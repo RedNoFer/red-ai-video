@@ -281,6 +281,7 @@ function inferProtocol(raw: string, endpoint: EndpointMatch | null, requestBody:
     if (source.includes("/v1/seedance-special/videos") || source.includes("sd_2.0_special_") || source.includes("sd_2.0_fast_special_")) return "custom";
     if (source.includes("/sdapi/v1/txt2img") || source.includes("/sdapi/v1/img2img") || source.includes("alwayson_scripts")) return "custom";
     if (source.includes("sub2api") || textContainsUrlHost(source, ["code2alita.com"])) return "sub2api";
+    if (source.includes("megabyai")) return "newapi-video";
     if (/\bnew\s*api\b|new-api|one-api/i.test(source)) return "newapi";
     if (textContainsUrlHost(source, ["globalaiopc.com"]) || source.includes("/videos/videos") || source.includes("referenceimages")) return "custom";
     if (textContainsUrlHost(source, ["ark.cn-beijing.volces.com"])) return "volcengine-video";
@@ -441,6 +442,7 @@ function protocolLabel(protocol: SystemChannelProtocol) {
     if (protocol === "yumeng") return "昱梦";
     if (protocol === "sub2api") return "sub2api";
     if (protocol === "newapi") return "New API";
+    if (protocol === "newapi-video") return "New API 视频";
     if (protocol === "vozeb-recommended") return "VOZEB推荐";
     if (protocol === "globalaiopc") return "GlobalAiOpc";
     if (protocol === "seedance") return "Seedance";

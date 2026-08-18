@@ -83,6 +83,7 @@ export async function POST(request: Request) {
         for (let index = 0; index < channels.length; index += 1) {
             const channel = channels[index];
             const geminiVideo = isGeminiVideoChannel(channel);
+            const capabilityProfile = channel.advancedConfig?.protocol === "newapi-video" ? { ...channel.capabilityProfile, maxReferenceImages: 1 } : channel.capabilityProfile;
             const parameters = {
                 ...requestedParameters,
                 videoSeconds: geminiVideo
@@ -94,7 +95,7 @@ export async function POST(request: Request) {
                       }),
             };
             try {
-                assertCapabilityConstraints(channel.capabilityProfile, {
+                assertCapabilityConstraints(capabilityProfile, {
                     capability: "video",
                     referenceCount: references.filter((reference) => reference.type === "image").length,
                     durationSeconds: parameters.videoSeconds === -1 ? undefined : parameters.videoSeconds,

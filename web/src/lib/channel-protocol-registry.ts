@@ -93,6 +93,20 @@ const seedanceSpecialOperation: ProtocolOperation = {
     supportsReferenceAudio: true,
 };
 
+const newApiVideoOperation: ProtocolOperation = {
+    capability: "video",
+    createPath: "/v1/video/generations",
+    imageToVideoPath: "/v1/video/generations",
+    queryPath: "/v1/video/generations/:task_id",
+    requestTemplate: '{"model":"{{model}}","prompt":"{{prompt}}","image":"{{image}}","duration":"{{duration}}","width":"{{width}}","height":"{{height}}"}',
+    resultField: "url",
+    statusField: "status",
+    referenceRule: "仅支持单张 image 参考图，且必须是公网可访问 URL 或站点签名图片地址；不支持多图、视频、音频、首帧或尾帧。",
+    supportsReferenceImage: true,
+    supportsReferenceVideo: false,
+    supportsReferenceAudio: false,
+};
+
 const vozebRecommendedVideoOperation: ProtocolOperation = {
     capability: "video",
     createPath: "/v1/videos/generations",
@@ -218,6 +232,18 @@ export const registeredChannelProtocolDefinitions: ChannelProtocolDefinition[] =
         modelCatalogPaths: ["/v1/models"],
         capabilities: ["text", "image", "video", "audio"],
         operations: openAiOperations,
+        strict: true,
+    },
+    {
+        id: "newapi-video",
+        label: "New API 视频（MegabyAI）",
+        description: "MegabyAI New API 视频中转协议，使用 /v1/video/generations 提交和查询任务。",
+        apiFormat: "openai",
+        authMode: "bearer",
+        defaultBaseUrl: "https://newapi.megabyai.cc",
+        modelCatalogPaths: ["/v1/models"],
+        capabilities: ["video"],
+        operations: { video: newApiVideoOperation },
         strict: true,
     },
     {

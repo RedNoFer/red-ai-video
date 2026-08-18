@@ -161,6 +161,13 @@ async function handleFixtureRequest({ request, response, url, body, tasks, reque
         tasks.set(id, { kind: "video", status: model.includes("-slow") ? "pending" : "completed" });
         return sendJson(response, 200, { id, task_id: id, status: "queued" });
     }
+    if (request.method === "POST" && path === "/video/generations") {
+        const model = requestedModel(body, request.headers["content-type"] || "");
+        if (shouldFailRequest(request, model)) return sendJson(response, model.includes("-fail") ? 400 : 503, { error: { message: "fixture video failure" } });
+        const id = nextTaskId("newapi-video");
+        tasks.set(id, { kind: "newapi-video", status: model.includes("-slow") ? "pending" : "completed" });
+        return sendJson(response, 200, { task_id: id, status: "queued" });
+    }
     if (request.method === "POST" && path === "/videos/generations") {
         if (
             !String(request.headers["content-type"] || "")
@@ -209,6 +216,7 @@ async function handleFixtureRequest({ request, response, url, body, tasks, reque
     if (request.method === "GET" && videoId) {
         const mediaUrl = `${url.origin}/media/fixture.mp4`;
         const task = tasks.get(videoId);
+        if (task?.kind === "newapi-video") return sendJson(response, 200, { task_id: videoId, status: "completed", url: mediaUrl });
         if (task?.kind === "image") return sendJson(response, 200, { task_id: videoId, status: "completed", image_url: `${url.origin}/media/fixture.png` });
         if (task?.status === "pending") return sendJson(response, 200, { id: videoId, task_id: videoId, status: "processing" });
         if (task?.status === "cancelled") return sendJson(response, 200, { id: videoId, task_id: videoId, status: "cancelled" });
@@ -333,7 +341,7 @@ function firstShotId(payload) {
 }
 
 function videoTaskId(path) {
-    const patterns = [/^\/videos\/([^/]+)$/, /^\/contents\/generations\/tasks\/([^/]+)$/, /^\/result\/([^/]+)$/];
+    const patterns = [/^\/video\/generations\/([^/]+)$/, /^\/videos\/([^/]+)$/, /^\/contents\/generations\/tasks\/([^/]+)$/, /^\/result\/([^/]+)$/];
     for (const pattern of patterns) {
         const match = path.match(pattern);
         if (match) return decodeURIComponent(match[1]);

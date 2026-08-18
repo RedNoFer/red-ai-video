@@ -90,6 +90,7 @@ describe("admin model catalog", () => {
         const payload = { data: [{ id: "opaque-model", object: "model" }] };
 
         expect(parseModelCatalog(payload, "provider", "seedance")).toEqual([{ id: "opaque-model", capability: "video", source: "provider" }]);
+        expect(parseModelCatalog(payload, "provider", "newapi-video")).toEqual([{ id: "opaque-model", capability: "video", source: "provider" }]);
         expect(parseModelCatalog(payload, "provider", "vozeb-recommended")).toEqual([{ id: "opaque-model", capability: "video", source: "provider" }]);
         expect(parseModelCatalog(payload, "provider", "stable-diffusion")).toEqual([{ id: "opaque-model", capability: "image", source: "provider" }]);
         expect(parseModelCatalog(payload, "provider", "openai")).toEqual([{ id: "opaque-model", capability: "text", source: "provider" }]);

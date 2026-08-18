@@ -236,6 +236,25 @@ describe("video task upstream reconciliation", () => {
         expect((mocks.fetchInternalApi.mock.calls[0]?.[1] as RequestInit).method).toBeUndefined();
     });
 
+    it("polls the dedicated New API video task endpoint and reads the returned url", async () => {
+        const task = videoTask({
+            config: {
+                ...videoTask().config,
+                model: "seedance-2.5",
+                advancedConfig: { protocol: "newapi-video", queryPath: "/v1/video/generations/:task_id", statusField: "status", resultField: "url" } as NonNullable<VideoTask["config"]["advancedConfig"]>,
+            },
+            upstream: { ...videoTask().upstream, model: "seedance-2.5", pollPath: "/v1/video/generations" },
+        });
+        mocks.fetchInternalApi.mockResolvedValue(json({ task_id: task.upstream.id, status: "completed", url: "https://cdn.example.com/result.mp4" }));
+
+        await expect(queryVideoTaskUpstream(task, "http://localhost", "session=test")).resolves.toEqual({
+            state: "result_ready",
+            status: "completed",
+            resultUrl: "https://cdn.example.com/result.mp4",
+        });
+        expect(mocks.fetchInternalApi).toHaveBeenCalledWith(`http://localhost/api/ai/system/channel/v1/video/generations/${task.upstream.id}`, expect.objectContaining({ cache: "no-store" }));
+    });
+
     it("does not query upstream again before the polling interval elapses", async () => {
         const task = videoTask();
         mocks.claim.mockResolvedValue(null);

@@ -29,11 +29,12 @@ const channel = {
 describe("channel protocol registry", () => {
     it("exposes only active protocols and keeps SD2 separate from Stable Diffusion", () => {
         const protocols = channelProtocolOptions().map((item) => item.value);
-        expect(protocols).toEqual(["openai", "yumeng", "gemini", "seedance", "stable-diffusion", "volcengine-video", "sub2api", "newapi", "custom", "compatible", "auto"]);
+        expect(protocols).toEqual(["openai", "yumeng", "gemini", "seedance", "stable-diffusion", "volcengine-video", "sub2api", "newapi", "newapi-video", "custom", "compatible", "auto"]);
         expect(protocols).not.toEqual(expect.arrayContaining(["vozeb-recommended", "seedance-special", "globalaiopc"]));
         expect(channelProtocolDefinition("openai").modelCatalogPaths).toEqual(["/v1/models"]);
         expect(channelProtocolDefinition("sub2api").modelCatalogPaths).toEqual(["/v1/models"]);
         expect(channelProtocolDefinition("newapi").modelCatalogPaths).toEqual(["/v1/models"]);
+        expect(channelProtocolDefinition("newapi-video").modelCatalogPaths).toEqual(["/v1/models"]);
         expect(channelProtocolDefinition("seedance").modelCatalogPaths).toEqual(["/models"]);
         expect(channelProtocolDefinition("volcengine-video").modelCatalogPaths).toEqual(["/api/v3/models"]);
         expect(channelProtocolDefinition("stable-diffusion").modelCatalogPaths).toEqual(["/sdapi/v1/sd-models"]);
@@ -57,6 +58,17 @@ describe("channel protocol registry", () => {
         });
         expect(channelProtocolDefinition("sub2api").operations.image).toMatchObject({ createPath: "/images/generations", editPath: "/images/generations", requestTemplate: expect.stringContaining("image_urls") });
         expect(channelProtocolDefinition("newapi").operations).toEqual(channelProtocolDefinition("openai").operations);
+        expect(channelProtocolDefinition("newapi-video").operations.video).toMatchObject({
+            createPath: "/v1/video/generations",
+            imageToVideoPath: "/v1/video/generations",
+            queryPath: "/v1/video/generations/:task_id",
+            requestTemplate: expect.stringContaining('"image":"{{image}}"'),
+            resultField: "url",
+            statusField: "status",
+            supportsReferenceImage: true,
+            supportsReferenceVideo: false,
+            supportsReferenceAudio: false,
+        });
         expect(channelProtocolDefinition("seedance").operations.video).toMatchObject({ createPath: "/contents/generations/tasks", queryPath: "/contents/generations/tasks/:task_id", resultField: "content.video_url" });
         expect(channelProtocolDefinition("volcengine-video").operations.video).toEqual(channelProtocolDefinition("seedance").operations.video);
         expect(channelProtocolDefinition("stable-diffusion").operations.image).toMatchObject({ createPath: "/sdapi/v1/txt2img", editPath: "/sdapi/v1/img2img", resultField: "images[0]" });

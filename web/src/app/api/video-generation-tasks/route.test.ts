@@ -56,6 +56,8 @@ vi.mock("@/lib/server/video-task-store", () => ({
 
 import { POST } from "./route";
 import { resetChannelRuntimeHealth } from "@/lib/server/channel-runtime-health";
+import { applyChannelProtocol } from "@/lib/channel-protocol-registry";
+import { emptyAdvancedConfig } from "@/lib/channel-protocol-registry";
 
 const channels = [
     { id: "one", name: "主渠道", baseUrl: "https://one.example.com/v1", apiKey: "one-secret", apiFormat: "openai", models: ["video-one"], enabled: true, advancedConfig: { protocol: "openai" } },
@@ -420,6 +422,26 @@ describe("video generation candidate failover", () => {
         expect(upstreamBody.images).toEqual(["https://cdn.example.com/reference.jpg"]);
     });
 
+    it("sends the New API video request body to the dedicated generations endpoint", async () => {
+        mocks.getAuthSettings.mockResolvedValue(newApiVideoSettings());
+        mocks.fetchInternalApi.mockResolvedValue(json({ task_id: "newapi-video-task", status: "queued" }));
+
+        const response = await POST(request({ model: "seedance-2.5", videoSeconds: "5", size: "1280x720" }, [{ type: "image", url: "https://cdn.example.com/reference.jpg" }]));
+        const [url, init] = mocks.fetchInternalApi.mock.calls[0] as [string, RequestInit];
+
+        expect(response.status).toBe(200);
+        expect(url).toContain("/api/ai/system/one/v1/video/generations");
+        expect(JSON.parse(String(init.body))).toMatchObject({
+            model: "seedance-2.5",
+            prompt: expect.stringContaining("A test video"),
+            image: "https://cdn.example.com/reference.jpg",
+            duration: 5,
+            width: 1280,
+            height: 720,
+        });
+        expect(JSON.parse(String(init.body)).prompt).toContain("参考素材一致性要求");
+    });
+
     it("sends a compatible text-to-video request without empty reference fields", async () => {
         mocks.getAuthSettings.mockResolvedValue(publicUrlCompatibleSettings());
         mocks.fetchInternalApi.mockResolvedValue(json({ id: "upstream-text-video", status: "queued" }));
@@ -434,6 +456,31 @@ describe("video generation candidate failover", () => {
         expect(upstreamBody).not.toHaveProperty("image");
         expect(upstreamBody).not.toHaveProperty("images");
         expect(upstreamBody.prompt).not.toContain("参考素材一致性要求");
+    });
+
+    it("rejects multiple reference images for the New API video protocol", async () => {
+        mocks.getAuthSettings.mockResolvedValue(newApiVideoSettings());
+
+        const response = await POST(
+            request({ model: "seedance-2.5" }, [
+                { type: "image", url: "https://cdn.example.com/reference-1.jpg" },
+                { type: "image", url: "https://cdn.example.com/reference-2.jpg" },
+            ]),
+        );
+
+        expect(response.status).toBe(400);
+        expect((await response.json()).error).toContain("最多支持 1 张参考图");
+        expect(mocks.fetchInternalApi).not.toHaveBeenCalled();
+    });
+
+    it("rejects first-frame references for the New API video protocol", async () => {
+        mocks.getAuthSettings.mockResolvedValue(newApiVideoSettings());
+
+        const response = await POST(request({ model: "seedance-2.5" }, [{ type: "image", url: "https://cdn.example.com/first.jpg", role: "first_frame" }]));
+
+        expect(response.status).toBe(400);
+        expect((await response.json()).error).toContain("不支持显式首帧输入");
+        expect(mocks.fetchInternalApi).not.toHaveBeenCalled();
     });
 
     it("converts workbench pixel sizes into the provider ratio field", async () => {
@@ -771,6 +818,24 @@ function publicUrlCompatibleSettings() {
             },
         ],
         logicalModels: [{ ...settings.logicalModels[0], bindings: [settings.logicalModels[0].bindings[0]] }],
+    };
+}
+
+function newApiVideoSettings() {
+    const model = "seedance-2.5";
+    const channel = applyChannelProtocol({ ...channels[0], baseUrl: "", models: [model], advancedConfig: emptyAdvancedConfig() }, "newapi-video");
+    return {
+        ...settings,
+        systemChannels: [channel],
+        logicalModels: [
+            {
+                ...settings.logicalModels[0],
+                id: model,
+                name: model,
+                bindings: [{ id: "newapi-video-binding", channelId: channel.id, upstreamModel: model, enabled: true, priority: 1 }],
+            },
+        ],
+        defaultModels: { videoModel: model },
     };
 }
 

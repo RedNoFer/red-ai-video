@@ -402,7 +402,7 @@ function upstreamPath(baseUrl: string, path: string) {
 
 function requestContainsReference(request: (typeof fixture.requests)[number] | undefined) {
     const body = request?.body.toString(request.contentType.includes("multipart/form-data") ? "latin1" : "utf8") || "";
-    return /reference\.png|fixture\.png|iVBOR|input_reference|reference_images|image_urls|inlineData|image_url|"images"\s*:\s*\[\s*"http|"image"\s*:\s*\{/.test(body);
+    return /reference\.png|fixture\.png|iVBOR|input_reference|reference_images|image_urls|inlineData|image_url|"images"\s*:\s*\[\s*"http|"image"\s*:\s*"(?:https?|data:|assetId:)/.test(body);
 }
 
 async function dispatchInternalRequest(input: string | URL | Request, init?: RequestInit) {
