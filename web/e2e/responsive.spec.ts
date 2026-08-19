@@ -1041,6 +1041,14 @@ test("creative workspaces remain usable without horizontal overflow in light and
             await expect(page.getByLabel("短剧项目名称").first()).toHaveValue("E2E 短剧项目");
             await expect(page.locator("[data-drama-workspace-header]")).toHaveCount(1);
             await expect(page.locator("[data-drama-stage-navigation]")).toHaveCount(1);
+            await page.getByRole("button", { name: "完整制作包", exact: true }).click();
+            const packageDialog = page.getByRole("dialog", { name: "导入完整制作包" });
+            await expect(packageDialog).toBeVisible();
+            await expect(packageDialog.getByRole("button", { name: "选择制作包文件" })).toBeVisible();
+            await expect(packageDialog.getByRole("textbox", { name: "粘贴制作包文本" })).toBeVisible();
+            const packageDialogBox = await packageDialog.boundingBox();
+            expect(packageDialogBox?.width || 0).toBeLessThanOrEqual((page.viewportSize()?.width || 0) - 22);
+            await packageDialog.getByRole("button", { name: /取\s*消/ }).click();
             const workspaceBody = page.locator("[data-drama-workspace-body]");
             const productionSurface = page.locator("[data-drama-production-surface]");
             const closedLayout = await Promise.all([workspaceBody.boundingBox(), productionSurface.boundingBox()]);

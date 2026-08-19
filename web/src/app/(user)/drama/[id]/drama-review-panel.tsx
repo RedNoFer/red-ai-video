@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Input, InputNumber, Modal } from "antd";
+import { Button, Input, InputNumber, Modal, Segmented, Tag } from "antd";
 import { ArrowLeft, Check, ChevronDown, SlidersHorizontal } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -14,6 +14,7 @@ export function DramaReviewPanel({ project, episode, onDesignVisuals, designing,
     const updateEpisode = useDramaStore((state) => state.updateEpisode);
     const updateShot = useDramaStore((state) => state.updateShot);
     const [episodeInfoOpen, setEpisodeInfoOpen] = useState(false);
+    const [view, setView] = useState<"content" | "production" | "continuity">("content");
     const [expandedShotIds, setExpandedShotIds] = useState<Set<string>>(() => new Set(episode.shots.slice(0, 1).map((shot) => shot.id)));
     useEffect(() => {
         setExpandedShotIds(new Set(episode.shots.slice(0, 1).map((shot) => shot.id)));
@@ -32,13 +33,14 @@ export function DramaReviewPanel({ project, episode, onDesignVisuals, designing,
     };
     const totalDuration = episode.shots.reduce((total, shot) => total + shot.duration, 0);
     const dialogueCount = episode.shots.reduce((total, shot) => total + (shot.utterances.filter((item) => item.type === "dialogue").length || shot.dialogue.split(/\n+/).filter((line) => line.trim()).length), 0);
+    const hasPackageVisualPlan = episode.reviewStatus === "visual_ready" && episode.shots.every((shot) => shot.fieldOrigins?.imagePrompt === "package" && shot.fieldOrigins?.videoPrompt === "package");
     return (
         <div>
             <DramaStageHeader
                 step="02"
                 title="内容审核"
                 description="确认剧本事实、镜头边界、对白与叙事信息；视觉模型不会在这个阶段改写内容。"
-                status={!episode.shots.length ? "等待内容结构" : episode.reviewStatus === "visual_ready" ? "视觉方案已生成" : "待确认"}
+                status={!episode.shots.length ? "等待内容结构" : hasPackageVisualPlan ? "制作方案已就绪" : episode.reviewStatus === "visual_ready" ? "视觉方案已生成" : "待确认"}
                 tone={!episode.shots.length ? "attention" : episode.reviewStatus === "visual_ready" ? "ready" : "neutral"}
                 metrics={
                     episode.shots.length
@@ -60,13 +62,26 @@ export function DramaReviewPanel({ project, episode, onDesignVisuals, designing,
                         className="!h-9 !w-full sm:!w-auto"
                         icon={episode.shots.length ? <Check className="size-4" /> : <ArrowLeft className="size-4" />}
                         loading={designing}
-                        onClick={episode.shots.length ? onDesignVisuals : () => onStageChange("script")}
+                        onClick={!episode.shots.length ? () => onStageChange("script") : hasPackageVisualPlan ? () => onStageChange("storyboard") : onDesignVisuals}
                     >
-                        {!episode.shots.length ? "返回剧本并提取结构" : episode.reviewStatus === "visual_ready" ? "更新视觉方案" : "确认内容并生成视觉方案"}
+                        {!episode.shots.length ? "返回剧本并提取结构" : hasPackageVisualPlan ? "进入分镜" : episode.reviewStatus === "visual_ready" ? "更新视觉方案" : "确认内容并生成视觉方案"}
                     </Button>
                 }
             />
             {episode.shots.length ? (
+                <div className="mt-2.5 overflow-x-auto hide-scrollbar">
+                    <Segmented
+                        value={view}
+                        onChange={(value) => setView(value as typeof view)}
+                        options={[
+                            { label: "内容结构", value: "content" },
+                            { label: "制作参数", value: "production" },
+                            { label: "连续性", value: "continuity" },
+                        ]}
+                    />
+                </div>
+            ) : null}
+            {episode.shots.length && view === "content" ? (
                 <div className="mt-2.5 space-y-2.5">
                     {episode.shots.map((shot) => {
                         const expanded = expandedShotIds.has(shot.id);
@@ -153,14 +168,61 @@ export function DramaReviewPanel({ project, episode, onDesignVisuals, designing,
                         );
                     })}
                 </div>
-            ) : (
+            ) : !episode.shots.length ? (
                 <div className="mt-2.5 flex min-h-14 items-center rounded-lg border border-dashed border-border bg-card/25 px-3 py-2.5">
                     <div className="min-w-0">
                         <h3 className="text-sm font-medium">还没有待审核的内容结构</h3>
                         <p className="mt-0.5 truncate text-xs text-muted-foreground">先填写或导入本集剧本，再由 AI 提取可编辑的镜头事实、对白和原文依据。</p>
                     </div>
                 </div>
-            )}
+            ) : null}
+            {episode.shots.length && view === "production" ? (
+                <div className="mt-2.5 overflow-hidden rounded-lg border border-border bg-background">
+                    {episode.shots.map((shot) => (
+                        <div key={shot.id} className="grid gap-2 border-b border-border px-3 py-3 last:border-b-0 sm:grid-cols-[150px_minmax(0,1fr)]">
+                            <div>
+                                <div className="text-xs font-semibold">{shot.code || `镜头 ${String(shot.order).padStart(2, "0")}`}</div>
+                                <div className="mt-1 truncate text-xs text-muted-foreground">{shot.title}</div>
+                            </div>
+                            <dl className="grid min-w-0 gap-x-4 gap-y-1 text-xs sm:grid-cols-2 xl:grid-cols-4">
+                                <Parameter label="焦段" value={shot.lens} />
+                                <Parameter label="光线" value={shot.lighting} />
+                                <Parameter label="色板" value={shot.colorPalette} />
+                                <Parameter label="转场" value={[shot.transitionIn, shot.transitionOut].filter(Boolean).join(" → ")} />
+                                <Parameter label="环境声" value={shot.sound?.ambience} />
+                                <Parameter label="音效" value={shot.sound?.soundEffects} />
+                                <Parameter label="音乐" value={shot.sound?.music} />
+                                <Parameter label="表演" value={shot.performanceNotes} />
+                            </dl>
+                        </div>
+                    ))}
+                </div>
+            ) : null}
+            {episode.shots.length && view === "continuity" ? (
+                <div className="mt-2.5 space-y-2">
+                    {episode.shots.map((shot) => {
+                        const edge = episode.continuityEdges?.find((item) => item.toShotId === shot.id);
+                        const previous = edge ? episode.shots.find((item) => item.id === edge.fromShotId) : undefined;
+                        const status = shot.continuityStatus || "ready";
+                        return (
+                            <article key={shot.id} className="rounded-lg border border-border bg-background px-3 py-3">
+                                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                    <span className="text-xs font-semibold">{shot.code || `镜头 ${shot.order}`}</span>
+                                    <span className="min-w-0 flex-1 truncate text-xs">{shot.title}</span>
+                                    <Tag color={status === "passed" ? "success" : status === "blocked" ? "warning" : status === "needs_review" || status === "stale" ? "processing" : "default"}>{continuityStatusLabel(status)}</Tag>
+                                </div>
+                                <div className="mt-2 grid gap-1 text-xs text-muted-foreground sm:grid-cols-2">
+                                    <span>{edge ? `${previous?.code || previous?.title || "上一镜头"} → ${shot.code || shot.title}` : "场次起始镜头，无前镜继承"}</span>
+                                    <span>{edge ? `${transitionLabel(edge.transition)} · ${edge.inheritActualEndFrame ? "继承实际尾帧" : "不继承尾帧"}` : "独立起始状态"}</span>
+                                    <span>实际首帧：{shot.actualStartFrameUrl ? "已提取" : "未提取"}</span>
+                                    <span>实际尾帧：{shot.actualEndFrameUrl ? "已提取" : "未提取"}</span>
+                                </div>
+                                {shot.continuityError ? <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">阻塞原因：{shot.continuityError}</p> : null}
+                            </article>
+                        );
+                    })}
+                </div>
+            ) : null}
             <Modal title="本集信息" open={episodeInfoOpen} width={620} centered destroyOnHidden footer={null} onCancel={() => setEpisodeInfoOpen(false)} styles={{ container: { maxWidth: "calc(100vw - 24px)" } }}>
                 <div className="grid gap-3 pt-1 sm:grid-cols-2">
                     {[
@@ -188,4 +250,23 @@ export function DramaReviewPanel({ project, episode, onDesignVisuals, designing,
 function compactReviewText(value: string) {
     const normalized = value.replace(/\s+/g, " ").trim();
     return normalized.length > 72 ? `${normalized.slice(0, 72)}…` : normalized;
+}
+
+function Parameter({ label, value }: { label: string; value?: string }) {
+    return (
+        <div className="min-w-0">
+            <dt className="text-muted-foreground">{label}</dt>
+            <dd className="mt-0.5 truncate text-foreground" title={value || "未设置"}>
+                {value || "未设置"}
+            </dd>
+        </div>
+    );
+}
+
+function continuityStatusLabel(status: NonNullable<DramaEpisode["shots"][number]["continuityStatus"]>) {
+    return { ready: "待生产", stale: "已过期", blocked: "已阻塞", needs_review: "待 QC", passed: "已通过" }[status];
+}
+
+function transitionLabel(value: NonNullable<DramaEpisode["continuityEdges"]>[number]["transition"]) {
+    return { continuous: "连续", match_cut: "匹配剪辑", hard_cut: "硬切", scene_change: "场景切换", jump_cut: "跳切" }[value];
 }

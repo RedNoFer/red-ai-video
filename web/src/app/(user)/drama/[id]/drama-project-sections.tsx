@@ -352,7 +352,8 @@ export function DramaScriptPanel({
                     tone={scriptText ? (episode.shots.length ? "ready" : "neutral") : "attention"}
                     metrics={[
                         { label: "字数", value: scriptText.length },
-                        { label: "场景", value: episode.shots.length },
+                        { label: "剧情场次", value: episode.storyScenes?.length || 0 },
+                        { label: "导演镜头", value: episode.shots.length },
                     ]}
                     action={
                         <div className="flex min-w-0 flex-wrap items-center gap-1.5">

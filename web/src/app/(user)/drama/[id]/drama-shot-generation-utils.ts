@@ -1,20 +1,41 @@
-import type { DramaAssetReference, DramaProject, DramaShot } from "../types";
+import type { DramaAssetReference, DramaEpisode, DramaProject, DramaShot } from "../types";
 import type { useEffectiveConfig } from "@/stores/use-config-store";
 import { resolveDramaGenerationSize } from "@/lib/drama-image-size";
 import type { ReferenceImage } from "@/types/image";
 import type { VideoReferenceRole } from "@/lib/video-reference-contract";
 
 export function shotReferenceImages(project: DramaProject, shot: DramaShot) {
-    const assetUrls = [...project.characters.filter((item) => shot.characterIds.includes(item.id)), ...project.scenes.filter((item) => item.id === shot.sceneId), ...project.props.filter((item) => shot.propIds.includes(item.id))].flatMap((item) => {
+    const assetUrls = [
+        ...project.characters.filter((item) => shot.characterIds.includes(item.id)),
+        ...project.scenes.filter((item) => item.id === shot.sceneId),
+        ...project.props.filter((item) => shot.propIds.includes(item.id)),
+        ...(project.clues || []).filter((item) => shot.clueIds.includes(item.id)),
+    ].flatMap((item) => {
         const reference = primaryAssetReference(item);
         return reference ? [referenceImage(item.id, `${item.name}.png`, reference.url, "image/png", reference.width, reference.height)] : [];
     });
+    const sourceAssetIds = new Set(shot.sourceAssetIds || []);
     const sourceUrls = (project.sourceAssets || []).flatMap((item) => {
+        if (!sourceAssetIds.has(item.id)) return [];
         if (item.type !== "image") return [];
         const url = item.serverUrl || item.remoteUrl;
         return url ? [referenceImage(item.id, item.title, url, item.mimeType, item.width, item.height)] : [];
     });
     return [...assetUrls, ...sourceUrls];
+}
+
+export function continuityReferenceImages(project: DramaProject, episode: DramaEpisode, shot: DramaShot) {
+    const edge = episode.continuityEdges?.find((item) => item.toShotId === shot.id && item.inheritActualEndFrame);
+    const previous = edge ? episode.shots.find((item) => item.id === edge.fromShotId) : undefined;
+    const actualEnd = previous?.actualEndFrameUrl ? referenceImage(`continuity-end-${previous.id}`, `${previous.title}-实际尾帧.png`, previous.actualEndFrameUrl, "image/png", undefined, undefined, "first_frame") : null;
+    return [...(actualEnd ? [actualEnd] : []), ...shotReferenceImages(project, shot)];
+}
+
+export function isDramaContinuityStartReady(episode: DramaEpisode, shot: DramaShot) {
+    const edge = episode.continuityEdges?.find((item) => item.toShotId === shot.id && item.inheritActualEndFrame);
+    if (!edge) return true;
+    const previous = episode.shots.find((item) => item.id === edge.fromShotId);
+    return previous?.continuityStatus === "passed" && Boolean(previous.actualEndFrameUrl);
 }
 
 export function storyboardReferenceImages(shot: DramaShot) {
