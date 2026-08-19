@@ -38,6 +38,8 @@ export function previewDramaProductionPackage(source: string, fileName = "produc
             characters: productionPackage.assets.characters.length,
             locations: productionPackage.assets.locations.length,
             duration: productionPackage.episodes.reduce((total, episode) => total + episode.shots.reduce((sum, shot) => sum + shot.duration, 0), 0),
+            archiveSections: productionPackage.archive?.sections.length || 0,
+            promptAssets: productionPackage.archive?.promptAssets.length || 0,
         },
     };
 }
@@ -68,6 +70,7 @@ export function applyDramaProductionPackage(project: DramaProject, source: Drama
         style: preferred(project.style, project.fieldOrigins, "style", projectPatch.style),
         ratio: preferred(project.ratio, project.fieldOrigins, "ratio", projectPatch.ratio),
         productionBible: project.fieldOrigins?.productionBible === "manual" ? project.productionBible : projectPatch.productionBible,
+        productionArchive: productionPackage.archive,
         fieldOrigins: { ...packageOrigins(["title", "summary", "style", "ratio", "productionBible"]), ...project.fieldOrigins },
         characters: characters.items,
         scenes: locations.items,
@@ -245,6 +248,48 @@ function normalizeProductionPackage(value: unknown): DramaProductionPackageV1 {
         },
         assets: normalizedAssets,
         episodes: normalizedEpisodes,
+        archive: normalizeProductionArchive(input.archive),
+    };
+}
+
+function normalizeProductionArchive(value: unknown): DramaProductionPackageV1["archive"] {
+    const input = object(value);
+    if (!Object.keys(input).length) return undefined;
+    return {
+        formatVersion: "vozeb-drama-production-package-v1",
+        sections: array(input.sections).flatMap((item) => {
+            const section = object(item);
+            const title = text(section.title);
+            return title ? [{ code: text(section.code), title, content: text(section.content) }] : [];
+        }),
+        promptAssets: array(input.promptAssets).flatMap((item) => {
+            const asset = object(item);
+            const code = text(asset.code);
+            const prompt = text(asset.prompt);
+            return code && prompt ? [{ code, category: asset.category === "storyboard" ? "storyboard" as const : "keyframe" as const, title: text(asset.title) || code, prompt, shotCodes: strings(asset.shotCodes) }] : [];
+        }),
+        dialogueDirections: array(input.dialogueDirections).flatMap((item) => {
+            const direction = object(item);
+            const id = text(direction.id);
+            return id ? [{ id, shotCode: text(direction.shotCode), speaker: text(direction.speaker), text: text(direction.text), performance: text(direction.performance), lipSync: Boolean(direction.lipSync) }] : [];
+        }),
+        voiceDirections: array(input.voiceDirections).flatMap((item) => {
+            const direction = object(item);
+            const subject = text(direction.subject);
+            return subject ? [{ subject, direction: text(direction.direction) }] : [];
+        }),
+        silenceDirections: array(input.silenceDirections).flatMap((item) => {
+            const direction = object(item);
+            const shotCode = text(direction.shotCode);
+            return shotCode ? [{ shotCode, direction: text(direction.direction) }] : [];
+        }),
+        referencePlan: array(input.referencePlan).flatMap((item) => {
+            const plan = object(item);
+            const asset = text(plan.asset);
+            return asset ? [{ priority: Math.max(1, Math.floor(Number(plan.priority) || 1)), asset, purpose: text(plan.purpose), planType: text(plan.planType), shotCodes: strings(plan.shotCodes) }] : [];
+        }),
+        generationOrder: strings(input.generationOrder),
+        qcReport: text(input.qcReport),
     };
 }
 
@@ -514,6 +559,7 @@ function parseDirectorMarkdown(source: string): DramaProductionPackageV1 | null 
         utterancesByShot.set(row[1], list);
     }
     const videoPrompts = new Map([...section(source, "## 十一、Seedance 分段视频 Prompt", "## 十二、").matchAll(/###\s*P(\d+)｜[^\n]*\n+```text\n([\s\S]*?)```/g)].map((match) => [`SH${match[1].padStart(2, "0")}`, match[2].trim()]));
+    const archive = parseProductionArchive(source);
     const allCharacters = [...characterAssets, ...functionalRoles];
     const shots = shotRows.map((row, index) => {
         const code = row[0];
@@ -618,7 +664,65 @@ function parseDirectorMarkdown(source: string): DramaProductionPackageV1 | null 
                 continuityEdges: edges,
             },
         ],
+        archive,
     };
+}
+
+function parseProductionArchive(source: string): NonNullable<DramaProductionPackageV1["archive"]> {
+    const sections = [...source.matchAll(/^##\s+([^\n]+)\n([\s\S]*?)(?=^##\s+|\s*$)/gm)].map((match, index) => ({
+        code: `SEC${String(index + 1).padStart(2, "0")}`,
+        title: match[1].replace(/^[一二三四五六七八九十]+、/, "").trim(),
+        content: match[2].trim(),
+    }));
+    const referenceRows = markdownTableRows(section(source, "### 参考图生成后的推荐映射", "### 生成顺序"), 5).filter((row) => /^\d+$/.test(row[0]));
+    const referencePlan = referenceRows.map((row) => ({ priority: Number(row[0]), asset: row[1], purpose: row[2], planType: row[3], shotCodes: shotCodes(row[4]) }));
+    const referenceShots = new Map(referencePlan.flatMap((plan) => {
+        const code = plan.asset.match(/^(V\d+|C\d+|S\d+)/)?.[1];
+        return code ? [[code, plan.shotCodes] as const] : [];
+    }));
+    const keyframes = [...section(source, "## 七、关键视频资产 Prompt", "## 八、").matchAll(/###\s*(V\d+)｜([^\n]+)\n+```text\n([\s\S]*?)```/g)].map((match) => ({
+        code: match[1],
+        category: "keyframe" as const,
+        title: match[2].trim(),
+        prompt: match[3].trim(),
+        shotCodes: referenceShots.get(match[1]) || [],
+    }));
+    const storyboards = [...section(source, "## 八、全案板 Prompt", "## 九、").matchAll(/###\s*全案板\s*(\d+)\/\d+｜(SH\d+)-(SH\d+)\n+```text\n([\s\S]*?)```/g)].map((match) => ({
+        code: `SB${match[1].padStart(2, "0")}`,
+        category: "storyboard" as const,
+        title: `${match[2]}-${match[3]}`,
+        prompt: match[4].trim(),
+        shotCodes: inclusiveShotRange(match[2], match[3]),
+    }));
+    const dialogueDirections = markdownTableRows(section(source, "### 台词序列", "### 沉默设计"), 6)
+        .filter((row) => /^D\d+$/i.test(row[0]))
+        .map((row) => ({ id: row[0], shotCode: row[1], speaker: row[2], text: row[3].replace(/^[“\"]|[”\"]$/g, ""), performance: row[4], lipSync: row[5] !== "否" }));
+    const voiceDirections = [...section(source, "### 角色台词基调", "### 台词序列").matchAll(/^-\s*([^：\n]+)：([^\n]+)/gm)].map((match) => ({ subject: match[1].trim(), direction: match[2].trim() }));
+    const silenceDirections = [...section(source, "### 沉默设计", "## 十、").matchAll(/^-\s*(SH\d+)([^\n]*)/gm)].map((match) => ({ shotCode: match[1], direction: match[2].replace(/^[:：]/, "").trim() }));
+    const generationOrder = [...section(source, "### 生成顺序", "## 十三、").matchAll(/^\d+\.\s*([^\n]+)/gm)].map((match) => match[1].trim());
+    return {
+        formatVersion: "vozeb-drama-production-package-v1",
+        sections,
+        promptAssets: [...keyframes, ...storyboards],
+        dialogueDirections,
+        voiceDirections,
+        silenceDirections,
+        referencePlan,
+        generationOrder,
+        qcReport: section(source, "## 十三、QC 报告", "## 十四、").trim(),
+    };
+}
+
+function shotCodes(value: string) {
+    const range = value.match(/(P|SH)(\d+)-(?:P|SH)?(\d+)/i);
+    if (range) return inclusiveShotRange(`SH${range[2].padStart(2, "0")}`, `SH${range[3].padStart(2, "0")}`);
+    return [...value.matchAll(/(?:P|SH)(\d+)/gi)].map((match) => `SH${match[1].padStart(2, "0")}`);
+}
+
+function inclusiveShotRange(start: string, end: string) {
+    const from = Number(start.match(/\d+/)?.[0]);
+    const to = Number(end.match(/\d+/)?.[0]);
+    return Number.isFinite(from) && Number.isFinite(to) && to >= from ? Array.from({ length: to - from + 1 }, (_, index) => `SH${String(from + index).padStart(2, "0")}`) : [];
 }
 
 function markdownPromptAssets(source: string, pattern: RegExp, location = false) {

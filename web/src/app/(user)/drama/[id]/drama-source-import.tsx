@@ -266,6 +266,8 @@ export function DramaSourceImport({ project, onImported }: { project: DramaProje
                                 ["角色", packagePreview.summary.characters],
                                 ["地点", packagePreview.summary.locations],
                                 ["总时长", `${packagePreview.summary.duration} 秒`],
+                                ["档案章节", packagePreview.summary.archiveSections],
+                                ["Prompt 资产", packagePreview.summary.promptAssets],
                             ].map(([label, value]) => (
                                 <div key={String(label)} className="bg-card px-3 py-2.5">
                                     <div className="text-[11px] text-muted-foreground">{label}</div>
@@ -278,6 +280,7 @@ export function DramaSourceImport({ project, onImported }: { project: DramaProje
                             <PackageFact label="目标平台" value={packagePreview.package.project.productionBible.targetPlatform || "由后台规划"} />
                             <PackageFact label="连续性" value={packagePreview.package.project.productionBible.continuityMode === "strict" ? "连续性优先" : "平衡模式"} />
                             <PackageFact label="字段策略" value="人工编辑 > 制作包 > AI 补全" />
+                            <PackageFact label="格式版本" value={packagePreview.package.archive?.formatVersion || "基础制作包 v1"} />
                         </div>
                         {packagePreview.warnings.length ? (
                             <div className="rounded-md border border-amber-300/70 bg-amber-50/70 p-3 text-xs text-amber-900 dark:border-amber-700/60 dark:bg-amber-950/20 dark:text-amber-100">

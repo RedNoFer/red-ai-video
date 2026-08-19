@@ -3,6 +3,8 @@ export type DramaReviewStatus = "draft" | "content_review" | "approved" | "visua
 export type DramaVideoMode = "storyboard" | "direct" | "reference";
 export type DramaStoryboardFrameMode = "single" | "first_last";
 export type DramaShotAudioMode = "source" | "voiceover" | "mute";
+export type DramaFieldOrigin = "package" | "manual" | "ai" | "default";
+export type DramaContinuityTransition = "continuous" | "match_cut" | "hard_cut" | "scene_change" | "jump_cut";
 
 export type DramaAssetReference = {
     id: string;
@@ -20,6 +22,11 @@ export type DramaAssetProfile = {
     styling: string;
     colorPalette: string;
     consistencyRules: string;
+    designPrompt?: string;
+    identityAnchors?: string[];
+    spatialRules?: string[];
+    stateRules?: string[];
+    forbiddenChanges?: string[];
 };
 
 export type DramaVoiceProfile = {
@@ -30,8 +37,11 @@ export type DramaVoiceProfile = {
 
 export type DramaNamedAsset = {
     id: string;
+    code?: string;
     name: string;
     description: string;
+    fieldOrigins?: Record<string, DramaFieldOrigin>;
+    activeEpisodeCodes?: string[];
     profile?: DramaAssetProfile;
     references?: DramaAssetReference[];
     primaryReferenceId?: string;
@@ -41,6 +51,7 @@ export type DramaNamedAsset = {
 
 export type DramaCharacter = DramaNamedAsset & { voiceProfile?: DramaVoiceProfile };
 export type DramaScene = DramaNamedAsset;
+export type DramaLocation = DramaScene;
 export type DramaProp = DramaNamedAsset;
 export type DramaClue = DramaNamedAsset & { payoff: string };
 
@@ -57,6 +68,83 @@ export type DramaShotContinuity = {
     continuityNotes: string;
 };
 
+export type DramaContinuityEntityState = {
+    assetId: string;
+    wardrobe?: string;
+    position?: string;
+    gaze?: string;
+    pose?: string;
+    expression?: string;
+    action?: string;
+    state?: string;
+    holderId?: string;
+};
+
+export type DramaContinuityState = {
+    characters: DramaContinuityEntityState[];
+    props: DramaContinuityEntityState[];
+    environment?: string;
+    lighting?: string;
+    axis?: string;
+    screenDirection?: string;
+};
+
+export type DramaContinuityEdge = {
+    fromShotId: string;
+    toShotId: string;
+    transition: DramaContinuityTransition;
+    inheritActualEndFrame: boolean;
+    carryCharacterIds: string[];
+    carryPropIds: string[];
+    carryEnvironment: boolean;
+    carryAxis: boolean;
+    notes?: string;
+};
+
+export type DramaStoryScene = {
+    id: string;
+    code?: string;
+    order: number;
+    title: string;
+    timeOfDay?: string;
+    timeRange?: string;
+    locationId?: string;
+    summary: string;
+    shotIds: string[];
+    fieldOrigins?: Record<string, DramaFieldOrigin>;
+};
+
+export type DramaProductionBible = {
+    targetPlatform?: string;
+    language: string;
+    ratio: string;
+    targetDuration?: number;
+    visualStyle: string;
+    colorScript?: string;
+    soundBible?: string;
+    globalNegativePrompt?: string;
+    subtitleSafeArea?: string;
+    continuityMode: "strict" | "balanced";
+};
+
+export type DramaProductionArchive = {
+    formatVersion: "vozeb-drama-production-package-v1";
+    sections: Array<{ code: string; title: string; content: string }>;
+    promptAssets: Array<{ code: string; category: "keyframe" | "storyboard"; title: string; prompt: string; shotCodes: string[] }>;
+    dialogueDirections: Array<{ id: string; shotCode: string; speaker: string; text: string; performance: string; lipSync: boolean }>;
+    voiceDirections: Array<{ subject: string; direction: string }>;
+    silenceDirections: Array<{ shotCode: string; direction: string }>;
+    referencePlan: Array<{ priority: number; asset: string; purpose: string; planType: string; shotCodes: string[] }>;
+    generationOrder: string[];
+    qcReport: string;
+};
+
+export type DramaShotSound = {
+    ambience?: string;
+    soundEffects?: string;
+    music?: string;
+};
+
 export type DramaUtterance = {
     id: string;
     order: number;
@@ -67,6 +155,7 @@ export type DramaUtterance = {
 
 export type DramaShot = {
     id: string;
+    code?: string;
     order: number;
     title: string;
     description: string;
@@ -82,6 +171,24 @@ export type DramaShot = {
     endFramePrompt?: string;
     negativePrompt?: string;
     continuity?: DramaShotContinuity;
+    storySceneId?: string;
+    timecode?: string;
+    dramaticFunction?: string;
+    lens?: string;
+    lighting?: string;
+    colorPalette?: string;
+    transitionIn?: string;
+    transitionOut?: string;
+    performanceNotes?: string;
+    sound?: DramaShotSound;
+    entryState?: DramaContinuityState;
+    exitState?: DramaContinuityState;
+    fieldOrigins?: Record<string, DramaFieldOrigin>;
+    sourceAssetIds?: string[];
+    continuityStatus?: "ready" | "stale" | "blocked" | "needs_review" | "passed";
+    continuityError?: string;
+    actualStartFrameUrl?: string;
+    actualEndFrameUrl?: string;
     duration: number;
     characterIds: string[];
     propIds: string[];
@@ -135,6 +242,8 @@ export type DramaVisualReview = {
 
 export type DramaEpisode = {
     id: string;
+    code?: string;
+    canvasProjectId?: string;
     title: string;
     script: string;
     scriptRichContent?: import("@/lib/drama-script-rich-content").DramaScriptRichContent;
@@ -143,6 +252,9 @@ export type DramaEpisode = {
     nextPreview: string;
     sourceRange: string;
     reviewStatus: DramaReviewStatus;
+    storyScenes?: DramaStoryScene[];
+    continuityEdges?: DramaContinuityEdge[];
+    fieldOrigins?: Record<string, DramaFieldOrigin>;
     shots: DramaShot[];
     renderTask?: DramaRenderTask;
     visualReview?: DramaVisualReview;
@@ -159,6 +271,7 @@ export type DramaSourceAsset = {
     mimeType?: string;
     width?: number;
     height?: number;
+    sourceHash?: string;
 };
 
 export type DramaProject = {
@@ -168,6 +281,9 @@ export type DramaProject = {
     summary: string;
     style: string;
     ratio: string;
+    productionBible?: DramaProductionBible;
+    productionArchive?: DramaProductionArchive;
+    fieldOrigins?: Record<string, DramaFieldOrigin>;
     status: "active" | "archived";
     creativeConversationId?: string;
     activeEpisodeId?: string;
@@ -245,4 +361,100 @@ export type DramaCostSummary = {
     successCount: number;
     failedCount: number;
     byType: Partial<Record<"image" | "video" | "audio", { tasks: number; estimatedPoints: number; actualPoints: number }>>;
+};
+
+export type DramaProductionPackageAsset = {
+    code: string;
+    name: string;
+    description: string;
+    profile?: DramaAssetProfile;
+    payoff?: string;
+    activeEpisodeCodes?: string[];
+    fieldOrigins?: Record<string, DramaFieldOrigin>;
+};
+
+export type DramaProductionPackageShot = Omit<DramaShot, "id" | "characterIds" | "propIds" | "clueIds" | "sceneId" | "storySceneId"> & {
+    code: string;
+    characterCodes: string[];
+    propCodes: string[];
+    clueCodes: string[];
+    locationCode?: string;
+    storySceneCode?: string;
+};
+
+export type DramaProductionPackageEpisode = {
+    code: string;
+    title: string;
+    script: string;
+    outline: string;
+    hook: string;
+    nextPreview: string;
+    sourceRange: string;
+    storyScenes: Array<Omit<DramaStoryScene, "id" | "shotIds"> & { code: string; locationCode?: string; shotCodes: string[] }>;
+    shots: DramaProductionPackageShot[];
+    continuityEdges: Array<Omit<DramaContinuityEdge, "fromShotId" | "toShotId"> & { fromShotCode: string; toShotCode: string }>;
+};
+
+export type DramaProductionPackageV1 = {
+    schemaVersion: 1;
+    project: {
+        title: string;
+        summary: string;
+        style: string;
+        ratio: string;
+        productionBible: DramaProductionBible;
+    };
+    assets: {
+        characters: DramaProductionPackageAsset[];
+        locations: DramaProductionPackageAsset[];
+        props: DramaProductionPackageAsset[];
+        clues: DramaProductionPackageAsset[];
+    };
+    episodes: DramaProductionPackageEpisode[];
+    archive?: DramaProductionArchive;
+};
+
+export type DramaProductionPackagePreview = {
+    package: DramaProductionPackageV1;
+    sourceHash: string;
+    format: "json" | "markdown";
+    warnings: string[];
+    summary: { episodes: number; storyScenes: number; shots: number; characters: number; locations: number; duration: number; archiveSections: number; promptAssets: number };
+};
+
+export type DramaProductionRunStatus = "planning" | "ready" | "running" | "paused" | "needs_review" | "completed" | "failed" | "cancelled";
+export type DramaProductionStepStatus = "blocked" | "ready" | "running" | "success" | "needs_review" | "failed" | "stale" | "cancelled";
+export type DramaProductionStep = {
+    id: string;
+    shotId?: string;
+    type: "asset_anchor" | "start_frame" | "end_frame" | "video" | "extract_frames" | "continuity_qc" | "audio";
+    dependsOn: string[];
+    status: DramaProductionStepStatus;
+    taskId?: string;
+    clipIndex?: number;
+    duration?: number;
+    referenceShotId?: string;
+    inputHash?: string;
+    outputUrls?: string[];
+    error?: string;
+};
+export type DramaProductionRun = {
+    id: string;
+    projectId: string;
+    episodeId: string;
+    planRevision: string;
+    status: DramaProductionRunStatus;
+    mode: "strict" | "balanced";
+    parameterSnapshot: {
+        imageModel: string;
+        videoModel: string;
+        audioModel?: string;
+        ratio: string;
+        maxVideoSeconds?: number;
+        imageQuality?: string;
+        videoQuality?: string;
+    };
+    steps: DramaProductionStep[];
+    createdAt: string;
+    updatedAt: string;
 };

@@ -29,5 +29,7 @@ describe("drama script workspace layout", () => {
         expect(sourceImport).toContain("选择制作包文件");
         expect(review).toContain('hasPackageVisualPlan ? () => onStageChange("storyboard") : onDesignVisuals');
         expect(review).toContain('hasPackageVisualPlan ? "进入分镜"');
+        expect(review).toContain('{ label: "制作包资料", value: "package" }');
+        expect(review).toContain("data-drama-production-archive");
     });
 });

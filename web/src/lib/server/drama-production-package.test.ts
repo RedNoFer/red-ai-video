@@ -43,7 +43,7 @@ describe("production package boundary", () => {
         const preview = previewDramaProductionPackage(JSON.stringify(productionPackage), "package.json");
 
         expect(preview.format).toBe("json");
-        expect(preview.summary).toEqual({ episodes: 1, storyScenes: 1, shots: 2, characters: 2, locations: 1, duration: 30 });
+        expect(preview.summary).toEqual({ episodes: 1, storyScenes: 1, shots: 2, characters: 2, locations: 1, duration: 30, archiveSections: 0, promptAssets: 0 });
         expect(preview.package.episodes[0].shots[0]).toMatchObject({ code: "SH01", lens: "50mm", sound: { ambience: "车轮声" }, videoPrompt: "梦中惊醒" });
     });
 
@@ -52,7 +52,7 @@ describe("production package boundary", () => {
         const preview = previewDramaProductionPackage(source, "mahadel-episode-01-production-package.md");
 
         expect(preview.format).toBe("markdown");
-        expect(preview.summary).toEqual({ episodes: 1, storyScenes: 7, shots: 12, characters: 7, locations: 4, duration: 180 });
+        expect(preview.summary).toEqual({ episodes: 1, storyScenes: 7, shots: 12, characters: 7, locations: 4, duration: 180, archiveSections: 13, promptAssets: 7 });
         expect(preview.package.project).toMatchObject({ ratio: "9:16", productionBible: { targetPlatform: "Seedance 2.0", continuityMode: "strict" } });
         expect(preview.package.episodes[0].shots.map((shot) => shot.code)).toEqual(["SH01", "SH02", "SH03", "SH04", "SH05", "SH06", "SH07", "SH08", "SH09", "SH10", "SH11", "SH12"]);
         expect(preview.package.episodes[0].shots[11]).toMatchObject({ lens: "85mm", sound: { ambience: "店外声音像隔水" } });
@@ -60,6 +60,22 @@ describe("production package boundary", () => {
         expect(preview.package.assets.characters.find((asset) => asset.code === "C03")?.activeEpisodeCodes).toEqual([]);
         expect(preview.package.episodes[0].shots.flatMap((shot) => shot.characterCodes)).not.toContain("C03");
         expect(preview.package.episodes[0].shots.flatMap((shot) => shot.characterCodes)).not.toContain("C04");
+        expect(preview.package.archive).toMatchObject({
+            formatVersion: "vozeb-drama-production-package-v1",
+            promptAssets: expect.arrayContaining([
+                expect.objectContaining({ code: "V01", category: "keyframe", shotCodes: ["SH01", "SH11"] }),
+                expect.objectContaining({ code: "SB01", category: "storyboard", shotCodes: ["SH01", "SH02", "SH03", "SH04"] }),
+            ]),
+            dialogueDirections: expect.arrayContaining([expect.objectContaining({ id: "D01", performance: "VL1耳语、SP2慢、无呼吸感", lipSync: false })]),
+            voiceDirections: expect.arrayContaining([expect.objectContaining({ subject: "Karin" })]),
+            silenceDirections: expect.arrayContaining([expect.objectContaining({ shotCode: "SH07" })]),
+            referencePlan: expect.arrayContaining([expect.objectContaining({ priority: 1, asset: "C01 Karin角色卡", planType: "consistency_asset" })]),
+        });
+        expect(preview.package.archive?.sections.map((section) => section.title)).toEqual(
+            expect.arrayContaining(["原创第一章", "项目总览", "关键视频资产 Prompt", "全案板 Prompt", "QC 报告"]),
+        );
+        expect(preview.package.archive?.generationOrder.length).toBeGreaterThan(0);
+        expect(preview.package.archive?.qcReport).toContain("总分");
     });
 
     it("applies package codes to stable project ids and preserves manual fields", () => {
@@ -83,6 +99,7 @@ describe("production package boundary", () => {
         expect(second.episodes[0].continuityEdges?.[0]).toMatchObject({ fromShotId: shotId, toShotId: second.episodes[0].shots[1].id, inheritActualEndFrame: true });
         expect(second.sourceAssets?.at(-1)).toMatchObject({ type: "text", title: "制作包 package.json", textContent: "hash-two" });
         expect(second.episodes[0].reviewStatus).toBe("visual_ready");
+        expect(second.productionArchive).toEqual(productionPackage.archive);
     });
 
     it("treats complete-package asset lists as authoritative while keeping stable matched ids", () => {

@@ -14,7 +14,7 @@ export function DramaReviewPanel({ project, episode, onDesignVisuals, designing,
     const updateEpisode = useDramaStore((state) => state.updateEpisode);
     const updateShot = useDramaStore((state) => state.updateShot);
     const [episodeInfoOpen, setEpisodeInfoOpen] = useState(false);
-    const [view, setView] = useState<"content" | "production" | "continuity">("content");
+    const [view, setView] = useState<"content" | "production" | "continuity" | "package">("content");
     const [expandedShotIds, setExpandedShotIds] = useState<Set<string>>(() => new Set(episode.shots.slice(0, 1).map((shot) => shot.id)));
     useEffect(() => {
         setExpandedShotIds(new Set(episode.shots.slice(0, 1).map((shot) => shot.id)));
@@ -33,7 +33,7 @@ export function DramaReviewPanel({ project, episode, onDesignVisuals, designing,
     };
     const totalDuration = episode.shots.reduce((total, shot) => total + shot.duration, 0);
     const dialogueCount = episode.shots.reduce((total, shot) => total + (shot.utterances.filter((item) => item.type === "dialogue").length || shot.dialogue.split(/\n+/).filter((line) => line.trim()).length), 0);
-    const hasPackageVisualPlan = episode.reviewStatus === "visual_ready" && episode.shots.every((shot) => shot.fieldOrigins?.imagePrompt === "package" && shot.fieldOrigins?.videoPrompt === "package");
+    const hasPackageVisualPlan = episode.reviewStatus === "visual_ready" && episode.shots.every((shot) => shot.imagePrompt.trim() && shot.videoPrompt.trim() && shot.fieldOrigins?.imagePrompt === "package" && shot.fieldOrigins?.videoPrompt === "package");
     return (
         <div>
             <DramaStageHeader
@@ -77,6 +77,7 @@ export function DramaReviewPanel({ project, episode, onDesignVisuals, designing,
                             { label: "内容结构", value: "content" },
                             { label: "制作参数", value: "production" },
                             { label: "连续性", value: "continuity" },
+                            ...(project.productionArchive ? [{ label: "制作包资料", value: "package" }] : []),
                         ]}
                     />
                 </div>
@@ -223,6 +224,7 @@ export function DramaReviewPanel({ project, episode, onDesignVisuals, designing,
                     })}
                 </div>
             ) : null}
+            {episode.shots.length && view === "package" && project.productionArchive ? <DramaProductionArchiveView archive={project.productionArchive} /> : null}
             <Modal title="本集信息" open={episodeInfoOpen} width={620} centered destroyOnHidden footer={null} onCancel={() => setEpisodeInfoOpen(false)} styles={{ container: { maxWidth: "calc(100vw - 24px)" } }}>
                 <div className="grid gap-3 pt-1 sm:grid-cols-2">
                     {[
@@ -243,6 +245,69 @@ export function DramaReviewPanel({ project, episode, onDesignVisuals, designing,
                     ))}
                 </div>
             </Modal>
+        </div>
+    );
+}
+
+function DramaProductionArchiveView({ archive }: { archive: NonNullable<DramaProject["productionArchive"]> }) {
+    return (
+        <div className="mt-2.5 space-y-3" data-drama-production-archive>
+            <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-4">
+                {[
+                    ["原文章节", archive.sections.length],
+                    ["视觉 Prompt 资产", archive.promptAssets.length],
+                    ["台词表演指令", archive.dialogueDirections.length],
+                    ["资产引用计划", archive.referencePlan.length],
+                ].map(([label, value]) => (
+                    <div key={String(label)} className="bg-card px-3 py-2.5"><div className="text-[11px] text-muted-foreground">{label}</div><div className="mt-0.5 text-sm font-semibold tabular-nums">{value}</div></div>
+                ))}
+            </div>
+            <section className="rounded-lg border border-border bg-background p-3">
+                <h3 className="text-sm font-semibold">关键帧与全案板 Prompt</h3>
+                <div className="mt-2 grid gap-2 lg:grid-cols-2">
+                    {archive.promptAssets.map((asset) => (
+                        <details key={asset.code} className="rounded-md border border-border bg-card px-3 py-2 open:pb-3">
+                            <summary className="cursor-pointer text-xs font-medium">{asset.code} · {asset.title} <span className="ml-1 text-muted-foreground">{asset.shotCodes.join("、") || "未绑定镜头"}</span></summary>
+                            <pre className="mt-2 whitespace-pre-wrap break-words font-sans text-xs leading-5 text-muted-foreground">{asset.prompt}</pre>
+                        </details>
+                    ))}
+                </div>
+            </section>
+            <section className="rounded-lg border border-border bg-background p-3">
+                <h3 className="text-sm font-semibold">表演、静默与执行计划</h3>
+                <dl className="mt-2 grid gap-2 text-xs sm:grid-cols-2">
+                    <Parameter label="角色台词基调" value={archive.voiceDirections.map((item) => `${item.subject}：${item.direction}`).join("；")} />
+                    <Parameter label="沉默设计" value={archive.silenceDirections.map((item) => `${item.shotCode}：${item.direction}`).join("；")} />
+                    <Parameter label="生成顺序" value={archive.generationOrder.join(" → ")} />
+                    <Parameter label="格式版本" value={archive.formatVersion} />
+                </dl>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    {archive.referencePlan.map((item) => (
+                        <div key={`${item.priority}-${item.asset}`} className="rounded-md border border-border px-2.5 py-2 text-xs">
+                            <div className="font-medium">{item.priority}. {item.asset}</div>
+                            <div className="mt-1 text-muted-foreground">{item.planType} · {item.purpose} · {item.shotCodes.join("、") || "未绑定镜头"}</div>
+                        </div>
+                    ))}
+                </div>
+                <div className="mt-3 overflow-x-auto hide-scrollbar">
+                    <table className="w-full min-w-[680px] text-left text-xs">
+                        <thead className="text-muted-foreground"><tr><th className="pb-2">ID</th><th className="pb-2">镜头</th><th className="pb-2">说话人</th><th className="pb-2">台词</th><th className="pb-2">表演与节奏</th><th className="pb-2">口型</th></tr></thead>
+                        <tbody>{archive.dialogueDirections.map((item) => <tr key={item.id} className="border-t border-border"><td className="py-2">{item.id}</td><td>{item.shotCode}</td><td>{item.speaker}</td><td>{item.text}</td><td>{item.performance}</td><td>{item.lipSync ? "是" : "否"}</td></tr>)}</tbody>
+                    </table>
+                </div>
+            </section>
+            <section className="rounded-lg border border-border bg-background p-3">
+                <h3 className="text-sm font-semibold">原制作包章节与 QC</h3>
+                <div className="mt-2 space-y-2">
+                    {archive.sections.map((section) => (
+                        <details key={section.code} className="rounded-md border border-border bg-card px-3 py-2 open:pb-3">
+                            <summary className="cursor-pointer text-xs font-medium">{section.title}</summary>
+                            <pre className="mt-2 whitespace-pre-wrap break-words font-sans text-xs leading-5 text-muted-foreground">{section.content}</pre>
+                        </details>
+                    ))}
+                </div>
+                {archive.qcReport ? <pre className="mt-3 whitespace-pre-wrap break-words rounded-md bg-muted/45 p-3 font-sans text-xs leading-5">{archive.qcReport}</pre> : null}
+            </section>
         </div>
     );
 }
