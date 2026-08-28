@@ -6,7 +6,17 @@ import { generationModelId, toSystemGenerationChannel } from "@/lib/server/gener
 import { finishGenerationAttempt, startGenerationAttempt, type GenerationAttempt } from "@/lib/server/generation-attempt";
 import { fetchInternalApi, resolveInternalOrigin } from "@/lib/server/internal-origin";
 import { resolveLogicalModelCandidates } from "@/lib/server/logical-model-router";
-import { assertReferenceCapabilities, assertReferenceUrls, assertVideoReferenceRoles, buildVideoProviderRequest, isProviderBusinessError, readProviderError, readProviderString, resolvedProviderCreatePaths } from "@/lib/server/provider-task-config";
+import {
+    assertReferenceCapabilities,
+    assertReferenceUrls,
+    assertVideoReferenceRoles,
+    buildVideoProviderRequest,
+    isProviderBusinessError,
+    readProviderError,
+    readProviderString,
+    resolvedProviderCreatePaths,
+    serializeProviderRequest,
+} from "@/lib/server/provider-task-config";
 import { buildGlobalAiOpcVideoRequest, resolveGlobalAiOpcPreset } from "@/lib/globalaiopc-catalog";
 import { createVideoTask, transitionVideoTask, updateVideoTask, type VideoTask } from "@/lib/server/video-task-store";
 import { toSafeGenerationErrorMessage } from "@/lib/server/generation-errors";
@@ -22,6 +32,7 @@ import { runGenerationTaskRecoveryBatch } from "@/lib/server/generation-task-rec
 import { scheduleGenerationTask } from "@/lib/server/generation-task-scheduler";
 import { VIDEO_PROVIDER_MEDIA_KEYS, parseVideoProviderJson, readVideoProviderHttpError, readVideoProviderId, readVideoProviderUrl } from "@/lib/server/video-provider-response";
 import { buildSeedanceSpecialRequest } from "@/lib/seedance-special";
+import { resolveBumingSeedanceVideoModelContract } from "@/lib/channel-protocol-registry";
 import { assertVozebRecommendedVideoReferences, buildVozebRecommendedVideoRequest } from "@/lib/vozeb-recommended-video";
 import { assertGeminiVideoReferences, buildGeminiVideoRequest, geminiVideoCreatePath, normalizeGeminiVideoDuration, parseGeminiVideoCreateResponse } from "@/lib/server/gemini-video-provider";
 import { systemAiBillingHeaders } from "@/lib/server/system-ai-billing";
@@ -61,7 +72,9 @@ export async function POST(request: Request) {
     const settings = await getAuthSettings();
     const response = await withGenerationConcurrencyLimit(user.id, "video", 30 * 60_000, settings.generationConcurrency.video, async () => {
         const requestedModel = typeof body.config?.model === "string" && body.config.model.trim() ? body.config.model : settings.defaultModels.videoModel;
-        const channels = resolveLogicalModelCandidates(settings, "video", requestedModel).map(toSystemGenerationChannel);
+        const requestedChannelId = typeof body.config?.channelId === "string" ? body.config.channelId.trim() : "";
+        const candidates = resolveLogicalModelCandidates(settings, "video", requestedModel, requestedChannelId);
+        const channels = (body.context?.surface === "drama" && body.context.runId ? candidates.slice(0, 1) : candidates).map(toSystemGenerationChannel);
         const prompt = String(body.prompt || "").trim();
         if (!channels.length || !prompt) return NextResponse.json({ error: "视频任务参数不完整或渠道不支持" }, { status: 400 });
         const publicOrigin = requestPublicOrigin(request);
@@ -83,7 +96,20 @@ export async function POST(request: Request) {
         for (let index = 0; index < channels.length; index += 1) {
             const channel = channels[index];
             const geminiVideo = isGeminiVideoChannel(channel);
-            const capabilityProfile = channel.advancedConfig?.protocol === "newapi-video" ? { ...channel.capabilityProfile, maxReferenceImages: 1 } : channel.capabilityProfile;
+            const capabilityProfile = channel.capabilityProfile;
+            const keyframeCount = references.filter((reference) => reference.role === "keyframe").length;
+            const bumingContract = channel.advancedConfig?.protocol === "buming-seedance" ? resolveBumingSeedanceVideoModelContract(channel.model) : undefined;
+            const supportsKeyframes = bumingContract ? bumingContract.videoReferenceModes.includes("all_frames") : capabilityProfile?.supportsKeyframes;
+            const maxReferenceImages = bumingContract?.maxReferenceImages || capabilityProfile?.maxReferenceImages || 0;
+            if (keyframeCount && (!supportsKeyframes || maxReferenceImages < keyframeCount)) {
+                if (bumingContract && !bumingContract.videoReferenceModes.includes("all_frames")) {
+                    return NextResponse.json({ error: "当前不鸣视频模型不支持全能帧连续参考" }, { status: 400 });
+                }
+                const error = new Error(`当前模型未声明支持 ${keyframeCount} 张全能帧关键图，请切换支持全能帧的模型`);
+                if (channel.advancedConfig?.protocol === "buming-seedance") return NextResponse.json({ error: error.message }, { status: 400 });
+                capabilityError = error;
+                continue;
+            }
             const parameters = {
                 ...requestedParameters,
                 videoSeconds: geminiVideo
@@ -105,6 +131,7 @@ export async function POST(request: Request) {
                 if (geminiVideo) {
                     assertGeminiVideoReferences(references);
                 } else {
+                    if (channel.advancedConfig?.protocol === "newapi-video") assertNewApiVideoReferences(references);
                     assertReferenceCapabilities(
                         globalPreset
                             ? {
@@ -116,12 +143,13 @@ export async function POST(request: Request) {
                             : channel.advancedConfig,
                         references,
                     );
-                    if (channel.advancedConfig?.protocol !== "yumeng") assertVideoReferenceRoles(channel.advancedConfig, references, globalPreset?.videoReferenceRoles);
+                    if (channel.advancedConfig?.protocol !== "yumeng") assertVideoReferenceRoles(channel.advancedConfig, references, globalPreset?.videoReferenceRoles, channel.model);
                     if (channel.advancedConfig?.protocol === "vozeb-recommended") assertVozebRecommendedVideoReferences(channel.model, references);
                     if (channel.advancedConfig?.protocol === "yumeng") assertYumengVideoReferences(channel.model, references);
                     assertReferenceUrls(channel.advancedConfig, references, Boolean(globalPreset));
                 }
             } catch (error) {
+                if (channel.advancedConfig?.protocol === "buming-seedance") return NextResponse.json({ error: error instanceof Error ? error.message : "当前不鸣视频模型不支持参考素材" }, { status: 400 });
                 capabilityError = error;
                 continue;
             }
@@ -221,8 +249,10 @@ export async function createUpstream(
 ) {
     let lastError = "";
     const regularReferences = regularVideoReferences(references);
-    const { firstFrame, lastFrame } = videoFrameReferences(references);
-    const images = referenceUrls(regularReferences, "image");
+    const { firstFrame, lastFrame, keyframes } = videoFrameReferences(references);
+    const images = referenceUrls([...keyframes, ...regularReferences.filter((reference) => reference.type === "image")], "image");
+    const bumingSeedance = channel.advancedConfig?.protocol === "buming-seedance";
+    const bumingImages = referenceUrls([...keyframes, ...(firstFrame ? [firstFrame] : []), ...(lastFrame ? [lastFrame] : []), ...regularReferences.filter((reference) => reference.type === "image")], "image");
     const videos = referenceUrls(regularReferences, "video");
     const audios = referenceUrls(regularReferences, "audio");
     const requestImage = images[0] || "";
@@ -231,23 +261,25 @@ export async function createUpstream(
     const lastFrameUrl = lastFrame?.url || "";
     const dimensions = videoDimensions(raw.size, raw.vquality);
     const generateAudio = raw.videoGenerateAudio !== false && raw.videoGenerateAudio !== "false";
+    const bumingContract = bumingSeedance ? resolveBumingSeedanceVideoModelContract(channel.model) : undefined;
+    const providerPrompt = bumingSeedance ? bumingSeedancePrompt(prompt, firstFrame, lastFrame, keyframes.length, bumingImages.length - keyframes.length - Number(Boolean(firstFrame)) - Number(Boolean(lastFrame)), videos.length, audios.length) : prompt;
     if (isGeminiVideoChannel(channel)) {
         return createGeminiVideoUpstream({ userId, origin, cookie, channel, prompt, raw, references, generateAudio, multipliers, billingRequestId });
     }
     const values = {
         model: channel.model,
-        prompt,
+        prompt: providerPrompt,
         duration: duration(raw.videoSeconds),
         seconds: duration(raw.videoSeconds),
         ratio: ratio(raw.size),
         aspect_ratio: ratio(raw.size),
         size: sizeValue(raw.size),
         resolution: resolution(raw.vquality),
-        quality: resolution(raw.vquality),
+        quality: bumingSeedance ? bumingContract?.quality || "" : resolution(raw.vquality),
         width: dimensions.width,
         height: dimensions.height,
         generate_audio: generateAudio,
-        images: requestImages,
+        images: bumingSeedance ? bumingImages : requestImages,
         videos,
         audios,
         image: requestImage,
@@ -259,10 +291,30 @@ export async function createUpstream(
         first_frame_url: firstFrameUrl,
         last_frame: lastFrameUrl,
         last_frame_url: lastFrameUrl,
+        mode: bumingSeedance
+            ? keyframes.length
+                ? "reference"
+                : firstFrameUrl
+                  ? lastFrameUrl
+                      ? "first-last"
+                      : "first-frame"
+                  : images.length || videos.length || audios.length
+                    ? "reference"
+                    : "text-to-video"
+            : firstFrameUrl
+              ? lastFrameUrl
+                  ? "first-last-frame"
+                  : "first-frame"
+              : videos.length
+                ? "reference-video"
+                : images.length
+                  ? "image-to-video"
+                  : "text-to-video",
+        client_request_id: billingRequestId,
     };
     const defaults = {
         model: channel.model,
-        prompt,
+        prompt: providerPrompt,
         duration: values.duration,
         seconds: values.seconds,
         ratio: values.ratio,
@@ -275,9 +327,11 @@ export async function createUpstream(
         ...(requestImages.length ? { images: requestImages, image_urls: requestImages, reference_images: requestImages } : {}),
         ...(videos.length ? { video: videos[0], videos, reference_videos: videos } : {}),
         ...(audios.length ? { audio: audios[0], audios, reference_audios: audios } : {}),
-        ...(references.length ? { ref_assets: references.map((item) => ({ type: item.type, url: item.url, role: item.role || "reference" })) } : {}),
+        ...(references.length ? { ref_assets: references.map((item) => ({ type: item.type, url: item.url, role: item.role || "reference", ...(item.keyframeIndex ? { keyframe_index: item.keyframeIndex } : {}) })) } : {}),
         ...(firstFrameUrl ? { first_frame: firstFrameUrl, first_frame_url: firstFrameUrl } : {}),
         ...(lastFrameUrl ? { last_frame: lastFrameUrl, last_frame_url: lastFrameUrl } : {}),
+        mode: values.mode,
+        ...(channel.advancedConfig?.protocol === "buming-seedance" ? { client_request_id: billingRequestId } : {}),
     };
     const globalPreset = globalAiOpcVideoPreset(channel.advancedConfig, channel.model);
     const multipart = channel.advancedConfig?.requestTemplate?.trim().toLowerCase().startsWith("multipart/form-data") === true;
@@ -336,7 +390,7 @@ export async function createUpstream(
                 : buildVideoProviderRequest(channel.advancedConfig?.requestTemplate, defaults, values);
     const requestBody = multipart
         ? await buildOpenAiVideoFormData({ model: channel.model, prompt, seconds: values.seconds as number, width: dimensions.width, height: dimensions.height, imageUrls: firstFrameUrl ? [firstFrameUrl] : images, origin, cookie })
-        : JSON.stringify(payload);
+        : serializeVideoProviderRequest(payload);
     const imageToVideoPath = images.length || firstFrameUrl ? channel.advancedConfig?.imageToVideoPath?.trim() : "";
     const createPaths = globalPreset ? [globalPreset.createPath] : imageToVideoPath ? [imageToVideoPath] : resolvedProviderCreatePaths(channel.advancedConfig, "video", CREATE_PATHS);
     for (const path of createPaths) {
@@ -427,7 +481,7 @@ async function createGeminiVideoUpstream(input: {
             "X-Client-Request-Id": input.billingRequestId,
             ...systemAiBillingHeaders(generationModelId(input.channel), `video-request:${input.billingRequestId}`, input.channel.model),
         },
-        body: JSON.stringify(payload),
+        body: serializeVideoProviderRequest(payload),
         signal: AbortSignal.timeout(resolveModelRequestTimeoutMs(input.channel, "video")),
     });
     const text = await response.text();
@@ -492,15 +546,27 @@ function ratio(value: unknown) {
 }
 function resolution(value: unknown) {
     const text = clean(value).replace(/p$/i, "");
-    return text === "480" || text === "1080" ? `${text}p` : "720p";
+    return text === "480" || text === "1080" || text === "720" ? `${text}p` : "480p";
 }
 function videoDimensions(size: unknown, quality: unknown) {
     const exact = parseImageDimensions(String(size || ""));
     if (exact) return exact;
     const [x, y] = ratio(size).split(":").map(Number);
-    const edge = Number(resolution(quality).replace("p", "")) || 720;
+    const edge = Number(resolution(quality).replace("p", "")) || 480;
     if (!x || !y) return { width: 1280, height: 720 };
     return x >= y ? { width: Math.round((edge * x) / y), height: edge } : { width: edge, height: Math.round((edge * y) / x) };
+}
+
+function bumingSeedancePrompt(prompt: string, firstFrame: VideoGenerationReference | undefined, lastFrame: VideoGenerationReference | undefined, keyframeCount: number, regularImageCount: number, videoCount: number, audioCount: number) {
+    const references: string[] = [];
+    if (keyframeCount) references.push(`连续关键帧按时间顺序使用@图片1至@图片${keyframeCount}`);
+    else if (firstFrame && lastFrame) references.push("首帧使用@图片1，尾帧使用@图片2");
+    else if (firstFrame) references.push("首帧使用@图片1");
+    const regularImageStart = keyframeCount + Number(Boolean(firstFrame)) + Number(Boolean(lastFrame)) + 1;
+    if (regularImageCount) references.push(`普通参考图片使用@图片${regularImageStart}${regularImageCount > 1 ? `至@图片${regularImageStart + regularImageCount - 1}` : ""}`);
+    if (videoCount) references.push(`参考视频使用@视频1${videoCount > 1 ? `至@视频${videoCount}` : ""}`);
+    if (audioCount) references.push(`参考音频使用@音频1${audioCount > 1 ? `至@音频${audioCount}` : ""}`);
+    return references.length ? `${references.join("；")}。\n${prompt}` : prompt;
 }
 function sizeValue(value: unknown) {
     const text = clean(value);
@@ -512,7 +578,7 @@ function billedPointsCost(value: unknown) {
     return Number.isFinite(number) && number >= 0 ? number : undefined;
 }
 function videoUnits(raw: Record<string, unknown>, multipliers: Awaited<ReturnType<typeof getAuthSettings>>["generationPointMultipliers"]) {
-    const quality = clean(raw.vquality).replace(/p$/i, "") || "720";
+    const quality = clean(raw.vquality).replace(/p$/i, "") || "480";
     const seconds = String(duration(raw.videoSeconds));
     return (multipliers.videoQuality[quality] || 1) * (multipliers.videoSeconds[seconds] || 1);
 }
@@ -535,7 +601,12 @@ function videoReferenceContent(prompt: string, references: readonly VideoGenerat
         { type: "text", text: prompt },
         ...references.map((reference) =>
             reference.type === "image"
-                ? { type: "image_url", role: reference.role === "first_frame" || reference.role === "last_frame" ? reference.role : "reference_image", image_url: { url: reference.url } }
+                ? {
+                      type: "image_url",
+                      role: reference.role === "first_frame" || reference.role === "last_frame" ? reference.role : reference.role === "keyframe" ? "keyframe" : "reference_image",
+                      ...(reference.keyframeIndex ? { keyframe_index: reference.keyframeIndex } : {}),
+                      image_url: { url: reference.url },
+                  }
                 : reference.type === "video"
                   ? { type: "video_url", role: "reference_video", video_url: { url: reference.url } }
                   : { type: "audio_url", role: "reference_audio", audio_url: { url: reference.url } },
@@ -557,3 +628,20 @@ const MEDIA_KEYS = VIDEO_PROVIDER_MEDIA_KEYS;
 const SAFE_CREATE_FAILURE_STATUSES = new Set([400, 401, 403, 404, 405, 413, 415, 422, 429]);
 
 class SafeCandidateFailure extends Error {}
+
+function assertNewApiVideoReferences(references: readonly VideoGenerationReference[]) {
+    const imageCount = references.filter((reference) => reference.type === "image").length;
+    const videoCount = references.filter((reference) => reference.type === "video").length;
+    const audioCount = references.filter((reference) => reference.type === "audio").length;
+    if (imageCount > 9) throw new Error("New API 视频最多支持 9 张参考图");
+    if (videoCount > 3) throw new Error("New API 视频最多支持 3 个参考视频");
+    if (audioCount > 3) throw new Error("New API 视频最多支持 3 个参考音频");
+}
+
+function serializeVideoProviderRequest(value: unknown) {
+    try {
+        return serializeProviderRequest(value);
+    } catch (error) {
+        throw new SafeCandidateFailure(error instanceof Error ? error.message : "视频请求参数无效");
+    }
+}

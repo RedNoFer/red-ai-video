@@ -12,9 +12,12 @@ import { isExplicitProjectHandoffRequest, normalizeAgentProjectHandoff } from ".
 import { normalizeCanvasPlanForSelection } from "./agent-run-task-input";
 import { GenerationSubmissionUncertainError } from "@/lib/server/generation-submission-error";
 import { rankTextPlanningCandidates } from "@/lib/server/text-planning-runtime";
-import { filterAgentPlannerModels } from "@/lib/server/agent-run-planning-profile";
+import { filterAgentPlannerModels, isLikelyConversationPlannerPrompt } from "@/lib/server/agent-run-planning-profile";
 import { buildAgentRunPlannerAudit } from "@/lib/server/agent-run-audit";
 import { orderCreativeAssetsByIds } from "@/lib/creative-asset-references";
+import { getDramaProject } from "@/lib/server/drama-project-store";
+import { previewDramaProductionPackage } from "@/lib/server/drama-production-package";
+import { serializeDramaProductionPackageMarkdown } from "@/lib/drama-production-package-serializer";
 
 const globalAgentExecutors = globalThis as typeof globalThis & { __vozebProAgentRunControllers?: Map<string, AbortController> };
 const controllers = (globalAgentExecutors.__vozebProAgentRunControllers ??= new Map<string, AbortController>());
@@ -50,6 +53,10 @@ export async function executeAgentRun(run: AgentRun, origin: string, cookie: str
         }
         const directModelSelection = Boolean(claimed.requestedModelIds?.length);
         const usesMemoryCandidates = !directModelSelection && claimed.surface === "chat" && claimed.referencedAssetIds.length === 0;
+        if (claimed.workflow === "drama-script") {
+            await executeDramaScriptRun(claimed, origin, cookie, controller.signal);
+            return;
+        }
         const [settings, loadedExplicitAssets, conversationContext, memoryAssets] = await Promise.all([
             getAuthSettings(),
             getCreativeAssetsByIds(claimed.referencedAssetIds, claimed.userId),
@@ -87,6 +94,7 @@ export async function executeAgentRun(run: AgentRun, origin: string, cookie: str
         if (!model || !candidates.length) throw new Error("后台尚未配置可用的默认文本模型");
         const fallbackExample = agentPlanFallbackExample(availableModels);
         const plannerContext = buildAgentPlannerInput(claimed, conversationContext!, referencedAssets, referenceSource, skillOptions, availableModels, settings);
+        const allowConversationProse = claimed.surface === "chat" && isLikelyConversationPlannerPrompt(claimed.prompt);
         if (!(await updateAgentRunById(run.id, { plannerContext: plannerContext.summary }, { type: "skills.selected", data: { skills: skills.map((skill) => ({ id: skill.id, name: skill.name })) } }, ["running"], executionId))) return;
         const planningInput = [
             {
@@ -112,10 +120,10 @@ export async function executeAgentRun(run: AgentRun, origin: string, cookie: str
                     controller.signal,
                     run.userId,
                     model,
-                    false,
+                    allowConversationProse,
                     systemAiIdempotencyKey("agent-plan", run.userId, run.id, candidate.channel.id, candidate.upstreamModel),
                 );
-                plan = await parseAgentPlanCall(planCall, () => refundFunctionCall(claimed.userId, model, planCall), undefined, {
+                plan = await parseAgentPlanCall(planCall, () => refundFunctionCall(claimed.userId, model, planCall), allowConversationProse ? { objective: claimed.prompt, reply: conversationFallbackReply(claimed.surface) } : undefined, {
                     allowProjectHandoff: claimed.surface === "chat" && isExplicitProjectHandoffRequest(claimed.prompt),
                     requiredGenerationMode: claimed.generationPreferences?.mode,
                 });
@@ -203,4 +211,128 @@ export async function executeAgentRun(run: AgentRun, origin: string, cookie: str
     } finally {
         if (controllers.get(run.id) === controller) controllers.delete(run.id);
     }
+}
+
+async function executeDramaScriptRun(run: AgentRun, origin: string, cookie: string, signal: AbortSignal) {
+    const projectId = run.projectId?.trim();
+    const episodeId = run.episodeId?.trim();
+    if (!projectId || !episodeId) throw new Error("剧本 Agent 缺少项目或集数上下文");
+    const [settings, project, conversationContext] = await Promise.all([getAuthSettings(), getDramaProject(projectId, run.userId), getCreativeConversationContext(run.conversationId, run.userId, run.id)]);
+    if (!project) throw new Error("短剧项目不存在");
+    const index = project.episodes.findIndex((episode) => episode.id === episodeId);
+    if (index < 0) throw new Error("当前集不存在或已被删除");
+    const current = project.episodes[index];
+    const selectedSkills = selectAgentSkills(settings, "drama", run.selectedSkillIds || []);
+    const lockedPlan = run.snapshot && typeof run.snapshot === "object" && !Array.isArray(run.snapshot) ? (run.snapshot as { productionPlan?: unknown }).productionPlan : undefined;
+    if (isOutsideDramaScriptScope(run.prompt)) {
+        const reply = `当前窗口只处理${current.title}的新剧本内容。请继续提供本集剧情、人物、冲突或制作包要求。`;
+        await updateAgentRunById(
+            run.id,
+            { status: "completed", tasks: [], reviewed: true, executionId: undefined, timings: { ...(run.timings || { requestAcceptedAt: run.createdAt }), runCompletedAt: Date.now() } },
+            { type: "run.completed", data: { reply } },
+            ["running"],
+            run.executionId,
+        );
+        return;
+    }
+    const adjacent = [project.episodes[index - 1], project.episodes[index + 1]]
+        .filter(Boolean)
+        .map((episode) => ({ id: episode.id, title: episode.title, outline: episode.outline, hook: episode.hook, nextPreview: episode.nextPreview, script: episode.script.slice(0, 6000) }));
+    const model = settings.defaultModels.textModel;
+    const candidates = resolveLogicalModelCandidates(settings, "text", model);
+    if (!model || !candidates.length) throw new Error("后台尚未配置可用的默认文本模型");
+    const instruction = `你是 VOZEB PRO 短剧项目的专属集数编剧 GPT。你只能讨论当前集剧本：剧情、人物、冲突、场景、对白、节奏、结尾钩子和制作包内容。任何普通闲聊、知识问答、图片/视频/音频生成、其他项目事务或修改其他集的请求，都必须只回复：\"当前窗口只处理第 ${current.title} 的新剧本内容。请继续提供本集剧情、人物、冲突或制作包要求。\"。所有内容必须依据项目与会话上下文，不得凭空添加与上下文冲突的设定；缺少必要信息时先提问。${selectedSkills.length ? `本次用户显式选择的 Skill（仅可使用这些，版本必须保留）：${selectedSkills.map((skill) => `${skill.name}@${skill.id}`).join("、")}。` : "本次未选择普通 Skill，不得自行添加 Skill。"} 用户没有明确要求生成制作包时，只返回自然中文剧本协作回复，不输出内部规则、模型选择、规划过程或 Markdown 制作包。用户明确要求生成制作包时，必须返回一个 JSON 对象：{\"mode\":\"package\",\"reply\":\"简短完成说明\",\"markdown\":\"符合 vozeb-drama-production-package-v1 的完整 Markdown\"}。制作包只包含当前集和项目级资产，严格遵循 docs/drama-production-package-v1.md 的 13 个章节、编码和固定表头；每个镜头都必须同时提供 performancePlan、逐句 dialoguePerformance（无对白时为空数组）、lightingPlan、完整 continuity、entryState 和 exitState、framePlan.referenceManifest 与 framePlan.frames。${lockedPlan ? `必须严格执行并保留以下锁定生产方案，不得换模型、换模式或修改参数：${JSON.stringify(lockedPlan)}` : "如果没有锁定方案，必须先提示用户完成生产方案配置。"} 每镜 referenceManifest 按图片1、图片2…连续编号，智能规划3-5张有职责的参考图；framePlan.frames 必须按剧情动作节点规划 1-9 个连续帧段，每段包含稳定 id、sequenceIndex、startSecond、endSecond、actionPrompt 和 imagePrompt，从 0 秒无断层覆盖镜头时长，并在分段视频 Prompt 中用 Pxx-Fxx 对应描述；连续镜头只能把上一镜当前视频版本、已人工验收的实际尾帧作为首要连续性依据。所有这些字段都必须写成基于当前镜头事实、前后镜头和项目资产的具体可执行内容，禁止写“待补全”“无”或空对象作为占位；无对白时只允许 dialoguePerformance 为空数组。连续性必须明确景别、机位、构图、站位、视线、动作起止、屏幕方向和轴线规则，入口/出口状态必须能被下一镜继承。不能只输出画面或视频 Prompt，也不能覆盖其他集。`;
+    const input = {
+        request: run.prompt,
+        project: {
+            id: project.id,
+            title: project.title,
+            summary: project.summary,
+            style: project.style,
+            ratio: project.ratio,
+            seriesBible: project.seriesBible,
+            productionBible: project.productionBible,
+            productionArchive: project.productionArchive,
+            characters: project.characters,
+            scenes: project.scenes,
+            props: project.props,
+            clues: project.clues,
+        },
+        currentEpisode: current,
+        adjacentEpisodes: adjacent,
+        conversation: conversationContext,
+        selectedSkills: selectedSkills.map((skill) => ({ id: skill.id, name: skill.name })),
+        lockedProductionPlan: lockedPlan,
+    };
+    const tool = {
+        name: "drama_script_response",
+        description: "返回受限剧本协作回复或完整制作包",
+        parameters: { type: "object", properties: { mode: { type: "string", enum: ["reply", "package"] }, reply: { type: "string" }, markdown: { type: "string" } }, required: ["mode", "reply"], additionalProperties: false },
+    };
+    let latestError: unknown;
+    for (const candidate of rankTextPlanningCandidates(candidates.map((item) => ({ ...item, channelId: item.channel.id })))) {
+        try {
+            const call = await requestFunctionCall(
+                origin,
+                cookie,
+                candidate,
+                [
+                    { role: "system", content: instruction },
+                    { role: "user", content: JSON.stringify(input) },
+                ],
+                tool,
+                tool.name,
+                signal,
+                run.userId,
+                model,
+                false,
+                systemAiIdempotencyKey("drama-script", run.userId, run.id, candidate.channel.id, candidate.upstreamModel),
+            );
+            const parsed = JSON.parse(call.arguments) as { mode?: string; reply?: string; markdown?: string };
+            if (parsed.mode === "package") {
+                const markdown = parsed.markdown?.trim() || "";
+                if (!markdown) throw new Error("剧本 Agent 没有返回制作包正文");
+                let preview = previewDramaProductionPackage(markdown, "剧本 Agent 制作包.md");
+                if (lockedPlan && typeof lockedPlan === "object") {
+                    preview = { ...preview, package: { ...preview.package, project: { ...preview.package.project, productionBible: { ...preview.package.project.productionBible, productionPlan: lockedPlan as never } } } };
+                }
+                const canonicalMarkdown = serializeDramaProductionPackageMarkdown(preview.package);
+                const canonicalPreview = previewDramaProductionPackage(canonicalMarkdown, "剧本 Agent 制作包.md");
+                await updateAgentRunById(
+                    run.id,
+                    {
+                        status: "completed",
+                        tasks: [],
+                        reviewed: true,
+                        dramaScriptPackage: { markdown: canonicalMarkdown, preview: canonicalPreview },
+                        executionId: undefined,
+                        timings: { ...(run.timings || { requestAcceptedAt: run.createdAt }), runCompletedAt: Date.now() },
+                    },
+                    { type: "run.completed", data: { reply: parsed.reply?.trim() || "制作包已生成，请确认预览后回填当前集。", dramaScriptPackage: { markdown: canonicalMarkdown, preview: canonicalPreview } } },
+                    ["running"],
+                    run.executionId,
+                );
+            } else {
+                await updateAgentRunById(
+                    run.id,
+                    { status: "completed", tasks: [], reviewed: true, executionId: undefined, timings: { ...(run.timings || { requestAcceptedAt: run.createdAt }), runCompletedAt: Date.now() } },
+                    { type: "run.completed", data: { reply: parsed.reply?.trim() || "已收到本集剧本要求。" } },
+                    ["running"],
+                    run.executionId,
+                );
+            }
+            return;
+        } catch (error) {
+            latestError = error;
+        }
+    }
+    throw latestError instanceof Error ? latestError : new Error("剧本 Agent 执行失败");
+}
+
+export function isOutsideDramaScriptScope(prompt: string) {
+    const value = prompt.trim();
+    if (!value) return true;
+    return /(?:生成|制作|画|绘制|编辑|修改).{0,8}(?:图片|图像|海报|视频|动画|音频|配音|歌曲)|(?:天气|新闻|股票|基金|汇率|编程|代码|部署|服务器|数学题|翻译|写邮件|写简历|产品文案|广告文案)|^(?:你好|您好|在吗|谢谢|你是谁|能做什么)[！!。.？?]*$/u.test(
+        value,
+    );
 }

@@ -420,6 +420,68 @@ describe("client store session isolation", () => {
         expect(updated.episodes[0].shots[0]).toMatchObject({ characterIds: ["character-hero", newCharacter?.id], sceneId: newScene?.id });
     });
 
+    it("promotes a legacy reference image when confirming it as the primary asset reference", async () => {
+        vi.useFakeTimers();
+        try {
+            mocks.saveDramaProject.mockImplementation(async (value: DramaProject) => value);
+            useUserStore.getState().setUser(user("user-a"));
+            const project = dramaProject("drama-a", "用户 A 短剧");
+            project.characters = [{ id: "character-hero", name: "主角", description: "角色设定", referenceImageUrl: "/api/reference-assets/hero.png" }];
+            useDramaStore.setState({ projects: [project], hydrated: true, hydratedUserId: "user-a" });
+
+            const legacyReferenceId = "character-hero-reference-legacy";
+            useDramaStore.getState().approveAssetReference(project.id, "characters", "character-hero", legacyReferenceId);
+            await vi.advanceTimersByTimeAsync(250);
+
+            const updated = useDramaStore.getState().projects[0].characters[0];
+            expect(updated.primaryReferenceId).toBe(legacyReferenceId);
+            expect(updated.references).toEqual([expect.objectContaining({ id: legacyReferenceId, status: "approved", url: "/api/reference-assets/hero.png" })]);
+            expect(updated.referenceImageUrl).toBe("/api/reference-assets/hero.png");
+            expect(mocks.saveDramaProject).toHaveBeenCalledWith(expect.objectContaining({ characters: [expect.objectContaining({ primaryReferenceId: legacyReferenceId })] }));
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it("promotes a generated candidate reference when confirming it as the primary asset reference", async () => {
+        vi.useFakeTimers();
+        try {
+            mocks.saveDramaProject.mockImplementation(async (value: DramaProject) => value);
+            useUserStore.getState().setUser(user("user-a"));
+            const project = dramaProject("drama-a", "用户 A 短剧");
+            project.characters = [{ id: "character-hero", name: "主角", description: "角色设定", references: [{ id: "candidate-one", url: "/api/generation-log-assets/permanent/hero.png", source: "generated", label: "AI 候选图", status: "candidate", createdAt: project.updatedAt }] }];
+            useDramaStore.setState({ projects: [project], hydrated: true, hydratedUserId: "user-a" });
+
+            useDramaStore.getState().approveAssetReference(project.id, "characters", "character-hero", "candidate-one");
+            await vi.advanceTimersByTimeAsync(250);
+
+            const updated = useDramaStore.getState().projects[0].characters[0];
+            expect(updated.primaryReferenceId).toBe("candidate-one");
+            expect(updated.references).toEqual([expect.objectContaining({ id: "candidate-one", status: "approved" })]);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it("serializes immediate Drama saves so the latest local primary reference wins", async () => {
+        const firstSave = deferred<DramaProject>();
+        mocks.saveDramaProject.mockReturnValueOnce(firstSave.promise).mockImplementation(async (value: DramaProject) => value);
+        useUserStore.getState().setUser(user("user-a"));
+        const project = dramaProject("drama-a", "用户 A 短剧");
+        useDramaStore.setState({ projects: [project], hydrated: true, hydratedUserId: "user-a" });
+
+        const first = useDramaStore.getState().saveProjectNow(project.id);
+        await Promise.resolve();
+        useDramaStore.getState().updateProject(project.id, { title: "最新主基准状态" });
+        const second = useDramaStore.getState().saveProjectNow(project.id);
+
+        expect(mocks.saveDramaProject).toHaveBeenCalledTimes(1);
+        firstSave.resolve(project);
+        await Promise.all([first, second]);
+
+        expect(mocks.saveDramaProject).toHaveBeenLastCalledWith(expect.objectContaining({ title: "最新主基准状态" }));
+    });
+
     it("does not reset queued or running Drama shot tasks", () => {
         useUserStore.getState().setUser(user("user-a"));
         const project = dramaProject("drama-a", "用户 A 短剧");
@@ -438,6 +500,73 @@ describe("client store session isolation", () => {
         const shots = useDramaStore.getState().projects[0].episodes[0].shots;
         expect(shots[0]).toEqual(runningShot);
         expect(shots[1]).toMatchObject({ id: "shot-idle", storyboardStatus: "queued", storyboardAttempt: 1, generationStatus: "idle", audioStatus: "idle" });
+    });
+
+    it("fills blank package review fields without overwriting non-empty package fields", () => {
+        useUserStore.getState().setUser(user("user-a"));
+        const project = dramaProject("drama-a", "用户 A 短剧");
+        project.productionArchive = {
+            formatVersion: "vozeb-drama-production-package-v1",
+            sections: [
+                { code: "04", title: "镜头执行表", content: "旧内容" },
+                { code: "09", title: "台词与表演脚本", content: "旧对白" },
+                { code: "13", title: "QC 报告", content: "旧 QC" },
+            ],
+            promptAssets: [],
+            dialogueDirections: [],
+            voiceDirections: [],
+            silenceDirections: [],
+            referencePlan: [],
+            generationOrder: [],
+            qcReport: "旧 QC",
+        };
+        const shot = {
+            ...dramaShot("shot-review"),
+            fieldOrigins: { performancePlan: "package" as const, continuity: "package" as const },
+            performancePlan: undefined,
+            continuity: { shotSize: "中景", cameraAngle: "平视", composition: "已锁定构图", characterBlocking: "左侧", gazeDirection: "向右", actionStart: "站定", actionEnd: "抬头", screenDirection: "向右", axisRule: "不越轴", continuityNotes: "保持" },
+        };
+        project.episodes[0].shots = [shot];
+        useDramaStore.setState({ projects: [project], hydrated: true, hydratedUserId: "user-a" });
+
+        useDramaStore.getState().applyReviewCompletion(project.id, project.episodes[0].id, {
+            shots: [
+                {
+                    shotId: shot.id,
+                    performancePlan: {
+                        emotionalObjective: "确认危险",
+                        emotionalArc: "平静到警觉",
+                        speechStyle: "低声",
+                        pace: "慢",
+                        breath: "浅呼吸",
+                        restraintLevel: "克制",
+                        beats: {
+                            start: { emotion: "平静", facialAction: "眉眼放松", gaze: "向前", bodyAction: "站定" },
+                            middle: { emotion: "警觉", facialAction: "眉心收紧", gaze: "看门", bodyAction: "绷紧" },
+                            end: { emotion: "紧张", facialAction: "下颌收紧", gaze: "锁定", bodyAction: "后退" },
+                        },
+                    },
+                    continuity: {
+                        shotSize: "特写",
+                        cameraAngle: "俯拍",
+                        composition: "不应覆盖",
+                        characterBlocking: "右侧",
+                        gazeDirection: "向左",
+                        actionStart: "站定",
+                        actionEnd: "抬头",
+                        screenDirection: "向左",
+                        axisRule: "越轴",
+                        continuityNotes: "覆盖",
+                    },
+                },
+            ],
+        });
+
+        const updated = useDramaStore.getState().projects[0].episodes[0].shots[0];
+        expect(updated.performancePlan).toMatchObject({ emotionalObjective: "确认危险" });
+        expect(updated.continuity).toMatchObject({ shotSize: "中景", composition: "已锁定构图" });
+        expect(useDramaStore.getState().projects[0].productionArchive?.sections[0].content).toContain("确认危险");
+        expect(useDramaStore.getState().projects[0].productionArchive?.sections[0].content).not.toContain("待补全");
     });
 
     it("waits for an in-flight save before restoring a Drama version", async () => {

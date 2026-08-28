@@ -3,6 +3,9 @@ import { isRemoteMediaUrl } from "@/lib/browser-media-url";
 import { writeReferenceImageDataUrl } from "@/lib/server/reference-asset-store";
 import { createSignedReferenceAssetUrl, signReferenceAssetInputUrl } from "@/lib/server/reference-asset-access";
 import { resolvePublicRequestOrigin } from "@/lib/server/public-request-origin";
+import { fetchSafeOutbound } from "@/lib/server/safe-outbound-fetch";
+
+import { INLINE_IMAGE_TIMEOUT_MS } from "./image-task-types";
 
 export function referenceRequestUrl(reference: ImageTaskReference, origin = "") {
     return referenceRequestUrlCandidates(reference, origin)[0] || "";
@@ -15,23 +18,54 @@ export function jsonImageReferenceRequestUrl(reference: ImageTaskReference, orig
 }
 
 export async function publicImageReferenceRequestUrl(reference: ImageTaskReference, origin: string, publicOrigin: string, context: { ownerUserId: string; taskId: string }) {
-    const candidates = referenceRequestUrlCandidates(reference, origin).filter((value) => isExternalPublicMediaUrl(value));
-    if (candidates.length) return candidates[0];
-    const localCandidate = referenceRequestUrlCandidates(reference, origin).find((value) => /\/api\/reference-assets\//.test(value));
-    if (localCandidate) {
-        const signedUrl = signReferenceAssetInputUrl(localCandidate, publicOrigin);
-        if (signedUrl !== localCandidate) return signedUrl;
-        throw new Error("站内参考素材签名不可用，请配置 VOZEB_PRO_ENCRYPTION_KEY");
+    const requestCandidates = referenceRequestUrlCandidates(reference, origin);
+    const localCandidate = requestCandidates.find((value) => /\/api\/(?:reference-assets|generation-log-assets)\//.test(value));
+    const providerCandidates = requestCandidates.filter((value) => isExternalPublicMediaUrl(value) && !/\/api\/(?:reference-assets|generation-log-assets)\//.test(value));
+    if (!localCandidate && providerCandidates[0]) return providerCandidates[0];
+    for (const remoteUrl of providerCandidates) {
+        if (await isReachableProviderImage(remoteUrl)) return remoteUrl;
     }
+
+    if (localCandidate) {
+        if (hasUsableProviderReadSignature(localCandidate)) {
+            if (await isReachableProviderImage(localCandidate)) return localCandidate;
+            throw new Error("本地参考图公网地址不可访问，请检查 NEXT_PUBLIC_SITE_URL 后重试");
+        }
+        if (isExternalPublicOrigin(publicOrigin)) {
+            const signedUrl = signReferenceAssetInputUrl(localCandidate, publicOrigin);
+            if (signedUrl !== localCandidate) {
+                if (await isReachableProviderImage(signedUrl)) return signedUrl;
+                throw new Error("本地参考图公网地址不可访问，请检查 NEXT_PUBLIC_SITE_URL 后重试");
+            }
+            throw new Error("站内参考素材签名不可用，请配置 VOZEB_PRO_ENCRYPTION_KEY");
+        }
+    }
+
+    if (localCandidate) throw new Error("供应商参考图已失效，且本地副本没有可用公网地址；请配置 NEXT_PUBLIC_SITE_URL 后重试");
+    if (providerCandidates.length) throw new Error("供应商参考图已失效且没有可用本地副本，请重新上传参考图");
 
     const dataUrl = (reference.dataUrl || "").trim();
     if (!/^data:image\//i.test(dataUrl)) throw new Error("\u53c2\u8003\u56fe\u9700\u8981\u516c\u7f51\u56fe\u7247 URL\uff0c\u8bf7\u91cd\u65b0\u4e0a\u4f20\u53c2\u8003\u56fe");
-    const asset = await writeReferenceImageDataUrl(dataUrl, { ownerUserId: context.ownerUserId, source: "image-task-reference", taskId: context.taskId });
-    if (asset.url) return asset.url;
     if (!isExternalPublicOrigin(publicOrigin)) throw new Error("参考图需要公网图片 URL；本地开发 localhost 不能直接提交给上游，请部署后配置 NEXT_PUBLIC_SITE_URL");
+    const asset = await writeReferenceImageDataUrl(dataUrl, { ownerUserId: context.ownerUserId, source: "image-task-reference", taskId: context.taskId });
     const signedUrl = createSignedReferenceAssetUrl(asset.token, publicOrigin);
     if (!signedUrl) throw new Error("站内参考素材签名不可用，请配置 VOZEB_PRO_ENCRYPTION_KEY");
-    return asset.url || signedUrl;
+    return signedUrl;
+}
+
+async function isReachableProviderImage(url: string) {
+    try {
+        const response = await fetchSafeOutbound(url, {
+            headers: { accept: "image/*", range: "bytes=0-0" },
+            cache: "no-store",
+            signal: AbortSignal.timeout(INLINE_IMAGE_TIMEOUT_MS),
+        });
+        const contentType = response.headers.get("content-type")?.toLowerCase() || "";
+        await response.body?.cancel().catch(() => undefined);
+        return response.ok && contentType.startsWith("image/");
+    } catch {
+        return false;
+    }
 }
 
 export function referenceRequestUrlCandidates(reference: ImageTaskReference, origin = "") {
@@ -88,6 +122,15 @@ export function isExternalPublicMediaUrl(value: string) {
     if (!/^https?:\/\//i.test(url)) return false;
     try {
         return isExternalPublicHost(new URL(url).hostname);
+    } catch {
+        return false;
+    }
+}
+
+function hasUsableProviderReadSignature(value: string) {
+    try {
+        const url = new URL(value);
+        return isExternalPublicMediaUrl(value) && url.searchParams.get("purpose") === "provider-read" && Number(url.searchParams.get("expires")) > Math.floor(Date.now() / 1000) && Boolean(url.searchParams.get("signature"));
     } catch {
         return false;
     }

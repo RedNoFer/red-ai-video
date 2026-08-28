@@ -26,11 +26,11 @@ export default defineConfig({
     },
     projects: [
         { name: "setup", testMatch: /installation\.spec\.ts/ },
-        { name: "chromium", testMatch: [/(?:all-pages|canvas|commerce|core|creative-video-result|home|responsive)\.spec\.ts/], dependencies: ["setup"], use: { ...devices["Desktop Chrome"], storageState } },
-        { name: "mobile-390", testMatch: /(?:all-pages|commerce|creative-video-result|home|responsive)\.spec\.ts/, dependencies: ["setup"], use: { ...devices["iPhone 13"], browserName: "chromium", viewport: { width: 390, height: 844 }, storageState } },
+        { name: "chromium", testMatch: [/(?:admin-channel-api-key|admin-channel-save|all-pages|canvas|commerce|core|creative-video-result|drama-asset-candidate-generation|drama-frame-sequence|drama-review-audio-flow|home|responsive)\.spec\.ts/], dependencies: ["setup"], use: { ...devices["Desktop Chrome"], storageState } },
+        { name: "mobile-390", testMatch: /(?:all-pages|commerce|creative-video-result|drama-review-audio-flow|home|responsive)\.spec\.ts/, dependencies: ["setup"], use: { ...devices["iPhone 13"], browserName: "chromium", viewport: { width: 390, height: 844 }, storageState } },
         {
             name: "mobile-430",
-            testMatch: /(?:all-pages|commerce|creative-video-result|home|responsive)\.spec\.ts/,
+            testMatch: /(?:all-pages|commerce|creative-video-result|drama-review-audio-flow|home|responsive)\.spec\.ts/,
             dependencies: ["setup"],
             use: { ...devices["iPhone 14 Pro Max"], browserName: "chromium", viewport: { width: 430, height: 932 }, storageState },
         },
@@ -54,11 +54,11 @@ export default defineConfig({
             command: "pnpm run start",
             url: `${baseURL}/api/auth/session`,
             timeout: 120_000,
-            reuseExistingServer: false,
+            reuseExistingServer: Boolean(process.env.PLAYWRIGHT_REUSE_EXISTING_SERVER),
             env: {
                 ...process.env,
                 PORT: String(port),
-                NEXT_PUBLIC_SITE_URL: baseURL,
+                NEXT_PUBLIC_SITE_URL: process.env.VOZEB_PRO_E2E_PUBLIC_SITE_URL?.trim() || "https://e2e.vozeb.test",
                 VOZEB_PRO_DATABASE_PROVIDER: databaseUrl ? "postgres" : "file",
                 VOZEB_PRO_DATA_DIR: path.join(process.cwd(), ".e2e-data"),
                 VOZEB_PRO_ENCRYPTION_KEY: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",

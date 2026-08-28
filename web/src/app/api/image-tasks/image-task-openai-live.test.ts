@@ -104,7 +104,7 @@ describe("OpenAI image provider over a live compatible fixture", () => {
         }
     });
 
-    it("sends sub2api edits as one JSON request with an image_urls string array", async () => {
+    it("sends sub2api edits to the documented endpoint with images image_url objects", async () => {
         const fixture = createProtocolFixtureServer();
         await new Promise<void>((resolve) => fixture.server.listen(0, "127.0.0.1", resolve));
         const address = fixture.server.address();
@@ -120,6 +120,39 @@ describe("OpenAI image provider over a live compatible fixture", () => {
                 apiFormat: "openai",
                 model: "gpt-image-1",
                 channelId: "fixture-sub2api",
+                advancedConfig: { ...emptyAdvancedConfig(), protocol: "sub2api", createPath: "/images/generations", editPath: "/images/edits", supportsReferenceImage: true },
+            },
+        });
+
+        try {
+            await expect(runOpenAiImageTask(task, "", "", "", true)).resolves.toMatchObject({ dataUrl: expect.stringMatching(/^data:image\/png;base64,/) });
+            expect(fixture.requests).toHaveLength(1);
+            expect(fixture.requests[0]?.path).toBe("/v1/images/edits");
+            const body = JSON.parse(fixture.requests[0]?.body.toString("utf8") || "{}");
+            expect(body.images).toEqual([{ image_url: "https://cdn.example.com/reference.png" }]);
+            expect(body.image_urls).toBeUndefined();
+            expect(fixture.requests[0]?.headers["idempotency-key"]).toBe("image-task:image-sub2api-live:attempt:1");
+        } finally {
+            await new Promise<void>((resolve, reject) => fixture.server.close((error?: Error) => (error ? reject(error) : resolve())));
+        }
+    });
+
+    it("sends sub2api text-to-image using only the strict image request fields", async () => {
+        const fixture = createProtocolFixtureServer();
+        await new Promise<void>((resolve) => fixture.server.listen(0, "127.0.0.1", resolve));
+        const address = fixture.server.address();
+        if (!address || typeof address === "string") throw new Error("Protocol fixture did not bind a TCP port");
+        const origin = `http://127.0.0.1:${address.port}`;
+        const task = liveImageTask(origin, {
+            id: "image-sub2api-generation-live",
+            config: {
+                baseUrl: origin,
+                apiKey: "fixture-key",
+                apiFormat: "openai",
+                model: "gpt-image-2",
+                channelId: "fixture-sub2api",
+                quality: "high",
+                size: "9:16",
                 advancedConfig: { ...emptyAdvancedConfig(), protocol: "sub2api", createPath: "/images/generations", editPath: "/images/generations", supportsReferenceImage: true },
             },
         });
@@ -128,10 +161,46 @@ describe("OpenAI image provider over a live compatible fixture", () => {
             await expect(runOpenAiImageTask(task, "", "", "", true)).resolves.toMatchObject({ dataUrl: expect.stringMatching(/^data:image\/png;base64,/) });
             expect(fixture.requests).toHaveLength(1);
             expect(fixture.requests[0]?.path).toBe("/v1/images/generations");
-            const body = JSON.parse(fixture.requests[0]?.body.toString("utf8") || "{}");
-            expect(body.image_urls).toEqual(["https://cdn.example.com/reference.png"]);
-            expect(body.images).toBeUndefined();
-            expect(fixture.requests[0]?.headers["idempotency-key"]).toBe("image-task:image-sub2api-live:attempt:1");
+            expect(JSON.parse(fixture.requests[0]?.body.toString("utf8") || "{}")).toEqual({
+                model: "gpt-image-2",
+                prompt: "create a blue protocol test image",
+                n: 1,
+                quality: "high",
+                size: "1024x1536",
+                output_format: "png",
+            });
+        } finally {
+            await new Promise<void>((resolve, reject) => fixture.server.close((error?: Error) => (error ? reject(error) : resolve())));
+        }
+    });
+
+    it("sends a public reference URL directly to sub2api edit images", async () => {
+        const fixture = createProtocolFixtureServer();
+        await new Promise<void>((resolve) => fixture.server.listen(0, "127.0.0.1", resolve));
+        const address = fixture.server.address();
+        if (!address || typeof address === "string") throw new Error("Protocol fixture did not bind a TCP port");
+        const origin = `http://127.0.0.1:${address.port}`;
+        const task = liveImageTask(origin, {
+            id: "image-sub2api-local-reference",
+            kind: "edit",
+            references: [{ name: "candidate.png", type: "image/png", dataUrl: "", url: "https://cdn.example.com/reference.png" }],
+            config: {
+                baseUrl: origin,
+                apiKey: "fixture-key",
+                apiFormat: "openai",
+                model: "gpt-image-2",
+                channelId: "",
+                advancedConfig: { ...emptyAdvancedConfig(), protocol: "sub2api", createPath: "/images/generations", editPath: "/images/edits", supportsReferenceImage: true },
+            },
+        });
+
+        try {
+            await expect(runOpenAiImageTask(task, origin, "https://app.example.com", "", true)).resolves.toMatchObject({ dataUrl: expect.stringMatching(/^data:image\/png;base64,/) });
+            const submission = fixture.requests.find((request) => request.method === "POST" && request.path === "/v1/images/edits");
+            expect(submission).toBeDefined();
+            const body = JSON.parse(submission?.body.toString("utf8") || "{}");
+            expect(body.images).toEqual([{ image_url: "https://cdn.example.com/reference.png" }]);
+            expect(fixture.requests.map((request) => request.path)).toEqual(["/v1/images/edits"]);
         } finally {
             await new Promise<void>((resolve, reject) => fixture.server.close((error?: Error) => (error ? reject(error) : resolve())));
         }
@@ -204,6 +273,73 @@ describe("OpenAI image provider over a live compatible fixture", () => {
             expect(fixture.requests).toHaveLength(1);
             expect(fixture.requests[0]?.path).toBe("/sdapi/v1/img2img");
             expect(JSON.parse(fixture.requests[0]?.body.toString("utf8") || "{}")).toMatchObject({ init_images: [PNG_DATA_URL] });
+        } finally {
+            await new Promise<void>((resolve, reject) => fixture.server.close((error?: Error) => (error ? reject(error) : resolve())));
+        }
+    });
+
+    it("uses TokenGo's async image runtime for text and reference image requests", async () => {
+        const fixture = createProtocolFixtureServer();
+        await new Promise<void>((resolve) => fixture.server.listen(0, "127.0.0.1", resolve));
+        const address = fixture.server.address();
+        if (!address || typeof address === "string") throw new Error("Protocol fixture did not bind a TCP port");
+        const origin = `http://127.0.0.1:${address.port}`;
+        const task = liveImageTask(origin, {
+            id: "image-buming-image-live",
+            kind: "edit",
+            references: [{ type: "image/png", dataUrl: "https://cdn.example.com/reference.png" }],
+            config: {
+                baseUrl: origin,
+                apiKey: "fixture-key",
+                apiFormat: "openai",
+                model: "gpt-image-2-official",
+                channelId: "fixture-buming-image",
+                size: "9:16",
+                quality: "high",
+                advancedConfig: { ...emptyAdvancedConfig(), protocol: "buming-image", createPath: "/api/v1/model-runtime/invoke", queryPath: "/api/v1/model-runtime/tasks/:task_id", requestTemplate: '{"modality":"image","model_id":"{{model}}","operation":"generate","params":{"prompt":"{{prompt}}","mode":"{{mode}}","aspect_ratio":"{{aspect_ratio}}","resolution":"{{resolution}}","quality":"{{quality}}","count":1,"output_format":"{{output_format}}","images":"{{images}}"}}', resultField: "result_url", statusField: "status", referenceRule: "参考图必须是公网 URL。", supportsReferenceImage: true },
+            },
+        });
+
+        try {
+            const submitted = await runCustomImageTask(task, "", "", "", true);
+            expect(submitted.pending).toMatchObject({ id: expect.stringMatching(/^fixture-buming-image-/) });
+            const body = JSON.parse(fixture.requests[0]?.body.toString("utf8") || "{}");
+            expect(fixture.requests[0]?.path).toBe("/api/v1/model-runtime/invoke");
+            expect(body.params).toMatchObject({ mode: "image-edit", aspect_ratio: "9:16", resolution: "4K", images: ["https://cdn.example.com/reference.png"] });
+
+            const result = await import("./image-task-custom").then(({ pollCustomImageTask }) => pollCustomImageTask(task, submitted.pending!.id, `${origin}/api/v1/model-runtime/invoke`, "", true));
+            expect(result.dataUrl).toMatch(/(?:^data:image\/png;base64,|\/media\/fixture\.png$)/);
+            expect(fixture.requests.map((request) => request.path)).toEqual(["/api/v1/model-runtime/invoke", `/api/v1/model-runtime/tasks/${submitted.pending!.id}`]);
+        } finally {
+            await new Promise<void>((resolve, reject) => fixture.server.close((error?: Error) => (error ? reject(error) : resolve())));
+        }
+    });
+
+    it("uploads a local reference before TokenGo image editing", async () => {
+        const fixture = createProtocolFixtureServer();
+        await new Promise<void>((resolve) => fixture.server.listen(0, "127.0.0.1", resolve));
+        const address = fixture.server.address();
+        if (!address || typeof address === "string") throw new Error("Protocol fixture did not bind a TCP port");
+        const origin = `http://127.0.0.1:${address.port}`;
+        const task = liveImageTask(origin, {
+            id: "image-buming-local-reference",
+            kind: "edit",
+            references: [{ name: "candidate.png", type: "image/png", dataUrl: PNG_DATA_URL }],
+            config: {
+                baseUrl: origin,
+                apiKey: "fixture-key",
+                apiFormat: "openai",
+                model: "gpt-image-2-official",
+                channelId: "fixture-buming-image",
+                advancedConfig: { ...emptyAdvancedConfig(), protocol: "buming-image", createPath: "/api/v1/model-runtime/invoke", queryPath: "/api/v1/model-runtime/tasks/:task_id", requestTemplate: '{"modality":"image","model_id":"{{model}}","operation":"generate","params":{"prompt":"{{prompt}}","mode":"{{mode}}","images":"{{images}}"}}', resultField: "result_url", statusField: "status", referenceRule: "参考图必须是公网 URL。", supportsReferenceImage: true },
+            },
+        });
+
+        try {
+            await expect(runCustomImageTask(task, origin, "", "", true)).resolves.toMatchObject({ pending: { id: expect.stringMatching(/^fixture-buming-image-/) } });
+            expect(fixture.requests.map((request) => request.path)).toEqual(["/v1/files", "/api/v1/model-runtime/invoke"]);
+            expect(fixture.requests[0]?.contentType).toMatch(/^multipart\/form-data; boundary=/);
+            expect(JSON.parse(fixture.requests[1]?.body.toString("utf8") || "{}").params).toMatchObject({ mode: "image-edit", images: ["https://cdn.example.com/fixture-upload.png"] });
         } finally {
             await new Promise<void>((resolve, reject) => fixture.server.close((error?: Error) => (error ? reject(error) : resolve())));
         }

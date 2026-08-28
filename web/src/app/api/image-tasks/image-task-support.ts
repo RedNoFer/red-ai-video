@@ -1,4 +1,4 @@
-import { rawReferenceRequestUrlCandidates } from "./image-task-reference-urls";
+import { isExternalPublicMediaUrl, rawReferenceRequestUrlCandidates, referenceRequestUrlCandidates } from "./image-task-reference-urls";
 import { after, NextResponse } from "next/server";
 
 import { getCurrentUser } from "@/lib/auth/session";
@@ -67,8 +67,8 @@ export function publicTask(task: ImageTask) {
 }
 
 export function sanitizeConfigs(config: ImageTaskConfig | undefined, settings: Awaited<ReturnType<typeof getAuthSettings>>): ImageTaskConfig[] {
-    const requestedModel = config?.model || settings.defaultModels.imageModel;
-    return resolveLogicalModelCandidates(settings, "image", requestedModel).map((resolved) => {
+    const requestedModel = (config as (ImageTaskConfig & { imageModel?: string }) | undefined)?.imageModel || config?.model || settings.defaultModels.imageModel;
+    return resolveLogicalModelCandidates(settings, "image", requestedModel, config?.channelId).map((resolved) => {
         const channel = toSystemGenerationChannel(resolved);
         return {
             ...channel,
@@ -112,13 +112,14 @@ export async function preferredImageResponseFormat(config: ImageTaskConfig): Pro
 }
 
 export async function openAiImageTaskPath(config: ImageTaskConfig, kind: ImageTask["kind"]) {
+    if (config.advancedConfig?.protocol === "sub2api") return kind === "edit" ? "/images/edits" : "/images/generations";
     const configured = (config.advancedConfig?.createPath || "").trim();
     const configuredPath = configured ? normalizeImageTaskPath(configured) : "";
     if (kind !== "edit") return configuredPath || "/images/generations";
+    const apiBase = await resolveConfiguredApiBaseUrl(config.baseUrl).catch(() => config.baseUrl);
+    if (shouldUseSub2ApiImageEdit(config, apiBase)) return "/images/edits";
     const configuredEditPath = (config.advancedConfig?.editPath || "").trim();
     if (configuredEditPath) return normalizeImageTaskPath(configuredEditPath);
-    const apiBase = await resolveConfiguredApiBaseUrl(config.baseUrl).catch(() => config.baseUrl);
-    if (shouldUseSub2ApiImageEdit(config, apiBase)) return configuredPath || "/images/generations";
 
     const ruleEditPath = configuredImageEditPath(config);
     if (ruleEditPath) return ruleEditPath;
@@ -211,7 +212,7 @@ export function matchesApiHost(baseUrl: string, hostname: string) {
 
 export function taskUrl(config: ImageTaskConfig, path: string, origin: string) {
     const protocol = resolveChannelModelConfig(config.advancedConfig, config.model)?.protocol || config.advancedConfig?.protocol;
-    const apiBase = protocol === "custom" || protocol === "stable-diffusion" || protocol === "yumeng" ? absoluteApiBaseUrl(config.baseUrl, origin) : normalizeApiBaseUrl(config.baseUrl, config.apiFormat, origin);
+    const apiBase = protocol === "custom" || protocol === "stable-diffusion" || protocol === "yumeng" || protocol === "buming-image" ? absoluteApiBaseUrl(config.baseUrl, origin) : normalizeApiBaseUrl(config.baseUrl, config.apiFormat, origin);
     return `${apiBase}${path}`;
 }
 
@@ -319,7 +320,7 @@ export async function parseImagePayloadOrPoll(config: ImageTaskConfig, payload: 
     if (images.length) return imageTaskResultFromMedia(images);
 
     const taskId = readImageTaskId(payload);
-    if (!taskId) throw new GenerationSubmissionUncertainError("图片接口没有返回图片或任务 ID，创建结果待确认");
+    if (!taskId) throw new GenerationSubmissionUncertainError("图片接口没有返回图片或任务 ID，创建结果待确认", imageSubmissionResponseDiagnostics(payload));
     const explicitPollUrl = readImagePollUrl(config, payload, mediaBaseUrl, pollBaseUrl);
     const upstream = { id: taskId, mediaBaseUrl, pollBaseUrl, explicitPollUrl: explicitPollUrl || undefined };
     if (!imageTaskPollUrls(config, pollBaseUrl, taskId, explicitPollUrl).length) {
@@ -443,15 +444,49 @@ export function isLikelyImageUrl(value: string) {
 }
 
 export function readImagePayloadError(payload: ImageApiResponse) {
+    const response = payload as ImageApiResponse & { success?: unknown; ok?: unknown; message?: unknown };
     if (typeof payload.code === "number" && payload.code !== 0) return payload.msg || "图片生成失败";
+    if (response.success === false || response.ok === false) return payload.msg || (typeof response.message === "string" ? response.message : "") || payload.error?.message || "图片渠道拒绝创建请求";
     if (payload.error?.message) return payload.error.message;
     const status = (payload.status || "").toLowerCase();
     if (["failed", "failure", "error", "cancelled", "canceled", "expired"].includes(status)) return payload.msg || "图片生成失败";
     return "";
 }
 
+function imageSubmissionResponseDiagnostics(payload: ImageApiResponse) {
+    const record = payload && typeof payload === "object" && !Array.isArray(payload) ? (payload as Record<string, unknown>) : {};
+    const responseKeys = Object.keys(record).sort().slice(0, 24);
+    return {
+        responseKeys,
+        containerKeys: responseKeys.filter((key) => IMAGE_CONTAINER_KEYS.includes(key)),
+    };
+}
+
 export function readImageTaskId(payload: ImageApiResponse) {
-    return findStringByKeys(payload, IMAGE_TASK_ID_KEYS);
+    return findTaskIdValue(payload);
+}
+
+function findTaskIdValue(value: unknown, depth = 0): string {
+    if (!value || depth > 5) return "";
+    if (Array.isArray(value)) {
+        for (const item of value) {
+            const found = findTaskIdValue(item, depth + 1);
+            if (found) return found;
+        }
+        return "";
+    }
+    if (typeof value !== "object") return "";
+    const record = value as Record<string, unknown>;
+    for (const key of IMAGE_TASK_ID_KEYS) {
+        const candidate = record[key];
+        if (typeof candidate === "string" && candidate.trim()) return candidate.trim();
+        if (typeof candidate === "number" && Number.isSafeInteger(candidate)) return String(candidate);
+    }
+    for (const key of IMAGE_CONTAINER_KEYS) {
+        const found = findTaskIdValue(record[key], depth + 1);
+        if (found) return found;
+    }
+    return "";
 }
 
 export function readImageTaskStatus(payload: ImageApiResponse) {
@@ -675,7 +710,7 @@ export async function buildImageEditFormData(task: ImageTask, quality: string | 
     const formData = new FormData();
     formData.set("model", task.config.model);
     formData.set("prompt", withSystemPrompt(task.config, buildImageReferencePromptText(task.prompt, task.references)));
-    formData.set("n", "1");
+    formData.set("n", String(task.config.count || 1));
     if (includeCompatibilityFields) {
         formData.set("response_format", responseFormat);
         formData.set("output_format", IMAGE_OUTPUT_FORMAT);
@@ -696,9 +731,10 @@ export async function imageReferenceToFile(reference: ImageTaskReference, name: 
             if (/^blob:/i.test(value)) throw new Error("参考图已失效，请重新上传");
             const fetchUrl = value.startsWith("/") ? `${origin}${value}` : value;
             if (!isRemoteMediaUrl(fetchUrl)) throw new Error("参考图地址无效，请重新上传参考图");
+            const isInternalReference = value.startsWith("/") || sameOriginUrl(fetchUrl, origin) || isLoopbackUrl(fetchUrl);
             const workerHeaders = maintenanceWorkerContextHeaders(cookie);
-            const response = await (value.startsWith("/") ? fetchInternalApi : fetchSafeOutbound)(fetchUrl, {
-                headers: value.startsWith("/") ? workerHeaders || (cookie ? { cookie } : undefined) : undefined,
+            const response = await (isInternalReference ? fetchInternalApi : fetchSafeOutbound)(fetchUrl, {
+                headers: isInternalReference ? workerHeaders || (cookie ? { cookie } : undefined) : undefined,
                 cache: "no-store",
                 signal: AbortSignal.timeout(INLINE_IMAGE_TIMEOUT_MS),
             });
@@ -716,6 +752,23 @@ export async function imageReferenceToFile(reference: ImageTaskReference, name: 
         }
     }
     throw lastError instanceof Error ? lastError : new Error("参考图读取失败");
+}
+
+function sameOriginUrl(value: string, origin: string) {
+    if (!origin) return false;
+    try {
+        return new URL(value).origin === new URL(origin).origin;
+    } catch {
+        return false;
+    }
+}
+
+function isLoopbackUrl(value: string) {
+    try {
+        return ["localhost", "127.0.0.1", "::1"].includes(new URL(value).hostname.toLowerCase());
+    } catch {
+        return false;
+    }
 }
 
 export async function imageReferenceToDataUrl(reference: ImageTaskReference, name: string, origin: string, cookie: string) {

@@ -11,7 +11,7 @@ import { toSafeGenerationErrorMessage } from "@/lib/server/generation-errors";
 import { generationModelId, toSystemGenerationChannel } from "@/lib/server/generation-channel";
 import { finishGenerationAttempt, startGenerationAttempt } from "@/lib/server/generation-attempt";
 import { resolveLogicalModelCandidates } from "@/lib/server/logical-model-router";
-import { assertReferenceCapabilities } from "@/lib/server/provider-task-config";
+import { assertReferenceCapabilities, serializeProviderRequest } from "@/lib/server/provider-task-config";
 import { countActiveImageTasksForUser, createImageTask, getImageTask, touchImageTask, transitionImageTask, type ImageTask, type ImageTaskConfig, type ImageTaskReference, updateImageTask } from "@/lib/server/image-task-store";
 import { isGenerationSource, recordGenerationLog } from "@/lib/server/generation-log-store";
 import { writeReferenceImageDataUrl } from "@/lib/server/reference-asset-store";
@@ -21,6 +21,7 @@ import { registerGenerationTaskAssetsForUser } from "@/lib/server/creative-runti
 import { createSignedReferenceAssetUrl, signReferenceAssetInputUrl } from "@/lib/server/reference-asset-access";
 import { assertCapabilityConstraints } from "@/lib/server/capability-constraints";
 import { GenerationSubmissionSafeFailure } from "@/lib/server/generation-submission-error";
+import { resolveChannelModelConfig } from "@/lib/channel-protocol-registry";
 
 import {
     type CreateImageTaskBody,
@@ -128,6 +129,8 @@ export async function runOpenAiImageTask(task: ImageTask, origin: string, public
     const config = task.config;
     const quality = normalizeQuality(config.quality || "");
     const requestSize = resolveRequestSize(quality, config.size || "auto");
+    const strictSub2Api = isStrictSub2ApiImage(config);
+    const providerRequestSize = strictSub2Api ? resolveSub2ApiImageSize(config, requestSize) : requestSize;
     const globalPreset = globalAiOpcImagePreset(config);
     if (globalPreset) return runGlobalAiOpcImageTask(task, origin, publicOrigin, cookie, quality, requestSize, singleStep);
     const path = await openAiImageTaskPath(config, task.kind);
@@ -159,14 +162,18 @@ export async function runOpenAiImageTask(task: ImageTask, origin: string, public
         response = await imageSubmissionFetch(config, url, {
             method: "POST",
             headers,
-            body: JSON.stringify({
-                model: config.model,
-                prompt: withSystemPrompt(config, task.prompt),
-                n: 1,
-                ...(quality ? { quality } : {}),
-                ...(requestSize ? { size: requestSize } : {}),
-                ...(allowProtocolFallback ? { response_format: responseFormat, output_format: IMAGE_OUTPUT_FORMAT } : {}),
-            }),
+            body: serializeProviderRequest(
+                strictSub2Api
+                    ? buildSub2ApiImageBody(config.model, withSystemPrompt(config, task.prompt), providerRequestSize, [], quality, "", config.count || 1)
+                    : {
+                          model: config.model,
+                          prompt: withSystemPrompt(config, task.prompt),
+                          n: config.count || 1,
+                          ...(quality ? { quality } : {}),
+                          ...(requestSize ? { size: requestSize } : {}),
+                          ...(allowProtocolFallback ? { response_format: responseFormat, output_format: IMAGE_OUTPUT_FORMAT } : {}),
+                      },
+            ),
             cache: "no-store",
         });
         if (!response.ok) {
@@ -202,7 +209,7 @@ async function runGlobalAiOpcImageTask(task: ImageTask, origin: string, publicOr
     const response = await imageSubmissionFetch(config, url, {
         method: "POST",
         headers,
-        body: JSON.stringify(
+        body: serializeProviderRequest(
             buildGlobalAiOpcImageRequest(preset, {
                 model: config.model,
                 prompt: withSystemPrompt(config, buildImageReferencePromptText(task.prompt, task.references)),
@@ -240,9 +247,10 @@ export async function runOpenAiJsonImageEditTask(
     const referenceMode = configuredImageEditReferenceMode(config);
     const imageUrlObjectOnlyMode = shouldUseSub2ApiImageEdit(config, apiBase);
     const allowProtocolFallback = allowsImageProtocolFallback(config);
-    const publicUrlReferenceMode = imageUrlObjectOnlyMode || referenceMode === "public-url";
-    for (const body of await buildJsonImageEditBodies(task, quality, requestSize, responseFormat, origin, publicOrigin, publicUrlReferenceMode, imageUrlObjectOnlyMode, allowProtocolFallback)) {
-        const response = await imageSubmissionFetch(config, url, { method: "POST", headers, body: JSON.stringify(body), cache: "no-store" });
+    const providerRequestSize = imageUrlObjectOnlyMode ? resolveSub2ApiImageSize(config, requestSize) : requestSize;
+    const publicUrlReferenceMode = !imageUrlObjectOnlyMode && referenceMode === "public-url";
+    for (const body of await buildJsonImageEditBodies(task, quality, providerRequestSize, responseFormat, origin, publicOrigin, cookie, publicUrlReferenceMode, imageUrlObjectOnlyMode, allowProtocolFallback)) {
+        const response = await imageSubmissionFetch(config, url, { method: "POST", headers, body: serializeProviderRequest(body), cache: "no-store" });
         if (!response.ok) {
             const message = await readFetchError(response, "图片生成失败");
             lastMessage = message;
@@ -303,10 +311,10 @@ export async function runOpenAiImageTaskWithBase64Response(task: ImageTask, orig
     const response = await imageSubmissionFetch(config, url, {
         method: "POST",
         headers,
-        body: JSON.stringify({
+        body: serializeProviderRequest({
             model: config.model,
             prompt: withSystemPrompt(config, task.prompt),
-            n: 1,
+            n: config.count || 1,
             ...(quality ? { quality } : {}),
             ...(requestSize ? { size: requestSize } : {}),
             response_format: "b64_json",
@@ -333,7 +341,7 @@ export async function runOpenAiResponsesImageTask(task: ImageTask, origin: strin
 
     const bodies = allowsImageProtocolFallback(config) ? buildResponsesImageBodies(task, origin) : [buildResponsesImageBodies(task, origin)[0]];
     for (const body of bodies) {
-        const response = await imageSubmissionFetch(config, url, { method: "POST", headers, body: JSON.stringify(body), cache: "no-store" });
+        const response = await imageSubmissionFetch(config, url, { method: "POST", headers, body: serializeProviderRequest(body), cache: "no-store" });
         if (!response.ok) {
             lastError = await readFetchError(response, "图片生成失败");
             if (response.status === 400 || response.status === 422) continue;
@@ -380,20 +388,30 @@ export async function buildJsonImageEditBodies(
     responseFormat: (typeof IMAGE_RESPONSE_FORMATS)[number],
     origin: string,
     publicOrigin: string,
+    cookie: string,
     publicUrlReferenceMode = false,
     imageUrlObjectOnlyMode = false,
     includeCompatibilityFields = true,
 ) {
     const referenceContext = { ownerUserId: task.userId, taskId: task.id };
-    const images = (
-        await Promise.all(task.references.map((reference) => (publicUrlReferenceMode ? publicImageReferenceRequestUrl(reference, origin, publicOrigin, referenceContext) : Promise.resolve(jsonImageReferenceRequestUrl(reference, origin)))))
-    ).filter(Boolean);
-    const mask = task.mask ? (publicUrlReferenceMode ? await publicImageReferenceRequestUrl(task.mask, origin, publicOrigin, referenceContext) : jsonImageReferenceRequestUrl(task.mask, origin)) : "";
+    const requestReferenceUrl = async (reference: ImageTaskReference, index: number) => {
+        if (publicUrlReferenceMode) return publicImageReferenceRequestUrl(reference, origin, publicOrigin, referenceContext);
+        if (!imageUrlObjectOnlyMode) return jsonImageReferenceRequestUrl(reference, origin);
+        return publicImageReferenceRequestUrl(reference, origin, publicOrigin, referenceContext);
+    };
+    let images: string[];
+    let mask = "";
+    try {
+        images = (await Promise.all(task.references.map(requestReferenceUrl))).filter(Boolean);
+        if (task.mask) mask = await requestReferenceUrl(task.mask, task.references.length);
+    } catch (error) {
+        throw new GenerationSubmissionSafeFailure(error instanceof Error ? error.message : "参考图读取失败，请重新上传参考图");
+    }
     const prompt = imageUrlObjectOnlyMode ? buildSub2ApiImageEditPrompt(task.prompt, task.references) : buildImageReferencePromptText(task.prompt, task.references);
     const base = {
         model: task.config.model,
         prompt: withSystemPrompt(task.config, prompt),
-        n: 1,
+        n: task.config.count || 1,
         ...(quality ? { quality } : {}),
         ...(requestSize ? { size: requestSize } : {}),
         ...(includeCompatibilityFields ? { response_format: responseFormat, output_format: IMAGE_OUTPUT_FORMAT } : {}),
@@ -404,17 +422,7 @@ export async function buildJsonImageEditBodies(
     const imageUrlObjects = images.map((item) => ({ image_url: item }));
     const imageObjects = images.map((item) => ({ url: item }));
     if (imageUrlObjectOnlyMode) {
-        return [
-            {
-                model: task.config.model,
-                prompt: withSystemPrompt(task.config, prompt),
-                n: 1,
-                ...(quality ? { quality } : {}),
-                ...(requestSize ? { size: requestSize } : {}),
-                ...(mask ? { mask } : {}),
-                image_urls: images,
-            },
-        ];
+        return [buildSub2ApiImageBody(task.config.model, withSystemPrompt(task.config, prompt), requestSize, images, quality, mask, task.config.count || 1)];
     }
     return [
         { ...base, images: imageUrlObjects, ref_assets: imageUrlObjects, image_urls: imageUrlObjects },
@@ -426,13 +434,39 @@ export async function buildJsonImageEditBodies(
     ];
 }
 
+function isStrictSub2ApiImage(config: ImageTaskConfig) {
+    return (resolveChannelModelConfig(config.advancedConfig, config.model)?.protocol || config.advancedConfig?.protocol) === "sub2api";
+}
+
+function buildSub2ApiImageBody(model: string, prompt: string, size?: string, imageUrls: string[] = [], quality?: string, mask = "", count = 1) {
+    return {
+        model,
+        prompt,
+        n: count,
+        ...(quality ? { quality } : {}),
+        ...(imageUrls.length ? { images: imageUrls.map((image_url) => ({ image_url })) } : {}),
+        ...(mask ? { mask: { image_url: mask } } : {}),
+        ...(size ? { size } : {}),
+        output_format: IMAGE_OUTPUT_FORMAT,
+    };
+}
+
+export function resolveSub2ApiImageSize(config: Pick<ImageTaskConfig, "size">, requestSize?: string) {
+    const configuredSize = (config.size || "").trim();
+    if (!configuredSize.includes(":")) return requestSize;
+    // Sub2API's OpenAI-compatible image contract accepts the canonical image sizes; keep exact user dimensions untouched.
+    const { width, height } = parseImageRatio(configuredSize);
+    if (width === height) return "1024x1024";
+    return width > height ? "1536x1024" : "1024x1536";
+}
+
 export function buildSub2ApiImageEditPrompt(prompt: string, references: readonly unknown[]) {
     const text = prompt.trim();
     if (!references.length) return text;
-    const fieldHint = references.length === 1 ? "image_urls[0]" : "image_urls";
+    const fieldHint = references.length === 1 ? "images[0].image_url" : "images[].image_url";
     return [
         `Use the actual reference image supplied in the JSON field ${fieldHint} as visual input, not as a text-only hint.`,
-        "The first reference image, image_urls[0], is the primary identity and character reference. Keep the same person or character, face proportions, hairstyle, body shape, clothing, and main pose as much as possible.",
+        "The first reference image, images[0].image_url, is the primary identity and character reference. Keep the same person or character, face proportions, hairstyle, body shape, clothing, and main pose as much as possible.",
         "Only apply the user's requested edit to the existing referenced subject. Do not replace the referenced person or character with a new unrelated person.",
         "",
         `User request: ${text}`,
@@ -441,9 +475,9 @@ export function buildSub2ApiImageEditPrompt(prompt: string, references: readonly
 
 import {
     referenceRequestUrl,
+    referenceRequestUrlCandidates,
     jsonImageReferenceRequestUrl,
     publicImageReferenceRequestUrl,
-    referenceRequestUrlCandidates,
     rawReferenceRequestUrlCandidates,
     uniqueStrings,
     normalizeReferenceRequestUrl,
@@ -455,9 +489,9 @@ import {
 } from "./image-task-reference-urls";
 export {
     referenceRequestUrl,
+    referenceRequestUrlCandidates,
     jsonImageReferenceRequestUrl,
     publicImageReferenceRequestUrl,
-    referenceRequestUrlCandidates,
     rawReferenceRequestUrlCandidates,
     uniqueStrings,
     normalizeReferenceRequestUrl,

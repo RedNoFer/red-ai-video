@@ -422,7 +422,7 @@ describe("video generation candidate failover", () => {
         expect(upstreamBody.images).toEqual(["https://cdn.example.com/reference.jpg"]);
     });
 
-    it("sends the New API video request body to the dedicated generations endpoint", async () => {
+    it("sends the New API video request body to the documented videos endpoint", async () => {
         mocks.getAuthSettings.mockResolvedValue(newApiVideoSettings());
         mocks.fetchInternalApi.mockResolvedValue(json({ task_id: "newapi-video-task", status: "queued" }));
 
@@ -430,16 +430,72 @@ describe("video generation candidate failover", () => {
         const [url, init] = mocks.fetchInternalApi.mock.calls[0] as [string, RequestInit];
 
         expect(response.status).toBe(200);
-        expect(url).toContain("/api/ai/system/one/v1/video/generations");
+        expect(url).toContain("/api/ai/system/one/v1/videos");
         expect(JSON.parse(String(init.body))).toMatchObject({
             model: "seedance-2.5",
             prompt: expect.stringContaining("A test video"),
-            image: "https://cdn.example.com/reference.jpg",
             duration: 5,
-            width: 1280,
-            height: 720,
+            ratio: "16:9",
+            resolution: "720p",
+            referenceImages: ["https://cdn.example.com/reference.jpg"],
         });
+        expect(JSON.parse(String(init.body))).not.toHaveProperty("image");
+        expect(JSON.parse(String(init.body))).not.toHaveProperty("width");
+        expect(JSON.parse(String(init.body))).not.toHaveProperty("height");
         expect(JSON.parse(String(init.body)).prompt).toContain("参考素材一致性要求");
+    });
+
+    it.each([
+        ["不鸣", 1, 2, "/api/ai/system/buming/v1/videos/generations"],
+        ["New API", 2, 1, "/api/ai/system/newapi-video/v1/videos"],
+    ] as const)("uses the %s protocol selected by logical-model binding priority", async (_label, bumingPriority, newApiPriority, expectedPath) => {
+        const bumingChannel = applyChannelProtocol({ ...channels[0], id: "buming", name: "不鸣", baseUrl: "", models: ["wan-3.0"], advancedConfig: emptyAdvancedConfig() }, "buming-seedance");
+        const newApiChannel = applyChannelProtocol({ ...channels[1], id: "newapi-video", name: "New API 视频", baseUrl: "", models: ["wan-3.0"], advancedConfig: emptyAdvancedConfig() }, "newapi-video");
+        mocks.getAuthSettings.mockResolvedValue({
+            ...settings,
+            systemChannels: [bumingChannel, newApiChannel],
+            logicalModels: [{ id: "wan-3.0", name: "Wan 3.0", capability: "video", enabled: true, bindings: [
+                { id: "buming-binding", channelId: "buming", upstreamModel: "wan-3.0", enabled: true, priority: bumingPriority },
+                { id: "newapi-binding", channelId: "newapi-video", upstreamModel: "wan-3.0", enabled: true, priority: newApiPriority },
+            ] }],
+            defaultModels: { ...settings.defaultModels, videoModel: "wan-3.0" },
+        });
+        mocks.fetchInternalApi.mockImplementation(async (url: string) => url.includes("/buming/") ? json({ id: "buming-task", state: "queued" }) : json({ task_id: "newapi-task", status: "queued" }));
+
+        const response = await POST(request({ model: "wan-3.0" }));
+
+        expect(response.status).toBe(200);
+        expect(mocks.fetchInternalApi).toHaveBeenCalledTimes(1);
+        expect(mocks.fetchInternalApi.mock.calls[0]?.[0]).toContain(expectedPath);
+    });
+
+    it("sends New API reference media as the documented plural URL arrays", async () => {
+        mocks.getAuthSettings.mockResolvedValue(newApiVideoSettings());
+        mocks.fetchInternalApi.mockResolvedValue(json({ task_id: "newapi-video-task", status: "queued" }));
+
+        const response = await POST(
+            request({ model: "seedance-2.5", videoSeconds: "8", size: "9:16", vquality: "1080" }, [
+                { type: "image", url: "https://cdn.example.com/reference-1.jpg" },
+                { type: "image", url: "https://cdn.example.com/reference-2.jpg" },
+                { type: "video", url: "https://cdn.example.com/reference.mp4" },
+                { type: "audio", url: "https://cdn.example.com/reference.mp3" },
+            ]),
+        );
+        const body = JSON.parse(String((mocks.fetchInternalApi.mock.calls[0]?.[1] as RequestInit).body));
+
+        expect(response.status).toBe(200);
+        expect(body).toMatchObject({
+            duration: 8,
+            ratio: "9:16",
+            resolution: "1080p",
+            referenceImages: ["https://cdn.example.com/reference-1.jpg", "https://cdn.example.com/reference-2.jpg"],
+            referenceVideos: ["https://cdn.example.com/reference.mp4"],
+            referenceAudios: ["https://cdn.example.com/reference.mp3"],
+        });
+        expect(body).not.toHaveProperty("image");
+        expect(body).not.toHaveProperty("images");
+        expect(body).not.toHaveProperty("video");
+        expect(body).not.toHaveProperty("audio");
     });
 
     it("sends a compatible text-to-video request without empty reference fields", async () => {
@@ -458,18 +514,45 @@ describe("video generation candidate failover", () => {
         expect(upstreamBody.prompt).not.toContain("参考素材一致性要求");
     });
 
-    it("rejects multiple reference images for the New API video protocol", async () => {
+    it("rejects over-limit reference images for the New API video protocol", async () => {
         mocks.getAuthSettings.mockResolvedValue(newApiVideoSettings());
 
         const response = await POST(
-            request({ model: "seedance-2.5" }, [
-                { type: "image", url: "https://cdn.example.com/reference-1.jpg" },
-                { type: "image", url: "https://cdn.example.com/reference-2.jpg" },
-            ]),
+            request(
+                { model: "seedance-2.5" },
+                Array.from({ length: 10 }, (_, index) => ({ type: "image" as const, url: `https://cdn.example.com/reference-${index + 1}.jpg` })),
+            ),
         );
 
         expect(response.status).toBe(400);
-        expect((await response.json()).error).toContain("最多支持 1 张参考图");
+        expect((await response.json()).error).toContain("最多支持 9 张参考图");
+        expect(mocks.fetchInternalApi).not.toHaveBeenCalled();
+    });
+
+    it("rejects over-limit New API video and audio references before submission", async () => {
+        mocks.getAuthSettings.mockResolvedValue(newApiVideoSettings());
+
+        const videoResponse = await POST(
+            request({ model: "seedance-2.5" }, [
+                { type: "video", url: "https://cdn.example.com/reference-1.mp4" },
+                { type: "video", url: "https://cdn.example.com/reference-2.mp4" },
+                { type: "video", url: "https://cdn.example.com/reference-3.mp4" },
+                { type: "video", url: "https://cdn.example.com/reference-4.mp4" },
+            ]),
+        );
+        expect(videoResponse.status).toBe(400);
+        expect((await videoResponse.json()).error).toContain("最多支持 3 个参考视频");
+
+        const audioResponse = await POST(
+            request({ model: "seedance-2.5" }, [
+                { type: "audio", url: "https://cdn.example.com/reference-1.mp3" },
+                { type: "audio", url: "https://cdn.example.com/reference-2.mp3" },
+                { type: "audio", url: "https://cdn.example.com/reference-3.mp3" },
+                { type: "audio", url: "https://cdn.example.com/reference-4.mp3" },
+            ]),
+        );
+        expect(audioResponse.status).toBe(400);
+        expect((await audioResponse.json()).error).toContain("最多支持 3 个参考音频");
         expect(mocks.fetchInternalApi).not.toHaveBeenCalled();
     });
 
@@ -480,6 +563,11 @@ describe("video generation candidate failover", () => {
 
         expect(response.status).toBe(400);
         expect((await response.json()).error).toContain("不支持显式首帧输入");
+
+        const lastFrameResponse = await POST(request({ model: "seedance-2.5" }, [{ type: "image", url: "https://cdn.example.com/last.jpg", role: "last_frame" }]));
+
+        expect(lastFrameResponse.status).toBe(400);
+        expect((await lastFrameResponse.json()).error).toContain("指定尾帧");
         expect(mocks.fetchInternalApi).not.toHaveBeenCalled();
     });
 
@@ -563,6 +651,121 @@ describe("video generation candidate failover", () => {
         });
     });
 
+    it("submits the documented Buming flat Seedance request and keeps the task query path explicit", async () => {
+        const bumingChannel = applyChannelProtocol(
+            { ...channels[0], baseUrl: "", models: ["seedance-2-5"], advancedConfig: emptyAdvancedConfig() },
+            "buming-seedance",
+        );
+        mocks.getAuthSettings.mockResolvedValue({
+            ...settings,
+            systemChannels: [bumingChannel],
+            logicalModels: [{ ...settings.logicalModels[0], bindings: [{ ...settings.logicalModels[0].bindings[0], channelId: bumingChannel.id, upstreamModel: "seedance-2-5" }] }],
+        });
+        mocks.fetchInternalApi.mockResolvedValue(json({ id: "buming-task", state: "queued" }));
+
+        const response = await POST(
+            request({ model: "video", videoSeconds: "8", size: "16:9", vquality: "1080" }, [
+                { type: "image", url: "https://cdn.example.com/reference.png" },
+                { type: "video", url: "https://cdn.example.com/reference.mp4" },
+            ]),
+        );
+        const [url, init] = mocks.fetchInternalApi.mock.calls[0] as [string, RequestInit];
+        const body = JSON.parse(String(init.body));
+
+        expect(response.status).toBe(200);
+        expect(url).toContain("/api/ai/system/one/v1/videos/generations");
+        expect(body).toMatchObject({ model: "seedance-2-5", prompt: expect.stringContaining("A test video"), mode: "reference", duration: 8, aspect_ratio: "16:9", resolution: "1080p", client_request_id: expect.any(String), images: ["https://cdn.example.com/reference.png"], videos: ["https://cdn.example.com/reference.mp4"] });
+        expect(body).not.toHaveProperty("first_frame");
+        expect(mocks.createVideoTask).toHaveBeenCalledWith(expect.objectContaining({ upstream: expect.objectContaining({ pollPath: "/v1/videos/generations" }) }));
+    });
+
+    it("uses Buming Seedance documented mode values and image ordering for first-last", async () => {
+        const bumingChannel = applyChannelProtocol(
+            { ...channels[0], baseUrl: "", models: ["seedance-2-0-official"], advancedConfig: emptyAdvancedConfig() },
+            "buming-seedance",
+        );
+        mocks.getAuthSettings.mockResolvedValue({
+            ...settings,
+            systemChannels: [bumingChannel],
+            logicalModels: [{ ...settings.logicalModels[0], bindings: [{ ...settings.logicalModels[0].bindings[0], channelId: bumingChannel.id, upstreamModel: "seedance-2-0-official" }] }],
+        });
+        mocks.fetchInternalApi.mockResolvedValue(json({ id: "buming-first-last-task", state: "queued" }));
+
+        const response = await POST(
+            request({ model: "video", videoSeconds: "8", size: "9:16", vquality: "720" }, [
+                { type: "image", url: "https://cdn.example.com/first.png", role: "first_frame" },
+                { type: "image", url: "https://cdn.example.com/last.png", role: "last_frame" },
+                { type: "image", url: "https://cdn.example.com/character.png" },
+            ]),
+        );
+        const [, init] = mocks.fetchInternalApi.mock.calls[0] as [string, RequestInit];
+        const body = JSON.parse(String(init.body));
+
+        expect(response.status).toBe(200);
+        expect(body).toMatchObject({ model: "seedance-2-0-official", mode: "first-last", duration: 8, aspect_ratio: "9:16", resolution: "720p", quality: "mini", images: ["https://cdn.example.com/first.png", "https://cdn.example.com/last.png", "https://cdn.example.com/character.png"], count: 1, prompt: expect.stringContaining("首帧使用@图片1，尾帧使用@图片2") });
+        expect(body).not.toHaveProperty("first_frame");
+        expect(body).not.toHaveProperty("last_frame");
+        expect(body).not.toHaveProperty("generate_audio");
+    });
+
+    it("submits Buming all-frame references as one ordered reference request", async () => {
+        const bumingChannel = applyChannelProtocol(
+            { ...channels[0], baseUrl: "", models: ["seedance-2-0-official"], advancedConfig: emptyAdvancedConfig() },
+            "buming-seedance",
+        );
+        mocks.getAuthSettings.mockResolvedValue({
+            ...settings,
+            systemChannels: [bumingChannel],
+            logicalModels: [{ ...settings.logicalModels[0], bindings: [{ ...settings.logicalModels[0].bindings[0], channelId: bumingChannel.id, upstreamModel: "seedance-2-0-official" }] }],
+        });
+        mocks.fetchInternalApi.mockResolvedValue(json({ id: "buming-all-frame-task", state: "queued" }));
+
+        const response = await POST(
+            request({ model: "video", videoSeconds: "8", size: "9:16", vquality: "720" }, [
+                { type: "image", url: "https://cdn.example.com/frame-1.png", role: "keyframe", keyframeIndex: 1 },
+                { type: "image", url: "https://cdn.example.com/frame-2.png", role: "keyframe", keyframeIndex: 2 },
+                { type: "image", url: "https://cdn.example.com/frame-3.png", role: "keyframe", keyframeIndex: 3 },
+                { type: "image", url: "https://cdn.example.com/character.png" },
+            ]),
+        );
+        const [, init] = mocks.fetchInternalApi.mock.calls[0] as [string, RequestInit];
+        const body = JSON.parse(String(init.body));
+
+        expect(response.status).toBe(200);
+        expect(body).toMatchObject({
+            model: "seedance-2-0-official",
+            mode: "reference",
+            images: ["https://cdn.example.com/frame-1.png", "https://cdn.example.com/frame-2.png", "https://cdn.example.com/frame-3.png", "https://cdn.example.com/character.png"],
+            prompt: expect.stringContaining("连续关键帧按时间顺序使用@图片1至@图片3"),
+        });
+        expect(mocks.fetchInternalApi).toHaveBeenCalledTimes(1);
+        expect(body).not.toHaveProperty("params");
+    });
+
+    it("blocks Buming manju special before creating an unsupported all-frame task", async () => {
+        const bumingChannel = applyChannelProtocol(
+            { ...channels[0], baseUrl: "", models: ["seedance-2-0-manju-special"], advancedConfig: emptyAdvancedConfig() },
+            "buming-seedance",
+        );
+        mocks.getAuthSettings.mockResolvedValue({
+            ...settings,
+            systemChannels: [bumingChannel],
+            logicalModels: [{ ...settings.logicalModels[0], bindings: [{ ...settings.logicalModels[0].bindings[0], channelId: bumingChannel.id, upstreamModel: "seedance-2-0-manju-special" }] }],
+        });
+
+        const response = await POST(
+            request({ model: "video", videoSeconds: "8", size: "9:16", vquality: "720" }, [
+                { type: "image", url: "https://cdn.example.com/frame-1.png", role: "keyframe", keyframeIndex: 1 },
+                { type: "image", url: "https://cdn.example.com/frame-2.png", role: "keyframe", keyframeIndex: 2 },
+            ]),
+        );
+
+        expect(response.status).toBe(400);
+        expect(await response.json()).toMatchObject({ error: "当前不鸣视频模型不支持全能帧连续参考" });
+        expect(mocks.fetchInternalApi).not.toHaveBeenCalled();
+        expect(mocks.createVideoTask).not.toHaveBeenCalled();
+    });
+
     it("sends explicit first and last frames as Seedance content roles", async () => {
         mocks.getAuthSettings.mockResolvedValue(seedanceFrameSettings());
         mocks.fetchInternalApi.mockResolvedValue(json({ id: "seedance-frame-task", status: "queued" }));
@@ -576,7 +779,7 @@ describe("video generation candidate failover", () => {
         const [url, init] = mocks.fetchInternalApi.mock.calls[0] as [string, RequestInit];
 
         expect(response.status).toBe(200);
-        expect(url).toContain("/api/ai/system/one/seedance-special/videos");
+        expect(url).toContain("/api/ai/system/one/v1/seedance-special/videos");
         expect(JSON.parse(String(init.body))).toMatchObject({
             content: [
                 expect.objectContaining({ type: "text" }),
@@ -637,7 +840,7 @@ describe("video generation candidate failover", () => {
         expect(response.status).toBe(200);
         expect(mocks.createVideoTask).toHaveBeenCalledTimes(1);
         expect(mocks.fetchInternalApi).toHaveBeenCalledTimes(1);
-        expect(String(mocks.fetchInternalApi.mock.calls[0][0])).toContain("/api/ai/system/two/seedance-special/videos");
+        expect(String(mocks.fetchInternalApi.mock.calls[0][0])).toContain("/api/ai/system/two/v1/seedance-special/videos");
     });
 
     it("ignores legacy GlobalAiOpc sample references for text-to-video requests", async () => {
@@ -768,7 +971,7 @@ describe("video generation candidate failover", () => {
     });
 });
 
-function request(config: Record<string, unknown> = { model: "video" }, references: Array<{ type: string; url: string; role?: string }> = [], context?: Record<string, unknown>) {
+function request(config: Record<string, unknown> = { model: "video" }, references: Array<{ type: string; url: string; role?: string; keyframeIndex?: number }> = [], context?: Record<string, unknown>) {
     const clientRequestId = typeof context?.clientRequestId === "string" ? context.clientRequestId : "";
     return new Request("http://localhost/api/video-generation-tasks", {
         method: "POST",

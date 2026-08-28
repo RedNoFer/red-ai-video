@@ -31,7 +31,7 @@ export async function GET(request: Request, context: RouteContext) {
     const executionPhase = schedule?.executionPhase || settledExecutionPhase(task.status);
     if (isRecoverableImageTask(task, executionPhase)) {
         const origin = resolveInternalOrigin(new URL(request.url).origin);
-        after(() => runGenerationTaskRecoveryBatch({ origin, publicOrigin: requestPublicOrigin(request), cookie: request.headers.get("cookie") || "", limit: 1, taskIds: [task.id] }));
+        after(() => Promise.resolve(runGenerationTaskRecoveryBatch({ origin, publicOrigin: requestPublicOrigin(request), cookie: request.headers.get("cookie") || "", limit: 1, taskIds: [task.id] })).catch(() => undefined));
     }
     const shouldRefund = Boolean(task.billing?.pointsRecordId && !task.billing.refunded && task.status === "error");
     const settledTask = shouldRefund ? await refundImageTask(task) : task;

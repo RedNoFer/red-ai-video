@@ -12,9 +12,13 @@ import type {
     DramaProductionPackagePreview,
     DramaProductionPackageV1,
     DramaProject,
+    DramaReferenceManifestRole,
+    DramaSeriesBible,
     DramaShot,
     DramaStoryScene,
 } from "@/lib/drama-project-contract";
+import { normalizeDramaProductionPlan } from "@/lib/drama-production-plan";
+import { defaultDramaFrameBeats, normalizeDramaFrameBeats } from "@/lib/drama-frame-sequence";
 
 export class DramaProductionPackageError extends Error {}
 
@@ -23,7 +27,7 @@ export function previewDramaProductionPackage(source: string, fileName = "produc
     if (!trimmed) throw new DramaProductionPackageError("制作包内容不能为空");
     const embedded = trimmed.match(/```(?:json|drama-production-package)\s*([\s\S]*?)```/i)?.[1];
     const format = fileName.toLowerCase().endsWith(".json") || trimmed.startsWith("{") ? "json" : "markdown";
-    const parsed = parseObject(format === "json" ? trimmed : embedded || "") || (format === "markdown" ? parseDirectorMarkdown(trimmed) : null);
+    const parsed = format === "markdown" ? parseDirectorMarkdown(trimmed) || parseObject(embedded || "") : parseObject(trimmed);
     if (!parsed) throw new DramaProductionPackageError("Markdown 制作包缺少可读取的标准清单或导演执行表");
     const productionPackage = normalizeProductionPackage(parsed);
     return {
@@ -40,6 +44,9 @@ export function previewDramaProductionPackage(source: string, fileName = "produc
             duration: productionPackage.episodes.reduce((total, episode) => total + episode.shots.reduce((sum, shot) => sum + shot.duration, 0), 0),
             archiveSections: productionPackage.archive?.sections.length || 0,
             promptAssets: productionPackage.archive?.promptAssets.length || 0,
+            performancePlans: productionPackage.episodes.reduce((total, episode) => total + episode.shots.filter((shot) => hasPerformancePlan(shot.performancePlan)).length, 0),
+            lightingPlans: productionPackage.episodes.reduce((total, episode) => total + episode.shots.filter((shot) => hasLightingPlan(shot.lightingPlan)).length, 0),
+            continuityPlans: productionPackage.episodes.reduce((total, episode) => total + episode.shots.filter((shot) => hasContinuityPlan(shot)).length, 0),
         },
     };
 }
@@ -70,6 +77,7 @@ export function applyDramaProductionPackage(project: DramaProject, source: Drama
         style: preferred(project.style, project.fieldOrigins, "style", projectPatch.style),
         ratio: preferred(project.ratio, project.fieldOrigins, "ratio", projectPatch.ratio),
         productionBible: project.fieldOrigins?.productionBible === "manual" ? project.productionBible : projectPatch.productionBible,
+        seriesBible: productionPackage.seriesBible || project.seriesBible,
         productionArchive: productionPackage.archive,
         fieldOrigins: { ...packageOrigins(["title", "summary", "style", "ratio", "productionBible"]), ...project.fieldOrigins },
         characters: characters.items,
@@ -107,7 +115,7 @@ function mergeEpisode(
             entryState: remapContinuityState(shot.entryState, characterIds, propIds),
             exitState: remapContinuityState(shot.exitState, characterIds, propIds),
             storySceneId: undefined,
-            videoMode: shot.videoMode || defaultVideoMode,
+            videoMode: shot.videoMode === "direct" || defaultVideoMode === "direct" ? "direct" : "storyboard",
             storyboardStatus: current?.storyboardStatus || "idle",
             storyboardEndStatus: current?.storyboardEndStatus || "idle",
             generationStatus: current?.generationStatus || "idle",
@@ -132,12 +140,26 @@ function mergeEpisode(
     const storySceneIds = new Map(storyScenes.flatMap((scene) => (scene.code ? [[scene.code, scene.id] as const] : [])));
     const linkedShots = shots.map((shot) => {
         const packageShot = incoming.shots.find((item) => item.code === shot.code);
-        return { ...shot, storySceneId: packageShot?.storySceneCode ? storySceneIds.get(packageShot.storySceneCode) : undefined };
+        return {
+            ...shot,
+            framePlan: shot.fieldOrigins?.framePlan === "manual" ? shot.framePlan : remapFramePlan(packageShot?.framePlan, characterIds, locationIds, propIds, clueIds, shotIds),
+            storySceneId: packageShot?.storySceneCode ? storySceneIds.get(packageShot.storySceneCode) : undefined,
+        };
     });
     const continuityEdges = incoming.continuityEdges.flatMap<DramaContinuityEdge>((edge) => {
         const fromShotId = shotIds.get(edge.fromShotCode);
         const toShotId = shotIds.get(edge.toShotCode);
-        return fromShotId && toShotId ? [{ ...edge, fromShotId, toShotId }] : [];
+        return fromShotId && toShotId
+            ? [
+                  {
+                      ...edge,
+                      fromShotId,
+                      toShotId,
+                      carryCharacterIds: edge.carryCharacterIds.map((code) => characterIds.get(code)).filter((id): id is string => Boolean(id)),
+                      carryPropIds: edge.carryPropIds.map((code) => propIds.get(code)).filter((id): id is string => Boolean(id)),
+                  },
+              ]
+            : [];
     });
     return {
         id,
@@ -156,6 +178,26 @@ function mergeEpisode(
     };
 }
 
+function remapFramePlan(
+    framePlan: DramaShot["framePlan"],
+    characterIds: Map<string, string>,
+    locationIds: Map<string, string>,
+    propIds: Map<string, string>,
+    clueIds: Map<string, string>,
+    shotIds: Map<string, string>,
+): DramaShot["framePlan"] {
+    if (!framePlan?.referenceManifest) return framePlan;
+    const remapAsset = (assetId: string) => characterIds.get(assetId) || locationIds.get(assetId) || propIds.get(assetId) || clueIds.get(assetId) || assetId;
+    return {
+        ...framePlan,
+        referenceManifest: framePlan.referenceManifest.map((item) => ({
+            ...item,
+            assetId: item.assetId ? remapAsset(item.assetId) : item.assetId,
+            shotId: item.shotId ? shotIds.get(item.shotId) || item.shotId : item.shotId,
+        })),
+    };
+}
+
 function remapContinuityState(state: DramaShot["entryState"], characterIds: Map<string, string>, propIds: Map<string, string>): DramaShot["entryState"] {
     if (!state) return undefined;
     const remap = (assetId: string) => characterIds.get(assetId) || propIds.get(assetId) || assetId;
@@ -167,6 +209,7 @@ function remapContinuityState(state: DramaShot["entryState"], characterIds: Map<
 }
 
 function mergeAssets<T extends DramaNamedAsset>(existing: T[], incoming: DramaProductionPackageAsset[], prefix: string) {
+    incoming = dedupePackageAssets(incoming);
     const byCode = new Map(existing.flatMap((asset) => (asset.code ? [[asset.code, asset] as const] : [])));
     const byName = new Map(existing.map((asset) => [normalizeKey(asset.name), asset]));
     const ids = new Map<string, string>();
@@ -183,8 +226,35 @@ function mergeAssets<T extends DramaNamedAsset>(existing: T[], incoming: DramaPr
         return result;
     });
     const incomingIds = new Set(merged.map((asset) => asset.id));
-    const manualAssets = existing.filter((asset) => !incomingIds.has(asset.id) && Object.values(asset.fieldOrigins || {}).includes("manual"));
+    const incomingKeys = new Set(merged.flatMap((asset) => [asset.code || "", normalizeKey(asset.name)]).filter(Boolean));
+    const manualAssets = existing.filter(
+        (asset) =>
+            !incomingIds.has(asset.id) &&
+            Object.values(asset.fieldOrigins || {}).includes("manual") &&
+            ![asset.code || "", normalizeKey(asset.name)].some((key) => key && incomingKeys.has(key)),
+    );
     return { items: [...merged, ...manualAssets], ids };
+}
+
+function dedupePackageAssets(items: DramaProductionPackageAsset[]) {
+    const byKey = new Map<string, DramaProductionPackageAsset>();
+    for (const item of items) {
+        const key = item.code || normalizeKey(item.name);
+        if (!key) continue;
+        const current = byKey.get(key);
+        byKey.set(key, current ? mergePackageAsset(current, item) : item);
+    }
+    return [...byKey.values()];
+}
+
+function mergePackageAsset(current: DramaProductionPackageAsset, incoming: DramaProductionPackageAsset) {
+    return {
+        ...current,
+        ...incoming,
+        description: incoming.description || current.description,
+        ...(current.profile || incoming.profile ? { profile: { ...current.profile, ...incoming.profile } as NonNullable<DramaProductionPackageAsset["profile"]> } : {}),
+        ...(incoming.activeEpisodeCodes?.length || current.activeEpisodeCodes?.length ? { activeEpisodeCodes: incoming.activeEpisodeCodes?.length ? incoming.activeEpisodeCodes : current.activeEpisodeCodes } : {}),
+    } as DramaProductionPackageAsset;
 }
 
 function mergeManualFields<T extends { fieldOrigins?: Record<string, DramaFieldOrigin> }>(current: T | undefined, next: T): T {
@@ -206,10 +276,10 @@ function normalizeProductionPackage(value: unknown): DramaProductionPackageV1 {
         .filter((episode) => episode.shots.length);
     if (!episodes.length) throw new DramaProductionPackageError("制作包至少需要一个包含镜头的剧集");
     const normalizedAssets = {
-        characters: array(assets.characters).map(normalizePackageAsset).filter(hasCodeAndName),
-        locations: array(assets.locations).map(normalizePackageAsset).filter(hasCodeAndName),
-        props: array(assets.props).map(normalizePackageAsset).filter(hasCodeAndName),
-        clues: array(assets.clues).map(normalizePackageAsset).filter(hasCodeAndName),
+        characters: dedupePackageAssets(array(assets.characters).map((asset) => normalizePackageAsset(asset)).filter(hasCodeAndName)),
+        locations: dedupePackageAssets(array(assets.locations).map((asset) => normalizePackageAsset(asset, true)).filter(hasCodeAndName)),
+        props: dedupePackageAssets(array(assets.props).map((asset) => normalizePackageAsset(asset)).filter(hasCodeAndName)),
+        clues: dedupePackageAssets(array(assets.clues).map((asset) => normalizePackageAsset(asset)).filter(hasCodeAndName)),
     };
     const activeCodes = (items: DramaProductionPackageAsset[], episodeCode: string) => new Set(items.filter((item) => !item.activeEpisodeCodes?.length || item.activeEpisodeCodes.includes(episodeCode)).map((item) => item.code));
     const normalizedEpisodes = episodes.map((episode) => {
@@ -226,6 +296,7 @@ function normalizeProductionPackage(value: unknown): DramaProductionPackageV1 {
             })),
         };
     });
+    const synchronizedEpisodes = normalizedEpisodes.map(synchronizeContinuityStates);
     return {
         schemaVersion: 1,
         project: {
@@ -244,11 +315,77 @@ function normalizeProductionPackage(value: unknown): DramaProductionPackageV1 {
                 globalNegativePrompt: optionalText(bible.globalNegativePrompt),
                 subtitleSafeArea: optionalText(bible.subtitleSafeArea),
                 continuityMode: bible.continuityMode === "balanced" ? "balanced" : "strict",
+                productionPlan: normalizeDramaProductionPlan(bible.productionPlan),
             },
         },
         assets: normalizedAssets,
-        episodes: normalizedEpisodes,
+        episodes: synchronizedEpisodes,
+        seriesBible: normalizeSeriesBible(input.seriesBible),
         archive: normalizeProductionArchive(input.archive),
+    };
+}
+
+/**
+ * Make continuity edges executable before a package is persisted or handed to a provider.
+ * A carried entity's next entry state is derived from the previous exit state; generators
+ * must describe intentional changes in the previous shot's exit, never by inventing a
+ * second incompatible state at the next shot boundary.
+ */
+function synchronizeContinuityStates(episode: DramaProductionPackageEpisode): DramaProductionPackageEpisode {
+    const shots = new Map(episode.shots.map((shot) => [shot.code, shot]));
+    const synchronized = episode.shots.map((shot) => ({ ...shot, entryState: cloneState(shot.entryState), exitState: cloneState(shot.exitState) }));
+    const synchronizedByCode = new Map(synchronized.map((shot) => [shot.code, shot]));
+    for (const edge of episode.continuityEdges) {
+        const from = shots.get(edge.fromShotCode);
+        const to = synchronizedByCode.get(edge.toShotCode);
+        if (!from || !to || !from.exitState) continue;
+        const previousCharacters = new Map(from.exitState.characters.map((item) => [item.assetId, item]));
+        const previousProps = new Map(from.exitState.props.map((item) => [item.assetId, item]));
+        const carriedCharacters = new Set(edge.carryCharacterIds);
+        const carriedProps = new Set(edge.carryPropIds);
+        if (to.entryState) {
+            to.entryState.characters = mergeCarriedEntities(to.entryState.characters, previousCharacters, carriedCharacters);
+            to.entryState.props = mergeCarriedEntities(to.entryState.props, previousProps, carriedProps);
+        }
+        if (edge.inheritActualEndFrame) {
+            if (to.framePlan) to.framePlan = { ...to.framePlan, start: { source: "previous_accepted_actual_tail" } };
+        }
+    }
+    return { ...episode, shots: synchronized };
+}
+
+function mergeCarriedEntities<T extends { assetId: string }>(current: T[], previous: Map<string, T>, carried: Set<string>) {
+    const result = current.map((item) => (carried.has(item.assetId) && previous.has(item.assetId) ? previous.get(item.assetId)! : item));
+    const present = new Set(result.map((item) => item.assetId));
+    for (const assetId of carried) {
+        const item = previous.get(assetId);
+        if (item && !present.has(assetId)) result.push(item);
+    }
+    return result;
+}
+
+function cloneState<T extends DramaProductionPackageEpisode["shots"][number]["entryState"]>(state: T): T {
+    if (!state) return state;
+    return {
+        ...state,
+        characters: state.characters.map((item) => ({ ...item })),
+        props: state.props.map((item) => ({ ...item })),
+    } as T;
+}
+
+function normalizeSeriesBible(value: unknown): DramaSeriesBible | undefined {
+    const input = object(value);
+    if (!Object.keys(input).length) return undefined;
+    return {
+        version: "series-bible-v1",
+        canonCharacters: strings(input.canonCharacters),
+        immutableRules: strings(input.immutableRules),
+        relationshipState: text(input.relationshipState),
+        worldRules: strings(input.worldRules),
+        unresolvedThreads: strings(input.unresolvedThreads),
+        visualMotifs: strings(input.visualMotifs),
+        soundMotifs: strings(input.soundMotifs),
+        previousEpisodeExitState: normalizeState(input.previousEpisodeExitState),
     };
 }
 
@@ -266,7 +403,7 @@ function normalizeProductionArchive(value: unknown): DramaProductionPackageV1["a
             const asset = object(item);
             const code = text(asset.code);
             const prompt = text(asset.prompt);
-            return code && prompt ? [{ code, category: asset.category === "storyboard" ? "storyboard" as const : "keyframe" as const, title: text(asset.title) || code, prompt, shotCodes: strings(asset.shotCodes) }] : [];
+            return code && prompt ? [{ code, category: asset.category === "storyboard" ? ("storyboard" as const) : ("keyframe" as const), title: text(asset.title) || code, prompt, shotCodes: strings(asset.shotCodes) }] : [];
         }),
         dialogueDirections: array(input.dialogueDirections).flatMap((item) => {
             const direction = object(item);
@@ -345,91 +482,352 @@ function normalizeEpisodePackage(value: unknown, episodeIndex: number): DramaPro
 
 function normalizePackageShot(value: unknown, index: number): DramaProductionPackageEpisode["shots"][number] {
     const shot = object(value);
+    const framePlan = object(shot.framePlan);
+    const frameStart = object(framePlan.start);
+    const frameEnd = object(framePlan.end);
+    if (!Object.keys(framePlan).length || (frameStart.source !== "independent" && frameStart.source !== "previous_accepted_actual_tail") || typeof frameEnd.required !== "boolean")
+        throw new DramaProductionPackageError(`镜头 ${text(shot.code) || index + 1} 缺少有效 framePlan；必须声明首帧来源和尾帧要求`);
+    if (!Object.keys(object(shot.entryState)).length || !Object.keys(object(shot.exitState)).length) throw new DramaProductionPackageError(`镜头 ${text(shot.code) || index + 1} 必须声明入口和出口状态`);
     const continuity = object(shot.continuity);
+    const utterances: DramaShot["utterances"] = array(shot.utterances).map((value, utteranceIndex) => {
+        const utterance = object(value);
+        const type: "dialogue" | "voiceover" = utterance.type === "voiceover" ? "voiceover" : "dialogue";
+        return {
+            id: text(utterance.id) || `utterance-${utteranceIndex + 1}`,
+            order: positiveNumber(utterance.order) || utteranceIndex + 1,
+            type,
+            speaker: text(utterance.speaker),
+            text: text(utterance.text),
+        };
+    });
+    const title = text(shot.title) || `镜头 ${index + 1}`;
+    const description = text(shot.description);
+    const lighting = optionalText(shot.lighting) || "延续本场主光";
+    const colorPalette = optionalText(shot.colorPalette) || "沿用项目主色板";
+    const actionStart = text(continuity.actionStart) || description || title;
+    const actionEnd = text(continuity.actionEnd) || description || title;
+    const characterCodes = strings(shot.characterCodes);
+    const propCodes = strings(shot.propCodes);
+    const clueCodes = strings(shot.clueCodes);
+    const performanceFallback = defaultPerformancePlan(title, description, actionEnd, utterances.length > 0);
+    const lightingFallback = defaultLightingPlan(lighting, colorPalette);
+    const performancePlan = mergePerformancePlan(normalizePerformancePlan(shot.performancePlan), performanceFallback);
+    const lightingPlan = mergeLightingPlan(normalizeLightingPlan(shot.lightingPlan), lightingFallback);
+    const dialoguePerformance = mergeDialoguePerformance(normalizeDialoguePerformance(shot.dialoguePerformance), utterances);
+    const duration = positiveNumber(shot.duration) || 5;
+    let frames;
+    try {
+        frames = normalizeDramaFrameBeats(
+            array(framePlan.frames).map((value, frameIndex) => {
+                const frame = object(value);
+                return {
+                    id: text(frame.id) || `${text(shot.code) || `shot-${index + 1}`}-frame-${frameIndex + 1}`,
+                    sequenceIndex: positiveNumber(frame.sequenceIndex) || frameIndex + 1,
+                    startSecond: Number(frame.startSecond),
+                    endSecond: Number(frame.endSecond),
+                    actionPrompt: text(frame.actionPrompt),
+                    imagePrompt: text(frame.imagePrompt),
+                };
+            }),
+            duration,
+        );
+    } catch (error) {
+        throw new DramaProductionPackageError(`镜头 ${text(shot.code) || index + 1} 的逐帧计划无效：${error instanceof Error ? error.message : "无法解析"}`);
+    }
     return {
         code: text(shot.code),
         order: positiveNumber(shot.order) || index + 1,
-        title: text(shot.title) || `镜头 ${index + 1}`,
-        description: text(shot.description),
+        title,
+        description,
         sourceText: text(shot.sourceText),
         shotBoundary: text(shot.shotBoundary),
         dialogue: text(shot.dialogue),
         narration: text(shot.narration),
-        utterances: array(shot.utterances).map((value, utteranceIndex) => {
-            const utterance = object(value);
-            return {
-                id: text(utterance.id) || `utterance-${utteranceIndex + 1}`,
-                order: positiveNumber(utterance.order) || utteranceIndex + 1,
-                type: utterance.type === "voiceover" ? "voiceover" : "dialogue",
-                speaker: text(utterance.speaker),
-                text: text(utterance.text),
-            };
-        }),
+        utterances,
         imagePrompt: text(shot.imagePrompt),
         videoPrompt: text(shot.videoPrompt),
         cameraMotion: text(shot.cameraMotion),
-        startFramePrompt: optionalText(shot.startFramePrompt),
-        endFramePrompt: optionalText(shot.endFramePrompt),
         negativePrompt: optionalText(shot.negativePrompt),
         continuity: {
-            shotSize: text(continuity.shotSize),
-            cameraAngle: text(continuity.cameraAngle),
-            composition: text(continuity.composition),
-            characterBlocking: text(continuity.characterBlocking),
-            gazeDirection: text(continuity.gazeDirection),
-            actionStart: text(continuity.actionStart),
-            actionEnd: text(continuity.actionEnd),
-            screenDirection: text(continuity.screenDirection),
-            axisRule: text(continuity.axisRule),
-            continuityNotes: text(continuity.continuityNotes),
+            shotSize: text(continuity.shotSize) || defaultShotSize(description, title),
+            cameraAngle: text(continuity.cameraAngle) || "视线高度平视，沿动作轴线拍摄",
+            composition: text(continuity.composition) || "主体保持在9:16安全区，动作方向留出前进空间",
+            characterBlocking: text(continuity.characterBlocking) || `按${description || title}的动作关系安排站位`,
+            gazeDirection: text(continuity.gazeDirection) || "沿叙事动作方向，反应时回看对手或关键道具",
+            actionStart,
+            actionEnd,
+            screenDirection: text(continuity.screenDirection) || "保持同侧屏幕运动方向",
+            axisRule: text(continuity.axisRule) || "保持180度关系轴线，转场时明确切换",
+            continuityNotes: text(continuity.continuityNotes) || "保持人物、道具、空间和光色状态连续",
         },
-        duration: positiveNumber(shot.duration) || 5,
-        characterCodes: strings(shot.characterCodes),
-        propCodes: strings(shot.propCodes),
-        clueCodes: strings(shot.clueCodes),
+        duration,
+        characterCodes,
+        propCodes,
+        clueCodes,
         locationCode: optionalText(shot.locationCode),
         storySceneCode: optionalText(shot.storySceneCode),
         timecode: optionalText(shot.timecode),
         dramaticFunction: optionalText(shot.dramaticFunction),
         lens: optionalText(shot.lens),
-        lighting: optionalText(shot.lighting),
-        colorPalette: optionalText(shot.colorPalette),
+        lighting,
+        colorPalette,
         transitionIn: optionalText(shot.transitionIn),
         transitionOut: optionalText(shot.transitionOut),
         performanceNotes: optionalText(shot.performanceNotes),
+        performancePlan,
+        dialoguePerformance,
+        lightingPlan,
         sound: normalizeSound(shot.sound),
-        entryState: normalizeState(shot.entryState),
-        exitState: normalizeState(shot.exitState),
+        entryState: mergeState(normalizeState(shot.entryState), directorState(characterCodes, propCodes, title, lighting, actionStart)),
+        exitState: mergeState(normalizeState(shot.exitState), directorState(characterCodes, propCodes, title, lighting, actionEnd)),
+        framePlan: {
+            start: { source: frameStart.source },
+            end: { required: frameEnd.required },
+            frames,
+            ...(normalizeReferenceManifest(framePlan.referenceManifest).length ? { referenceManifest: normalizeReferenceManifest(framePlan.referenceManifest) } : {}),
+            ...(object(framePlan.referenceCount).min || object(framePlan.referenceCount).max ? { referenceCount: normalizeReferenceCount(framePlan.referenceCount) } : {}),
+        },
         sourceAssetIds: strings(shot.sourceAssetIds),
-        continuityStatus: shot.continuityStatus === "blocked" || shot.continuityStatus === "needs_review" || shot.continuityStatus === "passed" || shot.continuityStatus === "stale" ? shot.continuityStatus : "ready",
-        videoMode: shot.videoMode === "direct" || shot.videoMode === "reference" ? shot.videoMode : "storyboard",
-        storyboardFrameMode: shot.storyboardFrameMode === "single" ? "single" : "first_last",
+        continuityStatus: "ready",
+        videoMode: shot.videoMode === "direct" ? "direct" : "storyboard",
+        storyboardFrameMode: shot.storyboardFrameMode === "single" ? "single" : shot.storyboardFrameMode === "first_last" ? "first_last" : "all_frames",
     };
 }
 
-function normalizePackageAsset(value: unknown): DramaProductionPackageAsset {
+function normalizeReferenceManifest(value: unknown) {
+    return array(value).flatMap((item) => {
+        const input = object(item);
+        const alias = text(input.alias);
+        const role = text(input.role);
+        if (!alias || !["previous_actual_tail", "character_anchor", "scene_anchor", "prop_anchor", "action_keyframe", "composition_keyframe"].includes(role)) return [];
+        return [{ alias, role: role as DramaReferenceManifestRole, purpose: text(input.purpose), assetId: optionalText(input.assetId), shotId: optionalText(input.shotId), frameEvidenceId: optionalText(input.frameEvidenceId) }];
+    });
+}
+
+function normalizeReferenceCount(value: unknown) {
+    const input = object(value);
+    const min = Math.max(1, Math.floor(Number(input.min) || 1));
+    const max = Math.max(min, Math.floor(Number(input.max) || min));
+    return { min: Math.min(30, min), max: Math.min(30, max) };
+}
+
+function defaultShotSize(description: string, title: string) {
+    const value = `${title}\n${description}`;
+    if (/(眼神|嘴角|眉|手指|戒指|护符|剑刃|特写|近距离)/u.test(value)) return "近景或特写";
+    if (/(抵达|城门|远处|全貌|街道|塔楼|广场|全景)/u.test(value)) return "全景或远景";
+    return "中景";
+}
+
+function normalizePerformancePlan(value: unknown): DramaShot["performancePlan"] {
+    const input = object(value);
+    if (!Object.keys(input).length) return undefined;
+    const beat = (item: unknown) => {
+        const value = object(item);
+        return { emotion: text(value.emotion), facialAction: text(value.facialAction), gaze: text(value.gaze), bodyAction: text(value.bodyAction) };
+    };
+    return {
+        emotionalObjective: text(input.emotionalObjective),
+        emotionalArc: text(input.emotionalArc),
+        speechStyle: text(input.speechStyle),
+        pace: text(input.pace),
+        breath: text(input.breath),
+        restraintLevel: text(input.restraintLevel),
+        beats: { start: beat(object(input.beats).start), middle: beat(object(input.beats).middle), end: beat(object(input.beats).end) },
+    };
+}
+
+function normalizeDialoguePerformance(value: unknown): DramaShot["dialoguePerformance"] {
+    return array(value).flatMap((item) => {
+        const input = object(item);
+        const utteranceId = text(input.utteranceId);
+        return utteranceId
+            ? [
+                  {
+                      utteranceId,
+                      intent: text(input.intent),
+                      tone: text(input.tone),
+                      pace: text(input.pace),
+                      pause: text(input.pause),
+                      emphasis: text(input.emphasis),
+                      facialReactionBefore: text(input.facialReactionBefore),
+                      facialReactionDuring: text(input.facialReactionDuring),
+                      facialReactionAfter: text(input.facialReactionAfter),
+                  },
+              ]
+            : [];
+    });
+}
+
+function normalizeLightingPlan(value: unknown): DramaShot["lightingPlan"] {
+    const input = object(value);
+    if (!Object.keys(input).length) return undefined;
+    return {
+        palette: text(input.palette),
+        colorTemperature: text(input.colorTemperature),
+        keyLight: text(input.keyLight),
+        fillLight: text(input.fillLight),
+        rimLight: text(input.rimLight),
+        contrast: text(input.contrast),
+        materialResponse: text(input.materialResponse),
+        skinToneProtection: text(input.skinToneProtection),
+        inheritFromPrevious: text(input.inheritFromPrevious),
+        transitionToNext: text(input.transitionToNext),
+    };
+}
+
+function mergePerformancePlan(current: DramaShot["performancePlan"], fallback: NonNullable<DramaShot["performancePlan"]>): NonNullable<DramaShot["performancePlan"]> {
+    return {
+        ...fallback,
+        ...(current || {}),
+        beats: {
+            ...fallback.beats,
+            ...(current?.beats || {}),
+            start: { ...fallback.beats.start, ...(current?.beats?.start || {}) },
+            middle: { ...fallback.beats.middle, ...(current?.beats?.middle || {}) },
+            end: { ...fallback.beats.end, ...(current?.beats?.end || {}) },
+        },
+    };
+}
+
+function mergeLightingPlan(current: DramaShot["lightingPlan"], fallback: NonNullable<DramaShot["lightingPlan"]>): NonNullable<DramaShot["lightingPlan"]> {
+    return { ...fallback, ...(current || {}) };
+}
+
+function mergeState(current: DramaShot["entryState"], fallback: NonNullable<DramaShot["entryState"]>): NonNullable<DramaShot["entryState"]> {
+    return {
+        ...fallback,
+        ...(current || {}),
+        characters: current?.characters?.length ? current.characters : fallback.characters,
+        props: current?.props?.length ? current.props : fallback.props,
+    };
+}
+
+function mergeDialoguePerformance(current: DramaShot["dialoguePerformance"], utterances: DramaShot["utterances"]): NonNullable<DramaShot["dialoguePerformance"]> {
+    const fallback = defaultDialoguePerformance(utterances);
+    const currentById = new Map((current || []).map((item) => [item.utteranceId, item]));
+    const merged = fallback.map((item) => ({ ...item, ...(currentById.get(item.utteranceId) || {}) }));
+    return [...merged, ...(current || []).filter((item) => !fallback.some((fallbackItem) => fallbackItem.utteranceId === item.utteranceId))];
+}
+
+function defaultPerformancePlan(title: string, description: string, actionEnd: string, hasSpeech: boolean): NonNullable<DramaShot["performancePlan"]> {
+    const action = description || title;
+    return {
+        emotionalObjective: `围绕${action}完成当前镜头的外在行动目标`,
+        emotionalArc: `从进入${action}的克制状态开始，经由动作反应推进，在${actionEnd}前收束`,
+        speechStyle: hasSpeech ? "台词贴合当下处境，语气清晰克制，重音落在行动关键信息" : "无对白，以呼吸、视线和动作反应传递情绪",
+        pace: "按镜头时长均匀推进，动作变化处短暂停顿，转场前收住",
+        breath: "起始自然吸气，动作变化处短暂停顿，结束以呼气完成收束",
+        restraintLevel: "中等克制，避免夸张表演",
+        beats: {
+            start: { emotion: "保持与上一状态一致", facialAction: "眉眼和下颌保持可读的初始反应", gaze: "沿当前镜头动作方向", bodyAction: `进入${action}` },
+            middle: { emotion: "压力或目标逐步显现", facialAction: "眉眼、嘴角或下颌出现与动作对应的细微变化", gaze: "短暂聚焦关键人物或道具", bodyAction: "完成主要动作并保留反应停顿" },
+            end: { emotion: "在下一镜头切点前完成情绪落点", facialAction: "固定最终表情，避免切点前漂移", gaze: "指向下一动作或转场方向", bodyAction: actionEnd },
+        },
+    };
+}
+
+function defaultDialoguePerformance(utterances: Array<{ id: string; text: string; type: string }>): NonNullable<DramaShot["dialoguePerformance"]> {
+    return utterances
+        .filter((utterance) => utterance.type === "dialogue")
+        .map((utterance) => ({
+            utteranceId: utterance.id,
+            intent: "推动当前镜头行动并回应对手或环境",
+            tone: "贴合当前情绪，清晰自然",
+            pace: "按语义分句，中速完成",
+            pause: "关键信息前短停，句末自然收束",
+            emphasis: utterance.text,
+            facialReactionBefore: "先以视线和眉眼确认对方或关键道具",
+            facialReactionDuring: "说话时保持与行动一致的面部反应",
+            facialReactionAfter: "说完保留短暂反应，衔接下一动作",
+        }));
+}
+
+function defaultLightingPlan(lighting: string, colorPalette: string): NonNullable<DramaShot["lightingPlan"]> {
+    return {
+        palette: colorPalette,
+        colorTemperature: "主光冷暖关系沿用本场设定，避免相邻镜头跳变",
+        keyLight: `${lighting}作为主光，明确来自画面主方向并照亮主体面部`,
+        fillLight: "弱补光保留面部细节，阴影侧不完全压黑",
+        rimLight: "以轻微轮廓光分离人物与背景，不制造硬边光晕",
+        contrast: "中等反差，主体层次清晰，避免高光溢出",
+        materialResponse: "金属、皮革和织物按真实材质反射，亮部克制",
+        skinToneProtection: "保护肤色自然，不被环境色完全染色",
+        inheritFromPrevious: "继承上一镜主光方向、色温和环境亮度",
+        transitionToNext: "在动作结束处平滑过渡到下一镜主光和色板",
+    };
+}
+
+function hasPerformancePlan(value: DramaShot["performancePlan"]) {
+    return Boolean(value?.emotionalObjective || value?.emotionalArc || value?.speechStyle || value?.pace || value?.breath || value?.restraintLevel || Object.values(value?.beats || {}).some((beat) => Object.values(beat).some(Boolean)));
+}
+
+function hasLightingPlan(value: DramaShot["lightingPlan"]) {
+    return Boolean(value && Object.values(value).some(Boolean));
+}
+
+function hasContinuityPlan(shot: DramaProductionPackageEpisode["shots"][number]) {
+    return Boolean(
+        Object.values(shot.continuity || {}).some(Boolean) ||
+        Object.values(shot.entryState || {}).some((value) => (Array.isArray(value) ? value.length > 0 : Boolean(value))) ||
+        Object.values(shot.exitState || {}).some((value) => (Array.isArray(value) ? value.length > 0 : Boolean(value))),
+    );
+}
+
+function normalizePackageAsset(value: unknown, location = false): DramaProductionPackageAsset {
     const asset = object(value);
     const profile = object(asset.profile);
+    const name = text(asset.name);
+    const description = text(asset.description);
+    const rawVisualIdentity = text(profile.visualIdentity);
+    const visualIdentity = rawVisualIdentity && !/^不可变为/u.test(rawVisualIdentity) ? rawVisualIdentity : description || `${name}的固定外观与识别特征`;
+    const sourceText = [description, text(profile.designPrompt)].filter(Boolean).join("\n");
+    const rawStyling = text(profile.styling);
+    const styling = rawStyling && !(location && /发型、服装、随身物件与材质按描述固定/u.test(rawStyling)) ? rawStyling : inferAssetStyling(sourceText, name, location);
+    const colorPalette = text(profile.colorPalette) || inferAssetPalette(sourceText);
+    const rawConsistencyRules = text(profile.consistencyRules);
+    const spatialRules = strings(profile.spatialRules);
+    const consistencyRules = rawConsistencyRules && !isGenericConsistencyRule(rawConsistencyRules) ? rawConsistencyRules : location
+        ? inferLocationConsistencyRules(name, sourceText, spatialRules, styling, colorPalette)
+        : `固定${name}的外观、服装、配色和动作状态，不随镜头重设计；${visualIdentity}`;
     return {
         code: text(asset.code),
-        name: text(asset.name),
-        description: text(asset.description),
+        name,
+        description,
         payoff: optionalText(asset.payoff),
         activeEpisodeCodes: strings(asset.activeEpisodeCodes),
-        profile: Object.keys(profile).length
-            ? {
-                  visualIdentity: text(profile.visualIdentity),
-                  styling: text(profile.styling),
-                  colorPalette: text(profile.colorPalette),
-                  consistencyRules: text(profile.consistencyRules),
-                  designPrompt: optionalText(profile.designPrompt),
-                  identityAnchors: strings(profile.identityAnchors),
-                  spatialRules: strings(profile.spatialRules),
-                  stateRules: strings(profile.stateRules),
-                  forbiddenChanges: strings(profile.forbiddenChanges),
-              }
-            : undefined,
+        profile: {
+            visualIdentity,
+            styling,
+            colorPalette,
+            consistencyRules,
+            designPrompt: optionalText(profile.designPrompt) || description || undefined,
+            identityAnchors: strings(profile.identityAnchors).length ? strings(profile.identityAnchors) : [visualIdentity],
+            spatialRules,
+            stateRules: strings(profile.stateRules),
+            forbiddenChanges: strings(profile.forbiddenChanges),
+        },
     };
+}
+
+function isGenericConsistencyRule(value: string) {
+    return value === "按设计 Prompt 保持一致" || /^固定：不可变为/u.test(value);
+}
+
+function inferLocationConsistencyRules(name: string, source: string, spatialRules: string[], styling: string, colorPalette: string) {
+    const fixedText = spatialRules.filter(Boolean).join("；") || styling || source.split("。格")[0] || `${name}的主要空间结构按设计基准锁定`;
+    const paletteText = colorPalette && !colorPalette.startsWith("按制作包描述") ? `；环境色与光向保持${colorPalette}` : "";
+    return `固定${name}的空间拓扑、入口方向、主要陈设位置与镜头轴线，不随镜头重排；${fixedText}${paletteText}。`;
+}
+
+function inferAssetStyling(source: string, name: string, location = false) {
+    if (location) return source.match(/(?:陈设|材质|建筑|空间|地面|墙面|入口|固定元素|固定空间)(?:为|是|：)?([^。\n]+)/u)?.[0]?.trim() || `${name}的空间陈设、建筑结构、地面与环境材质按描述固定`;
+    const match = source.match(/(?:服装|造型|制服|斗篷|外套|围裙)(?:为|是|：)?([^。\n]+)/u)?.[0]?.trim();
+    return match || `${name}的发型、服装、随身物件与材质按描述固定`;
+}
+
+function inferAssetPalette(source: string) {
+    const colors = [...new Set(source.match(/(?:深紫黑|紫黑|皇家深蓝|海军蓝|烟紫|深墨绿|灰蓝|炭灰|暗红|深棕|旧银|铁灰|煤黑|暗琥珀|浅灰蓝|亚麻金|深栗棕|灰绿色|琥珀棕)/gu) || [])];
+    return colors.length ? colors.join("、") : "按制作包描述中的固有色保持跨镜头一致";
 }
 
 function collectWarnings(value: DramaProductionPackageV1) {
@@ -480,6 +878,14 @@ function positiveNumber(value: unknown) {
 }
 function normalizeKey(value: string) {
     return value.trim().toLocaleLowerCase();
+}
+function functionalRoleAsset(labelValue: string, description: string, index: number, knownCharacters: DramaProductionPackageAsset[]) {
+    const label = labelValue.trim();
+    if (/(木匣|声音|断剑|护符|探测器|短刃|银戒|锤柄|铜镜|剑鞘|马车|城门|高塔|黑湖|结界)/u.test(label)) return [];
+    const aliases: Record<string, string> = { 检查官: "城门检查官", 观察者: "神秘观察者", 奥伦: "奥伦·奈特" };
+    const canonicalName = aliases[label] || label;
+    if (knownCharacters.some((asset) => normalizeKey(asset.name) === normalizeKey(canonicalName))) return [];
+    return [packageAsset(`C${String(knownCharacters.length + index + 1).padStart(2, "0")}`, canonicalName, description, description, [description.split(/[；，]/).at(-1) || description])];
 }
 function hasCodeAndName(value: DramaProductionPackageAsset) {
     return Boolean(value.code && value.name);
@@ -539,15 +945,23 @@ function parseDirectorMarkdown(source: string): DramaProductionPackageV1 | null 
         };
     });
     const characterAssets = markdownPromptAssets(section(source, "## 五、角色一致性资产", "## 六、"), /###\s*5\.\d+\s+([^｜\n]+)｜(C\d+)｜[^\n]*\n+```text\n([\s\S]*?)```/g);
-    const functionalRoles = [...section(source, "### 5.5 本集功能角色 DNA", "## 六、").matchAll(/^-\s*([^：\n]+)：([^\n]+)/gm)].map((match, index) =>
-        packageAsset(`C${String(characterAssets.length + index + 1).padStart(2, "0")}`, match[1], match[2], match[2], [match[2].split(/[；，]/).at(-1) || match[2]]),
+    const functionalRoles = [...section(source, "### 5.5 本集功能角色 DNA", "## 六、").matchAll(/^-\s*([^：\n]+)：([^\n]+)/gm)].flatMap((match, index) =>
+        functionalRoleAsset(match[1], match[2], index, characterAssets),
     );
-    const locationAssets = markdownPromptAssets(section(source, "## 六、场景一致性资产", "## 七、"), /###\s*6\.\d+\s+([^｜\n]+)｜(S\d+)｜[^\n]*\n+```text\n([\s\S]*?)```/g, true);
+    const locationAssets = [
+        ...markdownPromptAssets(section(source, "## 六、场景一致性资产", "## 七、"), /###\s*6\.\d+\s+([^｜\n]+)｜(S\d+)｜[^\n]*\n+```text\n([\s\S]*?)```/g, true),
+        packageAsset("S05", "黑湖记忆", "无风黑湖、倒悬古塔、雪地四手与冷白无源光", "黑湖贯穿竖幅，倒悬古塔位置固定，雪地位于画面下方，冷白无源光", ["倒悬塔位置", "无波黑湖", "雪地边界"], true),
+        packageAsset("S06", "前往阿佐雷斯的马车", "中世纪封闭木马车，左右长凳、右侧竖向车窗、前进方向固定", "车厢长凳左右相对，Karin位于左侧、Rifa位于右侧，竖向车窗在Rifa身后，阴天柔光从右上进入", ["左右长凳", "右侧竖窗", "前进方向"], true),
+    ];
     const props = [
         packageAsset("P01", "Karin的断剑", "暗银断剑、不对称双翼护手、剑柄缠深蓝旧布", "暗银断剑，不对称双翼护手，剑柄缠深蓝旧布", ["不对称双翼护手", "断口形态固定"]),
         packageAsset("P02", "失灵护符", "暗黄铜圆片，边缘有焦黑痕", "暗黄铜圆片护符", ["焦黑边缘"]),
         packageAsset("P03", "灵压探测器", "黄铜探测器，指针可停在零并从内部裂开", "皇家黄铜灵压探测器", ["黄铜材质"]),
         packageAsset("P04", "四点木匣", "带银裂痕与四点印记的窄木匣", "四点印记窄木匣", ["四点印记", "银色裂痕"]),
+        packageAsset("P05", "Rifa短刃", "哑光钢刃、黑木握柄缠暗红细线、窄鞘固定右腰", "Rifa短刃正侧背细节卡", ["黑木红线握柄", "窄鞘", "右腰位置"]),
+        packageAsset("P06", "四点银戒", "观察者右手佩戴的旧银戒，四个圆点等距排列", "四点银戒多角度细节卡", ["四点等距", "旧银材质"]),
+        packageAsset("P07", "无头锤柄", "奥伦使用的深色旧木锤柄，没有锤头", "无头锤柄正侧面细节卡", ["无锤头", "旧木磨损"]),
+        packageAsset("P08", "烟黑铜镜", "悬挂在铁砧上方、表面烟黑的旧铜镜", "烟黑铜镜正侧面细节卡", ["烟黑镜面", "铁砧上方位置"]),
     ];
     const soundRows = markdownTableRows(section(source, "## 十、声音设计", "## 十一、"), 4).filter((row) => /^SH\d+$/i.test(row[0]));
     const soundByShot = new Map(soundRows.map((row) => [row[0], { ambience: row[1], soundEffects: row[2], music: row[3] }]));
@@ -561,14 +975,25 @@ function parseDirectorMarkdown(source: string): DramaProductionPackageV1 | null 
     const videoPrompts = new Map([...section(source, "## 十一、Seedance 分段视频 Prompt", "## 十二、").matchAll(/###\s*P(\d+)｜[^\n]*\n+```text\n([\s\S]*?)```/g)].map((match) => [`SH${match[1].padStart(2, "0")}`, match[2].trim()]));
     const archive = parseProductionArchive(source);
     const allCharacters = [...characterAssets, ...functionalRoles];
-    const shots = shotRows.map((row, index) => {
+    const baseShots = shotRows.map((row, index) => {
         const code = row[0];
         const prompt = videoPrompts.get(code) || row[9];
         const utterances = utterancesByShot.get(code) || [];
         const storyScene = storyScenes.find((scene) => scene.shotCodes.includes(code));
-        const characterCodes = allCharacters.filter((asset) => asset.activeEpisodeCodes?.includes("E01") && (prompt.includes(asset.name) || row[9].includes(asset.name))).map((asset) => asset.code);
-        const propCodes = props.filter((asset) => prompt.includes(asset.name.replace(/^Karin的/, "")) || row[9].includes(asset.name.replace(/^Karin的/, ""))).map((asset) => asset.code);
+        const characterCodes = allCharacters.filter((asset) => asset.activeEpisodeCodes?.includes("E01") && matchesAssetText(asset.name, `${prompt}\n${row[9]}`)).map((asset) => asset.code);
+        const propCodes = props.filter((asset) => matchesAssetText(asset.name, `${prompt}\n${row[9]}`)).map((asset) => asset.code);
         const duration = timeRangeSeconds(row[1]);
+        const lighting = row[6] || "延续本场主光";
+        const colorPalette = row[7] || "沿用项目主色板";
+        const actionEnd = row[10] || row[9];
+        const performancePlan = defaultPerformancePlan(
+            row[9],
+            row[9],
+            actionEnd,
+            utterances.some((item) => item.type === "dialogue"),
+        );
+        const dialoguePerformance = defaultDialoguePerformance(utterances);
+        const lightingPlan = defaultLightingPlan(lighting, colorPalette);
         return {
             code,
             order: index + 1,
@@ -591,7 +1016,18 @@ function parseDirectorMarkdown(source: string): DramaProductionPackageV1 | null 
             startFramePrompt: `${row[9]}，动作起始状态`,
             endFramePrompt: row[10],
             negativePrompt: negativePromptFrom(prompt),
-            continuity: { shotSize: row[3], cameraAngle: "", composition: "9:16竖向构图", characterBlocking: "", gazeDirection: "", actionStart: row[9], actionEnd: row[10], screenDirection: "", axisRule: "保持同侧轴线", continuityNotes: row[8] },
+            continuity: {
+                shotSize: row[3],
+                cameraAngle: "视线高度平视，沿动作轴线拍摄",
+                composition: "主体保持在9:16安全区，动作方向留出前进空间",
+                characterBlocking: `按${row[9]}的动作关系安排站位`,
+                gazeDirection: "沿叙事动作方向，反应时回看对手或关键道具",
+                actionStart: row[9],
+                actionEnd,
+                screenDirection: "保持同侧屏幕运动方向",
+                axisRule: "保持180度关系轴线，转场时明确切换",
+                continuityNotes: row[8] || "保持人物、道具、空间和光色状态连续",
+            },
             duration: Math.max(1, duration[1] - duration[0]),
             characterCodes,
             propCodes,
@@ -601,18 +1037,24 @@ function parseDirectorMarkdown(source: string): DramaProductionPackageV1 | null 
             timecode: row[1],
             dramaticFunction: row[2],
             lens: row[5],
-            lighting: row[6],
-            colorPalette: row[7],
+            lighting,
+            colorPalette,
             transitionOut: row[8],
             performanceNotes: utterances.map((item) => item.text).join("；"),
+            performancePlan,
+            dialoguePerformance,
+            lightingPlan,
             sound: soundByShot.get(code),
-            entryState: { characters: characterCodes.map((assetId) => ({ assetId })), props: propCodes.map((assetId) => ({ assetId })), environment: storyScene?.title, lighting: row[6] },
-            exitState: { characters: characterCodes.map((assetId) => ({ assetId })), props: propCodes.map((assetId) => ({ assetId })), environment: row[10], lighting: row[6] },
+            entryState: directorState(characterCodes, propCodes, storyScene?.title || "未命名场景", row[6], `进入${row[9]}`),
+            exitState: directorState(characterCodes, propCodes, storyScene?.title || "未命名场景", row[6], row[10]),
             videoMode: "storyboard" as const,
-            storyboardFrameMode: "first_last" as const,
+            storyboardFrameMode: "all_frames" as const,
             continuityStatus: "ready" as const,
+            framePlan: { start: { source: "independent" as const }, end: { required: true }, frames: defaultDramaFrameBeats(Math.max(1, duration[1] - duration[0]), prompt, `${row[9]}，${row[3]}，${row[6]}，${row[7]}，9:16竖屏电影分镜`) },
         };
     });
+    const shots = inheritCarriedStates(splitDirectorShots(baseShots));
+    const resolvedStoryScenes = storyScenes.map((scene) => ({ ...scene, shotCodes: shots.filter((shot) => shot.storySceneCode === scene.code).map((shot) => shot.code) }));
     const edges = shots.slice(0, -1).map((shot, index) => {
         const next = shots[index + 1];
         const sameScene = shot.storySceneCode === next.storySceneCode;
@@ -659,11 +1101,21 @@ function parseDirectorMarkdown(source: string): DramaProductionPackageV1 | null 
                 hook: bullet(source, "结尾新问题"),
                 nextPreview: "进入 Edia Knight 后，追查断剑与木匣的共同记忆。",
                 sourceRange: bullet(source, "小说章节"),
-                storyScenes,
+                storyScenes: resolvedStoryScenes,
                 shots,
                 continuityEdges: edges,
             },
         ],
+        seriesBible: {
+            version: "series-bible-v1",
+            canonCharacters: ["C01", "C02", "C03", "C04"],
+            immutableRules: ["Karin、Rifa、Ras、Ref的面孔、身高比例、发型、服装基线与标志道具跨集不可重建", "Ras与Ref第一集不出镜，不得进入E01参考图请求", "任何新角色、服装、地点或道具必须先登记资产再进入镜头Prompt"],
+            relationshipState: bullet(source, "关系弧"),
+            worldRules: ["Mahadel保存诸界试图遗忘的记忆", "器物能够保存并借用接触者的记忆", "Karin十八岁后会使魔法装备逐渐失灵"],
+            unresolvedThreads: [bullet(source, "结尾新问题"), "预言中缺失的两个名字是谁", "木匣为何记得Karin"].filter(Boolean),
+            visualMotifs: [bullet(source, "色彩叙事"), "四点印记", "倒悬塔", "银色裂痕"].filter(Boolean),
+            soundMotifs: ["无呼吸女声耳语", "低弦两音母题", "力量释放前的绝对静音"],
+        },
         archive,
     };
 }
@@ -676,10 +1128,12 @@ function parseProductionArchive(source: string): NonNullable<DramaProductionPack
     }));
     const referenceRows = markdownTableRows(section(source, "### 参考图生成后的推荐映射", "### 生成顺序"), 5).filter((row) => /^\d+$/.test(row[0]));
     const referencePlan = referenceRows.map((row) => ({ priority: Number(row[0]), asset: row[1], purpose: row[2], planType: row[3], shotCodes: shotCodes(row[4]) }));
-    const referenceShots = new Map(referencePlan.flatMap((plan) => {
-        const code = plan.asset.match(/^(V\d+|C\d+|S\d+)/)?.[1];
-        return code ? [[code, plan.shotCodes] as const] : [];
-    }));
+    const referenceShots = new Map(
+        referencePlan.flatMap((plan) => {
+            const code = plan.asset.match(/^(V\d+|C\d+|S\d+)/)?.[1];
+            return code ? [[code, plan.shotCodes] as const] : [];
+        }),
+    );
     const keyframes = [...section(source, "## 七、关键视频资产 Prompt", "## 八、").matchAll(/###\s*(V\d+)｜([^\n]+)\n+```text\n([\s\S]*?)```/g)].map((match) => ({
         code: match[1],
         category: "keyframe" as const,
@@ -747,7 +1201,7 @@ function packageAsset(code: string, name: string, description: string, designPro
             visualIdentity: anchors.join("、") || description.trim(),
             styling: designPrompt.match(/(?:服装|固定元素|固定空间)：([^。\n]+)/)?.[1] || "",
             colorPalette: designPrompt.match(/色彩(?:CN3)?：?([^。\n]+)/)?.[1] || "",
-            consistencyRules: anchors.length ? `固定：${anchors.join("、")}` : "按设计 Prompt 保持一致",
+            consistencyRules: anchors.length ? `固定：${anchors.join("、")}` : location ? inferLocationConsistencyRules(name, designPrompt, location ? sentenceList(designPrompt, /固定(?:元素|空间)：([^。\n]+)/) : [], designPrompt.match(/固定(?:元素|空间)：([^。\n]+)/)?.[1] || "", designPrompt.match(/色彩(?:CN3)?：?([^。\n]+)/)?.[1] || "") : "按设计 Prompt 保持一致",
             designPrompt,
             identityAnchors: anchors,
             spatialRules: location ? sentenceList(designPrompt, /固定(?:元素|空间)：([^。\n]+)/) : [],
@@ -786,7 +1240,114 @@ function overlaps(left: [number, number], right: [number, number]) {
     return left[0] < right[1] && left[1] > right[0];
 }
 function storyLocationCode(order: number) {
-    return order <= 2 ? undefined : order <= 4 ? "S02" : order === 5 ? "S03" : "S04";
+    return order === 1 ? "S05" : order === 2 ? "S06" : order <= 4 ? "S02" : order === 5 ? "S03" : "S04";
+}
+function matchesAssetText(name: string, value: string) {
+    const aliases: Record<string, string[]> = {
+        城门检查官: ["检查官"],
+        "奥伦·奈特": ["奥伦", "铸剑师"],
+        神秘观察者: ["观察者"],
+        Karin的断剑: ["断剑", "剑柄", "剑鞘"],
+        失灵护符: ["护符"],
+        灵压探测器: ["探测器"],
+        四点木匣: ["木匣"],
+        Rifa短刃: ["短刃"],
+        四点银戒: ["银戒"],
+        无头锤柄: ["锤柄", "木柄"],
+        烟黑铜镜: ["铜镜"],
+    };
+    return [name, ...(aliases[name] || [])].some((alias) => value.includes(alias));
+}
+function directorState(characterCodes: string[], propCodes: string[], environment: string, lighting: string, action: string) {
+    const holder: Record<string, string> = { P01: "C01", P02: "C01", P03: "C05", P04: "C06", P05: "C02", P06: "C07", P07: "C06", P08: "C06" };
+    return {
+        characters: characterCodes.map((assetId, index) => ({
+            assetId,
+            wardrobe: "系列圣经标准造型",
+            position: index === 0 ? "画面左侧或前景" : "画面右侧或后景",
+            gaze: index === 0 ? "沿镜头轴线向右" : "沿镜头轴线向左",
+            pose: "克制站姿或自然坐姿",
+            expression: "按本镜表演说明",
+            action,
+        })),
+        props: propCodes.map((assetId) => ({ assetId, state: action, holderId: holder[assetId] || characterCodes[0] || "environment" })),
+        environment,
+        lighting,
+        axis: "保持180度人物关系轴线",
+        screenDirection: "角色移动方向沿场景既定动线",
+    };
+}
+function splitDirectorShots<T extends DramaProductionPackageEpisode["shots"][number]>(shots: T[]): T[] {
+    const counts = [2, 3, 2, 2, 3, 2, 3, 3, 2, 3, 3, 2];
+    let order = 0;
+    return shots.flatMap((shot, shotIndex) => {
+        const count = counts[shotIndex] || Math.max(1, Math.ceil(shot.duration / 8));
+        const start = timeRangeSeconds(shot.timecode || "0-0s")[0];
+        const duration = shot.duration / count;
+        const utteranceGroups = Array.from({ length: count }, () => [] as typeof shot.utterances);
+        shot.utterances.forEach((utterance, index) => utteranceGroups[Math.min(count - 1, Math.floor((index * count) / Math.max(1, shot.utterances.length)))].push(utterance));
+        let previousExitState = cloneState(shot.entryState);
+        let previousActionEnd = shot.continuity?.actionStart || shot.description;
+        const finalActionEnd = shot.continuity?.actionEnd || shot.description;
+        return Array.from({ length: count }, (_, part) => {
+            order += 1;
+            const from = start + duration * part;
+            const to = start + duration * (part + 1);
+            const utterances = utteranceGroups[part].map((utterance, index) => ({ ...utterance, order: index + 1 }));
+            const action = part === 0 ? shot.continuity?.actionStart || shot.description : part === count - 1 ? shot.continuity?.actionEnd || shot.description : `${shot.title}的连续反应与动作过渡`;
+            const actionStart = part === 0 ? shot.continuity?.actionStart || shot.description : previousActionEnd;
+            const actionEnd = part === 0 ? finalActionEnd : part === count - 1 ? finalActionEnd : action;
+            const entryState = part === 0 ? cloneState(shot.entryState) : cloneState(previousExitState);
+            const exitState = part === count - 1 ? shot.exitState : directorState(shot.characterCodes, shot.propCodes, shot.exitState?.environment || shot.title, shot.lighting || "延续主光", actionEnd);
+            previousExitState = cloneState(exitState);
+            previousActionEnd = actionEnd;
+            return {
+                ...shot,
+                code: `SH${String(order).padStart(3, "0")}`,
+                order,
+                title: `${shot.title} ${part + 1}/${count}`,
+                description: action,
+                duration,
+                timecode: `${trimSecond(from)}-${trimSecond(to)}s`,
+                utterances,
+                dialogue: utterances
+                    .filter((item) => item.type === "dialogue")
+                    .map((item) => `${item.speaker}：${item.text}`)
+                    .join("\n"),
+                narration: utterances
+                    .filter((item) => item.type === "voiceover")
+                    .map((item) => `${item.speaker}：${item.text}`)
+                    .join("\n"),
+                imagePrompt: `${action}，${shot.continuity?.shotSize || "电影景别"}，${shot.lighting || "延续主光"}，9:16安全构图，人物头顶与底部字幕区留白`,
+                videoPrompt: `本内部镜头只执行：${action}。保持角色、道具、轴线和前后状态连续。`,
+                startFramePrompt: undefined,
+                endFramePrompt: undefined,
+                continuity: { ...shot.continuity, actionStart, actionEnd },
+                framePlan: { start: { source: part === 0 ? "independent" : "previous_accepted_actual_tail" }, end: { required: part === count - 1 || shot.framePlan?.end.required === true }, frames: defaultDramaFrameBeats(duration, `本内部镜头只执行：${action}`, `${action}，${shot.continuity?.shotSize || "电影景别"}，${shot.lighting || "延续主光"}，9:16安全构图`) },
+                entryState,
+                exitState,
+            } as T;
+        });
+    });
+}
+function inheritCarriedStates<T extends DramaProductionPackageEpisode["shots"][number]>(shots: T[]): T[] {
+    return shots.map((shot, index) => {
+        const previous = shots[index - 1];
+        if (!previous?.exitState || !shot.entryState) return shot;
+        const previousCharacters = new Map(previous.exitState.characters.map((item) => [item.assetId, item]));
+        const previousProps = new Map(previous.exitState.props.map((item) => [item.assetId, item]));
+        return {
+            ...shot,
+            entryState: {
+                ...shot.entryState,
+                characters: shot.entryState.characters.map((item) => previousCharacters.get(item.assetId) || item),
+                props: shot.entryState.props.map((item) => previousProps.get(item.assetId) || item),
+            },
+        } as T;
+    });
+}
+function trimSecond(value: number) {
+    return Number.isInteger(value) ? String(value) : value.toFixed(1).replace(/\.0$/, "");
 }
 function compactMarkdown(value: string) {
     return value.replace(/\n{2,}/g, "\n").trim();

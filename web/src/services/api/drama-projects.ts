@@ -1,4 +1,114 @@
-import type { CreateDramaProjectInput, DramaCostSummary, DramaEpisode, DramaProject, DramaProjectSummary, DramaProjectVersion, DramaVisualReview } from "@/lib/drama-project-contract";
+import type { CreativeReview } from "@/lib/creative-agent-contract";
+import type {
+    CreateDramaProjectInput,
+    DramaCostSummary,
+    DramaEpisode,
+    DramaProductionPackagePreview,
+    DramaProductionPreflight,
+    DramaProductionPlan,
+    DramaProductionRun,
+    DramaProject,
+    DramaProjectSummary,
+    DramaProjectVersion,
+    DramaAssetRefinementProposal,
+    DramaAssetReference,
+    DramaAssetGenerationBatch,
+    DramaVisualReview,
+} from "@/lib/drama-project-contract";
+
+export function listDramaAssetGenerationBatches(projectId: string) {
+    return request<{ batches: DramaAssetGenerationBatch[] }>(`/api/drama/projects/${encodeURIComponent(projectId)}/asset-generation-batches`).then((data) => data.batches);
+}
+
+export function createDramaAssetGenerationBatch(projectId: string, assets: Array<{ kind: "characters" | "scenes" | "props"; assetId: string }>, config: unknown) {
+    return request<{ batch: DramaAssetGenerationBatch }>(`/api/drama/projects/${encodeURIComponent(projectId)}/asset-generation-batches`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ assets, config }) }).then(
+        (data) => data.batch,
+    );
+}
+
+export function getDramaAssetGenerationBatch(projectId: string, batchId: string) {
+    return request<{ batch: DramaAssetGenerationBatch }>(`/api/drama/projects/${encodeURIComponent(projectId)}/asset-generation-batches/${encodeURIComponent(batchId)}`).then((data) => data.batch);
+}
+
+export function cancelDramaAssetGenerationBatch(projectId: string, batchId: string) {
+    return request<{ batch: DramaAssetGenerationBatch }>(`/api/drama/projects/${encodeURIComponent(projectId)}/asset-generation-batches/${encodeURIComponent(batchId)}/cancel`, { method: "POST" }).then((data) => data.batch);
+}
+
+export function retryDramaAssetGenerationBatch(projectId: string, batchId: string, config: unknown) {
+    return request<{ batch: DramaAssetGenerationBatch }>(`/api/drama/projects/${encodeURIComponent(projectId)}/asset-generation-batches/${encodeURIComponent(batchId)}/retry`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ config }),
+    }).then((data) => data.batch);
+}
+
+export function refineDramaAsset(projectId: string, kind: "characters" | "scenes" | "props", assetId: string, prompt: string, requestId: string) {
+    return request<{ proposal: DramaAssetRefinementProposal }>(`/api/drama/projects/${encodeURIComponent(projectId)}/assets/${kind}/${encodeURIComponent(assetId)}/refine`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt, requestId }),
+    }).then((data) => data.proposal);
+}
+
+export function completeDramaAsset(projectId: string, kind: "characters" | "scenes" | "props" | "clues", assetId: string, requestId: string, config?: unknown) {
+    return request<{ project: DramaProject; missingItems: unknown[]; planning?: string; voice?: string; reference?: string; referenceTaskId?: string }>(
+        `/api/drama/projects/${encodeURIComponent(projectId)}/assets/${kind}/${encodeURIComponent(assetId)}/complete`,
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ requestId, config }) },
+    );
+}
+
+export function planDramaVoice(projectId: string, assetId: string) {
+    return request<{ project: DramaProject; voiceProfile: import("@/lib/drama-project-contract").DramaVoiceProfile; task?: { id: string; status: string }; cached?: boolean; warning?: string }>(
+        `/api/drama/projects/${encodeURIComponent(projectId)}/assets/characters/${encodeURIComponent(assetId)}/voice-plan`,
+        {
+            method: "POST",
+        },
+    ).then((data) => data);
+}
+
+export function createDramaVoiceProfile(projectId: string, assetId: string, input: { mode: "clone"; sampleAssetId?: string; requestId: string; confirmReplace?: boolean }) {
+    return request<{ project: DramaProject; voiceProfile: import("@/lib/drama-project-contract").DramaVoiceProfile; task: { id: string; status: string }; cached: boolean }>(
+        `/api/drama/projects/${encodeURIComponent(projectId)}/assets/characters/${encodeURIComponent(assetId)}/voice-creation`,
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) },
+    );
+}
+
+export function syncDramaVoiceCreation(projectId: string, assetId: string) {
+    return request<{ project: DramaProject; voiceProfile: import("@/lib/drama-project-contract").DramaVoiceProfile; task?: { id: string; status: string } }>(
+        `/api/drama/projects/${encodeURIComponent(projectId)}/assets/characters/${encodeURIComponent(assetId)}/voice-creation`,
+        { method: "GET" },
+    );
+}
+
+export function syncDramaVoicePreview(projectId: string, assetId: string) {
+    return request<{ project: DramaProject; voiceProfile: import("@/lib/drama-project-contract").DramaVoiceProfile; task?: { id: string; status: string }; cached?: boolean }>(
+        `/api/drama/projects/${encodeURIComponent(projectId)}/assets/characters/${encodeURIComponent(assetId)}/voice-preview`,
+        { method: "GET" },
+    ).then((data) => data);
+}
+
+export function retryDramaVoicePreview(projectId: string, assetId: string) {
+    return request<{ project: DramaProject; voiceProfile: import("@/lib/drama-project-contract").DramaVoiceProfile; task?: { id: string; status: string }; cached?: boolean }>(
+        `/api/drama/projects/${encodeURIComponent(projectId)}/assets/characters/${encodeURIComponent(assetId)}/voice-preview`,
+        { method: "POST" },
+    ).then((data) => data);
+}
+
+export function reviewDramaAssetCandidates(projectId: string, kind: "characters" | "scenes" | "props", assetId: string, prompt: string, references: DramaAssetReference[]) {
+    return request<{ review: CreativeReview }>(`/api/drama/projects/${encodeURIComponent(projectId)}/assets/${kind}/${encodeURIComponent(assetId)}/review`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt, generationStage: references[0]?.generationStage || "initial", references: references.map(({ id, url }) => ({ id, url })) }),
+    }).then((data) => data.review);
+}
+
+export function approveDramaAssetReference(projectId: string, kind: "characters" | "scenes" | "props" | "clues", assetId: string, referenceId: string) {
+    return request<{ project: DramaProject }>(`/api/drama/projects/${encodeURIComponent(projectId)}/assets/${kind}/${encodeURIComponent(assetId)}/primary`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ referenceId }),
+    }).then((data) => data.project);
+}
 
 export type DramaProjectSummaryResponse = { projects: DramaProjectSummary[]; total: number; page: number; pageSize: number };
 
@@ -45,6 +155,119 @@ export function restoreDramaProjectVersion(projectId: string, versionId: string)
 
 export function getDramaProjectCosts(projectId: string) {
     return request<{ summary: DramaCostSummary }>(`/api/drama/projects/${encodeURIComponent(projectId)}/costs`).then((data) => data.summary);
+}
+
+export function previewDramaProductionPackage(projectId: string, source: string, fileName: string) {
+    return request<{ preview: DramaProductionPackagePreview }>(`/api/drama/projects/${encodeURIComponent(projectId)}/production-package`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "preview", source, fileName }),
+    }).then((data) => data.preview);
+}
+
+export function applyDramaProductionPackage(project: DramaProject, preview: DramaProductionPackagePreview, source: string, fileName: string) {
+    return request<{ project: DramaProject }>(`/api/drama/projects/${encodeURIComponent(project.id)}/production-package`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "apply", source, fileName, sourceHash: preview.sourceHash, expectedUpdatedAt: project.updatedAt }),
+    }).then((data) => data.project);
+}
+
+export function previewDramaEpisodeProductionPackage(projectId: string, episodeId: string, source: string, fileName: string) {
+    return request<{ preview: DramaProductionPackagePreview }>(`/api/drama/projects/${encodeURIComponent(projectId)}/episodes/${encodeURIComponent(episodeId)}/script-package`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "preview", source, fileName }),
+    }).then((data) => data.preview);
+}
+
+export function applyDramaEpisodeProductionPackage(project: DramaProject, episodeId: string, preview: DramaProductionPackagePreview, source: string, fileName: string) {
+    return request<{ project: DramaProject }>(`/api/drama/projects/${encodeURIComponent(project.id)}/episodes/${encodeURIComponent(episodeId)}/script-package`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "apply", source, fileName, sourceHash: preview.sourceHash, expectedUpdatedAt: project.updatedAt }),
+    }).then((data) => data.project);
+}
+
+export function getLatestDramaProductionRun(projectId: string, episodeId: string, scope: "visual" | "production" = "production") {
+    return request<{ run: DramaProductionRun | null; preflight: DramaProductionPreflight }>(`/api/drama/projects/${encodeURIComponent(projectId)}/production-runs?episodeId=${encodeURIComponent(episodeId)}&scope=${scope}`);
+}
+
+export function preflightDramaGeneration(projectId: string, episodeId: string, shotIds: string[], requestId: string) {
+    return request<{ preflight: DramaProductionPreflight }>("/api/drama/preflight", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId, episodeId, shotIds, requestId }),
+    }).then((data) => data.preflight);
+}
+
+export function createDramaProductionRun(
+    projectId: string,
+    episodeId: string,
+    scope?: "visual",
+    preflight?: DramaProductionPreflight,
+    options: {
+        shotIds?: string[];
+        imageModel?: string;
+        imageChannelId?: string;
+        imageQuality?: string;
+        frameType?: "start_frame" | "end_frame" | "all_frames";
+        frameCount?: number;
+        frameIds?: string[];
+        regenerateAll?: boolean;
+        productionPlan?: DramaProductionPlan;
+    } = {},
+) {
+    return request<{ run: DramaProductionRun }>(`/api/drama/projects/${encodeURIComponent(projectId)}/production-runs`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            episodeId,
+            ...(scope ? { scope } : {}),
+            ...(preflight ? { preflight } : {}),
+            ...(options.shotIds?.length ? { shotIds: options.shotIds } : {}),
+            ...(options.imageModel ? { imageModel: options.imageModel } : {}),
+            ...(options.imageChannelId ? { imageChannelId: options.imageChannelId } : {}),
+            ...(options.imageQuality ? { imageQuality: options.imageQuality } : {}),
+            ...(options.frameType ? { frameType: options.frameType } : {}),
+            ...(options.frameCount ? { frameCount: options.frameCount } : {}),
+            ...(options.frameIds?.length ? { frameIds: options.frameIds } : {}),
+            ...(options.regenerateAll ? { regenerateAll: true } : {}),
+            ...(options.productionPlan ? { productionPlan: options.productionPlan } : {}),
+        }),
+    }).then((data) => data.run);
+}
+
+export function updateDramaProductionRun(projectId: string, runId: string, input: { action: "confirm" | "cancel" | "retry"; stepIds?: string[] }) {
+    return request<{ run: DramaProductionRun }>(`/api/drama/projects/${encodeURIComponent(projectId)}/production-runs/${encodeURIComponent(runId)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+    }).then((data) => data.run);
+}
+
+export function ensureDramaEpisodeCanvas(projectId: string, episodeId: string) {
+    return request<{ canvas: { canvasProjectId: string; href: string; title: string } }>(`/api/drama/projects/${encodeURIComponent(projectId)}/episodes/${encodeURIComponent(episodeId)}/canvas`, { method: "POST" }).then((data) => data.canvas);
+}
+
+export function syncDramaCanvas(canvasProjectId: string) {
+    return request<{ canvas: { canvasProjectId: string; href: string; title: string } }>(`/api/canvas/projects/${encodeURIComponent(canvasProjectId)}/drama-sync`, { method: "POST" }).then((data) => data.canvas);
+}
+
+export function updateDramaShotMedia(projectId: string, episodeId: string, shotId: string, input: { field: "storyboardImageUrl" | "storyboardEndImageUrl" | "videoUrl"; url: string; width?: number; height?: number }) {
+    return request<{ project: DramaProject }>(`/api/drama/projects/${encodeURIComponent(projectId)}/episodes/${encodeURIComponent(episodeId)}/shots/${encodeURIComponent(shotId)}/media`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+    }).then((data) => data.project);
+}
+
+export function decideDramaContinuityFrame(projectId: string, episodeId: string, shotId: string, input: { frameEvidenceId: string; decision: "accept" | "reject"; expectedVideoRevision: string }) {
+    return request<{ project: DramaProject }>(`/api/drama/projects/${encodeURIComponent(projectId)}/episodes/${encodeURIComponent(episodeId)}/shots/${encodeURIComponent(shotId)}/continuity-frame`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+    }).then((data) => data.project);
 }
 
 export function reviewDramaEpisode(project: DramaProject, episode: DramaEpisode) {

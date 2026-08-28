@@ -1,7 +1,11 @@
 import type { DramaAssetReference, DramaEpisode, DramaProject, DramaShot } from "../types";
+import type { DramaProductionPlan } from "@/lib/drama-project-contract";
+import { approvedAssetReference } from "@/lib/drama-asset-baseline";
+import { continuityStartEvidence, latestFrameEvidence } from "@/lib/drama-continuity-policy";
 import type { useEffectiveConfig } from "@/stores/use-config-store";
 import { resolveDramaGenerationSize } from "@/lib/drama-image-size";
 import type { ReferenceImage } from "@/types/image";
+import type { ReferenceAudio } from "@/types/media";
 import type { VideoReferenceRole } from "@/lib/video-reference-contract";
 
 export function shotReferenceImages(project: DramaProject, shot: DramaShot) {
@@ -12,7 +16,7 @@ export function shotReferenceImages(project: DramaProject, shot: DramaShot) {
         ...(project.clues || []).filter((item) => shot.clueIds.includes(item.id)),
     ].flatMap((item) => {
         const reference = primaryAssetReference(item);
-        return reference ? [referenceImage(item.id, `${item.name}.png`, reference.url, "image/png", reference.width, reference.height)] : [];
+        return reference ? [referenceImage(item.id, `${item.name}.png`, reference.url, "image/png", reference.width, reference.height, undefined, reference.remoteUrl)] : [];
     });
     const sourceAssetIds = new Set(shot.sourceAssetIds || []);
     const sourceUrls = (project.sourceAssets || []).flatMap((item) => {
@@ -27,32 +31,130 @@ export function shotReferenceImages(project: DramaProject, shot: DramaShot) {
 export function continuityReferenceImages(project: DramaProject, episode: DramaEpisode, shot: DramaShot) {
     const edge = episode.continuityEdges?.find((item) => item.toShotId === shot.id && item.inheritActualEndFrame);
     const previous = edge ? episode.shots.find((item) => item.id === edge.fromShotId) : undefined;
-    const actualEnd = previous?.actualEndFrameUrl ? referenceImage(`continuity-end-${previous.id}`, `${previous.title}-实际尾帧.png`, previous.actualEndFrameUrl, "image/png", undefined, undefined, "first_frame") : null;
+    const actualTail = previous ? continuityStartEvidence(previous) : undefined;
+    const actualEnd = actualTail ? referenceImage(`continuity-end-${previous!.id}`, `${previous!.title}-实际尾帧.png`, actualTail.mediaUrl, "image/png", undefined, undefined, "first_frame", actualTail.remoteUrl) : null;
     return [...(actualEnd ? [actualEnd] : []), ...shotReferenceImages(project, shot)];
+}
+
+export function multiFrameReferenceImages(project: DramaProject, episode: DramaEpisode, shot: DramaShot, plan: DramaProductionPlan) {
+    const continuity = continuityReferenceImages(project, episode, shot);
+    const tail = continuity.find((item) => item.videoRole === "first_frame");
+    const assets = shotReferenceImages(project, shot);
+    const keyframes = storyboardReferenceImages(shot);
+    const manifest = shot.framePlan?.referenceManifest || [];
+    const ordered = manifest.flatMap((item, index) => {
+        if (item.role === "previous_actual_tail") return tail ? [{ ...tail, videoRole: "reference" as const }] : [];
+        if (item.assetId) {
+            const asset = assets.find((candidate) => candidate.id === item.assetId);
+            if (asset) return [{ ...asset, videoRole: "reference" as const }];
+        }
+        if (item.role === "action_keyframe" || item.role === "composition_keyframe") {
+            const frame = keyframes[index] || keyframes.find((candidate) => !candidate.videoRole || candidate.videoRole === "keyframe");
+            if (frame) return [{ ...frame, videoRole: "reference" as const }];
+        }
+        return [];
+    });
+    const fallback = [...(tail ? [{ ...tail, videoRole: "reference" as const }] : []), ...assets.map((item) => ({ ...item, videoRole: "reference" as const })), ...keyframes.map((item) => ({ ...item, videoRole: "reference" as const }))];
+    return Array.from(new Map([...ordered, ...fallback].map((item) => [item.url || item.dataUrl, item])).values()).slice(0, plan.references.maxImages);
 }
 
 export function isDramaContinuityStartReady(episode: DramaEpisode, shot: DramaShot) {
     const edge = episode.continuityEdges?.find((item) => item.toShotId === shot.id && item.inheritActualEndFrame);
     if (!edge) return true;
     const previous = episode.shots.find((item) => item.id === edge.fromShotId);
-    return previous?.continuityStatus === "passed" && Boolean(previous.actualEndFrameUrl);
+    return Boolean(previous && continuityStartEvidence(previous));
 }
 
 export function storyboardReferenceImages(shot: DramaShot) {
+    if (shot.storyboardFrameMode === "all_frames") {
+        const keyframes = (shot.storyboardFrames || [])
+            .filter((frame) => frame.mediaUrl && frame.status === "success" && frame.continuityStatus !== "needs_review" && frame.continuityStatus !== "stale")
+            .sort((left, right) => left.sequenceIndex - right.sequenceIndex)
+            .map((frame) => ({
+                ...referenceImage(`storyboard-keyframe-${shot.id}-${frame.sequenceIndex}`, `${shot.title}-关键帧${frame.sequenceIndex}.png`, frame.mediaUrl!, "image/png", frame.width, frame.height, "keyframe", frame.remoteUrl),
+                keyframeIndex: frame.sequenceIndex,
+            }));
+        return keyframes.slice(0, 5).map((frame, index) => ({ ...frame, keyframeIndex: index + 1 }));
+    }
     return [
-        shot.storyboardImageUrl ? referenceImage(`storyboard-start-${shot.id}`, `${shot.title}-起始帧.png`, shot.storyboardImageUrl, "image/png", shot.storyboardImageWidth, shot.storyboardImageHeight, "first_frame") : null,
-        shot.storyboardFrameMode === "first_last" && shot.storyboardEndImageUrl
-            ? referenceImage(`storyboard-end-${shot.id}`, `${shot.title}-结束帧.png`, shot.storyboardEndImageUrl, "image/png", shot.storyboardEndImageWidth, shot.storyboardEndImageHeight, "last_frame")
+        latestFrameEvidence(shot, "storyboard_start", ["candidate", "accepted"])
+            ? referenceImage(
+                  `storyboard-start-${shot.id}`,
+                  `${shot.title}-起始帧.png`,
+                  latestFrameEvidence(shot, "storyboard_start", ["candidate", "accepted"])!.mediaUrl,
+                  "image/png",
+                  undefined,
+                  undefined,
+                  "first_frame",
+                  latestFrameEvidence(shot, "storyboard_start", ["candidate", "accepted"])!.remoteUrl,
+              )
+            : null,
+        shot.storyboardFrameMode === "first_last" && latestFrameEvidence(shot, "storyboard_end", ["candidate", "accepted"])
+            ? referenceImage(
+                  `storyboard-end-${shot.id}`,
+                  `${shot.title}-结束帧.png`,
+                  latestFrameEvidence(shot, "storyboard_end", ["candidate", "accepted"])!.mediaUrl,
+                  "image/png",
+                  undefined,
+                  undefined,
+                  "last_frame",
+                  latestFrameEvidence(shot, "storyboard_end", ["candidate", "accepted"])!.remoteUrl,
+              )
             : null,
     ].filter((item): item is ReturnType<typeof referenceImage> => Boolean(item));
 }
 
-function primaryAssetReference(item: DramaProject["characters"][number]): Pick<DramaAssetReference, "url" | "width" | "height"> | undefined {
-    return item.references?.find((reference) => reference.id === item.primaryReferenceId) || item.references?.[0] || (item.referenceImageUrl ? { url: item.referenceImageUrl } : undefined);
+export function videoReferenceImages(project: DramaProject, episode: DramaEpisode, shot: DramaShot) {
+    const continuity = continuityReferenceImages(project, episode, shot);
+    const assets = shotReferenceImages(project, shot);
+    const storyboard = storyboardReferenceImages(shot);
+    const continuityReferences = continuity.map((reference) => ({ ...reference, videoRole: "reference" as const }));
+    if (shot.storyboardFrameMode === "all_frames") {
+        return dedupeVideoReferences([...storyboard, ...continuityReferences]);
+    }
+    const combined = dedupeVideoReferences([...continuity, ...storyboard]);
+    const hasActualTail = continuity.some((reference) => reference.videoRole === "first_frame");
+    // Strict providers reject first/last-frame inputs mixed with ordinary asset refs.
+    // When assets are present, keep every storyboard frame in the same reference batch
+    // so the provider receives both the storyboard and the project anchors.
+    if (assets.length) return combined.map((reference) => ({ ...reference, videoRole: "reference" as const }));
+    return hasActualTail ? combined.map((reference) => (reference.id.startsWith("storyboard-start-") ? { ...reference, videoRole: "reference" as const } : reference)) : combined;
 }
 
-export function referenceImage(id: string, name: string, url: string, type = "image/png", width?: number, height?: number, videoRole?: VideoReferenceRole): ReferenceImage {
-    return { id, name, type, dataUrl: url, url, width, height, ...(videoRole ? { videoRole } : {}), ...(url.startsWith("/") ? { serverUrl: url } : /^https?:\/\//i.test(url) ? { remoteUrl: url } : {}) };
+function dedupeVideoReferences<T extends { id: string; url?: string }>(references: T[]) {
+    return Array.from(new Map(references.map((reference) => [reference.url || reference.id, reference])).values());
+}
+
+export function dramaShotVideoMode(project: DramaProject, shot: DramaShot) {
+    const mode = shot.videoMode || project.defaultVideoMode;
+    return mode === "reference" ? "storyboard" : mode;
+}
+
+export function characterReferenceAudios(project: DramaProject, shot: DramaShot): ReferenceAudio[] {
+    const characterKeys = new Set([...(shot.characterIds || []), shot.characterId, shot.voiceIdentityId].filter((value): value is string => Boolean(value)));
+    return project.characters.flatMap((character) => {
+        const voice = character.voiceProfile;
+        const isReferenced = characterKeys.has(character.id) || characterKeys.has(`${project.id}:${character.id}`);
+        if (!isReferenced || !voice?.sampleAssetId || voice.previewStatus !== "success" || !voice.previewAudioUrl?.startsWith("/api/reference-assets/")) return [];
+        return [{ id: `voice-${character.id}-${voice.sampleAssetId}`, name: `${character.name} 角色音频`, type: audioMimeType(voice.previewAudioUrl), url: voice.previewAudioUrl }];
+    });
+}
+
+function audioMimeType(url: string) {
+    const path = url.split("?", 1)[0].toLowerCase();
+    if (path.endsWith(".mp3") || path.endsWith(".mpeg")) return "audio/mpeg";
+    if (path.endsWith(".ogg") || path.endsWith(".opus")) return "audio/ogg";
+    if (path.endsWith(".m4a") || path.endsWith(".aac")) return "audio/aac";
+    if (path.endsWith(".flac")) return "audio/flac";
+    return "audio/wav";
+}
+
+function primaryAssetReference(item: DramaProject["characters"][number]): Pick<DramaAssetReference, "url" | "remoteUrl" | "width" | "height"> | undefined {
+    return approvedAssetReference(item);
+}
+
+export function referenceImage(id: string, name: string, url: string, type = "image/png", width?: number, height?: number, videoRole?: VideoReferenceRole, remoteUrl?: string): ReferenceImage {
+    return { id, name, type, dataUrl: url, url, width, height, ...(videoRole ? { videoRole } : {}), ...(url.startsWith("/") ? { serverUrl: url } : /^https?:\/\//i.test(url) ? { remoteUrl: url } : {}), ...(remoteUrl ? { remoteUrl } : {}) };
 }
 
 export function dramaGenerationSize(project: DramaProject, prompt: string, references: ReferenceImage[] = []) {
@@ -71,12 +173,13 @@ export function estimateTaskPoints(config: ReturnType<typeof useEffectiveConfig>
     return Number(base.toFixed(2));
 }
 
-export function estimateEpisodePoints(config: ReturnType<typeof useEffectiveConfig>, project: DramaProject, shots: DramaShot[]) {
+export function estimateEpisodePoints(config: ReturnType<typeof useEffectiveConfig>, project: DramaProject, shots: DramaShot[], videoResolution?: string) {
+    const videoQuality = String(videoResolution || config.vquality).replace(/p$/i, "");
     const total = shots.reduce((sum, shot) => {
-        const mode = shot.videoMode || project.defaultVideoMode;
-        const image = mode === "storyboard" ? estimateTaskPoints(config, "image") * (shot.storyboardFrameMode === "first_last" ? 2 : 1) : 0;
+        const mode = dramaShotVideoMode(project, shot);
+        const image = mode === "storyboard" ? estimateTaskPoints(config, "image") * (shot.storyboardFrameMode === "all_frames" ? Math.max(2, shot.storyboardFrames?.length || 3) : shot.storyboardFrameMode === "first_last" ? 2 : 1) : 0;
         const audio = shot.audioMode === "voiceover" && (shot.subtitle || shot.dialogue || shot.narration).trim() ? estimateTaskPoints(config, "audio") : 0;
-        return sum + image + estimateTaskPoints(config, "video", shot.duration) + audio;
+        return sum + image + estimateTaskPoints({ ...config, vquality: videoQuality }, "video", shot.duration) + audio;
     }, 0);
     return Number(total.toFixed(2));
 }

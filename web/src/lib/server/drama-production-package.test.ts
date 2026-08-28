@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 
 import type { DramaProductionPackageV1, DramaProject } from "@/lib/drama-project-contract";
+import { DRAMA_STYLE_COLOR_SCRIPT, DRAMA_STYLE_NAME } from "@/lib/drama-style";
 import { applyDramaProductionPackage, previewDramaProductionPackage } from "@/lib/server/drama-production-package";
 
 const productionPackage: DramaProductionPackageV1 = {
@@ -9,9 +10,9 @@ const productionPackage: DramaProductionPackageV1 = {
     project: {
         title: "四界之心",
         summary: "两个新生进入阿佐雷斯。",
-        style: "电影级写实奇幻",
+        style: DRAMA_STYLE_NAME,
         ratio: "9:16",
-        productionBible: { targetPlatform: "Seedance 2.0", language: "中文", ratio: "9:16", targetDuration: 30, visualStyle: "电影级写实奇幻", continuityMode: "strict" },
+        productionBible: { targetPlatform: "Seedance 2.0", language: "中文", ratio: "9:16", targetDuration: 30, visualStyle: DRAMA_STYLE_NAME, colorScript: DRAMA_STYLE_COLOR_SCRIPT, continuityMode: "strict" },
     },
     assets: {
         characters: [
@@ -43,39 +44,152 @@ describe("production package boundary", () => {
         const preview = previewDramaProductionPackage(JSON.stringify(productionPackage), "package.json");
 
         expect(preview.format).toBe("json");
-        expect(preview.summary).toEqual({ episodes: 1, storyScenes: 1, shots: 2, characters: 2, locations: 1, duration: 30, archiveSections: 0, promptAssets: 0 });
+        expect(preview.package.project).toMatchObject({ style: DRAMA_STYLE_NAME, productionBible: { visualStyle: DRAMA_STYLE_NAME, colorScript: DRAMA_STYLE_COLOR_SCRIPT } });
+        expect(preview.summary).toEqual({ episodes: 1, storyScenes: 1, shots: 2, characters: 2, locations: 1, duration: 30, archiveSections: 0, promptAssets: 0, performancePlans: 2, lightingPlans: 2, continuityPlans: 2 });
         expect(preview.package.episodes[0].shots[0]).toMatchObject({ code: "SH01", lens: "50mm", sound: { ambience: "车轮声" }, videoPrompt: "梦中惊醒" });
+        expect(preview.package.assets.characters.find((item) => item.code === "C02")?.profile).toMatchObject({
+            styling: "Rifa的发型、服装、随身物件与材质按描述固定",
+            colorPalette: "按制作包描述中的固有色保持跨镜头一致",
+        });
     });
 
-    it("maps the Mahadel director Markdown into an executable package", () => {
-        const source = readFileSync(new URL("../../../../output/mahadel-episode-01-production-package.md", import.meta.url), "utf8");
-        const preview = previewDramaProductionPackage(source, "mahadel-episode-01-production-package.md");
+    it("deduplicates package assets by stable code before preview and apply", () => {
+        const source = structuredClone(productionPackage);
+        source.assets.characters.push({ code: "C01", name: "Karin", description: "重复记录" });
+        source.assets.props.push({ code: "P01", name: "断剑", description: "重复记录" });
+        const preview = previewDramaProductionPackage(JSON.stringify(source), "package.json");
+        expect(preview.package.assets.characters).toHaveLength(2);
+        expect(preview.package.assets.props).toHaveLength(1);
+        expect(preview.package.assets.characters.find((item) => item.code === "C01")?.description).toBe("重复记录");
+    });
 
-        expect(preview.format).toBe("markdown");
-        expect(preview.summary).toEqual({ episodes: 1, storyScenes: 7, shots: 12, characters: 7, locations: 4, duration: 180, archiveSections: 13, promptAssets: 7 });
-        expect(preview.package.project).toMatchObject({ ratio: "9:16", productionBible: { targetPlatform: "Seedance 2.0", continuityMode: "strict" } });
-        expect(preview.package.episodes[0].shots.map((shot) => shot.code)).toEqual(["SH01", "SH02", "SH03", "SH04", "SH05", "SH06", "SH07", "SH08", "SH09", "SH10", "SH11", "SH12"]);
-        expect(preview.package.episodes[0].shots[11]).toMatchObject({ lens: "85mm", sound: { ambience: "店外声音像隔水" } });
-        expect(preview.package.episodes[0].shots[11].videoPrompt).toContain("拒绝保持完整");
-        expect(preview.package.assets.characters.find((asset) => asset.code === "C03")?.activeEpisodeCodes).toEqual([]);
-        expect(preview.package.episodes[0].shots.flatMap((shot) => shot.characterCodes)).not.toContain("C03");
-        expect(preview.package.episodes[0].shots.flatMap((shot) => shot.characterCodes)).not.toContain("C04");
-        expect(preview.package.archive).toMatchObject({
-            formatVersion: "vozeb-drama-production-package-v1",
-            promptAssets: expect.arrayContaining([
-                expect.objectContaining({ code: "V01", category: "keyframe", shotCodes: ["SH01", "SH11"] }),
-                expect.objectContaining({ code: "SB01", category: "storyboard", shotCodes: ["SH01", "SH02", "SH03", "SH04"] }),
-            ]),
-            dialogueDirections: expect.arrayContaining([expect.objectContaining({ id: "D01", performance: "VL1耳语、SP2慢、无呼吸感", lipSync: false })]),
-            voiceDirections: expect.arrayContaining([expect.objectContaining({ subject: "Karin" })]),
-            silenceDirections: expect.arrayContaining([expect.objectContaining({ shotCode: "SH07" })]),
-            referencePlan: expect.arrayContaining([expect.objectContaining({ priority: 1, asset: "C01 Karin角色卡", planType: "consistency_asset" })]),
+    it("preserves all-frames storyboard mode from an imported package", () => {
+        const source = structuredClone(productionPackage);
+        source.episodes[0].shots[0].storyboardFrameMode = "all_frames";
+        const preview = previewDramaProductionPackage(JSON.stringify(source), "package.json");
+        expect(preview.package.episodes[0].shots[0].storyboardFrameMode).toBe("all_frames");
+    });
+
+    it("rejects a package that omits required state and frame-plan fields", () => {
+        const incomplete = structuredClone(productionPackage);
+        const target = incomplete.episodes[0].shots[0];
+        target.performancePlan = undefined;
+        target.lightingPlan = undefined;
+        target.continuity = {
+            shotSize: "",
+            cameraAngle: "",
+            composition: "",
+            characterBlocking: "",
+            gazeDirection: "",
+            actionStart: "",
+            actionEnd: "",
+            screenDirection: "",
+            axisRule: "",
+            continuityNotes: "",
+        };
+        target.entryState = undefined;
+        target.exitState = undefined;
+
+        expect(() => previewDramaProductionPackage(JSON.stringify(incomplete), "package.json")).toThrow("必须声明入口和出口状态");
+    });
+
+    it("rejects a legacy Markdown snapshot that lacks required frame plans", () => {
+        const source = readFileSync(new URL("../../../../output/mahadel-episode-01-production-package.md", import.meta.url), "utf8");
+        expect(() => previewDramaProductionPackage(source, "mahadel-episode-01-production-package.md")).toThrow("缺少有效 framePlan");
+    });
+
+    it("recognizes the generated multiframe Markdown package", () => {
+        const source = readFileSync(new URL("../../../../output/mahadel-episode-01-production-package-v2-multiframe.md", import.meta.url), "utf8");
+        const preview = previewDramaProductionPackage(source, "mahadel-episode-01-production-package-v2-multiframe.md");
+        expect(preview.package.schemaVersion).toBe(1);
+        expect(preview.package.project.productionBible.productionPlan?.video.mode).toBe("storyboard");
+        expect(preview.package.episodes[0].shots.every((shot) => shot.storyboardFrameMode === "all_frames")).toBe(true);
+    });
+
+    it("derives concrete profile fields when a package omits optional character profile values", () => {
+        const source = readFileSync(new URL("../../../../output/mahadel-episode-01-production-package-v2-multiframe.md", import.meta.url), "utf8");
+        const preview = previewDramaProductionPackage(source, "mahadel-episode-01-production-package-v2-multiframe.md");
+        const inspector = preview.package.assets.characters.find((item) => item.code === "C05");
+        expect(inspector?.profile).toMatchObject({
+            visualIdentity: expect.stringContaining("铁灰短发"),
+            styling: expect.stringContaining("制服"),
+            colorPalette: expect.stringContaining("皇家深蓝"),
         });
-        expect(preview.package.archive?.sections.map((section) => section.title)).toEqual(
-            expect.arrayContaining(["原创第一章", "项目总览", "关键视频资产 Prompt", "全案板 Prompt", "QC 报告"]),
-        );
-        expect(preview.package.archive?.generationOrder.length).toBeGreaterThan(0);
-        expect(preview.package.archive?.qcReport).toContain("总分");
+        expect(inspector?.profile?.styling).not.toContain("按制作包设定保持稳定");
+    });
+
+    it("normalizes generic location consistency rules into executable spatial constraints", () => {
+        const source = structuredClone(productionPackage);
+        source.assets.locations = [{
+            code: "S01",
+            name: "铸剑铺",
+            description: "纵深店铺，入口在前，铁砧居中，炉膛在后左，柜台在右侧。",
+            profile: {
+                visualIdentity: "纵深铸剑铺",
+                styling: "铁砧居中、炉膛后左、柜台右侧",
+                colorPalette: "煤黑与暗琥珀",
+                consistencyRules: "按设计 Prompt 保持一致",
+                spatialRules: ["入口在前", "铁砧居中", "炉膛后左", "柜台右侧"],
+            },
+        }];
+
+        const location = previewDramaProductionPackage(JSON.stringify(source), "package.json").package.assets.locations[0];
+        expect(location.profile?.consistencyRules).toContain("空间拓扑");
+        expect(location.profile?.consistencyRules).toContain("入口在前");
+        expect(location.profile?.consistencyRules).not.toBe("按设计 Prompt 保持一致");
+    });
+
+    it("does not infer character styling for a location with incomplete profile fields", () => {
+        const source = structuredClone(productionPackage);
+        source.assets.locations = [{ code: "S01", name: "黑湖记忆", description: "无风黑湖、倒悬古塔、雪地边界" }];
+
+        const location = previewDramaProductionPackage(JSON.stringify(source), "package.json").package.assets.locations[0];
+        expect(location.profile?.styling).not.toContain("发型");
+        expect(location.profile?.styling).not.toContain("服装");
+        expect(location.profile?.styling).toContain("陈设");
+    });
+
+    it("keeps carried prop states identical across split director shots", () => {
+        const episode = previewDramaProductionPackage(JSON.stringify(productionPackage), "package.json").package.episodes[0];
+        const shots = new Map(episode.shots.map((shot) => [shot.code, shot]));
+
+        for (const edge of episode.continuityEdges) {
+            const from = shots.get(edge.fromShotCode);
+            const to = shots.get(edge.toShotCode);
+            if (!from || !to) continue;
+            for (const propCode of edge.carryPropIds) {
+                const left = from.exitState?.props.find((item) => item.assetId === propCode);
+                const right = to.entryState?.props.find((item) => item.assetId === propCode);
+                expect(right).toMatchObject({ assetId: propCode, state: left?.state, holderId: left?.holderId });
+            }
+        }
+    });
+
+    it("derives every split shot entry from the previous exit without retaining prompt facts", () => {
+        const episode = previewDramaProductionPackage(JSON.stringify(productionPackage), "package.json").package.episodes[0];
+        const splitShots = episode.shots.filter((shot) => /\d+\/\d+$/.test(shot.title));
+
+        for (let index = 1; index < splitShots.length; index += 1) {
+            const previous = splitShots[index - 1];
+            const current = splitShots[index];
+            if (current.framePlan.start.source !== "previous_accepted_actual_tail") continue;
+            expect(current.entryState).toEqual(previous.exitState);
+            expect(current.startFramePrompt).toBeUndefined();
+            expect(current.endFramePrompt).toBeUndefined();
+        }
+    });
+
+    it("normalizes an incompatible carried entry state before package output", () => {
+        const inconsistent = structuredClone(productionPackage);
+        const entryState = inconsistent.episodes[0].shots[1].entryState!;
+        inconsistent.episodes[0].shots[1].entryState = {
+            ...entryState,
+            props: [{ assetId: "P01", state: "错误的持有状态", holderId: "C02" }],
+        };
+        const normalized = previewDramaProductionPackage(JSON.stringify(inconsistent), "package.json").package.episodes[0];
+        const previous = normalized.shots[0].exitState?.props.find((item) => item.assetId === "P01");
+        const next = normalized.shots[1].entryState?.props.find((item) => item.assetId === "P01");
+        expect(next).toMatchObject({ assetId: "P01", state: previous?.state, holderId: previous?.holderId });
     });
 
     it("applies package codes to stable project ids and preserves manual fields", () => {
@@ -94,12 +208,84 @@ describe("production package boundary", () => {
         );
 
         expect(second.characters.find((item) => item.name === "Karin")).toMatchObject({ id: karinId, description: "人工角色描述" });
+        expect(second).toMatchObject({ style: DRAMA_STYLE_NAME, productionBible: { visualStyle: DRAMA_STYLE_NAME, colorScript: DRAMA_STYLE_COLOR_SCRIPT } });
         expect(second.episodes[0].shots[0].id).toBe(shotId);
         expect(second.episodes[0].storyScenes?.[0].shotIds).toEqual([shotId, second.episodes[0].shots[1].id]);
         expect(second.episodes[0].continuityEdges?.[0]).toMatchObject({ fromShotId: shotId, toShotId: second.episodes[0].shots[1].id, inheritActualEndFrame: true });
         expect(second.sourceAssets?.at(-1)).toMatchObject({ type: "text", title: "制作包 package.json", textContent: "hash-two" });
         expect(second.episodes[0].reviewStatus).toBe("visual_ready");
         expect(second.productionArchive).toEqual(productionPackage.archive);
+    });
+
+    it("remaps reference manifest codes to stable project and shot ids", () => {
+        const source = structuredClone(productionPackage);
+        source.episodes[0].shots[0].framePlan = {
+            start: { source: "independent" },
+            end: { required: true },
+            frames: source.episodes[0].shots[0].framePlan.frames,
+            referenceManifest: [
+                { alias: "@图片1", role: "character_anchor", purpose: "角色基准图", assetId: "C01" },
+                { alias: "@图片2", role: "scene_anchor", purpose: "场景基准图", assetId: "S01" },
+                { alias: "@图片3", role: "action_keyframe", purpose: "动作关键帧", shotId: "SH01" },
+            ],
+        };
+        const applied = applyDramaProductionPackage(project(), source, "hash-manifest");
+        const shot = applied.episodes[0].shots[0];
+        const karinId = applied.characters.find((item) => item.name === "Karin")!.id;
+        const sceneId = applied.scenes.find((item) => item.name === "阿佐雷斯城门")!.id;
+        expect(shot.framePlan?.referenceManifest).toMatchObject([
+            { assetId: karinId },
+            { assetId: sceneId },
+            { shotId: shot.id },
+        ]);
+    });
+
+    it("round-trips structured review fields from the package into the project", () => {
+        const reviewPackage = {
+            ...productionPackage,
+            episodes: [
+                {
+                    ...productionPackage.episodes[0],
+                    shots: [
+                        {
+                            ...productionPackage.episodes[0].shots[0],
+                            performancePlan: {
+                                emotionalObjective: "守住秘密",
+                                emotionalArc: "平静到警觉",
+                                speechStyle: "低声克制",
+                                pace: "慢",
+                                breath: "屏息后缓呼",
+                                restraintLevel: "克制",
+                                beats: {
+                                    start: { emotion: "平静", facialAction: "眉眼放松", gaze: "看向门外", bodyAction: "站定" },
+                                    middle: { emotion: "警觉", facialAction: "眉心收紧", gaze: "锁定门缝", bodyAction: "肩膀绷紧" },
+                                    end: { emotion: "紧张", facialAction: "嘴角压住", gaze: "不移开", bodyAction: "后退半步" },
+                                },
+                            },
+                            dialoguePerformance: [{ utteranceId: "u1", intent: "试探", tone: "压低", pace: "慢", pause: "句中停顿", emphasis: "最后一个字", facialReactionBefore: "抬眉", facialReactionDuring: "盯住对方", facialReactionAfter: "闭口" }],
+                            lightingPlan: {
+                                palette: "冷灰蓝",
+                                colorTemperature: "4200K",
+                                keyLight: "左上冷主光",
+                                fillLight: "低强度正面补光",
+                                rimLight: "背后蓝色轮廓光",
+                                contrast: "中高反差",
+                                materialResponse: "湿地反射",
+                                skinToneProtection: "保留肤色",
+                                inheritFromPrevious: "无",
+                                transitionToNext: "冷光延续",
+                            },
+                        },
+                    ],
+                },
+            ],
+        } as DramaProductionPackageV1;
+        const applied = applyDramaProductionPackage(project(), reviewPackage, "hash-review");
+        expect(applied.episodes[0].shots[0]).toMatchObject({
+            fieldOrigins: expect.objectContaining({ performancePlan: "package", dialoguePerformance: "package", lightingPlan: "package" }),
+            performancePlan: expect.objectContaining({ emotionalObjective: "守住秘密" }),
+            lightingPlan: expect.objectContaining({ colorTemperature: "4200K" }),
+        });
     });
 
     it("treats complete-package asset lists as authoritative while keeping stable matched ids", () => {
@@ -159,6 +345,11 @@ function shot(code: string, order: number, timecode: string, characterCodes: str
         sound: { ambience: "车轮声" },
         entryState: { characters: [], props: [] },
         exitState: { characters: [], props: [] },
+        framePlan: {
+            start: { source: order === 1 ? "independent" : "previous_accepted_actual_tail" },
+            end: { required: true },
+            frames: [{ id: `${code}-frame-1`, sequenceIndex: 1, startSecond: 0, endSecond: 15, actionPrompt: videoPrompt, imagePrompt: `${videoPrompt}画面` }],
+        },
         videoMode: "storyboard",
         storyboardFrameMode: "first_last",
     };

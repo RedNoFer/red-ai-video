@@ -1,9 +1,11 @@
 import type { ImageTask } from "@/lib/server/image-task-store";
+import { getAuthSettings } from "@/lib/auth/store";
 import { GenerationSubmissionSafeFailure, GenerationSubmissionUncertainError } from "@/lib/server/generation-submission-error";
-import { buildProviderRequest, isProviderBusinessError, readProviderError, readProviderString } from "@/lib/server/provider-task-config";
+import { buildProviderRequest, isProviderBusinessError, readProviderError, readProviderString, serializeProviderRequest } from "@/lib/server/provider-task-config";
+import { fetchSafeOutbound } from "@/lib/server/safe-outbound-fetch";
 import { buildYumengImageRequest, resolveYumengImageResolution } from "@/lib/yumeng-model-center";
 
-import { publicImageReferenceRequestUrl } from "./image-task-openai";
+import { isExternalPublicMediaUrl, isExternalPublicOrigin, publicImageReferenceRequestUrl, referenceRequestUrlCandidates } from "./image-task-reference-urls";
 import { IMAGE_TASK_POLL_INTERVAL_MS, type ImageApiResponse, type ImageTaskResult } from "./image-task-types";
 import {
     findImageResult,
@@ -11,6 +13,7 @@ import {
     imageSubmissionFetch,
     imageSubmissionResponseError,
     imageReferenceToDataUrl,
+    dataUrlToFile,
     imageTaskPollAttempts,
     imageTaskPollUrls,
     isPendingImageStatus,
@@ -37,7 +40,13 @@ export async function runCustomImageTask(task: ImageTask, origin: string, public
     const inlineReferences = advanced.protocol === "stable-diffusion" || /\bbase64\b|data:image|\binline\b/i.test(advanced.referenceRule || "");
     const images = (
         await Promise.all(
-            task.references.map((reference, index) => (inlineReferences ? imageReferenceToDataUrl(reference, reference.name || `reference-${index + 1}.png`, origin, cookie) : publicImageReferenceRequestUrl(reference, origin, publicOrigin, context))),
+            task.references.map((reference, index) =>
+                inlineReferences
+                    ? imageReferenceToDataUrl(reference, reference.name || `reference-${index + 1}.png`, origin, cookie)
+                    : advanced.protocol === "buming-image"
+                      ? bumingImageReferenceUrl(config, reference, origin, publicOrigin, cookie, context, index)
+                      : publicImageReferenceRequestUrl(reference, origin, publicOrigin, context),
+            ),
         )
     ).filter(Boolean);
     const values = {
@@ -45,11 +54,13 @@ export async function runCustomImageTask(task: ImageTask, origin: string, public
         prompt: withSystemPrompt(config, task.prompt),
         size,
         aspect_ratio: imageRequestAspectRatio(config.size || "auto"),
-        resolution: advanced.protocol === "yumeng" ? resolveYumengImageResolution(config.model, config.quality) : config.quality || "auto",
+        resolution: advanced.protocol === "yumeng" ? resolveYumengImageResolution(config.model, config.quality) : advanced.protocol === "buming-image" ? resolveBumingImageResolution(config.quality) : config.quality || "auto",
         width,
         height,
         quality: config.quality || "auto",
-        n: 1,
+        mode: images.length ? "image-edit" : "text-to-image",
+        output_format: "png",
+        n: config.count || 1,
         image: images[0] || "",
         images,
     };
@@ -60,7 +71,7 @@ export async function runCustomImageTask(task: ImageTask, origin: string, public
     const url = taskUrl(config, task.kind === "edit" ? advanced.editPath || advanced.createPath : advanced.createPath, origin);
     const headers = taskHeaders(config, cookie, imagePointsIdempotencyKey(task));
     headers.set("content-type", "application/json");
-    const response = await imageSubmissionFetch(config, url, { method: "POST", headers, body: JSON.stringify(payload), cache: "no-store" });
+    const response = await imageSubmissionFetch(config, url, { method: "POST", headers, body: serializeProviderRequest(payload), cache: "no-store" });
     if (!response.ok) throw imageSubmissionResponseError(response.status, await readFetchError(response, "自定义图片接口调用失败"));
     const data = await parseImageSubmissionJson<ImageApiResponse>(response);
     return parseChargedImageResponse(task, response, async () => {
@@ -78,6 +89,57 @@ export async function runCustomImageTask(task: ImageTask, origin: string, public
 export function resolveDeclarativeImageSize(config: Pick<ImageTask["config"], "quality" | "size" | "advancedConfig">) {
     const size = resolveRequestSize(config.quality, config.size || "auto") || config.size || "";
     return !size || size.toLowerCase() === "auto" ? (config.advancedConfig?.protocol === "stable-diffusion" ? "1024x1024" : "") : size;
+}
+
+function resolveBumingImageResolution(quality: ImageTask["config"]["quality"]) {
+    if (quality === "low") return "1K";
+    if (quality === "high") return "4K";
+    return "2K";
+}
+
+async function bumingImageReferenceUrl(config: ImageTask["config"], reference: ImageTask["references"][number], origin: string, publicOrigin: string, cookie: string, context: { ownerUserId: string; taskId: string }, index: number) {
+    if (isExternalPublicOrigin(publicOrigin)) return publicImageReferenceRequestUrl(reference, origin, publicOrigin, context);
+    const external = referenceRequestUrlCandidates(reference, origin).find(isExternalPublicMediaUrl);
+    if (external) return external;
+
+    const dataUrl = await imageReferenceToDataUrl(reference, reference.name || `reference-${index + 1}.png`, origin, cookie);
+    const file = dataUrlToFile(dataUrl, reference.name || `reference-${index + 1}.png`, reference.type);
+    const channel = config.apiKey === "system" && config.channelId ? (await getAuthSettings()).systemChannels.find((item) => item.id === config.channelId) : undefined;
+    const apiKey = config.apiKey !== "system" ? config.apiKey : channel?.apiKey || "";
+    const baseUrl = channel?.baseUrl || config.baseUrl;
+    if (!apiKey || !baseUrl) throw new GenerationSubmissionSafeFailure("图片渠道缺少可用的上传凭证，请检查渠道配置");
+    const uploadUrl = `${bumingApiRoot(baseUrl)}/v1/files`;
+    const form = new FormData();
+    form.set("file", file);
+    const response = await fetchSafeOutbound(uploadUrl, { method: "POST", headers: { authorization: `Bearer ${apiKey}` }, body: form, cache: "no-store" });
+    if (!response.ok) throw new GenerationSubmissionSafeFailure(`参考图上传失败，状态码 ${response.status}`);
+    const payload = (await response.json().catch(() => null)) as unknown;
+    const uploadedUrl = findPublicUrl(payload);
+    if (!uploadedUrl) throw new GenerationSubmissionSafeFailure("供应商没有返回可访问的参考图 URL");
+    return uploadedUrl;
+}
+
+function bumingApiRoot(value: string) {
+    return value.trim().replace(/\/+$/, "").replace(/\/api\/v1$/i, "").replace(/\/v1$/i, "");
+}
+
+function findPublicUrl(value: unknown): string {
+    const queue: unknown[] = [value];
+    const visited = new Set<object>();
+    for (let index = 0; index < queue.length && index < 128; index += 1) {
+        const current = queue[index];
+        if (typeof current === "string") {
+            if (isExternalPublicMediaUrl(current)) return current;
+            continue;
+        }
+        if (!current || typeof current !== "object") continue;
+        if (visited.has(current)) continue;
+        visited.add(current);
+        const entries = Object.entries(current);
+        entries.sort(([left], [right]) => Number(/url|uri|src/i.test(right)) - Number(/url|uri|src/i.test(left)));
+        for (const [, nested] of entries) queue.push(nested);
+    }
+    return "";
 }
 
 export async function pollCustomImageTask(task: ImageTask, taskId: string, requestUrl: string, cookie: string, singleStep = false) {

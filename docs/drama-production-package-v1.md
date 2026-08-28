@@ -33,6 +33,12 @@
 ## 数据落库规则
 
 - 项目、资产、场次、镜头、声音与连续性进入可执行生产数据。
+- 每个镜头必须携带可执行的 `performancePlan`、逐句 `dialoguePerformance`（无对白时为空数组）、`lightingPlan`、`continuity`、`entryState`、`exitState` 与 `framePlan`。`framePlan.start.source` 只能是 `independent` 或 `previous_accepted_actual_tail`，`framePlan.end.required` 必须是布尔值；`framePlan.frames` 必须包含 1–9 个按剧情动作节点拆分的帧段，每段提供稳定 `id`、连续 `sequenceIndex`、`startSecond`、`endSecond`、`actionPrompt` 与 `imagePrompt`，并从 0 秒无空白、无重叠地覆盖完整镜头时长。缺失时直接拒绝导入，不再从描述或旧提示词补齐。
+- 连续性边和 `framePlan` 是状态关系，不由 `startFramePrompt` / `endFramePrompt` 推断。自动拆镜后，后续子镜入口状态、首帧计划和提示词只能继承前一子镜出口状态；禁止复制原组首镜起始状态。声明 `previous_accepted_actual_tail` 的镜头只能使用上一镜当前视频版本、经人工验收的实际尾帧作为唯一 `first_frame`。
+- 帧图统一记录在 `frameEvidence`：必须包含角色、来源类型、来源镜头/视频/任务/资产、媒体与公网 URL、内容哈希、所属视频版本、`candidate/accepted/rejected/superseded/unavailable` 有效性及验收或失效原因和时间。旧分镜 URL、旧任务结果、删除帧、拒绝帧和失效帧均不得再作为请求引用。
+- 视频提取的实际首尾帧先是 `candidate`。只有人工验收当前视频版本的实际尾帧，才可解锁下游继承镜头；拒绝仅保留审计证据并阻塞下游，不自动创建重试任务。
+- 首尾帧模式的 Agent 每次显式操作只创建一个帧位任务：缺起始帧时创建起始帧，已有起始帧且缺结束帧时才在下一次显式操作创建结束帧；首帧成功不得自动追加尾帧上游请求。
+- 全能帧模式使用 `all_frames`，锚点帧按 `sequenceIndex` 从 1 连续排列，数量必须为 1–9；每个帧段保存独立时间、动作、画面提示词、媒体、任务、输入哈希和连续性证据。分段视频 Prompt 使用 `Pxx-Fxx` 标识对应帧段；视频任务只能传给已明确声明支持相应参考图数量的模型，容量不足时按帧段拆成子片并顺序合成，禁止静默裁掉参考图。
 - 原创章节、结构卡、导演规则、V/SB Prompt、表演口型、静默设计、引用计划、生成顺序和 QC 进入制作包档案。
 - 完整原文件及 SHA-256 继续作为来源凭据保存。
 - 人工字段优先级最高，其次为制作包、AI 补全和默认值。

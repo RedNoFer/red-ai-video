@@ -82,6 +82,7 @@ CREATE TABLE IF NOT EXISTS app_settings (
     default_plan_id text NOT NULL DEFAULT 'free' REFERENCES entitlement_plans(id),
     generation_concurrency jsonb NOT NULL DEFAULT '{}'::jsonb,
     generation_defaults jsonb NOT NULL DEFAULT '{}'::jsonb,
+    character_voice_pool jsonb NOT NULL DEFAULT '[]'::jsonb,
     payment_config jsonb NOT NULL DEFAULT '{}'::jsonb,
     logical_models jsonb NOT NULL DEFAULT '[]'::jsonb,
     default_models jsonb NOT NULL DEFAULT '{}'::jsonb,
@@ -100,6 +101,7 @@ ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS free_daily_points_enabled bool
 ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS free_daily_points numeric(18, 2) NOT NULL DEFAULT 0;
 ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS generation_cost_control jsonb NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS data_lifecycle jsonb NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS character_voice_pool jsonb NOT NULL DEFAULT '[]'::jsonb;
 
 CREATE TABLE IF NOT EXISTS system_model_channels (
     id text PRIMARY KEY,
@@ -365,6 +367,7 @@ CREATE TABLE IF NOT EXISTS creative_conversations (
     surface text NOT NULL,
     source text NOT NULL DEFAULT 'agent',
     project_id text,
+    episode_id text,
     title text NOT NULL DEFAULT '',
     status text NOT NULL DEFAULT 'active',
     context_summary text NOT NULL DEFAULT '',
@@ -373,17 +376,21 @@ CREATE TABLE IF NOT EXISTS creative_conversations (
     updated_at timestamptz NOT NULL DEFAULT now(),
     last_message_at timestamptz NOT NULL DEFAULT now(),
     CONSTRAINT creative_conversations_surface CHECK (surface IN ('chat', 'canvas', 'drama')),
-    CONSTRAINT creative_conversations_source CHECK (source IN ('agent', 'image-workbench', 'video-workbench', 'canvas', 'drama')),
+    CONSTRAINT creative_conversations_source CHECK (source IN ('agent', 'image-workbench', 'video-workbench', 'canvas', 'drama', 'drama-script')),
     CONSTRAINT creative_conversations_status CHECK (status IN ('active', 'archived'))
 );
 ALTER TABLE creative_conversations ADD COLUMN IF NOT EXISTS context_summary text NOT NULL DEFAULT '';
 ALTER TABLE creative_conversations ADD COLUMN IF NOT EXISTS context_summary_through_sequence integer NOT NULL DEFAULT 0;
 ALTER TABLE creative_conversations ADD COLUMN IF NOT EXISTS source text NOT NULL DEFAULT 'agent';
+ALTER TABLE creative_conversations ADD COLUMN IF NOT EXISTS episode_id text;
+ALTER TABLE creative_conversations DROP CONSTRAINT IF EXISTS creative_conversations_source;
+ALTER TABLE creative_conversations ADD CONSTRAINT creative_conversations_source CHECK (source IN ('agent', 'image-workbench', 'video-workbench', 'canvas', 'drama', 'drama-script'));
 UPDATE creative_conversations SET source = surface WHERE surface IN ('canvas', 'drama') AND source = 'agent';
 
 CREATE INDEX IF NOT EXISTS creative_conversations_user_updated_idx ON creative_conversations (user_id, updated_at DESC);
 CREATE INDEX IF NOT EXISTS creative_conversations_user_source_idx ON creative_conversations (user_id, surface, source, status, updated_at DESC);
 CREATE INDEX IF NOT EXISTS creative_conversations_project_idx ON creative_conversations (user_id, surface, project_id, updated_at DESC) WHERE project_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS creative_conversations_episode_idx ON creative_conversations (user_id, project_id, episode_id, source, updated_at DESC) WHERE episode_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS creative_messages (
     id text PRIMARY KEY,
@@ -577,6 +584,33 @@ CREATE TABLE IF NOT EXISTS drama_project_versions (
 );
 
 CREATE INDEX IF NOT EXISTS drama_project_versions_user_created_idx ON drama_project_versions (user_id, project_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS drama_production_runs (
+    id text PRIMARY KEY,
+    project_id text NOT NULL REFERENCES drama_projects(id) ON DELETE CASCADE,
+    episode_id text NOT NULL,
+    user_id text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    status text NOT NULL,
+    run_json jsonb NOT NULL DEFAULT '{}'::jsonb,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT drama_production_runs_status CHECK (status IN ('planning', 'ready', 'running', 'paused', 'needs_review', 'completed', 'failed', 'cancelled'))
+);
+
+CREATE INDEX IF NOT EXISTS drama_production_runs_user_project_idx ON drama_production_runs (user_id, project_id, episode_id, updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS drama_asset_generation_batches (
+    id text PRIMARY KEY,
+    project_id text NOT NULL REFERENCES drama_projects(id) ON DELETE CASCADE,
+    user_id text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    status text NOT NULL,
+    batch_json jsonb NOT NULL DEFAULT '{}'::jsonb,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT drama_asset_generation_batches_status CHECK (status IN ('queued', 'running', 'completed', 'partial_failed', 'failed', 'cancelled'))
+);
+
+CREATE INDEX IF NOT EXISTS drama_asset_generation_batches_user_project_idx ON drama_asset_generation_batches (user_id, project_id, updated_at DESC);
 
 CREATE TABLE IF NOT EXISTS email_codes (
     id text PRIMARY KEY,

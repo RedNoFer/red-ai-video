@@ -176,6 +176,7 @@ export async function POST(request: Request) {
         });
         if (!compatibleConfigs.length) return NextResponse.json({ error: "当前模型能力不满足参考素材或数量参数" }, { status: 400 });
         const config = compatibleConfigs[0];
+        const strictDramaRun = resolvedBody.context?.surface === "drama" && Boolean(resolvedBody.context.runId);
         const task = await createImageTask({
             ...(resolvedBody.context || {}),
             userId: currentUser.id,
@@ -185,7 +186,7 @@ export async function POST(request: Request) {
             source: isGenerationSource(resolvedBody.source) ? resolvedBody.source : "image-workbench",
             title: typeof resolvedBody.title === "string" ? resolvedBody.title : "",
             config,
-            candidateConfigs: compatibleConfigs.slice(1),
+            candidateConfigs: strictDramaRun ? [] : compatibleConfigs.slice(1),
             prompt,
             references,
             mask: resolvedBody.mask?.dataUrl || resolvedBody.mask?.url || resolvedBody.mask?.remoteUrl || resolvedBody.mask?.serverUrl ? resolvedBody.mask : undefined,
