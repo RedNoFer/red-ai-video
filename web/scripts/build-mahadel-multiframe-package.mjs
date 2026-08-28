@@ -180,5 +180,5 @@ const markdown = [
     sectionBody,
     "",
 ].join("\n");
-fs.writeFileSync(targetMarkdownPath, markdown, "utf8");
+fs.writeFileSync(targetMarkdownPath, markdown.replace(/\n+$/u, "\n"), "utf8");
 console.log(`Wrote ${path.relative(root, targetPath)} and ${path.relative(root, targetMarkdownPath)} (${source.episodes[0].shots.length} shots)`);
