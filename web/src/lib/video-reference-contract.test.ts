@@ -20,14 +20,15 @@ describe("video reference contract", () => {
         ]);
     });
 
-    it("accepts ordered keyframes and rejects mixed frame roles", () => {
+    it("accepts ordered keyframes with a continuity first frame and rejects a mixed last frame", () => {
         expect(
             normalizeVideoGenerationReferences([
                 { type: "image", url: "https://cdn.example.com/one.png", role: "keyframe", keyframeIndex: 1 },
                 { type: "image", url: "https://cdn.example.com/two.png", role: "keyframe", keyframeIndex: 2 },
             ]),
         ).toMatchObject([{ role: "keyframe", keyframeIndex: 1 }, { role: "keyframe", keyframeIndex: 2 }]);
-        expect(() => normalizeVideoGenerationReferences([{ type: "image", url: "https://cdn.example.com/one.png", role: "keyframe", keyframeIndex: 1 }, { type: "image", url: "https://cdn.example.com/two.png", role: "keyframe", keyframeIndex: 2 }, { type: "image", url: "https://cdn.example.com/last.png", role: "last_frame" }, { type: "image", url: "https://cdn.example.com/first.png", role: "first_frame" }])).toThrow("全能帧不能与首帧或尾帧混用");
+        expect(normalizeVideoGenerationReferences([{ type: "image", url: "https://cdn.example.com/first.png", role: "first_frame" }, { type: "image", url: "https://cdn.example.com/one.png", role: "keyframe", keyframeIndex: 1 }, { type: "image", url: "https://cdn.example.com/two.png", role: "keyframe", keyframeIndex: 2 }])).toHaveLength(3);
+        expect(() => normalizeVideoGenerationReferences([{ type: "image", url: "https://cdn.example.com/first.png", role: "first_frame" }, { type: "image", url: "https://cdn.example.com/one.png", role: "keyframe", keyframeIndex: 1 }, { type: "image", url: "https://cdn.example.com/two.png", role: "keyframe", keyframeIndex: 2 }, { type: "image", url: "https://cdn.example.com/last.png", role: "last_frame" }])).toThrow("全能帧不能与尾帧混用");
     });
 
     it("enforces the 2-5 frame range, unique images, and contiguous indexes", () => {

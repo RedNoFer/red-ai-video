@@ -1,6 +1,18 @@
 import { nanoid } from "nanoid";
 
-import type { DramaAssetProfile, DramaContentAnalysis, DramaShotContinuity, DramaUtterance, DramaVisualAnalysis } from "@/lib/drama-project-contract";
+import type {
+    DramaAssetProfile,
+    DramaContentAnalysis,
+    DramaContinuityTransition,
+    DramaDialoguePerformance,
+    DramaLightingPlan,
+    DramaPerformanceBeat,
+    DramaPerformancePlan,
+    DramaReviewCompletion,
+    DramaShotContinuity,
+    DramaUtterance,
+    DramaVisualAnalysis,
+} from "@/lib/drama-project-contract";
 import { resolveDramaShotDuration } from "@/lib/server/drama-shot-config";
 import { strictJsonObjectText } from "@/lib/server/structured-model-output";
 
@@ -57,9 +69,9 @@ export function normalizeDramaContentAnalysis(value: unknown, defaultVideoSecond
             nextPreview: text(object(source.episode).nextPreview),
             sourceRange: text(object(source.episode).sourceRange),
         },
-        characters: normalizeAssets(source.characters),
-        scenes: normalizeAssets(source.scenes),
-        props: normalizeAssets(source.props),
+        characters: normalizeAssets(source.characters, "character"),
+        scenes: normalizeAssets(source.scenes, "scene"),
+        props: normalizeAssets(source.props, "prop"),
         clues: normalizeClues(source.clues),
         shots: restoreMissingDialogueCoverage(shots, sourceScript),
     };
@@ -85,23 +97,154 @@ export function normalizeDramaVisualAnalysis(value: unknown, shotIds: string[]):
                 endFramePrompt: text(shot.endFramePrompt) || videoPrompt,
                 negativePrompt: text(shot.negativePrompt),
                 continuity: normalizeContinuity(shot.continuity),
+                performancePlan: normalizePerformancePlan(shot.performancePlan),
+                dialoguePerformance: normalizeDialoguePerformance(shot.dialoguePerformance),
+                lightingPlan: normalizeLightingPlan(shot.lightingPlan),
             },
         ];
     });
     return { shots };
 }
 
+export function normalizeDramaVideoPromptAnalysis(value: unknown, shotIds: string[]): import("@/lib/drama-project-contract").DramaVideoPromptAnalysis {
+    const allowed = new Set(shotIds);
+    const seen = new Set<string>();
+    const shots = array(object(value).shots).flatMap((item) => {
+        const shot = object(item);
+        const shotId = text(shot.shotId);
+        const videoPrompt = text(shot.videoPrompt);
+        if (!allowed.has(shotId) || seen.has(shotId) || !videoPrompt) return [];
+        seen.add(shotId);
+        return [{ shotId, videoPrompt }];
+    });
+    return { shots };
+}
+
+export function normalizeDramaReviewCompletion(value: unknown, shotIds: string[]): DramaReviewCompletion {
+    const allowed = new Set(shotIds);
+    const seen = new Set<string>();
+    const shots = array(object(value).shots).flatMap((item) => {
+        const shot = object(item);
+        const shotId = text(shot.shotId);
+        if (!allowed.has(shotId) || seen.has(shotId)) return [];
+        seen.add(shotId);
+        const edge = object(shot.continuityEdge);
+        const fromShotId = text(edge.fromShotId);
+        const toShotId = text(edge.toShotId);
+        return [
+            {
+                shotId,
+                performancePlan: normalizePerformancePlan(shot.performancePlan),
+                dialoguePerformance: normalizeDialoguePerformance(shot.dialoguePerformance),
+                lightingPlan: normalizeLightingPlan(shot.lightingPlan),
+                continuity: normalizeContinuity(shot.continuity),
+                entryState: normalizeState(shot.entryState),
+                exitState: normalizeState(shot.exitState),
+                ...(fromShotId && toShotId
+                    ? {
+                          continuityEdge: {
+                              fromShotId,
+                              toShotId,
+                              transition: (["continuous", "match_cut", "hard_cut", "scene_change", "jump_cut"].includes(text(edge.transition)) ? text(edge.transition) : "hard_cut") as DramaContinuityTransition,
+                              inheritActualEndFrame: Boolean(edge.inheritActualEndFrame),
+                              carryCharacterIds: texts(edge.carryCharacterIds),
+                              carryPropIds: texts(edge.carryPropIds),
+                              carryEnvironment: Boolean(edge.carryEnvironment),
+                              carryAxis: Boolean(edge.carryAxis),
+                              notes: text(edge.notes) || undefined,
+                          },
+                      }
+                    : {}),
+            },
+        ];
+    });
+    return { shots };
+}
+
+function normalizePerformancePlan(value: unknown): DramaPerformancePlan {
+    const input = object(value);
+    const beat = (item: unknown): DramaPerformanceBeat => {
+        const value = object(item);
+        return { emotion: text(value.emotion), facialAction: text(value.facialAction), gaze: text(value.gaze), bodyAction: text(value.bodyAction) };
+    };
+    return {
+        emotionalObjective: text(input.emotionalObjective),
+        emotionalArc: text(input.emotionalArc),
+        speechStyle: text(input.speechStyle),
+        pace: text(input.pace),
+        breath: text(input.breath),
+        restraintLevel: text(input.restraintLevel),
+        beats: { start: beat(input.beats && object(input.beats).start), middle: beat(input.beats && object(input.beats).middle), end: beat(input.beats && object(input.beats).end) },
+    };
+}
+
+function normalizeDialoguePerformance(value: unknown): DramaDialoguePerformance[] {
+    return array(value).flatMap((item) => {
+        const input = object(item);
+        const utteranceId = text(input.utteranceId);
+        return utteranceId
+            ? [
+                  {
+                      utteranceId,
+                      intent: text(input.intent),
+                      tone: text(input.tone),
+                      pace: text(input.pace),
+                      pause: text(input.pause),
+                      emphasis: text(input.emphasis),
+                      facialReactionBefore: text(input.facialReactionBefore),
+                      facialReactionDuring: text(input.facialReactionDuring),
+                      facialReactionAfter: text(input.facialReactionAfter),
+                  },
+              ]
+            : [];
+    });
+}
+
+function normalizeLightingPlan(value: unknown): DramaLightingPlan {
+    const input = object(value);
+    return {
+        palette: text(input.palette),
+        colorTemperature: text(input.colorTemperature),
+        keyLight: text(input.keyLight),
+        fillLight: text(input.fillLight),
+        rimLight: text(input.rimLight),
+        contrast: text(input.contrast),
+        materialResponse: text(input.materialResponse),
+        skinToneProtection: text(input.skinToneProtection),
+        inheritFromPrevious: text(input.inheritFromPrevious),
+        transitionToNext: text(input.transitionToNext),
+    };
+}
+
 export function readDramaUpstreamError(value: string, status: number) {
-    const fallback = status === 401 || status === 403 ? "文本模型渠道鉴权失败，请管理员检查账号和密钥" : status === 429 ? "文本模型渠道请求过于频繁，请稍后重试" : status >= 500 ? `文本模型渠道暂不可用（HTTP ${status}）` : "后台文本模型调用失败";
+    const fallback =
+        status === 401 || status === 403
+            ? `文本模型渠道鉴权失败（HTTP ${status}），请管理员检查账号、密钥和模型绑定`
+            : status === 429
+              ? "文本模型渠道请求过于频繁（HTTP 429），可稍后重试或切换备用渠道"
+              : status >= 500
+                ? `上游文本模型渠道暂时不可用（HTTP ${status}），可重试；连续失败请检查渠道健康、模型账号和网关连通性`
+                : "后台文本模型调用失败，需要检查上游响应和模型配置";
     if (!value.trim()) return fallback;
     try {
         const payload = JSON.parse(value) as { msg?: unknown; error?: unknown; response?: unknown };
         const error = object(payload.error);
         const responseError = object(object(payload.response).error);
-        return text(payload.msg, 300) || text(payload.error, 300) || text(error.message, 300) || text(responseError.message, 300) || fallback;
+        const raw = text(payload.msg, 300) || text(payload.error, 300) || text(error.message, 300) || text(responseError.message, 300);
+        return actionableUpstreamError(raw, status) || fallback;
     } catch {
-        return value.trim().slice(0, 300) || fallback;
+        return actionableUpstreamError(value.trim().slice(0, 300), status) || fallback;
     }
+}
+
+function actionableUpstreamError(raw: string, status: number) {
+    if (!raw) return "";
+    const lower = raw.toLowerCase();
+    if (lower.includes("upstream service temporarily unavailable")) return `上游渠道暂时不可用${status ? `（HTTP ${status}）` : ""}，可重试；连续失败请检查渠道健康、模型账号和网关连通性`;
+    if (lower.includes("timeout") || raw.includes("超时")) return "上游任务超时，建议先重试；连续超时请降低任务复杂度或检查渠道响应";
+    if (raw.includes("无可用账号") || lower.includes("no available account")) return "模型无可用账号，请管理员检查渠道账号池、额度或模型绑定";
+    if (lower.includes("invalid") || raw.includes("协议") || raw.includes("解析")) return `上游返回不符合协议：${raw}`;
+    return raw;
 }
 
 export function readDramaResponsesArguments(value: unknown, toolName: string) {
@@ -230,16 +373,20 @@ function valueType(value: unknown) {
     return Array.isArray(value) ? "array" : value === null ? "null" : typeof value;
 }
 
-function normalizeAssets(value: unknown) {
+function normalizeAssets(value: unknown, kind: "character" | "scene" | "prop" = "prop") {
+    const seen = new Set<string>();
     return array(value).flatMap((item) => {
         const record = object(item);
         const name = text(record.name);
+        const key = name.toLocaleLowerCase();
+        if (!name || seen.has(key) || (kind === "character" && /(木匣|断剑|护符|探测器|短刃|银戒|锤柄|铜镜|剑鞘|马车|声音)/u.test(name))) return [];
+        seen.add(key);
         return name
             ? [
                   {
                       name,
                       description: text(record.description),
-                      profile: normalizeProfile(record.profile, record),
+                      profile: normalizeProfile(record.profile, record, kind),
                   },
               ]
             : [];
@@ -263,14 +410,19 @@ function normalizeClues(value: unknown) {
     });
 }
 
-function normalizeProfile(value: unknown, fallback: Record<string, unknown>): DramaAssetProfile {
+function normalizeProfile(value: unknown, fallback: Record<string, unknown>, kind: "character" | "scene" | "prop" = "prop"): DramaAssetProfile {
     const profile = object(value);
+    const styling = text(profile.styling) || text(fallback.styling);
     return {
         visualIdentity: text(profile.visualIdentity) || text(fallback.visualIdentity),
-        styling: text(profile.styling) || text(fallback.styling),
+        styling: kind === "scene" && isCharacterStyling(styling) ? "" : styling,
         colorPalette: text(profile.colorPalette) || text(fallback.colorPalette),
         consistencyRules: text(profile.consistencyRules) || text(fallback.consistencyRules),
     };
+}
+
+function isCharacterStyling(value: string) {
+    return /发型|随身物件|发色|(?:^|[，、；\s])服装(?:[，、；\s]|$)/u.test(value) || /角色|人物/u.test(value) && /穿着|衣着|造型/u.test(value);
 }
 
 function normalizeContinuity(value: unknown): DramaShotContinuity {
@@ -286,6 +438,39 @@ function normalizeContinuity(value: unknown): DramaShotContinuity {
         screenDirection: text(input.screenDirection),
         axisRule: text(input.axisRule),
         continuityNotes: text(input.continuityNotes),
+    };
+}
+
+function normalizeState(value: unknown) {
+    const input = object(value);
+    if (!Object.keys(input).length) return undefined;
+    const entities = (key: "characters" | "props") =>
+        array(input[key]).flatMap((item) => {
+            const entity = object(item);
+            const assetId = text(entity.assetId);
+            return assetId
+                ? [
+                      {
+                          assetId,
+                          wardrobe: text(entity.wardrobe) || undefined,
+                          position: text(entity.position) || undefined,
+                          gaze: text(entity.gaze) || undefined,
+                          pose: text(entity.pose) || undefined,
+                          expression: text(entity.expression) || undefined,
+                          action: text(entity.action) || undefined,
+                          state: text(entity.state) || undefined,
+                          holderId: text(entity.holderId) || undefined,
+                      },
+                  ]
+                : [];
+        });
+    return {
+        characters: entities("characters"),
+        props: entities("props"),
+        environment: text(input.environment) || undefined,
+        lighting: text(input.lighting) || undefined,
+        axis: text(input.axis) || undefined,
+        screenDirection: text(input.screenDirection) || undefined,
     };
 }
 
@@ -601,7 +786,7 @@ export const dramaVisualTool = {
                 items: {
                     type: "object",
                     additionalProperties: false,
-                    required: ["shotId", "imagePrompt", "videoPrompt", "cameraMotion", "startFramePrompt", "endFramePrompt", "negativePrompt", "continuity"],
+                    required: ["shotId", "imagePrompt", "videoPrompt", "cameraMotion", "startFramePrompt", "endFramePrompt", "negativePrompt", "continuity", "performancePlan", "dialoguePerformance", "lightingPlan"],
                     properties: {
                         shotId: { type: "string" },
                         imagePrompt: { type: "string" },
@@ -610,6 +795,56 @@ export const dramaVisualTool = {
                         startFramePrompt: { type: "string" },
                         endFramePrompt: { type: "string" },
                         negativePrompt: { type: "string" },
+                        performancePlan: {
+                            type: "object",
+                            additionalProperties: false,
+                            required: ["emotionalObjective", "emotionalArc", "speechStyle", "pace", "breath", "restraintLevel", "beats"],
+                            properties: {
+                                emotionalObjective: { type: "string" },
+                                emotionalArc: { type: "string" },
+                                speechStyle: { type: "string" },
+                                pace: { type: "string" },
+                                breath: { type: "string" },
+                                restraintLevel: { type: "string" },
+                                beats: { type: "object", additionalProperties: false, required: ["start", "middle", "end"], properties: { start: performanceBeatSchema(), middle: performanceBeatSchema(), end: performanceBeatSchema() } },
+                            },
+                        },
+                        dialoguePerformance: {
+                            type: "array",
+                            items: {
+                                type: "object",
+                                additionalProperties: false,
+                                required: ["utteranceId", "intent", "tone", "pace", "pause", "emphasis", "facialReactionBefore", "facialReactionDuring", "facialReactionAfter"],
+                                properties: {
+                                    utteranceId: { type: "string" },
+                                    intent: { type: "string" },
+                                    tone: { type: "string" },
+                                    pace: { type: "string" },
+                                    pause: { type: "string" },
+                                    emphasis: { type: "string" },
+                                    facialReactionBefore: { type: "string" },
+                                    facialReactionDuring: { type: "string" },
+                                    facialReactionAfter: { type: "string" },
+                                },
+                            },
+                        },
+                        lightingPlan: {
+                            type: "object",
+                            additionalProperties: false,
+                            required: ["palette", "colorTemperature", "keyLight", "fillLight", "rimLight", "contrast", "materialResponse", "skinToneProtection", "inheritFromPrevious", "transitionToNext"],
+                            properties: {
+                                palette: { type: "string" },
+                                colorTemperature: { type: "string" },
+                                keyLight: { type: "string" },
+                                fillLight: { type: "string" },
+                                rimLight: { type: "string" },
+                                contrast: { type: "string" },
+                                materialResponse: { type: "string" },
+                                skinToneProtection: { type: "string" },
+                                inheritFromPrevious: { type: "string" },
+                                transitionToNext: { type: "string" },
+                            },
+                        },
                         continuity: {
                             type: "object",
                             additionalProperties: false,
@@ -633,3 +868,190 @@ export const dramaVisualTool = {
         },
     },
 };
+
+export const dramaVideoPromptTool = {
+    name: "generate_drama_video_prompts",
+    description: "根据已经生成并验收的顺序帧、固定资产和连续性信息，为每个镜头生成可直接提交给视频供应商的图生视频提示词",
+    parameters: {
+        type: "object",
+        additionalProperties: false,
+        required: ["shots"],
+        properties: {
+            shots: {
+                type: "array",
+                items: {
+                    type: "object",
+                    additionalProperties: false,
+                    required: ["shotId", "videoPrompt"],
+                    properties: {
+                        shotId: { type: "string" },
+                        videoPrompt: { type: "string", description: "只写当前镜头的图生视频执行提示词，明确主体动作、单一主运镜、环境压力、身体微动作、声音/视觉母题、结束画面、连续性和针对性负面约束；不要输出内部 ID 或解释文字" },
+                    },
+                },
+            },
+        },
+    },
+};
+
+export const dramaReviewCompletionTool = {
+    name: "complete_drama_review",
+    description: "只补齐短剧内容审核中缺失的表演、灯光和计划性连续性字段，不改变已有字段和镜头事实；可以只返回本次真正补齐的字段",
+    parameters: {
+        type: "object",
+        additionalProperties: false,
+        required: ["shots"],
+        properties: {
+            shots: {
+                type: "array",
+                items: {
+                    type: "object",
+                    additionalProperties: false,
+                    required: ["shotId"],
+                    properties: {
+                        shotId: { type: "string" },
+                        performancePlan: {
+                            type: "object",
+                            description: "可执行的人物表演：情绪目标、情绪递进、语气、节奏、呼吸、克制度，以及起始/中段/结束三拍的情绪、眉眼嘴角下颌、视线和身体动作。",
+                            additionalProperties: false,
+                            properties: {
+                                emotionalObjective: { type: "string" },
+                                emotionalArc: { type: "string" },
+                                speechStyle: { type: "string" },
+                                pace: { type: "string" },
+                                breath: { type: "string" },
+                                restraintLevel: { type: "string" },
+                                beats: { type: "object", additionalProperties: false, properties: { start: performanceBeatSchema(), middle: performanceBeatSchema(), end: performanceBeatSchema() } },
+                            },
+                        },
+                        dialoguePerformance: {
+                            type: "array",
+                            description: "按 utterances 逐句填写对白意图、语气、节奏、停顿、重音，以及说话前/中/后的面部反应。",
+                            items: {
+                                type: "object",
+                                additionalProperties: false,
+                                properties: {
+                                    utteranceId: { type: "string" },
+                                    intent: { type: "string" },
+                                    tone: { type: "string" },
+                                    pace: { type: "string" },
+                                    pause: { type: "string" },
+                                    emphasis: { type: "string" },
+                                    facialReactionBefore: { type: "string" },
+                                    facialReactionDuring: { type: "string" },
+                                    facialReactionAfter: { type: "string" },
+                                },
+                            },
+                        },
+                        lightingPlan: {
+                            type: "object",
+                            description: "可执行的色彩灯光：色板、色温、主光、补光、轮廓光、反差、材质反射、肤色保护，以及从上一镜继承和向下一镜过渡。",
+                            additionalProperties: false,
+                            properties: {
+                                palette: { type: "string" },
+                                colorTemperature: { type: "string" },
+                                keyLight: { type: "string" },
+                                fillLight: { type: "string" },
+                                rimLight: { type: "string" },
+                                contrast: { type: "string" },
+                                materialResponse: { type: "string" },
+                                skinToneProtection: { type: "string" },
+                                inheritFromPrevious: { type: "string" },
+                                transitionToNext: { type: "string" },
+                            },
+                        },
+                        continuity: {
+                            type: "object",
+                            description: "镜头连续性关键词：景别、机位与角度、构图、人物站位、视线方向、动作起始、动作结束、屏幕运动方向、轴线规则、相邻镜头衔接备注。",
+                            additionalProperties: false,
+                            properties: {
+                                shotSize: { type: "string" },
+                                cameraAngle: { type: "string" },
+                                composition: { type: "string" },
+                                characterBlocking: { type: "string" },
+                                gazeDirection: { type: "string" },
+                                actionStart: { type: "string" },
+                                actionEnd: { type: "string" },
+                                screenDirection: { type: "string" },
+                                axisRule: { type: "string" },
+                                continuityNotes: { type: "string" },
+                            },
+                        },
+                        entryState: { type: "object", description: "镜头开始时的可观察状态：角色位置/姿态/视线/表情/动作，关键道具状态，环境、光色和轴线。" },
+                        exitState: { type: "object", description: "镜头结束时的可观察状态：角色位置/姿态/视线/表情/动作，关键道具状态，环境、光色和轴线，供下一镜继承。" },
+                        continuityEdge: { type: "object" },
+                    },
+                },
+            },
+        },
+    },
+};
+
+export function dramaReviewCompletionToolForFields(fields: string[]) {
+    const parameters = dramaReviewCompletionTool.parameters as { properties: { shots: { items: { properties: Record<string, unknown> } } } };
+    const selectedFields = [...new Set(fields.filter((field) => parameters.properties.shots.items.properties[field]))];
+    const selectedProperties = Object.fromEntries(selectedFields.map((field) => [field, requiredReviewCompletionProperty(field, parameters.properties.shots.items.properties[field])]));
+    return {
+        ...dramaReviewCompletionTool,
+        description: `${dramaReviewCompletionTool.description}。本次只处理：${selectedFields.join("、")}`,
+        parameters: {
+            ...dramaReviewCompletionTool.parameters,
+            properties: {
+                ...parameters.properties,
+                shots: {
+                    ...parameters.properties.shots,
+                    items: { ...parameters.properties.shots.items, required: ["shotId", ...selectedFields], properties: { shotId: parameters.properties.shots.items.properties.shotId, ...selectedProperties } },
+                },
+            },
+        },
+    };
+}
+
+export function dramaReviewCompletionFieldInstructions(fields: string[]) {
+    const instructions: Record<string, string> = {
+        performancePlan: "performancePlan 必须填写 emotionalObjective、emotionalArc、speechStyle、pace、breath、restraintLevel，以及 beats.start/middle/end 各自的 emotion、facialAction（眉眼嘴角下颌）、gaze、bodyAction。",
+        dialoguePerformance: "dialoguePerformance 必须按输入 utterances 的 utteranceId 逐句填写 intent、tone、pace、pause、emphasis、facialReactionBefore、facialReactionDuring、facialReactionAfter；没有对白时返回空数组。",
+        lightingPlan: "lightingPlan 必须填写 palette、colorTemperature、keyLight、fillLight、rimLight、contrast、materialResponse、skinToneProtection、inheritFromPrevious、transitionToNext。",
+        continuity:
+            "continuity 必须填写 shotSize（景别）、cameraAngle（机位角度）、composition（构图）、characterBlocking（人物站位）、gazeDirection（视线）、actionStart/actionEnd（动作起止）、screenDirection（屏幕运动方向）、axisRule（轴线规则）、continuityNotes（相邻镜头衔接）。",
+        entryState: "entryState 必须写镜头开始时角色位置/姿态/视线/表情/动作、关键道具、环境、光色和轴线等可观察状态。",
+        exitState: "exitState 必须写镜头结束时角色位置/姿态/视线/表情/动作、关键道具、环境、光色和轴线等可观察状态，供下一镜继承。",
+    };
+    return fields
+        .map((field) => instructions[field])
+        .filter(Boolean)
+        .join("\n");
+}
+
+function requiredReviewCompletionProperty(field: string, value: unknown) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+    const definition = { ...(value as Record<string, unknown>) };
+    const requiredByField: Record<string, string[]> = {
+        performancePlan: ["emotionalObjective", "emotionalArc", "speechStyle", "pace", "breath", "restraintLevel", "beats"],
+        lightingPlan: ["palette", "colorTemperature", "keyLight", "fillLight", "rimLight", "contrast", "materialResponse", "skinToneProtection", "inheritFromPrevious", "transitionToNext"],
+        continuity: ["shotSize", "cameraAngle", "composition", "characterBlocking", "gazeDirection", "actionStart", "actionEnd", "screenDirection", "axisRule", "continuityNotes"],
+        entryState: [],
+        exitState: [],
+    };
+    if (field === "dialoguePerformance") {
+        const item = definition.items;
+        if (item && typeof item === "object" && !Array.isArray(item)) {
+            definition.items = { ...(item as Record<string, unknown>), required: ["utteranceId", "intent", "tone", "pace", "pause", "emphasis", "facialReactionBefore", "facialReactionDuring", "facialReactionAfter"] };
+        }
+    }
+    if (requiredByField[field]) definition.required = requiredByField[field];
+    if (field === "performancePlan") {
+        const properties = definition.properties;
+        const beats = properties && typeof properties === "object" && !Array.isArray(properties) ? (properties as Record<string, unknown>).beats : undefined;
+        if (beats && typeof beats === "object" && !Array.isArray(beats)) definition.properties = { ...(properties as Record<string, unknown>), beats: { ...(beats as Record<string, unknown>), required: ["start", "middle", "end"] } };
+    }
+    return definition;
+}
+
+function performanceBeatSchema() {
+    return {
+        type: "object",
+        additionalProperties: false,
+        required: ["emotion", "facialAction", "gaze", "bodyAction"],
+        properties: { emotion: { type: "string" }, facialAction: { type: "string" }, gaze: { type: "string" }, bodyAction: { type: "string" } },
+    };
+}

@@ -29,6 +29,7 @@ export type DramaFrameEvidence = {
     rejectedAt?: string;
     invalidReason?: string;
     sequenceIndex?: number;
+    generationPrompt?: string;
 };
 
 export type DramaShotFramePlan = {
@@ -56,6 +57,18 @@ export type DramaReferenceManifestItem = {
     assetId?: string;
     shotId?: string;
     frameEvidenceId?: string;
+};
+
+export type DramaVideoReferenceBinding = {
+    alias: string;
+    role: "first_frame" | "last_frame" | "keyframe" | "character_anchor" | "scene_anchor" | "prop_anchor";
+    purpose: string;
+    sourceId?: string;
+    shotId?: string;
+    frameId?: string;
+    url: string;
+    remoteUrl?: string;
+    keyframeIndex?: number;
 };
 
 export type DramaAssetReference = {
@@ -436,6 +449,7 @@ export type DramaStoryboardFrame = {
     inputHash?: string;
     continuityStatus?: "pending" | "passed" | "needs_review" | "stale";
     continuityEvidenceId?: string;
+    generationPrompt?: string;
 };
 
 export type DramaShot = {
@@ -500,6 +514,7 @@ export type DramaShot = {
     storyboardImageWidth?: number;
     storyboardImageHeight?: number;
     storyboardImageDeletedAt?: string;
+    storyboardPrompt?: string;
     storyboardEndStatus?: DramaTaskStatus;
     storyboardEndAttempt?: number;
     storyboardEndTaskId?: string;
@@ -510,6 +525,7 @@ export type DramaShot = {
     storyboardEndImageWidth?: number;
     storyboardEndImageHeight?: number;
     storyboardEndImageDeletedAt?: string;
+    storyboardEndPrompt?: string;
     generationStatus?: DramaTaskStatus;
     generationAttempt?: number;
     generationRunId?: string;
@@ -666,6 +682,10 @@ export type DramaVisualAnalysis = {
     >;
 };
 
+export type DramaVideoPromptAnalysis = {
+    shots: Array<{ shotId: string; videoPrompt: string }>;
+};
+
 export type DramaReviewCompletion = {
     shots: Array<
         Pick<DramaShot, "performancePlan" | "dialoguePerformance" | "lightingPlan" | "continuity" | "entryState" | "exitState"> & {
@@ -786,10 +806,12 @@ export type DramaProductionStep = {
     assetKind?: "characters" | "scenes" | "props";
     title?: string;
     prompt?: string;
+    executionPrompt?: string;
     referenceAssetIds?: string[];
     referenceImageUrls?: string[];
     referenceImageRemoteUrls?: Array<string | undefined>;
     referenceManifest?: DramaReferenceManifestItem[];
+    referenceBindingsSnapshot?: DramaVideoReferenceBinding[];
     frameId?: string;
     startSecond?: number;
     endSecond?: number;

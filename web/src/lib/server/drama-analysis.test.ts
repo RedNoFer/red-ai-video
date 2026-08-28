@@ -1,6 +1,18 @@
 import { describe, expect, it } from "vitest";
 
-import { describeDramaModelOutput, hasUsableDramaToolArguments, normalizeDramaContentAnalysis, normalizeDramaVisualAnalysis, readDramaChatArguments, readDramaResponsesArguments, readDramaUpstreamError } from "./drama-analysis";
+import {
+    describeDramaModelOutput,
+    dramaReviewCompletionTool,
+    dramaReviewCompletionToolForFields,
+    hasUsableDramaToolArguments,
+    normalizeDramaContentAnalysis,
+    normalizeDramaReviewCompletion,
+    normalizeDramaVideoPromptAnalysis,
+    normalizeDramaVisualAnalysis,
+    readDramaChatArguments,
+    readDramaResponsesArguments,
+    readDramaUpstreamError,
+} from "./drama-analysis";
 
 describe("drama analysis contracts", () => {
     it("keeps content facts separate from visual prompts", () => {
@@ -39,6 +51,22 @@ describe("drama analysis contracts", () => {
         expect(result.characters[0]).toMatchObject({ profile: { visualIdentity: "短发", consistencyRules: "服装不变" } });
         expect(result.shots[0]).toMatchObject({ sourceText: "她在门边看见一滴血。", duration: 7, clueNames: ["血迹"] });
         expect(result.shots[0]).not.toHaveProperty("imagePrompt");
+    });
+
+    it("keeps character-only appearance fields out of scene profiles", () => {
+        const result = normalizeDramaContentAnalysis(
+            {
+                episode: {},
+                characters: [],
+                scenes: [{ name: "黑湖记忆", description: "无风黑湖、倒悬古塔、雪地边界", profile: { styling: "黑湖记忆的发型、服装、随身物件与材质按描述固定" } }],
+                props: [],
+                clues: [],
+                shots: [],
+            },
+            5,
+        );
+
+        expect(result.scenes[0]?.profile?.styling).toBe("");
     });
 
     it("restores every direct line from the source script and rejects narrative summaries", () => {
@@ -163,15 +191,119 @@ describe("drama analysis contracts", () => {
                         axisRule: "不越轴",
                         continuityNotes: "服装不变",
                     },
+                    performancePlan: {
+                        emotionalObjective: "",
+                        emotionalArc: "",
+                        speechStyle: "",
+                        pace: "",
+                        breath: "",
+                        restraintLevel: "",
+                        beats: { start: { emotion: "", facialAction: "", gaze: "", bodyAction: "" }, middle: { emotion: "", facialAction: "", gaze: "", bodyAction: "" }, end: { emotion: "", facialAction: "", gaze: "", bodyAction: "" } },
+                    },
+                    dialoguePerformance: [],
+                    lightingPlan: { palette: "", colorTemperature: "", keyLight: "", fillLight: "", rimLight: "", contrast: "", materialResponse: "", skinToneProtection: "", inheritFromPrevious: "", transitionToNext: "" },
                 },
             ],
         });
     });
 
+    it("only accepts one generated video prompt per requested shot", () => {
+        expect(normalizeDramaVideoPromptAnalysis({ shots: [{ shotId: "shot-one", videoPrompt: "用已验收帧完成匹配切" }, { shotId: "unknown", videoPrompt: "不应进入" }, { shotId: "shot-one", videoPrompt: "重复" }] }, ["shot-one"])).toEqual({
+            shots: [{ shotId: "shot-one", videoPrompt: "用已验收帧完成匹配切" }],
+        });
+    });
+
+    it("normalizes review completion for every requested shot", () => {
+        const result = normalizeDramaReviewCompletion(
+            {
+                shots: [
+                    {
+                        shotId: "shot-one",
+                        performancePlan: {
+                            emotionalObjective: "守住秘密",
+                            emotionalArc: "平静到警觉",
+                            speechStyle: "低声",
+                            pace: "慢",
+                            breath: "屏息",
+                            restraintLevel: "克制",
+                            beats: {
+                                start: { emotion: "平静", facialAction: "放松", gaze: "向前", bodyAction: "站定" },
+                                middle: { emotion: "警觉", facialAction: "收紧", gaze: "看门", bodyAction: "绷紧" },
+                                end: { emotion: "紧张", facialAction: "压住", gaze: "锁定", bodyAction: "后退" },
+                            },
+                        },
+                        lightingPlan: {
+                            palette: "冷灰",
+                            colorTemperature: "4200K",
+                            keyLight: "左上",
+                            fillLight: "低",
+                            rimLight: "蓝",
+                            contrast: "中高",
+                            materialResponse: "湿地反射",
+                            skinToneProtection: "保留肤色",
+                            inheritFromPrevious: "无",
+                            transitionToNext: "延续",
+                        },
+                        continuity: {
+                            shotSize: "中景",
+                            cameraAngle: "平视",
+                            composition: "左侧留白",
+                            characterBlocking: "门边",
+                            gazeDirection: "向左",
+                            actionStart: "站定",
+                            actionEnd: "后退",
+                            screenDirection: "向左",
+                            axisRule: "不越轴",
+                            continuityNotes: "保持服装",
+                        },
+                        entryState: { characters: [], props: [], environment: "黑湖", lighting: "冷灰" },
+                        exitState: { characters: [], props: [], environment: "黑湖", lighting: "冷灰" },
+                    },
+                    { shotId: "unknown" },
+                ],
+            },
+            ["shot-one"],
+        );
+        expect(result.shots).toHaveLength(1);
+        expect(result.shots[0]).toMatchObject({
+            shotId: "shot-one",
+            performancePlan: expect.objectContaining({ emotionalObjective: "守住秘密" }),
+            lightingPlan: expect.objectContaining({ keyLight: "左上" }),
+            continuity: expect.objectContaining({ shotSize: "中景" }),
+        });
+    });
+
     it("turns upstream failures into actionable messages", () => {
-        expect(readDramaUpstreamError('{"error":{"message":"无可用账号，请稍后重试"}}', 502)).toBe("无可用账号，请稍后重试");
-        expect(readDramaUpstreamError("", 502)).toBe("文本模型渠道暂不可用（HTTP 502）");
-        expect(readDramaUpstreamError("", 401)).toBe("文本模型渠道鉴权失败，请管理员检查账号和密钥");
+        expect(readDramaUpstreamError('{"error":{"message":"无可用账号，请稍后重试"}}', 502)).toBe("模型无可用账号，请管理员检查渠道账号池、额度或模型绑定");
+        expect(readDramaUpstreamError("Upstream service temporarily unavailable", 502)).toContain("上游渠道暂时不可用");
+        expect(readDramaUpstreamError("", 502)).toContain("上游文本模型渠道暂时不可用");
+        expect(readDramaUpstreamError("", 401)).toContain("文本模型渠道鉴权失败");
+    });
+
+    it("lets review completion return only the fields that were actually filled", () => {
+        expect(dramaReviewCompletionTool.parameters).toMatchObject({
+            properties: {
+                shots: {
+                    items: {
+                        required: ["shotId"],
+                    },
+                },
+            },
+        });
+        const shotProperties = (dramaReviewCompletionTool.parameters as { properties: { shots: { items: { properties: Record<string, unknown> } } } }).properties.shots.items.properties;
+        expect(shotProperties.performancePlan).not.toHaveProperty("required");
+        expect(shotProperties.lightingPlan).not.toHaveProperty("required");
+        expect(shotProperties.continuity).not.toHaveProperty("required");
+    });
+
+    it("requires the requested continuity field and its production keywords", () => {
+        const tool = dramaReviewCompletionToolForFields(["continuity"]);
+        const items = (tool.parameters as { properties: { shots: { items: { required: string[]; properties: Record<string, { required?: string[]; description?: string }> } } } }).properties.shots.items;
+
+        expect(items.required).toContain("continuity");
+        expect(items.properties.continuity.required).toEqual(["shotSize", "cameraAngle", "composition", "characterBlocking", "gazeDirection", "actionStart", "actionEnd", "screenDirection", "axisRule", "continuityNotes"]);
+        expect(items.properties.continuity.description).toContain("景别");
+        expect(items.properties.continuity.description).toContain("轴线");
     });
 
     it("accepts strict JSON when a channel returns content instead of a tool call", () => {

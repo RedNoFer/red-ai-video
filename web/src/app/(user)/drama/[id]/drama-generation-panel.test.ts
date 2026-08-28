@@ -38,7 +38,11 @@ describe("Drama generation production workspace", () => {
         expect(source).toContain("data-drama-shot-reference-assets");
         expect(source).toContain("引用资产图片");
         expect(source).toContain("data-drama-shot-supplier-prompt");
+        expect(source).toContain("data-drama-shot-boundary-frames");
         expect(source).toContain("视频供应商提示词");
+        expect(source).toContain("Agent 生成提示词");
+        expect(source).toContain("视频提示词已保存");
+        expect(source).toContain("请先按开始到结束顺序生成并验收全部顺序帧");
         expect(source).toContain("shotReferenceAssets");
         expect(source).toContain("[content-visibility:visible]");
         expect(source).toContain("sm:[content-visibility:auto]");
@@ -57,11 +61,12 @@ describe("Drama generation production workspace", () => {
     });
 
     it("uses the locked episode resolution and does not expose a client video-model selector", async () => {
-        const [generationSource, settingsSource, scriptSource, sectionsSource] = await Promise.all([
+        const [generationSource, settingsSource, scriptSource, sectionsSource, frameEditorSource] = await Promise.all([
             readFile(resolve(process.cwd(), "src/app/(user)/drama/[id]/drama-generation-panel.tsx"), "utf8"),
             readFile(resolve(process.cwd(), "src/app/(user)/drama/[id]/drama-episode-settings.tsx"), "utf8"),
             readFile(resolve(process.cwd(), "src/app/(user)/drama/[id]/drama-script-agent-panel.tsx"), "utf8"),
             readFile(resolve(process.cwd(), "src/app/(user)/drama/[id]/drama-project-sections.tsx"), "utf8"),
+            readFile(resolve(process.cwd(), "src/app/(user)/drama/[id]/drama-shot-frame-editor.tsx"), "utf8"),
         ]);
         expect(generationSource).toContain("productionPlan?.video.resolution");
         expect(settingsSource).toContain("DRAMA_VIDEO_RESOLUTION_OPTIONS");
@@ -71,6 +76,9 @@ describe("Drama generation production workspace", () => {
         expect(settingsSource).toContain("本集设置已保存");
         expect(scriptSource).not.toContain("视频模型");
         expect(sectionsSource).toContain("onSaveSettings");
+        expect(frameEditorSource).toContain("shotSnapshot:");
+        expect(frameEditorSource).toContain("compactShotSnapshot");
+        expect(frameEditorSource).not.toContain("saveProjectNow(project.id)");
     });
 
     it("shows persistent per-frame progress without blocking the whole storyboard area", async () => {

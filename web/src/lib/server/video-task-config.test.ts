@@ -69,4 +69,23 @@ describe("resolveVideoGenerationParameters", () => {
         const once = withVideoReferenceFidelity("让镜头缓慢推进", [{ type: "video", url: "https://cdn.example.com/reference.mp4" }]);
         expect(withVideoReferenceFidelity(once, [{ type: "video", url: "https://cdn.example.com/reference.mp4" }])).toBe(once);
     });
+
+    it("adds ordered continuity instructions for all-frame videos", () => {
+        const prompt = withVideoReferenceFidelity("人物走向窗边", [
+            { type: "image", url: "https://cdn.example.com/one.png", role: "keyframe", keyframeIndex: 1 },
+            { type: "image", url: "https://cdn.example.com/two.png", role: "keyframe", keyframeIndex: 2 },
+        ]);
+        expect(prompt).toContain("全能帧连续性要求");
+        expect(prompt).toContain("关键帧 1 到 2 的时间顺序");
+    });
+
+    it("keeps a continuity first frame ahead of ordered keyframes", () => {
+        const prompt = withVideoReferenceFidelity("从上一镜尾帧匹配切入", [
+            { type: "image", url: "https://cdn.example.com/tail.png", role: "first_frame" },
+            { type: "image", url: "https://cdn.example.com/one.png", role: "keyframe", keyframeIndex: 1 },
+            { type: "image", url: "https://cdn.example.com/two.png", role: "keyframe", keyframeIndex: 2 },
+        ]);
+        expect(prompt).toContain("首帧是唯一开场画面");
+        expect(prompt).toContain("按关键帧 1 到 2 的时间顺序");
+    });
 });

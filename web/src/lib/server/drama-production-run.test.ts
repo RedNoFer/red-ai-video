@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { DramaEpisode, DramaProject } from "@/lib/drama-project-contract";
-import { buildDramaProductionRun, compileDramaVideoSegmentPrompt, invalidateDramaProductionRunFromShot } from "@/lib/server/drama-production-run";
+import { buildDramaProductionRun, compileDramaVideoSegmentPrompt, invalidateDramaProductionRunFromShot, refreshDramaVideoStepReferences } from "@/lib/server/drama-production-run";
 
 describe("drama production run planning", () => {
     it("locks parameters and gates the next continuous shot on previous continuity QC", () => {
@@ -83,6 +83,37 @@ describe("drama production run planning", () => {
             expect.objectContaining({ assetId: "source-one", status: "success", outputUrls: ["/api/reference-assets/one.png"] }),
         ]);
         expect(run.steps.find((step) => step.type === "video")?.referenceAssetIds).toEqual(["source-two", "source-one"]);
+        expect(run.steps.find((step) => step.type === "video")?.referenceBindingsSnapshot).toMatchObject([
+            { alias: "@图片1", role: "keyframe", frameId: "f1" },
+            { alias: "@图片2", role: "keyframe", frameId: "f2" },
+            { alias: "@图片3", role: "scene_anchor", sourceId: "source-two", url: "/api/reference-assets/two.png" },
+            { alias: "@图片4", role: "character_anchor", sourceId: "source-one", url: "/api/reference-assets/one.png" },
+        ]);
+    });
+
+    it("refreshes a locked video step from keyframes generated after the run was created", () => {
+        const project = fixture();
+        const shot = project.episodes[0].shots[0];
+        shot.storyboardFrameMode = "all_frames";
+        shot.duration = 4;
+        shot.framePlan = {
+            start: { source: "independent" },
+            end: { required: false },
+            frames: [
+                { id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 2, actionPrompt: "抬头", imagePrompt: "人物抬头" },
+                { id: "f2", sequenceIndex: 2, startSecond: 2, endSecond: 4, actionPrompt: "转身", imagePrompt: "人物转身" },
+            ],
+        };
+        const locked = buildDramaProductionRun(project, { ...project.episodes[0], shots: [shot], continuityEdges: [] }, { imageModel: "image", videoModel: "video", maxReferenceImages: 4 });
+        const video = locked.steps.find((step) => step.type === "video")!;
+        expect(video.referenceImageUrls).toEqual([]);
+
+        shot.storyboardFrames = shot.framePlan.frames.map((frame) => ({ id: frame.id, sequenceIndex: frame.sequenceIndex, mediaUrl: `/generated-${frame.id}.png`, source: "generated", status: "success", continuityStatus: "passed" }));
+        const refreshed = refreshDramaVideoStepReferences(project, { ...project.episodes[0], shots: [shot], continuityEdges: [] }, video);
+
+        expect(refreshed.referenceImageUrls).toEqual(["/generated-f1.png", "/generated-f2.png"]);
+        expect(refreshed.referenceBindingsSnapshot).toMatchObject([{ alias: "@图片1", frameId: "f1" }, { alias: "@图片2", frameId: "f2" }]);
+        expect(refreshed.prompt).toContain("P01-F01 0-2s：抬头");
     });
 
     it("blocks before submission when assets leave room for fewer than two frame anchors", () => {

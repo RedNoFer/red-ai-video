@@ -1,14 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { App, Button, Popconfirm, Progress, Select, Tag } from "antd";
-import { ArrowRight, Captions, ChevronDown, ChevronUp, CircleAlert, CircleCheck, CircleDashed, Download, Film, GitBranch, LoaderCircle, Pause, Play, RefreshCw, ScanSearch, Send, Sparkles, Volume2 } from "lucide-react";
+import { App, Button, Input, Popconfirm, Progress, Select, Tag } from "antd";
+import { ArrowRight, Captions, ChevronDown, ChevronUp, CircleAlert, CircleCheck, CircleDashed, Download, Film, GitBranch, LoaderCircle, Pause, Play, RefreshCw, Save, ScanSearch, Send, Sparkles, Volume2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { mediaDownloadFileName } from "@/lib/media-file";
 import { imagePreviewUrl, originalMediaDownloadUrl } from "@/lib/media-image-url";
-import { createDramaProductionRun, ensureDramaEpisodeCanvas, exportDramaJianyingDraft, getDramaProjectCosts, getLatestDramaProductionRun, preflightDramaGeneration, reviewDramaEpisode, updateDramaProductionRun } from "@/services/api/drama-projects";
+import { createDramaProductionRun, ensureDramaEpisodeCanvas, exportDramaJianyingDraft, generateDramaVideoPrompt, getDramaProjectCosts, getLatestDramaProductionRun, preflightDramaGeneration, reviewDramaEpisode, updateDramaProductionRun } from "@/services/api/drama-projects";
 import { resolveModelRequestConfig, useEffectiveConfig } from "@/stores/use-config-store";
-import { compileDramaShotExecutionPrompts } from "@/lib/drama-prompt-compiler";
+import { compileDramaShotExecutionPrompts, sanitizeDramaSupplierText } from "@/lib/drama-prompt-compiler";
 import { approvedAssetReference } from "@/lib/drama-asset-baseline";
 import { activeFrameEvidence, continuityStartEvidence } from "@/lib/drama-continuity-policy";
 import { useDramaStore } from "../stores/use-drama-store";
@@ -286,6 +286,38 @@ export function DramaGenerationPanel({
             message.error(error instanceof Error ? error.message : "生产计划创建失败");
         } finally {
             setCreatingRun(false);
+        }
+    };
+
+    const generateVideoPrompt = async (shot: DramaShot) => {
+        const frames = (shot.storyboardFrames || [])
+            .filter((frame) => frame.mediaUrl && frame.status === "success" && frame.continuityStatus !== "stale")
+            .sort((left, right) => left.sequenceIndex - right.sequenceIndex);
+        const start = activeFrameEvidence(shot, "storyboard_start")[0];
+        const end = activeFrameEvidence(shot, "storyboard_end")[0];
+        if (shot.storyboardFrameMode === "all_frames" && (frames.length < (shot.framePlan?.frames.length || 2) || frames.some((frame, index) => frame.sequenceIndex !== index + 1))) return message.warning("请先按开始到结束顺序生成并验收全部顺序帧");
+        if (shot.storyboardFrameMode === "first_last" && (!start || !end)) return message.warning("请先生成并验收本镜首帧和尾帧");
+        if (shot.storyboardFrameMode !== "all_frames" && shot.storyboardFrameMode !== "first_last" && !frames.length && !start) return message.warning("请先生成并验收本镜起始帧");
+        const incoming = episode.continuityEdges?.find((edge) => edge.toShotId === shot.id && edge.inheritActualEndFrame);
+        const previous = incoming ? episode.shots.find((item) => item.id === incoming.fromShotId) : undefined;
+        const tail = previous ? continuityStartEvidence(previous) : undefined;
+        const referenceMaterials = [
+            ...(tail ? [{ role: "first_frame", purpose: "上一镜当前视频版本的已人工验收实际尾帧", url: tail.mediaUrl }] : []),
+            ...(shot.storyboardFrameMode === "first_last"
+                ? [start ? { role: tail ? "reference" : "first_frame", purpose: tail ? "本镜已验收首帧构图参考（供应商首帧由上一镜尾帧承担）" : "本镜已验收首帧", url: start.mediaUrl } : undefined, end ? { role: "last_frame", purpose: "本镜已验收尾帧", url: end.mediaUrl } : undefined].filter(Boolean)
+                : frames.map((frame) => ({ role: "keyframe", purpose: `顺序帧 ${frame.sequenceIndex}（${frame.sequenceIndex === 1 ? "开始" : frame.sequenceIndex === frames.length ? "结束" : "中间"}）`, sequenceIndex: frame.sequenceIndex, url: frame.mediaUrl! }))),
+            ...shotReferenceAssets(project, shot).map((asset) => ({ role: "asset_anchor", purpose: asset.label, url: asset.url })),
+        ];
+        try {
+            const result = await generateDramaVideoPrompt({ project, episode, shot, referenceMaterials });
+            const generated = result.shots.find((item) => item.shotId === shot.id)?.videoPrompt;
+            if (!generated) throw new Error("Agent 未返回当前镜头的视频提示词");
+            updateShot(project.id, episode.id, shot.id, { executionVideoPrompt: sanitizeDramaSupplierText(generated, project), fieldOrigins: { ...(shot.fieldOrigins || {}), executionVideoPrompt: "ai" } });
+            await saveProjectNow(project.id);
+            await loadProject(project.id, true);
+            message.success("Agent 视频提示词已生成并保存");
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : "Agent 视频提示词生成失败");
         }
     };
 
@@ -691,6 +723,7 @@ export function DramaGenerationPanel({
                                 onOpenCanvas={() => void openEpisodeCanvas()}
                                 onCompleteReview={() => completeShotReviewAndRefresh(shot.id)}
                                 onGenerate={() => void startProduction([shot.id])}
+                                onGenerateVideoPrompt={() => void generateVideoPrompt(shot)}
                                 blocked={readiness.missingBaselineShotIds.includes(shot.id)}
                                 preflightIssues={preflight?.issues.filter((issue) => issue.shotId === shot.id && issue.severity === "blocking") || []}
                                 onMaintain={(action) => {
@@ -840,6 +873,7 @@ function ShotTaskRow({
     onOpenCanvas,
     onCompleteReview,
     onGenerate,
+    onGenerateVideoPrompt,
     blocked,
     preflightIssues,
     onMaintain,
@@ -855,6 +889,7 @@ function ShotTaskRow({
     onOpenCanvas: () => void;
     onCompleteReview: () => Promise<boolean>;
     onGenerate: () => void;
+    onGenerateVideoPrompt: () => void;
     blocked: boolean;
     preflightIssues: DramaProductionPreflight["issues"];
     onMaintain: (action: "assets" | "storyboard" | "review") => void;
@@ -864,6 +899,7 @@ function ShotTaskRow({
     const queueAudio = useDramaStore((state) => state.queueAudio);
     const [detailsOpen, setDetailsOpen] = useState(false);
     const [completingReview, setCompletingReview] = useState(false);
+    const [generatingVideoPrompt, setGeneratingVideoPrompt] = useState(false);
     const generating = [shot.storyboardStatus, shot.storyboardEndStatus, shot.generationStatus].some((status) => status === "queued" || status === "running");
     const failed = [shot.storyboardStatus, shot.storyboardEndStatus, shot.generationStatus].some((status) => status === "error");
     const dialogue = (shot.subtitle || shot.dialogue || shot.narration).trim();
@@ -945,6 +981,22 @@ function ShotTaskRow({
                     }}
                 >
                     智能补全参数
+                </Button>
+                <Button
+                    className={`${actionButtonClass} col-span-2 lg:col-span-1`}
+                    icon={<Sparkles className="size-4" />}
+                    loading={generatingVideoPrompt}
+                    disabled={generating || blocked || generatingVideoPrompt}
+                    onClick={async () => {
+                        setGeneratingVideoPrompt(true);
+                        try {
+                            await onGenerateVideoPrompt();
+                        } finally {
+                            setGeneratingVideoPrompt(false);
+                        }
+                    }}
+                >
+                    Agent 生成提示词
                 </Button>
                 {shot.audioStatus === "running" || shot.audioStatus === "queued" ? (
                     <Button className={actionButtonClass} icon={<Pause className="size-4" />} onClick={() => void cancelDramaAudioTask(shot.audioTaskId).finally(() => updateShot(project.id, episode.id, shot.id, { audioStatus: "cancelled" }))}>
@@ -1042,6 +1094,10 @@ function publicUpstreamError(raw: string) {
 }
 
 function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview }: { project: DramaProject; episode: DramaEpisode; shot: DramaShot; productionRun: DramaProductionRun | null; onPreview: (media: DramaPreviewMedia) => void }) {
+    const { message } = App.useApp();
+    const updateShot = useDramaStore((state) => state.updateShot);
+    const saveProjectNow = useDramaStore((state) => state.saveProjectNow);
+    const [videoPromptDraft, setVideoPromptDraft] = useState("");
     const promptSnapshot = productionRun?.preflightSnapshot?.prompts?.[shot.id];
     const sourceImagePrompt = promptSnapshot?.sourceImagePrompt || shot.imagePrompt;
     const sourceVideoPrompt = promptSnapshot?.sourceVideoPrompt || shot.videoPrompt;
@@ -1049,7 +1105,17 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
     const executionVideoPrompt = shot.executionVideoPrompt || promptSnapshot?.executionVideoPrompt;
     const assets = shotAssetLabels(project, shot);
     const referenceAssets = shotReferenceAssets(project, shot);
-    const supplierVideoPrompt = compileDramaShotExecutionPrompts(project, episode, shot).videoPrompt;
+    const videoStep = productionRun?.steps.filter((step) => step.shotId === shot.id && step.type === "video").sort((left, right) => (right.clipIndex || 0) - (left.clipIndex || 0))[0];
+    const referenceBindings = videoStep?.referenceBindingsSnapshot || [];
+    const sequenceFrames = (shot.storyboardFrames || [])
+        .filter((frame) => frame.mediaUrl && frame.status === "success" && frame.continuityStatus !== "stale")
+        .sort((left, right) => left.sequenceIndex - right.sequenceIndex);
+    const boundaryFrames = [
+        ...activeFrameEvidence(shot, "storyboard_start").slice(0, 1).map((frame) => ({ ...frame, label: "本镜首帧" })),
+        ...activeFrameEvidence(shot, "storyboard_end").slice(0, 1).map((frame) => ({ ...frame, label: "本镜尾帧" })),
+    ];
+    const supplierVideoPrompt = shot.executionVideoPrompt?.trim() || compileDramaShotExecutionPrompts(project, episode, shot).videoPrompt;
+    useEffect(() => setVideoPromptDraft(supplierVideoPrompt), [shot.id, supplierVideoPrompt]);
     const continuityEdge = episode.continuityEdges?.find((edge) => edge.toShotId === shot.id && edge.inheritActualEndFrame);
     const continuitySource = continuityEdge ? episode.shots.find((item) => item.id === continuityEdge.fromShotId) : undefined;
     const voiceSource = shot.audioMode === "mute" ? "静音" : shot.audioMode === "source" ? "视频原声" : shotVoiceSource(project, shot);
@@ -1100,9 +1166,92 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
                     <p className="mt-2 text-muted-foreground">本镜头引用的固定资产还没有可展示的已审核主基准图。</p>
                 )}
             </div>
+            <div className="mt-1 border-t border-border/70 pt-3" data-drama-shot-sequence-frames>
+                <div className="flex items-center justify-between gap-2">
+                    <span className="font-medium text-foreground">顺序帧引用</span>
+                    <span className="text-muted-foreground">{sequenceFrames.length ? `${sequenceFrames.length} 张` : "暂无已验收顺序帧"}</span>
+                </div>
+                {sequenceFrames.length ? (
+                    <div className="mt-2 grid grid-cols-[repeat(auto-fill,minmax(104px,1fr))] gap-2 sm:grid-cols-[repeat(auto-fill,minmax(120px,1fr))]">
+                        {sequenceFrames.map((frame) => {
+                            const binding = referenceBindings.find((item) => item.frameId === frame.id || item.keyframeIndex === frame.sequenceIndex);
+                            const beat = shot.framePlan?.frames.find((item) => item.id === frame.id || item.sequenceIndex === frame.sequenceIndex);
+                            return (
+                                <button key={frame.id} type="button" className="group min-w-0 overflow-hidden rounded-md border border-border bg-background text-left transition hover:border-foreground/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/35" onClick={() => onPreview({ type: "image", url: frame.mediaUrl!, title: `${shot.title}顺序帧${frame.sequenceIndex}` })} aria-label={`查看顺序帧 ${frame.sequenceIndex}`}>
+                                    <span className="block overflow-hidden bg-muted" style={{ aspectRatio: frame.width && frame.height ? `${frame.width} / ${frame.height}` : "4 / 3" }}>
+                                        <img className="size-full object-cover transition group-hover:scale-[1.02]" src={imagePreviewUrl(frame.mediaUrl!, 480)} alt={`${shot.title}顺序帧${frame.sequenceIndex}`} />
+                                    </span>
+                                    <span className="block px-2 py-1.5 text-[11px] leading-4 text-muted-foreground">
+                                        <span className="block font-medium text-foreground">帧 {frame.sequenceIndex} · {frame.sequenceIndex === 1 ? "开始" : frame.sequenceIndex === sequenceFrames.length ? "结束" : "中间"}{binding ? ` · ${binding.alias}` : ""}</span>
+                                        <span className="block truncate">{beat ? `${beat.startSecond}-${beat.endSecond}s` : "已验收关键帧"}</span>
+                                    </span>
+                                </button>
+                            );
+                        })}
+                    </div>
+                ) : (
+                    <p className="mt-2 text-muted-foreground">本镜头尚未生成并验收可用于视频的顺序关键帧，固定资产图不能替代顺序帧。</p>
+                )}
+                {shot.storyboardFrameMode === "first_last" ? (
+                    <div className="mt-3 border-t border-border/70 pt-3" data-drama-shot-boundary-frames>
+                        <div className="flex items-center justify-between gap-2">
+                            <span className="font-medium text-foreground">本镜首尾帧</span>
+                            <span className="text-muted-foreground">{boundaryFrames.length}/2 张已验收</span>
+                        </div>
+                        {boundaryFrames.length ? (
+                            <div className="mt-2 grid grid-cols-[repeat(auto-fill,minmax(104px,1fr))] gap-2 sm:grid-cols-[repeat(auto-fill,minmax(120px,1fr))]">
+                                {boundaryFrames.map((frame) => (
+                                    <button key={`${frame.label}-${frame.id}`} type="button" className="group min-w-0 overflow-hidden rounded-md border border-border bg-background text-left transition hover:border-foreground/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/35" onClick={() => onPreview({ type: "image", url: frame.mediaUrl, title: `${shot.title}${frame.label}` })} aria-label={`查看${frame.label}`}>
+                                        <span className="block overflow-hidden bg-muted" style={{ aspectRatio: "4 / 3" }}>
+                                            <img className="size-full object-cover transition group-hover:scale-[1.02]" src={imagePreviewUrl(frame.mediaUrl, 480)} alt={`${shot.title}${frame.label}`} />
+                                        </span>
+                                        <span className="block px-2 py-1.5 text-[11px] leading-4 text-muted-foreground">{frame.label}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        ) : (
+                            <p className="mt-2 text-muted-foreground">本镜首帧和尾帧尚未生成并验收，不能用固定资产图代替。</p>
+                        )}
+                    </div>
+                ) : null}
+                {referenceBindings.length ? (
+                    <div className="mt-3 space-y-1 rounded-md border border-border/70 bg-background/60 p-2.5" data-drama-shot-reference-mapping>
+                        <div className="font-medium text-foreground">供应商引用映射</div>
+                        {referenceBindings.map((binding) => (
+                            <div key={`${binding.alias}-${binding.sourceId || binding.frameId || binding.shotId || "reference"}`} className="grid min-w-0 gap-1 sm:grid-cols-[4.5rem_minmax(0,1fr)]">
+                                <span className="font-medium text-foreground">{binding.alias}</span>
+                                <span className="min-w-0 break-words text-muted-foreground">{binding.purpose}</span>
+                            </div>
+                        ))}
+                    </div>
+                ) : null}
+                {continuitySource && continuityStartEvidence(continuitySource) ? (
+                    <div className="mt-3 border-t border-border/70 pt-3" data-drama-shot-continuity-tail>
+                        <div className="font-medium text-foreground">上一镜实际尾帧</div>
+                        <button type="button" className="mt-2 flex max-w-[180px] flex-col overflow-hidden rounded-md border border-border bg-background text-left" onClick={() => onPreview({ type: "image", url: continuityStartEvidence(continuitySource)!.mediaUrl, title: `${continuitySource.title}实际尾帧` })}>
+                            <img className="aspect-video w-full object-cover" src={imagePreviewUrl(continuityStartEvidence(continuitySource)!.mediaUrl, 480)} alt={`${continuitySource.title}实际尾帧`} />
+                            <span className="px-2 py-1.5 text-[11px] text-muted-foreground">已人工验收 · {continuitySource.title}</span>
+                        </button>
+                    </div>
+                ) : null}
+            </div>
             <div className="mt-1 border-t border-border/70 pt-3" data-drama-shot-supplier-prompt>
-                <div className="font-medium text-foreground">视频供应商提示词</div>
-                <p className="mt-1 whitespace-pre-wrap break-words text-muted-foreground">{supplierVideoPrompt || "暂无可提交给视频供应商的提示词"}</p>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="font-medium text-foreground">视频供应商提示词</div>
+                    <Button
+                        size="small"
+                        icon={<Save className="size-3.5" />}
+                        disabled={!videoPromptDraft.trim() || videoPromptDraft.trim() === supplierVideoPrompt.trim()}
+                        onClick={async () => {
+                            updateShot(project.id, episode.id, shot.id, { executionVideoPrompt: videoPromptDraft.trim(), fieldOrigins: { ...(shot.fieldOrigins || {}), executionVideoPrompt: "manual" } });
+                            await saveProjectNow(project.id);
+                            message.success("视频提示词已保存");
+                        }}
+                    >
+                        保存
+                    </Button>
+                </div>
+                <Input.TextArea className="mt-2" value={videoPromptDraft} onChange={(event) => setVideoPromptDraft(event.target.value)} autoSize={{ minRows: 5, maxRows: 14 }} placeholder="先生成并验收顺序帧，再生成或编辑视频提示词" />
             </div>
         </div>
     );

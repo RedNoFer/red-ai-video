@@ -98,12 +98,48 @@ describe("production package boundary", () => {
         expect(() => previewDramaProductionPackage(source, "mahadel-episode-01-production-package.md")).toThrow("缺少有效 framePlan");
     });
 
+    it("upgrades a frame plan from an older package that omitted frame beats", () => {
+        const source = structuredClone(productionPackage);
+        source.episodes[0].shots[0].framePlan = { start: { source: "independent" }, end: { required: true }, frames: [] };
+        const shot = previewDramaProductionPackage(JSON.stringify(source), "package.json").package.episodes[0].shots[0];
+        expect(shot.framePlan.frames).toHaveLength(4);
+        expect(shot.framePlan.frames[0]).toMatchObject({ startSecond: 0, endSecond: 4, actionPrompt: "抬手；起始状态" });
+        expect(shot.framePlan.frames.at(-1)).toMatchObject({ startSecond: 12, endSecond: 15, actionPrompt: "抬手；结果状态" });
+    });
+
+    it("keeps split shot durations and timecodes integer and continuous", () => {
+        const source = structuredClone(productionPackage);
+        source.episodes[0].shots[0].duration = 2;
+        source.episodes[0].shots[0].timecode = "0-2s";
+        source.episodes[0].shots[0].framePlan.frames = [];
+        const preview = previewDramaProductionPackage(JSON.stringify(source), "package.json");
+        const shots = preview.package.episodes[0].shots;
+        expect(shots.every((shot) => Number.isInteger(shot.duration))).toBe(true);
+        expect(shots.flatMap((shot) => shot.framePlan.frames).every((frame) => Number.isInteger(frame.startSecond) && Number.isInteger(frame.endSecond))).toBe(true);
+    });
+
     it("recognizes the generated multiframe Markdown package", () => {
         const source = readFileSync(new URL("../../../../output/mahadel-episode-01-production-package-v2-multiframe.md", import.meta.url), "utf8");
         const preview = previewDramaProductionPackage(source, "mahadel-episode-01-production-package-v2-multiframe.md");
         expect(preview.package.schemaVersion).toBe(1);
         expect(preview.package.project.productionBible.productionPlan?.video.mode).toBe("storyboard");
         expect(preview.package.episodes[0].shots.every((shot) => shot.storyboardFrameMode === "all_frames")).toBe(true);
+        expect(preview.package.episodes[0].shots.slice(0, 2).map((shot) => shot.duration)).toEqual([5, 2.5]);
+        expect(preview.package.episodes[0].shots[1].framePlan?.start.source).toBe("previous_accepted_actual_tail");
+    });
+
+    it("upgrades repetitive frame image prompts into independent visual states", () => {
+        const source = structuredClone(productionPackage);
+        const shot = source.episodes[0].shots[0];
+        shot.framePlan.frames = [
+            { id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 7.5, actionPrompt: "Karin低头站在黑湖边", imagePrompt: "黑湖、倒塔，9:16安全构图。当前时段动作锚点：Karin低头站在黑湖边。保持角色身份、服装、道具、场景结构与上一帧连续。" },
+            { id: "f2", sequenceIndex: 2, startSecond: 7.5, endSecond: 15, actionPrompt: "Karin抬眼看向倒悬高塔", imagePrompt: "黑湖、倒塔，9:16安全构图。当前时段动作锚点：Karin抬眼看向倒悬高塔。保持角色身份、服装、道具、场景结构与上一帧连续。" },
+        ];
+        const frames = previewDramaProductionPackage(JSON.stringify(source), "package.json").package.episodes[0].shots[0].framePlan.frames;
+        expect(frames[0].imagePrompt).toContain("静态关键帧：Karin低头站在黑湖边");
+        expect(frames[1].imagePrompt).toContain("静态关键帧：Karin抬眼看向倒悬高塔");
+        expect(frames[0].imagePrompt).not.toContain("当前时段动作锚点");
+        expect(frames[0].imagePrompt).not.toBe(frames[1].imagePrompt);
     });
 
     it("derives concrete profile fields when a package omits optional character profile values", () => {
@@ -120,18 +156,20 @@ describe("production package boundary", () => {
 
     it("normalizes generic location consistency rules into executable spatial constraints", () => {
         const source = structuredClone(productionPackage);
-        source.assets.locations = [{
-            code: "S01",
-            name: "铸剑铺",
-            description: "纵深店铺，入口在前，铁砧居中，炉膛在后左，柜台在右侧。",
-            profile: {
-                visualIdentity: "纵深铸剑铺",
-                styling: "铁砧居中、炉膛后左、柜台右侧",
-                colorPalette: "煤黑与暗琥珀",
-                consistencyRules: "按设计 Prompt 保持一致",
-                spatialRules: ["入口在前", "铁砧居中", "炉膛后左", "柜台右侧"],
+        source.assets.locations = [
+            {
+                code: "S01",
+                name: "铸剑铺",
+                description: "纵深店铺，入口在前，铁砧居中，炉膛在后左，柜台在右侧。",
+                profile: {
+                    visualIdentity: "纵深铸剑铺",
+                    styling: "铁砧居中、炉膛后左、柜台右侧",
+                    colorPalette: "煤黑与暗琥珀",
+                    consistencyRules: "按设计 Prompt 保持一致",
+                    spatialRules: ["入口在前", "铁砧居中", "炉膛后左", "柜台右侧"],
+                },
             },
-        }];
+        ];
 
         const location = previewDramaProductionPackage(JSON.stringify(source), "package.json").package.assets.locations[0];
         expect(location.profile?.consistencyRules).toContain("空间拓扑");
@@ -233,11 +271,7 @@ describe("production package boundary", () => {
         const shot = applied.episodes[0].shots[0];
         const karinId = applied.characters.find((item) => item.name === "Karin")!.id;
         const sceneId = applied.scenes.find((item) => item.name === "阿佐雷斯城门")!.id;
-        expect(shot.framePlan?.referenceManifest).toMatchObject([
-            { assetId: karinId },
-            { assetId: sceneId },
-            { shotId: shot.id },
-        ]);
+        expect(shot.framePlan?.referenceManifest).toMatchObject([{ assetId: karinId }, { assetId: sceneId }, { shotId: shot.id }]);
     });
 
     it("round-trips structured review fields from the package into the project", () => {

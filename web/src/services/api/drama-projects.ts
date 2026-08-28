@@ -8,12 +8,14 @@ import type {
     DramaProductionPlan,
     DramaProductionRun,
     DramaProject,
+    DramaVideoPromptAnalysis,
     DramaProjectSummary,
     DramaProjectVersion,
     DramaAssetRefinementProposal,
     DramaAssetReference,
     DramaAssetGenerationBatch,
     DramaVisualReview,
+    DramaShot,
 } from "@/lib/drama-project-contract";
 
 export function listDramaAssetGenerationBatches(projectId: string) {
@@ -169,7 +171,7 @@ export function applyDramaProductionPackage(project: DramaProject, preview: Dram
     return request<{ project: DramaProject }>(`/api/drama/projects/${encodeURIComponent(project.id)}/production-package`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "apply", source, fileName, sourceHash: preview.sourceHash, expectedUpdatedAt: project.updatedAt }),
+        body: JSON.stringify({ action: "apply", source, fileName, sourceHash: preview.sourceHash }),
     }).then((data) => data.project);
 }
 
@@ -201,6 +203,25 @@ export function preflightDramaGeneration(projectId: string, episodeId: string, s
     }).then((data) => data.preflight);
 }
 
+export function generateDramaVideoPrompt(input: { project: DramaProject; episode: DramaEpisode; shot: DramaShot; referenceMaterials: unknown[] }) {
+    return request<DramaVideoPromptAnalysis>("/api/drama/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            phase: "video_prompt",
+            summary: input.project.summary,
+            style: input.project.style,
+            episode: input.episode,
+            characters: input.project.characters,
+            scenes: input.project.scenes,
+            props: input.project.props,
+            clues: input.project.clues,
+            shots: [input.shot],
+            referenceMaterials: input.referenceMaterials,
+        }),
+    });
+}
+
 export function createDramaProductionRun(
     projectId: string,
     episodeId: string,
@@ -216,6 +237,7 @@ export function createDramaProductionRun(
         frameIds?: string[];
         regenerateAll?: boolean;
         productionPlan?: DramaProductionPlan;
+        shotSnapshot?: DramaShot;
     } = {},
 ) {
     return request<{ run: DramaProductionRun }>(`/api/drama/projects/${encodeURIComponent(projectId)}/production-runs`, {
@@ -234,6 +256,7 @@ export function createDramaProductionRun(
             ...(options.frameIds?.length ? { frameIds: options.frameIds } : {}),
             ...(options.regenerateAll ? { regenerateAll: true } : {}),
             ...(options.productionPlan ? { productionPlan: options.productionPlan } : {}),
+            ...(options.shotSnapshot ? { shotSnapshot: options.shotSnapshot } : {}),
         }),
     }).then((data) => data.run);
 }

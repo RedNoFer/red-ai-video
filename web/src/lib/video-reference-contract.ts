@@ -43,7 +43,7 @@ export function normalizeVideoGenerationReferences(value: unknown): VideoGenerat
     const keyframes = references.filter((reference) => reference.role === "keyframe");
     if (keyframes.length && (keyframes.length < ALL_FRAMES_MIN || keyframes.length > ALL_FRAMES_MAX)) throw new Error("全能帧必须提供 2 到 5 张图片");
     if (keyframes.length) {
-        if (firstFrames.length || lastFrames.length) throw new Error("全能帧不能与首帧或尾帧混用");
+        if (lastFrames.length) throw new Error("全能帧不能与尾帧混用");
         if (new Set(keyframes.map((reference) => reference.url)).size !== keyframes.length) throw new Error("全能帧图片不能重复");
         const indexes = keyframes.map((reference) => reference.keyframeIndex).sort((left, right) => (left || 0) - (right || 0));
         if (new Set(indexes).size !== indexes.length || indexes.some((index, position) => index !== position + 1)) throw new Error("全能帧序号必须从 1 连续排列");

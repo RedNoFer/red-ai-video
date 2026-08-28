@@ -47,6 +47,11 @@ export function withVideoReferenceFidelity(prompt: string, references: readonly 
     const source = prompt.trim();
     const hasFirstFrame = references.some((reference) => reference.role === "first_frame");
     const hasLastFrame = references.some((reference) => reference.role === "last_frame");
+    const keyframes = references.filter((reference) => reference.role === "keyframe").sort((left, right) => (left.keyframeIndex || 0) - (right.keyframeIndex || 0));
+    if (keyframes.length && !source.includes("全能帧连续性要求：")) {
+        const opening = hasFirstFrame ? "首帧是唯一开场画面；" : "";
+        return `${source}\n\n全能帧连续性要求：${opening}按关键帧 1 到 ${keyframes.length} 的时间顺序持续推进动作与镜头。每张关键帧都是对应阶段的画面依据，保持主体身份、服装、场景、光线、构图和空间关系连续，禁止交换顺序、跳过状态或将关键帧当作无序参考图。`;
+    }
     if ((hasFirstFrame || hasLastFrame) && !source.includes("首尾帧连续性要求：")) {
         const ending = hasLastFrame
             ? "首帧是唯一开场画面，尾帧是唯一结束画面；镜头、主体姿态、光线和环境变化必须在两帧之间自然连续过渡，禁止交换两帧、跳切到无关场景或把尾帧当普通参考图。"

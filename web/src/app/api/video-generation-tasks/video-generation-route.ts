@@ -559,7 +559,10 @@ function videoDimensions(size: unknown, quality: unknown) {
 
 function bumingSeedancePrompt(prompt: string, firstFrame: VideoGenerationReference | undefined, lastFrame: VideoGenerationReference | undefined, keyframeCount: number, regularImageCount: number, videoCount: number, audioCount: number) {
     const references: string[] = [];
-    if (keyframeCount) references.push(`连续关键帧按时间顺序使用@图片1至@图片${keyframeCount}`);
+    if (keyframeCount) {
+        const firstKeyframe = Number(Boolean(firstFrame)) + 1;
+        references.push(`${firstFrame ? "首帧使用@图片1；" : ""}连续关键帧按时间顺序使用@图片${firstKeyframe}至@图片${firstKeyframe + keyframeCount - 1}`);
+    }
     else if (firstFrame && lastFrame) references.push("首帧使用@图片1，尾帧使用@图片2");
     else if (firstFrame) references.push("首帧使用@图片1");
     const regularImageStart = keyframeCount + Number(Boolean(firstFrame)) + Number(Boolean(lastFrame)) + 1;
