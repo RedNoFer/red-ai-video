@@ -8,7 +8,7 @@ describe("drama production preflight", () => {
         const project = fixture();
         const result = preflightDramaProduction(project, project.episodes[0]);
         expect(result.status).toBe("blocked");
-        expect(result.issues.map((issue) => issue.code)).toEqual(expect.arrayContaining(["SERIES_BIBLE", "SHOT_TOO_LONG", "CHARACTER_ANCHOR", "CHARACTER_STATE"]));
+        expect(result.issues.map((issue) => issue.code)).toEqual(expect.arrayContaining(["SERIES_BIBLE", "CHARACTER_ANCHOR", "CHARACTER_STATE"]));
     });
 
     it("passes a short shot with locked references and complete states", () => {

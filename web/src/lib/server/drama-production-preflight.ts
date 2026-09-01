@@ -13,6 +13,7 @@ export function preflightDramaProduction(project: DramaProject, episode: DramaEp
     if (project.ratio !== "9:16") issues.push(blocking("RATIO", `本集必须使用9:16，当前为${project.ratio}`));
     if (!project.seriesBible) issues.push(blocking("SERIES_BIBLE", "项目缺少已锁定的系列圣经，不能跨集生产"));
     const plan = project.productionBible?.productionPlan;
+    const targetShotDuration = plan?.video.shotDuration;
     if (plan) {
         // The executable video model is selected by the backend channel binding at task creation.
         // Do not gate production on the stale model label persisted in the editable plan.
@@ -26,7 +27,7 @@ export function preflightDramaProduction(project: DramaProject, episode: DramaEp
     const shotById = new Map(episode.shots.map((shot) => [shot.id, shot]));
     const edgeByTo = new Map((episode.continuityEdges || []).map((edge) => [edge.toShotId, edge]));
 
-    for (const shot of episode.shots) if (selected.has(shot.id)) checkShot(shot, episode.code || episode.id, project, characters, scenes, props, clues, edgeByTo, shotById, issues);
+    for (const shot of episode.shots) if (selected.has(shot.id)) checkShot(shot, episode.code || episode.id, project, characters, scenes, props, clues, edgeByTo, shotById, issues, targetShotDuration);
     for (const edge of episode.continuityEdges || []) {
         if (!selected.has(edge.toShotId)) continue;
         const from = shotById.get(edge.fromShotId);
@@ -81,6 +82,7 @@ function checkShot(
     edgeByTo: Map<string, NonNullable<DramaEpisode["continuityEdges"]>[number]>,
     shotById: Map<string, DramaShot>,
     issues: DramaProductionPreflightIssue[],
+    targetShotDuration?: 15 | 30,
 ) {
     const label = shot.code || shot.title;
     if (!shot.imagePrompt.trim() || !shot.videoPrompt.trim()) issues.push(blocking("PROMPT_MISSING", `${label}缺少图像或视频Prompt`, { shotId: shot.id }));
@@ -94,7 +96,8 @@ function checkShot(
     if (!light?.palette || !light.colorTemperature || !light.keyLight || !light.fillLight || !light.rimLight || !light.materialResponse || !light.skinToneProtection)
         issues.push(blocking("LIGHTING_PLAN_MISSING", `${label}缺少完整色彩与灯光规划`, { shotId: shot.id }));
     if (!Number.isFinite(shot.duration) || shot.duration <= 0) issues.push(blocking("DURATION", `${label}缺少有效时长`, { shotId: shot.id }));
-    if (shot.duration > 8) issues.push(blocking("SHOT_TOO_LONG", `${label}为${shot.duration}秒，必须拆成3–8秒可执行镜头`, { shotId: shot.id }));
+    if (targetShotDuration && shot.duration !== targetShotDuration)
+        issues.push(warning("SHOT_DURATION_MISMATCH", `${label}当前为${shot.duration}秒，生产方案目标为${targetShotDuration}秒`, { shotId: shot.id, correction: `按生产方案重新生成或调整为${targetShotDuration}秒逻辑镜头` }));
     if (!shot.continuity?.shotSize || !shot.continuity?.cameraAngle || !shot.continuity?.composition)
         issues.push(warning("FRAMING_UNCLEAR", `${label}缺少完整景别、机位或构图约束，可能导致主体位置和景别漂移`, { shotId: shot.id, correction: "补充明确景别、机位和构图" }));
     if (!shot.lighting && !shot.entryState?.lighting) issues.push(warning("LIGHTING_UNCLEAR", `${label}缺少明确光照方向，生成结果可能出现人物与背景光照脱节`, { shotId: shot.id, correction: "补充主光方向、色温和主体/背景光照关系" }));

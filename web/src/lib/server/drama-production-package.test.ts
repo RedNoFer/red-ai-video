@@ -68,6 +68,7 @@ describe("production package boundary", () => {
         source.assets.characters.push({ code: "C01", name: "Karin", description: "重复记录" });
         source.assets.props.push({ code: "P01", name: "断剑", description: "重复记录" });
         const preview = previewDramaProductionPackage(JSON.stringify(source), "package.json");
+        console.log("DEBUG SCENE", preview.package.episodes[0].storyScenes);
         expect(preview.package.assets.characters).toHaveLength(2);
         expect(preview.package.assets.props).toHaveLength(1);
         expect(preview.package.assets.characters.find((item) => item.code === "C01")?.description).toBe("重复记录");
@@ -77,6 +78,7 @@ describe("production package boundary", () => {
         const source = structuredClone(productionPackage);
         source.episodes[0].shots[0].storyboardFrameMode = "all_frames";
         const preview = previewDramaProductionPackage(JSON.stringify(source), "package.json");
+        console.log("DEBUG", preview.package.project.productionBible.productionPlan?.video, preview.package.episodes[0].shots.map((shot) => ({ title: shot.title, duration: shot.duration, scene: shot.storySceneCode, location: shot.locationCode })));
         expect(preview.package.episodes[0].shots[0].storyboardFrameMode).toBe("all_frames");
     });
 
@@ -123,6 +125,38 @@ describe("production package boundary", () => {
         const shots = preview.package.episodes[0].shots;
         expect(shots.every((shot) => Number.isInteger(shot.duration))).toBe(true);
         expect(shots.flatMap((shot) => shot.framePlan.frames).every((frame) => Number.isFinite(frame.startSecond) && Number.isFinite(frame.endSecond))).toBe(true);
+    });
+
+    it("merges contiguous 8s and 7s fragments into one 15s logical shot", () => {
+        const source = structuredClone(productionPackage);
+        source.assets.locations.push({ code: "S02", name: "马车", description: "封闭木马车" });
+        const [first, second] = source.episodes[0].shots;
+        first.title = "黑湖记忆 1/2";
+        second.title = "黑湖记忆 2/2";
+        first.description = "黑湖中的完整剑刃裂开";
+        second.description = "马车中Karin惊醒";
+        first.sourceText = first.description;
+        second.sourceText = second.description;
+        first.duration = 8;
+        second.duration = 7;
+        first.timecode = "0-8s";
+        second.timecode = "8-15s";
+        first.storySceneCode = "SC01";
+        second.storySceneCode = "SC01";
+        second.locationCode = "S02";
+        second.framePlan.referenceManifest = [
+            ...(second.framePlan.referenceManifest || []).filter((item) => item.role !== "scene_anchor"),
+            { alias: "@场景2", role: "scene_anchor", purpose: "马车场景基准", assetId: "S02" },
+        ];
+        first.framePlan.frames = first.framePlan.frames.map((frame) => ({ ...frame, startSecond: 0, endSecond: 8 }));
+        second.framePlan.frames = second.framePlan.frames.map((frame) => ({ ...frame, startSecond: 0, endSecond: 7 }));
+        source.episodes[0].storyScenes[0].shotCodes = ["SH01", "SH02"];
+        const preview = previewDramaProductionPackage(JSON.stringify(source), "package.json");
+        expect(preview.package.episodes[0].shots).toHaveLength(1);
+        expect(preview.package.episodes[0].shots[0]).toMatchObject({ duration: 15, timecode: "0-15s", title: "黑湖记忆" });
+        expect(preview.package.episodes[0].shots[0].framePlan.frames.at(-1)?.endSecond).toBe(15);
+        expect(preview.package.episodes[0].storyScenes[0].shotCodes).toEqual(["SH001"]);
+        expect(preview.package.assets.characters.map((asset) => asset.code)).toEqual(["C01", "C02"]);
     });
 
     it("recognizes the generated multiframe Markdown package", () => {

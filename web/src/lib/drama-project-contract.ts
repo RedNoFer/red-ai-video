@@ -343,6 +343,8 @@ export type DramaProductionPlan = {
         resolution: string;
         durationPolicy: "shot" | "fixed";
         duration?: number;
+        /** Target duration of each logical shot in the production package. */
+        shotDuration?: 15 | 30;
         count: number;
         audioMode: "native" | "voiceover" | "mute";
         allowExplicitFallback: boolean;

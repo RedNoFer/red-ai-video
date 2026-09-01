@@ -32,7 +32,10 @@ export function previewDramaProductionPackage(source: string, fileName = "produc
     // preview and apply use the same normalized source of truth.
     const parsed = format === "markdown" ? parseObject(embedded || "") || parseDirectorMarkdown(trimmed) : parseObject(trimmed);
     if (!parsed) throw new DramaProductionPackageError("Markdown 制作包缺少可读取的标准清单或导演执行表");
-    const productionPackage = normalizeProductionPackage(parsed);
+    const normalizedPackage = normalizeProductionPackage(parsed);
+    const rawPlan = object(object(object(parsed).project).productionBible).productionPlan;
+    const configuredShotDuration = Object.prototype.hasOwnProperty.call(object(rawPlan).video, "shotDuration") ? normalizedPackage.project.productionBible.productionPlan?.video.shotDuration : undefined;
+    const productionPackage = configuredShotDuration ? mergeDramaProductionPackageShotDurations(normalizedPackage, configuredShotDuration) : normalizedPackage;
     return {
         package: productionPackage,
         sourceHash: createHash("sha256").update(source).digest("hex"),
@@ -303,7 +306,10 @@ function normalizeProductionPackage(value: unknown): DramaProductionPackageV1 {
             })),
         };
     });
-    const synchronizedEpisodes = normalizedEpisodes.map((episode) => synchronizeContinuityStates(repairOpeningCut(episode, text(project.title))));
+    const rawProductionPlan = object(bible.productionPlan);
+    const shotDuration = Object.prototype.hasOwnProperty.call(rawProductionPlan, "shotDuration") ? normalizeDramaProductionPlan(rawProductionPlan)?.video.shotDuration : undefined;
+    const rebalancedEpisodes = shotDuration ? normalizedEpisodes.map((episode) => mergeTargetDurationShots(episode, shotDuration)) : normalizedEpisodes;
+    const synchronizedEpisodes = rebalancedEpisodes.map((episode) => synchronizeContinuityStates(repairOpeningCut(episode, text(project.title))));
     validateProductionPackageCompleteness({ ...input, project: { ...project, productionBible: bible }, assets: normalizedAssets, episodes: synchronizedEpisodes });
     validateSplitShotFramePlans(synchronizedEpisodes);
     return {
@@ -1456,6 +1462,178 @@ function directorState(characterCodes: string[], propCodes: string[], environmen
         screenDirection: "角色移动方向沿场景既定动线",
     };
 }
+
+/**
+ * Reassembles explicit Agent-created shot fragments into the selected logical
+ * shot duration. Only fragments carrying the same `title N/M` group are
+ * eligible, so intentional cuts and scene changes remain untouched.
+ */
+export function mergeDramaProductionPackageShotDurations(value: DramaProductionPackageV1, targetDuration: 15 | 30): DramaProductionPackageV1 {
+    return { ...value, episodes: value.episodes.map((episode) => mergeTargetDurationShots(episode, targetDuration)) };
+}
+
+function mergeTargetDurationShots(episode: DramaProductionPackageEpisode, targetDuration: 15 | 30): DramaProductionPackageEpisode {
+    const groups: DramaProductionPackageEpisode["shots"][] = [];
+    let changed = false;
+    for (let index = 0; index < episode.shots.length; ) {
+        const group = explicitDurationGroup(episode.shots, index, targetDuration);
+        if (group.length > 1) {
+            groups.push(group);
+            index += group.length;
+            changed = true;
+        } else {
+            groups.push([episode.shots[index]]);
+            index += 1;
+        }
+    }
+    if (!changed) return episode;
+
+    const merged = groups.map((group) => (group.length === 1 ? group[0] : mergeShotGroup(group)));
+    const codeMap = new Map<string, string>();
+    merged.forEach((shot, index) => {
+        const code = `SH${String(index + 1).padStart(3, "0")}`;
+        const sourceCodes = groups[index].map((item) => item.code);
+        sourceCodes.forEach((sourceCode) => codeMap.set(sourceCode, code));
+    });
+    const shots = merged.map((shot, index) => {
+        const code = `SH${String(index + 1).padStart(3, "0")}`;
+        return {
+            ...shot,
+            code,
+            order: index + 1,
+            framePlan: {
+                ...shot.framePlan,
+                frames: shot.framePlan.frames.map((frame, frameIndex) => ({ ...frame, id: `${code}-F${String(frameIndex + 1).padStart(2, "0")}`, sequenceIndex: frameIndex + 1 })),
+                referenceManifest: shot.framePlan.referenceManifest?.map((item) => ({ ...item, shotId: item.shotId ? codeMap.get(item.shotId) || item.shotId : item.shotId })),
+            },
+        };
+    });
+    const storyScenes = episode.storyScenes.map((scene) => ({ ...scene, shotCodes: dedupeStrings(scene.shotCodes.map((code) => codeMap.get(code) || code)) }));
+    const continuityEdges = dedupeContinuityEdges(
+        episode.continuityEdges.flatMap((edge) => {
+            const fromShotCode = codeMap.get(edge.fromShotCode) || edge.fromShotCode;
+            const toShotCode = codeMap.get(edge.toShotCode) || edge.toShotCode;
+            return fromShotCode === toShotCode ? [] : [{ ...edge, fromShotCode, toShotCode }];
+        }),
+    );
+    return { ...episode, shots, storyScenes, continuityEdges };
+}
+
+function explicitDurationGroup(shots: DramaProductionPackageEpisode["shots"], startIndex: number, targetDuration: 15 | 30) {
+    const first = splitShotTitle(shots[startIndex]?.title || "");
+    if (!first || first.part !== 1 || first.total < 2) return [];
+    const group = shots.slice(startIndex, startIndex + first.total);
+    if (group.length !== first.total || group.some((shot, index) => {
+        const parsed = splitShotTitle(shot.title);
+        return parsed?.base !== first.base || parsed.part !== index + 1 || parsed.total !== first.total || shot.storySceneCode !== group[0].storySceneCode;
+    })) return [];
+    const total = group.reduce((sum, shot) => sum + shot.duration, 0);
+    if (total !== targetDuration) return [];
+    const firstTime = parseTimecode(group[0].timecode);
+    let previousEnd = firstTime?.[1] ?? firstTime?.[0] ?? 0;
+    for (let index = 1; index < group.length; index += 1) {
+        const current = parseTimecode(group[index].timecode);
+        if (!current || Math.abs(current[0] - previousEnd) > 0.01) return [];
+        previousEnd = current[1];
+    }
+    return group;
+}
+
+function mergeShotGroup(group: DramaProductionPackageEpisode["shots"]) {
+    const first = group[0];
+    const last = group.at(-1)!;
+    const firstTitle = splitShotTitle(first.title)?.base || first.title;
+    const offsets = group.reduce<number[]>((values, shot, index) => [...values, (values[index - 1] || 0) + (index ? group[index - 1].duration : 0)], []);
+    const mergedFrames = group.flatMap((shot, index) =>
+        shot.framePlan.frames.map((frame) => ({ ...frame, startSecond: Number((frame.startSecond + offsets[index]).toFixed(3)), endSecond: Number((frame.endSecond + offsets[index]).toFixed(3)) })),
+    );
+    const frames = compactMergedFrames(mergedFrames, group.reduce((sum, shot) => sum + shot.duration, 0));
+    const references = dedupeReferenceManifest(group.flatMap((shot, index) => (shot.framePlan.referenceManifest || []).filter((item) => index === 0 || item.role !== "previous_actual_tail")));
+    const firstTime = parseTimecode(first.timecode);
+    const lastTime = parseTimecode(last.timecode);
+    const startSecond = firstTime?.[0] ?? 0;
+    const endSecond = lastTime?.[1] ?? startSecond + group.reduce((sum, shot) => sum + shot.duration, 0);
+    return {
+        ...first,
+        title: firstTitle,
+        description: joinTexts(group.map((shot) => shot.description)),
+        sourceText: joinTexts(group.map((shot) => shot.sourceText)),
+        shotBoundary: joinTexts(group.map((shot) => shot.shotBoundary)),
+        dialogue: joinTexts(group.map((shot) => shot.dialogue)),
+        narration: joinTexts(group.map((shot) => shot.narration)),
+        utterances: group.flatMap((shot) => shot.utterances).map((utterance, index) => ({ ...utterance, order: index + 1 })),
+        imagePrompt: first.imagePrompt,
+        videoPrompt: joinTexts(group.map((shot) => shot.videoPrompt)),
+        negativePrompt: joinTexts(group.map((shot) => shot.negativePrompt)),
+        continuity: { ...first.continuity, actionStart: first.continuity?.actionStart || first.description, actionEnd: last.continuity?.actionEnd || last.description, continuityNotes: joinTexts([first.continuity?.continuityNotes, last.continuity?.continuityNotes]) },
+        duration: group.reduce((sum, shot) => sum + shot.duration, 0),
+        characterCodes: dedupeStrings(group.flatMap((shot) => shot.characterCodes)),
+        propCodes: dedupeStrings(group.flatMap((shot) => shot.propCodes)),
+        clueCodes: dedupeStrings(group.flatMap((shot) => shot.clueCodes)),
+        timecode: `${trimSecond(startSecond)}-${trimSecond(endSecond)}s`,
+        dramaticFunction: joinTexts(group.map((shot) => shot.dramaticFunction)),
+        performanceNotes: joinTexts(group.map((shot) => shot.performanceNotes)),
+        transitionIn: first.transitionIn,
+        transitionOut: last.transitionOut,
+        sound: mergeSounds(group.map((shot) => shot.sound)),
+        entryState: first.entryState,
+        exitState: last.exitState,
+        framePlan: { start: first.framePlan.start, end: last.framePlan.end, frames, ...(references.length ? { referenceManifest: references } : {}), ...(first.framePlan.referenceCount ? { referenceCount: first.framePlan.referenceCount } : {}) },
+    } as DramaProductionPackageEpisode["shots"][number];
+}
+
+function compactMergedFrames(frames: DramaProductionPackageEpisode["shots"][number]["framePlan"]["frames"], duration: number) {
+    if (frames.length <= 9) return frames;
+    const selected = Array.from({ length: 9 }, (_, index) => frames[Math.floor((index * frames.length) / 9)]).filter((frame, index, all) => all.findIndex((item) => item.id === frame.id) === index);
+    const partitions = integerPartitions(duration, selected.length);
+    let cursor = 0;
+    return selected.map((frame, index) => ({
+        ...frame,
+        startSecond: cursor,
+        endSecond: (cursor += partitions[index]),
+    }));
+}
+
+function dedupeReferenceManifest(items: NonNullable<DramaProductionPackageEpisode["shots"][number]["framePlan"]["referenceManifest"]>) {
+    const seen = new Set<string>();
+    return items
+        .filter((item) => {
+            const key = `${item.role}|${item.assetId || ""}|${item.shotId || ""}|${item.frameEvidenceId || ""}|${item.purpose || ""}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        })
+        .map((item, index) => ({ ...item, alias: `@图片${index + 1}` }));
+}
+
+function mergeSounds(values: Array<DramaProductionPackageEpisode["shots"][number]["sound"]>) {
+    const entries = values.filter(Boolean);
+    if (!entries.length) return undefined;
+    return {
+        ambience: joinTexts(entries.map((sound) => sound?.ambience)),
+        soundEffects: joinTexts(entries.map((sound) => sound?.soundEffects)),
+        music: joinTexts(entries.map((sound) => sound?.music)),
+    };
+}
+
+function joinTexts(values: Array<string | undefined>) {
+    return [...new Set(values.map((value) => value?.trim()).filter(Boolean))].join("；");
+}
+
+function dedupeStrings(values: string[]) {
+    return [...new Set(values.filter(Boolean))];
+}
+
+function dedupeContinuityEdges(edges: DramaProductionPackageEpisode["continuityEdges"]) {
+    const seen = new Set<string>();
+    return edges.filter((edge) => {
+        const key = `${edge.fromShotCode}|${edge.toShotCode}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
+}
+
 function splitDirectorShots<T extends DramaProductionPackageEpisode["shots"][number]>(shots: T[]): T[] {
     const counts = [2, 3, 2, 2, 3, 2, 3, 3, 2, 3, 3, 2];
     let order = 0;

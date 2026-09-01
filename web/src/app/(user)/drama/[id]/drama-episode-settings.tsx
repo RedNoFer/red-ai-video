@@ -5,7 +5,7 @@ import { App, Button, Input, Select } from "antd";
 import { Save } from "lucide-react";
 
 import { DRAMA_STYLE_NAME } from "@/lib/drama-style";
-import { defaultDramaProductionPlan, DRAMA_VIDEO_RESOLUTION_OPTIONS, normalizeDramaProductionPlan } from "@/lib/drama-production-plan";
+import { defaultDramaProductionPlan, DRAMA_SHOT_DURATION_OPTIONS, DRAMA_VIDEO_RESOLUTION_OPTIONS, normalizeDramaProductionPlan } from "@/lib/drama-production-plan";
 import type { DramaProductionPlan } from "@/lib/drama-project-contract";
 import type { DramaEpisode, DramaProject } from "../types";
 import { useDramaStore } from "../stores/use-drama-store";
@@ -122,6 +122,16 @@ export function DramaEpisodeSettings({ project, episode, embedded = false }: { p
                                     value={productionPlan.video.resolution}
                                     options={DRAMA_VIDEO_RESOLUTION_OPTIONS.map((value) => ({ label: value, value }))}
                                     onChange={(resolution) => updateProductionPlan({ resolution })}
+                                />
+                            </label>
+                            <label className="flex items-center gap-1">
+                                <span>每镜：</span>
+                                <Select
+                                    size="small"
+                                    className="min-w-20"
+                                    value={productionPlan.video.shotDuration || 15}
+                                    options={DRAMA_SHOT_DURATION_OPTIONS.map((value) => ({ label: `${value}s`, value }))}
+                                    onChange={(shotDuration: 15 | 30) => updateProductionPlan({ shotDuration })}
                                 />
                             </label>
                             <span>连续性：{productionPlan.continuity.mode === "strict" ? "严格" : "平衡"}</span>

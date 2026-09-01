@@ -12,7 +12,7 @@ import { createCreativeAgentRun, createCreativeConversation, listCreativeConvers
 import { applyDramaEpisodeProductionPackage } from "@/services/api/drama-projects";
 import { useDramaStore } from "../stores/use-drama-store";
 import { useCreativeAgentOptions } from "@/hooks/use-creative-agent-options";
-import { defaultDramaProductionPlan, DRAMA_VIDEO_RESOLUTION_OPTIONS, normalizeDramaProductionPlan } from "@/lib/drama-production-plan";
+import { defaultDramaProductionPlan, DRAMA_SHOT_DURATION_OPTIONS, DRAMA_VIDEO_RESOLUTION_OPTIONS, normalizeDramaProductionPlan } from "@/lib/drama-production-plan";
 import type { DramaProductionPlan } from "@/lib/drama-project-contract";
 
 type Props = { project: DramaProject; episode: DramaEpisode; open: boolean; onOpenChange: (open: boolean) => void };
@@ -150,7 +150,12 @@ export function DramaScriptAgentPanel({ project, episode, open, onOpenChange }: 
         await saveProjectNow(project.id);
         if (pendingPackage) {
             setPendingPackage(false);
-            void submit("请基于当前项目、当前集、本次锁定的生产方案和本次对话上下文，生成完整的 vozeb-drama-production-package-v1 Markdown 制作包，只包含当前集，并为每个镜头生成有序多帧 referenceManifest。");
+            const packageRequest = prompt.trim();
+            void submit(
+                packageRequest
+                    ? `${packageRequest}\n\n请基于当前项目、当前集、本次锁定的生产方案和本次对话上下文，生成完整的 vozeb-drama-production-package-v1 Markdown 制作包，只包含当前集，并按本次指定的每镜时长重新分割剧情。`
+                    : "请基于当前项目、当前集、本次锁定的生产方案和本次对话上下文，生成完整的 vozeb-drama-production-package-v1 Markdown 制作包，只包含当前集，并按本次指定的每镜时长重新分割剧情。",
+            );
         }
     };
     const confirmApply = async () => {
@@ -334,6 +339,15 @@ export function DramaScriptAgentPanel({ project, episode, open, onOpenChange }: 
                                 onChange={(resolution) => setPlanDraft((current) => ({ ...current, video: { ...current.video, resolution } }))}
                             />
                         </label>
+                        <label className="block space-y-1">
+                            <span className="text-xs font-medium">每镜时长</span>
+                            <Select
+                                className="w-full"
+                                value={planDraft.video.shotDuration || 15}
+                                options={DRAMA_SHOT_DURATION_OPTIONS.map((value) => ({ label: `${value} 秒`, value }))}
+                                onChange={(shotDuration: 15 | 30) => setPlanDraft((current) => ({ ...current, video: { ...current.video, shotDuration } }))}
+                            />
+                        </label>
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                         {planDraft.video.mode === "storyboard" ? (
@@ -370,7 +384,7 @@ export function DramaScriptAgentPanel({ project, episode, open, onOpenChange }: 
                             />
                         </label>
                     </div>
-                    <p className="text-xs leading-5 text-muted-foreground">连续性固定为严格模式：下一镜只能引用上一镜当前视频版本且已人工验收的实际尾帧；模型不支持多图时不会自动改成首尾帧。</p>
+                    <p className="text-xs leading-5 text-muted-foreground">Agent 会按每镜目标时长重新切分剧情；相邻碎片镜头会合并为完整的 {planDraft.video.shotDuration || 15} 秒逻辑镜头。连续性固定为严格模式：下一镜只能引用上一镜当前视频版本且已人工验收的实际尾帧。</p>
                 </div>
             </Modal>
         </div>

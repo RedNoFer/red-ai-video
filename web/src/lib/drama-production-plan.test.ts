@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { defaultDramaProductionPlan, normalizeDramaProductionPlan } from "@/lib/drama-production-plan";
+import { defaultDramaProductionPlan, normalizeDramaProductionPlan, resolveDramaShotDurationPreference } from "@/lib/drama-production-plan";
 
 describe("drama production plan", () => {
     it("defaults new projects to locked-by-confirmation storyboard settings", () => {
@@ -18,5 +18,13 @@ describe("drama production plan", () => {
     it("normalizes episode resolution to the editable 480p/720p/1080p set", () => {
         expect(normalizeDramaProductionPlan({ video: { resolution: "480" } })?.video.resolution).toBe("480p");
         expect(normalizeDramaProductionPlan({ video: { resolution: "2160p" } })?.video.resolution).toBe("720p");
+    });
+
+    it("defaults and normalizes the logical shot duration to 15 or 30 seconds", () => {
+        expect(defaultDramaProductionPlan().video.shotDuration).toBe(15);
+        expect(normalizeDramaProductionPlan({ video: { shotDuration: 30 } })?.video.shotDuration).toBe(30);
+        expect(normalizeDramaProductionPlan({ video: { shotDuration: 12 } })?.video.shotDuration).toBe(15);
+        expect(resolveDramaShotDurationPreference("请按每个视频片段30s重新拆分")).toBe(30);
+        expect(resolveDramaShotDurationPreference("请按每个视频片段15秒重新拆分")).toBe(15);
     });
 });

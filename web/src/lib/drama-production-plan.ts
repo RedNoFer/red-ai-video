@@ -4,6 +4,8 @@ export const DRAMA_PRODUCTION_PLAN_VERSION = "drama-production-plan-v1" as const
 export const DEFAULT_DRAMA_SKILL = { id: "seedance-director", name: "Seedance 导演", version: "2.0" } as const;
 export const DRAMA_REFERENCE_ROLES: DramaReferenceManifestRole[] = ["previous_actual_tail", "character_anchor", "scene_anchor", "prop_anchor", "action_keyframe", "composition_keyframe"];
 export const DRAMA_VIDEO_RESOLUTION_OPTIONS = ["480p", "720p", "1080p"] as const;
+export const DRAMA_SHOT_DURATION_OPTIONS = [15, 30] as const;
+export type DramaShotDuration = (typeof DRAMA_SHOT_DURATION_OPTIONS)[number];
 
 export function defaultDramaProductionPlan(source: DramaProductionPlan["source"] = "new-project"): DramaProductionPlan {
     return {
@@ -15,6 +17,7 @@ export function defaultDramaProductionPlan(source: DramaProductionPlan["source"]
             ratio: "9:16",
             resolution: "720p",
             durationPolicy: "shot",
+            shotDuration: 15,
             count: 1,
             audioMode: "native",
             allowExplicitFallback: false,
@@ -50,6 +53,7 @@ export function normalizeDramaProductionPlan(value: unknown, fallback?: DramaPro
     const minImages = boundedInteger(referenceInput.minImages, base.references.minImages, 1, 30);
     const maxImages = Math.max(minImages, boundedInteger(referenceInput.maxImages, base.references.maxImages, minImages, 30));
     const roles = Array.isArray(referenceInput.roles) ? referenceInput.roles.map(text).filter((role): role is DramaReferenceManifestRole => DRAMA_REFERENCE_ROLES.includes(role as DramaReferenceManifestRole)) : base.references.roles;
+    const requestedShotDuration = positive(videoInput.shotDuration) || (videoInput.durationPolicy === "fixed" ? positive(videoInput.duration) : undefined);
     return {
         version: DRAMA_PRODUCTION_PLAN_VERSION,
         skills: normalizedSkills,
@@ -61,6 +65,7 @@ export function normalizeDramaProductionPlan(value: unknown, fallback?: DramaPro
             resolution: normalizeResolution(videoInput.resolution, base.video.resolution),
             durationPolicy: videoInput.durationPolicy === "fixed" ? "fixed" : "shot",
             duration: positive(videoInput.duration) || base.video.duration,
+            shotDuration: normalizeShotDuration(requestedShotDuration, base.video.shotDuration || 15),
             count: boundedInteger(videoInput.count, base.video.count, 1, 50),
             audioMode: ["native", "voiceover", "mute"].includes(text(videoInput.audioMode)) ? (text(videoInput.audioMode) as DramaProductionPlan["video"]["audioMode"]) : base.video.audioMode,
             allowExplicitFallback: videoInput.allowExplicitFallback === true,
@@ -71,6 +76,14 @@ export function normalizeDramaProductionPlan(value: unknown, fallback?: DramaPro
         lockedAt: text(input.lockedAt) || base.lockedAt,
         source: ["new-project", "package", "manual"].includes(text(input.source)) ? (text(input.source) as DramaProductionPlan["source"]) : base.source,
     };
+}
+
+export function resolveDramaShotDurationPreference(prompt: string, fallback: DramaShotDuration = 15): DramaShotDuration {
+    const values = Array.from(prompt.matchAll(/(?:^|[^\d])(15|30)\s*(?:秒|s)(?!\w)/giu), (match) => Number(match[1])).filter(
+        (value): value is DramaShotDuration => DRAMA_SHOT_DURATION_OPTIONS.includes(value as DramaShotDuration),
+    );
+    const unique = [...new Set(values)];
+    return unique.length === 1 ? unique[0] : fallback;
 }
 
 function object(value: unknown): Record<string, unknown> {
@@ -84,6 +97,12 @@ function text(value: unknown) {
 function positive(value: unknown) {
     const number = Number(value);
     return Number.isFinite(number) && number > 0 ? number : undefined;
+}
+
+function normalizeShotDuration(value: unknown, fallback: number) {
+    const requested = Number(value);
+    if (DRAMA_SHOT_DURATION_OPTIONS.includes(requested as DramaShotDuration)) return requested as DramaShotDuration;
+    return DRAMA_SHOT_DURATION_OPTIONS.includes(fallback as DramaShotDuration) ? (fallback as DramaShotDuration) : 15;
 }
 
 function normalizeResolution(value: unknown, fallback: string) {
