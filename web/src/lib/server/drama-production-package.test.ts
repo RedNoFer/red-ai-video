@@ -393,6 +393,31 @@ describe("production package boundary", () => {
         expect(second.productionArchive).toEqual(productionPackage.archive);
     });
 
+    it("replaces legacy manual frame plans when importing a newly structured package", () => {
+        const first = applyDramaProductionPackage(project(), productionPackage, "hash-legacy-frame");
+        const legacyShot = first.episodes[0].shots[0];
+        const legacy: DramaProject = {
+            ...first,
+            episodes: [{
+                ...first.episodes[0],
+                shots: [{
+                    ...legacyShot,
+                    fieldOrigins: { ...legacyShot.fieldOrigins, framePlan: "manual" },
+                    framePlan: {
+                        ...legacyShot.framePlan!,
+                        frames: legacyShot.framePlan!.frames.map((frame) => ({ ...frame, supplierPrompt: "静态画面：旧版长提示词；主体锚点：历史文本" })),
+                    },
+                }, ...first.episodes[0].shots.slice(1)],
+            }],
+        };
+        const imported = applyDramaProductionPackage(legacy, productionPackage, "hash-new-frame");
+        const prompt = imported.episodes[0].shots[0].framePlan!.frames[0].imagePrompt;
+        expect(prompt).toContain("静态关键帧：");
+        expect(prompt).toContain("机位与构图：");
+        expect(prompt).toContain("光色与风格：");
+        expect(prompt).not.toContain("旧版长提示词");
+    });
+
     it("allows a regenerated package to be identified and applied again", () => {
         const first = applyDramaProductionPackage(project(), productionPackage, "hash-regenerated");
         const second = applyDramaProductionPackage(first, productionPackage, "hash-regenerated");

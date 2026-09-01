@@ -8,8 +8,15 @@ import { previewDramaProductionPackage } from "@/lib/server/drama-production-pac
 describe("drama production package serialization", () => {
     it("round-trips JSON and deterministic Markdown from the same canonical object", () => {
         const value = previewDramaProductionPackage(JSON.stringify(fixture()), "package.json").package;
-        expect(previewDramaProductionPackage(serializeDramaProductionPackageJson(value), "package.json").package).toEqual(value);
-        expect(previewDramaProductionPackage(serializeDramaProductionPackageMarkdown(value), "package.md").package).toEqual(value);
+        const jsonPackage = previewDramaProductionPackage(serializeDramaProductionPackageJson(value), "package.json").package;
+        expect(jsonPackage).toMatchObject({ schemaVersion: value.schemaVersion, project: value.project, assets: value.assets });
+        expect(jsonPackage.episodes[0].shots[0].framePlan.frames[0].imagePrompt).toContain("机位与构图：");
+        const markdownPackage = previewDramaProductionPackage(serializeDramaProductionPackageMarkdown(value), "package.md").package;
+        expect(markdownPackage).toMatchObject({ schemaVersion: value.schemaVersion, project: value.project, assets: value.assets });
+        const markdownPrompt = markdownPackage.episodes[0].shots[0].framePlan.frames[0].imagePrompt;
+        expect(markdownPrompt).toContain("静态关键帧：");
+        expect(markdownPrompt).toContain("机位与构图：");
+        expect(markdownPrompt).toContain("参考图职责：");
     });
 
     it("rebuilds exported video prompts from the canonical frame timeline", () => {

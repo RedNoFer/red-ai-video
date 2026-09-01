@@ -1,6 +1,6 @@
 import type { DramaAssetRefinementProposal, DramaEpisode, DramaFrameBeat, DramaNamedAsset, DramaProject, DramaReferenceManifestItem, DramaShot, DramaShotContinuity } from "@/lib/drama-project-contract";
 import { DRAMA_STYLE_COLOR_SCRIPT, DRAMA_STYLE_DESCRIPTION, DRAMA_STYLE_NAME, DRAMA_STYLE_VISUAL, resolveDramaVisualStyle, sanitizeDramaVisualPrompt } from "@/lib/drama-style";
-import { staticShotSize } from "@/lib/drama-frame-sequence";
+import { upgradeDramaFrameImagePrompt } from "@/lib/drama-frame-sequence";
 
 export type DramaAssetGenerationPreflight = { ok: true; constraints: string[] } | { ok: false; errors: string[]; constraints: string[] };
 
@@ -181,28 +181,28 @@ export function compileDramaFrameSupplierPrompt(project: DramaProject, episode: 
     const saved = phase === "start" ? (shot.fieldOrigins?.startFramePrompt === "manual" ? shot.startFramePrompt : undefined) : phase === "end" ? (shot.fieldOrigins?.endFramePrompt === "manual" ? shot.endFramePrompt : undefined) : beat?.supplierPrompt;
     const image = beat?.imagePrompt || shot.imagePrompt;
     const action = beat?.actionPrompt || (phase === "start" ? shot.continuity?.actionStart || shot.description : phase === "end" ? shot.continuity?.actionEnd || shot.description : shot.description);
-    const phaseState = phase === "start" ? stateLines(shot.entryState, project) : phase === "end" ? stateLines(shot.exitState, project) : [];
-    const staticSize = shot.continuity?.shotSize ? staticShotSize(shot.continuity.shotSize, beat?.sequenceIndex || (phase === "end" ? Number.MAX_SAFE_INTEGER : 1)) : "";
-    const camera = [staticSize, shot.continuity?.cameraAngle, shot.continuity?.composition].filter(Boolean).join("；");
-    if (saved?.trim())
-        return sanitizeDramaSupplierText(
-            [saved.trim(), characters.length ? `角色锚点：${characters.join("；")}` : "", scene ? `场景锚点：${assetText(scene, project)}` : "", props.length ? `道具锚点：${props.join("；")}` : ""].filter(Boolean).join("\n"),
-            project,
-        );
-    return sanitizeDramaSupplierText(
-        compact([
-            `主体：${characters.length ? characters.join("；") : "按参考图中的主体"}${props.length ? `；道具：${props.join("；")}` : ""}${clues.length ? `；线索：${clues.join("、")}` : ""}`,
-            `场景：${scene ? assetText(scene, project) : "按场景参考图"}`,
-            `画面：${image}`,
-            phase === "start" ? `起始动作状态：${phaseState.join("；") || action}` : phase === "end" ? `结束动作状态：${phaseState.join("；") || action}` : `当前状态：${action}`,
-            camera ? `镜头：${camera}` : "",
-            shot.lighting || shot.colorPalette ? `光色：${[shot.lighting, shot.colorPalette].filter(Boolean).join("；")}` : "",
-            `风格：${DRAMA_STYLE_NAME}`,
-            "一致性：严格以已绑定参考图为准，保持人物身份、服装、道具和场景空间不变。",
-            shot.negativePrompt ? `避免：${shot.negativePrompt}` : "",
-        ]).join("\n"),
-        project,
-    );
+    const sequenceIndex = beat?.sequenceIndex || (phase === "end" ? Number.MAX_SAFE_INTEGER : 1);
+    // Only preserve a manually saved prompt when it already follows the current
+    // static-frame contract. Legacy prompts are rebuilt from the canonical beat
+    // image prompt so old asset-anchor text cannot leak back into the preview.
+    const savedPrompt = saved?.trim();
+    const sourceImage = savedPrompt && isCurrentStaticFramePrompt(savedPrompt) ? savedPrompt : image;
+    const staticPrompt = upgradeDramaFrameImagePrompt(sourceImage, action, {
+        description: [shot.description, characters.length ? characters.join("；") : "", scene ? assetText(scene, project) : "", props.length ? props.join("；") : "", clues.length ? `线索：${clues.join("、")}` : ""].filter(Boolean).join("；") || image,
+        shotSize: shot.continuity?.shotSize || "中景",
+        cameraAngle: shot.continuity?.cameraAngle || "视线高度平视",
+        composition: shot.continuity?.composition || "主体位于9:16安全区，前景有具体框景",
+        characterBlocking: shot.continuity?.characterBlocking || "按当前动作关系安排主体站位",
+        gazeDirection: shot.continuity?.gazeDirection || "视线落向当前叙事目标",
+        lighting: shot.lighting || "延续本场主光",
+        colorPalette: [shot.colorPalette || "沿用本场色板", `统一风格：${DRAMA_STYLE_NAME}`].join("；"),
+        sequenceIndex,
+    });
+    return sanitizeDramaSupplierText(staticPrompt, project);
+}
+
+function isCurrentStaticFramePrompt(value: string) {
+    return value.startsWith("静态关键帧：") && value.includes("可见表演状态：") && value.includes("景别：") && value.includes("机位与构图：") && value.includes("站位与视线：") && value.includes("三层空间：") && value.includes("光色与风格：") && value.includes("参考图职责：") && value.includes("负面约束：");
 }
 
 export function compileDramaDialogueAudioInstructions(shot: DramaShot) {

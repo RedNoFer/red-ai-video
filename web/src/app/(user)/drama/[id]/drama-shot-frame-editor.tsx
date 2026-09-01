@@ -563,7 +563,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                                             onClick={() =>
                                                 openPromptPreview({
                                                     title: "帧 " + beat.sequenceIndex + " 图片提示词",
-                                                    prompt: beat.supplierPrompt || frame?.generationPrompt || plannedFramePrompt(project, episodeId, shot, beat),
+                                                    prompt: plannedFramePrompt(project, episodeId, shot, beat),
                                                     references: frame?.generationReferences || plannedFrameReferences(project, episodeId, shot, beat.sequenceIndex, storedFrames),
                                                     frameId: beat.id,
                                                     visibleSubject: dramaFrameVisualSubject(beat.imagePrompt, beat.actionPrompt, shot.description),
@@ -716,11 +716,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                         onPrompt={() =>
                             openPromptPreview({
                                 title: "起始帧图片提示词",
-                                prompt: startPromptEvidence?.generationPrompt
-                                    ? startPromptEvidence.generationPrompt
-                                    : shot.fieldOrigins?.startFramePrompt === "manual"
-                                      ? shot.startFramePrompt || plannedLegacyPrompt(project, episodeId, shot, "start")
-                                      : plannedLegacyPrompt(project, episodeId, shot, "start"),
+                                prompt: plannedLegacyPrompt(project, episodeId, shot, "start"),
                                 references: startPromptEvidence?.generationReferences || plannedFrameReferences(project, episodeId, shot, 1, storedFrames),
                                 phase: "start",
                                 readOnly: false,
@@ -738,11 +734,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                             onPrompt={() =>
                                 openPromptPreview({
                                     title: "结束帧图片提示词",
-                                    prompt: endPromptEvidence?.generationPrompt
-                                        ? endPromptEvidence.generationPrompt
-                                        : shot.fieldOrigins?.endFramePrompt === "manual"
-                                          ? shot.endFramePrompt || plannedLegacyPrompt(project, episodeId, shot, "end")
-                                          : plannedLegacyPrompt(project, episodeId, shot, "end"),
+                                    prompt: plannedLegacyPrompt(project, episodeId, shot, "end"),
                                     references: endPromptEvidence?.generationReferences || plannedFrameReferences(project, episodeId, shot, "end", storedFrames),
                                     phase: "end",
                                     readOnly: false,

@@ -26,11 +26,11 @@ export class DramaProductionPackageError extends Error {}
 export function previewDramaProductionPackage(source: string, fileName = "production-package.json"): DramaProductionPackagePreview {
     const trimmed = source.trim();
     if (!trimmed) throw new DramaProductionPackageError("制作包内容不能为空");
-    const embedded = trimmed.match(/```(?:json|drama-production-package)\s*([\s\S]*?)```/i)?.[1];
+    const embedded = trimmed.match(/```(?:json|drama-production-package)[ \t]*\r?\n([\s\S]*?)```/i)?.[1];
     const format = fileName.toLowerCase().endsWith(".json") || trimmed.startsWith("{") ? "json" : "markdown";
     // The serialized Markdown embeds the canonical package object. Prefer it so
     // preview and apply use the same normalized source of truth.
-    const parsed = format === "markdown" ? parseObject((embedded || "").replace(/\\u0060/gu, "`")) || parseDirectorMarkdown(trimmed) : parseObject(trimmed);
+    const parsed = format === "markdown" ? parseObject(embedded || "") || parseObject((embedded || "").replace(/\\u0060/gu, "`")) || parseDirectorMarkdown(trimmed) : parseObject(trimmed);
     if (!parsed) throw new DramaProductionPackageError("Markdown 制作包缺少可读取的标准清单或导演执行表");
     const normalizedPackage = normalizeProductionPackage(parsed);
     const rawPlan = object(object(object(parsed).project).productionBible).productionPlan;
@@ -148,7 +148,7 @@ function mergeEpisode(
         const packageShot = incoming.shots.find((item) => item.code === shot.code);
         return {
             ...shot,
-            framePlan: shot.fieldOrigins?.framePlan === "manual" ? shot.framePlan : remapFramePlan(packageShot?.framePlan, characterIds, locationIds, propIds, clueIds, shotIds),
+            framePlan: shouldPreserveManualFramePlan(shot.framePlan, shot.fieldOrigins?.framePlan) ? shot.framePlan : remapFramePlan(packageShot?.framePlan, characterIds, locationIds, propIds, clueIds, shotIds),
             storySceneId: packageShot?.storySceneCode ? storySceneIds.get(packageShot.storySceneCode) : undefined,
         };
     });
@@ -182,6 +182,14 @@ function mergeEpisode(
         shots: linkedShots,
         fieldOrigins: { ...packageOrigins(["code", "title", "script", "outline", "hook", "nextPreview", "sourceRange"]), ...existing?.fieldOrigins },
     };
+}
+
+function shouldPreserveManualFramePlan(framePlan: DramaShot["framePlan"], origin: DramaFieldOrigin | undefined) {
+    if (origin !== "manual" || !framePlan?.frames?.length) return false;
+    return framePlan.frames.every((frame) => {
+        const prompt = frame.supplierPrompt || frame.imagePrompt;
+        return prompt.startsWith("静态关键帧：") && prompt.includes("可见表演状态：") && prompt.includes("景别：") && prompt.includes("机位与构图：") && prompt.includes("站位与视线：") && prompt.includes("三层空间：") && prompt.includes("光色与风格：") && prompt.includes("参考图职责：") && prompt.includes("负面约束：");
+    });
 }
 
 function remapFramePlan(framePlan: DramaShot["framePlan"], characterIds: Map<string, string>, locationIds: Map<string, string>, propIds: Map<string, string>, clueIds: Map<string, string>, shotIds: Map<string, string>): DramaShot["framePlan"] {

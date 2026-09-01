@@ -84,7 +84,7 @@ export function upgradeDramaFrameImagePrompt(
     actionPrompt: string,
     context: { description: string; shotSize: string; cameraAngle: string; composition: string; characterBlocking: string; gazeDirection: string; lighting: string; colorPalette: string; performanceState?: string; sequenceIndex?: number },
 ) {
-    if (imagePrompt.trim().startsWith("静态关键帧：") && imagePrompt.includes("参考图职责：") && imagePrompt.includes("负面约束：") && !/(?:景别|镜头)(?:（[^）]*）)?\s*[：:]\s*[^；。\n]*(?:→|->|至)/u.test(imagePrompt)) return imagePrompt.trim();
+    if (imagePrompt.trim().startsWith("静态关键帧：") && imagePrompt.includes("可见表演状态：") && imagePrompt.includes("景别：") && imagePrompt.includes("机位与构图：") && imagePrompt.includes("站位与视线：") && imagePrompt.includes("三层空间：") && imagePrompt.includes("光色与风格：") && imagePrompt.includes("参考图职责：") && imagePrompt.includes("负面约束：") && !/(?:景别|镜头)(?:（[^）]*）)?\s*[：:]\s*[^；。\n]*(?:→|->|至)/u.test(imagePrompt)) return imagePrompt.trim();
     const subject = staticFrameSubject(imagePrompt, actionPrompt, context.description);
     const visibleState = imagePrompt.match(/可见状态：([^；。]+)/u)?.[1] || "";
     const performanceState = context.performanceState || inferStaticPerformanceState(subject, actionPrompt, context.sequenceIndex);
@@ -95,7 +95,7 @@ export function upgradeDramaFrameImagePrompt(
         context.shotSize ? `景别：${staticShotSize(context.shotSize, context.sequenceIndex)}` : "",
         context.cameraAngle || context.composition ? `机位与构图：${[context.cameraAngle, context.composition].map(cleanStaticConstraint).filter(Boolean).join("；")}` : "",
         context.characterBlocking || context.gazeDirection ? `站位与视线：${[context.characterBlocking, context.gazeDirection].map(cleanStaticConstraint).filter(Boolean).join("；")}` : "",
-        context.lighting || context.colorPalette ? `灯光与色彩：${[context.lighting, staticPalette(context.colorPalette, context.sequenceIndex)].map(cleanStaticConstraint).filter(Boolean).join("；")}` : "",
+        context.lighting || context.colorPalette ? `光色与风格：${[context.lighting, staticPalette(context.colorPalette, context.sequenceIndex)].map(cleanStaticConstraint).filter(Boolean).join("；")}` : "",
         "三层空间：前景必须是具体框景或遮挡物；中景承载主体与当前状态；背景交代环境关系与纵深。",
         "动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。",
         "主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。",
@@ -177,7 +177,12 @@ function staticFrameSubject(imagePrompt: string, actionPrompt: string, fallback:
     const safeFallback = cleanStaticConstraint(fallback)
         .replace(/[；。]+$/u, "")
         .trim();
-    return candidates[0] || safeFallback || "主体保持当前设定中的静态状态";
+    const safeImage = cleanStaticConstraint(imagePrompt)
+        .replace(/^静态关键帧：/u, "")
+        .replace(/[；。]+$/u, "")
+        .trim();
+    const usableImage = safeImage.length > 3 && !/^(?:无|待补全|待生成)$/u.test(safeImage) && !/(?:镜头|运镜|推镜|拉镜|摇镜|跟拍|拍摄|焦段|\d+mm|缩短距离|靠近|冲刺|奔跑|逐渐|继续|向前靠近)/u.test(safeImage);
+    return candidates[0] || (usableImage ? safeImage : safeFallback) || "主体保持当前设定中的静态状态";
 }
 
 export function insertDramaFrameBeat(frames: readonly DramaFrameBeat[], frameId: string): DramaFrameBeat[] {

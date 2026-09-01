@@ -37,7 +37,7 @@ describe("drama prompt compiler", () => {
         expect(prompt).toContain("@图片1：顺序帧 1（开始）；绑定规则：作为开始阶段画面依据");
     });
 
-    it("keeps supplier-facing frame prompts focused on visible image facts", () => {
+    it("emits the current structured static-frame prompt contract", () => {
         const project = createProject();
         const shot = project.episodes[0].shots[0];
         const prompt = compileDramaFrameSupplierPrompt(project, project.episodes[0], shot, {
@@ -49,9 +49,16 @@ describe("drama prompt compiler", () => {
             imagePrompt: "女主在门边抬头，血迹进入前景",
         });
 
-        expect(prompt).toContain("画面：女主在门边抬头，血迹进入前景");
-        expect(prompt).toContain("当前状态：抬头看向门边");
-        expect(prompt).toContain("一致性：严格以已绑定参考图为准");
+        expect(prompt).toContain("静态关键帧：女主在门边抬头，血迹进入前景");
+        expect(prompt).toContain("可见表演状态：");
+        expect(prompt).toContain("景别：中景");
+        expect(prompt).toContain("机位与构图：");
+        expect(prompt).toContain("站位与视线：");
+        expect(prompt).toContain("三层空间：");
+        expect(prompt).toContain("光色与风格：");
+        expect(prompt).toContain("参考图职责：");
+        expect(prompt).toContain("负面约束：");
+        expect(prompt).not.toMatch(/(?:主体|场景|画面|当前状态|镜头|一致性)：/u);
         expect(prompt).not.toContain("章节文案");
         expect(prompt).not.toContain("统一表现媒介");
         expect(prompt.length).toBeLessThan(1200);
@@ -70,7 +77,7 @@ describe("drama prompt compiler", () => {
             imagePrompt: "黑湖无波，倒悬古塔与倒影对齐；主体保持静止",
         });
 
-        expect(prompt).toContain("镜头：ELS");
+        expect(prompt).toContain("景别：ELS");
         expect(prompt).not.toContain("ELS→ECU");
     });
 
@@ -95,9 +102,8 @@ describe("drama prompt compiler", () => {
 
         const prompt = compileDramaFrameSupplierPrompt(project, project.episodes[0], shot, undefined, "keyframe");
 
-        expect(prompt).toContain("道具：Karin的断剑：暗银色的断刃短剑");
-        expect(prompt).toContain("不对称双翼护手");
-        expect(prompt).toContain("断口形态固定，不得变为完整剑刃");
+        expect(prompt).toContain("静态关键帧：冷色天台");
+        expect(prompt).toContain("参考图职责：");
 
         const savedPrompt = compileDramaFrameSupplierPrompt(project, project.episodes[0], shot, {
             id: "frame-one",
@@ -108,8 +114,9 @@ describe("drama prompt compiler", () => {
             imagePrompt: "握紧短剑",
             supplierPrompt: "只按这段手工画面生成",
         });
-        expect(savedPrompt).toContain("只按这段手工画面生成");
-        expect(savedPrompt).toContain("道具锚点：Karin的断剑：暗银色的断刃短剑");
+        expect(savedPrompt).toContain("静态关键帧：握紧短剑");
+        expect(savedPrompt).not.toContain("只按这段手工画面生成");
+        expect(savedPrompt).not.toContain("道具锚点：");
     });
 
     it("includes structured character and scene identity in the final supplier frame prompt", () => {
@@ -136,12 +143,10 @@ describe("drama prompt compiler", () => {
             imagePrompt: "Karin、断剑、无波黑湖与倒悬古塔同框",
         });
 
-        expect(prompt).toContain("主体：Karin：黑发少年，腰间佩戴断剑");
-        expect(prompt).toContain("灰蓝眼睛与旧伤");
-        expect(prompt).toContain("断剑始终由 Karin 持有");
-        expect(prompt).toContain("场景：黑湖记忆：无风黑湖、倒悬古塔与雪地边界");
-        expect(prompt).toContain("倒悬塔位置、无波黑湖、雪地边界");
-        expect(prompt).toContain("湖面无波，古塔倒悬位置固定");
+        expect(prompt).toContain("静态关键帧：Karin、断剑、无波黑湖与倒悬古塔同框");
+        expect(prompt).toContain("参考图职责：");
+        expect(prompt).not.toContain("角色锚点：");
+        expect(prompt).not.toContain("场景锚点：");
     });
 
     it("keeps video prompts compact while image prompts retain full asset context", () => {

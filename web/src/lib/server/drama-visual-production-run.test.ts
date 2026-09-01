@@ -71,7 +71,8 @@ describe("drama director visual plan", () => {
         expect(start.referenceShotId).toBe("shot-one");
         expect(start.referenceImageUrls).toEqual(["/api/reference-assets/shot-one-tail.png"]);
         expect(start.status).toBe("blocked");
-        expect(start.prompt).toContain("两人在雨夜相遇");
+        expect(start.prompt).toContain("静态关键帧：");
+        expect(start.prompt).toContain("参考图职责：");
         expect(compileDramaVisualStepPrompt(project, project.episodes[0], start)).toContain("上一镜成片实际尾帧是唯一开场依据");
     });
 
@@ -109,7 +110,8 @@ describe("drama director visual plan", () => {
 
         const run = buildDramaVisualProductionRun(project, project.episodes[0], { imageModel: "image-pro", shotIds: ["shot-two"] });
 
-        expect(run.steps.find((step) => step.type === "start_frame")?.prompt).toContain("起始动作状态：环境 马车内");
+        expect(run.steps.find((step) => step.type === "start_frame")?.prompt).toContain("静态关键帧：");
+        expect(run.steps.find((step) => step.type === "start_frame")?.prompt).toContain("站位与视线：车厢内；向前");
         expect(run.steps.find((step) => step.type === "start_frame")?.prompt).not.toContain("Karin在马车中惊醒，手扣断剑，呼吸急促");
     });
 
@@ -143,8 +145,8 @@ describe("drama director visual plan", () => {
         ]);
         expect(frames[1].dependsOn).toEqual(["frame-shot-one-f1"]);
         expect(frames[0].prompt).toContain("P01-F01（0-2s）");
-        expect(frames[1].prompt).toContain("画面：两人缩短距离");
-        expect(frames[1].prompt).toContain("当前状态：靠近");
+        expect(frames[1].prompt).toContain("静态关键帧：两人在雨夜相遇");
+        expect(frames[1].prompt).toContain("可见表演状态：");
     });
 
     it("injects the previous generated frame when unlocking the next beat", () => {
@@ -297,7 +299,7 @@ describe("drama director visual plan", () => {
         const run = buildDramaVisualProductionRun(project, project.episodes[0], { imageModel: "image-pro" });
         const framePrompts = run.steps.filter((step) => step.type === "start_frame" || step.type === "end_frame").map((step) => step.prompt || "");
 
-        expect(framePrompts.every((prompt) => prompt.includes("半写实动漫幻想风"))).toBe(true);
+        expect(framePrompts.every((prompt) => prompt.includes("光色与风格："))).toBe(true);
         expect(framePrompts.join("\n")).not.toContain("VS14");
         expect(framePrompts.join("\n")).not.toContain("中性浅灰背景");
     });
@@ -309,7 +311,8 @@ describe("drama director visual plan", () => {
 
         const prompt = compileDramaVisualStepPrompt(project, project.episodes[0], step);
 
-        expect(prompt).toContain("风格：半写实动漫幻想风");
+        expect(prompt).toContain("光色与风格：");
+        expect(prompt).toContain("半写实动漫幻想风");
         expect(prompt).not.toContain("VS14");
     });
 });
