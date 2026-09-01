@@ -35,6 +35,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
     const [promptPreview, setPromptPreview] = useState<PromptPreview | null>(null);
     const [referencePreview, setReferencePreview] = useState<ReferencePreview | null>(null);
     const [promptDraft, setPromptDraft] = useState("");
+    const [promptOriginal, setPromptOriginal] = useState("");
     const [optimizingPrompt, setOptimizingPrompt] = useState(false);
     const frameMode = shot.storyboardFrameMode || "single";
     const startFrame = latestFrameEvidence(shot, "storyboard_start", ["candidate", "accepted"]);
@@ -43,7 +44,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
     const endPromptEvidence = latestPromptEvidence(shot, "storyboard_end");
     const startFrames = activeFrameEvidence(shot, "storyboard_start");
     const endFrames = activeFrameEvidence(shot, "storyboard_end");
-    const beats = useMemo(() => frameBeats(shot), [shot]);
+    const beats = useMemo(() => frameBeats(shot, project.productionBible?.productionPlan?.video.frameCount || 5), [project.productionBible?.productionPlan?.video.frameCount, shot]);
     const storedFrames = useMemo(() => [...(shot.storyboardFrames || [])].sort((left, right) => left.sequenceIndex - right.sequenceIndex), [shot.storyboardFrames]);
     const frameById = useMemo(() => new Map(storedFrames.map((frame) => [frame.id, frame])), [storedFrames]);
     const generationActive =
@@ -401,6 +402,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
         const prompt = appendDramaImageReferenceBindings(input.prompt, input.references);
         setPromptPreview({ ...input, prompt });
         setPromptDraft(prompt);
+        setPromptOriginal(prompt);
     };
 
     const savePromptPreview = () => {
@@ -809,6 +811,9 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                     <Button onClick={() => setPromptPreview(null)}>{promptPreview?.readOnly ? "关闭" : "取消"}</Button>
                     {!promptPreview?.readOnly ? (
                         <>
+                            <Button icon={<RotateCcw className="size-3.5" />} disabled={promptDraft === promptOriginal || optimizingPrompt} onClick={() => setPromptDraft(promptOriginal)}>
+                                还原上次
+                            </Button>
                             <Button icon={<Sparkles className="size-3.5" />} loading={optimizingPrompt} disabled={!promptDraft.trim()} onClick={() => void optimizePromptPreview()}>
                                 提示词优化
                             </Button>
@@ -906,8 +911,8 @@ function FrameStatusTag({ frame }: { frame?: DramaStoryboardFrame }) {
     return <Tag color={colors[state]}>{labels[state] || state}</Tag>;
 }
 
-function frameBeats(shot: DramaShot): DramaFrameBeat[] {
-    return shot.framePlan?.frames?.length ? [...shot.framePlan.frames].sort((left, right) => left.sequenceIndex - right.sequenceIndex) : defaultDramaFrameBeats(shot.duration, shot.videoPrompt, shot.imagePrompt);
+function frameBeats(shot: DramaShot, frameCount: number): DramaFrameBeat[] {
+    return shot.framePlan?.frames?.length ? [...shot.framePlan.frames].sort((left, right) => left.sequenceIndex - right.sequenceIndex) : defaultDramaFrameBeats(shot.duration, shot.videoPrompt, shot.imagePrompt, frameCount);
 }
 
 function emptyStoryboardFrame(beat: DramaFrameBeat): DramaStoryboardFrame {

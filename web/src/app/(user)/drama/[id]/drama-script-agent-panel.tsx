@@ -345,7 +345,16 @@ export function DramaScriptAgentPanel({ project, episode, open, onOpenChange }: 
                                 className="w-full"
                                 value={planDraft.video.shotDuration || 15}
                                 options={DRAMA_SHOT_DURATION_OPTIONS.map((value) => ({ label: `${value} 秒`, value }))}
-                                onChange={(shotDuration: 15 | 30) => setPlanDraft((current) => ({ ...current, video: { ...current.video, shotDuration } }))}
+                                onChange={(shotDuration: 15 | 20 | 30) => setPlanDraft((current) => ({ ...current, video: { ...current.video, shotDuration } }))}
+                            />
+                        </label>
+                        <label className="block space-y-1">
+                            <span className="text-xs font-medium">每镜帧数</span>
+                            <Select
+                                className="w-full"
+                                value={planDraft.video.frameCount || 5}
+                                options={Array.from({ length: 9 }, (_, index) => ({ label: `${index + 1} 帧`, value: index + 1 }))}
+                                onChange={(frameCount) => setPlanDraft((current) => ({ ...current, video: { ...current.video, frameCount } }))}
                             />
                         </label>
                     </div>
@@ -384,7 +393,7 @@ export function DramaScriptAgentPanel({ project, episode, open, onOpenChange }: 
                             />
                         </label>
                     </div>
-                    <p className="text-xs leading-5 text-muted-foreground">Agent 会按每镜目标时长重新切分剧情；相邻碎片镜头会合并为完整的 {planDraft.video.shotDuration || 15} 秒逻辑镜头。连续性固定为严格模式：下一镜只能引用上一镜当前视频版本且已人工验收的实际尾帧。</p>
+                    <p className="text-xs leading-5 text-muted-foreground">Agent 会按每镜 {planDraft.video.shotDuration || 15} 秒、{planDraft.video.frameCount || 5} 帧重新切分剧情；相邻碎片镜头会合并为完整逻辑镜头。连续性固定为严格模式：下一镜只能引用上一镜当前视频版本且已人工验收的实际尾帧。</p>
                 </div>
             </Modal>
         </div>

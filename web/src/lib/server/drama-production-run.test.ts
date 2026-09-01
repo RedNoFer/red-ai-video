@@ -65,6 +65,27 @@ describe("drama production run planning", () => {
         expect(compileDramaVideoSegmentPrompt(shot, ["f3", "f4"])).toContain("P01-F04 6-8s：动作4");
     });
 
+    it("submits only checked intermediate frames while retaining fixed assets", () => {
+        const project = fixture();
+        const shot = project.episodes[0].shots[0];
+        shot.storyboardFrameMode = "all_frames";
+        shot.duration = 15;
+        shot.framePlan = {
+            start: { source: "independent" },
+            end: { required: true },
+            frames: Array.from({ length: 5 }, (_, index) => ({ id: `f${index + 1}`, sequenceIndex: index + 1, startSecond: index * 3, endSecond: (index + 1) * 3, actionPrompt: `动作${index + 1}`, imagePrompt: `画面${index + 1}` })),
+        };
+        shot.storyboardFrames = shot.framePlan.frames.map((frame) => ({ id: frame.id, sequenceIndex: frame.sequenceIndex, mediaUrl: `/${frame.id}.png`, source: "upload", status: "success", continuityStatus: "passed" }));
+
+        const run = buildDramaProductionRun(project, { ...project.episodes[0], shots: [shot], continuityEdges: [] }, { imageModel: "image", videoModel: "video", referenceSelections: { [shot.id]: ["f1", "f3", "f5"] } });
+        const video = run.steps.find((step) => step.type === "video")!;
+
+        expect(video.referenceImageUrls).toEqual(["/f1.png", "/f3.png", "/f5.png"]);
+        expect(video.referenceBindingsSnapshot?.filter((binding) => binding.role === "keyframe").map((binding) => binding.frameId)).toEqual(["f1", "f3", "f5"]);
+        expect(video.referenceAssetIds).toEqual(expect.arrayContaining(shot.characterIds));
+        expect(video.prompt).not.toContain("P01-F02");
+    });
+
     it("keeps production-package reference order and accepts usable project source images", () => {
         const project = fixture();
         project.sourceAssets = [

@@ -4,8 +4,14 @@ export const DRAMA_PRODUCTION_PLAN_VERSION = "drama-production-plan-v1" as const
 export const DEFAULT_DRAMA_SKILL = { id: "seedance-director", name: "Seedance 导演", version: "2.0" } as const;
 export const DRAMA_REFERENCE_ROLES: DramaReferenceManifestRole[] = ["previous_actual_tail", "character_anchor", "scene_anchor", "prop_anchor", "action_keyframe", "composition_keyframe"];
 export const DRAMA_VIDEO_RESOLUTION_OPTIONS = ["480p", "720p", "1080p"] as const;
-export const DRAMA_SHOT_DURATION_OPTIONS = [15, 30] as const;
+export const DRAMA_SHOT_DURATION_OPTIONS = [15, 20, 30] as const;
 export type DramaShotDuration = (typeof DRAMA_SHOT_DURATION_OPTIONS)[number];
+export const DRAMA_FRAME_COUNT_DEFAULT = 5;
+export const DRAMA_FRAME_COUNT_MAX = 9;
+
+export function dramaReferenceImageBudget(duration: DramaShotDuration | number): number {
+    return Number(duration) >= 30 ? 30 : 9;
+}
 
 export function defaultDramaProductionPlan(source: DramaProductionPlan["source"] = "new-project"): DramaProductionPlan {
     return {
@@ -18,6 +24,7 @@ export function defaultDramaProductionPlan(source: DramaProductionPlan["source"]
             resolution: "720p",
             durationPolicy: "shot",
             shotDuration: 15,
+            frameCount: DRAMA_FRAME_COUNT_DEFAULT,
             count: 1,
             audioMode: "native",
             allowExplicitFallback: false,
@@ -66,6 +73,7 @@ export function normalizeDramaProductionPlan(value: unknown, fallback?: DramaPro
             durationPolicy: videoInput.durationPolicy === "fixed" ? "fixed" : "shot",
             duration: positive(videoInput.duration) || base.video.duration,
             shotDuration: normalizeShotDuration(requestedShotDuration, base.video.shotDuration || 15),
+            frameCount: boundedInteger(videoInput.frameCount, base.video.frameCount || DRAMA_FRAME_COUNT_DEFAULT, 1, DRAMA_FRAME_COUNT_MAX),
             count: boundedInteger(videoInput.count, base.video.count, 1, 50),
             audioMode: ["native", "voiceover", "mute"].includes(text(videoInput.audioMode)) ? (text(videoInput.audioMode) as DramaProductionPlan["video"]["audioMode"]) : base.video.audioMode,
             allowExplicitFallback: videoInput.allowExplicitFallback === true,
@@ -79,11 +87,18 @@ export function normalizeDramaProductionPlan(value: unknown, fallback?: DramaPro
 }
 
 export function resolveDramaShotDurationPreference(prompt: string, fallback: DramaShotDuration = 15): DramaShotDuration {
-    const values = Array.from(prompt.matchAll(/(?:^|[^\d])(15|30)\s*(?:秒|s)(?!\w)/giu), (match) => Number(match[1])).filter(
+    const values = Array.from(prompt.matchAll(/(?:^|[^\d])(15|20|30)\s*(?:秒|s)(?!\w)/giu), (match) => Number(match[1])).filter(
         (value): value is DramaShotDuration => DRAMA_SHOT_DURATION_OPTIONS.includes(value as DramaShotDuration),
     );
     const unique = [...new Set(values)];
     return unique.length === 1 ? unique[0] : fallback;
+}
+
+export function resolveDramaFrameCountPreference(prompt: string, fallback = DRAMA_FRAME_COUNT_DEFAULT): number {
+    const values = Array.from(prompt.matchAll(/(?:分\s*)?(\d+)\s*(?:个)?\s*帧/giu), (match) => Number(match[1])).filter(
+        (value) => Number.isInteger(value) && value >= 1 && value <= DRAMA_FRAME_COUNT_MAX,
+    );
+    return values.length ? values.at(-1)! : Math.max(1, Math.min(DRAMA_FRAME_COUNT_MAX, Math.floor(fallback)));
 }
 
 function object(value: unknown): Record<string, unknown> {

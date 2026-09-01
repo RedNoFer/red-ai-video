@@ -66,7 +66,7 @@ function cleanVisibleAction(value) {
         .trim();
 }
 
-function fourFramePlan(shot) {
+function fiveFramePlan(shot) {
     const duration = Math.max(1, Number(shot.duration) || 5);
     if (shot.code === "SH001" && duration === 8) return openingCutFrames("SH001", duration, [
         "黑湖无波，倒悬古塔与Karin模糊倒影对齐",
@@ -82,19 +82,21 @@ function fourFramePlan(shot) {
     ]);
     const actionStart = text(shot.continuity?.actionStart) || text(shot.description) || text(shot.title);
     const actionEnd = text(shot.continuity?.actionEnd) || text(shot.description) || text(shot.title);
-    const stateSuffixes = ["入口姿态、表情与视线已建立", "表情和视线对当前目标作出反应，手部关系发生变化", "关键道具或环境状态已经改变，人物保持明确接触", "动作完成后的表情、视线与道具关系稳定落点"];
+    const stateSuffixes = ["入口姿态、表情与视线已建立", "表情和视线对当前目标作出初次反应", "手部或身体姿态形成可见变化", "关键道具或环境状态已经改变", "动作完成后的表情、视线与道具关系稳定落点"];
     const actions = [...new Set([actionStart, text(shot.description), actionEnd].map(cleanVisibleAction).filter(isVisualAction))];
-    while (actions.length < 4) actions.push(`${actions.at(-1) || actionStart}；${stateSuffixes[actions.length]}`);
-    const frameCount = 4;
+    if (shot.code === "SH001") actions.unshift("黑湖无波，倒悬古塔与Karin模糊倒影对齐");
+    while (actions.length < 5) actions.push(`${actions.at(-1) || actionStart}；${stateSuffixes[actions.length]}`);
+    if (shot.code === "SH001") actions[4] = "Karin在马车中完全惊醒，手扣断剑，呼吸急促";
+    const frameCount = 5;
     const continuity = shot.continuity || {};
     const context = [
-        text(continuity.shotSize) || "电影中景",
+        /(?:ELS|极远景)/u.test(text(continuity.shotSize)) ? "中远景" : (text(continuity.shotSize) || "电影中景").split(/\s*(?:→|->|至)\s*/u)[0],
         text(continuity.cameraAngle) || "视线高度平视，沿动作轴线拍摄",
         text(continuity.composition) || "主体保持在 9:16 安全区",
         `站位与视线：${text(continuity.characterBlocking) || "按动作关系安排站位"}；${text(continuity.gazeDirection) || "沿叙事动作方向"}`,
         `灯光与色彩：${text(shot.lighting) || "延续主光"}；${text(shot.colorPalette) || "沿用项目主色板"}`,
     ].join("；");
-    return actions.slice(0, 4).map((action, index) => {
+    return actions.slice(0, 5).map((action, index) => {
         const startSecond = Number(((duration * index) / frameCount).toFixed(3));
         const endSecond = index === frameCount - 1 ? duration : Number(((duration * (index + 1)) / frameCount).toFixed(3));
         return {
@@ -103,7 +105,7 @@ function fourFramePlan(shot) {
             startSecond,
             endSecond,
             actionPrompt: `${action}；${visibleFrameState(action, index, frameCount)}`,
-            imagePrompt: `静态关键帧：${action}；可见状态：${stateSuffixes[index]}；可见表演状态：${visibleFrameState(action, index, frameCount)}。${context}；只呈现当前时间段的静态瞬间。`,
+            imagePrompt: `静态关键帧：${action}；可见状态：${stateSuffixes[index]}；可见表演状态：${visibleFrameState(action, index, frameCount)}。${context}；三层空间保持前景框景、中景主体与背景环境关系；冻结为单一静态姿态。`,
         };
     });
 }
@@ -171,7 +173,7 @@ function repairSplitGroup(group) {
             videoPrompt: `本内部镜头只执行：${actionStart}到${actionEnd}。保持角色、道具、轴线和前后状态连续。`,
             continuity: { ...shot.continuity, actionStart, actionEnd },
         };
-        return { ...next, framePlan: { ...next.framePlan, frames: fourFramePlan(next) } };
+        return { ...next, framePlan: { ...next.framePlan, frames: fiveFramePlan(next) } };
     });
 }
 
@@ -189,7 +191,7 @@ function repairEpisode(episode) {
             continue;
         }
         const shot = episode.shots[index];
-        nextShots.push({ ...shot, framePlan: { ...shot.framePlan, frames: fourFramePlan(shot) } });
+        nextShots.push({ ...shot, framePlan: { ...shot.framePlan, frames: fiveFramePlan(shot) } });
         index += 1;
     }
     return { ...episode, shots: nextShots };
@@ -197,22 +199,26 @@ function repairEpisode(episode) {
 
 function updatePackage(value) {
     const fixedTitles = ["一、项目总览", "二、原创第一章", "三、第一集文学剧本", "四、镜头执行表", "五、角色一致性资产", "六、场景一致性资产", "七、关键视频资产 Prompt", "八、全案板 Prompt", "九、台词与表演脚本", "十、声音设计", "十一、分段视频 Prompt", "十二、资产映射与执行顺序", "十三、QC 报告"];
+    value.project.productionBible.productionPlan.video.frameCount = 5;
     value.episodes = (value.episodes || []).map(repairEpisode);
     value.archive = {
         ...value.archive,
         sections: (value.archive?.sections || []).map((section, index) => {
             section = { ...section, title: fixedTitles[Number(String(section.code || "").replace(/\D/g, "")) - 1] || fixedTitles[index] || section.title };
-            if (section.title === "Seedance 分段视频 Prompt") {
+            if (section.title.includes("分段视频 Prompt")) {
                 const content = value.episodes[0].shots
                     .map(
                         (shot) =>
-                            `### ${shot.code} ${shot.title}\n${shot.framePlan.frames.map((frame) => `- P${String(frame.sequenceIndex).padStart(2, "0")}-F${String(frame.sequenceIndex).padStart(2, "0")} ${frame.startSecond}-${frame.endSecond}s：${frame.actionPrompt}`).join("\n")}`,
+                            `### ${shot.code} ${shot.title}\n${shot.framePlan.frames.map((frame) => `- P${String(shot.order).padStart(2, "0")}-F${String(frame.sequenceIndex).padStart(2, "0")} ${frame.startSecond}-${frame.endSecond}s：${frame.actionPrompt}`).join("\n")}`,
                     )
                     .join("\n\n");
-                return { ...section, content: `默认每镜 4 个连续帧段；仅明确的特殊镜头允许 5-9 帧。\n\n${content}` };
+                return { ...section, content: `默认每镜 5 个连续剧情帧；用户可在 1-9 帧范围内明确调整。\n\n${content}` };
             }
-            if (section.title === "资产映射与执行顺序") {
-                return { ...section, content: `${text(section.content)}\n\n多帧执行规则：默认每镜 4 个连续帧段，按 Pxx-Fxx 顺序执行；显式提供的 1-9 个帧段优先保留。每张图片单独提交，连续镜头的首帧只接受上一镜已人工验收的实际尾帧。` };
+            if (section.title.includes("资产映射与执行顺序")) {
+                return {
+                    ...section,
+                    content: `生产方案快照（导入后作为本集执行契约）：\n${JSON.stringify(value.project.productionBible.productionPlan, null, 2)}\n\n多帧执行规则：默认每镜 5 个连续剧情帧，按 Pxx-Fxx 顺序执行；用户明确指定的 1-9 帧优先。15/20 秒片段提交前校验分镜帧与固定资产图合计不超过 9 张，30 秒片段不超过 30 张；连续镜头的首帧只接受上一镜已人工验收的实际尾帧。`,
+                };
             }
             return section;
         }),
@@ -255,7 +261,7 @@ try {
     const sourceHash = createHash("sha256").update(packageMarkdown).digest("hex");
     nextProject.productionArchive = updatedPackage.archive;
     const sourceId = `source-package-${sourceHash.slice(0, 16)}`;
-    nextProject.sourceAssets = [...(nextProject.sourceAssets || []).filter((asset) => asset.id !== sourceId), { id: sourceId, type: "text", title: "制作包 Mahadel-episode-01-four-frame.md", textContent: packageMarkdown, sourceHash }];
+    nextProject.sourceAssets = [...(nextProject.sourceAssets || []).filter((asset) => asset.id !== sourceId), { id: sourceId, type: "text", title: "制作包 Mahadel-episode-01-five-frame.md", textContent: packageMarkdown, sourceHash }];
     nextProject.updatedAt = new Date().toISOString();
     const after = JSON.stringify(nextProject);
     if (before === after) throw new Error("项目没有需要更新的 9/8 帧计划");

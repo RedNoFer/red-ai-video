@@ -2,7 +2,7 @@ import { nanoid } from "nanoid";
 
 import type { DramaFrameBeat, DramaStoryboardFrame } from "./drama-project-contract";
 
-const MAX_FRAME_BEATS = 9;
+export const MAX_FRAME_BEATS = 9;
 const TIME_EPSILON = 0.001;
 
 export function normalizeDramaFrameBeats(value: readonly DramaFrameBeat[], duration: number): DramaFrameBeat[] {
@@ -40,6 +40,7 @@ export function validateDramaFrameVisualContent(imagePrompt: string, actionPromp
     const subject = staticFrameSubject(imagePrompt, actionPrompt, "");
     if (/(?:运镜|焦段|推镜|拉镜|摇镜|跟拍|滑轨|环绕|吊臂|慢推|慢拉|后拉|时间段|时间轴|动作过程|对白|声音|口型)/u.test(imagePrompt)) return "每帧必须描述当前可见画面，且静态图片帧不能包含运镜、时间过程、对白或声音指令";
     if (/(?:景别|镜头)(?:（[^）]*）)?\s*[：:]\s*[^；。\n]*(?:→|->|至)/u.test(imagePrompt)) return "每帧只能使用一个固定景别，不能保留景别切换过程";
+    if (/(?:ELS|极远景)/u.test(imagePrompt) && /(?:清晰面部|面部清晰|眉眼|嘴角|下颌|手部|手指|道具|细节)/u.test(imagePrompt)) return "ELS/极远景只能承载远景空间关系，不能与清晰面部、手部或道具细节同时出现";
     if (!subject || /^(?:主体保持当前设定中的静态状态|无|待补全|待生成)$/u.test(subject) || /^(?:口型同步|无字幕|无水印|禁止|避免|不得|不展示|没有)/u.test(subject) || /^(?:\d+mm|镜头|运镜|沿[^；。]*?(?:推|拉|摇|跟拍)|(?:慢推|慢拉|环绕))/u.test(subject))
         return "每帧必须描述当前可见的主体、姿态、道具或环境状态，不能只有对白、旁白、运镜或约束说明";
     return undefined;
@@ -56,11 +57,12 @@ export function validateDramaFramePlanVisuals(frames: readonly DramaFrameBeat[])
     return errors;
 }
 
-export function defaultDramaFrameBeats(duration: number, actionPrompt: string, imagePrompt: string): DramaFrameBeat[] {
+export function defaultDramaFrameBeats(duration: number, actionPrompt: string, imagePrompt: string, frameCount = 5): DramaFrameBeat[] {
+    const count = Math.max(1, Math.min(MAX_FRAME_BEATS, Math.floor(frameCount)));
     const phases = ["起始状态", "动作展开", "关键变化", "结果状态"];
     const visibleStates = ["主体保持进入镜头时的静止姿态", "主体的手部或身体姿态已发生可见变化", "关键道具或环境出现明确可见变化", "主体保持动作完成后的稳定姿态"];
     const normalizedDuration = Math.max(1, Math.round(duration));
-    const activePhases = phases;
+    const activePhases = Array.from({ length: count }, (_, index) => phases[index] || `阶段${index + 1}`);
     const normalizedActionPrompt = actionPrompt.trim();
     const normalizedImagePrompt = imagePrompt.trim();
     return activePhases.map((phase, index) => {
@@ -72,7 +74,7 @@ export function defaultDramaFrameBeats(duration: number, actionPrompt: string, i
             startSecond,
             endSecond,
             actionPrompt: `${normalizedActionPrompt}；${phase}`,
-            imagePrompt: `${normalizedImagePrompt}；可见状态：${visibleStates[index]}；${phase}静态锚点`,
+            imagePrompt: `${normalizedImagePrompt}；可见状态：${visibleStates[index] || `主体与道具形成第${index + 1}阶段的明确静态变化`}；${phase}静态锚点`,
         };
     });
 }
@@ -95,7 +97,7 @@ export function upgradeDramaFrameImagePrompt(
         context.composition ? `构图：${cleanStaticConstraint(context.composition)}` : "",
         context.characterBlocking || context.gazeDirection ? `站位与视线：${[context.characterBlocking, context.gazeDirection].map(cleanStaticConstraint).filter(Boolean).join("；")}` : "",
         context.lighting || context.colorPalette ? `灯光与色彩：${[context.lighting, staticPalette(context.colorPalette, context.sequenceIndex)].map(cleanStaticConstraint).filter(Boolean).join("；")}` : "",
-        "三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。",
+        "三层空间：前景必须是具体框景或遮挡物；中景承载主体与当前状态；背景交代环境关系与纵深。",
         "动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。",
         "主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。",
         "冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。",
@@ -144,12 +146,13 @@ function isGenericFrameState(value: string) {
 }
 
 function staticFrameSubject(imagePrompt: string, actionPrompt: string, fallback: string) {
-    const markerSources = [imagePrompt, actionPrompt].map((value) => value.match(/当前(?:时段动作锚点|帧可见画面)：([\s\S]*)/u)?.[1] || "").filter(Boolean);
+    const markerSources = [imagePrompt, actionPrompt].map((value) => value.match(/(?:本帧|当前)(?:时段动作锚点|帧可见画面)：([\s\S]*)/u)?.[1] || "").filter(Boolean);
     const candidates = [...markerSources, imagePrompt, actionPrompt]
         .map((value) =>
             value
-                .replace(/^当前(?:时段动作锚点|帧可见画面)：/u, "")
+                .replace(/^(?:本帧|当前)(?:时段动作锚点|帧可见画面)：/u, "")
                 .replace(/^静态关键帧：/u, "")
+                .replace(/^本帧可见画面：/u, "")
                 .replace(/^生成\d+秒[^。]*。?/u, "")
                 .replace(/^本内部镜头只执行：/u, "")
                 .replace(/^无字幕、无水印、无logo[^。]*。?/u, "")

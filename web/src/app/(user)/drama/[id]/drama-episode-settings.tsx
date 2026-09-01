@@ -131,7 +131,17 @@ export function DramaEpisodeSettings({ project, episode, embedded = false }: { p
                                     className="min-w-20"
                                     value={productionPlan.video.shotDuration || 15}
                                     options={DRAMA_SHOT_DURATION_OPTIONS.map((value) => ({ label: `${value}s`, value }))}
-                                    onChange={(shotDuration: 15 | 30) => updateProductionPlan({ shotDuration })}
+                                    onChange={(shotDuration: 15 | 20 | 30) => updateProductionPlan({ shotDuration })}
+                                />
+                            </label>
+                            <label className="flex items-center gap-1">
+                                <span>帧数：</span>
+                                <Select
+                                    size="small"
+                                    className="min-w-20"
+                                    value={productionPlan.video.frameCount || 5}
+                                    options={Array.from({ length: 9 }, (_, index) => ({ label: `${index + 1} 帧`, value: index + 1 }))}
+                                    onChange={(frameCount) => updateProductionPlan({ frameCount })}
                                 />
                             </label>
                             <span>连续性：{productionPlan.continuity.mode === "strict" ? "严格" : "平衡"}</span>

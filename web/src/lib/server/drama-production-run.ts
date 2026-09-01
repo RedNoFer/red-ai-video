@@ -5,6 +5,7 @@ import { nanoid } from "nanoid";
 import { approvedAssetReference, hasApprovedAssetReference } from "@/lib/drama-asset-baseline";
 import { continuityStartEvidence, latestFrameEvidence } from "@/lib/drama-continuity-policy";
 import { planDramaVideoSegments } from "@/lib/drama-frame-sequence";
+import { dramaReferenceImageBudget } from "@/lib/drama-production-plan";
 import { compileDramaShotExecutionPrompts, compileDramaShotVideoBasePrompt, sanitizeDramaSupplierText } from "@/lib/drama-prompt-compiler";
 import type { DramaEpisode, DramaProductionPlan, DramaProductionRun, DramaProductionStep, DramaProject, DramaVideoReferenceBinding } from "@/lib/drama-project-contract";
 
@@ -19,6 +20,7 @@ export type DramaProductionParameterInput = {
     minVideoSeconds?: number;
     maxReferenceImages?: number;
     productionPlan?: DramaProductionPlan;
+    referenceSelections?: Record<string, string[]>;
 };
 
 export function buildDramaProductionRun(project: DramaProject, episode: DramaEpisode, parameters: DramaProductionParameterInput): DramaProductionRun {
@@ -46,6 +48,7 @@ export function buildDramaProductionRun(project: DramaProject, episode: DramaEpi
     const qcStepIds = new Map<string, string>();
     for (const shot of [...episode.shots].sort((left, right) => left.order - right.order)) {
         const incoming = episode.continuityEdges?.find((edge) => edge.toShotId === shot.id && edge.inheritActualEndFrame);
+        const selectedReferenceIds = parameters.referenceSelections?.[shot.id];
         const assetIds = shotReferenceIds(project, shot);
         const assetDependencies = assetIds.map((id) => anchorStepIds.get(id)).filter((id): id is string => Boolean(id));
         const previousQc = incoming ? qcStepIds.get(incoming.fromShotId) : undefined;
@@ -55,8 +58,8 @@ export function buildDramaProductionRun(project: DramaProject, episode: DramaEpi
         let videoSegments: Array<{ startSecond: number; endSecond: number; duration: number; frameIds: string[] }>;
 
         if (allFrames) {
-            const beats = shot.framePlan!.frames;
-            for (const beat of beats) {
+            const beats = selectedReferenceIds ? shot.framePlan!.frames.filter((beat) => selectedReferenceIds.includes(beat.id)) : shot.framePlan!.frames;
+            for (const [beatIndex, beat] of beats.entries()) {
                 const stored = shot.storyboardFrames?.find((frame) => frame.id === beat.id || frame.sequenceIndex === beat.sequenceIndex);
                 const id = `frame-${shot.id}-${beat.id}`;
                 frameStepIds.push(id);
@@ -68,7 +71,7 @@ export function buildDramaProductionRun(project: DramaProject, episode: DramaEpi
                     sequenceIndex: beat.sequenceIndex,
                     startSecond: beat.startSecond,
                     endSecond: beat.endSecond,
-                    dependsOn: beat.sequenceIndex === 1 ? [...assetDependencies, ...continuityDependencies] : [`frame-${shot.id}-${beats[beat.sequenceIndex - 2].id}`],
+                    dependsOn: beatIndex === 0 ? [...assetDependencies, ...continuityDependencies] : [`frame-${shot.id}-${beats[beatIndex - 1].id}`],
                     status: validFrame(stored) ? "success" : "blocked",
                     outputUrls: validFrame(stored) ? [stored!.mediaUrl!] : undefined,
                     outputRemoteUrls: validFrame(stored) && stored!.remoteUrl ? [stored!.remoteUrl] : undefined,
@@ -79,7 +82,7 @@ export function buildDramaProductionRun(project: DramaProject, episode: DramaEpi
             videoSegments = planDramaVideoSegments(beats, {
                 minDurationSeconds: Math.max(0, parameters.minVideoSeconds || 0),
                 maxDurationSeconds: parameters.maxVideoSeconds && parameters.maxVideoSeconds > 0 ? parameters.maxVideoSeconds : shot.duration,
-                maxReferenceImages: Math.min(parameters.maxReferenceImages && parameters.maxReferenceImages > 0 ? parameters.maxReferenceImages : assetIds.length + beats.length, assetIds.length + 5, 9),
+                maxReferenceImages: Math.min(parameters.maxReferenceImages && parameters.maxReferenceImages > 0 ? parameters.maxReferenceImages : dramaReferenceImageBudget(shot.duration), dramaReferenceImageBudget(shot.duration)),
                 assetReferenceCount: assetIds.length + (incoming ? 1 : 0),
             });
         } else {

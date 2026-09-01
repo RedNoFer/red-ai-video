@@ -44,7 +44,7 @@ import { createFrameEvidence, decideActualEndFrame, invalidateFrameEvidence, rep
 import { DRAMA_STYLE_COLOR_SCRIPT, DRAMA_STYLE_NAME, normalizeDramaStyleName } from "@/lib/drama-style";
 import { normalizeDramaImageSize } from "@/lib/drama-image-size";
 import { defaultDramaFrameBeats, normalizeDramaFrameBeats, upgradeDramaFrameImagePrompt } from "@/lib/drama-frame-sequence";
-import { defaultDramaProductionPlan, normalizeDramaProductionPlan } from "@/lib/drama-production-plan";
+import { defaultDramaProductionPlan, dramaReferenceImageBudget, normalizeDramaProductionPlan } from "@/lib/drama-production-plan";
 import { resolveDramaShotDuration } from "@/lib/server/drama-shot-config";
 import { TEXT_MODEL_REQUEST_TIMEOUT_MS } from "@/lib/server/model-request-policy";
 import { listAgentRuns } from "@/lib/server/agent-run-store";
@@ -887,18 +887,25 @@ export async function createDramaProductionRunForUser(userId: string, projectId:
     };
     if (!parameters.imageModel) throw new DramaProjectServiceError("后台尚未配置可用的图片逻辑模型", 409);
     const submittedPreflight = object(object(value).preflight);
+    const referenceSelections = stringArrayRecord(object(value).referenceSelections);
     const checkedShotIds = ids(submittedPreflight.checkedShotIds);
     const productionShots = checkedShotIds.length ? episode.shots.filter((shot) => checkedShotIds.includes(shot.id)) : episode.shots;
     const requiresAllFrames = productionShots.some((shot) => shot.storyboardFrameMode === "all_frames" && Boolean(shot.framePlan?.frames.length));
     const requestedVideoModel = parameters.productionPlan?.video.model || parameters.videoModel;
     const videoCandidates = resolveLogicalModelCandidates(settings, "video", requestedVideoModel, parameters.productionPlan?.video.channelId);
-    const requiredKeyframeCount = Math.max(0, ...productionShots.filter((shot) => shot.storyboardFrameMode === "all_frames").map((shot) => shot.framePlan?.frames.length || 0));
+    const requiredKeyframeCount = Math.max(
+        0,
+        ...productionShots
+            .filter((shot) => shot.storyboardFrameMode === "all_frames")
+            .map((shot) => (referenceSelections[shot.id] ? (shot.framePlan?.frames || []).filter((frame) => referenceSelections[shot.id].includes(frame.id)).length : shot.framePlan?.frames.length || 0)),
+    );
     const videoCandidate = requiresAllFrames ? videoCandidates.find((candidate) => supportsVideoKeyframeReferences(candidate, requiredKeyframeCount)) : videoCandidates[0];
     if (!videoCandidate) {
         if (!videoCandidates.length)
             throw new DramaProjectServiceError(`本集锁定的视频模型 ${requestedVideoModel} 未在后台启用或没有可用渠道；后台默认视频模型为 ${settings.defaultModels.videoModel || "未配置"}。请在本集设置中明确选择已启用模型并重新锁定，系统不会自动切换模型`, 409);
         throw new DramaProjectServiceError(`当前视频模型 ${requestedVideoModel} 未声明支持 ${requiredKeyframeCount} 张全能帧关键图，请在后台为该模型声明全能帧能力或调整本集帧模式；系统不会自动切换模型`, 409);
     }
+    validateDramaReferenceSelections(project, episode, productionShots, referenceSelections, videoCandidate.capabilityProfile?.maxReferenceImages);
     const preflight = preflightDramaProduction(project, episode, checkedShotIds.length ? checkedShotIds : undefined);
     if (preflight.status === "blocked") {
         const detail = preflight.issues
@@ -920,6 +927,7 @@ export async function createDramaProductionRunForUser(userId: string, projectId:
             minVideoSeconds: videoCandidate.capabilityProfile?.minDurationSeconds,
             maxVideoSeconds: videoCandidate.capabilityProfile?.maxDurationSeconds,
             maxReferenceImages: videoCandidate.capabilityProfile?.maxReferenceImages,
+            referenceSelections,
         }),
         preflightSnapshot: {
             checkedShotIds,
@@ -3122,6 +3130,33 @@ function object(value: unknown) {
 
 function array(value: unknown): unknown[] {
     return Array.isArray(value) ? value : [];
+}
+
+function stringArrayRecord(value: unknown): Record<string, string[]> {
+    return Object.fromEntries(
+        Object.entries(object(value)).flatMap(([key, entries]) => {
+            const values = ids(entries);
+            return key.trim() && values.length ? [[key.trim(), values]] : [];
+        }),
+    );
+}
+
+function validateDramaReferenceSelections(project: DramaProject, episode: DramaEpisode, shots: DramaShot[], selections: Record<string, string[]>, providerLimit?: number) {
+    for (const shot of shots) {
+        const fixedAssetIds = Array.from(new Set([shot.sceneId, ...shot.characterIds, ...shot.propIds, ...shot.clueIds, ...(shot.sourceAssetIds || [])].filter((id): id is string => Boolean(id))));
+        const frameIds = shot.framePlan?.frames.map((frame) => frame.id) || [];
+        const selected = selections[shot.id];
+        if (selected && fixedAssetIds.some((id) => !selected.includes(id))) throw new DramaProjectServiceError(`${shot.title}的固定资产引用不能取消`, 409);
+        const selectedFrameIds = shot.storyboardFrameMode === "all_frames" ? (selected ? frameIds.filter((id) => selected.includes(id)) : frameIds) : [];
+        if (shot.storyboardFrameMode === "all_frames" && selectedFrameIds.length < 2) throw new DramaProjectServiceError(`${shot.title}至少需要保留首帧和尾帧两张顺序帧`, 409);
+        if (shot.storyboardFrameMode === "all_frames" && selected && (selectedFrameIds[0] !== frameIds[0] || selectedFrameIds.at(-1) !== frameIds.at(-1))) throw new DramaProjectServiceError(`${shot.title}的首帧和尾帧不能取消引用`, 409);
+        const incoming = episode.continuityEdges?.some((edge) => edge.toShotId === shot.id && edge.inheritActualEndFrame) ? 1 : 0;
+        const legacyFrames = shot.storyboardFrameMode === "all_frames" ? 0 : shot.storyboardFrameMode === "first_last" ? 2 : 1;
+        const selectedFixedAssetCount = selected ? fixedAssetIds.filter((id) => selected.includes(id)).length : fixedAssetIds.length;
+        const total = selectedFixedAssetCount + incoming + selectedFrameIds.length + legacyFrames;
+        const limit = Math.min(dramaReferenceImageBudget(shot.duration), providerLimit && providerLimit > 0 ? providerLimit : Number.POSITIVE_INFINITY);
+        if (total > limit) throw new DramaProjectServiceError(`${shot.title}本次引用 ${total} 张图片，超过 ${shot.duration} 秒视频的 ${limit} 张上限；请返回提示词预览取消部分中间帧`, 409);
+    }
 }
 
 function urls(value: unknown, fallback?: unknown) {

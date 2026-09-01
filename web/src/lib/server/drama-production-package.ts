@@ -1468,11 +1468,11 @@ function directorState(characterCodes: string[], propCodes: string[], environmen
  * shot duration. Only fragments carrying the same `title N/M` group are
  * eligible, so intentional cuts and scene changes remain untouched.
  */
-export function mergeDramaProductionPackageShotDurations(value: DramaProductionPackageV1, targetDuration: 15 | 30): DramaProductionPackageV1 {
+export function mergeDramaProductionPackageShotDurations(value: DramaProductionPackageV1, targetDuration: 15 | 20 | 30): DramaProductionPackageV1 {
     return { ...value, episodes: value.episodes.map((episode) => mergeTargetDurationShots(episode, targetDuration)) };
 }
 
-function mergeTargetDurationShots(episode: DramaProductionPackageEpisode, targetDuration: 15 | 30): DramaProductionPackageEpisode {
+function mergeTargetDurationShots(episode: DramaProductionPackageEpisode, targetDuration: 15 | 20 | 30): DramaProductionPackageEpisode {
     const groups: DramaProductionPackageEpisode["shots"][] = [];
     let changed = false;
     for (let index = 0; index < episode.shots.length; ) {
@@ -1519,7 +1519,7 @@ function mergeTargetDurationShots(episode: DramaProductionPackageEpisode, target
     return { ...episode, shots, storyScenes, continuityEdges };
 }
 
-function explicitDurationGroup(shots: DramaProductionPackageEpisode["shots"], startIndex: number, targetDuration: 15 | 30) {
+function explicitDurationGroup(shots: DramaProductionPackageEpisode["shots"], startIndex: number, targetDuration: 15 | 20 | 30) {
     const first = splitShotTitle(shots[startIndex]?.title || "");
     if (!first || first.part !== 1 || first.total < 2) return [];
     const group = shots.slice(startIndex, startIndex + first.total);

@@ -1,7 +1,7 @@
 "use client";
 
 import { App, Button, Input, InputNumber, Modal, Segmented, Tag } from "antd";
-import { ChevronDown, GitBranch, MessageSquareText, Sparkles, Volume1 } from "lucide-react";
+import { ChevronDown, GitBranch, MessageSquareText, RotateCcw, Sparkles, Volume1 } from "lucide-react";
 import { useState } from "react";
 
 import { useDramaStore } from "../stores/use-drama-store";
@@ -40,6 +40,7 @@ export function DramaStoryboardShotCard({
     const replaceProject = useDramaStore((state) => state.replaceProject);
     const [imagePromptModalOpen, setImagePromptModalOpen] = useState(false);
     const [imagePromptDraft, setImagePromptDraft] = useState("");
+    const [imagePromptOriginal, setImagePromptOriginal] = useState("");
     const [imagePromptGenerating, setImagePromptGenerating] = useState(false);
     const [imagePromptSaving, setImagePromptSaving] = useState(false);
     const dialogueLines = shot.dialogue
@@ -62,6 +63,7 @@ export function DramaStoryboardShotCard({
     const generateImagePrompt = async () => {
         setImagePromptGenerating(true);
         try {
+            setImagePromptOriginal(shot.imagePrompt || shot.description);
             setImagePromptDraft(await optimizeDramaFramePrompt(shot.imagePrompt || shot.description));
             setImagePromptModalOpen(true);
         } catch (error) {
@@ -208,7 +210,7 @@ export function DramaStoryboardShotCard({
                             <InputNumber
                                 className="!h-9 !w-24 [&.ant-input-number-focused]:!border-foreground/35 [&.ant-input-number-focused]:!shadow-none"
                                 min={1}
-                                max={20}
+                                max={30}
                                 step={1}
                                 precision={0}
                                 value={shot.duration}
@@ -228,7 +230,12 @@ export function DramaStoryboardShotCard({
                         onOk={() => void saveImagePrompt()}
                         onCancel={() => setImagePromptModalOpen(false)}
                     >
-                        <p className="mb-2 text-xs leading-5 text-muted-foreground">已结合当前镜头事实、连续性和固定资产生成 Seedance 2.0 静态画面提示词。编辑后覆盖保存，不会修改视频提示词或剧情字段。</p>
+                        <div className="mb-2 flex items-start justify-between gap-2">
+                            <p className="text-xs leading-5 text-muted-foreground">已结合当前镜头事实、连续性和固定资产生成 Seedance 2.0 静态画面提示词。编辑后覆盖保存，不会修改视频提示词或剧情字段。</p>
+                            <Button size="small" icon={<RotateCcw className="size-3.5" />} disabled={imagePromptDraft === imagePromptOriginal || imagePromptSaving} onClick={() => setImagePromptDraft(imagePromptOriginal)}>
+                                还原上次
+                            </Button>
+                        </div>
                         <Input.TextArea value={imagePromptDraft} onChange={(event) => setImagePromptDraft(event.target.value)} autoSize={{ minRows: 8, maxRows: 18 }} />
                     </Modal>
                 </div>

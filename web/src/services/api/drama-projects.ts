@@ -287,6 +287,7 @@ export function createDramaProductionRun(
         regenerateAll?: boolean;
         productionPlan?: DramaProductionPlan;
         shotSnapshot?: DramaShot;
+        referenceSelections?: Record<string, string[]>;
     } = {},
 ) {
     return request<{ run: DramaProductionRun }>(`/api/drama/projects/${encodeURIComponent(projectId)}/production-runs`, {
@@ -306,6 +307,7 @@ export function createDramaProductionRun(
             ...(options.regenerateAll ? { regenerateAll: true } : {}),
             ...(options.productionPlan ? { productionPlan: options.productionPlan } : {}),
             ...(options.shotSnapshot ? { shotSnapshot: options.shotSnapshot } : {}),
+            ...(options.referenceSelections ? { referenceSelections: options.referenceSelections } : {}),
         }),
     }).then((data) => data.run);
 }

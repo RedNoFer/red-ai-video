@@ -26,6 +26,10 @@ describe("drama frame sequence", () => {
         expect(validateDramaFrameVisualContent("85mm沿铁砧慢推", "镜头沿铁砧慢推")).toContain("每帧必须描述");
     });
 
+    it("rejects ELS prompts that also demand readable facial or hand detail", () => {
+        expect(validateDramaFrameVisualContent("ELS，面部清晰可读，手部细节明显", "ELS静帧")).toContain("ELS/极远景");
+    });
+
     it("rejects adjacent frames without a visible state change", () => {
         expect(
             validateDramaFramePlanVisuals([
@@ -93,6 +97,22 @@ describe("drama frame sequence", () => {
         expect(prompt).not.toContain("”");
     });
 
+    it("normalizes the newer 本帧可见画面 prefix into a static keyframe subject", () => {
+        const prompt = upgradeDramaFrameImagePrompt("本帧可见画面：黑湖无波，倒悬古塔与倒影对齐", "黑湖无波，倒悬古塔与倒影对齐", {
+            description: "黑湖记忆",
+            shotSize: "ELS",
+            cameraAngle: "平视",
+            composition: "主体位于9:16安全区",
+            characterBlocking: "Karin站在湖边",
+            gazeDirection: "视线朝向倒悬古塔",
+            lighting: "无源冷光",
+            colorPalette: "深蓝黑与雪白",
+        });
+
+        expect(prompt).toContain("静态关键帧：黑湖无波，倒悬古塔与倒影对齐");
+        expect(prompt).not.toContain("本帧可见画面");
+    });
+
     it("normalizes a plain frame description instead of sending an action process", () => {
         const prompt = upgradeDramaFrameImagePrompt("两人缩短距离", "两人向前靠近", {
             description: "雨夜车站，两人隔着站台对视",
@@ -110,17 +130,18 @@ describe("drama frame sequence", () => {
         expect(prompt).not.toContain("向前靠近");
     });
 
-    it("creates four equal default beats", () => {
-        const defaults = defaultDramaFrameBeats(8, "角色拔剑", "角色站在黑湖边");
-        expect(defaults).toHaveLength(4);
+    it("creates five continuous default beats and honors an explicit frame count", () => {
+        const defaults = defaultDramaFrameBeats(15, "角色拔剑", "角色站在黑湖边");
+        expect(defaults).toHaveLength(5);
         expect(defaults.map((frame) => [frame.startSecond, frame.endSecond])).toEqual([
-            [0, 2],
-            [2, 4],
-            [4, 6],
-            [6, 8],
+            [0, 3],
+            [3, 6],
+            [6, 9],
+            [9, 12],
+            [12, 15],
         ]);
         expect(defaults.every((frame) => Number.isInteger(frame.startSecond) && Number.isInteger(frame.endSecond))).toBe(true);
-        expect(defaults.map((frame) => frame.actionPrompt)).toEqual(["角色拔剑；起始状态", "角色拔剑；动作展开", "角色拔剑；关键变化", "角色拔剑；结果状态"]);
+        expect(defaultDramaFrameBeats(30, "角色拔剑", "角色站在黑湖边", 7)).toHaveLength(7);
     });
 
     it("preserves decimal frame boundaries inside an integer-second shot", () => {
