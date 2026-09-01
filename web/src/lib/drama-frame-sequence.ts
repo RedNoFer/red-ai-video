@@ -74,7 +74,7 @@ export function defaultDramaFrameBeats(duration: number, actionPrompt: string, i
             startSecond,
             endSecond,
             actionPrompt: `${normalizedActionPrompt}；${phase}`,
-            imagePrompt: `${normalizedImagePrompt}；可见状态：${visibleStates[index] || `主体与道具形成第${index + 1}阶段的明确静态变化`}；${phase}静态锚点`,
+            imagePrompt: `静态关键帧：${normalizedImagePrompt}；可见状态：${visibleStates[index] || `主体与道具形成第${index + 1}阶段的明确静态变化`}；可见表演状态：${phase}时的眉眼、视线、呼吸与手部关系保持可见；景别：中景；机位与构图：平视，主体位于9:16安全区，前景有具体框景；站位与视线：主体站位明确，视线落向当前叙事目标；三层空间：前景为框景遮挡，中景承载主体与道具，背景交代环境纵深；光色与风格：延续本场主光与色板，材质纹理自然；参考图职责：按本镜已绑定角色、场景、道具和连续性图片各司其职；负面约束：无字幕、无水印、无logo、无HUD、无现代元素、无额外主体、无额外肢体、无变形。`,
         };
     });
 }
@@ -84,7 +84,7 @@ export function upgradeDramaFrameImagePrompt(
     actionPrompt: string,
     context: { description: string; shotSize: string; cameraAngle: string; composition: string; characterBlocking: string; gazeDirection: string; lighting: string; colorPalette: string; performanceState?: string; sequenceIndex?: number },
 ) {
-    if (imagePrompt.trim().startsWith("静态关键帧：") && imagePrompt.includes("可见表演状态：") && imagePrompt.includes("冻结为单一静态姿态") && !/(?:景别|镜头)(?:（[^）]*）)?\s*[：:]\s*[^；。\n]*(?:→|->|至)/u.test(imagePrompt)) return imagePrompt.trim();
+    if (imagePrompt.trim().startsWith("静态关键帧：") && imagePrompt.includes("可见状态：") && imagePrompt.includes("可见表演状态：") && imagePrompt.includes("景别：") && imagePrompt.includes("机位与构图：") && imagePrompt.includes("三层空间：") && imagePrompt.includes("参考图职责：") && imagePrompt.includes("负面约束：") && !/(?:景别|镜头)(?:（[^）]*）)?\s*[：:]\s*[^；。\n]*(?:→|->|至)/u.test(imagePrompt)) return imagePrompt.trim();
     const subject = staticFrameSubject(imagePrompt, actionPrompt, context.description);
     const visibleState = imagePrompt.match(/可见状态：([^；。]+)/u)?.[1] || "";
     const performanceState = context.performanceState || inferStaticPerformanceState(subject, actionPrompt, context.sequenceIndex);
@@ -92,15 +92,15 @@ export function upgradeDramaFrameImagePrompt(
         `静态关键帧：${subject}`,
         visibleState ? `可见状态：${visibleState}` : "",
         `可见表演状态：${performanceState}`,
-        context.shotSize ? `景别（本帧固定）：${staticShotSize(context.shotSize, context.sequenceIndex)}` : "",
-        context.cameraAngle ? `视角：${cleanStaticConstraint(context.cameraAngle)}` : "",
-        context.composition ? `构图：${cleanStaticConstraint(context.composition)}` : "",
+        context.shotSize ? `景别：${staticShotSize(context.shotSize, context.sequenceIndex)}` : "",
+        context.cameraAngle || context.composition ? `机位与构图：${[context.cameraAngle, context.composition].map(cleanStaticConstraint).filter(Boolean).join("；")}` : "",
         context.characterBlocking || context.gazeDirection ? `站位与视线：${[context.characterBlocking, context.gazeDirection].map(cleanStaticConstraint).filter(Boolean).join("；")}` : "",
         context.lighting || context.colorPalette ? `灯光与色彩：${[context.lighting, staticPalette(context.colorPalette, context.sequenceIndex)].map(cleanStaticConstraint).filter(Boolean).join("；")}` : "",
         "三层空间：前景必须是具体框景或遮挡物；中景承载主体与当前状态；背景交代环境关系与纵深。",
         "动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。",
         "主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。",
-        "冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。",
+        "参考图职责：按本镜已绑定角色、场景、道具和连续性图片各司其职。",
+        "负面约束：无字幕、无水印、无logo、无HUD、无现代元素、无额外主体、无额外肢体、无变形。",
     ]
         .filter(Boolean)
         .join("；");

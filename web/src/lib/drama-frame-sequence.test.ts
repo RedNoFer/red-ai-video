@@ -53,8 +53,8 @@ describe("drama frame sequence", () => {
         });
 
         expect(prompt).toContain("静态关键帧：马车中Karin猛然睁眼、手扣断剑");
-        expect(prompt).toContain("景别（本帧固定）：ECU");
-        expect(prompt).toContain("视角：平视");
+        expect(prompt).toContain("景别：ECU");
+        expect(prompt).toContain("机位与构图：平视");
         expect(prompt).not.toContain("镜头");
         expect(prompt).not.toContain("ELS→ECU");
         expect(prompt).not.toContain("耳语");
@@ -74,7 +74,7 @@ describe("drama frame sequence", () => {
             sequenceIndex: 1,
         });
 
-        expect(prompt).toContain("景别（本帧固定）：ELS");
+        expect(prompt).toContain("景别：ELS");
         expect(prompt).not.toContain("ELS→ECU");
     });
 

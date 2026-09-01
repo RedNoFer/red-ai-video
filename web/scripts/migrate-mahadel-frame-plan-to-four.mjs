@@ -105,7 +105,7 @@ function fiveFramePlan(shot) {
             startSecond,
             endSecond,
             actionPrompt: `${action}；${visibleFrameState(action, index, frameCount)}`,
-            imagePrompt: `静态关键帧：${action}；可见状态：${stateSuffixes[index]}；可见表演状态：${visibleFrameState(action, index, frameCount)}。${context}；三层空间保持前景框景、中景主体与背景环境关系；冻结为单一静态姿态。`,
+            imagePrompt: `静态关键帧：${action}；可见状态：${stateSuffixes[index]}；可见表演状态：${visibleFrameState(action, index, frameCount)}；景别：${context.split("；")[0]}；机位与构图：${context.split("；").slice(1, 3).join("；")}，9:16安全区，前景有具体框景；站位与视线：${context.split("；").slice(3, 5).join("；")}；三层空间：前景为框景遮挡，中景承载主体与道具，背景交代环境纵深；光色与风格：${context.split("；").slice(-1)[0]}，材质纹理自然；参考图职责：按本镜已绑定角色、场景、道具和连续性图片各司其职；负面约束：无字幕、无水印、无logo、无HUD、无现代元素、无额外主体、无额外肢体、无变形。`,
         };
     });
 }

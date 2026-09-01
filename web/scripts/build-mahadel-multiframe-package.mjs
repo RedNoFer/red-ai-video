@@ -142,7 +142,7 @@ function frameStatesForShot(shot) {
         .flatMap((item, index, list) => splitVisibleState(item, index, list.length))
         .filter(Boolean);
     const unique = [...new Map(raw.map((state) => [state, state])).values()];
-    return (unique.length ? unique : ["主体与当前场景保持明确的静态关系"]).slice(0, 4);
+    return (unique.length ? unique : ["主体与当前场景保持明确的静态关系"]).slice(0, 5);
 }
 
 function splitVisibleState(value, index, count) {
@@ -169,7 +169,7 @@ function staticImagePrompt(shot, state, index, count) {
     const composition = cleanStaticText(shot.continuity?.composition || "主体关系清晰，保留前景、中景与背景纵深");
     const lighting = cleanStaticText(shot.lighting || "延续本场主光");
     const palette = cleanStaticText(shot.colorPalette || "沿用本场色板");
-    return `静态画面：${state}；可见表演：${performance}；景别：${size}；构图：${composition}；光线与色彩：${lighting}，${palette}；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。`;
+    return `静态关键帧：${state}；可见状态：主体、道具与环境在当前瞬间的明确状态；可见表演状态：${performance}；景别：${size}；机位与构图：${composition}，9:16安全区，前景有具体框景；站位与视线：主体站位明确，视线落向当前叙事目标；三层空间：前景为框景遮挡，中景承载主体与道具，背景交代环境纵深；光色与风格：${lighting}，${palette}，材质纹理自然；参考图职责：按本镜已绑定角色、场景、道具和连续性图片各司其职；负面约束：无字幕、无水印、无logo、无HUD、无现代元素、无额外主体、无额外肢体、无变形。`;
 }
 
 function staticShotSize(value, sequenceIndex = 1) {
