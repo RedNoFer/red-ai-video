@@ -30,7 +30,7 @@ export function previewDramaProductionPackage(source: string, fileName = "produc
     const format = fileName.toLowerCase().endsWith(".json") || trimmed.startsWith("{") ? "json" : "markdown";
     // The serialized Markdown embeds the canonical package object. Prefer it so
     // preview and apply use the same normalized source of truth.
-    const parsed = format === "markdown" ? parseObject(embedded || "") || parseDirectorMarkdown(trimmed) : parseObject(trimmed);
+    const parsed = format === "markdown" ? parseObject((embedded || "").replace(/\\u0060/gu, "`")) || parseDirectorMarkdown(trimmed) : parseObject(trimmed);
     if (!parsed) throw new DramaProductionPackageError("Markdown 制作包缺少可读取的标准清单或导演执行表");
     const normalizedPackage = normalizeProductionPackage(parsed);
     const rawPlan = object(object(object(parsed).project).productionBible).productionPlan;
@@ -1563,7 +1563,9 @@ function mergeShotGroup(group: DramaProductionPackageEpisode["shots"]) {
         narration: joinTexts(group.map((shot) => shot.narration)),
         utterances: group.flatMap((shot) => shot.utterances).map((utterance, index) => ({ ...utterance, order: index + 1 })),
         imagePrompt: first.imagePrompt,
-        videoPrompt: joinTexts(group.map((shot) => shot.videoPrompt)),
+        videoPrompt: mergeVideoPromptGroup(group),
+        startFramePrompt: first.startFramePrompt,
+        endFramePrompt: last.endFramePrompt,
         negativePrompt: joinTexts(group.map((shot) => shot.negativePrompt)),
         continuity: { ...first.continuity, actionStart: first.continuity?.actionStart || first.description, actionEnd: last.continuity?.actionEnd || last.description, continuityNotes: joinTexts([first.continuity?.continuityNotes, last.continuity?.continuityNotes]) },
         duration: group.reduce((sum, shot) => sum + shot.duration, 0),
@@ -1582,9 +1584,33 @@ function mergeShotGroup(group: DramaProductionPackageEpisode["shots"]) {
     } as DramaProductionPackageEpisode["shots"][number];
 }
 
+function mergeVideoPromptGroup(group: DramaProductionPackageEpisode["shots"]) {
+    const first = group[0];
+    const last = group.at(-1)!;
+    const start = extractVideoMarker(first.videoPrompt, "起始可见状态") || first.continuity?.actionStart || first.description;
+    const end = extractVideoMarker(last.videoPrompt, "结束画面") || last.continuity?.actionEnd || last.description;
+    const performance = group.map((shot) => shot.continuity?.actionEnd || shot.description).filter(Boolean);
+    const environment = group.flatMap((shot) => [shot.sound?.ambience, shot.sound?.soundEffects, shot.sound?.music]).filter(Boolean);
+    const constraints = last.negativePrompt || first.negativePrompt || "无闪烁、无形变、无背景漂移、无身份跳变、无水印文字";
+    return [
+        `动态意图：${start}到${end}`,
+        `起始可见状态：${start}`,
+        `主体动作与反应：${joinTexts(performance)}`,
+        `一个主运镜：${first.cameraMotion || "固定机位"}`,
+        environment.length ? `环境压力与声音：${joinTexts(environment)}` : "",
+        `结束画面：${end}`,
+        `针对性约束：${constraints}`,
+    ].filter(Boolean).join("；");
+}
+
+function extractVideoMarker(value: string, marker: string) {
+    return value.match(new RegExp(`${marker}[：:]([^；。]+)`, "u"))?.[1]?.trim() || "";
+}
+
 function compactMergedFrames(frames: DramaProductionPackageEpisode["shots"][number]["framePlan"]["frames"], duration: number) {
-    if (frames.length <= 9) return frames;
-    const selected = Array.from({ length: 9 }, (_, index) => frames[Math.floor((index * frames.length) / 9)]).filter((frame, index, all) => all.findIndex((item) => item.id === frame.id) === index);
+    const unique = frames.filter((frame, index, all) => all.findIndex((item) => item.actionPrompt.trim() === frame.actionPrompt.trim()) === index);
+    if (unique.length === frames.length) return frames;
+    const selected = unique.length <= 9 ? unique : Array.from({ length: 9 }, (_, index) => unique[Math.floor((index * unique.length) / 9)]);
     const partitions = integerPartitions(duration, selected.length);
     let cursor = 0;
     return selected.map((frame, index) => ({

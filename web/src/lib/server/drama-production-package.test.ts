@@ -164,16 +164,15 @@ describe("production package boundary", () => {
         const preview = previewDramaProductionPackage(source, "mahadel-episode-01-production-package-v2-multiframe.md");
         expect(preview.package.schemaVersion).toBe(1);
         expect(preview.package.project.productionBible.productionPlan?.video.mode).toBe("storyboard");
+        expect(preview.package.project.productionBible.productionPlan?.video.shotDuration).toBe(15);
         expect(preview.package.episodes[0].shots.every((shot) => shot.storyboardFrameMode === "all_frames")).toBe(true);
-        expect(preview.package.episodes[0].shots.slice(0, 2).map((shot) => shot.duration)).toEqual([8, 7]);
+        expect(preview.package.episodes[0].shots).toHaveLength(12);
+        expect(preview.package.episodes[0].shots.every((shot) => shot.duration === 15)).toBe(true);
+        expect(preview.package.episodes[0].shots[0].title).toBe("黑湖记忆");
+        expect(preview.package.episodes[0].shots[1].title).toBe("梦醒试探");
         expect(preview.package.episodes[0].shots[1].framePlan?.start.source).toBe("previous_accepted_actual_tail");
-        expect(preview.package.episodes[0].shots[0].framePlan?.frames.map((frame) => frame.actionPrompt)).toEqual([
-            "黑湖无波，倒悬古塔与Karin模糊倒影对齐",
-            "雪地中央四只手彼此扣紧，Karin掌心握住完整剑刃",
-            "完整剑刃从掌心断口向外裂开，四只手仍未松开",
-            "冷银断口占据画面中心，Karin手指扣住碎裂剑刃并停住",
-        ]);
-        expect(preview.package.episodes[0].shots[1].framePlan?.frames.at(-1)?.actionPrompt).toContain("完全惊醒");
+        expect(preview.package.episodes[0].shots[0].framePlan?.frames[0].imagePrompt).toContain("黑湖无波");
+        expect(preview.package.episodes[0].shots[0].framePlan?.frames.at(-1)?.imagePrompt).toContain("完全惊醒");
     });
 
     it("keeps the generated package prompts split into static frames and motion intent", () => {
@@ -186,6 +185,7 @@ describe("production package boundary", () => {
             expect(shot.videoPrompt).toContain("起始可见状态");
             expect(shot.videoPrompt).toContain("一个主运镜");
             expect(shot.videoPrompt).toContain("结束画面");
+            expect((shot.videoPrompt.match(/一个主运镜：/gu) || []).length).toBe(1);
             expect(shot.videoPrompt).not.toMatch(/本内部|assetId|参考图清单|URL/u);
             for (const frame of shot.framePlan.frames) {
                 expect(frame.imagePrompt).not.toMatch(movement);

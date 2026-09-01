@@ -9,7 +9,8 @@ export function serializeDramaProductionPackageMarkdown(value: DramaProductionPa
     const canonical = withDeterministicVideoSection(value);
     const sections = canonical.archive?.sections || [];
     const body = sections.map((section, index) => `## ${canonicalChapterTitle(section, index)}\n\n${section.title.includes("镜头执行表") ? shotTable(canonical) : section.content.trim()}`).join("\n\n");
-    return `${`# 《${canonical.project.title}》完整制作包\n\n> 制作包格式：\`vozeb-drama-production-package-v1\`\n> 规范数据源：JSON；本文件由同一对象确定性导出。\n> 目标平台：${canonical.project.productionBible.targetPlatform || "未指定"}｜语言：${canonical.project.productionBible.language}｜画幅：${canonical.project.ratio}｜成片：约 ${canonical.project.productionBible.targetDuration || canonical.episodes.reduce((total, episode) => total + episode.shots.reduce((sum, shot) => sum + shot.duration, 0), 0)} 秒\n\n## 规范对象（导入权威数据）\n\n\`\`\`drama-production-package\n${JSON.stringify(canonical, null, 2)}\n\`\`\`\n\n${body}`.trimEnd()}\n`;
+    const embeddedJson = JSON.stringify(canonical, null, 2).replace(/```/gu, "\\u0060\\u0060\\u0060");
+    return `${`# 《${canonical.project.title}》完整制作包\n\n> 制作包格式：\`vozeb-drama-production-package-v1\`\n> 规范数据源：JSON；本文件由同一对象确定性导出。\n> 目标平台：${canonical.project.productionBible.targetPlatform || "未指定"}｜语言：${canonical.project.productionBible.language}｜画幅：${canonical.project.ratio}｜成片：约 ${canonical.project.productionBible.targetDuration || canonical.episodes.reduce((total, episode) => total + episode.shots.reduce((sum, shot) => sum + shot.duration, 0), 0)} 秒\n\n## 规范对象（导入权威数据）\n\n\`\`\`drama-production-package\n${embeddedJson}\n\`\`\`\n\n${body}`.trimEnd()}\n`;
 }
 
 function withDeterministicVideoSection(value: DramaProductionPackageV1): DramaProductionPackageV1 {

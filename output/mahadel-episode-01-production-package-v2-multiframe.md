@@ -36,13 +36,15 @@
         ],
         "video": {
           "model": "alibaba/wan-3.0",
-          "mode": "reference",
+          "mode": "storyboard",
           "ratio": "9:16",
           "resolution": "720p",
           "durationPolicy": "shot",
+          "shotDuration": 15,
           "count": 1,
           "audioMode": "native",
-          "allowExplicitFallback": false
+          "allowExplicitFallback": false,
+          "modelParameters": {}
         },
         "references": {
           "strategy": "adaptive",
@@ -589,8 +591,7 @@
           "locationCode": "S05",
           "summary": "黑湖没有波纹。倒悬在水下的高塔占满竖幅，塔尖正对Karin的倒影。雪地里，四只手彼此抓紧。Karin看不清另外三个人的脸，只看见自己掌心握着一截完整剑刃。\n剑刃自行裂开。\n记忆中的声音（耳语）：“你又来迟了。”\nKarin猛然睁眼。",
           "shotCodes": [
-            "SH001",
-            "SH002"
+            "SH001"
           ]
         },
         {
@@ -602,11 +603,8 @@
           "locationCode": "S06",
           "summary": "Karin的手仍扣在断剑上。Rifa没有追问，先等他的呼吸恢复。\nRifa：“又是那个梦？”\nKarin：“只是路太颠。”\nRifa看一眼平整得过分的皇家道路：“当然。石头还学会道歉了。”\n她把水囊推过去。Karin刚接住，腰间护符忽然闪烁后熄灭。\nRifa：“第几个？”\nKarin：“今天？”\nRifa：“十八岁以后。”\nKarin没有回答。车窗外，皇家结界已经逼近。",
           "shotCodes": [
-            "SH003",
-            "SH004",
-            "SH005",
-            "SH006",
-            "SH007"
+            "SH002",
+            "SH003"
           ]
         },
         {
@@ -618,11 +616,8 @@
           "locationCode": "S02",
           "summary": "马车穿过水波般的结界，高塔法师同时转头。检查官把黄铜探测器依次对准Karin与Rifa，指针死死停在零。\n检查官：“没有灵压，却带着Mahadel的徽记。”\nRifa：“你可以说我们很有礼貌。”\n检查官抬手，闸门锁链落下：“也可以说，你们在隐藏危险。”\nKarin向前半步，挡住检查官看向Rifa的视线。\nKarin：“我们只是来修一把剑。”",
           "shotCodes": [
-            "SH008",
-            "SH009",
-            "SH010",
-            "SH011",
-            "SH012"
+            "SH004",
+            "SH005"
           ]
         },
         {
@@ -634,11 +629,8 @@
           "locationCode": "S02",
           "summary": "Rifa不看Karin的脸，只看他扣在断剑上的拇指。那是两人早已约定的信号。她走到与他完全并肩的位置。\n两人同时松开封印的一线。\n没有火焰，没有雷霆。声音先被抽空。旗帜停在风里，尘埃悬浮，结界向二人凹陷，探测器从内部裂开。\nKarin先收力。Rifa慢半拍，确认他站稳才收回力量。\nKarin（低声）：“这样够明显吗？”\n检查官看见一年级徽记，放下手臂。闸门开启。高塔上，观察者转动四点银戒。\n观察者（耳语）：“两个异类。可预言里，缺了两个名字。”",
           "shotCodes": [
-            "SH013",
-            "SH014",
-            "SH015",
-            "SH016",
-            "SH017"
+            "SH006",
+            "SH007"
           ]
         },
         {
@@ -650,9 +642,7 @@
           "locationCode": "S03",
           "summary": "城市沿竖向陡坡层层升高。Karin仰头看得出神，断剑撞上手推车，他立刻护住剑鞘。\nRifa：“还疼？”\nKarin：“剑不会疼。”\nRifa放慢脚步，与他并肩：“我问的是你。”\nKarin不回答，但没有把手从剑上移开。",
           "shotCodes": [
-            "SH018",
-            "SH019",
-            "SH020"
+            "SH008"
           ]
         },
         {
@@ -664,8 +654,7 @@
           "locationCode": "S04",
           "summary": "坡道尽头，木牌上的银色裂痕与梦中剑刃的裂口完全相同。\nRifa：“你见过这个？”\nKarin：“没有。”\n他说得太快。抬起的手尚未碰门，断剑先在鞘中震动。门内传来三次锤击，木门自行开启。\n奥伦在纵深尽头背对二人：“关门。把剑放到铁砧上。”",
           "shotCodes": [
-            "SH021",
-            "SH022"
+            "SH009"
           ]
         },
         {
@@ -677,14 +666,9 @@
           "locationCode": "S04",
           "summary": "Rifa守在门与Karin之间，直到Karin主动走向铁砧才让开半步。\n奥伦不看推荐信：“谁告诉你，它是被打断的？”\nKarin：“我看着它断的。”\n奥伦：“你看见的是结果。”\n无头锤柄碰触断口。炉火缩成一线，店内金属全部朝铁砧偏转。\n黑湖、倒塔、四只手。这一次，Karin看清其中一只手腕系着暗红细线。他转头看向Rifa的辫绳。Rifa立刻抓住他的手腕，幻象破碎。\n奥伦：“别放开。剑正在借她的记忆认你。”\nRifa：“你知道它为什么断？”\n奥伦取出带四点印记的木匣：“它不是断了。它在拒绝保持完整。”\n他把木匣推向Karin：“而你，不是第一个带它来这里的人。”\n铜镜中没有店内三人，只有高塔上的斗篷身影。Rifa的短刃滑出半寸。\nRifa：“上一个人是谁？”\n奥伦熄灭炉火。黑暗中，木匣再次耳语：“你又来迟了。”\n切黑。",
           "shotCodes": [
-            "SH023",
-            "SH024",
-            "SH025",
-            "SH026",
-            "SH027",
-            "SH028",
-            "SH029",
-            "SH030"
+            "SH010",
+            "SH011",
+            "SH012"
           ]
         }
       ],
@@ -692,9 +676,9 @@
         {
           "code": "SH001",
           "order": 1,
-          "title": "黑湖记忆 1/2",
-          "description": "黑湖、倒塔、四手与裂剑",
-          "sourceText": "黑湖没有波纹。倒悬在水下的高塔占满竖幅，塔尖正对Karin的倒影。雪地里，四只手彼此抓紧。Karin看不清另外三个人的脸，只看见自己掌心握着一截完整剑刃。\n剑刃自行裂开。\n记忆中的声音（耳语）：“你又来迟了。”\nKarin猛然睁眼。",
+          "title": "黑湖记忆",
+          "description": "黑湖、倒塔、四手与裂剑；剑刃在 Karin 掌心裂开；马车中的 Karin 从裂剑匹配切中惊醒，手扣住断剑，呼吸急促",
+          "sourceText": "黑湖没有波纹。倒悬在水下的高塔占满竖幅，塔尖正对Karin的倒影。雪地里，四只手彼此抓紧。Karin看不清另外三个人的脸，只看见自己掌心握着一截完整剑刃。\n剑刃自行裂开。\n记忆中的声音（耳语）：“你又来迟了。”；裂开的剑刃断口与 Karin 扣紧的手指匹配切到马车内；Karin 猛然睁眼，手扣住断剑，呼吸急促。",
           "shotBoundary": "睁眼匹配切",
           "dialogue": "",
           "narration": "记忆：你又来迟了。",
@@ -708,10 +692,8 @@
             }
           ],
           "imagePrompt": "静态画面：黑湖无波，倒悬古塔与Karin模糊倒影对齐；可见表演：表情：眉眼清晰；视线：朝向当前主体；手部与道具保持明确接触关系；景别：大远景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：无源冷光，深蓝黑+雪白；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。",
-          "videoPrompt": "动态意图：黑湖无波，倒悬古塔与Karin模糊倒影对齐到冷银断口占据画面中心，Karin手指扣住碎裂剑刃并停住；起始可见状态：黑湖无波，倒悬古塔与Karin模糊倒影对齐；触发：完整剑刃从掌心断口向外裂开，四只手仍未松开；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：垂直慢推；声音：近乎无环境声、远处冰风；剑刃自裂；无呼吸女声与低弦两音母题；结束画面：冷银断口占据画面中心，Karin手指扣住碎裂剑刃并停住；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无水印、无logo、无可辨识的Ras或Ref、无额外肢体、无断手、无脸部变形、无现代元素、无HUD、无过量粒子。。",
+          "videoPrompt": "动态意图：黑湖、倒塔、四手与完整剑刃到Karin在马车中睁眼并扣住断剑，呼吸急促；起始可见状态：黑湖、倒塔、四手与完整剑刃；主体动作与反应：Karin掌心的完整剑刃裂开，手指仍扣住断口；Karin在马车中睁眼并扣住断剑，呼吸急促；一个主运镜：垂直慢推；环境压力与声音：近乎无环境声、远处冰风；剑刃自裂；无呼吸女声与低弦两音母题；结束画面：Karin在马车中睁眼并扣住断剑，呼吸急促；针对性约束：无字幕、无水印、无logo、无可辨识的Ras或Ref、无额外肢体、无断手、无脸部变形、无现代元素、无HUD、无过量粒子。",
           "cameraMotion": "垂直慢推",
-          "startFramePrompt": "静态画面：黑湖无波，倒悬古塔与Karin模糊倒影对齐；可见表演：表情：眉眼清晰；视线：朝向当前主体；手部与道具保持明确接触关系；景别：大远景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：无源冷光，深蓝黑+雪白；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。；本镜以独立入口状态开始。",
-          "endFramePrompt": "静态画面：冷银断口占据画面中心，Karin手指扣住碎裂剑刃并停住；可见表演：表情保持稳定；视线朝向当前主体；Karin在马车中惊醒，手扣断剑，呼吸急促；景别：特写；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：无源冷光，深蓝黑+雪白；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。；出口状态保存为当前视频版本实际尾帧并在下游继承前人工验收。",
           "negativePrompt": "无字幕、无水印、无logo、无可辨识的Ras或Ref、无额外肢体、无断手、无脸部变形、无现代元素、无HUD、无过量粒子。",
           "continuity": {
             "shotSize": "ELS→ECU",
@@ -719,13 +701,13 @@
             "composition": "主体保持在9:16安全区，动作方向留出前进空间",
             "characterBlocking": "按黑湖、倒塔、四手与裂剑的动作关系安排站位",
             "gazeDirection": "沿叙事动作方向，反应时回看对手或关键道具",
-            "actionStart": "黑湖、倒塔、四手与裂剑",
-            "actionEnd": "Karin在马车中惊醒，手扣断剑，呼吸急促",
+            "actionStart": "黑湖、倒塔、四手与完整剑刃",
+            "actionEnd": "Karin在马车中睁眼并扣住断剑，呼吸急促",
             "screenDirection": "保持同侧屏幕运动方向",
             "axisRule": "保持180度关系轴线，转场时明确切换",
-            "continuityNotes": "睁眼匹配切"
+            "continuityNotes": "断口匹配切；继承上一镜断口，匹配切入马车"
           },
-          "duration": 8,
+          "duration": 15,
           "characterCodes": [
             "C01"
           ],
@@ -735,7 +717,7 @@
           "clueCodes": [],
           "locationCode": "S05",
           "storySceneCode": "SC01",
-          "timecode": "0-8s",
+          "timecode": "0-15s",
           "dramaticFunction": "B线钩子",
           "lens": "35mm",
           "lighting": "无源冷光",
@@ -821,13 +803,13 @@
                 "gaze": "沿镜头轴线向右",
                 "pose": "克制站姿或自然坐姿",
                 "expression": "按本镜表演说明",
-                "action": "黑湖、倒塔、四手与裂剑"
+                "action": "Karin在马车中惊醒，手扣断剑，呼吸急促"
               }
             ],
             "props": [
               {
                 "assetId": "P01",
-                "state": "黑湖、倒塔、四手与裂剑",
+                "state": "Karin在马车中惊醒，手扣断剑，呼吸急促",
                 "holderId": "C01"
               }
             ],
@@ -836,10 +818,6 @@
             "axis": "保持180度人物关系轴线",
             "screenDirection": "角色移动方向沿场景既定动线"
           },
-          "sourceAssetIds": [],
-          "continuityStatus": "planned",
-          "videoMode": "reference",
-          "storyboardFrameMode": "all_frames",
           "framePlan": {
             "start": {
               "source": "independent"
@@ -854,7 +832,7 @@
                 "startSecond": 0,
                 "endSecond": 2,
                 "actionPrompt": "黑湖无波，倒悬古塔与Karin模糊倒影对齐",
-                "imagePrompt": "静态画面：黑湖无波，倒悬古塔与Karin模糊倒影对齐；可见表演：表情：眉眼清晰；视线：朝向当前主体；手部与道具保持明确接触关系；景别：大远景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：无源冷光，深蓝黑+雪白；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
+                "imagePrompt": "静态关键帧：黑湖无波，倒悬古塔与Karin模糊倒影对齐；可见状态：入口构图已建立；保持人物身份、服装、道具材质、空间结构、光向、构图和轴线连续；只呈现当前时间点的静态画面，不表现运动过程。"
               },
               {
                 "id": "SH001-F02",
@@ -862,7 +840,7 @@
                 "startSecond": 2,
                 "endSecond": 4,
                 "actionPrompt": "雪地中央四只手彼此扣紧，Karin掌心握住完整剑刃",
-                "imagePrompt": "静态画面：雪地中央四只手彼此扣紧，Karin掌心握住完整剑刃；可见表演：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；景别：特写；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：无源冷光，深蓝黑+雪白；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
+                "imagePrompt": "静态关键帧：雪地中央四只手彼此扣紧，Karin掌心握住完整剑刃；可见状态：手部与道具关系发生可见变化；保持人物身份、服装、道具材质、空间结构、光向、构图和轴线连续；只呈现当前时间点的静态画面，不表现运动过程。"
               },
               {
                 "id": "SH001-F03",
@@ -870,7 +848,7 @@
                 "startSecond": 4,
                 "endSecond": 6,
                 "actionPrompt": "完整剑刃从掌心断口向外裂开，四只手仍未松开",
-                "imagePrompt": "静态画面：完整剑刃从掌心断口向外裂开，四只手仍未松开；可见表演：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；景别：特写；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：无源冷光，深蓝黑+雪白；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
+                "imagePrompt": "静态关键帧：完整剑刃从掌心断口向外裂开，四只手仍未松开；可见状态：表情、视线与道具状态同步变化；保持人物身份、服装、道具材质、空间结构、光向、构图和轴线连续；只呈现当前时间点的静态画面，不表现运动过程。"
               },
               {
                 "id": "SH001-F04",
@@ -878,13 +856,41 @@
                 "startSecond": 6,
                 "endSecond": 8,
                 "actionPrompt": "冷银断口占据画面中心，Karin手指扣住碎裂剑刃并停住",
-                "imagePrompt": "静态画面：冷银断口占据画面中心，Karin手指扣住碎裂剑刃并停住；可见表演：表情保持稳定；视线朝向当前主体；Karin在马车中惊醒，手扣断剑，呼吸急促；景别：特写；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：无源冷光，深蓝黑+雪白；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
+                "imagePrompt": "静态关键帧：冷银断口占据画面中心，Karin手指扣住碎裂剑刃并停住；可见状态：动作完成后的稳定尾帧；保持人物身份、服装、道具材质、空间结构、光向、构图和轴线连续；只呈现当前时间点的静态画面，不表现运动过程。"
+              },
+              {
+                "id": "SH001-F05",
+                "sequenceIndex": 5,
+                "startSecond": 8,
+                "endSecond": 9.75,
+                "actionPrompt": "上一镜冷银断口与扣紧手指作为马车内匹配切入口",
+                "imagePrompt": "静态关键帧：上一镜冷银断口与扣紧手指作为马车内匹配切入口；可见状态：入口构图已建立；保持人物身份、服装、道具材质、空间结构、光向、构图和轴线连续；只呈现当前时间点的静态画面，不表现运动过程。"
+              },
+              {
+                "id": "SH001-F06",
+                "sequenceIndex": 6,
+                "startSecond": 9.75,
+                "endSecond": 11.5,
+                "actionPrompt": "马车内同一只手继续压住断剑，Karin肩膀绷紧",
+                "imagePrompt": "静态关键帧：马车内同一只手继续压住断剑，Karin肩膀绷紧；可见状态：手部与道具关系发生可见变化；保持人物身份、服装、道具材质、空间结构、光向、构图和轴线连续；只呈现当前时间点的静态画面，不表现运动过程。"
+              },
+              {
+                "id": "SH001-F07",
+                "sequenceIndex": 7,
+                "startSecond": 11.5,
+                "endSecond": 13.25,
+                "actionPrompt": "Karin睁开灰绿色眼睛，视线落向断剑，呼吸急促并保持握持",
+                "imagePrompt": "静态关键帧：Karin睁开灰绿色眼睛，视线落向断剑，呼吸急促并保持握持；可见状态：表情、视线与道具状态同步变化；保持人物身份、服装、道具材质、空间结构、光向、构图和轴线连续；只呈现当前时间点的静态画面，不表现运动过程。"
+              },
+              {
+                "id": "SH001-F08",
+                "sequenceIndex": 8,
+                "startSecond": 13.25,
+                "endSecond": 15,
+                "actionPrompt": "Karin完全惊醒，手扣断剑、肩膀绷紧、视线稳定锁定握柄",
+                "imagePrompt": "静态关键帧：Karin完全惊醒，手扣断剑、肩膀绷紧、视线稳定锁定握柄；可见状态：动作完成后的稳定尾帧；保持人物身份、服装、道具材质、空间结构、光向、构图和轴线连续；只呈现当前时间点的静态画面，不表现运动过程。"
               }
             ],
-            "referenceCount": {
-              "min": 3,
-              "max": 9
-            },
             "referenceManifest": [
               {
                 "alias": "@图片1",
@@ -903,226 +909,33 @@
                 "role": "prop_anchor",
                 "purpose": "道具基准图：保持 Karin的断剑 的形状、持有人与当前状态一致",
                 "assetId": "P01"
-              }
-            ]
-          }
-        },
-        {
-          "code": "SH002",
-          "order": 2,
-          "title": "黑湖记忆 2/2",
-          "description": "Karin在马车中惊醒，手扣断剑，呼吸急促",
-          "sourceText": "黑湖没有波纹。倒悬在水下的高塔占满竖幅，塔尖正对Karin的倒影。雪地里，四只手彼此抓紧。Karin看不清另外三个人的脸，只看见自己掌心握着一截完整剑刃。\n剑刃自行裂开。\n记忆中的声音（耳语）：“你又来迟了。”\nKarin猛然睁眼。",
-          "shotBoundary": "睁眼匹配切",
-          "dialogue": "",
-          "narration": "",
-          "utterances": [],
-          "imagePrompt": "静态画面：马车内同一只手继续压住断剑，Karin肩膀绷紧；可见表演：表情：眉眼清晰；视线：朝向当前主体；手部与道具保持明确接触关系；景别：大远景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：无源冷光，深蓝黑+雪白；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。",
-          "videoPrompt": "动态意图：马车内同一只手继续压住断剑，Karin肩膀绷紧到Karin完全惊醒，手扣断剑、肩膀绷紧、视线稳定锁定握柄；起始可见状态：马车内同一只手继续压住断剑，Karin肩膀绷紧；触发：Karin睁开灰绿色眼睛，视线落向断剑，呼吸急促并保持握持；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：垂直慢推；声音：近乎无环境声、远处冰风；剑刃自裂；无呼吸女声与低弦两音母题；结束画面：Karin完全惊醒，手扣断剑、肩膀绷紧、视线稳定锁定握柄；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无水印、无logo、无可辨识的Ras或Ref、无额外肢体、无断手、无脸部变形、无现代元素、无HUD、无过量粒子。。",
-          "cameraMotion": "垂直慢推",
-          "startFramePrompt": "静态画面：马车内同一只手继续压住断剑，Karin肩膀绷紧；可见表演：表情：眉眼清晰；视线：朝向当前主体；手部与道具保持明确接触关系；景别：大远景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：无源冷光，深蓝黑+雪白；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。；首帧仅继承@图片1对应的上一镜已验收实际尾帧状态。",
-          "endFramePrompt": "静态画面：Karin完全惊醒，手扣断剑、肩膀绷紧、视线稳定锁定握柄；可见表演：表情保持稳定；视线朝向当前主体；Karin在马车中惊醒，手扣断剑，呼吸急促；景别：特写；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：无源冷光，深蓝黑+雪白；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。；出口状态保存为当前视频版本实际尾帧并在下游继承前人工验收。",
-          "negativePrompt": "无字幕、无水印、无logo、无可辨识的Ras或Ref、无额外肢体、无断手、无脸部变形、无现代元素、无HUD、无过量粒子。",
-          "continuity": {
-            "shotSize": "ELS→ECU",
-            "cameraAngle": "视线高度平视，沿动作轴线拍摄",
-            "composition": "主体保持在9:16安全区，动作方向留出前进空间",
-            "characterBlocking": "按黑湖、倒塔、四手与裂剑的动作关系安排站位",
-            "gazeDirection": "沿叙事动作方向，反应时回看对手或关键道具",
-            "actionStart": "黑湖、倒塔、四手与裂剑",
-            "actionEnd": "Karin在马车中惊醒，手扣断剑，呼吸急促",
-            "screenDirection": "保持同侧屏幕运动方向",
-            "axisRule": "保持180度关系轴线，转场时明确切换",
-            "continuityNotes": "睁眼匹配切"
-          },
-          "duration": 7,
-          "characterCodes": [
-            "C01"
-          ],
-          "propCodes": [
-            "P01"
-          ],
-          "clueCodes": [],
-          "locationCode": "S06",
-          "storySceneCode": "SC01",
-          "timecode": "8-15s",
-          "dramaticFunction": "B线钩子",
-          "lens": "35mm",
-          "lighting": "无源冷光",
-          "colorPalette": "深蓝黑+雪白",
-          "transitionOut": "睁眼匹配切",
-          "performanceNotes": "你又来迟了。",
-          "performancePlan": {
-            "emotionalObjective": "围绕黑湖、倒塔、四手与裂剑完成当前镜头的外在行动目标",
-            "emotionalArc": "从进入黑湖、倒塔、四手与裂剑的克制状态开始，经由动作反应推进，在Karin在马车中惊醒，手扣断剑，呼吸急促前收束",
-            "speechStyle": "无对白，以呼吸、视线和动作反应传递情绪",
-            "pace": "按镜头时长均匀推进，动作变化处短暂停顿，转场前收住",
-            "breath": "起始自然吸气，动作变化处短暂停顿，结束以呼气完成收束",
-            "restraintLevel": "中等克制，避免夸张表演",
-            "beats": {
-              "start": {
-                "emotion": "保持与上一状态一致",
-                "facialAction": "眉眼和下颌保持可读的初始反应",
-                "gaze": "沿当前镜头动作方向",
-                "bodyAction": "进入黑湖、倒塔、四手与裂剑"
-              },
-              "middle": {
-                "emotion": "压力或目标逐步显现",
-                "facialAction": "眉眼、嘴角或下颌出现与动作对应的细微变化",
-                "gaze": "短暂聚焦关键人物或道具",
-                "bodyAction": "完成主要动作并保留反应停顿"
-              },
-              "end": {
-                "emotion": "在下一镜头切点前完成情绪落点",
-                "facialAction": "固定最终表情，避免切点前漂移",
-                "gaze": "指向下一动作或转场方向",
-                "bodyAction": "Karin在马车中惊醒，手扣断剑，呼吸急促"
-              }
-            }
-          },
-          "dialoguePerformance": [],
-          "lightingPlan": {
-            "palette": "深蓝黑+雪白",
-            "colorTemperature": "主光冷暖关系沿用本场设定，避免相邻镜头跳变",
-            "keyLight": "无源冷光作为主光，明确来自画面主方向并照亮主体面部",
-            "fillLight": "弱补光保留面部细节，阴影侧不完全压黑",
-            "rimLight": "以轻微轮廓光分离人物与背景，不制造硬边光晕",
-            "contrast": "中等反差，主体层次清晰，避免高光溢出",
-            "materialResponse": "金属、皮革和织物按真实材质反射，亮部克制",
-            "skinToneProtection": "保护肤色自然，不被环境色完全染色",
-            "inheritFromPrevious": "继承上一镜主光方向、色温和环境亮度",
-            "transitionToNext": "在动作结束处平滑过渡到下一镜主光和色板"
-          },
-          "sound": {
-            "ambience": "近乎无环境声、远处冰风",
-            "soundEffects": "剑刃自裂",
-            "music": "无呼吸女声与低弦两音母题"
-          },
-          "entryState": {
-            "characters": [
-              {
-                "assetId": "C01",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面左侧或前景",
-                "gaze": "沿镜头轴线向右",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "黑湖、倒塔、四手与裂剑"
-              }
-            ],
-            "props": [
-              {
-                "assetId": "P01",
-                "state": "黑湖、倒塔、四手与裂剑",
-                "holderId": "C01"
-              }
-            ],
-            "environment": "黑湖记忆",
-            "lighting": "无源冷光",
-            "axis": "保持180度人物关系轴线",
-            "screenDirection": "角色移动方向沿场景既定动线"
-          },
-          "exitState": {
-            "characters": [
-              {
-                "assetId": "C01",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面左侧或前景",
-                "gaze": "沿镜头轴线向右",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "Karin在马车中惊醒，手扣断剑，呼吸急促"
-              }
-            ],
-            "props": [
-              {
-                "assetId": "P01",
-                "state": "Karin在马车中惊醒，手扣断剑，呼吸急促",
-                "holderId": "C01"
-              }
-            ],
-            "environment": "黑湖记忆",
-            "lighting": "无源冷光",
-            "axis": "保持180度人物关系轴线",
-            "screenDirection": "角色移动方向沿场景既定动线"
-          },
-          "sourceAssetIds": [],
-          "continuityStatus": "planned",
-          "videoMode": "reference",
-          "storyboardFrameMode": "all_frames",
-          "framePlan": {
-            "start": {
-              "source": "previous_accepted_actual_tail"
-            },
-            "end": {
-              "required": true
-            },
-            "frames": [
-              {
-                "id": "SH002-F01",
-                "sequenceIndex": 1,
-                "startSecond": 0,
-                "endSecond": 2.333,
-                "actionPrompt": "马车内同一只手继续压住断剑，Karin肩膀绷紧",
-                "imagePrompt": "静态画面：马车内同一只手继续压住断剑，Karin肩膀绷紧；可见表演：表情：眉眼清晰；视线：朝向当前主体；手部与道具保持明确接触关系；景别：大远景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：无源冷光，深蓝黑+雪白；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
               },
               {
-                "id": "SH002-F02",
-                "sequenceIndex": 2,
-                "startSecond": 2.333,
-                "endSecond": 4.667,
-                "actionPrompt": "Karin睁开灰绿色眼睛，视线落向断剑，呼吸急促并保持握持",
-                "imagePrompt": "静态画面：Karin睁开灰绿色眼睛，视线落向断剑，呼吸急促并保持握持；可见表演：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；景别：特写；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：无源冷光，深蓝黑+雪白；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
-              },
-              {
-                "id": "SH002-F03",
-                "sequenceIndex": 3,
-                "startSecond": 4.667,
-                "endSecond": 7,
-                "actionPrompt": "Karin完全惊醒，手扣断剑、肩膀绷紧、视线稳定锁定握柄",
-                "imagePrompt": "静态画面：Karin完全惊醒，手扣断剑、肩膀绷紧、视线稳定锁定握柄；可见表演：表情保持稳定；视线朝向当前主体；Karin在马车中惊醒，手扣断剑，呼吸急促；景别：特写；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：无源冷光，深蓝黑+雪白；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
+                "alias": "@图片4",
+                "role": "scene_anchor",
+                "purpose": "场景基准图：保持空间结构、光向与轴线一致",
+                "assetId": "S06"
               }
             ],
             "referenceCount": {
               "min": 3,
               "max": 9
-            },
-            "referenceManifest": [
-              {
-                "alias": "@图片1",
-                "role": "previous_actual_tail",
-                "purpose": "上一镜当前视频版本的已人工验收实际尾帧，仅作为本镜唯一连续性锚点",
-                "shotId": "SH001"
-              },
-              {
-                "alias": "@图片2",
-                "role": "character_anchor",
-                "purpose": "角色基准图：保持 Karin 的身份特征、服装与道具不漂移",
-                "assetId": "C01"
-              },
-              {
-                "alias": "@图片3",
-                "role": "scene_anchor",
-                "purpose": "场景基准图：保持空间结构、光向与轴线一致",
-                "assetId": "S06"
-              },
-              {
-                "alias": "@图片4",
-                "role": "prop_anchor",
-                "purpose": "道具基准图：保持 Karin的断剑 的形状、持有人与当前状态一致",
-                "assetId": "P01"
-              }
-            ]
-          }
+            }
+          },
+          "sourceAssetIds": [],
+          "continuityStatus": "ready",
+          "videoMode": "storyboard",
+          "storyboardFrameMode": "all_frames",
+          "endFramePrompt": "Karin在马车中睁眼并扣住断剑，呼吸急促，肩膀绷紧。"
         },
         {
-          "code": "SH003",
-          "order": 3,
-          "title": "梦醒试探 1/3",
-          "description": "Rifa识破梦境，Karin否认",
+          "code": "SH002",
+          "order": 2,
+          "title": "梦醒试探",
+          "description": "Rifa识破梦境，Karin否认；梦醒试探的连续反应与动作过渡；Karin接住水囊，Rifa移开视线，关系恢复日常",
           "sourceText": "Karin的手仍扣在断剑上。Rifa没有追问，先等他的呼吸恢复。\nRifa：“又是那个梦？”\nKarin：“只是路太颠。”\nRifa看一眼平整得过分的皇家道路：“当然。石头还学会道歉了。”\n她把水囊推过去。Karin刚接住，腰间护符忽然闪烁后熄灭。\nRifa：“第几个？”\nKarin：“今天？”\nRifa：“十八岁以后。”\nKarin没有回答。车窗外，皇家结界已经逼近。",
           "shotBoundary": "水囊动作切",
-          "dialogue": "Rifa：又是那个梦？",
+          "dialogue": "Rifa：又是那个梦？；Karin：只是路太颠。；Rifa：当然。石头还学会道歉了。",
           "narration": "",
           "utterances": [
             {
@@ -1131,13 +944,25 @@
               "type": "dialogue",
               "speaker": "Rifa",
               "text": "又是那个梦？"
+            },
+            {
+              "id": "D03",
+              "order": 2,
+              "type": "dialogue",
+              "speaker": "Karin",
+              "text": "只是路太颠。"
+            },
+            {
+              "id": "D04",
+              "order": 3,
+              "type": "dialogue",
+              "speaker": "Rifa",
+              "text": "当然。石头还学会道歉了。"
             }
           ],
           "imagePrompt": "静态画面：马车内Rifa看向Karin，Karin的手仍扣住断剑；可见表演：表情：眉眼清晰；视线：朝向当前主体；手部与道具保持明确接触关系；景别：中景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：阴天柔光，雾蓝灰+皮革棕；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。",
-          "videoPrompt": "动态意图：马车内Rifa看向Karin，Karin的手仍扣住断剑到Karin接住水囊，Rifa移开目光，车厢关系恢复克制；起始可见状态：马车内Rifa看向Karin，Karin的手仍扣住断剑；触发：Karin避开Rifa的视线，Rifa眉心收紧并等待回答；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：固定双人中景；声音：车轮、马具、木车轻响；水囊滑过木板、剑鞘摩擦；克制拨弦，保留对白空间；结束画面：Karin接住水囊，Rifa移开目光，车厢关系恢复克制；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无浪漫凝视、无现代物品、无额外肢体、无脸部融化、无背景漂移。。",
+          "videoPrompt": "动态意图：马车内Rifa看向Karin，Karin的手仍扣住断剑到Karin握住水囊，Rifa望向车窗，车厢恢复日常站位；起始可见状态：马车内Rifa看向Karin，Karin的手仍扣住断剑；主体动作与反应：Karin接住水囊，Rifa移开视线，关系恢复日常；一个主运镜：固定双人中景；环境压力与声音：车轮、马具、木车轻响；水囊滑过木板、剑鞘摩擦；克制拨弦，保留对白空间；结束画面：Karin握住水囊，Rifa望向车窗，车厢恢复日常站位；针对性约束：无字幕、无浪漫凝视、无现代物品、无额外肢体、无脸部融化、无背景漂移。",
           "cameraMotion": "固定双人中景",
-          "startFramePrompt": "静态画面：马车内Rifa看向Karin，Karin的手仍扣住断剑；可见表演：表情：眉眼清晰；视线：朝向当前主体；手部与道具保持明确接触关系；景别：中景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：阴天柔光，雾蓝灰+皮革棕；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。；首帧仅继承@图片1对应的上一镜已验收实际尾帧状态。",
-          "endFramePrompt": "静态画面：Karin接住水囊，Rifa移开目光，车厢关系恢复克制；可见表演：表情保持稳定；视线朝向当前主体；Karin接住水囊，Rifa移开视线，关系恢复日常；景别：中景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：阴天柔光，雾蓝灰+皮革棕；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。；出口状态保存为当前视频版本实际尾帧并在下游继承前人工验收。",
           "negativePrompt": "无字幕、无浪漫凝视、无现代物品、无额外肢体、无脸部融化、无背景漂移。",
           "continuity": {
             "shotSize": "MS",
@@ -1151,7 +976,7 @@
             "axisRule": "保持180度关系轴线，转场时明确切换",
             "continuityNotes": "水囊动作切"
           },
-          "duration": 5,
+          "duration": 15,
           "characterCodes": [
             "C01",
             "C02"
@@ -1162,7 +987,7 @@
           "clueCodes": [],
           "locationCode": "S06",
           "storySceneCode": "SC02",
-          "timecode": "15-20s",
+          "timecode": "15-30s",
           "dramaticFunction": "起/关系",
           "lens": "50mm",
           "lighting": "阴天柔光",
@@ -1291,556 +1116,6 @@
                 "gaze": "沿镜头轴线向右",
                 "pose": "克制站姿或自然坐姿",
                 "expression": "按本镜表演说明",
-                "action": "Rifa识破梦境，Karin否认"
-              },
-              {
-                "assetId": "C02",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "Rifa识破梦境，Karin否认"
-              }
-            ],
-            "props": [
-              {
-                "assetId": "P01",
-                "state": "Rifa识破梦境，Karin否认",
-                "holderId": "C01"
-              }
-            ],
-            "environment": "马车",
-            "lighting": "阴天柔光",
-            "axis": "保持180度人物关系轴线",
-            "screenDirection": "角色移动方向沿场景既定动线"
-          },
-          "sourceAssetIds": [],
-          "continuityStatus": "planned",
-          "videoMode": "reference",
-          "storyboardFrameMode": "all_frames",
-          "framePlan": {
-            "start": {
-              "source": "previous_accepted_actual_tail"
-            },
-            "end": {
-              "required": true
-            },
-            "frames": [
-              {
-                "id": "SH003-F01",
-                "sequenceIndex": 1,
-                "startSecond": 0,
-                "endSecond": 1.667,
-                "actionPrompt": "马车内Rifa看向Karin，Karin的手仍扣住断剑",
-                "imagePrompt": "静态画面：马车内Rifa看向Karin，Karin的手仍扣住断剑；可见表演：表情：眉眼清晰；视线：朝向当前主体；手部与道具保持明确接触关系；景别：中景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：阴天柔光，雾蓝灰+皮革棕；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
-              },
-              {
-                "id": "SH003-F02",
-                "sequenceIndex": 2,
-                "startSecond": 1.667,
-                "endSecond": 3.333,
-                "actionPrompt": "Karin避开Rifa的视线，Rifa眉心收紧并等待回答",
-                "imagePrompt": "静态画面：Karin避开Rifa的视线，Rifa眉心收紧并等待回答；可见表演：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；景别：中景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：阴天柔光，雾蓝灰+皮革棕；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
-              },
-              {
-                "id": "SH003-F03",
-                "sequenceIndex": 3,
-                "startSecond": 3.333,
-                "endSecond": 5,
-                "actionPrompt": "Karin接住水囊，Rifa移开目光，车厢关系恢复克制",
-                "imagePrompt": "静态画面：Karin接住水囊，Rifa移开目光，车厢关系恢复克制；可见表演：表情保持稳定；视线朝向当前主体；Karin接住水囊，Rifa移开视线，关系恢复日常；景别：中景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：阴天柔光，雾蓝灰+皮革棕；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
-              }
-            ],
-            "referenceCount": {
-              "min": 3,
-              "max": 9
-            },
-            "referenceManifest": [
-              {
-                "alias": "@图片1",
-                "role": "previous_actual_tail",
-                "purpose": "上一镜当前视频版本的已人工验收实际尾帧，仅作为本镜唯一连续性锚点",
-                "shotId": "SH002"
-              },
-              {
-                "alias": "@图片2",
-                "role": "character_anchor",
-                "purpose": "角色基准图：保持 Karin 的身份特征、服装与道具不漂移",
-                "assetId": "C01"
-              },
-              {
-                "alias": "@图片3",
-                "role": "character_anchor",
-                "purpose": "角色基准图：保持 Rifa 的身份特征、服装与道具不漂移",
-                "assetId": "C02"
-              },
-              {
-                "alias": "@图片4",
-                "role": "scene_anchor",
-                "purpose": "场景基准图：保持空间结构、光向与轴线一致",
-                "assetId": "S06"
-              },
-              {
-                "alias": "@图片5",
-                "role": "prop_anchor",
-                "purpose": "道具基准图：保持 Karin的断剑 的形状、持有人与当前状态一致",
-                "assetId": "P01"
-              }
-            ]
-          }
-        },
-        {
-          "code": "SH004",
-          "order": 4,
-          "title": "梦醒试探 2/3",
-          "description": "梦醒试探的连续反应与动作过渡",
-          "sourceText": "Karin的手仍扣在断剑上。Rifa没有追问，先等他的呼吸恢复。\nRifa：“又是那个梦？”\nKarin：“只是路太颠。”\nRifa看一眼平整得过分的皇家道路：“当然。石头还学会道歉了。”\n她把水囊推过去。Karin刚接住，腰间护符忽然闪烁后熄灭。\nRifa：“第几个？”\nKarin：“今天？”\nRifa：“十八岁以后。”\nKarin没有回答。车窗外，皇家结界已经逼近。",
-          "shotBoundary": "水囊动作切",
-          "dialogue": "Karin：只是路太颠。",
-          "narration": "",
-          "utterances": [
-            {
-              "id": "D03",
-              "order": 1,
-              "type": "dialogue",
-              "speaker": "Karin",
-              "text": "只是路太颠。"
-            }
-          ],
-          "imagePrompt": "静态画面：Rifa观察Karin的呼吸，Karin仍坐在车厢内；可见表演：表情：眉眼清晰；视线：朝向当前主体；手部与道具保持明确接触关系；景别：中景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：阴天柔光，雾蓝灰+皮革棕；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。",
-          "videoPrompt": "动态意图：Rifa观察Karin的呼吸，Karin仍坐在车厢内到Rifa把水囊推到Karin手边，Karin抬手准备接住；起始可见状态：Rifa观察Karin的呼吸，Karin仍坐在车厢内；触发：Karin避开Rifa的视线，嘴角压住，手仍靠近断剑；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：固定双人中景；声音：车轮、马具、木车轻响；水囊滑过木板、剑鞘摩擦；克制拨弦，保留对白空间；结束画面：Rifa把水囊推到Karin手边，Karin抬手准备接住；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无浪漫凝视、无现代物品、无额外肢体、无脸部融化、无背景漂移。。",
-          "cameraMotion": "固定双人中景",
-          "startFramePrompt": "静态画面：Rifa观察Karin的呼吸，Karin仍坐在车厢内；可见表演：表情：眉眼清晰；视线：朝向当前主体；手部与道具保持明确接触关系；景别：中景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：阴天柔光，雾蓝灰+皮革棕；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。；首帧仅继承@图片1对应的上一镜已验收实际尾帧状态。",
-          "endFramePrompt": "静态画面：Rifa把水囊推到Karin手边，Karin抬手准备接住；可见表演：表情保持稳定；视线朝向当前主体；Karin接住水囊，Rifa移开视线，关系恢复日常；景别：中景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：阴天柔光，雾蓝灰+皮革棕；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。；出口状态保存为当前视频版本实际尾帧并在下游继承前人工验收。",
-          "negativePrompt": "无字幕、无浪漫凝视、无现代物品、无额外肢体、无脸部融化、无背景漂移。",
-          "continuity": {
-            "shotSize": "MS",
-            "cameraAngle": "视线高度平视，沿动作轴线拍摄",
-            "composition": "主体保持在9:16安全区，动作方向留出前进空间",
-            "characterBlocking": "按Rifa识破梦境，Karin否认的动作关系安排站位",
-            "gazeDirection": "沿叙事动作方向，反应时回看对手或关键道具",
-            "actionStart": "Rifa识破梦境，Karin否认",
-            "actionEnd": "Karin接住水囊，Rifa移开视线，关系恢复日常",
-            "screenDirection": "保持同侧屏幕运动方向",
-            "axisRule": "保持180度关系轴线，转场时明确切换",
-            "continuityNotes": "水囊动作切"
-          },
-          "duration": 5,
-          "characterCodes": [
-            "C01",
-            "C02"
-          ],
-          "propCodes": [
-            "P01"
-          ],
-          "clueCodes": [],
-          "locationCode": "S06",
-          "storySceneCode": "SC02",
-          "timecode": "20-25s",
-          "dramaticFunction": "起/关系",
-          "lens": "50mm",
-          "lighting": "阴天柔光",
-          "colorPalette": "雾蓝灰+皮革棕",
-          "transitionOut": "水囊动作切",
-          "performanceNotes": "又是那个梦？；只是路太颠。；当然。石头还学会道歉了。",
-          "performancePlan": {
-            "emotionalObjective": "围绕Rifa识破梦境，Karin否认完成当前镜头的外在行动目标",
-            "emotionalArc": "从进入Rifa识破梦境，Karin否认的克制状态开始，经由动作反应推进，在Karin接住水囊，Rifa移开视线，关系恢复日常前收束",
-            "speechStyle": "台词贴合当下处境，语气清晰克制，重音落在行动关键信息",
-            "pace": "按镜头时长均匀推进，动作变化处短暂停顿，转场前收住",
-            "breath": "起始自然吸气，动作变化处短暂停顿，结束以呼气完成收束",
-            "restraintLevel": "中等克制，避免夸张表演",
-            "beats": {
-              "start": {
-                "emotion": "保持与上一状态一致",
-                "facialAction": "眉眼和下颌保持可读的初始反应",
-                "gaze": "沿当前镜头动作方向",
-                "bodyAction": "进入Rifa识破梦境，Karin否认"
-              },
-              "middle": {
-                "emotion": "压力或目标逐步显现",
-                "facialAction": "眉眼、嘴角或下颌出现与动作对应的细微变化",
-                "gaze": "短暂聚焦关键人物或道具",
-                "bodyAction": "完成主要动作并保留反应停顿"
-              },
-              "end": {
-                "emotion": "在下一镜头切点前完成情绪落点",
-                "facialAction": "固定最终表情，避免切点前漂移",
-                "gaze": "指向下一动作或转场方向",
-                "bodyAction": "Karin接住水囊，Rifa移开视线，关系恢复日常"
-              }
-            }
-          },
-          "dialoguePerformance": [
-            {
-              "utteranceId": "D03",
-              "intent": "推动当前镜头行动并回应对手或环境",
-              "tone": "贴合当前情绪，清晰自然",
-              "pace": "按语义分句，中速完成",
-              "pause": "关键信息前短停，句末自然收束",
-              "emphasis": "只是路太颠。",
-              "facialReactionBefore": "先以视线和眉眼确认对方或关键道具",
-              "facialReactionDuring": "说话时保持与行动一致的面部反应",
-              "facialReactionAfter": "说完保留短暂反应，衔接下一动作"
-            },
-            {
-              "utteranceId": "D02",
-              "intent": "推动当前镜头行动并回应对手或环境",
-              "tone": "贴合当前情绪，清晰自然",
-              "pace": "按语义分句，中速完成",
-              "pause": "关键信息前短停，句末自然收束",
-              "emphasis": "又是那个梦？",
-              "facialReactionBefore": "先以视线和眉眼确认对方或关键道具",
-              "facialReactionDuring": "说话时保持与行动一致的面部反应",
-              "facialReactionAfter": "说完保留短暂反应，衔接下一动作"
-            },
-            {
-              "utteranceId": "D04",
-              "intent": "推动当前镜头行动并回应对手或环境",
-              "tone": "贴合当前情绪，清晰自然",
-              "pace": "按语义分句，中速完成",
-              "pause": "关键信息前短停，句末自然收束",
-              "emphasis": "当然。石头还学会道歉了。",
-              "facialReactionBefore": "先以视线和眉眼确认对方或关键道具",
-              "facialReactionDuring": "说话时保持与行动一致的面部反应",
-              "facialReactionAfter": "说完保留短暂反应，衔接下一动作"
-            }
-          ],
-          "lightingPlan": {
-            "palette": "雾蓝灰+皮革棕",
-            "colorTemperature": "主光冷暖关系沿用本场设定，避免相邻镜头跳变",
-            "keyLight": "阴天柔光作为主光，明确来自画面主方向并照亮主体面部",
-            "fillLight": "弱补光保留面部细节，阴影侧不完全压黑",
-            "rimLight": "以轻微轮廓光分离人物与背景，不制造硬边光晕",
-            "contrast": "中等反差，主体层次清晰，避免高光溢出",
-            "materialResponse": "金属、皮革和织物按真实材质反射，亮部克制",
-            "skinToneProtection": "保护肤色自然，不被环境色完全染色",
-            "inheritFromPrevious": "继承上一镜主光方向、色温和环境亮度",
-            "transitionToNext": "在动作结束处平滑过渡到下一镜主光和色板"
-          },
-          "sound": {
-            "ambience": "车轮、马具、木车轻响",
-            "soundEffects": "水囊滑过木板、剑鞘摩擦",
-            "music": "克制拨弦，保留对白空间"
-          },
-          "entryState": {
-            "characters": [
-              {
-                "assetId": "C01",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面左侧或前景",
-                "gaze": "沿镜头轴线向右",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "Rifa识破梦境，Karin否认"
-              },
-              {
-                "assetId": "C02",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "Rifa识破梦境，Karin否认"
-              }
-            ],
-            "props": [
-              {
-                "assetId": "P01",
-                "state": "Rifa识破梦境，Karin否认",
-                "holderId": "C01"
-              }
-            ],
-            "environment": "马车",
-            "lighting": "阴天柔光",
-            "axis": "保持180度人物关系轴线",
-            "screenDirection": "角色移动方向沿场景既定动线"
-          },
-          "exitState": {
-            "characters": [
-              {
-                "assetId": "C01",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面左侧或前景",
-                "gaze": "沿镜头轴线向右",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "梦醒试探的连续反应与动作过渡"
-              },
-              {
-                "assetId": "C02",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "梦醒试探的连续反应与动作过渡"
-              }
-            ],
-            "props": [
-              {
-                "assetId": "P01",
-                "state": "梦醒试探的连续反应与动作过渡",
-                "holderId": "C01"
-              }
-            ],
-            "environment": "马车",
-            "lighting": "阴天柔光",
-            "axis": "保持180度人物关系轴线",
-            "screenDirection": "角色移动方向沿场景既定动线"
-          },
-          "sourceAssetIds": [],
-          "continuityStatus": "planned",
-          "videoMode": "reference",
-          "storyboardFrameMode": "all_frames",
-          "framePlan": {
-            "start": {
-              "source": "previous_accepted_actual_tail"
-            },
-            "end": {
-              "required": true
-            },
-            "frames": [
-              {
-                "id": "SH004-F01",
-                "sequenceIndex": 1,
-                "startSecond": 0,
-                "endSecond": 1.667,
-                "actionPrompt": "Rifa观察Karin的呼吸，Karin仍坐在车厢内",
-                "imagePrompt": "静态画面：Rifa观察Karin的呼吸，Karin仍坐在车厢内；可见表演：表情：眉眼清晰；视线：朝向当前主体；手部与道具保持明确接触关系；景别：中景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：阴天柔光，雾蓝灰+皮革棕；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
-              },
-              {
-                "id": "SH004-F02",
-                "sequenceIndex": 2,
-                "startSecond": 1.667,
-                "endSecond": 3.333,
-                "actionPrompt": "Karin避开Rifa的视线，嘴角压住，手仍靠近断剑",
-                "imagePrompt": "静态画面：Karin避开Rifa的视线，嘴角压住，手仍靠近断剑；可见表演：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；景别：中景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：阴天柔光，雾蓝灰+皮革棕；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
-              },
-              {
-                "id": "SH004-F03",
-                "sequenceIndex": 3,
-                "startSecond": 3.333,
-                "endSecond": 5,
-                "actionPrompt": "Rifa把水囊推到Karin手边，Karin抬手准备接住",
-                "imagePrompt": "静态画面：Rifa把水囊推到Karin手边，Karin抬手准备接住；可见表演：表情保持稳定；视线朝向当前主体；Karin接住水囊，Rifa移开视线，关系恢复日常；景别：中景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：阴天柔光，雾蓝灰+皮革棕；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
-              }
-            ],
-            "referenceCount": {
-              "min": 3,
-              "max": 9
-            },
-            "referenceManifest": [
-              {
-                "alias": "@图片1",
-                "role": "previous_actual_tail",
-                "purpose": "上一镜当前视频版本的已人工验收实际尾帧，仅作为本镜唯一连续性锚点",
-                "shotId": "SH003"
-              },
-              {
-                "alias": "@图片2",
-                "role": "character_anchor",
-                "purpose": "角色基准图：保持 Karin 的身份特征、服装与道具不漂移",
-                "assetId": "C01"
-              },
-              {
-                "alias": "@图片3",
-                "role": "character_anchor",
-                "purpose": "角色基准图：保持 Rifa 的身份特征、服装与道具不漂移",
-                "assetId": "C02"
-              },
-              {
-                "alias": "@图片4",
-                "role": "scene_anchor",
-                "purpose": "场景基准图：保持空间结构、光向与轴线一致",
-                "assetId": "S06"
-              },
-              {
-                "alias": "@图片5",
-                "role": "prop_anchor",
-                "purpose": "道具基准图：保持 Karin的断剑 的形状、持有人与当前状态一致",
-                "assetId": "P01"
-              }
-            ]
-          }
-        },
-        {
-          "code": "SH005",
-          "order": 5,
-          "title": "梦醒试探 3/3",
-          "description": "Karin接住水囊，Rifa移开视线，关系恢复日常",
-          "sourceText": "Karin的手仍扣在断剑上。Rifa没有追问，先等他的呼吸恢复。\nRifa：“又是那个梦？”\nKarin：“只是路太颠。”\nRifa看一眼平整得过分的皇家道路：“当然。石头还学会道歉了。”\n她把水囊推过去。Karin刚接住，腰间护符忽然闪烁后熄灭。\nRifa：“第几个？”\nKarin：“今天？”\nRifa：“十八岁以后。”\nKarin没有回答。车窗外，皇家结界已经逼近。",
-          "shotBoundary": "水囊动作切",
-          "dialogue": "Rifa：当然。石头还学会道歉了。",
-          "narration": "",
-          "utterances": [
-            {
-              "id": "D04",
-              "order": 1,
-              "type": "dialogue",
-              "speaker": "Rifa",
-              "text": "当然。石头还学会道歉了。"
-            }
-          ],
-          "imagePrompt": "静态画面：水囊停在Karin手边，Rifa收回目光；可见表演：表情：紧张略有缓和；视线：跟随水囊移动；手部：从待接变为握稳水囊；景别：中景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：阴天柔光，雾蓝灰+皮革棕；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。",
-          "videoPrompt": "动态意图：水囊停在Karin手边，Rifa收回目光到Karin握住水囊，Rifa望向车窗，车厢恢复日常站位；起始可见状态：水囊停在Karin手边，Rifa收回目光；触发：Karin双手接住水囊，肩膀从绷紧转为放松；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：固定双人中景；声音：车轮、马具、木车轻响；水囊滑过木板、剑鞘摩擦；克制拨弦，保留对白空间；结束画面：Karin握住水囊，Rifa望向车窗，车厢恢复日常站位；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无浪漫凝视、无现代物品、无额外肢体、无脸部融化、无背景漂移。。",
-          "cameraMotion": "固定双人中景",
-          "startFramePrompt": "静态画面：水囊停在Karin手边，Rifa收回目光；可见表演：表情：紧张略有缓和；视线：跟随水囊移动；手部：从待接变为握稳水囊；景别：中景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：阴天柔光，雾蓝灰+皮革棕；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。；首帧仅继承@图片1对应的上一镜已验收实际尾帧状态。",
-          "endFramePrompt": "静态画面：Karin握住水囊，Rifa望向车窗，车厢恢复日常站位；可见表演：表情保持稳定；视线朝向当前主体；Karin接住水囊，Rifa移开视线，关系恢复日常；景别：中景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：阴天柔光，雾蓝灰+皮革棕；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。；出口状态保存为当前视频版本实际尾帧并在下游继承前人工验收。",
-          "negativePrompt": "无字幕、无浪漫凝视、无现代物品、无额外肢体、无脸部融化、无背景漂移。",
-          "continuity": {
-            "shotSize": "MS",
-            "cameraAngle": "视线高度平视，沿动作轴线拍摄",
-            "composition": "主体保持在9:16安全区，动作方向留出前进空间",
-            "characterBlocking": "按Rifa识破梦境，Karin否认的动作关系安排站位",
-            "gazeDirection": "沿叙事动作方向，反应时回看对手或关键道具",
-            "actionStart": "Rifa识破梦境，Karin否认",
-            "actionEnd": "Karin接住水囊，Rifa移开视线，关系恢复日常",
-            "screenDirection": "保持同侧屏幕运动方向",
-            "axisRule": "保持180度关系轴线，转场时明确切换",
-            "continuityNotes": "水囊动作切"
-          },
-          "duration": 5,
-          "characterCodes": [
-            "C01",
-            "C02"
-          ],
-          "propCodes": [
-            "P01"
-          ],
-          "clueCodes": [],
-          "locationCode": "S06",
-          "storySceneCode": "SC02",
-          "timecode": "25-30s",
-          "dramaticFunction": "起/关系",
-          "lens": "50mm",
-          "lighting": "阴天柔光",
-          "colorPalette": "雾蓝灰+皮革棕",
-          "transitionOut": "水囊动作切",
-          "performanceNotes": "又是那个梦？；只是路太颠。；当然。石头还学会道歉了。",
-          "performancePlan": {
-            "emotionalObjective": "围绕Rifa识破梦境，Karin否认完成当前镜头的外在行动目标",
-            "emotionalArc": "从进入Rifa识破梦境，Karin否认的克制状态开始，经由动作反应推进，在Karin接住水囊，Rifa移开视线，关系恢复日常前收束",
-            "speechStyle": "台词贴合当下处境，语气清晰克制，重音落在行动关键信息",
-            "pace": "按镜头时长均匀推进，动作变化处短暂停顿，转场前收住",
-            "breath": "起始自然吸气，动作变化处短暂停顿，结束以呼气完成收束",
-            "restraintLevel": "中等克制，避免夸张表演",
-            "beats": {
-              "start": {
-                "emotion": "保持与上一状态一致",
-                "facialAction": "眉眼和下颌保持可读的初始反应",
-                "gaze": "沿当前镜头动作方向",
-                "bodyAction": "进入Rifa识破梦境，Karin否认"
-              },
-              "middle": {
-                "emotion": "压力或目标逐步显现",
-                "facialAction": "眉眼、嘴角或下颌出现与动作对应的细微变化",
-                "gaze": "短暂聚焦关键人物或道具",
-                "bodyAction": "完成主要动作并保留反应停顿"
-              },
-              "end": {
-                "emotion": "在下一镜头切点前完成情绪落点",
-                "facialAction": "固定最终表情，避免切点前漂移",
-                "gaze": "指向下一动作或转场方向",
-                "bodyAction": "Karin接住水囊，Rifa移开视线，关系恢复日常"
-              }
-            }
-          },
-          "dialoguePerformance": [
-            {
-              "utteranceId": "D04",
-              "intent": "推动当前镜头行动并回应对手或环境",
-              "tone": "贴合当前情绪，清晰自然",
-              "pace": "按语义分句，中速完成",
-              "pause": "关键信息前短停，句末自然收束",
-              "emphasis": "当然。石头还学会道歉了。",
-              "facialReactionBefore": "先以视线和眉眼确认对方或关键道具",
-              "facialReactionDuring": "说话时保持与行动一致的面部反应",
-              "facialReactionAfter": "说完保留短暂反应，衔接下一动作"
-            },
-            {
-              "utteranceId": "D02",
-              "intent": "推动当前镜头行动并回应对手或环境",
-              "tone": "贴合当前情绪，清晰自然",
-              "pace": "按语义分句，中速完成",
-              "pause": "关键信息前短停，句末自然收束",
-              "emphasis": "又是那个梦？",
-              "facialReactionBefore": "先以视线和眉眼确认对方或关键道具",
-              "facialReactionDuring": "说话时保持与行动一致的面部反应",
-              "facialReactionAfter": "说完保留短暂反应，衔接下一动作"
-            },
-            {
-              "utteranceId": "D03",
-              "intent": "推动当前镜头行动并回应对手或环境",
-              "tone": "贴合当前情绪，清晰自然",
-              "pace": "按语义分句，中速完成",
-              "pause": "关键信息前短停，句末自然收束",
-              "emphasis": "只是路太颠。",
-              "facialReactionBefore": "先以视线和眉眼确认对方或关键道具",
-              "facialReactionDuring": "说话时保持与行动一致的面部反应",
-              "facialReactionAfter": "说完保留短暂反应，衔接下一动作"
-            }
-          ],
-          "lightingPlan": {
-            "palette": "雾蓝灰+皮革棕",
-            "colorTemperature": "主光冷暖关系沿用本场设定，避免相邻镜头跳变",
-            "keyLight": "阴天柔光作为主光，明确来自画面主方向并照亮主体面部",
-            "fillLight": "弱补光保留面部细节，阴影侧不完全压黑",
-            "rimLight": "以轻微轮廓光分离人物与背景，不制造硬边光晕",
-            "contrast": "中等反差，主体层次清晰，避免高光溢出",
-            "materialResponse": "金属、皮革和织物按真实材质反射，亮部克制",
-            "skinToneProtection": "保护肤色自然，不被环境色完全染色",
-            "inheritFromPrevious": "继承上一镜主光方向、色温和环境亮度",
-            "transitionToNext": "在动作结束处平滑过渡到下一镜主光和色板"
-          },
-          "sound": {
-            "ambience": "车轮、马具、木车轻响",
-            "soundEffects": "水囊滑过木板、剑鞘摩擦",
-            "music": "克制拨弦，保留对白空间"
-          },
-          "entryState": {
-            "characters": [
-              {
-                "assetId": "C01",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面左侧或前景",
-                "gaze": "沿镜头轴线向右",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "梦醒试探的连续反应与动作过渡"
-              },
-              {
-                "assetId": "C02",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "梦醒试探的连续反应与动作过渡"
-              }
-            ],
-            "props": [
-              {
-                "assetId": "P01",
-                "state": "梦醒试探的连续反应与动作过渡",
-                "holderId": "C01"
-              }
-            ],
-            "environment": "马车",
-            "lighting": "阴天柔光",
-            "axis": "保持180度人物关系轴线",
-            "screenDirection": "角色移动方向沿场景既定动线"
-          },
-          "exitState": {
-            "characters": [
-              {
-                "assetId": "C01",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面左侧或前景",
-                "gaze": "沿镜头轴线向右",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
                 "action": "Karin接住水囊，Rifa移开视线，关系恢复日常"
               },
               {
@@ -1865,10 +1140,6 @@
             "axis": "保持180度人物关系轴线",
             "screenDirection": "角色移动方向沿场景既定动线"
           },
-          "sourceAssetIds": [],
-          "continuityStatus": "planned",
-          "videoMode": "reference",
-          "storyboardFrameMode": "all_frames",
           "framePlan": {
             "start": {
               "source": "previous_accepted_actual_tail"
@@ -1878,40 +1149,84 @@
             },
             "frames": [
               {
-                "id": "SH005-F01",
+                "id": "SH002-F01",
                 "sequenceIndex": 1,
                 "startSecond": 0,
                 "endSecond": 1.667,
-                "actionPrompt": "水囊停在Karin手边，Rifa收回目光",
-                "imagePrompt": "静态画面：水囊停在Karin手边，Rifa收回目光；可见表演：表情：紧张略有缓和；视线：跟随水囊移动；手部：从待接变为握稳水囊；景别：中景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：阴天柔光，雾蓝灰+皮革棕；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
+                "actionPrompt": "马车内Rifa看向Karin，Karin的手仍扣住断剑",
+                "imagePrompt": "静态关键帧：静态画面：马车内Rifa看向Karin，Karin的手仍扣住断剑；可见表演状态：情绪保持与上一状态一致；面部眉眼和下颌保持可读的初始反应；视线沿当前镜头动作方向；身体与手部进入Rifa识破梦境，Karin否认；景别（本帧固定）：MS；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按Rifa识破梦境，Karin否认的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：阴天柔光；雾蓝灰+皮革棕；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
               },
               {
-                "id": "SH005-F02",
+                "id": "SH002-F02",
                 "sequenceIndex": 2,
                 "startSecond": 1.667,
                 "endSecond": 3.333,
-                "actionPrompt": "Karin双手接住水囊，肩膀从绷紧转为放松",
-                "imagePrompt": "静态画面：Karin双手接住水囊，肩膀从绷紧转为放松；可见表演：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；景别：中景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：阴天柔光，雾蓝灰+皮革棕；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
+                "actionPrompt": "Karin避开Rifa的视线，Rifa眉心收紧并等待回答",
+                "imagePrompt": "静态关键帧：可见表演：眉眼、嘴角或下颌出现与动作对应的细微变化；可见表演状态：情绪压力或目标逐步显现；面部眉眼、嘴角或下颌出现与动作对应的细微变化；视线短暂聚焦关键人物或道具；身体与手部完成主要动作并保留反应停顿；景别（本帧固定）：MS；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按Rifa识破梦境，Karin否认的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：阴天柔光；雾蓝灰+皮革棕；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
               },
               {
-                "id": "SH005-F03",
+                "id": "SH002-F03",
                 "sequenceIndex": 3,
                 "startSecond": 3.333,
                 "endSecond": 5,
+                "actionPrompt": "Karin接住水囊，Rifa移开目光，车厢关系恢复克制",
+                "imagePrompt": "静态关键帧：静态画面：Karin接住水囊，Rifa移开目光，车厢关系恢复克制；可见表演状态：情绪在下一镜头切点前完成情绪落点；面部固定最终表情，避免切点前漂移；视线指向下一动作或转场方向；身体与手部Karin接住水囊，Rifa移开视线，关系恢复日常；景别（本帧固定）：MS；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按Rifa识破梦境，Karin否认的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：阴天柔光；雾蓝灰+皮革棕；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
+              },
+              {
+                "id": "SH002-F04",
+                "sequenceIndex": 4,
+                "startSecond": 5,
+                "endSecond": 6.667,
+                "actionPrompt": "Rifa观察Karin的呼吸，Karin仍坐在车厢内",
+                "imagePrompt": "静态关键帧：静态画面：Rifa观察Karin的呼吸，Karin仍坐在车厢内；可见表演状态：情绪保持与上一状态一致；面部眉眼和下颌保持可读的初始反应；视线沿当前镜头动作方向；身体与手部进入Rifa识破梦境，Karin否认；景别（本帧固定）：MS；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按Rifa识破梦境，Karin否认的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：阴天柔光；雾蓝灰+皮革棕；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
+              },
+              {
+                "id": "SH002-F05",
+                "sequenceIndex": 5,
+                "startSecond": 6.667,
+                "endSecond": 8.333,
+                "actionPrompt": "Karin避开Rifa的视线，嘴角压住，手仍靠近断剑",
+                "imagePrompt": "静态关键帧：可见表演：眉眼、嘴角或下颌出现与动作对应的细微变化；可见表演状态：情绪压力或目标逐步显现；面部眉眼、嘴角或下颌出现与动作对应的细微变化；视线短暂聚焦关键人物或道具；身体与手部完成主要动作并保留反应停顿；景别（本帧固定）：MS；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按Rifa识破梦境，Karin否认的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：阴天柔光；雾蓝灰+皮革棕；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
+              },
+              {
+                "id": "SH002-F06",
+                "sequenceIndex": 6,
+                "startSecond": 8.333,
+                "endSecond": 10,
+                "actionPrompt": "Rifa把水囊推到Karin手边，Karin抬手准备接住",
+                "imagePrompt": "静态关键帧：静态画面：Rifa把水囊推到Karin手边，Karin抬手准备接住；可见表演状态：情绪在下一镜头切点前完成情绪落点；面部固定最终表情，避免切点前漂移；视线指向下一动作或转场方向；身体与手部Karin接住水囊，Rifa移开视线，关系恢复日常；景别（本帧固定）：MS；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按Rifa识破梦境，Karin否认的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：阴天柔光；雾蓝灰+皮革棕；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
+              },
+              {
+                "id": "SH002-F07",
+                "sequenceIndex": 7,
+                "startSecond": 10,
+                "endSecond": 11.667,
+                "actionPrompt": "水囊停在Karin手边，Rifa收回目光",
+                "imagePrompt": "静态关键帧：静态画面：水囊停在Karin手边，Rifa收回目光；可见表演状态：情绪保持与上一状态一致；面部眉眼和下颌保持可读的初始反应；视线沿当前镜头动作方向；身体与手部进入Rifa识破梦境，Karin否认；景别（本帧固定）：MS；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按Rifa识破梦境，Karin否认的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：阴天柔光；雾蓝灰+皮革棕；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
+              },
+              {
+                "id": "SH002-F08",
+                "sequenceIndex": 8,
+                "startSecond": 11.667,
+                "endSecond": 13.333,
+                "actionPrompt": "Karin双手接住水囊，肩膀从绷紧转为放松",
+                "imagePrompt": "静态关键帧：静态画面：Karin双手接住水囊，肩膀从绷紧转为放松；可见表演状态：情绪压力或目标逐步显现；面部眉眼、嘴角或下颌出现与动作对应的细微变化；视线短暂聚焦关键人物或道具；身体与手部完成主要动作并保留反应停顿；景别（本帧固定）：MS；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按Rifa识破梦境，Karin否认的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：阴天柔光；雾蓝灰+皮革棕；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
+              },
+              {
+                "id": "SH002-F09",
+                "sequenceIndex": 9,
+                "startSecond": 13.333,
+                "endSecond": 15,
                 "actionPrompt": "Karin握住水囊，Rifa望向车窗，车厢恢复日常站位",
-                "imagePrompt": "静态画面：Karin握住水囊，Rifa望向车窗，车厢恢复日常站位；可见表演：表情保持稳定；视线朝向当前主体；Karin接住水囊，Rifa移开视线，关系恢复日常；景别：中景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：阴天柔光，雾蓝灰+皮革棕；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
+                "imagePrompt": "静态关键帧：静态画面：Karin握住水囊，Rifa望向车窗，车厢恢复日常站位；可见表演状态：情绪在下一镜头切点前完成情绪落点；面部固定最终表情，避免切点前漂移；视线指向下一动作或转场方向；身体与手部Karin接住水囊，Rifa移开视线，关系恢复日常；景别（本帧固定）：MS；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按Rifa识破梦境，Karin否认的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：阴天柔光；雾蓝灰+皮革棕；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
               }
             ],
-            "referenceCount": {
-              "min": 3,
-              "max": 9
-            },
             "referenceManifest": [
               {
                 "alias": "@图片1",
                 "role": "previous_actual_tail",
                 "purpose": "上一镜当前视频版本的已人工验收实际尾帧，仅作为本镜唯一连续性锚点",
-                "shotId": "SH004"
+                "shotId": "SH001"
               },
               {
                 "alias": "@图片2",
@@ -1937,17 +1252,25 @@
                 "purpose": "道具基准图：保持 Karin的断剑 的形状、持有人与当前状态一致",
                 "assetId": "P01"
               }
-            ]
-          }
+            ],
+            "referenceCount": {
+              "min": 3,
+              "max": 9
+            }
+          },
+          "sourceAssetIds": [],
+          "continuityStatus": "ready",
+          "videoMode": "storyboard",
+          "storyboardFrameMode": "all_frames"
         },
         {
-          "code": "SH006",
-          "order": 6,
-          "title": "第几个 1/2",
-          "description": "护符失灵，结界逼近",
+          "code": "SH003",
+          "order": 3,
+          "title": "第几个",
+          "description": "护符失灵，结界逼近；Karin握住护符，Rifa望向结界，二人警觉",
           "sourceText": "Karin的手仍扣在断剑上。Rifa没有追问，先等他的呼吸恢复。\nRifa：“又是那个梦？”\nKarin：“只是路太颠。”\nRifa看一眼平整得过分的皇家道路：“当然。石头还学会道歉了。”\n她把水囊推过去。Karin刚接住，腰间护符忽然闪烁后熄灭。\nRifa：“第几个？”\nKarin：“今天？”\nRifa：“十八岁以后。”\nKarin没有回答。车窗外，皇家结界已经逼近。",
           "shotBoundary": "护符熄灭切",
-          "dialogue": "Rifa：第几个？\nKarin：今天？",
+          "dialogue": "Rifa：第几个？\nKarin：今天？；Rifa：十八岁以后。",
           "narration": "",
           "utterances": [
             {
@@ -1963,13 +1286,18 @@
               "type": "dialogue",
               "speaker": "Karin",
               "text": "今天？"
+            },
+            {
+              "id": "D07",
+              "order": 3,
+              "type": "dialogue",
+              "speaker": "Rifa",
+              "text": "十八岁以后。"
             }
           ],
           "imagePrompt": "静态画面：腰间黄铜护符闪烁后熄灭，Karin的手停在护符旁；可见表演：表情：眉心收紧、眼神警觉；视线：锁定结界或探测器；手部：握紧当前道具；景别：中近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：柔光转结界冷光，暖棕，冷银；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。",
-          "videoPrompt": "动态意图：腰间黄铜护符闪烁后熄灭，Karin的手停在护符旁到Karin握住熄灭护符，Rifa望向结界并保持警觉；起始可见状态：腰间黄铜护符闪烁后熄灭，Karin的手停在护符旁；触发：透明皇家结界逼近车窗，两人同时转头警觉；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：车内慢拉；声音：车轮渐弱、结界远鸣；护符闪烁后熄灭；两音母题低声回归；结束画面：Karin握住熄灭护符，Rifa望向结界并保持警觉；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无科技扫描、无雷电爆炸、无角色变形、无背景漂移。。",
+          "videoPrompt": "动态意图：腰间黄铜护符闪烁后熄灭，Karin的手停在护符旁到两人保持警觉站位，护符贴在Karin掌心，结界占据车窗背景；起始可见状态：腰间黄铜护符闪烁后熄灭，Karin的手停在护符旁；主体动作与反应：Karin握住护符，Rifa望向结界，二人警觉；一个主运镜：车内慢拉；环境压力与声音：车轮渐弱、结界远鸣；护符闪烁后熄灭；两音母题低声回归；结束画面：两人保持警觉站位，护符贴在Karin掌心，结界占据车窗背景；针对性约束：无字幕、无科技扫描、无雷电爆炸、无角色变形、无背景漂移。",
           "cameraMotion": "车内慢拉",
-          "startFramePrompt": "静态画面：腰间黄铜护符闪烁后熄灭，Karin的手停在护符旁；可见表演：表情：眉心收紧、眼神警觉；视线：锁定结界或探测器；手部：握紧当前道具；景别：中近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：柔光转结界冷光，暖棕，冷银；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。；首帧仅继承@图片1对应的上一镜已验收实际尾帧状态。",
-          "endFramePrompt": "静态画面：Karin握住熄灭护符，Rifa望向结界并保持警觉；可见表演：表情保持稳定；视线朝向当前主体；Karin握住护符，Rifa望向结界，二人警觉；景别：远景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：柔光转结界冷光，暖棕，冷银；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。；出口状态保存为当前视频版本实际尾帧并在下游继承前人工验收。",
           "negativePrompt": "无字幕、无科技扫描、无雷电爆炸、无角色变形、无背景漂移。",
           "continuity": {
             "shotSize": "MCU→LS",
@@ -1983,7 +1311,7 @@
             "axisRule": "保持180度关系轴线，转场时明确切换",
             "continuityNotes": "护符熄灭切"
           },
-          "duration": 8,
+          "duration": 15,
           "characterCodes": [
             "C01",
             "C02"
@@ -1994,7 +1322,7 @@
           "clueCodes": [],
           "locationCode": "S06",
           "storySceneCode": "SC02",
-          "timecode": "30-38s",
+          "timecode": "30-45s",
           "dramaticFunction": "起/异常",
           "lens": "65mm",
           "lighting": "柔光转结界冷光",
@@ -2123,281 +1451,6 @@
                 "gaze": "沿镜头轴线向右",
                 "pose": "克制站姿或自然坐姿",
                 "expression": "按本镜表演说明",
-                "action": "护符失灵，结界逼近"
-              },
-              {
-                "assetId": "C02",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "护符失灵，结界逼近"
-              }
-            ],
-            "props": [
-              {
-                "assetId": "P02",
-                "state": "护符失灵，结界逼近",
-                "holderId": "C01"
-              }
-            ],
-            "environment": "马车",
-            "lighting": "柔光转结界冷光",
-            "axis": "保持180度人物关系轴线",
-            "screenDirection": "角色移动方向沿场景既定动线"
-          },
-          "sourceAssetIds": [],
-          "continuityStatus": "planned",
-          "videoMode": "reference",
-          "storyboardFrameMode": "all_frames",
-          "framePlan": {
-            "start": {
-              "source": "previous_accepted_actual_tail"
-            },
-            "end": {
-              "required": true
-            },
-            "frames": [
-              {
-                "id": "SH006-F01",
-                "sequenceIndex": 1,
-                "startSecond": 0,
-                "endSecond": 2.667,
-                "actionPrompt": "腰间黄铜护符闪烁后熄灭，Karin的手停在护符旁",
-                "imagePrompt": "静态画面：腰间黄铜护符闪烁后熄灭，Karin的手停在护符旁；可见表演：表情：眉心收紧、眼神警觉；视线：锁定结界或探测器；手部：握紧当前道具；景别：中近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：柔光转结界冷光，暖棕，冷银；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
-              },
-              {
-                "id": "SH006-F02",
-                "sequenceIndex": 2,
-                "startSecond": 2.667,
-                "endSecond": 5.333,
-                "actionPrompt": "透明皇家结界逼近车窗，两人同时转头警觉",
-                "imagePrompt": "静态画面：透明皇家结界逼近车窗，两人同时转头警觉；可见表演：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；景别：远景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：柔光转结界冷光，暖棕，冷银；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
-              },
-              {
-                "id": "SH006-F03",
-                "sequenceIndex": 3,
-                "startSecond": 5.333,
-                "endSecond": 8,
-                "actionPrompt": "Karin握住熄灭护符，Rifa望向结界并保持警觉",
-                "imagePrompt": "静态画面：Karin握住熄灭护符，Rifa望向结界并保持警觉；可见表演：表情保持稳定；视线朝向当前主体；Karin握住护符，Rifa望向结界，二人警觉；景别：远景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：柔光转结界冷光，暖棕，冷银；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
-              }
-            ],
-            "referenceCount": {
-              "min": 3,
-              "max": 9
-            },
-            "referenceManifest": [
-              {
-                "alias": "@图片1",
-                "role": "previous_actual_tail",
-                "purpose": "上一镜当前视频版本的已人工验收实际尾帧，仅作为本镜唯一连续性锚点",
-                "shotId": "SH005"
-              },
-              {
-                "alias": "@图片2",
-                "role": "character_anchor",
-                "purpose": "角色基准图：保持 Karin 的身份特征、服装与道具不漂移",
-                "assetId": "C01"
-              },
-              {
-                "alias": "@图片3",
-                "role": "character_anchor",
-                "purpose": "角色基准图：保持 Rifa 的身份特征、服装与道具不漂移",
-                "assetId": "C02"
-              },
-              {
-                "alias": "@图片4",
-                "role": "scene_anchor",
-                "purpose": "场景基准图：保持空间结构、光向与轴线一致",
-                "assetId": "S06"
-              },
-              {
-                "alias": "@图片5",
-                "role": "prop_anchor",
-                "purpose": "道具基准图：保持 失灵护符 的形状、持有人与当前状态一致",
-                "assetId": "P02"
-              }
-            ]
-          }
-        },
-        {
-          "code": "SH007",
-          "order": 7,
-          "title": "第几个 2/2",
-          "description": "Karin握住护符，Rifa望向结界，二人警觉",
-          "sourceText": "Karin的手仍扣在断剑上。Rifa没有追问，先等他的呼吸恢复。\nRifa：“又是那个梦？”\nKarin：“只是路太颠。”\nRifa看一眼平整得过分的皇家道路：“当然。石头还学会道歉了。”\n她把水囊推过去。Karin刚接住，腰间护符忽然闪烁后熄灭。\nRifa：“第几个？”\nKarin：“今天？”\nRifa：“十八岁以后。”\nKarin没有回答。车窗外，皇家结界已经逼近。",
-          "shotBoundary": "护符熄灭切",
-          "dialogue": "Rifa：十八岁以后。",
-          "narration": "",
-          "utterances": [
-            {
-              "id": "D07",
-              "order": 1,
-              "type": "dialogue",
-              "speaker": "Rifa",
-              "text": "十八岁以后。"
-            }
-          ],
-          "imagePrompt": "静态画面：Karin握住熄灭护符，Rifa仍看向车窗外的结界；可见表演：表情：眉心收紧、眼神警觉；视线：锁定结界或探测器；手部：握紧当前道具；景别：中近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：柔光转结界冷光，暖棕，冷银；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。",
-          "videoPrompt": "动态意图：Karin握住熄灭护符，Rifa仍看向车窗外的结界到两人保持警觉站位，护符贴在Karin掌心，结界占据车窗背景；起始可见状态：Karin握住熄灭护符，Rifa仍看向车窗外的结界；触发：Rifa的视线锁定结界，Karin手指收紧护符；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：车内慢拉；声音：车轮渐弱、结界远鸣；护符闪烁后熄灭；两音母题低声回归；结束画面：两人保持警觉站位，护符贴在Karin掌心，结界占据车窗背景；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无科技扫描、无雷电爆炸、无角色变形、无背景漂移。。",
-          "cameraMotion": "车内慢拉",
-          "startFramePrompt": "静态画面：Karin握住熄灭护符，Rifa仍看向车窗外的结界；可见表演：表情：眉心收紧、眼神警觉；视线：锁定结界或探测器；手部：握紧当前道具；景别：中近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：柔光转结界冷光，暖棕，冷银；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。；首帧仅继承@图片1对应的上一镜已验收实际尾帧状态。",
-          "endFramePrompt": "静态画面：两人保持警觉站位，护符贴在Karin掌心，结界占据车窗背景；可见表演：表情保持稳定；视线朝向当前主体；Karin握住护符，Rifa望向结界，二人警觉；景别：远景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：柔光转结界冷光，暖棕，冷银；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。；出口状态保存为当前视频版本实际尾帧并在下游继承前人工验收。",
-          "negativePrompt": "无字幕、无科技扫描、无雷电爆炸、无角色变形、无背景漂移。",
-          "continuity": {
-            "shotSize": "MCU→LS",
-            "cameraAngle": "视线高度平视，沿动作轴线拍摄",
-            "composition": "主体保持在9:16安全区，动作方向留出前进空间",
-            "characterBlocking": "按护符失灵，结界逼近的动作关系安排站位",
-            "gazeDirection": "沿叙事动作方向，反应时回看对手或关键道具",
-            "actionStart": "护符失灵，结界逼近",
-            "actionEnd": "Karin握住护符，Rifa望向结界，二人警觉",
-            "screenDirection": "保持同侧屏幕运动方向",
-            "axisRule": "保持180度关系轴线，转场时明确切换",
-            "continuityNotes": "护符熄灭切"
-          },
-          "duration": 7,
-          "characterCodes": [
-            "C01",
-            "C02"
-          ],
-          "propCodes": [
-            "P02"
-          ],
-          "clueCodes": [],
-          "locationCode": "S06",
-          "storySceneCode": "SC02",
-          "timecode": "38-45s",
-          "dramaticFunction": "起/异常",
-          "lens": "65mm",
-          "lighting": "柔光转结界冷光",
-          "colorPalette": "暖棕→冷银",
-          "transitionOut": "护符熄灭切",
-          "performanceNotes": "第几个？；今天？；十八岁以后。",
-          "performancePlan": {
-            "emotionalObjective": "围绕护符失灵，结界逼近完成当前镜头的外在行动目标",
-            "emotionalArc": "从进入护符失灵，结界逼近的克制状态开始，经由动作反应推进，在Karin握住护符，Rifa望向结界，二人警觉前收束",
-            "speechStyle": "台词贴合当下处境，语气清晰克制，重音落在行动关键信息",
-            "pace": "按镜头时长均匀推进，动作变化处短暂停顿，转场前收住",
-            "breath": "起始自然吸气，动作变化处短暂停顿，结束以呼气完成收束",
-            "restraintLevel": "中等克制，避免夸张表演",
-            "beats": {
-              "start": {
-                "emotion": "保持与上一状态一致",
-                "facialAction": "眉眼和下颌保持可读的初始反应",
-                "gaze": "沿当前镜头动作方向",
-                "bodyAction": "进入护符失灵，结界逼近"
-              },
-              "middle": {
-                "emotion": "压力或目标逐步显现",
-                "facialAction": "眉眼、嘴角或下颌出现与动作对应的细微变化",
-                "gaze": "短暂聚焦关键人物或道具",
-                "bodyAction": "完成主要动作并保留反应停顿"
-              },
-              "end": {
-                "emotion": "在下一镜头切点前完成情绪落点",
-                "facialAction": "固定最终表情，避免切点前漂移",
-                "gaze": "指向下一动作或转场方向",
-                "bodyAction": "Karin握住护符，Rifa望向结界，二人警觉"
-              }
-            }
-          },
-          "dialoguePerformance": [
-            {
-              "utteranceId": "D07",
-              "intent": "推动当前镜头行动并回应对手或环境",
-              "tone": "贴合当前情绪，清晰自然",
-              "pace": "按语义分句，中速完成",
-              "pause": "关键信息前短停，句末自然收束",
-              "emphasis": "十八岁以后。",
-              "facialReactionBefore": "先以视线和眉眼确认对方或关键道具",
-              "facialReactionDuring": "说话时保持与行动一致的面部反应",
-              "facialReactionAfter": "说完保留短暂反应，衔接下一动作"
-            },
-            {
-              "utteranceId": "D05",
-              "intent": "推动当前镜头行动并回应对手或环境",
-              "tone": "贴合当前情绪，清晰自然",
-              "pace": "按语义分句，中速完成",
-              "pause": "关键信息前短停，句末自然收束",
-              "emphasis": "第几个？",
-              "facialReactionBefore": "先以视线和眉眼确认对方或关键道具",
-              "facialReactionDuring": "说话时保持与行动一致的面部反应",
-              "facialReactionAfter": "说完保留短暂反应，衔接下一动作"
-            },
-            {
-              "utteranceId": "D06",
-              "intent": "推动当前镜头行动并回应对手或环境",
-              "tone": "贴合当前情绪，清晰自然",
-              "pace": "按语义分句，中速完成",
-              "pause": "关键信息前短停，句末自然收束",
-              "emphasis": "今天？",
-              "facialReactionBefore": "先以视线和眉眼确认对方或关键道具",
-              "facialReactionDuring": "说话时保持与行动一致的面部反应",
-              "facialReactionAfter": "说完保留短暂反应，衔接下一动作"
-            }
-          ],
-          "lightingPlan": {
-            "palette": "暖棕→冷银",
-            "colorTemperature": "主光冷暖关系沿用本场设定，避免相邻镜头跳变",
-            "keyLight": "柔光转结界冷光作为主光，明确来自画面主方向并照亮主体面部",
-            "fillLight": "弱补光保留面部细节，阴影侧不完全压黑",
-            "rimLight": "以轻微轮廓光分离人物与背景，不制造硬边光晕",
-            "contrast": "中等反差，主体层次清晰，避免高光溢出",
-            "materialResponse": "金属、皮革和织物按真实材质反射，亮部克制",
-            "skinToneProtection": "保护肤色自然，不被环境色完全染色",
-            "inheritFromPrevious": "继承上一镜主光方向、色温和环境亮度",
-            "transitionToNext": "在动作结束处平滑过渡到下一镜主光和色板"
-          },
-          "sound": {
-            "ambience": "车轮渐弱、结界远鸣",
-            "soundEffects": "护符闪烁后熄灭",
-            "music": "两音母题低声回归"
-          },
-          "entryState": {
-            "characters": [
-              {
-                "assetId": "C01",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面左侧或前景",
-                "gaze": "沿镜头轴线向右",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "护符失灵，结界逼近"
-              },
-              {
-                "assetId": "C02",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "护符失灵，结界逼近"
-              }
-            ],
-            "props": [
-              {
-                "assetId": "P02",
-                "state": "护符失灵，结界逼近",
-                "holderId": "C01"
-              }
-            ],
-            "environment": "马车",
-            "lighting": "柔光转结界冷光",
-            "axis": "保持180度人物关系轴线",
-            "screenDirection": "角色移动方向沿场景既定动线"
-          },
-          "exitState": {
-            "characters": [
-              {
-                "assetId": "C01",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面左侧或前景",
-                "gaze": "沿镜头轴线向右",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
                 "action": "Karin握住护符，Rifa望向结界，二人警觉"
               },
               {
@@ -2422,10 +1475,6 @@
             "axis": "保持180度人物关系轴线",
             "screenDirection": "角色移动方向沿场景既定动线"
           },
-          "sourceAssetIds": [],
-          "continuityStatus": "planned",
-          "videoMode": "reference",
-          "storyboardFrameMode": "all_frames",
           "framePlan": {
             "start": {
               "source": "previous_accepted_actual_tail"
@@ -2435,40 +1484,60 @@
             },
             "frames": [
               {
-                "id": "SH007-F01",
+                "id": "SH003-F01",
                 "sequenceIndex": 1,
                 "startSecond": 0,
-                "endSecond": 2.333,
-                "actionPrompt": "Karin握住熄灭护符，Rifa仍看向车窗外的结界",
-                "imagePrompt": "静态画面：Karin握住熄灭护符，Rifa仍看向车窗外的结界；可见表演：表情：眉心收紧、眼神警觉；视线：锁定结界或探测器；手部：握紧当前道具；景别：中近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：柔光转结界冷光，暖棕，冷银；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
+                "endSecond": 2.667,
+                "actionPrompt": "腰间黄铜护符闪烁后熄灭，Karin的手停在护符旁",
+                "imagePrompt": "静态关键帧：静态画面：腰间黄铜护符闪烁后熄灭，Karin的手停在护符旁；可见表演状态：情绪保持与上一状态一致；面部眉眼和下颌保持可读的初始反应；视线沿当前镜头动作方向；身体与手部进入护符失灵，结界逼近；景别（本帧固定）：MCU；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按护符失灵，结界逼近的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：柔光转结界冷光；暖棕；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
               },
               {
-                "id": "SH007-F02",
+                "id": "SH003-F02",
                 "sequenceIndex": 2,
-                "startSecond": 2.333,
-                "endSecond": 4.667,
-                "actionPrompt": "Rifa的视线锁定结界，Karin手指收紧护符",
-                "imagePrompt": "静态画面：Rifa的视线锁定结界，Karin手指收紧护符；可见表演：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；景别：远景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：柔光转结界冷光，暖棕，冷银；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
+                "startSecond": 2.667,
+                "endSecond": 5.333,
+                "actionPrompt": "透明皇家结界逼近车窗，两人同时转头警觉",
+                "imagePrompt": "静态关键帧：静态画面：透明皇家结界逼近车窗，两人同时转头警觉；可见表演状态：情绪压力或目标逐步显现；面部眉眼、嘴角或下颌出现与动作对应的细微变化；视线短暂聚焦关键人物或道具；身体与手部完成主要动作并保留反应停顿；景别（本帧固定）：LS；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按护符失灵，结界逼近的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：柔光转结界冷光；冷银；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
               },
               {
-                "id": "SH007-F03",
+                "id": "SH003-F03",
                 "sequenceIndex": 3,
-                "startSecond": 4.667,
-                "endSecond": 7,
+                "startSecond": 5.333,
+                "endSecond": 8,
+                "actionPrompt": "Karin握住熄灭护符，Rifa望向结界并保持警觉",
+                "imagePrompt": "静态关键帧：静态画面：Karin握住熄灭护符，Rifa望向结界并保持警觉；可见表演状态：情绪在下一镜头切点前完成情绪落点；面部固定最终表情，避免切点前漂移；视线指向下一动作或转场方向；身体与手部Karin握住护符，Rifa望向结界，二人警觉；景别（本帧固定）：LS；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按护符失灵，结界逼近的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：柔光转结界冷光；冷银；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
+              },
+              {
+                "id": "SH003-F04",
+                "sequenceIndex": 4,
+                "startSecond": 8,
+                "endSecond": 10.333,
+                "actionPrompt": "Karin握住熄灭护符，Rifa仍看向车窗外的结界",
+                "imagePrompt": "静态关键帧：静态画面：Karin握住熄灭护符，Rifa仍看向车窗外的结界；可见表演状态：情绪保持与上一状态一致；面部眉眼和下颌保持可读的初始反应；视线沿当前镜头动作方向；身体与手部进入护符失灵，结界逼近；景别（本帧固定）：MCU；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按护符失灵，结界逼近的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：柔光转结界冷光；暖棕；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
+              },
+              {
+                "id": "SH003-F05",
+                "sequenceIndex": 5,
+                "startSecond": 10.333,
+                "endSecond": 12.667,
+                "actionPrompt": "Rifa的视线锁定结界，Karin手指收紧护符",
+                "imagePrompt": "静态关键帧：静态画面：Rifa的视线锁定结界，Karin手指收紧护符；可见表演状态：情绪压力或目标逐步显现；面部眉眼、嘴角或下颌出现与动作对应的细微变化；视线短暂聚焦关键人物或道具；身体与手部完成主要动作并保留反应停顿；景别（本帧固定）：LS；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按护符失灵，结界逼近的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：柔光转结界冷光；冷银；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
+              },
+              {
+                "id": "SH003-F06",
+                "sequenceIndex": 6,
+                "startSecond": 12.667,
+                "endSecond": 15,
                 "actionPrompt": "两人保持警觉站位，护符贴在Karin掌心，结界占据车窗背景",
-                "imagePrompt": "静态画面：两人保持警觉站位，护符贴在Karin掌心，结界占据车窗背景；可见表演：表情保持稳定；视线朝向当前主体；Karin握住护符，Rifa望向结界，二人警觉；景别：远景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：柔光转结界冷光，暖棕，冷银；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
+                "imagePrompt": "静态关键帧：静态画面：两人保持警觉站位，护符贴在Karin掌心，结界占据车窗背景；可见表演状态：情绪在下一镜头切点前完成情绪落点；面部固定最终表情，避免切点前漂移；视线指向下一动作或转场方向；身体与手部Karin握住护符，Rifa望向结界，二人警觉；景别（本帧固定）：LS；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按护符失灵，结界逼近的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：柔光转结界冷光；冷银；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
               }
             ],
-            "referenceCount": {
-              "min": 3,
-              "max": 9
-            },
             "referenceManifest": [
               {
                 "alias": "@图片1",
                 "role": "previous_actual_tail",
                 "purpose": "上一镜当前视频版本的已人工验收实际尾帧，仅作为本镜唯一连续性锚点",
-                "shotId": "SH006"
+                "shotId": "SH002"
               },
               {
                 "alias": "@图片2",
@@ -2494,24 +1563,30 @@
                 "purpose": "道具基准图：保持 失灵护符 的形状、持有人与当前状态一致",
                 "assetId": "P02"
               }
-            ]
-          }
+            ],
+            "referenceCount": {
+              "min": 3,
+              "max": 9
+            }
+          },
+          "sourceAssetIds": [],
+          "continuityStatus": "ready",
+          "videoMode": "storyboard",
+          "storyboardFrameMode": "all_frames"
         },
         {
-          "code": "SH008",
-          "order": 8,
-          "title": "跨越结界 1/2",
-          "description": "穿过结界，法师注视",
+          "code": "SH004",
+          "order": 4,
+          "title": "跨越结界",
+          "description": "穿过结界，法师注视；二人站在检查台前，探测器举起",
           "sourceText": "马车穿过水波般的结界，高塔法师同时转头。检查官把黄铜探测器依次对准Karin与Rifa，指针死死停在零。\n检查官：“没有灵压，却带着Mahadel的徽记。”\nRifa：“你可以说我们很有礼貌。”\n检查官抬手，闸门锁链落下：“也可以说，你们在隐藏危险。”\nKarin向前半步，挡住检查官看向Rifa的视线。\nKarin：“我们只是来修一把剑。”",
           "shotBoundary": "指针匹配切",
           "dialogue": "",
           "narration": "",
           "utterances": [],
           "imagePrompt": "静态画面：马车穿过透明皇家结界，冷银光落在Karin与Rifa身上；可见表演：表情：眉心收紧、眼神警觉；视线：锁定结界或探测器；手部：握紧当前道具；景别：远景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：结界折射天光，冷银+暗蓝；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。",
-          "videoPrompt": "动态意图：马车穿过透明皇家结界，冷银光落在Karin与Rifa身上到Karin与Rifa站在检查台前，黄铜探测器被举起；起始可见状态：马车穿过透明皇家结界，冷银光落在Karin与Rifa身上；触发：双塔上方的法师剪影俯视马车，结界光纹停在背景；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：前向跟车；声音：风穿结界、远钟；透明波纹、探测器启动；低弦持续音进入；结束画面：Karin与Rifa站在检查台前，黄铜探测器被举起；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无现代检查设备、无枪械、无HUD、无雷电爆炸、无角色变形。。",
+          "videoPrompt": "动态意图：马车穿过透明皇家结界，冷银光落在Karin与Rifa身上到两人站在检查台前，检查官举起黄铜探测器；起始可见状态：马车穿过透明皇家结界，冷银光落在Karin与Rifa身上；主体动作与反应：二人站在检查台前，探测器举起；一个主运镜：前向跟车；环境压力与声音：风穿结界、远钟；透明波纹、探测器启动；低弦持续音进入；结束画面：两人站在检查台前，检查官举起黄铜探测器；针对性约束：无字幕、无现代检查设备、无枪械、无HUD、无雷电爆炸、无角色变形。",
           "cameraMotion": "前向跟车",
-          "startFramePrompt": "静态画面：马车穿过透明皇家结界，冷银光落在Karin与Rifa身上；可见表演：表情：眉心收紧、眼神警觉；视线：锁定结界或探测器；手部：握紧当前道具；景别：远景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：结界折射天光，冷银+暗蓝；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。；首帧仅继承@图片1对应的上一镜已验收实际尾帧状态。",
-          "endFramePrompt": "静态画面：Karin与Rifa站在检查台前，黄铜探测器被举起；可见表演：表情保持稳定；视线朝向当前主体；二人站在检查台前，探测器举起；景别：中近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：结界折射天光，冷银+暗蓝；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。；出口状态保存为当前视频版本实际尾帧并在下游继承前人工验收。",
           "negativePrompt": "无字幕、无现代检查设备、无枪械、无HUD、无雷电爆炸、无角色变形。",
           "continuity": {
             "shotSize": "LS→MCU",
@@ -2525,7 +1600,7 @@
             "axisRule": "保持180度关系轴线，转场时明确切换",
             "continuityNotes": "指针匹配切"
           },
-          "duration": 8,
+          "duration": 15,
           "characterCodes": [
             "C01",
             "C02",
@@ -2538,12 +1613,13 @@
           "clueCodes": [],
           "locationCode": "S02",
           "storySceneCode": "SC03",
-          "timecode": "45-53s",
+          "timecode": "45-60s",
           "dramaticFunction": "承/门槛",
           "lens": "35mm",
           "lighting": "结界折射天光",
           "colorPalette": "冷银+暗蓝",
           "transitionOut": "指针匹配切",
+          "performanceNotes": "",
           "performancePlan": {
             "emotionalObjective": "围绕穿过结界，法师注视完成当前镜头的外在行动目标",
             "emotionalArc": "从进入穿过结界，法师注视的克制状态开始，经由动作反应推进，在二人站在检查台前，探测器举起前收束",
@@ -2646,7 +1722,7 @@
                 "gaze": "沿镜头轴线向右",
                 "pose": "克制站姿或自然坐姿",
                 "expression": "按本镜表演说明",
-                "action": "穿过结界，法师注视"
+                "action": "二人站在检查台前，探测器举起"
               },
               {
                 "assetId": "C02",
@@ -2655,7 +1731,7 @@
                 "gaze": "沿镜头轴线向左",
                 "pose": "克制站姿或自然坐姿",
                 "expression": "按本镜表演说明",
-                "action": "穿过结界，法师注视"
+                "action": "二人站在检查台前，探测器举起"
               },
               {
                 "assetId": "C05",
@@ -2664,18 +1740,18 @@
                 "gaze": "沿镜头轴线向左",
                 "pose": "克制站姿或自然坐姿",
                 "expression": "按本镜表演说明",
-                "action": "穿过结界，法师注视"
+                "action": "二人站在检查台前，探测器举起"
               }
             ],
             "props": [
               {
                 "assetId": "P02",
-                "state": "穿过结界，法师注视",
+                "state": "二人站在检查台前，探测器举起",
                 "holderId": "C01"
               },
               {
                 "assetId": "P03",
-                "state": "穿过结界，法师注视",
+                "state": "二人站在检查台前，探测器举起",
                 "holderId": "C05"
               }
             ],
@@ -2684,10 +1760,6 @@
             "axis": "保持180度人物关系轴线",
             "screenDirection": "角色移动方向沿场景既定动线"
           },
-          "sourceAssetIds": [],
-          "continuityStatus": "planned",
-          "videoMode": "reference",
-          "storyboardFrameMode": "all_frames",
           "framePlan": {
             "start": {
               "source": "previous_accepted_actual_tail"
@@ -2697,40 +1769,60 @@
             },
             "frames": [
               {
-                "id": "SH008-F01",
+                "id": "SH004-F01",
                 "sequenceIndex": 1,
                 "startSecond": 0,
                 "endSecond": 2.667,
                 "actionPrompt": "马车穿过透明皇家结界，冷银光落在Karin与Rifa身上",
-                "imagePrompt": "静态画面：马车穿过透明皇家结界，冷银光落在Karin与Rifa身上；可见表演：表情：眉心收紧、眼神警觉；视线：锁定结界或探测器；手部：握紧当前道具；景别：远景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：结界折射天光，冷银+暗蓝；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
+                "imagePrompt": "静态关键帧：静态画面：马车穿过透明皇家结界，冷银光落在Karin与Rifa身上；可见表演状态：情绪保持与上一状态一致；面部眉眼和下颌保持可读的初始反应；视线沿当前镜头动作方向；身体与手部进入穿过结界，法师注视；景别（本帧固定）：LS；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按穿过结界，法师注视的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：结界折射天光；冷银+暗蓝；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
               },
               {
-                "id": "SH008-F02",
+                "id": "SH004-F02",
                 "sequenceIndex": 2,
                 "startSecond": 2.667,
                 "endSecond": 5.333,
                 "actionPrompt": "双塔上方的法师剪影俯视马车，结界光纹停在背景",
-                "imagePrompt": "静态画面：双塔上方的法师剪影俯视马车，结界光纹停在背景；可见表演：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；景别：中近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：结界折射天光，冷银+暗蓝；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
+                "imagePrompt": "静态关键帧：静态画面：双塔上方的法师剪影俯视马车，结界光纹停在背景；可见表演状态：情绪压力或目标逐步显现；面部眉眼、嘴角或下颌出现与动作对应的细微变化；视线短暂聚焦关键人物或道具；身体与手部完成主要动作并保留反应停顿；景别（本帧固定）：MCU；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按穿过结界，法师注视的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：结界折射天光；冷银+暗蓝；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
               },
               {
-                "id": "SH008-F03",
+                "id": "SH004-F03",
                 "sequenceIndex": 3,
                 "startSecond": 5.333,
                 "endSecond": 8,
                 "actionPrompt": "Karin与Rifa站在检查台前，黄铜探测器被举起",
-                "imagePrompt": "静态画面：Karin与Rifa站在检查台前，黄铜探测器被举起；可见表演：表情保持稳定；视线朝向当前主体；二人站在检查台前，探测器举起；景别：中近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：结界折射天光，冷银+暗蓝；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
+                "imagePrompt": "静态关键帧：静态画面：Karin与Rifa站在检查台前，黄铜探测器被举起；可见表演状态：情绪在下一镜头切点前完成情绪落点；面部固定最终表情，避免切点前漂移；视线指向下一动作或转场方向；身体与手部二人站在检查台前，探测器举起；景别（本帧固定）：MCU；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按穿过结界，法师注视的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：结界折射天光；冷银+暗蓝；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
+              },
+              {
+                "id": "SH004-F04",
+                "sequenceIndex": 4,
+                "startSecond": 8,
+                "endSecond": 10.333,
+                "actionPrompt": "透明结界光纹停在双塔城门外，法师剪影俯视道路",
+                "imagePrompt": "静态关键帧：静态画面：透明结界光纹停在双塔城门外，法师剪影俯视道路；可见表演状态：情绪保持与上一状态一致；面部眉眼和下颌保持可读的初始反应；视线沿当前镜头动作方向；身体与手部进入穿过结界，法师注视；景别（本帧固定）：LS；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按穿过结界，法师注视的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：结界折射天光；冷银+暗蓝；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
+              },
+              {
+                "id": "SH004-F05",
+                "sequenceIndex": 5,
+                "startSecond": 10.333,
+                "endSecond": 12.667,
+                "actionPrompt": "马车停在检查台前，Karin与Rifa从车厢下车",
+                "imagePrompt": "静态关键帧：静态画面：马车停在检查台前，Karin与Rifa从车厢下车；可见表演状态：情绪压力或目标逐步显现；面部眉眼、嘴角或下颌出现与动作对应的细微变化；视线短暂聚焦关键人物或道具；身体与手部完成主要动作并保留反应停顿；景别（本帧固定）：MCU；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按穿过结界，法师注视的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：结界折射天光；冷银+暗蓝；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
+              },
+              {
+                "id": "SH004-F06",
+                "sequenceIndex": 6,
+                "startSecond": 12.667,
+                "endSecond": 15,
+                "actionPrompt": "两人站在检查台前，检查官举起黄铜探测器",
+                "imagePrompt": "静态关键帧：静态画面：两人站在检查台前，检查官举起黄铜探测器；可见表演状态：情绪在下一镜头切点前完成情绪落点；面部固定最终表情，避免切点前漂移；视线指向下一动作或转场方向；身体与手部二人站在检查台前，探测器举起；景别（本帧固定）：MCU；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按穿过结界，法师注视的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：结界折射天光；冷银+暗蓝；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
               }
             ],
-            "referenceCount": {
-              "min": 3,
-              "max": 9
-            },
             "referenceManifest": [
               {
                 "alias": "@图片1",
                 "role": "previous_actual_tail",
                 "purpose": "上一镜当前视频版本的已人工验收实际尾帧，仅作为本镜唯一连续性锚点",
-                "shotId": "SH007"
+                "shotId": "SH003"
               },
               {
                 "alias": "@图片2",
@@ -2768,291 +1860,25 @@
                 "purpose": "道具基准图：保持 灵压探测器 的形状、持有人与当前状态一致",
                 "assetId": "P03"
               }
-            ]
-          }
-        },
-        {
-          "code": "SH009",
-          "order": 9,
-          "title": "跨越结界 2/2",
-          "description": "二人站在检查台前，探测器举起",
-          "sourceText": "马车穿过水波般的结界，高塔法师同时转头。检查官把黄铜探测器依次对准Karin与Rifa，指针死死停在零。\n检查官：“没有灵压，却带着Mahadel的徽记。”\nRifa：“你可以说我们很有礼貌。”\n检查官抬手，闸门锁链落下：“也可以说，你们在隐藏危险。”\nKarin向前半步，挡住检查官看向Rifa的视线。\nKarin：“我们只是来修一把剑。”",
-          "shotBoundary": "指针匹配切",
-          "dialogue": "",
-          "narration": "",
-          "utterances": [],
-          "imagePrompt": "静态画面：透明结界光纹停在双塔城门外，法师剪影俯视道路；可见表演：表情：眉心收紧、眼神警觉；视线：锁定结界或探测器；手部：握紧当前道具；景别：远景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：结界折射天光，冷银+暗蓝；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。",
-          "videoPrompt": "动态意图：透明结界光纹停在双塔城门外，法师剪影俯视道路到两人站在检查台前，检查官举起黄铜探测器；起始可见状态：透明结界光纹停在双塔城门外，法师剪影俯视道路；触发：马车停在检查台前，Karin与Rifa从车厢下车；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：前向跟车；声音：风穿结界、远钟；透明波纹、探测器启动；低弦持续音进入；结束画面：两人站在检查台前，检查官举起黄铜探测器；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无现代检查设备、无枪械、无HUD、无雷电爆炸、无角色变形。。",
-          "cameraMotion": "前向跟车",
-          "startFramePrompt": "静态画面：透明结界光纹停在双塔城门外，法师剪影俯视道路；可见表演：表情：眉心收紧、眼神警觉；视线：锁定结界或探测器；手部：握紧当前道具；景别：远景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：结界折射天光，冷银+暗蓝；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。；首帧仅继承@图片1对应的上一镜已验收实际尾帧状态。",
-          "endFramePrompt": "静态画面：两人站在检查台前，检查官举起黄铜探测器；可见表演：表情保持稳定；视线朝向当前主体；二人站在检查台前，探测器举起；景别：中近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：结界折射天光，冷银+暗蓝；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。；出口状态保存为当前视频版本实际尾帧并在下游继承前人工验收。",
-          "negativePrompt": "无字幕、无现代检查设备、无枪械、无HUD、无雷电爆炸、无角色变形。",
-          "continuity": {
-            "shotSize": "LS→MCU",
-            "cameraAngle": "视线高度平视，沿动作轴线拍摄",
-            "composition": "主体保持在9:16安全区，动作方向留出前进空间",
-            "characterBlocking": "按穿过结界，法师注视的动作关系安排站位",
-            "gazeDirection": "沿叙事动作方向，反应时回看对手或关键道具",
-            "actionStart": "穿过结界，法师注视",
-            "actionEnd": "二人站在检查台前，探测器举起",
-            "screenDirection": "保持同侧屏幕运动方向",
-            "axisRule": "保持180度关系轴线，转场时明确切换",
-            "continuityNotes": "指针匹配切"
-          },
-          "duration": 7,
-          "characterCodes": [
-            "C01",
-            "C02",
-            "C05"
-          ],
-          "propCodes": [
-            "P02",
-            "P03"
-          ],
-          "clueCodes": [],
-          "locationCode": "S02",
-          "storySceneCode": "SC03",
-          "timecode": "53-60s",
-          "dramaticFunction": "承/门槛",
-          "lens": "35mm",
-          "lighting": "结界折射天光",
-          "colorPalette": "冷银+暗蓝",
-          "transitionOut": "指针匹配切",
-          "performancePlan": {
-            "emotionalObjective": "围绕穿过结界，法师注视完成当前镜头的外在行动目标",
-            "emotionalArc": "从进入穿过结界，法师注视的克制状态开始，经由动作反应推进，在二人站在检查台前，探测器举起前收束",
-            "speechStyle": "无对白，以呼吸、视线和动作反应传递情绪",
-            "pace": "按镜头时长均匀推进，动作变化处短暂停顿，转场前收住",
-            "breath": "起始自然吸气，动作变化处短暂停顿，结束以呼气完成收束",
-            "restraintLevel": "中等克制，避免夸张表演",
-            "beats": {
-              "start": {
-                "emotion": "保持与上一状态一致",
-                "facialAction": "眉眼和下颌保持可读的初始反应",
-                "gaze": "沿当前镜头动作方向",
-                "bodyAction": "进入穿过结界，法师注视"
-              },
-              "middle": {
-                "emotion": "压力或目标逐步显现",
-                "facialAction": "眉眼、嘴角或下颌出现与动作对应的细微变化",
-                "gaze": "短暂聚焦关键人物或道具",
-                "bodyAction": "完成主要动作并保留反应停顿"
-              },
-              "end": {
-                "emotion": "在下一镜头切点前完成情绪落点",
-                "facialAction": "固定最终表情，避免切点前漂移",
-                "gaze": "指向下一动作或转场方向",
-                "bodyAction": "二人站在检查台前，探测器举起"
-              }
+            ],
+            "referenceCount": {
+              "min": 3,
+              "max": 9
             }
           },
-          "dialoguePerformance": [],
-          "lightingPlan": {
-            "palette": "冷银+暗蓝",
-            "colorTemperature": "主光冷暖关系沿用本场设定，避免相邻镜头跳变",
-            "keyLight": "结界折射天光作为主光，明确来自画面主方向并照亮主体面部",
-            "fillLight": "弱补光保留面部细节，阴影侧不完全压黑",
-            "rimLight": "以轻微轮廓光分离人物与背景，不制造硬边光晕",
-            "contrast": "中等反差，主体层次清晰，避免高光溢出",
-            "materialResponse": "金属、皮革和织物按真实材质反射，亮部克制",
-            "skinToneProtection": "保护肤色自然，不被环境色完全染色",
-            "inheritFromPrevious": "继承上一镜主光方向、色温和环境亮度",
-            "transitionToNext": "在动作结束处平滑过渡到下一镜主光和色板"
-          },
-          "sound": {
-            "ambience": "风穿结界、远钟",
-            "soundEffects": "透明波纹、探测器启动",
-            "music": "低弦持续音进入"
-          },
-          "entryState": {
-            "characters": [
-              {
-                "assetId": "C01",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面左侧或前景",
-                "gaze": "沿镜头轴线向右",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "穿过结界，法师注视"
-              },
-              {
-                "assetId": "C02",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "穿过结界，法师注视"
-              },
-              {
-                "assetId": "C05",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "穿过结界，法师注视"
-              }
-            ],
-            "props": [
-              {
-                "assetId": "P02",
-                "state": "穿过结界，法师注视",
-                "holderId": "C01"
-              },
-              {
-                "assetId": "P03",
-                "state": "穿过结界，法师注视",
-                "holderId": "C05"
-              }
-            ],
-            "environment": "城门盘查",
-            "lighting": "结界折射天光",
-            "axis": "保持180度人物关系轴线",
-            "screenDirection": "角色移动方向沿场景既定动线"
-          },
-          "exitState": {
-            "characters": [
-              {
-                "assetId": "C01",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面左侧或前景",
-                "gaze": "沿镜头轴线向右",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "二人站在检查台前，探测器举起"
-              },
-              {
-                "assetId": "C02",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "二人站在检查台前，探测器举起"
-              },
-              {
-                "assetId": "C05",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "二人站在检查台前，探测器举起"
-              }
-            ],
-            "props": [
-              {
-                "assetId": "P02",
-                "state": "二人站在检查台前，探测器举起",
-                "holderId": "C01"
-              },
-              {
-                "assetId": "P03",
-                "state": "二人站在检查台前，探测器举起",
-                "holderId": "C05"
-              }
-            ],
-            "environment": "城门盘查",
-            "lighting": "结界折射天光",
-            "axis": "保持180度人物关系轴线",
-            "screenDirection": "角色移动方向沿场景既定动线"
-          },
           "sourceAssetIds": [],
-          "continuityStatus": "planned",
-          "videoMode": "reference",
-          "storyboardFrameMode": "all_frames",
-          "framePlan": {
-            "start": {
-              "source": "previous_accepted_actual_tail"
-            },
-            "end": {
-              "required": true
-            },
-            "frames": [
-              {
-                "id": "SH009-F01",
-                "sequenceIndex": 1,
-                "startSecond": 0,
-                "endSecond": 2.333,
-                "actionPrompt": "透明结界光纹停在双塔城门外，法师剪影俯视道路",
-                "imagePrompt": "静态画面：透明结界光纹停在双塔城门外，法师剪影俯视道路；可见表演：表情：眉心收紧、眼神警觉；视线：锁定结界或探测器；手部：握紧当前道具；景别：远景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：结界折射天光，冷银+暗蓝；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
-              },
-              {
-                "id": "SH009-F02",
-                "sequenceIndex": 2,
-                "startSecond": 2.333,
-                "endSecond": 4.667,
-                "actionPrompt": "马车停在检查台前，Karin与Rifa从车厢下车",
-                "imagePrompt": "静态画面：马车停在检查台前，Karin与Rifa从车厢下车；可见表演：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；景别：中近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：结界折射天光，冷银+暗蓝；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
-              },
-              {
-                "id": "SH009-F03",
-                "sequenceIndex": 3,
-                "startSecond": 4.667,
-                "endSecond": 7,
-                "actionPrompt": "两人站在检查台前，检查官举起黄铜探测器",
-                "imagePrompt": "静态画面：两人站在检查台前，检查官举起黄铜探测器；可见表演：表情保持稳定；视线朝向当前主体；二人站在检查台前，探测器举起；景别：中近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：结界折射天光，冷银+暗蓝；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
-              }
-            ],
-            "referenceCount": {
-              "min": 3,
-              "max": 9
-            },
-            "referenceManifest": [
-              {
-                "alias": "@图片1",
-                "role": "previous_actual_tail",
-                "purpose": "上一镜当前视频版本的已人工验收实际尾帧，仅作为本镜唯一连续性锚点",
-                "shotId": "SH008"
-              },
-              {
-                "alias": "@图片2",
-                "role": "character_anchor",
-                "purpose": "角色基准图：保持 Karin 的身份特征、服装与道具不漂移",
-                "assetId": "C01"
-              },
-              {
-                "alias": "@图片3",
-                "role": "character_anchor",
-                "purpose": "角色基准图：保持 Rifa 的身份特征、服装与道具不漂移",
-                "assetId": "C02"
-              },
-              {
-                "alias": "@图片4",
-                "role": "character_anchor",
-                "purpose": "角色基准图：保持 城门检查官 的身份特征、服装与道具不漂移",
-                "assetId": "C05"
-              },
-              {
-                "alias": "@图片5",
-                "role": "scene_anchor",
-                "purpose": "场景基准图：保持空间结构、光向与轴线一致",
-                "assetId": "S02"
-              },
-              {
-                "alias": "@图片6",
-                "role": "prop_anchor",
-                "purpose": "道具基准图：保持 失灵护符 的形状、持有人与当前状态一致",
-                "assetId": "P02"
-              },
-              {
-                "alias": "@图片7",
-                "role": "prop_anchor",
-                "purpose": "道具基准图：保持 灵压探测器 的形状、持有人与当前状态一致",
-                "assetId": "P03"
-              }
-            ]
-          }
+          "continuityStatus": "ready",
+          "videoMode": "storyboard",
+          "storyboardFrameMode": "all_frames"
         },
         {
-          "code": "SH010",
-          "order": 10,
-          "title": "空白读数 1/3",
-          "description": "空白读数与封锁",
+          "code": "SH005",
+          "order": 5,
+          "title": "空白读数",
+          "description": "空白读数与封锁；空白读数的连续反应与动作过渡；Karin前移半步，Rifa侧后，闸门锁闭",
           "sourceText": "马车穿过水波般的结界，高塔法师同时转头。检查官把黄铜探测器依次对准Karin与Rifa，指针死死停在零。\n检查官：“没有灵压，却带着Mahadel的徽记。”\nRifa：“你可以说我们很有礼貌。”\n检查官抬手，闸门锁链落下：“也可以说，你们在隐藏危险。”\nKarin向前半步，挡住检查官看向Rifa的视线。\nKarin：“我们只是来修一把剑。”",
           "shotBoundary": "锁链硬切",
-          "dialogue": "检查官：没有灵压，却带着Mahadel的徽记。\nRifa：你可以说我们很有礼貌。",
+          "dialogue": "检查官：没有灵压，却带着Mahadel的徽记。\nRifa：你可以说我们很有礼貌。；检查官：也可以说，你们在隐藏危险。；Karin：我们只是来修一把剑。",
           "narration": "",
           "utterances": [
             {
@@ -3068,13 +1894,25 @@
               "type": "dialogue",
               "speaker": "Rifa",
               "text": "你可以说我们很有礼貌。"
+            },
+            {
+              "id": "D10",
+              "order": 3,
+              "type": "dialogue",
+              "speaker": "检查官",
+              "text": "也可以说，你们在隐藏危险。"
+            },
+            {
+              "id": "D11",
+              "order": 4,
+              "type": "dialogue",
+              "speaker": "Karin",
+              "text": "我们只是来修一把剑。"
             }
           ],
           "imagePrompt": "静态画面：黄铜探测器指针停在零刻度，检查官与两名旅人保持对峙站位；可见表演：表情：眉心收紧、眼神警觉；视线：锁定结界或探测器；手部：握紧当前道具；景别：过肩中景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：城门侧光，冷灰+暗红；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。",
-          "videoPrompt": "动态意图：黄铜探测器指针停在零刻度，检查官与两名旅人保持对峙站位到Karin前移半步挡住检查官看向Rifa的视线，闸门锁闭；起始可见状态：黄铜探测器指针停在零刻度，检查官与两名旅人保持对峙站位；触发：检查官抬手，竖幅上方的闸门锁链开始下落；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：固定正反打；声音：人群渐静；探测器空响、锁链落下；低频缓慢上升；结束画面：Karin前移半步挡住检查官看向Rifa的视线，闸门锁闭；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无现代检查站、无夸张表演、无魔法光球、无角色变形。。",
+          "videoPrompt": "动态意图：黄铜探测器指针停在零刻度，检查官与两名旅人保持对峙站位到闸门锁闭，Karin挡住检查官视线，Rifa保持警觉；起始可见状态：黄铜探测器指针停在零刻度，检查官与两名旅人保持对峙站位；主体动作与反应：Karin前移半步，Rifa侧后，闸门锁闭；一个主运镜：固定正反打；环境压力与声音：人群渐静；探测器空响、锁链落下；低频缓慢上升；结束画面：闸门锁闭，Karin挡住检查官视线，Rifa保持警觉；针对性约束：无字幕、无现代检查站、无夸张表演、无魔法光球、无角色变形。",
           "cameraMotion": "固定正反打",
-          "startFramePrompt": "静态画面：黄铜探测器指针停在零刻度，检查官与两名旅人保持对峙站位；可见表演：表情：眉心收紧、眼神警觉；视线：锁定结界或探测器；手部：握紧当前道具；景别：过肩中景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：城门侧光，冷灰+暗红；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。；首帧仅继承@图片1对应的上一镜已验收实际尾帧状态。",
-          "endFramePrompt": "静态画面：Karin前移半步挡住检查官看向Rifa的视线，闸门锁闭；可见表演：表情保持稳定；视线朝向当前主体；Karin前移半步，Rifa侧后，闸门锁闭；景别：中近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：城门侧光，冷灰+暗红；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。；出口状态保存为当前视频版本实际尾帧并在下游继承前人工验收。",
           "negativePrompt": "无字幕、无现代检查站、无夸张表演、无魔法光球、无角色变形。",
           "continuity": {
             "shotSize": "OTS/MCU",
@@ -3088,7 +1926,7 @@
             "axisRule": "保持180度关系轴线，转场时明确切换",
             "continuityNotes": "锁链硬切"
           },
-          "duration": 5,
+          "duration": 15,
           "characterCodes": [
             "C01",
             "C02",
@@ -3100,7 +1938,7 @@
           "clueCodes": [],
           "locationCode": "S02",
           "storySceneCode": "SC03",
-          "timecode": "60-65s",
+          "timecode": "60-75s",
           "dramaticFunction": "承/盘查",
           "lens": "65mm",
           "lighting": "城门侧光",
@@ -3232,628 +2070,6 @@
               {
                 "assetId": "P03",
                 "state": "二人站在检查台前，探测器举起",
-                "holderId": "C05"
-              }
-            ],
-            "environment": "城门盘查",
-            "lighting": "城门侧光",
-            "axis": "保持180度人物关系轴线",
-            "screenDirection": "角色移动方向沿场景既定动线"
-          },
-          "exitState": {
-            "characters": [
-              {
-                "assetId": "C01",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面左侧或前景",
-                "gaze": "沿镜头轴线向右",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "空白读数与封锁"
-              },
-              {
-                "assetId": "C02",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "空白读数与封锁"
-              },
-              {
-                "assetId": "C05",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "空白读数与封锁"
-              }
-            ],
-            "props": [
-              {
-                "assetId": "P03",
-                "state": "空白读数与封锁",
-                "holderId": "C05"
-              }
-            ],
-            "environment": "城门盘查",
-            "lighting": "城门侧光",
-            "axis": "保持180度人物关系轴线",
-            "screenDirection": "角色移动方向沿场景既定动线"
-          },
-          "sourceAssetIds": [],
-          "continuityStatus": "planned",
-          "videoMode": "reference",
-          "storyboardFrameMode": "all_frames",
-          "framePlan": {
-            "start": {
-              "source": "previous_accepted_actual_tail"
-            },
-            "end": {
-              "required": true
-            },
-            "frames": [
-              {
-                "id": "SH010-F01",
-                "sequenceIndex": 1,
-                "startSecond": 0,
-                "endSecond": 1.667,
-                "actionPrompt": "黄铜探测器指针停在零刻度，检查官与两名旅人保持对峙站位",
-                "imagePrompt": "静态画面：黄铜探测器指针停在零刻度，检查官与两名旅人保持对峙站位；可见表演：表情：眉心收紧、眼神警觉；视线：锁定结界或探测器；手部：握紧当前道具；景别：过肩中景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：城门侧光，冷灰+暗红；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
-              },
-              {
-                "id": "SH010-F02",
-                "sequenceIndex": 2,
-                "startSecond": 1.667,
-                "endSecond": 3.333,
-                "actionPrompt": "检查官抬手，竖幅上方的闸门锁链开始下落",
-                "imagePrompt": "静态画面：检查官抬手，竖幅上方的闸门锁链开始下落；可见表演：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；景别：中近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：城门侧光，冷灰+暗红；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
-              },
-              {
-                "id": "SH010-F03",
-                "sequenceIndex": 3,
-                "startSecond": 3.333,
-                "endSecond": 5,
-                "actionPrompt": "Karin前移半步挡住检查官看向Rifa的视线，闸门锁闭",
-                "imagePrompt": "静态画面：Karin前移半步挡住检查官看向Rifa的视线，闸门锁闭；可见表演：表情保持稳定；视线朝向当前主体；Karin前移半步，Rifa侧后，闸门锁闭；景别：中近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：城门侧光，冷灰+暗红；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
-              }
-            ],
-            "referenceCount": {
-              "min": 3,
-              "max": 9
-            },
-            "referenceManifest": [
-              {
-                "alias": "@图片1",
-                "role": "previous_actual_tail",
-                "purpose": "上一镜当前视频版本的已人工验收实际尾帧，仅作为本镜唯一连续性锚点",
-                "shotId": "SH009"
-              },
-              {
-                "alias": "@图片2",
-                "role": "character_anchor",
-                "purpose": "角色基准图：保持 Karin 的身份特征、服装与道具不漂移",
-                "assetId": "C01"
-              },
-              {
-                "alias": "@图片3",
-                "role": "character_anchor",
-                "purpose": "角色基准图：保持 Rifa 的身份特征、服装与道具不漂移",
-                "assetId": "C02"
-              },
-              {
-                "alias": "@图片4",
-                "role": "character_anchor",
-                "purpose": "角色基准图：保持 城门检查官 的身份特征、服装与道具不漂移",
-                "assetId": "C05"
-              },
-              {
-                "alias": "@图片5",
-                "role": "scene_anchor",
-                "purpose": "场景基准图：保持空间结构、光向与轴线一致",
-                "assetId": "S02"
-              },
-              {
-                "alias": "@图片6",
-                "role": "prop_anchor",
-                "purpose": "道具基准图：保持 灵压探测器 的形状、持有人与当前状态一致",
-                "assetId": "P03"
-              }
-            ]
-          }
-        },
-        {
-          "code": "SH011",
-          "order": 11,
-          "title": "空白读数 2/3",
-          "description": "空白读数的连续反应与动作过渡",
-          "sourceText": "马车穿过水波般的结界，高塔法师同时转头。检查官把黄铜探测器依次对准Karin与Rifa，指针死死停在零。\n检查官：“没有灵压，却带着Mahadel的徽记。”\nRifa：“你可以说我们很有礼貌。”\n检查官抬手，闸门锁链落下：“也可以说，你们在隐藏危险。”\nKarin向前半步，挡住检查官看向Rifa的视线。\nKarin：“我们只是来修一把剑。”",
-          "shotBoundary": "锁链硬切",
-          "dialogue": "检查官：也可以说，你们在隐藏危险。",
-          "narration": "",
-          "utterances": [
-            {
-              "id": "D10",
-              "order": 1,
-              "type": "dialogue",
-              "speaker": "检查官",
-              "text": "也可以说，你们在隐藏危险。"
-            }
-          ],
-          "imagePrompt": "静态画面：黄铜探测器停在零刻度，检查官与两名旅人保持对峙站位；可见表演：表情：眉心收紧、眼神警觉；视线：锁定结界或探测器；手部：握紧当前道具；景别：过肩中景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：城门侧光，冷灰+暗红；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。",
-          "videoPrompt": "动态意图：黄铜探测器停在零刻度，检查官与两名旅人保持对峙站位到Karin前移半步挡住检查官看向Rifa的视线，闸门锁闭；起始可见状态：黄铜探测器停在零刻度，检查官与两名旅人保持对峙站位；触发：检查官抬手，竖幅上方闸门锁链开始下落；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：固定正反打；声音：人群渐静；探测器空响、锁链落下；低频缓慢上升；结束画面：Karin前移半步挡住检查官看向Rifa的视线，闸门锁闭；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无现代检查站、无夸张表演、无魔法光球、无角色变形。。",
-          "cameraMotion": "固定正反打",
-          "startFramePrompt": "静态画面：黄铜探测器停在零刻度，检查官与两名旅人保持对峙站位；可见表演：表情：眉心收紧、眼神警觉；视线：锁定结界或探测器；手部：握紧当前道具；景别：过肩中景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：城门侧光，冷灰+暗红；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。；首帧仅继承@图片1对应的上一镜已验收实际尾帧状态。",
-          "endFramePrompt": "静态画面：Karin前移半步挡住检查官看向Rifa的视线，闸门锁闭；可见表演：表情保持稳定；视线朝向当前主体；Karin前移半步，Rifa侧后，闸门锁闭；景别：中近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：城门侧光，冷灰+暗红；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。；出口状态保存为当前视频版本实际尾帧并在下游继承前人工验收。",
-          "negativePrompt": "无字幕、无现代检查站、无夸张表演、无魔法光球、无角色变形。",
-          "continuity": {
-            "shotSize": "OTS/MCU",
-            "cameraAngle": "视线高度平视，沿动作轴线拍摄",
-            "composition": "主体保持在9:16安全区，动作方向留出前进空间",
-            "characterBlocking": "按空白读数与封锁的动作关系安排站位",
-            "gazeDirection": "沿叙事动作方向，反应时回看对手或关键道具",
-            "actionStart": "空白读数与封锁",
-            "actionEnd": "Karin前移半步，Rifa侧后，闸门锁闭",
-            "screenDirection": "保持同侧屏幕运动方向",
-            "axisRule": "保持180度关系轴线，转场时明确切换",
-            "continuityNotes": "锁链硬切"
-          },
-          "duration": 5,
-          "characterCodes": [
-            "C01",
-            "C02",
-            "C05"
-          ],
-          "propCodes": [
-            "P03"
-          ],
-          "clueCodes": [],
-          "locationCode": "S02",
-          "storySceneCode": "SC03",
-          "timecode": "65-70s",
-          "dramaticFunction": "承/盘查",
-          "lens": "65mm",
-          "lighting": "城门侧光",
-          "colorPalette": "冷灰+暗红",
-          "transitionOut": "锁链硬切",
-          "performanceNotes": "没有灵压，却带着Mahadel的徽记。；你可以说我们很有礼貌。；也可以说，你们在隐藏危险。；我们只是来修一把剑。",
-          "performancePlan": {
-            "emotionalObjective": "围绕空白读数与封锁完成当前镜头的外在行动目标",
-            "emotionalArc": "从进入空白读数与封锁的克制状态开始，经由动作反应推进，在Karin前移半步，Rifa侧后，闸门锁闭前收束",
-            "speechStyle": "台词贴合当下处境，语气清晰克制，重音落在行动关键信息",
-            "pace": "按镜头时长均匀推进，动作变化处短暂停顿，转场前收住",
-            "breath": "起始自然吸气，动作变化处短暂停顿，结束以呼气完成收束",
-            "restraintLevel": "中等克制，避免夸张表演",
-            "beats": {
-              "start": {
-                "emotion": "保持与上一状态一致",
-                "facialAction": "眉眼和下颌保持可读的初始反应",
-                "gaze": "沿当前镜头动作方向",
-                "bodyAction": "进入空白读数与封锁"
-              },
-              "middle": {
-                "emotion": "压力或目标逐步显现",
-                "facialAction": "眉眼、嘴角或下颌出现与动作对应的细微变化",
-                "gaze": "短暂聚焦关键人物或道具",
-                "bodyAction": "完成主要动作并保留反应停顿"
-              },
-              "end": {
-                "emotion": "在下一镜头切点前完成情绪落点",
-                "facialAction": "固定最终表情，避免切点前漂移",
-                "gaze": "指向下一动作或转场方向",
-                "bodyAction": "Karin前移半步，Rifa侧后，闸门锁闭"
-              }
-            }
-          },
-          "dialoguePerformance": [
-            {
-              "utteranceId": "D10",
-              "intent": "推动当前镜头行动并回应对手或环境",
-              "tone": "贴合当前情绪，清晰自然",
-              "pace": "按语义分句，中速完成",
-              "pause": "关键信息前短停，句末自然收束",
-              "emphasis": "也可以说，你们在隐藏危险。",
-              "facialReactionBefore": "先以视线和眉眼确认对方或关键道具",
-              "facialReactionDuring": "说话时保持与行动一致的面部反应",
-              "facialReactionAfter": "说完保留短暂反应，衔接下一动作"
-            },
-            {
-              "utteranceId": "D08",
-              "intent": "推动当前镜头行动并回应对手或环境",
-              "tone": "贴合当前情绪，清晰自然",
-              "pace": "按语义分句，中速完成",
-              "pause": "关键信息前短停，句末自然收束",
-              "emphasis": "没有灵压，却带着Mahadel的徽记。",
-              "facialReactionBefore": "先以视线和眉眼确认对方或关键道具",
-              "facialReactionDuring": "说话时保持与行动一致的面部反应",
-              "facialReactionAfter": "说完保留短暂反应，衔接下一动作"
-            },
-            {
-              "utteranceId": "D09",
-              "intent": "推动当前镜头行动并回应对手或环境",
-              "tone": "贴合当前情绪，清晰自然",
-              "pace": "按语义分句，中速完成",
-              "pause": "关键信息前短停，句末自然收束",
-              "emphasis": "你可以说我们很有礼貌。",
-              "facialReactionBefore": "先以视线和眉眼确认对方或关键道具",
-              "facialReactionDuring": "说话时保持与行动一致的面部反应",
-              "facialReactionAfter": "说完保留短暂反应，衔接下一动作"
-            },
-            {
-              "utteranceId": "D11",
-              "intent": "推动当前镜头行动并回应对手或环境",
-              "tone": "贴合当前情绪，清晰自然",
-              "pace": "按语义分句，中速完成",
-              "pause": "关键信息前短停，句末自然收束",
-              "emphasis": "我们只是来修一把剑。",
-              "facialReactionBefore": "先以视线和眉眼确认对方或关键道具",
-              "facialReactionDuring": "说话时保持与行动一致的面部反应",
-              "facialReactionAfter": "说完保留短暂反应，衔接下一动作"
-            }
-          ],
-          "lightingPlan": {
-            "palette": "冷灰+暗红",
-            "colorTemperature": "主光冷暖关系沿用本场设定，避免相邻镜头跳变",
-            "keyLight": "城门侧光作为主光，明确来自画面主方向并照亮主体面部",
-            "fillLight": "弱补光保留面部细节，阴影侧不完全压黑",
-            "rimLight": "以轻微轮廓光分离人物与背景，不制造硬边光晕",
-            "contrast": "中等反差，主体层次清晰，避免高光溢出",
-            "materialResponse": "金属、皮革和织物按真实材质反射，亮部克制",
-            "skinToneProtection": "保护肤色自然，不被环境色完全染色",
-            "inheritFromPrevious": "继承上一镜主光方向、色温和环境亮度",
-            "transitionToNext": "在动作结束处平滑过渡到下一镜主光和色板"
-          },
-          "sound": {
-            "ambience": "人群渐静",
-            "soundEffects": "探测器空响、锁链落下",
-            "music": "低频缓慢上升"
-          },
-          "entryState": {
-            "characters": [
-              {
-                "assetId": "C01",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面左侧或前景",
-                "gaze": "沿镜头轴线向右",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "空白读数与封锁"
-              },
-              {
-                "assetId": "C02",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "空白读数与封锁"
-              },
-              {
-                "assetId": "C05",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "空白读数与封锁"
-              }
-            ],
-            "props": [
-              {
-                "assetId": "P03",
-                "state": "空白读数与封锁",
-                "holderId": "C05"
-              }
-            ],
-            "environment": "城门盘查",
-            "lighting": "城门侧光",
-            "axis": "保持180度人物关系轴线",
-            "screenDirection": "角色移动方向沿场景既定动线"
-          },
-          "exitState": {
-            "characters": [
-              {
-                "assetId": "C01",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面左侧或前景",
-                "gaze": "沿镜头轴线向右",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "空白读数的连续反应与动作过渡"
-              },
-              {
-                "assetId": "C02",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "空白读数的连续反应与动作过渡"
-              },
-              {
-                "assetId": "C05",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "空白读数的连续反应与动作过渡"
-              }
-            ],
-            "props": [
-              {
-                "assetId": "P03",
-                "state": "空白读数的连续反应与动作过渡",
-                "holderId": "C05"
-              }
-            ],
-            "environment": "城门盘查",
-            "lighting": "城门侧光",
-            "axis": "保持180度人物关系轴线",
-            "screenDirection": "角色移动方向沿场景既定动线"
-          },
-          "sourceAssetIds": [],
-          "continuityStatus": "planned",
-          "videoMode": "reference",
-          "storyboardFrameMode": "all_frames",
-          "framePlan": {
-            "start": {
-              "source": "previous_accepted_actual_tail"
-            },
-            "end": {
-              "required": true
-            },
-            "frames": [
-              {
-                "id": "SH011-F01",
-                "sequenceIndex": 1,
-                "startSecond": 0,
-                "endSecond": 1.667,
-                "actionPrompt": "黄铜探测器停在零刻度，检查官与两名旅人保持对峙站位",
-                "imagePrompt": "静态画面：黄铜探测器停在零刻度，检查官与两名旅人保持对峙站位；可见表演：表情：眉心收紧、眼神警觉；视线：锁定结界或探测器；手部：握紧当前道具；景别：过肩中景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：城门侧光，冷灰+暗红；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
-              },
-              {
-                "id": "SH011-F02",
-                "sequenceIndex": 2,
-                "startSecond": 1.667,
-                "endSecond": 3.333,
-                "actionPrompt": "检查官抬手，竖幅上方闸门锁链开始下落",
-                "imagePrompt": "静态画面：检查官抬手，竖幅上方闸门锁链开始下落；可见表演：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；景别：中近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：城门侧光，冷灰+暗红；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
-              },
-              {
-                "id": "SH011-F03",
-                "sequenceIndex": 3,
-                "startSecond": 3.333,
-                "endSecond": 5,
-                "actionPrompt": "Karin前移半步挡住检查官看向Rifa的视线，闸门锁闭",
-                "imagePrompt": "静态画面：Karin前移半步挡住检查官看向Rifa的视线，闸门锁闭；可见表演：表情保持稳定；视线朝向当前主体；Karin前移半步，Rifa侧后，闸门锁闭；景别：中近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：城门侧光，冷灰+暗红；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
-              }
-            ],
-            "referenceCount": {
-              "min": 3,
-              "max": 9
-            },
-            "referenceManifest": [
-              {
-                "alias": "@图片1",
-                "role": "previous_actual_tail",
-                "purpose": "上一镜当前视频版本的已人工验收实际尾帧，仅作为本镜唯一连续性锚点",
-                "shotId": "SH010"
-              },
-              {
-                "alias": "@图片2",
-                "role": "character_anchor",
-                "purpose": "角色基准图：保持 Karin 的身份特征、服装与道具不漂移",
-                "assetId": "C01"
-              },
-              {
-                "alias": "@图片3",
-                "role": "character_anchor",
-                "purpose": "角色基准图：保持 Rifa 的身份特征、服装与道具不漂移",
-                "assetId": "C02"
-              },
-              {
-                "alias": "@图片4",
-                "role": "character_anchor",
-                "purpose": "角色基准图：保持 城门检查官 的身份特征、服装与道具不漂移",
-                "assetId": "C05"
-              },
-              {
-                "alias": "@图片5",
-                "role": "scene_anchor",
-                "purpose": "场景基准图：保持空间结构、光向与轴线一致",
-                "assetId": "S02"
-              },
-              {
-                "alias": "@图片6",
-                "role": "prop_anchor",
-                "purpose": "道具基准图：保持 灵压探测器 的形状、持有人与当前状态一致",
-                "assetId": "P03"
-              }
-            ]
-          }
-        },
-        {
-          "code": "SH012",
-          "order": 12,
-          "title": "空白读数 3/3",
-          "description": "Karin前移半步，Rifa侧后，闸门锁闭",
-          "sourceText": "马车穿过水波般的结界，高塔法师同时转头。检查官把黄铜探测器依次对准Karin与Rifa，指针死死停在零。\n检查官：“没有灵压，却带着Mahadel的徽记。”\nRifa：“你可以说我们很有礼貌。”\n检查官抬手，闸门锁链落下：“也可以说，你们在隐藏危险。”\nKarin向前半步，挡住检查官看向Rifa的视线。\nKarin：“我们只是来修一把剑。”",
-          "shotBoundary": "锁链硬切",
-          "dialogue": "Karin：我们只是来修一把剑。",
-          "narration": "",
-          "utterances": [
-            {
-              "id": "D11",
-              "order": 1,
-              "type": "dialogue",
-              "speaker": "Karin",
-              "text": "我们只是来修一把剑。"
-            }
-          ],
-          "imagePrompt": "静态画面：检查官与Karin隔着零刻度探测器对峙，Rifa站在侧后方；可见表演：表情：眉心收紧、眼神警觉；视线：锁定结界或探测器；手部：握紧当前道具；景别：过肩中景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：城门侧光，冷灰+暗红；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。",
-          "videoPrompt": "动态意图：检查官与Karin隔着零刻度探测器对峙，Rifa站在侧后方到闸门锁闭，Karin挡住检查官视线，Rifa保持警觉；起始可见状态：检查官与Karin隔着零刻度探测器对峙，Rifa站在侧后方；触发：Karin向前半步，Rifa保持侧后位置，闸门锁链悬在上方；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：固定正反打；声音：人群渐静；探测器空响、锁链落下；低频缓慢上升；结束画面：闸门锁闭，Karin挡住检查官视线，Rifa保持警觉；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无现代检查站、无夸张表演、无魔法光球、无角色变形。。",
-          "cameraMotion": "固定正反打",
-          "startFramePrompt": "静态画面：检查官与Karin隔着零刻度探测器对峙，Rifa站在侧后方；可见表演：表情：眉心收紧、眼神警觉；视线：锁定结界或探测器；手部：握紧当前道具；景别：过肩中景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：城门侧光，冷灰+暗红；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。；首帧仅继承@图片1对应的上一镜已验收实际尾帧状态。",
-          "endFramePrompt": "静态画面：闸门锁闭，Karin挡住检查官视线，Rifa保持警觉；可见表演：表情保持稳定；视线朝向当前主体；Karin前移半步，Rifa侧后，闸门锁闭；景别：中近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：城门侧光，冷灰+暗红；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。；出口状态保存为当前视频版本实际尾帧并在下游继承前人工验收。",
-          "negativePrompt": "无字幕、无现代检查站、无夸张表演、无魔法光球、无角色变形。",
-          "continuity": {
-            "shotSize": "OTS/MCU",
-            "cameraAngle": "视线高度平视，沿动作轴线拍摄",
-            "composition": "主体保持在9:16安全区，动作方向留出前进空间",
-            "characterBlocking": "按空白读数与封锁的动作关系安排站位",
-            "gazeDirection": "沿叙事动作方向，反应时回看对手或关键道具",
-            "actionStart": "空白读数与封锁",
-            "actionEnd": "Karin前移半步，Rifa侧后，闸门锁闭",
-            "screenDirection": "保持同侧屏幕运动方向",
-            "axisRule": "保持180度关系轴线，转场时明确切换",
-            "continuityNotes": "锁链硬切"
-          },
-          "duration": 5,
-          "characterCodes": [
-            "C01",
-            "C02",
-            "C05"
-          ],
-          "propCodes": [
-            "P03"
-          ],
-          "clueCodes": [],
-          "locationCode": "S02",
-          "storySceneCode": "SC03",
-          "timecode": "70-75s",
-          "dramaticFunction": "承/盘查",
-          "lens": "65mm",
-          "lighting": "城门侧光",
-          "colorPalette": "冷灰+暗红",
-          "transitionOut": "锁链硬切",
-          "performanceNotes": "没有灵压，却带着Mahadel的徽记。；你可以说我们很有礼貌。；也可以说，你们在隐藏危险。；我们只是来修一把剑。",
-          "performancePlan": {
-            "emotionalObjective": "围绕空白读数与封锁完成当前镜头的外在行动目标",
-            "emotionalArc": "从进入空白读数与封锁的克制状态开始，经由动作反应推进，在Karin前移半步，Rifa侧后，闸门锁闭前收束",
-            "speechStyle": "台词贴合当下处境，语气清晰克制，重音落在行动关键信息",
-            "pace": "按镜头时长均匀推进，动作变化处短暂停顿，转场前收住",
-            "breath": "起始自然吸气，动作变化处短暂停顿，结束以呼气完成收束",
-            "restraintLevel": "中等克制，避免夸张表演",
-            "beats": {
-              "start": {
-                "emotion": "保持与上一状态一致",
-                "facialAction": "眉眼和下颌保持可读的初始反应",
-                "gaze": "沿当前镜头动作方向",
-                "bodyAction": "进入空白读数与封锁"
-              },
-              "middle": {
-                "emotion": "压力或目标逐步显现",
-                "facialAction": "眉眼、嘴角或下颌出现与动作对应的细微变化",
-                "gaze": "短暂聚焦关键人物或道具",
-                "bodyAction": "完成主要动作并保留反应停顿"
-              },
-              "end": {
-                "emotion": "在下一镜头切点前完成情绪落点",
-                "facialAction": "固定最终表情，避免切点前漂移",
-                "gaze": "指向下一动作或转场方向",
-                "bodyAction": "Karin前移半步，Rifa侧后，闸门锁闭"
-              }
-            }
-          },
-          "dialoguePerformance": [
-            {
-              "utteranceId": "D11",
-              "intent": "推动当前镜头行动并回应对手或环境",
-              "tone": "贴合当前情绪，清晰自然",
-              "pace": "按语义分句，中速完成",
-              "pause": "关键信息前短停，句末自然收束",
-              "emphasis": "我们只是来修一把剑。",
-              "facialReactionBefore": "先以视线和眉眼确认对方或关键道具",
-              "facialReactionDuring": "说话时保持与行动一致的面部反应",
-              "facialReactionAfter": "说完保留短暂反应，衔接下一动作"
-            },
-            {
-              "utteranceId": "D08",
-              "intent": "推动当前镜头行动并回应对手或环境",
-              "tone": "贴合当前情绪，清晰自然",
-              "pace": "按语义分句，中速完成",
-              "pause": "关键信息前短停，句末自然收束",
-              "emphasis": "没有灵压，却带着Mahadel的徽记。",
-              "facialReactionBefore": "先以视线和眉眼确认对方或关键道具",
-              "facialReactionDuring": "说话时保持与行动一致的面部反应",
-              "facialReactionAfter": "说完保留短暂反应，衔接下一动作"
-            },
-            {
-              "utteranceId": "D09",
-              "intent": "推动当前镜头行动并回应对手或环境",
-              "tone": "贴合当前情绪，清晰自然",
-              "pace": "按语义分句，中速完成",
-              "pause": "关键信息前短停，句末自然收束",
-              "emphasis": "你可以说我们很有礼貌。",
-              "facialReactionBefore": "先以视线和眉眼确认对方或关键道具",
-              "facialReactionDuring": "说话时保持与行动一致的面部反应",
-              "facialReactionAfter": "说完保留短暂反应，衔接下一动作"
-            },
-            {
-              "utteranceId": "D10",
-              "intent": "推动当前镜头行动并回应对手或环境",
-              "tone": "贴合当前情绪，清晰自然",
-              "pace": "按语义分句，中速完成",
-              "pause": "关键信息前短停，句末自然收束",
-              "emphasis": "也可以说，你们在隐藏危险。",
-              "facialReactionBefore": "先以视线和眉眼确认对方或关键道具",
-              "facialReactionDuring": "说话时保持与行动一致的面部反应",
-              "facialReactionAfter": "说完保留短暂反应，衔接下一动作"
-            }
-          ],
-          "lightingPlan": {
-            "palette": "冷灰+暗红",
-            "colorTemperature": "主光冷暖关系沿用本场设定，避免相邻镜头跳变",
-            "keyLight": "城门侧光作为主光，明确来自画面主方向并照亮主体面部",
-            "fillLight": "弱补光保留面部细节，阴影侧不完全压黑",
-            "rimLight": "以轻微轮廓光分离人物与背景，不制造硬边光晕",
-            "contrast": "中等反差，主体层次清晰，避免高光溢出",
-            "materialResponse": "金属、皮革和织物按真实材质反射，亮部克制",
-            "skinToneProtection": "保护肤色自然，不被环境色完全染色",
-            "inheritFromPrevious": "继承上一镜主光方向、色温和环境亮度",
-            "transitionToNext": "在动作结束处平滑过渡到下一镜主光和色板"
-          },
-          "sound": {
-            "ambience": "人群渐静",
-            "soundEffects": "探测器空响、锁链落下",
-            "music": "低频缓慢上升"
-          },
-          "entryState": {
-            "characters": [
-              {
-                "assetId": "C01",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面左侧或前景",
-                "gaze": "沿镜头轴线向右",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "空白读数的连续反应与动作过渡"
-              },
-              {
-                "assetId": "C02",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "空白读数的连续反应与动作过渡"
-              },
-              {
-                "assetId": "C05",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "空白读数的连续反应与动作过渡"
-              }
-            ],
-            "props": [
-              {
-                "assetId": "P03",
-                "state": "空白读数的连续反应与动作过渡",
                 "holderId": "C05"
               }
             ],
@@ -3904,10 +2120,6 @@
             "axis": "保持180度人物关系轴线",
             "screenDirection": "角色移动方向沿场景既定动线"
           },
-          "sourceAssetIds": [],
-          "continuityStatus": "planned",
-          "videoMode": "reference",
-          "storyboardFrameMode": "all_frames",
           "framePlan": {
             "start": {
               "source": "previous_accepted_actual_tail"
@@ -3917,40 +2129,76 @@
             },
             "frames": [
               {
-                "id": "SH012-F01",
+                "id": "SH005-F01",
                 "sequenceIndex": 1,
                 "startSecond": 0,
-                "endSecond": 1.667,
-                "actionPrompt": "检查官与Karin隔着零刻度探测器对峙，Rifa站在侧后方",
-                "imagePrompt": "静态画面：检查官与Karin隔着零刻度探测器对峙，Rifa站在侧后方；可见表演：表情：眉心收紧、眼神警觉；视线：锁定结界或探测器；手部：握紧当前道具；景别：过肩中景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：城门侧光，冷灰+暗红；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
+                "endSecond": 2,
+                "actionPrompt": "黄铜探测器指针停在零刻度，检查官与两名旅人保持对峙站位",
+                "imagePrompt": "静态关键帧：静态画面：黄铜探测器指针停在零刻度，检查官与两名旅人保持对峙站位；可见表演状态：情绪保持与上一状态一致；面部眉眼和下颌保持可读的初始反应；视线沿当前镜头动作方向；身体与手部进入空白读数与封锁；景别（本帧固定）：OTS/MCU；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按空白读数与封锁的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：城门侧光；冷灰+暗红；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
               },
               {
-                "id": "SH012-F02",
+                "id": "SH005-F02",
                 "sequenceIndex": 2,
-                "startSecond": 1.667,
-                "endSecond": 3.333,
-                "actionPrompt": "Karin向前半步，Rifa保持侧后位置，闸门锁链悬在上方",
-                "imagePrompt": "静态画面：Karin向前半步，Rifa保持侧后位置，闸门锁链悬在上方；可见表演：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；景别：中近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：城门侧光，冷灰+暗红；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
+                "startSecond": 2,
+                "endSecond": 4,
+                "actionPrompt": "检查官抬手，竖幅上方的闸门锁链开始下落",
+                "imagePrompt": "静态关键帧：静态画面：检查官抬手，竖幅上方的闸门锁链开始下落；可见表演状态：情绪压力或目标逐步显现；面部眉眼、嘴角或下颌出现与动作对应的细微变化；视线短暂聚焦关键人物或道具；身体与手部完成主要动作并保留反应停顿；景别（本帧固定）：OTS/MCU；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按空白读数与封锁的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：城门侧光；冷灰+暗红；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
               },
               {
-                "id": "SH012-F03",
+                "id": "SH005-F03",
                 "sequenceIndex": 3,
-                "startSecond": 3.333,
-                "endSecond": 5,
+                "startSecond": 4,
+                "endSecond": 6,
+                "actionPrompt": "Karin前移半步挡住检查官看向Rifa的视线，闸门锁闭",
+                "imagePrompt": "静态关键帧：静态画面：Karin前移半步挡住检查官看向Rifa的视线，闸门锁闭；可见表演状态：情绪在下一镜头切点前完成情绪落点；面部固定最终表情，避免切点前漂移；视线指向下一动作或转场方向；身体与手部Karin前移半步，Rifa侧后，闸门锁闭；景别（本帧固定）：OTS/MCU；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按空白读数与封锁的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：城门侧光；冷灰+暗红；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
+              },
+              {
+                "id": "SH005-F04",
+                "sequenceIndex": 4,
+                "startSecond": 6,
+                "endSecond": 8,
+                "actionPrompt": "黄铜探测器停在零刻度，检查官与两名旅人保持对峙站位",
+                "imagePrompt": "静态关键帧：静态画面：黄铜探测器停在零刻度，检查官与两名旅人保持对峙站位；可见表演状态：情绪保持与上一状态一致；面部眉眼和下颌保持可读的初始反应；视线沿当前镜头动作方向；身体与手部进入空白读数与封锁；景别（本帧固定）：OTS/MCU；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按空白读数与封锁的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：城门侧光；冷灰+暗红；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
+              },
+              {
+                "id": "SH005-F05",
+                "sequenceIndex": 5,
+                "startSecond": 8,
+                "endSecond": 10,
+                "actionPrompt": "检查官抬手，竖幅上方闸门锁链开始下落",
+                "imagePrompt": "静态关键帧：静态画面：检查官抬手，竖幅上方闸门锁链开始下落；可见表演状态：情绪压力或目标逐步显现；面部眉眼、嘴角或下颌出现与动作对应的细微变化；视线短暂聚焦关键人物或道具；身体与手部完成主要动作并保留反应停顿；景别（本帧固定）：OTS/MCU；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按空白读数与封锁的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：城门侧光；冷灰+暗红；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
+              },
+              {
+                "id": "SH005-F06",
+                "sequenceIndex": 6,
+                "startSecond": 10,
+                "endSecond": 12,
+                "actionPrompt": "检查官与Karin隔着零刻度探测器对峙，Rifa站在侧后方",
+                "imagePrompt": "静态关键帧：静态画面：检查官与Karin隔着零刻度探测器对峙，Rifa站在侧后方；可见表演状态：情绪保持与上一状态一致；面部眉眼和下颌保持可读的初始反应；视线沿当前镜头动作方向；身体与手部进入空白读数与封锁；景别（本帧固定）：OTS/MCU；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按空白读数与封锁的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：城门侧光；冷灰+暗红；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
+              },
+              {
+                "id": "SH005-F07",
+                "sequenceIndex": 7,
+                "startSecond": 12,
+                "endSecond": 14,
+                "actionPrompt": "Karin向前半步，Rifa保持侧后位置，闸门锁链悬在上方",
+                "imagePrompt": "静态关键帧：静态画面：Karin向前半步，Rifa保持侧后位置，闸门锁链悬在上方；可见表演状态：情绪压力或目标逐步显现；面部眉眼、嘴角或下颌出现与动作对应的细微变化；视线短暂聚焦关键人物或道具；身体与手部完成主要动作并保留反应停顿；景别（本帧固定）：OTS/MCU；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按空白读数与封锁的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：城门侧光；冷灰+暗红；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
+              },
+              {
+                "id": "SH005-F08",
+                "sequenceIndex": 8,
+                "startSecond": 14,
+                "endSecond": 15,
                 "actionPrompt": "闸门锁闭，Karin挡住检查官视线，Rifa保持警觉",
-                "imagePrompt": "静态画面：闸门锁闭，Karin挡住检查官视线，Rifa保持警觉；可见表演：表情保持稳定；视线朝向当前主体；Karin前移半步，Rifa侧后，闸门锁闭；景别：中近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：城门侧光，冷灰+暗红；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
+                "imagePrompt": "静态关键帧：静态画面：闸门锁闭，Karin挡住检查官视线，Rifa保持警觉；可见表演状态：情绪在下一镜头切点前完成情绪落点；面部固定最终表情，避免切点前漂移；视线指向下一动作或转场方向；身体与手部Karin前移半步，Rifa侧后，闸门锁闭；景别（本帧固定）：OTS/MCU；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按空白读数与封锁的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：城门侧光；冷灰+暗红；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
               }
             ],
-            "referenceCount": {
-              "min": 3,
-              "max": 9
-            },
             "referenceManifest": [
               {
                 "alias": "@图片1",
                 "role": "previous_actual_tail",
                 "purpose": "上一镜当前视频版本的已人工验收实际尾帧，仅作为本镜唯一连续性锚点",
-                "shotId": "SH011"
+                "shotId": "SH004"
               },
               {
                 "alias": "@图片2",
@@ -3982,24 +2230,30 @@
                 "purpose": "道具基准图：保持 灵压探测器 的形状、持有人与当前状态一致",
                 "assetId": "P03"
               }
-            ]
-          }
+            ],
+            "referenceCount": {
+              "min": 3,
+              "max": 9
+            }
+          },
+          "sourceAssetIds": [],
+          "continuityStatus": "ready",
+          "videoMode": "storyboard",
+          "storyboardFrameMode": "all_frames"
         },
         {
-          "code": "SH013",
-          "order": 13,
-          "title": "旧信号 1/2",
-          "description": "二人用旧信号决定解封",
+          "code": "SH006",
+          "order": 6,
+          "title": "旧信号",
+          "description": "二人用旧信号决定解封；两人完全并肩，封印将开未开",
           "sourceText": "Rifa不看Karin的脸，只看他扣在断剑上的拇指。那是两人早已约定的信号。她走到与他完全并肩的位置。\n两人同时松开封印的一线。\n没有火焰，没有雷霆。声音先被抽空。旗帜停在风里，尘埃悬浮，结界向二人凹陷，探测器从内部裂开。\nKarin先收力。Rifa慢半拍，确认他站稳才收回力量。\nKarin（低声）：“这样够明显吗？”\n检查官看见一年级徽记，放下手臂。闸门开启。高塔上，观察者转动四点银戒。\n观察者（耳语）：“两个异类。可预言里，缺了两个名字。”",
           "shotBoundary": "拇指动作切",
           "dialogue": "",
           "narration": "",
           "utterances": [],
           "imagePrompt": "静态画面：Karin拇指压在断剑剑柄上，Rifa看向他的手；可见表演：表情：眉眼清晰；视线：朝向当前主体；手部与道具保持明确接触关系；景别：近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：冷暖分割，暗蓝，暗紫；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。",
-          "videoPrompt": "动态意图：Karin拇指压在断剑剑柄上，Rifa看向他的手到两人并肩站在封印前，手部保持旧信号后的静止关系；起始可见状态：Karin拇指压在断剑剑柄上，Rifa看向他的手；触发：Rifa向前一步停在Karin身侧，两人肩膀逐渐放松；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：缓慢推近；声音：城门底噪收窄；拇指压住剑柄、布料轻响；心跳式低频，不盖对白；结束画面：两人并肩站在封印前，手部保持旧信号后的静止关系；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无浪漫化、无施法手势、无能量球、无角色换脸、无背景跳动。。",
+          "videoPrompt": "动态意图：Karin拇指压在断剑剑柄上，Rifa看向他的手到两人完全并肩，封印保持将开未开的裂隙状态；起始可见状态：Karin拇指压在断剑剑柄上，Rifa看向他的手；主体动作与反应：两人完全并肩，封印将开未开；一个主运镜：缓慢推近；环境压力与声音：城门底噪收窄；拇指压住剑柄、布料轻响；心跳式低频，不盖对白；结束画面：两人完全并肩，封印保持将开未开的裂隙状态；针对性约束：无字幕、无浪漫化、无施法手势、无能量球、无角色换脸、无背景跳动。",
           "cameraMotion": "缓慢推近",
-          "startFramePrompt": "静态画面：Karin拇指压在断剑剑柄上，Rifa看向他的手；可见表演：表情：眉眼清晰；视线：朝向当前主体；手部与道具保持明确接触关系；景别：近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：冷暖分割，暗蓝，暗紫；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。；首帧仅继承@图片1对应的上一镜已验收实际尾帧状态。",
-          "endFramePrompt": "静态画面：两人并肩站在封印前，手部保持旧信号后的静止关系；可见表演：表情保持稳定；视线朝向当前主体；两人完全并肩，封印将开未开；景别：中景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：冷暖分割，暗蓝，暗紫；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。；出口状态保存为当前视频版本实际尾帧并在下游继承前人工验收。",
           "negativePrompt": "无字幕、无浪漫化、无施法手势、无能量球、无角色换脸、无背景跳动。",
           "continuity": {
             "shotSize": "CU→MS",
@@ -4013,7 +2267,7 @@
             "axisRule": "保持180度关系轴线，转场时明确切换",
             "continuityNotes": "拇指动作切"
           },
-          "duration": 8,
+          "duration": 15,
           "characterCodes": [
             "C01",
             "C02"
@@ -4024,12 +2278,13 @@
           "clueCodes": [],
           "locationCode": "S02",
           "storySceneCode": "SC04",
-          "timecode": "75-83s",
+          "timecode": "75-90s",
           "dramaticFunction": "转/选择",
           "lens": "85mm",
           "lighting": "冷暖分割",
           "colorPalette": "暗蓝→暗紫",
           "transitionOut": "拇指动作切",
+          "performanceNotes": "",
           "performancePlan": {
             "emotionalObjective": "围绕二人用旧信号决定解封完成当前镜头的外在行动目标",
             "emotionalArc": "从进入二人用旧信号决定解封的克制状态开始，经由动作反应推进，在两人完全并肩，封印将开未开前收束",
@@ -4118,238 +2373,6 @@
                 "gaze": "沿镜头轴线向右",
                 "pose": "克制站姿或自然坐姿",
                 "expression": "按本镜表演说明",
-                "action": "二人用旧信号决定解封"
-              },
-              {
-                "assetId": "C02",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "二人用旧信号决定解封"
-              }
-            ],
-            "props": [
-              {
-                "assetId": "P01",
-                "state": "二人用旧信号决定解封",
-                "holderId": "C01"
-              }
-            ],
-            "environment": "力量解封",
-            "lighting": "冷暖分割",
-            "axis": "保持180度人物关系轴线",
-            "screenDirection": "角色移动方向沿场景既定动线"
-          },
-          "sourceAssetIds": [],
-          "continuityStatus": "planned",
-          "videoMode": "reference",
-          "storyboardFrameMode": "all_frames",
-          "framePlan": {
-            "start": {
-              "source": "previous_accepted_actual_tail"
-            },
-            "end": {
-              "required": true
-            },
-            "frames": [
-              {
-                "id": "SH013-F01",
-                "sequenceIndex": 1,
-                "startSecond": 0,
-                "endSecond": 2.667,
-                "actionPrompt": "Karin拇指压在断剑剑柄上，Rifa看向他的手",
-                "imagePrompt": "静态画面：Karin拇指压在断剑剑柄上，Rifa看向他的手；可见表演：表情：眉眼清晰；视线：朝向当前主体；手部与道具保持明确接触关系；景别：近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：冷暖分割，暗蓝，暗紫；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
-              },
-              {
-                "id": "SH013-F02",
-                "sequenceIndex": 2,
-                "startSecond": 2.667,
-                "endSecond": 5.333,
-                "actionPrompt": "Rifa向前一步停在Karin身侧，两人肩膀逐渐放松",
-                "imagePrompt": "静态画面：Rifa向前一步停在Karin身侧，两人肩膀逐渐放松；可见表演：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；景别：中景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：冷暖分割，暗蓝，暗紫；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
-              },
-              {
-                "id": "SH013-F03",
-                "sequenceIndex": 3,
-                "startSecond": 5.333,
-                "endSecond": 8,
-                "actionPrompt": "两人并肩站在封印前，手部保持旧信号后的静止关系",
-                "imagePrompt": "静态画面：两人并肩站在封印前，手部保持旧信号后的静止关系；可见表演：表情保持稳定；视线朝向当前主体；两人完全并肩，封印将开未开；景别：中景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：冷暖分割，暗蓝，暗紫；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
-              }
-            ],
-            "referenceCount": {
-              "min": 3,
-              "max": 9
-            },
-            "referenceManifest": [
-              {
-                "alias": "@图片1",
-                "role": "previous_actual_tail",
-                "purpose": "上一镜当前视频版本的已人工验收实际尾帧，仅作为本镜唯一连续性锚点",
-                "shotId": "SH012"
-              },
-              {
-                "alias": "@图片2",
-                "role": "character_anchor",
-                "purpose": "角色基准图：保持 Karin 的身份特征、服装与道具不漂移",
-                "assetId": "C01"
-              },
-              {
-                "alias": "@图片3",
-                "role": "character_anchor",
-                "purpose": "角色基准图：保持 Rifa 的身份特征、服装与道具不漂移",
-                "assetId": "C02"
-              },
-              {
-                "alias": "@图片4",
-                "role": "scene_anchor",
-                "purpose": "场景基准图：保持空间结构、光向与轴线一致",
-                "assetId": "S02"
-              },
-              {
-                "alias": "@图片5",
-                "role": "prop_anchor",
-                "purpose": "道具基准图：保持 Karin的断剑 的形状、持有人与当前状态一致",
-                "assetId": "P01"
-              }
-            ]
-          }
-        },
-        {
-          "code": "SH014",
-          "order": 14,
-          "title": "旧信号 2/2",
-          "description": "两人完全并肩，封印将开未开",
-          "sourceText": "Rifa不看Karin的脸，只看他扣在断剑上的拇指。那是两人早已约定的信号。她走到与他完全并肩的位置。\n两人同时松开封印的一线。\n没有火焰，没有雷霆。声音先被抽空。旗帜停在风里，尘埃悬浮，结界向二人凹陷，探测器从内部裂开。\nKarin先收力。Rifa慢半拍，确认他站稳才收回力量。\nKarin（低声）：“这样够明显吗？”\n检查官看见一年级徽记，放下手臂。闸门开启。高塔上，观察者转动四点银戒。\n观察者（耳语）：“两个异类。可预言里，缺了两个名字。”",
-          "shotBoundary": "拇指动作切",
-          "dialogue": "",
-          "narration": "",
-          "utterances": [],
-          "imagePrompt": "静态画面：Karin与Rifa并肩站在封印前，Rifa的视线落向封印边缘；可见表演：表情：下颌收紧后放松；视线：正对前方目标；手部：由蓄力转为稳定收力；景别：近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：冷暖分割，暗蓝，暗紫；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。",
-          "videoPrompt": "动态意图：Karin与Rifa并肩站在封印前，Rifa的视线落向封印边缘到两人完全并肩，封印保持将开未开的裂隙状态；起始可见状态：Karin与Rifa并肩站在封印前，Rifa的视线落向封印边缘；触发：两人的肩膀放松，双手停在封印两侧；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：缓慢推近；声音：城门底噪收窄；拇指压住剑柄、布料轻响；心跳式低频，不盖对白；结束画面：两人完全并肩，封印保持将开未开的裂隙状态；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无浪漫化、无施法手势、无能量球、无角色换脸、无背景跳动。。",
-          "cameraMotion": "缓慢推近",
-          "startFramePrompt": "静态画面：Karin与Rifa并肩站在封印前，Rifa的视线落向封印边缘；可见表演：表情：下颌收紧后放松；视线：正对前方目标；手部：由蓄力转为稳定收力；景别：近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：冷暖分割，暗蓝，暗紫；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。；首帧仅继承@图片1对应的上一镜已验收实际尾帧状态。",
-          "endFramePrompt": "静态画面：两人完全并肩，封印保持将开未开的裂隙状态；可见表演：表情保持稳定；视线朝向当前主体；两人完全并肩，封印将开未开；景别：中景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：冷暖分割，暗蓝，暗紫；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。；出口状态保存为当前视频版本实际尾帧并在下游继承前人工验收。",
-          "negativePrompt": "无字幕、无浪漫化、无施法手势、无能量球、无角色换脸、无背景跳动。",
-          "continuity": {
-            "shotSize": "CU→MS",
-            "cameraAngle": "视线高度平视，沿动作轴线拍摄",
-            "composition": "主体保持在9:16安全区，动作方向留出前进空间",
-            "characterBlocking": "按二人用旧信号决定解封的动作关系安排站位",
-            "gazeDirection": "沿叙事动作方向，反应时回看对手或关键道具",
-            "actionStart": "二人用旧信号决定解封",
-            "actionEnd": "两人完全并肩，封印将开未开",
-            "screenDirection": "保持同侧屏幕运动方向",
-            "axisRule": "保持180度关系轴线，转场时明确切换",
-            "continuityNotes": "拇指动作切"
-          },
-          "duration": 7,
-          "characterCodes": [
-            "C01",
-            "C02"
-          ],
-          "propCodes": [
-            "P01"
-          ],
-          "clueCodes": [],
-          "locationCode": "S02",
-          "storySceneCode": "SC04",
-          "timecode": "83-90s",
-          "dramaticFunction": "转/选择",
-          "lens": "85mm",
-          "lighting": "冷暖分割",
-          "colorPalette": "暗蓝→暗紫",
-          "transitionOut": "拇指动作切",
-          "performancePlan": {
-            "emotionalObjective": "围绕二人用旧信号决定解封完成当前镜头的外在行动目标",
-            "emotionalArc": "从进入二人用旧信号决定解封的克制状态开始，经由动作反应推进，在两人完全并肩，封印将开未开前收束",
-            "speechStyle": "无对白，以呼吸、视线和动作反应传递情绪",
-            "pace": "按镜头时长均匀推进，动作变化处短暂停顿，转场前收住",
-            "breath": "起始自然吸气，动作变化处短暂停顿，结束以呼气完成收束",
-            "restraintLevel": "中等克制，避免夸张表演",
-            "beats": {
-              "start": {
-                "emotion": "保持与上一状态一致",
-                "facialAction": "眉眼和下颌保持可读的初始反应",
-                "gaze": "沿当前镜头动作方向",
-                "bodyAction": "进入二人用旧信号决定解封"
-              },
-              "middle": {
-                "emotion": "压力或目标逐步显现",
-                "facialAction": "眉眼、嘴角或下颌出现与动作对应的细微变化",
-                "gaze": "短暂聚焦关键人物或道具",
-                "bodyAction": "完成主要动作并保留反应停顿"
-              },
-              "end": {
-                "emotion": "在下一镜头切点前完成情绪落点",
-                "facialAction": "固定最终表情，避免切点前漂移",
-                "gaze": "指向下一动作或转场方向",
-                "bodyAction": "两人完全并肩，封印将开未开"
-              }
-            }
-          },
-          "dialoguePerformance": [],
-          "lightingPlan": {
-            "palette": "暗蓝→暗紫",
-            "colorTemperature": "主光冷暖关系沿用本场设定，避免相邻镜头跳变",
-            "keyLight": "冷暖分割作为主光，明确来自画面主方向并照亮主体面部",
-            "fillLight": "弱补光保留面部细节，阴影侧不完全压黑",
-            "rimLight": "以轻微轮廓光分离人物与背景，不制造硬边光晕",
-            "contrast": "中等反差，主体层次清晰，避免高光溢出",
-            "materialResponse": "金属、皮革和织物按真实材质反射，亮部克制",
-            "skinToneProtection": "保护肤色自然，不被环境色完全染色",
-            "inheritFromPrevious": "继承上一镜主光方向、色温和环境亮度",
-            "transitionToNext": "在动作结束处平滑过渡到下一镜主光和色板"
-          },
-          "sound": {
-            "ambience": "城门底噪收窄",
-            "soundEffects": "拇指压住剑柄、布料轻响",
-            "music": "心跳式低频，不盖对白"
-          },
-          "entryState": {
-            "characters": [
-              {
-                "assetId": "C01",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面左侧或前景",
-                "gaze": "沿镜头轴线向右",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "二人用旧信号决定解封"
-              },
-              {
-                "assetId": "C02",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "二人用旧信号决定解封"
-              }
-            ],
-            "props": [
-              {
-                "assetId": "P01",
-                "state": "二人用旧信号决定解封",
-                "holderId": "C01"
-              }
-            ],
-            "environment": "力量解封",
-            "lighting": "冷暖分割",
-            "axis": "保持180度人物关系轴线",
-            "screenDirection": "角色移动方向沿场景既定动线"
-          },
-          "exitState": {
-            "characters": [
-              {
-                "assetId": "C01",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面左侧或前景",
-                "gaze": "沿镜头轴线向右",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
                 "action": "两人完全并肩，封印将开未开"
               },
               {
@@ -4374,10 +2397,6 @@
             "axis": "保持180度人物关系轴线",
             "screenDirection": "角色移动方向沿场景既定动线"
           },
-          "sourceAssetIds": [],
-          "continuityStatus": "planned",
-          "videoMode": "reference",
-          "storyboardFrameMode": "all_frames",
           "framePlan": {
             "start": {
               "source": "previous_accepted_actual_tail"
@@ -4387,40 +2406,60 @@
             },
             "frames": [
               {
-                "id": "SH014-F01",
+                "id": "SH006-F01",
                 "sequenceIndex": 1,
                 "startSecond": 0,
-                "endSecond": 2.333,
-                "actionPrompt": "Karin与Rifa并肩站在封印前，Rifa的视线落向封印边缘",
-                "imagePrompt": "静态画面：Karin与Rifa并肩站在封印前，Rifa的视线落向封印边缘；可见表演：表情：下颌收紧后放松；视线：正对前方目标；手部：由蓄力转为稳定收力；景别：近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：冷暖分割，暗蓝，暗紫；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
+                "endSecond": 2.667,
+                "actionPrompt": "Karin拇指压在断剑剑柄上，Rifa看向他的手",
+                "imagePrompt": "静态关键帧：静态画面：Karin拇指压在断剑剑柄上，Rifa看向他的手；可见表演状态：情绪保持与上一状态一致；面部眉眼和下颌保持可读的初始反应；视线沿当前镜头动作方向；身体与手部进入二人用旧信号决定解封；景别（本帧固定）：CU；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按二人用旧信号决定解封的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：冷暖分割；暗蓝；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
               },
               {
-                "id": "SH014-F02",
+                "id": "SH006-F02",
                 "sequenceIndex": 2,
-                "startSecond": 2.333,
-                "endSecond": 4.667,
-                "actionPrompt": "两人的肩膀放松，双手停在封印两侧",
-                "imagePrompt": "静态画面：两人的肩膀放松，双手停在封印两侧；可见表演：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；景别：中景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：冷暖分割，暗蓝，暗紫；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
+                "startSecond": 2.667,
+                "endSecond": 5.333,
+                "actionPrompt": "Rifa向前一步停在Karin身侧，两人肩膀逐渐放松",
+                "imagePrompt": "静态关键帧：可见表演：眉眼、嘴角或下颌出现与动作对应的细微变化；可见表演状态：情绪压力或目标逐步显现；面部眉眼、嘴角或下颌出现与动作对应的细微变化；视线短暂聚焦关键人物或道具；身体与手部完成主要动作并保留反应停顿；景别（本帧固定）：MS；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按二人用旧信号决定解封的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：冷暖分割；暗紫；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
               },
               {
-                "id": "SH014-F03",
+                "id": "SH006-F03",
                 "sequenceIndex": 3,
-                "startSecond": 4.667,
-                "endSecond": 7,
+                "startSecond": 5.333,
+                "endSecond": 8,
+                "actionPrompt": "两人并肩站在封印前，手部保持旧信号后的静止关系",
+                "imagePrompt": "静态关键帧：静态画面：两人并肩站在封印前，手部保持旧信号后的静止关系；可见表演状态：情绪在下一镜头切点前完成情绪落点；面部固定最终表情，避免切点前漂移；视线指向下一动作或转场方向；身体与手部两人完全并肩，封印将开未开；景别（本帧固定）：MS；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按二人用旧信号决定解封的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：冷暖分割；暗紫；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
+              },
+              {
+                "id": "SH006-F04",
+                "sequenceIndex": 4,
+                "startSecond": 8,
+                "endSecond": 10.333,
+                "actionPrompt": "Karin与Rifa并肩站在封印前，Rifa的视线落向封印边缘",
+                "imagePrompt": "静态关键帧：静态画面：Karin与Rifa并肩站在封印前，Rifa的视线落向封印边缘；可见表演状态：情绪保持与上一状态一致；面部眉眼和下颌保持可读的初始反应；视线沿当前镜头动作方向；身体与手部进入二人用旧信号决定解封；景别（本帧固定）：CU；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按二人用旧信号决定解封的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：冷暖分割；暗蓝；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
+              },
+              {
+                "id": "SH006-F05",
+                "sequenceIndex": 5,
+                "startSecond": 10.333,
+                "endSecond": 12.667,
+                "actionPrompt": "两人的肩膀放松，双手停在封印两侧",
+                "imagePrompt": "静态关键帧：静态画面：两人的肩膀放松，双手停在封印两侧；可见表演状态：情绪压力或目标逐步显现；面部眉眼、嘴角或下颌出现与动作对应的细微变化；视线短暂聚焦关键人物或道具；身体与手部完成主要动作并保留反应停顿；景别（本帧固定）：MS；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按二人用旧信号决定解封的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：冷暖分割；暗紫；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
+              },
+              {
+                "id": "SH006-F06",
+                "sequenceIndex": 6,
+                "startSecond": 12.667,
+                "endSecond": 15,
                 "actionPrompt": "两人完全并肩，封印保持将开未开的裂隙状态",
-                "imagePrompt": "静态画面：两人完全并肩，封印保持将开未开的裂隙状态；可见表演：表情保持稳定；视线朝向当前主体；两人完全并肩，封印将开未开；景别：中景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：冷暖分割，暗蓝，暗紫；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
+                "imagePrompt": "静态关键帧：静态画面：两人完全并肩，封印保持将开未开的裂隙状态；可见表演状态：情绪在下一镜头切点前完成情绪落点；面部固定最终表情，避免切点前漂移；视线指向下一动作或转场方向；身体与手部两人完全并肩，封印将开未开；景别（本帧固定）：MS；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按二人用旧信号决定解封的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：冷暖分割；暗紫；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
               }
             ],
-            "referenceCount": {
-              "min": 3,
-              "max": 9
-            },
             "referenceManifest": [
               {
                 "alias": "@图片1",
                 "role": "previous_actual_tail",
                 "purpose": "上一镜当前视频版本的已人工验收实际尾帧，仅作为本镜唯一连续性锚点",
-                "shotId": "SH013"
+                "shotId": "SH005"
               },
               {
                 "alias": "@图片2",
@@ -4446,18 +2485,26 @@
                 "purpose": "道具基准图：保持 Karin的断剑 的形状、持有人与当前状态一致",
                 "assetId": "P01"
               }
-            ]
-          }
+            ],
+            "referenceCount": {
+              "min": 3,
+              "max": 9
+            }
+          },
+          "sourceAssetIds": [],
+          "continuityStatus": "ready",
+          "videoMode": "storyboard",
+          "storyboardFrameMode": "all_frames"
         },
         {
-          "code": "SH015",
-          "order": 15,
-          "title": "力量与观察 1/3",
-          "description": "世界短暂失去常态",
+          "code": "SH007",
+          "order": 7,
+          "title": "力量与观察",
+          "description": "世界短暂失去常态；力量与观察的连续反应与动作过渡；二人收力站稳，闸门打开，观察者远望",
           "sourceText": "Rifa不看Karin的脸，只看他扣在断剑上的拇指。那是两人早已约定的信号。她走到与他完全并肩的位置。\n两人同时松开封印的一线。\n没有火焰，没有雷霆。声音先被抽空。旗帜停在风里，尘埃悬浮，结界向二人凹陷，探测器从内部裂开。\nKarin先收力。Rifa慢半拍，确认他站稳才收回力量。\nKarin（低声）：“这样够明显吗？”\n检查官看见一年级徽记，放下手臂。闸门开启。高塔上，观察者转动四点银戒。\n观察者（耳语）：“两个异类。可预言里，缺了两个名字。”",
           "shotBoundary": "声音骤停",
           "dialogue": "Karin：这样够明显吗？",
-          "narration": "",
+          "narration": "观察者：两个异类。可预言里，缺了两个名字。",
           "utterances": [
             {
               "id": "D12",
@@ -4465,333 +2512,18 @@
               "type": "dialogue",
               "speaker": "Karin",
               "text": "这样够明显吗？"
-            }
-          ],
-          "imagePrompt": "静态画面：Karin与Rifa并肩站在封印前，双手停在解除动作起点；可见表演：表情：下颌收紧后放松；视线：正对前方目标；手部：由蓄力转为稳定收力；景别：全景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：银白无源光，银白+深紫；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。",
-          "videoPrompt": "动态意图：Karin与Rifa并肩站在封印前，双手停在解除动作起点到两人收力站稳，闸门打开，远处观察者转动四点银戒；起始可见状态：Karin与Rifa并肩站在封印前，双手停在解除动作起点；触发：旗帜与尘埃悬停，结界向两人凹陷，探测器内部出现裂纹；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：极慢环绕；声音：前3s完全静音；探测器细裂、闸门链条；一次低频冲击后骤停；结束画面：两人收力站稳，闸门打开，远处观察者转动四点银戒；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无爆炸闪电火焰、无能量球、观察者不露脸、无角色变形。。",
-          "cameraMotion": "极慢环绕",
-          "startFramePrompt": "静态画面：Karin与Rifa并肩站在封印前，双手停在解除动作起点；可见表演：表情：下颌收紧后放松；视线：正对前方目标；手部：由蓄力转为稳定收力；景别：全景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：银白无源光，银白+深紫；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。；首帧仅继承@图片1对应的上一镜已验收实际尾帧状态。",
-          "endFramePrompt": "静态画面：两人收力站稳，闸门打开，远处观察者转动四点银戒；可见表演：表情保持稳定；视线朝向当前主体；二人收力站稳，闸门打开，观察者远望；景别：中近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：银白无源光，银白+深紫；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。；出口状态保存为当前视频版本实际尾帧并在下游继承前人工验收。",
-          "negativePrompt": "无字幕、无爆炸闪电火焰、无能量球、观察者不露脸、无角色变形。",
-          "continuity": {
-            "shotSize": "WS→MCU",
-            "cameraAngle": "视线高度平视，沿动作轴线拍摄",
-            "composition": "主体保持在9:16安全区，动作方向留出前进空间",
-            "characterBlocking": "按世界短暂失去常态的动作关系安排站位",
-            "gazeDirection": "沿叙事动作方向，反应时回看对手或关键道具",
-            "actionStart": "世界短暂失去常态",
-            "actionEnd": "二人收力站稳，闸门打开，观察者远望",
-            "screenDirection": "保持同侧屏幕运动方向",
-            "axisRule": "保持180度关系轴线，转场时明确切换",
-            "continuityNotes": "声音骤停"
-          },
-          "duration": 5,
-          "characterCodes": [
-            "C01",
-            "C02",
-            "C05",
-            "C07"
-          ],
-          "propCodes": [
-            "P03",
-            "P06"
-          ],
-          "clueCodes": [],
-          "locationCode": "S02",
-          "storySceneCode": "SC04",
-          "timecode": "90-95s",
-          "dramaticFunction": "转/爆发",
-          "lens": "35mm",
-          "lighting": "银白无源光",
-          "colorPalette": "银白+深紫",
-          "transitionOut": "声音骤停",
-          "performanceNotes": "这样够明显吗？；两个异类。可预言里，缺了两个名字。",
-          "performancePlan": {
-            "emotionalObjective": "围绕世界短暂失去常态完成当前镜头的外在行动目标",
-            "emotionalArc": "从进入世界短暂失去常态的克制状态开始，经由动作反应推进，在二人收力站稳，闸门打开，观察者远望前收束",
-            "speechStyle": "台词贴合当下处境，语气清晰克制，重音落在行动关键信息",
-            "pace": "按镜头时长均匀推进，动作变化处短暂停顿，转场前收住",
-            "breath": "起始自然吸气，动作变化处短暂停顿，结束以呼气完成收束",
-            "restraintLevel": "中等克制，避免夸张表演",
-            "beats": {
-              "start": {
-                "emotion": "保持与上一状态一致",
-                "facialAction": "眉眼和下颌保持可读的初始反应",
-                "gaze": "沿当前镜头动作方向",
-                "bodyAction": "进入世界短暂失去常态"
-              },
-              "middle": {
-                "emotion": "压力或目标逐步显现",
-                "facialAction": "眉眼、嘴角或下颌出现与动作对应的细微变化",
-                "gaze": "短暂聚焦关键人物或道具",
-                "bodyAction": "完成主要动作并保留反应停顿"
-              },
-              "end": {
-                "emotion": "在下一镜头切点前完成情绪落点",
-                "facialAction": "固定最终表情，避免切点前漂移",
-                "gaze": "指向下一动作或转场方向",
-                "bodyAction": "二人收力站稳，闸门打开，观察者远望"
-              }
-            }
-          },
-          "dialoguePerformance": [
-            {
-              "utteranceId": "D12",
-              "intent": "推动当前镜头行动并回应对手或环境",
-              "tone": "贴合当前情绪，清晰自然",
-              "pace": "按语义分句，中速完成",
-              "pause": "关键信息前短停，句末自然收束",
-              "emphasis": "这样够明显吗？",
-              "facialReactionBefore": "先以视线和眉眼确认对方或关键道具",
-              "facialReactionDuring": "说话时保持与行动一致的面部反应",
-              "facialReactionAfter": "说完保留短暂反应，衔接下一动作"
-            }
-          ],
-          "lightingPlan": {
-            "palette": "银白+深紫",
-            "colorTemperature": "主光冷暖关系沿用本场设定，避免相邻镜头跳变",
-            "keyLight": "银白无源光作为主光，明确来自画面主方向并照亮主体面部",
-            "fillLight": "弱补光保留面部细节，阴影侧不完全压黑",
-            "rimLight": "以轻微轮廓光分离人物与背景，不制造硬边光晕",
-            "contrast": "中等反差，主体层次清晰，避免高光溢出",
-            "materialResponse": "金属、皮革和织物按真实材质反射，亮部克制",
-            "skinToneProtection": "保护肤色自然，不被环境色完全染色",
-            "inheritFromPrevious": "继承上一镜主光方向、色温和环境亮度",
-            "transitionToNext": "在动作结束处平滑过渡到下一镜主光和色板"
-          },
-          "sound": {
-            "ambience": "前3s完全静音",
-            "soundEffects": "探测器细裂、闸门链条",
-            "music": "一次低频冲击后骤停"
-          },
-          "entryState": {
-            "characters": [
-              {
-                "assetId": "C01",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面左侧或前景",
-                "gaze": "沿镜头轴线向右",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "两人完全并肩，封印将开未开"
-              },
-              {
-                "assetId": "C02",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "两人完全并肩，封印将开未开"
-              },
-              {
-                "assetId": "C05",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "进入世界短暂失去常态"
-              },
-              {
-                "assetId": "C07",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "进入世界短暂失去常态"
-              }
-            ],
-            "props": [
-              {
-                "assetId": "P03",
-                "state": "进入世界短暂失去常态",
-                "holderId": "C05"
-              },
-              {
-                "assetId": "P06",
-                "state": "进入世界短暂失去常态",
-                "holderId": "C07"
-              }
-            ],
-            "environment": "力量解封",
-            "lighting": "银白无源光",
-            "axis": "保持180度人物关系轴线",
-            "screenDirection": "角色移动方向沿场景既定动线"
-          },
-          "exitState": {
-            "characters": [
-              {
-                "assetId": "C01",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面左侧或前景",
-                "gaze": "沿镜头轴线向右",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "世界短暂失去常态"
-              },
-              {
-                "assetId": "C02",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "世界短暂失去常态"
-              },
-              {
-                "assetId": "C05",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "世界短暂失去常态"
-              },
-              {
-                "assetId": "C07",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "世界短暂失去常态"
-              }
-            ],
-            "props": [
-              {
-                "assetId": "P03",
-                "state": "世界短暂失去常态",
-                "holderId": "C05"
-              },
-              {
-                "assetId": "P06",
-                "state": "世界短暂失去常态",
-                "holderId": "C07"
-              }
-            ],
-            "environment": "力量解封",
-            "lighting": "银白无源光",
-            "axis": "保持180度人物关系轴线",
-            "screenDirection": "角色移动方向沿场景既定动线"
-          },
-          "sourceAssetIds": [],
-          "continuityStatus": "planned",
-          "videoMode": "reference",
-          "storyboardFrameMode": "all_frames",
-          "framePlan": {
-            "start": {
-              "source": "previous_accepted_actual_tail"
             },
-            "end": {
-              "required": true
-            },
-            "frames": [
-              {
-                "id": "SH015-F01",
-                "sequenceIndex": 1,
-                "startSecond": 0,
-                "endSecond": 1.667,
-                "actionPrompt": "Karin与Rifa并肩站在封印前，双手停在解除动作起点",
-                "imagePrompt": "静态画面：Karin与Rifa并肩站在封印前，双手停在解除动作起点；可见表演：表情：下颌收紧后放松；视线：正对前方目标；手部：由蓄力转为稳定收力；景别：全景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：银白无源光，银白+深紫；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
-              },
-              {
-                "id": "SH015-F02",
-                "sequenceIndex": 2,
-                "startSecond": 1.667,
-                "endSecond": 3.333,
-                "actionPrompt": "旗帜与尘埃悬停，结界向两人凹陷，探测器内部出现裂纹",
-                "imagePrompt": "静态画面：旗帜与尘埃悬停，结界向两人凹陷，探测器内部出现裂纹；可见表演：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；景别：中近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：银白无源光，银白+深紫；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
-              },
-              {
-                "id": "SH015-F03",
-                "sequenceIndex": 3,
-                "startSecond": 3.333,
-                "endSecond": 5,
-                "actionPrompt": "两人收力站稳，闸门打开，远处观察者转动四点银戒",
-                "imagePrompt": "静态画面：两人收力站稳，闸门打开，远处观察者转动四点银戒；可见表演：表情保持稳定；视线朝向当前主体；二人收力站稳，闸门打开，观察者远望；景别：中近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：银白无源光，银白+深紫；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
-              }
-            ],
-            "referenceCount": {
-              "min": 3,
-              "max": 9
-            },
-            "referenceManifest": [
-              {
-                "alias": "@图片1",
-                "role": "previous_actual_tail",
-                "purpose": "上一镜当前视频版本的已人工验收实际尾帧，仅作为本镜唯一连续性锚点",
-                "shotId": "SH014"
-              },
-              {
-                "alias": "@图片2",
-                "role": "character_anchor",
-                "purpose": "角色基准图：保持 Karin 的身份特征、服装与道具不漂移",
-                "assetId": "C01"
-              },
-              {
-                "alias": "@图片3",
-                "role": "character_anchor",
-                "purpose": "角色基准图：保持 Rifa 的身份特征、服装与道具不漂移",
-                "assetId": "C02"
-              },
-              {
-                "alias": "@图片4",
-                "role": "character_anchor",
-                "purpose": "角色基准图：保持 城门检查官 的身份特征、服装与道具不漂移",
-                "assetId": "C05"
-              },
-              {
-                "alias": "@图片5",
-                "role": "character_anchor",
-                "purpose": "角色基准图：保持 神秘观察者 的身份特征、服装与道具不漂移",
-                "assetId": "C07"
-              },
-              {
-                "alias": "@图片6",
-                "role": "scene_anchor",
-                "purpose": "场景基准图：保持空间结构、光向与轴线一致",
-                "assetId": "S02"
-              },
-              {
-                "alias": "@图片7",
-                "role": "prop_anchor",
-                "purpose": "道具基准图：保持 灵压探测器 的形状、持有人与当前状态一致",
-                "assetId": "P03"
-              },
-              {
-                "alias": "@图片8",
-                "role": "prop_anchor",
-                "purpose": "道具基准图：保持 四点银戒 的形状、持有人与当前状态一致",
-                "assetId": "P06"
-              }
-            ]
-          }
-        },
-        {
-          "code": "SH016",
-          "order": 16,
-          "title": "力量与观察 2/3",
-          "description": "力量与观察的连续反应与动作过渡",
-          "sourceText": "Rifa不看Karin的脸，只看他扣在断剑上的拇指。那是两人早已约定的信号。她走到与他完全并肩的位置。\n两人同时松开封印的一线。\n没有火焰，没有雷霆。声音先被抽空。旗帜停在风里，尘埃悬浮，结界向二人凹陷，探测器从内部裂开。\nKarin先收力。Rifa慢半拍，确认他站稳才收回力量。\nKarin（低声）：“这样够明显吗？”\n检查官看见一年级徽记，放下手臂。闸门开启。高塔上，观察者转动四点银戒。\n观察者（耳语）：“两个异类。可预言里，缺了两个名字。”",
-          "shotBoundary": "声音骤停",
-          "dialogue": "",
-          "narration": "观察者：两个异类。可预言里，缺了两个名字。",
-          "utterances": [
             {
               "id": "D13",
-              "order": 1,
+              "order": 2,
               "type": "voiceover",
               "speaker": "观察者",
               "text": "两个异类。可预言里，缺了两个名字。"
             }
           ],
-          "imagePrompt": "静态画面：悬停的旗帜和尘埃固定在半空，结界保持凹陷；可见表演：表情：眉心收紧、眼神警觉；视线：锁定结界或探测器；手部：握紧当前道具；景别：全景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：银白无源光，银白+深紫；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。",
-          "videoPrompt": "动态意图：悬停的旗帜和尘埃固定在半空，结界保持凹陷到高塔远处观察者转动四点银戒，闸门在背景打开；起始可见状态：悬停的旗帜和尘埃固定在半空，结界保持凹陷；触发：探测器从内部裂开，Karin与Rifa的肩膀开始放松；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：极慢环绕；声音：前3s完全静音；探测器细裂、闸门链条；一次低频冲击后骤停；结束画面：高塔远处观察者转动四点银戒，闸门在背景打开；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无爆炸闪电火焰、无能量球、观察者不露脸、无角色变形。。",
+          "imagePrompt": "静态画面：Karin与Rifa并肩站在封印前，双手停在解除动作起点；可见表演：表情：下颌收紧后放松；视线：正对前方目标；手部：由蓄力转为稳定收力；景别：全景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：银白无源光，银白+深紫；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。",
+          "videoPrompt": "动态意图：Karin与Rifa并肩站在封印前，双手停在解除动作起点到高塔观察者站在远处阴影中，四点银戒停在抬起的手指间；起始可见状态：Karin与Rifa并肩站在封印前，双手停在解除动作起点；主体动作与反应：二人收力站稳，闸门打开，观察者远望；一个主运镜：极慢环绕；环境压力与声音：前3s完全静音；探测器细裂、闸门链条；一次低频冲击后骤停；结束画面：高塔观察者站在远处阴影中，四点银戒停在抬起的手指间；针对性约束：无字幕、无爆炸闪电火焰、无能量球、观察者不露脸、无角色变形。",
           "cameraMotion": "极慢环绕",
-          "startFramePrompt": "静态画面：悬停的旗帜和尘埃固定在半空，结界保持凹陷；可见表演：表情：眉心收紧、眼神警觉；视线：锁定结界或探测器；手部：握紧当前道具；景别：全景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：银白无源光，银白+深紫；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。；首帧仅继承@图片1对应的上一镜已验收实际尾帧状态。",
-          "endFramePrompt": "静态画面：高塔远处观察者转动四点银戒，闸门在背景打开；可见表演：表情保持稳定；视线朝向当前主体；二人收力站稳，闸门打开，观察者远望；景别：中近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：银白无源光，银白+深紫；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。；出口状态保存为当前视频版本实际尾帧并在下游继承前人工验收。",
           "negativePrompt": "无字幕、无爆炸闪电火焰、无能量球、观察者不露脸、无角色变形。",
           "continuity": {
             "shotSize": "WS→MCU",
@@ -4805,7 +2537,7 @@
             "axisRule": "保持180度关系轴线，转场时明确切换",
             "continuityNotes": "声音骤停"
           },
-          "duration": 5,
+          "duration": 15,
           "characterCodes": [
             "C01",
             "C02",
@@ -4819,7 +2551,7 @@
           "clueCodes": [],
           "locationCode": "S02",
           "storySceneCode": "SC04",
-          "timecode": "95-100s",
+          "timecode": "90-105s",
           "dramaticFunction": "转/爆发",
           "lens": "35mm",
           "lighting": "银白无源光",
@@ -4893,7 +2625,7 @@
                 "gaze": "沿镜头轴线向右",
                 "pose": "克制站姿或自然坐姿",
                 "expression": "按本镜表演说明",
-                "action": "世界短暂失去常态"
+                "action": "两人完全并肩，封印将开未开"
               },
               {
                 "assetId": "C02",
@@ -4902,7 +2634,7 @@
                 "gaze": "沿镜头轴线向左",
                 "pose": "克制站姿或自然坐姿",
                 "expression": "按本镜表演说明",
-                "action": "世界短暂失去常态"
+                "action": "两人完全并肩，封印将开未开"
               },
               {
                 "assetId": "C05",
@@ -4911,7 +2643,7 @@
                 "gaze": "沿镜头轴线向左",
                 "pose": "克制站姿或自然坐姿",
                 "expression": "按本镜表演说明",
-                "action": "世界短暂失去常态"
+                "action": "进入世界短暂失去常态"
               },
               {
                 "assetId": "C07",
@@ -4920,18 +2652,18 @@
                 "gaze": "沿镜头轴线向左",
                 "pose": "克制站姿或自然坐姿",
                 "expression": "按本镜表演说明",
-                "action": "世界短暂失去常态"
+                "action": "进入世界短暂失去常态"
               }
             ],
             "props": [
               {
                 "assetId": "P03",
-                "state": "世界短暂失去常态",
+                "state": "进入世界短暂失去常态",
                 "holderId": "C05"
               },
               {
                 "assetId": "P06",
-                "state": "世界短暂失去常态",
+                "state": "进入世界短暂失去常态",
                 "holderId": "C07"
               }
             ],
@@ -4949,7 +2681,7 @@
                 "gaze": "沿镜头轴线向右",
                 "pose": "克制站姿或自然坐姿",
                 "expression": "按本镜表演说明",
-                "action": "力量与观察的连续反应与动作过渡"
+                "action": "二人收力站稳，闸门打开，观察者远望"
               },
               {
                 "assetId": "C02",
@@ -4958,7 +2690,7 @@
                 "gaze": "沿镜头轴线向左",
                 "pose": "克制站姿或自然坐姿",
                 "expression": "按本镜表演说明",
-                "action": "力量与观察的连续反应与动作过渡"
+                "action": "二人收力站稳，闸门打开，观察者远望"
               },
               {
                 "assetId": "C05",
@@ -4967,7 +2699,7 @@
                 "gaze": "沿镜头轴线向左",
                 "pose": "克制站姿或自然坐姿",
                 "expression": "按本镜表演说明",
-                "action": "力量与观察的连续反应与动作过渡"
+                "action": "二人收力站稳，闸门打开，观察者远望"
               },
               {
                 "assetId": "C07",
@@ -4976,18 +2708,18 @@
                 "gaze": "沿镜头轴线向左",
                 "pose": "克制站姿或自然坐姿",
                 "expression": "按本镜表演说明",
-                "action": "力量与观察的连续反应与动作过渡"
+                "action": "二人收力站稳，闸门打开，观察者远望"
               }
             ],
             "props": [
               {
                 "assetId": "P03",
-                "state": "力量与观察的连续反应与动作过渡",
+                "state": "二人收力站稳，闸门打开，观察者远望",
                 "holderId": "C05"
               },
               {
                 "assetId": "P06",
-                "state": "力量与观察的连续反应与动作过渡",
+                "state": "二人收力站稳，闸门打开，观察者远望",
                 "holderId": "C07"
               }
             ],
@@ -4996,10 +2728,6 @@
             "axis": "保持180度人物关系轴线",
             "screenDirection": "角色移动方向沿场景既定动线"
           },
-          "sourceAssetIds": [],
-          "continuityStatus": "planned",
-          "videoMode": "reference",
-          "storyboardFrameMode": "all_frames",
           "framePlan": {
             "start": {
               "source": "previous_accepted_actual_tail"
@@ -5009,40 +2737,84 @@
             },
             "frames": [
               {
-                "id": "SH016-F01",
+                "id": "SH007-F01",
                 "sequenceIndex": 1,
                 "startSecond": 0,
                 "endSecond": 1.667,
+                "actionPrompt": "Karin与Rifa并肩站在封印前，双手停在解除动作起点",
+                "imagePrompt": "静态关键帧：静态画面：Karin与Rifa并肩站在封印前，双手停在解除动作起点；可见表演状态：情绪保持与上一状态一致；面部眉眼和下颌保持可读的初始反应；视线沿当前镜头动作方向；身体与手部进入世界短暂失去常态；景别（本帧固定）：WS；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按世界短暂失去常态的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：银白无源光；银白+深紫；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
+              },
+              {
+                "id": "SH007-F02",
+                "sequenceIndex": 2,
+                "startSecond": 1.667,
+                "endSecond": 3.333,
+                "actionPrompt": "旗帜与尘埃悬停，结界向两人凹陷，探测器内部出现裂纹",
+                "imagePrompt": "静态关键帧：静态画面：旗帜与尘埃悬停，结界向两人凹陷，探测器内部出现裂纹；可见表演状态：情绪压力或目标逐步显现；面部眉眼、嘴角或下颌出现与动作对应的细微变化；视线短暂聚焦关键人物或道具；身体与手部完成主要动作并保留反应停顿；景别（本帧固定）：MCU；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按世界短暂失去常态的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：银白无源光；银白+深紫；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
+              },
+              {
+                "id": "SH007-F03",
+                "sequenceIndex": 3,
+                "startSecond": 3.333,
+                "endSecond": 5,
+                "actionPrompt": "两人收力站稳，闸门打开，远处观察者转动四点银戒",
+                "imagePrompt": "静态关键帧：静态画面：两人收力站稳，闸门打开，远处观察者转动四点银戒；可见表演状态：情绪在下一镜头切点前完成情绪落点；面部固定最终表情，避免切点前漂移；视线指向下一动作或转场方向；身体与手部二人收力站稳，闸门打开，观察者远望；景别（本帧固定）：MCU；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按世界短暂失去常态的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：银白无源光；银白+深紫；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
+              },
+              {
+                "id": "SH007-F04",
+                "sequenceIndex": 4,
+                "startSecond": 5,
+                "endSecond": 6.667,
                 "actionPrompt": "悬停的旗帜和尘埃固定在半空，结界保持凹陷",
-                "imagePrompt": "静态画面：悬停的旗帜和尘埃固定在半空，结界保持凹陷；可见表演：表情：眉心收紧、眼神警觉；视线：锁定结界或探测器；手部：握紧当前道具；景别：全景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：银白无源光，银白+深紫；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
+                "imagePrompt": "静态关键帧：静态画面：悬停的旗帜和尘埃固定在半空，结界保持凹陷；可见表演状态：情绪保持与上一状态一致；面部眉眼和下颌保持可读的初始反应；视线沿当前镜头动作方向；身体与手部进入世界短暂失去常态；景别（本帧固定）：WS；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按世界短暂失去常态的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：银白无源光；银白+深紫；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
               },
               {
-                "id": "SH016-F02",
-                "sequenceIndex": 2,
-                "startSecond": 1.667,
-                "endSecond": 3.333,
+                "id": "SH007-F05",
+                "sequenceIndex": 5,
+                "startSecond": 6.667,
+                "endSecond": 8.333,
                 "actionPrompt": "探测器从内部裂开，Karin与Rifa的肩膀开始放松",
-                "imagePrompt": "静态画面：探测器从内部裂开，Karin与Rifa的肩膀开始放松；可见表演：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；景别：中近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：银白无源光，银白+深紫；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
+                "imagePrompt": "静态关键帧：静态画面：探测器从内部裂开，Karin与Rifa的肩膀开始放松；可见表演状态：情绪压力或目标逐步显现；面部眉眼、嘴角或下颌出现与动作对应的细微变化；视线短暂聚焦关键人物或道具；身体与手部完成主要动作并保留反应停顿；景别（本帧固定）：MCU；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按世界短暂失去常态的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：银白无源光；银白+深紫；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
               },
               {
-                "id": "SH016-F03",
-                "sequenceIndex": 3,
-                "startSecond": 3.333,
-                "endSecond": 5,
+                "id": "SH007-F06",
+                "sequenceIndex": 6,
+                "startSecond": 8.333,
+                "endSecond": 10,
                 "actionPrompt": "高塔远处观察者转动四点银戒，闸门在背景打开",
-                "imagePrompt": "静态画面：高塔远处观察者转动四点银戒，闸门在背景打开；可见表演：表情保持稳定；视线朝向当前主体；二人收力站稳，闸门打开，观察者远望；景别：中近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：银白无源光，银白+深紫；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
+                "imagePrompt": "静态关键帧：静态画面：高塔远处观察者转动四点银戒，闸门在背景打开；可见表演状态：情绪在下一镜头切点前完成情绪落点；面部固定最终表情，避免切点前漂移；视线指向下一动作或转场方向；身体与手部二人收力站稳，闸门打开，观察者远望；景别（本帧固定）：MCU；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按世界短暂失去常态的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：银白无源光；银白+深紫；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
+              },
+              {
+                "id": "SH007-F07",
+                "sequenceIndex": 7,
+                "startSecond": 10,
+                "endSecond": 11.667,
+                "actionPrompt": "Karin与Rifa站在打开的闸门前，肩膀已收力",
+                "imagePrompt": "静态关键帧：静态画面：Karin与Rifa站在打开的闸门前，肩膀已收力；可见表演状态：情绪保持与上一状态一致；面部眉眼和下颌保持可读的初始反应；视线沿当前镜头动作方向；身体与手部进入世界短暂失去常态；景别（本帧固定）：WS；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按世界短暂失去常态的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：银白无源光；银白+深紫；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
+              },
+              {
+                "id": "SH007-F08",
+                "sequenceIndex": 8,
+                "startSecond": 11.667,
+                "endSecond": 13.333,
+                "actionPrompt": "闸门完全打开，两人保持站稳，冷银光落在地面",
+                "imagePrompt": "静态关键帧：静态画面：闸门完全打开，两人保持站稳，冷银光落在地面；可见表演状态：情绪压力或目标逐步显现；面部眉眼、嘴角或下颌出现与动作对应的细微变化；视线短暂聚焦关键人物或道具；身体与手部完成主要动作并保留反应停顿；景别（本帧固定）：MCU；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按世界短暂失去常态的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：银白无源光；银白+深紫；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
+              },
+              {
+                "id": "SH007-F09",
+                "sequenceIndex": 9,
+                "startSecond": 13.333,
+                "endSecond": 15,
+                "actionPrompt": "高塔观察者站在远处阴影中，四点银戒停在抬起的手指间",
+                "imagePrompt": "静态关键帧：静态画面：高塔观察者站在远处阴影中，四点银戒停在抬起的手指间；可见表演状态：情绪在下一镜头切点前完成情绪落点；面部固定最终表情，避免切点前漂移；视线指向下一动作或转场方向；身体与手部二人收力站稳，闸门打开，观察者远望；景别（本帧固定）：MCU；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按世界短暂失去常态的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：银白无源光；银白+深紫；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
               }
             ],
-            "referenceCount": {
-              "min": 3,
-              "max": 9
-            },
             "referenceManifest": [
               {
                 "alias": "@图片1",
                 "role": "previous_actual_tail",
                 "purpose": "上一镜当前视频版本的已人工验收实际尾帧，仅作为本镜唯一连续性锚点",
-                "shotId": "SH015"
+                "shotId": "SH006"
               },
               {
                 "alias": "@图片2",
@@ -5086,329 +2858,25 @@
                 "purpose": "道具基准图：保持 四点银戒 的形状、持有人与当前状态一致",
                 "assetId": "P06"
               }
-            ]
-          }
-        },
-        {
-          "code": "SH017",
-          "order": 17,
-          "title": "力量与观察 3/3",
-          "description": "二人收力站稳，闸门打开，观察者远望",
-          "sourceText": "Rifa不看Karin的脸，只看他扣在断剑上的拇指。那是两人早已约定的信号。她走到与他完全并肩的位置。\n两人同时松开封印的一线。\n没有火焰，没有雷霆。声音先被抽空。旗帜停在风里，尘埃悬浮，结界向二人凹陷，探测器从内部裂开。\nKarin先收力。Rifa慢半拍，确认他站稳才收回力量。\nKarin（低声）：“这样够明显吗？”\n检查官看见一年级徽记，放下手臂。闸门开启。高塔上，观察者转动四点银戒。\n观察者（耳语）：“两个异类。可预言里，缺了两个名字。”",
-          "shotBoundary": "声音骤停",
-          "dialogue": "",
-          "narration": "",
-          "utterances": [],
-          "imagePrompt": "静态画面：Karin与Rifa站在打开的闸门前，肩膀已收力；可见表演：表情：下颌收紧后放松；视线：正对前方目标；手部：由蓄力转为稳定收力；景别：全景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：银白无源光，银白+深紫；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。",
-          "videoPrompt": "动态意图：Karin与Rifa站在打开的闸门前，肩膀已收力到高塔观察者站在远处阴影中，四点银戒停在抬起的手指间；起始可见状态：Karin与Rifa站在打开的闸门前，肩膀已收力；触发：闸门完全打开，两人保持站稳，冷银光落在地面；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：极慢环绕；声音：前3s完全静音；探测器细裂、闸门链条；一次低频冲击后骤停；结束画面：高塔观察者站在远处阴影中，四点银戒停在抬起的手指间；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无爆炸闪电火焰、无能量球、观察者不露脸、无角色变形。。",
-          "cameraMotion": "极慢环绕",
-          "startFramePrompt": "静态画面：Karin与Rifa站在打开的闸门前，肩膀已收力；可见表演：表情：下颌收紧后放松；视线：正对前方目标；手部：由蓄力转为稳定收力；景别：全景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：银白无源光，银白+深紫；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。；首帧仅继承@图片1对应的上一镜已验收实际尾帧状态。",
-          "endFramePrompt": "静态画面：高塔观察者站在远处阴影中，四点银戒停在抬起的手指间；可见表演：表情保持稳定；视线朝向当前主体；二人收力站稳，闸门打开，观察者远望；景别：中近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：银白无源光，银白+深紫；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。；出口状态保存为当前视频版本实际尾帧并在下游继承前人工验收。",
-          "negativePrompt": "无字幕、无爆炸闪电火焰、无能量球、观察者不露脸、无角色变形。",
-          "continuity": {
-            "shotSize": "WS→MCU",
-            "cameraAngle": "视线高度平视，沿动作轴线拍摄",
-            "composition": "主体保持在9:16安全区，动作方向留出前进空间",
-            "characterBlocking": "按世界短暂失去常态的动作关系安排站位",
-            "gazeDirection": "沿叙事动作方向，反应时回看对手或关键道具",
-            "actionStart": "世界短暂失去常态",
-            "actionEnd": "二人收力站稳，闸门打开，观察者远望",
-            "screenDirection": "保持同侧屏幕运动方向",
-            "axisRule": "保持180度关系轴线，转场时明确切换",
-            "continuityNotes": "声音骤停"
-          },
-          "duration": 5,
-          "characterCodes": [
-            "C01",
-            "C02",
-            "C05",
-            "C07"
-          ],
-          "propCodes": [
-            "P03",
-            "P06"
-          ],
-          "clueCodes": [],
-          "locationCode": "S02",
-          "storySceneCode": "SC04",
-          "timecode": "100-105s",
-          "dramaticFunction": "转/爆发",
-          "lens": "35mm",
-          "lighting": "银白无源光",
-          "colorPalette": "银白+深紫",
-          "transitionOut": "声音骤停",
-          "performanceNotes": "这样够明显吗？；两个异类。可预言里，缺了两个名字。",
-          "performancePlan": {
-            "emotionalObjective": "围绕世界短暂失去常态完成当前镜头的外在行动目标",
-            "emotionalArc": "从进入世界短暂失去常态的克制状态开始，经由动作反应推进，在二人收力站稳，闸门打开，观察者远望前收束",
-            "speechStyle": "台词贴合当下处境，语气清晰克制，重音落在行动关键信息",
-            "pace": "按镜头时长均匀推进，动作变化处短暂停顿，转场前收住",
-            "breath": "起始自然吸气，动作变化处短暂停顿，结束以呼气完成收束",
-            "restraintLevel": "中等克制，避免夸张表演",
-            "beats": {
-              "start": {
-                "emotion": "保持与上一状态一致",
-                "facialAction": "眉眼和下颌保持可读的初始反应",
-                "gaze": "沿当前镜头动作方向",
-                "bodyAction": "进入世界短暂失去常态"
-              },
-              "middle": {
-                "emotion": "压力或目标逐步显现",
-                "facialAction": "眉眼、嘴角或下颌出现与动作对应的细微变化",
-                "gaze": "短暂聚焦关键人物或道具",
-                "bodyAction": "完成主要动作并保留反应停顿"
-              },
-              "end": {
-                "emotion": "在下一镜头切点前完成情绪落点",
-                "facialAction": "固定最终表情，避免切点前漂移",
-                "gaze": "指向下一动作或转场方向",
-                "bodyAction": "二人收力站稳，闸门打开，观察者远望"
-              }
+            ],
+            "referenceCount": {
+              "min": 3,
+              "max": 9
             }
-          },
-          "dialoguePerformance": [
-            {
-              "utteranceId": "D12",
-              "intent": "推动当前镜头行动并回应对手或环境",
-              "tone": "贴合当前情绪，清晰自然",
-              "pace": "按语义分句，中速完成",
-              "pause": "关键信息前短停，句末自然收束",
-              "emphasis": "这样够明显吗？",
-              "facialReactionBefore": "先以视线和眉眼确认对方或关键道具",
-              "facialReactionDuring": "说话时保持与行动一致的面部反应",
-              "facialReactionAfter": "说完保留短暂反应，衔接下一动作"
-            }
-          ],
-          "lightingPlan": {
-            "palette": "银白+深紫",
-            "colorTemperature": "主光冷暖关系沿用本场设定，避免相邻镜头跳变",
-            "keyLight": "银白无源光作为主光，明确来自画面主方向并照亮主体面部",
-            "fillLight": "弱补光保留面部细节，阴影侧不完全压黑",
-            "rimLight": "以轻微轮廓光分离人物与背景，不制造硬边光晕",
-            "contrast": "中等反差，主体层次清晰，避免高光溢出",
-            "materialResponse": "金属、皮革和织物按真实材质反射，亮部克制",
-            "skinToneProtection": "保护肤色自然，不被环境色完全染色",
-            "inheritFromPrevious": "继承上一镜主光方向、色温和环境亮度",
-            "transitionToNext": "在动作结束处平滑过渡到下一镜主光和色板"
-          },
-          "sound": {
-            "ambience": "前3s完全静音",
-            "soundEffects": "探测器细裂、闸门链条",
-            "music": "一次低频冲击后骤停"
-          },
-          "entryState": {
-            "characters": [
-              {
-                "assetId": "C01",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面左侧或前景",
-                "gaze": "沿镜头轴线向右",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "力量与观察的连续反应与动作过渡"
-              },
-              {
-                "assetId": "C02",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "力量与观察的连续反应与动作过渡"
-              },
-              {
-                "assetId": "C05",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "力量与观察的连续反应与动作过渡"
-              },
-              {
-                "assetId": "C07",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "力量与观察的连续反应与动作过渡"
-              }
-            ],
-            "props": [
-              {
-                "assetId": "P03",
-                "state": "力量与观察的连续反应与动作过渡",
-                "holderId": "C05"
-              },
-              {
-                "assetId": "P06",
-                "state": "力量与观察的连续反应与动作过渡",
-                "holderId": "C07"
-              }
-            ],
-            "environment": "力量解封",
-            "lighting": "银白无源光",
-            "axis": "保持180度人物关系轴线",
-            "screenDirection": "角色移动方向沿场景既定动线"
-          },
-          "exitState": {
-            "characters": [
-              {
-                "assetId": "C01",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面左侧或前景",
-                "gaze": "沿镜头轴线向右",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "二人收力站稳，闸门打开，观察者远望"
-              },
-              {
-                "assetId": "C02",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "二人收力站稳，闸门打开，观察者远望"
-              },
-              {
-                "assetId": "C05",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "二人收力站稳，闸门打开，观察者远望"
-              },
-              {
-                "assetId": "C07",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "二人收力站稳，闸门打开，观察者远望"
-              }
-            ],
-            "props": [
-              {
-                "assetId": "P03",
-                "state": "二人收力站稳，闸门打开，观察者远望",
-                "holderId": "C05"
-              },
-              {
-                "assetId": "P06",
-                "state": "二人收力站稳，闸门打开，观察者远望",
-                "holderId": "C07"
-              }
-            ],
-            "environment": "力量解封",
-            "lighting": "银白无源光",
-            "axis": "保持180度人物关系轴线",
-            "screenDirection": "角色移动方向沿场景既定动线"
           },
           "sourceAssetIds": [],
-          "continuityStatus": "planned",
-          "videoMode": "reference",
-          "storyboardFrameMode": "all_frames",
-          "framePlan": {
-            "start": {
-              "source": "previous_accepted_actual_tail"
-            },
-            "end": {
-              "required": true
-            },
-            "frames": [
-              {
-                "id": "SH017-F01",
-                "sequenceIndex": 1,
-                "startSecond": 0,
-                "endSecond": 1.667,
-                "actionPrompt": "Karin与Rifa站在打开的闸门前，肩膀已收力",
-                "imagePrompt": "静态画面：Karin与Rifa站在打开的闸门前，肩膀已收力；可见表演：表情：下颌收紧后放松；视线：正对前方目标；手部：由蓄力转为稳定收力；景别：全景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：银白无源光，银白+深紫；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
-              },
-              {
-                "id": "SH017-F02",
-                "sequenceIndex": 2,
-                "startSecond": 1.667,
-                "endSecond": 3.333,
-                "actionPrompt": "闸门完全打开，两人保持站稳，冷银光落在地面",
-                "imagePrompt": "静态画面：闸门完全打开，两人保持站稳，冷银光落在地面；可见表演：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；景别：中近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：银白无源光，银白+深紫；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
-              },
-              {
-                "id": "SH017-F03",
-                "sequenceIndex": 3,
-                "startSecond": 3.333,
-                "endSecond": 5,
-                "actionPrompt": "高塔观察者站在远处阴影中，四点银戒停在抬起的手指间",
-                "imagePrompt": "静态画面：高塔观察者站在远处阴影中，四点银戒停在抬起的手指间；可见表演：表情保持稳定；视线朝向当前主体；二人收力站稳，闸门打开，观察者远望；景别：中近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：银白无源光，银白+深紫；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
-              }
-            ],
-            "referenceCount": {
-              "min": 3,
-              "max": 9
-            },
-            "referenceManifest": [
-              {
-                "alias": "@图片1",
-                "role": "previous_actual_tail",
-                "purpose": "上一镜当前视频版本的已人工验收实际尾帧，仅作为本镜唯一连续性锚点",
-                "shotId": "SH016"
-              },
-              {
-                "alias": "@图片2",
-                "role": "character_anchor",
-                "purpose": "角色基准图：保持 Karin 的身份特征、服装与道具不漂移",
-                "assetId": "C01"
-              },
-              {
-                "alias": "@图片3",
-                "role": "character_anchor",
-                "purpose": "角色基准图：保持 Rifa 的身份特征、服装与道具不漂移",
-                "assetId": "C02"
-              },
-              {
-                "alias": "@图片4",
-                "role": "character_anchor",
-                "purpose": "角色基准图：保持 城门检查官 的身份特征、服装与道具不漂移",
-                "assetId": "C05"
-              },
-              {
-                "alias": "@图片5",
-                "role": "character_anchor",
-                "purpose": "角色基准图：保持 神秘观察者 的身份特征、服装与道具不漂移",
-                "assetId": "C07"
-              },
-              {
-                "alias": "@图片6",
-                "role": "scene_anchor",
-                "purpose": "场景基准图：保持空间结构、光向与轴线一致",
-                "assetId": "S02"
-              },
-              {
-                "alias": "@图片7",
-                "role": "prop_anchor",
-                "purpose": "道具基准图：保持 灵压探测器 的形状、持有人与当前状态一致",
-                "assetId": "P03"
-              },
-              {
-                "alias": "@图片8",
-                "role": "prop_anchor",
-                "purpose": "道具基准图：保持 四点银戒 的形状、持有人与当前状态一致",
-                "assetId": "P06"
-              }
-            ]
-          }
+          "continuityStatus": "ready",
+          "videoMode": "storyboard",
+          "storyboardFrameMode": "all_frames"
         },
         {
-          "code": "SH018",
-          "order": 18,
-          "title": "我问的是你 1/3",
-          "description": "城市揭示与关系停顿",
+          "code": "SH008",
+          "order": 8,
+          "title": "我问的是你",
+          "description": "城市揭示与关系停顿；我问的是你的连续反应与动作过渡；二人并肩抵达上行坡道",
           "sourceText": "城市沿竖向陡坡层层升高。Karin仰头看得出神，断剑撞上手推车，他立刻护住剑鞘。\nRifa：“还疼？”\nKarin：“剑不会疼。”\nRifa放慢脚步，与他并肩：“我问的是你。”\nKarin不回答，但没有把手从剑上移开。",
           "shotBoundary": "碰剑声切",
-          "dialogue": "Rifa：还疼？",
+          "dialogue": "Rifa：还疼？；Karin：剑不会疼。；Rifa：我问的是你。",
           "narration": "",
           "utterances": [
             {
@@ -5417,13 +2885,25 @@
               "type": "dialogue",
               "speaker": "Rifa",
               "text": "还疼？"
+            },
+            {
+              "id": "D15",
+              "order": 2,
+              "type": "dialogue",
+              "speaker": "Karin",
+              "text": "剑不会疼。"
+            },
+            {
+              "id": "D16",
+              "order": 3,
+              "type": "dialogue",
+              "speaker": "Rifa",
+              "text": "我问的是你。"
             }
           ],
           "imagePrompt": "静态画面：阿佐雷斯层叠塔楼、吊桥和水渠沿陡坡展开；可见表演：表情：眉眼清晰；视线：朝向当前主体；手部与道具保持明确接触关系；景别：大远景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：散射光+炉火，石灰白+琥珀+灰蓝；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。",
-          "videoPrompt": "动态意图：阿佐雷斯层叠塔楼、吊桥和水渠沿陡坡展开到Rifa放慢脚步与Karin并肩抵达上行坡道；起始可见状态：阿佐雷斯层叠塔楼、吊桥和水渠沿陡坡展开；触发：断剑撞上蓝玻璃瓶手推车，Karin立刻护住剑鞘；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：吊臂下降；声音：城市人声、铁锤、水渠；剑鞘碰车沿；木管好奇动机转暖弦；结束画面：Rifa放慢脚步与Karin并肩抵达上行坡道；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无现代城市、无角色换脸、无横向拥挤。。",
+          "videoPrompt": "动态意图：阿佐雷斯层叠塔楼、吊桥和水渠沿陡坡展开到两人并肩抵达上行坡道尽头，剑鞘仍在Karin腰后；起始可见状态：阿佐雷斯层叠塔楼、吊桥和水渠沿陡坡展开；主体动作与反应：二人并肩抵达上行坡道；一个主运镜：吊臂下降；环境压力与声音：城市人声、铁锤、水渠；剑鞘碰车沿；木管好奇动机转暖弦；结束画面：两人并肩抵达上行坡道尽头，剑鞘仍在Karin腰后；针对性约束：无字幕、无现代城市、无角色换脸、无横向拥挤。",
           "cameraMotion": "吊臂下降",
-          "startFramePrompt": "静态画面：阿佐雷斯层叠塔楼、吊桥和水渠沿陡坡展开；可见表演：表情：眉眼清晰；视线：朝向当前主体；手部与道具保持明确接触关系；景别：大远景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：散射光+炉火，石灰白+琥珀+灰蓝；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。；首帧仅继承@图片1对应的上一镜已验收实际尾帧状态。",
-          "endFramePrompt": "静态画面：Rifa放慢脚步与Karin并肩抵达上行坡道；可见表演：表情保持稳定；视线朝向当前主体；二人并肩抵达上行坡道；景别：中景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：散射光+炉火，石灰白+琥珀+灰蓝；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。；出口状态保存为当前视频版本实际尾帧并在下游继承前人工验收。",
           "negativePrompt": "无字幕、无现代城市、无角色换脸、无横向拥挤。",
           "continuity": {
             "shotSize": "ELS→MS",
@@ -5437,7 +2917,7 @@
             "axisRule": "保持180度关系轴线，转场时明确切换",
             "continuityNotes": "碰剑声切"
           },
-          "duration": 5,
+          "duration": 15,
           "characterCodes": [
             "C01",
             "C02"
@@ -5448,7 +2928,7 @@
           "clueCodes": [],
           "locationCode": "S03",
           "storySceneCode": "SC05",
-          "timecode": "105-110s",
+          "timecode": "105-120s",
           "dramaticFunction": "转/余波",
           "lens": "24mm",
           "lighting": "散射光+炉火",
@@ -5577,556 +3057,6 @@
                 "gaze": "沿镜头轴线向右",
                 "pose": "克制站姿或自然坐姿",
                 "expression": "按本镜表演说明",
-                "action": "城市揭示与关系停顿"
-              },
-              {
-                "assetId": "C02",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "城市揭示与关系停顿"
-              }
-            ],
-            "props": [
-              {
-                "assetId": "P01",
-                "state": "城市揭示与关系停顿",
-                "holderId": "C01"
-              }
-            ],
-            "environment": "阿佐雷斯街巷",
-            "lighting": "散射光+炉火",
-            "axis": "保持180度人物关系轴线",
-            "screenDirection": "角色移动方向沿场景既定动线"
-          },
-          "sourceAssetIds": [],
-          "continuityStatus": "planned",
-          "videoMode": "reference",
-          "storyboardFrameMode": "all_frames",
-          "framePlan": {
-            "start": {
-              "source": "previous_accepted_actual_tail"
-            },
-            "end": {
-              "required": true
-            },
-            "frames": [
-              {
-                "id": "SH018-F01",
-                "sequenceIndex": 1,
-                "startSecond": 0,
-                "endSecond": 1.667,
-                "actionPrompt": "阿佐雷斯层叠塔楼、吊桥和水渠沿陡坡展开",
-                "imagePrompt": "静态画面：阿佐雷斯层叠塔楼、吊桥和水渠沿陡坡展开；可见表演：表情：眉眼清晰；视线：朝向当前主体；手部与道具保持明确接触关系；景别：大远景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：散射光+炉火，石灰白+琥珀+灰蓝；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
-              },
-              {
-                "id": "SH018-F02",
-                "sequenceIndex": 2,
-                "startSecond": 1.667,
-                "endSecond": 3.333,
-                "actionPrompt": "断剑撞上蓝玻璃瓶手推车，Karin立刻护住剑鞘",
-                "imagePrompt": "静态画面：断剑撞上蓝玻璃瓶手推车，Karin立刻护住剑鞘；可见表演：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；景别：中景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：散射光+炉火，石灰白+琥珀+灰蓝；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
-              },
-              {
-                "id": "SH018-F03",
-                "sequenceIndex": 3,
-                "startSecond": 3.333,
-                "endSecond": 5,
-                "actionPrompt": "Rifa放慢脚步与Karin并肩抵达上行坡道",
-                "imagePrompt": "静态画面：Rifa放慢脚步与Karin并肩抵达上行坡道；可见表演：表情保持稳定；视线朝向当前主体；二人并肩抵达上行坡道；景别：中景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：散射光+炉火，石灰白+琥珀+灰蓝；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
-              }
-            ],
-            "referenceCount": {
-              "min": 3,
-              "max": 9
-            },
-            "referenceManifest": [
-              {
-                "alias": "@图片1",
-                "role": "previous_actual_tail",
-                "purpose": "上一镜当前视频版本的已人工验收实际尾帧，仅作为本镜唯一连续性锚点",
-                "shotId": "SH017"
-              },
-              {
-                "alias": "@图片2",
-                "role": "character_anchor",
-                "purpose": "角色基准图：保持 Karin 的身份特征、服装与道具不漂移",
-                "assetId": "C01"
-              },
-              {
-                "alias": "@图片3",
-                "role": "character_anchor",
-                "purpose": "角色基准图：保持 Rifa 的身份特征、服装与道具不漂移",
-                "assetId": "C02"
-              },
-              {
-                "alias": "@图片4",
-                "role": "scene_anchor",
-                "purpose": "场景基准图：保持空间结构、光向与轴线一致",
-                "assetId": "S03"
-              },
-              {
-                "alias": "@图片5",
-                "role": "prop_anchor",
-                "purpose": "道具基准图：保持 Karin的断剑 的形状、持有人与当前状态一致",
-                "assetId": "P01"
-              }
-            ]
-          }
-        },
-        {
-          "code": "SH019",
-          "order": 19,
-          "title": "我问的是你 2/3",
-          "description": "我问的是你的连续反应与动作过渡",
-          "sourceText": "城市沿竖向陡坡层层升高。Karin仰头看得出神，断剑撞上手推车，他立刻护住剑鞘。\nRifa：“还疼？”\nKarin：“剑不会疼。”\nRifa放慢脚步，与他并肩：“我问的是你。”\nKarin不回答，但没有把手从剑上移开。",
-          "shotBoundary": "碰剑声切",
-          "dialogue": "Karin：剑不会疼。",
-          "narration": "",
-          "utterances": [
-            {
-              "id": "D15",
-              "order": 1,
-              "type": "dialogue",
-              "speaker": "Karin",
-              "text": "剑不会疼。"
-            }
-          ],
-          "imagePrompt": "静态画面：Rifa望向Karin，Karin的手仍按住剑鞘；可见表演：表情：眉眼清晰；视线：朝向当前主体；手部与道具保持明确接触关系；景别：大远景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：散射光+炉火，石灰白+琥珀+灰蓝；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。",
-          "videoPrompt": "动态意图：Rifa望向Karin，Karin的手仍按住剑鞘到两人放慢脚步并肩前行，Karin没有把手从剑上移开；起始可见状态：Rifa望向Karin，Karin的手仍按住剑鞘；触发：Karin避开视线，Rifa保持半步距离并等待回答；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：吊臂下降；声音：城市人声、铁锤、水渠；剑鞘碰车沿；木管好奇动机转暖弦；结束画面：两人放慢脚步并肩前行，Karin没有把手从剑上移开；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无现代城市、无角色换脸、无横向拥挤。。",
-          "cameraMotion": "吊臂下降",
-          "startFramePrompt": "静态画面：Rifa望向Karin，Karin的手仍按住剑鞘；可见表演：表情：眉眼清晰；视线：朝向当前主体；手部与道具保持明确接触关系；景别：大远景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：散射光+炉火，石灰白+琥珀+灰蓝；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。；首帧仅继承@图片1对应的上一镜已验收实际尾帧状态。",
-          "endFramePrompt": "静态画面：两人放慢脚步并肩前行，Karin没有把手从剑上移开；可见表演：表情保持稳定；视线朝向当前主体；二人并肩抵达上行坡道；景别：中景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：散射光+炉火，石灰白+琥珀+灰蓝；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。；出口状态保存为当前视频版本实际尾帧并在下游继承前人工验收。",
-          "negativePrompt": "无字幕、无现代城市、无角色换脸、无横向拥挤。",
-          "continuity": {
-            "shotSize": "ELS→MS",
-            "cameraAngle": "视线高度平视，沿动作轴线拍摄",
-            "composition": "主体保持在9:16安全区，动作方向留出前进空间",
-            "characterBlocking": "按城市揭示与关系停顿的动作关系安排站位",
-            "gazeDirection": "沿叙事动作方向，反应时回看对手或关键道具",
-            "actionStart": "城市揭示与关系停顿",
-            "actionEnd": "二人并肩抵达上行坡道",
-            "screenDirection": "保持同侧屏幕运动方向",
-            "axisRule": "保持180度关系轴线，转场时明确切换",
-            "continuityNotes": "碰剑声切"
-          },
-          "duration": 5,
-          "characterCodes": [
-            "C01",
-            "C02"
-          ],
-          "propCodes": [
-            "P01"
-          ],
-          "clueCodes": [],
-          "locationCode": "S03",
-          "storySceneCode": "SC05",
-          "timecode": "110-115s",
-          "dramaticFunction": "转/余波",
-          "lens": "24mm",
-          "lighting": "散射光+炉火",
-          "colorPalette": "石灰白+琥珀+灰蓝",
-          "transitionOut": "碰剑声切",
-          "performanceNotes": "还疼？；剑不会疼。；我问的是你。",
-          "performancePlan": {
-            "emotionalObjective": "围绕城市揭示与关系停顿完成当前镜头的外在行动目标",
-            "emotionalArc": "从进入城市揭示与关系停顿的克制状态开始，经由动作反应推进，在二人并肩抵达上行坡道前收束",
-            "speechStyle": "台词贴合当下处境，语气清晰克制，重音落在行动关键信息",
-            "pace": "按镜头时长均匀推进，动作变化处短暂停顿，转场前收住",
-            "breath": "起始自然吸气，动作变化处短暂停顿，结束以呼气完成收束",
-            "restraintLevel": "中等克制，避免夸张表演",
-            "beats": {
-              "start": {
-                "emotion": "保持与上一状态一致",
-                "facialAction": "眉眼和下颌保持可读的初始反应",
-                "gaze": "沿当前镜头动作方向",
-                "bodyAction": "进入城市揭示与关系停顿"
-              },
-              "middle": {
-                "emotion": "压力或目标逐步显现",
-                "facialAction": "眉眼、嘴角或下颌出现与动作对应的细微变化",
-                "gaze": "短暂聚焦关键人物或道具",
-                "bodyAction": "完成主要动作并保留反应停顿"
-              },
-              "end": {
-                "emotion": "在下一镜头切点前完成情绪落点",
-                "facialAction": "固定最终表情，避免切点前漂移",
-                "gaze": "指向下一动作或转场方向",
-                "bodyAction": "二人并肩抵达上行坡道"
-              }
-            }
-          },
-          "dialoguePerformance": [
-            {
-              "utteranceId": "D15",
-              "intent": "推动当前镜头行动并回应对手或环境",
-              "tone": "贴合当前情绪，清晰自然",
-              "pace": "按语义分句，中速完成",
-              "pause": "关键信息前短停，句末自然收束",
-              "emphasis": "剑不会疼。",
-              "facialReactionBefore": "先以视线和眉眼确认对方或关键道具",
-              "facialReactionDuring": "说话时保持与行动一致的面部反应",
-              "facialReactionAfter": "说完保留短暂反应，衔接下一动作"
-            },
-            {
-              "utteranceId": "D14",
-              "intent": "推动当前镜头行动并回应对手或环境",
-              "tone": "贴合当前情绪，清晰自然",
-              "pace": "按语义分句，中速完成",
-              "pause": "关键信息前短停，句末自然收束",
-              "emphasis": "还疼？",
-              "facialReactionBefore": "先以视线和眉眼确认对方或关键道具",
-              "facialReactionDuring": "说话时保持与行动一致的面部反应",
-              "facialReactionAfter": "说完保留短暂反应，衔接下一动作"
-            },
-            {
-              "utteranceId": "D16",
-              "intent": "推动当前镜头行动并回应对手或环境",
-              "tone": "贴合当前情绪，清晰自然",
-              "pace": "按语义分句，中速完成",
-              "pause": "关键信息前短停，句末自然收束",
-              "emphasis": "我问的是你。",
-              "facialReactionBefore": "先以视线和眉眼确认对方或关键道具",
-              "facialReactionDuring": "说话时保持与行动一致的面部反应",
-              "facialReactionAfter": "说完保留短暂反应，衔接下一动作"
-            }
-          ],
-          "lightingPlan": {
-            "palette": "石灰白+琥珀+灰蓝",
-            "colorTemperature": "主光冷暖关系沿用本场设定，避免相邻镜头跳变",
-            "keyLight": "散射光+炉火作为主光，明确来自画面主方向并照亮主体面部",
-            "fillLight": "弱补光保留面部细节，阴影侧不完全压黑",
-            "rimLight": "以轻微轮廓光分离人物与背景，不制造硬边光晕",
-            "contrast": "中等反差，主体层次清晰，避免高光溢出",
-            "materialResponse": "金属、皮革和织物按真实材质反射，亮部克制",
-            "skinToneProtection": "保护肤色自然，不被环境色完全染色",
-            "inheritFromPrevious": "继承上一镜主光方向、色温和环境亮度",
-            "transitionToNext": "在动作结束处平滑过渡到下一镜主光和色板"
-          },
-          "sound": {
-            "ambience": "城市人声、铁锤、水渠",
-            "soundEffects": "剑鞘碰车沿",
-            "music": "木管好奇动机转暖弦"
-          },
-          "entryState": {
-            "characters": [
-              {
-                "assetId": "C01",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面左侧或前景",
-                "gaze": "沿镜头轴线向右",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "城市揭示与关系停顿"
-              },
-              {
-                "assetId": "C02",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "城市揭示与关系停顿"
-              }
-            ],
-            "props": [
-              {
-                "assetId": "P01",
-                "state": "城市揭示与关系停顿",
-                "holderId": "C01"
-              }
-            ],
-            "environment": "阿佐雷斯街巷",
-            "lighting": "散射光+炉火",
-            "axis": "保持180度人物关系轴线",
-            "screenDirection": "角色移动方向沿场景既定动线"
-          },
-          "exitState": {
-            "characters": [
-              {
-                "assetId": "C01",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面左侧或前景",
-                "gaze": "沿镜头轴线向右",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "我问的是你的连续反应与动作过渡"
-              },
-              {
-                "assetId": "C02",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "我问的是你的连续反应与动作过渡"
-              }
-            ],
-            "props": [
-              {
-                "assetId": "P01",
-                "state": "我问的是你的连续反应与动作过渡",
-                "holderId": "C01"
-              }
-            ],
-            "environment": "阿佐雷斯街巷",
-            "lighting": "散射光+炉火",
-            "axis": "保持180度人物关系轴线",
-            "screenDirection": "角色移动方向沿场景既定动线"
-          },
-          "sourceAssetIds": [],
-          "continuityStatus": "planned",
-          "videoMode": "reference",
-          "storyboardFrameMode": "all_frames",
-          "framePlan": {
-            "start": {
-              "source": "previous_accepted_actual_tail"
-            },
-            "end": {
-              "required": true
-            },
-            "frames": [
-              {
-                "id": "SH019-F01",
-                "sequenceIndex": 1,
-                "startSecond": 0,
-                "endSecond": 1.667,
-                "actionPrompt": "Rifa望向Karin，Karin的手仍按住剑鞘",
-                "imagePrompt": "静态画面：Rifa望向Karin，Karin的手仍按住剑鞘；可见表演：表情：眉眼清晰；视线：朝向当前主体；手部与道具保持明确接触关系；景别：大远景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：散射光+炉火，石灰白+琥珀+灰蓝；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
-              },
-              {
-                "id": "SH019-F02",
-                "sequenceIndex": 2,
-                "startSecond": 1.667,
-                "endSecond": 3.333,
-                "actionPrompt": "Karin避开视线，Rifa保持半步距离并等待回答",
-                "imagePrompt": "静态画面：Karin避开视线，Rifa保持半步距离并等待回答；可见表演：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；景别：中景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：散射光+炉火，石灰白+琥珀+灰蓝；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
-              },
-              {
-                "id": "SH019-F03",
-                "sequenceIndex": 3,
-                "startSecond": 3.333,
-                "endSecond": 5,
-                "actionPrompt": "两人放慢脚步并肩前行，Karin没有把手从剑上移开",
-                "imagePrompt": "静态画面：两人放慢脚步并肩前行，Karin没有把手从剑上移开；可见表演：表情保持稳定；视线朝向当前主体；二人并肩抵达上行坡道；景别：中景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：散射光+炉火，石灰白+琥珀+灰蓝；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
-              }
-            ],
-            "referenceCount": {
-              "min": 3,
-              "max": 9
-            },
-            "referenceManifest": [
-              {
-                "alias": "@图片1",
-                "role": "previous_actual_tail",
-                "purpose": "上一镜当前视频版本的已人工验收实际尾帧，仅作为本镜唯一连续性锚点",
-                "shotId": "SH018"
-              },
-              {
-                "alias": "@图片2",
-                "role": "character_anchor",
-                "purpose": "角色基准图：保持 Karin 的身份特征、服装与道具不漂移",
-                "assetId": "C01"
-              },
-              {
-                "alias": "@图片3",
-                "role": "character_anchor",
-                "purpose": "角色基准图：保持 Rifa 的身份特征、服装与道具不漂移",
-                "assetId": "C02"
-              },
-              {
-                "alias": "@图片4",
-                "role": "scene_anchor",
-                "purpose": "场景基准图：保持空间结构、光向与轴线一致",
-                "assetId": "S03"
-              },
-              {
-                "alias": "@图片5",
-                "role": "prop_anchor",
-                "purpose": "道具基准图：保持 Karin的断剑 的形状、持有人与当前状态一致",
-                "assetId": "P01"
-              }
-            ]
-          }
-        },
-        {
-          "code": "SH020",
-          "order": 20,
-          "title": "我问的是你 3/3",
-          "description": "二人并肩抵达上行坡道",
-          "sourceText": "城市沿竖向陡坡层层升高。Karin仰头看得出神，断剑撞上手推车，他立刻护住剑鞘。\nRifa：“还疼？”\nKarin：“剑不会疼。”\nRifa放慢脚步，与他并肩：“我问的是你。”\nKarin不回答，但没有把手从剑上移开。",
-          "shotBoundary": "碰剑声切",
-          "dialogue": "Rifa：我问的是你。",
-          "narration": "",
-          "utterances": [
-            {
-              "id": "D16",
-              "order": 1,
-              "type": "dialogue",
-              "speaker": "Rifa",
-              "text": "我问的是你。"
-            }
-          ],
-          "imagePrompt": "静态画面：Karin与Rifa沿阿佐雷斯上行坡道并肩走近门口；可见表演：表情：眉眼清晰；视线：朝向当前主体；手部与道具保持明确接触关系；景别：大远景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：散射光+炉火，石灰白+琥珀+灰蓝；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。",
-          "videoPrompt": "动态意图：Karin与Rifa沿阿佐雷斯上行坡道并肩走近门口到两人并肩抵达上行坡道尽头，剑鞘仍在Karin腰后；起始可见状态：Karin与Rifa沿阿佐雷斯上行坡道并肩走近门口；触发：两人停在坡道转折处，Rifa侧身看向Karin；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：吊臂下降；声音：城市人声、铁锤、水渠；剑鞘碰车沿；木管好奇动机转暖弦；结束画面：两人并肩抵达上行坡道尽头，剑鞘仍在Karin腰后；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无现代城市、无角色换脸、无横向拥挤。。",
-          "cameraMotion": "吊臂下降",
-          "startFramePrompt": "静态画面：Karin与Rifa沿阿佐雷斯上行坡道并肩走近门口；可见表演：表情：眉眼清晰；视线：朝向当前主体；手部与道具保持明确接触关系；景别：大远景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：散射光+炉火，石灰白+琥珀+灰蓝；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。；首帧仅继承@图片1对应的上一镜已验收实际尾帧状态。",
-          "endFramePrompt": "静态画面：两人并肩抵达上行坡道尽头，剑鞘仍在Karin腰后；可见表演：表情保持稳定；视线朝向当前主体；二人并肩抵达上行坡道；景别：中景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：散射光+炉火，石灰白+琥珀+灰蓝；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。；出口状态保存为当前视频版本实际尾帧并在下游继承前人工验收。",
-          "negativePrompt": "无字幕、无现代城市、无角色换脸、无横向拥挤。",
-          "continuity": {
-            "shotSize": "ELS→MS",
-            "cameraAngle": "视线高度平视，沿动作轴线拍摄",
-            "composition": "主体保持在9:16安全区，动作方向留出前进空间",
-            "characterBlocking": "按城市揭示与关系停顿的动作关系安排站位",
-            "gazeDirection": "沿叙事动作方向，反应时回看对手或关键道具",
-            "actionStart": "城市揭示与关系停顿",
-            "actionEnd": "二人并肩抵达上行坡道",
-            "screenDirection": "保持同侧屏幕运动方向",
-            "axisRule": "保持180度关系轴线，转场时明确切换",
-            "continuityNotes": "碰剑声切"
-          },
-          "duration": 5,
-          "characterCodes": [
-            "C01",
-            "C02"
-          ],
-          "propCodes": [
-            "P01"
-          ],
-          "clueCodes": [],
-          "locationCode": "S03",
-          "storySceneCode": "SC05",
-          "timecode": "115-120s",
-          "dramaticFunction": "转/余波",
-          "lens": "24mm",
-          "lighting": "散射光+炉火",
-          "colorPalette": "石灰白+琥珀+灰蓝",
-          "transitionOut": "碰剑声切",
-          "performanceNotes": "还疼？；剑不会疼。；我问的是你。",
-          "performancePlan": {
-            "emotionalObjective": "围绕城市揭示与关系停顿完成当前镜头的外在行动目标",
-            "emotionalArc": "从进入城市揭示与关系停顿的克制状态开始，经由动作反应推进，在二人并肩抵达上行坡道前收束",
-            "speechStyle": "台词贴合当下处境，语气清晰克制，重音落在行动关键信息",
-            "pace": "按镜头时长均匀推进，动作变化处短暂停顿，转场前收住",
-            "breath": "起始自然吸气，动作变化处短暂停顿，结束以呼气完成收束",
-            "restraintLevel": "中等克制，避免夸张表演",
-            "beats": {
-              "start": {
-                "emotion": "保持与上一状态一致",
-                "facialAction": "眉眼和下颌保持可读的初始反应",
-                "gaze": "沿当前镜头动作方向",
-                "bodyAction": "进入城市揭示与关系停顿"
-              },
-              "middle": {
-                "emotion": "压力或目标逐步显现",
-                "facialAction": "眉眼、嘴角或下颌出现与动作对应的细微变化",
-                "gaze": "短暂聚焦关键人物或道具",
-                "bodyAction": "完成主要动作并保留反应停顿"
-              },
-              "end": {
-                "emotion": "在下一镜头切点前完成情绪落点",
-                "facialAction": "固定最终表情，避免切点前漂移",
-                "gaze": "指向下一动作或转场方向",
-                "bodyAction": "二人并肩抵达上行坡道"
-              }
-            }
-          },
-          "dialoguePerformance": [
-            {
-              "utteranceId": "D16",
-              "intent": "推动当前镜头行动并回应对手或环境",
-              "tone": "贴合当前情绪，清晰自然",
-              "pace": "按语义分句，中速完成",
-              "pause": "关键信息前短停，句末自然收束",
-              "emphasis": "我问的是你。",
-              "facialReactionBefore": "先以视线和眉眼确认对方或关键道具",
-              "facialReactionDuring": "说话时保持与行动一致的面部反应",
-              "facialReactionAfter": "说完保留短暂反应，衔接下一动作"
-            },
-            {
-              "utteranceId": "D14",
-              "intent": "推动当前镜头行动并回应对手或环境",
-              "tone": "贴合当前情绪，清晰自然",
-              "pace": "按语义分句，中速完成",
-              "pause": "关键信息前短停，句末自然收束",
-              "emphasis": "还疼？",
-              "facialReactionBefore": "先以视线和眉眼确认对方或关键道具",
-              "facialReactionDuring": "说话时保持与行动一致的面部反应",
-              "facialReactionAfter": "说完保留短暂反应，衔接下一动作"
-            },
-            {
-              "utteranceId": "D15",
-              "intent": "推动当前镜头行动并回应对手或环境",
-              "tone": "贴合当前情绪，清晰自然",
-              "pace": "按语义分句，中速完成",
-              "pause": "关键信息前短停，句末自然收束",
-              "emphasis": "剑不会疼。",
-              "facialReactionBefore": "先以视线和眉眼确认对方或关键道具",
-              "facialReactionDuring": "说话时保持与行动一致的面部反应",
-              "facialReactionAfter": "说完保留短暂反应，衔接下一动作"
-            }
-          ],
-          "lightingPlan": {
-            "palette": "石灰白+琥珀+灰蓝",
-            "colorTemperature": "主光冷暖关系沿用本场设定，避免相邻镜头跳变",
-            "keyLight": "散射光+炉火作为主光，明确来自画面主方向并照亮主体面部",
-            "fillLight": "弱补光保留面部细节，阴影侧不完全压黑",
-            "rimLight": "以轻微轮廓光分离人物与背景，不制造硬边光晕",
-            "contrast": "中等反差，主体层次清晰，避免高光溢出",
-            "materialResponse": "金属、皮革和织物按真实材质反射，亮部克制",
-            "skinToneProtection": "保护肤色自然，不被环境色完全染色",
-            "inheritFromPrevious": "继承上一镜主光方向、色温和环境亮度",
-            "transitionToNext": "在动作结束处平滑过渡到下一镜主光和色板"
-          },
-          "sound": {
-            "ambience": "城市人声、铁锤、水渠",
-            "soundEffects": "剑鞘碰车沿",
-            "music": "木管好奇动机转暖弦"
-          },
-          "entryState": {
-            "characters": [
-              {
-                "assetId": "C01",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面左侧或前景",
-                "gaze": "沿镜头轴线向右",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "我问的是你的连续反应与动作过渡"
-              },
-              {
-                "assetId": "C02",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "我问的是你的连续反应与动作过渡"
-              }
-            ],
-            "props": [
-              {
-                "assetId": "P01",
-                "state": "我问的是你的连续反应与动作过渡",
-                "holderId": "C01"
-              }
-            ],
-            "environment": "阿佐雷斯街巷",
-            "lighting": "散射光+炉火",
-            "axis": "保持180度人物关系轴线",
-            "screenDirection": "角色移动方向沿场景既定动线"
-          },
-          "exitState": {
-            "characters": [
-              {
-                "assetId": "C01",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面左侧或前景",
-                "gaze": "沿镜头轴线向右",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
                 "action": "二人并肩抵达上行坡道"
               },
               {
@@ -6151,10 +3081,6 @@
             "axis": "保持180度人物关系轴线",
             "screenDirection": "角色移动方向沿场景既定动线"
           },
-          "sourceAssetIds": [],
-          "continuityStatus": "planned",
-          "videoMode": "reference",
-          "storyboardFrameMode": "all_frames",
           "framePlan": {
             "start": {
               "source": "previous_accepted_actual_tail"
@@ -6164,40 +3090,84 @@
             },
             "frames": [
               {
-                "id": "SH020-F01",
+                "id": "SH008-F01",
                 "sequenceIndex": 1,
                 "startSecond": 0,
                 "endSecond": 1.667,
-                "actionPrompt": "Karin与Rifa沿阿佐雷斯上行坡道并肩走近门口",
-                "imagePrompt": "静态画面：Karin与Rifa沿阿佐雷斯上行坡道并肩走近门口；可见表演：表情：眉眼清晰；视线：朝向当前主体；手部与道具保持明确接触关系；景别：大远景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：散射光+炉火，石灰白+琥珀+灰蓝；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
+                "actionPrompt": "阿佐雷斯层叠塔楼、吊桥和水渠沿陡坡展开",
+                "imagePrompt": "静态关键帧：静态画面：阿佐雷斯层叠塔楼、吊桥和水渠沿陡坡展开；可见表演状态：情绪保持与上一状态一致；面部眉眼和下颌保持可读的初始反应；视线沿当前镜头动作方向；身体与手部进入城市揭示与关系停顿；景别（本帧固定）：ELS；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按城市揭示与关系停顿的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：散射光+炉火；石灰白+琥珀+灰蓝；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
               },
               {
-                "id": "SH020-F02",
+                "id": "SH008-F02",
                 "sequenceIndex": 2,
                 "startSecond": 1.667,
                 "endSecond": 3.333,
-                "actionPrompt": "两人停在坡道转折处，Rifa侧身看向Karin",
-                "imagePrompt": "静态画面：两人停在坡道转折处，Rifa侧身看向Karin；可见表演：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；景别：中景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：散射光+炉火，石灰白+琥珀+灰蓝；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
+                "actionPrompt": "断剑撞上蓝玻璃瓶手推车，Karin立刻护住剑鞘",
+                "imagePrompt": "静态关键帧：静态画面：断剑撞上蓝玻璃瓶手推车，Karin立刻护住剑鞘；可见表演状态：情绪压力或目标逐步显现；面部眉眼、嘴角或下颌出现与动作对应的细微变化；视线短暂聚焦关键人物或道具；身体与手部完成主要动作并保留反应停顿；景别（本帧固定）：MS；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按城市揭示与关系停顿的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：散射光+炉火；石灰白+琥珀+灰蓝；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
               },
               {
-                "id": "SH020-F03",
+                "id": "SH008-F03",
                 "sequenceIndex": 3,
                 "startSecond": 3.333,
                 "endSecond": 5,
+                "actionPrompt": "Rifa放慢脚步与Karin并肩抵达上行坡道",
+                "imagePrompt": "静态关键帧：静态画面：Rifa放慢脚步与Karin并肩抵达上行坡道；可见表演状态：情绪在下一镜头切点前完成情绪落点；面部固定最终表情，避免切点前漂移；视线指向下一动作或转场方向；身体与手部二人并肩抵达上行坡道；景别（本帧固定）：MS；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按城市揭示与关系停顿的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：散射光+炉火；石灰白+琥珀+灰蓝；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
+              },
+              {
+                "id": "SH008-F04",
+                "sequenceIndex": 4,
+                "startSecond": 5,
+                "endSecond": 6.667,
+                "actionPrompt": "Rifa望向Karin，Karin的手仍按住剑鞘",
+                "imagePrompt": "静态关键帧：静态画面：Rifa望向Karin，Karin的手仍按住剑鞘；可见表演状态：情绪保持与上一状态一致；面部眉眼和下颌保持可读的初始反应；视线沿当前镜头动作方向；身体与手部进入城市揭示与关系停顿；景别（本帧固定）：ELS；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按城市揭示与关系停顿的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：散射光+炉火；石灰白+琥珀+灰蓝；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
+              },
+              {
+                "id": "SH008-F05",
+                "sequenceIndex": 5,
+                "startSecond": 6.667,
+                "endSecond": 8.333,
+                "actionPrompt": "Karin避开视线，Rifa保持半步距离并等待回答",
+                "imagePrompt": "静态关键帧：可见表演：眉眼、嘴角或下颌出现与动作对应的细微变化；可见表演状态：情绪压力或目标逐步显现；面部眉眼、嘴角或下颌出现与动作对应的细微变化；视线短暂聚焦关键人物或道具；身体与手部完成主要动作并保留反应停顿；景别（本帧固定）：MS；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按城市揭示与关系停顿的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：散射光+炉火；石灰白+琥珀+灰蓝；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
+              },
+              {
+                "id": "SH008-F06",
+                "sequenceIndex": 6,
+                "startSecond": 8.333,
+                "endSecond": 10,
+                "actionPrompt": "两人放慢脚步并肩前行，Karin没有把手从剑上移开",
+                "imagePrompt": "静态关键帧：静态画面：两人放慢脚步并肩前行，Karin没有把手从剑上移开；可见表演状态：情绪在下一镜头切点前完成情绪落点；面部固定最终表情，避免切点前漂移；视线指向下一动作或转场方向；身体与手部二人并肩抵达上行坡道；景别（本帧固定）：MS；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按城市揭示与关系停顿的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：散射光+炉火；石灰白+琥珀+灰蓝；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
+              },
+              {
+                "id": "SH008-F07",
+                "sequenceIndex": 7,
+                "startSecond": 10,
+                "endSecond": 11.667,
+                "actionPrompt": "Karin与Rifa沿阿佐雷斯上行坡道并肩走近门口",
+                "imagePrompt": "静态关键帧：静态画面：Karin与Rifa沿阿佐雷斯上行坡道并肩走近门口；可见表演状态：情绪保持与上一状态一致；面部眉眼和下颌保持可读的初始反应；视线沿当前镜头动作方向；身体与手部进入城市揭示与关系停顿；景别（本帧固定）：ELS；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按城市揭示与关系停顿的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：散射光+炉火；石灰白+琥珀+灰蓝；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
+              },
+              {
+                "id": "SH008-F08",
+                "sequenceIndex": 8,
+                "startSecond": 11.667,
+                "endSecond": 13.333,
+                "actionPrompt": "两人停在坡道转折处，Rifa侧身看向Karin",
+                "imagePrompt": "静态关键帧：静态画面：两人停在坡道转折处，Rifa侧身看向Karin；可见表演状态：情绪压力或目标逐步显现；面部眉眼、嘴角或下颌出现与动作对应的细微变化；视线短暂聚焦关键人物或道具；身体与手部完成主要动作并保留反应停顿；景别（本帧固定）：MS；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按城市揭示与关系停顿的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：散射光+炉火；石灰白+琥珀+灰蓝；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
+              },
+              {
+                "id": "SH008-F09",
+                "sequenceIndex": 9,
+                "startSecond": 13.333,
+                "endSecond": 15,
                 "actionPrompt": "两人并肩抵达上行坡道尽头，剑鞘仍在Karin腰后",
-                "imagePrompt": "静态画面：两人并肩抵达上行坡道尽头，剑鞘仍在Karin腰后；可见表演：表情保持稳定；视线朝向当前主体；二人并肩抵达上行坡道；景别：中景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：散射光+炉火，石灰白+琥珀+灰蓝；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
+                "imagePrompt": "静态关键帧：静态画面：两人并肩抵达上行坡道尽头，剑鞘仍在Karin腰后；可见表演状态：情绪在下一镜头切点前完成情绪落点；面部固定最终表情，避免切点前漂移；视线指向下一动作或转场方向；身体与手部二人并肩抵达上行坡道；景别（本帧固定）：MS；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按城市揭示与关系停顿的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：散射光+炉火；石灰白+琥珀+灰蓝；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
               }
             ],
-            "referenceCount": {
-              "min": 3,
-              "max": 9
-            },
             "referenceManifest": [
               {
                 "alias": "@图片1",
                 "role": "previous_actual_tail",
                 "purpose": "上一镜当前视频版本的已人工验收实际尾帧，仅作为本镜唯一连续性锚点",
-                "shotId": "SH019"
+                "shotId": "SH007"
               },
               {
                 "alias": "@图片2",
@@ -6223,17 +3193,25 @@
                 "purpose": "道具基准图：保持 Karin的断剑 的形状、持有人与当前状态一致",
                 "assetId": "P01"
               }
-            ]
-          }
+            ],
+            "referenceCount": {
+              "min": 3,
+              "max": 9
+            }
+          },
+          "sourceAssetIds": [],
+          "continuityStatus": "ready",
+          "videoMode": "storyboard",
+          "storyboardFrameMode": "all_frames"
         },
         {
-          "code": "SH021",
-          "order": 21,
-          "title": "银色裂痕 1/2",
-          "description": "裂纹似梦中断口",
+          "code": "SH009",
+          "order": 9,
+          "title": "银色裂痕",
+          "description": "裂纹似梦中断口；二人立在门槛，奥伦背对，Karin隐瞒梦境",
           "sourceText": "坡道尽头，木牌上的银色裂痕与梦中剑刃的裂口完全相同。\nRifa：“你见过这个？”\nKarin：“没有。”\n他说得太快。抬起的手尚未碰门，断剑先在鞘中震动。门内传来三次锤击，木门自行开启。\n奥伦在纵深尽头背对二人：“关门。把剑放到铁砧上。”",
           "shotBoundary": "门开切内景",
-          "dialogue": "Rifa：你见过这个？\nKarin：没有。",
+          "dialogue": "Rifa：你见过这个？\nKarin：没有。；奥伦：关门。把剑放到铁砧上。",
           "narration": "",
           "utterances": [
             {
@@ -6249,13 +3227,18 @@
               "type": "dialogue",
               "speaker": "Karin",
               "text": "没有。"
+            },
+            {
+              "id": "D19",
+              "order": 3,
+              "type": "dialogue",
+              "speaker": "奥伦",
+              "text": "关门。把剑放到铁砧上。"
             }
           ],
           "imagePrompt": "静态画面：Edia Knight木门占满竖幅，门面银色裂痕与梦中剑刃断口相同；可见表演：表情：疑惑转为戒备；视线：锁定关键道具；手部：保持与断剑或道具的明确接触；景别：近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：银纹冷光+炉光，冷银+暗琥珀；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。",
-          "videoPrompt": "动态意图：Edia Knight木门占满竖幅，门面银色裂痕与梦中剑刃断口相同到木门开启，奥伦背对站在冷蓝外光与暗琥珀炉光交界处；起始可见状态：Edia Knight木门占满竖幅，门面银色裂痕与梦中剑刃断口相同；触发：Karin抬手未触门，腰后断剑先发生震动；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：银裂纹后拉；声音：坡道风声；断剑震动、三次锤击、门滑开；两音母题反向出现；结束画面：木门开启，奥伦背对站在冷蓝外光与暗琥珀炉光交界处；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无现代门锁、无可读招牌、无电动机械感、无角色变形。。",
+          "videoPrompt": "动态意图：Edia Knight木门占满竖幅，门面银色裂痕与梦中剑刃断口相同到奥伦保持背对，Karin避开Rifa的视线，三人纵深关系稳定；起始可见状态：Edia Knight木门占满竖幅，门面银色裂痕与梦中剑刃断口相同；主体动作与反应：二人立在门槛，奥伦背对，Karin隐瞒梦境；一个主运镜：银裂纹后拉；环境压力与声音：坡道风声；断剑震动、三次锤击、门滑开；两音母题反向出现；结束画面：奥伦保持背对，Karin避开Rifa的视线，三人纵深关系稳定；针对性约束：无字幕、无现代门锁、无可读招牌、无电动机械感、无角色变形。",
           "cameraMotion": "银裂纹后拉",
-          "startFramePrompt": "静态画面：Edia Knight木门占满竖幅，门面银色裂痕与梦中剑刃断口相同；可见表演：表情：疑惑转为戒备；视线：锁定关键道具；手部：保持与断剑或道具的明确接触；景别：近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：银纹冷光+炉光，冷银+暗琥珀；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。；首帧仅继承@图片1对应的上一镜已验收实际尾帧状态。",
-          "endFramePrompt": "静态画面：木门开启，奥伦背对站在冷蓝外光与暗琥珀炉光交界处；可见表演：表情保持稳定；视线朝向当前主体；二人立在门槛，奥伦背对，Karin隐瞒梦境；景别：远景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：银纹冷光+炉光，冷银+暗琥珀；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。；出口状态保存为当前视频版本实际尾帧并在下游继承前人工验收。",
           "negativePrompt": "无字幕、无现代门锁、无可读招牌、无电动机械感、无角色变形。",
           "continuity": {
             "shotSize": "CU→LS",
@@ -6269,7 +3252,7 @@
             "axisRule": "保持180度关系轴线，转场时明确切换",
             "continuityNotes": "门开切内景"
           },
-          "duration": 8,
+          "duration": 15,
           "characterCodes": [
             "C01",
             "C02",
@@ -6281,7 +3264,7 @@
           "clueCodes": [],
           "locationCode": "S04",
           "storySceneCode": "SC06",
-          "timecode": "120-128s",
+          "timecode": "120-135s",
           "dramaticFunction": "合/召唤",
           "lens": "65mm",
           "lighting": "银纹冷光+炉光",
@@ -6419,306 +3402,6 @@
                 "gaze": "沿镜头轴线向右",
                 "pose": "克制站姿或自然坐姿",
                 "expression": "按本镜表演说明",
-                "action": "裂纹似梦中断口"
-              },
-              {
-                "assetId": "C02",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "裂纹似梦中断口"
-              },
-              {
-                "assetId": "C06",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "裂纹似梦中断口"
-              }
-            ],
-            "props": [
-              {
-                "assetId": "P01",
-                "state": "裂纹似梦中断口",
-                "holderId": "C01"
-              }
-            ],
-            "environment": "Edia Knight门前",
-            "lighting": "银纹冷光+炉光",
-            "axis": "保持180度人物关系轴线",
-            "screenDirection": "角色移动方向沿场景既定动线"
-          },
-          "sourceAssetIds": [],
-          "continuityStatus": "planned",
-          "videoMode": "reference",
-          "storyboardFrameMode": "all_frames",
-          "framePlan": {
-            "start": {
-              "source": "previous_accepted_actual_tail"
-            },
-            "end": {
-              "required": true
-            },
-            "frames": [
-              {
-                "id": "SH021-F01",
-                "sequenceIndex": 1,
-                "startSecond": 0,
-                "endSecond": 2.667,
-                "actionPrompt": "Edia Knight木门占满竖幅，门面银色裂痕与梦中剑刃断口相同",
-                "imagePrompt": "静态画面：Edia Knight木门占满竖幅，门面银色裂痕与梦中剑刃断口相同；可见表演：表情：疑惑转为戒备；视线：锁定关键道具；手部：保持与断剑或道具的明确接触；景别：近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：银纹冷光+炉光，冷银+暗琥珀；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
-              },
-              {
-                "id": "SH021-F02",
-                "sequenceIndex": 2,
-                "startSecond": 2.667,
-                "endSecond": 5.333,
-                "actionPrompt": "Karin抬手未触门，腰后断剑先发生震动",
-                "imagePrompt": "静态画面：Karin抬手未触门，腰后断剑先发生震动；可见表演：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；景别：远景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：银纹冷光+炉光，冷银+暗琥珀；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
-              },
-              {
-                "id": "SH021-F03",
-                "sequenceIndex": 3,
-                "startSecond": 5.333,
-                "endSecond": 8,
-                "actionPrompt": "木门开启，奥伦背对站在冷蓝外光与暗琥珀炉光交界处",
-                "imagePrompt": "静态画面：木门开启，奥伦背对站在冷蓝外光与暗琥珀炉光交界处；可见表演：表情保持稳定；视线朝向当前主体；二人立在门槛，奥伦背对，Karin隐瞒梦境；景别：远景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：银纹冷光+炉光，冷银+暗琥珀；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
-              }
-            ],
-            "referenceCount": {
-              "min": 3,
-              "max": 9
-            },
-            "referenceManifest": [
-              {
-                "alias": "@图片1",
-                "role": "previous_actual_tail",
-                "purpose": "上一镜当前视频版本的已人工验收实际尾帧，仅作为本镜唯一连续性锚点",
-                "shotId": "SH020"
-              },
-              {
-                "alias": "@图片2",
-                "role": "character_anchor",
-                "purpose": "角色基准图：保持 Karin 的身份特征、服装与道具不漂移",
-                "assetId": "C01"
-              },
-              {
-                "alias": "@图片3",
-                "role": "character_anchor",
-                "purpose": "角色基准图：保持 Rifa 的身份特征、服装与道具不漂移",
-                "assetId": "C02"
-              },
-              {
-                "alias": "@图片4",
-                "role": "character_anchor",
-                "purpose": "角色基准图：保持 奥伦·奈特 的身份特征、服装与道具不漂移",
-                "assetId": "C06"
-              },
-              {
-                "alias": "@图片5",
-                "role": "scene_anchor",
-                "purpose": "场景基准图：保持空间结构、光向与轴线一致",
-                "assetId": "S04"
-              },
-              {
-                "alias": "@图片6",
-                "role": "prop_anchor",
-                "purpose": "道具基准图：保持 Karin的断剑 的形状、持有人与当前状态一致",
-                "assetId": "P01"
-              }
-            ]
-          }
-        },
-        {
-          "code": "SH022",
-          "order": 22,
-          "title": "银色裂痕 2/2",
-          "description": "二人立在门槛，奥伦背对，Karin隐瞒梦境",
-          "sourceText": "坡道尽头，木牌上的银色裂痕与梦中剑刃的裂口完全相同。\nRifa：“你见过这个？”\nKarin：“没有。”\n他说得太快。抬起的手尚未碰门，断剑先在鞘中震动。门内传来三次锤击，木门自行开启。\n奥伦在纵深尽头背对二人：“关门。把剑放到铁砧上。”",
-          "shotBoundary": "门开切内景",
-          "dialogue": "奥伦：关门。把剑放到铁砧上。",
-          "narration": "",
-          "utterances": [
-            {
-              "id": "D19",
-              "order": 1,
-              "type": "dialogue",
-              "speaker": "奥伦",
-              "text": "关门。把剑放到铁砧上。"
-            }
-          ],
-          "imagePrompt": "静态画面：Karin与Rifa立在木门门槛，奥伦背对站在炉光深处；可见表演：表情：眉眼清晰；视线：朝向当前主体；手部与道具保持明确接触关系；景别：近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：银纹冷光+炉光，冷银+暗琥珀；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。",
-          "videoPrompt": "动态意图：Karin与Rifa立在木门门槛，奥伦背对站在炉光深处到奥伦保持背对，Karin避开Rifa的视线，三人纵深关系稳定；起始可见状态：Karin与Rifa立在木门门槛，奥伦背对站在炉光深处；触发：Karin的手停在腰后断剑旁，Rifa的视线落向门内；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：银裂纹后拉；声音：坡道风声；断剑震动、三次锤击、门滑开；两音母题反向出现；结束画面：奥伦保持背对，Karin避开Rifa的视线，三人纵深关系稳定；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无现代门锁、无可读招牌、无电动机械感、无角色变形。。",
-          "cameraMotion": "银裂纹后拉",
-          "startFramePrompt": "静态画面：Karin与Rifa立在木门门槛，奥伦背对站在炉光深处；可见表演：表情：眉眼清晰；视线：朝向当前主体；手部与道具保持明确接触关系；景别：近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：银纹冷光+炉光，冷银+暗琥珀；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。；首帧仅继承@图片1对应的上一镜已验收实际尾帧状态。",
-          "endFramePrompt": "静态画面：奥伦保持背对，Karin避开Rifa的视线，三人纵深关系稳定；可见表演：表情保持稳定；视线朝向当前主体；二人立在门槛，奥伦背对，Karin隐瞒梦境；景别：远景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：银纹冷光+炉光，冷银+暗琥珀；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。；出口状态保存为当前视频版本实际尾帧并在下游继承前人工验收。",
-          "negativePrompt": "无字幕、无现代门锁、无可读招牌、无电动机械感、无角色变形。",
-          "continuity": {
-            "shotSize": "CU→LS",
-            "cameraAngle": "视线高度平视，沿动作轴线拍摄",
-            "composition": "主体保持在9:16安全区，动作方向留出前进空间",
-            "characterBlocking": "按裂纹似梦中断口的动作关系安排站位",
-            "gazeDirection": "沿叙事动作方向，反应时回看对手或关键道具",
-            "actionStart": "裂纹似梦中断口",
-            "actionEnd": "二人立在门槛，奥伦背对，Karin隐瞒梦境",
-            "screenDirection": "保持同侧屏幕运动方向",
-            "axisRule": "保持180度关系轴线，转场时明确切换",
-            "continuityNotes": "门开切内景"
-          },
-          "duration": 7,
-          "characterCodes": [
-            "C01",
-            "C02",
-            "C06"
-          ],
-          "propCodes": [
-            "P01"
-          ],
-          "clueCodes": [],
-          "locationCode": "S04",
-          "storySceneCode": "SC06",
-          "timecode": "128-135s",
-          "dramaticFunction": "合/召唤",
-          "lens": "65mm",
-          "lighting": "银纹冷光+炉光",
-          "colorPalette": "冷银+暗琥珀",
-          "transitionOut": "门开切内景",
-          "performanceNotes": "你见过这个？；没有。；关门。把剑放到铁砧上。",
-          "performancePlan": {
-            "emotionalObjective": "围绕裂纹似梦中断口完成当前镜头的外在行动目标",
-            "emotionalArc": "从进入裂纹似梦中断口的克制状态开始，经由动作反应推进，在二人立在门槛，奥伦背对，Karin隐瞒梦境前收束",
-            "speechStyle": "台词贴合当下处境，语气清晰克制，重音落在行动关键信息",
-            "pace": "按镜头时长均匀推进，动作变化处短暂停顿，转场前收住",
-            "breath": "起始自然吸气，动作变化处短暂停顿，结束以呼气完成收束",
-            "restraintLevel": "中等克制，避免夸张表演",
-            "beats": {
-              "start": {
-                "emotion": "保持与上一状态一致",
-                "facialAction": "眉眼和下颌保持可读的初始反应",
-                "gaze": "沿当前镜头动作方向",
-                "bodyAction": "进入裂纹似梦中断口"
-              },
-              "middle": {
-                "emotion": "压力或目标逐步显现",
-                "facialAction": "眉眼、嘴角或下颌出现与动作对应的细微变化",
-                "gaze": "短暂聚焦关键人物或道具",
-                "bodyAction": "完成主要动作并保留反应停顿"
-              },
-              "end": {
-                "emotion": "在下一镜头切点前完成情绪落点",
-                "facialAction": "固定最终表情，避免切点前漂移",
-                "gaze": "指向下一动作或转场方向",
-                "bodyAction": "二人立在门槛，奥伦背对，Karin隐瞒梦境"
-              }
-            }
-          },
-          "dialoguePerformance": [
-            {
-              "utteranceId": "D19",
-              "intent": "推动当前镜头行动并回应对手或环境",
-              "tone": "贴合当前情绪，清晰自然",
-              "pace": "按语义分句，中速完成",
-              "pause": "关键信息前短停，句末自然收束",
-              "emphasis": "关门。把剑放到铁砧上。",
-              "facialReactionBefore": "先以视线和眉眼确认对方或关键道具",
-              "facialReactionDuring": "说话时保持与行动一致的面部反应",
-              "facialReactionAfter": "说完保留短暂反应，衔接下一动作"
-            },
-            {
-              "utteranceId": "D17",
-              "intent": "推动当前镜头行动并回应对手或环境",
-              "tone": "贴合当前情绪，清晰自然",
-              "pace": "按语义分句，中速完成",
-              "pause": "关键信息前短停，句末自然收束",
-              "emphasis": "你见过这个？",
-              "facialReactionBefore": "先以视线和眉眼确认对方或关键道具",
-              "facialReactionDuring": "说话时保持与行动一致的面部反应",
-              "facialReactionAfter": "说完保留短暂反应，衔接下一动作"
-            },
-            {
-              "utteranceId": "D18",
-              "intent": "推动当前镜头行动并回应对手或环境",
-              "tone": "贴合当前情绪，清晰自然",
-              "pace": "按语义分句，中速完成",
-              "pause": "关键信息前短停，句末自然收束",
-              "emphasis": "没有。",
-              "facialReactionBefore": "先以视线和眉眼确认对方或关键道具",
-              "facialReactionDuring": "说话时保持与行动一致的面部反应",
-              "facialReactionAfter": "说完保留短暂反应，衔接下一动作"
-            }
-          ],
-          "lightingPlan": {
-            "palette": "冷银+暗琥珀",
-            "colorTemperature": "主光冷暖关系沿用本场设定，避免相邻镜头跳变",
-            "keyLight": "银纹冷光+炉光作为主光，明确来自画面主方向并照亮主体面部",
-            "fillLight": "弱补光保留面部细节，阴影侧不完全压黑",
-            "rimLight": "以轻微轮廓光分离人物与背景，不制造硬边光晕",
-            "contrast": "中等反差，主体层次清晰，避免高光溢出",
-            "materialResponse": "金属、皮革和织物按真实材质反射，亮部克制",
-            "skinToneProtection": "保护肤色自然，不被环境色完全染色",
-            "inheritFromPrevious": "继承上一镜主光方向、色温和环境亮度",
-            "transitionToNext": "在动作结束处平滑过渡到下一镜主光和色板"
-          },
-          "sound": {
-            "ambience": "坡道风声",
-            "soundEffects": "断剑震动、三次锤击、门滑开",
-            "music": "两音母题反向出现"
-          },
-          "entryState": {
-            "characters": [
-              {
-                "assetId": "C01",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面左侧或前景",
-                "gaze": "沿镜头轴线向右",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "裂纹似梦中断口"
-              },
-              {
-                "assetId": "C02",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "裂纹似梦中断口"
-              },
-              {
-                "assetId": "C06",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "裂纹似梦中断口"
-              }
-            ],
-            "props": [
-              {
-                "assetId": "P01",
-                "state": "裂纹似梦中断口",
-                "holderId": "C01"
-              }
-            ],
-            "environment": "Edia Knight门前",
-            "lighting": "银纹冷光+炉光",
-            "axis": "保持180度人物关系轴线",
-            "screenDirection": "角色移动方向沿场景既定动线"
-          },
-          "exitState": {
-            "characters": [
-              {
-                "assetId": "C01",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面左侧或前景",
-                "gaze": "沿镜头轴线向右",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
                 "action": "二人立在门槛，奥伦背对，Karin隐瞒梦境"
               },
               {
@@ -6752,10 +3435,6 @@
             "axis": "保持180度人物关系轴线",
             "screenDirection": "角色移动方向沿场景既定动线"
           },
-          "sourceAssetIds": [],
-          "continuityStatus": "planned",
-          "videoMode": "reference",
-          "storyboardFrameMode": "all_frames",
           "framePlan": {
             "start": {
               "source": "previous_accepted_actual_tail"
@@ -6765,40 +3444,60 @@
             },
             "frames": [
               {
-                "id": "SH022-F01",
+                "id": "SH009-F01",
                 "sequenceIndex": 1,
                 "startSecond": 0,
-                "endSecond": 2.333,
-                "actionPrompt": "Karin与Rifa立在木门门槛，奥伦背对站在炉光深处",
-                "imagePrompt": "静态画面：Karin与Rifa立在木门门槛，奥伦背对站在炉光深处；可见表演：表情：眉眼清晰；视线：朝向当前主体；手部与道具保持明确接触关系；景别：近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：银纹冷光+炉光，冷银+暗琥珀；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
+                "endSecond": 2.667,
+                "actionPrompt": "Edia Knight木门占满竖幅，门面银色裂痕与梦中剑刃断口相同",
+                "imagePrompt": "静态关键帧：静态画面：Edia Knight木门占满竖幅，门面银色裂痕与梦中剑刃断口相同；可见表演状态：情绪保持与上一状态一致；面部眉眼和下颌保持可读的初始反应；视线沿当前镜头动作方向；身体与手部进入裂纹似梦中断口；景别（本帧固定）：CU；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按裂纹似梦中断口的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：银纹冷光+炉光；冷银+暗琥珀；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
               },
               {
-                "id": "SH022-F02",
+                "id": "SH009-F02",
                 "sequenceIndex": 2,
-                "startSecond": 2.333,
-                "endSecond": 4.667,
-                "actionPrompt": "Karin的手停在腰后断剑旁，Rifa的视线落向门内",
-                "imagePrompt": "静态画面：Karin的手停在腰后断剑旁，Rifa的视线落向门内；可见表演：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；景别：远景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：银纹冷光+炉光，冷银+暗琥珀；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
+                "startSecond": 2.667,
+                "endSecond": 5.333,
+                "actionPrompt": "Karin抬手未触门，腰后断剑先发生震动",
+                "imagePrompt": "静态关键帧：静态画面：Karin抬手未触门，腰后断剑先发生震动；可见表演状态：情绪压力或目标逐步显现；面部眉眼、嘴角或下颌出现与动作对应的细微变化；视线短暂聚焦关键人物或道具；身体与手部完成主要动作并保留反应停顿；景别（本帧固定）：LS；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按裂纹似梦中断口的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：银纹冷光+炉光；冷银+暗琥珀；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
               },
               {
-                "id": "SH022-F03",
+                "id": "SH009-F03",
                 "sequenceIndex": 3,
-                "startSecond": 4.667,
-                "endSecond": 7,
+                "startSecond": 5.333,
+                "endSecond": 8,
+                "actionPrompt": "木门开启，奥伦背对站在冷蓝外光与暗琥珀炉光交界处",
+                "imagePrompt": "静态关键帧：静态画面：木门开启，奥伦背对站在冷蓝外光与暗琥珀炉光交界处；可见表演状态：情绪在下一镜头切点前完成情绪落点；面部固定最终表情，避免切点前漂移；视线指向下一动作或转场方向；身体与手部二人立在门槛，奥伦背对，Karin隐瞒梦境；景别（本帧固定）：LS；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按裂纹似梦中断口的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：银纹冷光+炉光；冷银+暗琥珀；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
+              },
+              {
+                "id": "SH009-F04",
+                "sequenceIndex": 4,
+                "startSecond": 8,
+                "endSecond": 10.333,
+                "actionPrompt": "Karin与Rifa立在木门门槛，奥伦背对站在炉光深处",
+                "imagePrompt": "静态关键帧：静态画面：Karin与Rifa立在木门门槛，奥伦背对站在炉光深处；可见表演状态：情绪保持与上一状态一致；面部眉眼和下颌保持可读的初始反应；视线沿当前镜头动作方向；身体与手部进入裂纹似梦中断口；景别（本帧固定）：CU；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按裂纹似梦中断口的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：银纹冷光+炉光；冷银+暗琥珀；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
+              },
+              {
+                "id": "SH009-F05",
+                "sequenceIndex": 5,
+                "startSecond": 10.333,
+                "endSecond": 12.667,
+                "actionPrompt": "Karin的手停在腰后断剑旁，Rifa的视线落向门内",
+                "imagePrompt": "静态关键帧：静态画面：Karin的手停在腰后断剑旁，Rifa的视线落向门内；可见表演状态：情绪压力或目标逐步显现；面部眉眼、嘴角或下颌出现与动作对应的细微变化；视线短暂聚焦关键人物或道具；身体与手部完成主要动作并保留反应停顿；景别（本帧固定）：LS；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按裂纹似梦中断口的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：银纹冷光+炉光；冷银+暗琥珀；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
+              },
+              {
+                "id": "SH009-F06",
+                "sequenceIndex": 6,
+                "startSecond": 12.667,
+                "endSecond": 15,
                 "actionPrompt": "奥伦保持背对，Karin避开Rifa的视线，三人纵深关系稳定",
-                "imagePrompt": "静态画面：奥伦保持背对，Karin避开Rifa的视线，三人纵深关系稳定；可见表演：表情保持稳定；视线朝向当前主体；二人立在门槛，奥伦背对，Karin隐瞒梦境；景别：远景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：银纹冷光+炉光，冷银+暗琥珀；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
+                "imagePrompt": "静态关键帧：静态画面：奥伦保持背对，Karin避开Rifa的视线，三人纵深关系稳定；可见表演状态：情绪在下一镜头切点前完成情绪落点；面部固定最终表情，避免切点前漂移；视线指向下一动作或转场方向；身体与手部二人立在门槛，奥伦背对，Karin隐瞒梦境；景别（本帧固定）：LS；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按裂纹似梦中断口的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：银纹冷光+炉光；冷银+暗琥珀；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
               }
             ],
-            "referenceCount": {
-              "min": 3,
-              "max": 9
-            },
             "referenceManifest": [
               {
                 "alias": "@图片1",
                 "role": "previous_actual_tail",
                 "purpose": "上一镜当前视频版本的已人工验收实际尾帧，仅作为本镜唯一连续性锚点",
-                "shotId": "SH021"
+                "shotId": "SH008"
               },
               {
                 "alias": "@图片2",
@@ -6830,17 +3529,25 @@
                 "purpose": "道具基准图：保持 Karin的断剑 的形状、持有人与当前状态一致",
                 "assetId": "P01"
               }
-            ]
-          }
+            ],
+            "referenceCount": {
+              "min": 3,
+              "max": 9
+            }
+          },
+          "sourceAssetIds": [],
+          "continuityStatus": "ready",
+          "videoMode": "storyboard",
+          "storyboardFrameMode": "all_frames"
         },
         {
-          "code": "SH023",
-          "order": 23,
-          "title": "你看见的是结果 1/3",
-          "description": "奥伦质疑“被打断”",
+          "code": "SH010",
+          "order": 10,
+          "title": "你看见的是结果",
+          "description": "奥伦质疑“被打断”；你看见的是结果的连续反应与动作过渡；断剑平放铁砧，锤柄抵住断口",
           "sourceText": "Rifa守在门与Karin之间，直到Karin主动走向铁砧才让开半步。\n奥伦不看推荐信：“谁告诉你，它是被打断的？”\nKarin：“我看着它断的。”\n奥伦：“你看见的是结果。”\n无头锤柄碰触断口。炉火缩成一线，店内金属全部朝铁砧偏转。\n黑湖、倒塔、四只手。这一次，Karin看清其中一只手腕系着暗红细线。他转头看向Rifa的辫绳。Rifa立刻抓住他的手腕，幻象破碎。\n奥伦：“别放开。剑正在借她的记忆认你。”\nRifa：“你知道它为什么断？”\n奥伦取出带四点印记的木匣：“它不是断了。它在拒绝保持完整。”\n他把木匣推向Karin：“而你，不是第一个带它来这里的人。”\n铜镜中没有店内三人，只有高塔上的斗篷身影。Rifa的短刃滑出半寸。\nRifa：“上一个人是谁？”\n奥伦熄灭炉火。黑暗中，木匣再次耳语：“你又来迟了。”\n切黑。",
           "shotBoundary": "锤柄触剑切",
-          "dialogue": "奥伦：谁告诉你，它是被打断的？",
+          "dialogue": "奥伦：谁告诉你，它是被打断的？；Karin：我看着它断的。；奥伦：你看见的是结果。",
           "narration": "",
           "utterances": [
             {
@@ -6849,13 +3556,25 @@
               "type": "dialogue",
               "speaker": "奥伦",
               "text": "谁告诉你，它是被打断的？"
+            },
+            {
+              "id": "D21",
+              "order": 2,
+              "type": "dialogue",
+              "speaker": "Karin",
+              "text": "我看着它断的。"
+            },
+            {
+              "id": "D22",
+              "order": 3,
+              "type": "dialogue",
+              "speaker": "奥伦",
+              "text": "你看见的是结果。"
             }
           ],
           "imagePrompt": "静态画面：奥伦站在铁砧旁抬眼看向Karin手中的断剑；可见表演：表情：疑惑转为戒备；视线：锁定关键道具；手部：保持与断剑或道具的明确接触；景别：中近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：炉火侧光，煤黑+琥珀；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。",
-          "videoPrompt": "动态意图：奥伦站在铁砧旁抬眼看向Karin手中的断剑到断剑平放在铁砧上，锤柄抵住断口；起始可见状态：奥伦站在铁砧旁抬眼看向Karin手中的断剑；触发：Karin走到铁砧前，Rifa守在门与他之间；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：侧向滑轨；声音：炉火、极远街声；断剑放上铁砧、木柄轻触；单一低弦持续，不抢台词；结束画面：断剑平放在铁砧上，锤柄抵住断口；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无现代工具、无角色变形、无过量火花。。",
+          "videoPrompt": "动态意图：奥伦站在铁砧旁抬眼看向Karin手中的断剑到锤柄抵住断口，三人停在同一纵深关系中；起始可见状态：奥伦站在铁砧旁抬眼看向Karin手中的断剑；主体动作与反应：断剑平放铁砧，锤柄抵住断口；一个主运镜：侧向滑轨；环境压力与声音：炉火、极远街声；断剑放上铁砧、木柄轻触；单一低弦持续，不抢台词；结束画面：锤柄抵住断口，三人停在同一纵深关系中；针对性约束：无字幕、无现代工具、无角色变形、无过量火花。",
           "cameraMotion": "侧向滑轨",
-          "startFramePrompt": "静态画面：奥伦站在铁砧旁抬眼看向Karin手中的断剑；可见表演：表情：疑惑转为戒备；视线：锁定关键道具；手部：保持与断剑或道具的明确接触；景别：中近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：炉火侧光，煤黑+琥珀；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。；首帧仅继承@图片1对应的上一镜已验收实际尾帧状态。",
-          "endFramePrompt": "静态画面：断剑平放在铁砧上，锤柄抵住断口；可见表演：表情保持稳定；视线朝向当前主体；断剑平放铁砧，锤柄抵住断口；景别：中近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：炉火侧光，煤黑+琥珀；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。；出口状态保存为当前视频版本实际尾帧并在下游继承前人工验收。",
           "negativePrompt": "无字幕、无现代工具、无角色变形、无过量火花。",
           "continuity": {
             "shotSize": "MCU",
@@ -6869,7 +3588,7 @@
             "axisRule": "保持180度关系轴线，转场时明确切换",
             "continuityNotes": "锤柄触剑切"
           },
-          "duration": 5,
+          "duration": 15,
           "characterCodes": [
             "C01",
             "C02",
@@ -6882,7 +3601,7 @@
           "clueCodes": [],
           "locationCode": "S04",
           "storySceneCode": "SC07",
-          "timecode": "135-140s",
+          "timecode": "135-150s",
           "dramaticFunction": "合/试探",
           "lens": "50mm",
           "lighting": "炉火侧光",
@@ -7025,7 +3744,7 @@
                 "gaze": "沿镜头轴线向右",
                 "pose": "克制站姿或自然坐姿",
                 "expression": "按本镜表演说明",
-                "action": "奥伦质疑“被打断”"
+                "action": "断剑平放铁砧，锤柄抵住断口"
               },
               {
                 "assetId": "C02",
@@ -7034,7 +3753,7 @@
                 "gaze": "沿镜头轴线向左",
                 "pose": "克制站姿或自然坐姿",
                 "expression": "按本镜表演说明",
-                "action": "奥伦质疑“被打断”"
+                "action": "断剑平放铁砧，锤柄抵住断口"
               },
               {
                 "assetId": "C06",
@@ -7043,18 +3762,18 @@
                 "gaze": "沿镜头轴线向左",
                 "pose": "克制站姿或自然坐姿",
                 "expression": "按本镜表演说明",
-                "action": "奥伦质疑“被打断”"
+                "action": "断剑平放铁砧，锤柄抵住断口"
               }
             ],
             "props": [
               {
                 "assetId": "P01",
-                "state": "奥伦质疑“被打断”",
+                "state": "断剑平放铁砧，锤柄抵住断口",
                 "holderId": "C01"
               },
               {
                 "assetId": "P07",
-                "state": "奥伦质疑“被打断”",
+                "state": "断剑平放铁砧，锤柄抵住断口",
                 "holderId": "C06"
               }
             ],
@@ -7063,10 +3782,6 @@
             "axis": "保持180度人物关系轴线",
             "screenDirection": "角色移动方向沿场景既定动线"
           },
-          "sourceAssetIds": [],
-          "continuityStatus": "planned",
-          "videoMode": "reference",
-          "storyboardFrameMode": "all_frames",
           "framePlan": {
             "start": {
               "source": "previous_accepted_actual_tail"
@@ -7076,357 +3791,76 @@
             },
             "frames": [
               {
-                "id": "SH023-F01",
+                "id": "SH010-F01",
                 "sequenceIndex": 1,
                 "startSecond": 0,
-                "endSecond": 1.667,
+                "endSecond": 2,
                 "actionPrompt": "奥伦站在铁砧旁抬眼看向Karin手中的断剑",
-                "imagePrompt": "静态画面：奥伦站在铁砧旁抬眼看向Karin手中的断剑；可见表演：表情：疑惑转为戒备；视线：锁定关键道具；手部：保持与断剑或道具的明确接触；景别：中近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：炉火侧光，煤黑+琥珀；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
+                "imagePrompt": "静态关键帧：静态画面：奥伦站在铁砧旁抬眼看向Karin手中的断剑；可见表演状态：情绪保持与上一状态一致；面部眉眼和下颌保持可读的初始反应；视线沿当前镜头动作方向；身体与手部进入奥伦质疑“被打断”；景别（本帧固定）：MCU；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按奥伦质疑的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：炉火侧光；煤黑+琥珀；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
               },
               {
-                "id": "SH023-F02",
+                "id": "SH010-F02",
                 "sequenceIndex": 2,
-                "startSecond": 1.667,
-                "endSecond": 3.333,
+                "startSecond": 2,
+                "endSecond": 4,
                 "actionPrompt": "Karin走到铁砧前，Rifa守在门与他之间",
-                "imagePrompt": "静态画面：Karin走到铁砧前，Rifa守在门与他之间；可见表演：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；景别：中近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：炉火侧光，煤黑+琥珀；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
+                "imagePrompt": "静态关键帧：静态画面：Karin走到铁砧前，Rifa守在门与他之间；可见表演状态：情绪压力或目标逐步显现；面部眉眼、嘴角或下颌出现与动作对应的细微变化；视线短暂聚焦关键人物或道具；身体与手部完成主要动作并保留反应停顿；景别（本帧固定）：MCU；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按奥伦质疑的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：炉火侧光；煤黑+琥珀；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
               },
               {
-                "id": "SH023-F03",
+                "id": "SH010-F03",
                 "sequenceIndex": 3,
-                "startSecond": 3.333,
-                "endSecond": 5,
+                "startSecond": 4,
+                "endSecond": 6,
                 "actionPrompt": "断剑平放在铁砧上，锤柄抵住断口",
-                "imagePrompt": "静态画面：断剑平放在铁砧上，锤柄抵住断口；可见表演：表情保持稳定；视线朝向当前主体；断剑平放铁砧，锤柄抵住断口；景别：中近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：炉火侧光，煤黑+琥珀；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
-              }
-            ],
-            "referenceCount": {
-              "min": 3,
-              "max": 9
-            },
-            "referenceManifest": [
-              {
-                "alias": "@图片1",
-                "role": "previous_actual_tail",
-                "purpose": "上一镜当前视频版本的已人工验收实际尾帧，仅作为本镜唯一连续性锚点",
-                "shotId": "SH022"
+                "imagePrompt": "静态关键帧：静态画面：断剑平放在铁砧上，锤柄抵住断口；可见表演状态：情绪在下一镜头切点前完成情绪落点；面部固定最终表情，避免切点前漂移；视线指向下一动作或转场方向；身体与手部断剑平放铁砧，锤柄抵住断口；景别（本帧固定）：MCU；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按奥伦质疑的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：炉火侧光；煤黑+琥珀；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
               },
               {
-                "alias": "@图片2",
-                "role": "character_anchor",
-                "purpose": "角色基准图：保持 Karin 的身份特征、服装与道具不漂移",
-                "assetId": "C01"
-              },
-              {
-                "alias": "@图片3",
-                "role": "character_anchor",
-                "purpose": "角色基准图：保持 Rifa 的身份特征、服装与道具不漂移",
-                "assetId": "C02"
-              },
-              {
-                "alias": "@图片4",
-                "role": "character_anchor",
-                "purpose": "角色基准图：保持 奥伦·奈特 的身份特征、服装与道具不漂移",
-                "assetId": "C06"
-              },
-              {
-                "alias": "@图片5",
-                "role": "scene_anchor",
-                "purpose": "场景基准图：保持空间结构、光向与轴线一致",
-                "assetId": "S04"
-              },
-              {
-                "alias": "@图片6",
-                "role": "prop_anchor",
-                "purpose": "道具基准图：保持 Karin的断剑 的形状、持有人与当前状态一致",
-                "assetId": "P01"
-              },
-              {
-                "alias": "@图片7",
-                "role": "prop_anchor",
-                "purpose": "道具基准图：保持 无头锤柄 的形状、持有人与当前状态一致",
-                "assetId": "P07"
-              }
-            ]
-          }
-        },
-        {
-          "code": "SH024",
-          "order": 24,
-          "title": "你看见的是结果 2/3",
-          "description": "你看见的是结果的连续反应与动作过渡",
-          "sourceText": "Rifa守在门与Karin之间，直到Karin主动走向铁砧才让开半步。\n奥伦不看推荐信：“谁告诉你，它是被打断的？”\nKarin：“我看着它断的。”\n奥伦：“你看见的是结果。”\n无头锤柄碰触断口。炉火缩成一线，店内金属全部朝铁砧偏转。\n黑湖、倒塔、四只手。这一次，Karin看清其中一只手腕系着暗红细线。他转头看向Rifa的辫绳。Rifa立刻抓住他的手腕，幻象破碎。\n奥伦：“别放开。剑正在借她的记忆认你。”\nRifa：“你知道它为什么断？”\n奥伦取出带四点印记的木匣：“它不是断了。它在拒绝保持完整。”\n他把木匣推向Karin：“而你，不是第一个带它来这里的人。”\n铜镜中没有店内三人，只有高塔上的斗篷身影。Rifa的短刃滑出半寸。\nRifa：“上一个人是谁？”\n奥伦熄灭炉火。黑暗中，木匣再次耳语：“你又来迟了。”\n切黑。",
-          "shotBoundary": "锤柄触剑切",
-          "dialogue": "Karin：我看着它断的。",
-          "narration": "",
-          "utterances": [
-            {
-              "id": "D21",
-              "order": 1,
-              "type": "dialogue",
-              "speaker": "Karin",
-              "text": "我看着它断的。"
-            }
-          ],
-          "imagePrompt": "静态画面：奥伦侧身站在铁砧旁，目光落向Karin手中的断剑；可见表演：表情：疑惑转为戒备；视线：锁定关键道具；手部：保持与断剑或道具的明确接触；景别：中近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：炉火侧光，煤黑+琥珀；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。",
-          "videoPrompt": "动态意图：奥伦侧身站在铁砧旁，目光落向Karin手中的断剑到锤柄抵住断口，三人停在同一纵深关系中；起始可见状态：奥伦侧身站在铁砧旁，目光落向Karin手中的断剑；触发：Karin把断剑平放在铁砧上，Rifa守在门与他之间；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：侧向滑轨；声音：炉火、极远街声；断剑放上铁砧、木柄轻触；单一低弦持续，不抢台词；结束画面：锤柄抵住断口，三人停在同一纵深关系中；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无现代工具、无角色变形、无过量火花。。",
-          "cameraMotion": "侧向滑轨",
-          "startFramePrompt": "静态画面：奥伦侧身站在铁砧旁，目光落向Karin手中的断剑；可见表演：表情：疑惑转为戒备；视线：锁定关键道具；手部：保持与断剑或道具的明确接触；景别：中近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：炉火侧光，煤黑+琥珀；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。；首帧仅继承@图片1对应的上一镜已验收实际尾帧状态。",
-          "endFramePrompt": "静态画面：锤柄抵住断口，三人停在同一纵深关系中；可见表演：表情保持稳定；视线朝向当前主体；断剑平放铁砧，锤柄抵住断口；景别：中近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：炉火侧光，煤黑+琥珀；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。；出口状态保存为当前视频版本实际尾帧并在下游继承前人工验收。",
-          "negativePrompt": "无字幕、无现代工具、无角色变形、无过量火花。",
-          "continuity": {
-            "shotSize": "MCU",
-            "cameraAngle": "视线高度平视，沿动作轴线拍摄",
-            "composition": "主体保持在9:16安全区，动作方向留出前进空间",
-            "characterBlocking": "按奥伦质疑“被打断”的动作关系安排站位",
-            "gazeDirection": "沿叙事动作方向，反应时回看对手或关键道具",
-            "actionStart": "奥伦质疑“被打断”",
-            "actionEnd": "断剑平放铁砧，锤柄抵住断口",
-            "screenDirection": "保持同侧屏幕运动方向",
-            "axisRule": "保持180度关系轴线，转场时明确切换",
-            "continuityNotes": "锤柄触剑切"
-          },
-          "duration": 5,
-          "characterCodes": [
-            "C01",
-            "C02",
-            "C06"
-          ],
-          "propCodes": [
-            "P01",
-            "P07"
-          ],
-          "clueCodes": [],
-          "locationCode": "S04",
-          "storySceneCode": "SC07",
-          "timecode": "140-145s",
-          "dramaticFunction": "合/试探",
-          "lens": "50mm",
-          "lighting": "炉火侧光",
-          "colorPalette": "煤黑+琥珀",
-          "transitionOut": "锤柄触剑切",
-          "performanceNotes": "谁告诉你，它是被打断的？；我看着它断的。；你看见的是结果。",
-          "performancePlan": {
-            "emotionalObjective": "围绕奥伦质疑“被打断”完成当前镜头的外在行动目标",
-            "emotionalArc": "从进入奥伦质疑“被打断”的克制状态开始，经由动作反应推进，在断剑平放铁砧，锤柄抵住断口前收束",
-            "speechStyle": "台词贴合当下处境，语气清晰克制，重音落在行动关键信息",
-            "pace": "按镜头时长均匀推进，动作变化处短暂停顿，转场前收住",
-            "breath": "起始自然吸气，动作变化处短暂停顿，结束以呼气完成收束",
-            "restraintLevel": "中等克制，避免夸张表演",
-            "beats": {
-              "start": {
-                "emotion": "保持与上一状态一致",
-                "facialAction": "眉眼和下颌保持可读的初始反应",
-                "gaze": "沿当前镜头动作方向",
-                "bodyAction": "进入奥伦质疑“被打断”"
-              },
-              "middle": {
-                "emotion": "压力或目标逐步显现",
-                "facialAction": "眉眼、嘴角或下颌出现与动作对应的细微变化",
-                "gaze": "短暂聚焦关键人物或道具",
-                "bodyAction": "完成主要动作并保留反应停顿"
-              },
-              "end": {
-                "emotion": "在下一镜头切点前完成情绪落点",
-                "facialAction": "固定最终表情，避免切点前漂移",
-                "gaze": "指向下一动作或转场方向",
-                "bodyAction": "断剑平放铁砧，锤柄抵住断口"
-              }
-            }
-          },
-          "dialoguePerformance": [
-            {
-              "utteranceId": "D21",
-              "intent": "推动当前镜头行动并回应对手或环境",
-              "tone": "贴合当前情绪，清晰自然",
-              "pace": "按语义分句，中速完成",
-              "pause": "关键信息前短停，句末自然收束",
-              "emphasis": "我看着它断的。",
-              "facialReactionBefore": "先以视线和眉眼确认对方或关键道具",
-              "facialReactionDuring": "说话时保持与行动一致的面部反应",
-              "facialReactionAfter": "说完保留短暂反应，衔接下一动作"
-            },
-            {
-              "utteranceId": "D20",
-              "intent": "推动当前镜头行动并回应对手或环境",
-              "tone": "贴合当前情绪，清晰自然",
-              "pace": "按语义分句，中速完成",
-              "pause": "关键信息前短停，句末自然收束",
-              "emphasis": "谁告诉你，它是被打断的？",
-              "facialReactionBefore": "先以视线和眉眼确认对方或关键道具",
-              "facialReactionDuring": "说话时保持与行动一致的面部反应",
-              "facialReactionAfter": "说完保留短暂反应，衔接下一动作"
-            },
-            {
-              "utteranceId": "D22",
-              "intent": "推动当前镜头行动并回应对手或环境",
-              "tone": "贴合当前情绪，清晰自然",
-              "pace": "按语义分句，中速完成",
-              "pause": "关键信息前短停，句末自然收束",
-              "emphasis": "你看见的是结果。",
-              "facialReactionBefore": "先以视线和眉眼确认对方或关键道具",
-              "facialReactionDuring": "说话时保持与行动一致的面部反应",
-              "facialReactionAfter": "说完保留短暂反应，衔接下一动作"
-            }
-          ],
-          "lightingPlan": {
-            "palette": "煤黑+琥珀",
-            "colorTemperature": "主光冷暖关系沿用本场设定，避免相邻镜头跳变",
-            "keyLight": "炉火侧光作为主光，明确来自画面主方向并照亮主体面部",
-            "fillLight": "弱补光保留面部细节，阴影侧不完全压黑",
-            "rimLight": "以轻微轮廓光分离人物与背景，不制造硬边光晕",
-            "contrast": "中等反差，主体层次清晰，避免高光溢出",
-            "materialResponse": "金属、皮革和织物按真实材质反射，亮部克制",
-            "skinToneProtection": "保护肤色自然，不被环境色完全染色",
-            "inheritFromPrevious": "继承上一镜主光方向、色温和环境亮度",
-            "transitionToNext": "在动作结束处平滑过渡到下一镜主光和色板"
-          },
-          "sound": {
-            "ambience": "炉火、极远街声",
-            "soundEffects": "断剑放上铁砧、木柄轻触",
-            "music": "单一低弦持续，不抢台词"
-          },
-          "entryState": {
-            "characters": [
-              {
-                "assetId": "C01",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面左侧或前景",
-                "gaze": "沿镜头轴线向右",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "奥伦质疑“被打断”"
-              },
-              {
-                "assetId": "C02",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "奥伦质疑“被打断”"
-              },
-              {
-                "assetId": "C06",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "奥伦质疑“被打断”"
-              }
-            ],
-            "props": [
-              {
-                "assetId": "P01",
-                "state": "奥伦质疑“被打断”",
-                "holderId": "C01"
-              },
-              {
-                "assetId": "P07",
-                "state": "奥伦质疑“被打断”",
-                "holderId": "C06"
-              }
-            ],
-            "environment": "铸剑师的警告",
-            "lighting": "炉火侧光",
-            "axis": "保持180度人物关系轴线",
-            "screenDirection": "角色移动方向沿场景既定动线"
-          },
-          "exitState": {
-            "characters": [
-              {
-                "assetId": "C01",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面左侧或前景",
-                "gaze": "沿镜头轴线向右",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "你看见的是结果的连续反应与动作过渡"
-              },
-              {
-                "assetId": "C02",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "你看见的是结果的连续反应与动作过渡"
-              },
-              {
-                "assetId": "C06",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "你看见的是结果的连续反应与动作过渡"
-              }
-            ],
-            "props": [
-              {
-                "assetId": "P01",
-                "state": "你看见的是结果的连续反应与动作过渡",
-                "holderId": "C01"
-              },
-              {
-                "assetId": "P07",
-                "state": "你看见的是结果的连续反应与动作过渡",
-                "holderId": "C06"
-              }
-            ],
-            "environment": "铸剑师的警告",
-            "lighting": "炉火侧光",
-            "axis": "保持180度人物关系轴线",
-            "screenDirection": "角色移动方向沿场景既定动线"
-          },
-          "sourceAssetIds": [],
-          "continuityStatus": "planned",
-          "videoMode": "reference",
-          "storyboardFrameMode": "all_frames",
-          "framePlan": {
-            "start": {
-              "source": "previous_accepted_actual_tail"
-            },
-            "end": {
-              "required": true
-            },
-            "frames": [
-              {
-                "id": "SH024-F01",
-                "sequenceIndex": 1,
-                "startSecond": 0,
-                "endSecond": 1.667,
+                "id": "SH010-F04",
+                "sequenceIndex": 4,
+                "startSecond": 6,
+                "endSecond": 8,
                 "actionPrompt": "奥伦侧身站在铁砧旁，目光落向Karin手中的断剑",
-                "imagePrompt": "静态画面：奥伦侧身站在铁砧旁，目光落向Karin手中的断剑；可见表演：表情：疑惑转为戒备；视线：锁定关键道具；手部：保持与断剑或道具的明确接触；景别：中近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：炉火侧光，煤黑+琥珀；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
+                "imagePrompt": "静态关键帧：静态画面：奥伦侧身站在铁砧旁，目光落向Karin手中的断剑；可见表演状态：情绪保持与上一状态一致；面部眉眼和下颌保持可读的初始反应；视线沿当前镜头动作方向；身体与手部进入奥伦质疑“被打断”；景别（本帧固定）：MCU；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按奥伦质疑的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：炉火侧光；煤黑+琥珀；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
               },
               {
-                "id": "SH024-F02",
-                "sequenceIndex": 2,
-                "startSecond": 1.667,
-                "endSecond": 3.333,
+                "id": "SH010-F05",
+                "sequenceIndex": 5,
+                "startSecond": 8,
+                "endSecond": 10,
                 "actionPrompt": "Karin把断剑平放在铁砧上，Rifa守在门与他之间",
-                "imagePrompt": "静态画面：Karin把断剑平放在铁砧上，Rifa守在门与他之间；可见表演：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；景别：中近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：炉火侧光，煤黑+琥珀；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
+                "imagePrompt": "静态关键帧：静态画面：Karin把断剑平放在铁砧上，Rifa守在门与他之间；可见表演状态：情绪压力或目标逐步显现；面部眉眼、嘴角或下颌出现与动作对应的细微变化；视线短暂聚焦关键人物或道具；身体与手部完成主要动作并保留反应停顿；景别（本帧固定）：MCU；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按奥伦质疑的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：炉火侧光；煤黑+琥珀；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
               },
               {
-                "id": "SH024-F03",
-                "sequenceIndex": 3,
-                "startSecond": 3.333,
-                "endSecond": 5,
+                "id": "SH010-F06",
+                "sequenceIndex": 6,
+                "startSecond": 10,
+                "endSecond": 12,
                 "actionPrompt": "锤柄抵住断口，三人停在同一纵深关系中",
-                "imagePrompt": "静态画面：锤柄抵住断口，三人停在同一纵深关系中；可见表演：表情保持稳定；视线朝向当前主体；断剑平放铁砧，锤柄抵住断口；景别：中近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：炉火侧光，煤黑+琥珀；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
+                "imagePrompt": "静态关键帧：静态画面：锤柄抵住断口，三人停在同一纵深关系中；可见表演状态：情绪在下一镜头切点前完成情绪落点；面部固定最终表情，避免切点前漂移；视线指向下一动作或转场方向；身体与手部断剑平放铁砧，锤柄抵住断口；景别（本帧固定）：MCU；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按奥伦质疑的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：炉火侧光；煤黑+琥珀；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
+              },
+              {
+                "id": "SH010-F07",
+                "sequenceIndex": 7,
+                "startSecond": 12,
+                "endSecond": 14,
+                "actionPrompt": "奥伦的手停在断剑上方，Karin站在铁砧前",
+                "imagePrompt": "静态关键帧：静态画面：奥伦的手停在断剑上方，Karin站在铁砧前；可见表演状态：情绪保持与上一状态一致；面部眉眼和下颌保持可读的初始反应；视线沿当前镜头动作方向；身体与手部进入奥伦质疑“被打断”；景别（本帧固定）：MCU；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按奥伦质疑的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：炉火侧光；煤黑+琥珀；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
+              },
+              {
+                "id": "SH010-F08",
+                "sequenceIndex": 8,
+                "startSecond": 14,
+                "endSecond": 15,
+                "actionPrompt": "Karin把断剑平放在铁砧上，Rifa保持门口站位",
+                "imagePrompt": "静态关键帧：静态画面：Karin把断剑平放在铁砧上，Rifa保持门口站位；可见表演状态：情绪压力或目标逐步显现；面部眉眼、嘴角或下颌出现与动作对应的细微变化；视线短暂聚焦关键人物或道具；身体与手部完成主要动作并保留反应停顿；景别（本帧固定）：MCU；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按奥伦质疑的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：炉火侧光；煤黑+琥珀；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
               }
             ],
-            "referenceCount": {
-              "min": 3,
-              "max": 9
-            },
             "referenceManifest": [
               {
                 "alias": "@图片1",
                 "role": "previous_actual_tail",
                 "purpose": "上一镜当前视频版本的已人工验收实际尾帧，仅作为本镜唯一连续性锚点",
-                "shotId": "SH023"
+                "shotId": "SH009"
               },
               {
                 "alias": "@图片2",
@@ -7464,331 +3898,22 @@
                 "purpose": "道具基准图：保持 无头锤柄 的形状、持有人与当前状态一致",
                 "assetId": "P07"
               }
-            ]
-          }
-        },
-        {
-          "code": "SH025",
-          "order": 25,
-          "title": "你看见的是结果 3/3",
-          "description": "断剑平放铁砧，锤柄抵住断口",
-          "sourceText": "Rifa守在门与Karin之间，直到Karin主动走向铁砧才让开半步。\n奥伦不看推荐信：“谁告诉你，它是被打断的？”\nKarin：“我看着它断的。”\n奥伦：“你看见的是结果。”\n无头锤柄碰触断口。炉火缩成一线，店内金属全部朝铁砧偏转。\n黑湖、倒塔、四只手。这一次，Karin看清其中一只手腕系着暗红细线。他转头看向Rifa的辫绳。Rifa立刻抓住他的手腕，幻象破碎。\n奥伦：“别放开。剑正在借她的记忆认你。”\nRifa：“你知道它为什么断？”\n奥伦取出带四点印记的木匣：“它不是断了。它在拒绝保持完整。”\n他把木匣推向Karin：“而你，不是第一个带它来这里的人。”\n铜镜中没有店内三人，只有高塔上的斗篷身影。Rifa的短刃滑出半寸。\nRifa：“上一个人是谁？”\n奥伦熄灭炉火。黑暗中，木匣再次耳语：“你又来迟了。”\n切黑。",
-          "shotBoundary": "锤柄触剑切",
-          "dialogue": "奥伦：你看见的是结果。",
-          "narration": "",
-          "utterances": [
-            {
-              "id": "D22",
-              "order": 1,
-              "type": "dialogue",
-              "speaker": "奥伦",
-              "text": "你看见的是结果。"
+            ],
+            "referenceCount": {
+              "min": 3,
+              "max": 9
             }
-          ],
-          "imagePrompt": "静态画面：奥伦的手停在断剑上方，Karin站在铁砧前；可见表演：表情：疑惑转为戒备；视线：锁定关键道具；手部：保持与断剑或道具的明确接触；景别：中近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：炉火侧光，煤黑+琥珀；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。",
-          "videoPrompt": "动态意图：奥伦的手停在断剑上方，Karin站在铁砧前到锤柄抵住断口，三人停在同一纵深关系中；起始可见状态：奥伦的手停在断剑上方，Karin站在铁砧前；触发：Karin把断剑平放在铁砧上，Rifa保持门口站位；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：侧向滑轨；声音：炉火、极远街声；断剑放上铁砧、木柄轻触；单一低弦持续，不抢台词；结束画面：锤柄抵住断口，三人停在同一纵深关系中；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无现代工具、无角色变形、无过量火花。。",
-          "cameraMotion": "侧向滑轨",
-          "startFramePrompt": "静态画面：奥伦的手停在断剑上方，Karin站在铁砧前；可见表演：表情：疑惑转为戒备；视线：锁定关键道具；手部：保持与断剑或道具的明确接触；景别：中近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：炉火侧光，煤黑+琥珀；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。；首帧仅继承@图片1对应的上一镜已验收实际尾帧状态。",
-          "endFramePrompt": "静态画面：锤柄抵住断口，三人停在同一纵深关系中；可见表演：表情保持稳定；视线朝向当前主体；断剑平放铁砧，锤柄抵住断口；景别：中近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：炉火侧光，煤黑+琥珀；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。；出口状态保存为当前视频版本实际尾帧并在下游继承前人工验收。",
-          "negativePrompt": "无字幕、无现代工具、无角色变形、无过量火花。",
-          "continuity": {
-            "shotSize": "MCU",
-            "cameraAngle": "视线高度平视，沿动作轴线拍摄",
-            "composition": "主体保持在9:16安全区，动作方向留出前进空间",
-            "characterBlocking": "按奥伦质疑“被打断”的动作关系安排站位",
-            "gazeDirection": "沿叙事动作方向，反应时回看对手或关键道具",
-            "actionStart": "奥伦质疑“被打断”",
-            "actionEnd": "断剑平放铁砧，锤柄抵住断口",
-            "screenDirection": "保持同侧屏幕运动方向",
-            "axisRule": "保持180度关系轴线，转场时明确切换",
-            "continuityNotes": "锤柄触剑切"
-          },
-          "duration": 5,
-          "characterCodes": [
-            "C01",
-            "C02",
-            "C06"
-          ],
-          "propCodes": [
-            "P01",
-            "P07"
-          ],
-          "clueCodes": [],
-          "locationCode": "S04",
-          "storySceneCode": "SC07",
-          "timecode": "145-150s",
-          "dramaticFunction": "合/试探",
-          "lens": "50mm",
-          "lighting": "炉火侧光",
-          "colorPalette": "煤黑+琥珀",
-          "transitionOut": "锤柄触剑切",
-          "performanceNotes": "谁告诉你，它是被打断的？；我看着它断的。；你看见的是结果。",
-          "performancePlan": {
-            "emotionalObjective": "围绕奥伦质疑“被打断”完成当前镜头的外在行动目标",
-            "emotionalArc": "从进入奥伦质疑“被打断”的克制状态开始，经由动作反应推进，在断剑平放铁砧，锤柄抵住断口前收束",
-            "speechStyle": "台词贴合当下处境，语气清晰克制，重音落在行动关键信息",
-            "pace": "按镜头时长均匀推进，动作变化处短暂停顿，转场前收住",
-            "breath": "起始自然吸气，动作变化处短暂停顿，结束以呼气完成收束",
-            "restraintLevel": "中等克制，避免夸张表演",
-            "beats": {
-              "start": {
-                "emotion": "保持与上一状态一致",
-                "facialAction": "眉眼和下颌保持可读的初始反应",
-                "gaze": "沿当前镜头动作方向",
-                "bodyAction": "进入奥伦质疑“被打断”"
-              },
-              "middle": {
-                "emotion": "压力或目标逐步显现",
-                "facialAction": "眉眼、嘴角或下颌出现与动作对应的细微变化",
-                "gaze": "短暂聚焦关键人物或道具",
-                "bodyAction": "完成主要动作并保留反应停顿"
-              },
-              "end": {
-                "emotion": "在下一镜头切点前完成情绪落点",
-                "facialAction": "固定最终表情，避免切点前漂移",
-                "gaze": "指向下一动作或转场方向",
-                "bodyAction": "断剑平放铁砧，锤柄抵住断口"
-              }
-            }
-          },
-          "dialoguePerformance": [
-            {
-              "utteranceId": "D22",
-              "intent": "推动当前镜头行动并回应对手或环境",
-              "tone": "贴合当前情绪，清晰自然",
-              "pace": "按语义分句，中速完成",
-              "pause": "关键信息前短停，句末自然收束",
-              "emphasis": "你看见的是结果。",
-              "facialReactionBefore": "先以视线和眉眼确认对方或关键道具",
-              "facialReactionDuring": "说话时保持与行动一致的面部反应",
-              "facialReactionAfter": "说完保留短暂反应，衔接下一动作"
-            },
-            {
-              "utteranceId": "D20",
-              "intent": "推动当前镜头行动并回应对手或环境",
-              "tone": "贴合当前情绪，清晰自然",
-              "pace": "按语义分句，中速完成",
-              "pause": "关键信息前短停，句末自然收束",
-              "emphasis": "谁告诉你，它是被打断的？",
-              "facialReactionBefore": "先以视线和眉眼确认对方或关键道具",
-              "facialReactionDuring": "说话时保持与行动一致的面部反应",
-              "facialReactionAfter": "说完保留短暂反应，衔接下一动作"
-            },
-            {
-              "utteranceId": "D21",
-              "intent": "推动当前镜头行动并回应对手或环境",
-              "tone": "贴合当前情绪，清晰自然",
-              "pace": "按语义分句，中速完成",
-              "pause": "关键信息前短停，句末自然收束",
-              "emphasis": "我看着它断的。",
-              "facialReactionBefore": "先以视线和眉眼确认对方或关键道具",
-              "facialReactionDuring": "说话时保持与行动一致的面部反应",
-              "facialReactionAfter": "说完保留短暂反应，衔接下一动作"
-            }
-          ],
-          "lightingPlan": {
-            "palette": "煤黑+琥珀",
-            "colorTemperature": "主光冷暖关系沿用本场设定，避免相邻镜头跳变",
-            "keyLight": "炉火侧光作为主光，明确来自画面主方向并照亮主体面部",
-            "fillLight": "弱补光保留面部细节，阴影侧不完全压黑",
-            "rimLight": "以轻微轮廓光分离人物与背景，不制造硬边光晕",
-            "contrast": "中等反差，主体层次清晰，避免高光溢出",
-            "materialResponse": "金属、皮革和织物按真实材质反射，亮部克制",
-            "skinToneProtection": "保护肤色自然，不被环境色完全染色",
-            "inheritFromPrevious": "继承上一镜主光方向、色温和环境亮度",
-            "transitionToNext": "在动作结束处平滑过渡到下一镜主光和色板"
-          },
-          "sound": {
-            "ambience": "炉火、极远街声",
-            "soundEffects": "断剑放上铁砧、木柄轻触",
-            "music": "单一低弦持续，不抢台词"
-          },
-          "entryState": {
-            "characters": [
-              {
-                "assetId": "C01",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面左侧或前景",
-                "gaze": "沿镜头轴线向右",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "你看见的是结果的连续反应与动作过渡"
-              },
-              {
-                "assetId": "C02",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "你看见的是结果的连续反应与动作过渡"
-              },
-              {
-                "assetId": "C06",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "你看见的是结果的连续反应与动作过渡"
-              }
-            ],
-            "props": [
-              {
-                "assetId": "P01",
-                "state": "你看见的是结果的连续反应与动作过渡",
-                "holderId": "C01"
-              },
-              {
-                "assetId": "P07",
-                "state": "你看见的是结果的连续反应与动作过渡",
-                "holderId": "C06"
-              }
-            ],
-            "environment": "铸剑师的警告",
-            "lighting": "炉火侧光",
-            "axis": "保持180度人物关系轴线",
-            "screenDirection": "角色移动方向沿场景既定动线"
-          },
-          "exitState": {
-            "characters": [
-              {
-                "assetId": "C01",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面左侧或前景",
-                "gaze": "沿镜头轴线向右",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "断剑平放铁砧，锤柄抵住断口"
-              },
-              {
-                "assetId": "C02",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "断剑平放铁砧，锤柄抵住断口"
-              },
-              {
-                "assetId": "C06",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "断剑平放铁砧，锤柄抵住断口"
-              }
-            ],
-            "props": [
-              {
-                "assetId": "P01",
-                "state": "断剑平放铁砧，锤柄抵住断口",
-                "holderId": "C01"
-              },
-              {
-                "assetId": "P07",
-                "state": "断剑平放铁砧，锤柄抵住断口",
-                "holderId": "C06"
-              }
-            ],
-            "environment": "铸剑师的警告",
-            "lighting": "炉火侧光",
-            "axis": "保持180度人物关系轴线",
-            "screenDirection": "角色移动方向沿场景既定动线"
           },
           "sourceAssetIds": [],
-          "continuityStatus": "planned",
-          "videoMode": "reference",
-          "storyboardFrameMode": "all_frames",
-          "framePlan": {
-            "start": {
-              "source": "previous_accepted_actual_tail"
-            },
-            "end": {
-              "required": true
-            },
-            "frames": [
-              {
-                "id": "SH025-F01",
-                "sequenceIndex": 1,
-                "startSecond": 0,
-                "endSecond": 1.667,
-                "actionPrompt": "奥伦的手停在断剑上方，Karin站在铁砧前",
-                "imagePrompt": "静态画面：奥伦的手停在断剑上方，Karin站在铁砧前；可见表演：表情：疑惑转为戒备；视线：锁定关键道具；手部：保持与断剑或道具的明确接触；景别：中近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：炉火侧光，煤黑+琥珀；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
-              },
-              {
-                "id": "SH025-F02",
-                "sequenceIndex": 2,
-                "startSecond": 1.667,
-                "endSecond": 3.333,
-                "actionPrompt": "Karin把断剑平放在铁砧上，Rifa保持门口站位",
-                "imagePrompt": "静态画面：Karin把断剑平放在铁砧上，Rifa保持门口站位；可见表演：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；景别：中近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：炉火侧光，煤黑+琥珀；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
-              },
-              {
-                "id": "SH025-F03",
-                "sequenceIndex": 3,
-                "startSecond": 3.333,
-                "endSecond": 5,
-                "actionPrompt": "锤柄抵住断口，三人停在同一纵深关系中",
-                "imagePrompt": "静态画面：锤柄抵住断口，三人停在同一纵深关系中；可见表演：表情保持稳定；视线朝向当前主体；断剑平放铁砧，锤柄抵住断口；景别：中近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：炉火侧光，煤黑+琥珀；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
-              }
-            ],
-            "referenceCount": {
-              "min": 3,
-              "max": 9
-            },
-            "referenceManifest": [
-              {
-                "alias": "@图片1",
-                "role": "previous_actual_tail",
-                "purpose": "上一镜当前视频版本的已人工验收实际尾帧，仅作为本镜唯一连续性锚点",
-                "shotId": "SH024"
-              },
-              {
-                "alias": "@图片2",
-                "role": "character_anchor",
-                "purpose": "角色基准图：保持 Karin 的身份特征、服装与道具不漂移",
-                "assetId": "C01"
-              },
-              {
-                "alias": "@图片3",
-                "role": "character_anchor",
-                "purpose": "角色基准图：保持 Rifa 的身份特征、服装与道具不漂移",
-                "assetId": "C02"
-              },
-              {
-                "alias": "@图片4",
-                "role": "character_anchor",
-                "purpose": "角色基准图：保持 奥伦·奈特 的身份特征、服装与道具不漂移",
-                "assetId": "C06"
-              },
-              {
-                "alias": "@图片5",
-                "role": "scene_anchor",
-                "purpose": "场景基准图：保持空间结构、光向与轴线一致",
-                "assetId": "S04"
-              },
-              {
-                "alias": "@图片6",
-                "role": "prop_anchor",
-                "purpose": "道具基准图：保持 Karin的断剑 的形状、持有人与当前状态一致",
-                "assetId": "P01"
-              },
-              {
-                "alias": "@图片7",
-                "role": "prop_anchor",
-                "purpose": "道具基准图：保持 无头锤柄 的形状、持有人与当前状态一致",
-                "assetId": "P07"
-              }
-            ]
-          }
+          "continuityStatus": "ready",
+          "videoMode": "storyboard",
+          "storyboardFrameMode": "all_frames"
         },
         {
-          "code": "SH026",
-          "order": 26,
-          "title": "借她的记忆 1/3",
-          "description": "记忆显出暗红线",
+          "code": "SH011",
+          "order": 11,
+          "title": "借她的记忆",
+          "description": "记忆显出暗红线；借她的记忆的连续反应与动作过渡；Rifa抓住Karin，奥伦注视相接的手",
           "sourceText": "Rifa守在门与Karin之间，直到Karin主动走向铁砧才让开半步。\n奥伦不看推荐信：“谁告诉你，它是被打断的？”\nKarin：“我看着它断的。”\n奥伦：“你看见的是结果。”\n无头锤柄碰触断口。炉火缩成一线，店内金属全部朝铁砧偏转。\n黑湖、倒塔、四只手。这一次，Karin看清其中一只手腕系着暗红细线。他转头看向Rifa的辫绳。Rifa立刻抓住他的手腕，幻象破碎。\n奥伦：“别放开。剑正在借她的记忆认你。”\nRifa：“你知道它为什么断？”\n奥伦取出带四点印记的木匣：“它不是断了。它在拒绝保持完整。”\n他把木匣推向Karin：“而你，不是第一个带它来这里的人。”\n铜镜中没有店内三人，只有高塔上的斗篷身影。Rifa的短刃滑出半寸。\nRifa：“上一个人是谁？”\n奥伦熄灭炉火。黑暗中，木匣再次耳语：“你又来迟了。”\n切黑。",
           "shotBoundary": "抓腕切回",
           "dialogue": "奥伦：别放开。剑正在借她的记忆认你。",
@@ -7803,10 +3928,8 @@
             }
           ],
           "imagePrompt": "静态画面：锤柄触碰断剑，炉火缩成一线，金属朝铁砧偏转；可见表演：表情：疑惑转为戒备；视线：锁定关键道具；手部：保持与断剑或道具的明确接触；景别：近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：炉火收缩+冷光，琥珀，深蓝黑；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。",
-          "videoPrompt": "动态意图：锤柄触碰断剑，炉火缩成一线，金属朝铁砧偏转到Rifa抓住Karin手腕，奥伦注视两人相接的手；起始可见状态：锤柄触碰断剑，炉火缩成一线，金属朝铁砧偏转；触发：黑湖记忆浮现，雪地中央的手腕系着暗红细线；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：记忆慢推；声音：金属共鸣、记忆风声；Rifa抓腕、炉火收缩；女声母题短促上升后断开；结束画面：Rifa抓住Karin手腕，奥伦注视两人相接的手；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无额外手指、无断手、无可辨识的其他三人面孔、无角色变形、无过载闪回。。",
+          "videoPrompt": "动态意图：锤柄触碰断剑，炉火缩成一线，金属朝铁砧偏转到奥伦注视两人相接的手，断剑停在铁砧上；起始可见状态：锤柄触碰断剑，炉火缩成一线，金属朝铁砧偏转；主体动作与反应：Rifa抓住Karin，奥伦注视相接的手；一个主运镜：记忆慢推；环境压力与声音：金属共鸣、记忆风声；Rifa抓腕、炉火收缩；女声母题短促上升后断开；结束画面：奥伦注视两人相接的手，断剑停在铁砧上；针对性约束：无字幕、无额外手指、无断手、无可辨识的其他三人面孔、无角色变形、无过载闪回。",
           "cameraMotion": "记忆慢推",
-          "startFramePrompt": "静态画面：锤柄触碰断剑，炉火缩成一线，金属朝铁砧偏转；可见表演：表情：疑惑转为戒备；视线：锁定关键道具；手部：保持与断剑或道具的明确接触；景别：近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：炉火收缩+冷光，琥珀，深蓝黑；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。；首帧仅继承@图片1对应的上一镜已验收实际尾帧状态。",
-          "endFramePrompt": "静态画面：Rifa抓住Karin手腕，奥伦注视两人相接的手；可见表演：表情保持稳定；视线朝向当前主体；Rifa抓住Karin，奥伦注视相接的手；景别：特写；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：炉火收缩+冷光，琥珀，深蓝黑；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。；出口状态保存为当前视频版本实际尾帧并在下游继承前人工验收。",
           "negativePrompt": "无字幕、无额外手指、无断手、无可辨识的其他三人面孔、无角色变形、无过载闪回。",
           "continuity": {
             "shotSize": "CU→ECU",
@@ -7820,7 +3943,7 @@
             "axisRule": "保持180度关系轴线，转场时明确切换",
             "continuityNotes": "抓腕切回"
           },
-          "duration": 5,
+          "duration": 15,
           "characterCodes": [
             "C01",
             "C02",
@@ -7833,7 +3956,7 @@
           "clueCodes": [],
           "locationCode": "S04",
           "storySceneCode": "SC07",
-          "timecode": "150-155s",
+          "timecode": "150-165s",
           "dramaticFunction": "双线汇合",
           "lens": "85mm",
           "lighting": "炉火收缩+冷光",
@@ -7954,7 +4077,7 @@
                 "gaze": "沿镜头轴线向右",
                 "pose": "克制站姿或自然坐姿",
                 "expression": "按本镜表演说明",
-                "action": "记忆显出暗红线"
+                "action": "Rifa抓住Karin，奥伦注视相接的手"
               },
               {
                 "assetId": "C02",
@@ -7963,7 +4086,7 @@
                 "gaze": "沿镜头轴线向左",
                 "pose": "克制站姿或自然坐姿",
                 "expression": "按本镜表演说明",
-                "action": "记忆显出暗红线"
+                "action": "Rifa抓住Karin，奥伦注视相接的手"
               },
               {
                 "assetId": "C06",
@@ -7972,18 +4095,18 @@
                 "gaze": "沿镜头轴线向左",
                 "pose": "克制站姿或自然坐姿",
                 "expression": "按本镜表演说明",
-                "action": "记忆显出暗红线"
+                "action": "Rifa抓住Karin，奥伦注视相接的手"
               }
             ],
             "props": [
               {
                 "assetId": "P01",
-                "state": "记忆显出暗红线",
+                "state": "Rifa抓住Karin，奥伦注视相接的手",
                 "holderId": "C01"
               },
               {
                 "assetId": "P07",
-                "state": "记忆显出暗红线",
+                "state": "Rifa抓住Karin，奥伦注视相接的手",
                 "holderId": "C06"
               }
             ],
@@ -7992,10 +4115,6 @@
             "axis": "保持180度人物关系轴线",
             "screenDirection": "角色移动方向沿场景既定动线"
           },
-          "sourceAssetIds": [],
-          "continuityStatus": "planned",
-          "videoMode": "reference",
-          "storyboardFrameMode": "all_frames",
           "framePlan": {
             "start": {
               "source": "previous_accepted_actual_tail"
@@ -8005,327 +4124,68 @@
             },
             "frames": [
               {
-                "id": "SH026-F01",
+                "id": "SH011-F01",
                 "sequenceIndex": 1,
                 "startSecond": 0,
-                "endSecond": 1.667,
+                "endSecond": 3,
                 "actionPrompt": "锤柄触碰断剑，炉火缩成一线，金属朝铁砧偏转",
-                "imagePrompt": "静态画面：锤柄触碰断剑，炉火缩成一线，金属朝铁砧偏转；可见表演：表情：疑惑转为戒备；视线：锁定关键道具；手部：保持与断剑或道具的明确接触；景别：近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：炉火收缩+冷光，琥珀，深蓝黑；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
+                "imagePrompt": "静态关键帧：静态画面：锤柄触碰断剑，炉火缩成一线，金属朝铁砧偏转；可见表演状态：情绪保持与上一状态一致；面部眉眼和下颌保持可读的初始反应；视线沿当前镜头动作方向；身体与手部进入记忆显出暗红线；景别（本帧固定）：CU；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按记忆显出暗红线的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：炉火收缩+冷光；琥珀；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
               },
               {
-                "id": "SH026-F02",
+                "id": "SH011-F02",
                 "sequenceIndex": 2,
-                "startSecond": 1.667,
-                "endSecond": 3.333,
-                "actionPrompt": "黑湖记忆浮现，雪地中央的手腕系着暗红细线",
-                "imagePrompt": "静态画面：黑湖记忆浮现，雪地中央的手腕系着暗红细线；可见表演：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；景别：特写；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：炉火收缩+冷光，琥珀，深蓝黑；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
-              },
-              {
-                "id": "SH026-F03",
-                "sequenceIndex": 3,
-                "startSecond": 3.333,
+                "startSecond": 3,
                 "endSecond": 5,
+                "actionPrompt": "黑湖记忆浮现，雪地中央的手腕系着暗红细线",
+                "imagePrompt": "静态关键帧：静态画面：黑湖记忆浮现，雪地中央的手腕系着暗红细线；可见表演状态：情绪压力或目标逐步显现；面部眉眼、嘴角或下颌出现与动作对应的细微变化；视线短暂聚焦关键人物或道具；身体与手部完成主要动作并保留反应停顿；景别（本帧固定）：ECU；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按记忆显出暗红线的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：炉火收缩+冷光；深蓝黑；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
+              },
+              {
+                "id": "SH011-F03",
+                "sequenceIndex": 3,
+                "startSecond": 5,
+                "endSecond": 7,
                 "actionPrompt": "Rifa抓住Karin手腕，奥伦注视两人相接的手",
-                "imagePrompt": "静态画面：Rifa抓住Karin手腕，奥伦注视两人相接的手；可见表演：表情保持稳定；视线朝向当前主体；Rifa抓住Karin，奥伦注视相接的手；景别：特写；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：炉火收缩+冷光，琥珀，深蓝黑；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
-              }
-            ],
-            "referenceCount": {
-              "min": 3,
-              "max": 9
-            },
-            "referenceManifest": [
-              {
-                "alias": "@图片1",
-                "role": "previous_actual_tail",
-                "purpose": "上一镜当前视频版本的已人工验收实际尾帧，仅作为本镜唯一连续性锚点",
-                "shotId": "SH025"
+                "imagePrompt": "静态关键帧：静态画面：Rifa抓住Karin手腕，奥伦注视两人相接的手；可见表演状态：情绪在下一镜头切点前完成情绪落点；面部固定最终表情，避免切点前漂移；视线指向下一动作或转场方向；身体与手部Rifa抓住Karin，奥伦注视相接的手；景别（本帧固定）：ECU；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按记忆显出暗红线的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：炉火收缩+冷光；深蓝黑；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
               },
               {
-                "alias": "@图片2",
-                "role": "character_anchor",
-                "purpose": "角色基准图：保持 Karin 的身份特征、服装与道具不漂移",
-                "assetId": "C01"
-              },
-              {
-                "alias": "@图片3",
-                "role": "character_anchor",
-                "purpose": "角色基准图：保持 Rifa 的身份特征、服装与道具不漂移",
-                "assetId": "C02"
-              },
-              {
-                "alias": "@图片4",
-                "role": "character_anchor",
-                "purpose": "角色基准图：保持 奥伦·奈特 的身份特征、服装与道具不漂移",
-                "assetId": "C06"
-              },
-              {
-                "alias": "@图片5",
-                "role": "scene_anchor",
-                "purpose": "场景基准图：保持空间结构、光向与轴线一致",
-                "assetId": "S04"
-              },
-              {
-                "alias": "@图片6",
-                "role": "prop_anchor",
-                "purpose": "道具基准图：保持 Karin的断剑 的形状、持有人与当前状态一致",
-                "assetId": "P01"
-              },
-              {
-                "alias": "@图片7",
-                "role": "prop_anchor",
-                "purpose": "道具基准图：保持 无头锤柄 的形状、持有人与当前状态一致",
-                "assetId": "P07"
-              }
-            ]
-          }
-        },
-        {
-          "code": "SH027",
-          "order": 27,
-          "title": "借她的记忆 2/3",
-          "description": "借她的记忆的连续反应与动作过渡",
-          "sourceText": "Rifa守在门与Karin之间，直到Karin主动走向铁砧才让开半步。\n奥伦不看推荐信：“谁告诉你，它是被打断的？”\nKarin：“我看着它断的。”\n奥伦：“你看见的是结果。”\n无头锤柄碰触断口。炉火缩成一线，店内金属全部朝铁砧偏转。\n黑湖、倒塔、四只手。这一次，Karin看清其中一只手腕系着暗红细线。他转头看向Rifa的辫绳。Rifa立刻抓住他的手腕，幻象破碎。\n奥伦：“别放开。剑正在借她的记忆认你。”\nRifa：“你知道它为什么断？”\n奥伦取出带四点印记的木匣：“它不是断了。它在拒绝保持完整。”\n他把木匣推向Karin：“而你，不是第一个带它来这里的人。”\n铜镜中没有店内三人，只有高塔上的斗篷身影。Rifa的短刃滑出半寸。\nRifa：“上一个人是谁？”\n奥伦熄灭炉火。黑暗中，木匣再次耳语：“你又来迟了。”\n切黑。",
-          "shotBoundary": "抓腕切回",
-          "dialogue": "",
-          "narration": "",
-          "utterances": [],
-          "imagePrompt": "静态画面：无头锤柄触碰断剑，炉火缩成一线，金属朝铁砧偏转；可见表演：表情：疑惑转为戒备；视线：锁定关键道具；手部：保持与断剑或道具的明确接触；景别：近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：炉火收缩+冷光，琥珀，深蓝黑；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。",
-          "videoPrompt": "动态意图：无头锤柄触碰断剑，炉火缩成一线，金属朝铁砧偏转到Rifa抓住Karin手腕，奥伦注视两人相接的手；起始可见状态：无头锤柄触碰断剑，炉火缩成一线，金属朝铁砧偏转；触发：黑湖记忆浮现，雪地中央的手腕系着暗红细线；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：记忆慢推；声音：金属共鸣、记忆风声；Rifa抓腕、炉火收缩；女声母题短促上升后断开；结束画面：Rifa抓住Karin手腕，奥伦注视两人相接的手；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无额外手指、无断手、无可辨识的其他三人面孔、无角色变形、无过载闪回。。",
-          "cameraMotion": "记忆慢推",
-          "startFramePrompt": "静态画面：无头锤柄触碰断剑，炉火缩成一线，金属朝铁砧偏转；可见表演：表情：疑惑转为戒备；视线：锁定关键道具；手部：保持与断剑或道具的明确接触；景别：近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：炉火收缩+冷光，琥珀，深蓝黑；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。；首帧仅继承@图片1对应的上一镜已验收实际尾帧状态。",
-          "endFramePrompt": "静态画面：Rifa抓住Karin手腕，奥伦注视两人相接的手；可见表演：表情保持稳定；视线朝向当前主体；Rifa抓住Karin，奥伦注视相接的手；景别：特写；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：炉火收缩+冷光，琥珀，深蓝黑；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。；出口状态保存为当前视频版本实际尾帧并在下游继承前人工验收。",
-          "negativePrompt": "无字幕、无额外手指、无断手、无可辨识的其他三人面孔、无角色变形、无过载闪回。",
-          "continuity": {
-            "shotSize": "CU→ECU",
-            "cameraAngle": "视线高度平视，沿动作轴线拍摄",
-            "composition": "主体保持在9:16安全区，动作方向留出前进空间",
-            "characterBlocking": "按记忆显出暗红线的动作关系安排站位",
-            "gazeDirection": "沿叙事动作方向，反应时回看对手或关键道具",
-            "actionStart": "记忆显出暗红线",
-            "actionEnd": "Rifa抓住Karin，奥伦注视相接的手",
-            "screenDirection": "保持同侧屏幕运动方向",
-            "axisRule": "保持180度关系轴线，转场时明确切换",
-            "continuityNotes": "抓腕切回"
-          },
-          "duration": 5,
-          "characterCodes": [
-            "C01",
-            "C02",
-            "C06"
-          ],
-          "propCodes": [
-            "P01",
-            "P07"
-          ],
-          "clueCodes": [],
-          "locationCode": "S04",
-          "storySceneCode": "SC07",
-          "timecode": "155-160s",
-          "dramaticFunction": "双线汇合",
-          "lens": "85mm",
-          "lighting": "炉火收缩+冷光",
-          "colorPalette": "琥珀→深蓝黑",
-          "transitionOut": "抓腕切回",
-          "performanceNotes": "别放开。剑正在借她的记忆认你。",
-          "performancePlan": {
-            "emotionalObjective": "围绕记忆显出暗红线完成当前镜头的外在行动目标",
-            "emotionalArc": "从进入记忆显出暗红线的克制状态开始，经由动作反应推进，在Rifa抓住Karin，奥伦注视相接的手前收束",
-            "speechStyle": "台词贴合当下处境，语气清晰克制，重音落在行动关键信息",
-            "pace": "按镜头时长均匀推进，动作变化处短暂停顿，转场前收住",
-            "breath": "起始自然吸气，动作变化处短暂停顿，结束以呼气完成收束",
-            "restraintLevel": "中等克制，避免夸张表演",
-            "beats": {
-              "start": {
-                "emotion": "保持与上一状态一致",
-                "facialAction": "眉眼和下颌保持可读的初始反应",
-                "gaze": "沿当前镜头动作方向",
-                "bodyAction": "进入记忆显出暗红线"
-              },
-              "middle": {
-                "emotion": "压力或目标逐步显现",
-                "facialAction": "眉眼、嘴角或下颌出现与动作对应的细微变化",
-                "gaze": "短暂聚焦关键人物或道具",
-                "bodyAction": "完成主要动作并保留反应停顿"
-              },
-              "end": {
-                "emotion": "在下一镜头切点前完成情绪落点",
-                "facialAction": "固定最终表情，避免切点前漂移",
-                "gaze": "指向下一动作或转场方向",
-                "bodyAction": "Rifa抓住Karin，奥伦注视相接的手"
-              }
-            }
-          },
-          "dialoguePerformance": [
-            {
-              "utteranceId": "D23",
-              "intent": "推动当前镜头行动并回应对手或环境",
-              "tone": "贴合当前情绪，清晰自然",
-              "pace": "按语义分句，中速完成",
-              "pause": "关键信息前短停，句末自然收束",
-              "emphasis": "别放开。剑正在借她的记忆认你。",
-              "facialReactionBefore": "先以视线和眉眼确认对方或关键道具",
-              "facialReactionDuring": "说话时保持与行动一致的面部反应",
-              "facialReactionAfter": "说完保留短暂反应，衔接下一动作"
-            }
-          ],
-          "lightingPlan": {
-            "palette": "琥珀→深蓝黑",
-            "colorTemperature": "主光冷暖关系沿用本场设定，避免相邻镜头跳变",
-            "keyLight": "炉火收缩+冷光作为主光，明确来自画面主方向并照亮主体面部",
-            "fillLight": "弱补光保留面部细节，阴影侧不完全压黑",
-            "rimLight": "以轻微轮廓光分离人物与背景，不制造硬边光晕",
-            "contrast": "中等反差，主体层次清晰，避免高光溢出",
-            "materialResponse": "金属、皮革和织物按真实材质反射，亮部克制",
-            "skinToneProtection": "保护肤色自然，不被环境色完全染色",
-            "inheritFromPrevious": "继承上一镜主光方向、色温和环境亮度",
-            "transitionToNext": "在动作结束处平滑过渡到下一镜主光和色板"
-          },
-          "sound": {
-            "ambience": "金属共鸣、记忆风声",
-            "soundEffects": "Rifa抓腕、炉火收缩",
-            "music": "女声母题短促上升后断开"
-          },
-          "entryState": {
-            "characters": [
-              {
-                "assetId": "C01",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面左侧或前景",
-                "gaze": "沿镜头轴线向右",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "记忆显出暗红线"
-              },
-              {
-                "assetId": "C02",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "记忆显出暗红线"
-              },
-              {
-                "assetId": "C06",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "记忆显出暗红线"
-              }
-            ],
-            "props": [
-              {
-                "assetId": "P01",
-                "state": "记忆显出暗红线",
-                "holderId": "C01"
-              },
-              {
-                "assetId": "P07",
-                "state": "记忆显出暗红线",
-                "holderId": "C06"
-              }
-            ],
-            "environment": "铸剑师的警告",
-            "lighting": "炉火收缩+冷光",
-            "axis": "保持180度人物关系轴线",
-            "screenDirection": "角色移动方向沿场景既定动线"
-          },
-          "exitState": {
-            "characters": [
-              {
-                "assetId": "C01",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面左侧或前景",
-                "gaze": "沿镜头轴线向右",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "借她的记忆的连续反应与动作过渡"
-              },
-              {
-                "assetId": "C02",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "借她的记忆的连续反应与动作过渡"
-              },
-              {
-                "assetId": "C06",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "借她的记忆的连续反应与动作过渡"
-              }
-            ],
-            "props": [
-              {
-                "assetId": "P01",
-                "state": "借她的记忆的连续反应与动作过渡",
-                "holderId": "C01"
-              },
-              {
-                "assetId": "P07",
-                "state": "借她的记忆的连续反应与动作过渡",
-                "holderId": "C06"
-              }
-            ],
-            "environment": "铸剑师的警告",
-            "lighting": "炉火收缩+冷光",
-            "axis": "保持180度人物关系轴线",
-            "screenDirection": "角色移动方向沿场景既定动线"
-          },
-          "sourceAssetIds": [],
-          "continuityStatus": "planned",
-          "videoMode": "reference",
-          "storyboardFrameMode": "all_frames",
-          "framePlan": {
-            "start": {
-              "source": "previous_accepted_actual_tail"
-            },
-            "end": {
-              "required": true
-            },
-            "frames": [
-              {
-                "id": "SH027-F01",
-                "sequenceIndex": 1,
-                "startSecond": 0,
-                "endSecond": 1.667,
+                "id": "SH011-F04",
+                "sequenceIndex": 4,
+                "startSecond": 7,
+                "endSecond": 9,
                 "actionPrompt": "无头锤柄触碰断剑，炉火缩成一线，金属朝铁砧偏转",
-                "imagePrompt": "静态画面：无头锤柄触碰断剑，炉火缩成一线，金属朝铁砧偏转；可见表演：表情：疑惑转为戒备；视线：锁定关键道具；手部：保持与断剑或道具的明确接触；景别：近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：炉火收缩+冷光，琥珀，深蓝黑；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
+                "imagePrompt": "静态关键帧：静态画面：无头锤柄触碰断剑，炉火缩成一线，金属朝铁砧偏转；可见表演状态：情绪保持与上一状态一致；面部眉眼和下颌保持可读的初始反应；视线沿当前镜头动作方向；身体与手部进入记忆显出暗红线；景别（本帧固定）：CU；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按记忆显出暗红线的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：炉火收缩+冷光；琥珀；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
               },
               {
-                "id": "SH027-F02",
-                "sequenceIndex": 2,
-                "startSecond": 1.667,
-                "endSecond": 3.333,
-                "actionPrompt": "黑湖记忆浮现，雪地中央的手腕系着暗红细线",
-                "imagePrompt": "静态画面：黑湖记忆浮现，雪地中央的手腕系着暗红细线；可见表演：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；景别：特写；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：炉火收缩+冷光，琥珀，深蓝黑；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
+                "id": "SH011-F05",
+                "sequenceIndex": 5,
+                "startSecond": 9,
+                "endSecond": 11,
+                "actionPrompt": "炉火缩成一线，Karin看向暗红细线的记忆残影",
+                "imagePrompt": "静态关键帧：静态画面：炉火缩成一线，Karin看向暗红细线的记忆残影；可见表演状态：情绪保持与上一状态一致；面部眉眼和下颌保持可读的初始反应；视线沿当前镜头动作方向；身体与手部进入记忆显出暗红线；景别（本帧固定）：CU；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按记忆显出暗红线的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：炉火收缩+冷光；琥珀；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
               },
               {
-                "id": "SH027-F03",
-                "sequenceIndex": 3,
-                "startSecond": 3.333,
-                "endSecond": 5,
-                "actionPrompt": "Rifa抓住Karin手腕，奥伦注视两人相接的手",
-                "imagePrompt": "静态画面：Rifa抓住Karin手腕，奥伦注视两人相接的手；可见表演：表情保持稳定；视线朝向当前主体；Rifa抓住Karin，奥伦注视相接的手；景别：特写；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：炉火收缩+冷光，琥珀，深蓝黑；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
+                "id": "SH011-F06",
+                "sequenceIndex": 6,
+                "startSecond": 11,
+                "endSecond": 13,
+                "actionPrompt": "Rifa的手扣住Karin手腕，暗红辫绳与记忆中的红线相对",
+                "imagePrompt": "静态关键帧：静态画面：Rifa的手扣住Karin手腕，暗红辫绳与记忆中的红线相对；可见表演状态：情绪压力或目标逐步显现；面部眉眼、嘴角或下颌出现与动作对应的细微变化；视线短暂聚焦关键人物或道具；身体与手部完成主要动作并保留反应停顿；景别（本帧固定）：ECU；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按记忆显出暗红线的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：炉火收缩+冷光；深蓝黑；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
+              },
+              {
+                "id": "SH011-F07",
+                "sequenceIndex": 7,
+                "startSecond": 13,
+                "endSecond": 15,
+                "actionPrompt": "奥伦注视两人相接的手，断剑停在铁砧上",
+                "imagePrompt": "静态关键帧：静态画面：奥伦注视两人相接的手，断剑停在铁砧上；可见表演状态：情绪在下一镜头切点前完成情绪落点；面部固定最终表情，避免切点前漂移；视线指向下一动作或转场方向；身体与手部Rifa抓住Karin，奥伦注视相接的手；景别（本帧固定）：ECU；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按记忆显出暗红线的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：炉火收缩+冷光；深蓝黑；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
               }
             ],
-            "referenceCount": {
-              "min": 3,
-              "max": 9
-            },
             "referenceManifest": [
               {
                 "alias": "@图片1",
                 "role": "previous_actual_tail",
                 "purpose": "上一镜当前视频版本的已人工验收实际尾帧，仅作为本镜唯一连续性锚点",
-                "shotId": "SH026"
+                "shotId": "SH010"
               },
               {
                 "alias": "@图片2",
@@ -8363,305 +4223,26 @@
                 "purpose": "道具基准图：保持 无头锤柄 的形状、持有人与当前状态一致",
                 "assetId": "P07"
               }
-            ]
-          }
-        },
-        {
-          "code": "SH028",
-          "order": 28,
-          "title": "借她的记忆 3/3",
-          "description": "Rifa抓住Karin，奥伦注视相接的手",
-          "sourceText": "Rifa守在门与Karin之间，直到Karin主动走向铁砧才让开半步。\n奥伦不看推荐信：“谁告诉你，它是被打断的？”\nKarin：“我看着它断的。”\n奥伦：“你看见的是结果。”\n无头锤柄碰触断口。炉火缩成一线，店内金属全部朝铁砧偏转。\n黑湖、倒塔、四只手。这一次，Karin看清其中一只手腕系着暗红细线。他转头看向Rifa的辫绳。Rifa立刻抓住他的手腕，幻象破碎。\n奥伦：“别放开。剑正在借她的记忆认你。”\nRifa：“你知道它为什么断？”\n奥伦取出带四点印记的木匣：“它不是断了。它在拒绝保持完整。”\n他把木匣推向Karin：“而你，不是第一个带它来这里的人。”\n铜镜中没有店内三人，只有高塔上的斗篷身影。Rifa的短刃滑出半寸。\nRifa：“上一个人是谁？”\n奥伦熄灭炉火。黑暗中，木匣再次耳语：“你又来迟了。”\n切黑。",
-          "shotBoundary": "抓腕切回",
-          "dialogue": "",
-          "narration": "",
-          "utterances": [],
-          "imagePrompt": "静态画面：炉火缩成一线，Karin看向暗红细线的记忆残影；可见表演：表情：眉眼清晰；视线：朝向当前主体；手部与道具保持明确接触关系；景别：近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：炉火收缩+冷光，琥珀，深蓝黑；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。",
-          "videoPrompt": "动态意图：炉火缩成一线，Karin看向暗红细线的记忆残影到奥伦注视两人相接的手，断剑停在铁砧上；起始可见状态：炉火缩成一线，Karin看向暗红细线的记忆残影；触发：Rifa的手扣住Karin手腕，暗红辫绳与记忆中的红线相对；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：记忆慢推；声音：金属共鸣、记忆风声；Rifa抓腕、炉火收缩；女声母题短促上升后断开；结束画面：奥伦注视两人相接的手，断剑停在铁砧上；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无额外手指、无断手、无可辨识的其他三人面孔、无角色变形、无过载闪回。。",
-          "cameraMotion": "记忆慢推",
-          "startFramePrompt": "静态画面：炉火缩成一线，Karin看向暗红细线的记忆残影；可见表演：表情：眉眼清晰；视线：朝向当前主体；手部与道具保持明确接触关系；景别：近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：炉火收缩+冷光，琥珀，深蓝黑；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。；首帧仅继承@图片1对应的上一镜已验收实际尾帧状态。",
-          "endFramePrompt": "静态画面：奥伦注视两人相接的手，断剑停在铁砧上；可见表演：表情保持稳定；视线朝向当前主体；Rifa抓住Karin，奥伦注视相接的手；景别：特写；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：炉火收缩+冷光，琥珀，深蓝黑；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。；出口状态保存为当前视频版本实际尾帧并在下游继承前人工验收。",
-          "negativePrompt": "无字幕、无额外手指、无断手、无可辨识的其他三人面孔、无角色变形、无过载闪回。",
-          "continuity": {
-            "shotSize": "CU→ECU",
-            "cameraAngle": "视线高度平视，沿动作轴线拍摄",
-            "composition": "主体保持在9:16安全区，动作方向留出前进空间",
-            "characterBlocking": "按记忆显出暗红线的动作关系安排站位",
-            "gazeDirection": "沿叙事动作方向，反应时回看对手或关键道具",
-            "actionStart": "记忆显出暗红线",
-            "actionEnd": "Rifa抓住Karin，奥伦注视相接的手",
-            "screenDirection": "保持同侧屏幕运动方向",
-            "axisRule": "保持180度关系轴线，转场时明确切换",
-            "continuityNotes": "抓腕切回"
-          },
-          "duration": 5,
-          "characterCodes": [
-            "C01",
-            "C02",
-            "C06"
-          ],
-          "propCodes": [
-            "P01",
-            "P07"
-          ],
-          "clueCodes": [],
-          "locationCode": "S04",
-          "storySceneCode": "SC07",
-          "timecode": "160-165s",
-          "dramaticFunction": "双线汇合",
-          "lens": "85mm",
-          "lighting": "炉火收缩+冷光",
-          "colorPalette": "琥珀→深蓝黑",
-          "transitionOut": "抓腕切回",
-          "performanceNotes": "别放开。剑正在借她的记忆认你。",
-          "performancePlan": {
-            "emotionalObjective": "围绕记忆显出暗红线完成当前镜头的外在行动目标",
-            "emotionalArc": "从进入记忆显出暗红线的克制状态开始，经由动作反应推进，在Rifa抓住Karin，奥伦注视相接的手前收束",
-            "speechStyle": "台词贴合当下处境，语气清晰克制，重音落在行动关键信息",
-            "pace": "按镜头时长均匀推进，动作变化处短暂停顿，转场前收住",
-            "breath": "起始自然吸气，动作变化处短暂停顿，结束以呼气完成收束",
-            "restraintLevel": "中等克制，避免夸张表演",
-            "beats": {
-              "start": {
-                "emotion": "保持与上一状态一致",
-                "facialAction": "眉眼和下颌保持可读的初始反应",
-                "gaze": "沿当前镜头动作方向",
-                "bodyAction": "进入记忆显出暗红线"
-              },
-              "middle": {
-                "emotion": "压力或目标逐步显现",
-                "facialAction": "眉眼、嘴角或下颌出现与动作对应的细微变化",
-                "gaze": "短暂聚焦关键人物或道具",
-                "bodyAction": "完成主要动作并保留反应停顿"
-              },
-              "end": {
-                "emotion": "在下一镜头切点前完成情绪落点",
-                "facialAction": "固定最终表情，避免切点前漂移",
-                "gaze": "指向下一动作或转场方向",
-                "bodyAction": "Rifa抓住Karin，奥伦注视相接的手"
-              }
+            ],
+            "referenceCount": {
+              "min": 3,
+              "max": 9
             }
-          },
-          "dialoguePerformance": [
-            {
-              "utteranceId": "D23",
-              "intent": "推动当前镜头行动并回应对手或环境",
-              "tone": "贴合当前情绪，清晰自然",
-              "pace": "按语义分句，中速完成",
-              "pause": "关键信息前短停，句末自然收束",
-              "emphasis": "别放开。剑正在借她的记忆认你。",
-              "facialReactionBefore": "先以视线和眉眼确认对方或关键道具",
-              "facialReactionDuring": "说话时保持与行动一致的面部反应",
-              "facialReactionAfter": "说完保留短暂反应，衔接下一动作"
-            }
-          ],
-          "lightingPlan": {
-            "palette": "琥珀→深蓝黑",
-            "colorTemperature": "主光冷暖关系沿用本场设定，避免相邻镜头跳变",
-            "keyLight": "炉火收缩+冷光作为主光，明确来自画面主方向并照亮主体面部",
-            "fillLight": "弱补光保留面部细节，阴影侧不完全压黑",
-            "rimLight": "以轻微轮廓光分离人物与背景，不制造硬边光晕",
-            "contrast": "中等反差，主体层次清晰，避免高光溢出",
-            "materialResponse": "金属、皮革和织物按真实材质反射，亮部克制",
-            "skinToneProtection": "保护肤色自然，不被环境色完全染色",
-            "inheritFromPrevious": "继承上一镜主光方向、色温和环境亮度",
-            "transitionToNext": "在动作结束处平滑过渡到下一镜主光和色板"
-          },
-          "sound": {
-            "ambience": "金属共鸣、记忆风声",
-            "soundEffects": "Rifa抓腕、炉火收缩",
-            "music": "女声母题短促上升后断开"
-          },
-          "entryState": {
-            "characters": [
-              {
-                "assetId": "C01",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面左侧或前景",
-                "gaze": "沿镜头轴线向右",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "借她的记忆的连续反应与动作过渡"
-              },
-              {
-                "assetId": "C02",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "借她的记忆的连续反应与动作过渡"
-              },
-              {
-                "assetId": "C06",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "借她的记忆的连续反应与动作过渡"
-              }
-            ],
-            "props": [
-              {
-                "assetId": "P01",
-                "state": "借她的记忆的连续反应与动作过渡",
-                "holderId": "C01"
-              },
-              {
-                "assetId": "P07",
-                "state": "借她的记忆的连续反应与动作过渡",
-                "holderId": "C06"
-              }
-            ],
-            "environment": "铸剑师的警告",
-            "lighting": "炉火收缩+冷光",
-            "axis": "保持180度人物关系轴线",
-            "screenDirection": "角色移动方向沿场景既定动线"
-          },
-          "exitState": {
-            "characters": [
-              {
-                "assetId": "C01",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面左侧或前景",
-                "gaze": "沿镜头轴线向右",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "Rifa抓住Karin，奥伦注视相接的手"
-              },
-              {
-                "assetId": "C02",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "Rifa抓住Karin，奥伦注视相接的手"
-              },
-              {
-                "assetId": "C06",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "Rifa抓住Karin，奥伦注视相接的手"
-              }
-            ],
-            "props": [
-              {
-                "assetId": "P01",
-                "state": "Rifa抓住Karin，奥伦注视相接的手",
-                "holderId": "C01"
-              },
-              {
-                "assetId": "P07",
-                "state": "Rifa抓住Karin，奥伦注视相接的手",
-                "holderId": "C06"
-              }
-            ],
-            "environment": "铸剑师的警告",
-            "lighting": "炉火收缩+冷光",
-            "axis": "保持180度人物关系轴线",
-            "screenDirection": "角色移动方向沿场景既定动线"
           },
           "sourceAssetIds": [],
-          "continuityStatus": "planned",
-          "videoMode": "reference",
-          "storyboardFrameMode": "all_frames",
-          "framePlan": {
-            "start": {
-              "source": "previous_accepted_actual_tail"
-            },
-            "end": {
-              "required": true
-            },
-            "frames": [
-              {
-                "id": "SH028-F01",
-                "sequenceIndex": 1,
-                "startSecond": 0,
-                "endSecond": 1.667,
-                "actionPrompt": "炉火缩成一线，Karin看向暗红细线的记忆残影",
-                "imagePrompt": "静态画面：炉火缩成一线，Karin看向暗红细线的记忆残影；可见表演：表情：眉眼清晰；视线：朝向当前主体；手部与道具保持明确接触关系；景别：近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：炉火收缩+冷光，琥珀，深蓝黑；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
-              },
-              {
-                "id": "SH028-F02",
-                "sequenceIndex": 2,
-                "startSecond": 1.667,
-                "endSecond": 3.333,
-                "actionPrompt": "Rifa的手扣住Karin手腕，暗红辫绳与记忆中的红线相对",
-                "imagePrompt": "静态画面：Rifa的手扣住Karin手腕，暗红辫绳与记忆中的红线相对；可见表演：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；景别：特写；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：炉火收缩+冷光，琥珀，深蓝黑；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
-              },
-              {
-                "id": "SH028-F03",
-                "sequenceIndex": 3,
-                "startSecond": 3.333,
-                "endSecond": 5,
-                "actionPrompt": "奥伦注视两人相接的手，断剑停在铁砧上",
-                "imagePrompt": "静态画面：奥伦注视两人相接的手，断剑停在铁砧上；可见表演：表情保持稳定；视线朝向当前主体；Rifa抓住Karin，奥伦注视相接的手；景别：特写；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：炉火收缩+冷光，琥珀，深蓝黑；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
-              }
-            ],
-            "referenceCount": {
-              "min": 3,
-              "max": 9
-            },
-            "referenceManifest": [
-              {
-                "alias": "@图片1",
-                "role": "previous_actual_tail",
-                "purpose": "上一镜当前视频版本的已人工验收实际尾帧，仅作为本镜唯一连续性锚点",
-                "shotId": "SH027"
-              },
-              {
-                "alias": "@图片2",
-                "role": "character_anchor",
-                "purpose": "角色基准图：保持 Karin 的身份特征、服装与道具不漂移",
-                "assetId": "C01"
-              },
-              {
-                "alias": "@图片3",
-                "role": "character_anchor",
-                "purpose": "角色基准图：保持 Rifa 的身份特征、服装与道具不漂移",
-                "assetId": "C02"
-              },
-              {
-                "alias": "@图片4",
-                "role": "character_anchor",
-                "purpose": "角色基准图：保持 奥伦·奈特 的身份特征、服装与道具不漂移",
-                "assetId": "C06"
-              },
-              {
-                "alias": "@图片5",
-                "role": "scene_anchor",
-                "purpose": "场景基准图：保持空间结构、光向与轴线一致",
-                "assetId": "S04"
-              },
-              {
-                "alias": "@图片6",
-                "role": "prop_anchor",
-                "purpose": "道具基准图：保持 Karin的断剑 的形状、持有人与当前状态一致",
-                "assetId": "P01"
-              },
-              {
-                "alias": "@图片7",
-                "role": "prop_anchor",
-                "purpose": "道具基准图：保持 无头锤柄 的形状、持有人与当前状态一致",
-                "assetId": "P07"
-              }
-            ]
-          }
+          "continuityStatus": "ready",
+          "videoMode": "storyboard",
+          "storyboardFrameMode": "all_frames"
         },
         {
-          "code": "SH029",
-          "order": 29,
-          "title": "拒绝完整 1/2",
-          "description": "答案与新问题",
+          "code": "SH012",
+          "order": 12,
+          "title": "拒绝完整",
+          "description": "答案与新问题；木匣四点微亮，铜镜现观察者，短刃出鞘半寸",
           "sourceText": "Rifa守在门与Karin之间，直到Karin主动走向铁砧才让开半步。\n奥伦不看推荐信：“谁告诉你，它是被打断的？”\nKarin：“我看着它断的。”\n奥伦：“你看见的是结果。”\n无头锤柄碰触断口。炉火缩成一线，店内金属全部朝铁砧偏转。\n黑湖、倒塔、四只手。这一次，Karin看清其中一只手腕系着暗红细线。他转头看向Rifa的辫绳。Rifa立刻抓住他的手腕，幻象破碎。\n奥伦：“别放开。剑正在借她的记忆认你。”\nRifa：“你知道它为什么断？”\n奥伦取出带四点印记的木匣：“它不是断了。它在拒绝保持完整。”\n他把木匣推向Karin：“而你，不是第一个带它来这里的人。”\n铜镜中没有店内三人，只有高塔上的斗篷身影。Rifa的短刃滑出半寸。\nRifa：“上一个人是谁？”\n奥伦熄灭炉火。黑暗中，木匣再次耳语：“你又来迟了。”\n切黑。",
           "shotBoundary": "熄火切黑",
-          "dialogue": "Rifa：你知道它为什么断？\n奥伦：它不是断了。它在拒绝保持完整。\n奥伦：而你，不是第一个带它来这里的人。",
-          "narration": "",
+          "dialogue": "Rifa：你知道它为什么断？\n奥伦：它不是断了。它在拒绝保持完整。\n奥伦：而你，不是第一个带它来这里的人。；Rifa：上一个人是谁？",
+          "narration": "记忆：你又来迟了。",
           "utterances": [
             {
               "id": "D24",
@@ -8683,13 +4264,25 @@
               "type": "dialogue",
               "speaker": "奥伦",
               "text": "而你，不是第一个带它来这里的人。"
+            },
+            {
+              "id": "D27",
+              "order": 4,
+              "type": "dialogue",
+              "speaker": "Rifa",
+              "text": "上一个人是谁？"
+            },
+            {
+              "id": "D28",
+              "order": 5,
+              "type": "voiceover",
+              "speaker": "记忆",
+              "text": "你又来迟了。"
             }
           ],
           "imagePrompt": "静态画面：奥伦从铁砧下取出窄木匣并推向Karin；可见表演：表情：疑惑转为戒备；视线：锁定关键道具；手部：保持与断剑或道具的明确接触；景别：中近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：炉火熄灭，暗琥珀，冷紫黑；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。",
-          "videoPrompt": "动态意图：奥伦从铁砧下取出窄木匣并推向Karin到炉火熄灭，木匣四点微亮，铜镜映出高塔观察者；起始可见状态：奥伦从铁砧下取出窄木匣并推向Karin；触发：Rifa的短刃滑出半寸，视线转向木匣与奥伦；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：木匣慢推；声音：店外声音像隔水；木匣滑动、短刃半出鞘、熄火；冷低弦与耳语后绝对静音；结束画面：炉火熄灭，木匣四点微亮，铜镜映出高塔观察者；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无过量闪回、无额外手指、无现代工具、无水印logo、观察者不露脸，结尾切黑。。",
+          "videoPrompt": "动态意图：奥伦从铁砧下取出窄木匣并推向Karin到炉火完全熄灭，木匣四点微亮，短刃保持出鞘半寸；起始可见状态：奥伦从铁砧下取出窄木匣并推向Karin；主体动作与反应：木匣四点微亮，铜镜现观察者，短刃出鞘半寸；一个主运镜：木匣慢推；环境压力与声音：店外声音像隔水；木匣滑动、短刃半出鞘、熄火；冷低弦与耳语后绝对静音；结束画面：炉火完全熄灭，木匣四点微亮，短刃保持出鞘半寸；针对性约束：无字幕、无过量闪回、无额外手指、无现代工具、无水印logo、观察者不露脸，结尾切黑。",
           "cameraMotion": "木匣慢推",
-          "startFramePrompt": "静态画面：奥伦从铁砧下取出窄木匣并推向Karin；可见表演：表情：疑惑转为戒备；视线：锁定关键道具；手部：保持与断剑或道具的明确接触；景别：中近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：炉火熄灭，暗琥珀，冷紫黑；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。；首帧仅继承@图片1对应的上一镜已验收实际尾帧状态。",
-          "endFramePrompt": "静态画面：炉火熄灭，木匣四点微亮，铜镜映出高塔观察者；可见表演：表情保持稳定；视线朝向当前主体；木匣四点微亮，铜镜现观察者，短刃出鞘半寸；景别：特写；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：炉火熄灭，暗琥珀，冷紫黑；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。；出口状态保存为当前视频版本实际尾帧并在下游继承前人工验收。",
           "negativePrompt": "无字幕、无过量闪回、无额外手指、无现代工具、无水印logo、观察者不露脸，结尾切黑。",
           "continuity": {
             "shotSize": "MCU→ECU",
@@ -8703,7 +4296,7 @@
             "axisRule": "保持180度关系轴线，转场时明确切换",
             "continuityNotes": "熄火切黑"
           },
-          "duration": 8,
+          "duration": 15,
           "characterCodes": [
             "C01",
             "C02",
@@ -8718,7 +4311,7 @@
           "clueCodes": [],
           "locationCode": "S04",
           "storySceneCode": "SC07",
-          "timecode": "165-173s",
+          "timecode": "165-180s",
           "dramaticFunction": "悬念钩子",
           "lens": "85mm",
           "lighting": "炉火熄灭",
@@ -8886,7 +4479,7 @@
                 "gaze": "沿镜头轴线向右",
                 "pose": "克制站姿或自然坐姿",
                 "expression": "按本镜表演说明",
-                "action": "答案与新问题"
+                "action": "木匣四点微亮，铜镜现观察者，短刃出鞘半寸"
               },
               {
                 "assetId": "C02",
@@ -8895,7 +4488,7 @@
                 "gaze": "沿镜头轴线向左",
                 "pose": "克制站姿或自然坐姿",
                 "expression": "按本镜表演说明",
-                "action": "答案与新问题"
+                "action": "木匣四点微亮，铜镜现观察者，短刃出鞘半寸"
               },
               {
                 "assetId": "C06",
@@ -8904,7 +4497,7 @@
                 "gaze": "沿镜头轴线向左",
                 "pose": "克制站姿或自然坐姿",
                 "expression": "按本镜表演说明",
-                "action": "答案与新问题"
+                "action": "木匣四点微亮，铜镜现观察者，短刃出鞘半寸"
               },
               {
                 "assetId": "C07",
@@ -8913,23 +4506,23 @@
                 "gaze": "沿镜头轴线向左",
                 "pose": "克制站姿或自然坐姿",
                 "expression": "按本镜表演说明",
-                "action": "答案与新问题"
+                "action": "木匣四点微亮，铜镜现观察者，短刃出鞘半寸"
               }
             ],
             "props": [
               {
                 "assetId": "P04",
-                "state": "答案与新问题",
+                "state": "木匣四点微亮，铜镜现观察者，短刃出鞘半寸",
                 "holderId": "C06"
               },
               {
                 "assetId": "P05",
-                "state": "答案与新问题",
+                "state": "木匣四点微亮，铜镜现观察者，短刃出鞘半寸",
                 "holderId": "C02"
               },
               {
                 "assetId": "P08",
-                "state": "答案与新问题",
+                "state": "木匣四点微亮，铜镜现观察者，短刃出鞘半寸",
                 "holderId": "C06"
               }
             ],
@@ -8938,10 +4531,6 @@
             "axis": "保持180度人物关系轴线",
             "screenDirection": "角色移动方向沿场景既定动线"
           },
-          "sourceAssetIds": [],
-          "continuityStatus": "planned",
-          "videoMode": "reference",
-          "storyboardFrameMode": "all_frames",
           "framePlan": {
             "start": {
               "source": "previous_accepted_actual_tail"
@@ -8951,40 +4540,60 @@
             },
             "frames": [
               {
-                "id": "SH029-F01",
+                "id": "SH012-F01",
                 "sequenceIndex": 1,
                 "startSecond": 0,
                 "endSecond": 2.667,
                 "actionPrompt": "奥伦从铁砧下取出窄木匣并推向Karin",
-                "imagePrompt": "静态画面：奥伦从铁砧下取出窄木匣并推向Karin；可见表演：表情：疑惑转为戒备；视线：锁定关键道具；手部：保持与断剑或道具的明确接触；景别：中近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：炉火熄灭，暗琥珀，冷紫黑；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
+                "imagePrompt": "静态关键帧：静态画面：奥伦从铁砧下取出窄木匣并推向Karin；可见表演状态：情绪保持与上一状态一致；面部眉眼和下颌保持可读的初始反应；视线沿当前镜头动作方向；身体与手部进入答案与新问题；景别（本帧固定）：MCU；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按答案与新问题的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：炉火熄灭；暗琥珀；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
               },
               {
-                "id": "SH029-F02",
+                "id": "SH012-F02",
                 "sequenceIndex": 2,
                 "startSecond": 2.667,
                 "endSecond": 5.333,
                 "actionPrompt": "Rifa的短刃滑出半寸，视线转向木匣与奥伦",
-                "imagePrompt": "静态画面：Rifa的短刃滑出半寸，视线转向木匣与奥伦；可见表演：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；景别：特写；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：炉火熄灭，暗琥珀，冷紫黑；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
+                "imagePrompt": "静态关键帧：静态画面：Rifa的短刃滑出半寸，视线转向木匣与奥伦；可见表演状态：情绪压力或目标逐步显现；面部眉眼、嘴角或下颌出现与动作对应的细微变化；视线短暂聚焦关键人物或道具；身体与手部完成主要动作并保留反应停顿；景别（本帧固定）：ECU；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按答案与新问题的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：炉火熄灭；冷紫黑；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
               },
               {
-                "id": "SH029-F03",
+                "id": "SH012-F03",
                 "sequenceIndex": 3,
                 "startSecond": 5.333,
                 "endSecond": 8,
                 "actionPrompt": "炉火熄灭，木匣四点微亮，铜镜映出高塔观察者",
-                "imagePrompt": "静态画面：炉火熄灭，木匣四点微亮，铜镜映出高塔观察者；可见表演：表情保持稳定；视线朝向当前主体；木匣四点微亮，铜镜现观察者，短刃出鞘半寸；景别：特写；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：炉火熄灭，暗琥珀，冷紫黑；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
+                "imagePrompt": "静态关键帧：静态画面：炉火熄灭，木匣四点微亮，铜镜映出高塔观察者；可见表演状态：情绪在下一镜头切点前完成情绪落点；面部固定最终表情，避免切点前漂移；视线指向下一动作或转场方向；身体与手部木匣四点微亮，铜镜现观察者，短刃出鞘半寸；景别（本帧固定）：ECU；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按答案与新问题的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：炉火熄灭；冷紫黑；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
+              },
+              {
+                "id": "SH012-F04",
+                "sequenceIndex": 4,
+                "startSecond": 8,
+                "endSecond": 10.333,
+                "actionPrompt": "窄木匣停在铁砧边，Rifa的短刃露出半寸",
+                "imagePrompt": "静态关键帧：静态画面：窄木匣停在铁砧边，Rifa的短刃露出半寸；可见表演状态：情绪保持与上一状态一致；面部眉眼和下颌保持可读的初始反应；视线沿当前镜头动作方向；身体与手部进入答案与新问题；景别（本帧固定）：MCU；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按答案与新问题的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：炉火熄灭；暗琥珀；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
+              },
+              {
+                "id": "SH012-F05",
+                "sequenceIndex": 5,
+                "startSecond": 10.333,
+                "endSecond": 12.667,
+                "actionPrompt": "烟黑铜镜映出高塔观察者，奥伦的手停在熄灭的炉膛旁",
+                "imagePrompt": "静态关键帧：静态画面：烟黑铜镜映出高塔观察者，奥伦的手停在熄灭的炉膛旁；可见表演状态：情绪压力或目标逐步显现；面部眉眼、嘴角或下颌出现与动作对应的细微变化；视线短暂聚焦关键人物或道具；身体与手部完成主要动作并保留反应停顿；景别（本帧固定）：ECU；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按答案与新问题的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：炉火熄灭；冷紫黑；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
+              },
+              {
+                "id": "SH012-F06",
+                "sequenceIndex": 6,
+                "startSecond": 12.667,
+                "endSecond": 15,
+                "actionPrompt": "炉火完全熄灭，木匣四点微亮，短刃保持出鞘半寸",
+                "imagePrompt": "静态关键帧：静态画面：炉火完全熄灭，木匣四点微亮，短刃保持出鞘半寸；可见表演状态：情绪在下一镜头切点前完成情绪落点；面部固定最终表情，避免切点前漂移；视线指向下一动作或转场方向；身体与手部木匣四点微亮，铜镜现观察者，短刃出鞘半寸；景别（本帧固定）：ECU；视角：视线高度平视，沿动作轴线拍摄；构图：主体保持在9:16安全区，动作方向留出前进空间；站位与视线：按答案与新问题的动作关系安排站位；沿叙事动作方向，反应时回看对手或关键道具；灯光与色彩：炉火熄灭；冷紫黑；三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。；动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。；主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。；冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。"
               }
             ],
-            "referenceCount": {
-              "min": 3,
-              "max": 9
-            },
             "referenceManifest": [
               {
                 "alias": "@图片1",
                 "role": "previous_actual_tail",
                 "purpose": "上一镜当前视频版本的已人工验收实际尾帧，仅作为本镜唯一连续性锚点",
-                "shotId": "SH028"
+                "shotId": "SH011"
               },
               {
                 "alias": "@图片2",
@@ -9034,406 +4643,22 @@
                 "purpose": "道具基准图：保持 烟黑铜镜 的形状、持有人与当前状态一致",
                 "assetId": "P08"
               }
-            ]
-          }
-        },
-        {
-          "code": "SH030",
-          "order": 30,
-          "title": "拒绝完整 2/2",
-          "description": "木匣四点微亮，铜镜现观察者，短刃出鞘半寸",
-          "sourceText": "Rifa守在门与Karin之间，直到Karin主动走向铁砧才让开半步。\n奥伦不看推荐信：“谁告诉你，它是被打断的？”\nKarin：“我看着它断的。”\n奥伦：“你看见的是结果。”\n无头锤柄碰触断口。炉火缩成一线，店内金属全部朝铁砧偏转。\n黑湖、倒塔、四只手。这一次，Karin看清其中一只手腕系着暗红细线。他转头看向Rifa的辫绳。Rifa立刻抓住他的手腕，幻象破碎。\n奥伦：“别放开。剑正在借她的记忆认你。”\nRifa：“你知道它为什么断？”\n奥伦取出带四点印记的木匣：“它不是断了。它在拒绝保持完整。”\n他把木匣推向Karin：“而你，不是第一个带它来这里的人。”\n铜镜中没有店内三人，只有高塔上的斗篷身影。Rifa的短刃滑出半寸。\nRifa：“上一个人是谁？”\n奥伦熄灭炉火。黑暗中，木匣再次耳语：“你又来迟了。”\n切黑。",
-          "shotBoundary": "熄火切黑",
-          "dialogue": "Rifa：上一个人是谁？",
-          "narration": "记忆：你又来迟了。",
-          "utterances": [
-            {
-              "id": "D27",
-              "order": 1,
-              "type": "dialogue",
-              "speaker": "Rifa",
-              "text": "上一个人是谁？"
-            },
-            {
-              "id": "D28",
-              "order": 2,
-              "type": "voiceover",
-              "speaker": "记忆",
-              "text": "你又来迟了。"
+            ],
+            "referenceCount": {
+              "min": 3,
+              "max": 9
             }
-          ],
-          "imagePrompt": "静态画面：窄木匣停在铁砧边，Rifa的短刃露出半寸；可见表演：表情：疑惑转为戒备；视线：锁定关键道具；手部：保持与断剑或道具的明确接触；景别：中近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：炉火熄灭，暗琥珀，冷紫黑；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。",
-          "videoPrompt": "动态意图：窄木匣停在铁砧边，Rifa的短刃露出半寸到炉火完全熄灭，木匣四点微亮，短刃保持出鞘半寸；起始可见状态：窄木匣停在铁砧边，Rifa的短刃露出半寸；触发：烟黑铜镜映出高塔观察者，奥伦的手停在熄灭的炉膛旁；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：木匣慢推；声音：店外声音像隔水；木匣滑动、短刃半出鞘、熄火；冷低弦与耳语后绝对静音；结束画面：炉火完全熄灭，木匣四点微亮，短刃保持出鞘半寸；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无过量闪回、无额外手指、无现代工具、无水印logo、观察者不露脸，结尾切黑。。",
-          "cameraMotion": "木匣慢推",
-          "startFramePrompt": "静态画面：窄木匣停在铁砧边，Rifa的短刃露出半寸；可见表演：表情：疑惑转为戒备；视线：锁定关键道具；手部：保持与断剑或道具的明确接触；景别：中近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：炉火熄灭，暗琥珀，冷紫黑；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。；首帧仅继承@图片1对应的上一镜已验收实际尾帧状态。",
-          "endFramePrompt": "静态画面：炉火完全熄灭，木匣四点微亮，短刃保持出鞘半寸；可见表演：表情保持稳定；视线朝向当前主体；木匣四点微亮，铜镜现观察者，短刃出鞘半寸；景别：特写；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：炉火熄灭，暗琥珀，冷紫黑；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。；出口状态保存为当前视频版本实际尾帧并在下游继承前人工验收。",
-          "negativePrompt": "无字幕、无过量闪回、无额外手指、无现代工具、无水印logo、观察者不露脸，结尾切黑。",
-          "continuity": {
-            "shotSize": "MCU→ECU",
-            "cameraAngle": "视线高度平视，沿动作轴线拍摄",
-            "composition": "主体保持在9:16安全区，动作方向留出前进空间",
-            "characterBlocking": "按答案与新问题的动作关系安排站位",
-            "gazeDirection": "沿叙事动作方向，反应时回看对手或关键道具",
-            "actionStart": "答案与新问题",
-            "actionEnd": "木匣四点微亮，铜镜现观察者，短刃出鞘半寸",
-            "screenDirection": "保持同侧屏幕运动方向",
-            "axisRule": "保持180度关系轴线，转场时明确切换",
-            "continuityNotes": "熄火切黑"
-          },
-          "duration": 7,
-          "characterCodes": [
-            "C01",
-            "C02",
-            "C06",
-            "C07"
-          ],
-          "propCodes": [
-            "P04",
-            "P05",
-            "P08"
-          ],
-          "clueCodes": [],
-          "locationCode": "S04",
-          "storySceneCode": "SC07",
-          "timecode": "173-180s",
-          "dramaticFunction": "悬念钩子",
-          "lens": "85mm",
-          "lighting": "炉火熄灭",
-          "colorPalette": "暗琥珀→冷紫黑",
-          "transitionOut": "熄火切黑",
-          "performanceNotes": "你知道它为什么断？；它不是断了。它在拒绝保持完整。；而你，不是第一个带它来这里的人。；上一个人是谁？；你又来迟了。",
-          "performancePlan": {
-            "emotionalObjective": "围绕答案与新问题完成当前镜头的外在行动目标",
-            "emotionalArc": "从进入答案与新问题的克制状态开始，经由动作反应推进，在木匣四点微亮，铜镜现观察者，短刃出鞘半寸前收束",
-            "speechStyle": "台词贴合当下处境，语气清晰克制，重音落在行动关键信息",
-            "pace": "按镜头时长均匀推进，动作变化处短暂停顿，转场前收住",
-            "breath": "起始自然吸气，动作变化处短暂停顿，结束以呼气完成收束",
-            "restraintLevel": "中等克制，避免夸张表演",
-            "beats": {
-              "start": {
-                "emotion": "保持与上一状态一致",
-                "facialAction": "眉眼和下颌保持可读的初始反应",
-                "gaze": "沿当前镜头动作方向",
-                "bodyAction": "进入答案与新问题"
-              },
-              "middle": {
-                "emotion": "压力或目标逐步显现",
-                "facialAction": "眉眼、嘴角或下颌出现与动作对应的细微变化",
-                "gaze": "短暂聚焦关键人物或道具",
-                "bodyAction": "完成主要动作并保留反应停顿"
-              },
-              "end": {
-                "emotion": "在下一镜头切点前完成情绪落点",
-                "facialAction": "固定最终表情，避免切点前漂移",
-                "gaze": "指向下一动作或转场方向",
-                "bodyAction": "木匣四点微亮，铜镜现观察者，短刃出鞘半寸"
-              }
-            }
-          },
-          "dialoguePerformance": [
-            {
-              "utteranceId": "D27",
-              "intent": "推动当前镜头行动并回应对手或环境",
-              "tone": "贴合当前情绪，清晰自然",
-              "pace": "按语义分句，中速完成",
-              "pause": "关键信息前短停，句末自然收束",
-              "emphasis": "上一个人是谁？",
-              "facialReactionBefore": "先以视线和眉眼确认对方或关键道具",
-              "facialReactionDuring": "说话时保持与行动一致的面部反应",
-              "facialReactionAfter": "说完保留短暂反应，衔接下一动作"
-            },
-            {
-              "utteranceId": "D24",
-              "intent": "推动当前镜头行动并回应对手或环境",
-              "tone": "贴合当前情绪，清晰自然",
-              "pace": "按语义分句，中速完成",
-              "pause": "关键信息前短停，句末自然收束",
-              "emphasis": "你知道它为什么断？",
-              "facialReactionBefore": "先以视线和眉眼确认对方或关键道具",
-              "facialReactionDuring": "说话时保持与行动一致的面部反应",
-              "facialReactionAfter": "说完保留短暂反应，衔接下一动作"
-            },
-            {
-              "utteranceId": "D25",
-              "intent": "推动当前镜头行动并回应对手或环境",
-              "tone": "贴合当前情绪，清晰自然",
-              "pace": "按语义分句，中速完成",
-              "pause": "关键信息前短停，句末自然收束",
-              "emphasis": "它不是断了。它在拒绝保持完整。",
-              "facialReactionBefore": "先以视线和眉眼确认对方或关键道具",
-              "facialReactionDuring": "说话时保持与行动一致的面部反应",
-              "facialReactionAfter": "说完保留短暂反应，衔接下一动作"
-            },
-            {
-              "utteranceId": "D26",
-              "intent": "推动当前镜头行动并回应对手或环境",
-              "tone": "贴合当前情绪，清晰自然",
-              "pace": "按语义分句，中速完成",
-              "pause": "关键信息前短停，句末自然收束",
-              "emphasis": "而你，不是第一个带它来这里的人。",
-              "facialReactionBefore": "先以视线和眉眼确认对方或关键道具",
-              "facialReactionDuring": "说话时保持与行动一致的面部反应",
-              "facialReactionAfter": "说完保留短暂反应，衔接下一动作"
-            }
-          ],
-          "lightingPlan": {
-            "palette": "暗琥珀→冷紫黑",
-            "colorTemperature": "主光冷暖关系沿用本场设定，避免相邻镜头跳变",
-            "keyLight": "炉火熄灭作为主光，明确来自画面主方向并照亮主体面部",
-            "fillLight": "弱补光保留面部细节，阴影侧不完全压黑",
-            "rimLight": "以轻微轮廓光分离人物与背景，不制造硬边光晕",
-            "contrast": "中等反差，主体层次清晰，避免高光溢出",
-            "materialResponse": "金属、皮革和织物按真实材质反射，亮部克制",
-            "skinToneProtection": "保护肤色自然，不被环境色完全染色",
-            "inheritFromPrevious": "继承上一镜主光方向、色温和环境亮度",
-            "transitionToNext": "在动作结束处平滑过渡到下一镜主光和色板"
-          },
-          "sound": {
-            "ambience": "店外声音像隔水",
-            "soundEffects": "木匣滑动、短刃半出鞘、熄火",
-            "music": "冷低弦与耳语后绝对静音"
-          },
-          "entryState": {
-            "characters": [
-              {
-                "assetId": "C01",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面左侧或前景",
-                "gaze": "沿镜头轴线向右",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "答案与新问题"
-              },
-              {
-                "assetId": "C02",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "答案与新问题"
-              },
-              {
-                "assetId": "C06",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "答案与新问题"
-              },
-              {
-                "assetId": "C07",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "答案与新问题"
-              }
-            ],
-            "props": [
-              {
-                "assetId": "P04",
-                "state": "答案与新问题",
-                "holderId": "C06"
-              },
-              {
-                "assetId": "P05",
-                "state": "答案与新问题",
-                "holderId": "C02"
-              },
-              {
-                "assetId": "P08",
-                "state": "答案与新问题",
-                "holderId": "C06"
-              }
-            ],
-            "environment": "铸剑师的警告",
-            "lighting": "炉火熄灭",
-            "axis": "保持180度人物关系轴线",
-            "screenDirection": "角色移动方向沿场景既定动线"
-          },
-          "exitState": {
-            "characters": [
-              {
-                "assetId": "C01",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面左侧或前景",
-                "gaze": "沿镜头轴线向右",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "木匣四点微亮，铜镜现观察者，短刃出鞘半寸"
-              },
-              {
-                "assetId": "C02",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "木匣四点微亮，铜镜现观察者，短刃出鞘半寸"
-              },
-              {
-                "assetId": "C06",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "木匣四点微亮，铜镜现观察者，短刃出鞘半寸"
-              },
-              {
-                "assetId": "C07",
-                "wardrobe": "系列圣经标准造型",
-                "position": "画面右侧或后景",
-                "gaze": "沿镜头轴线向左",
-                "pose": "克制站姿或自然坐姿",
-                "expression": "按本镜表演说明",
-                "action": "木匣四点微亮，铜镜现观察者，短刃出鞘半寸"
-              }
-            ],
-            "props": [
-              {
-                "assetId": "P04",
-                "state": "木匣四点微亮，铜镜现观察者，短刃出鞘半寸",
-                "holderId": "C06"
-              },
-              {
-                "assetId": "P05",
-                "state": "木匣四点微亮，铜镜现观察者，短刃出鞘半寸",
-                "holderId": "C02"
-              },
-              {
-                "assetId": "P08",
-                "state": "木匣四点微亮，铜镜现观察者，短刃出鞘半寸",
-                "holderId": "C06"
-              }
-            ],
-            "environment": "铸剑师的警告",
-            "lighting": "炉火熄灭",
-            "axis": "保持180度人物关系轴线",
-            "screenDirection": "角色移动方向沿场景既定动线"
           },
           "sourceAssetIds": [],
-          "continuityStatus": "planned",
-          "videoMode": "reference",
-          "storyboardFrameMode": "all_frames",
-          "framePlan": {
-            "start": {
-              "source": "previous_accepted_actual_tail"
-            },
-            "end": {
-              "required": true
-            },
-            "frames": [
-              {
-                "id": "SH030-F01",
-                "sequenceIndex": 1,
-                "startSecond": 0,
-                "endSecond": 2.333,
-                "actionPrompt": "窄木匣停在铁砧边，Rifa的短刃露出半寸",
-                "imagePrompt": "静态画面：窄木匣停在铁砧边，Rifa的短刃露出半寸；可见表演：表情：疑惑转为戒备；视线：锁定关键道具；手部：保持与断剑或道具的明确接触；景别：中近景；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：炉火熄灭，暗琥珀，冷紫黑；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
-              },
-              {
-                "id": "SH030-F02",
-                "sequenceIndex": 2,
-                "startSecond": 2.333,
-                "endSecond": 4.667,
-                "actionPrompt": "烟黑铜镜映出高塔观察者，奥伦的手停在熄灭的炉膛旁",
-                "imagePrompt": "静态画面：烟黑铜镜映出高塔观察者，奥伦的手停在熄灭的炉膛旁；可见表演：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；景别：特写；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：炉火熄灭，暗琥珀，冷紫黑；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
-              },
-              {
-                "id": "SH030-F03",
-                "sequenceIndex": 3,
-                "startSecond": 4.667,
-                "endSecond": 7,
-                "actionPrompt": "炉火完全熄灭，木匣四点微亮，短刃保持出鞘半寸",
-                "imagePrompt": "静态画面：炉火完全熄灭，木匣四点微亮，短刃保持出鞘半寸；可见表演：表情保持稳定；视线朝向当前主体；木匣四点微亮，铜镜现观察者，短刃出鞘半寸；景别：特写；构图：主体保持在9:16安全区，动作方向留出前进空间；光线与色彩：炉火熄灭，暗琥珀，冷紫黑；画幅约束：9:16，人物头顶与底部保留安全区；保持已绑定角色身份、服装、道具形态、场景结构和轴线连续；冻结为单一静态姿态，不表现运动或剪辑过程。"
-              }
-            ],
-            "referenceCount": {
-              "min": 3,
-              "max": 9
-            },
-            "referenceManifest": [
-              {
-                "alias": "@图片1",
-                "role": "previous_actual_tail",
-                "purpose": "上一镜当前视频版本的已人工验收实际尾帧，仅作为本镜唯一连续性锚点",
-                "shotId": "SH029"
-              },
-              {
-                "alias": "@图片2",
-                "role": "character_anchor",
-                "purpose": "角色基准图：保持 Karin 的身份特征、服装与道具不漂移",
-                "assetId": "C01"
-              },
-              {
-                "alias": "@图片3",
-                "role": "character_anchor",
-                "purpose": "角色基准图：保持 Rifa 的身份特征、服装与道具不漂移",
-                "assetId": "C02"
-              },
-              {
-                "alias": "@图片4",
-                "role": "character_anchor",
-                "purpose": "角色基准图：保持 奥伦·奈特 的身份特征、服装与道具不漂移",
-                "assetId": "C06"
-              },
-              {
-                "alias": "@图片5",
-                "role": "character_anchor",
-                "purpose": "角色基准图：保持 神秘观察者 的身份特征、服装与道具不漂移",
-                "assetId": "C07"
-              },
-              {
-                "alias": "@图片6",
-                "role": "scene_anchor",
-                "purpose": "场景基准图：保持空间结构、光向与轴线一致",
-                "assetId": "S04"
-              },
-              {
-                "alias": "@图片7",
-                "role": "prop_anchor",
-                "purpose": "道具基准图：保持 四点木匣 的形状、持有人与当前状态一致",
-                "assetId": "P04"
-              },
-              {
-                "alias": "@图片8",
-                "role": "prop_anchor",
-                "purpose": "道具基准图：保持 Rifa短刃 的形状、持有人与当前状态一致",
-                "assetId": "P05"
-              },
-              {
-                "alias": "@图片9",
-                "role": "prop_anchor",
-                "purpose": "道具基准图：保持 烟黑铜镜 的形状、持有人与当前状态一致",
-                "assetId": "P08"
-              }
-            ]
-          }
+          "continuityStatus": "ready",
+          "videoMode": "storyboard",
+          "storyboardFrameMode": "all_frames"
         }
       ],
       "continuityEdges": [
         {
           "fromShotCode": "SH001",
           "toShotCode": "SH002",
-          "transition": "match_cut",
-          "inheritActualEndFrame": true,
-          "carryCharacterIds": [
-            "C01"
-          ],
-          "carryPropIds": [
-            "P01"
-          ],
-          "carryEnvironment": true,
-          "carryAxis": true,
-          "notes": "睁眼匹配切"
-        },
-        {
-          "fromShotCode": "SH002",
-          "toShotCode": "SH003",
           "transition": "scene_change",
           "inheritActualEndFrame": false,
           "carryCharacterIds": [
@@ -9447,40 +4672,8 @@
           "notes": "睁眼匹配切"
         },
         {
-          "fromShotCode": "SH003",
-          "toShotCode": "SH004",
-          "transition": "continuous",
-          "inheritActualEndFrame": true,
-          "carryCharacterIds": [
-            "C01",
-            "C02"
-          ],
-          "carryPropIds": [
-            "P01"
-          ],
-          "carryEnvironment": true,
-          "carryAxis": true,
-          "notes": "水囊动作切"
-        },
-        {
-          "fromShotCode": "SH004",
-          "toShotCode": "SH005",
-          "transition": "continuous",
-          "inheritActualEndFrame": true,
-          "carryCharacterIds": [
-            "C01",
-            "C02"
-          ],
-          "carryPropIds": [
-            "P01"
-          ],
-          "carryEnvironment": true,
-          "carryAxis": true,
-          "notes": "水囊动作切"
-        },
-        {
-          "fromShotCode": "SH005",
-          "toShotCode": "SH006",
+          "fromShotCode": "SH002",
+          "toShotCode": "SH003",
           "transition": "continuous",
           "inheritActualEndFrame": true,
           "carryCharacterIds": [
@@ -9491,6 +4684,53 @@
           "carryEnvironment": true,
           "carryAxis": true,
           "notes": "水囊动作切"
+        },
+        {
+          "fromShotCode": "SH003",
+          "toShotCode": "SH004",
+          "transition": "scene_change",
+          "inheritActualEndFrame": false,
+          "carryCharacterIds": [
+            "C01",
+            "C02"
+          ],
+          "carryPropIds": [
+            "P02"
+          ],
+          "carryEnvironment": false,
+          "carryAxis": false,
+          "notes": "护符熄灭切"
+        },
+        {
+          "fromShotCode": "SH004",
+          "toShotCode": "SH005",
+          "transition": "match_cut",
+          "inheritActualEndFrame": true,
+          "carryCharacterIds": [
+            "C01",
+            "C02",
+            "C05"
+          ],
+          "carryPropIds": [
+            "P03"
+          ],
+          "carryEnvironment": true,
+          "carryAxis": true,
+          "notes": "指针匹配切"
+        },
+        {
+          "fromShotCode": "SH005",
+          "toShotCode": "SH006",
+          "transition": "scene_change",
+          "inheritActualEndFrame": false,
+          "carryCharacterIds": [
+            "C01",
+            "C02"
+          ],
+          "carryPropIds": [],
+          "carryEnvironment": false,
+          "carryAxis": false,
+          "notes": "锁链硬切"
         },
         {
           "fromShotCode": "SH006",
@@ -9501,12 +4741,10 @@
             "C01",
             "C02"
           ],
-          "carryPropIds": [
-            "P02"
-          ],
+          "carryPropIds": [],
           "carryEnvironment": true,
           "carryAxis": true,
-          "notes": "护符熄灭切"
+          "notes": "拇指动作切"
         },
         {
           "fromShotCode": "SH007",
@@ -9517,353 +4755,65 @@
             "C01",
             "C02"
           ],
-          "carryPropIds": [
-            "P02"
-          ],
+          "carryPropIds": [],
           "carryEnvironment": false,
           "carryAxis": false,
-          "notes": "护符熄灭切"
+          "notes": "声音骤停"
         },
         {
           "fromShotCode": "SH008",
           "toShotCode": "SH009",
-          "transition": "match_cut",
-          "inheritActualEndFrame": true,
+          "transition": "scene_change",
+          "inheritActualEndFrame": false,
           "carryCharacterIds": [
             "C01",
-            "C02",
-            "C05"
+            "C02"
           ],
           "carryPropIds": [
-            "P02",
-            "P03"
+            "P01"
           ],
-          "carryEnvironment": true,
-          "carryAxis": true,
-          "notes": "指针匹配切"
+          "carryEnvironment": false,
+          "carryAxis": false,
+          "notes": "碰剑声切"
         },
         {
           "fromShotCode": "SH009",
           "toShotCode": "SH010",
-          "transition": "match_cut",
-          "inheritActualEndFrame": true,
+          "transition": "scene_change",
+          "inheritActualEndFrame": false,
           "carryCharacterIds": [
             "C01",
             "C02",
-            "C05"
+            "C06"
           ],
           "carryPropIds": [
-            "P03"
+            "P01"
           ],
-          "carryEnvironment": true,
-          "carryAxis": true,
-          "notes": "指针匹配切"
+          "carryEnvironment": false,
+          "carryAxis": false,
+          "notes": "门开切内景"
         },
         {
           "fromShotCode": "SH010",
           "toShotCode": "SH011",
-          "transition": "hard_cut",
-          "inheritActualEndFrame": false,
+          "transition": "continuous",
+          "inheritActualEndFrame": true,
           "carryCharacterIds": [
             "C01",
             "C02",
-            "C05"
+            "C06"
           ],
           "carryPropIds": [
-            "P03"
+            "P01",
+            "P07"
           ],
           "carryEnvironment": true,
           "carryAxis": true,
-          "notes": "锁链硬切"
+          "notes": "锤柄触剑切"
         },
         {
           "fromShotCode": "SH011",
           "toShotCode": "SH012",
-          "transition": "hard_cut",
-          "inheritActualEndFrame": false,
-          "carryCharacterIds": [
-            "C01",
-            "C02",
-            "C05"
-          ],
-          "carryPropIds": [
-            "P03"
-          ],
-          "carryEnvironment": true,
-          "carryAxis": true,
-          "notes": "锁链硬切"
-        },
-        {
-          "fromShotCode": "SH012",
-          "toShotCode": "SH013",
-          "transition": "scene_change",
-          "inheritActualEndFrame": false,
-          "carryCharacterIds": [
-            "C01",
-            "C02"
-          ],
-          "carryPropIds": [],
-          "carryEnvironment": false,
-          "carryAxis": false,
-          "notes": "锁链硬切"
-        },
-        {
-          "fromShotCode": "SH013",
-          "toShotCode": "SH014",
-          "transition": "continuous",
-          "inheritActualEndFrame": true,
-          "carryCharacterIds": [
-            "C01",
-            "C02"
-          ],
-          "carryPropIds": [
-            "P01"
-          ],
-          "carryEnvironment": true,
-          "carryAxis": true,
-          "notes": "拇指动作切"
-        },
-        {
-          "fromShotCode": "SH014",
-          "toShotCode": "SH015",
-          "transition": "continuous",
-          "inheritActualEndFrame": true,
-          "carryCharacterIds": [
-            "C01",
-            "C02"
-          ],
-          "carryPropIds": [],
-          "carryEnvironment": true,
-          "carryAxis": true,
-          "notes": "拇指动作切"
-        },
-        {
-          "fromShotCode": "SH015",
-          "toShotCode": "SH016",
-          "transition": "continuous",
-          "inheritActualEndFrame": true,
-          "carryCharacterIds": [
-            "C01",
-            "C02",
-            "C05",
-            "C07"
-          ],
-          "carryPropIds": [
-            "P03",
-            "P06"
-          ],
-          "carryEnvironment": true,
-          "carryAxis": true,
-          "notes": "声音骤停"
-        },
-        {
-          "fromShotCode": "SH016",
-          "toShotCode": "SH017",
-          "transition": "continuous",
-          "inheritActualEndFrame": true,
-          "carryCharacterIds": [
-            "C01",
-            "C02",
-            "C05",
-            "C07"
-          ],
-          "carryPropIds": [
-            "P03",
-            "P06"
-          ],
-          "carryEnvironment": true,
-          "carryAxis": true,
-          "notes": "声音骤停"
-        },
-        {
-          "fromShotCode": "SH017",
-          "toShotCode": "SH018",
-          "transition": "scene_change",
-          "inheritActualEndFrame": false,
-          "carryCharacterIds": [
-            "C01",
-            "C02"
-          ],
-          "carryPropIds": [],
-          "carryEnvironment": false,
-          "carryAxis": false,
-          "notes": "声音骤停"
-        },
-        {
-          "fromShotCode": "SH018",
-          "toShotCode": "SH019",
-          "transition": "continuous",
-          "inheritActualEndFrame": true,
-          "carryCharacterIds": [
-            "C01",
-            "C02"
-          ],
-          "carryPropIds": [
-            "P01"
-          ],
-          "carryEnvironment": true,
-          "carryAxis": true,
-          "notes": "碰剑声切"
-        },
-        {
-          "fromShotCode": "SH019",
-          "toShotCode": "SH020",
-          "transition": "continuous",
-          "inheritActualEndFrame": true,
-          "carryCharacterIds": [
-            "C01",
-            "C02"
-          ],
-          "carryPropIds": [
-            "P01"
-          ],
-          "carryEnvironment": true,
-          "carryAxis": true,
-          "notes": "碰剑声切"
-        },
-        {
-          "fromShotCode": "SH020",
-          "toShotCode": "SH021",
-          "transition": "scene_change",
-          "inheritActualEndFrame": false,
-          "carryCharacterIds": [
-            "C01",
-            "C02"
-          ],
-          "carryPropIds": [
-            "P01"
-          ],
-          "carryEnvironment": false,
-          "carryAxis": false,
-          "notes": "碰剑声切"
-        },
-        {
-          "fromShotCode": "SH021",
-          "toShotCode": "SH022",
-          "transition": "continuous",
-          "inheritActualEndFrame": true,
-          "carryCharacterIds": [
-            "C01",
-            "C02",
-            "C06"
-          ],
-          "carryPropIds": [
-            "P01"
-          ],
-          "carryEnvironment": true,
-          "carryAxis": true,
-          "notes": "门开切内景"
-        },
-        {
-          "fromShotCode": "SH022",
-          "toShotCode": "SH023",
-          "transition": "scene_change",
-          "inheritActualEndFrame": false,
-          "carryCharacterIds": [
-            "C01",
-            "C02",
-            "C06"
-          ],
-          "carryPropIds": [
-            "P01"
-          ],
-          "carryEnvironment": false,
-          "carryAxis": false,
-          "notes": "门开切内景"
-        },
-        {
-          "fromShotCode": "SH023",
-          "toShotCode": "SH024",
-          "transition": "continuous",
-          "inheritActualEndFrame": true,
-          "carryCharacterIds": [
-            "C01",
-            "C02",
-            "C06"
-          ],
-          "carryPropIds": [
-            "P01",
-            "P07"
-          ],
-          "carryEnvironment": true,
-          "carryAxis": true,
-          "notes": "锤柄触剑切"
-        },
-        {
-          "fromShotCode": "SH024",
-          "toShotCode": "SH025",
-          "transition": "continuous",
-          "inheritActualEndFrame": true,
-          "carryCharacterIds": [
-            "C01",
-            "C02",
-            "C06"
-          ],
-          "carryPropIds": [
-            "P01",
-            "P07"
-          ],
-          "carryEnvironment": true,
-          "carryAxis": true,
-          "notes": "锤柄触剑切"
-        },
-        {
-          "fromShotCode": "SH025",
-          "toShotCode": "SH026",
-          "transition": "continuous",
-          "inheritActualEndFrame": true,
-          "carryCharacterIds": [
-            "C01",
-            "C02",
-            "C06"
-          ],
-          "carryPropIds": [
-            "P01",
-            "P07"
-          ],
-          "carryEnvironment": true,
-          "carryAxis": true,
-          "notes": "锤柄触剑切"
-        },
-        {
-          "fromShotCode": "SH026",
-          "toShotCode": "SH027",
-          "transition": "continuous",
-          "inheritActualEndFrame": true,
-          "carryCharacterIds": [
-            "C01",
-            "C02",
-            "C06"
-          ],
-          "carryPropIds": [
-            "P01",
-            "P07"
-          ],
-          "carryEnvironment": true,
-          "carryAxis": true,
-          "notes": "抓腕切回"
-        },
-        {
-          "fromShotCode": "SH027",
-          "toShotCode": "SH028",
-          "transition": "continuous",
-          "inheritActualEndFrame": true,
-          "carryCharacterIds": [
-            "C01",
-            "C02",
-            "C06"
-          ],
-          "carryPropIds": [
-            "P01",
-            "P07"
-          ],
-          "carryEnvironment": true,
-          "carryAxis": true,
-          "notes": "抓腕切回"
-        },
-        {
-          "fromShotCode": "SH028",
-          "toShotCode": "SH029",
           "transition": "continuous",
           "inheritActualEndFrame": true,
           "carryCharacterIds": [
@@ -9875,26 +4825,6 @@
           "carryEnvironment": true,
           "carryAxis": true,
           "notes": "抓腕切回"
-        },
-        {
-          "fromShotCode": "SH029",
-          "toShotCode": "SH030",
-          "transition": "continuous",
-          "inheritActualEndFrame": true,
-          "carryCharacterIds": [
-            "C01",
-            "C02",
-            "C06",
-            "C07"
-          ],
-          "carryPropIds": [
-            "P04",
-            "P05",
-            "P08"
-          ],
-          "carryEnvironment": true,
-          "carryAxis": true,
-          "notes": "熄火切黑"
         }
       ]
     }
@@ -9940,67 +4870,67 @@
     "sections": [
       {
         "code": "SEC01",
-        "title": "项目总览",
+        "title": "一、项目总览",
         "content": ""
       },
       {
         "code": "SEC02",
-        "title": "原创第一章",
+        "title": "二、原创第一章",
         "content": ""
       },
       {
         "code": "SEC03",
-        "title": "第一集文学剧本（编剧链重构版）",
+        "title": "三、第一集文学剧本",
         "content": ""
       },
       {
         "code": "SEC04",
-        "title": "镜头执行表",
+        "title": "四、镜头执行表",
         "content": ""
       },
       {
         "code": "SEC05",
-        "title": "角色一致性资产",
+        "title": "五、角色一致性资产",
         "content": ""
       },
       {
         "code": "SEC06",
-        "title": "场景一致性资产",
+        "title": "六、场景一致性资产",
         "content": ""
       },
       {
         "code": "SEC07",
-        "title": "关键视频资产 Prompt",
+        "title": "七、关键视频资产 Prompt",
         "content": ""
       },
       {
         "code": "SEC08",
-        "title": "全案板 Prompt",
+        "title": "八、全案板 Prompt",
         "content": ""
       },
       {
         "code": "SEC09",
-        "title": "台词与表演脚本",
+        "title": "九、台词与表演脚本",
         "content": ""
       },
       {
         "code": "SEC10",
-        "title": "声音设计",
+        "title": "十、声音设计",
         "content": ""
       },
       {
         "code": "SEC11",
-        "title": "Seedance 分段视频 Prompt",
-        "content": "### P01｜SH001\n\n动态意图：黑湖无波，倒悬古塔与Karin模糊倒影对齐到冷银断口占据画面中心，Karin手指扣住碎裂剑刃并停住；起始可见状态：黑湖无波，倒悬古塔与Karin模糊倒影对齐；触发：完整剑刃从掌心断口向外裂开，四只手仍未松开；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：垂直慢推；声音：近乎无环境声、远处冰风；剑刃自裂；无呼吸女声与低弦两音母题；结束画面：冷银断口占据画面中心，Karin手指扣住碎裂剑刃并停住；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无水印、无logo、无可辨识的Ras或Ref、无额外肢体、无断手、无脸部变形、无现代元素、无HUD、无过量粒子。。\n\nP01-F01 0-2s：黑湖无波，倒悬古塔与Karin模糊倒影对齐\nP01-F02 2-4s：雪地中央四只手彼此扣紧，Karin掌心握住完整剑刃\nP01-F03 4-6s：完整剑刃从掌心断口向外裂开，四只手仍未松开\nP01-F04 6-8s：冷银断口占据画面中心，Karin手指扣住碎裂剑刃并停住\n\n### P02｜SH002\n\n动态意图：马车内同一只手继续压住断剑，Karin肩膀绷紧到Karin完全惊醒，手扣断剑、肩膀绷紧、视线稳定锁定握柄；起始可见状态：马车内同一只手继续压住断剑，Karin肩膀绷紧；触发：Karin睁开灰绿色眼睛，视线落向断剑，呼吸急促并保持握持；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：垂直慢推；声音：近乎无环境声、远处冰风；剑刃自裂；无呼吸女声与低弦两音母题；结束画面：Karin完全惊醒，手扣断剑、肩膀绷紧、视线稳定锁定握柄；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无水印、无logo、无可辨识的Ras或Ref、无额外肢体、无断手、无脸部变形、无现代元素、无HUD、无过量粒子。。\n\nP02-F01 0-2.333s：马车内同一只手继续压住断剑，Karin肩膀绷紧\nP02-F02 2.333-4.667s：Karin睁开灰绿色眼睛，视线落向断剑，呼吸急促并保持握持\nP02-F03 4.667-7s：Karin完全惊醒，手扣断剑、肩膀绷紧、视线稳定锁定握柄\n\n### P03｜SH003\n\n动态意图：马车内Rifa看向Karin，Karin的手仍扣住断剑到Karin接住水囊，Rifa移开目光，车厢关系恢复克制；起始可见状态：马车内Rifa看向Karin，Karin的手仍扣住断剑；触发：Karin避开Rifa的视线，Rifa眉心收紧并等待回答；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：固定双人中景；声音：车轮、马具、木车轻响；水囊滑过木板、剑鞘摩擦；克制拨弦，保留对白空间；结束画面：Karin接住水囊，Rifa移开目光，车厢关系恢复克制；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无浪漫凝视、无现代物品、无额外肢体、无脸部融化、无背景漂移。。\n\nP03-F01 0-1.667s：马车内Rifa看向Karin，Karin的手仍扣住断剑\nP03-F02 1.667-3.333s：Karin避开Rifa的视线，Rifa眉心收紧并等待回答\nP03-F03 3.333-5s：Karin接住水囊，Rifa移开目光，车厢关系恢复克制\n\n### P04｜SH004\n\n动态意图：Rifa观察Karin的呼吸，Karin仍坐在车厢内到Rifa把水囊推到Karin手边，Karin抬手准备接住；起始可见状态：Rifa观察Karin的呼吸，Karin仍坐在车厢内；触发：Karin避开Rifa的视线，嘴角压住，手仍靠近断剑；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：固定双人中景；声音：车轮、马具、木车轻响；水囊滑过木板、剑鞘摩擦；克制拨弦，保留对白空间；结束画面：Rifa把水囊推到Karin手边，Karin抬手准备接住；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无浪漫凝视、无现代物品、无额外肢体、无脸部融化、无背景漂移。。\n\nP04-F01 0-1.667s：Rifa观察Karin的呼吸，Karin仍坐在车厢内\nP04-F02 1.667-3.333s：Karin避开Rifa的视线，嘴角压住，手仍靠近断剑\nP04-F03 3.333-5s：Rifa把水囊推到Karin手边，Karin抬手准备接住\n\n### P05｜SH005\n\n动态意图：水囊停在Karin手边，Rifa收回目光到Karin握住水囊，Rifa望向车窗，车厢恢复日常站位；起始可见状态：水囊停在Karin手边，Rifa收回目光；触发：Karin双手接住水囊，肩膀从绷紧转为放松；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：固定双人中景；声音：车轮、马具、木车轻响；水囊滑过木板、剑鞘摩擦；克制拨弦，保留对白空间；结束画面：Karin握住水囊，Rifa望向车窗，车厢恢复日常站位；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无浪漫凝视、无现代物品、无额外肢体、无脸部融化、无背景漂移。。\n\nP05-F01 0-1.667s：水囊停在Karin手边，Rifa收回目光\nP05-F02 1.667-3.333s：Karin双手接住水囊，肩膀从绷紧转为放松\nP05-F03 3.333-5s：Karin握住水囊，Rifa望向车窗，车厢恢复日常站位\n\n### P06｜SH006\n\n动态意图：腰间黄铜护符闪烁后熄灭，Karin的手停在护符旁到Karin握住熄灭护符，Rifa望向结界并保持警觉；起始可见状态：腰间黄铜护符闪烁后熄灭，Karin的手停在护符旁；触发：透明皇家结界逼近车窗，两人同时转头警觉；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：车内慢拉；声音：车轮渐弱、结界远鸣；护符闪烁后熄灭；两音母题低声回归；结束画面：Karin握住熄灭护符，Rifa望向结界并保持警觉；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无科技扫描、无雷电爆炸、无角色变形、无背景漂移。。\n\nP06-F01 0-2.667s：腰间黄铜护符闪烁后熄灭，Karin的手停在护符旁\nP06-F02 2.667-5.333s：透明皇家结界逼近车窗，两人同时转头警觉\nP06-F03 5.333-8s：Karin握住熄灭护符，Rifa望向结界并保持警觉\n\n### P07｜SH007\n\n动态意图：Karin握住熄灭护符，Rifa仍看向车窗外的结界到两人保持警觉站位，护符贴在Karin掌心，结界占据车窗背景；起始可见状态：Karin握住熄灭护符，Rifa仍看向车窗外的结界；触发：Rifa的视线锁定结界，Karin手指收紧护符；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：车内慢拉；声音：车轮渐弱、结界远鸣；护符闪烁后熄灭；两音母题低声回归；结束画面：两人保持警觉站位，护符贴在Karin掌心，结界占据车窗背景；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无科技扫描、无雷电爆炸、无角色变形、无背景漂移。。\n\nP07-F01 0-2.333s：Karin握住熄灭护符，Rifa仍看向车窗外的结界\nP07-F02 2.333-4.667s：Rifa的视线锁定结界，Karin手指收紧护符\nP07-F03 4.667-7s：两人保持警觉站位，护符贴在Karin掌心，结界占据车窗背景\n\n### P08｜SH008\n\n动态意图：马车穿过透明皇家结界，冷银光落在Karin与Rifa身上到Karin与Rifa站在检查台前，黄铜探测器被举起；起始可见状态：马车穿过透明皇家结界，冷银光落在Karin与Rifa身上；触发：双塔上方的法师剪影俯视马车，结界光纹停在背景；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：前向跟车；声音：风穿结界、远钟；透明波纹、探测器启动；低弦持续音进入；结束画面：Karin与Rifa站在检查台前，黄铜探测器被举起；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无现代检查设备、无枪械、无HUD、无雷电爆炸、无角色变形。。\n\nP08-F01 0-2.667s：马车穿过透明皇家结界，冷银光落在Karin与Rifa身上\nP08-F02 2.667-5.333s：双塔上方的法师剪影俯视马车，结界光纹停在背景\nP08-F03 5.333-8s：Karin与Rifa站在检查台前，黄铜探测器被举起\n\n### P09｜SH009\n\n动态意图：透明结界光纹停在双塔城门外，法师剪影俯视道路到两人站在检查台前，检查官举起黄铜探测器；起始可见状态：透明结界光纹停在双塔城门外，法师剪影俯视道路；触发：马车停在检查台前，Karin与Rifa从车厢下车；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：前向跟车；声音：风穿结界、远钟；透明波纹、探测器启动；低弦持续音进入；结束画面：两人站在检查台前，检查官举起黄铜探测器；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无现代检查设备、无枪械、无HUD、无雷电爆炸、无角色变形。。\n\nP09-F01 0-2.333s：透明结界光纹停在双塔城门外，法师剪影俯视道路\nP09-F02 2.333-4.667s：马车停在检查台前，Karin与Rifa从车厢下车\nP09-F03 4.667-7s：两人站在检查台前，检查官举起黄铜探测器\n\n### P10｜SH010\n\n动态意图：黄铜探测器指针停在零刻度，检查官与两名旅人保持对峙站位到Karin前移半步挡住检查官看向Rifa的视线，闸门锁闭；起始可见状态：黄铜探测器指针停在零刻度，检查官与两名旅人保持对峙站位；触发：检查官抬手，竖幅上方的闸门锁链开始下落；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：固定正反打；声音：人群渐静；探测器空响、锁链落下；低频缓慢上升；结束画面：Karin前移半步挡住检查官看向Rifa的视线，闸门锁闭；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无现代检查站、无夸张表演、无魔法光球、无角色变形。。\n\nP10-F01 0-1.667s：黄铜探测器指针停在零刻度，检查官与两名旅人保持对峙站位\nP10-F02 1.667-3.333s：检查官抬手，竖幅上方的闸门锁链开始下落\nP10-F03 3.333-5s：Karin前移半步挡住检查官看向Rifa的视线，闸门锁闭\n\n### P11｜SH011\n\n动态意图：黄铜探测器停在零刻度，检查官与两名旅人保持对峙站位到Karin前移半步挡住检查官看向Rifa的视线，闸门锁闭；起始可见状态：黄铜探测器停在零刻度，检查官与两名旅人保持对峙站位；触发：检查官抬手，竖幅上方闸门锁链开始下落；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：固定正反打；声音：人群渐静；探测器空响、锁链落下；低频缓慢上升；结束画面：Karin前移半步挡住检查官看向Rifa的视线，闸门锁闭；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无现代检查站、无夸张表演、无魔法光球、无角色变形。。\n\nP11-F01 0-1.667s：黄铜探测器停在零刻度，检查官与两名旅人保持对峙站位\nP11-F02 1.667-3.333s：检查官抬手，竖幅上方闸门锁链开始下落\nP11-F03 3.333-5s：Karin前移半步挡住检查官看向Rifa的视线，闸门锁闭\n\n### P12｜SH012\n\n动态意图：检查官与Karin隔着零刻度探测器对峙，Rifa站在侧后方到闸门锁闭，Karin挡住检查官视线，Rifa保持警觉；起始可见状态：检查官与Karin隔着零刻度探测器对峙，Rifa站在侧后方；触发：Karin向前半步，Rifa保持侧后位置，闸门锁链悬在上方；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：固定正反打；声音：人群渐静；探测器空响、锁链落下；低频缓慢上升；结束画面：闸门锁闭，Karin挡住检查官视线，Rifa保持警觉；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无现代检查站、无夸张表演、无魔法光球、无角色变形。。\n\nP12-F01 0-1.667s：检查官与Karin隔着零刻度探测器对峙，Rifa站在侧后方\nP12-F02 1.667-3.333s：Karin向前半步，Rifa保持侧后位置，闸门锁链悬在上方\nP12-F03 3.333-5s：闸门锁闭，Karin挡住检查官视线，Rifa保持警觉\n\n### P13｜SH013\n\n动态意图：Karin拇指压在断剑剑柄上，Rifa看向他的手到两人并肩站在封印前，手部保持旧信号后的静止关系；起始可见状态：Karin拇指压在断剑剑柄上，Rifa看向他的手；触发：Rifa向前一步停在Karin身侧，两人肩膀逐渐放松；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：缓慢推近；声音：城门底噪收窄；拇指压住剑柄、布料轻响；心跳式低频，不盖对白；结束画面：两人并肩站在封印前，手部保持旧信号后的静止关系；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无浪漫化、无施法手势、无能量球、无角色换脸、无背景跳动。。\n\nP13-F01 0-2.667s：Karin拇指压在断剑剑柄上，Rifa看向他的手\nP13-F02 2.667-5.333s：Rifa向前一步停在Karin身侧，两人肩膀逐渐放松\nP13-F03 5.333-8s：两人并肩站在封印前，手部保持旧信号后的静止关系\n\n### P14｜SH014\n\n动态意图：Karin与Rifa并肩站在封印前，Rifa的视线落向封印边缘到两人完全并肩，封印保持将开未开的裂隙状态；起始可见状态：Karin与Rifa并肩站在封印前，Rifa的视线落向封印边缘；触发：两人的肩膀放松，双手停在封印两侧；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：缓慢推近；声音：城门底噪收窄；拇指压住剑柄、布料轻响；心跳式低频，不盖对白；结束画面：两人完全并肩，封印保持将开未开的裂隙状态；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无浪漫化、无施法手势、无能量球、无角色换脸、无背景跳动。。\n\nP14-F01 0-2.333s：Karin与Rifa并肩站在封印前，Rifa的视线落向封印边缘\nP14-F02 2.333-4.667s：两人的肩膀放松，双手停在封印两侧\nP14-F03 4.667-7s：两人完全并肩，封印保持将开未开的裂隙状态\n\n### P15｜SH015\n\n动态意图：Karin与Rifa并肩站在封印前，双手停在解除动作起点到两人收力站稳，闸门打开，远处观察者转动四点银戒；起始可见状态：Karin与Rifa并肩站在封印前，双手停在解除动作起点；触发：旗帜与尘埃悬停，结界向两人凹陷，探测器内部出现裂纹；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：极慢环绕；声音：前3s完全静音；探测器细裂、闸门链条；一次低频冲击后骤停；结束画面：两人收力站稳，闸门打开，远处观察者转动四点银戒；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无爆炸闪电火焰、无能量球、观察者不露脸、无角色变形。。\n\nP15-F01 0-1.667s：Karin与Rifa并肩站在封印前，双手停在解除动作起点\nP15-F02 1.667-3.333s：旗帜与尘埃悬停，结界向两人凹陷，探测器内部出现裂纹\nP15-F03 3.333-5s：两人收力站稳，闸门打开，远处观察者转动四点银戒\n\n### P16｜SH016\n\n动态意图：悬停的旗帜和尘埃固定在半空，结界保持凹陷到高塔远处观察者转动四点银戒，闸门在背景打开；起始可见状态：悬停的旗帜和尘埃固定在半空，结界保持凹陷；触发：探测器从内部裂开，Karin与Rifa的肩膀开始放松；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：极慢环绕；声音：前3s完全静音；探测器细裂、闸门链条；一次低频冲击后骤停；结束画面：高塔远处观察者转动四点银戒，闸门在背景打开；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无爆炸闪电火焰、无能量球、观察者不露脸、无角色变形。。\n\nP16-F01 0-1.667s：悬停的旗帜和尘埃固定在半空，结界保持凹陷\nP16-F02 1.667-3.333s：探测器从内部裂开，Karin与Rifa的肩膀开始放松\nP16-F03 3.333-5s：高塔远处观察者转动四点银戒，闸门在背景打开\n\n### P17｜SH017\n\n动态意图：Karin与Rifa站在打开的闸门前，肩膀已收力到高塔观察者站在远处阴影中，四点银戒停在抬起的手指间；起始可见状态：Karin与Rifa站在打开的闸门前，肩膀已收力；触发：闸门完全打开，两人保持站稳，冷银光落在地面；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：极慢环绕；声音：前3s完全静音；探测器细裂、闸门链条；一次低频冲击后骤停；结束画面：高塔观察者站在远处阴影中，四点银戒停在抬起的手指间；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无爆炸闪电火焰、无能量球、观察者不露脸、无角色变形。。\n\nP17-F01 0-1.667s：Karin与Rifa站在打开的闸门前，肩膀已收力\nP17-F02 1.667-3.333s：闸门完全打开，两人保持站稳，冷银光落在地面\nP17-F03 3.333-5s：高塔观察者站在远处阴影中，四点银戒停在抬起的手指间\n\n### P18｜SH018\n\n动态意图：阿佐雷斯层叠塔楼、吊桥和水渠沿陡坡展开到Rifa放慢脚步与Karin并肩抵达上行坡道；起始可见状态：阿佐雷斯层叠塔楼、吊桥和水渠沿陡坡展开；触发：断剑撞上蓝玻璃瓶手推车，Karin立刻护住剑鞘；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：吊臂下降；声音：城市人声、铁锤、水渠；剑鞘碰车沿；木管好奇动机转暖弦；结束画面：Rifa放慢脚步与Karin并肩抵达上行坡道；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无现代城市、无角色换脸、无横向拥挤。。\n\nP18-F01 0-1.667s：阿佐雷斯层叠塔楼、吊桥和水渠沿陡坡展开\nP18-F02 1.667-3.333s：断剑撞上蓝玻璃瓶手推车，Karin立刻护住剑鞘\nP18-F03 3.333-5s：Rifa放慢脚步与Karin并肩抵达上行坡道\n\n### P19｜SH019\n\n动态意图：Rifa望向Karin，Karin的手仍按住剑鞘到两人放慢脚步并肩前行，Karin没有把手从剑上移开；起始可见状态：Rifa望向Karin，Karin的手仍按住剑鞘；触发：Karin避开视线，Rifa保持半步距离并等待回答；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：吊臂下降；声音：城市人声、铁锤、水渠；剑鞘碰车沿；木管好奇动机转暖弦；结束画面：两人放慢脚步并肩前行，Karin没有把手从剑上移开；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无现代城市、无角色换脸、无横向拥挤。。\n\nP19-F01 0-1.667s：Rifa望向Karin，Karin的手仍按住剑鞘\nP19-F02 1.667-3.333s：Karin避开视线，Rifa保持半步距离并等待回答\nP19-F03 3.333-5s：两人放慢脚步并肩前行，Karin没有把手从剑上移开\n\n### P20｜SH020\n\n动态意图：Karin与Rifa沿阿佐雷斯上行坡道并肩走近门口到两人并肩抵达上行坡道尽头，剑鞘仍在Karin腰后；起始可见状态：Karin与Rifa沿阿佐雷斯上行坡道并肩走近门口；触发：两人停在坡道转折处，Rifa侧身看向Karin；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：吊臂下降；声音：城市人声、铁锤、水渠；剑鞘碰车沿；木管好奇动机转暖弦；结束画面：两人并肩抵达上行坡道尽头，剑鞘仍在Karin腰后；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无现代城市、无角色换脸、无横向拥挤。。\n\nP20-F01 0-1.667s：Karin与Rifa沿阿佐雷斯上行坡道并肩走近门口\nP20-F02 1.667-3.333s：两人停在坡道转折处，Rifa侧身看向Karin\nP20-F03 3.333-5s：两人并肩抵达上行坡道尽头，剑鞘仍在Karin腰后\n\n### P21｜SH021\n\n动态意图：Edia Knight木门占满竖幅，门面银色裂痕与梦中剑刃断口相同到木门开启，奥伦背对站在冷蓝外光与暗琥珀炉光交界处；起始可见状态：Edia Knight木门占满竖幅，门面银色裂痕与梦中剑刃断口相同；触发：Karin抬手未触门，腰后断剑先发生震动；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：银裂纹后拉；声音：坡道风声；断剑震动、三次锤击、门滑开；两音母题反向出现；结束画面：木门开启，奥伦背对站在冷蓝外光与暗琥珀炉光交界处；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无现代门锁、无可读招牌、无电动机械感、无角色变形。。\n\nP21-F01 0-2.667s：Edia Knight木门占满竖幅，门面银色裂痕与梦中剑刃断口相同\nP21-F02 2.667-5.333s：Karin抬手未触门，腰后断剑先发生震动\nP21-F03 5.333-8s：木门开启，奥伦背对站在冷蓝外光与暗琥珀炉光交界处\n\n### P22｜SH022\n\n动态意图：Karin与Rifa立在木门门槛，奥伦背对站在炉光深处到奥伦保持背对，Karin避开Rifa的视线，三人纵深关系稳定；起始可见状态：Karin与Rifa立在木门门槛，奥伦背对站在炉光深处；触发：Karin的手停在腰后断剑旁，Rifa的视线落向门内；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：银裂纹后拉；声音：坡道风声；断剑震动、三次锤击、门滑开；两音母题反向出现；结束画面：奥伦保持背对，Karin避开Rifa的视线，三人纵深关系稳定；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无现代门锁、无可读招牌、无电动机械感、无角色变形。。\n\nP22-F01 0-2.333s：Karin与Rifa立在木门门槛，奥伦背对站在炉光深处\nP22-F02 2.333-4.667s：Karin的手停在腰后断剑旁，Rifa的视线落向门内\nP22-F03 4.667-7s：奥伦保持背对，Karin避开Rifa的视线，三人纵深关系稳定\n\n### P23｜SH023\n\n动态意图：奥伦站在铁砧旁抬眼看向Karin手中的断剑到断剑平放在铁砧上，锤柄抵住断口；起始可见状态：奥伦站在铁砧旁抬眼看向Karin手中的断剑；触发：Karin走到铁砧前，Rifa守在门与他之间；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：侧向滑轨；声音：炉火、极远街声；断剑放上铁砧、木柄轻触；单一低弦持续，不抢台词；结束画面：断剑平放在铁砧上，锤柄抵住断口；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无现代工具、无角色变形、无过量火花。。\n\nP23-F01 0-1.667s：奥伦站在铁砧旁抬眼看向Karin手中的断剑\nP23-F02 1.667-3.333s：Karin走到铁砧前，Rifa守在门与他之间\nP23-F03 3.333-5s：断剑平放在铁砧上，锤柄抵住断口\n\n### P24｜SH024\n\n动态意图：奥伦侧身站在铁砧旁，目光落向Karin手中的断剑到锤柄抵住断口，三人停在同一纵深关系中；起始可见状态：奥伦侧身站在铁砧旁，目光落向Karin手中的断剑；触发：Karin把断剑平放在铁砧上，Rifa守在门与他之间；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：侧向滑轨；声音：炉火、极远街声；断剑放上铁砧、木柄轻触；单一低弦持续，不抢台词；结束画面：锤柄抵住断口，三人停在同一纵深关系中；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无现代工具、无角色变形、无过量火花。。\n\nP24-F01 0-1.667s：奥伦侧身站在铁砧旁，目光落向Karin手中的断剑\nP24-F02 1.667-3.333s：Karin把断剑平放在铁砧上，Rifa守在门与他之间\nP24-F03 3.333-5s：锤柄抵住断口，三人停在同一纵深关系中\n\n### P25｜SH025\n\n动态意图：奥伦的手停在断剑上方，Karin站在铁砧前到锤柄抵住断口，三人停在同一纵深关系中；起始可见状态：奥伦的手停在断剑上方，Karin站在铁砧前；触发：Karin把断剑平放在铁砧上，Rifa保持门口站位；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：侧向滑轨；声音：炉火、极远街声；断剑放上铁砧、木柄轻触；单一低弦持续，不抢台词；结束画面：锤柄抵住断口，三人停在同一纵深关系中；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无现代工具、无角色变形、无过量火花。。\n\nP25-F01 0-1.667s：奥伦的手停在断剑上方，Karin站在铁砧前\nP25-F02 1.667-3.333s：Karin把断剑平放在铁砧上，Rifa保持门口站位\nP25-F03 3.333-5s：锤柄抵住断口，三人停在同一纵深关系中\n\n### P26｜SH026\n\n动态意图：锤柄触碰断剑，炉火缩成一线，金属朝铁砧偏转到Rifa抓住Karin手腕，奥伦注视两人相接的手；起始可见状态：锤柄触碰断剑，炉火缩成一线，金属朝铁砧偏转；触发：黑湖记忆浮现，雪地中央的手腕系着暗红细线；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：记忆慢推；声音：金属共鸣、记忆风声；Rifa抓腕、炉火收缩；女声母题短促上升后断开；结束画面：Rifa抓住Karin手腕，奥伦注视两人相接的手；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无额外手指、无断手、无可辨识的其他三人面孔、无角色变形、无过载闪回。。\n\nP26-F01 0-1.667s：锤柄触碰断剑，炉火缩成一线，金属朝铁砧偏转\nP26-F02 1.667-3.333s：黑湖记忆浮现，雪地中央的手腕系着暗红细线\nP26-F03 3.333-5s：Rifa抓住Karin手腕，奥伦注视两人相接的手\n\n### P27｜SH027\n\n动态意图：无头锤柄触碰断剑，炉火缩成一线，金属朝铁砧偏转到Rifa抓住Karin手腕，奥伦注视两人相接的手；起始可见状态：无头锤柄触碰断剑，炉火缩成一线，金属朝铁砧偏转；触发：黑湖记忆浮现，雪地中央的手腕系着暗红细线；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：记忆慢推；声音：金属共鸣、记忆风声；Rifa抓腕、炉火收缩；女声母题短促上升后断开；结束画面：Rifa抓住Karin手腕，奥伦注视两人相接的手；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无额外手指、无断手、无可辨识的其他三人面孔、无角色变形、无过载闪回。。\n\nP27-F01 0-1.667s：无头锤柄触碰断剑，炉火缩成一线，金属朝铁砧偏转\nP27-F02 1.667-3.333s：黑湖记忆浮现，雪地中央的手腕系着暗红细线\nP27-F03 3.333-5s：Rifa抓住Karin手腕，奥伦注视两人相接的手\n\n### P28｜SH028\n\n动态意图：炉火缩成一线，Karin看向暗红细线的记忆残影到奥伦注视两人相接的手，断剑停在铁砧上；起始可见状态：炉火缩成一线，Karin看向暗红细线的记忆残影；触发：Rifa的手扣住Karin手腕，暗红辫绳与记忆中的红线相对；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：记忆慢推；声音：金属共鸣、记忆风声；Rifa抓腕、炉火收缩；女声母题短促上升后断开；结束画面：奥伦注视两人相接的手，断剑停在铁砧上；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无额外手指、无断手、无可辨识的其他三人面孔、无角色变形、无过载闪回。。\n\nP28-F01 0-1.667s：炉火缩成一线，Karin看向暗红细线的记忆残影\nP28-F02 1.667-3.333s：Rifa的手扣住Karin手腕，暗红辫绳与记忆中的红线相对\nP28-F03 3.333-5s：奥伦注视两人相接的手，断剑停在铁砧上\n\n### P29｜SH029\n\n动态意图：奥伦从铁砧下取出窄木匣并推向Karin到炉火熄灭，木匣四点微亮，铜镜映出高塔观察者；起始可见状态：奥伦从铁砧下取出窄木匣并推向Karin；触发：Rifa的短刃滑出半寸，视线转向木匣与奥伦；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：木匣慢推；声音：店外声音像隔水；木匣滑动、短刃半出鞘、熄火；冷低弦与耳语后绝对静音；结束画面：炉火熄灭，木匣四点微亮，铜镜映出高塔观察者；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无过量闪回、无额外手指、无现代工具、无水印logo、观察者不露脸，结尾切黑。。\n\nP29-F01 0-2.667s：奥伦从铁砧下取出窄木匣并推向Karin\nP29-F02 2.667-5.333s：Rifa的短刃滑出半寸，视线转向木匣与奥伦\nP29-F03 5.333-8s：炉火熄灭，木匣四点微亮，铜镜映出高塔观察者\n\n### P30｜SH030\n\n动态意图：窄木匣停在铁砧边，Rifa的短刃露出半寸到炉火完全熄灭，木匣四点微亮，短刃保持出鞘半寸；起始可见状态：窄木匣停在铁砧边，Rifa的短刃露出半寸；触发：烟黑铜镜映出高塔观察者，奥伦的手停在熄灭的炉膛旁；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：木匣慢推；声音：店外声音像隔水；木匣滑动、短刃半出鞘、熄火；冷低弦与耳语后绝对静音；结束画面：炉火完全熄灭，木匣四点微亮，短刃保持出鞘半寸；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无过量闪回、无额外手指、无现代工具、无水印logo、观察者不露脸，结尾切黑。。\n\nP30-F01 0-2.333s：窄木匣停在铁砧边，Rifa的短刃露出半寸\nP30-F02 2.333-4.667s：烟黑铜镜映出高塔观察者，奥伦的手停在熄灭的炉膛旁\nP30-F03 4.667-7s：炉火完全熄灭，木匣四点微亮，短刃保持出鞘半寸"
+        "title": "十一、分段视频 Prompt",
+        "content": "### P01｜SH001 黑湖记忆\n\n\u0060\u0060\u0060text\n15s 9:16 视频\n动态意图：动态意图：黑湖、倒塔、四手与完整剑刃到Karin在马车中睁眼并扣住断剑，呼吸急促；起始可见状态：黑湖、倒塔、四手与完整剑刃；主体动作与反应：Karin掌心的完整剑刃裂开，手指仍扣住断口；Karin在马车中睁眼并扣住断剑，呼吸急促；一个主运镜：垂直慢推；环境压力与声音：近乎无环境声、远处冰风；剑刃自裂；无呼吸女声与低弦两音母题；结束画面：Karin在马车中睁眼并扣住断剑，呼吸急促；针对性约束：无字幕、无水印、无logo、无可辨识的Ras或Ref、无额外肢体、无断手、无脸部变形、无现代元素、无HUD、无过量粒子。\n单一主运镜：垂直慢推\nP01-F01 0-2s：黑湖无波，倒悬古塔与Karin模糊倒影对齐\nP01-F02 2-4s：雪地中央四只手彼此扣紧，Karin掌心握住完整剑刃\nP01-F03 4-6s：完整剑刃从掌心断口向外裂开，四只手仍未松开\nP01-F04 6-8s：冷银断口占据画面中心，Karin手指扣住碎裂剑刃并停住\nP01-F05 8-9.75s：上一镜冷银断口与扣紧手指作为马车内匹配切入口\nP01-F06 9.75-11.5s：马车内同一只手继续压住断剑，Karin肩膀绷紧\nP01-F07 11.5-13.25s：Karin睁开灰绿色眼睛，视线落向断剑，呼吸急促并保持握持\nP01-F08 13.25-15s：Karin完全惊醒，手扣断剑、肩膀绷紧、视线稳定锁定握柄\n参考职责：@图片1仅用于角色基准图：保持 Karin 的身份特征、服装与道具不漂移；@图片2仅用于场景基准图：保持空间结构、光向与轴线一致；@图片3仅用于道具基准图：保持 Karin的断剑 的形状、持有人与当前状态一致；@图片4仅用于场景基准图：保持空间结构、光向与轴线一致\n结束画面：Karin在马车中惊醒，手扣断剑，呼吸急促\n风格：VS14 中世纪史诗的学院奇幻变体；宏大空间与克制人物近景并重，不使用现代元素或科幻 UI。\n针对性约束：无字幕、无水印、无logo、无可辨识的Ras或Ref、无额外肢体、无断手、无脸部变形、无现代元素、无HUD、无过量粒子。\n\u0060\u0060\u0060\n\n### P02｜SH002 梦醒试探\n\n\u0060\u0060\u0060text\n15s 9:16 视频\n动态意图：动态意图：马车内Rifa看向Karin，Karin的手仍扣住断剑到Karin握住水囊，Rifa望向车窗，车厢恢复日常站位；起始可见状态：马车内Rifa看向Karin，Karin的手仍扣住断剑；主体动作与反应：Karin接住水囊，Rifa移开视线，关系恢复日常；一个主运镜：固定双人中景；环境压力与声音：车轮、马具、木车轻响；水囊滑过木板、剑鞘摩擦；克制拨弦，保留对白空间；结束画面：Karin握住水囊，Rifa望向车窗，车厢恢复日常站位；针对性约束：无字幕、无浪漫凝视、无现代物品、无额外肢体、无脸部融化、无背景漂移。\n单一主运镜：固定双人中景\nP02-F01 0-1.667s：马车内Rifa看向Karin，Karin的手仍扣住断剑\nP02-F02 1.667-3.333s：Karin避开Rifa的视线，Rifa眉心收紧并等待回答\nP02-F03 3.333-5s：Karin接住水囊，Rifa移开目光，车厢关系恢复克制\nP02-F04 5-6.667s：Rifa观察Karin的呼吸，Karin仍坐在车厢内\nP02-F05 6.667-8.333s：Karin避开Rifa的视线，嘴角压住，手仍靠近断剑\nP02-F06 8.333-10s：Rifa把水囊推到Karin手边，Karin抬手准备接住\nP02-F07 10-11.667s：水囊停在Karin手边，Rifa收回目光\nP02-F08 11.667-13.333s：Karin双手接住水囊，肩膀从绷紧转为放松\nP02-F09 13.333-15s：Karin握住水囊，Rifa望向车窗，车厢恢复日常站位\n参考职责：@图片1仅用于上一镜当前视频版本的已人工验收实际尾帧，仅作为本镜唯一连续性锚点；@图片2仅用于角色基准图：保持 Karin 的身份特征、服装与道具不漂移；@图片3仅用于角色基准图：保持 Rifa 的身份特征、服装与道具不漂移；@图片4仅用于场景基准图：保持空间结构、光向与轴线一致；@图片5仅用于道具基准图：保持 Karin的断剑 的形状、持有人与当前状态一致\n结束画面：Karin接住水囊，Rifa移开视线，关系恢复日常；Karin接住水囊，Rifa移开视线，关系恢复日常\n风格：VS14 中世纪史诗的学院奇幻变体；宏大空间与克制人物近景并重，不使用现代元素或科幻 UI。\n针对性约束：无字幕、无浪漫凝视、无现代物品、无额外肢体、无脸部融化、无背景漂移。\n\u0060\u0060\u0060\n\n### P03｜SH003 第几个\n\n\u0060\u0060\u0060text\n15s 9:16 视频\n动态意图：动态意图：腰间黄铜护符闪烁后熄灭，Karin的手停在护符旁到两人保持警觉站位，护符贴在Karin掌心，结界占据车窗背景；起始可见状态：腰间黄铜护符闪烁后熄灭，Karin的手停在护符旁；主体动作与反应：Karin握住护符，Rifa望向结界，二人警觉；一个主运镜：车内慢拉；环境压力与声音：车轮渐弱、结界远鸣；护符闪烁后熄灭；两音母题低声回归；结束画面：两人保持警觉站位，护符贴在Karin掌心，结界占据车窗背景；针对性约束：无字幕、无科技扫描、无雷电爆炸、无角色变形、无背景漂移。\n单一主运镜：车内慢拉\nP03-F01 0-2.667s：腰间黄铜护符闪烁后熄灭，Karin的手停在护符旁\nP03-F02 2.667-5.333s：透明皇家结界逼近车窗，两人同时转头警觉\nP03-F03 5.333-8s：Karin握住熄灭护符，Rifa望向结界并保持警觉\nP03-F04 8-10.333s：Karin握住熄灭护符，Rifa仍看向车窗外的结界\nP03-F05 10.333-12.667s：Rifa的视线锁定结界，Karin手指收紧护符\nP03-F06 12.667-15s：两人保持警觉站位，护符贴在Karin掌心，结界占据车窗背景\n参考职责：@图片1仅用于上一镜当前视频版本的已人工验收实际尾帧，仅作为本镜唯一连续性锚点；@图片2仅用于角色基准图：保持 Karin 的身份特征、服装与道具不漂移；@图片3仅用于角色基准图：保持 Rifa 的身份特征、服装与道具不漂移；@图片4仅用于场景基准图：保持空间结构、光向与轴线一致；@图片5仅用于道具基准图：保持 失灵护符 的形状、持有人与当前状态一致\n结束画面：Karin握住护符，Rifa望向结界，二人警觉；Karin握住护符，Rifa望向结界，二人警觉\n风格：VS14 中世纪史诗的学院奇幻变体；宏大空间与克制人物近景并重，不使用现代元素或科幻 UI。\n针对性约束：无字幕、无科技扫描、无雷电爆炸、无角色变形、无背景漂移。\n\u0060\u0060\u0060\n\n### P04｜SH004 跨越结界\n\n\u0060\u0060\u0060text\n15s 9:16 视频\n动态意图：动态意图：马车穿过透明皇家结界，冷银光落在Karin与Rifa身上到两人站在检查台前，检查官举起黄铜探测器；起始可见状态：马车穿过透明皇家结界，冷银光落在Karin与Rifa身上；主体动作与反应：二人站在检查台前，探测器举起；一个主运镜：前向跟车；环境压力与声音：风穿结界、远钟；透明波纹、探测器启动；低弦持续音进入；结束画面：两人站在检查台前，检查官举起黄铜探测器；针对性约束：无字幕、无现代检查设备、无枪械、无HUD、无雷电爆炸、无角色变形。\n单一主运镜：前向跟车\nP04-F01 0-2.667s：马车穿过透明皇家结界，冷银光落在Karin与Rifa身上\nP04-F02 2.667-5.333s：双塔上方的法师剪影俯视马车，结界光纹停在背景\nP04-F03 5.333-8s：Karin与Rifa站在检查台前，黄铜探测器被举起\nP04-F04 8-10.333s：透明结界光纹停在双塔城门外，法师剪影俯视道路\nP04-F05 10.333-12.667s：马车停在检查台前，Karin与Rifa从车厢下车\nP04-F06 12.667-15s：两人站在检查台前，检查官举起黄铜探测器\n参考职责：@图片1仅用于上一镜当前视频版本的已人工验收实际尾帧，仅作为本镜唯一连续性锚点；@图片2仅用于角色基准图：保持 Karin 的身份特征、服装与道具不漂移；@图片3仅用于角色基准图：保持 Rifa 的身份特征、服装与道具不漂移；@图片4仅用于角色基准图：保持 城门检查官 的身份特征、服装与道具不漂移；@图片5仅用于场景基准图：保持空间结构、光向与轴线一致；@图片6仅用于道具基准图：保持 失灵护符 的形状、持有人与当前状态一致；@图片7仅用于道具基准图：保持 灵压探测器 的形状、持有人与当前状态一致\n结束画面：二人站在检查台前，探测器举起；二人站在检查台前，探测器举起；二人站在检查台前，探测器举起\n风格：VS14 中世纪史诗的学院奇幻变体；宏大空间与克制人物近景并重，不使用现代元素或科幻 UI。\n针对性约束：无字幕、无现代检查设备、无枪械、无HUD、无雷电爆炸、无角色变形。\n\u0060\u0060\u0060\n\n### P05｜SH005 空白读数\n\n\u0060\u0060\u0060text\n15s 9:16 视频\n动态意图：动态意图：黄铜探测器指针停在零刻度，检查官与两名旅人保持对峙站位到闸门锁闭，Karin挡住检查官视线，Rifa保持警觉；起始可见状态：黄铜探测器指针停在零刻度，检查官与两名旅人保持对峙站位；主体动作与反应：Karin前移半步，Rifa侧后，闸门锁闭；一个主运镜：固定正反打；环境压力与声音：人群渐静；探测器空响、锁链落下；低频缓慢上升；结束画面：闸门锁闭，Karin挡住检查官视线，Rifa保持警觉；针对性约束：无字幕、无现代检查站、无夸张表演、无魔法光球、无角色变形。\n单一主运镜：固定正反打\nP05-F01 0-2s：黄铜探测器指针停在零刻度，检查官与两名旅人保持对峙站位\nP05-F02 2-4s：检查官抬手，竖幅上方的闸门锁链开始下落\nP05-F03 4-6s：Karin前移半步挡住检查官看向Rifa的视线，闸门锁闭\nP05-F04 6-8s：黄铜探测器停在零刻度，检查官与两名旅人保持对峙站位\nP05-F05 8-10s：检查官抬手，竖幅上方闸门锁链开始下落\nP05-F06 10-12s：检查官与Karin隔着零刻度探测器对峙，Rifa站在侧后方\nP05-F07 12-14s：Karin向前半步，Rifa保持侧后位置，闸门锁链悬在上方\nP05-F08 14-15s：闸门锁闭，Karin挡住检查官视线，Rifa保持警觉\n参考职责：@图片1仅用于上一镜当前视频版本的已人工验收实际尾帧，仅作为本镜唯一连续性锚点；@图片2仅用于角色基准图：保持 Karin 的身份特征、服装与道具不漂移；@图片3仅用于角色基准图：保持 Rifa 的身份特征、服装与道具不漂移；@图片4仅用于角色基准图：保持 城门检查官 的身份特征、服装与道具不漂移；@图片5仅用于场景基准图：保持空间结构、光向与轴线一致；@图片6仅用于道具基准图：保持 灵压探测器 的形状、持有人与当前状态一致\n结束画面：Karin前移半步，Rifa侧后，闸门锁闭；Karin前移半步，Rifa侧后，闸门锁闭；Karin前移半步，Rifa侧后，闸门锁闭\n风格：VS14 中世纪史诗的学院奇幻变体；宏大空间与克制人物近景并重，不使用现代元素或科幻 UI。\n针对性约束：无字幕、无现代检查站、无夸张表演、无魔法光球、无角色变形。\n\u0060\u0060\u0060\n\n### P06｜SH006 旧信号\n\n\u0060\u0060\u0060text\n15s 9:16 视频\n动态意图：动态意图：Karin拇指压在断剑剑柄上，Rifa看向他的手到两人完全并肩，封印保持将开未开的裂隙状态；起始可见状态：Karin拇指压在断剑剑柄上，Rifa看向他的手；主体动作与反应：两人完全并肩，封印将开未开；一个主运镜：缓慢推近；环境压力与声音：城门底噪收窄；拇指压住剑柄、布料轻响；心跳式低频，不盖对白；结束画面：两人完全并肩，封印保持将开未开的裂隙状态；针对性约束：无字幕、无浪漫化、无施法手势、无能量球、无角色换脸、无背景跳动。\n单一主运镜：缓慢推近\nP06-F01 0-2.667s：Karin拇指压在断剑剑柄上，Rifa看向他的手\nP06-F02 2.667-5.333s：Rifa向前一步停在Karin身侧，两人肩膀逐渐放松\nP06-F03 5.333-8s：两人并肩站在封印前，手部保持旧信号后的静止关系\nP06-F04 8-10.333s：Karin与Rifa并肩站在封印前，Rifa的视线落向封印边缘\nP06-F05 10.333-12.667s：两人的肩膀放松，双手停在封印两侧\nP06-F06 12.667-15s：两人完全并肩，封印保持将开未开的裂隙状态\n参考职责：@图片1仅用于上一镜当前视频版本的已人工验收实际尾帧，仅作为本镜唯一连续性锚点；@图片2仅用于角色基准图：保持 Karin 的身份特征、服装与道具不漂移；@图片3仅用于角色基准图：保持 Rifa 的身份特征、服装与道具不漂移；@图片4仅用于场景基准图：保持空间结构、光向与轴线一致；@图片5仅用于道具基准图：保持 Karin的断剑 的形状、持有人与当前状态一致\n结束画面：两人完全并肩，封印将开未开；两人完全并肩，封印将开未开\n风格：VS14 中世纪史诗的学院奇幻变体；宏大空间与克制人物近景并重，不使用现代元素或科幻 UI。\n针对性约束：无字幕、无浪漫化、无施法手势、无能量球、无角色换脸、无背景跳动。\n\u0060\u0060\u0060\n\n### P07｜SH007 力量与观察\n\n\u0060\u0060\u0060text\n15s 9:16 视频\n动态意图：动态意图：Karin与Rifa并肩站在封印前，双手停在解除动作起点到高塔观察者站在远处阴影中，四点银戒停在抬起的手指间；起始可见状态：Karin与Rifa并肩站在封印前，双手停在解除动作起点；主体动作与反应：二人收力站稳，闸门打开，观察者远望；一个主运镜：极慢环绕；环境压力与声音：前3s完全静音；探测器细裂、闸门链条；一次低频冲击后骤停；结束画面：高塔观察者站在远处阴影中，四点银戒停在抬起的手指间；针对性约束：无字幕、无爆炸闪电火焰、无能量球、观察者不露脸、无角色变形。\n单一主运镜：极慢环绕\nP07-F01 0-1.667s：Karin与Rifa并肩站在封印前，双手停在解除动作起点\nP07-F02 1.667-3.333s：旗帜与尘埃悬停，结界向两人凹陷，探测器内部出现裂纹\nP07-F03 3.333-5s：两人收力站稳，闸门打开，远处观察者转动四点银戒\nP07-F04 5-6.667s：悬停的旗帜和尘埃固定在半空，结界保持凹陷\nP07-F05 6.667-8.333s：探测器从内部裂开，Karin与Rifa的肩膀开始放松\nP07-F06 8.333-10s：高塔远处观察者转动四点银戒，闸门在背景打开\nP07-F07 10-11.667s：Karin与Rifa站在打开的闸门前，肩膀已收力\nP07-F08 11.667-13.333s：闸门完全打开，两人保持站稳，冷银光落在地面\nP07-F09 13.333-15s：高塔观察者站在远处阴影中，四点银戒停在抬起的手指间\n参考职责：@图片1仅用于上一镜当前视频版本的已人工验收实际尾帧，仅作为本镜唯一连续性锚点；@图片2仅用于角色基准图：保持 Karin 的身份特征、服装与道具不漂移；@图片3仅用于角色基准图：保持 Rifa 的身份特征、服装与道具不漂移；@图片4仅用于角色基准图：保持 城门检查官 的身份特征、服装与道具不漂移；@图片5仅用于角色基准图：保持 神秘观察者 的身份特征、服装与道具不漂移；@图片6仅用于场景基准图：保持空间结构、光向与轴线一致；@图片7仅用于道具基准图：保持 灵压探测器 的形状、持有人与当前状态一致；@图片8仅用于道具基准图：保持 四点银戒 的形状、持有人与当前状态一致\n结束画面：二人收力站稳，闸门打开，观察者远望；二人收力站稳，闸门打开，观察者远望；二人收力站稳，闸门打开，观察者远望；二人收力站稳，闸门打开，观察者远望\n风格：VS14 中世纪史诗的学院奇幻变体；宏大空间与克制人物近景并重，不使用现代元素或科幻 UI。\n针对性约束：无字幕、无爆炸闪电火焰、无能量球、观察者不露脸、无角色变形。\n\u0060\u0060\u0060\n\n### P08｜SH008 我问的是你\n\n\u0060\u0060\u0060text\n15s 9:16 视频\n动态意图：动态意图：阿佐雷斯层叠塔楼、吊桥和水渠沿陡坡展开到两人并肩抵达上行坡道尽头，剑鞘仍在Karin腰后；起始可见状态：阿佐雷斯层叠塔楼、吊桥和水渠沿陡坡展开；主体动作与反应：二人并肩抵达上行坡道；一个主运镜：吊臂下降；环境压力与声音：城市人声、铁锤、水渠；剑鞘碰车沿；木管好奇动机转暖弦；结束画面：两人并肩抵达上行坡道尽头，剑鞘仍在Karin腰后；针对性约束：无字幕、无现代城市、无角色换脸、无横向拥挤。\n单一主运镜：吊臂下降\nP08-F01 0-1.667s：阿佐雷斯层叠塔楼、吊桥和水渠沿陡坡展开\nP08-F02 1.667-3.333s：断剑撞上蓝玻璃瓶手推车，Karin立刻护住剑鞘\nP08-F03 3.333-5s：Rifa放慢脚步与Karin并肩抵达上行坡道\nP08-F04 5-6.667s：Rifa望向Karin，Karin的手仍按住剑鞘\nP08-F05 6.667-8.333s：Karin避开视线，Rifa保持半步距离并等待回答\nP08-F06 8.333-10s：两人放慢脚步并肩前行，Karin没有把手从剑上移开\nP08-F07 10-11.667s：Karin与Rifa沿阿佐雷斯上行坡道并肩走近门口\nP08-F08 11.667-13.333s：两人停在坡道转折处，Rifa侧身看向Karin\nP08-F09 13.333-15s：两人并肩抵达上行坡道尽头，剑鞘仍在Karin腰后\n参考职责：@图片1仅用于上一镜当前视频版本的已人工验收实际尾帧，仅作为本镜唯一连续性锚点；@图片2仅用于角色基准图：保持 Karin 的身份特征、服装与道具不漂移；@图片3仅用于角色基准图：保持 Rifa 的身份特征、服装与道具不漂移；@图片4仅用于场景基准图：保持空间结构、光向与轴线一致；@图片5仅用于道具基准图：保持 Karin的断剑 的形状、持有人与当前状态一致\n结束画面：二人并肩抵达上行坡道；二人并肩抵达上行坡道\n风格：VS14 中世纪史诗的学院奇幻变体；宏大空间与克制人物近景并重，不使用现代元素或科幻 UI。\n针对性约束：无字幕、无现代城市、无角色换脸、无横向拥挤。\n\u0060\u0060\u0060\n\n### P09｜SH009 银色裂痕\n\n\u0060\u0060\u0060text\n15s 9:16 视频\n动态意图：动态意图：Edia Knight木门占满竖幅，门面银色裂痕与梦中剑刃断口相同到奥伦保持背对，Karin避开Rifa的视线，三人纵深关系稳定；起始可见状态：Edia Knight木门占满竖幅，门面银色裂痕与梦中剑刃断口相同；主体动作与反应：二人立在门槛，奥伦背对，Karin隐瞒梦境；一个主运镜：银裂纹后拉；环境压力与声音：坡道风声；断剑震动、三次锤击、门滑开；两音母题反向出现；结束画面：奥伦保持背对，Karin避开Rifa的视线，三人纵深关系稳定；针对性约束：无字幕、无现代门锁、无可读招牌、无电动机械感、无角色变形。\n单一主运镜：银裂纹后拉\nP09-F01 0-2.667s：Edia Knight木门占满竖幅，门面银色裂痕与梦中剑刃断口相同\nP09-F02 2.667-5.333s：Karin抬手未触门，腰后断剑先发生震动\nP09-F03 5.333-8s：木门开启，奥伦背对站在冷蓝外光与暗琥珀炉光交界处\nP09-F04 8-10.333s：Karin与Rifa立在木门门槛，奥伦背对站在炉光深处\nP09-F05 10.333-12.667s：Karin的手停在腰后断剑旁，Rifa的视线落向门内\nP09-F06 12.667-15s：奥伦保持背对，Karin避开Rifa的视线，三人纵深关系稳定\n参考职责：@图片1仅用于上一镜当前视频版本的已人工验收实际尾帧，仅作为本镜唯一连续性锚点；@图片2仅用于角色基准图：保持 Karin 的身份特征、服装与道具不漂移；@图片3仅用于角色基准图：保持 Rifa 的身份特征、服装与道具不漂移；@图片4仅用于角色基准图：保持 奥伦·奈特 的身份特征、服装与道具不漂移；@图片5仅用于场景基准图：保持空间结构、光向与轴线一致；@图片6仅用于道具基准图：保持 Karin的断剑 的形状、持有人与当前状态一致\n结束画面：二人立在门槛，奥伦背对，Karin隐瞒梦境；二人立在门槛，奥伦背对，Karin隐瞒梦境；二人立在门槛，奥伦背对，Karin隐瞒梦境\n风格：VS14 中世纪史诗的学院奇幻变体；宏大空间与克制人物近景并重，不使用现代元素或科幻 UI。\n针对性约束：无字幕、无现代门锁、无可读招牌、无电动机械感、无角色变形。\n\u0060\u0060\u0060\n\n### P10｜SH010 你看见的是结果\n\n\u0060\u0060\u0060text\n15s 9:16 视频\n动态意图：动态意图：奥伦站在铁砧旁抬眼看向Karin手中的断剑到锤柄抵住断口，三人停在同一纵深关系中；起始可见状态：奥伦站在铁砧旁抬眼看向Karin手中的断剑；主体动作与反应：断剑平放铁砧，锤柄抵住断口；一个主运镜：侧向滑轨；环境压力与声音：炉火、极远街声；断剑放上铁砧、木柄轻触；单一低弦持续，不抢台词；结束画面：锤柄抵住断口，三人停在同一纵深关系中；针对性约束：无字幕、无现代工具、无角色变形、无过量火花。\n单一主运镜：侧向滑轨\nP10-F01 0-2s：奥伦站在铁砧旁抬眼看向Karin手中的断剑\nP10-F02 2-4s：Karin走到铁砧前，Rifa守在门与他之间\nP10-F03 4-6s：断剑平放在铁砧上，锤柄抵住断口\nP10-F04 6-8s：奥伦侧身站在铁砧旁，目光落向Karin手中的断剑\nP10-F05 8-10s：Karin把断剑平放在铁砧上，Rifa守在门与他之间\nP10-F06 10-12s：锤柄抵住断口，三人停在同一纵深关系中\nP10-F07 12-14s：奥伦的手停在断剑上方，Karin站在铁砧前\nP10-F08 14-15s：Karin把断剑平放在铁砧上，Rifa保持门口站位\n参考职责：@图片1仅用于上一镜当前视频版本的已人工验收实际尾帧，仅作为本镜唯一连续性锚点；@图片2仅用于角色基准图：保持 Karin 的身份特征、服装与道具不漂移；@图片3仅用于角色基准图：保持 Rifa 的身份特征、服装与道具不漂移；@图片4仅用于角色基准图：保持 奥伦·奈特 的身份特征、服装与道具不漂移；@图片5仅用于场景基准图：保持空间结构、光向与轴线一致；@图片6仅用于道具基准图：保持 Karin的断剑 的形状、持有人与当前状态一致；@图片7仅用于道具基准图：保持 无头锤柄 的形状、持有人与当前状态一致\n结束画面：断剑平放铁砧，锤柄抵住断口；断剑平放铁砧，锤柄抵住断口；断剑平放铁砧，锤柄抵住断口\n风格：VS14 中世纪史诗的学院奇幻变体；宏大空间与克制人物近景并重，不使用现代元素或科幻 UI。\n针对性约束：无字幕、无现代工具、无角色变形、无过量火花。\n\u0060\u0060\u0060\n\n### P11｜SH011 借她的记忆\n\n\u0060\u0060\u0060text\n15s 9:16 视频\n动态意图：动态意图：锤柄触碰断剑，炉火缩成一线，金属朝铁砧偏转到奥伦注视两人相接的手，断剑停在铁砧上；起始可见状态：锤柄触碰断剑，炉火缩成一线，金属朝铁砧偏转；主体动作与反应：Rifa抓住Karin，奥伦注视相接的手；一个主运镜：记忆慢推；环境压力与声音：金属共鸣、记忆风声；Rifa抓腕、炉火收缩；女声母题短促上升后断开；结束画面：奥伦注视两人相接的手，断剑停在铁砧上；针对性约束：无字幕、无额外手指、无断手、无可辨识的其他三人面孔、无角色变形、无过载闪回。\n单一主运镜：记忆慢推\nP11-F01 0-3s：锤柄触碰断剑，炉火缩成一线，金属朝铁砧偏转\nP11-F02 3-5s：黑湖记忆浮现，雪地中央的手腕系着暗红细线\nP11-F03 5-7s：Rifa抓住Karin手腕，奥伦注视两人相接的手\nP11-F04 7-9s：无头锤柄触碰断剑，炉火缩成一线，金属朝铁砧偏转\nP11-F05 9-11s：炉火缩成一线，Karin看向暗红细线的记忆残影\nP11-F06 11-13s：Rifa的手扣住Karin手腕，暗红辫绳与记忆中的红线相对\nP11-F07 13-15s：奥伦注视两人相接的手，断剑停在铁砧上\n参考职责：@图片1仅用于上一镜当前视频版本的已人工验收实际尾帧，仅作为本镜唯一连续性锚点；@图片2仅用于角色基准图：保持 Karin 的身份特征、服装与道具不漂移；@图片3仅用于角色基准图：保持 Rifa 的身份特征、服装与道具不漂移；@图片4仅用于角色基准图：保持 奥伦·奈特 的身份特征、服装与道具不漂移；@图片5仅用于场景基准图：保持空间结构、光向与轴线一致；@图片6仅用于道具基准图：保持 Karin的断剑 的形状、持有人与当前状态一致；@图片7仅用于道具基准图：保持 无头锤柄 的形状、持有人与当前状态一致\n结束画面：Rifa抓住Karin，奥伦注视相接的手；Rifa抓住Karin，奥伦注视相接的手；Rifa抓住Karin，奥伦注视相接的手\n风格：VS14 中世纪史诗的学院奇幻变体；宏大空间与克制人物近景并重，不使用现代元素或科幻 UI。\n针对性约束：无字幕、无额外手指、无断手、无可辨识的其他三人面孔、无角色变形、无过载闪回。\n\u0060\u0060\u0060\n\n### P12｜SH012 拒绝完整\n\n\u0060\u0060\u0060text\n15s 9:16 视频\n动态意图：动态意图：奥伦从铁砧下取出窄木匣并推向Karin到炉火完全熄灭，木匣四点微亮，短刃保持出鞘半寸；起始可见状态：奥伦从铁砧下取出窄木匣并推向Karin；主体动作与反应：木匣四点微亮，铜镜现观察者，短刃出鞘半寸；一个主运镜：木匣慢推；环境压力与声音：店外声音像隔水；木匣滑动、短刃半出鞘、熄火；冷低弦与耳语后绝对静音；结束画面：炉火完全熄灭，木匣四点微亮，短刃保持出鞘半寸；针对性约束：无字幕、无过量闪回、无额外手指、无现代工具、无水印logo、观察者不露脸，结尾切黑。\n单一主运镜：木匣慢推\nP12-F01 0-2.667s：奥伦从铁砧下取出窄木匣并推向Karin\nP12-F02 2.667-5.333s：Rifa的短刃滑出半寸，视线转向木匣与奥伦\nP12-F03 5.333-8s：炉火熄灭，木匣四点微亮，铜镜映出高塔观察者\nP12-F04 8-10.333s：窄木匣停在铁砧边，Rifa的短刃露出半寸\nP12-F05 10.333-12.667s：烟黑铜镜映出高塔观察者，奥伦的手停在熄灭的炉膛旁\nP12-F06 12.667-15s：炉火完全熄灭，木匣四点微亮，短刃保持出鞘半寸\n参考职责：@图片1仅用于上一镜当前视频版本的已人工验收实际尾帧，仅作为本镜唯一连续性锚点；@图片2仅用于角色基准图：保持 Karin 的身份特征、服装与道具不漂移；@图片3仅用于角色基准图：保持 Rifa 的身份特征、服装与道具不漂移；@图片4仅用于角色基准图：保持 奥伦·奈特 的身份特征、服装与道具不漂移；@图片5仅用于角色基准图：保持 神秘观察者 的身份特征、服装与道具不漂移；@图片6仅用于场景基准图：保持空间结构、光向与轴线一致；@图片7仅用于道具基准图：保持 四点木匣 的形状、持有人与当前状态一致；@图片8仅用于道具基准图：保持 Rifa短刃 的形状、持有人与当前状态一致；@图片9仅用于道具基准图：保持 烟黑铜镜 的形状、持有人与当前状态一致\n结束画面：木匣四点微亮，铜镜现观察者，短刃出鞘半寸；木匣四点微亮，铜镜现观察者，短刃出鞘半寸；木匣四点微亮，铜镜现观察者，短刃出鞘半寸；木匣四点微亮，铜镜现观察者，短刃出鞘半寸\n风格：VS14 中世纪史诗的学院奇幻变体；宏大空间与克制人物近景并重，不使用现代元素或科幻 UI。\n针对性约束：无字幕、无过量闪回、无额外手指、无现代工具、无水印logo、观察者不露脸，结尾切黑。\n\u0060\u0060\u0060"
       },
       {
         "code": "SEC12",
-        "title": "资产映射与执行顺序",
-        "content": "\n\n生产方案快照（导入后作为本集执行契约）：\n{\n  \"version\": \"drama-production-plan-v1\",\n  \"skills\": [\n    {\n      \"id\": \"seedance-director\",\n      \"name\": \"Seedance 导演\",\n      \"version\": \"2.0\"\n    }\n  ],\n  \"video\": {\n    \"model\": \"alibaba/wan-3.0\",\n    \"mode\": \"reference\",\n    \"ratio\": \"9:16\",\n    \"resolution\": \"720p\",\n    \"durationPolicy\": \"shot\",\n    \"count\": 1,\n    \"audioMode\": \"native\",\n    \"allowExplicitFallback\": false\n  },\n  \"references\": {\n    \"strategy\": \"adaptive\",\n    \"minImages\": 3,\n    \"maxImages\": 9,\n    \"roles\": [\n      \"previous_actual_tail\",\n      \"character_anchor\",\n      \"scene_anchor\",\n      \"prop_anchor\",\n      \"action_keyframe\",\n      \"composition_keyframe\"\n    ]\n  },\n  \"continuity\": {\n    \"mode\": \"strict\",\n    \"requireAcceptedActualTail\": true\n  },\n  \"source\": \"package\"\n}\n\n多帧执行规则：每镜按 framePlan.frames 的 Pxx-Fxx 时间顺序执行，并按 referenceManifest 的 @图片N 顺序提交 images；连续镜头的 @图片1 仅接受上一镜当前视频版本、已人工验收的实际尾帧。"
+        "title": "十二、资产映射与执行顺序",
+        "content": "生产方案快照（导入后作为本集执行契约）：\n{\n  \"version\": \"drama-production-plan-v1\",\n  \"skills\": [\n    {\n      \"id\": \"seedance-director\",\n      \"name\": \"Seedance 导演\",\n      \"version\": \"2.0\"\n    }\n  ],\n  \"video\": {\n    \"model\": \"alibaba/wan-3.0\",\n    \"mode\": \"reference\",\n    \"ratio\": \"9:16\",\n    \"resolution\": \"720p\",\n    \"durationPolicy\": \"shot\",\n    \"count\": 1,\n    \"audioMode\": \"native\",\n    \"allowExplicitFallback\": false\n  },\n  \"references\": {\n    \"strategy\": \"adaptive\",\n    \"minImages\": 3,\n    \"maxImages\": 9,\n    \"roles\": [\n      \"previous_actual_tail\",\n      \"character_anchor\",\n      \"scene_anchor\",\n      \"prop_anchor\",\n      \"action_keyframe\",\n      \"composition_keyframe\"\n    ]\n  },\n  \"continuity\": {\n    \"mode\": \"strict\",\n    \"requireAcceptedActualTail\": true\n  },\n  \"source\": \"package\"\n}\n\n多帧执行规则：每镜按 framePlan.frames 的 Pxx-Fxx 时间顺序执行，并按 referenceManifest 的 @图片N 顺序提交 images；连续镜头的 @图片1 仅接受上一镜当前视频版本、已人工验收的实际尾帧。"
       },
       {
         "code": "SEC13",
-        "title": "QC 报告",
+        "title": "十三、QC 报告",
         "content": ""
       }
     ],
@@ -10477,323 +5407,294 @@
 }
 ```
 
-## 项目总览
+## 一、项目总览
 
 
 
-## 原创第一章
+## 二、原创第一章
 
 
 
-## 第一集文学剧本（编剧链重构版）
+## 三、第一集文学剧本
 
 
 
-## 镜头执行表
+## 四、镜头执行表
 
 | 镜号 | 时间 | 阶段 | 景别 | 运镜 | 焦段 | 灯光 | 色彩 | 转场 | 动作描述 | end_state |
 |---|---:|---|---|---|---:|---|---|---|---|---|
-| SH001 | 0-8s | B线钩子 | ELS→ECU | 垂直慢推 | 35mm | 无源冷光 | 深蓝黑+雪白 | 睁眼匹配切 | 黑湖、倒塔、四手与裂剑 | 黑湖、倒塔、四手与裂剑 |
-| SH002 | 8-15s | B线钩子 | ELS→ECU | 垂直慢推 | 35mm | 无源冷光 | 深蓝黑+雪白 | 睁眼匹配切 | Karin在马车中惊醒，手扣断剑，呼吸急促 | Karin在马车中惊醒，手扣断剑，呼吸急促 |
-| SH003 | 15-20s | 起/关系 | MS | 固定双人中景 | 50mm | 阴天柔光 | 雾蓝灰+皮革棕 | 水囊动作切 | Rifa识破梦境，Karin否认 | Rifa识破梦境，Karin否认；Rifa识破梦境，Karin否认 |
-| SH004 | 20-25s | 起/关系 | MS | 固定双人中景 | 50mm | 阴天柔光 | 雾蓝灰+皮革棕 | 水囊动作切 | 梦醒试探的连续反应与动作过渡 | 梦醒试探的连续反应与动作过渡；梦醒试探的连续反应与动作过渡 |
-| SH005 | 25-30s | 起/关系 | MS | 固定双人中景 | 50mm | 阴天柔光 | 雾蓝灰+皮革棕 | 水囊动作切 | Karin接住水囊，Rifa移开视线，关系恢复日常 | Karin接住水囊，Rifa移开视线，关系恢复日常；Karin接住水囊，Rifa移开视线，关系恢复日常 |
-| SH006 | 30-38s | 起/异常 | MCU→LS | 车内慢拉 | 65mm | 柔光转结界冷光 | 暖棕→冷银 | 护符熄灭切 | 护符失灵，结界逼近 | 护符失灵，结界逼近；护符失灵，结界逼近 |
-| SH007 | 38-45s | 起/异常 | MCU→LS | 车内慢拉 | 65mm | 柔光转结界冷光 | 暖棕→冷银 | 护符熄灭切 | Karin握住护符，Rifa望向结界，二人警觉 | Karin握住护符，Rifa望向结界，二人警觉；Karin握住护符，Rifa望向结界，二人警觉 |
-| SH008 | 45-53s | 承/门槛 | LS→MCU | 前向跟车 | 35mm | 结界折射天光 | 冷银+暗蓝 | 指针匹配切 | 穿过结界，法师注视 | 穿过结界，法师注视；穿过结界，法师注视；穿过结界，法师注视 |
-| SH009 | 53-60s | 承/门槛 | LS→MCU | 前向跟车 | 35mm | 结界折射天光 | 冷银+暗蓝 | 指针匹配切 | 二人站在检查台前，探测器举起 | 二人站在检查台前，探测器举起；二人站在检查台前，探测器举起；二人站在检查台前，探测器举起 |
-| SH010 | 60-65s | 承/盘查 | OTS/MCU | 固定正反打 | 65mm | 城门侧光 | 冷灰+暗红 | 锁链硬切 | 空白读数与封锁 | 空白读数与封锁；空白读数与封锁；空白读数与封锁 |
-| SH011 | 65-70s | 承/盘查 | OTS/MCU | 固定正反打 | 65mm | 城门侧光 | 冷灰+暗红 | 锁链硬切 | 空白读数的连续反应与动作过渡 | 空白读数的连续反应与动作过渡；空白读数的连续反应与动作过渡；空白读数的连续反应与动作过渡 |
-| SH012 | 70-75s | 承/盘查 | OTS/MCU | 固定正反打 | 65mm | 城门侧光 | 冷灰+暗红 | 锁链硬切 | Karin前移半步，Rifa侧后，闸门锁闭 | Karin前移半步，Rifa侧后，闸门锁闭；Karin前移半步，Rifa侧后，闸门锁闭；Karin前移半步，Rifa侧后，闸门锁闭 |
-| SH013 | 75-83s | 转/选择 | CU→MS | 缓慢推近 | 85mm | 冷暖分割 | 暗蓝→暗紫 | 拇指动作切 | 二人用旧信号决定解封 | 二人用旧信号决定解封；二人用旧信号决定解封 |
-| SH014 | 83-90s | 转/选择 | CU→MS | 缓慢推近 | 85mm | 冷暖分割 | 暗蓝→暗紫 | 拇指动作切 | 两人完全并肩，封印将开未开 | 两人完全并肩，封印将开未开；两人完全并肩，封印将开未开 |
-| SH015 | 90-95s | 转/爆发 | WS→MCU | 极慢环绕 | 35mm | 银白无源光 | 银白+深紫 | 声音骤停 | 世界短暂失去常态 | 世界短暂失去常态；世界短暂失去常态；世界短暂失去常态；世界短暂失去常态 |
-| SH016 | 95-100s | 转/爆发 | WS→MCU | 极慢环绕 | 35mm | 银白无源光 | 银白+深紫 | 声音骤停 | 力量与观察的连续反应与动作过渡 | 力量与观察的连续反应与动作过渡；力量与观察的连续反应与动作过渡；力量与观察的连续反应与动作过渡；力量与观察的连续反应与动作过渡 |
-| SH017 | 100-105s | 转/爆发 | WS→MCU | 极慢环绕 | 35mm | 银白无源光 | 银白+深紫 | 声音骤停 | 二人收力站稳，闸门打开，观察者远望 | 二人收力站稳，闸门打开，观察者远望；二人收力站稳，闸门打开，观察者远望；二人收力站稳，闸门打开，观察者远望；二人收力站稳，闸门打开，观察者远望 |
-| SH018 | 105-110s | 转/余波 | ELS→MS | 吊臂下降 | 24mm | 散射光+炉火 | 石灰白+琥珀+灰蓝 | 碰剑声切 | 城市揭示与关系停顿 | 城市揭示与关系停顿；城市揭示与关系停顿 |
-| SH019 | 110-115s | 转/余波 | ELS→MS | 吊臂下降 | 24mm | 散射光+炉火 | 石灰白+琥珀+灰蓝 | 碰剑声切 | 我问的是你的连续反应与动作过渡 | 我问的是你的连续反应与动作过渡；我问的是你的连续反应与动作过渡 |
-| SH020 | 115-120s | 转/余波 | ELS→MS | 吊臂下降 | 24mm | 散射光+炉火 | 石灰白+琥珀+灰蓝 | 碰剑声切 | 二人并肩抵达上行坡道 | 二人并肩抵达上行坡道；二人并肩抵达上行坡道 |
-| SH021 | 120-128s | 合/召唤 | CU→LS | 银裂纹后拉 | 65mm | 银纹冷光+炉光 | 冷银+暗琥珀 | 门开切内景 | 裂纹似梦中断口 | 裂纹似梦中断口；裂纹似梦中断口；裂纹似梦中断口 |
-| SH022 | 128-135s | 合/召唤 | CU→LS | 银裂纹后拉 | 65mm | 银纹冷光+炉光 | 冷银+暗琥珀 | 门开切内景 | 二人立在门槛，奥伦背对，Karin隐瞒梦境 | 二人立在门槛，奥伦背对，Karin隐瞒梦境；二人立在门槛，奥伦背对，Karin隐瞒梦境；二人立在门槛，奥伦背对，Karin隐瞒梦境 |
-| SH023 | 135-140s | 合/试探 | MCU | 侧向滑轨 | 50mm | 炉火侧光 | 煤黑+琥珀 | 锤柄触剑切 | 奥伦质疑“被打断” | 奥伦质疑“被打断”；奥伦质疑“被打断”；奥伦质疑“被打断” |
-| SH024 | 140-145s | 合/试探 | MCU | 侧向滑轨 | 50mm | 炉火侧光 | 煤黑+琥珀 | 锤柄触剑切 | 你看见的是结果的连续反应与动作过渡 | 你看见的是结果的连续反应与动作过渡；你看见的是结果的连续反应与动作过渡；你看见的是结果的连续反应与动作过渡 |
-| SH025 | 145-150s | 合/试探 | MCU | 侧向滑轨 | 50mm | 炉火侧光 | 煤黑+琥珀 | 锤柄触剑切 | 断剑平放铁砧，锤柄抵住断口 | 断剑平放铁砧，锤柄抵住断口；断剑平放铁砧，锤柄抵住断口；断剑平放铁砧，锤柄抵住断口 |
-| SH026 | 150-155s | 双线汇合 | CU→ECU | 记忆慢推 | 85mm | 炉火收缩+冷光 | 琥珀→深蓝黑 | 抓腕切回 | 记忆显出暗红线 | 记忆显出暗红线；记忆显出暗红线；记忆显出暗红线 |
-| SH027 | 155-160s | 双线汇合 | CU→ECU | 记忆慢推 | 85mm | 炉火收缩+冷光 | 琥珀→深蓝黑 | 抓腕切回 | 借她的记忆的连续反应与动作过渡 | 借她的记忆的连续反应与动作过渡；借她的记忆的连续反应与动作过渡；借她的记忆的连续反应与动作过渡 |
-| SH028 | 160-165s | 双线汇合 | CU→ECU | 记忆慢推 | 85mm | 炉火收缩+冷光 | 琥珀→深蓝黑 | 抓腕切回 | Rifa抓住Karin，奥伦注视相接的手 | Rifa抓住Karin，奥伦注视相接的手；Rifa抓住Karin，奥伦注视相接的手；Rifa抓住Karin，奥伦注视相接的手 |
-| SH029 | 165-173s | 悬念钩子 | MCU→ECU | 木匣慢推 | 85mm | 炉火熄灭 | 暗琥珀→冷紫黑 | 熄火切黑 | 答案与新问题 | 答案与新问题；答案与新问题；答案与新问题；答案与新问题 |
-| SH030 | 173-180s | 悬念钩子 | MCU→ECU | 木匣慢推 | 85mm | 炉火熄灭 | 暗琥珀→冷紫黑 | 熄火切黑 | 木匣四点微亮，铜镜现观察者，短刃出鞘半寸 | 木匣四点微亮，铜镜现观察者，短刃出鞘半寸；木匣四点微亮，铜镜现观察者，短刃出鞘半寸；木匣四点微亮，铜镜现观察者，短刃出鞘半寸；木匣四点微亮，铜镜现观察者，短刃出鞘半寸 |
+| SH001 | 0-15s | B线钩子 | ELS→ECU | 垂直慢推 | 35mm | 无源冷光 | 深蓝黑+雪白 | 睁眼匹配切 | 黑湖、倒塔、四手与裂剑；剑刃在 Karin 掌心裂开；马车中的 Karin 从裂剑匹配切中惊醒，手扣住断剑，呼吸急促 | Karin在马车中惊醒，手扣断剑，呼吸急促 |
+| SH002 | 15-30s | 起/关系 | MS | 固定双人中景 | 50mm | 阴天柔光 | 雾蓝灰+皮革棕 | 水囊动作切 | Rifa识破梦境，Karin否认；梦醒试探的连续反应与动作过渡；Karin接住水囊，Rifa移开视线，关系恢复日常 | Karin接住水囊，Rifa移开视线，关系恢复日常；Karin接住水囊，Rifa移开视线，关系恢复日常 |
+| SH003 | 30-45s | 起/异常 | MCU→LS | 车内慢拉 | 65mm | 柔光转结界冷光 | 暖棕→冷银 | 护符熄灭切 | 护符失灵，结界逼近；Karin握住护符，Rifa望向结界，二人警觉 | Karin握住护符，Rifa望向结界，二人警觉；Karin握住护符，Rifa望向结界，二人警觉 |
+| SH004 | 45-60s | 承/门槛 | LS→MCU | 前向跟车 | 35mm | 结界折射天光 | 冷银+暗蓝 | 指针匹配切 | 穿过结界，法师注视；二人站在检查台前，探测器举起 | 二人站在检查台前，探测器举起；二人站在检查台前，探测器举起；二人站在检查台前，探测器举起 |
+| SH005 | 60-75s | 承/盘查 | OTS/MCU | 固定正反打 | 65mm | 城门侧光 | 冷灰+暗红 | 锁链硬切 | 空白读数与封锁；空白读数的连续反应与动作过渡；Karin前移半步，Rifa侧后，闸门锁闭 | Karin前移半步，Rifa侧后，闸门锁闭；Karin前移半步，Rifa侧后，闸门锁闭；Karin前移半步，Rifa侧后，闸门锁闭 |
+| SH006 | 75-90s | 转/选择 | CU→MS | 缓慢推近 | 85mm | 冷暖分割 | 暗蓝→暗紫 | 拇指动作切 | 二人用旧信号决定解封；两人完全并肩，封印将开未开 | 两人完全并肩，封印将开未开；两人完全并肩，封印将开未开 |
+| SH007 | 90-105s | 转/爆发 | WS→MCU | 极慢环绕 | 35mm | 银白无源光 | 银白+深紫 | 声音骤停 | 世界短暂失去常态；力量与观察的连续反应与动作过渡；二人收力站稳，闸门打开，观察者远望 | 二人收力站稳，闸门打开，观察者远望；二人收力站稳，闸门打开，观察者远望；二人收力站稳，闸门打开，观察者远望；二人收力站稳，闸门打开，观察者远望 |
+| SH008 | 105-120s | 转/余波 | ELS→MS | 吊臂下降 | 24mm | 散射光+炉火 | 石灰白+琥珀+灰蓝 | 碰剑声切 | 城市揭示与关系停顿；我问的是你的连续反应与动作过渡；二人并肩抵达上行坡道 | 二人并肩抵达上行坡道；二人并肩抵达上行坡道 |
+| SH009 | 120-135s | 合/召唤 | CU→LS | 银裂纹后拉 | 65mm | 银纹冷光+炉光 | 冷银+暗琥珀 | 门开切内景 | 裂纹似梦中断口；二人立在门槛，奥伦背对，Karin隐瞒梦境 | 二人立在门槛，奥伦背对，Karin隐瞒梦境；二人立在门槛，奥伦背对，Karin隐瞒梦境；二人立在门槛，奥伦背对，Karin隐瞒梦境 |
+| SH010 | 135-150s | 合/试探 | MCU | 侧向滑轨 | 50mm | 炉火侧光 | 煤黑+琥珀 | 锤柄触剑切 | 奥伦质疑“被打断”；你看见的是结果的连续反应与动作过渡；断剑平放铁砧，锤柄抵住断口 | 断剑平放铁砧，锤柄抵住断口；断剑平放铁砧，锤柄抵住断口；断剑平放铁砧，锤柄抵住断口 |
+| SH011 | 150-165s | 双线汇合 | CU→ECU | 记忆慢推 | 85mm | 炉火收缩+冷光 | 琥珀→深蓝黑 | 抓腕切回 | 记忆显出暗红线；借她的记忆的连续反应与动作过渡；Rifa抓住Karin，奥伦注视相接的手 | Rifa抓住Karin，奥伦注视相接的手；Rifa抓住Karin，奥伦注视相接的手；Rifa抓住Karin，奥伦注视相接的手 |
+| SH012 | 165-180s | 悬念钩子 | MCU→ECU | 木匣慢推 | 85mm | 炉火熄灭 | 暗琥珀→冷紫黑 | 熄火切黑 | 答案与新问题；木匣四点微亮，铜镜现观察者，短刃出鞘半寸 | 木匣四点微亮，铜镜现观察者，短刃出鞘半寸；木匣四点微亮，铜镜现观察者，短刃出鞘半寸；木匣四点微亮，铜镜现观察者，短刃出鞘半寸；木匣四点微亮，铜镜现观察者，短刃出鞘半寸 |
 
-## 角色一致性资产
+## 五、角色一致性资产
 
 
 
-## 场景一致性资产
+## 六、场景一致性资产
 
 
 
-## 关键视频资产 Prompt
+## 七、关键视频资产 Prompt
 
 
 
-## 全案板 Prompt
+## 八、全案板 Prompt
 
 
 
-## 台词与表演脚本
+## 九、台词与表演脚本
 
 
 
-## 声音设计
+## 十、声音设计
 
 
 
-## Seedance 分段视频 Prompt
+## 十一、分段视频 Prompt
 
-### P01｜SH001
+### P01｜SH001 黑湖记忆
 
-动态意图：黑湖无波，倒悬古塔与Karin模糊倒影对齐到冷银断口占据画面中心，Karin手指扣住碎裂剑刃并停住；起始可见状态：黑湖无波，倒悬古塔与Karin模糊倒影对齐；触发：完整剑刃从掌心断口向外裂开，四只手仍未松开；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：垂直慢推；声音：近乎无环境声、远处冰风；剑刃自裂；无呼吸女声与低弦两音母题；结束画面：冷银断口占据画面中心，Karin手指扣住碎裂剑刃并停住；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无水印、无logo、无可辨识的Ras或Ref、无额外肢体、无断手、无脸部变形、无现代元素、无HUD、无过量粒子。。
-
+```text
+15s 9:16 视频
+动态意图：动态意图：黑湖、倒塔、四手与完整剑刃到Karin在马车中睁眼并扣住断剑，呼吸急促；起始可见状态：黑湖、倒塔、四手与完整剑刃；主体动作与反应：Karin掌心的完整剑刃裂开，手指仍扣住断口；Karin在马车中睁眼并扣住断剑，呼吸急促；一个主运镜：垂直慢推；环境压力与声音：近乎无环境声、远处冰风；剑刃自裂；无呼吸女声与低弦两音母题；结束画面：Karin在马车中睁眼并扣住断剑，呼吸急促；针对性约束：无字幕、无水印、无logo、无可辨识的Ras或Ref、无额外肢体、无断手、无脸部变形、无现代元素、无HUD、无过量粒子。
+单一主运镜：垂直慢推
 P01-F01 0-2s：黑湖无波，倒悬古塔与Karin模糊倒影对齐
 P01-F02 2-4s：雪地中央四只手彼此扣紧，Karin掌心握住完整剑刃
 P01-F03 4-6s：完整剑刃从掌心断口向外裂开，四只手仍未松开
 P01-F04 6-8s：冷银断口占据画面中心，Karin手指扣住碎裂剑刃并停住
-
-### P02｜SH002
-
-动态意图：马车内同一只手继续压住断剑，Karin肩膀绷紧到Karin完全惊醒，手扣断剑、肩膀绷紧、视线稳定锁定握柄；起始可见状态：马车内同一只手继续压住断剑，Karin肩膀绷紧；触发：Karin睁开灰绿色眼睛，视线落向断剑，呼吸急促并保持握持；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：垂直慢推；声音：近乎无环境声、远处冰风；剑刃自裂；无呼吸女声与低弦两音母题；结束画面：Karin完全惊醒，手扣断剑、肩膀绷紧、视线稳定锁定握柄；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无水印、无logo、无可辨识的Ras或Ref、无额外肢体、无断手、无脸部变形、无现代元素、无HUD、无过量粒子。。
-
-P02-F01 0-2.333s：马车内同一只手继续压住断剑，Karin肩膀绷紧
-P02-F02 2.333-4.667s：Karin睁开灰绿色眼睛，视线落向断剑，呼吸急促并保持握持
-P02-F03 4.667-7s：Karin完全惊醒，手扣断剑、肩膀绷紧、视线稳定锁定握柄
-
-### P03｜SH003
-
-动态意图：马车内Rifa看向Karin，Karin的手仍扣住断剑到Karin接住水囊，Rifa移开目光，车厢关系恢复克制；起始可见状态：马车内Rifa看向Karin，Karin的手仍扣住断剑；触发：Karin避开Rifa的视线，Rifa眉心收紧并等待回答；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：固定双人中景；声音：车轮、马具、木车轻响；水囊滑过木板、剑鞘摩擦；克制拨弦，保留对白空间；结束画面：Karin接住水囊，Rifa移开目光，车厢关系恢复克制；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无浪漫凝视、无现代物品、无额外肢体、无脸部融化、无背景漂移。。
-
-P03-F01 0-1.667s：马车内Rifa看向Karin，Karin的手仍扣住断剑
-P03-F02 1.667-3.333s：Karin避开Rifa的视线，Rifa眉心收紧并等待回答
-P03-F03 3.333-5s：Karin接住水囊，Rifa移开目光，车厢关系恢复克制
-
-### P04｜SH004
-
-动态意图：Rifa观察Karin的呼吸，Karin仍坐在车厢内到Rifa把水囊推到Karin手边，Karin抬手准备接住；起始可见状态：Rifa观察Karin的呼吸，Karin仍坐在车厢内；触发：Karin避开Rifa的视线，嘴角压住，手仍靠近断剑；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：固定双人中景；声音：车轮、马具、木车轻响；水囊滑过木板、剑鞘摩擦；克制拨弦，保留对白空间；结束画面：Rifa把水囊推到Karin手边，Karin抬手准备接住；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无浪漫凝视、无现代物品、无额外肢体、无脸部融化、无背景漂移。。
-
-P04-F01 0-1.667s：Rifa观察Karin的呼吸，Karin仍坐在车厢内
-P04-F02 1.667-3.333s：Karin避开Rifa的视线，嘴角压住，手仍靠近断剑
-P04-F03 3.333-5s：Rifa把水囊推到Karin手边，Karin抬手准备接住
-
-### P05｜SH005
-
-动态意图：水囊停在Karin手边，Rifa收回目光到Karin握住水囊，Rifa望向车窗，车厢恢复日常站位；起始可见状态：水囊停在Karin手边，Rifa收回目光；触发：Karin双手接住水囊，肩膀从绷紧转为放松；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：固定双人中景；声音：车轮、马具、木车轻响；水囊滑过木板、剑鞘摩擦；克制拨弦，保留对白空间；结束画面：Karin握住水囊，Rifa望向车窗，车厢恢复日常站位；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无浪漫凝视、无现代物品、无额外肢体、无脸部融化、无背景漂移。。
-
-P05-F01 0-1.667s：水囊停在Karin手边，Rifa收回目光
-P05-F02 1.667-3.333s：Karin双手接住水囊，肩膀从绷紧转为放松
-P05-F03 3.333-5s：Karin握住水囊，Rifa望向车窗，车厢恢复日常站位
-
-### P06｜SH006
-
-动态意图：腰间黄铜护符闪烁后熄灭，Karin的手停在护符旁到Karin握住熄灭护符，Rifa望向结界并保持警觉；起始可见状态：腰间黄铜护符闪烁后熄灭，Karin的手停在护符旁；触发：透明皇家结界逼近车窗，两人同时转头警觉；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：车内慢拉；声音：车轮渐弱、结界远鸣；护符闪烁后熄灭；两音母题低声回归；结束画面：Karin握住熄灭护符，Rifa望向结界并保持警觉；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无科技扫描、无雷电爆炸、无角色变形、无背景漂移。。
-
-P06-F01 0-2.667s：腰间黄铜护符闪烁后熄灭，Karin的手停在护符旁
-P06-F02 2.667-5.333s：透明皇家结界逼近车窗，两人同时转头警觉
-P06-F03 5.333-8s：Karin握住熄灭护符，Rifa望向结界并保持警觉
-
-### P07｜SH007
-
-动态意图：Karin握住熄灭护符，Rifa仍看向车窗外的结界到两人保持警觉站位，护符贴在Karin掌心，结界占据车窗背景；起始可见状态：Karin握住熄灭护符，Rifa仍看向车窗外的结界；触发：Rifa的视线锁定结界，Karin手指收紧护符；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：车内慢拉；声音：车轮渐弱、结界远鸣；护符闪烁后熄灭；两音母题低声回归；结束画面：两人保持警觉站位，护符贴在Karin掌心，结界占据车窗背景；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无科技扫描、无雷电爆炸、无角色变形、无背景漂移。。
-
-P07-F01 0-2.333s：Karin握住熄灭护符，Rifa仍看向车窗外的结界
-P07-F02 2.333-4.667s：Rifa的视线锁定结界，Karin手指收紧护符
-P07-F03 4.667-7s：两人保持警觉站位，护符贴在Karin掌心，结界占据车窗背景
-
-### P08｜SH008
-
-动态意图：马车穿过透明皇家结界，冷银光落在Karin与Rifa身上到Karin与Rifa站在检查台前，黄铜探测器被举起；起始可见状态：马车穿过透明皇家结界，冷银光落在Karin与Rifa身上；触发：双塔上方的法师剪影俯视马车，结界光纹停在背景；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：前向跟车；声音：风穿结界、远钟；透明波纹、探测器启动；低弦持续音进入；结束画面：Karin与Rifa站在检查台前，黄铜探测器被举起；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无现代检查设备、无枪械、无HUD、无雷电爆炸、无角色变形。。
-
-P08-F01 0-2.667s：马车穿过透明皇家结界，冷银光落在Karin与Rifa身上
-P08-F02 2.667-5.333s：双塔上方的法师剪影俯视马车，结界光纹停在背景
-P08-F03 5.333-8s：Karin与Rifa站在检查台前，黄铜探测器被举起
-
-### P09｜SH009
-
-动态意图：透明结界光纹停在双塔城门外，法师剪影俯视道路到两人站在检查台前，检查官举起黄铜探测器；起始可见状态：透明结界光纹停在双塔城门外，法师剪影俯视道路；触发：马车停在检查台前，Karin与Rifa从车厢下车；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：前向跟车；声音：风穿结界、远钟；透明波纹、探测器启动；低弦持续音进入；结束画面：两人站在检查台前，检查官举起黄铜探测器；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无现代检查设备、无枪械、无HUD、无雷电爆炸、无角色变形。。
-
-P09-F01 0-2.333s：透明结界光纹停在双塔城门外，法师剪影俯视道路
-P09-F02 2.333-4.667s：马车停在检查台前，Karin与Rifa从车厢下车
-P09-F03 4.667-7s：两人站在检查台前，检查官举起黄铜探测器
-
-### P10｜SH010
-
-动态意图：黄铜探测器指针停在零刻度，检查官与两名旅人保持对峙站位到Karin前移半步挡住检查官看向Rifa的视线，闸门锁闭；起始可见状态：黄铜探测器指针停在零刻度，检查官与两名旅人保持对峙站位；触发：检查官抬手，竖幅上方的闸门锁链开始下落；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：固定正反打；声音：人群渐静；探测器空响、锁链落下；低频缓慢上升；结束画面：Karin前移半步挡住检查官看向Rifa的视线，闸门锁闭；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无现代检查站、无夸张表演、无魔法光球、无角色变形。。
-
-P10-F01 0-1.667s：黄铜探测器指针停在零刻度，检查官与两名旅人保持对峙站位
-P10-F02 1.667-3.333s：检查官抬手，竖幅上方的闸门锁链开始下落
-P10-F03 3.333-5s：Karin前移半步挡住检查官看向Rifa的视线，闸门锁闭
-
-### P11｜SH011
-
-动态意图：黄铜探测器停在零刻度，检查官与两名旅人保持对峙站位到Karin前移半步挡住检查官看向Rifa的视线，闸门锁闭；起始可见状态：黄铜探测器停在零刻度，检查官与两名旅人保持对峙站位；触发：检查官抬手，竖幅上方闸门锁链开始下落；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：固定正反打；声音：人群渐静；探测器空响、锁链落下；低频缓慢上升；结束画面：Karin前移半步挡住检查官看向Rifa的视线，闸门锁闭；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无现代检查站、无夸张表演、无魔法光球、无角色变形。。
-
-P11-F01 0-1.667s：黄铜探测器停在零刻度，检查官与两名旅人保持对峙站位
-P11-F02 1.667-3.333s：检查官抬手，竖幅上方闸门锁链开始下落
-P11-F03 3.333-5s：Karin前移半步挡住检查官看向Rifa的视线，闸门锁闭
-
-### P12｜SH012
-
-动态意图：检查官与Karin隔着零刻度探测器对峙，Rifa站在侧后方到闸门锁闭，Karin挡住检查官视线，Rifa保持警觉；起始可见状态：检查官与Karin隔着零刻度探测器对峙，Rifa站在侧后方；触发：Karin向前半步，Rifa保持侧后位置，闸门锁链悬在上方；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：固定正反打；声音：人群渐静；探测器空响、锁链落下；低频缓慢上升；结束画面：闸门锁闭，Karin挡住检查官视线，Rifa保持警觉；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无现代检查站、无夸张表演、无魔法光球、无角色变形。。
-
-P12-F01 0-1.667s：检查官与Karin隔着零刻度探测器对峙，Rifa站在侧后方
-P12-F02 1.667-3.333s：Karin向前半步，Rifa保持侧后位置，闸门锁链悬在上方
-P12-F03 3.333-5s：闸门锁闭，Karin挡住检查官视线，Rifa保持警觉
-
-### P13｜SH013
-
-动态意图：Karin拇指压在断剑剑柄上，Rifa看向他的手到两人并肩站在封印前，手部保持旧信号后的静止关系；起始可见状态：Karin拇指压在断剑剑柄上，Rifa看向他的手；触发：Rifa向前一步停在Karin身侧，两人肩膀逐渐放松；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：缓慢推近；声音：城门底噪收窄；拇指压住剑柄、布料轻响；心跳式低频，不盖对白；结束画面：两人并肩站在封印前，手部保持旧信号后的静止关系；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无浪漫化、无施法手势、无能量球、无角色换脸、无背景跳动。。
-
-P13-F01 0-2.667s：Karin拇指压在断剑剑柄上，Rifa看向他的手
-P13-F02 2.667-5.333s：Rifa向前一步停在Karin身侧，两人肩膀逐渐放松
-P13-F03 5.333-8s：两人并肩站在封印前，手部保持旧信号后的静止关系
-
-### P14｜SH014
-
-动态意图：Karin与Rifa并肩站在封印前，Rifa的视线落向封印边缘到两人完全并肩，封印保持将开未开的裂隙状态；起始可见状态：Karin与Rifa并肩站在封印前，Rifa的视线落向封印边缘；触发：两人的肩膀放松，双手停在封印两侧；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：缓慢推近；声音：城门底噪收窄；拇指压住剑柄、布料轻响；心跳式低频，不盖对白；结束画面：两人完全并肩，封印保持将开未开的裂隙状态；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无浪漫化、无施法手势、无能量球、无角色换脸、无背景跳动。。
-
-P14-F01 0-2.333s：Karin与Rifa并肩站在封印前，Rifa的视线落向封印边缘
-P14-F02 2.333-4.667s：两人的肩膀放松，双手停在封印两侧
-P14-F03 4.667-7s：两人完全并肩，封印保持将开未开的裂隙状态
-
-### P15｜SH015
-
-动态意图：Karin与Rifa并肩站在封印前，双手停在解除动作起点到两人收力站稳，闸门打开，远处观察者转动四点银戒；起始可见状态：Karin与Rifa并肩站在封印前，双手停在解除动作起点；触发：旗帜与尘埃悬停，结界向两人凹陷，探测器内部出现裂纹；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：极慢环绕；声音：前3s完全静音；探测器细裂、闸门链条；一次低频冲击后骤停；结束画面：两人收力站稳，闸门打开，远处观察者转动四点银戒；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无爆炸闪电火焰、无能量球、观察者不露脸、无角色变形。。
-
-P15-F01 0-1.667s：Karin与Rifa并肩站在封印前，双手停在解除动作起点
-P15-F02 1.667-3.333s：旗帜与尘埃悬停，结界向两人凹陷，探测器内部出现裂纹
-P15-F03 3.333-5s：两人收力站稳，闸门打开，远处观察者转动四点银戒
-
-### P16｜SH016
-
-动态意图：悬停的旗帜和尘埃固定在半空，结界保持凹陷到高塔远处观察者转动四点银戒，闸门在背景打开；起始可见状态：悬停的旗帜和尘埃固定在半空，结界保持凹陷；触发：探测器从内部裂开，Karin与Rifa的肩膀开始放松；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：极慢环绕；声音：前3s完全静音；探测器细裂、闸门链条；一次低频冲击后骤停；结束画面：高塔远处观察者转动四点银戒，闸门在背景打开；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无爆炸闪电火焰、无能量球、观察者不露脸、无角色变形。。
-
-P16-F01 0-1.667s：悬停的旗帜和尘埃固定在半空，结界保持凹陷
-P16-F02 1.667-3.333s：探测器从内部裂开，Karin与Rifa的肩膀开始放松
-P16-F03 3.333-5s：高塔远处观察者转动四点银戒，闸门在背景打开
-
-### P17｜SH017
-
-动态意图：Karin与Rifa站在打开的闸门前，肩膀已收力到高塔观察者站在远处阴影中，四点银戒停在抬起的手指间；起始可见状态：Karin与Rifa站在打开的闸门前，肩膀已收力；触发：闸门完全打开，两人保持站稳，冷银光落在地面；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：极慢环绕；声音：前3s完全静音；探测器细裂、闸门链条；一次低频冲击后骤停；结束画面：高塔观察者站在远处阴影中，四点银戒停在抬起的手指间；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无爆炸闪电火焰、无能量球、观察者不露脸、无角色变形。。
-
-P17-F01 0-1.667s：Karin与Rifa站在打开的闸门前，肩膀已收力
-P17-F02 1.667-3.333s：闸门完全打开，两人保持站稳，冷银光落在地面
-P17-F03 3.333-5s：高塔观察者站在远处阴影中，四点银戒停在抬起的手指间
-
-### P18｜SH018
-
-动态意图：阿佐雷斯层叠塔楼、吊桥和水渠沿陡坡展开到Rifa放慢脚步与Karin并肩抵达上行坡道；起始可见状态：阿佐雷斯层叠塔楼、吊桥和水渠沿陡坡展开；触发：断剑撞上蓝玻璃瓶手推车，Karin立刻护住剑鞘；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：吊臂下降；声音：城市人声、铁锤、水渠；剑鞘碰车沿；木管好奇动机转暖弦；结束画面：Rifa放慢脚步与Karin并肩抵达上行坡道；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无现代城市、无角色换脸、无横向拥挤。。
-
-P18-F01 0-1.667s：阿佐雷斯层叠塔楼、吊桥和水渠沿陡坡展开
-P18-F02 1.667-3.333s：断剑撞上蓝玻璃瓶手推车，Karin立刻护住剑鞘
-P18-F03 3.333-5s：Rifa放慢脚步与Karin并肩抵达上行坡道
-
-### P19｜SH019
-
-动态意图：Rifa望向Karin，Karin的手仍按住剑鞘到两人放慢脚步并肩前行，Karin没有把手从剑上移开；起始可见状态：Rifa望向Karin，Karin的手仍按住剑鞘；触发：Karin避开视线，Rifa保持半步距离并等待回答；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：吊臂下降；声音：城市人声、铁锤、水渠；剑鞘碰车沿；木管好奇动机转暖弦；结束画面：两人放慢脚步并肩前行，Karin没有把手从剑上移开；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无现代城市、无角色换脸、无横向拥挤。。
-
-P19-F01 0-1.667s：Rifa望向Karin，Karin的手仍按住剑鞘
-P19-F02 1.667-3.333s：Karin避开视线，Rifa保持半步距离并等待回答
-P19-F03 3.333-5s：两人放慢脚步并肩前行，Karin没有把手从剑上移开
-
-### P20｜SH020
-
-动态意图：Karin与Rifa沿阿佐雷斯上行坡道并肩走近门口到两人并肩抵达上行坡道尽头，剑鞘仍在Karin腰后；起始可见状态：Karin与Rifa沿阿佐雷斯上行坡道并肩走近门口；触发：两人停在坡道转折处，Rifa侧身看向Karin；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：吊臂下降；声音：城市人声、铁锤、水渠；剑鞘碰车沿；木管好奇动机转暖弦；结束画面：两人并肩抵达上行坡道尽头，剑鞘仍在Karin腰后；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无现代城市、无角色换脸、无横向拥挤。。
-
-P20-F01 0-1.667s：Karin与Rifa沿阿佐雷斯上行坡道并肩走近门口
-P20-F02 1.667-3.333s：两人停在坡道转折处，Rifa侧身看向Karin
-P20-F03 3.333-5s：两人并肩抵达上行坡道尽头，剑鞘仍在Karin腰后
-
-### P21｜SH021
-
-动态意图：Edia Knight木门占满竖幅，门面银色裂痕与梦中剑刃断口相同到木门开启，奥伦背对站在冷蓝外光与暗琥珀炉光交界处；起始可见状态：Edia Knight木门占满竖幅，门面银色裂痕与梦中剑刃断口相同；触发：Karin抬手未触门，腰后断剑先发生震动；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：银裂纹后拉；声音：坡道风声；断剑震动、三次锤击、门滑开；两音母题反向出现；结束画面：木门开启，奥伦背对站在冷蓝外光与暗琥珀炉光交界处；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无现代门锁、无可读招牌、无电动机械感、无角色变形。。
-
-P21-F01 0-2.667s：Edia Knight木门占满竖幅，门面银色裂痕与梦中剑刃断口相同
-P21-F02 2.667-5.333s：Karin抬手未触门，腰后断剑先发生震动
-P21-F03 5.333-8s：木门开启，奥伦背对站在冷蓝外光与暗琥珀炉光交界处
-
-### P22｜SH022
-
-动态意图：Karin与Rifa立在木门门槛，奥伦背对站在炉光深处到奥伦保持背对，Karin避开Rifa的视线，三人纵深关系稳定；起始可见状态：Karin与Rifa立在木门门槛，奥伦背对站在炉光深处；触发：Karin的手停在腰后断剑旁，Rifa的视线落向门内；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：银裂纹后拉；声音：坡道风声；断剑震动、三次锤击、门滑开；两音母题反向出现；结束画面：奥伦保持背对，Karin避开Rifa的视线，三人纵深关系稳定；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无现代门锁、无可读招牌、无电动机械感、无角色变形。。
-
-P22-F01 0-2.333s：Karin与Rifa立在木门门槛，奥伦背对站在炉光深处
-P22-F02 2.333-4.667s：Karin的手停在腰后断剑旁，Rifa的视线落向门内
-P22-F03 4.667-7s：奥伦保持背对，Karin避开Rifa的视线，三人纵深关系稳定
-
-### P23｜SH023
-
-动态意图：奥伦站在铁砧旁抬眼看向Karin手中的断剑到断剑平放在铁砧上，锤柄抵住断口；起始可见状态：奥伦站在铁砧旁抬眼看向Karin手中的断剑；触发：Karin走到铁砧前，Rifa守在门与他之间；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：侧向滑轨；声音：炉火、极远街声；断剑放上铁砧、木柄轻触；单一低弦持续，不抢台词；结束画面：断剑平放在铁砧上，锤柄抵住断口；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无现代工具、无角色变形、无过量火花。。
-
-P23-F01 0-1.667s：奥伦站在铁砧旁抬眼看向Karin手中的断剑
-P23-F02 1.667-3.333s：Karin走到铁砧前，Rifa守在门与他之间
-P23-F03 3.333-5s：断剑平放在铁砧上，锤柄抵住断口
-
-### P24｜SH024
-
-动态意图：奥伦侧身站在铁砧旁，目光落向Karin手中的断剑到锤柄抵住断口，三人停在同一纵深关系中；起始可见状态：奥伦侧身站在铁砧旁，目光落向Karin手中的断剑；触发：Karin把断剑平放在铁砧上，Rifa守在门与他之间；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：侧向滑轨；声音：炉火、极远街声；断剑放上铁砧、木柄轻触；单一低弦持续，不抢台词；结束画面：锤柄抵住断口，三人停在同一纵深关系中；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无现代工具、无角色变形、无过量火花。。
-
-P24-F01 0-1.667s：奥伦侧身站在铁砧旁，目光落向Karin手中的断剑
-P24-F02 1.667-3.333s：Karin把断剑平放在铁砧上，Rifa守在门与他之间
-P24-F03 3.333-5s：锤柄抵住断口，三人停在同一纵深关系中
-
-### P25｜SH025
-
-动态意图：奥伦的手停在断剑上方，Karin站在铁砧前到锤柄抵住断口，三人停在同一纵深关系中；起始可见状态：奥伦的手停在断剑上方，Karin站在铁砧前；触发：Karin把断剑平放在铁砧上，Rifa保持门口站位；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：侧向滑轨；声音：炉火、极远街声；断剑放上铁砧、木柄轻触；单一低弦持续，不抢台词；结束画面：锤柄抵住断口，三人停在同一纵深关系中；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无现代工具、无角色变形、无过量火花。。
-
-P25-F01 0-1.667s：奥伦的手停在断剑上方，Karin站在铁砧前
-P25-F02 1.667-3.333s：Karin把断剑平放在铁砧上，Rifa保持门口站位
-P25-F03 3.333-5s：锤柄抵住断口，三人停在同一纵深关系中
-
-### P26｜SH026
-
-动态意图：锤柄触碰断剑，炉火缩成一线，金属朝铁砧偏转到Rifa抓住Karin手腕，奥伦注视两人相接的手；起始可见状态：锤柄触碰断剑，炉火缩成一线，金属朝铁砧偏转；触发：黑湖记忆浮现，雪地中央的手腕系着暗红细线；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：记忆慢推；声音：金属共鸣、记忆风声；Rifa抓腕、炉火收缩；女声母题短促上升后断开；结束画面：Rifa抓住Karin手腕，奥伦注视两人相接的手；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无额外手指、无断手、无可辨识的其他三人面孔、无角色变形、无过载闪回。。
-
-P26-F01 0-1.667s：锤柄触碰断剑，炉火缩成一线，金属朝铁砧偏转
-P26-F02 1.667-3.333s：黑湖记忆浮现，雪地中央的手腕系着暗红细线
-P26-F03 3.333-5s：Rifa抓住Karin手腕，奥伦注视两人相接的手
-
-### P27｜SH027
-
-动态意图：无头锤柄触碰断剑，炉火缩成一线，金属朝铁砧偏转到Rifa抓住Karin手腕，奥伦注视两人相接的手；起始可见状态：无头锤柄触碰断剑，炉火缩成一线，金属朝铁砧偏转；触发：黑湖记忆浮现，雪地中央的手腕系着暗红细线；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：记忆慢推；声音：金属共鸣、记忆风声；Rifa抓腕、炉火收缩；女声母题短促上升后断开；结束画面：Rifa抓住Karin手腕，奥伦注视两人相接的手；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无额外手指、无断手、无可辨识的其他三人面孔、无角色变形、无过载闪回。。
-
-P27-F01 0-1.667s：无头锤柄触碰断剑，炉火缩成一线，金属朝铁砧偏转
-P27-F02 1.667-3.333s：黑湖记忆浮现，雪地中央的手腕系着暗红细线
-P27-F03 3.333-5s：Rifa抓住Karin手腕，奥伦注视两人相接的手
-
-### P28｜SH028
-
-动态意图：炉火缩成一线，Karin看向暗红细线的记忆残影到奥伦注视两人相接的手，断剑停在铁砧上；起始可见状态：炉火缩成一线，Karin看向暗红细线的记忆残影；触发：Rifa的手扣住Karin手腕，暗红辫绳与记忆中的红线相对；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：记忆慢推；声音：金属共鸣、记忆风声；Rifa抓腕、炉火收缩；女声母题短促上升后断开；结束画面：奥伦注视两人相接的手，断剑停在铁砧上；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无额外手指、无断手、无可辨识的其他三人面孔、无角色变形、无过载闪回。。
-
-P28-F01 0-1.667s：炉火缩成一线，Karin看向暗红细线的记忆残影
-P28-F02 1.667-3.333s：Rifa的手扣住Karin手腕，暗红辫绳与记忆中的红线相对
-P28-F03 3.333-5s：奥伦注视两人相接的手，断剑停在铁砧上
-
-### P29｜SH029
-
-动态意图：奥伦从铁砧下取出窄木匣并推向Karin到炉火熄灭，木匣四点微亮，铜镜映出高塔观察者；起始可见状态：奥伦从铁砧下取出窄木匣并推向Karin；触发：Rifa的短刃滑出半寸，视线转向木匣与奥伦；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：木匣慢推；声音：店外声音像隔水；木匣滑动、短刃半出鞘、熄火；冷低弦与耳语后绝对静音；结束画面：炉火熄灭，木匣四点微亮，铜镜映出高塔观察者；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无过量闪回、无额外手指、无现代工具、无水印logo、观察者不露脸，结尾切黑。。
-
-P29-F01 0-2.667s：奥伦从铁砧下取出窄木匣并推向Karin
-P29-F02 2.667-5.333s：Rifa的短刃滑出半寸，视线转向木匣与奥伦
-P29-F03 5.333-8s：炉火熄灭，木匣四点微亮，铜镜映出高塔观察者
-
-### P30｜SH030
-
-动态意图：窄木匣停在铁砧边，Rifa的短刃露出半寸到炉火完全熄灭，木匣四点微亮，短刃保持出鞘半寸；起始可见状态：窄木匣停在铁砧边，Rifa的短刃露出半寸；触发：烟黑铜镜映出高塔观察者，奥伦的手停在熄灭的炉膛旁；主体动作与反应：眉眼、嘴角或下颌出现与动作对应的细微变化；短暂聚焦关键人物或道具；身体保持当前姿态；一个主运镜：木匣慢推；声音：店外声音像隔水；木匣滑动、短刃半出鞘、熄火；冷低弦与耳语后绝对静音；结束画面：炉火完全熄灭，木匣四点微亮，短刃保持出鞘半寸；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：无字幕、无过量闪回、无额外手指、无现代工具、无水印logo、观察者不露脸，结尾切黑。。
-
-P30-F01 0-2.333s：窄木匣停在铁砧边，Rifa的短刃露出半寸
-P30-F02 2.333-4.667s：烟黑铜镜映出高塔观察者，奥伦的手停在熄灭的炉膛旁
-P30-F03 4.667-7s：炉火完全熄灭，木匣四点微亮，短刃保持出鞘半寸
-
-## 资产映射与执行顺序
-
-
+P01-F05 8-9.75s：上一镜冷银断口与扣紧手指作为马车内匹配切入口
+P01-F06 9.75-11.5s：马车内同一只手继续压住断剑，Karin肩膀绷紧
+P01-F07 11.5-13.25s：Karin睁开灰绿色眼睛，视线落向断剑，呼吸急促并保持握持
+P01-F08 13.25-15s：Karin完全惊醒，手扣断剑、肩膀绷紧、视线稳定锁定握柄
+参考职责：@图片1仅用于角色基准图：保持 Karin 的身份特征、服装与道具不漂移；@图片2仅用于场景基准图：保持空间结构、光向与轴线一致；@图片3仅用于道具基准图：保持 Karin的断剑 的形状、持有人与当前状态一致；@图片4仅用于场景基准图：保持空间结构、光向与轴线一致
+结束画面：Karin在马车中惊醒，手扣断剑，呼吸急促
+风格：VS14 中世纪史诗的学院奇幻变体；宏大空间与克制人物近景并重，不使用现代元素或科幻 UI。
+针对性约束：无字幕、无水印、无logo、无可辨识的Ras或Ref、无额外肢体、无断手、无脸部变形、无现代元素、无HUD、无过量粒子。
+```
+
+### P02｜SH002 梦醒试探
+
+```text
+15s 9:16 视频
+动态意图：动态意图：马车内Rifa看向Karin，Karin的手仍扣住断剑到Karin握住水囊，Rifa望向车窗，车厢恢复日常站位；起始可见状态：马车内Rifa看向Karin，Karin的手仍扣住断剑；主体动作与反应：Karin接住水囊，Rifa移开视线，关系恢复日常；一个主运镜：固定双人中景；环境压力与声音：车轮、马具、木车轻响；水囊滑过木板、剑鞘摩擦；克制拨弦，保留对白空间；结束画面：Karin握住水囊，Rifa望向车窗，车厢恢复日常站位；针对性约束：无字幕、无浪漫凝视、无现代物品、无额外肢体、无脸部融化、无背景漂移。
+单一主运镜：固定双人中景
+P02-F01 0-1.667s：马车内Rifa看向Karin，Karin的手仍扣住断剑
+P02-F02 1.667-3.333s：Karin避开Rifa的视线，Rifa眉心收紧并等待回答
+P02-F03 3.333-5s：Karin接住水囊，Rifa移开目光，车厢关系恢复克制
+P02-F04 5-6.667s：Rifa观察Karin的呼吸，Karin仍坐在车厢内
+P02-F05 6.667-8.333s：Karin避开Rifa的视线，嘴角压住，手仍靠近断剑
+P02-F06 8.333-10s：Rifa把水囊推到Karin手边，Karin抬手准备接住
+P02-F07 10-11.667s：水囊停在Karin手边，Rifa收回目光
+P02-F08 11.667-13.333s：Karin双手接住水囊，肩膀从绷紧转为放松
+P02-F09 13.333-15s：Karin握住水囊，Rifa望向车窗，车厢恢复日常站位
+参考职责：@图片1仅用于上一镜当前视频版本的已人工验收实际尾帧，仅作为本镜唯一连续性锚点；@图片2仅用于角色基准图：保持 Karin 的身份特征、服装与道具不漂移；@图片3仅用于角色基准图：保持 Rifa 的身份特征、服装与道具不漂移；@图片4仅用于场景基准图：保持空间结构、光向与轴线一致；@图片5仅用于道具基准图：保持 Karin的断剑 的形状、持有人与当前状态一致
+结束画面：Karin接住水囊，Rifa移开视线，关系恢复日常；Karin接住水囊，Rifa移开视线，关系恢复日常
+风格：VS14 中世纪史诗的学院奇幻变体；宏大空间与克制人物近景并重，不使用现代元素或科幻 UI。
+针对性约束：无字幕、无浪漫凝视、无现代物品、无额外肢体、无脸部融化、无背景漂移。
+```
+
+### P03｜SH003 第几个
+
+```text
+15s 9:16 视频
+动态意图：动态意图：腰间黄铜护符闪烁后熄灭，Karin的手停在护符旁到两人保持警觉站位，护符贴在Karin掌心，结界占据车窗背景；起始可见状态：腰间黄铜护符闪烁后熄灭，Karin的手停在护符旁；主体动作与反应：Karin握住护符，Rifa望向结界，二人警觉；一个主运镜：车内慢拉；环境压力与声音：车轮渐弱、结界远鸣；护符闪烁后熄灭；两音母题低声回归；结束画面：两人保持警觉站位，护符贴在Karin掌心，结界占据车窗背景；针对性约束：无字幕、无科技扫描、无雷电爆炸、无角色变形、无背景漂移。
+单一主运镜：车内慢拉
+P03-F01 0-2.667s：腰间黄铜护符闪烁后熄灭，Karin的手停在护符旁
+P03-F02 2.667-5.333s：透明皇家结界逼近车窗，两人同时转头警觉
+P03-F03 5.333-8s：Karin握住熄灭护符，Rifa望向结界并保持警觉
+P03-F04 8-10.333s：Karin握住熄灭护符，Rifa仍看向车窗外的结界
+P03-F05 10.333-12.667s：Rifa的视线锁定结界，Karin手指收紧护符
+P03-F06 12.667-15s：两人保持警觉站位，护符贴在Karin掌心，结界占据车窗背景
+参考职责：@图片1仅用于上一镜当前视频版本的已人工验收实际尾帧，仅作为本镜唯一连续性锚点；@图片2仅用于角色基准图：保持 Karin 的身份特征、服装与道具不漂移；@图片3仅用于角色基准图：保持 Rifa 的身份特征、服装与道具不漂移；@图片4仅用于场景基准图：保持空间结构、光向与轴线一致；@图片5仅用于道具基准图：保持 失灵护符 的形状、持有人与当前状态一致
+结束画面：Karin握住护符，Rifa望向结界，二人警觉；Karin握住护符，Rifa望向结界，二人警觉
+风格：VS14 中世纪史诗的学院奇幻变体；宏大空间与克制人物近景并重，不使用现代元素或科幻 UI。
+针对性约束：无字幕、无科技扫描、无雷电爆炸、无角色变形、无背景漂移。
+```
+
+### P04｜SH004 跨越结界
+
+```text
+15s 9:16 视频
+动态意图：动态意图：马车穿过透明皇家结界，冷银光落在Karin与Rifa身上到两人站在检查台前，检查官举起黄铜探测器；起始可见状态：马车穿过透明皇家结界，冷银光落在Karin与Rifa身上；主体动作与反应：二人站在检查台前，探测器举起；一个主运镜：前向跟车；环境压力与声音：风穿结界、远钟；透明波纹、探测器启动；低弦持续音进入；结束画面：两人站在检查台前，检查官举起黄铜探测器；针对性约束：无字幕、无现代检查设备、无枪械、无HUD、无雷电爆炸、无角色变形。
+单一主运镜：前向跟车
+P04-F01 0-2.667s：马车穿过透明皇家结界，冷银光落在Karin与Rifa身上
+P04-F02 2.667-5.333s：双塔上方的法师剪影俯视马车，结界光纹停在背景
+P04-F03 5.333-8s：Karin与Rifa站在检查台前，黄铜探测器被举起
+P04-F04 8-10.333s：透明结界光纹停在双塔城门外，法师剪影俯视道路
+P04-F05 10.333-12.667s：马车停在检查台前，Karin与Rifa从车厢下车
+P04-F06 12.667-15s：两人站在检查台前，检查官举起黄铜探测器
+参考职责：@图片1仅用于上一镜当前视频版本的已人工验收实际尾帧，仅作为本镜唯一连续性锚点；@图片2仅用于角色基准图：保持 Karin 的身份特征、服装与道具不漂移；@图片3仅用于角色基准图：保持 Rifa 的身份特征、服装与道具不漂移；@图片4仅用于角色基准图：保持 城门检查官 的身份特征、服装与道具不漂移；@图片5仅用于场景基准图：保持空间结构、光向与轴线一致；@图片6仅用于道具基准图：保持 失灵护符 的形状、持有人与当前状态一致；@图片7仅用于道具基准图：保持 灵压探测器 的形状、持有人与当前状态一致
+结束画面：二人站在检查台前，探测器举起；二人站在检查台前，探测器举起；二人站在检查台前，探测器举起
+风格：VS14 中世纪史诗的学院奇幻变体；宏大空间与克制人物近景并重，不使用现代元素或科幻 UI。
+针对性约束：无字幕、无现代检查设备、无枪械、无HUD、无雷电爆炸、无角色变形。
+```
+
+### P05｜SH005 空白读数
+
+```text
+15s 9:16 视频
+动态意图：动态意图：黄铜探测器指针停在零刻度，检查官与两名旅人保持对峙站位到闸门锁闭，Karin挡住检查官视线，Rifa保持警觉；起始可见状态：黄铜探测器指针停在零刻度，检查官与两名旅人保持对峙站位；主体动作与反应：Karin前移半步，Rifa侧后，闸门锁闭；一个主运镜：固定正反打；环境压力与声音：人群渐静；探测器空响、锁链落下；低频缓慢上升；结束画面：闸门锁闭，Karin挡住检查官视线，Rifa保持警觉；针对性约束：无字幕、无现代检查站、无夸张表演、无魔法光球、无角色变形。
+单一主运镜：固定正反打
+P05-F01 0-2s：黄铜探测器指针停在零刻度，检查官与两名旅人保持对峙站位
+P05-F02 2-4s：检查官抬手，竖幅上方的闸门锁链开始下落
+P05-F03 4-6s：Karin前移半步挡住检查官看向Rifa的视线，闸门锁闭
+P05-F04 6-8s：黄铜探测器停在零刻度，检查官与两名旅人保持对峙站位
+P05-F05 8-10s：检查官抬手，竖幅上方闸门锁链开始下落
+P05-F06 10-12s：检查官与Karin隔着零刻度探测器对峙，Rifa站在侧后方
+P05-F07 12-14s：Karin向前半步，Rifa保持侧后位置，闸门锁链悬在上方
+P05-F08 14-15s：闸门锁闭，Karin挡住检查官视线，Rifa保持警觉
+参考职责：@图片1仅用于上一镜当前视频版本的已人工验收实际尾帧，仅作为本镜唯一连续性锚点；@图片2仅用于角色基准图：保持 Karin 的身份特征、服装与道具不漂移；@图片3仅用于角色基准图：保持 Rifa 的身份特征、服装与道具不漂移；@图片4仅用于角色基准图：保持 城门检查官 的身份特征、服装与道具不漂移；@图片5仅用于场景基准图：保持空间结构、光向与轴线一致；@图片6仅用于道具基准图：保持 灵压探测器 的形状、持有人与当前状态一致
+结束画面：Karin前移半步，Rifa侧后，闸门锁闭；Karin前移半步，Rifa侧后，闸门锁闭；Karin前移半步，Rifa侧后，闸门锁闭
+风格：VS14 中世纪史诗的学院奇幻变体；宏大空间与克制人物近景并重，不使用现代元素或科幻 UI。
+针对性约束：无字幕、无现代检查站、无夸张表演、无魔法光球、无角色变形。
+```
+
+### P06｜SH006 旧信号
+
+```text
+15s 9:16 视频
+动态意图：动态意图：Karin拇指压在断剑剑柄上，Rifa看向他的手到两人完全并肩，封印保持将开未开的裂隙状态；起始可见状态：Karin拇指压在断剑剑柄上，Rifa看向他的手；主体动作与反应：两人完全并肩，封印将开未开；一个主运镜：缓慢推近；环境压力与声音：城门底噪收窄；拇指压住剑柄、布料轻响；心跳式低频，不盖对白；结束画面：两人完全并肩，封印保持将开未开的裂隙状态；针对性约束：无字幕、无浪漫化、无施法手势、无能量球、无角色换脸、无背景跳动。
+单一主运镜：缓慢推近
+P06-F01 0-2.667s：Karin拇指压在断剑剑柄上，Rifa看向他的手
+P06-F02 2.667-5.333s：Rifa向前一步停在Karin身侧，两人肩膀逐渐放松
+P06-F03 5.333-8s：两人并肩站在封印前，手部保持旧信号后的静止关系
+P06-F04 8-10.333s：Karin与Rifa并肩站在封印前，Rifa的视线落向封印边缘
+P06-F05 10.333-12.667s：两人的肩膀放松，双手停在封印两侧
+P06-F06 12.667-15s：两人完全并肩，封印保持将开未开的裂隙状态
+参考职责：@图片1仅用于上一镜当前视频版本的已人工验收实际尾帧，仅作为本镜唯一连续性锚点；@图片2仅用于角色基准图：保持 Karin 的身份特征、服装与道具不漂移；@图片3仅用于角色基准图：保持 Rifa 的身份特征、服装与道具不漂移；@图片4仅用于场景基准图：保持空间结构、光向与轴线一致；@图片5仅用于道具基准图：保持 Karin的断剑 的形状、持有人与当前状态一致
+结束画面：两人完全并肩，封印将开未开；两人完全并肩，封印将开未开
+风格：VS14 中世纪史诗的学院奇幻变体；宏大空间与克制人物近景并重，不使用现代元素或科幻 UI。
+针对性约束：无字幕、无浪漫化、无施法手势、无能量球、无角色换脸、无背景跳动。
+```
+
+### P07｜SH007 力量与观察
+
+```text
+15s 9:16 视频
+动态意图：动态意图：Karin与Rifa并肩站在封印前，双手停在解除动作起点到高塔观察者站在远处阴影中，四点银戒停在抬起的手指间；起始可见状态：Karin与Rifa并肩站在封印前，双手停在解除动作起点；主体动作与反应：二人收力站稳，闸门打开，观察者远望；一个主运镜：极慢环绕；环境压力与声音：前3s完全静音；探测器细裂、闸门链条；一次低频冲击后骤停；结束画面：高塔观察者站在远处阴影中，四点银戒停在抬起的手指间；针对性约束：无字幕、无爆炸闪电火焰、无能量球、观察者不露脸、无角色变形。
+单一主运镜：极慢环绕
+P07-F01 0-1.667s：Karin与Rifa并肩站在封印前，双手停在解除动作起点
+P07-F02 1.667-3.333s：旗帜与尘埃悬停，结界向两人凹陷，探测器内部出现裂纹
+P07-F03 3.333-5s：两人收力站稳，闸门打开，远处观察者转动四点银戒
+P07-F04 5-6.667s：悬停的旗帜和尘埃固定在半空，结界保持凹陷
+P07-F05 6.667-8.333s：探测器从内部裂开，Karin与Rifa的肩膀开始放松
+P07-F06 8.333-10s：高塔远处观察者转动四点银戒，闸门在背景打开
+P07-F07 10-11.667s：Karin与Rifa站在打开的闸门前，肩膀已收力
+P07-F08 11.667-13.333s：闸门完全打开，两人保持站稳，冷银光落在地面
+P07-F09 13.333-15s：高塔观察者站在远处阴影中，四点银戒停在抬起的手指间
+参考职责：@图片1仅用于上一镜当前视频版本的已人工验收实际尾帧，仅作为本镜唯一连续性锚点；@图片2仅用于角色基准图：保持 Karin 的身份特征、服装与道具不漂移；@图片3仅用于角色基准图：保持 Rifa 的身份特征、服装与道具不漂移；@图片4仅用于角色基准图：保持 城门检查官 的身份特征、服装与道具不漂移；@图片5仅用于角色基准图：保持 神秘观察者 的身份特征、服装与道具不漂移；@图片6仅用于场景基准图：保持空间结构、光向与轴线一致；@图片7仅用于道具基准图：保持 灵压探测器 的形状、持有人与当前状态一致；@图片8仅用于道具基准图：保持 四点银戒 的形状、持有人与当前状态一致
+结束画面：二人收力站稳，闸门打开，观察者远望；二人收力站稳，闸门打开，观察者远望；二人收力站稳，闸门打开，观察者远望；二人收力站稳，闸门打开，观察者远望
+风格：VS14 中世纪史诗的学院奇幻变体；宏大空间与克制人物近景并重，不使用现代元素或科幻 UI。
+针对性约束：无字幕、无爆炸闪电火焰、无能量球、观察者不露脸、无角色变形。
+```
+
+### P08｜SH008 我问的是你
+
+```text
+15s 9:16 视频
+动态意图：动态意图：阿佐雷斯层叠塔楼、吊桥和水渠沿陡坡展开到两人并肩抵达上行坡道尽头，剑鞘仍在Karin腰后；起始可见状态：阿佐雷斯层叠塔楼、吊桥和水渠沿陡坡展开；主体动作与反应：二人并肩抵达上行坡道；一个主运镜：吊臂下降；环境压力与声音：城市人声、铁锤、水渠；剑鞘碰车沿；木管好奇动机转暖弦；结束画面：两人并肩抵达上行坡道尽头，剑鞘仍在Karin腰后；针对性约束：无字幕、无现代城市、无角色换脸、无横向拥挤。
+单一主运镜：吊臂下降
+P08-F01 0-1.667s：阿佐雷斯层叠塔楼、吊桥和水渠沿陡坡展开
+P08-F02 1.667-3.333s：断剑撞上蓝玻璃瓶手推车，Karin立刻护住剑鞘
+P08-F03 3.333-5s：Rifa放慢脚步与Karin并肩抵达上行坡道
+P08-F04 5-6.667s：Rifa望向Karin，Karin的手仍按住剑鞘
+P08-F05 6.667-8.333s：Karin避开视线，Rifa保持半步距离并等待回答
+P08-F06 8.333-10s：两人放慢脚步并肩前行，Karin没有把手从剑上移开
+P08-F07 10-11.667s：Karin与Rifa沿阿佐雷斯上行坡道并肩走近门口
+P08-F08 11.667-13.333s：两人停在坡道转折处，Rifa侧身看向Karin
+P08-F09 13.333-15s：两人并肩抵达上行坡道尽头，剑鞘仍在Karin腰后
+参考职责：@图片1仅用于上一镜当前视频版本的已人工验收实际尾帧，仅作为本镜唯一连续性锚点；@图片2仅用于角色基准图：保持 Karin 的身份特征、服装与道具不漂移；@图片3仅用于角色基准图：保持 Rifa 的身份特征、服装与道具不漂移；@图片4仅用于场景基准图：保持空间结构、光向与轴线一致；@图片5仅用于道具基准图：保持 Karin的断剑 的形状、持有人与当前状态一致
+结束画面：二人并肩抵达上行坡道；二人并肩抵达上行坡道
+风格：VS14 中世纪史诗的学院奇幻变体；宏大空间与克制人物近景并重，不使用现代元素或科幻 UI。
+针对性约束：无字幕、无现代城市、无角色换脸、无横向拥挤。
+```
+
+### P09｜SH009 银色裂痕
+
+```text
+15s 9:16 视频
+动态意图：动态意图：Edia Knight木门占满竖幅，门面银色裂痕与梦中剑刃断口相同到奥伦保持背对，Karin避开Rifa的视线，三人纵深关系稳定；起始可见状态：Edia Knight木门占满竖幅，门面银色裂痕与梦中剑刃断口相同；主体动作与反应：二人立在门槛，奥伦背对，Karin隐瞒梦境；一个主运镜：银裂纹后拉；环境压力与声音：坡道风声；断剑震动、三次锤击、门滑开；两音母题反向出现；结束画面：奥伦保持背对，Karin避开Rifa的视线，三人纵深关系稳定；针对性约束：无字幕、无现代门锁、无可读招牌、无电动机械感、无角色变形。
+单一主运镜：银裂纹后拉
+P09-F01 0-2.667s：Edia Knight木门占满竖幅，门面银色裂痕与梦中剑刃断口相同
+P09-F02 2.667-5.333s：Karin抬手未触门，腰后断剑先发生震动
+P09-F03 5.333-8s：木门开启，奥伦背对站在冷蓝外光与暗琥珀炉光交界处
+P09-F04 8-10.333s：Karin与Rifa立在木门门槛，奥伦背对站在炉光深处
+P09-F05 10.333-12.667s：Karin的手停在腰后断剑旁，Rifa的视线落向门内
+P09-F06 12.667-15s：奥伦保持背对，Karin避开Rifa的视线，三人纵深关系稳定
+参考职责：@图片1仅用于上一镜当前视频版本的已人工验收实际尾帧，仅作为本镜唯一连续性锚点；@图片2仅用于角色基准图：保持 Karin 的身份特征、服装与道具不漂移；@图片3仅用于角色基准图：保持 Rifa 的身份特征、服装与道具不漂移；@图片4仅用于角色基准图：保持 奥伦·奈特 的身份特征、服装与道具不漂移；@图片5仅用于场景基准图：保持空间结构、光向与轴线一致；@图片6仅用于道具基准图：保持 Karin的断剑 的形状、持有人与当前状态一致
+结束画面：二人立在门槛，奥伦背对，Karin隐瞒梦境；二人立在门槛，奥伦背对，Karin隐瞒梦境；二人立在门槛，奥伦背对，Karin隐瞒梦境
+风格：VS14 中世纪史诗的学院奇幻变体；宏大空间与克制人物近景并重，不使用现代元素或科幻 UI。
+针对性约束：无字幕、无现代门锁、无可读招牌、无电动机械感、无角色变形。
+```
+
+### P10｜SH010 你看见的是结果
+
+```text
+15s 9:16 视频
+动态意图：动态意图：奥伦站在铁砧旁抬眼看向Karin手中的断剑到锤柄抵住断口，三人停在同一纵深关系中；起始可见状态：奥伦站在铁砧旁抬眼看向Karin手中的断剑；主体动作与反应：断剑平放铁砧，锤柄抵住断口；一个主运镜：侧向滑轨；环境压力与声音：炉火、极远街声；断剑放上铁砧、木柄轻触；单一低弦持续，不抢台词；结束画面：锤柄抵住断口，三人停在同一纵深关系中；针对性约束：无字幕、无现代工具、无角色变形、无过量火花。
+单一主运镜：侧向滑轨
+P10-F01 0-2s：奥伦站在铁砧旁抬眼看向Karin手中的断剑
+P10-F02 2-4s：Karin走到铁砧前，Rifa守在门与他之间
+P10-F03 4-6s：断剑平放在铁砧上，锤柄抵住断口
+P10-F04 6-8s：奥伦侧身站在铁砧旁，目光落向Karin手中的断剑
+P10-F05 8-10s：Karin把断剑平放在铁砧上，Rifa守在门与他之间
+P10-F06 10-12s：锤柄抵住断口，三人停在同一纵深关系中
+P10-F07 12-14s：奥伦的手停在断剑上方，Karin站在铁砧前
+P10-F08 14-15s：Karin把断剑平放在铁砧上，Rifa保持门口站位
+参考职责：@图片1仅用于上一镜当前视频版本的已人工验收实际尾帧，仅作为本镜唯一连续性锚点；@图片2仅用于角色基准图：保持 Karin 的身份特征、服装与道具不漂移；@图片3仅用于角色基准图：保持 Rifa 的身份特征、服装与道具不漂移；@图片4仅用于角色基准图：保持 奥伦·奈特 的身份特征、服装与道具不漂移；@图片5仅用于场景基准图：保持空间结构、光向与轴线一致；@图片6仅用于道具基准图：保持 Karin的断剑 的形状、持有人与当前状态一致；@图片7仅用于道具基准图：保持 无头锤柄 的形状、持有人与当前状态一致
+结束画面：断剑平放铁砧，锤柄抵住断口；断剑平放铁砧，锤柄抵住断口；断剑平放铁砧，锤柄抵住断口
+风格：VS14 中世纪史诗的学院奇幻变体；宏大空间与克制人物近景并重，不使用现代元素或科幻 UI。
+针对性约束：无字幕、无现代工具、无角色变形、无过量火花。
+```
+
+### P11｜SH011 借她的记忆
+
+```text
+15s 9:16 视频
+动态意图：动态意图：锤柄触碰断剑，炉火缩成一线，金属朝铁砧偏转到奥伦注视两人相接的手，断剑停在铁砧上；起始可见状态：锤柄触碰断剑，炉火缩成一线，金属朝铁砧偏转；主体动作与反应：Rifa抓住Karin，奥伦注视相接的手；一个主运镜：记忆慢推；环境压力与声音：金属共鸣、记忆风声；Rifa抓腕、炉火收缩；女声母题短促上升后断开；结束画面：奥伦注视两人相接的手，断剑停在铁砧上；针对性约束：无字幕、无额外手指、无断手、无可辨识的其他三人面孔、无角色变形、无过载闪回。
+单一主运镜：记忆慢推
+P11-F01 0-3s：锤柄触碰断剑，炉火缩成一线，金属朝铁砧偏转
+P11-F02 3-5s：黑湖记忆浮现，雪地中央的手腕系着暗红细线
+P11-F03 5-7s：Rifa抓住Karin手腕，奥伦注视两人相接的手
+P11-F04 7-9s：无头锤柄触碰断剑，炉火缩成一线，金属朝铁砧偏转
+P11-F05 9-11s：炉火缩成一线，Karin看向暗红细线的记忆残影
+P11-F06 11-13s：Rifa的手扣住Karin手腕，暗红辫绳与记忆中的红线相对
+P11-F07 13-15s：奥伦注视两人相接的手，断剑停在铁砧上
+参考职责：@图片1仅用于上一镜当前视频版本的已人工验收实际尾帧，仅作为本镜唯一连续性锚点；@图片2仅用于角色基准图：保持 Karin 的身份特征、服装与道具不漂移；@图片3仅用于角色基准图：保持 Rifa 的身份特征、服装与道具不漂移；@图片4仅用于角色基准图：保持 奥伦·奈特 的身份特征、服装与道具不漂移；@图片5仅用于场景基准图：保持空间结构、光向与轴线一致；@图片6仅用于道具基准图：保持 Karin的断剑 的形状、持有人与当前状态一致；@图片7仅用于道具基准图：保持 无头锤柄 的形状、持有人与当前状态一致
+结束画面：Rifa抓住Karin，奥伦注视相接的手；Rifa抓住Karin，奥伦注视相接的手；Rifa抓住Karin，奥伦注视相接的手
+风格：VS14 中世纪史诗的学院奇幻变体；宏大空间与克制人物近景并重，不使用现代元素或科幻 UI。
+针对性约束：无字幕、无额外手指、无断手、无可辨识的其他三人面孔、无角色变形、无过载闪回。
+```
+
+### P12｜SH012 拒绝完整
+
+```text
+15s 9:16 视频
+动态意图：动态意图：奥伦从铁砧下取出窄木匣并推向Karin到炉火完全熄灭，木匣四点微亮，短刃保持出鞘半寸；起始可见状态：奥伦从铁砧下取出窄木匣并推向Karin；主体动作与反应：木匣四点微亮，铜镜现观察者，短刃出鞘半寸；一个主运镜：木匣慢推；环境压力与声音：店外声音像隔水；木匣滑动、短刃半出鞘、熄火；冷低弦与耳语后绝对静音；结束画面：炉火完全熄灭，木匣四点微亮，短刃保持出鞘半寸；针对性约束：无字幕、无过量闪回、无额外手指、无现代工具、无水印logo、观察者不露脸，结尾切黑。
+单一主运镜：木匣慢推
+P12-F01 0-2.667s：奥伦从铁砧下取出窄木匣并推向Karin
+P12-F02 2.667-5.333s：Rifa的短刃滑出半寸，视线转向木匣与奥伦
+P12-F03 5.333-8s：炉火熄灭，木匣四点微亮，铜镜映出高塔观察者
+P12-F04 8-10.333s：窄木匣停在铁砧边，Rifa的短刃露出半寸
+P12-F05 10.333-12.667s：烟黑铜镜映出高塔观察者，奥伦的手停在熄灭的炉膛旁
+P12-F06 12.667-15s：炉火完全熄灭，木匣四点微亮，短刃保持出鞘半寸
+参考职责：@图片1仅用于上一镜当前视频版本的已人工验收实际尾帧，仅作为本镜唯一连续性锚点；@图片2仅用于角色基准图：保持 Karin 的身份特征、服装与道具不漂移；@图片3仅用于角色基准图：保持 Rifa 的身份特征、服装与道具不漂移；@图片4仅用于角色基准图：保持 奥伦·奈特 的身份特征、服装与道具不漂移；@图片5仅用于角色基准图：保持 神秘观察者 的身份特征、服装与道具不漂移；@图片6仅用于场景基准图：保持空间结构、光向与轴线一致；@图片7仅用于道具基准图：保持 四点木匣 的形状、持有人与当前状态一致；@图片8仅用于道具基准图：保持 Rifa短刃 的形状、持有人与当前状态一致；@图片9仅用于道具基准图：保持 烟黑铜镜 的形状、持有人与当前状态一致
+结束画面：木匣四点微亮，铜镜现观察者，短刃出鞘半寸；木匣四点微亮，铜镜现观察者，短刃出鞘半寸；木匣四点微亮，铜镜现观察者，短刃出鞘半寸；木匣四点微亮，铜镜现观察者，短刃出鞘半寸
+风格：VS14 中世纪史诗的学院奇幻变体；宏大空间与克制人物近景并重，不使用现代元素或科幻 UI。
+针对性约束：无字幕、无过量闪回、无额外手指、无现代工具、无水印logo、观察者不露脸，结尾切黑。
+```
+
+## 十二、资产映射与执行顺序
 
 生产方案快照（导入后作为本集执行契约）：
 {
@@ -10837,4 +5738,4 @@ P30-F03 4.667-7s：炉火完全熄灭，木匣四点微亮，短刃保持出鞘�
 
 多帧执行规则：每镜按 framePlan.frames 的 Pxx-Fxx 时间顺序执行，并按 referenceManifest 的 @图片N 顺序提交 images；连续镜头的 @图片1 仅接受上一镜当前视频版本、已人工验收的实际尾帧。
 
-## QC 报告
+## 十三、QC 报告
