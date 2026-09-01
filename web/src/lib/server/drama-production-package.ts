@@ -1075,14 +1075,16 @@ function normalizeState(value: unknown) {
                 ? [
                       {
                           assetId,
-                          wardrobe: optionalText(entity.wardrobe),
-                          position: optionalText(entity.position),
-                          gaze: optionalText(entity.gaze),
-                          pose: optionalText(entity.pose),
-                          expression: optionalText(entity.expression),
-                          action: optionalText(entity.action),
-                          state: optionalText(entity.state),
-                          holderId: optionalText(entity.holderId),
+                          ...optionalRecord({
+                              wardrobe: optionalText(entity.wardrobe),
+                              position: optionalText(entity.position),
+                              gaze: optionalText(entity.gaze),
+                              pose: optionalText(entity.pose),
+                              expression: optionalText(entity.expression),
+                              action: optionalText(entity.action),
+                              state: optionalText(entity.state),
+                              holderId: optionalText(entity.holderId),
+                          }),
                       },
                   ]
                 : [];
@@ -1090,6 +1092,10 @@ function normalizeState(value: unknown) {
     return Object.keys(state).length
         ? { characters: entities(state.characters), props: entities(state.props), environment: optionalText(state.environment), lighting: optionalText(state.lighting), axis: optionalText(state.axis), screenDirection: optionalText(state.screenDirection) }
         : undefined;
+}
+
+function optionalRecord<T extends Record<string, unknown>>(value: T) {
+    return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined && item !== ""));
 }
 
 function parseDirectorMarkdown(source: string): DramaProductionPackageV1 | null {

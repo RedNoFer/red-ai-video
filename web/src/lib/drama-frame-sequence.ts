@@ -84,7 +84,7 @@ export function upgradeDramaFrameImagePrompt(
     actionPrompt: string,
     context: { description: string; shotSize: string; cameraAngle: string; composition: string; characterBlocking: string; gazeDirection: string; lighting: string; colorPalette: string; performanceState?: string; sequenceIndex?: number },
 ) {
-    if (imagePrompt.trim().startsWith("静态关键帧：") && imagePrompt.includes("可见状态：") && imagePrompt.includes("可见表演状态：") && imagePrompt.includes("景别：") && imagePrompt.includes("机位与构图：") && imagePrompt.includes("三层空间：") && imagePrompt.includes("参考图职责：") && imagePrompt.includes("负面约束：") && !/(?:景别|镜头)(?:（[^）]*）)?\s*[：:]\s*[^；。\n]*(?:→|->|至)/u.test(imagePrompt)) return imagePrompt.trim();
+    if (imagePrompt.trim().startsWith("静态关键帧：") && imagePrompt.includes("参考图职责：") && imagePrompt.includes("负面约束：") && !/(?:景别|镜头)(?:（[^）]*）)?\s*[：:]\s*[^；。\n]*(?:→|->|至)/u.test(imagePrompt)) return imagePrompt.trim();
     const subject = staticFrameSubject(imagePrompt, actionPrompt, context.description);
     const visibleState = imagePrompt.match(/可见状态：([^；。]+)/u)?.[1] || "";
     const performanceState = context.performanceState || inferStaticPerformanceState(subject, actionPrompt, context.sequenceIndex);
