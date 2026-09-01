@@ -82,6 +82,18 @@ describe("Canvas video references", () => {
             }),
         ).toThrow("请先选择视频尾帧图片");
     });
+
+    it("keeps all-frame selections ordered in the persisted snapshot", () => {
+        const first = image("frame-one", "https://cdn.example.com/frame-one.webp");
+        const second = image("frame-two", "https://cdn.example.com/frame-two.webp");
+        const resolved = resolveCanvasVideoGenerationReferences({
+            metadata: { videoReferenceMode: "all_frames", videoKeyframes: [frameSelection(second.id, second.url!), frameSelection(first.id, first.url!)] },
+            context: emptyContext(),
+            availableInputs: [{ image: first }, { image: second }],
+        });
+        expect(resolved.images.map((item) => [item.id, item.videoRole, item.keyframeIndex])).toEqual([["frame-two", "keyframe", 1], ["frame-one", "keyframe", 2]]);
+        expect(canvasVideoReferenceMetadata(resolved).videoReferences?.map((item) => item.keyframeIndex)).toEqual([1, 2]);
+    });
 });
 
 function image(id: string, url: string): ReferenceImage {

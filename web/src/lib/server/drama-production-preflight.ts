@@ -1,14 +1,15 @@
 import type { DramaEpisode, DramaProductionPreflight, DramaProductionPreflightIssue, DramaProject, DramaShot } from "@/lib/drama-project-contract";
 import { hasApprovedAssetReference } from "@/lib/drama-asset-baseline";
 import { continuityStartEvidence } from "@/lib/drama-continuity-policy";
-import { normalizeDramaFrameBeats } from "@/lib/drama-frame-sequence";
+import { normalizeDramaFrameBeats, validateDramaFrameVisualContent, dramaFrameVisualSubject } from "@/lib/drama-frame-sequence";
 
 const blocking = (code: string, message: string, extra: Partial<DramaProductionPreflightIssue> = {}): DramaProductionPreflightIssue => ({ code, severity: "blocking", message, ...extra });
 const warning = (code: string, message: string, extra: Partial<DramaProductionPreflightIssue> = {}): DramaProductionPreflightIssue => ({ code, severity: "warning", message, ...extra });
 
 /** Director gate: no paid generation may start until the executable package is internally consistent. */
-export function preflightDramaProduction(project: DramaProject, episode: DramaEpisode): DramaProductionPreflight {
+export function preflightDramaProduction(project: DramaProject, episode: DramaEpisode, shotIds?: string[]): DramaProductionPreflight {
     const issues: DramaProductionPreflightIssue[] = [];
+    const selected = new Set(shotIds?.length ? shotIds : episode.shots.map((shot) => shot.id));
     if (project.ratio !== "9:16") issues.push(blocking("RATIO", `本集必须使用9:16，当前为${project.ratio}`));
     if (!project.seriesBible) issues.push(blocking("SERIES_BIBLE", "项目缺少已锁定的系列圣经，不能跨集生产"));
     const plan = project.productionBible?.productionPlan;
@@ -25,8 +26,9 @@ export function preflightDramaProduction(project: DramaProject, episode: DramaEp
     const shotById = new Map(episode.shots.map((shot) => [shot.id, shot]));
     const edgeByTo = new Map((episode.continuityEdges || []).map((edge) => [edge.toShotId, edge]));
 
-    for (const shot of episode.shots) checkShot(shot, episode.code || episode.id, project, characters, scenes, props, clues, edgeByTo, shotById, issues);
+    for (const shot of episode.shots) if (selected.has(shot.id)) checkShot(shot, episode.code || episode.id, project, characters, scenes, props, clues, edgeByTo, shotById, issues);
     for (const edge of episode.continuityEdges || []) {
+        if (!selected.has(edge.toShotId)) continue;
         const from = shotById.get(edge.fromShotId);
         const to = shotById.get(edge.toShotId);
         if (!from || !to) {
@@ -41,7 +43,7 @@ export function preflightDramaProduction(project: DramaProject, episode: DramaEp
         }
         compareContinuityStates(from, to, edge, issues);
     }
-    return { status: issues.some((issue) => issue.severity === "blocking") ? "blocked" : issues.length ? "needs_confirmation" : "passed", issues, checkedShotIds: episode.shots.map((shot) => shot.id) };
+    return { status: issues.some((issue) => issue.severity === "blocking") ? "blocked" : issues.length ? "needs_confirmation" : "passed", issues, checkedShotIds: episode.shots.filter((shot) => selected.has(shot.id)).map((shot) => shot.id) };
 }
 
 function compareContinuityStates(from: DramaShot, to: DramaShot, edge: NonNullable<DramaEpisode["continuityEdges"]>[number], issues: DramaProductionPreflightIssue[]) {
@@ -141,15 +143,34 @@ function checkShot(
     }
     if (!shot.framePlan) issues.push(blocking("FRAME_PLAN_MISSING", `${label}缺少起止帧执行计划`, { shotId: shot.id }));
     else {
+        validateReferenceManifest(shot, issues);
         if (!shot.framePlan.end || typeof shot.framePlan.end.required !== "boolean") issues.push(blocking("FRAME_PLAN_END", `${label}缺少结束帧要求`, { shotId: shot.id }));
         if (shot.storyboardFrameMode === "all_frames" || shot.fieldOrigins?.framePlan === "package") {
             try {
                 normalizeDramaFrameBeats(shot.framePlan.frames, shot.duration);
+                shot.framePlan.frames.forEach((frame, index, frames) => {
+                    const visualError = validateDramaFrameVisualContent(frame.imagePrompt, frame.actionPrompt);
+                    if (visualError) issues.push(blocking("FRAME_VISUAL_CONTENT", `${label}第${index + 1}帧${visualError}`, { shotId: shot.id }));
+                    if (index > 0 && dramaFrameVisualSubject(frame.imagePrompt, frame.actionPrompt) === dramaFrameVisualSubject(frames[index - 1].imagePrompt, frames[index - 1].actionPrompt))
+                        issues.push(blocking("FRAME_VISUAL_DUPLICATE", `${label}第${index + 1}帧与上一帧的可见画面没有变化`, { shotId: shot.id, correction: "补充当前帧新的姿态、道具状态、表情或环境变化" }));
+                });
             } catch (error) {
                 issues.push(blocking("FRAME_PLAN_INVALID", `${label}逐帧计划无效：${error instanceof Error ? error.message : "时间轴必须连续覆盖镜头时长"}`, { shotId: shot.id }));
             }
         }
     }
+}
+
+function validateReferenceManifest(shot: DramaShot, issues: DramaProductionPreflightIssue[]) {
+    const manifest = shot.framePlan?.referenceManifest;
+    if (!manifest?.length) return;
+    const has = (role: string, assetId: string) => manifest.some((item) => item.role === role && item.assetId === assetId);
+    if (shot.sceneId && !has("scene_anchor", shot.sceneId))
+        issues.push(blocking("REFERENCE_MANIFEST_SCENE", `${shot.code || shot.title}的固定场景引用与镜头场景不一致`, { shotId: shot.id, assetId: shot.sceneId, correction: "将scene_anchor绑定到当前镜头的场景资产" }));
+    for (const assetId of shot.characterIds)
+        if (!has("character_anchor", assetId)) issues.push(blocking("REFERENCE_MANIFEST_CHARACTER", `${shot.code || shot.title}缺少角色 ${assetId} 的固定引用`, { shotId: shot.id, assetId, correction: "补充该角色的character_anchor引用" }));
+    for (const assetId of shot.propIds)
+        if (!has("prop_anchor", assetId)) issues.push(blocking("REFERENCE_MANIFEST_PROP", `${shot.code || shot.title}缺少道具 ${assetId} 的固定引用`, { shotId: shot.id, assetId, correction: "补充该道具的prop_anchor引用" }));
 }
 
 /** Names inside explicit negative constraints are exclusions, not shot references. */

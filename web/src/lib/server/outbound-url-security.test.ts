@@ -36,6 +36,25 @@ describe("outbound url security", () => {
         await expect(isSafeOutboundUrl("http://[::ffff:127.0.0.1]/result")).resolves.toBe(false);
     });
 
+    it("keeps pinned GitHub raw assets reachable even when local DNS returns a private cache address", async () => {
+        mocks.lookup.mockResolvedValue([{ address: "198.18.0.99", family: 4 }]);
+
+        await expect(resolveSafeOutboundTarget("https://raw.githubusercontent.com/tigerowo/awesome-gpt-image-2-prompts/60e9c65baecfd6d6d51ac4e4d87f146af834bb64/images/ui_case90/output.jpg")).resolves.toMatchObject({
+            address: "198.18.0.99",
+            family: 4,
+        });
+    });
+
+    it("allows proxy fake-ip DNS answers for configured provider hostnames but rejects direct fake-ip URLs", async () => {
+        mocks.lookup.mockResolvedValue([{ address: "198.18.0.77", family: 4 }]);
+
+        await expect(resolveSafeOutboundTarget("https://www.mysub2api.top/v1/chat/completions")).resolves.toMatchObject({
+            address: "198.18.0.77",
+            family: 4,
+        });
+        await expect(isSafeOutboundUrl("https://198.18.0.77/v1/chat/completions")).resolves.toBe(false);
+    });
+
     it("allows exact private hosts only when explicitly enabled and never allows metadata addresses", async () => {
         vi.stubEnv("VOZEB_PRO_ALLOW_PRIVATE_UPSTREAMS", "1");
         vi.stubEnv("VOZEB_PRO_PRIVATE_UPSTREAM_HOSTS", "localhost,provider.internal,169.254.169.254");

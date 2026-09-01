@@ -70,7 +70,7 @@ export function createCanvasNode(type: CanvasNodeType, position: Position, metad
         },
         width: spec.width,
         height: spec.height,
-        metadata: { ...spec.metadata, ...metadata },
+        metadata: { canvasOrigin: "user", ...spec.metadata, ...metadata },
     };
 }
 

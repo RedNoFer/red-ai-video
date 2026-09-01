@@ -8,11 +8,11 @@ import { AdminChannelProtocolSetup } from "@/components/admin/admin-channel-prot
 import { LabeledControl } from "@/components/admin/admin-settings-controls";
 import { createSystemChannel } from "@/components/admin/admin-dashboard-elements";
 import type { LogicalModelCapability, SystemChannelAuthMode, SystemChannelProtocol, SystemModelChannel } from "@/lib/auth/store";
-import { applyChannelProtocol, channelConnectionReady, channelProtocolDefinition, channelProtocolOptions, channelRequiresApiKey, channelSupportsModelCatalog, protocolModelConfig, resolveChannelAuthMode } from "@/lib/channel-protocol-registry";
+import { applyChannelProtocol, channelAllowsManualModels, channelConnectionReady, channelProtocolDefinition, channelProtocolOptions, channelRequiresApiKey, channelSupportsModelCatalog, protocolModelConfig, resolveChannelAuthMode } from "@/lib/channel-protocol-registry";
 import { inferModelCapability, normalizeModelId } from "@/lib/model-capability";
-import { capabilityLabel, channelModelCapability, synchronizeLogicalModelsWithChannels } from "@/lib/model-routing-config";
+import { capabilityLabel, channelModelCapability } from "@/lib/model-routing-config";
 
-import { defaultModelField, removeChannelFromWorkspace, type ChannelWorkspaceSettings } from "./admin-channel-workspace-model";
+import { removeChannelFromWorkspace, synchronizeChannelModels, type ChannelWorkspaceSettings } from "./admin-channel-workspace-model";
 
 type Props = {
     open: boolean;
@@ -35,6 +35,7 @@ export function AdminChannelOnboardingDrawer({ open, initialProtocol, settings, 
     const [draftId, setDraftId] = useState("");
     const [setAsDefault, setSetAsDefault] = useState(true);
     const channel = settings.systemChannels.find((item) => item.id === draftId);
+    const canSkipModelSetup = Boolean(channel && channel.advancedConfig?.protocol === "custom" && !channel.models.length);
     const modelsSynchronized = Boolean(
         channel?.models.length &&
         channel.models.every((upstreamModel) => settings.logicalModels.some((model) => model.bindings.some((binding) => binding.channelId === channel.id && normalizedUpstreamModel(binding.upstreamModel) === normalizedUpstreamModel(upstreamModel)))),
@@ -93,18 +94,8 @@ export function AdminChannelOnboardingDrawer({ open, initialProtocol, settings, 
     };
     const synchronizeModels = () => {
         if (!channel?.models.length) return message.error("请先同步或填写上游模型目录");
-        const logicalModels = synchronizeLogicalModelsWithChannels(settings.logicalModels, settings.systemChannels);
-        const defaultModels = { ...settings.defaultModels };
-        if (setAsDefault) {
-            channel.models.forEach((upstreamModel) => {
-                const capability = channelModelCapability(channel, upstreamModel);
-                const field = defaultModelField(capability);
-                if (defaultModels[field]) return;
-                const logical = logicalModels.find((model) => model.bindings.some((binding) => binding.channelId === channel.id && binding.upstreamModel === upstreamModel));
-                if (logical) defaultModels[field] = logical.id;
-            });
-        }
-        onChange({ ...settings, logicalModels, defaultModels });
+        const next = synchronizeChannelModels(settings, channel.id, setAsDefault);
+        onChange({ ...settings, ...next });
         message.success("已按上游模型名自动合并逻辑模型");
     };
 
@@ -112,12 +103,12 @@ export function AdminChannelOnboardingDrawer({ open, initialProtocol, settings, 
         if (step === 0) return <ProtocolSelection protocols={protocolOptions} selected={selectedProtocol} onSelect={setSelectedProtocol} />;
         if (!channel) return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="渠道草稿不存在" />;
         if (step === 1) return <ConnectionStep channel={channel} onChange={updateChannel} />;
-        if (step === 2) return <ModelStep channel={channel} fetching={fetchingModelId === channel.id} onChange={updateChannel} onFetch={() => void onFetchModels(channel)} />;
-        if (step === 3) return <BindingStep channel={channel} logicalModels={settings.logicalModels} setAsDefault={setAsDefault} onSetAsDefault={setSetAsDefault} onSynchronize={synchronizeModels} />;
+        if (step === 2) return <ModelStep channel={channel} canSkipModelSetup={canSkipModelSetup} fetching={fetchingModelId === channel.id} onChange={updateChannel} onFetch={() => void onFetchModels(channel)} />;
+        if (step === 3) return <BindingStep channel={channel} canSkipModelSetup={canSkipModelSetup} logicalModels={settings.logicalModels} setAsDefault={setAsDefault} onSetAsDefault={setSetAsDefault} onSynchronize={synchronizeModels} />;
         return <ReviewStep channel={channel} settings={settings} />;
     };
 
-    const nextDisabled = step === 1 ? !channel?.name.trim() || !channelConnectionReady(channel) : step === 2 ? !channel?.models.length : step === 3 ? !modelsSynchronized : false;
+    const nextDisabled = step === 1 ? !channel?.name.trim() || !channelConnectionReady(channel) : step === 2 ? !channel?.models.length && !canSkipModelSetup : step === 3 ? !modelsSynchronized && !canSkipModelSetup : false;
 
     return (
         <Drawer
@@ -321,10 +312,11 @@ function ProtocolLockedSummary({ channel }: { channel: SystemModelChannel }) {
     );
 }
 
-function ModelStep({ channel, fetching, onChange, onFetch }: { channel: SystemModelChannel; fetching: boolean; onChange: (patch: Partial<SystemModelChannel>) => void; onFetch: () => void }) {
+function ModelStep({ channel, canSkipModelSetup, fetching, onChange, onFetch }: { channel: SystemModelChannel; canSkipModelSetup: boolean; fetching: boolean; onChange: (patch: Partial<SystemModelChannel>) => void; onFetch: () => void }) {
     const canSync = channelSupportsModelCatalog(channel);
     const definition = channelProtocolDefinition(channel.advancedConfig?.protocol || "auto");
     const hasDocumentedModels = Boolean(definition.builtInModels?.length);
+    const canEditModels = channelAllowsManualModels(channel);
     const manualCapabilityOptions = definition.capabilities.map((capability) => ({ label: capabilityLabel(capability), value: capability }));
     const updateModels = (models: string[]) => {
         const nextModels = models.map((model) => model.trim()).filter(Boolean);
@@ -338,7 +330,7 @@ function ModelStep({ channel, fetching, onChange, onFetch }: { channel: SystemMo
             const capability = definition.capabilities.includes(inferred) ? inferred : definition.capabilities[0];
             if (!capability) continue;
             modelCapabilities[key] = capability;
-            const config = protocolModelConfig(advanced.protocol, capability);
+            const config = protocolModelConfig(advanced.protocol, capability, model);
             if (config) modelConfigs[key] = config;
         }
         onChange({ models: nextModels, advancedConfig: { ...advanced, modelCapabilities, modelConfigs } });
@@ -346,7 +338,7 @@ function ModelStep({ channel, fetching, onChange, onFetch }: { channel: SystemMo
     const updateCapability = (model: string, capability: LogicalModelCapability) => {
         const advanced = channel.advancedConfig!;
         const key = normalizeModelId(model);
-        const config = protocolModelConfig(advanced.protocol, capability);
+        const config = protocolModelConfig(advanced.protocol, capability, model);
         onChange({
             advancedConfig: {
                 ...advanced,
@@ -382,15 +374,16 @@ function ModelStep({ channel, fetching, onChange, onFetch }: { channel: SystemMo
                     </span>
                 </div>
             ) : null}
+            {canSkipModelSetup ? <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">暂时没有模型 ID 也可以先继续，渠道会先以草稿保存，后续在详情里补模型即可。</div> : null}
             <LabeledControl label="模型 ID">
                 <Select
                     mode="tags"
                     className="w-full"
                     maxTagCount="responsive"
                     tokenSeparators={[",", "，", "\n"]}
-                    disabled={hasDocumentedModels}
+                    disabled={!canEditModels}
                     value={channel.models}
-                    placeholder={canSync ? "同步模型，或输入模型 ID 后按 Enter" : hasDocumentedModels ? "官方文档模型已预置" : "输入模型 ID 后按 Enter，可添加多个"}
+                    placeholder={definition.id === "buming-seedance" ? "例如 seedance-2-0-official，输入后按 Enter" : canSync ? "同步模型，或输入模型 ID 后按 Enter" : hasDocumentedModels ? "官方文档模型已预置" : "输入模型 ID 后按 Enter，可添加多个"}
                     onChange={updateModels}
                 />
             </LabeledControl>
@@ -407,7 +400,7 @@ function ModelStep({ channel, fetching, onChange, onFetch }: { channel: SystemMo
                         )}
                     </div>
                 ))}
-                {!channel.models.length ? <div className="py-8 text-center text-sm text-stone-500 dark:text-stone-400">{canSync ? "尚未获得模型" : "请先添加至少一个模型 ID"}</div> : null}
+                {!channel.models.length ? <div className="py-8 text-center text-sm text-stone-500 dark:text-stone-400">{canSync ? "尚未获得模型" : canSkipModelSetup ? "当前可先跳过模型，稍后补充" : "请先添加至少一个模型 ID"}</div> : null}
             </div>
         </div>
     );
@@ -415,12 +408,14 @@ function ModelStep({ channel, fetching, onChange, onFetch }: { channel: SystemMo
 
 function BindingStep({
     channel,
+    canSkipModelSetup,
     logicalModels,
     setAsDefault,
     onSetAsDefault,
     onSynchronize,
 }: {
     channel: SystemModelChannel;
+    canSkipModelSetup: boolean;
     logicalModels: ChannelWorkspaceSettings["logicalModels"];
     setAsDefault: boolean;
     onSetAsDefault: (value: boolean) => void;
@@ -429,6 +424,7 @@ function BindingStep({
     return (
         <div className="space-y-4">
             <ChannelInfoNote title="逻辑模型由渠道目录自动维护" description="同名上游模型会跨渠道合并；没有同名项时会按上游模型名建立独立逻辑模型，创建后可在逻辑模型页设置前端展示昵称。" />
+            {canSkipModelSetup ? <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">当前还没有模型 ID，可以直接保存草稿，后续再回来补模型并启用。</div> : null}
             <div className="divide-y divide-stone-200 border-y border-stone-200 dark:divide-stone-800 dark:border-stone-800">
                 {channel.models.map((upstreamModel) => {
                     const logical = logicalModels.find((model) => model.bindings.some((binding) => normalizedUpstreamModel(binding.upstreamModel) === normalizedUpstreamModel(upstreamModel)));
@@ -447,7 +443,7 @@ function BindingStep({
                 <span className="text-sm text-stone-700 dark:text-stone-300">为尚未配置的能力设置默认模型</span>
                 <Switch checked={setAsDefault} onChange={onSetAsDefault} />
             </div>
-            <Button type="primary" icon={<Link2 className="size-4" />} onClick={onSynchronize}>
+            <Button type="primary" icon={<Link2 className="size-4" />} disabled={!channel.models.length} onClick={onSynchronize}>
                 同步并自动合并
             </Button>
         </div>

@@ -45,9 +45,9 @@ describe("parseChannelExampleConfig", () => {
 
     it("recognizes the MegabyAI New API video host as the dedicated protocol", () => {
         const channel = { id: "one", name: "测试", baseUrl: "", apiKey: "", apiFormat: "openai", models: [], enabled: false } satisfies SystemModelChannel;
-        const result = parseChannelExampleConfig('curl https://newapi.megabyai.cc/v1/video/generations -d {"model":"seedance-2.5","prompt":"test","image":"https://cdn.example.com/ref.png"}', channel, advanced);
+        const result = parseChannelExampleConfig('curl https://newapi.megabyai.cc/v1/videos -d {"model":"alibaba/wan-3.0","prompt":"test","duration":5,"ratio":"16:9","resolution":"720p","referenceImages":["https://cdn.example.com/ref.png"]}', channel, advanced);
         expect(result?.patch.advancedConfig?.protocol).toBe("newapi-video");
-        expect(result?.patch.advancedConfig).toMatchObject({ imageToVideoPath: "/video/generations", queryPath: "/video/generations/:task_id" });
+        expect(result?.patch.advancedConfig).toMatchObject({ imageToVideoPath: "/videos", queryPath: "/videos/:task_id" });
     });
 
     it.each([
@@ -77,5 +77,14 @@ describe("parseChannelExampleConfig", () => {
         expect(result?.patch.baseUrl).toBeUndefined();
         expect(result?.patch.advancedConfig?.createPath).toBe("/kyyReactApiServer/v2/model-center/tasks");
         expect(result?.patch.models).toContain(model);
+    });
+
+    it("recognizes an OpenAI-compatible audio speech example as audio", () => {
+        const channel = { id: "one", name: "测试", baseUrl: "", apiKey: "", apiFormat: "openai", models: [], enabled: false } satisfies SystemModelChannel;
+        const result = parseChannelExampleConfig('curl https://buming.token6688.com/v1/audio/speech -H "Content-Type: application/json" -d {"model":"gemini-3.1-flash-tts","input":"你好","voice":"Kore","response_format":"mp3"}', channel, advanced);
+
+        expect(result?.patch.advancedConfig).toMatchObject({ protocol: "openai", createPath: "/audio/speech", requestTemplate: expect.stringContaining('"input":"{{prompt}}"') });
+        expect(result?.patch.models).toEqual(["gemini-3.1-flash-tts"]);
+        expect(result?.summary).toContain("音频接口");
     });
 });

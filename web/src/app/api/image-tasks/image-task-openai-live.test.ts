@@ -2,6 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/server/proxy-dispatcher", () => ({ configureServerProxyDispatcher: vi.fn() }));
 
+const mocks = vi.hoisted(() => ({ fetchSafeOutbound: vi.fn() }));
+vi.mock("@/lib/server/safe-outbound-fetch", () => ({ fetchSafeOutbound: (...args: Parameters<typeof fetch>) => mocks.fetchSafeOutbound(...args) }));
+
 import { createProtocolFixtureServer } from "../../../../scripts/protocol-fixture-server.mjs";
 import { runGeminiImageTask } from "./image-task-gemini";
 import { runOpenAiImageTask } from "./image-task-openai";
@@ -20,6 +23,10 @@ afterEach(() => {
 beforeEach(() => {
     vi.stubEnv("VOZEB_PRO_ALLOW_PRIVATE_UPSTREAMS", "1");
     vi.stubEnv("VOZEB_PRO_PRIVATE_UPSTREAM_HOSTS", "127.0.0.1");
+    mocks.fetchSafeOutbound.mockImplementation((url: string | URL, init?: RequestInit) => {
+        if (String(url).startsWith("https://cdn.example.com/")) return Promise.resolve(new Response(new Uint8Array([137]), { status: 206, headers: { "content-type": "image/png" } }));
+        return fetch(url, init);
+    });
 });
 
 describe("OpenAI image provider over a live compatible fixture", () => {
@@ -132,6 +139,42 @@ describe("OpenAI image provider over a live compatible fixture", () => {
             expect(body.images).toEqual([{ image_url: "https://cdn.example.com/reference.png" }]);
             expect(body.image_urls).toBeUndefined();
             expect(fixture.requests[0]?.headers["idempotency-key"]).toBe("image-task:image-sub2api-live:attempt:1");
+        } finally {
+            await new Promise<void>((resolve, reject) => fixture.server.close((error?: Error) => (error ? reject(error) : resolve())));
+        }
+    });
+
+    it("transmits every reference image in a multi-reference sub2api edit", async () => {
+        const fixture = createProtocolFixtureServer();
+        await new Promise<void>((resolve) => fixture.server.listen(0, "127.0.0.1", resolve));
+        const address = fixture.server.address();
+        if (!address || typeof address === "string") throw new Error("Protocol fixture did not bind a TCP port");
+        const origin = `http://127.0.0.1:${address.port}`;
+        const references = ["character.png", "scene.png", "prop.png"].map((name) => ({ name, type: "image/png", dataUrl: `https://cdn.example.com/${name}` }));
+        const task = liveImageTask(origin, {
+            id: "image-sub2api-multi-reference-live",
+            kind: "edit",
+            references,
+            config: {
+                baseUrl: origin,
+                apiKey: "fixture-key",
+                apiFormat: "openai",
+                model: "gpt-image-2",
+                channelId: "fixture-sub2api",
+                advancedConfig: { ...emptyAdvancedConfig(), protocol: "sub2api", createPath: "/images/generations", editPath: "/images/edits", supportsReferenceImage: true },
+            },
+        });
+
+        try {
+            await expect(runOpenAiImageTask(task, "", "", "", true)).resolves.toMatchObject({ dataUrl: expect.stringMatching(/^data:image\/png;base64,/) });
+            const submissions = fixture.requests.filter((request) => request.method === "POST" && request.path === "/v1/images/edits");
+            expect(submissions).toHaveLength(1);
+            const body = JSON.parse(submissions[0]?.body.toString("utf8") || "{}");
+            expect(body.images).toEqual(references.map((reference) => ({ image_url: `https://cdn.example.com/${reference.name}` })));
+            expect(body.images).toHaveLength(3);
+            expect(body.image_urls).toBeUndefined();
+            expect(body.prompt).toContain("images[].image_url");
+            expect(body.prompt).toContain("Use every supplied reference image in array order");
         } finally {
             await new Promise<void>((resolve, reject) => fixture.server.close((error?: Error) => (error ? reject(error) : resolve())));
         }

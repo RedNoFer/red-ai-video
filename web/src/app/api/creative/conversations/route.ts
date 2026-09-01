@@ -14,6 +14,7 @@ export async function GET(request: Request) {
             surface: url.searchParams.get("surface"),
             source: url.searchParams.get("source"),
             projectId: url.searchParams.get("projectId"),
+            ...(url.searchParams.get("episodeId") ? { episodeId: url.searchParams.get("episodeId") } : {}),
             status: url.searchParams.get("status"),
             limit: String(limit + 1),
             offset: url.searchParams.get("offset"),

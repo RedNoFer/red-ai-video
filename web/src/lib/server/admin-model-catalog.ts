@@ -31,6 +31,8 @@ const MODEL_METADATA_KEYS = new Set([
     "modality",
     "output_modalities",
     "outputModalities",
+    "supports_audio_output",
+    "supportsAudioOutput",
     "supported_generation_methods",
     "supportedGenerationMethods",
     "supported_endpoint_types",
@@ -223,6 +225,7 @@ function collectModelValues(value: unknown, depth = 0): Array<{ id: string; meta
 
 function capabilityFromModelMetadata(record: Record<string, unknown> | undefined) {
     if (!record) return undefined;
+    if (record.supports_audio_output === true || record.supportsAudioOutput === true) return "audio";
     const directHints = [
         record.capability,
         record.type,
@@ -286,12 +289,29 @@ function modelConfigFromMetadata(record: Record<string, unknown> | undefined, ca
         ...optionalMetadataText(record, "requestTemplate", "request_template", 12_000),
         ...optionalMetadataText(record, "resultField", "result_field", 500),
         ...optionalMetadataText(record, "statusField", "status_field", 500),
+        ...(record.audioOperation === "tts" || record.audioOperation === "voice-design" || record.audioOperation === "voice-clone" ? { audioOperation: record.audioOperation } : record.audio_operation === "tts" || record.audio_operation === "voice-design" || record.audio_operation === "voice-clone" ? { audioOperation: record.audio_operation } : {}),
+        ...optionalMetadataText(record, "voiceIdField", "voice_id_field", 500),
+        ...optionalMetadataText(record, "previewAudioField", "preview_audio_field", 500),
+        ...optionalMetadataText(record, "cloneSampleField", "clone_sample_field", 500),
         ...optionalMetadataText(record, "durationRange", "duration_range", 120),
         ...optionalMetadataText(record, "referenceRule", "reference_rule", 1_000),
         ...(typeof record.supportsReferenceImage === "boolean" ? { supportsReferenceImage: record.supportsReferenceImage } : {}),
         ...(typeof record.supportsReferenceVideo === "boolean" ? { supportsReferenceVideo: record.supportsReferenceVideo } : {}),
         ...(typeof record.supportsReferenceAudio === "boolean" ? { supportsReferenceAudio: record.supportsReferenceAudio } : {}),
+        ...(typeof record.supportsKeyframes === "boolean" ? { supportsKeyframes: record.supportsKeyframes } : {}),
+        ...(videoReferenceModes(record.videoReferenceModes ?? record.video_reference_modes).length ? { videoReferenceModes: videoReferenceModes(record.videoReferenceModes ?? record.video_reference_modes) } : {}),
+        ...(positiveInteger(record.maxReferenceImages ?? record.max_reference_images) ? { maxReferenceImages: positiveInteger(record.maxReferenceImages ?? record.max_reference_images) } : {}),
     };
+}
+
+function videoReferenceModes(value: unknown): Array<"reference" | "first_frame" | "first_last" | "all_frames"> {
+    const values = Array.isArray(value) ? value : typeof value === "string" ? value.split(/[，,\s]+/) : [];
+    return Array.from(new Set(values.filter((item): item is "reference" | "first_frame" | "first_last" | "all_frames" => item === "reference" || item === "first_frame" || item === "first_last" || item === "all_frames")));
+}
+
+function positiveInteger(value: unknown) {
+    const number = Number(value);
+    return Number.isSafeInteger(number) && number > 0 ? number : undefined;
 }
 
 function optionalMetadataText(record: Record<string, unknown>, camelKey: string, snakeKey: string, max: number) {
@@ -328,6 +348,8 @@ function isChannelProtocol(value: unknown): value is SystemChannelProtocol {
         value === "stable-diffusion" ||
         value === "volcengine-video" ||
         value === "seedance-special" ||
+        value === "buming-seedance" ||
+        value === "buming-image" ||
         value === "custom" ||
         value === "compatible"
     );

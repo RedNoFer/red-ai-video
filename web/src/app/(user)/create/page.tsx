@@ -45,7 +45,7 @@ export default function CreatePage() {
     const inputRef = useRef<TextAreaRef>(null);
     const attachmentInputRef = useRef<HTMLInputElement>(null);
     const frameInputRef = useRef<HTMLInputElement>(null);
-    const frameUploadRoleRef = useRef<FrameRole | undefined>(undefined);
+    const frameUploadRoleRef = useRef<FrameRole | "keyframe" | undefined>(undefined);
     const initialConversationRestoredRef = useRef(false);
     const initialPromptRestoredRef = useRef(false);
     const conversationScrollRef = useRef<HTMLElement>(null);
@@ -198,6 +198,10 @@ export default function CreatePage() {
             message.warning("请先同时选择视频首帧和尾帧图片");
             return;
         }
+        if (videoFrameModeActive && videoPreference?.referenceMode === "all_frames" && ((videoPreference.frameAssetIds?.length || 0) < 2 || (videoPreference.frameAssetIds?.length || 0) > 5)) {
+            message.warning("全能帧需要按顺序选择 2 到 5 张图片");
+            return;
+        }
         promptRevisionRef.current += 1;
         try {
             const preferences = { ...generationPreferences, ...(creationMode !== "agent" ? { mode: creationMode } : {}) };
@@ -211,7 +215,7 @@ export default function CreatePage() {
             ) {
                 updatePrompt("");
                 setSelectedSkillId(undefined);
-                setGenerationPreferences((current) => (current.video ? { ...current, video: { ...current.video, firstFrameAssetId: undefined, lastFrameAssetId: undefined } } : current));
+                setGenerationPreferences((current) => (current.video ? { ...current, video: { ...current.video, firstFrameAssetId: undefined, lastFrameAssetId: undefined, frameAssetIds: undefined } } : current));
             }
         } catch (error) {
             message.error(error instanceof Error ? error.message : "素材上传失败");
@@ -333,7 +337,7 @@ export default function CreatePage() {
             delete automaticPreferences.mode;
             const next: CreativeGenerationPreferences = mode === "agent" ? automaticPreferences : { ...current, mode };
             if (mode === "video" || !next.video) return next;
-            return { ...next, video: { ...next.video, referenceMode: "reference", firstFrameAssetId: undefined, lastFrameAssetId: undefined } };
+            return { ...next, video: { ...next.video, referenceMode: "reference", firstFrameAssetId: undefined, lastFrameAssetId: undefined, frameAssetIds: undefined } };
         });
         if (mode === "agent") {
             setSelectedModelIds([]);
@@ -348,7 +352,7 @@ export default function CreatePage() {
         setGenerationPreferences((current) => {
             const next = { ...current, mode: capability };
             if (capability === "video" || !current.video) return next;
-            return { ...next, video: { ...current.video, referenceMode: "reference", firstFrameAssetId: undefined, lastFrameAssetId: undefined } };
+            return { ...next, video: { ...current.video, referenceMode: "reference", firstFrameAssetId: undefined, lastFrameAssetId: undefined, frameAssetIds: undefined } };
         });
     };
 
@@ -357,8 +361,10 @@ export default function CreatePage() {
             const activePreferences = applyAgentGenerationCapability(creationMode, capability, current);
             if (capability !== "video") return { ...activePreferences, [capability]: { ...activePreferences[capability], ...patch } };
             const nextVideo = { ...activePreferences.video, ...patch };
-            if (patch.referenceMode === "reference") return { ...activePreferences, video: { ...nextVideo, firstFrameAssetId: undefined, lastFrameAssetId: undefined } };
-            if (patch.referenceMode === "first_frame") return { ...activePreferences, video: { ...nextVideo, lastFrameAssetId: undefined } };
+            if (patch.referenceMode === "reference") return { ...activePreferences, video: { ...nextVideo, firstFrameAssetId: undefined, lastFrameAssetId: undefined, frameAssetIds: undefined } };
+            if (patch.referenceMode === "first_frame") return { ...activePreferences, video: { ...nextVideo, lastFrameAssetId: undefined, frameAssetIds: undefined } };
+            if (patch.referenceMode === "first_last") return { ...activePreferences, video: { ...nextVideo, frameAssetIds: undefined } };
+            if (patch.referenceMode === "all_frames") return { ...activePreferences, video: { ...nextVideo, firstFrameAssetId: undefined, lastFrameAssetId: undefined, frameAssetIds: nextVideo.frameAssetIds || [] } };
             return { ...activePreferences, video: nextVideo };
         });
     };
@@ -396,6 +402,25 @@ export default function CreatePage() {
         );
     };
 
+    const toggleVideoKeyframe = (assetId: string) => {
+        setGenerationPreferences((current) => {
+            const video = current.video || {};
+            const ids = video.frameAssetIds || [];
+            return { ...current, video: { ...video, referenceMode: "all_frames", firstFrameAssetId: undefined, lastFrameAssetId: undefined, frameAssetIds: ids.includes(assetId) ? ids.filter((id) => id !== assetId) : ids.length < 5 ? [...ids, assetId] : ids } };
+        });
+    };
+    const moveVideoKeyframe = (assetId: string, direction: -1 | 1) => {
+        setGenerationPreferences((current) => {
+            const ids = current.video?.frameAssetIds || [];
+            const index = ids.indexOf(assetId);
+            const nextIndex = index + direction;
+            if (index < 0 || nextIndex < 0 || nextIndex >= ids.length) return current;
+            const next = [...ids];
+            [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
+            return { ...current, video: { ...current.video, frameAssetIds: next } };
+        });
+    };
+
     const removeAttachment = (id: string) => {
         const currentAssetIds = agent.selectedAssetIds;
         const nextAssetIds = currentAssetIds.filter((assetId) => assetId !== id);
@@ -410,6 +435,7 @@ export default function CreatePage() {
                           ...current.video,
                           ...(current.video.firstFrameAssetId === id ? { firstFrameAssetId: undefined } : {}),
                           ...(current.video.lastFrameAssetId === id ? { lastFrameAssetId: undefined } : {}),
+                          ...(current.video.frameAssetIds?.includes(id) ? { frameAssetIds: current.video.frameAssetIds.filter((assetId) => assetId !== id) } : {}),
                       },
                   }
                 : current,
@@ -511,6 +537,12 @@ export default function CreatePage() {
                 frameInputRef.current?.click();
             }}
             onRemoveVideoFrame={removeVideoFrame}
+            onToggleVideoKeyframe={toggleVideoKeyframe}
+            onUploadVideoKeyframe={() => {
+                frameUploadRoleRef.current = "keyframe";
+                frameInputRef.current?.click();
+            }}
+            onMoveVideoKeyframe={moveVideoKeyframe}
             onAttachment={() => attachmentInputRef.current?.click()}
             onPasteImages={(files) => void uploadAttachments(files)}
             referenceAssets={agent.assets}
@@ -735,7 +767,7 @@ export default function CreatePage() {
                     if (!role || !file) return;
                     void uploadAttachments([file]).then((items) => {
                         const image = items.find((item) => item.type === "image");
-                        if (image) selectVideoFrame(role, image.id);
+                        if (image) role === "keyframe" ? toggleVideoKeyframe(image.id) : selectVideoFrame(role, image.id);
                     });
                 }}
             />

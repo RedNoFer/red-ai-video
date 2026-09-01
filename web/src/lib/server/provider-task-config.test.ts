@@ -11,6 +11,7 @@ import {
     providerTaskPath,
     readProviderError,
     readProviderString,
+    serializeProviderRequest,
     templateVideoReferenceRoles,
     videoPollingPolicy,
 } from "./provider-task-config";
@@ -25,10 +26,33 @@ describe("provider task config", () => {
         expect(buildProviderRequest('{"model":"{{model}}","duration":"{{duration}}","images":"{{images}}"}', {}, { model: "video-v1", duration: 10, images: ["a", "b"] })).toEqual({ model: "video-v1", duration: 10, images: ["a", "b"] });
     });
 
+    it("rejects circular dynamic values before they reach JSON serialization", () => {
+        const values: { images?: unknown } = {};
+        const images: unknown[] = [];
+        images.push(images);
+        values.images = images;
+
+        expect(() => buildProviderRequest('{"images":"{{images}}"}', {}, values)).toThrow("动态值包含循环引用");
+    });
+
+    it("serializes provider payloads with a clear boundary error", () => {
+        const payload: Record<string, unknown> = {};
+        payload.self = payload;
+
+        expect(() => serializeProviderRequest(payload)).toThrow("生成请求参数包含循环引用");
+    });
+
     it("removes empty optional reference placeholders and containers", () => {
         const template = '{"model":"{{model}}","image":"{{image}}","images":"{{images}}","reference_images":["{{image}}"],"referenceVideos":["https://..."],"ref_assets":[{"type":"image","url":"{{image}}"}],"metadata":{"label":""}}';
 
         expect(buildProviderRequest(template, {}, { model: "video-v1", image: "", images: [] })).toEqual({ model: "video-v1", metadata: { label: "" } });
+    });
+
+    it("rejects excessively deep provider templates before native recursion overflows", () => {
+        let template = '"{{model}}"';
+        for (let index = 0; index < 200; index += 1) template = `{"nested":${template}}`;
+
+        expect(() => buildProviderRequest(template, {}, { model: "image-v1" })).toThrow("高级请求模板嵌套层级过深");
     });
 
     it("fills detected video template examples with the current parameters and reference image", () => {
@@ -112,9 +136,18 @@ describe("provider task config", () => {
         expect(() => assertVideoReferenceRoles({ protocol: "custom", requestTemplate: '{"first":"{{first_frame_url}}"}' } as never, frames)).toThrow("当前视频模型不支持尾帧输入");
     });
 
+    it("enforces Buming model-specific keyframe support", () => {
+        const frames = [
+            { type: "image" as const, url: "https://cdn.example.com/one.png", role: "keyframe" as const, keyframeIndex: 1 },
+            { type: "image" as const, url: "https://cdn.example.com/two.png", role: "keyframe" as const, keyframeIndex: 2 },
+        ];
+        expect(() => assertVideoReferenceRoles({ protocol: "buming-seedance" } as never, frames, undefined, "seedance-2-0-official")).not.toThrow();
+        expect(() => assertVideoReferenceRoles({ protocol: "buming-seedance" } as never, frames, undefined, "seedance-2-0-manju-special")).toThrow("不支持全能帧");
+    });
+
     it("derives custom template frame roles only from explicit variables or structured references", () => {
         expect(templateVideoReferenceRoles('{"first":"{{first_frame}}","last":"{{last_frame_url}}"}')).toEqual(["reference", "first_frame", "last_frame"]);
-        expect(templateVideoReferenceRoles('{"references":"{{references}}"}')).toEqual(["reference", "first_frame", "last_frame"]);
+        expect(templateVideoReferenceRoles('{"references":"{{references}}"}')).toEqual(["reference", "first_frame", "last_frame", "keyframe"]);
         expect(templateVideoReferenceRoles('{"images":"{{images}}"}')).toEqual(["reference"]);
     });
 
@@ -129,5 +162,7 @@ describe("provider task config", () => {
         expect(() => assertReferenceUrls(config, [{ url: "https://drama.example/api/reference-assets/temporary/2026/07/25/images/file.png" }])).toThrow("站内参考素材");
         expect(() => assertReferenceUrls(config, [{ url: "https://drama.example/api/reference-assets/temporary/2026/07/25/images/file.png?expires=1&signature=test" }])).toThrow("站内参考素材");
         expect(() => assertReferenceUrls(config, [{ url: "https://drama.example/api/reference-assets/temporary/2026/07/25/images/file.png?purpose=provider-read&expires=1&signature=test" }])).not.toThrow();
+        expect(() => assertReferenceUrls(config, [{ url: "https://drama.example/api/generation-log-assets/permanent/2026/07/25/images/file.png" }])).toThrow("站内参考素材");
+        expect(() => assertReferenceUrls(config, [{ url: "https://drama.example/api/generation-log-assets/permanent/2026/07/25/images/file.png?purpose=provider-read&expires=1&signature=test" }])).not.toThrow();
     });
 });

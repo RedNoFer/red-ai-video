@@ -188,7 +188,7 @@ function readProtocolArguments(payload: Record<string, unknown>, toolName: strin
 }
 
 function planningMessages(input: StructuredTextRequest) {
-    const instruction = `请先在模型内部完成需求理解、约束分析、模型选择、任务拆分与依赖规划，再只返回一个严格 JSON 对象，作为 ${input.tool.name} 的最终参数。任务用途：${input.tool.description}。不要使用 Markdown、代码围栏、解释或额外文字。JSON 必须符合以下 Schema：${JSON.stringify(input.tool.parameters)}`;
+    const instruction = `请先在模型内部完成需求理解、约束分析、模型选择、任务拆分与依赖规划，再只返回一个严格 JSON（json）对象，作为 ${input.tool.name} 的最终参数。任务用途：${input.tool.description}。不要使用 Markdown、代码围栏、解释或额外文字。JSON 必须符合以下 Schema：${JSON.stringify(input.tool.parameters)}`;
     if (input.messages[0]?.role === "system") return [{ ...input.messages[0], content: `${instruction}\n\n${input.messages[0].content}` }, ...input.messages.slice(1)];
     return [{ role: "system", content: instruction }, ...input.messages];
 }
@@ -272,17 +272,25 @@ function safeUpstreamError(value: string, status: number) {
     const fallback = status === 401 || status === 403 ? "文本模型渠道鉴权失败，请管理员检查密钥" : status === 429 ? "文本模型渠道请求过于频繁，请稍后重试" : status >= 500 ? `文本模型渠道暂不可用（HTTP ${status}）` : "文本模型调用失败";
     if (!value.trim() || /<!doctype\s+html|<html\b|<title>|<body\b|\bnginx\b|\bcloudflare\b/i.test(value)) return fallback;
     try {
-        const payload = JSON.parse(value) as { msg?: unknown; error?: unknown };
+        const payload = JSON.parse(value) as { msg?: unknown; message?: unknown; code?: unknown; error?: unknown };
         const error = payload.error && typeof payload.error === "object" ? (payload.error as { message?: unknown }) : undefined;
-        return (
-            [payload.msg, typeof payload.error === "string" ? payload.error : undefined, error?.message]
+        const raw =
+            [payload.message, payload.msg, typeof payload.error === "string" ? payload.error : undefined, error?.message, payload.code]
                 .find((item): item is string => typeof item === "string" && Boolean(item.trim()))
                 ?.trim()
-                .slice(0, 300) || fallback
-        );
+                .slice(0, 300) || "";
+        return actionableUpstreamError(raw, status) || fallback;
     } catch {
-        return value.trim().slice(0, 300) || fallback;
+        const raw = value.trim().slice(0, 300);
+        return actionableUpstreamError(raw, status) || (status >= 500 ? fallback : raw) || fallback;
     }
+}
+
+function actionableUpstreamError(raw: string, status: number) {
+    const lower = raw.toLowerCase();
+    if (lower.includes("upstream service temporarily unavailable")) return status >= 500 ? `文本模型渠道暂不可用（HTTP ${status}）` : "文本模型渠道暂不可用";
+    if (lower.includes("gateway timeout") || lower.includes("timeout") || raw.includes("超时")) return "文本模型规划响应超时，正在切换备用渠道";
+    return raw;
 }
 
 function normalizePath(value: string) {

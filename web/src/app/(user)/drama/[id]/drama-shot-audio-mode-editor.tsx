@@ -7,7 +7,7 @@ import type { DramaShot, DramaShotAudioMode } from "../types";
 
 const descriptions: Record<DramaShotAudioMode, string> = {
     source: "保留即梦等视频模型生成的对白、环境声和音乐。",
-    voiceover: "关闭视频模型原声，按角色音色生成独立配音并替换音轨。",
+    voiceover: "保留视频模型环境声，按角色绑定音色叠加对白配音。",
     mute: "生成静音镜头，整集合成时不保留视频原声。",
 };
 

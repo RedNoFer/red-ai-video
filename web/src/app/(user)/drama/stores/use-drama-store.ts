@@ -38,6 +38,7 @@ type DramaStore = {
     summaryPageSize: number;
     summaryLoadingMore: boolean;
     projects: DramaProject[];
+    videoPromptRuns: Record<string, { startedAt: number }>;
     hydrate: (force?: boolean) => Promise<void>;
     loadMore: () => Promise<void>;
     loadProject: (id: string, force?: boolean) => Promise<DramaProject>;
@@ -62,13 +63,15 @@ type DramaStore = {
     ) => void;
     buildStoryboard: (projectId: string, episodeId: string) => void;
     updateShot: (projectId: string, episodeId: string, shotId: string, patch: Partial<DramaShot>) => void;
-    saveProjectNow: (projectId: string) => Promise<DramaProject>;
+    saveProjectNow: (projectId: string, updater?: (project: DramaProject) => DramaProject) => Promise<DramaProject>;
     queueShots: (projectId: string, episodeId: string, shotIds: string[]) => void;
     applyContentAnalysis: (projectId: string, episodeId: string, analysis: DramaContentAnalysis) => void;
     applyVisualAnalysis: (projectId: string, episodeId: string, analysis: DramaVisualAnalysis) => void;
     applyReviewCompletion: (projectId: string, episodeId: string, analysis: DramaReviewCompletion) => void;
     applyContinuitySuggestion: (projectId: string, episodeId: string, analysis: DramaReviewCompletion) => void;
     replaceProject: (project: DramaProject) => void;
+    beginVideoPrompt: (projectId: string, episodeId: string, shotId: string) => boolean;
+    finishVideoPrompt: (projectId: string, episodeId: string, shotId: string) => void;
     createVersion: (project: DramaProject, reason: string) => Promise<void>;
     listVersions: (projectId: string) => Promise<import("@/lib/drama-project-contract").DramaProjectVersion[]>;
     restoreVersion: (projectId: string, versionId: string) => Promise<void>;
@@ -88,6 +91,10 @@ let hydrateRequestId = 0;
 let hydrateRequest: (ClientSessionStamp & { requestId: number; promise: Promise<void> }) | null = null;
 const SUMMARY_PAGE_SIZE = 12;
 
+export function dramaVideoPromptRunKey(projectId: string, episodeId: string, shotId: string) {
+    return JSON.stringify([projectId, episodeId, shotId]);
+}
+
 export const useDramaStore = create<DramaStore>((set, get) => ({
     hydrated: false,
     hydratedUserId: "",
@@ -98,11 +105,12 @@ export const useDramaStore = create<DramaStore>((set, get) => ({
     summaryPageSize: SUMMARY_PAGE_SIZE,
     summaryLoadingMore: false,
     projects: [],
+    videoPromptRuns: {},
     hydrate: async (force = false) => {
         const userId = useUserStore.getState().user?.id || "";
         if (!userId) {
             invalidateSession();
-            set({ hydrated: true, hydratedUserId: "", summaries: [], summaryTotal: 0, summaryPage: 0, summaryLoadingMore: false, projects: [], syncError: undefined });
+            set({ hydrated: true, hydratedUserId: "", summaries: [], summaryTotal: 0, summaryPage: 0, summaryPageSize: SUMMARY_PAGE_SIZE, summaryLoadingMore: false, projects: [], syncError: undefined, videoPromptRuns: {} });
             return;
         }
         if (!force && get().hydrated && get().hydratedUserId === userId) return;
@@ -117,6 +125,7 @@ export const useDramaStore = create<DramaStore>((set, get) => ({
             summaryPage: state.hydratedUserId === userId ? state.summaryPage : 0,
             summaryLoadingMore: false,
             projects: state.hydratedUserId === userId ? state.projects : [],
+            videoPromptRuns: state.hydratedUserId === userId ? state.videoPromptRuns : {},
             saveStateByProject: state.hydratedUserId === userId ? state.saveStateByProject : {},
             syncError: undefined,
         }));
@@ -330,23 +339,25 @@ export const useDramaStore = create<DramaStore>((set, get) => ({
             ...project,
             episodes: project.episodes.map((episode) => (episode.id === episodeId ? { ...episode, shots: episode.shots.map((shot) => (shot.id === shotId ? { ...shot, ...patch } : shot)) } : episode)),
         })),
-    saveProjectNow: async (projectId) => {
+    saveProjectNow: async (projectId, updater) => {
         const session = requireSession();
         clearProjectSave(session, projectId);
         const key = sessionEpoch.key(session, projectId);
-        const previous = saveQueues.get(key) || Promise.resolve();
+        const previous = saveQueues.get(key);
         let saved: DramaProject | undefined;
-        const operation = previous.then(async () => {
+        const operation = (previous ? previous.catch(() => undefined) : Promise.resolve()).then(async () => {
             assertCurrent(session);
-            const project = get().projects.find((item) => item.id === projectId);
-            if (!project) throw new Error("短剧项目不存在");
+            const currentProject = get().projects.find((item) => item.id === projectId);
+            if (!currentProject) throw new Error("短剧项目不存在");
+            const project = updater ? { ...updater(currentProject), updatedAt: nextUpdatedAt(session, currentProject) } : currentProject;
+            const expectedUpdatedAt = currentProject.updatedAt;
             saved = await saveDramaProject(project);
             assertCurrent(session);
             set((state) => ({
-                projects: state.projects.map((item) => (item.id === saved!.id && item.updatedAt === project.updatedAt ? saved! : item)),
+                projects: state.projects.map((item) => (item.id === saved!.id && (updater ? item.updatedAt === expectedUpdatedAt : item.updatedAt === project.updatedAt) ? saved! : item)),
                 summaries: upsertSummary(state.summaries, saved!),
                 saveStateByProject:
-                    state.projects.find((item) => item.id === project.id)?.updatedAt === project.updatedAt
+                    state.projects.find((item) => item.id === project.id)?.updatedAt === (updater ? expectedUpdatedAt : project.updatedAt)
                         ? { ...state.saveStateByProject, [saved!.id]: { status: "saved", savedAt: saved!.updatedAt } }
                         : state.saveStateByProject,
             }));
@@ -366,10 +377,13 @@ export const useDramaStore = create<DramaStore>((set, get) => ({
             return updateShots(project, episodeId, shotIds, (shot) => {
                 const hasStartFrame = activeFrameEvidence(shot, "storyboard_start").length > 0;
                 const hasEndFrame = activeFrameEvidence(shot, "storyboard_end").length > 0;
-                const hasAllFrames = shot.storyboardFrameMode === "all_frames" && Boolean(shot.framePlan?.frames.length) && shot.framePlan!.frames.every((beat) => {
-                    const frame = shot.storyboardFrames?.find((item) => item.id === beat.id || item.sequenceIndex === beat.sequenceIndex);
-                    return Boolean(frame?.mediaUrl && frame.status === "success" && frame.continuityStatus !== "needs_review" && frame.continuityStatus !== "stale");
-                });
+                const hasAllFrames =
+                    shot.storyboardFrameMode === "all_frames" &&
+                    Boolean(shot.framePlan?.frames.length) &&
+                    shot.framePlan!.frames.every((beat) => {
+                        const frame = shot.storyboardFrames?.find((item) => item.id === beat.id || item.sequenceIndex === beat.sequenceIndex);
+                        return Boolean(frame?.mediaUrl && frame.status === "success" && frame.continuityStatus !== "needs_review" && frame.continuityStatus !== "stale");
+                    });
                 const storyboardMode = dramaShotVideoMode(project, shot) === "storyboard";
                 const firstLast = shot.storyboardFrameMode === "first_last";
                 if (storyboardMode && (hasAllFrames || (hasStartFrame && (!firstLast || hasEndFrame)))) {
@@ -630,6 +644,25 @@ export const useDramaStore = create<DramaStore>((set, get) => ({
             };
         }),
     replaceProject: (project) => set((state) => ({ projects: state.projects.map((item) => (item.id === project.id ? project : item)), summaries: upsertSummary(state.summaries, project) })),
+    beginVideoPrompt: (projectId, episodeId, shotId) => {
+        const key = dramaVideoPromptRunKey(projectId, episodeId, shotId);
+        let started = false;
+        set((state) => {
+            if (state.videoPromptRuns[key]) return state;
+            started = true;
+            return { videoPromptRuns: { ...state.videoPromptRuns, [key]: { startedAt: Date.now() } } };
+        });
+        return started;
+    },
+    finishVideoPrompt: (projectId, episodeId, shotId) => {
+        const key = dramaVideoPromptRunKey(projectId, episodeId, shotId);
+        set((state) => {
+            if (!state.videoPromptRuns[key]) return state;
+            const videoPromptRuns = { ...state.videoPromptRuns };
+            delete videoPromptRuns[key];
+            return { videoPromptRuns };
+        });
+    },
     createVersion: async (project, reason) => {
         await createDramaProjectVersion(project, reason);
     },
@@ -658,7 +691,7 @@ export const useDramaStore = create<DramaStore>((set, get) => ({
         ),
     reset: () => {
         invalidateSession();
-        set({ hydrated: false, hydratedUserId: "", summaries: [], summaryTotal: 0, summaryPage: 0, summaryPageSize: SUMMARY_PAGE_SIZE, summaryLoadingMore: false, projects: [], syncError: undefined, saveStateByProject: {} });
+        set({ hydrated: false, hydratedUserId: "", summaries: [], summaryTotal: 0, summaryPage: 0, summaryPageSize: SUMMARY_PAGE_SIZE, summaryLoadingMore: false, projects: [], syncError: undefined, saveStateByProject: {}, videoPromptRuns: {} });
     },
 }));
 
@@ -735,6 +768,7 @@ function mergeVisualFields(shot: DramaShot, visual: DramaVisualAnalysis["shots"]
         performancePlan: visual.performancePlan,
         dialoguePerformance: visual.dialoguePerformance,
         lightingPlan: visual.lightingPlan,
+        framePlan: visual.framePlan,
     } as const;
     const next = { ...shot };
     for (const [field, value] of Object.entries(fields)) {

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { App, Button, Checkbox, Input, Popconfirm, Select, Switch, Tag, Tooltip } from "antd";
-import { Eye, EyeOff, PlugZap, RefreshCw, Sparkles, Trash2 } from "lucide-react";
+import { Eye, EyeOff, Pencil, PlugZap, RefreshCw, Sparkles, Trash2 } from "lucide-react";
 
 import { LabeledControl } from "@/components/admin/admin-settings-controls";
 import { parseChannelExampleConfig } from "@/lib/channel-example-parser";
@@ -33,6 +33,7 @@ export function SystemChannelEditor({ channel, fetching, onChange, onDelete, onF
     const [revealedApiKey, setRevealedApiKey] = useState("");
     const [apiKeyVisible, setApiKeyVisible] = useState(false);
     const [apiKeyLoading, setApiKeyLoading] = useState(false);
+    const [replacingApiKey, setReplacingApiKey] = useState(false);
     const advanced = channel.advancedConfig || createDefaultChannelAdvancedConfig();
     const protocolDefinition = channelProtocolDefinition(advanced.protocol);
     const canSyncModels = channelSupportsModelCatalog(channel);
@@ -111,7 +112,18 @@ export function SystemChannelEditor({ channel, fetching, onChange, onDelete, onF
     };
     const clearApiKey = () => {
         hideApiKey();
+        setReplacingApiKey(false);
         onChange({ apiKey: "", hasApiKey: false, clearApiKey: true });
+    };
+    const startReplacingApiKey = () => {
+        hideApiKey();
+        setReplacingApiKey(true);
+        onChange({ apiKey: "", clearApiKey: false });
+    };
+    const cancelReplacingApiKey = () => {
+        hideApiKey();
+        setReplacingApiKey(false);
+        onChange({ apiKey: "", clearApiKey: false });
     };
     const displayedApiKey = channel.apiKey || revealedApiKey;
     const requiresApiKey = channelRequiresApiKey(channel);
@@ -163,7 +175,8 @@ export function SystemChannelEditor({ channel, fetching, onChange, onDelete, onF
                                 <Input
                                     type={apiKeyVisible ? "text" : "password"}
                                     value={displayedApiKey}
-                                    placeholder={channel.hasApiKey ? "已安全保存，留空不修改" : "sk-..."}
+                                    readOnly={Boolean(channel.hasApiKey && !replacingApiKey && !channel.apiKey)}
+                                    placeholder={channel.hasApiKey ? (replacingApiKey ? "输入新 API Key，保存后覆盖旧值" : "已安全保存，点击“替换”输入新值") : "sk-..."}
                                     autoComplete="off"
                                     spellCheck={false}
                                     onChange={(event) => {
@@ -185,6 +198,17 @@ export function SystemChannelEditor({ channel, fetching, onChange, onDelete, onF
                                     }
                                 />
                                 {channel.hasApiKey ? (
+                                    replacingApiKey ? (
+                                        <Button size="small" className="shrink-0" onClick={cancelReplacingApiKey}>
+                                            取消替换
+                                        </Button>
+                                    ) : (
+                                        <Button size="small" icon={<Pencil className="size-3.5" />} className="shrink-0" onClick={startReplacingApiKey}>
+                                            替换
+                                        </Button>
+                                    )
+                                ) : null}
+                                {channel.hasApiKey && !replacingApiKey ? (
                                     <Popconfirm title="清除已保存的 API Key？" okText="清除" cancelText="取消" onConfirm={clearApiKey}>
                                         <Button size="small" danger className="shrink-0">
                                             清除
@@ -393,6 +417,7 @@ function ModelRouteConfigEditor({ channel, advanced, onChange }: { channel: Syst
     const showImageEditPath = config?.capability === "image";
     const showImageToVideoPath = config?.capability === "video";
     const showAsyncFields = config?.capability === "video" || (!definition.strict && config?.capability !== "text");
+    const showVoiceCreationFields = config?.capability === "audio" && config.audioOperation === "voice-clone";
     const write = (next: SystemChannelModelConfig) => {
         if (!key) return;
         onChange({
@@ -496,6 +521,34 @@ function ModelRouteConfigEditor({ channel, advanced, onChange }: { channel: Syst
                         <LabeledControl label="结果字段">
                             <Input disabled={definition.strict} value={config.resultField || ""} placeholder="video_url / data[0].url" onChange={(event) => update({ resultField: event.target.value })} />
                         </LabeledControl>
+                        {config.capability === "audio" ? (
+                            <LabeledControl label="音频操作">
+                                <Select
+                                    disabled={definition.strict}
+                                    value={config.audioOperation || "tts"}
+                                    options={[
+                                        { label: "普通 TTS", value: "tts" },
+                                        { label: "Voice Clone（样本克隆）", value: "voice-clone" },
+                                    ]}
+                                    onChange={(audioOperation) => update({ audioOperation })}
+                                />
+                            </LabeledControl>
+                        ) : null}
+                        {showVoiceCreationFields ? (
+                            <LabeledControl label="voice_id 返回字段">
+                                <Input disabled={definition.strict} value={config.voiceIdField || ""} placeholder="voice_id / data.voice_id" onChange={(event) => update({ voiceIdField: event.target.value })} />
+                            </LabeledControl>
+                        ) : null}
+                        {showVoiceCreationFields ? (
+                            <LabeledControl label="试听音频返回字段">
+                                <Input disabled={definition.strict} value={config.previewAudioField || ""} placeholder="trial_audio / data.trial_audio" onChange={(event) => update({ previewAudioField: event.target.value })} />
+                            </LabeledControl>
+                        ) : null}
+                        {config.audioOperation === "voice-clone" ? (
+                            <LabeledControl label="Clone 样本字段">
+                                <Input disabled={definition.strict} value={config.cloneSampleField || ""} placeholder="audio / sample_audio" onChange={(event) => update({ cloneSampleField: event.target.value })} />
+                            </LabeledControl>
+                        ) : null}
                         {showAsyncFields ? (
                             <LabeledControl label="状态字段">
                                 <Input disabled={definition.strict} value={config.statusField || ""} placeholder="status / state" onChange={(event) => update({ statusField: event.target.value })} />

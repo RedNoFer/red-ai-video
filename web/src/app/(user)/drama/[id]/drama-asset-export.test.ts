@@ -20,7 +20,7 @@ function projectFixture(): DramaProject {
                 id: "character-zhao",
                 name: "赵徽",
                 description: "主角",
-                references: [{ id: "reference-zhao", url: "/api/reference-assets/zhao.png", source: "upload", label: "基准图", createdAt: "2026-01-01T00:00:00.000Z" }],
+                references: [{ id: "reference-zhao", url: "/api/reference-assets/zhao.png", source: "upload", status: "approved", label: "基准图", createdAt: "2026-01-01T00:00:00.000Z" }],
                 primaryReferenceId: "reference-zhao",
             },
             { id: "character-missing", name: "孟婆", description: "配角" },

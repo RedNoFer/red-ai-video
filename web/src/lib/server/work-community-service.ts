@@ -195,6 +195,7 @@ export async function listUserCommunityActivity(userIdValue: unknown, input: { v
 }
 
 export async function listUserNotifications(userIdValue: unknown, input: { limit?: number; cursor?: unknown } = {}) {
+    if (getDatabaseProvider() !== "postgres") return { items: [], unreadCount: 0, nextCursor: undefined };
     await assertReady();
     const userId = requiredId(userIdValue, "用户");
     const repos = createPostgresRepositories();

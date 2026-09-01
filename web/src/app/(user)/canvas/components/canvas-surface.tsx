@@ -350,6 +350,7 @@ export function CanvasSurface({
     const handleNodeMouseDown = useCallback(
         (event: CanvasPointerEvent, nodeId: string) => {
             if (isInteractiveTarget(event.target)) return;
+            event.stopPropagation();
             if (displayNodesRef.current.find((node) => node.id === nodeId)?.type !== CanvasNodeType.Text) event.preventDefault();
             const additive = event.shiftKey || event.ctrlKey || event.metaKey;
             const nextSelection = new Set(selectedNodeIdsRef.current);
@@ -660,6 +661,7 @@ export function CanvasSurface({
             data-canvas-surface
             data-canvas-interaction-mode={interactionMode}
             data-canvas-temporary-pan={temporaryPan ? "true" : "false"}
+            data-canvas-viewport={`${displayViewport.x},${displayViewport.y},${displayViewport.k}`}
             tabIndex={-1}
             className="canvas-surface absolute inset-0 select-none overflow-hidden"
             style={canvasStyle}

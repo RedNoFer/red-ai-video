@@ -126,6 +126,7 @@ function normalizeProject(value: Record<string, unknown>, current: CanvasProject
         updatedAt: nextProjectVersion(current.updatedAt),
         id: current.id,
         sourceHandoffId: current.sourceHandoffId,
+        canvasMigrationVersion: sanitized.canvasMigrationVersion === 5 || current.canvasMigrationVersion === 5 ? 5 : sanitized.canvasMigrationVersion === 4 || current.canvasMigrationVersion === 4 ? 4 : sanitized.canvasMigrationVersion === 3 || current.canvasMigrationVersion === 3 ? 3 : sanitized.canvasMigrationVersion === 2 || current.canvasMigrationVersion === 2 ? 2 : sanitized.canvasMigrationVersion === 1 || current.canvasMigrationVersion === 1 ? 1 : undefined,
         creativeConversationId: current.creativeConversationId,
     };
 }

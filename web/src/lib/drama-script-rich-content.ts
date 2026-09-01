@@ -22,7 +22,11 @@ const ALIGNMENTS = new Set(["left", "center", "right", "justify"]);
 export function plainTextToDramaRichContent(value: string): DramaScriptRichContent {
     return {
         type: "doc",
-        content: value.split("\n").map((line) => ({ type: "paragraph", content: line ? [{ type: "text", text: line }] : undefined })),
+        content: value.split("\n").map((line) => {
+            const headingMatch = line.match(/^(#{1,3})\s+(.*)$/);
+            if (headingMatch) return { type: "heading", attrs: { level: headingMatch[1].length }, content: headingMatch[2] ? [{ type: "text", text: headingMatch[2] }] : undefined };
+            return { type: "paragraph", content: line ? [{ type: "text", text: line }] : undefined };
+        }),
     };
 }
 
@@ -97,6 +101,7 @@ function safeHref(value: unknown) {
 function blockText(node: DramaScriptRichNode): string {
     if (node.type === "text") return node.text || "";
     if (node.type === "hardBreak") return "\n";
+    if (node.type === "heading") return `${"#".repeat(Number(node.attrs?.level) || 1)} ${(node.content || []).map(blockText).join("")}`;
     const separator = node.type === "doc" || node.type === "bulletList" || node.type === "orderedList" || node.type === "blockquote" ? "\n" : "";
     return (node.content || []).map(blockText).join(separator);
 }

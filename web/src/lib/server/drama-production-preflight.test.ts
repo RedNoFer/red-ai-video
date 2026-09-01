@@ -47,6 +47,17 @@ describe("drama production preflight", () => {
         expect(codes).toEqual(expect.arrayContaining(["PROMPT_CHARACTER_REFERENCE", "PROMPT_PROP_REFERENCE"]));
     });
 
+    it("blocks a reference manifest whose scene or declared assets do not match the shot", () => {
+        const project = fixture();
+        project.episodes[0].shots[0].framePlan!.referenceManifest = [
+            { alias: "@场景", role: "scene_anchor", purpose: "错误场景", assetId: "scene-wrong" },
+            { alias: "@角色", role: "character_anchor", purpose: "角色基准", assetId: "character-one" },
+        ];
+        const issues = preflightDramaProduction(project, project.episodes[0]).issues;
+        expect(issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "REFERENCE_MANIFEST_SCENE", severity: "blocking" })]));
+        expect(issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "REFERENCE_MANIFEST_PROP", severity: "blocking", assetId: "prop-one" })]));
+    });
+
     it("does not treat characters named only inside negative prompt constraints as references", () => {
         const project = fixture();
         project.characters.push({ id: "character-two", code: "C02", name: "Ras", description: "", activeEpisodeCodes: [] });
@@ -136,6 +147,27 @@ describe("drama production preflight", () => {
         ];
         const codes = preflightDramaProduction(project, project.episodes[0]).issues.map((issue) => issue.code);
         expect(codes).toEqual(expect.arrayContaining(["ENVIRONMENT_CONTINUITY", "AXIS_CONTINUITY", "SCREEN_DIRECTION_CONTINUITY", "WARDROBE_CONTINUITY", "GAZE_CONTINUITY", "PROP_CONTINUITY"]));
+    });
+
+    it("does not validate later shots when only the first shot is being generated", () => {
+        const project = fixture();
+        const first = project.episodes[0].shots[0];
+        project.episodes[0].shots.push({
+            ...first,
+            id: "shot-two",
+            code: "SH002",
+            order: 2,
+            framePlan: { ...first.framePlan!, start: { source: "previous_accepted_actual_tail" } },
+        });
+        project.episodes[0].continuityEdges = [
+            { fromShotId: first.id, toShotId: "shot-two", transition: "continuous", inheritActualEndFrame: true, carryCharacterIds: ["character-one"], carryPropIds: [], carryEnvironment: true, carryAxis: true },
+        ];
+
+        const result = preflightDramaProduction(project, project.episodes[0], [first.id]);
+
+        expect(result.checkedShotIds).toEqual([first.id]);
+        expect(result.issues.some((issue) => issue.shotId === "shot-two")).toBe(false);
+        expect(result.issues.some((issue) => issue.message.includes("SH002需要上一镜"))).toBe(false);
     });
 });
 

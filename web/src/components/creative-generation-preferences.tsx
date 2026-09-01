@@ -80,6 +80,7 @@ const videoReferenceModeOptions = [
     { value: "reference", label: "智能参考" },
     { value: "first_frame", label: "首帧" },
     { value: "first_last", label: "首尾帧" },
+    { value: "all_frames", label: "全能帧" },
 ] as const;
 
 export function CreativeGenerationPreferences({
@@ -297,7 +298,7 @@ function PreferencePanel({
                     {capability === "video" && videoReferenceContent ? (
                         videoReferenceContent
                     ) : capability === "video" ? (
-                        <CompactOptionGroup label="参考方式" ariaLabel="选择视频参考方式" value={preferences.video?.referenceMode || "reference"} options={videoReferenceModeOptions} columns={3} onChange={(referenceMode) => onChange({ referenceMode })} />
+                        <CompactOptionGroup label="参考方式" ariaLabel="选择视频参考方式" value={preferences.video?.referenceMode || "reference"} options={videoReferenceModeOptions} columns={4} onChange={(referenceMode) => onChange({ referenceMode })} />
                     ) : null}
                     {fixedSizeLabel ? (
                         <div className="flex h-9 items-center justify-between rounded-lg bg-[#f5f6f7] px-3 text-[11px] dark:bg-[#24282e]">

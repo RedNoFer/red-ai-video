@@ -132,6 +132,7 @@ test("canvas keeps editing, selection, linking and persistence fluid", async ({ 
 
         patchRequests.length = 0;
         const beforeDrag = await sourceNode.boundingBox();
+        const viewportBeforeNodeDrag = await surface.getAttribute("data-canvas-viewport");
         expect(beforeDrag).not.toBeNull();
         const dragStart = { x: beforeDrag!.x + beforeDrag!.width / 2, y: beforeDrag!.y + beforeDrag!.height - 28 };
         await page.mouse.move(dragStart.x, dragStart.y);
@@ -144,6 +145,7 @@ test("canvas keeps editing, selection, linking and persistence fluid", async ({ 
         await expectCanvasSaved(page);
         const afterDrag = await sourceNode.boundingBox();
         expect(afterDrag!.x).toBeGreaterThan(beforeDrag!.x + 70);
+        await expect(surface).toHaveAttribute("data-canvas-viewport", viewportBeforeNodeDrag || "");
 
         const resizeHandle = sourceNode.locator('[data-canvas-resize-corner="bottom-right"]');
         const handleBounds = await resizeHandle.boundingBox();
@@ -170,6 +172,38 @@ test("canvas keeps editing, selection, linking and persistence fluid", async ({ 
         await expect.poll(() => patchRequests.length).toBeGreaterThan(copyPatchCount);
         await expectCanvasSaved(page);
         await expect.poll(() => readCanvasNodeCount(request, projectPath)).toBe(6);
+    } finally {
+        await deleteCanvasProject(request, project.id);
+    }
+});
+
+test("canvas node dragging keeps the viewport stable across desktop and mobile widths", async ({ page, request }) => {
+    const project = await createCanvasProject(request, {
+        title: `Canvas 拖拽视口 ${randomUUID().slice(0, 8)}`,
+        viewport: { x: 48, y: 40, k: 0.55 },
+        nodes: [node("stable-drag-node", "image", 80, 80, 380, 250, { canvasOrigin: "drama" })],
+        connections: [],
+        canvasMigrationVersion: 4,
+    });
+
+    try {
+        for (const width of [1366, 1440, 1672, 390, 430]) {
+            await page.setViewportSize({ width, height: width < 500 ? (width === 390 ? 844 : 932) : 900 });
+            await page.goto(`/canvas/${project.id}`, { waitUntil: "domcontentloaded" });
+            const surface = page.locator("[data-canvas-surface]");
+            const dragNode = page.locator('[data-node-id="stable-drag-node"]');
+            await expect(surface).toBeVisible({ timeout: 20_000 });
+            await expect(dragNode).toBeVisible();
+            const viewportBefore = await surface.getAttribute("data-canvas-viewport");
+            const bounds = await dragNode.boundingBox();
+            expect(bounds).not.toBeNull();
+            await page.mouse.move(bounds!.x + bounds!.width / 2, bounds!.y + bounds!.height / 2);
+            await page.mouse.down();
+            await page.mouse.move(bounds!.x + bounds!.width / 2 + 24, bounds!.y + bounds!.height / 2 + 16, { steps: 4 });
+            await page.mouse.up();
+            await expect(surface).toHaveAttribute("data-canvas-viewport", viewportBefore || "");
+            await expectNoHorizontalOverflow(page, `Canvas 拖拽 ${width}px`);
+        }
     } finally {
         await deleteCanvasProject(request, project.id);
     }

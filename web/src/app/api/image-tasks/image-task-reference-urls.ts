@@ -21,7 +21,6 @@ export async function publicImageReferenceRequestUrl(reference: ImageTaskReferen
     const requestCandidates = referenceRequestUrlCandidates(reference, origin);
     const localCandidate = requestCandidates.find((value) => /\/api\/(?:reference-assets|generation-log-assets)\//.test(value));
     const providerCandidates = requestCandidates.filter((value) => isExternalPublicMediaUrl(value) && !/\/api\/(?:reference-assets|generation-log-assets)\//.test(value));
-    if (!localCandidate && providerCandidates[0]) return providerCandidates[0];
     for (const remoteUrl of providerCandidates) {
         if (await isReachableProviderImage(remoteUrl)) return remoteUrl;
     }

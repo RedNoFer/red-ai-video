@@ -12,8 +12,9 @@ describe("drama render audio", () => {
         expect(resolveDramaRenderAudioPlan("mute", "/voice.mp3", true)).toBe("silence");
     });
 
-    it("uses dedicated voiceover only when it is ready", () => {
-        expect(resolveDramaRenderAudioPlan("voiceover", "/voice.mp3", true)).toBe("voiceover");
+    it("mixes character voiceover over the generated video sound", () => {
+        expect(resolveDramaRenderAudioPlan("voiceover", "/voice.mp3", true)).toBe("voiceover_mix");
+        expect(resolveDramaRenderAudioPlan("voiceover", "/voice.mp3", false)).toBe("voiceover");
         expect(() => resolveDramaRenderAudioPlan("voiceover", "", true)).toThrow("AI 配音尚未完成");
     });
 

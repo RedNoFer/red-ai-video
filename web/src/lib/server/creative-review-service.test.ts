@@ -58,6 +58,64 @@ describe("creative review service", () => {
         expect(headers.get("x-vozeb-pro-points-idempotency-key")).toMatch(/^creative-review:[a-f0-9]{32}$/);
     });
 
+    it("reviews a large private image through a bounded WebP preview", async () => {
+        fetchInternalApi
+            .mockResolvedValueOnce(new Response(new Uint8Array([1, 2, 3]), { status: 200, headers: { "Content-Type": "image/webp", "Content-Length": "3" } }))
+            .mockResolvedValueOnce(
+                new Response(
+                    JSON.stringify({
+                        output: [
+                            {
+                                type: "function_call",
+                                name: "review_creative_outputs",
+                                arguments: JSON.stringify({ mode: "visual", status: "passed", score: 90, summary: "连续性通过", issues: [], retryTaskIds: [] }),
+                            },
+                        ],
+                    }),
+                    { status: 200, headers: { "Content-Type": "application/json" } },
+                ),
+            );
+
+        const review = await reviewCreativeOutputs({
+            origin: "http://localhost:3000",
+            cookie: "session=1",
+            userId: "user",
+            foundation,
+            tasks: [{ id: "frame-2", title: "相邻帧", type: "image", prompt: "保持连续", resultSummary: "已生成", imageUrls: ["/api/generation-log-assets/permanent/frame-2.png"] }],
+        });
+
+        expect(review).toMatchObject({ mode: "visual", status: "passed" });
+        expect(fetchInternalApi.mock.calls[0][0]).toBe("http://localhost:3000/api/generation-log-assets/permanent/frame-2.png?format=webp&width=960");
+    });
+
+    it("requires complete heads and limbs for character reference review", async () => {
+        fetchInternalApi.mockResolvedValueOnce(
+            new Response(
+                JSON.stringify({
+                    output: [
+                        {
+                            type: "function_call",
+                            name: "review_creative_outputs",
+                            arguments: JSON.stringify({ mode: "visual", status: "needs_revision", summary: "角色头部被裁切", issues: [{ taskId: "character-1", category: "构图", severity: "high", message: "头部缺失" }], retryTaskIds: ["character-1"] }),
+                        },
+                    ],
+                }),
+                { status: 200, headers: { "Content-Type": "application/json" } },
+            ),
+        );
+
+        await reviewCreativeOutputs({
+            origin: "http://localhost:3000",
+            cookie: "session=1",
+            userId: "user",
+            foundation,
+            tasks: [{ id: "character-1", title: "角色设定图", type: "image", prompt: "角色基准图：完整头部和全身", resultSummary: "已生成", imageUrls: ["data:image/png;base64,AA=="] }],
+        });
+
+        const body = JSON.parse(fetchInternalApi.mock.calls[0][1].body);
+        expect(body.input[0].content).toContain("角色基准图必须逐张确认头顶、完整头部");
+    });
+
     it("refunds an invalid structured review and preserves the result as unavailable", async () => {
         fetchInternalApi.mockResolvedValueOnce(
             new Response(JSON.stringify({ output: [{ type: "function_call", name: "review_creative_outputs", arguments: JSON.stringify({ status: "passed" }) }] }), {

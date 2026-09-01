@@ -1,3 +1,5 @@
+"use client";
+
 import { create } from "zustand";
 
 type CanvasUiStore = {
@@ -11,6 +13,9 @@ type CanvasUiStore = {
     toggleSelectedProjectId: (id: string, selected: boolean) => void;
     setDeleteProjectIds: (ids: string[]) => void;
     removeSelectedProjectIds: (ids: string[]) => void;
+    assetsOpen: boolean;
+    setAssetsOpen: (open: boolean) => void;
+    toggleAssets: () => void;
 };
 
 export const useCanvasUiStore = create<CanvasUiStore>((set) => ({
@@ -29,4 +34,7 @@ export const useCanvasUiStore = create<CanvasUiStore>((set) => ({
             editingProjectId: state.editingProjectId && ids.includes(state.editingProjectId) ? null : state.editingProjectId,
             editingProjectTitle: state.editingProjectId && ids.includes(state.editingProjectId) ? "" : state.editingProjectTitle,
         })),
+    assetsOpen: false,
+    setAssetsOpen: (assetsOpen) => set({ assetsOpen }),
+    toggleAssets: () => set((state) => ({ assetsOpen: !state.assetsOpen })),
 }));

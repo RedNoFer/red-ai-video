@@ -143,9 +143,18 @@ export async function createServerVideoGenerationTask(
     const selectedModel = (config.model || config.videoModel).trim();
     const requestConfig = resolveModelRequestConfig(config, selectedModel);
     const serverReferences = await Promise.all([
-        ...references.map(async (item) => ({ type: "image", role: item.videoRole || "reference", url: isPublicMediaUrl(item.url || item.dataUrl) ? item.url || item.dataUrl : await publishReferenceMedia("image", await imageToDataUrl(item)) })),
-        ...videoReferences.map(async (item) => ({ type: "video", role: "reference", url: isPublicMediaUrl(item.url) ? item.url : await publishReferenceMedia("video", await referenceBlobDataUrl(item.storageKey, item.url)) })),
-        ...audioReferences.map(async (item) => ({ type: "audio", role: "reference", url: isPublicMediaUrl(item.url) ? item.url : await publishReferenceMedia("audio", await referenceBlobDataUrl(item.storageKey, item.url)) })),
+        ...references.map(async (item) => {
+            const remoteUrl = item.remoteUrl || item.url || item.dataUrl;
+            return { type: "image", role: item.videoRole || "reference", ...(item.keyframeIndex ? { keyframeIndex: item.keyframeIndex } : {}), url: isPublicMediaUrl(remoteUrl) ? remoteUrl : await publishReferenceMedia("image", await imageToDataUrl(item)) };
+        }),
+        ...videoReferences.map(async (item) => {
+            const remoteUrl = item.remoteUrl || item.url;
+            return { type: "video", role: "reference", url: isPublicMediaUrl(remoteUrl) ? remoteUrl : await publishReferenceMedia("video", await referenceBlobDataUrl(item.storageKey, item.url)) };
+        }),
+        ...audioReferences.map(async (item) => {
+            const remoteUrl = item.remoteUrl || item.url;
+            return { type: "audio", role: "reference", url: isPublicMediaUrl(remoteUrl) ? remoteUrl : await publishReferenceMedia("audio", await referenceBlobDataUrl(item.storageKey, item.url)) };
+        }),
     ]);
     const response = await fetch("/api/video-generation-tasks", {
         method: "POST",

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { AuthInputError, getFreshAuthSettings, isAuthInputError, setAuthSettings, type AuthSettings, type SiteSocialKey, type SiteSocialSettings } from "@/lib/auth/store";
-import { normalizeSiteSocial } from "@/lib/auth/store-normalizers";
+import { normalizeSiteSocial, normalizeSystemChannel } from "@/lib/auth/store-normalizers";
 import { modelRoutingValidationErrors, normalizeDefaultModelsConfig, synchronizeLogicalModelsWithChannels } from "@/lib/model-routing-config";
 import { readJsonBody } from "@/lib/auth/request";
 import { getCurrentUser } from "@/lib/auth/session";
@@ -47,8 +47,9 @@ export async function PATCH(request: Request) {
         if (body.entitlements && typeof body.entitlements === "object") patch.entitlements = body.entitlements;
         if (body.generationConcurrency && typeof body.generationConcurrency === "object") patch.generationConcurrency = body.generationConcurrency;
         if (body.generationDefaults && typeof body.generationDefaults === "object") patch.generationDefaults = body.generationDefaults;
+        if (Array.isArray(body.characterVoicePool)) patch.characterVoicePool = body.characterVoicePool;
         if (Array.isArray(body.systemChannels)) {
-            patch.systemChannels = mergeSystemChannelSecrets(body.systemChannels, currentSettings.systemChannels);
+            patch.systemChannels = mergeSystemChannelSecrets(body.systemChannels, currentSettings.systemChannels).map(normalizeSystemChannel);
             const webhookSecretError = patch.systemChannels.map(systemChannelWebhookSecretValidationError).find(Boolean);
             if (webhookSecretError) throw new AuthInputError(webhookSecretError);
         }
@@ -105,6 +106,7 @@ const SETTINGS_PERMISSION_BY_FIELD = {
     generationCostControl: "upstream.manage",
     generationConcurrency: "upstream.manage",
     generationDefaults: "upstream.manage",
+    characterVoicePool: "upstream.manage",
     systemChannels: "upstream.manage",
     logicalModels: "upstream.manage",
     defaultModels: "upstream.manage",

@@ -1,7 +1,7 @@
 "use client";
 
 import { useDeferredValue, useMemo, useState } from "react";
-import { Button, Empty, Input, Popconfirm, Select, Space, Switch, Table, Tabs, Tag } from "antd";
+import { Button, Empty, Input, Popconfirm, Select, Space, Switch, Table, Tabs, Tag, Tooltip } from "antd";
 import type { TableColumnsType } from "antd";
 import { Blocks, Plus, RefreshCw, Route, Search, Settings2, Trash2 } from "lucide-react";
 
@@ -13,7 +13,7 @@ import { capabilityLabel, isLogicalModelResolvable } from "@/lib/model-routing-c
 import { AdminChannelDetailDrawer } from "./admin-channel-detail-drawer";
 import { AdminChannelOnboardingDrawer } from "./admin-channel-onboarding-drawer";
 import { ChannelStatusBadge } from "./admin-channel-status-badge";
-import { channelBindingCount, channelCapabilityLabels, channelProtocolLabel, channelSearchText, channelWorkspaceStatus, updateChannelInWorkspace, type ChannelWorkspaceSettings, type ChannelWorkspaceStatus } from "./admin-channel-workspace-model";
+import { channelBindingCount, channelCanEnable, channelCapabilityLabels, channelEffectiveEnabled, channelEnableBlockReason, channelEnabledMetric, channelProtocolLabel, channelSearchText, channelSynchronizedMetric, channelWorkspaceStatus, updateChannelInWorkspace, type ChannelWorkspaceSettings, type ChannelWorkspaceStatus } from "./admin-channel-workspace-model";
 
 type Props = {
     settings: ChannelWorkspaceSettings;
@@ -44,8 +44,8 @@ export function AdminChannelWorkspace({ settings, fetchingModelId, saving, onCha
             }),
         [deferredQuery, protocolFilter, settings.systemChannels, statusFilter],
     );
-    const enabledChannels = settings.systemChannels.filter((channel) => channel.enabled).length;
-    const synchronizedChannels = settings.systemChannels.filter((channel) => channel.models.length).length;
+    const enabledChannels = channelEnabledMetric(settings);
+    const synchronizedChannels = channelSynchronizedMetric(settings);
     const protocolCount = new Set(settings.systemChannels.map((channel) => channel.advancedConfig?.protocol || "auto")).size;
     const readyDefaults = (["text", "image", "video", "audio"] as const).filter((capability) => {
         const key = capability === "text" ? "textModel" : capability === "image" ? "imageModel" : capability === "video" ? "videoModel" : "audioModel";
@@ -79,7 +79,7 @@ export function AdminChannelWorkspace({ settings, fetchingModelId, saving, onCha
             key: "enabled",
             width: 80,
             align: "center",
-            render: (_, channel) => <Switch size="small" checked={channel.enabled} aria-label={`${channel.name}启用状态`} onChange={(enabled) => updateChannel(channel.id, { enabled })} />,
+            render: (_, channel) => <ChannelEnableSwitch channel={channel} onChange={(enabled) => updateChannel(channel.id, { enabled })} />,
         },
         {
             title: "操作",
@@ -87,7 +87,7 @@ export function AdminChannelWorkspace({ settings, fetchingModelId, saving, onCha
             width: 220,
             render: (_, channel) => (
                 <Space size={4}>
-                    <Button size="small" onClick={() => setDetailId(channel.id)}>
+                    <Button size="small" aria-label={`查看渠道：${channel.name || "未命名渠道"}`} onClick={() => setDetailId(channel.id)}>
                         查看
                     </Button>
                     {channelSupportsModelCatalog(channel) ? (
@@ -247,6 +247,7 @@ function ChannelList({
                             options={[
                                 { label: "全部状态", value: "all" },
                                 { label: "已启用", value: "enabled" },
+                                { label: "待补模型", value: "incomplete" },
                                 { label: "草稿", value: "draft" },
                                 { label: "已停用", value: "disabled" },
                             ]}
@@ -280,7 +281,7 @@ function ChannelList({
                                 </div>
                                 <div className="mt-1 truncate text-xs text-stone-500 dark:text-stone-400">{channelProtocolLabel(channel)}</div>
                             </div>
-                            <Switch size="small" checked={channel.enabled} disabled aria-label={`${channel.name}当前启用状态`} />
+                            <ChannelEnableSwitch channel={channel} readonly />
                         </div>
                         <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-xs text-stone-500 dark:text-stone-400">
                             <span>{channel.models.length} 个模型</span>
@@ -288,7 +289,7 @@ function ChannelList({
                             <span>{channelBindingCount(channel.id, settings)} 个绑定</span>
                         </div>
                         <div className="mt-3 flex items-center gap-2 border-t border-stone-100 pt-3 dark:border-stone-900">
-                            <Button size="small" className="min-w-0 flex-1" onClick={() => onOpen(channel.id)}>
+                            <Button size="small" className="min-w-0 flex-1" aria-label={`查看渠道：${channel.name || "未命名渠道"}`} onClick={() => onOpen(channel.id)}>
                                 查看
                             </Button>
                             {channelSupportsModelCatalog(channel) ? (
@@ -360,7 +361,7 @@ function ProtocolCenter({ settings, onCreate, onOpenChannel }: { settings: Chann
                                 <div className="mt-1 truncate text-xs text-stone-500 dark:text-stone-400">{channel.advancedConfig?.documentationUrl || channel.baseUrl || "未填写文档和地址"}</div>
                             </div>
                             <Space>
-                                <Tag>{channel.enabled ? "渠道已启用" : "渠道级草稿"}</Tag>
+                                <ChannelStatusTag channel={channel} />
                                 <Button size="small" onClick={() => onOpenChannel(channel.id)}>
                                     继续配置
                                 </Button>
@@ -377,6 +378,18 @@ function ProtocolCenter({ settings, onCreate, onOpenChannel }: { settings: Chann
 function ChannelStatusTag({ channel }: { channel: SystemModelChannel }) {
     const status = channelWorkspaceStatus(channel);
     return <ChannelStatusBadge status={status} />;
+}
+
+function ChannelEnableSwitch({ channel, readonly, onChange }: { channel: SystemModelChannel; readonly?: boolean; onChange?: (enabled: boolean) => void }) {
+    const canEnable = channelCanEnable(channel);
+    const title = canEnable ? "" : channelEnableBlockReason(channel);
+    return (
+        <Tooltip title={title}>
+            <span className="inline-flex">
+                <Switch size="small" checked={channelEffectiveEnabled(channel)} disabled={readonly || !canEnable} aria-label={`${channel.name}启用状态`} onChange={onChange} />
+            </span>
+        </Tooltip>
+    );
 }
 
 function ChannelEmpty({ hasChannels, onCreate }: { hasChannels: boolean; onCreate: () => void }) {

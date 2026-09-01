@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 import { nanoid } from "nanoid";
 
-import { compileDramaAssetReferencePrompt, compileDramaShotExecutionPrompts } from "@/lib/drama-prompt-compiler";
+import { compileDramaAssetReferencePrompt, compileDramaFrameSupplierPrompt } from "@/lib/drama-prompt-compiler";
 import { approvedAssetReference } from "@/lib/drama-asset-baseline";
 import { continuityStartEvidence, latestFrameEvidence } from "@/lib/drama-continuity-policy";
 import { defaultDramaFrameBeats } from "@/lib/drama-frame-sequence";
@@ -74,6 +74,8 @@ export function buildDramaVisualProductionRun(project: DramaProject, episode: Dr
                 const selectedForRegeneration = selectedFrameIds.size > 0 && selectedFrameIds.has(beat.id);
                 const existingReady = Boolean(existing?.mediaUrl && existing.status === "success" && (existing.source === "upload" || existing.inputHash === inputHash) && !parameters.regenerateAll && !selectedForRegeneration);
                 const previousStepId = previousBeat ? `frame-${shot.id}-${previousBeat.id}` : undefined;
+                const previousStep = previousStepId ? steps.find((step) => step.id === previousStepId) : undefined;
+                const stepDependencies = previousStepId && previousStep?.status !== "stale" ? [previousStepId] : dependencies;
                 steps.push({
                     id: `frame-${shot.id}-${beat.id}`,
                     frameId: beat.id,
@@ -86,8 +88,8 @@ export function buildDramaVisualProductionRun(project: DramaProject, episode: Dr
                     prompt: compileDramaFrameBeatPrompt(project, episode, shot, beat),
                     referenceAssetIds: references,
                     referenceManifest: shot.framePlan?.referenceManifest,
-                    dependsOn: previousStepId ? [previousStepId] : dependencies,
-                    status: existingReady ? "success" : !explicitlySelected ? "blocked" : previousStepId || dependencies.length || !actualTailReady ? "blocked" : "ready",
+                    dependsOn: stepDependencies,
+                    status: existingReady ? "success" : !explicitlySelected ? "stale" : stepDependencies.length || !actualTailReady ? "blocked" : "ready",
                     referenceShotId: index === 0 && requiresAcceptedTail ? incoming?.fromShotId : undefined,
                     referenceImageUrls: previousUrl ? [previousUrl] : undefined,
                     referenceImageRemoteUrls: index ? (previousStored?.remoteUrl ? [previousStored.remoteUrl] : undefined) : actualTail?.remoteUrl ? [actualTail.remoteUrl] : undefined,
@@ -112,13 +114,12 @@ export function buildDramaVisualProductionRun(project: DramaProject, episode: Dr
                 outputUrls: startFrame ? [startFrame.mediaUrl] : undefined,
             });
         if (!allFrames && shot.storyboardFrameMode === "first_last" && parameters.frameType !== "start_frame") {
-            const prompts = compileDramaShotExecutionPrompts(project, episode, shot);
             steps.push({
                 id: `end-${shot.id}`,
                 shotId: shot.id,
                 type: "end_frame",
                 title: `${shot.title} · 结束帧`,
-                prompt: prompts.endFramePrompt,
+                prompt: compileDramaFrameSupplierPrompt(project, episode, shot, undefined, "end"),
                 referenceAssetIds: references,
                 dependsOn: [startId],
                 status: endFrame ? "success" : "blocked",
@@ -169,17 +170,15 @@ export function compileDramaVisualStepPrompt(project: DramaProject, episode: Dra
     if (!step.shotId) return step.prompt || "";
     const shot = episode.shots.find((candidate) => candidate.id === step.shotId);
     if (!shot) return step.prompt || "";
-    const prompts = compileDramaShotExecutionPrompts(project, episode, shot);
     const beat = step.type === "keyframe" ? shot.framePlan?.frames?.find((frame) => frame.id === step.frameId || frame.sequenceIndex === step.sequenceIndex) : undefined;
-    const prompt = step.type === "end_frame" ? prompts.endFramePrompt : beat ? compileDramaFrameBeatPrompt(project, episode, shot, beat) : compileDramaVisualStartFramePrompt(project, episode, shot);
+    const prompt = step.type === "end_frame" ? compileDramaFrameSupplierPrompt(project, episode, shot, undefined, "end") : beat ? compileDramaFrameBeatPrompt(project, episode, shot, beat) : compileDramaVisualStartFramePrompt(project, episode, shot);
     return (step.type === "start_frame" || step.type === "keyframe") && step.referenceImageUrls?.length
         ? `${prompt}\n上一镜成片实际尾帧是唯一开场依据：必须以该实际尾帧作为本镜头第一帧，保持人物、姿态、光线、环境和构图连续；当前镜头维护的分镜起始帧只能作为辅助参考，不得替代或覆盖实际尾帧。`
         : prompt;
 }
 
 export function compileDramaVisualStartFramePrompt(project: DramaProject, episode: DramaEpisode, shot: DramaEpisode["shots"][number]) {
-    const prompts = compileDramaShotExecutionPrompts(project, episode, shot);
-    return prompts.startFramePrompt || prompts.imagePrompt;
+    return compileDramaFrameSupplierPrompt(project, episode, shot, undefined, "start");
 }
 
 export function unlockDramaVisualSteps(run: DramaProductionRun) {
@@ -187,7 +186,8 @@ export function unlockDramaVisualSteps(run: DramaProductionRun) {
     const byId = new Map(run.steps.map((step) => [step.id, step]));
     const steps = run.steps.map((step) => {
         if (step.status !== "blocked" || !step.dependsOn.every((id) => statuses.get(id) === "success")) return step;
-        const previousFrame = step.type === "keyframe" ? step.dependsOn.map((id) => byId.get(id)).find((item) => item?.type === "keyframe") : undefined;
+        const previousFrame =
+            step.type === "keyframe" ? step.dependsOn.map((id) => byId.get(id)).find((item) => item?.type === "keyframe") : step.type === "end_frame" ? step.dependsOn.map((id) => byId.get(id)).find((item) => item?.type === "start_frame") : undefined;
         return {
             ...step,
             status: "ready" as const,
@@ -202,8 +202,8 @@ export function unlockDramaVisualSteps(run: DramaProductionRun) {
 }
 
 export function compileDramaFrameBeatPrompt(project: DramaProject, episode: DramaEpisode, shot: DramaEpisode["shots"][number], beat: NonNullable<DramaEpisode["shots"][number]["framePlan"]>["frames"][number]) {
-    const base = compileDramaVisualStartFramePrompt(project, episode, shot);
-    return `${base}\n帧段 P${String(shot.order).padStart(2, "0")}-F${String(beat.sequenceIndex).padStart(2, "0")}（${beat.startSecond}-${beat.endSecond}s）\n当前动作：${beat.actionPrompt}\n静态画面：${beat.imagePrompt}\n只表现当前时间点的可见状态；保持人物身份、服装、道具、场景拓扑、光向、构图和轴线与上一帧连续。`;
+    const base = compileDramaFrameSupplierPrompt(project, episode, shot, beat);
+    return base + `\n帧：P${String(shot.order).padStart(2, "0")}-F${String(beat.sequenceIndex).padStart(2, "0")}（${beat.startSecond}-${beat.endSecond}s）`;
 }
 
 function selectedEpisodeShots(episode: DramaEpisode, shotIds?: string[]) {

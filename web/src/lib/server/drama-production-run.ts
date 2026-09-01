@@ -5,7 +5,7 @@ import { nanoid } from "nanoid";
 import { approvedAssetReference, hasApprovedAssetReference } from "@/lib/drama-asset-baseline";
 import { continuityStartEvidence, latestFrameEvidence } from "@/lib/drama-continuity-policy";
 import { planDramaVideoSegments } from "@/lib/drama-frame-sequence";
-import { compileDramaShotExecutionPrompts, sanitizeDramaSupplierText } from "@/lib/drama-prompt-compiler";
+import { compileDramaShotExecutionPrompts, compileDramaShotVideoBasePrompt, sanitizeDramaSupplierText } from "@/lib/drama-prompt-compiler";
 import type { DramaEpisode, DramaProductionPlan, DramaProductionRun, DramaProductionStep, DramaProject, DramaVideoReferenceBinding } from "@/lib/drama-project-contract";
 
 export type DramaProductionParameterInput = {
@@ -112,7 +112,9 @@ export function buildDramaProductionRun(project: DramaProject, episode: DramaEpi
         for (const [index, segment] of videoSegments.entries()) {
             const id = videoSegments.length === 1 ? `video-${shot.id}` : `video-${shot.id}-${index + 1}`;
             const segmentFrames: Array<{ mediaUrl: string; remoteUrl?: string; frameId?: string; sequenceIndex?: number }> = allFrames
-                ? segment.frameIds.map((frameId) => shot.storyboardFrames?.find((frame) => frame.id === frameId)).flatMap((frame) => (frame?.mediaUrl ? [{ mediaUrl: frame.mediaUrl, remoteUrl: frame.remoteUrl, frameId: frame.id, sequenceIndex: frame.sequenceIndex }] : []))
+                ? segment.frameIds
+                      .map((frameId) => shot.storyboardFrames?.find((frame) => frame.id === frameId))
+                      .flatMap((frame) => (frame?.mediaUrl ? [{ mediaUrl: frame.mediaUrl, remoteUrl: frame.remoteUrl, frameId: frame.id, sequenceIndex: frame.sequenceIndex }] : []))
                 : frameStepIds.map((stepId) => steps.find((step) => step.id === stepId)).flatMap((step) => (step?.outputUrls?.[0] ? [{ mediaUrl: step.outputUrls[0], remoteUrl: step.outputRemoteUrls?.[0] }] : []));
             const previousShot = incoming ? episodeShot(project, episode, incoming.fromShotId) : undefined;
             const continuityTail = allFrames && index === 0 && previousShot ? continuityStartEvidence(previousShot) : undefined;
@@ -135,7 +137,7 @@ export function buildDramaProductionRun(project: DramaProject, episode: DramaEpi
                 dependsOn: Array.from(new Set(dependencies)),
                 status: dependencies.every((dependency) => steps.find((step) => step.id === dependency)?.status === "success") ? "ready" : "blocked",
                 title: `${shot.title} · 视频段 ${index + 1}/${videoSegments.length}`,
-                prompt: allFrames ? compileDramaVideoSegmentPrompt(shot, segment.frameIds, compileDramaShotExecutionPrompts(project, episode, shot).videoPrompt, project) : compileDramaShotExecutionPrompts(project, episode, shot).videoPrompt,
+                prompt: allFrames ? compileDramaVideoSegmentPrompt(shot, segment.frameIds, compileDramaShotVideoBasePrompt(project, episode, shot), project) : compileDramaShotExecutionPrompts(project, episode, shot).videoPrompt,
                 referenceAssetIds: assetIds,
                 referenceImageUrls: orderedFrames.map((frame) => frame.mediaUrl!),
                 referenceImageRemoteUrls: orderedFrames.map((frame) => frame.remoteUrl),
@@ -199,7 +201,12 @@ export function unlockDramaProductionSteps(run: DramaProductionRun) {
 
 export function compileDramaVideoSegmentPrompt(shot: DramaEpisode["shots"][number], frameIds: string[], basePrompt = shot.executionVideoPrompt || shot.videoPrompt, project?: DramaProject) {
     const frames = frameIds.flatMap((id) => shot.framePlan?.frames.find((frame) => frame.id === id) || []);
-    return [basePrompt, ...frames.map((frame) => `P${String(shot.order).padStart(2, "0")}-F${String(frame.sequenceIndex).padStart(2, "0")} ${frame.startSecond}-${frame.endSecond}s：${project ? sanitizeDramaSupplierText(frame.actionPrompt, project) : frame.actionPrompt}`)]
+    return [
+        basePrompt,
+        ...frames.map(
+            (frame) => `P${String(shot.order).padStart(2, "0")}-F${String(frame.sequenceIndex).padStart(2, "0")} ${frame.startSecond}-${frame.endSecond}s：${project ? sanitizeDramaSupplierText(frame.actionPrompt, project) : frame.actionPrompt}`,
+        ),
+    ]
         .filter(Boolean)
         .join("\n");
 }
@@ -210,9 +217,7 @@ export function refreshDramaVideoStepReferences(project: DramaProject, episode: 
     if (!shot) return step;
     const incoming = episode.continuityEdges?.find((edge) => edge.toShotId === shot.id && edge.inheritActualEndFrame);
     const allFrames = shot.storyboardFrameMode === "all_frames" && Boolean(shot.framePlan?.frames.length);
-    const frameIds = allFrames
-        ? shot.framePlan!.frames.filter((frame) => frame.startSecond >= (step.startSecond || 0) && frame.startSecond <= (step.endSecond || shot.duration)).map((frame) => frame.id)
-        : [];
+    const frameIds = allFrames ? shot.framePlan!.frames.filter((frame) => frame.startSecond >= (step.startSecond || 0) && frame.startSecond <= (step.endSecond || shot.duration)).map((frame) => frame.id) : [];
     const frameRefs = allFrames
         ? frameIds.flatMap((frameId) => {
               const frame = shot.storyboardFrames?.find((item) => item.id === frameId || item.sequenceIndex === shot.framePlan?.frames.find((beat) => beat.id === frameId)?.sequenceIndex);
@@ -222,7 +227,7 @@ export function refreshDramaVideoStepReferences(project: DramaProject, episode: 
     const previousShot = incoming ? episodeShot(project, episode, incoming.fromShotId) : undefined;
     const continuityTail = allFrames && step.clipIndex === 1 && previousShot ? continuityStartEvidence(previousShot) : undefined;
     const orderedFrames = continuityTail ? [{ mediaUrl: continuityTail.mediaUrl, remoteUrl: continuityTail.remoteUrl }, ...frameRefs] : frameRefs;
-    const basePrompt = compileDramaShotExecutionPrompts(project, episode, shot).videoPrompt;
+    const basePrompt = allFrames ? compileDramaShotVideoBasePrompt(project, episode, shot) : compileDramaShotExecutionPrompts(project, episode, shot).videoPrompt;
     return {
         ...step,
         prompt: allFrames ? compileDramaVideoSegmentPrompt(shot, frameIds, basePrompt, project) : basePrompt,
@@ -236,7 +241,13 @@ function episodeShot(project: DramaProject, episode: DramaEpisode, shotId: strin
     return episode.shots.find((shot) => shot.id === shotId) || project.episodes.flatMap((item) => item.shots).find((shot) => shot.id === shotId);
 }
 
-function buildVideoReferenceBindings(project: DramaProject, shot: DramaEpisode["shots"][number], frames: Array<{ mediaUrl: string; remoteUrl?: string; frameId?: string; sequenceIndex?: number }>, assetIds: string[], previousShotId?: string): DramaVideoReferenceBinding[] {
+function buildVideoReferenceBindings(
+    project: DramaProject,
+    shot: DramaEpisode["shots"][number],
+    frames: Array<{ mediaUrl: string; remoteUrl?: string; frameId?: string; sequenceIndex?: number }>,
+    assetIds: string[],
+    previousShotId?: string,
+): DramaVideoReferenceBinding[] {
     const manifest = shot.framePlan?.referenceManifest || [];
     const roleFor = (assetId: string): DramaVideoReferenceBinding["role"] => {
         const role = manifest.find((item) => item.assetId === assetId)?.role;
@@ -245,8 +256,8 @@ function buildVideoReferenceBindings(project: DramaProject, shot: DramaEpisode["
     const purposeFor = (assetId: string) => manifest.find((item) => item.assetId === assetId)?.purpose || "项目资产基准图";
     const bindings: DramaVideoReferenceBinding[] = frames.map((frame, index) => ({
         alias: `@图片${index + 1}`,
-        role: index === 0 && previousShotId ? "first_frame" : shot.storyboardFrameMode === "first_last" ? index === 0 ? "first_frame" : "last_frame" : "keyframe",
-        purpose: index === 0 && previousShotId ? "上一镜当前视频版本的已人工验收实际尾帧" : shot.storyboardFrameMode === "first_last" ? index === 0 ? "本镜已验收起始帧" : "本镜已验收结束帧" : `顺序帧 ${frame.sequenceIndex || index + 1}`,
+        role: index === 0 && previousShotId ? "first_frame" : shot.storyboardFrameMode === "first_last" ? (index === 0 ? "first_frame" : "last_frame") : "keyframe",
+        purpose: index === 0 && previousShotId ? "上一镜当前视频版本的已人工验收实际尾帧" : shot.storyboardFrameMode === "first_last" ? (index === 0 ? "本镜已验收起始帧" : "本镜已验收结束帧") : `顺序帧 ${frame.sequenceIndex || index + 1}`,
         shotId: previousShotId && index === 0 ? previousShotId : shot.id,
         frameId: frame.frameId,
         url: frame.mediaUrl,

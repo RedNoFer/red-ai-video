@@ -1,7 +1,8 @@
 import { resolveDramaShotDuration } from "@/lib/server/drama-shot-config";
 
 export type DramaAnalyzeBody = {
-    phase?: "content" | "visual" | "review_completion" | "video_prompt";
+    phase?: "content" | "visual" | "review_completion" | "video_prompt" | "image_prompt";
+    requestId?: unknown;
     script?: string;
     summary?: string;
     style?: string;
@@ -75,6 +76,32 @@ export function normalizeDramaVideoPromptInput(body: DramaAnalyzeBody) {
         shotIds: visual.shotIds,
         payload: { ...visual.payload, instruction: dramaAnalysisText(body.instruction) },
     };
+}
+
+export function normalizeDramaImagePromptInput(body: DramaAnalyzeBody) {
+    const visual = normalizeDramaVisualInput(body);
+    return { shotIds: visual.shotIds, payload: { ...visual.payload, instruction: dramaAnalysisText(body.instruction) } };
+}
+
+export function compileDramaVideoPromptReferenceInstructions(value: unknown) {
+    const references = array(value).flatMap((item, index) => {
+        const reference = object(item);
+        const role = dramaAnalysisText(reference.role);
+        const purpose = dramaAnalysisText(reference.purpose);
+        const sequenceIndex = Number(reference.sequenceIndex);
+        if (!role && !purpose) return [];
+        const label = purpose || (role === "keyframe" ? `顺序帧 ${Number.isFinite(sequenceIndex) && sequenceIndex > 0 ? sequenceIndex : index + 1}` : role === "first_frame" ? "视频首帧" : role === "last_frame" ? "视频尾帧" : "项目资产基准图");
+        return [`@图片${index + 1}：${label}`];
+    });
+    return references.length ? `参考图顺序（与视频请求数组完全一致）：\n${references.join("\n")}\n必须逐图按上述职责使用；顺序帧用于锁定对应时间段的可见状态，不能用固定资产图替代。` : "";
+}
+
+export function mergeDramaVideoPromptReferenceInstructions(prompt: string, value: unknown) {
+    const withoutReferenceList = prompt
+        .trim()
+        .replace(/\n?参考图顺序（与(?:视频)?请求数组完全一致）：\n(?:@图片[^\n]*\n?)+(?:必须逐图按上述职责使用；顺序帧用于锁定对应时间段的可见状态，不能用固定资产图替代。)?/u, "")
+        .trim();
+    return [withoutReferenceList, compileDramaVideoPromptReferenceInstructions(value)].filter(Boolean).join("\n");
 }
 
 export function normalizeDramaReviewCompletionInput(body: DramaAnalyzeBody) {

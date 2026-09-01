@@ -304,6 +304,24 @@ describe("directAgentPlan", () => {
             ],
         });
     });
+
+    it("全局画布布局请求不会绑定选中的文本节点", () => {
+        const plan = {
+            intent: "generation",
+            objective: "优化当前画布布局",
+            reply: "开始优化画布",
+            decisions: [],
+            foundation: { complexity: "complex", brief: { objective: "优化当前画布布局" }, direction: { summary: "清晰层级" } },
+            deliverables: [{ id: "layout", title: "画布布局优化", type: "text", model: "text-pro", prompt: "优化画布布局", count: 1, dependencies: [] }],
+        };
+        const snapshot = { selectedNodeIds: ["说明入口"], nodes: [{ id: "说明入口", type: "text", title: "说明入口", metadata: { content: "说明入口" } }] };
+        const prompt = "优化当前画布布局，让层级、间距和信息关系更清晰。";
+        const normalizedPlan = normalizeCanvasPlanForSelection(plan as never, snapshot, prompt);
+        const [task] = normalizeTasks(normalizedPlan, [], generationSettings() as never, snapshot, prompt, "canvas", []);
+        expect(normalizedPlan.deliverables[0]).not.toHaveProperty("targetNodeId");
+        expect(task.targetNodeId).toBeUndefined();
+    });
+
 });
 
 function generationSettings() {

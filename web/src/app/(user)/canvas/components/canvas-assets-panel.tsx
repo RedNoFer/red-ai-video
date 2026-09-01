@@ -13,6 +13,7 @@ import { ALL_PROMPTS_OPTION, fetchPrompts, promptCategoryLabel, type Prompt } fr
 import { useThemeStore } from "@/stores/use-theme-store";
 import { useUserStore } from "@/stores/use-user-store";
 import { useCanvasStore } from "../stores/use-canvas-store";
+import { useCanvasUiStore } from "../stores/use-canvas-ui-store";
 import { CanvasNodeType, type CanvasNodeData } from "../types";
 import { libraryAssetToInsertPayload, type InsertAssetPayload } from "./canvas-asset-insert";
 
@@ -42,7 +43,6 @@ export function canvasProjectMenuItemStyle(theme: CanvasTheme): CSSProperties {
 }
 
 export function CanvasAssetsPanel({
-    open,
     projectId,
     projectTitle,
     nodes,
@@ -52,9 +52,7 @@ export function CanvasAssetsPanel({
     onInsertAsset,
     onInsertPrompt,
     onLocateNode,
-    onClose,
 }: {
-    open: boolean;
     projectId: string;
     projectTitle: string;
     nodes: CanvasNodeData[];
@@ -64,8 +62,9 @@ export function CanvasAssetsPanel({
     onInsertAsset: (payload: InsertAssetPayload) => void;
     onInsertPrompt: (prompt: string) => void;
     onLocateNode: (id: string) => void;
-    onClose: () => void;
 }) {
+    const open = useCanvasUiStore((state) => state.assetsOpen);
+    const setAssetsOpen = useCanvasUiStore((state) => state.setAssetsOpen);
     const screens = Grid.useBreakpoint();
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
     const userId = useUserStore((state) => state.user?.id || "");
@@ -154,7 +153,7 @@ export function CanvasAssetsPanel({
                     <LibraryBig className="size-4" aria-hidden="true" />
                     <h2 className="min-w-0 flex-1 text-sm font-semibold">资产</h2>
                     <Tooltip title="关闭资产面板">
-                        <button type="button" className="grid size-8 place-items-center rounded-lg transition hover:opacity-70" onClick={onClose} aria-label="关闭资产面板">
+                        <button type="button" className="grid size-8 place-items-center rounded-lg transition hover:opacity-70" onClick={() => setAssetsOpen(false)} aria-label="关闭资产面板">
                             <X className="size-4" />
                         </button>
                     </Tooltip>
@@ -294,7 +293,7 @@ export function CanvasAssetsPanel({
                 size={336}
                 open={open && screens.lg !== true}
                 closable={false}
-                onClose={onClose}
+                onClose={() => setAssetsOpen(false)}
                 styles={{ wrapper: { maxWidth: "100vw" }, body: { height: "100%", padding: 0, overflow: "hidden" } }}
             >
                 {screens.lg !== true ? panel : null}

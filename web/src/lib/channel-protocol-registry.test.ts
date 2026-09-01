@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import type { SystemModelChannel } from "@/lib/auth/store";
+import type { SystemChannelAdvancedConfig, SystemModelChannel } from "@/lib/auth/store";
 import {
     applyChannelProtocol,
     applyModelProtocol,
+    channelAllowsManualModels,
     channelCredentialsReady,
     channelProtocolDefinition,
     channelProtocolDefinitions,
@@ -13,6 +14,8 @@ import {
     channelProtocolValidationErrors,
     normalizeStrictProtocolModelConfig,
     protocolAuthHeaders,
+    protocolModelConfig,
+    resolveChannelCapabilityConfig,
     resolveChannelModelConfig,
 } from "./channel-protocol-registry";
 
@@ -29,14 +32,34 @@ const channel = {
 describe("channel protocol registry", () => {
     it("exposes only active protocols and keeps SD2 separate from Stable Diffusion", () => {
         const protocols = channelProtocolOptions().map((item) => item.value);
-        expect(protocols).toEqual(["openai", "yumeng", "gemini", "seedance", "stable-diffusion", "volcengine-video", "sub2api", "newapi", "newapi-video", "custom", "compatible", "auto"]);
+        expect(protocols).toEqual(["openai", "openai-audio-dialogue", "yumeng", "gemini", "seedance", "stable-diffusion", "volcengine-video", "sub2api", "newapi", "newapi-video", "buming-seedance", "buming-image", "custom", "compatible", "auto"]);
         expect(protocols).not.toEqual(expect.arrayContaining(["vozeb-recommended", "seedance-special", "globalaiopc"]));
         expect(channelProtocolDefinition("openai").modelCatalogPaths).toEqual(["/v1/models"]);
+        expect(channelProtocolDefinition("openai-audio-dialogue")).toMatchObject({ capabilities: ["audio"], modelCatalogPaths: ["/v1/models"], operations: { audio: { createPath: "/chat/completions" } } });
         expect(channelProtocolDefinition("sub2api").modelCatalogPaths).toEqual(["/v1/models"]);
         expect(channelProtocolDefinition("newapi").modelCatalogPaths).toEqual(["/v1/models"]);
-        expect(channelProtocolDefinition("newapi-video").modelCatalogPaths).toEqual(["/v1/models"]);
+        expect(channelProtocolDefinition("newapi-video")).toMatchObject({
+            defaultBaseUrl: "https://newapi.megabyai.cc",
+            authMode: "bearer",
+            modelCatalogPaths: ["/v1/models"],
+            capabilities: ["video"],
+        });
         expect(channelProtocolDefinition("seedance").modelCatalogPaths).toEqual(["/models"]);
         expect(channelProtocolDefinition("volcengine-video").modelCatalogPaths).toEqual(["/api/v3/models"]);
+        expect(channelProtocolDefinition("buming-seedance")).toMatchObject({
+            label: "不鸣 TokenGo Seedance",
+            defaultBaseUrl: "https://api.tokengo.love",
+            modelCatalogPaths: ["/v1/logical-models", "/v1/skills/models"],
+            capabilities: ["video"],
+        });
+        expect(channelProtocolDefinition("buming-seedance").builtInModels).toBeUndefined();
+        expect(channelAllowsManualModels(applyChannelProtocol({ ...channel, models: ["seedance-2-0-official"] }, "buming-seedance"))).toBe(true);
+        expect(channelProtocolDefinition("buming-image")).toMatchObject({
+            label: "不鸣 TokenGo 图片",
+            defaultBaseUrl: "https://api.tokengo.love",
+            modelCatalogPaths: ["/v1/skills/models"],
+            capabilities: ["image"],
+        });
         expect(channelProtocolDefinition("stable-diffusion").modelCatalogPaths).toEqual(["/sdapi/v1/sd-models"]);
         expect(channelProtocolDefinition("gemini").modelCatalogPaths).toEqual(["/v1beta/models"]);
         expect(channelProtocolDefinition("yumeng")).toMatchObject({
@@ -49,6 +72,32 @@ describe("channel protocol registry", () => {
         expect(channelProtocolDefinition("yumeng").builtInModels).toHaveLength(26);
     });
 
+    it("provides the documented TokenGo Voice Design contract without guessing Clone fields", () => {
+        expect(protocolModelConfig("buming-seedance", "audio", "voice-design")).toMatchObject({
+            createPath: "/v1/media/generate",
+            requestTemplate: expect.stringContaining("design_prompt"),
+            audioOperation: "voice-design",
+            voiceIdField: "voice_id",
+            previewAudioField: "trial_audio",
+        });
+        expect(protocolModelConfig("buming-seedance", "audio", "voice-clone")).toBeUndefined();
+        expect(channelProtocolValidationErrors(applyChannelProtocol({ ...channel, models: [] }, "buming-seedance"))).toEqual([]);
+    });
+
+    it("upgrades only the legacy generic voice-design TTS route", () => {
+        const legacy = {
+            protocol: "openai" as const,
+            modelConfigs: {
+                "voice-design": { capability: "audio" as const, protocol: "openai" as const, createPath: "/audio/speech", requestTemplate: '{"model":"{{model}}","input":"{{prompt}}","voice":"alloy"}' },
+            },
+        } as unknown as SystemChannelAdvancedConfig;
+        expect(resolveChannelModelConfig(legacy, "voice-design")).toMatchObject({ createPath: "/v1/media/generate", audioOperation: "voice-design", voiceIdField: "voice_id", previewAudioField: "trial_audio" });
+        expect(resolveChannelCapabilityConfig(legacy, "voice-design", "audio")).toMatchObject({ audioOperation: "voice-design" });
+
+        const explicitTts = { ...legacy, modelConfigs: { ...(legacy.modelConfigs || {}), "voice-design": { ...legacy.modelConfigs!["voice-design"], audioOperation: "tts" as const } } };
+        expect(resolveChannelModelConfig(explicitTts, "voice-design")).toMatchObject({ createPath: "/audio/speech", audioOperation: "tts" });
+    });
+
     it("keeps strict protocol paths and request contracts isolated", () => {
         expect(channelProtocolDefinition("openai").operations).toMatchObject({
             text: { createPath: "/chat/completions" },
@@ -56,18 +105,23 @@ describe("channel protocol registry", () => {
             video: { createPath: "/videos", queryPath: "/videos/:task_id", requestTemplate: expect.stringContaining("multipart/form-data") },
             audio: { createPath: "/audio/speech" },
         });
-        expect(channelProtocolDefinition("sub2api").operations.image).toMatchObject({ createPath: "/images/generations", editPath: "/images/generations", requestTemplate: expect.stringContaining("image_urls") });
+        expect(channelProtocolDefinition("openai-audio-dialogue").operations.audio).toMatchObject({
+            createPath: "/chat/completions",
+            resultField: expect.stringContaining("choices[0].message.audio"),
+            requestTemplate: expect.stringContaining('"modalities":["text","audio"]'),
+        });
+        expect(channelProtocolDefinition("sub2api").operations.image).toMatchObject({ createPath: "/images/generations", editPath: "/images/edits", requestTemplate: expect.stringContaining('"images"') });
         expect(channelProtocolDefinition("newapi").operations).toEqual(channelProtocolDefinition("openai").operations);
         expect(channelProtocolDefinition("newapi-video").operations.video).toMatchObject({
-            createPath: "/v1/video/generations",
-            imageToVideoPath: "/v1/video/generations",
-            queryPath: "/v1/video/generations/:task_id",
-            requestTemplate: expect.stringContaining('"image":"{{image}}"'),
-            resultField: "url",
+            createPath: "/v1/videos",
+            imageToVideoPath: "/v1/videos",
+            queryPath: "/v1/videos/:task_id",
+            requestTemplate: expect.stringContaining('"referenceImages":"{{images}}"'),
+            resultField: "video_url / data.url / url",
             statusField: "status",
             supportsReferenceImage: true,
-            supportsReferenceVideo: false,
-            supportsReferenceAudio: false,
+            supportsReferenceVideo: true,
+            supportsReferenceAudio: true,
         });
         expect(channelProtocolDefinition("seedance").operations.video).toMatchObject({ createPath: "/contents/generations/tasks", queryPath: "/contents/generations/tasks/:task_id", resultField: "content.video_url" });
         expect(channelProtocolDefinition("volcengine-video").operations.video).toEqual(channelProtocolDefinition("seedance").operations.video);
@@ -91,12 +145,102 @@ describe("channel protocol registry", () => {
             resultField: "metadata.url",
             statusField: "status",
         });
+        expect(channelProtocolDefinition("buming-seedance").operations.video).toMatchObject({
+            createPath: "/v1/videos/generations",
+            imageToVideoPath: "/v1/videos/generations",
+            queryPath: "/v1/tasks/:task_id",
+            requestTemplate: expect.stringContaining('"client_request_id":"{{client_request_id}}"'),
+            resultField: expect.stringContaining("result.videos[0].url"),
+            statusField: "state / status",
+        });
+        expect(channelProtocolDefinition("buming-seedance").operations.video?.requestTemplate).not.toContain('"first_frame"');
+        expect(channelProtocolDefinition("buming-seedance").operations.video?.requestTemplate).not.toContain('"last_frame"');
+        expect(protocolModelConfig("buming-seedance", "video", "seedance-2-0-official")).toMatchObject({ supportsKeyframes: true, maxReferenceImages: 9, videoReferenceModes: expect.arrayContaining(["all_frames"]) });
+        expect(protocolModelConfig("buming-seedance", "video", "seedance-2-0-manju-special")).toMatchObject({ supportsKeyframes: false, videoReferenceModes: ["first_frame", "first_last"] });
+        expect(channelProtocolDefinition("buming-image").operations.image).toMatchObject({
+            createPath: "/api/v1/model-runtime/invoke",
+            queryPath: "/api/v1/model-runtime/tasks/:task_id",
+            requestTemplate: expect.stringContaining('"mode":"{{mode}}"'),
+            resultField: "result_url / output_url / result.images[0].url",
+            supportsReferenceImage: true,
+        });
         expect(channelProtocolDefinition("gemini").operations.video).toMatchObject({
             createPath: "/models/:model:predictLongRunning",
             imageToVideoPath: "/models/:model:predictLongRunning",
             queryPath: "/models/:model/operations/:task_id",
             resultField: "response.generateVideoResponse.generatedSamples[0].video.uri",
             statusField: "done",
+        });
+    });
+
+    it("restores the canonical Sub2API image contract when an old model config has stale paths", () => {
+        const config = {
+            protocol: "sub2api",
+            modelConfigs: {
+                "gpt-image-2": {
+                    capability: "image",
+                    protocol: "sub2api",
+                    createPath: "/v1/images/generations",
+                    editPath: "/v1/images/edits",
+                    requestTemplate: '{"model":"{{model}}","prompt":"{{prompt}}","image_urls":["{{image}}"]}',
+                    resultField: "data[0].url",
+                },
+            },
+        } as unknown as SystemChannelAdvancedConfig;
+
+        expect(resolveChannelCapabilityConfig(config, "gpt-image-2", "image")).toMatchObject({
+            protocol: "sub2api",
+            createPath: "/images/generations",
+            editPath: "/images/edits",
+        });
+        expect(resolveChannelModelConfig(config, "gpt-image-2")).toMatchObject({ editPath: "/images/edits" });
+    });
+
+    it("restores the canonical Buming video contract when persisted templates are stale", () => {
+        const config = {
+            protocol: "buming-seedance",
+            operationConfigs: {
+                video: {
+                    capability: "video",
+                    protocol: "buming-seedance",
+                    createPath: "/v1/videos/generations",
+                    queryPath: "/v1/tasks/:task_id",
+                    requestTemplate: '{"model":"{{model}}","prompt":"{{prompt}}","first_frame":"{{first_frame}}","last_frame":"{{last_frame}}","generate_audio":"{{generate_audio}}"}',
+                },
+            },
+        } as unknown as SystemChannelAdvancedConfig;
+
+        expect(resolveChannelCapabilityConfig(config, "seedance-2-0-official", "video")).toMatchObject({
+            protocol: "buming-seedance",
+            createPath: "/v1/videos/generations",
+            queryPath: "/v1/tasks/:task_id",
+            requestTemplate: expect.stringContaining('"mode":"{{mode}}"'),
+        });
+        expect(resolveChannelCapabilityConfig(config, "seedance-2-0-official", "video")?.requestTemplate).toContain('"quality":"{{quality}}"');
+        expect(resolveChannelCapabilityConfig(config, "seedance-2-0-official", "video")?.requestTemplate).not.toContain('"first_frame"');
+    });
+
+    it("restores the canonical New API video contract when persisted paths are stale", () => {
+        const config = {
+            protocol: "newapi-video",
+            operationConfigs: {
+                video: {
+                    capability: "video",
+                    protocol: "newapi-video",
+                    createPath: "/v1/video/generations",
+                    queryPath: "/v1/video/generations/:task_id",
+                    requestTemplate: '{"model":"{{model}}","prompt":"{{prompt}}","image":"{{image}}","width":"{{width}}","height":"{{height}}"}',
+                    resultField: "url",
+                },
+            },
+        } as unknown as SystemChannelAdvancedConfig;
+
+        expect(resolveChannelCapabilityConfig(config, "alibaba/wan-3.0", "video")).toMatchObject({
+            protocol: "newapi-video",
+            createPath: "/v1/videos",
+            queryPath: "/v1/videos/:task_id",
+            requestTemplate: expect.stringContaining('"referenceImages":"{{images}}"'),
+            resultField: "video_url / data.url / url",
         });
     });
 

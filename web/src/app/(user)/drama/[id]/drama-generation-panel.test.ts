@@ -51,6 +51,21 @@ describe("Drama generation production workspace", () => {
         expect(source).toContain("data-drama-shot-preflight-blockers");
         expect(source).toContain("completeShotReviewAndRefresh");
         expect(source).toContain("去内容审核");
+        expect(source).toContain("videoPromptRuns");
+        expect(source).toContain("beginVideoPrompt");
+        expect(source).toContain("finishVideoPrompt");
+    });
+
+    it("groups shot-level AI actions under one Agent creation entry", async () => {
+        const source = await readFile(resolve(process.cwd(), "src/app/(user)/drama/[id]/drama-generation-panel.tsx"), "utf8");
+
+        expect(source).toContain("Agent 创作");
+        expect(source).toContain("当前镜头 AI 操作");
+        expect(source).toContain('key: "complete-review"');
+        expect(source).toContain('key: "generate-prompt"');
+        expect(source).toContain('key: "open-agent"');
+        expect(source).toContain('label: "打开 Agent 对话"');
+        expect(source).not.toContain(">交给创作 Agent<");
     });
 
     it("keeps repeated preflight issues uniquely keyed per asset", async () => {
@@ -61,24 +76,35 @@ describe("Drama generation production workspace", () => {
     });
 
     it("uses the locked episode resolution and does not expose a client video-model selector", async () => {
-        const [generationSource, settingsSource, scriptSource, sectionsSource, frameEditorSource] = await Promise.all([
+        const [generationSource, settingsSource, scriptSource, frameEditorSource] = await Promise.all([
             readFile(resolve(process.cwd(), "src/app/(user)/drama/[id]/drama-generation-panel.tsx"), "utf8"),
             readFile(resolve(process.cwd(), "src/app/(user)/drama/[id]/drama-episode-settings.tsx"), "utf8"),
             readFile(resolve(process.cwd(), "src/app/(user)/drama/[id]/drama-script-agent-panel.tsx"), "utf8"),
-            readFile(resolve(process.cwd(), "src/app/(user)/drama/[id]/drama-project-sections.tsx"), "utf8"),
             readFile(resolve(process.cwd(), "src/app/(user)/drama/[id]/drama-shot-frame-editor.tsx"), "utf8"),
         ]);
         expect(generationSource).toContain("productionPlan?.video.resolution");
         expect(settingsSource).toContain("DRAMA_VIDEO_RESOLUTION_OPTIONS");
         expect(settingsSource).toContain("清晰度：");
-        expect(settingsSource).toContain("保存设置");
-        expect(settingsSource).toContain("onSave?: () => Promise<void>");
+        expect(settingsSource).toContain("锁定并保存设置");
         expect(settingsSource).toContain("本集设置已保存");
+        expect(settingsSource).toContain("const lockedAt = new Date().toISOString()");
+        expect(settingsSource).toContain("setSavedLockAt(persistedPlan.lockedAt)");
+        expect(settingsSource).toContain("savedLockAt || productionPlan.lockedAt");
+        expect(settingsSource).toContain('normalizeDramaProductionPlan(project.productionBible?.productionPlan, defaultDramaProductionPlan("new-project"))');
         expect(scriptSource).not.toContain("视频模型");
-        expect(sectionsSource).toContain("onSaveSettings");
         expect(frameEditorSource).toContain("shotSnapshot:");
         expect(frameEditorSource).toContain("compactShotSnapshot");
         expect(frameEditorSource).not.toContain("saveProjectNow(project.id)");
+        expect(frameEditorSource).not.toContain("本次绑定图片");
+        expect(frameEditorSource).toContain("保存提示词");
+        expect(frameEditorSource).toContain("generationReferences");
+        expect(frameEditorSource).toContain("supplierPrompt");
+        expect(frameEditorSource).toContain("appendDramaImageReferenceBindings");
+        expect(frameEditorSource).toContain("已绑定 ${promptPreview?.references.length || 0} 张图片");
+        expect(frameEditorSource).toContain('maxHeight: "calc(100dvh - 24px)"');
+        expect(frameEditorSource).toContain("zIndex={1100}");
+        expect(frameEditorSource).toContain("zIndex={1200}");
+        expect(frameEditorSource).toContain("data-drama-prompt-references");
     });
 
     it("shows persistent per-frame progress without blocking the whole storyboard area", async () => {
@@ -94,13 +120,43 @@ describe("Drama generation production workspace", () => {
         expect(source).toContain("导演 Agent 生图启动失败");
     });
 
+    it("keeps regenerated frame candidates until the user selects the current frame", async () => {
+        const source = await readFile(resolve(process.cwd(), "src/app/(user)/drama/[id]/drama-shot-frame-editor.tsx"), "utf8");
+
+        expect(source).toContain("const { message, modal } = App.useApp();");
+        expect(source).toContain("modal.confirm({");
+        expect(source).not.toContain("Modal.confirm({");
+        expect(source).toContain("候选图片");
+        expect(source).toContain("设为当前帧");
+        expect(source).toContain("实际提交提示词");
+        expect(source).toContain("实际提交给供应商的完整提示词（已留档）");
+        expect(source).toContain("readOnly={promptPreview?.readOnly}");
+        expect(source).toContain("确认使用当前图并继续");
+        expect(source).toContain("candidateStatus");
+        expect(source).not.toContain('mediaUrl: undefined, remoteUrl: undefined, inputHash: undefined, continuityStatus: "pending"');
+    });
+
+    it("exposes an unmistakable manual acceptance action beside a failed continuity review", async () => {
+        const source = await readFile(resolve(process.cwd(), "src/app/(user)/drama/[id]/drama-shot-frame-editor.tsx"), "utf8");
+
+        expect(source).toContain("data-drama-frame-acceptance");
+        expect(source).toContain("确认使用当前图并继续");
+        expect(source).toContain("确认验收帧 ${beat.sequenceIndex}？");
+        expect(source).toContain("不会重新生成图片");
+        expect(source).toContain('frame?.continuityStatus === "needs_review" ? "needs_review"');
+        expect(source).toContain("acceptDramaStoryboardFrame");
+        expect(source).toContain("replaceProject(await acceptDramaStoryboardFrame");
+    });
+
     it("keeps syncing visual tasks while the storyboard stage is mounted", async () => {
         const source = await readFile(resolve(process.cwd(), "src/app/(user)/drama/[id]/page.tsx"), "utf8");
 
         expect(source).toContain("const loadProject = useDramaStore((state) => state.loadProject)");
         expect(source).toContain('getLatestDramaProductionRun(project.id, episode.id, "visual")');
         expect(source).toContain("hasPendingStoryboard");
-        expect(source).toContain('"success", "failed", "cancelled", "needs_review"');
+        expect(source).toContain("resolveDramaVisualRunSync(currentProject, episode.id, run)");
+        expect(source).toContain("replaceProject(decision.project)");
+        expect(source).toContain("if (active && shouldContinue) timer = window.setTimeout");
         expect(source).toContain("await loadProject(project.id, true)");
     });
 });

@@ -7,7 +7,8 @@ import type { RegistrationPolicyConsent } from "@/lib/registration-consent";
 import { VOZEB_QQ_GROUP_URL } from "@/constant/community";
 
 export type ApiCallFormat = "openai" | "gemini";
-export type SystemChannelProtocol = "auto" | "openai" | "yumeng" | "gemini" | "sub2api" | "newapi" | "newapi-video" | "vozeb-recommended" | "globalaiopc" | "seedance" | "stable-diffusion" | "volcengine-video" | "seedance-special" | "custom" | "compatible";
+export type SystemChannelProtocol =
+    "auto" | "openai" | "openai-audio-dialogue" | "yumeng" | "gemini" | "sub2api" | "newapi" | "newapi-video" | "vozeb-recommended" | "globalaiopc" | "seedance" | "stable-diffusion" | "volcengine-video" | "seedance-special" | "buming-seedance" | "buming-image" | "custom" | "compatible";
 export type SystemChannelAuthMode = "none" | "bearer" | "x-api-key" | "custom-header";
 
 export type SystemChannelModelConfig = {
@@ -29,6 +30,19 @@ export type SystemChannelModelConfig = {
     supportsReferenceImage?: boolean;
     supportsReferenceVideo?: boolean;
     supportsReferenceAudio?: boolean;
+    supportsKeyframes?: boolean;
+    /** 项目侧视频参考方式；严格协议只接受已验证的模型预置。 */
+    videoReferenceModes?: Array<"reference" | "first_frame" | "first_last" | "all_frames">;
+    /** 单次请求的供应商参考图片总上限。 */
+    maxReferenceImages?: number;
+    /** 音频模型的实际操作；普通 TTS 省略，声纹创建必须显式标识。 */
+    audioOperation?: "tts" | "voice-design" | "voice-clone";
+    /** Voice Design / Clone 返回的专属声纹字段路径。 */
+    voiceIdField?: string;
+    /** Voice Design / Clone 返回试听音频的字段路径。 */
+    previewAudioField?: string;
+    /** Clone 请求模板中接收公网音频样本 URL 的变量字段说明。 */
+    cloneSampleField?: string;
 };
 
 export type SystemChannelAdvancedConfig = {
@@ -56,6 +70,11 @@ export type SystemChannelAdvancedConfig = {
     supportsReferenceImage: boolean;
     supportsReferenceVideo: boolean;
     supportsReferenceAudio: boolean;
+    supportsKeyframes?: boolean;
+    audioOperation?: "tts" | "voice-design" | "voice-clone";
+    voiceIdField?: string;
+    previewAudioField?: string;
+    cloneSampleField?: string;
     modelCatalogPaths?: string[];
     modelCapabilities?: Record<string, LogicalModelCapability>;
     modelConfigs?: Record<string, SystemChannelModelConfig>;
@@ -94,6 +113,7 @@ export type LogicalModelCapabilityProfile = {
     supportsReferenceImage?: boolean;
     supportsReferenceVideo?: boolean;
     supportsReferenceAudio?: boolean;
+    supportsKeyframes?: boolean;
     maxReferenceImages?: number;
     aspectRatios?: string[];
     minDurationSeconds?: number;
@@ -131,6 +151,8 @@ export type SystemDefaultModels = {
     videoModel: string;
     textModel: string;
     audioModel: string;
+    voiceDesignModel?: string;
+    voiceCloneModel?: string;
 };
 
 export type AgentSkillWorkspace = "image" | "video" | "canvas" | "drama";
@@ -174,6 +196,18 @@ export type GenerationDefaultSettings = {
     videoSeconds: number;
     audioVoice: string;
     audioFormat: string;
+};
+
+export type CharacterVoicePoolEntry = {
+    id: string;
+    label: string;
+    voiceId: string;
+    logicalModelId: string;
+    channelId: string;
+    language: string;
+    tags: string[];
+    enabled: boolean;
+    verified: boolean;
 };
 
 export type GenerationPointMultipliers = {
@@ -463,6 +497,7 @@ export type AuthSettings = {
     entitlements: EntitlementSettings;
     generationConcurrency: GenerationConcurrencySettings;
     generationDefaults: GenerationDefaultSettings;
+    characterVoicePool: CharacterVoicePoolEntry[];
     systemChannels: SystemModelChannel[];
     logicalModels: LogicalModel[];
     defaultModels: SystemDefaultModels;

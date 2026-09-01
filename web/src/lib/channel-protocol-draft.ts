@@ -53,6 +53,9 @@ const templateVariables = new Set([
     "last_frame_url",
     "references",
     "content",
+    "voice",
+    "format",
+    "speed",
 ]);
 
 export function parseDeterministicProtocolDraft(input: { text: string; documentationUrl?: string }): ChannelProtocolDraft | null {

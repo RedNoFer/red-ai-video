@@ -5,7 +5,7 @@ import { getAuthSettings, isAuthInputError, refundUserPoints } from "@/lib/auth/
 import { generationModelId, toSystemGenerationChannel } from "@/lib/server/generation-channel";
 import { finishGenerationAttempt, startGenerationAttempt, type GenerationAttempt } from "@/lib/server/generation-attempt";
 import { fetchInternalApi, resolveInternalOrigin } from "@/lib/server/internal-origin";
-import { resolveLogicalModelCandidates } from "@/lib/server/logical-model-router";
+import { resolveLogicalModelCandidates, supportsVideoKeyframeReferences } from "@/lib/server/logical-model-router";
 import {
     assertReferenceCapabilities,
     assertReferenceUrls,
@@ -74,9 +74,8 @@ export async function POST(request: Request) {
         const requestedModel = typeof body.config?.model === "string" && body.config.model.trim() ? body.config.model : settings.defaultModels.videoModel;
         const requestedChannelId = typeof body.config?.channelId === "string" ? body.config.channelId.trim() : "";
         const candidates = resolveLogicalModelCandidates(settings, "video", requestedModel, requestedChannelId);
-        const channels = (body.context?.surface === "drama" && body.context.runId ? candidates.slice(0, 1) : candidates).map(toSystemGenerationChannel);
         const prompt = String(body.prompt || "").trim();
-        if (!channels.length || !prompt) return NextResponse.json({ error: "视频任务参数不完整或渠道不支持" }, { status: 400 });
+        if (!prompt) return NextResponse.json({ error: "视频任务参数不完整或渠道不支持" }, { status: 400 });
         const publicOrigin = requestPublicOrigin(request);
         let references: VideoGenerationReference[];
         try {
@@ -84,6 +83,15 @@ export async function POST(request: Request) {
         } catch (error) {
             return NextResponse.json({ error: error instanceof Error ? error.message : "视频参考素材不正确" }, { status: 400 });
         }
+        const keyframeCount = references.filter((reference) => reference.role === "keyframe").length;
+        const isDramaRun = body.context?.surface === "drama" && Boolean(body.context.runId);
+        // A drama run must honor the logical model selected by the user. Keep only
+        // compatible bindings of that model; never scan another logical model to
+        // hide a configuration error.
+        const compatibleDramaCandidates = candidates.filter((candidate) => supportsVideoKeyframeReferences(candidate, keyframeCount));
+        const selectedCandidates = isDramaRun && keyframeCount ? (compatibleDramaCandidates.length ? compatibleDramaCandidates : candidates).slice(0, 1) : candidates;
+        if (!selectedCandidates.length) return NextResponse.json({ error: "视频任务参数不完整或渠道不支持" }, { status: 400 });
+        const channels = selectedCandidates.map(toSystemGenerationChannel);
         const providerPrompt = withVideoReferenceFidelity(prompt, references);
         const origin = resolveInternalOrigin(new URL(request.url).origin);
         const cookie = requestRuntimeCredential(request, user.id);
@@ -97,7 +105,6 @@ export async function POST(request: Request) {
             const channel = channels[index];
             const geminiVideo = isGeminiVideoChannel(channel);
             const capabilityProfile = channel.capabilityProfile;
-            const keyframeCount = references.filter((reference) => reference.role === "keyframe").length;
             const bumingContract = channel.advancedConfig?.protocol === "buming-seedance" ? resolveBumingSeedanceVideoModelContract(channel.model) : undefined;
             const supportsKeyframes = bumingContract ? bumingContract.videoReferenceModes.includes("all_frames") : capabilityProfile?.supportsKeyframes;
             const maxReferenceImages = bumingContract?.maxReferenceImages || capabilityProfile?.maxReferenceImages || 0;

@@ -28,13 +28,14 @@ export function mergeTaskReferences(current: AgentRunReference[], additions: Age
             return;
         }
         const role = explicitVideoRole(existing.role) || explicitVideoRole(item.role) || existing.role || item.role;
-        references.set(key, { ...item, ...existing, ...(role ? { role } : {}) });
+        const keyframeIndex = existing.keyframeIndex || item.keyframeIndex;
+        references.set(key, { ...item, ...existing, ...(role ? { role } : {}), ...(keyframeIndex ? { keyframeIndex } : {}) });
     });
     return Array.from(references.values());
 }
 
 function explicitVideoRole(role: AgentRunReference["role"]) {
-    return role === "first_frame" || role === "last_frame" ? role : undefined;
+    return role === "first_frame" || role === "last_frame" || role === "keyframe" ? role : undefined;
 }
 
 export function acceptsMediaReference(taskType: AgentRunTask["type"], assetType: CreativeAsset["type"]): assetType is "image" | "video" | "audio" {

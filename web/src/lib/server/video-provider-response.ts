@@ -27,7 +27,10 @@ export function readVideoProviderId(value: unknown) {
 }
 
 export function readVideoProviderStatus(value: unknown, configuredPath?: string) {
-    return readProviderString(value, configuredPath, VIDEO_PROVIDER_STATUS_KEYS).toLowerCase();
+    const status = readProviderString(value, configuredPath, VIDEO_PROVIDER_STATUS_KEYS).toLowerCase();
+    if (status) return status;
+    if (value && typeof value === "object" && (value as Record<string, unknown>).is_final === true) return "completed";
+    return "";
 }
 
 export function readVideoProviderUrl(value: unknown, configuredPath?: string) {
@@ -36,5 +39,6 @@ export function readVideoProviderUrl(value: unknown, configuredPath?: string) {
 
 export function videoProviderMediaUrl(baseUrl: string, url: string) {
     const base = baseUrl.replace(/\/+$/, "");
+    if (/^https?:\/\//i.test(base)) return /^https?:\/\//i.test(url) ? url : `${base}/${url.replace(/^\/+/, "")}`;
     return /^https?:\/\//i.test(url) ? `${base}/_media?url=${encodeURIComponent(url)}` : `${base}/${url.replace(/^\/+/, "")}`;
 }

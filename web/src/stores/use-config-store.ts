@@ -11,7 +11,7 @@ import { inferModelCapability, normalizeModelId } from "@/lib/model-capability";
 import { materializeLogicalModelPointCosts } from "@/lib/model-point-cost";
 
 type ApiCallFormat = "openai" | "gemini";
-type SystemChannelProtocol = "auto" | "openai" | "yumeng" | "gemini" | "sub2api" | "newapi" | "newapi-video" | "vozeb-recommended" | "globalaiopc" | "seedance" | "stable-diffusion" | "volcengine-video" | "seedance-special" | "custom" | "compatible";
+type SystemChannelProtocol = "auto" | "openai" | "openai-audio-dialogue" | "yumeng" | "gemini" | "sub2api" | "newapi" | "newapi-video" | "vozeb-recommended" | "globalaiopc" | "seedance" | "stable-diffusion" | "volcengine-video" | "seedance-special" | "buming-seedance" | "buming-image" | "custom" | "compatible";
 
 type SystemChannelAdvancedConfig = {
     protocol: SystemChannelProtocol;
@@ -34,6 +34,10 @@ type SystemChannelAdvancedConfig = {
     supportsReferenceImage: boolean;
     supportsReferenceVideo: boolean;
     supportsReferenceAudio: boolean;
+    audioOperation?: "tts" | "voice-design" | "voice-clone";
+    voiceIdField?: string;
+    previewAudioField?: string;
+    cloneSampleField?: string;
     modelCatalogPaths?: string[];
     modelCapabilities?: Record<string, ModelCapability>;
     modelConfigs?: Record<
@@ -48,6 +52,10 @@ type SystemChannelAdvancedConfig = {
             requestTemplate?: string;
             resultField?: string;
             statusField?: string;
+            audioOperation?: "tts" | "voice-design" | "voice-clone";
+            voiceIdField?: string;
+            previewAudioField?: string;
+            cloneSampleField?: string;
             durationRange?: string;
             referenceRule?: string;
             supportsReferenceImage?: boolean;
@@ -78,6 +86,7 @@ type LogicalModel = {
 export type AiConfig = {
     apiSource: "system" | "custom";
     channelMode: "remote" | "local";
+    channelId?: string;
     baseUrl: string;
     apiKey: string;
     apiFormat: ApiCallFormat;
@@ -173,7 +182,7 @@ export const defaultConfig: AiConfig = {
     audioSpeed: "1",
     audioInstructions: "",
     videoSeconds: "5",
-    vquality: "720",
+    vquality: "480",
     videoGenerateAudio: "true",
     videoWatermark: "false",
     systemPrompt: "",
@@ -453,30 +462,43 @@ function normalizeModelOptionValue(value: string | undefined, channels: ModelCha
 
 export function resolveModelChannel(config: AiConfig, value: string) {
     const channels = normalizeChannels(config);
-    const decoded = decodeChannelModel(value);
-    const model = decoded?.model || value;
-    const logical = config.logicalModels.find((item) => item.id === model && item.enabled);
-    const binding = logical?.bindings
+    const logical = findLogicalModel(config, value);
+    const decoded = logical ? null : decodeChannelModel(value);
+    const model = logical?.id || decoded?.model || value;
+    const bindings = logical?.bindings
         .filter((item) => item.enabled)
         .sort((a, b) => a.priority - b.priority)
-        .find((item) => channels.some((channel) => channel.id === item.channelId));
+        .filter((item) => channels.some((channel) => channel.id === item.channelId)) || [];
+    const preferredChannelId = config.channelId?.trim() || decoded?.channelId || "";
+    const binding = bindings.find((item) => item.channelId === preferredChannelId) || bindings[0];
     const matched = binding ? channels.find((channel) => channel.id === binding.channelId) : decoded ? channels.find((channel) => channel.id === decoded.channelId) : channels.find((channel) => channel.models.includes(model));
     return matched || channels[0] || createModelChannel({ id: "default", name: "默认渠道", models: config.models.map(modelOptionName) });
 }
 
 export function resolveModelRequestConfig(config: AiConfig, value: string) {
     const channel = resolveModelChannel(config, value);
-    const model = modelOptionName(value || config.model);
-    const advancedConfig = channel.advancedConfig ? resolveChannelModelAdvancedConfig(channel.advancedConfig, model) : undefined;
+    const logical = findLogicalModel(config, value || config.model);
+    const model = logical?.id || modelOptionName(value || config.model);
+    const binding = logical?.bindings
+        .filter((item) => item.enabled && item.channelId === channel.id)
+        .sort((left, right) => left.priority - right.priority)[0];
+    const upstreamModel = binding?.upstreamModel || modelOptionName(model);
+    const advancedConfig = channel.advancedConfig ? resolveChannelModelAdvancedConfig(channel.advancedConfig, upstreamModel) : undefined;
     return {
         ...config,
+        channelId: channel.id,
         model,
         baseUrl: channel.baseUrl,
         apiKey: channel.apiKey,
-        apiFormat: channel.advancedConfig?.modelConfigs?.[normalizeModelId(model)]?.apiFormat || channel.apiFormat,
+        apiFormat: channel.advancedConfig?.modelConfigs?.[normalizeModelId(upstreamModel)]?.apiFormat || channel.apiFormat,
         ...(advancedConfig ? { advancedConfig } : {}),
         systemPrompt: "",
     };
+}
+
+function findLogicalModel(config: AiConfig, value: string) {
+    const requested = String(value || "").trim().toLowerCase();
+    return config.logicalModels.find((item) => item.enabled && item.id.trim().toLowerCase() === requested);
 }
 
 function normalizeChannels(config: AiConfig) {

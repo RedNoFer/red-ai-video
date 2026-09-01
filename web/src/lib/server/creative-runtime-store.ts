@@ -42,7 +42,7 @@ import { CreativeStoreConflict } from "./creative-runtime-repository";
 
 export const CREATIVE_CONVERSATION_CONTEXT_MESSAGE_LIMIT = 12;
 
-export async function createCreativeConversation(userId: string, input: { surface: CreativeSurface; source?: CreativeConversationSource; projectId?: string; title?: string }) {
+export async function createCreativeConversation(userId: string, input: { surface: CreativeSurface; source?: CreativeConversationSource; projectId?: string; episodeId?: string; title?: string }) {
     const now = Date.now();
     const conversation: CreativeConversation = {
         id: `conversation-${nanoid()}`,
@@ -50,6 +50,7 @@ export async function createCreativeConversation(userId: string, input: { surfac
         surface: input.surface,
         source: input.source || creativeConversationSourceForSurface(input.surface),
         projectId: input.projectId,
+        episodeId: input.episodeId,
         title: cleanText(input.title, 120) || "新对话",
         status: "active",
         contextSummary: "",
@@ -61,9 +62,9 @@ export async function createCreativeConversation(userId: string, input: { surfac
     if (getDatabaseProvider() === "postgres") {
         await ensurePostgresSchema();
         await postgresQuery(
-            `INSERT INTO creative_conversations (id, user_id, surface, source, project_id, title, status, created_at, updated_at, last_message_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8, $8)`,
-            [conversation.id, userId, conversation.surface, conversation.source, conversation.projectId || null, conversation.title, conversation.status, new Date(now)],
+            `INSERT INTO creative_conversations (id, user_id, surface, source, project_id, episode_id, title, status, created_at, updated_at, last_message_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9, $9)`,
+            [conversation.id, userId, conversation.surface, conversation.source, conversation.projectId || null, conversation.episodeId || null, conversation.title, conversation.status, new Date(now)],
         );
         return conversation;
     }
@@ -71,25 +72,33 @@ export async function createCreativeConversation(userId: string, input: { surfac
     return conversation;
 }
 
-export async function listCreativeConversations(userId: string, input: { surface?: CreativeSurface; source?: CreativeConversationSource; projectId?: string; status?: CreativeConversation["status"]; limit?: number; offset?: number } = {}) {
+export async function listCreativeConversations(userId: string, input: { surface?: CreativeSurface; source?: CreativeConversationSource; projectId?: string; episodeId?: string; status?: CreativeConversation["status"]; limit?: number; offset?: number } = {}) {
     const limit = boundedLimit(input.limit, 50);
     const offset = Math.max(0, Math.floor(Number(input.offset) || 0));
     if (getDatabaseProvider() === "postgres") {
         await ensurePostgresSchema();
-        const result = await postgresQuery(
-            `SELECT * FROM creative_conversations
-             WHERE user_id = $1 AND ($2::text IS NULL OR surface = $2) AND ($3::text IS NULL OR source = $3)
-               AND ($4::text IS NULL OR project_id = $4) AND ($5::text IS NULL OR status = $5)
-             ORDER BY updated_at DESC, id ASC LIMIT $6 OFFSET $7`,
-            [userId, input.surface || null, input.source || null, input.projectId || null, input.status || null, limit, offset],
-        );
+        const result = input.episodeId
+            ? await postgresQuery(
+                  `SELECT * FROM creative_conversations
+                   WHERE user_id = $1 AND ($2::text IS NULL OR surface = $2) AND ($3::text IS NULL OR source = $3)
+                     AND ($4::text IS NULL OR project_id = $4) AND ($5::text IS NULL OR episode_id = $5) AND ($6::text IS NULL OR status = $6)
+                   ORDER BY updated_at DESC, id ASC LIMIT $7 OFFSET $8`,
+                  [userId, input.surface || null, input.source || null, input.projectId || null, input.episodeId, input.status || null, limit, offset],
+              )
+            : await postgresQuery(
+                  `SELECT * FROM creative_conversations
+                   WHERE user_id = $1 AND ($2::text IS NULL OR surface = $2) AND ($3::text IS NULL OR source = $3)
+                     AND ($4::text IS NULL OR project_id = $4) AND ($5::text IS NULL OR status = $5)
+                   ORDER BY updated_at DESC, id ASC LIMIT $6 OFFSET $7`,
+                  [userId, input.surface || null, input.source || null, input.projectId || null, input.status || null, limit, offset],
+              );
         return result.rows.map(mapConversation);
     }
     const db = await readRuntimeFile();
     return db.conversations
         .filter(
             (item) =>
-                item.userId === userId && (!input.surface || item.surface === input.surface) && (!input.source || item.source === input.source) && (!input.projectId || item.projectId === input.projectId) && (!input.status || item.status === input.status),
+                item.userId === userId && (!input.surface || item.surface === input.surface) && (!input.source || item.source === input.source) && (!input.projectId || item.projectId === input.projectId) && (!input.episodeId || item.episodeId === input.episodeId) && (!input.status || item.status === input.status),
         )
         .sort((a, b) => b.updatedAt - a.updatedAt)
         .slice(offset, offset + limit);

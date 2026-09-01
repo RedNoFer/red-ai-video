@@ -194,6 +194,7 @@ class SettingsRepository {
         if (input.defaultPlanId !== undefined) add("default_plan_id", input.defaultPlanId);
         if (input.generationConcurrency !== undefined) add("generation_concurrency", jsonParam(input.generationConcurrency));
         if (input.generationDefaults !== undefined) add("generation_defaults", jsonParam(input.generationDefaults));
+        if (input.characterVoicePool !== undefined) add("character_voice_pool", jsonParam(input.characterVoicePool));
         if (input.paymentConfig !== undefined) add("payment_config", jsonParam(input.paymentConfig));
         if (input.logicalModels !== undefined) add("logical_models", jsonParam(input.logicalModels));
         if (input.defaultModels !== undefined) add("default_models", jsonParam(input.defaultModels));
@@ -296,6 +297,7 @@ function mapSettings(row: Record<string, unknown>): AppSettingsRecord {
         defaultPlanId: stringValue(row.default_plan_id),
         generationConcurrency: jsonValue(row.generation_concurrency),
         generationDefaults: jsonValue(row.generation_defaults),
+        characterVoicePool: jsonValue(row.character_voice_pool),
         paymentConfig: jsonValue(row.payment_config),
         logicalModels: jsonValue(row.logical_models),
         defaultModels: jsonValue(row.default_models),

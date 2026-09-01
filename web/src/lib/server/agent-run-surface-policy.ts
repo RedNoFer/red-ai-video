@@ -5,6 +5,7 @@ import type { AgentRun, AgentRunPlannerContextSummary, AgentRunTask } from "@/li
 import type { AgentPlan } from "@/lib/server/agent-run-validation";
 import { resolveAgentPlanningProfile } from "@/lib/server/agent-run-planning-profile";
 import { canvasSnapshotPlannerView, selectedCanvasNodeIds } from "./agent-run-canvas-snapshot";
+import { SEEDANCE_DIRECTOR_SKILL } from "./agent-skills/creative-shortcuts";
 
 export function availableAgentSkills(settings: AuthSettings, surface: CreativeSurface) {
     const workspaces = surface === "canvas" ? new Set(["canvas"]) : surface === "drama" ? new Set(["drama"]) : new Set(["image", "video", "drama"]);
@@ -13,7 +14,9 @@ export function availableAgentSkills(settings: AuthSettings, surface: CreativeSu
 
 export function selectAgentSkills(settings: AuthSettings, surface: CreativeSurface, requestedSkillIds: string[] = []) {
     const available = new Map(availableAgentSkills(settings, surface).map((skill) => [skill.id, skill]));
-    return Array.from(new Set(requestedSkillIds.map((id) => id.trim()).filter(Boolean))).flatMap((id) => (available.has(id) ? [available.get(id)!] : []));
+    if (surface === "drama" && !available.has(SEEDANCE_DIRECTOR_SKILL.id)) available.set(SEEDANCE_DIRECTOR_SKILL.id, { ...SEEDANCE_DIRECTOR_SKILL, keywords: [...SEEDANCE_DIRECTOR_SKILL.keywords], workspaces: [...SEEDANCE_DIRECTOR_SKILL.workspaces] });
+    const ids = surface === "drama" ? ["seedance-director", ...requestedSkillIds] : requestedSkillIds;
+    return Array.from(new Set(ids.map((id) => id.trim()).filter(Boolean))).flatMap((id) => (available.has(id) ? [available.get(id)!] : []));
 }
 
 export function plannerAgentSkills(settings: AuthSettings, run: Pick<AgentRun, "surface" | "selectedSkillIds">) {
@@ -33,7 +36,7 @@ export function agentPlannerSystemPrompt(surface: CreativeSurface, fallbackExamp
             : "明确要求生成或修改文本、图片、视频、音频产物时为 generation。禁止创建、更新、删除或连接任何 Canvas 节点，targetNodeId 必须省略。";
     const projectRule =
         surface === "drama"
-            ? "projectSnapshot 是本次短剧生产的权威上下文：必须遵循其中 currentStage、project.ratio、project.style、episode、shots、characters、scenes、props、clues 和 currentTurnReferences。所有生成任务必须服务于当前项目与当前集，沿用项目画幅、视觉设定、角色/场景/道具基准和镜头连续性；不得把短剧入口当成脱离项目的通用图片或视频工作台。短剧项目中的角色、场景、多镜头和依赖生产默认是 complex。"
+            ? "projectSnapshot 是本次短剧生产的权威上下文：必须遵循其中 currentStage、project.ratio、project.style、seriesBible、episode、shots、characters、scenes、props、clues 和 currentTurnReferences。项目 Agent 的第一步固定为导演制作前置检查，顺序必须是系列圣经锁定、剧情结构校验、资产清单、场次与镜头预算、连续性状态、Prompt、静态导演QC；任何必需信息缺失时只返回明确阻断报告，不得规划完整制作包或收费媒体任务。只有前置检查通过后，所有生成任务才能服务于当前项目与当前集，并沿用项目画幅、视觉设定、角色/场景/道具基准和镜头连续性；不得把短剧入口当成脱离项目的通用图片或视频工作台。新角色、新服装、新地点或新道具必须先登记资产，禁止在Prompt临时创造。短剧项目中的角色、场景、多镜头和依赖生产默认是 complex。"
             : surface === "canvas"
               ? "Canvas 的品牌系列、多物料和依赖生产默认是 complex。"
               : "多物料、系列内容和依赖生产默认是 complex。";
@@ -41,7 +44,13 @@ export function agentPlannerSystemPrompt(surface: CreativeSurface, fallbackExamp
         surface === "chat"
             ? "只有用户原文明确要求创建、建立或整理成画布/短剧项目时才填写 projectHandoff；生成短视频、短片、图片或系列媒体不等于创建项目，必须省略 projectHandoff。只做明确项目交接且无需新产物时允许 deliverables=[]。projectHandoff.assetIds 只能引用 referencedAssets，当前 Run 新生成的资产会由服务端自动合并。"
             : "当前入口不得填写 projectHandoff。";
-    return `${identity}先结合 conversationContext 的长期摘要和近期消息理解用户的自然语言、指代和连续创作关系，再判断 intent：问候、闲聊、能力咨询、使用说明和知识问答为 conversation；${surfaceRules}conversation 必须 deliverables=[]、decisions=[]，直接在 reply 回答。generationPreferences.mode 非空时代表用户本轮明确选择的产物类型，必须按该类型执行 generation，deliverables 只能使用该媒体类型；generationPreferences 中该类型的尺寸、画质、时长、音色和格式是用户本轮明确参数，不得改选。视频 generationPreferences.referenceMode、firstFrameAssetId 和 lastFrameAssetId 是用户显式指定的首尾帧角色，必须规划视频任务且不得猜测、交换、删除或改成普通参考图；服务端会强制注入对应资产。generation 必须先形成 foundation：brief 说明目标、受众、使用场景、核心信息、约束和参考素材策略；direction 给出一个明确推荐的风格、构图/镜头、色彩、光线、视觉关键词和避免事项。${projectRule}${handoffRule}requestedSkillIds 非空时必须使用且只使用这些技能；requestedSkillIds 为空时 skillIds 必须为空，不得自动选择任何普通 Skill。没有 Skill 时仍需执行提示词优化、视觉方向、模型选择和参数规划。referenceContext.source=current-turn-explicit 表示 referencedAssets 是本轮用户明确附件，必须优先且排他；其中 alias 是用户正文中的通用引用名，必须严格按 alias 对应的真实 id 理解“@图片1 做什么、@图片2 做什么”等逐素材指令，不得按标题、数组偶然顺序或文本相似度猜测。source=conversation-memory-candidates 表示它们只是同会话最近成功媒体候选，只有自然语义明确延续、修改、变体或保持上一轮主体/场景时，才把确需使用的资产 ID 写入 deliverable.assetIds，新主题、独立创作或无法确认时不得引用。随后规划整套 deliverables 和依赖顺序，并主动从 availableModels 中为每个产物选择能力匹配的逻辑模型，决定画幅、质量、数量、时长、音色或格式。只能引用 referencedAssets 中存在的资产 ID；需要使用一个或多个资产时，将它们写入对应 deliverable.assetIds。每个 deliverable 的 prompt 必须执行同一 foundation，保持主体、信息、色彩和视觉语言一致。不要盲目照抄默认值，默认值只在没有更明确判断时作为兜底。reply 用自然中文概括推荐方向；decisions 用 2–6 项说明“选择了什么、为什么”；每个 deliverable 必须填写 model。优先调用 create_agent_plan；若渠道不支持工具调用，必须直接返回与函数参数完全一致的单个 JSON 对象，不要 Markdown 或额外文本，严格仿照这个完整结构：${fallbackExample}。不得暴露隐藏思维链，只输出可验证的决策摘要。`;
+    const skillSelectionRule =
+        surface === "drama"
+            ? "短剧入口即使 requestedSkillIds 为空也必须执行 seedance-director；用户选择的其他兼容技能可以叠加，不能替换该默认技能。"
+            : "requestedSkillIds 非空时必须使用且只使用这些技能；requestedSkillIds 为空时 skillIds 必须为空，不得自动选择任何普通 Skill。";
+    const dialogueProtocol =
+        "所有生成型对话都遵循统一创作协议：先锁定目标、受众、用途和参考素材，再给一个明确推荐方向。图片 Prompt 按主体/身份锚点、当前变化、构图、光色材质、用途和约束组织；编辑必须分别写 change、preserve、constraints，且一次只改一个变量。视频 Prompt 按静态锚点、可见起点、触发、主体动作、次级反应、一个主运镜、声音和可验证终点组织；每镜只保留一个主要变化，抽象情绪必须翻译成可观察的表情、视线、呼吸、手部或身体动作。多资产只能使用稳定 assetId 绑定，@引用只表达用途，不能按标题或文本相似度猜测；内部规划规则、供应商字段和执行提示词不得进入公开消息。";
+    return `${identity}先结合 conversationContext 的长期摘要和近期消息理解用户的自然语言、指代和连续创作关系，再判断 intent：问候、闲聊、能力咨询、使用说明和知识问答为 conversation；${surfaceRules}conversation 必须 deliverables=[]、decisions=[]，直接在 reply 回答。generationPreferences.mode 非空时代表用户本轮明确选择的产物类型，必须按该类型执行 generation，deliverables 只能使用该媒体类型；generationPreferences 中该类型的尺寸、画质、时长、音色和格式是用户本轮明确参数，不得改选。视频 generationPreferences.referenceMode 为 all_frames 时，必须规划视频任务并原样回显 all_frames，严格使用有序 frameAssetIds（2–5 张图片），不得猜测、交换、删除、改成普通参考图或首尾帧；首尾帧模式同样不得交换角色，服务端会强制注入对应资产。generation 必须先形成 foundation：brief 说明目标、受众、使用场景、核心信息、约束和参考素材策略；direction 给出一个明确推荐的风格、构图/镜头、色彩、光线、视觉关键词和避免事项。${dialogueProtocol}${projectRule}${handoffRule}${skillSelectionRule}没有 Skill 时仍需执行提示词优化、视觉方向、模型选择和参数规划。referenceContext.source=current-turn-explicit 表示 referencedAssets 是本轮用户明确附件，必须优先且排他；其中 alias 是用户正文中的通用引用名，必须严格按 alias 对应的真实 id 理解“@图片1 做什么、@图片2 做什么”等逐素材指令，不得按标题、数组偶然顺序或文本相似度猜测。source=conversation-memory-candidates 表示它们只是同会话最近成功媒体候选，只有自然语义明确延续、修改、变体或保持上一轮主体/场景时，才把确需使用的资产 ID 写入 deliverable.assetIds，新主题、独立创作或无法确认时不得引用。随后规划整套 deliverables 和依赖顺序，并主动从 availableModels 中为每个产物选择能力匹配的逻辑模型，决定画幅、质量、数量、时长、音色或格式。只能引用 referencedAssets 中存在的资产 ID；需要使用一个或多个资产时，将它们写入对应 deliverable.assetIds。每个 deliverable 的 prompt 必须执行同一 foundation，保持主体、信息、色彩和视觉语言一致。不要盲目照抄默认值，默认值只在没有更明确判断时作为兜底。reply 用自然中文概括推荐方向；decisions 用 2–6 项说明“选择了什么、为什么”；每个 deliverable 必须填写 model。优先调用 create_agent_plan；若渠道不支持工具调用，必须直接返回与函数参数完全一致的单个 JSON 对象，不要 Markdown 或额外文本，严格仿照这个完整结构：${fallbackExample}。不得暴露隐藏思维链，只输出可验证的决策摘要。`;
 }
 
 export function agentPlannerInput(

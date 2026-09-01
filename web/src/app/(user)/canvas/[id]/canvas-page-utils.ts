@@ -50,7 +50,7 @@ export async function uploadGeneratedCanvasImage(url: string, remoteFallback = "
 }
 
 export function imageMetadata(image: UploadedImage): CanvasNodeMetadata {
-    return { content: image.url, storageKey: image.storageKey, remoteUrl: image.remoteUrl, serverUrl: image.serverUrl, status: "success", naturalWidth: image.width, naturalHeight: image.height, bytes: image.bytes, mimeType: image.mimeType };
+    return { canvasOrigin: "user", content: image.url, storageKey: image.storageKey, remoteUrl: image.remoteUrl, serverUrl: image.serverUrl, status: "success", naturalWidth: image.width, naturalHeight: image.height, bytes: image.bytes, mimeType: image.mimeType };
 }
 
 export function canvasNodeReferenceImage(node: CanvasNodeData): ReferenceImage {
@@ -85,6 +85,7 @@ export function isServerGeneratedUrl(value: string) {
 
 export function videoMetadata(video: UploadedFile): CanvasNodeMetadata {
     return {
+        canvasOrigin: "user",
         content: video.url,
         storageKey: video.storageKey,
         remoteUrl: video.remoteUrl,
@@ -99,7 +100,7 @@ export function videoMetadata(video: UploadedFile): CanvasNodeMetadata {
 }
 
 export function audioMetadata(audio: UploadedFile): CanvasNodeMetadata {
-    return { content: audio.url, storageKey: audio.storageKey, remoteUrl: audio.remoteUrl, serverUrl: audio.serverUrl, status: "success", bytes: audio.bytes, mimeType: audio.mimeType || "audio/mpeg", durationMs: audio.durationMs };
+    return { canvasOrigin: "user", content: audio.url, storageKey: audio.storageKey, remoteUrl: audio.remoteUrl, serverUrl: audio.serverUrl, status: "success", bytes: audio.bytes, mimeType: audio.mimeType || "audio/mpeg", durationMs: audio.durationMs };
 }
 
 export function replaceCanvasNodeMediaMetadata(current: CanvasNodeMetadata | undefined, media: CanvasNodeMetadata, patch: CanvasNodeMetadata = {}): CanvasNodeMetadata {

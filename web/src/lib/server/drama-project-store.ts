@@ -73,6 +73,29 @@ export async function findDramaProjectBySourceHandoffId(userId: string, sourceHa
     return (await readDatabase()).projects.find((record) => record.userId === userId && record.project.sourceHandoffId === sourceHandoffId)?.project || null;
 }
 
+export async function findDramaEpisodeByCanvasProjectId(userId: string, canvasProjectId: string) {
+    if (getDatabaseProvider() === "postgres") {
+        await ensurePostgresSchema();
+        const result = await postgresQuery<{ project_json: DramaProject }>(
+            `SELECT project_json FROM drama_projects
+             WHERE user_id = $1
+               AND EXISTS (
+                   SELECT 1 FROM jsonb_array_elements(COALESCE(project_json->'episodes', '[]'::jsonb)) episode
+                   WHERE episode->>'canvasProjectId' = $2
+                      OR CONCAT('canvas-drama-episode-', project_json->>'id', '-', episode->>'id') = $2
+               )
+             LIMIT 1`,
+            [userId, canvasProjectId],
+        );
+        const project = result.rows[0]?.project_json;
+        const episode = project?.episodes.find((item) => item.canvasProjectId === canvasProjectId);
+        return project && episode ? { project, episode } : null;
+    }
+    const record = (await readDatabase()).projects.find((item) => item.userId === userId && item.project.episodes.some((episode) => episode.canvasProjectId === canvasProjectId || `canvas-drama-episode-${item.project.id}-${episode.id}` === canvasProjectId));
+    const episode = record?.project.episodes.find((item) => item.canvasProjectId === canvasProjectId || `canvas-drama-episode-${record.project.id}-${item.id}` === canvasProjectId);
+    return record && episode ? { project: record.project, episode } : null;
+}
+
 export async function getDramaProject(id: string, userId: string) {
     if (getDatabaseProvider() === "postgres") {
         await ensurePostgresSchema();

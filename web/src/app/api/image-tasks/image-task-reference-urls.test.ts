@@ -44,6 +44,23 @@ describe("image task reference request URLs", () => {
         ).resolves.toBe("https://provider.example/generated.png");
     });
 
+    it("rejects a stale provider-only reference before submission", async () => {
+        mocks.fetchSafeOutbound.mockResolvedValue(new Response('{"error":"not found"}', { status: 404, headers: { "content-type": "application/json" } }));
+
+        await expect(
+            publicImageReferenceRequestUrl(
+                { id: "reference-one", type: "image/png", dataUrl: "", remoteUrl: "https://provider.example/expired.png" },
+                "http://127.0.0.1:3010",
+                "https://vozeb.example",
+                { ownerUserId: "user-one", taskId: "task-one" },
+            ),
+        ).rejects.toThrow("供应商参考图已失效且没有可用本地副本");
+        expect(mocks.fetchSafeOutbound).toHaveBeenCalledWith(
+            "https://provider.example/expired.png",
+            expect.objectContaining({ headers: { accept: "image/*", range: "bytes=0-0" } }),
+        );
+    });
+
     it("signs a local mirror only when no provider URL exists", async () => {
         await expect(
             publicImageReferenceRequestUrl({ id: "reference-one", type: "image/png", dataUrl: "", serverUrl: "/api/generation-log-assets/local.png" }, "http://127.0.0.1:3010", "https://vozeb.example", {

@@ -275,8 +275,9 @@ export function isMediaReferenceType(type: CanvasTaskReferenceNode["type"]): typ
     return type === "image" || type === "video" || type === "audio";
 }
 
-function requestsSelectedTextEdit(prompt: string) {
+export function requestsSelectedTextEdit(prompt: string) {
     const normalized = prompt.replace(/(?:不要|无需|不需要|别)\s*(?:生成|生图|出图|制作)(?:图片|图像|画面|视频|音频)?/gu, "");
+    if (/(?:画布|布局|层级|间距|信息关系|节点|排版|对齐|连接)/u.test(normalized)) return false;
     const requestsEdit = /修改|改写|优化|润色|调整|重写|精简|扩写|翻译/u.test(normalized);
     const requestsMedia = /(?:生成|生图|出图|绘制|制作).{0,10}(?:图片|图像|画面|视频|音频)|(?:图片|图像|画面|视频|音频).{0,10}(?:生成|生图|出图|绘制|制作)/u.test(normalized);
     return requestsEdit && !requestsMedia;

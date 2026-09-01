@@ -1,18 +1,22 @@
 "use client";
 
 import { App, Button, Dropdown, Image, Input, Popconfirm, Select, Tooltip } from "antd";
-import { ArrowDownUp, ChevronDown, ChevronRight, Download, FileText, ImagePlus, Images, KeyRound, MapPinned, Package, Plus, RotateCcw, Search, Trash2, Users, Video } from "lucide-react";
+import { ArrowDownUp, ChevronDown, ChevronRight, Download, FileText, ImagePlus, Images, KeyRound, MapPinned, Package, Plus, RotateCcw, Search, Sparkles, Trash2, Users, Video } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { AgentMediaPreview } from "@/components/agent/agent-media-preview";
 import type { DramaEpisode, DramaProject } from "@/lib/drama-project-contract";
+import { approvedAssetReference } from "@/lib/drama-asset-baseline";
 import { imagePreviewUrl } from "@/lib/media-image-url";
 import { useDramaStore } from "../stores/use-drama-store";
-import { type DramaAssetFilter, type DramaAssetLibraryRow, type DramaAssetSort, buildDramaAssetLibraryRows, filterAndSortDramaAssets } from "./drama-asset-library-utils";
+import { dramaAssetAutoCompletionItems, dramaAssetMissingFields, type DramaAssetFilter, type DramaAssetLibraryRow, type DramaAssetSort, buildDramaAssetLibraryRows, filterAndSortDramaAssets } from "./drama-asset-library-utils";
 import { DRAMA_ASSET_DEFINITIONS, type DramaAssetKind } from "./drama-asset-definitions";
 import { DramaAssetEditorDrawer } from "./drama-asset-editor-drawer";
+import { DramaAssetGenerationBatchPanel } from "./drama-asset-generation-batch-panel";
 import { downloadDramaAssetBundle } from "./drama-asset-export";
 import { dramaAssetReferences } from "./drama-asset-reference-utils";
+import { completeDramaAsset, createDramaAssetGenerationBatch } from "@/services/api/drama-projects";
+import { useEffectiveConfig } from "@/stores/use-config-store";
 
 export { imageResultsToReferences } from "./drama-asset-reference-utils";
 
@@ -29,8 +33,11 @@ const filterOptions: Array<{ value: DramaAssetFilter; label: string }> = [
 const sortLabels: Record<DramaAssetSort, string> = { default: "默认顺序", attention: "待完善优先", usage: "引用最多", name: "按名称" };
 
 export function DramaAssetsPanel({ project, episode }: { project: DramaProject; episode: DramaEpisode }) {
-    const { message } = App.useApp();
+    const { message, modal } = App.useApp();
     const removeAsset = useDramaStore((state) => state.removeAsset);
+    const loadProject = useDramaStore((state) => state.loadProject);
+    const config = useEffectiveConfig();
+    const [completing, setCompleting] = useState<string>();
     const [activeKind, setActiveKind] = useState<DramaAssetKind>("characters");
     const [query, setQuery] = useState("");
     const [filter, setFilter] = useState<DramaAssetFilter>("all");
@@ -92,7 +99,8 @@ export function DramaAssetsPanel({ project, episode }: { project: DramaProject; 
                     })}
                 </nav>
 
-                <div className="flex min-w-0 flex-1 items-center gap-2 xl:justify-end">
+                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 xl:justify-end">
+                    <DramaAssetGenerationBatchPanel project={project} onProjectReload={() => void loadProject(project.id, true)} />
                     <Input
                         allowClear
                         className="min-w-0 flex-1 xl:!w-56 xl:!flex-none"
@@ -142,6 +150,41 @@ export function DramaAssetsPanel({ project, episode }: { project: DramaProject; 
                             kind={activeKind}
                             row={row}
                             onEdit={() => setEditor({ kind: activeKind, assetId: row.asset.id })}
+                            onComplete={async () => {
+                                const allMissing = dramaAssetAutoCompletionItems(row.asset, activeKind);
+                                const missing = allMissing.filter((item) => item.task !== "voice");
+                                if (!missing.length) return message.info(allMissing.some((item) => item.task === "voice") ? "文字设定和基准图已完整；音色请单独创建" : "当前资产已经完整");
+                                const confirmed = await new Promise<boolean>((resolve) => {
+                                    modal.confirm({
+                                        title: `智能补全“${row.asset.name}”`,
+                                        content: `将补全：${missing.map((item) => item.label).join("、")}。预计文本 ${missing.filter((item) => item.task === "planning").length} 项、音色 ${missing.filter((item) => item.task === "voice").length} 项、基准图 ${missing.filter((item) => item.task === "reference").length} 项。`,
+                                        okText: "开始补全",
+                                        cancelText: "取消",
+                                        onOk: () => resolve(true),
+                                        onCancel: () => resolve(false),
+                                    });
+                                });
+                                if (!confirmed) return;
+                                setCompleting(row.asset.id);
+                                try {
+                                    if (activeKind === "clues") await completeDramaAsset(project.id, activeKind, row.asset.id, `card:${project.id}:${activeKind}:${row.asset.id}:${Date.now()}`, config);
+                                    else
+                                        await createDramaAssetGenerationBatch(project.id, [{ kind: activeKind, assetId: row.asset.id }], {
+                                            ...config,
+                                            model: config.imageModel || config.model,
+                                            imageModel: config.imageModel || config.model,
+                                            count: "1",
+                                            completeMissingOnly: true,
+                                        });
+                                    await loadProject(project.id, true);
+                                    message.success("智能补全已提交");
+                                } catch (error) {
+                                    message.error(error instanceof Error ? error.message : "智能补全失败");
+                                } finally {
+                                    setCompleting(undefined);
+                                }
+                            }}
+                            completing={completing === row.asset.id}
                             onDelete={() => {
                                 removeAsset(project.id, activeKind, row.asset.id);
                                 message.success(`${definition.title}已删除`);
@@ -170,11 +213,13 @@ export function DramaAssetsPanel({ project, episode }: { project: DramaProject; 
     );
 }
 
-function DramaAssetCard({ kind, row, onEdit, onDelete }: { kind: DramaAssetKind; row: DramaAssetLibraryRow; onEdit: () => void; onDelete: () => void }) {
+function DramaAssetCard({ kind, row, onEdit, onComplete, onDelete, completing }: { kind: DramaAssetKind; row: DramaAssetLibraryRow; onEdit: () => void; onComplete: () => void; onDelete: () => void; completing: boolean }) {
     const { asset, incomplete, referenceCount, usageCount } = row;
     const definition = DRAMA_ASSET_DEFINITIONS[kind];
     const references = dramaAssetReferences(asset);
-    const primary = references.find((reference) => reference.id === asset.primaryReferenceId) || references[0];
+    const primary = approvedAssetReference(asset);
+    const candidateCount = references.filter((reference) => reference.status !== "approved" && reference.status !== "rejected").length;
+    const missingFields = dramaAssetMissingFields(asset, kind);
 
     return (
         <article className="group relative min-w-0 overflow-hidden rounded-md border border-border bg-card transition hover:border-foreground/25 hover:shadow-[0_6px_18px_rgba(15,23,42,.07)]">
@@ -194,7 +239,7 @@ function DramaAssetCard({ kind, row, onEdit, onDelete }: { kind: DramaAssetKind;
                         <h3 className="min-w-0 flex-1 truncate text-sm font-semibold" title={asset.name}>
                             {asset.name}
                         </h3>
-                        {!primary ? <span className="shrink-0 text-[10px] font-medium text-amber-600 dark:text-amber-300">缺基准</span> : null}
+                        {!primary ? <span className="shrink-0 text-[10px] font-medium text-amber-600 dark:text-amber-300">{candidateCount ? "待审核" : "缺基准"}</span> : null}
                     </div>
                     <p className="mt-1 truncate text-xs leading-4 text-muted-foreground" title={asset.description || undefined}>
                         {asset.description || `未填写${definition.label}用途`}
@@ -212,10 +257,31 @@ function DramaAssetCard({ kind, row, onEdit, onDelete }: { kind: DramaAssetKind;
                                 <span className="tabular-nums">{usageCount}</span>
                             </span>
                         </Tooltip>
-                        {incomplete ? <span className="ml-auto shrink-0 text-amber-600 dark:text-amber-300">设定待补</span> : usageCount === 0 ? <span className="ml-auto shrink-0">未引用</span> : null}
+                        {incomplete ? (
+                            <Tooltip title={`缺少：${missingFields.join("、")}。补齐这些文字设定后，分镜与生成任务才能稳定复用；图片基准图和文字设定是两套独立信息。`}>
+                                <span className="ml-auto shrink-0 cursor-help text-amber-600 dark:text-amber-300">设定待补</span>
+                            </Tooltip>
+                        ) : usageCount === 0 ? (
+                            <span className="ml-auto shrink-0">未引用</span>
+                        ) : null}
                     </div>
                 </div>
             </button>
+            {incomplete ? (
+                <Button
+                    type="primary"
+                    size="small"
+                    loading={completing}
+                    icon={<Sparkles className="size-3.5" />}
+                    className="!absolute !bottom-1.5 !right-1.5 !z-10 !h-7 !px-2 !text-[11px]"
+                    onClick={(event) => {
+                        event.stopPropagation();
+                        onComplete();
+                    }}
+                >
+                    智能补全（{missingFields.length}项）
+                </Button>
+            ) : null}
             <Popconfirm title={`删除${definition.title}“${asset.name}”？`} description="关联镜头中的资产引用会同步移除。" okText="删除" cancelText="取消" onConfirm={onDelete}>
                 <Tooltip title={`删除${definition.title}`}>
                     <Button

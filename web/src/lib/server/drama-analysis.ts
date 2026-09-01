@@ -8,11 +8,14 @@ import type {
     DramaLightingPlan,
     DramaPerformanceBeat,
     DramaPerformancePlan,
+    DramaReferenceManifestRole,
     DramaReviewCompletion,
+    DramaShotFramePlan,
     DramaShotContinuity,
     DramaUtterance,
     DramaVisualAnalysis,
 } from "@/lib/drama-project-contract";
+import { normalizeDramaFrameBeats, validateDramaFramePlanVisuals } from "@/lib/drama-frame-sequence";
 import { resolveDramaShotDuration } from "@/lib/server/drama-shot-config";
 import { strictJsonObjectText } from "@/lib/server/structured-model-output";
 
@@ -77,15 +80,17 @@ export function normalizeDramaContentAnalysis(value: unknown, defaultVideoSecond
     };
 }
 
-export function normalizeDramaVisualAnalysis(value: unknown, shotIds: string[]): DramaVisualAnalysis {
+export function normalizeDramaVisualAnalysis(value: unknown, shotIds: string[], sourceShots: ReadonlyArray<{ id: string; framePlan?: unknown }> = []): DramaVisualAnalysis {
     const allowed = new Set(shotIds);
     const seen = new Set<string>();
+    const sourceFramePlans = new Map(sourceShots.map((shot) => [shot.id, shot.framePlan]));
     const shots = array(object(value).shots).flatMap((item) => {
         const shot = object(item);
         const shotId = text(shot.shotId);
         const imagePrompt = text(shot.imagePrompt);
         const videoPrompt = text(shot.videoPrompt);
-        if (!allowed.has(shotId) || seen.has(shotId) || !imagePrompt || !videoPrompt) return [];
+        const framePlan = normalizeVisualFramePlan(shot.framePlan, sourceFramePlans.get(shotId));
+        if (!allowed.has(shotId) || seen.has(shotId) || !imagePrompt || !videoPrompt || !framePlan) return [];
         seen.add(shotId);
         return [
             {
@@ -100,10 +105,128 @@ export function normalizeDramaVisualAnalysis(value: unknown, shotIds: string[]):
                 performancePlan: normalizePerformancePlan(shot.performancePlan),
                 dialoguePerformance: normalizeDialoguePerformance(shot.dialoguePerformance),
                 lightingPlan: normalizeLightingPlan(shot.lightingPlan),
+                framePlan,
             },
         ];
     });
     return { shots };
+}
+
+export function validateDramaVisualAnalysis(value: DramaVisualAnalysis) {
+    const errors: string[] = [];
+    for (const shot of value.shots) {
+        const label = shot.shotId;
+        const performance = shot.performancePlan;
+        const beats = performance?.beats;
+        if (
+            !performance?.emotionalObjective ||
+            !performance.emotionalArc ||
+            !performance.speechStyle ||
+            !performance.pace ||
+            !performance.breath ||
+            !performance.restraintLevel ||
+            !beats?.start?.facialAction ||
+            !beats.middle?.facialAction ||
+            !beats.end?.facialAction ||
+            !beats.start?.gaze ||
+            !beats.middle?.gaze ||
+            !beats.end?.gaze
+        )
+            errors.push(`${label}缺少完整的情绪、表情和视线表演计划`);
+        const lighting = shot.lightingPlan;
+        if (
+            !lighting?.palette ||
+            !lighting.colorTemperature ||
+            !lighting.keyLight ||
+            !lighting.fillLight ||
+            !lighting.rimLight ||
+            !lighting.contrast ||
+            !lighting.materialResponse ||
+            !lighting.skinToneProtection ||
+            !lighting.inheritFromPrevious ||
+            !lighting.transitionToNext
+        )
+            errors.push(`${label}缺少完整的灯光与材质计划`);
+        const continuity = shot.continuity;
+        if (
+            !continuity?.shotSize ||
+            !continuity.cameraAngle ||
+            !continuity.composition ||
+            !continuity.characterBlocking ||
+            !continuity.gazeDirection ||
+            !continuity.actionStart ||
+            !continuity.actionEnd ||
+            !continuity.screenDirection ||
+            !continuity.axisRule ||
+            !continuity.continuityNotes
+        )
+            errors.push(`${label}缺少完整的连续性字段`);
+        if (!shot.framePlan.frames.length) errors.push(`${label}缺少逐帧计划`);
+    }
+    return errors;
+}
+
+function normalizeVisualFramePlan(value: unknown, fallbackValue?: unknown): DramaShotFramePlan | undefined {
+    const input = object(value);
+    const fallback = object(fallbackValue);
+    const start = object(input.start);
+    const end = object(input.end);
+    const rawFrames = array(input.frames);
+    if (!rawFrames.length || !["independent", "previous_accepted_actual_tail"].includes(text(start.source)) || typeof end.required !== "boolean") return undefined;
+    const frames = rawFrames.map((item, index) => {
+        const frame = object(item);
+        return {
+            id: text(frame.id) || `frame-${index + 1}`,
+            sequenceIndex: Number(frame.sequenceIndex) || index + 1,
+            startSecond: Number(frame.startSecond),
+            endSecond: Number(frame.endSecond),
+            actionPrompt: text(frame.actionPrompt),
+            imagePrompt: text(frame.imagePrompt),
+        };
+    });
+    const duration = Math.max(...frames.map((frame) => frame.endSecond));
+    if (!Number.isFinite(duration) || duration <= 0) return undefined;
+    try {
+        const normalizedFrames = normalizeDramaFrameBeats(frames, Math.round(duration));
+        if (validateDramaFramePlanVisuals(normalizedFrames).length) return undefined;
+        return {
+            start: { source: text(start.source) as "independent" | "previous_accepted_actual_tail" },
+            end: { required: end.required },
+            frames: normalizedFrames,
+            ...normalizeReferenceFields(input, fallback),
+        };
+    } catch {
+        return undefined;
+    }
+}
+
+function normalizeReferenceFields(input: Record<string, unknown>, fallback: Record<string, unknown>) {
+    const manifest = normalizeReferenceManifest(array(input.referenceManifest).length ? input.referenceManifest : fallback.referenceManifest);
+    const inputCount = object(input.referenceCount);
+    const fallbackCount = object(fallback.referenceCount);
+    const count = inputCount.min || inputCount.max ? normalizeReferenceCount(input.referenceCount) : fallbackCount.min || fallbackCount.max ? normalizeReferenceCount(fallback.referenceCount) : undefined;
+    return {
+        ...(manifest.length ? { referenceManifest: manifest } : {}),
+        ...(count ? { referenceCount: count } : {}),
+    };
+}
+
+function normalizeReferenceManifest(value: unknown) {
+    const roles: DramaReferenceManifestRole[] = ["previous_actual_tail", "character_anchor", "scene_anchor", "prop_anchor", "action_keyframe", "composition_keyframe"];
+    return array(value).flatMap((item) => {
+        const entry = object(item);
+        const alias = text(entry.alias);
+        const role = text(entry.role) as DramaReferenceManifestRole;
+        if (!alias || !roles.includes(role)) return [];
+        return [{ alias, role, purpose: text(entry.purpose), ...(text(entry.assetId) ? { assetId: text(entry.assetId) } : {}), ...(text(entry.shotId) ? { shotId: text(entry.shotId) } : {}), ...(text(entry.frameEvidenceId) ? { frameEvidenceId: text(entry.frameEvidenceId) } : {}) }];
+    });
+}
+
+function normalizeReferenceCount(value: unknown) {
+    const input = object(value);
+    const min = Math.max(1, Math.floor(Number(input.min) || 1));
+    const max = Math.max(min, Math.floor(Number(input.max) || min));
+    return { min: Math.min(30, min), max: Math.min(30, max) };
 }
 
 export function normalizeDramaVideoPromptAnalysis(value: unknown, shotIds: string[]): import("@/lib/drama-project-contract").DramaVideoPromptAnalysis {
@@ -116,6 +239,20 @@ export function normalizeDramaVideoPromptAnalysis(value: unknown, shotIds: strin
         if (!allowed.has(shotId) || seen.has(shotId) || !videoPrompt) return [];
         seen.add(shotId);
         return [{ shotId, videoPrompt }];
+    });
+    return { shots };
+}
+
+export function normalizeDramaImagePromptAnalysis(value: unknown, shotIds: string[]) {
+    const allowed = new Set(shotIds);
+    const seen = new Set<string>();
+    const shots = array(object(value).shots).flatMap((item) => {
+        const shot = object(item);
+        const shotId = text(shot.shotId);
+        const imagePrompt = text(shot.imagePrompt);
+        if (!allowed.has(shotId) || seen.has(shotId) || !imagePrompt) return [];
+        seen.add(shotId);
+        return [{ shotId, imagePrompt }];
     });
     return { shots };
 }
@@ -422,7 +559,7 @@ function normalizeProfile(value: unknown, fallback: Record<string, unknown>, kin
 }
 
 function isCharacterStyling(value: string) {
-    return /发型|随身物件|发色|(?:^|[，、；\s])服装(?:[，、；\s]|$)/u.test(value) || /角色|人物/u.test(value) && /穿着|衣着|造型/u.test(value);
+    return /发型|随身物件|发色|(?:^|[，、；\s])服装(?:[，、；\s]|$)/u.test(value) || (/角色|人物/u.test(value) && /穿着|衣着|造型/u.test(value));
 }
 
 function normalizeContinuity(value: unknown): DramaShotContinuity {
@@ -786,7 +923,7 @@ export const dramaVisualTool = {
                 items: {
                     type: "object",
                     additionalProperties: false,
-                    required: ["shotId", "imagePrompt", "videoPrompt", "cameraMotion", "startFramePrompt", "endFramePrompt", "negativePrompt", "continuity", "performancePlan", "dialoguePerformance", "lightingPlan"],
+                    required: ["shotId", "imagePrompt", "videoPrompt", "cameraMotion", "startFramePrompt", "endFramePrompt", "negativePrompt", "continuity", "performancePlan", "dialoguePerformance", "lightingPlan", "framePlan"],
                     properties: {
                         shotId: { type: "string" },
                         imagePrompt: { type: "string" },
@@ -862,6 +999,57 @@ export const dramaVisualTool = {
                                 continuityNotes: { type: "string" },
                             },
                         },
+                        framePlan: {
+                            type: "object",
+                            additionalProperties: false,
+                            required: ["start", "end", "frames"],
+                            description:
+                                "必须按真实可见动作节点拆分 1-9 个连续帧段；每帧 imagePrompt 只描述该时刻可见的姿态、表情、视线、手部/身体或道具/环境状态，不得复制整镜头提示词后追加通用阶段词。对白不必写入图片，但对白造成的表情、视线、手部或道具变化必须写入对应帧。",
+                            properties: {
+                                start: { type: "object", additionalProperties: false, required: ["source"], properties: { source: { type: "string", enum: ["independent", "previous_accepted_actual_tail"] } } },
+                                end: { type: "object", additionalProperties: false, required: ["required"], properties: { required: { type: "boolean" } } },
+                                frames: {
+                                    type: "array",
+                                    minItems: 1,
+                                    maxItems: 9,
+                                    items: {
+                                        type: "object",
+                                        additionalProperties: false,
+                                        required: ["id", "sequenceIndex", "startSecond", "endSecond", "actionPrompt", "imagePrompt"],
+                                        properties: {
+                                            id: { type: "string" },
+                                            sequenceIndex: { type: "integer", minimum: 1 },
+                                            startSecond: { type: "number", minimum: 0 },
+                                            endSecond: { type: "number", exclusiveMinimum: 0 },
+                                            actionPrompt: { type: "string" },
+                                            imagePrompt: { type: "string" },
+                                        },
+                                    },
+                                },
+                                referenceManifest: {
+                                    type: "array",
+                                    description: "如果输入镜头已有 referenceManifest，必须原样保留 alias、role、purpose 与资产/帧绑定，不得新增、删除或重排引用。",
+                                    items: {
+                                        type: "object",
+                                        additionalProperties: false,
+                                        required: ["alias", "role", "purpose"],
+                                        properties: {
+                                            alias: { type: "string" },
+                                            role: { type: "string", enum: ["previous_actual_tail", "character_anchor", "scene_anchor", "prop_anchor", "action_keyframe", "composition_keyframe"] },
+                                            purpose: { type: "string" },
+                                            assetId: { type: "string" },
+                                            shotId: { type: "string" },
+                                            frameEvidenceId: { type: "string" },
+                                        },
+                                    },
+                                },
+                                referenceCount: {
+                                    type: "object",
+                                    additionalProperties: false,
+                                    properties: { min: { type: "integer", minimum: 1 }, max: { type: "integer", minimum: 1 } },
+                                },
+                            },
+                        },
                     },
                 },
             },
@@ -885,7 +1073,37 @@ export const dramaVideoPromptTool = {
                     required: ["shotId", "videoPrompt"],
                     properties: {
                         shotId: { type: "string" },
-                        videoPrompt: { type: "string", description: "只写当前镜头的图生视频执行提示词，明确主体动作、单一主运镜、环境压力、身体微动作、声音/视觉母题、结束画面、连续性和针对性负面约束；不要输出内部 ID 或解释文字" },
+                        videoPrompt: {
+                            type: "string",
+                            description: "只写当前镜头的图生视频执行提示词，按起始可见状态、触发、主体动作与反应、一个主运镜、声音意图、结束画面和针对性约束组织；每镜只保留一个主要变化，不重复项目档案、URL、画幅、时长、参考图清单、逐帧时间线或内部说明",
+                        },
+                    },
+                },
+            },
+        },
+    },
+};
+
+export const dramaImagePromptTool = {
+    name: "generate_drama_image_prompts",
+    description: "根据当前镜头事实、固定资产和连续性约束，生成可直接用于 Seedance 2.0 图片参考帧的静态画面提示词",
+    parameters: {
+        type: "object",
+        additionalProperties: false,
+        required: ["shots"],
+        properties: {
+            shots: {
+                type: "array",
+                items: {
+                    type: "object",
+                    additionalProperties: false,
+                    required: ["shotId", "imagePrompt"],
+                    properties: {
+                        shotId: { type: "string" },
+                        imagePrompt: {
+                            type: "string",
+                            description: "只写可执行的单一静态画面提示词，包含主体身份、场景、当前可见姿态/表情/视线/手部或道具状态、景别、构图、光线和必要约束；不得写运镜、焦段、时间段、动作过程、对白、声音、内部 ID、URL 或解释",
+                        },
                     },
                 },
             },

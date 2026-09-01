@@ -5,9 +5,8 @@ import { readJsonBody } from "@/lib/auth/request";
 import { getAuthSettings, isAuthInputError, refundUserPoints } from "@/lib/auth/store";
 import {
     describeDramaAnalysisCandidate,
-    describeDramaModelOutput,
     dramaContentTool,
-    dramaReviewCompletionTool,
+    dramaImagePromptTool,
     dramaReviewCompletionFieldInstructions,
     dramaReviewCompletionToolForFields,
     dramaVideoPromptTool,
@@ -16,14 +15,18 @@ import {
     normalizeDramaContentAnalysis,
     normalizeDramaReviewCompletion,
     normalizeDramaVideoPromptAnalysis,
+    normalizeDramaImagePromptAnalysis,
     normalizeDramaVisualAnalysis,
+    validateDramaVisualAnalysis,
 } from "@/lib/server/drama-analysis";
 import { resolveInternalOrigin } from "@/lib/server/internal-origin";
 import { resolveLogicalModelCandidates } from "@/lib/server/logical-model-router";
 import { checkRateLimit } from "@/lib/server/security";
 import { hasSystemAiCharge, readSystemAiBilling, systemAiBillingHeaders, systemAiIdempotencyKey, type SystemAiBilling } from "@/lib/server/system-ai-billing";
 import { rankTextPlanningCandidates, requestStructuredText, type TextPlanningCandidate } from "@/lib/server/text-planning-runtime";
-import { dramaAnalysisText, normalizeDramaReviewCompletionInput, normalizeDramaVideoPromptInput, normalizeDramaVisualInput, reviewCompletionFilledCount, type DramaAnalyzeBody } from "@/lib/server/drama-analysis-input";
+import { dramaAnalysisText, normalizeDramaReviewCompletionInput, normalizeDramaVideoPromptInput, normalizeDramaImagePromptInput, normalizeDramaVisualInput, reviewCompletionFilledCount, type DramaAnalyzeBody } from "@/lib/server/drama-analysis-input";
+import { SEEDANCE_DIRECTOR_SKILL, SEEDANCE_STATIC_FRAME_RULES } from "@/lib/server/agent-skills/creative-shortcuts";
+import { DRAMA_PACKAGE_ARCHITECTURE_RULES } from "@/lib/server/drama-production-package-rules";
 
 export const runtime = "nodejs";
 
@@ -38,14 +41,21 @@ export async function POST(request: Request) {
         if (isAuthInputError(error)) return NextResponse.json({ code: error.status, data: null, msg: error.message }, { status: error.status });
         throw error;
     }
-    const phase = body.phase === "visual" || body.phase === "review_completion" || body.phase === "video_prompt" ? body.phase : "content";
+    const phase = body.phase === "visual" || body.phase === "review_completion" || body.phase === "video_prompt" || body.phase === "image_prompt" ? body.phase : "content";
     const script = dramaAnalysisText(body.script);
     if (phase === "content" && !script) return NextResponse.json({ code: 400, data: null, msg: "请先填写剧本" }, { status: 400 });
 
     const visualInput = phase === "visual" ? normalizeDramaVisualInput(body) : null;
     const videoPromptInput = phase === "video_prompt" ? normalizeDramaVideoPromptInput(body) : null;
+    const imagePromptInput = phase === "image_prompt" ? normalizeDramaImagePromptInput(body) : null;
     const reviewCompletionInput = phase === "review_completion" ? normalizeDramaReviewCompletionInput(body) : null;
-    if ((phase === "visual" && !visualInput?.shotIds.length) || (phase === "video_prompt" && !videoPromptInput?.shotIds.length) || (phase === "review_completion" && !reviewCompletionInput?.shotIds.length)) return NextResponse.json({ code: 400, data: null, msg: "请先完成内容审核" }, { status: 400 });
+    if (
+        (phase === "visual" && !visualInput?.shotIds.length) ||
+        (phase === "video_prompt" && !videoPromptInput?.shotIds.length) ||
+        (phase === "image_prompt" && !imagePromptInput?.shotIds.length) ||
+        (phase === "review_completion" && !reviewCompletionInput?.shotIds.length)
+    )
+        return NextResponse.json({ code: 400, data: null, msg: "请先完成内容审核" }, { status: 400 });
 
     const settings = await getAuthSettings();
     const model = settings.defaultModels.textModel;
@@ -54,21 +64,42 @@ export async function POST(request: Request) {
 
     let refundedPointsRemaining: number | undefined;
     try {
-        const tool = phase === "visual" ? dramaVisualTool : phase === "video_prompt" ? dramaVideoPromptTool : phase === "review_completion" ? dramaReviewCompletionToolForFields(reviewCompletionInput!.fields) : dramaContentTool;
-        const input = phase === "visual" ? visualInput!.payload : phase === "video_prompt" ? videoPromptInput!.payload : phase === "review_completion" ? reviewCompletionInput!.payload : { script, summary: dramaAnalysisText(body.summary) };
-        const schemaInstruction = `即使渠道没有传递工具定义，也必须只返回符合以下 JSON Schema 的对象，不能返回输入对象，不能把 script 或 summary 作为顶层字段：${JSON.stringify(tool.parameters)}`;
+        const tool =
+            phase === "visual"
+                ? dramaVisualTool
+                : phase === "video_prompt"
+                  ? dramaVideoPromptTool
+                  : phase === "image_prompt"
+                    ? dramaImagePromptTool
+                    : phase === "review_completion"
+                      ? dramaReviewCompletionToolForFields(reviewCompletionInput!.fields)
+                      : dramaContentTool;
+        const input =
+            phase === "visual"
+                ? visualInput!.payload
+                : phase === "video_prompt"
+                  ? videoPromptInput!.payload
+                  : phase === "image_prompt"
+                    ? imagePromptInput!.payload
+                    : phase === "review_completion"
+                      ? reviewCompletionInput!.payload
+                      : { script, summary: dramaAnalysisText(body.summary) };
+        const requestId = dramaAnalysisText(body.requestId);
+        const schemaInstruction = `${phase === "visual" || phase === "video_prompt" || phase === "image_prompt" ? `本次视觉任务强制执行 Seedance 2.0 导演 Skill：${SEEDANCE_DIRECTOR_SKILL.instructions}\n${phase === "visual" ? DRAMA_PACKAGE_ARCHITECTURE_RULES + "\n" : ""}` : ""}即使渠道没有传递工具定义，也必须只返回符合以下 JSON Schema 的对象，不能返回输入对象，不能把 script 或 summary 作为顶层字段：${JSON.stringify(tool.parameters)}`;
         const completionFieldInstruction = phase === "review_completion" ? `本次请求字段必须逐项真实补全，禁止只返回 shotId 空壳。${dramaReviewCompletionFieldInstructions(reviewCompletionInput!.fields)}` : "";
         const messages = [
             {
                 role: "system",
                 content:
                     phase === "visual"
-                        ? `你是影视视觉导演和表演导演。输入内容已经由用户审核，必须严格保留每个 shotId、镜头数量、顺序、人物、场景、对白、旁白、原文和时长。为每个镜头补充图片提示词、视频提示词、起始/结束帧提示词、镜头运动、连续性、结构化人物表演计划、逐句对白表演和色彩灯光计划。表演必须写成可执行的外在行为：情绪目标、情绪起中止递进、眉眼嘴角下颌、视线、呼吸、身体反应、语气、停顿、重音和节奏；禁止只写“表情自然”“情绪丰富”等抽象词。灯光必须明确色板、色温、主光、补光、轮廓光、反差、材质反射、肤色保护和跨镜继承/过渡。连续性必须明确景别、机位、构图、人物站位、视线、动作起止、屏幕运动方向和轴线规则。镜头之间要保持人物服装、道具、空间、表演状态和光色关系连续。不得新增输入中没有的剧情事实。必须调用 design_drama_visuals。不要使用 Markdown。${schemaInstruction}`
+                        ? `你是影视视觉导演和表演导演。输入内容已经由用户审核，必须严格保留每个 shotId、镜头数量、顺序、人物、场景、对白、旁白、原文和时长。为每个镜头补充图片提示词、视频提示词、起始/结束帧提示词、镜头运动、连续性、结构化人物表演计划、逐句对白表演、色彩灯光计划和 framePlan。表演必须写成可执行的外在行为：情绪目标、情绪起中止递进、眉眼嘴角下颌、视线、呼吸、身体反应、语气、停顿、重音和节奏；禁止只写“表情自然”“情绪丰富”等抽象词。对白和旁白可以不进入静态图片文字，但对白引发的表情、视线、手部/身体姿态、道具或环境变化必须进入对应 framePlan.frames 的 imagePrompt。每帧 imagePrompt 必须是独立可执行的静态画面，写明本帧可见状态并与上一帧有真实可见差异；禁止复制整镜头提示词后追加“起始状态/动作展开/关键变化/结果状态”等通用词。framePlan 必须提供 1-9 个按真实动作节点连续覆盖镜头时长的帧段。灯光必须明确色板、色温、主光、补光、轮廓光、反差、材质反射、肤色保护和跨镜继承/过渡。连续性必须明确景别、机位、构图、人物站位、视线、动作起止、屏幕运动方向和轴线规则。镜头之间要保持人物服装、道具、空间、表演状态和光色关系连续。不得新增输入中没有的剧情事实。必须调用 design_drama_visuals。不要使用 Markdown。${schemaInstruction}`
                         : phase === "video_prompt"
-                          ? `你是图生视频执行提示词导演。输入包含当前镜头全部已生成并验收的顺序帧、相邻帧的时间段和动作、固定资产基准图、连续性入口/出口状态以及上一镜实际尾帧（若有）。只能根据这些现有素材生成一个可直接提交给视频供应商的自然语言提示词，不得生成图片提示词，不得改变镜头事实或顺序。必须按顺序明确每张参考图的用途，首帧连续性依据优先于普通参考图；主体与动作前置，只保留一个主运镜，写出环境压力、身体微动作、声音或视觉母题、明确结束画面、针对性负面约束。不得输出任何内部 ID、URL、JSON、Markdown 标题或解释文字。必须调用 generate_drama_video_prompts。${schemaInstruction}`
-                        : phase === "review_completion"
-                          ? `你是影视制作审核编辑。只根据输入镜头和剧本中明确存在的事实，补充或按用户要求优化审核字段。可以只返回确实能够判断的字段，不要为了凑齐字段编造内容；必须保留每个返回项的 shotId，并且本次请求的字段必须全部返回，禁止只返回 shotId 或空对象。补充表演目标、情绪递进、语气节奏、呼吸、色彩灯光、连续性、转场、实际首帧和实际尾帧等制作审核信息时，内容必须具体、可执行，并与原文和相邻镜头一致。若输入包含 instruction，必须优先响应其中的修改方向，但不得违反项目事实、固定资产和相邻镜头约束。不得生成 imagePrompt、videoPrompt 或无依据的剧情事实。必须调用 complete_drama_review。不要使用 Markdown。${completionFieldInstruction}${schemaInstruction}`
-                          : `你是影视剧本编辑。只提取剧本明确存在的内容事实和镜头边界，不生成 imagePrompt、videoPrompt、镜头运动或画面风格，不添加无依据的主要情节。必须逐句保留所有角色直接说出的原话和原文明示的旁白，utterances 按原文顺序列出每一句，禁止把多句台词压缩成“某人说明/表示/询问”的剧情摘要；说话人转换、明确动作反应或场景变化都应成为可审核的镜头边界，sourceText 必须保留对应连续原文。资产字段必须按类型填写：characters 只写人物身份、外貌、发型、服装与人物固定特征；scenes 只写空间结构、陈设、建筑、地面/墙面/水体等环境材质、天气和环境色，禁止在场景的 styling/visualIdentity/description 中写人物发型、服装或随身物件；props 只写道具自身形态、材质和用途。缺少事实时留空，不要用其他资产类型的模板补齐。必须调用 analyze_drama_content。不要使用 Markdown。${schemaInstruction}`,
+                          ? `你是图生视频执行提示词导演。输入包含当前镜头全部已生成并验收的顺序帧、相邻帧的时间段和动作、固定资产基准图、连续性入口/出口状态以及上一镜实际尾帧（若有）。只能根据这些现有素材生成一个可直接提交给视频供应商的自然语言提示词，不得生成图片提示词，不得改变镜头事实或顺序。主体与动作前置，只保留一个主运镜，写出环境压力、声音或视觉母题、明确结束画面、针对性负面约束；如果画面有人物，必须把情绪转为可观察的表演变化，至少写起始、中段、结束的眉眼/嘴角/下颌、视线、呼吸和身体或手部动作，禁止只写“表情自然”“情绪丰富”等抽象词。参考图职责由服务端按视频请求数组统一追加，模型只需在动作中使用已提供的参考图，不要再次输出参考图顺序清单。不得输出任何内部 ID、URL、JSON、Markdown 标题或解释文字。必须调用 generate_drama_video_prompts。${schemaInstruction}`
+                          : phase === "image_prompt"
+                            ? `你是 Seedance 2.0 静态生图提示词导演。只优化当前镜头的图片提示词，不改变剧情事实、人物身份、资产造型或镜头数量。${SEEDANCE_STATIC_FRAME_RULES}输出一条可直接提交给图片供应商的静态画面提示词，主体和可见状态前置，明确场景空间、景别、机位、构图、光线色彩、材质细节、风格与针对性负面约束；禁止运镜、时间段、动作过程、对白转述、内部 ID、URL、JSON、Markdown 标题或解释文字。必须使用固定资产的身份、空间和道具约束，并保持与连续性入口状态一致。${schemaInstruction}`
+                            : phase === "review_completion"
+                              ? `你是影视制作审核编辑。只根据输入镜头和剧本中明确存在的事实，补充或按用户要求优化审核字段。可以只返回确实能够判断的字段，不要为了凑齐字段编造内容；必须保留每个返回项的 shotId，并且本次请求的字段必须全部返回，禁止只返回 shotId 或空对象。补充表演目标、情绪递进、语气节奏、呼吸、色彩灯光、连续性、转场、实际首帧和实际尾帧等制作审核信息时，内容必须具体、可执行，并与原文和相邻镜头一致。若输入包含 instruction，必须优先响应其中的修改方向，但不得违反项目事实、固定资产和相邻镜头约束。不得生成 imagePrompt、videoPrompt 或无依据的剧情事实。必须调用 complete_drama_review。不要使用 Markdown。${completionFieldInstruction}${schemaInstruction}`
+                              : `你是影视剧本编辑。只提取剧本明确存在的内容事实和镜头边界，不生成 imagePrompt、videoPrompt、镜头运动或画面风格，不添加无依据的主要情节。必须逐句保留所有角色直接说出的原话和原文明示的旁白，utterances 按原文顺序列出每一句，禁止把多句台词压缩成“某人说明/表示/询问”的剧情摘要；说话人转换、明确动作反应或场景变化都应成为可审核的镜头边界，sourceText 必须保留对应连续原文。资产字段必须按类型填写：characters 只写人物身份、外貌、发型、服装与人物固定特征；scenes 只写空间结构、陈设、建筑、地面/墙面/水体等环境材质、天气和环境色，禁止在场景的 styling/visualIdentity/description 中写人物发型、服装或随身物件；props 只写道具自身形态、材质和用途。缺少事实时留空，不要用其他资产类型的模板补齐。必须调用 analyze_drama_content。不要使用 Markdown。${schemaInstruction}`,
             },
             { role: "user", content: JSON.stringify(input) },
         ];
@@ -83,29 +114,72 @@ export async function POST(request: Request) {
                     messages,
                     user.id,
                     tool,
-                    systemAiIdempotencyKey("drama-analyze", user.id, phase, JSON.stringify(input), candidate.channel.id, candidate.upstreamModel),
+                    systemAiIdempotencyKey("drama-analyze", user.id, phase, requestId || JSON.stringify(input), candidate.channel.id, candidate.upstreamModel),
                 );
                 try {
                     const parsed = JSON.parse(call.args);
                     const data =
                         phase === "visual"
-                            ? normalizeDramaVisualAnalysis(parsed, visualInput!.shotIds)
+                            ? normalizeDramaVisualAnalysis(parsed, visualInput!.shotIds, visualInput!.payload.shots)
                             : phase === "video_prompt"
                               ? normalizeDramaVideoPromptAnalysis(parsed, videoPromptInput!.shotIds)
-                            : phase === "review_completion"
-                              ? normalizeDramaReviewCompletion(parsed, reviewCompletionInput!.shotIds)
-                              : normalizeDramaContentAnalysis(parsed, settings.generationDefaults.videoSeconds, script);
+                              : phase === "image_prompt"
+                                ? normalizeDramaImagePromptAnalysis(parsed, imagePromptInput!.shotIds)
+                                : phase === "review_completion"
+                                  ? normalizeDramaReviewCompletion(parsed, reviewCompletionInput!.shotIds)
+                                  : normalizeDramaContentAnalysis(parsed, settings.generationDefaults.videoSeconds, script);
+                    const publicData =
+                        phase === "video_prompt"
+                            ? {
+                                  ...(data as ReturnType<typeof normalizeDramaVideoPromptAnalysis>),
+                              }
+                            : data;
                     const resultCount = data.shots.length;
-                    const expectedCount = phase === "visual" ? visualInput!.shotIds.length : phase === "video_prompt" ? videoPromptInput!.shotIds.length : phase === "review_completion" ? reviewCompletionInput!.shotIds.length : 1;
+                    const visualErrors = phase === "visual" ? validateDramaVisualAnalysis(data as ReturnType<typeof normalizeDramaVisualAnalysis>) : [];
+                    const expectedCount =
+                        phase === "visual"
+                            ? visualInput!.shotIds.length
+                            : phase === "video_prompt"
+                              ? videoPromptInput!.shotIds.length
+                              : phase === "image_prompt"
+                                ? imagePromptInput!.shotIds.length
+                                : phase === "review_completion"
+                                  ? reviewCompletionInput!.shotIds.length
+                                  : 1;
                     const completionProgress =
                         phase === "review_completion"
                             ? data.shots.reduce((total, shot) => total + ("shotId" in shot ? reviewCompletionFilledCount(shot as unknown as Record<string, unknown>, reviewCompletionInput!.missingByShot[shot.shotId] || []) : 0), 0)
                             : 0;
-                    if (!resultCount || ((phase === "visual" || phase === "video_prompt") && resultCount !== expectedCount) || (phase === "review_completion" && completionProgress <= 0)) {
+                    if (!resultCount || visualErrors.length || ((phase === "visual" || phase === "video_prompt" || phase === "image_prompt") && resultCount !== expectedCount) || (phase === "review_completion" && completionProgress <= 0)) {
                         console.error("[drama-analyze] normalized output invalid", JSON.stringify({ phase, channelId: candidate.channel.id, model: candidate.upstreamModel, resultCount, expectedCount, shape: describeDramaAnalysisCandidate(parsed) }));
-                        throw new Error(phase === "visual" ? "模型没有为全部镜头生成视觉结构" : phase === "video_prompt" ? "模型没有为全部镜头生成视频提示词" : phase === "review_completion" ? "模型没有返回可回填的审核字段，请重试或检查默认文本模型" : "模型没有生成有效内容结构");
+                        throw new Error(
+                            phase === "visual"
+                                ? visualErrors.length
+                                    ? `模型生成的视觉结构不完整：${visualErrors.join("；")}`
+                                    : "模型没有为全部镜头生成视觉结构"
+                                : phase === "video_prompt"
+                                  ? "模型没有为全部镜头生成视频提示词"
+                                  : phase === "image_prompt"
+                                    ? "模型没有为全部镜头生成图片提示词"
+                                    : phase === "review_completion"
+                                      ? "模型没有返回可回填的审核字段，请重试或检查默认文本模型"
+                                      : "模型没有生成有效内容结构",
+                        );
                     }
-                    const response = NextResponse.json({ code: 0, data, msg: phase === "visual" ? "视觉结构已生成" : phase === "video_prompt" ? "视频提示词已生成" : phase === "review_completion" ? `审核字段已回填${completionProgress > 0 ? `（${completionProgress} 项）` : ""}` : "内容结构待审核" });
+                    const response = NextResponse.json({
+                        code: 0,
+                        data: publicData,
+                        msg:
+                            phase === "visual"
+                                ? "视觉结构已生成"
+                                : phase === "video_prompt"
+                                  ? "视频提示词已生成"
+                                  : phase === "image_prompt"
+                                    ? "图片提示词已生成"
+                                    : phase === "review_completion"
+                                      ? `审核字段已回填${completionProgress > 0 ? `（${completionProgress} 项）` : ""}`
+                                      : "内容结构待审核",
+                    });
                     if (typeof call.pointsRemaining === "number") response.headers.set("x-vozeb-pro-points-remaining", String(call.pointsRemaining));
                     return response;
                 } catch (error) {

@@ -6,15 +6,15 @@ describe("resolveImageTaskOptions", () => {
     const defaults = { imageQuality: "high", imageSize: "9:16" };
 
     it("uses backend defaults when image parameters are missing", () => {
-        expect(resolveImageTaskOptions({}, defaults)).toEqual({ quality: "high", size: "9:16" });
+        expect(resolveImageTaskOptions({}, defaults)).toEqual({ quality: "high", size: "9:16", count: 1 });
     });
 
     it("keeps explicit image parameters", () => {
-        expect(resolveImageTaskOptions({ quality: "medium", size: "1:1" }, defaults)).toEqual({ quality: "medium", size: "1:1" });
+        expect(resolveImageTaskOptions({ quality: "medium", size: "1:1" }, defaults)).toEqual({ quality: "medium", size: "1:1", count: 1 });
     });
 
     it("treats blank image parameters as missing", () => {
-        expect(resolveImageTaskOptions({ quality: " ", size: "" }, defaults)).toEqual({ quality: "high", size: "9:16" });
+        expect(resolveImageTaskOptions({ quality: " ", size: "" }, defaults)).toEqual({ quality: "high", size: "9:16", count: 1 });
     });
 });
 

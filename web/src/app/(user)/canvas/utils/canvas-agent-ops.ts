@@ -43,7 +43,7 @@ export function applyCanvasAgentOps(snapshot: CanvasAgentSnapshot, ops?: CanvasA
                 return;
             }
             const requestedPosition = op.position || { x: op.x ?? index * 36, y: op.y ?? index * 36 };
-            const metadata = { ...spec.metadata, ...op.metadata };
+            const metadata = { canvasOrigin: isAgentNode ? ("agent" as const) : ("user" as const), ...spec.metadata, ...op.metadata };
             const naturalWidth = metadata.naturalWidth;
             const naturalHeight = metadata.naturalHeight;
             const baseSize = { width: op.width || spec.width, height: op.height || spec.height };

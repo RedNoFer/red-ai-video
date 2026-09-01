@@ -5,7 +5,7 @@ import { normalizeDramaVisualReviewInput } from "./drama-visual-review";
 describe("normalizeDramaVisualReviewInput", () => {
     it("keeps only reviewable server or https storyboard images", () => {
         const result = normalizeDramaVisualReviewInput({
-            project: { title: "短剧", summary: "悬疑", style: "现实电影感", ratio: "9:16" },
+            project: { title: "短剧", summary: "悬疑", style: "暗黑学院史诗奇幻", ratio: "9:16" },
             episode: {
                 title: "第 1 集",
                 shots: [
@@ -26,5 +26,21 @@ describe("normalizeDramaVisualReviewInput", () => {
 
         expect(result.tasks).toHaveLength(21);
         expect(result.tasks.at(-1)).toMatchObject({ id: "shot-20", imageUrls: ["/api/media-assets/20"] });
+    });
+
+    it("adds an adjacent boundary task when a continuous shot has actual frames", () => {
+        const result = normalizeDramaVisualReviewInput({
+            project: { title: "连续场景", ratio: "9:16" },
+            episode: {
+                title: "第 1 集",
+                shots: [
+                    { id: "shot-one", title: "上一镜", imagePrompt: "雨夜", storyboardImageUrl: "/api/one", actualEndFrameUrl: "/api/one-end", continuityStatus: "needs_review" },
+                    { id: "shot-two", title: "下一镜", imagePrompt: "雨夜", storyboardImageUrl: "/api/two", actualStartFrameUrl: "/api/two-start" },
+                ],
+                continuityEdges: [{ fromShotId: "shot-one", toShotId: "shot-two", transition: "continuous", inheritActualEndFrame: true, carryCharacterIds: [], carryPropIds: [], carryEnvironment: true, carryAxis: true }],
+            },
+        });
+
+        expect(result.tasks).toContainEqual(expect.objectContaining({ id: "shot-two", imageUrls: ["/api/one-end", "/api/two-start"] }));
     });
 });

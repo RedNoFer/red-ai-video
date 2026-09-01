@@ -3,7 +3,7 @@ import { isGlobalAiOpcPreset } from "@/lib/globalaiopc-catalog";
 
 import type { LogicalModelCapability, SystemChannelAdvancedConfig, SystemChannelProtocol } from "./store-types";
 
-const CHANNEL_PROTOCOLS: SystemChannelProtocol[] = ["auto", "openai", "yumeng", "gemini", "sub2api", "newapi", "newapi-video", "vozeb-recommended", "globalaiopc", "seedance", "stable-diffusion", "volcengine-video", "seedance-special", "custom", "compatible"];
+const CHANNEL_PROTOCOLS: SystemChannelProtocol[] = ["auto", "openai", "openai-audio-dialogue", "yumeng", "gemini", "sub2api", "newapi", "newapi-video", "vozeb-recommended", "globalaiopc", "seedance", "stable-diffusion", "volcengine-video", "seedance-special", "buming-seedance", "buming-image", "custom", "compatible"];
 
 export function normalizeSystemChannelAdvancedConfig(config: Partial<SystemChannelAdvancedConfig> | undefined): SystemChannelAdvancedConfig | undefined {
     if (!config || typeof config !== "object") return undefined;
@@ -42,6 +42,11 @@ export function normalizeSystemChannelAdvancedConfig(config: Partial<SystemChann
         supportsReferenceImage: Boolean(config.supportsReferenceImage),
         supportsReferenceVideo: Boolean(config.supportsReferenceVideo),
         supportsReferenceAudio: Boolean(config.supportsReferenceAudio),
+        supportsKeyframes: Boolean(config.supportsKeyframes),
+        ...(["tts", "voice-design", "voice-clone"].includes(String(config.audioOperation || "")) ? { audioOperation: config.audioOperation as "tts" | "voice-design" | "voice-clone" } : {}),
+        ...(textOrEmpty(config.voiceIdField, 500) ? { voiceIdField: textOrEmpty(config.voiceIdField, 500) } : {}),
+        ...(textOrEmpty(config.previewAudioField, 500) ? { previewAudioField: textOrEmpty(config.previewAudioField, 500) } : {}),
+        ...(textOrEmpty(config.cloneSampleField, 160) ? { cloneSampleField: textOrEmpty(config.cloneSampleField, 160) } : {}),
         ...(modelCatalogPaths.length ? { modelCatalogPaths } : {}),
         ...(Object.keys(modelCapabilities).length ? { modelCapabilities } : {}),
         ...(Object.keys(modelConfigs).length ? { modelConfigs } : {}),
@@ -100,6 +105,23 @@ function normalizeChannelModelConfigs(value: unknown) {
                         ...(typeof config.supportsReferenceImage === "boolean" ? { supportsReferenceImage: config.supportsReferenceImage } : {}),
                         ...(typeof config.supportsReferenceVideo === "boolean" ? { supportsReferenceVideo: config.supportsReferenceVideo } : {}),
                         ...(typeof config.supportsReferenceAudio === "boolean" ? { supportsReferenceAudio: config.supportsReferenceAudio } : {}),
+                        ...(typeof config.supportsKeyframes === "boolean" ? { supportsKeyframes: config.supportsKeyframes } : {}),
+                        ...(Array.isArray(config.videoReferenceModes)
+                            ? {
+                                  videoReferenceModes: Array.from(
+                                      new Set(
+                                          config.videoReferenceModes.filter(
+                                              (mode): mode is "reference" | "first_frame" | "first_last" | "all_frames" => mode === "reference" || mode === "first_frame" || mode === "first_last" || mode === "all_frames",
+                                          ),
+                                      ),
+                                  ),
+                              }
+                            : {}),
+                        ...(positiveInteger(config.maxReferenceImages) ? { maxReferenceImages: positiveInteger(config.maxReferenceImages) } : {}),
+                        ...(["tts", "voice-design", "voice-clone"].includes(String(config.audioOperation || "")) ? { audioOperation: config.audioOperation as "tts" | "voice-design" | "voice-clone" } : {}),
+                        ...(textOrEmpty(config.voiceIdField, 500) ? { voiceIdField: textOrEmpty(config.voiceIdField, 500) } : {}),
+                        ...(textOrEmpty(config.previewAudioField, 500) ? { previewAudioField: textOrEmpty(config.previewAudioField, 500) } : {}),
+                        ...(textOrEmpty(config.cloneSampleField, 160) ? { cloneSampleField: textOrEmpty(config.cloneSampleField, 160) } : {}),
                     },
                 ] as const,
             ];
@@ -126,4 +148,9 @@ function normalizeChannelModelKey(value: string) {
 
 function isModelCapability(value: unknown): value is LogicalModelCapability {
     return value === "text" || value === "image" || value === "video" || value === "audio";
+}
+
+function positiveInteger(value: unknown) {
+    const number = Number(value);
+    return Number.isSafeInteger(number) && number > 0 ? number : undefined;
 }

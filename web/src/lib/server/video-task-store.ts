@@ -45,8 +45,8 @@ export function claimVideoTaskPoll(id: string, intervalMs: number) {
     });
 }
 
-export function completeReconciledVideoTask(id: string, result: NonNullable<VideoTask["result"]>) {
-    return mutateStoredGenerationTask<VideoTask>("video", id, GENERATION_TASK_RETENTION_MS, (task) => (canReconcileVideoTask(task) ? { ...task, status: "success", result, error: undefined, retryable: false } : null));
+export function completeReconciledVideoTask(id: string, result: NonNullable<VideoTask["result"]>, allowCompleted = false) {
+    return mutateStoredGenerationTask<VideoTask>("video", id, GENERATION_TASK_RETENTION_MS, (task) => (canReconcileVideoTask(task) || (allowCompleted && task.status === "success") ? { ...task, status: "success", result, error: undefined, retryable: false } : null));
 }
 
 export function failReconciledVideoTask(id: string, error: string, retryable = false) {

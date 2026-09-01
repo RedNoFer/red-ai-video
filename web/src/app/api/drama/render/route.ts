@@ -80,15 +80,18 @@ async function renderDrama(task: DramaRenderTask, shots: NormalizedDramaRenderSh
             await downloadMedia(current.videoUrl, videoPath, origin, cookie, 300 * 1024 * 1024);
             const clipPath = join(workdir, `clip-${index}.mp4`);
             const baseArgs = ["-y", "-i", videoPath];
-            const audioPlan = resolveDramaRenderAudioPlan(current.audioMode, current.audioUrl, current.audioMode === "source" ? await hasAudioStream(videoPath, workdir, abortController.signal) : false);
-            if (audioPlan === "voiceover") {
+            const sourceHasAudio = await hasAudioStream(videoPath, workdir, abortController.signal);
+            const audioPlan = resolveDramaRenderAudioPlan(current.audioMode, current.audioUrl, sourceHasAudio);
+            if (audioPlan === "voiceover" || audioPlan === "voiceover_mix") {
                 const audioPath = join(workdir, `audio-${index}.mp3`);
                 await downloadMedia(current.audioUrl, audioPath, origin, cookie, 30 * 1024 * 1024);
                 baseArgs.push(
                     "-i",
                     audioPath,
                     "-filter_complex",
-                    `[0:v]scale=${size.width}:${size.height}:force_original_aspect_ratio=decrease,pad=${size.width}:${size.height}:(ow-iw)/2:(oh-ih)/2,setsar=1,tpad=stop_mode=clone:stop_duration=${current.duration},trim=0:${current.duration}[v];[1:a]apad,atrim=0:${current.duration}[a]`,
+                    audioPlan === "voiceover_mix"
+                        ? `[0:v]scale=${size.width}:${size.height}:force_original_aspect_ratio=decrease,pad=${size.width}:${size.height}:(ow-iw)/2:(oh-ih)/2,setsar=1,tpad=stop_mode=clone:stop_duration=${current.duration},trim=0:${current.duration}[v];[0:a]aresample=async=1:first_pts=0,apad,atrim=0:${current.duration}[bg];[1:a]aresample=async=1:first_pts=0,apad,atrim=0:${current.duration}[voice];[bg][voice]amix=inputs=2:duration=longest:dropout_transition=2:normalize=1[a]`
+                        : `[0:v]scale=${size.width}:${size.height}:force_original_aspect_ratio=decrease,pad=${size.width}:${size.height}:(ow-iw)/2:(oh-ih)/2,setsar=1,tpad=stop_mode=clone:stop_duration=${current.duration},trim=0:${current.duration}[v];[1:a]apad,atrim=0:${current.duration}[a]`,
                     "-map",
                     "[v]",
                     "-map",

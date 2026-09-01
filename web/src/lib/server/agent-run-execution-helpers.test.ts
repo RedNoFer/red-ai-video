@@ -30,6 +30,15 @@ describe("mergeTaskReferences", () => {
         ).toEqual([{ assetId: "ordinary", sourceTaskId: "image-task", type: "image", url: "/api/reference-assets/last.png", role: "last_frame" }]);
     });
 
+    it("preserves ordered keyframe identity when references are merged", () => {
+        expect(
+            mergeTaskReferences(
+                [{ assetId: "frame-1", type: "image", url: "/api/reference-assets/frame-1.png", role: "keyframe", keyframeIndex: 1 }],
+                [{ assetId: "dependency-frame-1", sourceTaskId: "image-task", type: "image", url: "/api/reference-assets/frame-1.png", role: "reference" }],
+            ),
+        ).toEqual([{ assetId: "frame-1", sourceTaskId: "image-task", type: "image", url: "/api/reference-assets/frame-1.png", role: "keyframe", keyframeIndex: 1 }]);
+    });
+
     it("keeps all distinct dependency references", () => {
         const references = Array.from({ length: 25 }, (_, index) => ({ assetId: `asset-${index}`, type: "image" as const, url: `/api/reference-assets/${index}.png` }));
 

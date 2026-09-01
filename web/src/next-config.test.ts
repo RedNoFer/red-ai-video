@@ -17,6 +17,7 @@ describe("Next response headers", () => {
     it("loads local environment variables for standalone production testing", async () => {
         const packageJson = JSON.parse(await readFile(resolve(process.cwd(), "package.json"), "utf8")) as { scripts?: Record<string, string> };
 
+        expect(packageJson.scripts?.["start:standalone"]).toContain("--env-file-if-exists=../.env");
         expect(packageJson.scripts?.["start:standalone"]).toContain("--env-file-if-exists=.env.local");
     });
 });

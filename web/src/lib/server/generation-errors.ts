@@ -2,10 +2,12 @@ import { hasInsufficientPointsError } from "@/lib/creative-generation-status";
 import { readProviderError } from "@/lib/server/provider-task-config";
 
 export const DEFAULT_CHANNEL_CONNECT_ERROR = "生成渠道暂时无法连接，请稍后重试或联系管理员。";
+export const DEFAULT_ACCOUNT_AVAILABILITY_ERROR = "上游图片渠道没有可用的兼容账号：请检查供应商的图片生成权限、模型绑定、账号调度状态和可用额度。该请求尚未进入图片模型执行。";
 
 export function toSafeGenerationErrorMessage(error: unknown, fallback: string) {
     const message = generationErrorMessage(error);
     if (hasInsufficientPointsError(error)) return "积分不足";
+    if (/no\s+available\s+(?:compatible\s+)?accounts?|no\s+compatible\s+accounts?|no\s+available\s+providers?/i.test(message)) return DEFAULT_ACCOUNT_AVAILABILITY_ERROR;
     if (isTimeoutError(error, message)) return "生成接口响应超时，请稍后重试或检查模型服务。";
     if (isFetchNetworkError(error, message)) return DEFAULT_CHANNEL_CONNECT_ERROR;
     if (isHtmlGatewayError(message)) return DEFAULT_CHANNEL_CONNECT_ERROR;

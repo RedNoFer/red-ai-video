@@ -2,7 +2,7 @@
 
 固定格式标识：`vozeb-drama-production-package-v1`。
 
-以后由 Codex、项目 Agent 或人工编写的完整制作包，都必须保持以下一级章节、表头和编号规则。允许扩写正文，不允许改名、换序或省略必填章节。没有内容时保留章节并明确写“无”。
+以后由 Codex、项目 Agent 或人工编写的完整制作包，都必须保持以下一级章节、表头和编号规则。13 章是 v1 的固定制作包结构，不因项目、集数或对话内容改变。多集项目在一个总包中仍只保留一套固定一级章节，但每一集必须在规范对象中拥有完整且自洽的剧本、场次、镜头、资产引用、表演、声音、连续性、逐帧计划和 QC 数据；按单集生成或导入时，该单集制作包也必须完整保留全部 13 章，不得只输出镜头表或局部字段。允许扩写正文，不允许改名、换序或省略必填章节。没有内容时保留章节并明确写“无”。
 
 ## 固定章节顺序
 
@@ -33,7 +33,15 @@
 ## 数据落库规则
 
 - 项目、资产、场次、镜头、声音与连续性进入可执行生产数据。
+- 每个镜头的 `videoPrompt` 只保存精炼的“动态意图”：主体动作、单一主运镜、必要微动作、结束状态与针对性约束。项目风格全文、角色/场景/道具长档案、制作说明、参考图 URL、时长和逐帧时间线不得重复写入 `videoPrompt`；这些信息分别以 `productionBible`、资产档案、`framePlan.referenceManifest`、实际引用绑定和 `framePlan.frames` 为唯一来源。
+- 镜头级 `imagePrompt`、`startFramePrompt` 和 `endFramePrompt` 只描述单一静态画面，包含主体身份、当前可见姿态/表情/视线、道具或环境状态、景别、构图、光线与必要约束；不得写运镜、焦段、时间段、动作过程、对白或声音。图片编辑请求统一使用 `change / preserve / constraints`，其中 `change` 每次只允许一个已定位变量。
+- 第十一章“分段视频 Prompt”不是独立事实源。JSON 导出保留上述分层字段；Markdown 导出必须根据当前 `videoPrompt + framePlan.frames + referenceManifest` 确定性重建 `Pxx-Fxx 起止秒数：动作`，覆盖 Archive 中可能过期的展示文本。调整镜头时长或帧段后不得继续导出旧时长。
 - 每个镜头必须携带可执行的 `performancePlan`、逐句 `dialoguePerformance`（无对白时为空数组）、`lightingPlan`、`continuity`、`entryState`、`exitState` 与 `framePlan`。`framePlan.start.source` 只能是 `independent` 或 `previous_accepted_actual_tail`，`framePlan.end.required` 必须是布尔值；`framePlan.frames` 必须包含 1–9 个按剧情动作节点拆分的帧段，每段提供稳定 `id`、连续 `sequenceIndex`、`startSecond`、`endSecond`、`actionPrompt` 与 `imagePrompt`，并从 0 秒无空白、无重叠地覆盖完整镜头时长。缺失时直接拒绝导入，不再从描述或旧提示词补齐。
+- 短剧生产方案的 `productionBible.productionPlan.skills` 必须至少记录 `seedance-director`（Seedance 2.0 导演技能）及其版本；用户未选择其他 Skill 时也必须执行该默认技能。服务端必须把该技能的版本化正文注入规划/制作包生成系统指令，并在运行审计与制作包方案中保留技能 ID、名称和版本；不能只把技能名称作为展示字段，也不能因后台普通 Skill 配置缺失而静默降级。
+- 每帧的 `imagePrompt` 必须以“本帧可见状态”为主体事实源：至少明确当前可见的主体、姿态/表情/视线、道具状态、空间关系或环境变化中的一项，且必须能与相邻帧区分。不得只填写对白、旁白、口型、声音、运镜、焦段、景别、色彩、负面词或“保持一致”等约束；这些内容只能作为辅助字段，分别归入 `dialoguePerformance`、声音/表演规划、镜头参数或供应商固定约束。不得复制整镜头 `imagePrompt` 后只追加“起始状态/动作展开/关键变化/结果状态”或“当前时段动作锚点”充数。导入规范化、项目保存和生成前预检都必须拒绝“无可见画面”或“与上一帧可见状态完全重复”的帧；固定角色/场景/风格约束可以在服务端供应商请求中重复注入，但界面和制作包正文应突出本帧变化。
+- `framePlan.referenceManifest` 必须以镜头声明的 `characterCodes`、`locationCode`、`propCodes`、`clueCodes` 为主事实源，再用正文补充；场景切换时必须更换 `scene_anchor`，不得因为动作描述仍提到上一场环境而继续引用旧场景。镜头生成前必须逐镜核对“镜头场景/角色/道具声明 = 实际参考图绑定”，缺少任一声明资产时阻塞生成，不得静默降级为通用参考图。
+- 对白或旁白可以不写入静态图片正文，但其可见后果必须进入对应帧：说话者的眉眼、嘴角、视线、头部朝向、手部动作、道具位置、身体姿态或对方反应；表情变化只写在视频 Prompt 而未写入图片帧，视为不合格。每个动作节点至少应有一个可验收的静态表演状态，视频 Prompt 再负责状态之间的运动和声音衔接。
+- 新建镜头或制作包未提供帧段时，服务端默认生成 4 个连续等分帧段；制作包显式提供的 1–9 个帧段优先保留，只有真实动作节点需要时才使用超过 4 帧。
 - 连续性边和 `framePlan` 是状态关系，不由 `startFramePrompt` / `endFramePrompt` 推断。自动拆镜后，后续子镜入口状态、首帧计划和提示词只能继承前一子镜出口状态；禁止复制原组首镜起始状态。声明 `previous_accepted_actual_tail` 的镜头只能使用上一镜当前视频版本、经人工验收的实际尾帧作为唯一 `first_frame`。
 - 帧图统一记录在 `frameEvidence`：必须包含角色、来源类型、来源镜头/视频/任务/资产、媒体与公网 URL、内容哈希、所属视频版本、`candidate/accepted/rejected/superseded/unavailable` 有效性及验收或失效原因和时间。旧分镜 URL、旧任务结果、删除帧、拒绝帧和失效帧均不得再作为请求引用。
 - 视频提取的实际首尾帧先是 `candidate`。只有人工验收当前视频版本的实际尾帧，才可解锁下游继承镜头；拒绝仅保留审计证据并阻塞下游，不自动创建重试任务。

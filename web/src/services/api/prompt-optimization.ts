@@ -4,7 +4,7 @@ import type { CreativeGenerationMode } from "@/lib/creative-runtime-contract";
 import { refreshUserPointsIfSystem } from "@/services/api/points";
 import { throwIfClientSessionExpired } from "@/services/api/session-expiration";
 
-export async function optimizePrompt(input: { requestId: string; prompt: string; mode: "agent" | CreativeGenerationMode }) {
+export async function optimizePrompt(input: { requestId: string; prompt: string; mode: "agent" | CreativeGenerationMode | "drama-frame" }) {
     try {
         const response = await fetch("/api/agent/prompt-optimization", {
             method: "POST",
@@ -19,4 +19,8 @@ export async function optimizePrompt(input: { requestId: string; prompt: string;
     } finally {
         void refreshUserPointsIfSystem("system");
     }
+}
+
+export function optimizeDramaFramePrompt(prompt: string, requestId = crypto.randomUUID()) {
+    return optimizePrompt({ requestId, prompt, mode: "drama-frame" });
 }

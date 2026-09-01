@@ -11,12 +11,18 @@ export const DEFAULT_MODEL_REQUEST_TIMEOUT_MS: Record<LogicalModelCapability, nu
     audio: 3 * 60_000,
 };
 
-type ModelRequestPolicyConfig = { capabilityProfile?: Pick<LogicalModelCapabilityProfile, "timeoutMs"> };
+type ModelRequestPolicyConfig = {
+    capabilityProfile?: Pick<LogicalModelCapabilityProfile, "timeoutMs">;
+    advancedConfig?: { protocol?: string; queryPath?: string };
+};
 
 export function resolveModelRequestTimeoutMs(config: ModelRequestPolicyConfig | undefined, capability: LogicalModelCapability) {
     if (capability === "text") return TEXT_MODEL_REQUEST_TIMEOUT_MS;
     const configured = Math.floor(Number(config?.capabilityProfile?.timeoutMs));
-    if (!Number.isFinite(configured) || configured <= 0) return DEFAULT_MODEL_REQUEST_TIMEOUT_MS[capability];
+    if (!Number.isFinite(configured) || configured <= 0) {
+        if (capability === "image" && config?.advancedConfig?.protocol === "sub2api" && !config.advancedConfig.queryPath?.trim()) return MAX_REQUEST_TIMEOUT_MS;
+        return DEFAULT_MODEL_REQUEST_TIMEOUT_MS[capability];
+    }
     return Math.max(MIN_REQUEST_TIMEOUT_MS, Math.min(MAX_REQUEST_TIMEOUT_MS, configured));
 }
 

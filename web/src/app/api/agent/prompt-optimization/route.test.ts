@@ -35,6 +35,13 @@ describe("prompt optimization route", () => {
         expect(mocks.optimizeCreativePrompt).toHaveBeenCalledWith(expect.objectContaining({ userId: "user-one", requestId: "request-one", prompt: "原始提示词", mode: "video" }));
     });
 
+    it("accepts the Seedance drama frame optimization mode", async () => {
+        const response = await POST(request({ requestId: "frame-request", prompt: "静态帧原文", mode: "drama-frame" }));
+
+        expect(response.status).toBe(200);
+        expect(mocks.optimizeCreativePrompt).toHaveBeenCalledWith(expect.objectContaining({ mode: "drama-frame" }));
+    });
+
     it("rejects empty prompts without calling the model", async () => {
         const response = await POST(request({ requestId: "request-one", prompt: "   ", mode: "image" }));
 

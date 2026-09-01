@@ -2,7 +2,7 @@ import { videoFrameAssetIds, type CreativeVideoReferenceMode } from "@/lib/video
 
 export const creativeSurfaces = ["chat", "canvas", "drama"] as const;
 export type CreativeSurface = (typeof creativeSurfaces)[number];
-export const creativeConversationSources = ["agent", "image-workbench", "video-workbench", "canvas", "drama"] as const;
+export const creativeConversationSources = ["agent", "image-workbench", "video-workbench", "canvas", "drama", "drama-script"] as const;
 export type CreativeConversationSource = (typeof creativeConversationSources)[number];
 
 export type CreativeConversationStatus = "active" | "archived";
@@ -17,6 +17,7 @@ export type CreativeConversation = {
     surface: CreativeSurface;
     source: CreativeConversationSource;
     projectId?: string;
+    episodeId?: string;
     title: string;
     status: CreativeConversationStatus;
     contextSummary: string;
@@ -133,6 +134,7 @@ export type CreativeGenerationPreferences = {
         referenceMode?: CreativeVideoReferenceMode;
         firstFrameAssetId?: string;
         lastFrameAssetId?: string;
+        frameAssetIds?: string[];
     };
     audio?: { voice?: string; format?: string; speed?: number };
 };
@@ -142,6 +144,8 @@ export type CreativeRunRequest = {
     surface: CreativeSurface;
     conversationId?: string;
     projectId?: string;
+    episodeId?: string;
+    workflow?: "drama-script";
     prompt: string;
     publicPrompt?: string;
     snapshot?: unknown;
@@ -173,6 +177,8 @@ export function normalizeCreativeRunRequest(value: unknown): CreativeRunRequest 
     const surface = normalizeCreativeSurface(input.surface);
     const conversationId = optionalText(input.conversationId, MAX_ID);
     const projectId = optionalText(input.projectId, MAX_ID);
+    const episodeId = optionalText(input.episodeId, MAX_ID);
+    const workflow = input.workflow === "drama-script" ? "drama-script" : undefined;
     const prompt = text(input.prompt, MAX_PROMPT);
     const publicPrompt = optionalText(input.publicPrompt, MAX_PROMPT);
     const snapshot = input.snapshot;
@@ -183,6 +189,8 @@ export function normalizeCreativeRunRequest(value: unknown): CreativeRunRequest 
     if (!clientRequestId) throw new CreativeRuntimeInputError("请求标识不能为空");
     if (!surface) throw new CreativeRuntimeInputError("创作入口不正确");
     if (!prompt) throw new CreativeRuntimeInputError("创作需求不能为空");
+    if (workflow === "drama-script" && (surface !== "drama" || !projectId || !episodeId)) throw new CreativeRuntimeInputError("剧本 Agent 必须绑定短剧项目和当前集");
+    if (workflow === "drama-script" && (assetIds.length || modelIds.length || preferences)) throw new CreativeRuntimeInputError("剧本 Agent 不接受媒体或自选模型偏好");
     if (skillIds.length > CREATIVE_RUN_SKILL_LIMIT) throw new CreativeRuntimeInputError(`一次最多启用 ${CREATIVE_RUN_SKILL_LIMIT} 个 Skill`);
     if (modelIds.length > CREATIVE_RUN_MODEL_LIMIT) throw new CreativeRuntimeInputError(`一次最多选择 ${CREATIVE_RUN_MODEL_LIMIT} 个模型`);
     if (videoFrameAssetIds(preferences?.video).some((id) => !assetIds.includes(id))) throw new CreativeRuntimeInputError("视频首尾帧必须来自本轮已选择的图片素材");
@@ -190,7 +198,7 @@ export function normalizeCreativeRunRequest(value: unknown): CreativeRunRequest 
     if (surface !== "chat" && !projectId) throw new CreativeRuntimeInputError(surface === "canvas" ? "画布标识不能为空" : "短剧项目标识不能为空");
     if (snapshot !== undefined && new TextEncoder().encode(JSON.stringify(snapshot)).length > MAX_SNAPSHOT_BYTES) throw new CreativeRuntimeInputError("当前项目快照过大", 413);
 
-    return { clientRequestId, surface, conversationId, projectId, prompt, ...(publicPrompt && publicPrompt !== prompt ? { publicPrompt } : {}), snapshot, assetIds, skillIds, modelIds, ...(preferences ? { preferences } : {}) };
+    return { clientRequestId, surface, conversationId, projectId, episodeId, workflow, prompt, ...(publicPrompt && publicPrompt !== prompt ? { publicPrompt } : {}), snapshot, assetIds, skillIds, modelIds, ...(preferences ? { preferences } : {}) };
 }
 
 function normalizeCreativeGenerationPreferences(value: unknown): CreativeGenerationPreferences | undefined {
@@ -225,16 +233,22 @@ function normalizeVideoPreferences(value: unknown) {
     const normalizedCount = Number.isSafeInteger(count) && count > 0 ? count : undefined;
     const generateAudio = typeof input.generateAudio === "boolean" ? input.generateAudio : undefined;
     const watermark = typeof input.watermark === "boolean" ? input.watermark : undefined;
-    const referenceMode: CreativeVideoReferenceMode | undefined = input.referenceMode === "reference" || input.referenceMode === "first_frame" || input.referenceMode === "first_last" ? input.referenceMode : undefined;
+    const referenceMode: CreativeVideoReferenceMode | undefined =
+        input.referenceMode === "reference" || input.referenceMode === "first_frame" || input.referenceMode === "first_last" || input.referenceMode === "all_frames" ? input.referenceMode : undefined;
     const firstFrameAssetId = optionalText(input.firstFrameAssetId, MAX_ID);
     const lastFrameAssetId = optionalText(input.lastFrameAssetId, MAX_ID);
+    const frameAssetIds = Array.isArray(input.frameAssetIds) ? input.frameAssetIds.map((id) => optionalText(id, MAX_ID)).filter((id): id is string => Boolean(id)) : [];
     if ((firstFrameAssetId || lastFrameAssetId) && !referenceMode) throw new CreativeRuntimeInputError("选择视频首尾帧时必须指定参考方式");
     if (referenceMode === "reference" && (firstFrameAssetId || lastFrameAssetId)) throw new CreativeRuntimeInputError("智能参考模式不能保留首尾帧角色");
     if (referenceMode === "first_frame" && !firstFrameAssetId) throw new CreativeRuntimeInputError("首帧模式需要选择首帧图片");
     if (referenceMode === "first_last" && (!firstFrameAssetId || !lastFrameAssetId)) throw new CreativeRuntimeInputError("首尾帧模式需要同时选择首帧和尾帧图片");
+    if (referenceMode === "all_frames" && (frameAssetIds.length < 2 || frameAssetIds.length > 5)) throw new CreativeRuntimeInputError("全能帧必须选择 2 到 5 张图片");
+    if (referenceMode === "all_frames" && (firstFrameAssetId || lastFrameAssetId)) throw new CreativeRuntimeInputError("全能帧不能与首帧或尾帧混用");
+    if (referenceMode !== "all_frames" && frameAssetIds.length) throw new CreativeRuntimeInputError("全能帧图片只能用于全能帧模式");
+    if (new Set(frameAssetIds).size !== frameAssetIds.length) throw new CreativeRuntimeInputError("全能帧图片不能重复");
     if (firstFrameAssetId && lastFrameAssetId && firstFrameAssetId === lastFrameAssetId) throw new CreativeRuntimeInputError("首帧和尾帧不能使用同一张图片");
     if (input.referenceMode !== undefined && !referenceMode) throw new CreativeRuntimeInputError("视频参考方式不正确");
-    return size || quality || (Number.isInteger(seconds) && seconds > 0) || normalizedCount || generateAudio !== undefined || watermark !== undefined || referenceMode || firstFrameAssetId || lastFrameAssetId
+    return size || quality || (Number.isInteger(seconds) && seconds > 0) || normalizedCount || generateAudio !== undefined || watermark !== undefined || referenceMode || firstFrameAssetId || lastFrameAssetId || frameAssetIds.length
         ? {
               ...(size ? { size } : {}),
               ...(quality ? { quality } : {}),
@@ -245,6 +259,7 @@ function normalizeVideoPreferences(value: unknown) {
               ...(referenceMode ? { referenceMode } : {}),
               ...(firstFrameAssetId ? { firstFrameAssetId } : {}),
               ...(lastFrameAssetId ? { lastFrameAssetId } : {}),
+              ...(frameAssetIds.length ? { frameAssetIds } : {}),
           }
         : undefined;
 }
@@ -282,7 +297,7 @@ export function creativeConversationSourceForSurface(surface: CreativeSurface): 
 }
 
 export function isCreativeConversationSourceCompatible(surface: CreativeSurface, source: CreativeConversationSource) {
-    return surface === "chat" ? source === "agent" || source === "image-workbench" || source === "video-workbench" : source === surface;
+    return surface === "chat" ? source === "agent" || source === "image-workbench" || source === "video-workbench" : surface === "drama" ? source === "drama" || source === "drama-script" : source === surface;
 }
 
 function text(value: unknown, max: number) {

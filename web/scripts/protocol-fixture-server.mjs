@@ -77,7 +77,7 @@ async function handleFixtureRequest({ request, response, url, body, tasks, reque
         tasks.clear();
         return sendJson(response, 200, { ok: true });
     }
-    if (request.method === "GET" && ["/models", "/api/v3/models"].includes(path)) {
+    if (request.method === "GET" && ["/models", "/api/v3/models", "/logical-models", "/skills/models"].includes(path)) {
         const catalog = url.searchParams.has("protocol") ? [...models, { id: "opaque-catalog-model" }] : models;
         return sendJson(response, 200, { object: "list", data: catalog });
     }
@@ -89,6 +89,11 @@ async function handleFixtureRequest({ request, response, url, body, tasks, reque
         const payload = jsonBody(body);
         const model = requestedModel(body, request.headers["content-type"] || "");
         if (shouldFailRequest(request, model)) return sendJson(response, model.includes("-fail") ? 400 : 503, { error: { message: "fixture text failure" } });
+        if (Array.isArray(payload.modalities) && payload.modalities.includes("audio")) {
+            const audio = { data: createWave().toString("base64"), format: "wav", mime_type: "audio/wav" };
+            if (path === "/responses") return sendJson(response, 200, { output: [{ type: "message", content: [{ type: "output_audio", audio }] }] });
+            return sendJson(response, 200, { choices: [{ message: { role: "assistant", content: null, audio } }] });
+        }
         const toolName = selectedToolName(payload);
         const argumentsText = toolName ? JSON.stringify(toolArguments(toolName, payload)) : "协议测试文本返回成功";
         if (path === "/responses") {
@@ -117,6 +122,25 @@ async function handleFixtureRequest({ request, response, url, body, tasks, reque
         return sendJson(response, 200, { candidates: [{ content: { parts: [{ text }] } }], usageMetadata: { promptTokenCount: 8, candidatesTokenCount: 8, totalTokenCount: 16 } });
     }
     if (request.method === "POST" && path === "/planner/run") return sendJson(response, 200, { data: { plan: JSON.stringify({}) } });
+    if (request.method === "POST" && path === "/media/generate") {
+        const payload = jsonBody(body);
+        if (payload.model !== "voice-design" || !String(payload.prompt || "").trim()) return sendJson(response, 400, { error: { message: "voice-design requires model and prompt" } });
+        return sendJson(response, 200, { voice_id: `fixture-voice-${nextTaskId("design")}`, trial_audio: `${url.origin}/media/fixture.wav` });
+    }
+    if (request.method === "POST" && path === "/files") return sendJson(response, 200, { url: "https://cdn.example.com/fixture-upload.png" });
+    if (request.method === "POST" && path === "/model-runtime/invoke") {
+        const payload = jsonBody(body);
+        const id = nextTaskId("buming-image");
+        tasks.set(id, { kind: "buming-image", status: "completed", model: payload.model_id });
+        return sendJson(response, 200, { task_id: id, status: "queued" });
+    }
+    const bumingImageTaskId = path.match(/^\/model-runtime\/tasks\/([^/]+)$/)?.[1];
+    if (request.method === "GET" && bumingImageTaskId) {
+        const id = decodeURIComponent(bumingImageTaskId);
+        const task = tasks.get(id);
+        if (!task || task.kind !== "buming-image") return sendJson(response, 404, { error: { message: "不鸣图片任务不存在" } });
+        return sendJson(response, 200, { task_id: id, status: "completed", result_url: `${url.origin}/media/fixture.png` });
+    }
 
     const geminiCreate = path.match(/^\/models\/([^/]+):predictLongRunning$/);
     if (request.method === "POST" && geminiCreate) {
@@ -154,19 +178,29 @@ async function handleFixtureRequest({ request, response, url, body, tasks, reque
         return sendJson(response, 200, { data: { image_url: `${url.origin}/media/fixture.png` } });
     }
 
+    if (
+        request.method === "POST" &&
+        path === "/videos" &&
+        String(request.headers["content-type"] || "")
+            .toLowerCase()
+            .includes("application/json") &&
+        (() => {
+            const payload = jsonBody(body);
+            return Object.prototype.hasOwnProperty.call(payload, "ratio") && Object.prototype.hasOwnProperty.call(payload, "resolution");
+        })()
+    ) {
+        const model = requestedModel(body, request.headers["content-type"] || "");
+        if (shouldFailRequest(request, model)) return sendJson(response, model.includes("-fail") ? 400 : 503, { error: { message: "fixture video failure" } });
+        const id = nextTaskId("newapi-video");
+        tasks.set(id, { kind: "newapi-video", status: model.includes("-slow") ? "pending" : "completed" });
+        return sendJson(response, 200, { task_id: id, status: "queued" });
+    }
     if (request.method === "POST" && (GLOBAL_AIOPC_VIDEO_PATHS.has(path) || ["/videos", "/contents/generations/tasks", "/seedance-special/videos"].includes(path))) {
         const model = requestedModel(body, request.headers["content-type"] || "");
         if (shouldFailRequest(request, model)) return sendJson(response, model.includes("-fail") ? 400 : 503, { error: { message: "fixture video failure" } });
         const id = nextTaskId("video");
         tasks.set(id, { kind: "video", status: model.includes("-slow") ? "pending" : "completed" });
         return sendJson(response, 200, { id, task_id: id, status: "queued" });
-    }
-    if (request.method === "POST" && path === "/video/generations") {
-        const model = requestedModel(body, request.headers["content-type"] || "");
-        if (shouldFailRequest(request, model)) return sendJson(response, model.includes("-fail") ? 400 : 503, { error: { message: "fixture video failure" } });
-        const id = nextTaskId("newapi-video");
-        tasks.set(id, { kind: "newapi-video", status: model.includes("-slow") ? "pending" : "completed" });
-        return sendJson(response, 200, { task_id: id, status: "queued" });
     }
     if (request.method === "POST" && path === "/videos/generations") {
         if (
@@ -207,7 +241,7 @@ async function handleFixtureRequest({ request, response, url, body, tasks, reque
     if (request.method === "GET" && customVideoId) {
         return sendJson(response, 200, { data: { task_id: decodeURIComponent(customVideoId), status: "completed", video_url: `${url.origin}/media/fixture.mp4` } });
     }
-    const vozebVideoId = path.match(/^\/videos\/generations\/([^/]+)$/)?.[1];
+    const vozebVideoId = path.match(/^\/(?:videos\/generations|tasks)\/([^/]+)$/)?.[1];
     if (request.method === "GET" && vozebVideoId) {
         const id = decodeURIComponent(vozebVideoId);
         return sendJson(response, 200, { id, task_id: id, object: "video", status: "completed", progress: 100, metadata: { url: `${url.origin}/media/fixture.mp4` } });
@@ -216,7 +250,10 @@ async function handleFixtureRequest({ request, response, url, body, tasks, reque
     if (request.method === "GET" && videoId) {
         const mediaUrl = `${url.origin}/media/fixture.mp4`;
         const task = tasks.get(videoId);
-        if (task?.kind === "newapi-video") return sendJson(response, 200, { task_id: videoId, status: "completed", url: mediaUrl });
+        if (task?.kind === "newapi-video") {
+            if (task.status === "pending") return sendJson(response, 200, { task_id: videoId, status: "in_progress", progress: 40 });
+            return sendJson(response, 200, { task_id: videoId, status: "completed", data: { url: mediaUrl } });
+        }
         if (task?.kind === "image") return sendJson(response, 200, { task_id: videoId, status: "completed", image_url: `${url.origin}/media/fixture.png` });
         if (task?.status === "pending") return sendJson(response, 200, { id: videoId, task_id: videoId, status: "processing" });
         if (task?.status === "cancelled") return sendJson(response, 200, { id: videoId, task_id: videoId, status: "cancelled" });
@@ -351,7 +388,7 @@ function videoTaskId(path) {
 
 function fixturePath(pathname) {
     const internal = pathname.replace(/^\/api\/ai\/system\/[^/]+(?=\/)/, "");
-    return internal.replace(/^\/(?:api\/v3|v1beta|v1)(?=\/)/, "");
+    return internal.replace(/^\/(?:api\/v3|api\/v1|v1beta|v1)(?=\/)/, "");
 }
 
 function createWave() {

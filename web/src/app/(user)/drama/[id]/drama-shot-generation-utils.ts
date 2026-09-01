@@ -1,5 +1,5 @@
 import type { DramaAssetReference, DramaEpisode, DramaProject, DramaShot } from "../types";
-import type { DramaProductionPlan } from "@/lib/drama-project-contract";
+import type { DramaProductionPlan, DramaProductionRun } from "@/lib/drama-project-contract";
 import { approvedAssetReference } from "@/lib/drama-asset-baseline";
 import { continuityStartEvidence, latestFrameEvidence } from "@/lib/drama-continuity-policy";
 import type { useEffectiveConfig } from "@/stores/use-config-store";
@@ -7,6 +7,61 @@ import { resolveDramaGenerationSize } from "@/lib/drama-image-size";
 import type { ReferenceImage } from "@/types/image";
 import type { ReferenceAudio } from "@/types/media";
 import type { VideoReferenceRole } from "@/lib/video-reference-contract";
+
+export function resolveDramaVisualRunSync(project: DramaProject, episodeId: string, run: DramaProductionRun) {
+    let changed = false;
+    const episodes = project.episodes.map((episode) => {
+        if (episode.id !== episodeId) return episode;
+        const shots = episode.shots.map((shot) => {
+            const activeSteps = run.steps.filter((step) => step.shotId === shot.id && step.taskId && step.status === "running");
+            if (!activeSteps.length) return shot;
+            let nextShot = shot;
+            const start = activeSteps.find((step) => step.type === "start_frame");
+            const end = activeSteps.find((step) => step.type === "end_frame");
+            if (start && (shot.storyboardStatus !== "running" || shot.storyboardTaskId !== start.taskId)) nextShot = { ...nextShot, storyboardStatus: "running", storyboardTaskId: start.taskId, storyboardError: undefined };
+            if (end && (shot.storyboardEndStatus !== "running" || shot.storyboardEndTaskId !== end.taskId)) nextShot = { ...nextShot, storyboardEndStatus: "running", storyboardEndTaskId: end.taskId, storyboardEndError: undefined };
+            const keyframes = activeSteps.filter((step) => step.type === "keyframe" && (step.frameId || step.sequenceIndex));
+            if (keyframes.length) {
+                const frames = [...(nextShot.storyboardFrames || [])];
+                for (const step of keyframes) {
+                    const index = frames.findIndex((frame) => frame.id === step.frameId || frame.sequenceIndex === step.sequenceIndex);
+                    const current = frames[index];
+                    if ((current?.mediaUrl ? current.candidateStatus === "running" && current.candidateTaskId === step.taskId : current?.status === "running" && current.taskId === step.taskId)) continue;
+                    const frame = current?.mediaUrl
+                        ? { ...current, candidateStatus: "running" as const, candidateTaskId: step.taskId, candidateError: undefined }
+                        : {
+                              ...(current || { id: step.frameId || `frame-${step.sequenceIndex}`, sequenceIndex: step.sequenceIndex || 1, source: "generated" as const }),
+                              status: "running" as const,
+                              taskId: step.taskId,
+                              error: undefined,
+                          };
+                    if (index >= 0) frames[index] = frame;
+                    else frames.push(frame);
+                }
+                nextShot = { ...nextShot, storyboardFrameMode: "all_frames", storyboardFrames: frames.sort((left, right) => left.sequenceIndex - right.sequenceIndex) };
+            }
+            if (nextShot !== shot) changed = true;
+            return nextShot;
+        });
+        return shots.some((shot, index) => shot !== episode.shots[index]) ? { ...episode, shots } : episode;
+    });
+    const runtimeProject = changed ? { ...project, episodes } : project;
+    const episode = runtimeProject.episodes.find((item) => item.id === episodeId);
+    const pending = Boolean(
+        episode?.shots.some(
+            (shot) =>
+                [shot.storyboardStatus, shot.storyboardEndStatus].some((status) => status === "queued" || status === "running") ||
+                (shot.storyboardFrames || []).some((frame) => frame.status === "queued" || frame.status === "running" || frame.candidateStatus === "queued" || frame.candidateStatus === "running"),
+        ),
+    );
+    const trackedTaskIds = new Set(
+        episode?.shots.flatMap((shot) => [shot.storyboardTaskId, shot.storyboardEndTaskId, ...(shot.storyboardFrames || []).flatMap((frame) => [frame.taskId, frame.candidateTaskId])].filter((taskId): taskId is string => Boolean(taskId))) || [],
+    );
+    const resolvedSteps = run.steps.filter((step) => step.taskId && ["success", "failed", "cancelled", "needs_review"].includes(step.status));
+    const shouldReload = Boolean(resolvedSteps.length && (!pending || resolvedSteps.some((step) => trackedTaskIds.has(step.taskId!))));
+    const shouldContinue = !shouldReload && (pending || run.status === "ready" || run.status === "running");
+    return { project: runtimeProject, shouldContinue, shouldReload };
+}
 
 export function shotReferenceImages(project: DramaProject, shot: DramaShot) {
     const assetUrls = [

@@ -1,7 +1,7 @@
 "use client";
 
 import { Button, Popover } from "antd";
-import { ArrowLeftRight, ImagePlus, Upload, X } from "lucide-react";
+import { ArrowLeftRight, ChevronLeft, ChevronRight, ImagePlus, Upload, X } from "lucide-react";
 import { useState } from "react";
 
 import type { CreativeAsset } from "@/lib/creative-runtime-contract";
@@ -17,23 +17,34 @@ export function CreativeVideoFrameControls({
     images,
     firstFrameAssetId,
     lastFrameAssetId,
+    frameAssetIds = [],
     uploading,
     placement,
     onSelect,
     onUpload,
     onRemove,
+    onToggleKeyframe,
+    onUploadKeyframe,
+    onMoveKeyframe,
 }: {
     mode: CreativeVideoReferenceMode;
     images: CreativeAsset[];
     firstFrameAssetId?: string;
     lastFrameAssetId?: string;
+    frameAssetIds?: string[];
     uploading: boolean;
     placement: "topLeft" | "bottomLeft";
     onSelect: (role: FrameRole, assetId: string) => void;
     onUpload: (role: FrameRole) => void;
     onRemove: (role: FrameRole) => void;
+    onToggleKeyframe?: (assetId: string) => void;
+    onUploadKeyframe?: () => void;
+    onMoveKeyframe?: (assetId: string, direction: -1 | 1) => void;
 }) {
     if (mode === "reference") return null;
+    if (mode === "all_frames") {
+        return <KeyframeControls images={images} assetIds={frameAssetIds} uploading={uploading} placement={placement} onToggle={onToggleKeyframe} onUpload={onUploadKeyframe} onMove={onMoveKeyframe} />;
+    }
     return (
         <div className="flex shrink-0 items-start gap-1" aria-label={mode === "first_last" ? "视频首尾帧" : "视频首帧"}>
             <FrameSlot role="first_frame" label="首帧" assetId={firstFrameAssetId} images={images} uploading={uploading} placement={placement === "bottomLeft" ? "bottomLeft" : "topLeft"} onSelect={onSelect} onUpload={onUpload} onRemove={onRemove} />
@@ -53,6 +64,104 @@ export function CreativeVideoFrameControls({
                     />
                 </>
             ) : null}
+        </div>
+    );
+}
+
+function KeyframeControls({
+    images,
+    assetIds,
+    uploading,
+    placement,
+    onToggle,
+    onUpload,
+    onMove,
+}: {
+    images: CreativeAsset[];
+    assetIds: string[];
+    uploading: boolean;
+    placement: "topLeft" | "bottomLeft";
+    onToggle?: (assetId: string) => void;
+    onUpload?: () => void;
+    onMove?: (assetId: string, direction: -1 | 1) => void;
+}) {
+    const [open, setOpen] = useState(false);
+    const frames = assetIds.map((id) => images.find((image) => image.id === id)).filter((asset): asset is CreativeAsset => Boolean(asset));
+    return (
+        <div className="flex shrink-0 items-start gap-1" aria-label="视频全能帧">
+            <Popover
+                trigger="click"
+                placement={placement}
+                arrow={false}
+                destroyOnHidden
+                open={open}
+                onOpenChange={setOpen}
+                content={
+                    <div className="w-64 max-w-[calc(100vw-40px)] py-0.5 sm:w-80">
+                        <p className="px-1 pb-2 text-xs font-semibold text-[#303943] dark:text-[#eef1f4]">选择 2–5 张有序关键帧</p>
+                        <div className="hide-scrollbar grid max-h-52 grid-cols-3 gap-1.5 overflow-y-auto">
+                            {images.map((item) => {
+                                const url = assetUrl(item);
+                                const selected = assetIds.includes(item.id);
+                                return (
+                                    <button
+                                        key={item.id}
+                                        type="button"
+                                        disabled={!url || (!selected && assetIds.length >= 5)}
+                                        className={cn(
+                                            "relative aspect-square min-w-0 overflow-hidden rounded-lg border bg-[#f1f3f5] transition disabled:opacity-40 dark:bg-[#2a2f36]",
+                                            selected ? "border-[#4d7f99] ring-2 ring-[#4d7f99]/20 dark:border-[#82adc3]" : "border-[#e0e4e8] hover:border-[#aeb8c2] dark:border-[#3b424b]",
+                                        )}
+                                        onClick={() => onToggle?.(item.id)}
+                                        aria-label={`${selected ? "移除" : "添加"}关键帧：${item.title}`}
+                                    >
+                                        {url ? <img src={imagePreviewUrl(url, 320)} alt="" className="size-full object-cover" /> : null}
+                                        {selected ? <span className="absolute inset-x-0 bottom-0 bg-black/45 py-0.5 text-center text-[10px] text-white">第 {assetIds.indexOf(item.id) + 1} 帧</span> : null}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                        <Button
+                            type="text"
+                            block
+                            className="mt-2 !h-9 !justify-start !rounded-lg !text-xs"
+                            icon={<Upload className="size-3.5" />}
+                            loading={uploading}
+                            onClick={() => {
+                                setOpen(false);
+                                onUpload?.();
+                            }}
+                        >
+                            上传新图片
+                        </Button>
+                    </div>
+                }
+            >
+                <button
+                    type="button"
+                    className="relative grid size-14 place-items-center overflow-hidden rounded-lg border border-[#dfe4e8] bg-[#f1f3f5] text-[#84909c] shadow-[0_2px_8px_rgba(38,49,65,0.08)] transition hover:border-[#aeb8c2] dark:border-[#3c444d] dark:bg-[#191c20]"
+                    aria-label="设置视频全能帧"
+                >
+                    {frames[0] ? <img src={imagePreviewUrl(assetUrl(frames[0]), 320)} alt="全能帧" className="size-full object-cover" /> : <ImagePlus className="size-5" />}
+                    <span className="absolute inset-x-0 bottom-0 bg-black/45 px-1 py-0.5 text-center text-[9px] font-medium text-white">{frames.length ? `${frames.length} 帧` : "全能帧"}</span>
+                </button>
+            </Popover>
+            <div className="flex max-w-36 items-center gap-1 overflow-x-auto pt-1">
+                {frames.map((frame, index) => (
+                    <div key={frame.id} className="relative shrink-0">
+                        <img src={imagePreviewUrl(assetUrl(frame), 160)} alt={`关键帧 ${index + 1}`} className="size-10 rounded border border-[#dfe4e8] object-cover dark:border-[#3c444d]" />
+                        <button type="button" className="absolute -left-1 -top-1 rounded bg-black/60 text-white" disabled={index === 0} onClick={() => onMove?.(frame.id, -1)} aria-label="关键帧前移">
+                            <ChevronLeft className="size-3" />
+                        </button>
+                        <button type="button" className="absolute -right-1 -top-1 rounded bg-black/60 text-white" disabled={index === frames.length - 1} onClick={() => onMove?.(frame.id, 1)} aria-label="关键帧后移">
+                            <ChevronRight className="size-3" />
+                        </button>
+                        <button type="button" className="absolute -right-1 -bottom-1 rounded bg-black/60 text-white" onClick={() => onToggle?.(frame.id)} aria-label="移除关键帧">
+                            <X className="size-3" />
+                        </button>
+                    </div>
+                ))}
+            </div>
         </div>
     );
 }

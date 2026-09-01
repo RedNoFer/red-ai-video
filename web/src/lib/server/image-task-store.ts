@@ -20,6 +20,7 @@ export type ImageTaskConfig = {
     capabilityProfile?: LogicalModelCapabilityProfile;
     quality?: string;
     size?: string;
+    count?: number;
     systemPrompt?: string;
     advancedConfig?: SystemChannelAdvancedConfig;
 };

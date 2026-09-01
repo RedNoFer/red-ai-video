@@ -9,6 +9,11 @@ describe("model request policy", () => {
         expect(resolveModelRequestTimeoutMs(undefined, "image")).toBe(10 * 60_000);
     });
 
+    it("keeps synchronous sub2api image creation alive for its declared provider response window", () => {
+        expect(resolveModelRequestTimeoutMs({ advancedConfig: { protocol: "sub2api", queryPath: "" } }, "image")).toBe(30 * 60_000);
+        expect(resolveModelRequestTimeoutMs({ advancedConfig: { protocol: "sub2api", queryPath: "" }, capabilityProfile: { timeoutMs: 12 * 60_000 } }, "image")).toBe(12 * 60_000);
+    });
+
     it("keeps every text model attempt at three minutes", () => {
         expect(resolveModelRequestTimeoutMs({ capabilityProfile: { timeoutMs: 15_000 } }, "text")).toBe(3 * 60_000);
         expect(resolveModelRequestTimeoutMs({ capabilityProfile: { timeoutMs: 8 * 60_000 } }, "text")).toBe(3 * 60_000);

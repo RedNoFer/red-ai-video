@@ -13,6 +13,7 @@ import {
     resolveLogicalModelConfig,
     synchronizeLogicalModelsWithChannels,
 } from "./model-routing-config";
+import { applyChannelProtocol, resolveChannelCapabilityConfig } from "./channel-protocol-registry";
 
 const channel = (id: string, models: string[], enabled = true): SystemModelChannel => ({ id, name: id, baseUrl: `https://${id}.example.com/v1`, apiKey: "test-secret", apiFormat: "openai", models, enabled });
 
@@ -137,6 +138,129 @@ describe("model routing config", () => {
 
         expect(models).toHaveLength(1);
         expect(models[0].bindings).toEqual([{ ...existing[0].bindings[0], upstreamModel: "models/GPT-IMAGE-2" }, expect.objectContaining({ channelId: "two", upstreamModel: "gpt-image-2" })]);
+    });
+
+    it("does not keep a text-only upstream model as an audio logical route", () => {
+        const source = channel("sub2api", ["gpt-5.5"]);
+        source.advancedConfig = { protocol: "sub2api", modelCapabilities: { "gpt-5.5": "text" }, modelConfigs: { "gpt-5.5": { capability: "text", source: "provider" } } } as never;
+        const existing: LogicalModel[] = [
+            { id: "gpt-5.5", name: "gpt-5.5", capability: "text", enabled: true, bindings: [{ id: "text", channelId: "sub2api", upstreamModel: "gpt-5.5", enabled: true, priority: 1 }] },
+            { id: "gpt-5.5::audio", name: "gpt-5.5", capability: "audio", enabled: true, bindings: [{ id: "audio", channelId: "sub2api", upstreamModel: "gpt-5.5", enabled: true, priority: 1 }] },
+        ];
+
+        const models = synchronizeLogicalModelsWithChannels(existing, [source]);
+
+        expect(models).toHaveLength(1);
+        expect(models.find((model) => model.capability === "text")).toMatchObject({ id: "gpt-5.5", name: "gpt-5.5" });
+        expect(models.find((model) => model.capability === "audio")).toBeUndefined();
+        expect(normalizeDefaultModelsConfig({ textModel: "gpt-5.5", imageModel: "", videoModel: "", audioModel: "gpt-5.5::audio" }, models, [source])).toMatchObject({ textModel: "gpt-5.5", audioModel: "" });
+    });
+
+    it("rejects image models as audio routes without explicit audio model metadata", () => {
+        const source = channel("sub2api", ["gpt-image-2"]);
+        source.advancedConfig = { protocol: "sub2api", operationConfigs: { audio: { capability: "audio", createPath: "/audio/speech", requestTemplate: '{"model":"{{model}}","input":"{{prompt}}"}' } } } as never;
+        const models: LogicalModel[] = [{ id: "gpt-image-2::audio", name: "gpt-image-2", capability: "audio", enabled: true, bindings: [{ id: "audio", channelId: "sub2api", upstreamModel: "gpt-image-2", enabled: true, priority: 1 }] }];
+
+        expect(modelRoutingValidationErrors(models, [source], { textModel: "", imageModel: "", videoModel: "", audioModel: "gpt-image-2::audio" })).toContain("逻辑模型 gpt-image-2::audio：图片或视频模型不能作为音频模型，请配置明确的音频模型");
+    });
+
+    it("rejects a text-only provider model even when a dialogue audio operation is configured", () => {
+        const source = channel("sub2api", ["gpt-5.5"]);
+        source.advancedConfig = {
+            protocol: "sub2api",
+            modelCapabilities: { "gpt-5.5": "text" },
+            modelConfigs: { "gpt-5.5": { capability: "text", source: "provider" } },
+            operationConfigs: { audio: { capability: "audio", protocol: "openai-audio-dialogue", createPath: "/chat/completions", requestTemplate: '{"model":"{{model}}","modalities":["text","audio"]}', resultField: "choices[0].message.audio" } },
+        } as never;
+        const models: LogicalModel[] = [{ id: "gpt-5.5::audio", name: "gpt-5.5", capability: "audio", enabled: true, bindings: [{ id: "audio", channelId: "sub2api", upstreamModel: "gpt-5.5", enabled: true, priority: 1 }] }];
+
+        expect(modelRoutingValidationErrors(models, [source], { textModel: "", imageModel: "", videoModel: "", audioModel: "gpt-5.5::audio" })).toContain(
+            "逻辑模型 gpt-5.5::audio：上游模型已声明为文本模型，不能作为音频模型；请在供应商模型目录中启用真实音频模型并标记为音频能力",
+        );
+    });
+
+    it("accepts Chat/Responses audio for a model that is also exposed as text", () => {
+        const source = channel("sub2api", ["gpt-5.5"]);
+        source.advancedConfig = {
+            protocol: "sub2api",
+            modelCapabilities: { "gpt-5.5": "audio" },
+            modelConfigs: {
+                "gpt-5.5": {
+                    capability: "audio",
+                    source: "provider",
+                    protocol: "openai-audio-dialogue",
+                    createPath: "/chat/completions",
+                    requestTemplate: '{"model":"{{model}}","messages":[{"role":"user","content":"{{prompt}}"}],"modalities":["text","audio"],"audio":{"voice":"{{voice}}","format":"{{format}}"}}',
+                    resultField: "choices[0].message.audio",
+                },
+            },
+            operationConfigs: {
+                audio: {
+                    capability: "audio",
+                    protocol: "openai-audio-dialogue",
+                    createPath: "/chat/completions",
+                    requestTemplate: '{"model":"{{model}}","messages":[{"role":"user","content":"{{prompt}}"}],"modalities":["text","audio"],"audio":{"voice":"{{voice}}","format":"{{format}}"}}',
+                    resultField: "choices[0].message.audio",
+                },
+            },
+        } as never;
+        const models: LogicalModel[] = [{ id: "gpt-5.5::audio", name: "gpt-5.5", capability: "audio", enabled: true, bindings: [{ id: "audio", channelId: "sub2api", upstreamModel: "gpt-5.5", enabled: true, priority: 1 }] }];
+
+        expect(modelRoutingValidationErrors(models, [source], { textModel: "", imageModel: "", videoModel: "", audioModel: "gpt-5.5::audio" })).toEqual([]);
+    });
+
+    it("keeps the dialogue protocol on a channel-level audio preset", () => {
+        const configured = applyChannelProtocol({ ...channel("dialogue", ["mock-audio"]), baseUrl: "http://127.0.0.1:4010/v1" }, "openai-audio-dialogue");
+        const resolved = resolveChannelCapabilityConfig(configured.advancedConfig, "mock-audio", "audio");
+        expect(configured.advancedConfig?.protocol).toBe("openai-audio-dialogue");
+        expect(resolved).toMatchObject({ protocol: "openai-audio-dialogue", createPath: "/chat/completions" });
+        expect(
+            modelRoutingValidationErrors([{ id: "mock-audio", name: "mock-audio", capability: "audio", enabled: true, bindings: [{ id: "binding", channelId: "dialogue", upstreamModel: "mock-audio", enabled: true, priority: 1 }] }], [configured], {
+                textModel: "",
+                imageModel: "",
+                videoModel: "",
+                audioModel: "mock-audio",
+            }),
+        ).toEqual([]);
+    });
+
+    it("keeps an explicit audio model config on a mixed video protocol channel", () => {
+        const source = channel("buming", ["gemini-3.1-flash-tts"]);
+        source.advancedConfig = {
+            protocol: "buming-seedance",
+            modelCapabilities: { "gemini-3.1-flash-tts": "audio" },
+            modelConfigs: {
+                "gemini-3.1-flash-tts": {
+                    capability: "audio",
+                    source: "manual",
+                    protocol: "custom",
+                    createPath: "/audio/speech",
+                    requestTemplate: '{"model":"{{model}}","input":"{{prompt}}","voice":"{{voice}}","response_format":"{{format}}"}',
+                    resultField: "binary",
+                },
+            },
+        } as never;
+
+        const models = synchronizeLogicalModelsWithChannels(
+            [{ id: "gemini-3.1-flash-tts::video", name: "gemini-3.1-flash-tts", capability: "video", enabled: true, bindings: [{ id: "video", channelId: "buming", upstreamModel: "gemini-3.1-flash-tts", enabled: true, priority: 1 }] }],
+            [source],
+        );
+
+        expect(models).toHaveLength(1);
+        expect(models[0]).toMatchObject({ id: "gemini-3.1-flash-tts", capability: "audio" });
+        expect(modelRoutingValidationErrors(models, [source], { textModel: "", imageModel: "", videoModel: "", audioModel: "gemini-3.1-flash-tts" })).toEqual([]);
+    });
+
+    it("explains that a strict video channel cannot host an audio logical model", () => {
+        const source = channel("buming", ["gemini-3.1-flash-tts"]);
+        source.advancedConfig = { protocol: "buming-seedance", modelCapabilities: { "gemini-3.1-flash-tts": "video" }, modelConfigs: {} } as never;
+        const logicalModels: LogicalModel[] = [
+            { id: "gemini-3.1-flash-tts::audio", name: "Gemini TTS", capability: "audio", enabled: true, bindings: [{ id: "audio", channelId: "buming", upstreamModel: "gemini-3.1-flash-tts", enabled: true, priority: 1 }] },
+        ];
+
+        expect(modelRoutingValidationErrors(logicalModels, [source], { textModel: "", imageModel: "", videoModel: "", audioModel: "gemini-3.1-flash-tts::audio" })).toContain(
+            "逻辑模型 gemini-3.1-flash-tts::audio：渠道 buming 使用不鸣 TokenGo Seedance，仅支持视频；请新建 OpenAI 兼容音频渠道并按 TTS 文档配置 /audio/speech",
+        );
     });
 
     it("removes stale bindings and creates separate logical models for different upstream names", () => {

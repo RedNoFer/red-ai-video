@@ -1,7 +1,7 @@
-import type { LogicalModel, LogicalModelBinding, LogicalModelCapability, LogicalModelCapabilityProfile, SystemDefaultModels, SystemModelChannel } from "@/lib/auth/store";
+import type { LogicalModel, LogicalModelBinding, LogicalModelCapability, LogicalModelCapabilityProfile, SystemChannelProtocol, SystemDefaultModels, SystemModelChannel } from "@/lib/auth/store";
 import { resolveGlobalAiOpcPreset } from "@/lib/globalaiopc-catalog";
 import { inferModelCapability, isCreativeGenerationModel, normalizeModelId } from "@/lib/model-capability";
-import { channelConnectionReady, protocolCatalogCapability, resolveChannelModelConfig } from "@/lib/channel-protocol-registry";
+import { channelConnectionReady, channelProtocolDefinition, protocolCatalogCapability, resolveChannelCapabilityConfig, resolveChannelModelConfig } from "@/lib/channel-protocol-registry";
 
 const CAPABILITY_DEFAULT_KEYS = {
     text: "textModel",
@@ -24,7 +24,6 @@ export function synchronizeLogicalModelsWithChannels(existingModels: LogicalMode
         {
             upstreamModel: string;
             capability: LogicalModelCapability;
-            authoritative: boolean;
             bindings: Array<{ channel: SystemModelChannel; channelIndex: number; upstreamModel: string }>;
         }
     >();
@@ -32,28 +31,33 @@ export function synchronizeLogicalModelsWithChannels(existingModels: LogicalMode
         channel.models.forEach((upstreamModel) => {
             const id = rawModelName(upstreamModel);
             if (!id || !isCreativeGenerationModel(id)) return;
-            const key = normalizeModelName(id);
             const detected = resolveChannelModelCapability(channel, upstreamModel);
-            const model = catalog.get(key) || { upstreamModel: id, capability: detected.capability, authoritative: detected.authoritative, bindings: [] };
-            if ((!model.authoritative && detected.authoritative) || (model.capability === "text" && detected.capability !== "text")) {
-                model.capability = detected.capability;
-                model.authoritative = detected.authoritative;
+            const existingCapabilities = new Set<LogicalModelCapability>();
+            for (const existing of existingModels) {
+                if (!existing.bindings.some((binding) => binding.channelId === channel.id && normalizeModelName(binding.upstreamModel) === normalizeModelName(id))) continue;
+                if (channelSupportsCapability(channel, upstreamModel, existing.capability)) existingCapabilities.add(existing.capability);
             }
-            if (!model.bindings.some((binding) => binding.channel.id === channel.id)) model.bindings.push({ channel, channelIndex, upstreamModel });
-            catalog.set(key, model);
+            const capabilities = new Set<LogicalModelCapability>(channel.advancedConfig ? [detected.capability, ...existingCapabilities] : existingCapabilities.size ? existingCapabilities : [detected.capability]);
+            for (const capability of capabilities) {
+                const key = logicalCatalogKey(id, capability);
+                const model = catalog.get(key) || { upstreamModel: id, capability, bindings: [] };
+                if (!model.bindings.some((binding) => binding.channel.id === channel.id)) model.bindings.push({ channel, channelIndex, upstreamModel });
+                catalog.set(key, model);
+            }
         });
     });
 
     const usedExistingIds = new Set<string>();
     const usedModelIds = new Set<string>();
-    return Array.from(catalog.entries()).map(([modelKey, catalogModel]) => {
-        const matchingModels = existingModels.filter((model) => model.bindings?.some((binding) => normalizeModelName(binding.upstreamModel) === modelKey));
+    return Array.from(catalog.values()).map((catalogModel) => {
+        const modelKey = normalizeModelName(catalogModel.upstreamModel);
+        const matchingModels = existingModels.filter((model) => model.capability === catalogModel.capability && model.bindings?.some((binding) => normalizeModelName(binding.upstreamModel) === modelKey));
         const existing = matchingModels.find((model) => normalizeModelName(model.id) === modelKey && !usedExistingIds.has(model.id.toLowerCase())) || matchingModels.find((model) => !usedExistingIds.has(model.id.toLowerCase()));
         if (existing) usedExistingIds.add(existing.id.toLowerCase());
-        const id = uniqueLogicalModelId(existing?.id || catalogModel.upstreamModel, usedModelIds);
+        const id = uniqueLogicalModelId(existing?.id || catalogModel.upstreamModel, usedModelIds, catalogModel.capability);
         const bindings = catalogModel.bindings
             .map(({ channel, channelIndex, upstreamModel }) => {
-                const stored = findStoredBinding(existingModels, channel.id, upstreamModel);
+                const stored = findStoredBinding(existing, existingModels, channel.id, upstreamModel, catalogModel.capability);
                 const capabilityProfile = normalizeStoredCapabilityProfile(stored?.capabilityProfile);
                 const weight = clampWeight(stored?.weight);
                 return {
@@ -70,7 +74,7 @@ export function synchronizeLogicalModelsWithChannels(existingModels: LogicalMode
         return {
             id,
             name: text(existing?.name, 120) || catalogModel.upstreamModel,
-            capability: catalogModel.authoritative || !existing ? catalogModel.capability : normalizeCapability(existing.capability),
+            capability: catalogModel.capability,
             enabled: existing?.enabled !== false,
             bindings,
         };
@@ -82,7 +86,7 @@ export function mergeChannelModelsIntoLogicalModels(logicalModels: LogicalModel[
 }
 
 export function normalizeDefaultModelsConfig(defaults: Partial<SystemDefaultModels> | undefined, logicalModels: LogicalModel[], channels: SystemModelChannel[]): SystemDefaultModels {
-    return Object.fromEntries(
+    const normalized = Object.fromEntries(
         (Object.entries(CAPABILITY_DEFAULT_KEYS) as Array<[LogicalModelCapability, keyof SystemDefaultModels]>).map(([capability, key]) => {
             const modelId = text(defaults?.[key], 120);
             if (!modelId || isLogicalModelResolvable(logicalModels, channels, capability, modelId)) return [key, modelId];
@@ -90,6 +94,13 @@ export function normalizeDefaultModelsConfig(defaults: Partial<SystemDefaultMode
             return [key, fallback?.id || ""];
         }),
     ) as SystemDefaultModels;
+    const optionalAudioDefault = (key: "voiceDesignModel" | "voiceCloneModel") => {
+        const modelId = text(defaults?.[key], 120);
+        return modelId && isLogicalModelResolvable(logicalModels, channels, "audio", modelId) ? modelId : "";
+    };
+    const voiceDesignModel = optionalAudioDefault("voiceDesignModel");
+    const voiceCloneModel = optionalAudioDefault("voiceCloneModel");
+    return { ...normalized, ...(voiceDesignModel ? { voiceDesignModel } : {}), ...(voiceCloneModel ? { voiceCloneModel } : {}) };
 }
 
 export function isLogicalModelResolvable(logicalModels: LogicalModel[], channels: SystemModelChannel[], capability: LogicalModelCapability, modelId: string) {
@@ -122,6 +133,10 @@ export function modelRoutingValidationErrors(logicalModels: LogicalModel[], chan
             const bindingKey = `${binding.channelId}:${normalizeModelName(binding.upstreamModel)}`;
             if (!channel) errors.push(`逻辑模型 ${model.id} 引用了不存在的渠道`);
             else if (!channelSupportsModel(channel, binding.upstreamModel)) errors.push(`渠道 ${channel.name} 未启用上游模型 ${binding.upstreamModel}`);
+            else if (model.capability === "audio") {
+                const audioError = audioBindingValidationError(channel, binding.upstreamModel);
+                if (audioError) errors.push(`逻辑模型 ${model.id}：${audioError}`);
+            }
             if (bindingKeys.has(bindingKey)) errors.push(`逻辑模型 ${model.id} 存在重复绑定`);
             bindingKeys.add(bindingKey);
         }
@@ -144,12 +159,11 @@ export function channelModelCapability(channel: Pick<SystemModelChannel, "advanc
 function resolveChannelModelCapability(channel: Pick<SystemModelChannel, "advancedConfig">, model: string) {
     const key = normalizeModelId(model);
     if (key === "auto") return { capability: "text" as const, authoritative: true };
-    const protocolCapability = protocolCatalogCapability(channel.advancedConfig?.protocol || "auto");
-    if (protocolCapability) return { capability: protocolCapability, authoritative: true };
     const config = channel.advancedConfig?.modelConfigs?.[key];
     const inferred = inferModelCapability(model);
     if (config?.source === "health" && inferred !== "text") return { capability: inferred, authoritative: true };
     const configured = config?.capability || channel.advancedConfig?.modelCapabilities?.[key];
+    if (configured) return { capability: configured, authoritative: true };
     if (!config && configured === "text" && inferred !== "text") return { capability: inferred, authoritative: true };
     return configured ? { capability: configured, authoritative: true } : { capability: inferred, authoritative: false };
 }
@@ -168,7 +182,8 @@ export function resolveLogicalModelCapabilityProfile(binding: Pick<LogicalModelB
         supportsReferenceImage: booleanValue(stored.supportsReferenceImage, globalPreset?.supportsReferenceImage ?? modelConfig?.supportsReferenceImage ?? advanced?.supportsReferenceImage),
         supportsReferenceVideo: booleanValue(stored.supportsReferenceVideo, globalPreset?.supportsReferenceVideo ?? modelConfig?.supportsReferenceVideo ?? advanced?.supportsReferenceVideo),
         supportsReferenceAudio: booleanValue(stored.supportsReferenceAudio, globalPreset?.supportsReferenceAudio ?? modelConfig?.supportsReferenceAudio ?? advanced?.supportsReferenceAudio),
-        maxReferenceImages: positiveInteger(stored.maxReferenceImages),
+        supportsKeyframes: booleanValue(stored.supportsKeyframes, modelConfig?.supportsKeyframes),
+        maxReferenceImages: positiveInteger(stored.maxReferenceImages) || positiveInteger(modelConfig?.maxReferenceImages),
         aspectRatios: normalizeAspectRatios(stored.aspectRatios),
         minDurationSeconds: positiveNumber(stored.minDurationSeconds),
         maxDurationSeconds: positiveNumber(stored.maxDurationSeconds),
@@ -188,14 +203,75 @@ function channelSupportsModel(channel: Pick<SystemModelChannel, "models">, model
     return Boolean(target && channel.models.some((item) => normalizeModelName(item) === target));
 }
 
-function findStoredBinding(models: LogicalModel[], channelId: string, upstreamModel: string) {
-    const modelKey = normalizeModelName(upstreamModel);
-    return models.flatMap((model) => model.bindings || []).find((binding) => binding.channelId === channelId && normalizeModelName(binding.upstreamModel) === modelKey);
+function channelSupportsCapability(channel: Pick<SystemModelChannel, "apiFormat" | "advancedConfig">, model: string, capability: LogicalModelCapability) {
+    if (capability === "audio" && channel.apiFormat === "gemini") return false;
+    const modelKey = normalizeModelId(model);
+    const modelConfig = channel.advancedConfig?.modelConfigs?.[modelKey];
+    if (modelConfig) {
+        if (modelConfig.capability !== capability) return false;
+        if (capability === "audio" && (!modelConfig.createPath || !modelConfig.requestTemplate)) return false;
+        return true;
+    }
+    const declaredCapability = channel.advancedConfig?.modelCapabilities?.[modelKey];
+    if (declaredCapability && declaredCapability !== capability) return false;
+    if (capability === "audio" && (inferModelCapability(model) === "image" || inferModelCapability(model) === "video")) return false;
+    const config = resolveChannelCapabilityConfig(channel.advancedConfig, model, capability);
+    return Boolean(config?.createPath && config.requestTemplate) || (capability !== "audio" && !channel.advancedConfig);
 }
 
-function uniqueLogicalModelId(value: string, usedIds: Set<string>) {
+function audioBindingValidationError(channel: SystemModelChannel, model: string) {
+    if (channel.apiFormat === "gemini") return "Gemini 渠道不支持音频生成，请改用 OpenAI 兼容音频渠道";
+    const protocol = channel.advancedConfig?.protocol || "auto";
+    const definition = channelProtocolDefinition(protocol);
+    const modelConfig = channel.advancedConfig?.modelConfigs?.[normalizeModelId(model)];
+    const config = resolveChannelCapabilityConfig(channel.advancedConfig, model, "audio");
+    const hasExplicitAudioRoute = modelConfig?.capability === "audio" && Boolean(modelConfig.createPath && modelConfig.requestTemplate);
+    if (definition.strict && !definition.capabilities.includes("audio") && !hasExplicitAudioRoute) {
+        const capabilities = definition.capabilities.map(capabilityLabel).join("、");
+        return `渠道 ${channel.name || protocol} 使用${definition.label}，仅支持${capabilities}；请新建 OpenAI 兼容音频渠道并按 TTS 文档配置 /audio/speech`;
+    }
+    if (inferModelCapability(model) === "image" || inferModelCapability(model) === "video") return "图片或视频模型不能作为音频模型，请配置明确的音频模型";
+    if (channel.advancedConfig?.modelCapabilities?.[normalizeModelId(model)] && channel.advancedConfig.modelCapabilities[normalizeModelId(model)] !== "audio")
+        return "上游模型已声明为文本模型，不能作为音频模型；请在供应商模型目录中启用真实音频模型并标记为音频能力";
+    if (modelConfig && modelConfig.capability !== "audio") return "上游模型已声明为文本模型，不能作为音频模型；请在供应商模型目录中启用真实音频模型并标记为音频能力";
+    if (!config?.createPath || !config.requestTemplate) return "缺少音频创建路径或请求模板";
+    if (config.audioOperation === "voice-design" || config.audioOperation === "voice-clone") {
+        if (!config.voiceIdField || !config.previewAudioField) return "声纹创建模型必须配置 voice_id 和试听音频返回字段";
+        if (config.audioOperation === "voice-clone" && (!config.cloneSampleField || !/\{\{\s*(?:clone_sample_url|sample_audio_url|sample_url)\s*\}\}/i.test(config.requestTemplate))) return "Voice Clone 必须配置样本字段和公网样本 URL 请求模板";
+        return "";
+    }
+    if (isOpenAiAudioDialogueProtocol(config.protocol || channel.advancedConfig?.protocol)) {
+        if (!/^\/(?:chat\/completions|responses)$/.test(config.createPath)) return "Chat/Responses 音频协议只允许 /chat/completions 或 /responses";
+        return "";
+    }
+    if (isOpenAiSpeechProtocol(channel.advancedConfig?.protocol) && config.createPath !== "/audio/speech") return "OpenAI TTS 音频创建路径必须为 /audio/speech";
+    if (!/(?:audio|speech|voice|tts)/i.test(config.createPath) || /(?:images?|videos?)/i.test(config.createPath)) return `音频创建路径无效：${config.createPath}`;
+    return "";
+}
+
+function isOpenAiSpeechProtocol(protocol: SystemChannelProtocol | undefined) {
+    return protocol === "openai" || protocol === "sub2api" || protocol === "newapi" || protocol === "compatible";
+}
+
+function isOpenAiAudioDialogueProtocol(protocol: SystemChannelProtocol | undefined) {
+    return protocol === "openai-audio-dialogue";
+}
+
+function findStoredBinding(existing: LogicalModel | undefined, models: LogicalModel[], channelId: string, upstreamModel: string, capability: LogicalModelCapability) {
+    const modelKey = normalizeModelName(upstreamModel);
+    return (
+        existing?.bindings.find((binding) => binding.channelId === channelId && normalizeModelName(binding.upstreamModel) === modelKey) ||
+        models
+            .filter((model) => model.capability === capability)
+            .flatMap((model) => model.bindings || [])
+            .find((binding) => binding.channelId === channelId && normalizeModelName(binding.upstreamModel) === modelKey)
+    );
+}
+
+function uniqueLogicalModelId(value: string, usedIds: Set<string>, capability: LogicalModelCapability) {
     const base = text(rawModelName(value), 120) || "model";
     let candidate = base;
+    if (usedIds.has(candidate.toLowerCase())) candidate = `${base}::${capability}`;
     let suffix = 2;
     while (usedIds.has(candidate.toLowerCase())) {
         const ending = `-${suffix++}`;
@@ -212,6 +288,7 @@ function normalizeStoredCapabilityProfile(value: unknown): LogicalModelCapabilit
         supportsReferenceImage: optionalBoolean(input.supportsReferenceImage),
         supportsReferenceVideo: optionalBoolean(input.supportsReferenceVideo),
         supportsReferenceAudio: optionalBoolean(input.supportsReferenceAudio),
+        supportsKeyframes: optionalBoolean(input.supportsKeyframes),
         maxReferenceImages: positiveInteger(input.maxReferenceImages),
         aspectRatios: normalizeAspectRatios(input.aspectRatios),
         minDurationSeconds: positiveNumber(input.minDurationSeconds),
@@ -268,14 +345,14 @@ function normalizeModelName(value: string) {
     return rawModelName(value).toLowerCase();
 }
 
+function logicalCatalogKey(upstreamModel: string, capability: LogicalModelCapability) {
+    return `${normalizeModelName(upstreamModel)}::${capability}`;
+}
+
 function rawModelName(value: string) {
     return String(value || "")
         .trim()
         .replace(/^models\//i, "");
-}
-
-function normalizeCapability(value: unknown): LogicalModelCapability {
-    return value === "image" || value === "video" || value === "audio" ? value : "text";
 }
 
 function clampPriority(value: unknown, fallback: number) {

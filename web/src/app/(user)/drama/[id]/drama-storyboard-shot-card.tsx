@@ -1,20 +1,47 @@
 "use client";
 
-import { Button, Input, InputNumber, Segmented, Tag } from "antd";
-import { ChevronDown, MessageSquareText, Volume1 } from "lucide-react";
+import { App, Button, Input, InputNumber, Modal, Segmented, Tag } from "antd";
+import { ChevronDown, GitBranch, MessageSquareText, Sparkles, Volume1 } from "lucide-react";
+import { useState } from "react";
 
 import { useDramaStore } from "../stores/use-drama-store";
-import type { DramaProject, DramaShot } from "../types";
+import type { DramaEpisode, DramaProject, DramaShot } from "../types";
 import { StoryboardTag } from "./drama-editor-elements";
 import { DramaShotAudioModeEditor } from "./drama-shot-audio-mode-editor";
 import { DramaShotContinuityEditor } from "./drama-shot-continuity-editor";
 import { DramaShotDialogueEditor } from "./drama-shot-dialogue-editor";
 import { DramaShotFrameEditor } from "./drama-shot-frame-editor";
+import { dramaShotVideoMode } from "./drama-shot-generation-utils";
+import { updateDramaShotImagePrompt } from "@/services/api/drama-projects";
+import { optimizeDramaFramePrompt } from "@/services/api/prompt-optimization";
 
 const shotFieldClass = "!shadow-none hover:!border-foreground/25 focus:!border-foreground/35 focus:!shadow-none";
 
-export function DramaStoryboardShotCard({ project, episodeId, shot, expanded, onToggle }: { project: DramaProject; episodeId: string; shot: DramaShot; expanded: boolean; onToggle: () => void }) {
+export function DramaStoryboardShotCard({
+    project,
+    episode,
+    shot,
+    expanded,
+    onToggle,
+    onOpenCanvas,
+    onPrefetchCanvas,
+}: {
+    project: DramaProject;
+    episode: DramaEpisode;
+    shot: DramaShot;
+    expanded: boolean;
+    onToggle: () => void;
+    onOpenCanvas: () => void;
+    onPrefetchCanvas?: () => void;
+}) {
+    const { message } = App.useApp();
+    const episodeId = episode.id;
     const updateShot = useDramaStore((state) => state.updateShot);
+    const replaceProject = useDramaStore((state) => state.replaceProject);
+    const [imagePromptModalOpen, setImagePromptModalOpen] = useState(false);
+    const [imagePromptDraft, setImagePromptDraft] = useState("");
+    const [imagePromptGenerating, setImagePromptGenerating] = useState(false);
+    const [imagePromptSaving, setImagePromptSaving] = useState(false);
     const dialogueLines = shot.dialogue
         .split(/\n+/)
         .map((line) => line.trim())
@@ -32,6 +59,33 @@ export function DramaStoryboardShotCard({ project, episodeId, shot, expanded, on
         ),
     ];
 
+    const generateImagePrompt = async () => {
+        setImagePromptGenerating(true);
+        try {
+            setImagePromptDraft(await optimizeDramaFramePrompt(shot.imagePrompt || shot.description));
+            setImagePromptModalOpen(true);
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : "Agent 图片提示词生成失败");
+        } finally {
+            setImagePromptGenerating(false);
+        }
+    };
+
+    const saveImagePrompt = async () => {
+        const prompt = imagePromptDraft.trim();
+        if (!prompt) return;
+        setImagePromptSaving(true);
+        try {
+            replaceProject(await updateDramaShotImagePrompt(project.id, episode.id, shot.id, prompt));
+            setImagePromptModalOpen(false);
+            message.success("图片提示词已覆盖保存");
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : "图片提示词保存失败");
+        } finally {
+            setImagePromptSaving(false);
+        }
+    };
+
     return (
         <article
             className={`min-w-0 self-start overflow-hidden rounded-lg border border-border/80 bg-background/65 p-3 transition hover:border-foreground/15 hover:shadow-sm sm:p-4 [content-visibility:visible] sm:[content-visibility:auto] ${expanded ? "xl:col-span-2" : ""}`}
@@ -41,7 +95,10 @@ export function DramaStoryboardShotCard({ project, episodeId, shot, expanded, on
                 <div className="flex shrink-0 items-center gap-1.5">
                     <StoryboardTag status={shot.storyboardStatus} />
                     <Tag className="!m-0">#{shot.order}</Tag>
-                    <Button size="small" className="!h-8 !px-2.5" icon={<ChevronDown className={`size-3.5 transition-transform ${expanded ? "rotate-180" : ""}`} />} iconPosition="end" aria-expanded={expanded} onClick={onToggle}>
+                    <Button size="small" className="!h-8 !px-2.5" icon={<GitBranch className="size-3.5" />} onMouseEnter={onPrefetchCanvas} onFocus={onPrefetchCanvas} onPointerDown={onPrefetchCanvas} onClick={onOpenCanvas}>
+                        画布
+                    </Button>
+                    <Button size="small" className="!h-8 !px-2.5" icon={<ChevronDown className={`size-3.5 transition-transform ${expanded ? "rotate-180" : ""}`} />} iconPlacement="end" aria-expanded={expanded} onClick={onToggle}>
                         {expanded ? "收起" : "展开"}
                     </Button>
                 </div>
@@ -96,7 +153,7 @@ export function DramaStoryboardShotCard({ project, episodeId, shot, expanded, on
                         <div className="grid gap-3.5 lg:grid-cols-2">
                             <label className="block space-y-1.5">
                                 <span className="grid gap-0.5 text-sm font-medium sm:flex sm:items-baseline sm:gap-x-2">
-                                    画面提示词
+                                    <span className="flex items-center gap-1.5">静态帧提示词 <Button type="text" size="small" className="!h-6 !px-1.5 !text-xs" icon={<Sparkles className="size-3.5" />} loading={imagePromptGenerating} disabled={imagePromptGenerating} onClick={() => void generateImagePrompt()}>提示词优化</Button></span>
                                     <span className="text-xs font-normal text-muted-foreground">主体、场景、景别、构图与光线</span>
                                 </span>
                                 <Input.TextArea
@@ -132,18 +189,17 @@ export function DramaStoryboardShotCard({ project, episodeId, shot, expanded, on
                                 <Segmented
                                     block
                                     className="!min-w-0 !w-full [&_.ant-segmented-group]:!min-w-0 [&_.ant-segmented-item]:!min-w-0 [&_.ant-segmented-item-label]:!truncate [&_.ant-segmented-item-label]:!px-1.5 sm:[&_.ant-segmented-item-label]:!px-2"
-                                    value={shot.videoMode || project.defaultVideoMode}
+                                    value={dramaShotVideoMode(project, shot)}
                                     options={[
                                         { label: "分镜驱动", value: "storyboard" },
                                         { label: "直接生成", value: "direct" },
-                                        { label: "参考图", value: "reference" },
                                     ]}
                                     onChange={(value) => updateShot(project.id, episodeId, shot.id, { videoMode: value as DramaProject["defaultVideoMode"] })}
                                 />
                             </label>
                         </div>
-                        {(shot.videoMode || project.defaultVideoMode) === "storyboard" ? <DramaShotFrameEditor projectId={project.id} episodeId={episodeId} shot={shot} /> : null}
-                        <DramaShotContinuityEditor projectId={project.id} episodeId={episodeId} shot={shot} />
+                        {dramaShotVideoMode(project, shot) === "storyboard" ? <DramaShotFrameEditor project={project} episodeId={episodeId} shot={shot} /> : null}
+                        <DramaShotContinuityEditor project={project} episode={episode} shot={shot} />
                         {shot.storyboardError ? <p className="mt-2 text-xs text-red-500">{shot.storyboardError}</p> : null}
                         {shot.storyboardEndError ? <p className="mt-2 text-xs text-red-500">{shot.storyboardEndError}</p> : null}
                         <DramaShotAudioModeEditor projectId={project.id} episodeId={episodeId} shot={shot} />
@@ -153,12 +209,28 @@ export function DramaStoryboardShotCard({ project, episodeId, shot, expanded, on
                                 className="!h-9 !w-24 [&.ant-input-number-focused]:!border-foreground/35 [&.ant-input-number-focused]:!shadow-none"
                                 min={1}
                                 max={20}
+                                step={1}
+                                precision={0}
                                 value={shot.duration}
                                 onChange={(value) => updateShot(project.id, episodeId, shot.id, { duration: Number(value) || 5 })}
                             />
                             <span>秒</span>
                         </div>
                     </div>
+                    <Modal
+                        open={imagePromptModalOpen}
+                        title="Agent 图片提示词"
+                        centered
+                        width="min(760px, calc(100vw - 24px))"
+                        okText="覆盖保存"
+                        cancelText="取消"
+                        confirmLoading={imagePromptSaving}
+                        onOk={() => void saveImagePrompt()}
+                        onCancel={() => setImagePromptModalOpen(false)}
+                    >
+                        <p className="mb-2 text-xs leading-5 text-muted-foreground">已结合当前镜头事实、连续性和固定资产生成 Seedance 2.0 静态画面提示词。编辑后覆盖保存，不会修改视频提示词或剧情字段。</p>
+                        <Input.TextArea value={imagePromptDraft} onChange={(event) => setImagePromptDraft(event.target.value)} autoSize={{ minRows: 8, maxRows: 18 }} />
+                    </Modal>
                 </div>
             ) : (
                 <div className="mt-2 space-y-1.5">

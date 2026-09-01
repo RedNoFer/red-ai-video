@@ -886,6 +886,9 @@ function normalizeGenerationTaskContext(context: GenerationTaskContext): Generat
         clientRequestId: cleanContextText(context.clientRequestId),
         generationLogId: cleanContextText(context.generationLogId),
         generationSlotId: cleanContextText(context.generationSlotId),
+        assetKind: context.assetKind === "characters" || context.assetKind === "scenes" || context.assetKind === "props" ? context.assetKind : undefined,
+        assetId: cleanContextText(context.assetId),
+        generationStage: context.generationStage === "refinement" || context.generationStage === "initial" ? context.generationStage : undefined,
     };
 }
 
@@ -903,6 +906,9 @@ function preserveTaskContext(previous: StoredGenerationTaskRecord | undefined, n
         clientRequestId: next.clientRequestId || previous?.clientRequestId,
         generationLogId: next.generationLogId || previous?.generationLogId,
         generationSlotId: next.generationSlotId || previous?.generationSlotId,
+        assetKind: next.assetKind || previous?.assetKind,
+        assetId: next.assetId || previous?.assetId,
+        generationStage: next.generationStage || previous?.generationStage,
     };
 }
 

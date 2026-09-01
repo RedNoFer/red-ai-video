@@ -6,7 +6,7 @@ import { ECOMMERCE_IMAGE_SKILL } from "@/lib/server/agent-skills/ecommerce-image
 import { YANAI_BEAUTY_SKILL } from "@/lib/server/agent-skills/yanai-beauty";
 import { DEFAULT_CREATIVE_SHORTCUT_SKILLS } from "@/lib/server/agent-skills/creative-shortcuts";
 import { deriveLogicalModelsConfig, normalizeDefaultModelsConfig, normalizeLogicalModelsConfig } from "@/lib/model-routing-config";
-import { applyChannelProtocol } from "@/lib/channel-protocol-registry";
+import { applyChannelProtocol, channelProtocolDefinition, normalizeStrictProtocolModelConfig } from "@/lib/channel-protocol-registry";
 import { resolveConfiguredModelPointCost } from "@/lib/model-point-cost";
 import { normalizeSystemChannelAdvancedConfig } from "./store-normalizers-channel";
 import {
@@ -253,6 +253,7 @@ export function normalizeSettings(settings: AuthSettings): AuthSettings {
         entitlements: normalizeEntitlementSettings(settings.entitlements),
         generationConcurrency: normalizeGenerationConcurrency(settings.generationConcurrency),
         generationDefaults: normalizeGenerationDefaults(settings.generationDefaults),
+        characterVoicePool: normalizeCharacterVoicePool(settings.characterVoicePool),
         systemChannels,
         logicalModels,
         defaultModels: normalizeDefaultModelsConfig(settings.defaultModels, logicalModels, systemChannels),
@@ -351,6 +352,36 @@ export function normalizeGenerationDefaults(settings: Partial<GenerationDefaultS
         audioVoice: normalizeText(settings?.audioVoice, DEFAULT_SETTINGS.generationDefaults.audioVoice, 80),
         audioFormat: allowedText(settings?.audioFormat, ["mp3", "wav", "opus", "aac", "flac"], DEFAULT_SETTINGS.generationDefaults.audioFormat),
     };
+}
+
+export function normalizeCharacterVoicePool(value: unknown): import("./store-types").CharacterVoicePoolEntry[] {
+    if (!Array.isArray(value)) return [];
+    return value.flatMap((item) => {
+        if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+        const input = item as Record<string, unknown>;
+        const voiceId = typeof input.voiceId === "string" ? input.voiceId.trim().slice(0, 80) : "";
+        const id = typeof input.id === "string" ? input.id.trim().slice(0, 120) : "";
+        if (!id || !voiceId) return [];
+        return [
+            {
+                id,
+                label: typeof input.label === "string" ? input.label.trim().slice(0, 120) || voiceId : voiceId,
+                voiceId,
+                logicalModelId: typeof input.logicalModelId === "string" ? input.logicalModelId.trim().slice(0, 120) : "",
+                channelId: typeof input.channelId === "string" ? input.channelId.trim().slice(0, 120) : "",
+                language: typeof input.language === "string" ? input.language.trim().slice(0, 32) : "zh",
+                tags: Array.isArray(input.tags)
+                    ? input.tags
+                          .filter((tag): tag is string => typeof tag === "string")
+                          .map((tag) => tag.trim().slice(0, 40))
+                          .filter(Boolean)
+                          .slice(0, 20)
+                    : [],
+                enabled: input.enabled !== false,
+                verified: input.verified === true,
+            },
+        ];
+    });
 }
 
 function normalizeDefaultVideoSeconds(value: unknown) {
@@ -620,7 +651,22 @@ export function normalizeSystemChannel(channel: Partial<SystemModelChannel>): Sy
         enabled: channel.enabled !== false,
         advancedConfig: normalizeSystemChannelAdvancedConfig(channel.advancedConfig),
     };
-    return normalized.advancedConfig?.protocol === "yumeng" ? applyChannelProtocol(normalized, "yumeng") : normalized;
+    if (normalized.advancedConfig?.protocol === "yumeng") return applyChannelProtocol(normalized, "yumeng");
+    return normalizeStrictChannelProtocolConfigs(normalized);
+}
+
+function normalizeStrictChannelProtocolConfigs(channel: SystemModelChannel): SystemModelChannel {
+    const advanced = channel.advancedConfig;
+    if (!advanced || !channelProtocolDefinition(advanced.protocol).strict) return channel;
+    const normalizeConfig = (config: NonNullable<typeof advanced.modelConfigs>[string], model?: string) => normalizeStrictProtocolModelConfig(config, advanced.protocol, model);
+    return {
+        ...channel,
+        advancedConfig: {
+            ...advanced,
+            ...(advanced.modelConfigs ? { modelConfigs: Object.fromEntries(Object.entries(advanced.modelConfigs).map(([model, config]) => [model, normalizeConfig(config, model)])) } : {}),
+            ...(advanced.operationConfigs ? { operationConfigs: Object.fromEntries(Object.entries(advanced.operationConfigs).map(([capability, config]) => [capability, normalizeConfig(config)])) } : {}),
+        },
+    };
 }
 
 export function normalizePoints(value: unknown, fallback: number) {

@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { normalizeDramaVisualInput } from "./drama-analysis-input";
+import {
+    compileDramaVideoPromptReferenceInstructions,
+    mergeDramaVideoPromptReferenceInstructions,
+    normalizeDramaReviewCompletionInput,
+    normalizeDramaVisualInput,
+    reviewCompletionFilledCount,
+    reviewCompletionMissingFields,
+    reviewCompletionSatisfies,
+} from "./drama-analysis-input";
 
 describe("normalizeDramaVisualInput", () => {
     it("keeps every reviewed shot, asset, utterance, relation and full text", () => {
@@ -29,5 +37,95 @@ describe("normalizeDramaVisualInput", () => {
         expect(result.payload.shots[80].clueIds).toHaveLength(51);
         expect(result.payload.project.summary).toBe(longDescription);
         expect(result.payload.assets.characters[200].description).toBe(longDescription);
+    });
+});
+
+describe("video prompt reference instructions", () => {
+    it("preserves the exact reference order and sequence-frame roles", () => {
+        expect(
+            compileDramaVideoPromptReferenceInstructions([
+                { role: "keyframe", purpose: "顺序帧 1（开始）", sequenceIndex: 1 },
+                { role: "keyframe", purpose: "顺序帧 2（中间）", sequenceIndex: 2 },
+                { role: "asset_anchor", purpose: "角色基准图" },
+            ]),
+        ).toBe("参考图顺序（与视频请求数组完全一致）：\n@图片1：顺序帧 1（开始）\n@图片2：顺序帧 2（中间）\n@图片3：角色基准图\n必须逐图按上述职责使用；顺序帧用于锁定对应时间段的可见状态，不能用固定资产图替代。");
+    });
+
+    it("replaces a model-generated duplicate reference list with the canonical binding block", () => {
+        const merged = mergeDramaVideoPromptReferenceInstructions("动态意图：Karin 抬眼。\n参考图顺序（与视频请求数组完全一致）：\n@图片1：模型自写的错误职责", [{ role: "keyframe", purpose: "顺序帧 1（开始）", sequenceIndex: 1 }]);
+        expect(merged).toBe("动态意图：Karin 抬眼。\n参考图顺序（与视频请求数组完全一致）：\n@图片1：顺序帧 1（开始）\n必须逐图按上述职责使用；顺序帧用于锁定对应时间段的可见状态，不能用固定资产图替代。");
+    });
+});
+
+describe("review completion input", () => {
+    it("can force an already-complete shot for conversational continuity refinement", () => {
+        const completeContinuity = {
+            shotSize: "中景",
+            cameraAngle: "平视",
+            composition: "人物居左",
+            characterBlocking: "女主靠床",
+            gazeDirection: "看向右侧",
+            actionStart: "抬头",
+            actionEnd: "停住",
+            screenDirection: "向右",
+            axisRule: "不越轴",
+            continuityNotes: "保持视线方向",
+        };
+        const result = normalizeDramaReviewCompletionInput({
+            phase: "review_completion",
+            completionFields: ["continuity"],
+            forceShotIds: ["shot-one"],
+            instruction: "让动作衔接更自然",
+            shots: [{ id: "shot-one", title: "相遇", utterances: [], continuity: completeContinuity }],
+        });
+
+        expect(result.shotIds).toEqual(["shot-one"]);
+        expect(result.missingByShot["shot-one"]).toEqual(["continuity"]);
+        expect(result.payload.instruction).toBe("让动作衔接更自然");
+    });
+
+    it("requires the same key subfields that the review page displays", () => {
+        const emptyShell = {
+            utterances: [{ type: "dialogue", text: "你醒了？" }],
+            performancePlan: { emotionalObjective: "警觉" },
+            dialoguePerformance: [],
+            lightingPlan: { palette: "冷青" },
+            continuity: { shotSize: "中景", cameraAngle: "平视" },
+            entryState: {},
+            exitState: {},
+        };
+
+        expect(reviewCompletionMissingFields(emptyShell)).toEqual(["performancePlan", "dialoguePerformance", "lightingPlan", "continuity", "entryState", "exitState"]);
+        expect(reviewCompletionSatisfies(emptyShell, ["performancePlan", "lightingPlan", "continuity", "entryState", "exitState"])).toBe(false);
+    });
+
+    it("accepts complete performance, lighting and continuity plans", () => {
+        const complete = {
+            performancePlan: {
+                emotionalObjective: "确认危险",
+                emotionalArc: "疑惑到紧绷",
+                speechStyle: "低声短句",
+                pace: "先慢后急",
+                breath: "浅而急",
+                beats: { start: { facialAction: "眉头收紧" }, middle: { facialAction: "眼神游移" }, end: { facialAction: "下颌绷住" } },
+            },
+            lightingPlan: { palette: "冷青", colorTemperature: "4200K", keyLight: "窗侧硬光", fillLight: "弱补光", rimLight: "背后轮廓光", materialResponse: "金属反光偏冷", skinToneProtection: "脸部保留暖色" },
+            continuity: { shotSize: "中景", cameraAngle: "平视", composition: "人物居左", characterBlocking: "女主靠床", gazeDirection: "看向右侧", actionStart: "抬头", actionEnd: "停住", screenDirection: "向右", axisRule: "不越轴" },
+            entryState: { emotion: "虚弱" },
+            exitState: { emotion: "警觉" },
+        };
+
+        expect(reviewCompletionMissingFields(complete)).toEqual([]);
+        expect(reviewCompletionSatisfies(complete, ["performancePlan", "lightingPlan", "continuity", "entryState", "exitState"])).toBe(true);
+    });
+
+    it("counts partial field progress without requiring every missing field", () => {
+        const partial = {
+            performancePlan: { emotionalObjective: "确认危险", emotionalArc: "紧张递进", speechStyle: "低声", pace: "慢", breath: "浅", beats: { start: { facialAction: "收紧" }, middle: { facialAction: "迟疑" }, end: { facialAction: "绷住" } } },
+            lightingPlan: { palette: "冷青", colorTemperature: "4200K", keyLight: "窗侧硬光", fillLight: "弱补光", rimLight: "背后轮廓光", materialResponse: "金属反光", skinToneProtection: "保留肤色" },
+            continuity: { shotSize: "中景", cameraAngle: "平视", composition: "左侧留白", characterBlocking: "靠床", gazeDirection: "向右", actionStart: "抬头", actionEnd: "停住", screenDirection: "向右", axisRule: "不越轴" },
+        };
+
+        expect(reviewCompletionFilledCount(partial, ["performancePlan", "lightingPlan", "continuity", "entryState"])).toBe(3);
     });
 });

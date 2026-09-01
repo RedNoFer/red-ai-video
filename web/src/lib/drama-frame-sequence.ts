@@ -3,49 +3,76 @@ import { nanoid } from "nanoid";
 import type { DramaFrameBeat, DramaStoryboardFrame } from "./drama-project-contract";
 
 const MAX_FRAME_BEATS = 9;
+const TIME_EPSILON = 0.001;
 
 export function normalizeDramaFrameBeats(value: readonly DramaFrameBeat[], duration: number): DramaFrameBeat[] {
     if (!value.length) throw new Error("逐帧计划至少需要 1 帧");
     if (value.length > MAX_FRAME_BEATS) throw new Error("逐帧计划最多 9 帧");
-    if (!Number.isFinite(duration) || duration <= 0) throw new Error("镜头时长必须为正数秒");
-    if (value.length > duration) throw new Error("帧数不能超过镜头整数秒数");
-    if ((Number.isInteger(duration) ? Math.round(value[0].startSecond) : value[0].startSecond) !== 0 || (Number.isInteger(duration) ? Math.round(value.at(-1)!.endSecond) : value.at(-1)!.endSecond) !== duration) throw new Error("逐帧时间段必须完整覆盖镜头时长");
-    const boundaries = integerBoundaries(value, duration);
+    if (!Number.isFinite(duration) || duration <= 0 || !Number.isInteger(duration)) throw new Error("镜头时长必须为正整数秒");
     const frames = value.map((frame, index) => ({
         id: frame.id.trim() || `frame-${nanoid()}`,
         sequenceIndex: index + 1,
-        startSecond: boundaries[index],
-        endSecond: boundaries[index + 1],
+        startSecond: number(frame.startSecond),
+        endSecond: number(frame.endSecond),
         actionPrompt: frame.actionPrompt.trim(),
         imagePrompt: frame.imagePrompt.trim(),
+        ...(frame.supplierPrompt?.trim() ? { supplierPrompt: frame.supplierPrompt.trim() } : {}),
     }));
     if (frames.some((frame) => !frame.actionPrompt || !frame.imagePrompt)) throw new Error("每帧必须填写动作提示词和画面提示词");
-    if (frames[0].startSecond !== 0 || frames.at(-1)!.endSecond !== duration) throw new Error("逐帧时间段必须完整覆盖镜头时长");
+    if (Math.abs(frames[0].startSecond) > TIME_EPSILON || Math.abs(frames.at(-1)!.endSecond - duration) > TIME_EPSILON) throw new Error("逐帧时间段必须完整覆盖镜头时长");
     for (let index = 0; index < frames.length; index += 1) {
         const frame = frames[index];
         if (frame.startSecond < 0 || frame.endSecond <= frame.startSecond) throw new Error(`第 ${index + 1} 帧时间段无效`);
-        if (index && frame.startSecond !== frames[index - 1].endSecond) throw new Error("逐帧时间段不能重叠或存在空白");
+        if (index && Math.abs(frame.startSecond - frames[index - 1].endSecond) > TIME_EPSILON) throw new Error("逐帧时间段不能重叠或存在空白");
     }
     return frames;
 }
 
+/** Returns the visible subject that must change from frame to frame. */
+export function dramaFrameVisualSubject(imagePrompt: string, actionPrompt = "", fallback = "") {
+    const subject = staticFrameSubject(imagePrompt, actionPrompt, fallback);
+    const state = imagePrompt.match(/可见状态：([^；。]+)/u)?.[1] || "";
+    const performanceState = imagePrompt.match(/可见表演状态：([^；。]+)/u)?.[1] || "";
+    return [subject, isGenericFrameState(state) ? "" : state, performanceState].filter(Boolean).join("｜");
+}
+
+export function validateDramaFrameVisualContent(imagePrompt: string, actionPrompt = "") {
+    const subject = staticFrameSubject(imagePrompt, actionPrompt, "");
+    if (/(?:运镜|焦段|推镜|拉镜|摇镜|跟拍|滑轨|环绕|吊臂|慢推|慢拉|后拉|时间段|时间轴|动作过程|对白|声音|口型)/u.test(imagePrompt)) return "每帧必须描述当前可见画面，且静态图片帧不能包含运镜、时间过程、对白或声音指令";
+    if (/(?:景别|镜头)(?:（[^）]*）)?\s*[：:]\s*[^；。\n]*(?:→|->|至)/u.test(imagePrompt)) return "每帧只能使用一个固定景别，不能保留景别切换过程";
+    if (!subject || /^(?:主体保持当前设定中的静态状态|无|待补全|待生成)$/u.test(subject) || /^(?:口型同步|无字幕|无水印|禁止|避免|不得|不展示|没有)/u.test(subject) || /^(?:\d+mm|镜头|运镜|沿[^；。]*?(?:推|拉|摇|跟拍)|(?:慢推|慢拉|环绕))/u.test(subject))
+        return "每帧必须描述当前可见的主体、姿态、道具或环境状态，不能只有对白、旁白、运镜或约束说明";
+    return undefined;
+}
+
+export function validateDramaFramePlanVisuals(frames: readonly DramaFrameBeat[]) {
+    const errors: string[] = [];
+    const subjects = frames.map((frame) => dramaFrameVisualSubject(frame.imagePrompt, frame.actionPrompt));
+    frames.forEach((frame, index) => {
+        const error = validateDramaFrameVisualContent(frame.imagePrompt, frame.actionPrompt);
+        if (error) errors.push(`第 ${index + 1} 帧：${error}`);
+        if (index > 0 && subjects[index] && subjects[index] === subjects[index - 1]) errors.push(`第 ${index + 1} 帧与上一帧的可见画面没有变化，请补充本帧状态变化`);
+    });
+    return errors;
+}
+
 export function defaultDramaFrameBeats(duration: number, actionPrompt: string, imagePrompt: string): DramaFrameBeat[] {
     const phases = ["起始状态", "动作展开", "关键变化", "结果状态"];
-    const normalizedDuration = Math.max(0.001, duration);
-    const activePhases = phases.slice(0, Math.min(phases.length, normalizedDuration));
-    const durations = integerPartitions(normalizedDuration, activePhases.length);
+    const visibleStates = ["主体保持进入镜头时的静止姿态", "主体的手部或身体姿态已发生可见变化", "关键道具或环境出现明确可见变化", "主体保持动作完成后的稳定姿态"];
+    const normalizedDuration = Math.max(1, Math.round(duration));
+    const activePhases = phases;
     const normalizedActionPrompt = actionPrompt.trim();
     const normalizedImagePrompt = imagePrompt.trim();
     return activePhases.map((phase, index) => {
-        const startSecond = durations.slice(0, index).reduce((sum, value) => sum + value, 0);
-        const endSecond = startSecond + durations[index];
+        const startSecond = number((normalizedDuration * index) / activePhases.length);
+        const endSecond = index === activePhases.length - 1 ? normalizedDuration : number((normalizedDuration * (index + 1)) / activePhases.length);
         return {
             id: `frame-${index + 1}`,
             sequenceIndex: index + 1,
             startSecond,
             endSecond,
             actionPrompt: `${normalizedActionPrompt}；${phase}`,
-            imagePrompt: `${normalizedImagePrompt}；${phase}静态锚点`,
+            imagePrompt: `${normalizedImagePrompt}；可见状态：${visibleStates[index]}；${phase}静态锚点`,
         };
     });
 }
@@ -53,12 +80,16 @@ export function defaultDramaFrameBeats(duration: number, actionPrompt: string, i
 export function upgradeDramaFrameImagePrompt(
     imagePrompt: string,
     actionPrompt: string,
-    context: { description: string; shotSize: string; cameraAngle: string; composition: string; characterBlocking: string; gazeDirection: string; lighting: string; colorPalette: string; sequenceIndex?: number },
+    context: { description: string; shotSize: string; cameraAngle: string; composition: string; characterBlocking: string; gazeDirection: string; lighting: string; colorPalette: string; performanceState?: string; sequenceIndex?: number },
 ) {
-    if (imagePrompt.trim().startsWith("静态关键帧：") && imagePrompt.includes("冻结当前时间点的可见状态")) return imagePrompt.trim();
+    if (imagePrompt.trim().startsWith("静态关键帧：") && imagePrompt.includes("可见表演状态：") && imagePrompt.includes("冻结为单一静态姿态") && !/(?:景别|镜头)(?:（[^）]*）)?\s*[：:]\s*[^；。\n]*(?:→|->|至)/u.test(imagePrompt)) return imagePrompt.trim();
     const subject = staticFrameSubject(imagePrompt, actionPrompt, context.description);
+    const visibleState = imagePrompt.match(/可见状态：([^；。]+)/u)?.[1] || "";
+    const performanceState = context.performanceState || inferStaticPerformanceState(subject, actionPrompt, context.sequenceIndex);
     return [
         `静态关键帧：${subject}`,
+        visibleState ? `可见状态：${visibleState}` : "",
+        `可见表演状态：${performanceState}`,
         context.shotSize ? `景别（本帧固定）：${staticShotSize(context.shotSize, context.sequenceIndex)}` : "",
         context.cameraAngle ? `视角：${cleanStaticConstraint(context.cameraAngle)}` : "",
         context.composition ? `构图：${cleanStaticConstraint(context.composition)}` : "",
@@ -67,19 +98,37 @@ export function upgradeDramaFrameImagePrompt(
         "三层空间：前景用于框定或遮挡；中景承载主体与当前状态；背景交代环境关系与纵深。",
         "动作只以当前冻结姿态、手部/道具接触关系或环境残留呈现，不表现运动过程。",
         "主体、道具与环境保留可辨识材质纹理；人物面部清晰、自然并保持身份一致。",
-        "冻结当前时间点的可见状态；不包含运动、剪辑、对白或声音指令；保持人物、道具、空间结构与上一帧连续。",
+        "冻结为单一静态姿态；不表现运动或剪辑过程；保持人物、道具、空间结构与上一帧连续。",
     ]
         .filter(Boolean)
         .join("；");
 }
 
-function staticShotSize(value: string, sequenceIndex = 1) {
-    const parts = value.split(/\s*(?:→|->|至)\s*/u).map((part) => part.trim()).filter(Boolean);
+function inferStaticPerformanceState(subject: string, actionPrompt: string, sequenceIndex = 1) {
+    const text = `${subject}；${actionPrompt}`;
+    if (/惊醒|睁眼|呼吸急促/u.test(text)) return "眉眼骤然睁开、下颌绷紧；视线落向断剑或当前触发物；手部继续扣住握柄";
+    if (/否认|避开|隐瞒/u.test(text)) return "眉心轻收、嘴角压住；视线先避开对方后短暂回看；手部保持道具接触";
+    if (/接住|水囊|推过去/u.test(text)) return "表情紧张略缓；视线跟随水囊；手部从待接变为握稳";
+    if (/护符|警觉|注视|探测器|结界/u.test(text)) return "眉心收紧、眼神警觉；视线锁定结界或探测器；手部握紧当前道具";
+    if (/解封|封印|力量|收力/u.test(text)) return "下颌收紧后放松；视线正对目标；手部由蓄力转为稳定收力";
+    if (/木匣|铜镜|短刃|断口|铁砧|裂纹/u.test(text)) return "表情由疑惑转为戒备；视线锁定关键道具；手部保持明确接触关系";
+    if (sequenceIndex <= 1) return "表情保持入口情绪且眉眼清晰；视线沿叙事目标方向；手部与道具保持入口关系";
+    return "眉眼出现细微反应；视线转向当前叙事目标；手部或道具位置形成可见变化";
+}
+
+export function staticShotSize(value: string, sequenceIndex = 1) {
+    const parts = value
+        .split(/\s*(?:→|->|至)\s*/u)
+        .map((part) => part.trim())
+        .filter(Boolean);
     return parts[Math.min(Math.max(sequenceIndex - 1, 0), parts.length - 1)] || value;
 }
 
 function staticPalette(value: string, sequenceIndex = 1) {
-    const parts = value.split(/\s*(?:→|->|至)\s*/u).map((part) => part.trim()).filter(Boolean);
+    const parts = value
+        .split(/\s*(?:→|->|至)\s*/u)
+        .map((part) => part.trim())
+        .filter(Boolean);
     return parts[Math.min(Math.max(sequenceIndex - 1, 0), parts.length - 1)] || value;
 }
 
@@ -90,10 +139,12 @@ function cleanStaticConstraint(value: string) {
         .trim();
 }
 
+function isGenericFrameState(value: string) {
+    return /^(?:主体保持进入镜头时的静止姿态|主体的手部或身体姿态已发生可见变化|关键道具或环境出现明确可见变化|主体保持动作完成后的稳定姿态|起始状态|动作展开|关键变化|结果状态)$/u.test(value.trim());
+}
+
 function staticFrameSubject(imagePrompt: string, actionPrompt: string, fallback: string) {
-    const markerSources = [imagePrompt, actionPrompt]
-        .map((value) => value.match(/当前(?:时段动作锚点|帧可见画面)：([\s\S]*)/u)?.[1] || "")
-        .filter(Boolean);
+    const markerSources = [imagePrompt, actionPrompt].map((value) => value.match(/当前(?:时段动作锚点|帧可见画面)：([\s\S]*)/u)?.[1] || "").filter(Boolean);
     const candidates = [...markerSources, imagePrompt, actionPrompt]
         .map((value) =>
             value
@@ -104,8 +155,11 @@ function staticFrameSubject(imagePrompt: string, actionPrompt: string, fallback:
                 .replace(/^无字幕、无水印、无logo[^。]*。?/u, "")
                 .replace(/^深蓝黑、雪白、极少冷银。?/u, "")
                 .replace(/^.*?(?:匹配切到|切到|切至|转到)/u, "")
-                .replace(/(?:耳语|对白|旁白|口型同步|询问|回答|问)[:：][\s\S]*$/u, "")
+                .replace(/(?:耳语|对白|旁白|台词|口型同步|询问|回答|问)[:：][\s\S]*$/u, "")
                 .replace(/(?:镜头运动|运镜|推镜|拉镜|摇镜|跟拍|拍摄)[:：]?[\s\S]*$/u, "")
+                .replace(/^(?:镜头)?沿[^；。\n]*(?:推|拉|摇|跟拍|环绕)[^；。\n]*[；。]?/u, "")
+                .replace(/^(?:无对白|无台词|无字幕|无水印)[；。]?/u, "")
+                .replace(/(?:保持(?:角色|人物|身份|服装|道具|场景|空间|结构|连续)|严格以|冻结当前时间点|不包含运动|不表现运动过程|主体、道具与环境保留可辨识材质纹理|可见表演状态)[^；。]*[；。]?/gu, "")
                 .replace(/^”/u, "")
                 .replace(/[“”"][^“”"]{0,160}[”"]?/gu, "")
                 .trim(),
@@ -114,8 +168,12 @@ function staticFrameSubject(imagePrompt: string, actionPrompt: string, fallback:
         .map((value) => value.trim())
         .filter((value) => value.length > 3)
         .filter((value) => !/^(?:耳语|对白|旁白|口型同步|无对白|无字幕|不要|禁止)/u.test(value))
-        .filter((value) => !/(?:镜头|运镜|推镜|拉镜|摇镜|跟拍|匹配切|固定双人|景别|口型同步|开口|说话|回答|询问|质疑|否认|沿动作轴线|视线高度|拍摄|动作过渡|连续反应|当前动作|动作展开|关键变化|结果状态|缩短距离|冲刺|奔跑|靠近|走向|逐渐|继续)/u.test(value));
-    const safeFallback = cleanStaticConstraint(fallback).replace(/[；。]+$/u, "").trim();
+        .filter(
+            (value) => !/(?:镜头|运镜|推镜|拉镜|摇镜|跟拍|匹配切|固定双人|景别|口型同步|开口|说话|回答|询问|质疑|否认|沿动作轴线|视线高度|拍摄|动作过渡|连续反应|当前动作|动作展开|关键变化|结果状态|缩短距离|冲刺|奔跑|靠近|走向|逐渐|继续)/u.test(value),
+        );
+    const safeFallback = cleanStaticConstraint(fallback)
+        .replace(/[；。]+$/u, "")
+        .trim();
     return candidates[0] || safeFallback || "主体保持当前设定中的静态状态";
 }
 
@@ -124,7 +182,7 @@ export function insertDramaFrameBeat(frames: readonly DramaFrameBeat[], frameId:
     const index = frames.findIndex((frame) => frame.id === frameId);
     if (index < 0) throw new Error("待拆分帧不存在");
     const current = frames[index];
-    const middle = Math.floor((current.startSecond + current.endSecond) / 2);
+    const middle = number((current.startSecond + current.endSecond) / 2);
     if (middle <= current.startSecond || middle >= current.endSecond) throw new Error("当前时间段无法继续拆分");
     return reindex([...frames.slice(0, index), { ...current, endSecond: middle }, { ...current, id: `frame-${nanoid()}`, startSecond: middle, actionPrompt: `${current.actionPrompt}（后续）` }, ...frames.slice(index + 1)]);
 }
@@ -140,17 +198,21 @@ export function deleteDramaFrameBeat(frames: readonly DramaFrameBeat[], frameId:
     return reindex(next);
 }
 
-export function updateDramaFrameBeat(frames: readonly DramaFrameBeat[], generated: readonly DramaStoryboardFrame[], frameId: string, patch: Partial<Pick<DramaFrameBeat, "endSecond" | "actionPrompt" | "imagePrompt">>) {
+export function updateDramaFrameBeat(frames: readonly DramaFrameBeat[], generated: readonly DramaStoryboardFrame[], frameId: string, patch: Partial<Pick<DramaFrameBeat, "endSecond" | "actionPrompt" | "imagePrompt" | "supplierPrompt">>) {
     const index = frames.findIndex((frame) => frame.id === frameId);
     if (index < 0) throw new Error("待更新帧不存在");
     const beats = frames.map((frame) => ({ ...frame }));
     beats[index] = { ...beats[index], ...patch };
     if (patch.endSecond !== undefined && index + 1 < beats.length) beats[index + 1].startSecond = patch.endSecond;
-    const invalidFrom = patch.imagePrompt !== undefined || patch.endSecond !== undefined ? index : index + 1;
+    const invalidFrom = patch.imagePrompt !== undefined || patch.supplierPrompt !== undefined || patch.endSecond !== undefined ? index : index + 1;
     const staleIds = new Set(beats.slice(invalidFrom).map((frame) => frame.id));
     return {
         beats: reindex(beats),
-        frames: generated.map((frame) => (staleIds.has(frame.id) ? { ...frame, status: "stale" as const, taskId: undefined, error: undefined, inputHash: undefined, continuityStatus: "stale" as const, continuityEvidenceId: undefined, generationPrompt: undefined } : frame)),
+        frames: generated.map((frame) =>
+            staleIds.has(frame.id)
+                ? { ...frame, status: "stale" as const, taskId: undefined, error: undefined, inputHash: undefined, continuityStatus: "stale" as const, continuityEvidenceId: undefined, generationPrompt: undefined, generationReferences: undefined }
+                : frame,
+        ),
     };
 }
 
@@ -189,22 +251,6 @@ function reindex(frames: readonly DramaFrameBeat[]) {
     return frames.map((frame, index) => ({ ...frame, sequenceIndex: index + 1 }));
 }
 
-function integerBoundaries(frames: readonly DramaFrameBeat[], duration: number) {
-    const boundaries = [0];
-    for (let index = 0; index < frames.length - 1; index += 1) {
-        const remaining = frames.length - index - 1;
-        const preferred = Number.isInteger(duration) ? Math.round(Number(frames[index].endSecond)) : Number(frames[index].endSecond);
-        const minimum = boundaries[index];
-        const maximum = duration;
-        boundaries.push(Math.min(Math.max(preferred, minimum), maximum));
-    }
-    boundaries.push(duration);
-    return boundaries;
-}
-
-function integerPartitions(total: number, count: number) {
-    const safeTotal = Math.max(count * 0.001, total);
-    const base = Math.floor(safeTotal / count);
-    const remainder = safeTotal - base * count;
-    return Array.from({ length: count }, (_, index) => base + (index < remainder ? 1 : 0));
+function number(value: number) {
+    return Number(value.toFixed(3));
 }

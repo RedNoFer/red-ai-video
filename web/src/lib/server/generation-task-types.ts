@@ -16,6 +16,9 @@ export type GenerationTaskContext = {
     clientRequestId?: string;
     generationLogId?: string;
     generationSlotId?: string;
+    assetKind?: "characters" | "scenes" | "props";
+    assetId?: string;
+    generationStage?: "initial" | "refinement";
 };
 
 export type StoredGenerationTaskRecord = {

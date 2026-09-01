@@ -82,7 +82,7 @@ function isArkPlanBaseUrl(baseUrl: string) {
 export function normalizeSeedanceResolution(value: string, model = "") {
     const normalized = normalizeResolutionToken(value);
     if (isSeedanceFastModel(model) && normalized === "1080p") return "720p";
-    return seedanceResolutionOptions.some((item) => item.value === normalized) ? normalized : "720p";
+    return seedanceResolutionOptions.some((item) => item.value === normalized) ? normalized : "480p";
 }
 
 function normalizeResolutionToken(value: string) {

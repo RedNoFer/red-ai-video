@@ -2,12 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Dropdown, Modal } from "antd";
-import { BookOpen, Bot, LibraryBig, Menu, Redo2, Sparkles, Trash2, Undo2, Upload } from "lucide-react";
+import { BookOpen, Bot, GitBranch, LibraryBig, Menu, Redo2, Sparkles, Trash2, Undo2, Upload } from "lucide-react";
 
 import { UserStatusActions } from "@/components/layout/user-status-actions";
 import { canvasThemes } from "@/lib/canvas-theme";
 import { useThemeStore } from "@/stores/use-theme-store";
 import type { CanvasProjectSaveState } from "../stores/use-canvas-store";
+import { useCanvasUiStore } from "../stores/use-canvas-ui-store";
 
 export function CanvasTopBar({
     title,
@@ -23,10 +24,10 @@ export function CanvasTopBar({
     onWorkbench,
     onDeleteProject,
     onImportImage,
+    linkedDrama,
+    onRefreshDrama,
     onUndo,
     onRedo,
-    assetsOpen,
-    onToggleAssets,
     agentOpen,
     compactAgentStatus,
     onToggleAgent,
@@ -44,16 +45,18 @@ export function CanvasTopBar({
     onWorkbench: () => void;
     onDeleteProject: () => void;
     onImportImage: () => void;
+    linkedDrama?: boolean;
+    onRefreshDrama?: () => void;
     onUndo: () => void;
     onRedo: () => void;
-    assetsOpen: boolean;
-    onToggleAssets: () => void;
     agentOpen: boolean;
     compactAgentStatus?: { connected: boolean; enabled: boolean; activity: string };
     onToggleAgent: () => void;
 }) {
     const colorTheme = useThemeStore((state) => state.theme);
     const theme = canvasThemes[colorTheme];
+    const assetsOpen = useCanvasUiStore((state) => state.assetsOpen);
+    const toggleAssets = useCanvasUiStore((state) => state.toggleAssets);
     const titleRef = useRef<HTMLDivElement>(null);
     const menuTriggerRef = useRef<HTMLButtonElement>(null);
     const [shortcutsOpen, setShortcutsOpen] = useState(false);
@@ -96,6 +99,7 @@ export function CanvasTopBar({
                                 { key: "docs", icon: <BookOpen className="size-4" />, label: "使用帮助", onClick: () => window.location.assign("/help?section=canvas") },
                                 { type: "divider" },
                                 { key: "import", icon: <Upload className="size-4" />, label: "导入素材", onClick: onImportImage },
+                                ...(linkedDrama && onRefreshDrama ? [{ key: "refresh-drama", icon: <GitBranch className="size-4" />, label: "从短剧刷新", onClick: onRefreshDrama }] : []),
                                 { type: "divider" },
                                 { key: "undo", disabled: !canUndo, icon: <Undo2 className="size-4" />, label: <MenuLabel text="撤销" shortcut="⌘ Z" />, onClick: onUndo },
                                 { key: "redo", disabled: !canRedo, icon: <Redo2 className="size-4" />, label: <MenuLabel text="重做" shortcut="⌘ ⇧ Z / ⌘ Y" />, onClick: onRedo },
@@ -139,7 +143,7 @@ export function CanvasTopBar({
                         type="button"
                         className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg px-2 text-sm font-medium transition hover:opacity-70 focus-visible:outline-none focus-visible:ring-2"
                         style={{ background: assetsOpen ? theme.toolbar.itemHover : "transparent", color: theme.node.text }}
-                        onClick={onToggleAssets}
+                        onClick={toggleAssets}
                         aria-label={assetsOpen ? "关闭资产面板" : "打开资产面板"}
                         aria-expanded={assetsOpen}
                     >

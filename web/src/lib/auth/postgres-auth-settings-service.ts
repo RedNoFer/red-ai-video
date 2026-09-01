@@ -73,6 +73,7 @@ function postgresSettingsPatch(patch: Partial<AuthSettings>, settings: AuthSetti
     }
     if (patch.generationConcurrency !== undefined) result.generationConcurrency = asJson(settings.generationConcurrency);
     if (patch.generationDefaults !== undefined) result.generationDefaults = asJson(settings.generationDefaults);
+    if (patch.characterVoicePool !== undefined) result.characterVoicePool = asJson(settings.characterVoicePool);
     if (patch.logicalModels !== undefined) result.logicalModels = asJson(settings.logicalModels);
     if (patch.defaultModels !== undefined) result.defaultModels = asJson(settings.defaultModels);
     if (patch.agentSkills !== undefined) result.agentSkills = asJson(settings.agentSkills);

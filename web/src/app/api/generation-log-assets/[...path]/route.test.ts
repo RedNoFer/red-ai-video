@@ -28,6 +28,7 @@ vi.mock("@/lib/server/media-concurrency", () => ({ acquireMediaConcurrency: mock
 vi.mock("@/lib/server/security", () => ({ checkLocalMediaRateLimit: mocks.rate, rateLimitHeaders: vi.fn(() => ({ "Retry-After": "60" })) }));
 vi.mock("@/lib/server/object-storage-service", () => ({ createExternalMediaReadUrl: mocks.externalRead }));
 
+import { createSignedGenerationAssetUrl } from "@/lib/server/reference-asset-access";
 import { GET, HEAD } from "./route";
 
 const context = { params: Promise.resolve({ path: ["permanent", "2026", "07", "20", "images", "file.png"] }) };
@@ -95,6 +96,21 @@ describe("generation log asset access", () => {
         expect(mocks.canAccess).toHaveBeenCalledWith("owner", "user", "/api/generation-log-assets/permanent/2026/07/20/images/file.png");
         expect(mocks.disposition).toHaveBeenCalledWith("inline", "uploaded-file.png", "image/png", "");
         expect(mocks.stream).toHaveBeenCalled();
+    });
+
+    it("allows a short-lived signed provider read without a browser session", async () => {
+        const previousKey = process.env.VOZEB_PRO_REFERENCE_ASSET_SIGNING_KEY;
+        process.env.VOZEB_PRO_REFERENCE_ASSET_SIGNING_KEY = "test-signing-key";
+        try {
+            const signedUrl = createSignedGenerationAssetUrl("permanent/2026/07/20/images/file.png", "https://vozeb.example");
+            const response = await GET(new Request(signedUrl), context);
+            expect(response.status).toBe(200);
+            expect(mocks.getCurrentUser).not.toHaveBeenCalled();
+            expect(mocks.canAccess).not.toHaveBeenCalled();
+        } finally {
+            if (previousKey === undefined) delete process.env.VOZEB_PRO_REFERENCE_ASSET_SIGNING_KEY;
+            else process.env.VOZEB_PRO_REFERENCE_ASSET_SIGNING_KEY = previousKey;
+        }
     });
 
     it("marks object-backed original HEAD downloads as attachments", async () => {

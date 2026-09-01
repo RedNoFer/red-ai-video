@@ -19,6 +19,7 @@ export type ResolvedCanvasVideoReferences = {
     snapshots: CanvasVideoReferenceSnapshot[];
     firstFrame?: CanvasVideoFrameSelection;
     lastFrame?: CanvasVideoFrameSelection;
+    keyframes?: CanvasVideoFrameSelection[];
 };
 
 export function canvasVideoReferenceMetadata(references: ResolvedCanvasVideoReferences): Partial<CanvasNodeMetadata> {
@@ -26,12 +27,13 @@ export function canvasVideoReferenceMetadata(references: ResolvedCanvasVideoRefe
         videoReferenceMode: references.mode,
         videoFirstFrame: references.firstFrame,
         videoLastFrame: references.lastFrame,
+        videoKeyframes: references.keyframes,
         videoReferences: references.snapshots,
         references: references.snapshots.map((reference) => reference.source),
     };
 }
 
-const videoReferenceModes: CreativeVideoReferenceMode[] = ["reference", "first_frame", "first_last"];
+const videoReferenceModes: CreativeVideoReferenceMode[] = ["reference", "first_frame", "first_last", "all_frames"];
 
 export function normalizeCanvasVideoReferenceMode(value: unknown): CreativeVideoReferenceMode {
     return typeof value === "string" && videoReferenceModes.includes(value as CreativeVideoReferenceMode) ? (value as CreativeVideoReferenceMode) : "reference";
@@ -39,13 +41,14 @@ export function normalizeCanvasVideoReferenceMode(value: unknown): CreativeVideo
 
 export function canvasVideoReferenceModeLabel(value: unknown) {
     const mode = normalizeCanvasVideoReferenceMode(value);
-    return mode === "first_frame" ? "首帧" : mode === "first_last" ? "首尾帧" : "普通参考";
+    return mode === "first_frame" ? "首帧" : mode === "first_last" ? "首尾帧" : mode === "all_frames" ? "全能帧" : "普通参考";
 }
 
 export function canvasVideoReferenceModePatch(mode: CreativeVideoReferenceMode): Partial<CanvasNodeMetadata> {
-    if (mode === "reference") return { videoReferenceMode: mode, videoFirstFrame: undefined, videoLastFrame: undefined };
+    if (mode === "reference") return { videoReferenceMode: mode, videoFirstFrame: undefined, videoLastFrame: undefined, videoKeyframes: undefined };
     if (mode === "first_frame") return { videoReferenceMode: mode, videoLastFrame: undefined };
-    return { videoReferenceMode: mode };
+    if (mode === "all_frames") return { videoReferenceMode: mode, videoFirstFrame: undefined, videoLastFrame: undefined };
+    return { videoReferenceMode: mode, videoKeyframes: undefined };
 }
 
 export function canvasVideoFrameSelection(reference: CanvasResourceReference): CanvasVideoFrameSelection | null {
@@ -90,6 +93,28 @@ export function resolveCanvasVideoGenerationReferences({
         return resolvedVideoReferences(mode, images, context.referenceVideos, context.referenceAudios);
     }
 
+    if (mode === "all_frames") {
+        const selections = metadata?.videoKeyframes?.length
+            ? metadata.videoKeyframes
+            : availableImages.slice(0, 5).flatMap((image, index) => {
+                  const selection = frameSelectionFromImage(image);
+                  return selection ? [{ ...selection, title: `关键帧 ${index + 1}` }] : [];
+              });
+        const keyframes = selections.flatMap((selection) => {
+            const image = resolveFrameImage(selection, availableImages);
+            return image ? [image] : [];
+        });
+        if (keyframes.length < 2 || keyframes.length > 5) throw new Error("全能帧必须选择 2 到 5 张图片");
+        const images = keyframes.map((image, index) => ({ ...image, videoRole: "keyframe" as const, keyframeIndex: index + 1 }));
+        const regularImages = context.referenceImages.filter((image) => !keyframes.some((frame) => sameReferenceImage(frame, image))).map((image) => withVideoRole(image, "reference"));
+        const frames: CanvasVideoFrameSelection[] = [];
+        images.forEach((image, index) => {
+            const frame = frameSelectionFromImage(image, selections[index]);
+            if (frame) frames.push(frame);
+        });
+        return resolvedVideoReferences(mode, [...images, ...regularImages], context.referenceVideos, context.referenceAudios, undefined, undefined, frames);
+    }
+
     const firstImage = resolveFrameImage(metadata?.videoFirstFrame, availableImages);
     if (!firstImage) throw new Error("请先选择视频首帧图片");
     const firstFrame = frameSelectionFromImage(firstImage, metadata?.videoFirstFrame);
@@ -131,10 +156,11 @@ export function restoreCanvasVideoGenerationReferences(metadata: CanvasNodeMetad
                 width: snapshot.width,
                 height: snapshot.height,
                 videoRole: role,
+                keyframeIndex: snapshot.keyframeIndex,
             });
             continue;
         }
-        if (role !== "reference") throw new Error("视频首尾帧只能使用图片素材");
+        if (role !== "reference") throw new Error("视频帧只能使用图片素材");
         if (snapshot.type === "video") {
             videos.push({
                 id: snapshot.id,
@@ -169,6 +195,7 @@ export function restoreCanvasVideoGenerationReferences(metadata: CanvasNodeMetad
         snapshots: metadata.videoReferences,
         firstFrame: metadata.videoFirstFrame,
         lastFrame: metadata.videoLastFrame,
+        keyframes: metadata.videoKeyframes,
     };
 }
 
@@ -179,10 +206,11 @@ function resolvedVideoReferences(
     audios: ReferenceAudio[],
     firstFrame?: CanvasVideoFrameSelection,
     lastFrame?: CanvasVideoFrameSelection,
+    keyframes?: CanvasVideoFrameSelection[],
 ): ResolvedCanvasVideoReferences {
     assertFrameRoles(images);
     assertReferenceModeFrames(mode, images);
-    return { mode, images, videos, audios, snapshots: snapshotVideoReferences(images, videos, audios), firstFrame, lastFrame };
+    return { mode, images, videos, audios, snapshots: snapshotVideoReferences(images, videos, audios), firstFrame, lastFrame, keyframes };
 }
 
 function snapshotVideoReferences(images: ReferenceImage[], videos: ReferenceVideo[], audios: ReferenceAudio[]) {
@@ -204,6 +232,7 @@ function snapshotVideoReferences(images: ReferenceImage[], videos: ReferenceVide
                     serverUrl: image.serverUrl,
                     width: image.width,
                     height: image.height,
+                    ...(image.keyframeIndex ? { keyframeIndex: image.keyframeIndex } : {}),
                 },
             ];
         }),
@@ -271,8 +300,8 @@ function frameSelectionFromImage(image: ReferenceImage, fallback?: CanvasVideoFr
     } satisfies CanvasVideoFrameSelection;
 }
 
-function withVideoRole(image: ReferenceImage, role: VideoReferenceRole): ReferenceImage {
-    return { ...image, videoRole: role };
+function withVideoRole(image: ReferenceImage, role: VideoReferenceRole, keyframeIndex?: number): ReferenceImage {
+    return { ...image, videoRole: role, ...(keyframeIndex ? { keyframeIndex } : {}) };
 }
 
 function assertFrameRoles(images: ReferenceImage[]) {
@@ -282,9 +311,15 @@ function assertFrameRoles(images: ReferenceImage[]) {
     if (lastFrames.length > 1) throw new Error("一次只能指定一张视频尾帧图片");
     if (lastFrames.length && !firstFrames.length) throw new Error("指定视频尾帧时必须同时指定首帧");
     if (firstFrames[0] && lastFrames[0] && sameReferenceImage(firstFrames[0], lastFrames[0])) throw new Error("视频首帧和尾帧不能使用同一张图片");
+    const keyframes = images.filter((image) => image.videoRole === "keyframe").sort((left, right) => (left.keyframeIndex || 0) - (right.keyframeIndex || 0));
+    if (keyframes.length && (keyframes.length < 2 || keyframes.length > 5 || keyframes.some((image, index) => image.keyframeIndex !== index + 1))) throw new Error("全能帧必须按顺序选择 2 到 5 张图片");
 }
 
 function assertReferenceModeFrames(mode: CreativeVideoReferenceMode, images: ReferenceImage[]) {
+    if (mode === "all_frames") {
+        if (images.filter((image) => image.videoRole === "keyframe").length < 2) throw new Error("全能帧必须选择 2 到 5 张图片");
+        return;
+    }
     if (mode !== "reference" && !images.some((image) => image.videoRole === "first_frame")) throw new Error("请先选择视频首帧图片");
     if (mode === "first_last" && !images.some((image) => image.videoRole === "last_frame")) throw new Error("请先选择视频尾帧图片");
 }

@@ -25,7 +25,7 @@ describe("图片任务轮询", () => {
         const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => Response.json({ task: { id: "image-task", kind: "generation", model: "image-model" } }));
         vi.stubGlobal("fetch", fetchMock);
 
-        await createImageGenerationTask({ apiSource: "system", model: "image-model", imageModel: "image-model" } as AiConfig, "生成图片", [], undefined, {
+        await createImageGenerationTask({ apiSource: "system", model: "image-model", imageModel: "image-model", channelId: "new-channel" } as AiConfig, "生成图片", [], undefined, {
             clientRequestId: "image-workbench:conversation:slot",
             attemptNo: 3,
         });
@@ -34,10 +34,31 @@ describe("图片任务轮询", () => {
         expect(init).toBeDefined();
         if (!init) throw new Error("缺少图片任务请求参数");
         const headers = new Headers(init.headers);
-        const body = JSON.parse(String(init.body)) as { context?: { clientRequestId?: string; attemptNo?: number } };
+        const body = JSON.parse(String(init.body)) as { config?: { channelId?: string }; context?: { clientRequestId?: string; attemptNo?: number } };
         expect(headers.get("x-vozeb-pro-client-request-id")).toBe("image-workbench:conversation:slot");
         expect(headers.get("x-vozeb-pro-attempt-no")).toBe("3");
+        expect(body.config?.channelId).toBe("new-channel");
         expect(body.context).toMatchObject({ clientRequestId: "image-workbench:conversation:slot", attemptNo: 3 });
+    });
+
+    it("always selects the image-specific model when a generic model is also present", async () => {
+        const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => Response.json({ task: { id: "image-task", kind: "generation", model: "image-model" } }));
+        vi.stubGlobal("fetch", fetchMock);
+
+        await createImageGenerationTask({ apiSource: "system", model: "text-model", imageModel: "image-model" } as AiConfig, "生成图片");
+
+        const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as { config?: { model?: string } };
+        expect(body.config?.model).toBe("image-model");
+    });
+
+    it("forwards the requested image count to the task API", async () => {
+        const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => Response.json({ task: { id: "image-task", kind: "generation", model: "image-model" } }));
+        vi.stubGlobal("fetch", fetchMock);
+
+        await createImageGenerationTask({ apiSource: "system", model: "image-model", imageModel: "image-model", count: "2" } as AiConfig, "生成两张候选图");
+
+        const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as { config?: { count?: string } };
+        expect(body.config?.count).toBe("2");
     });
 
     it("reuses a permanent server reference without downloading it before task creation", async () => {

@@ -6,11 +6,26 @@ import { buildDramaProductionRun, compileDramaVideoSegmentPrompt, invalidateDram
 describe("drama production run planning", () => {
     it("locks parameters and gates the next continuous shot on previous continuity QC", () => {
         const project = fixture();
+        project.productionBible = {
+            language: "中文",
+            ratio: "9:16",
+            visualStyle: "测试",
+            continuityMode: "strict",
+            productionPlan: {
+                version: "drama-production-plan-v1",
+                skills: [],
+                video: { model: "video-one", mode: "storyboard", ratio: "9:16", resolution: "480p", durationPolicy: "shot", count: 1, audioMode: "native", allowExplicitFallback: false },
+                references: { strategy: "adaptive", minImages: 1, maxImages: 3, roles: [] },
+                continuity: { mode: "strict", requireAcceptedActualTail: true },
+                lockedAt: new Date(0).toISOString(),
+                source: "manual",
+            },
+        };
         const run = buildDramaProductionRun(project, project.episodes[0], { imageModel: "image-one", videoModel: "video-one", audioModel: "audio-one", imageQuality: "2k", videoQuality: "1080p" });
         const firstQc = run.steps.find((step) => step.shotId === "shot-one" && step.type === "continuity_qc")!;
         const secondStart = run.steps.find((step) => step.shotId === "shot-two" && step.type === "start_frame")!;
 
-        expect(run).toMatchObject({ mode: "strict", parameterSnapshot: { imageModel: "image-one", videoModel: "video-one", ratio: "9:16" } });
+        expect(run).toMatchObject({ mode: "strict", parameterSnapshot: { imageModel: "image-one", videoModel: "video-one", ratio: "9:16", productionPlan: { video: { resolution: "480p" } } } });
         expect(secondStart.dependsOn).toContain(firstQc.id);
         expect(secondStart.referenceShotId).toBe("shot-one");
         expect(run.steps.find((step) => step.shotId === "shot-three" && step.type === "start_frame")?.referenceShotId).toBeUndefined();

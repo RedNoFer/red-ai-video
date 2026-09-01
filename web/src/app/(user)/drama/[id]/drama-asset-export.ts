@@ -1,6 +1,7 @@
 import { saveAs } from "file-saver";
 
 import type { DramaAssetReference, DramaNamedAsset, DramaProject } from "@/lib/drama-project-contract";
+import { approvedAssetReference } from "@/lib/drama-asset-baseline";
 import { exportFileExtension, safeExportFileName } from "@/lib/export-file";
 import { originalImageDownloadUrl } from "@/lib/media-image-url";
 import { mediaDownloadFileName } from "@/lib/media-file";
@@ -59,6 +60,5 @@ export async function downloadDramaAssetBundle(project: DramaProject): Promise<D
 }
 
 function primaryReference(asset: DramaNamedAsset) {
-    const references = dramaAssetReferences(asset);
-    return references.find((reference) => reference.id === asset.primaryReferenceId) || references[0];
+    return approvedAssetReference(asset);
 }

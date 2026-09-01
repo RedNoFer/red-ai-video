@@ -336,6 +336,7 @@ export function mapPostgresSettings(settingsRow: Record<string, unknown> | undef
         },
         generationConcurrency: dbJson(settingsRow?.generation_concurrency, fallback.generationConcurrency),
         generationDefaults: normalizeGenerationDefaults(dbJson(settingsRow?.generation_defaults, fallback.generationDefaults)),
+        characterVoicePool: dbJson(settingsRow?.character_voice_pool, fallback.characterVoicePool),
         systemChannels: channelRows.map((row) => ({
             id: dbText(row.id),
             name: dbText(row.name),
@@ -511,10 +512,10 @@ export async function upsertPostgresSettings(db: QueryExecutor, settings: AuthSe
         `
         INSERT INTO app_settings (
             id, site, registration_enabled, email_registration_enabled, free_daily_points_enabled, mail, allow_user_api_config,
-            model_point_costs, generation_point_multipliers, generation_cost_control, data_lifecycle, entitlements_enabled, default_plan_id, generation_concurrency, generation_defaults,
+            model_point_costs, generation_point_multipliers, generation_cost_control, data_lifecycle, entitlements_enabled, default_plan_id, generation_concurrency, generation_defaults, character_voice_pool,
             logical_models, default_models, agent_skills, free_daily_points
         )
-        VALUES ('default', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+        VALUES ('default', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
         ON CONFLICT (id) DO UPDATE SET
             site = EXCLUDED.site,
             registration_enabled = EXCLUDED.registration_enabled,
@@ -530,6 +531,7 @@ export async function upsertPostgresSettings(db: QueryExecutor, settings: AuthSe
             default_plan_id = EXCLUDED.default_plan_id,
             generation_concurrency = EXCLUDED.generation_concurrency,
             generation_defaults = EXCLUDED.generation_defaults,
+            character_voice_pool = EXCLUDED.character_voice_pool,
             logical_models = EXCLUDED.logical_models,
             default_models = EXCLUDED.default_models,
             agent_skills = EXCLUDED.agent_skills,
@@ -550,6 +552,7 @@ export async function upsertPostgresSettings(db: QueryExecutor, settings: AuthSe
             settings.entitlements.defaultPlanId,
             dbJsonParam(settings.generationConcurrency),
             dbJsonParam(settings.generationDefaults),
+            dbJsonParam(settings.characterVoicePool),
             dbJsonParam(settings.logicalModels),
             dbJsonParam(settings.defaultModels),
             dbJsonParam(settings.agentSkills),

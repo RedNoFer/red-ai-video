@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { Button, Modal } from "antd";
 import { imagePreviewUrl } from "@/lib/media-image-url";
+import { ensureDramaEpisodeCanvas, updateDramaShotMedia } from "@/services/api/drama-projects";
 import { CanvasConfigComposer } from "../components/canvas-config-composer";
 import { CanvasConfigNodePanel } from "../components/canvas-config-node-panel";
 import { CanvasNodeContextMenu } from "../components/canvas-context-menu";
@@ -20,7 +21,7 @@ import { CanvasNodeUpscaleDialog } from "../components/canvas-node-upscale-dialo
 import { CanvasToolbar } from "../components/canvas-toolbar";
 import { CanvasTopBar } from "../components/canvas-top-bar";
 import { CanvasZoomControls } from "../components/canvas-zoom-controls";
-import { CanvasNodeType, type Position } from "../types";
+import { CanvasNodeType, type CanvasNodeData, type Position } from "../types";
 
 const CanvasAssistantPanel = dynamic(() => import("../components/canvas-assistant-panel").then((mod) => mod.CanvasAssistantPanel), { ssr: false });
 import { CanvasRefreshShell, ConnectionCreateMenu, NodeCreateMenu } from "./canvas-page-elements";
@@ -70,6 +71,7 @@ function VozebProCanvasPage() {
         hydrated,
         hydratedUserId,
         hydrate,
+        loadProject,
         createProject,
         updateProject,
         projectSaveState,
@@ -106,8 +108,6 @@ function VozebProCanvasPage() {
         setShowImageInfo,
         clearConfirmOpen,
         setClearConfirmOpen,
-        assetPickerOpen,
-        setAssetPickerOpen,
         projectLoaded,
         setProjectLoaded,
         toolbarNodeId,
@@ -258,11 +258,32 @@ function VozebProCanvasPage() {
         closeAgent,
     } = controller;
     const hiddenCanvasNodeIds = useMemo(() => new Set(nodes.filter((node) => isHiddenBatchChild(node, nodes, collapsingBatchIds)).map((node) => node.id)), [collapsingBatchIds, nodes]);
+    const linkedDrama = useMemo(() => nodes.find((node) => node.metadata?.sourceSurface === "drama" && node.metadata.dramaProjectId && node.metadata.dramaEpisodeId)?.metadata, [nodes]);
+    const refreshDramaCanvas = async () => {
+        if (!linkedDrama?.dramaProjectId || !linkedDrama.dramaEpisodeId) return;
+        try {
+            await ensureDramaEpisodeCanvas(linkedDrama.dramaProjectId, linkedDrama.dramaEpisodeId);
+            await loadProject(projectId, true);
+            window.location.reload();
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : "短剧画布刷新失败");
+        }
+    };
+    const applyNodeToDrama = async (node: CanvasNodeData) => {
+        const metadata = node.metadata;
+        const url = metadata?.serverUrl || metadata?.remoteUrl || metadata?.content || "";
+        if (!metadata?.dramaProjectId || !metadata.dramaEpisodeId || !metadata.dramaShotId || !metadata.dramaField || !url) return message.warning("当前节点不能回写到短剧");
+        try {
+            await updateDramaShotMedia(metadata.dramaProjectId, metadata.dramaEpisodeId, metadata.dramaShotId, { field: metadata.dramaField, url, width: metadata.naturalWidth, height: metadata.naturalHeight });
+            message.success("已应用到短剧镜头");
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : "短剧镜头回写失败");
+        }
+    };
     if (!projectLoaded) return <CanvasRefreshShell />;
     return (
         <main className="flex h-full min-h-0 overflow-hidden" style={{ background: theme.canvas.backdrop, color: theme.node.text }}>
             <CanvasAssetsPanel
-                open={assetPickerOpen}
                 projectId={projectId}
                 projectTitle={currentProject?.title || "未命名画布"}
                 nodes={nodes}
@@ -272,7 +293,6 @@ function VozebProCanvasPage() {
                 onInsertAsset={handleAssetInsert}
                 onInsertPrompt={insertAssistantText}
                 onLocateNode={locateCanvasNode}
-                onClose={() => setAssetPickerOpen(false)}
             />
             <section className="relative min-w-0 flex-1 overflow-hidden">
                 <CanvasTopBar
@@ -289,10 +309,10 @@ function VozebProCanvasPage() {
                     onWorkbench={() => router.push("/create")}
                     onDeleteProject={deleteCurrentProject}
                     onImportImage={() => handleUploadRequest()}
+                    linkedDrama={Boolean(linkedDrama)}
+                    onRefreshDrama={() => void refreshDramaCanvas()}
                     onUndo={undoCanvas}
                     onRedo={redoCanvas}
-                    assetsOpen={assetPickerOpen}
-                    onToggleAssets={() => setAssetPickerOpen((value) => !value)}
                     agentOpen={assistantOpen}
                     onToggleAgent={() => (assistantOpen ? closeAgent() : openAgent())}
                 />
@@ -471,6 +491,7 @@ function VozebProCanvasPage() {
                     onUpload={(node) => handleUploadRequest(node.id)}
                     onDownload={downloadNodeImage}
                     onSaveAsset={(node) => void saveNodeAsset(node).catch((error) => message.error(error instanceof Error ? error.message : "素材保存失败"))}
+                    onApplyToDrama={(node) => void applyNodeToDrama(node)}
                     onMaskEdit={(node) => setMaskEditNodeId(node.id)}
                     onCrop={(node) => setCropNodeId(node.id)}
                     onSplit={(node) => setSplitNodeId(node.id)}
@@ -506,9 +527,6 @@ function VozebProCanvasPage() {
                     onInteractionModeChange={setInteractionMode}
                     onBackgroundModeChange={setBackgroundMode}
                     onShowImageInfoChange={setShowImageInfo}
-                    onOpenAssets={() => {
-                        setAssetPickerOpen(true);
-                    }}
                 />
 
                 <CanvasZoomControls scale={viewport.k} onScaleChange={setZoomScale} onReset={resetViewport} isMiniMapOpen={isMiniMapOpen} onToggleMiniMap={() => setIsMiniMapOpen((value) => !value)} />

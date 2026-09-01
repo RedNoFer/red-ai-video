@@ -37,6 +37,7 @@ describe("text planning runtime protocol matrix", () => {
         expect(mockedFetch).toHaveBeenCalledTimes(1);
         expect(String(mockedFetch.mock.calls[0]?.[0])).toContain("/responses");
         expect(requestBody()).toMatchObject({ model: "model-one", input: expect.any(Array) });
+        expect((requestBody().input as Array<{ role: string; content: string }>).find((message) => message.role === "system")?.content).toContain("json");
         expect(requestBody()).not.toHaveProperty("tools");
         expect(requestBody()).not.toHaveProperty("reasoning");
     });
@@ -194,6 +195,41 @@ describe("text planning runtime protocol matrix", () => {
         mockedFetch.mockResolvedValue(new Response("<!doctype html><title>Bad gateway</title><body>nginx secret trace</body>", { status: 502 }));
 
         await expect(requestStructuredText(requestInput(candidate("newapi")))).rejects.toThrow("文本模型渠道暂不可用（HTTP 502）");
+    });
+
+    it("不会把英文上游不可用错误原文返回给用户", async () => {
+        mockedFetch.mockResolvedValue(new Response("Upstream service temporarily unavailable", { status: 502 }));
+
+        await expect(requestStructuredText(requestInput(candidate("newapi")))).rejects.toThrow("文本模型渠道暂不可用（HTTP 502）");
+    });
+
+    it("透出上游 JSON message 便于管理员修正供应商配置", async () => {
+        mockedFetch.mockResolvedValue(Response.json({ code: "API_KEY_REQUIRED", message: "API key is required" }, { status: 401 }));
+
+        await expect(requestStructuredText(requestInput(candidate("newapi")))).rejects.toThrow("API key is required");
+    });
+
+    it("不向 Chat 供应商强加未声明支持的 JSON 输出参数", async () => {
+        mockedFetch.mockImplementation(async (_input, init) => {
+            const body = JSON.parse(String(init?.body || "{}")) as Record<string, unknown>;
+            if ("response_format" in body) {
+                return Response.json({ error: { message: "response_format is not supported" } }, { status: 400 });
+            }
+            return chatJsonResponse();
+        });
+
+        await requestStructuredText(requestInput(candidate("newapi")));
+
+        expect(requestBody()).not.toHaveProperty("response_format");
+    });
+
+    it("在 JSON 输出模式的系统消息中显式包含小写 json，兼容 Responses 校验", async () => {
+        mockedFetch.mockResolvedValue(chatJsonResponse());
+
+        await requestStructuredText(requestInput(candidate("newapi")));
+
+        const messages = requestBody().messages as Array<{ role: string; content: string }>;
+        expect(messages.find((message) => message.role === "system")?.content).toContain("json");
     });
 
     it("把超时转换为可读且可切换渠道的错误", async () => {

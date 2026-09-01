@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { channelSupportsModel, generationModelId, resolveModelAdvancedConfig, resolveSystemGenerationChannel, systemGenerationChannelId } from "./generation-channel";
+import { channelSupportsModel, generationModelId, resolveModelAdvancedConfig, resolveSystemGenerationChannel, systemGenerationChannelId, toSystemGenerationChannel } from "./generation-channel";
 
 const channels = [{ id: "channel-1", enabled: true, apiFormat: "gemini" as const, models: ["models/video-v1"] }];
 
@@ -52,5 +52,27 @@ describe("resolveSystemGenerationChannel", () => {
 
         expect(resolveModelAdvancedConfig(advanced, "openai-text")).toMatchObject({ createPath: "/chat/completions", queryPath: "" });
         expect(resolveModelAdvancedConfig(advanced, "sd2.0")).toMatchObject({ protocol: "seedance", createPath: "/videos", queryPath: "/videos/:task_id" });
+    });
+
+    it("uses the audio operation when an upstream alias also has a text model config", () => {
+        const advanced = {
+            protocol: "sub2api",
+            createPath: "/chat/completions",
+            queryPath: "",
+            requestTemplate: '{"model":"{{model}}","messages":[{"role":"user","content":"{{prompt}}"}]}',
+            modelConfigs: { "gpt-5.5": { capability: "text", createPath: "/chat/completions", requestTemplate: '{"model":"{{model}}","messages":[]}' } },
+            operationConfigs: { audio: { capability: "audio", createPath: "/audio/speech", resultField: "binary", requestTemplate: '{"model":"{{model}}","input":"{{prompt}}","voice":"alloy"}' } },
+        } as never;
+
+        const resolved = toSystemGenerationChannel({
+            logicalModelId: "gpt-5.5::audio",
+            capability: "audio",
+            upstreamModel: "gpt-5.5",
+            channelId: "channel-audio",
+            channel: { id: "channel-audio", name: "Audio", enabled: true, apiFormat: "openai", baseUrl: "https://audio.example", apiKey: "secret", models: ["gpt-5.5"], advancedConfig: advanced },
+        });
+
+        expect(resolved.advancedConfig).toMatchObject({ createPath: "/audio/speech", resultField: "binary" });
+        expect(resolved.advancedConfig?.requestTemplate).toContain('"input"');
     });
 });

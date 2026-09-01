@@ -17,7 +17,8 @@ import { resolveGlobalAiOpcPathPreset, resolveGlobalAiOpcPreset } from "@/lib/gl
 import { adaptGlobalAiOpcTextRequest, adaptGlobalAiOpcTextResponse, isGlobalAiOpcChannel } from "@/lib/server/globalaiopc-proxy";
 import { readVerifiedSystemAiBusinessRequestId, SYSTEM_AI_LOGICAL_MODEL_HEADER, SYSTEM_AI_UPSTREAM_MODEL_HEADER, systemAiPointsIdempotencyKey, systemAiRequestFingerprint } from "@/lib/server/system-ai-billing";
 import { isAgnesApiBaseUrl } from "@/lib/agnes-model-catalog";
-import { channelConnectionReady, protocolAuthHeaders, resolveChannelModelConfig } from "@/lib/channel-protocol-registry";
+import { channelConnectionReady, protocolAuthHeaders, protocolCatalogCapability, resolveChannelCapabilityConfig, resolveChannelModelConfig } from "@/lib/channel-protocol-registry";
+import { inferModelCapability } from "@/lib/model-capability";
 import { normalizeYumengModelCenterBaseUrl } from "@/lib/yumeng-model-center";
 import { authorizedWorkerUserId } from "@/lib/server/maintenance-auth";
 import { authorizeGenerationMediaProxyRequest } from "@/lib/server/generation-media-access";
@@ -92,25 +93,32 @@ async function proxySystemRequest(request: Request, context: RouteContext) {
         throw error;
     }
     const upstreamModel = readRequestModel(readRequestBody(contentType, requestBody.pointsPayload)) || request.headers.get(SYSTEM_AI_UPSTREAM_MODEL_HEADER)?.trim() || readPathModel(path);
-    const modelConfig = upstreamModel ? resolveChannelModelConfig(channel.advancedConfig, upstreamModel) : undefined;
+    const modelCapability = upstreamModel ? resolveChannelModelConfig(channel.advancedConfig, upstreamModel)?.capability || protocolCatalogCapability(channel.advancedConfig?.protocol || "auto") || inferModelCapability(upstreamModel) : undefined;
+    const modelConfig = upstreamModel && modelCapability ? resolveChannelCapabilityConfig(channel.advancedConfig, upstreamModel, modelCapability) : undefined;
     const apiFormat = modelConfig?.apiFormat || channel.apiFormat;
     const globalChannel = isGlobalAiOpcChannel(channel.advancedConfig);
     const globalPreset = resolveGlobalAiOpcPreset(channel.advancedConfig, upstreamModel) || resolveGlobalAiOpcPathPreset(channel.advancedConfig, path);
     const globalAdaptation = adaptGlobalAiOpcTextRequest(channel.advancedConfig, path, requestBody.body);
     if (globalAdaptation === "responses-unsupported") return NextResponse.json({ error: "该 GlobalAiOpc 原生文本接口不支持 Responses，已切换 Chat 兼容回退。" }, { status: 404 });
-    const pointsRequest =
+    const preferredLogicalModelId = request.headers.get(SYSTEM_AI_LOGICAL_MODEL_HEADER) || "";
+    const pointsRequest = alignPointsRequestWithPreferredLogicalModel(
         classifyPointsRequest(request.method, apiFormat, path, contentType, requestBody.pointsPayload, settings.generationPointMultipliers) ||
-        classifyConfiguredPointsRequest(
-            request.method,
-            path,
-            contentType,
-            requestBody.pointsPayload,
-            channel.id,
-            [globalPreset?.createPath, modelConfig?.createPath, modelConfig?.editPath, modelConfig?.imageToVideoPath, channel.advancedConfig?.createPath, channel.advancedConfig?.editPath, channel.advancedConfig?.imageToVideoPath],
-            upstreamModel,
-            settings.logicalModels,
-            settings.generationPointMultipliers,
-        );
+            classifyConfiguredPointsRequest(
+                request.method,
+                path,
+                contentType,
+                requestBody.pointsPayload,
+                channel.id,
+                [globalPreset?.createPath, modelConfig?.createPath, modelConfig?.editPath, modelConfig?.imageToVideoPath, channel.advancedConfig?.createPath, channel.advancedConfig?.editPath, channel.advancedConfig?.imageToVideoPath],
+                upstreamModel,
+                settings.logicalModels,
+                settings.generationPointMultipliers,
+                preferredLogicalModelId,
+            ),
+        channel.id,
+        settings.logicalModels,
+        preferredLogicalModelId,
+    );
     if (pointsRequest?.model && !channelHasModel(channel.models, pointsRequest.model)) return NextResponse.json({ error: "该模型未在后台渠道中启用" }, { status: 403 });
     const access = authorizeSystemAiProxyRequest({
         method: request.method,
@@ -118,7 +126,7 @@ async function proxySystemRequest(request: Request, context: RouteContext) {
         search: new URL(request.url).search,
         channelId: channel.id,
         upstreamModel,
-        preferredLogicalModelId: request.headers.get(SYSTEM_AI_LOGICAL_MODEL_HEADER) || "",
+        preferredLogicalModelId,
         logicalModels: settings.logicalModels || [],
         apiFormat: globalPreset?.apiFormat || apiFormat,
         pointsUsageKind: pointsRequest?.usageKind,
@@ -430,14 +438,20 @@ function classifyPointsRequest(method: string, apiFormat: ApiCallFormat, path: s
         return { model, amount: videoParameterMultiplier(payload, multipliers), usageKind: "video" };
     }
     if (routePath === "/responses") {
+        if (hasAudioResponseModality(payload)) return { model, amount: 1, usageKind: "audio" };
         const isImage = hasResponsesImageGenerationTool(payload);
         return { model, amount: isImage ? imageQualityMultiplier(payload, multipliers) : 1, usageKind: isImage ? "image" : "text" };
     }
-    if (routePath === "/chat/completions") return { model, amount: 1, usageKind: "text" };
+    if (routePath === "/chat/completions") return { model, amount: 1, usageKind: hasAudioResponseModality(payload) ? "audio" : "text" };
     if (apiFormat === "gemini" && routePath.includes(":streamgeneratecontent")) return { model, amount: 1, usageKind: "text" };
     if (apiFormat === "gemini" && routePath.includes(":generatecontent")) return { model, amount: 1, usageKind: hasGeminiImageResponseModality(payload) ? "image" : "text" };
 
     return null;
+}
+
+function hasAudioResponseModality(payload: Record<string, unknown>) {
+    const modalities = payload.modalities;
+    return (Array.isArray(modalities) && modalities.some((item) => String(item).toLowerCase() === "audio")) || Boolean(payload.audio);
 }
 
 function classifyConfiguredPointsRequest(
@@ -450,6 +464,7 @@ function classifyConfiguredPointsRequest(
     modelHint: string,
     logicalModels: Awaited<ReturnType<typeof getAuthSettings>>["logicalModels"],
     multipliers?: GenerationPointMultipliers,
+    preferredLogicalModelId = "",
 ): PointsRequest | null {
     if (method.toUpperCase() !== "POST") return null;
     const cleanPath = normalizedConfiguredProxyPath(`/${path.join("/")}`);
@@ -457,11 +472,20 @@ function classifyConfiguredPointsRequest(
     const payload = readRequestBody(contentType, body);
     const model = readRequestModel(payload) || modelHint;
     if (!model) return null;
-    const capability = logicalModels.find((logical) => logical.enabled && logical.bindings.some((binding) => binding.enabled && binding.channelId === channelId && sameModel(binding.upstreamModel, model)))?.capability;
+    const matching = logicalModels.filter((logical) => logical.enabled && logical.bindings.some((binding) => binding.enabled && binding.channelId === channelId && sameModel(binding.upstreamModel, model)));
+    const preferred = preferredLogicalModelId.trim().toLowerCase();
+    const capability = (matching.find((logical) => logical.id.toLowerCase() === preferred) || matching[0])?.capability;
     if (capability === "image") return { model, amount: readRequestCount(payload) * imageQualityMultiplier(payload, multipliers), usageKind: "image" };
     if (capability === "video") return { model, amount: videoParameterMultiplier(payload, multipliers), usageKind: "video" };
     if (capability === "audio") return { model, amount: 1, usageKind: "audio" };
     return capability === "text" ? { model, amount: 1, usageKind: "text" } : null;
+}
+
+function alignPointsRequestWithPreferredLogicalModel(pointsRequest: PointsRequest | null, channelId: string, logicalModels: Awaited<ReturnType<typeof getAuthSettings>>["logicalModels"], preferredLogicalModelId: string): PointsRequest | null {
+    const preferred = preferredLogicalModelId.trim().toLowerCase();
+    if (!pointsRequest || !preferred) return pointsRequest;
+    const logical = logicalModels.find((item) => item.enabled && item.id.toLowerCase() === preferred && item.bindings.some((binding) => binding.enabled && binding.channelId === channelId && sameModel(binding.upstreamModel, pointsRequest.model)));
+    return logical && logical.capability !== pointsRequest.usageKind ? { ...pointsRequest, usageKind: logical.capability } : pointsRequest;
 }
 
 function normalizedConfiguredProxyPath(value: string) {
@@ -485,8 +509,16 @@ function sameModel(left: string, right: string) {
     );
 }
 
-function readRequestModel(payload: Record<string, unknown>) {
-    if (typeof payload.model === "string") return payload.model.trim();
+function readRequestModel(payload: Record<string, unknown>): string {
+    for (const key of ["model", "model_id", "modelId"]) {
+        if (typeof payload[key] === "string" && payload[key].trim()) return payload[key].trim();
+    }
+    for (const key of ["params", "parameters"]) {
+        const nested = payload[key];
+        if (!nested || typeof nested !== "object" || Array.isArray(nested)) continue;
+        const model: string = readRequestModel(nested as Record<string, unknown>);
+        if (model) return model;
+    }
     const overrideSettings = payload.override_settings;
     return overrideSettings && typeof overrideSettings === "object" && !Array.isArray(overrideSettings) && typeof (overrideSettings as Record<string, unknown>).sd_model_checkpoint === "string"
         ? String((overrideSettings as Record<string, unknown>).sd_model_checkpoint).trim()
@@ -588,7 +620,7 @@ function readMultipartFields(text: string): Record<string, string> {
 }
 
 function targetUrl(baseUrl: string, apiFormat: "openai" | "gemini", path: string[], search: string, globalAiOpc = false, protocol?: import("@/lib/auth/store").SystemChannelProtocol) {
-    const usesLiteralPath = protocol === "seedance-special" || protocol === "stable-diffusion" || protocol === "yumeng" || protocol === "custom";
+    const usesLiteralPath = protocol === "seedance-special" || protocol === "buming-seedance" || protocol === "buming-image" || protocol === "stable-diffusion" || protocol === "yumeng" || protocol === "custom";
     const cleanPath = !usesLiteralPath && (path[0] === "v1" || path[0] === "v1beta") ? path.slice(1) : path;
     const resolvedBaseUrl = protocol === "yumeng" ? normalizeYumengModelCenterBaseUrl(baseUrl) : baseUrl;
     if (isAgnesApiBaseUrl(resolvedBaseUrl) && cleanPath[0]?.toLowerCase() === "agnesapi") {

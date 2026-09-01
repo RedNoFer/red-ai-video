@@ -37,7 +37,8 @@ import {
 
 import type { DramaScriptRichContent } from "@/lib/drama-script-rich-content";
 import { dramaRichContentToPlainText, normalizeDramaScriptRichContent, plainTextToDramaRichContent } from "@/lib/drama-script-rich-content";
-import type { DramaEpisode } from "../types";
+import type { DramaEpisode, DramaShot, DramaStoryScene } from "../types";
+import { findDramaSceneHeadingRange, resolveDramaShotAnchor, type DramaScriptAnchorTarget } from "./drama-script-navigation";
 
 const TEXT_COLORS = [
     { label: "默认", value: "" },
@@ -72,7 +73,7 @@ export function DramaRichScriptEditor({
     fullscreen: boolean;
     onFullscreenChange: (value: boolean) => void;
     onChange: (script: string, scriptRichContent: DramaScriptRichContent) => void;
-    onReady: (selectText: (value: string) => void) => void;
+    onReady: (selectTarget: (target: { shot?: DramaShot; scene?: DramaStoryScene }) => void) => void;
 }) {
     const [searchOpen, setSearchOpen] = useState(false);
     const [searchText, setSearchText] = useState("");
@@ -127,8 +128,8 @@ export function DramaRichScriptEditor({
 
     useEffect(() => {
         if (!editor) return;
-        onReady((value) => selectText(editor, value));
-    }, [editor, onReady]);
+        onReady((target) => selectTarget(editor, episode, target));
+    }, [editor, episode, onReady]);
 
     useEffect(() => {
         if (!fullscreen) return;
@@ -191,6 +192,13 @@ export function DramaRichScriptEditor({
 
     return (
         <section className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden border border-border bg-background ${fullscreen ? "fixed inset-3 z-[1100] rounded-md shadow-2xl" : "rounded-md"}`} data-drama-script-editor>
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border bg-muted/20 px-3 py-2 text-xs">
+                <div className="min-w-0">
+                    <div className="font-medium text-foreground">当前集文学剧本</div>
+                    <div className="mt-0.5 truncate text-muted-foreground">这里只编辑场次、动作和对白；完整制作包资料请到“内容审核 → 制作包资料”查看。</div>
+                </div>
+                <span className="shrink-0 rounded border border-border bg-background px-2 py-1 text-[11px] text-muted-foreground">第 3 章</span>
+            </div>
             <div className="hide-scrollbar flex h-[46px] shrink-0 items-center gap-1 overflow-x-auto border-b border-border px-2" aria-label="剧本编辑工具栏" data-drama-script-toolbar>
                 <Select
                     size="small"
@@ -276,7 +284,7 @@ export function DramaRichScriptEditor({
                 <ToolButton label={fullscreen ? "退出全屏" : "全屏编辑"} icon={fullscreen ? <Minimize2 /> : <Maximize2 />} onClick={() => onFullscreenChange(!fullscreen)} />
                 <span className="ml-auto shrink-0 px-2 text-[11px] tabular-nums text-muted-foreground">{episode.script.length.toLocaleString("zh-CN")} 字</span>
             </div>
-            <EditorContent editor={editor} className="hide-scrollbar min-h-0 flex-1 overflow-y-auto bg-card/35" />
+            <EditorContent editor={editor} className="hide-scrollbar min-h-0 flex-1 overflow-y-auto bg-card/35" data-drama-script-editor-scroll />
             <Modal title="查找替换" open={searchOpen} width={420} centered destroyOnHidden okText="全部替换" cancelText="关闭" okButtonProps={{ disabled: !searchText }} onCancel={() => setSearchOpen(false)} onOk={replaceAll}>
                 <div className="space-y-3 py-1">
                     <Input value={searchText} onChange={(event) => setSearchText(event.target.value)} placeholder="查找内容" aria-label="查找内容" onPressEnter={findNext} />
@@ -370,17 +378,28 @@ function ToolbarDivider() {
     return <Divider orientation="vertical" className="!mx-1 !h-5 !border-border" />;
 }
 
-function selectText(editor: NonNullable<ReturnType<typeof useEditor>>, value: string) {
-    const source = value.trim();
-    if (!source) return;
+function selectTarget(editor: NonNullable<ReturnType<typeof useEditor>>, episode: DramaEpisode, target: { shot?: DramaShot; scene?: DramaStoryScene }) {
     const text = editor.state.doc.textBetween(0, editor.state.doc.content.size, "\n", "\n");
-    const offset = text.indexOf(source);
-    editor
-        .chain()
-        .focus()
-        .setTextSelection(offset < 0 ? 1 : { from: positionAtTextOffset(editor.state.doc, offset), to: positionAtTextOffset(editor.state.doc, offset + source.length) })
-        .scrollIntoView()
-        .run();
+    const range = target.shot
+        ? resolveDramaShotAnchor(text, target.shot, target.scene || episode.storyScenes?.find((scene) => scene.id === target.shot?.storySceneId || scene.shotIds.includes(target.shot?.id || "")))
+        : target.scene
+          ? findDramaSceneHeadingRange(text, target.scene)
+          : undefined;
+    if (!range || !("kind" in range) || (range as DramaScriptAnchorTarget).kind === "missing") return;
+    editor.commands.setTextSelection({ from: positionAtTextOffset(editor.state.doc, range.from), to: positionAtTextOffset(editor.state.doc, range.to) });
+    scrollSelectionInsideEditor(editor);
+}
+
+function scrollSelectionInsideEditor(editor: NonNullable<ReturnType<typeof useEditor>>) {
+    window.requestAnimationFrame(() => {
+        const scroller = editor.view.dom.closest<HTMLElement>("[data-drama-script-editor-scroll]");
+        if (!scroller) return;
+        const { from } = editor.state.selection;
+        const selectionTop = editor.view.coordsAtPos(from).top;
+        const bounds = scroller.getBoundingClientRect();
+        if (selectionTop < bounds.top) scroller.scrollTop += selectionTop - bounds.top;
+        else if (selectionTop > bounds.bottom) scroller.scrollTop += selectionTop - bounds.bottom;
+    });
 }
 
 function positionAtTextOffset(doc: { content: { size: number }; textBetween: (from: number, to: number, blockSeparator?: string, leafText?: string) => string }, offset: number) {

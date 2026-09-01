@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
     refundUserPoints: vi.fn(),
     safeRecordAuditLog: vi.fn(),
     taskAccess: vi.fn(),
+    fetchSafeOutbound: vi.fn(),
 }));
 
 vi.mock("@/lib/auth/session", () => ({ getCurrentUser: mocks.getCurrentUser }));
@@ -29,6 +30,7 @@ vi.mock("@/lib/server/internal-origin", () => ({
 }));
 vi.mock("@/lib/server/media-concurrency", () => ({ acquireMediaConcurrency: () => ({ release: vi.fn() }), withMediaConcurrency: (response: Response) => response }));
 vi.mock("@/lib/server/proxy-dispatcher", () => ({ configureServerProxyDispatcher: vi.fn() }));
+vi.mock("@/lib/server/safe-outbound-fetch", () => ({ fetchSafeOutbound: (...args: Parameters<typeof fetch>) => mocks.fetchSafeOutbound(...args) }));
 
 import { runCustomImageTask, pollCustomImageTask } from "@/app/api/image-tasks/image-task-custom";
 import { runOpenAiImageTask } from "@/app/api/image-tasks/image-task-openai";
@@ -68,6 +70,10 @@ describe("active protocols through persisted admin settings and the system proxy
         const address = fixture.server.address();
         if (!address || typeof address === "string") throw new Error("Protocol fixture did not bind a TCP port");
         fixtureOrigin = `http://127.0.0.1:${address.port}`;
+        mocks.fetchSafeOutbound.mockImplementation((url: string | URL, init?: RequestInit) => {
+            if (String(url).startsWith("https://cdn.example.com/")) return Promise.resolve(new Response(new Uint8Array([137]), { status: 206, headers: { "content-type": "image/png" } }));
+            return fetch(url, init);
+        });
         mocks.getCurrentUser.mockReset().mockResolvedValue({ id: "proxy-user", role: "admin", status: "active", adminPermissions: ["upstream.manage"], pointsBalance: 100 });
         mocks.consumeUserPoints.mockReset().mockResolvedValue({ cost: 1, remaining: 99, permanentRemaining: 99, dailyRemaining: 0, dailyExpiresAt: "", recordId: "points-record" });
         mocks.refundUserPoints.mockReset();
@@ -164,17 +170,26 @@ describe("active protocols through persisted admin settings and the system proxy
                 "x-client-request-id": `audio-${definition.id}`,
                 "x-vozeb-pro-logical-model": channel.logicalModelId,
             },
-            body: JSON.stringify({ model, input: "protocol audio test", voice: "alloy", format: "wav" }),
+            body: JSON.stringify(
+                definition.id === "openai-audio-dialogue"
+                    ? { model, messages: [{ role: "user", content: "protocol audio test" }], modalities: ["text", "audio"], audio: { voice: "alloy", format: "wav" } }
+                    : { model, input: "protocol audio test", voice: "alloy", format: "wav" },
+            ),
         });
 
         expect(response.ok).toBe(true);
         if (response.headers.get("content-type")?.includes("application/json")) {
-            const payload = (await response.json()) as { data?: { audio_url?: string } };
-            const mediaUrl = payload.data?.audio_url || "";
-            expect(mediaUrl).toContain("/media/fixture.wav");
-            const media = await dispatchInternalRequest(`${INTERNAL_ORIGIN}${channel.config.baseUrl}/_media?url=${encodeURIComponent(mediaUrl)}`, {});
-            expect(media.headers.get("content-type")).toBe("audio/wav");
-            expect((await media.arrayBuffer()).byteLength).toBeGreaterThan(44);
+            const payload = (await response.json()) as { data?: { audio_url?: string }; choices?: Array<{ message?: { audio?: { data?: string } } }> };
+            if (definition.id === "openai-audio-dialogue") {
+                const audioBase64 = payload.choices?.[0]?.message?.audio?.data || "";
+                expect(Buffer.from(audioBase64, "base64").byteLength).toBeGreaterThan(44);
+            } else {
+                const mediaUrl = payload.data?.audio_url || "";
+                expect(mediaUrl).toContain("/media/fixture.wav");
+                const media = await dispatchInternalRequest(`${INTERNAL_ORIGIN}${channel.config.baseUrl}/_media?url=${encodeURIComponent(mediaUrl)}`, {});
+                expect(media.headers.get("content-type")).toBe("audio/wav");
+                expect((await media.arrayBuffer()).byteLength).toBeGreaterThan(44);
+            }
         } else {
             expect(response.headers.get("content-type")).toBe("audio/wav");
             expect((await response.arrayBuffer()).byteLength).toBeGreaterThan(44);
@@ -234,7 +249,7 @@ function protocolOperation(definition: ChannelProtocolDefinition, capability: Lo
         } satisfies SystemChannelModelConfig;
     }
     if (capability === "audio") {
-        return { capability, protocol: definition.id, createPath: "/audio/speech" } satisfies SystemChannelModelConfig;
+        return { capability, protocol: definition.id, createPath: "/audio/speech", requestTemplate: '{"model":"{{model}}","input":"{{prompt}}","voice":"{{voice}}","response_format":"{{format}}"}', resultField: "binary" } satisfies SystemChannelModelConfig;
     }
     return {
         capability,
@@ -308,7 +323,7 @@ type ProxyChannel = {
 };
 
 function fixtureBaseUrl(protocol: SystemChannelProtocol, apiFormat: "openai" | "gemini") {
-    if (["custom", "stable-diffusion", "yumeng", "seedance-special"].includes(protocol)) return fixtureOrigin;
+    if (["custom", "stable-diffusion", "yumeng", "seedance-special", "buming-image"].includes(protocol)) return fixtureOrigin;
     return `${fixtureOrigin}/${apiFormat === "gemini" ? "v1beta" : "v1"}`;
 }
 
@@ -333,7 +348,7 @@ function imageTask(channel: ProxyChannel, edit: boolean): ImageTask {
                       id: "reference",
                       name: "reference.png",
                       type: "image/png",
-                      dataUrl: protocol === "yumeng" ? `${fixtureOrigin}/media/fixture.png` : ["sub2api", "custom"].includes(protocol) ? "https://cdn.example.com/reference.png" : PNG_DATA_URL,
+                      dataUrl: protocol === "yumeng" ? `${fixtureOrigin}/media/fixture.png` : ["sub2api", "custom", "buming-image"].includes(protocol) ? "https://cdn.example.com/reference.png" : PNG_DATA_URL,
                   },
               ]
             : [],
@@ -341,7 +356,7 @@ function imageTask(channel: ProxyChannel, edit: boolean): ImageTask {
 }
 
 async function runImage(task: ImageTask, protocol: SystemChannelProtocol) {
-    const declarative = protocol === "custom" || protocol === "stable-diffusion" || protocol === "yumeng";
+    const declarative = protocol === "custom" || protocol === "stable-diffusion" || protocol === "yumeng" || protocol === "buming-image";
     const submitted = declarative ? await runCustomImageTask(task, INTERNAL_ORIGIN, fixtureOrigin, "", true) : await runOpenAiImageTask(task, INTERNAL_ORIGIN, fixtureOrigin, "", true);
     return submitted.pending ? pollCustomImageTask(task, submitted.pending.id, submitted.pending.pollBaseUrl, "", true) : submitted;
 }

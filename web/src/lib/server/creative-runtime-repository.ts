@@ -21,12 +21,19 @@ export type AgentRunBase = {
     clientRequestId: string;
     surface: CreativeSurface;
     projectId?: string;
+    episodeId?: string;
+    workflow?: "drama-script";
     inputMessageId: string;
     assistantMessageId: string;
     status: string;
     createdAt: number;
     updatedAt: number;
+    dramaScriptPackage?: { markdown: string; preview: unknown };
 };
+
+function conversationSourceForRun(run: AgentRunBase) {
+    return run.workflow === "drama-script" ? ("drama-script" as const) : creativeConversationSourceForSurface(run.surface);
+}
 
 export type CreateRunBundleInput<T extends AgentRunBase> = {
     run: T;
@@ -119,7 +126,7 @@ export function resolveFileConversation<T extends AgentRunBase>(db: RuntimeFileD
     if (input.conversationId) {
         const conversation = db.conversations.find((item) => item.id === input.conversationId && item.userId === userId);
         if (!conversation) throw new CreativeStoreConflict("创作会话不存在", 404);
-        validateConversationScope(conversation, input.run.surface, input.run.projectId);
+        validateConversationScope(conversation, input.run.surface, input.run.projectId, conversationSourceForRun(input.run), input.run.episodeId);
         return conversation;
     }
     const now = input.run.createdAt;
@@ -127,8 +134,9 @@ export function resolveFileConversation<T extends AgentRunBase>(db: RuntimeFileD
         id: input.run.conversationId,
         userId,
         surface: input.run.surface,
-        source: creativeConversationSourceForSurface(input.run.surface),
+        source: conversationSourceForRun(input.run),
         projectId: input.run.projectId,
+        episodeId: input.run.episodeId,
         title: "新对话",
         status: "active",
         contextSummary: "",
@@ -144,7 +152,7 @@ export async function resolvePostgresConversation<T extends AgentRunBase>(client
         const result = await client.query("SELECT * FROM creative_conversations WHERE id = $1 AND user_id = $2 FOR UPDATE", [input.conversationId, userId]);
         if (!result.rows[0]) throw new CreativeStoreConflict("创作会话不存在", 404);
         const conversation = mapConversation(result.rows[0]);
-        validateConversationScope(conversation, input.run.surface, input.run.projectId);
+        validateConversationScope(conversation, input.run.surface, input.run.projectId, conversationSourceForRun(input.run), input.run.episodeId);
         return conversation;
     }
     const now = input.run.createdAt;
@@ -152,8 +160,9 @@ export async function resolvePostgresConversation<T extends AgentRunBase>(client
         id: input.run.conversationId,
         userId,
         surface: input.run.surface,
-        source: creativeConversationSourceForSurface(input.run.surface),
+        source: conversationSourceForRun(input.run),
         projectId: input.run.projectId,
+        episodeId: input.run.episodeId,
         title: "新对话",
         status: "active",
         contextSummary: "",
@@ -162,12 +171,13 @@ export async function resolvePostgresConversation<T extends AgentRunBase>(client
         updatedAt: now,
         lastMessageAt: now,
     };
-    await client.query("INSERT INTO creative_conversations (id, user_id, surface, source, project_id, title, status, created_at, updated_at, last_message_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8, $8)", [
+    await client.query("INSERT INTO creative_conversations (id, user_id, surface, source, project_id, episode_id, title, status, created_at, updated_at, last_message_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9, $9)", [
         conversation.id,
         userId,
         conversation.surface,
         conversation.source,
         conversation.projectId || null,
+        conversation.episodeId || null,
         conversation.title,
         conversation.status,
         new Date(now),
@@ -222,8 +232,9 @@ export function validateAssetOwnership(assets: CreativeAsset[], ids: string[], u
     if (ids.some((id) => !owned.has(id))) throw new CreativeStoreConflict("引用资产不存在或无权访问", 403);
 }
 
-export function validateConversationScope(conversation: CreativeConversation, surface: CreativeSurface, projectId?: string) {
-    if (conversation.surface !== surface || conversation.source !== creativeConversationSourceForSurface(surface) || (conversation.projectId || "") !== (projectId || "")) throw new CreativeStoreConflict("会话的创作入口、来源或项目不匹配", 409);
+export function validateConversationScope(conversation: CreativeConversation, surface: CreativeSurface, projectId?: string, source = creativeConversationSourceForSurface(surface), episodeId?: string) {
+    if (conversation.surface !== surface || conversation.source !== source || (conversation.projectId || "") !== (projectId || "") || (conversation.episodeId || "") !== (episodeId || ""))
+        throw new CreativeStoreConflict("会话的创作入口、来源、项目或集数不匹配", 409);
     if (conversation.status !== "active") throw new CreativeStoreConflict("归档会话不能创建新任务", 409);
 }
 
@@ -326,6 +337,7 @@ export function mapConversation(row: Record<string, unknown>): CreativeConversat
         surface: row.surface === "canvas" || row.surface === "drama" ? row.surface : "chat",
         source: normalizeCreativeConversationSource(row.source) || creativeConversationSourceForSurface(row.surface === "canvas" || row.surface === "drama" ? row.surface : "chat"),
         projectId: dbOptionalText(row.project_id),
+        episodeId: dbOptionalText(row.episode_id),
         title: dbText(row.title),
         status: row.status === "archived" ? "archived" : "active",
         contextSummary: dbText(row.context_summary),

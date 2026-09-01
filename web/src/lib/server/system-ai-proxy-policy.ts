@@ -77,7 +77,7 @@ function resolveBoundLogicalModel(logicalModels: LogicalModel[], channelId: stri
 function standardCreatePaths(capability: LogicalModelCapability, apiFormat: "openai" | "gemini") {
     if (capability === "image") return ["/images/generations", "/images/edits", "/responses", ...(apiFormat === "gemini" ? ["/models/:model:generateContent"] : [])];
     if (capability === "video") return ["/videos", "/video/generations", "/videos/generations", "/videos/videos", "/contents/generations/tasks", ...(apiFormat === "gemini" ? ["/models/:model:predictLongRunning"] : [])];
-    if (capability === "audio") return ["/audio/speech"];
+    if (capability === "audio") return ["/audio/speech", "/chat/completions", "/responses"];
     return ["/chat/completions", "/responses", "/messages", ...(apiFormat === "gemini" ? ["/models/:model:generateContent", "/models/:model:streamGenerateContent"] : [])];
 }
 

@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { App, Button, Drawer, Input, Popover, Tooltip } from "antd";
-import { ArrowLeft, Bot, Boxes, ChevronDown, ChevronRight, History, PanelLeft, Plus, Settings2, Sparkles, Trash2, X } from "lucide-react";
+import { ArrowLeft, Bot, ChevronDown, ChevronRight, History, PanelLeft, Plus, Settings2, Sparkles, Trash2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { UserStatusActions } from "@/components/layout/user-status-actions";
+import { SiteLogo } from "@/components/layout/site-logo";
+import { usePublicSessionStore } from "@/stores/use-public-session-store";
 import type { DramaEpisode, DramaProject } from "../types";
 import { useDramaStore } from "../stores/use-drama-store";
 import { DramaScriptWorkspace } from "./drama-script-workspace";
@@ -220,6 +222,7 @@ export function DramaWorkspaceHeader({
 }) {
     const router = useRouter();
     const updateProject = useDramaStore((state) => state.updateProject);
+    const siteLogoUrl = usePublicSessionStore((state) => state.payload?.settings?.site?.logoUrl || "/logo.svg");
     const stageStatuses = dramaStageStatuses(project, episode);
 
     return (
@@ -244,6 +247,8 @@ export function DramaWorkspaceHeader({
             >
                 {stages.map((item, index) => {
                     const active = !assetsOpen && stage === item.value;
+                    const status = stageStatuses[item.value];
+                    const highlightedStatus = status === "补全中" || status === "补全失败" ? status : "";
                     return (
                         <div key={item.value} className="flex shrink-0 items-center">
                             <button
@@ -260,7 +265,14 @@ export function DramaWorkspaceHeader({
                                 </span>
                                 <span className="block sm:hidden">{item.shortLabel}</span>
                                 <span className="hidden sm:block">{item.label}</span>
-                                <span className="sr-only">{stageStatuses[item.value]}</span>
+                                {highlightedStatus ? (
+                                    <span
+                                        className={`hidden rounded px-1.5 py-0.5 text-[10px] min-[1180px]:inline ${highlightedStatus === "补全中" ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/35 dark:text-emerald-300" : "bg-red-50 text-red-700 dark:bg-red-950/35 dark:text-red-300"}`}
+                                    >
+                                        {highlightedStatus}
+                                    </span>
+                                ) : null}
+                                <span className="sr-only">{status}</span>
                             </button>
                             {index < stages.length - 1 ? <ChevronRight className="size-3.5 text-border" aria-hidden="true" /> : null}
                         </div>
@@ -268,17 +280,15 @@ export function DramaWorkspaceHeader({
                 })}
             </nav>
             <div className="col-start-2 row-start-1 flex min-w-0 shrink-0 items-center justify-end gap-1 px-2.5 py-2 sm:px-4 min-[1366px]:col-start-3 min-[1366px]:h-full min-[1366px]:py-0">
-                <Tooltip title="项目资产">
-                    <Button
-                        className={`!h-9 !px-2.5 ${assetsOpen ? "!border-foreground !bg-foreground !text-background" : "!border-border !bg-background hover:!border-foreground/25 hover:!bg-muted"}`}
-                        icon={<Boxes className="size-4" />}
-                        onClick={assetsOpen ? onCloseAssets : onOpenAssets}
-                        aria-current={assetsOpen ? "page" : undefined}
-                        aria-label="打开项目资产"
-                    >
-                        <span className="hidden 2xl:inline">项目资产</span>
-                    </Button>
-                </Tooltip>
+                <Button
+                    className={`!h-9 !shrink-0 !gap-1.5 !px-2.5 ${assetsOpen ? "!border-foreground !bg-foreground !text-background" : "!border-border !bg-background hover:!border-foreground/25 hover:!bg-muted"}`}
+                    onClick={assetsOpen ? onCloseAssets : onOpenAssets}
+                    aria-current={assetsOpen ? "page" : undefined}
+                    aria-label="打开项目资产"
+                >
+                    <SiteLogo logoUrl={siteLogoUrl} className="size-4" />
+                    <span>项目资产</span>
+                </Button>
                 <Tooltip title="项目版本">
                     <Button className="!size-9 !min-w-9 !px-0 sm:!w-auto sm:!px-3" icon={<History className="size-4" />} onClick={onOpenVersions} aria-label="打开项目版本">
                         <span className="hidden sm:inline">版本记录</span>
@@ -306,7 +316,16 @@ function dramaStageStatuses(_project: DramaProject, episode: DramaEpisode): Reco
     const tasks = episode.shots.flatMap((shot) => [shot.storyboardStatus, shot.generationStatus, shot.audioStatus]);
     return {
         script: !episode.script.trim() ? "待编辑" : episode.shots.length ? "已整理" : "编辑中",
-        review: episode.reviewStatus === "approved" || episode.reviewStatus === "visual_ready" ? "已确认" : episode.reviewStatus === "content_review" ? "待确认" : "待审核",
+        review:
+            episode.reviewCompletionTask?.status === "running"
+                ? "补全中"
+                : episode.reviewCompletionTask?.status === "error"
+                  ? "补全失败"
+                  : episode.reviewStatus === "approved" || episode.reviewStatus === "visual_ready"
+                    ? "已确认"
+                    : episode.reviewStatus === "content_review"
+                      ? "待确认"
+                      : "待审核",
         storyboard: episode.shots.length && episode.shots.every((shot) => shot.storyboardStatus === "success") ? "已完成" : "待生成",
         generate: tasks.some((status) => status === "queued" || status === "running") ? "生成中" : episode.shots.length && episode.shots.every((shot) => shot.generationStatus === "success") ? "已完成" : "待生成",
     };
@@ -316,6 +335,8 @@ function episodeProgressLabel(episode: DramaEpisode) {
     if (episode.renderTask?.status === "success") return "整集已完成";
     if (episode.renderTask && ["pending", "running"].includes(episode.renderTask.status)) return "正在合成";
     if (episode.shots.some((shot) => shot.generationStatus === "queued" || shot.generationStatus === "running")) return "镜头生成中";
+    if (episode.reviewCompletionTask?.status === "running") return `审核补全中 · ${episode.reviewCompletionTask.missingCount} 项`;
+    if (episode.reviewCompletionTask?.status === "error") return "审核补全失败";
     if (episode.reviewStatus === "visual_ready") return `${episode.shots.length} 个镜头 · 可生成`;
     if (episode.reviewStatus === "approved") return `${episode.shots.length} 个镜头 · 待视觉设计`;
     if (episode.reviewStatus === "content_review") return `${episode.shots.length} 个镜头 · 待审核`;
@@ -330,6 +351,7 @@ export function DramaScriptPanel({
     onStageChange,
     selectedShotId,
     onSelectedShotChange,
+    onOpenScriptAgent,
 }: {
     project: DramaProject;
     episode: DramaEpisode;
@@ -338,6 +360,7 @@ export function DramaScriptPanel({
     onStageChange: (stage: DramaProjectStage) => void;
     selectedShotId?: string;
     onSelectedShotChange: (shotId?: string) => void;
+    onOpenScriptAgent: () => void;
 }) {
     const scriptText = episode.script.trim();
 
@@ -358,6 +381,9 @@ export function DramaScriptPanel({
                     action={
                         <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                             <DramaSourceImport project={project} onImported={() => onStageChange("script")} />
+                            <Button className="!h-8 !px-2.5" size="small" icon={<Bot className="size-3.5" />} onClick={onOpenScriptAgent}>
+                                剧本 GPT
+                            </Button>
                             <Button
                                 type="primary"
                                 className="!h-8 !px-2.5 enabled:!border-violet-600 enabled:!bg-violet-600 enabled:!text-white enabled:hover:!border-violet-500 enabled:hover:!bg-violet-500 dark:enabled:!border-violet-400 dark:enabled:!bg-violet-400 dark:enabled:!text-violet-950"

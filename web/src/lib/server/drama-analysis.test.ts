@@ -6,6 +6,7 @@ import {
     dramaReviewCompletionToolForFields,
     hasUsableDramaToolArguments,
     normalizeDramaContentAnalysis,
+    normalizeDramaImagePromptAnalysis,
     normalizeDramaReviewCompletion,
     normalizeDramaVideoPromptAnalysis,
     normalizeDramaVisualAnalysis,
@@ -15,6 +16,10 @@ import {
 } from "./drama-analysis";
 
 describe("drama analysis contracts", () => {
+    it("accepts only requested image prompt results", () => {
+        expect(normalizeDramaImagePromptAnalysis({ shots: [{ shotId: "shot-one", imagePrompt: "静态画面" }, { shotId: "unknown", imagePrompt: "忽略" }, { shotId: "shot-one", imagePrompt: "重复" }] }, ["shot-one"])).toEqual({ shots: [{ shotId: "shot-one", imagePrompt: "静态画面" }] });
+    });
+
     it("keeps content facts separate from visual prompts", () => {
         const result = normalizeDramaContentAnalysis(
             {
@@ -162,6 +167,14 @@ describe("drama analysis contracts", () => {
                                 axisRule: "不越轴",
                                 continuityNotes: "服装不变",
                             },
+                            framePlan: {
+                                start: { source: "independent" },
+                                end: { required: true },
+                                frames: [
+                                    { id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 2, actionPrompt: "低头站在门边", imagePrompt: "女主低头，双手垂落，门边中景" },
+                                    { id: "f2", sequenceIndex: 2, startSecond: 2, endSecond: 4, actionPrompt: "抬眼看向门外", imagePrompt: "女主抬眼看向门外，右手握紧衣角，门边中景" },
+                                ],
+                            },
                         },
                         { shotId: "unknown", imagePrompt: "错误", videoPrompt: "错误", cameraMotion: "" },
                         { shotId: "shot-one", imagePrompt: "重复", videoPrompt: "重复", cameraMotion: "" },
@@ -202,13 +215,67 @@ describe("drama analysis contracts", () => {
                     },
                     dialoguePerformance: [],
                     lightingPlan: { palette: "", colorTemperature: "", keyLight: "", fillLight: "", rimLight: "", contrast: "", materialResponse: "", skinToneProtection: "", inheritFromPrevious: "", transitionToNext: "" },
+                    framePlan: {
+                        start: { source: "independent" },
+                        end: { required: true },
+                        frames: [
+                            { id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 2, actionPrompt: "低头站在门边", imagePrompt: "女主低头，双手垂落，门边中景" },
+                            { id: "f2", sequenceIndex: 2, startSecond: 2, endSecond: 4, actionPrompt: "抬眼看向门外", imagePrompt: "女主抬眼看向门外，右手握紧衣角，门边中景" },
+                        ],
+                    },
                 },
             ],
         });
     });
 
+    it("keeps reference manifest when normalizing visual frame plans", () => {
+        const result = normalizeDramaVisualAnalysis(
+            {
+                shots: [
+                    {
+                        shotId: "shot-one",
+                        imagePrompt: "黑湖静态画面",
+                        videoPrompt: "固定机位",
+                        framePlan: {
+                            start: { source: "independent" },
+                            end: { required: true },
+                            frames: [{ id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 2, actionPrompt: "女主低头站定", imagePrompt: "女主低头，双手垂落，门边中景" }],
+                            referenceManifest: [{ alias: "@图片1", role: "scene_anchor", purpose: "场景基准图", assetId: "scene-one" }],
+                        },
+                    },
+                ],
+            },
+            ["shot-one"],
+        );
+
+        expect(result.shots[0].framePlan.referenceManifest).toEqual([{ alias: "@图片1", role: "scene_anchor", purpose: "场景基准图", assetId: "scene-one" }]);
+    });
+
+    it("restores the source manifest when a visual model omits reference fields", () => {
+        const result = normalizeDramaVisualAnalysis(
+            {
+                shots: [{ shotId: "shot-one", imagePrompt: "黑湖静态画面", videoPrompt: "固定机位", framePlan: { start: { source: "independent" }, end: { required: true }, frames: [{ id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 2, actionPrompt: "女主低头站定", imagePrompt: "女主低头，双手垂落，门边中景" }] } }],
+            },
+            ["shot-one"],
+            [{ id: "shot-one", framePlan: { referenceManifest: [{ alias: "@图片1", role: "scene_anchor", purpose: "场景基准图", assetId: "scene-one" }] } }],
+        );
+
+        expect(result.shots[0].framePlan.referenceManifest).toEqual([{ alias: "@图片1", role: "scene_anchor", purpose: "场景基准图", assetId: "scene-one" }]);
+    });
+
     it("only accepts one generated video prompt per requested shot", () => {
-        expect(normalizeDramaVideoPromptAnalysis({ shots: [{ shotId: "shot-one", videoPrompt: "用已验收帧完成匹配切" }, { shotId: "unknown", videoPrompt: "不应进入" }, { shotId: "shot-one", videoPrompt: "重复" }] }, ["shot-one"])).toEqual({
+        expect(
+            normalizeDramaVideoPromptAnalysis(
+                {
+                    shots: [
+                        { shotId: "shot-one", videoPrompt: "用已验收帧完成匹配切" },
+                        { shotId: "unknown", videoPrompt: "不应进入" },
+                        { shotId: "shot-one", videoPrompt: "重复" },
+                    ],
+                },
+                ["shot-one"],
+            ),
+        ).toEqual({
             shots: [{ shotId: "shot-one", videoPrompt: "用已验收帧完成匹配切" }],
         });
     });

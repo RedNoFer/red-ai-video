@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
     fetch: vi.fn(),
     resolve: vi.fn(),
     isPublic: vi.fn(() => true),
+    isProxyFake: vi.fn(() => false),
     proxyUrl: vi.fn(() => ""),
 }));
 vi.mock("undici", () => ({
@@ -22,7 +23,7 @@ vi.mock("undici", () => ({
     },
     fetch: mocks.fetch,
 }));
-vi.mock("@/lib/server/outbound-url-security", () => ({ isPublicIpAddress: mocks.isPublic, resolveSafeOutboundTarget: mocks.resolve }));
+vi.mock("@/lib/server/outbound-url-security", () => ({ isPublicIpAddress: mocks.isPublic, isProxyFakeDnsAddress: mocks.isProxyFake, resolveSafeOutboundTarget: mocks.resolve }));
 vi.mock("@/lib/server/proxy-dispatcher", () => ({ resolveServerProxyUrl: mocks.proxyUrl }));
 
 import { fetchSafeOutbound, UnsafeOutboundUrlError } from "./safe-outbound-fetch";
@@ -34,6 +35,7 @@ describe("safe outbound fetch", () => {
         mocks.agents.length = 0;
         mocks.resolve.mockReset();
         mocks.isPublic.mockReturnValue(true);
+        mocks.isProxyFake.mockReturnValue(false);
         mocks.proxyUrl.mockReturnValue("");
         mocks.fetch.mockResolvedValue(Response.json({ ok: true }));
     });
@@ -89,5 +91,16 @@ describe("safe outbound fetch", () => {
             headersTimeout: GENERATION_TRANSPORT_TIMEOUT_MS,
             bodyTimeout: GENERATION_TRANSPORT_TIMEOUT_MS,
         });
+    });
+
+    it("uses the configured proxy for provider hostnames resolved through fake DNS", async () => {
+        mocks.resolve.mockResolvedValue({ url: new URL("https://audio-provider.example/v1/chat/completions"), address: "198.18.0.84", family: 4 });
+        mocks.isPublic.mockReturnValue(false);
+        mocks.isProxyFake.mockReturnValue(true);
+        mocks.proxyUrl.mockReturnValue("http://proxy.test:8080");
+
+        await fetchSafeOutbound("https://audio-provider.example/v1/chat/completions");
+
+        expect(mocks.agents[0]?.options).toMatchObject({ uri: "http://proxy.test:8080" });
     });
 });

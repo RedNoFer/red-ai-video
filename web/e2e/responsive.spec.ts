@@ -4,6 +4,8 @@ import { readFileSync } from "node:fs";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import { billingProductsFixture, expectDialogWithinViewport, expectNoHorizontalOverflow, masonryGalleryFixture, masonryLayoutIsReady, openCreativeHistory, readMasonryLayout } from "./responsive-helpers";
+import { e2eSettingsPatch } from "./support";
+import type { DramaProject } from "../src/lib/drama-project-contract";
 
 async function waitForCreativeComposerReady(page: Page) {
     await expect(page.locator(".creative-composer")).toHaveAttribute("data-ready", "true", { timeout: 45_000 });
@@ -992,6 +994,299 @@ test("Agent text assets with emoji remain visible after hydration and refresh", 
     await expectNoHorizontalOverflow(page, "Agent emoji article dark");
 });
 
+test("drama asset GPT refinement drawer stays within desktop and mobile viewports", async ({ page, request }) => {
+    const created = await request.post("/api/drama/projects", { data: { title: "E2E 角色精修", ratio: "9:16" } });
+    expect(created.ok(), await created.text()).toBe(true);
+    const project = ((await created.json()) as { data: { project: { id: string } } }).data.project;
+
+    await page.goto(`/drama/${project.id}`, { waitUntil: "domcontentloaded" });
+    await page.getByRole("button", { name: "打开项目资产" }).click();
+    await page.getByRole("button", { name: "新建角色" }).click();
+    const createAsset = page.getByRole("dialog", { name: "新建角色" });
+    await createAsset.locator("input").first().fill("Rifa E2E");
+    await createAsset.locator("textarea").first().fill("需要保持身份一致的主角");
+    await createAsset.getByRole("button", { name: "创建角色" }).click();
+
+    await page.getByRole("button", { name: "编辑角色：Rifa E2E" }).click();
+    const drawer = page.getByRole("dialog", { name: "编辑角色" });
+    await expect(drawer).toBeVisible();
+    await expect(drawer.locator("[data-drama-asset-refinement]")).toBeVisible();
+    await expect(drawer.getByPlaceholder(/Rifa E2E 的肤色/)).toBeVisible();
+    await expectDialogWithinViewport(drawer);
+    const layout = await drawer.locator("[data-drama-asset-editor-content]").evaluate((element) => ({ clientWidth: element.clientWidth, scrollWidth: element.scrollWidth }));
+    expect(layout.scrollWidth).toBeLessThanOrEqual(layout.clientWidth + 1);
+});
+
+test("drama candidate generation does not require the approved baseline image", async ({ page, request }) => {
+    const settings = await request.patch("/api/admin/settings", { data: e2eSettingsPatch() });
+    expect(settings.ok(), await settings.text()).toBe(true);
+    const created = await request.post("/api/drama/projects", { data: { title: "E2E 无参考图候选", ratio: "9:16" } });
+    expect(created.ok(), await created.text()).toBe(true);
+    const project = ((await created.json()) as { data: { project: DramaProject } }).data.project;
+    const characterId = "character-no-reference-e2e";
+    const referenceId = "reference-approved-e2e";
+    const saved = await request.patch(`/api/drama/projects/${project.id}`, {
+        data: {
+            ...project,
+            characters: [
+                {
+                    id: characterId,
+                    name: "无参考图角色",
+                    description: "用于验证普通候选生成不强制依赖基准图",
+                    profile: { visualIdentity: "短发青年" },
+                    references: [{ id: referenceId, url: "/api/reference-assets/permanent/e2e-approved.png", source: "upload", status: "approved", label: "基准图", createdAt: new Date().toISOString() }],
+                    primaryReferenceId: referenceId,
+                },
+            ],
+        },
+    });
+    expect(saved.ok(), await saved.text()).toBe(true);
+
+    const taskId = "e2e-drama-no-reference-task";
+    let submittedBody: Record<string, unknown> | undefined;
+    await page.route(/\/api\/image-tasks$/, async (route) => {
+        if (route.request().method() !== "POST") return route.fallback();
+        submittedBody = (await route.request().postDataJSON()) as Record<string, unknown>;
+        return route.fulfill({ json: { task: { id: taskId, kind: "generation", status: "pending", model: "e2e-image" } } });
+    });
+    await page.route(new RegExp(`/api/image-tasks/${taskId}$`), (route) =>
+        route.fulfill({
+            json: {
+                task: {
+                    id: taskId,
+                    kind: "generation",
+                    status: "success",
+                    model: "e2e-image",
+                    result: { dataUrl: "data:image/png;base64,e2e", serverUrl: "/api/generation-log-assets/permanent/e2e-candidate.png", width: 1024, height: 1792, mimeType: "image/png" },
+                },
+            },
+        }),
+    );
+    await page.route(new RegExp(`/api/drama/projects/${project.id}/assets/characters/${characterId}/review$`), (route) =>
+        route.fulfill({ json: { code: 0, data: { review: { mode: "mock", status: "passed", summary: "通过", issues: [], retryTaskIds: [] } }, msg: "OK" } }),
+    );
+
+    await page.goto(`/drama/${project.id}`, { waitUntil: "domcontentloaded" });
+    await page.getByRole("button", { name: "打开项目资产" }).click();
+    await page.getByRole("button", { name: "编辑角色：无参考图角色" }).click();
+    const drawer = page.getByRole("dialog", { name: "编辑角色" });
+    await drawer.getByRole("button", { name: "生成候选" }).click();
+    await expect.poll(() => submittedBody).toBeTruthy();
+    expect(submittedBody?.references).toEqual([]);
+    await expect(page.getByText("参考图需要公网图片 URL", { exact: false })).toHaveCount(0);
+});
+
+test("drama shot generation previews prompt before confirmation", async ({ page }) => {
+    const adminState = JSON.parse(readFileSync(".e2e-data/admin-state.json", "utf8")) as { cookies: Array<{ name: string; value: string }> };
+    const cookie = adminState.cookies.map((item) => `${item.name}=${item.value}`).join("; ");
+    const created = await page.request.post("/api/drama/projects", { headers: { cookie }, data: { title: "E2E 镜头提示词预览", summary: "验证镜头生成前先看提示词", ratio: "9:16" } });
+    expect(created.ok(), await created.text()).toBe(true);
+    const project = ((await created.json()) as { data: { project: DramaProject } }).data.project;
+    const episode = project.episodes[0];
+    const seededProject: DramaProject = {
+        ...project,
+        defaultVideoMode: "reference",
+        productionBible: {
+            ...project.productionBible,
+            language: "中文",
+            ratio: "9:16",
+            visualStyle: "电影感",
+            continuityMode: "strict",
+            productionPlan: {
+                version: "drama-production-plan-v1",
+                skills: [],
+                video: { model: "e2e-video", mode: "storyboard", ratio: "9:16", resolution: "720p", durationPolicy: "shot", count: 1, audioMode: "native", allowExplicitFallback: false },
+                references: { strategy: "adaptive", minImages: 1, maxImages: 5, roles: [] },
+                continuity: { mode: "strict", requireAcceptedActualTail: true },
+                lockedAt: "2026-01-01T00:00:00.000Z",
+                source: "manual",
+            },
+        },
+        seriesBible: {
+            version: "series-bible-v1",
+            canonCharacters: ["character-one"],
+            immutableRules: ["角色识别保持不变"],
+            relationshipState: "稳定",
+            worldRules: ["黑湖持续存在"],
+            unresolvedThreads: [],
+            visualMotifs: ["冷灰蓝"],
+            soundMotifs: ["低频风声"],
+            previousEpisodeExitState: { environment: "黑湖边", lighting: "冷雾", characters: [], props: [] },
+        },
+        characters: [
+            {
+                id: "character-one",
+                name: "Karin",
+                description: "主角",
+                activeEpisodeCodes: [episode.code || episode.id],
+                primaryReferenceId: "character-one-ref",
+                references: [{ id: "character-one-ref", url: "/karin.png", source: "generated", label: "基准", status: "approved", createdAt: "2026-01-01T00:00:00.000Z" }],
+            },
+        ],
+        scenes: [
+            {
+                id: "scene-one",
+                name: "黑湖",
+                description: "湖面和高塔",
+                primaryReferenceId: "scene-one-ref",
+                references: [{ id: "scene-one-ref", url: "/scene.png", source: "generated", label: "基准", status: "approved", createdAt: "2026-01-01T00:00:00.000Z" }],
+            },
+        ],
+        props: [],
+        clues: [],
+        episodes: [
+            {
+                ...episode,
+                reviewStatus: "visual_ready",
+                shots: [
+                    {
+                        id: "shot-one",
+                        code: "SH01",
+                        order: 1,
+                        title: "黑湖记忆 1/1",
+                        description: "Karin 在黑湖边转身，风掠过水面。",
+                        sourceText: "Karin 在黑湖边转身，风掠过水面。",
+                        shotBoundary: "镜头起始于湖岸。",
+                        dialogue: "",
+                        narration: "",
+                        utterances: [],
+                        performancePlan: {
+                            emotionalObjective: "压住慌乱",
+                            emotionalArc: "从克制到警觉",
+                            speechStyle: "沉稳",
+                            pace: "中慢",
+                            breath: "浅",
+                            restraintLevel: "中",
+                            beats: {
+                                start: { emotion: "紧张", facialAction: "眉头微皱", gaze: "看向湖心", bodyAction: "肩背绷紧" },
+                                middle: { emotion: "警觉", facialAction: "目光收紧", gaze: "扫向左侧", bodyAction: "手指扣紧" },
+                                end: { emotion: "决断", facialAction: "下颌收紧", gaze: "盯住前方", bodyAction: "转身前倾" },
+                            },
+                        },
+                        lightingPlan: {
+                            palette: "冷灰蓝",
+                            colorTemperature: "5600K",
+                            keyLight: "左前方柔光",
+                            fillLight: "低强度环境补光",
+                            rimLight: "背后冷色轮廓光",
+                            contrast: "中高",
+                            materialResponse: "水面微亮，衣料吸光",
+                            skinToneProtection: "保留自然肤色",
+                            inheritFromPrevious: "延续前镜冷雾",
+                            transitionToNext: "过渡到更近景别",
+                        },
+                        imagePrompt: "黑湖边的写实电影感竖屏镜头，Karin 独自站立，禁止文字、水印、logo。",
+                        videoPrompt: "生成15秒9:16竖屏电影级视频。Karin 在黑湖边缓慢转身，风掠过水面，禁止文字、水印、logo。",
+                        executionImagePrompt: "黑湖边的写实电影感竖屏镜头，Karin 独自站立，禁止文字、水印、logo。",
+                        cameraMotion: "轻微推进",
+                        continuity: { shotSize: "中景", cameraAngle: "平视", composition: "主体居中", characterBlocking: "单人站立", gazeDirection: "看向湖心", screenDirection: "右向左", axisRule: "180度内", continuityNotes: "保持冷雾连续" },
+                        entryState: { environment: "黑湖边", lighting: "冷雾", characters: [], props: [] },
+                        exitState: { environment: "黑湖边", lighting: "冷雾", characters: [], props: [] },
+                        duration: 5,
+                        framePlan: {
+                            start: { source: "independent" },
+                            end: { required: true },
+                            referenceManifest: [
+                                { role: "character_anchor", assetId: "character-one", purpose: "保持 Karin 的身份与服装" },
+                                { role: "scene_anchor", assetId: "scene-one", purpose: "保持黑湖空间结构与光向" },
+                            ],
+                            frames: [
+                                { id: "frame-one", sequenceIndex: 1, startSecond: 0, endSecond: 2, actionPrompt: "Karin 在湖岸停住", imagePrompt: "Karin 在湖岸停住" },
+                                { id: "frame-two", sequenceIndex: 2, startSecond: 2, endSecond: 5, actionPrompt: "Karin 转身看向湖心", imagePrompt: "Karin 转身看向湖心" },
+                            ],
+                        },
+                        storyboardFrames: [
+                            { id: "frame-one", sequenceIndex: 1, source: "generated", status: "success", mediaUrl: "/frame-one.png", continuityStatus: "passed" },
+                            { id: "frame-two", sequenceIndex: 2, source: "generated", status: "success", mediaUrl: "/frame-two.png", continuityStatus: "passed" },
+                        ],
+                        characterIds: ["character-one"],
+                        propIds: [],
+                        clueIds: [],
+                        sceneId: "scene-one",
+                        storyboardFrameMode: "all_frames",
+                        videoMode: "reference",
+                        audioMode: "source",
+                    },
+                ],
+                continuityEdges: [],
+            },
+        ],
+    };
+    const unlockedProject = {
+        ...seededProject,
+        productionBible: {
+            ...seededProject.productionBible,
+            productionPlan: { ...seededProject.productionBible!.productionPlan!, lockedAt: undefined },
+        },
+    } as DramaProject;
+    const saved = await page.request.patch(`/api/drama/projects/${project.id}`, { headers: { cookie }, data: unlockedProject });
+    expect(saved.ok(), await saved.text()).toBe(true);
+    const locked = await page.request.patch(`/api/drama/projects/${project.id}`, {
+        headers: { cookie },
+        data: { productionBible: { ...unlockedProject.productionBible, productionPlan: { ...unlockedProject.productionBible!.productionPlan!, lockedAt: "2026-01-01T00:00:00.000Z" } } },
+    });
+    expect(locked.ok(), await locked.text()).toBe(true);
+    let productionRunCreates = 0;
+    await page.route(new RegExp(`/api/drama/projects/${project.id}/production-runs$`), async (route) => {
+        if (route.request().method() !== "POST") return route.fallback();
+        productionRunCreates += 1;
+        await route.fulfill({
+            json: {
+                code: 0,
+                data: {
+                    run: {
+                        id: "run-one",
+                        projectId: project.id,
+                        episodeId: episode.id,
+                        planRevision: "preview-e2e",
+                        status: "ready",
+                        mode: "strict",
+                        parameterSnapshot: { imageModel: "image-e2e", videoModel: "video-e2e", imageQuality: "standard", videoQuality: "720", ratio: "9:16" },
+                        steps: [],
+                        preflightSnapshot: { checkedShotIds: ["shot-one"], issues: [], changeSummary: [], prompts: {} },
+                        createdAt: "2026-01-01T00:00:00.000Z",
+                        updatedAt: "2026-01-01T00:00:00.000Z",
+                    },
+                },
+                msg: "连续性生产计划已锁定",
+            },
+        });
+    });
+
+    await page.goto(`/drama/${project.id}`, { waitUntil: "domcontentloaded" });
+    await page.getByRole("button", { name: "切换到镜头生成" }).click();
+    const generationPanel = page.locator("[data-drama-generation-panel]");
+    await expect(generationPanel).toBeVisible();
+    await expect(generationPanel.getByRole("button", { name: "生成镜头" })).toBeVisible();
+    await generationPanel.getByRole("button", { name: "生成镜头" }).click();
+
+    const previewDialog = page.getByRole("dialog", { name: "确认生成 1 个镜头" });
+    await expect(previewDialog).toBeVisible();
+    await expect(previewDialog.getByText("清晰度：", { exact: false })).toBeVisible();
+    await expect(previewDialog.getByText("Karin 在黑湖边缓慢转身", { exact: false })).toBeVisible();
+    await expect(previewDialog.getByText("0-2s：Karin 在湖岸停住", { exact: false })).toBeVisible();
+    await expect(previewDialog.getByText("2-5s：Karin 转身看向湖心", { exact: false })).toBeVisible();
+    await expect(previewDialog.getByText("实际参考图绑定（编号与本次请求图片数组完全一致）", { exact: false })).toBeVisible();
+    await expect(previewDialog.getByText("@图片1：顺序帧 1", { exact: false })).toBeVisible();
+    await expect(previewDialog.getByText("@图片4：场景 · 黑湖", { exact: false })).toBeVisible();
+    const referenceGallery = previewDialog.locator("[data-drama-prompt-reference-gallery]");
+    await expect(referenceGallery).toBeVisible();
+    await expect(referenceGallery.getByRole("img")).toHaveCount(4);
+    await expect(referenceGallery.getByText("@图片1", { exact: true })).toBeVisible();
+    await expect(referenceGallery.getByText("@图片4", { exact: true })).toBeVisible();
+    await expect(referenceGallery.getByRole("img", { name: "顺序帧 1" })).toBeVisible();
+    await expect(referenceGallery.getByRole("img", { name: "角色 · Karin" })).toBeVisible();
+    await expect(previewDialog.getByText("生成15秒", { exact: false })).toHaveCount(0);
+    await expect(previewDialog.getByText("角色设定：", { exact: false })).toHaveCount(0);
+    await expect(previewDialog.getByText("确认后才会创建视频任务并消耗额度", { exact: false })).toBeVisible();
+    await expect(generationPanel.getByRole("button", { name: "生成镜头" })).toBeVisible();
+    expect(productionRunCreates).toBe(0);
+
+    await previewDialog.getByRole("button", { name: "确认生成" }).click();
+    await expect(previewDialog).toBeHidden();
+    expect(productionRunCreates).toBe(1);
+});
+
 test("creative workspaces remain usable without horizontal overflow in light and dark themes", async ({ page, request }) => {
     const created = await request.post("/api/drama/projects", { data: { title: "E2E 短剧项目", ratio: "9:16" } });
     expect(created.ok(), await created.text()).toBe(true);
@@ -1045,6 +1340,7 @@ test("creative workspaces remain usable without horizontal overflow in light and
             const packageDialog = page.getByRole("dialog", { name: "导入完整制作包" });
             await expect(packageDialog).toBeVisible();
             await expect(packageDialog.getByRole("button", { name: "选择制作包文件" })).toBeVisible();
+            await expect(packageDialog.getByRole("button", { name: "下载制作包模板" })).toBeVisible();
             await expect(packageDialog.getByRole("textbox", { name: "粘贴制作包文本" })).toBeVisible();
             const packageDialogBox = await packageDialog.boundingBox();
             expect(packageDialogBox?.width || 0).toBeLessThanOrEqual((page.viewportSize()?.width || 0) - 22);
@@ -1098,6 +1394,18 @@ test("creative workspaces remain usable without horizontal overflow in light and
             await expect(page.locator("[data-drama-generation-panel]")).toBeVisible();
             const generationLayout = await page.locator("[data-drama-generation-panel]").evaluate((element) => ({ clientWidth: element.clientWidth, scrollWidth: element.scrollWidth }));
             expect(generationLayout.scrollWidth).toBeLessThanOrEqual(generationLayout.clientWidth + 1);
+            const visualPlan = page.locator("[data-drama-visual-plan]");
+            await visualPlan.getByRole("button", { name: "生成视觉计划" }).click();
+            const confirmVisualPlan = visualPlan.getByRole("button", { name: /确认执行/ });
+            await expect(confirmVisualPlan).toBeVisible();
+            await confirmVisualPlan.click();
+            await expect(page.getByText("确认执行视觉计划？", { exact: true })).toBeVisible();
+            await page
+                .getByRole("button", { name: /取\s*消/ })
+                .last()
+                .click();
+            await expect(page.getByText("确认执行视觉计划？", { exact: true })).toBeHidden();
+            await expectNoHorizontalOverflow(page, `${dramaRoute} visual plan`);
 
             if ((page.viewportSize()?.width || 0) < 1366) {
                 await page.getByRole("button", { name: "打开剧集导航" }).click();

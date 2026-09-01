@@ -14,7 +14,7 @@ import { generationModelId, toSystemGenerationChannel } from "@/lib/server/gener
 import { finishGenerationAttempt, startGenerationAttempt } from "@/lib/server/generation-attempt";
 import { resolveLogicalModelCandidates } from "@/lib/server/logical-model-router";
 import { resolveChannelModelConfig } from "@/lib/channel-protocol-registry";
-import { assertReferenceCapabilities } from "@/lib/server/provider-task-config";
+import { assertReferenceCapabilities, readProviderString } from "@/lib/server/provider-task-config";
 import { countActiveImageTasksForUser, createImageTask, getImageTask, touchImageTask, transitionImageTask, type ImageTask, type ImageTaskConfig, type ImageTaskReference, updateImageTask } from "@/lib/server/image-task-store";
 import { isGenerationSource, recordGenerationLog } from "@/lib/server/generation-log-store";
 import { writeReferenceImageDataUrl } from "@/lib/server/reference-asset-store";
@@ -316,11 +316,13 @@ export function withSystemPrompt(config: ImageTaskConfig, prompt: string) {
 export async function parseImagePayloadOrPoll(config: ImageTaskConfig, payload: ImageApiResponse, mediaBaseUrl: string, cookie: string, pollBaseUrl = mediaBaseUrl, singleStep = false): Promise<ImageTaskResult> {
     const payloadError = readImagePayloadError(payload);
     if (payloadError) throw new GenerationSubmissionSafeFailure(payloadError);
+    const configuredImage = configuredImageResult(payload, mediaBaseUrl, config);
+    if (configuredImage) return configuredImage;
     const images = findImageResults(payload, mediaBaseUrl, config);
     if (images.length) return imageTaskResultFromMedia(images);
 
     const taskId = readImageTaskId(payload);
-    if (!taskId) throw new GenerationSubmissionUncertainError("图片接口没有返回图片或任务 ID，创建结果待确认", imageSubmissionResponseDiagnostics(payload));
+    if (!taskId) throw new GenerationSubmissionUncertainError("图片接口返回了空结果（没有图片或任务 ID），创建结果待确认", imageSubmissionResponseDiagnostics(payload));
     const explicitPollUrl = readImagePollUrl(config, payload, mediaBaseUrl, pollBaseUrl);
     const upstream = { id: taskId, mediaBaseUrl, pollBaseUrl, explicitPollUrl: explicitPollUrl || undefined };
     if (!imageTaskPollUrls(config, pollBaseUrl, taskId, explicitPollUrl).length) {
@@ -374,8 +376,15 @@ export async function parseImageQueryJson(response: Response): Promise<ImageApiR
 export function parseImagePayloadCompat(payload: ImageApiResponse, baseUrl: string, config: ImageTaskConfig): ImageTaskResult | null {
     const error = readImagePayloadError(payload);
     if (error) throw new Error(error);
+    const configuredImage = configuredImageResult(payload, baseUrl, config);
+    if (configuredImage) return configuredImage;
     const images = findImageResults(payload, baseUrl, config);
     return images.length ? imageTaskResultFromMedia(images) : null;
+}
+
+function configuredImageResult(payload: ImageApiResponse, baseUrl: string, config: ImageTaskConfig) {
+    const value = readProviderString(payload, config.advancedConfig?.resultField, []);
+    return value ? findImageResult(value, baseUrl, config) : null;
 }
 
 export function findImageResult(value: unknown, baseUrl: string, config: ImageTaskConfig, depth = 0): ImageTaskResult | null {
@@ -456,9 +465,17 @@ export function readImagePayloadError(payload: ImageApiResponse) {
 function imageSubmissionResponseDiagnostics(payload: ImageApiResponse) {
     const record = payload && typeof payload === "object" && !Array.isArray(payload) ? (payload as Record<string, unknown>) : {};
     const responseKeys = Object.keys(record).sort().slice(0, 24);
+    const data = record.data;
+    const dataItems = Array.isArray(data) ? data : data && typeof data === "object" ? [data] : [];
+    const firstItem = dataItems[0];
     return {
         responseKeys,
         containerKeys: responseKeys.filter((key) => IMAGE_CONTAINER_KEYS.includes(key)),
+        dataType: Array.isArray(data) ? "array" : data === null ? "null" : typeof data,
+        ...(Array.isArray(data) ? { dataLength: data.length } : {}),
+        ...(firstItem && typeof firstItem === "object" && !Array.isArray(firstItem)
+            ? { firstDataItemKeys: Object.keys(firstItem as Record<string, unknown>).sort().slice(0, 24) }
+            : {}),
     };
 }
 

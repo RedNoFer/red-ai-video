@@ -66,6 +66,9 @@ export function CreativeComposer({
     onSelectVideoFrame,
     onUploadVideoFrame,
     onRemoveVideoFrame,
+    onToggleVideoKeyframe,
+    onUploadVideoKeyframe,
+    onMoveVideoKeyframe,
     centered = false,
     compact = false,
     onExpand,
@@ -105,6 +108,9 @@ export function CreativeComposer({
     onSelectVideoFrame: (role: Extract<VideoReferenceRole, "first_frame" | "last_frame">, assetId: string) => void;
     onUploadVideoFrame: (role: Extract<VideoReferenceRole, "first_frame" | "last_frame">) => void;
     onRemoveVideoFrame: (role: Extract<VideoReferenceRole, "first_frame" | "last_frame">) => void;
+    onToggleVideoKeyframe: (assetId: string) => void;
+    onUploadVideoKeyframe: () => void;
+    onMoveVideoKeyframe: (assetId: string, direction: -1 | 1) => void;
     centered?: boolean;
     compact?: boolean;
     onExpand?: () => void;
@@ -124,7 +130,7 @@ export function CreativeComposer({
     const videoPreference = generationPreferences.video;
     const frameMode = videoPreference?.referenceMode || "reference";
     const showVideoFrames = shouldShowVideoFrameControls(creationMode, generationPreferences);
-    const frameAssetIds = new Set([videoPreference?.firstFrameAssetId, videoPreference?.lastFrameAssetId].filter(Boolean));
+    const frameAssetIds = new Set([videoPreference?.firstFrameAssetId, videoPreference?.lastFrameAssetId, ...(videoPreference?.frameAssetIds || [])].filter(Boolean));
     const popoverPlacement = centered ? "bottomLeft" : "topLeft";
     const composerPopoverPlacement = useCreativeComposerPopoverPlacement(popoverPlacement);
     const mentionCandidates = useMemo(() => creativeAssetMentionCandidates(referenceAssets, mentionQuery || ""), [mentionQuery, referenceAssets]);
@@ -392,11 +398,15 @@ export function CreativeComposer({
                                 images={attachments.filter((asset) => asset.type === "image")}
                                 firstFrameAssetId={videoPreference?.firstFrameAssetId}
                                 lastFrameAssetId={videoPreference?.lastFrameAssetId}
+                                frameAssetIds={videoPreference?.frameAssetIds}
                                 uploading={uploading}
                                 placement={popoverPlacement}
                                 onSelect={onSelectVideoFrame}
                                 onUpload={onUploadVideoFrame}
                                 onRemove={onRemoveVideoFrame}
+                                onToggleKeyframe={onToggleVideoKeyframe}
+                                onUploadKeyframe={onUploadVideoKeyframe}
+                                onMoveKeyframe={onMoveVideoKeyframe}
                             />
                         ) : (
                             <>

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { applyPublicSystemSettings, defaultConfig, modelMatchesCapability, modelOptionLabel, type PublicSystemSettings } from "./use-config-store";
+import { applyPublicSystemSettings, defaultConfig, modelMatchesCapability, modelOptionLabel, resolveModelRequestConfig, type PublicSystemSettings } from "./use-config-store";
 
 const audioSettings: PublicSystemSettings = {
     systemChannels: [
@@ -112,6 +112,47 @@ describe("applyPublicSystemSettings", () => {
         expect(config.generationConcurrency).toEqual({ agent: 11, image: 12, video: 6, audio: 13, text: 21, render: 7 });
         expect(config.canvasImageCount).toBe("11");
         expect(config.count).toBe("12");
+    });
+
+    it("honors an explicitly selected channel for a logical image model", () => {
+        const config = applyPublicSystemSettings(defaultConfig, {
+            systemChannels: [
+                { id: "image-channel-one", name: "渠道一", baseUrl: "https://one.example", apiKey: "", apiFormat: "openai", models: ["vendor/image"], enabled: true, hasApiKey: true },
+                { id: "image-channel-two", name: "渠道二", baseUrl: "https://two.example", apiKey: "", apiFormat: "openai", models: ["vendor/image"], enabled: true, hasApiKey: true },
+            ],
+            defaultModels: { imageModel: "image-logical" },
+            logicalModels: [
+                {
+                    id: "image-logical",
+                    name: "图片模型",
+                    capability: "image",
+                    enabled: true,
+                    bindings: [
+                        { id: "binding-one", channelId: "image-channel-one", upstreamModel: "vendor/image", enabled: true, priority: 1 },
+                        { id: "binding-two", channelId: "image-channel-two", upstreamModel: "vendor/image", enabled: true, priority: 2 },
+                    ],
+                },
+            ],
+        });
+
+        const selected = resolveModelRequestConfig({ ...config, channelId: "image-channel-two" }, "image-logical");
+
+        expect(selected.channelId).toBe("image-channel-two");
+        expect(selected.baseUrl).toBe("/api/ai/system/image-channel-two");
+    });
+
+    it("does not parse a capability-suffixed logical image id as a channel-qualified model", () => {
+        const config = applyPublicSystemSettings(defaultConfig, {
+            systemChannels: [{ id: "image-channel", name: "图片渠道", baseUrl: "https://image.example.com", apiKey: "", apiFormat: "openai", models: ["gpt-image-2"], enabled: true, hasApiKey: true }],
+            logicalModels: [{ id: "gpt-image-2::image", name: "图片模型", capability: "image", enabled: true, bindings: [{ id: "image-binding", channelId: "image-channel", upstreamModel: "gpt-image-2", enabled: true, priority: 1 }] }],
+            defaultModels: { imageModel: "gpt-image-2::image" },
+        });
+
+        const selected = resolveModelRequestConfig(config, "gpt-image-2::image");
+
+        expect(selected.model).toBe("gpt-image-2::image");
+        expect(selected.channelId).toBe("image-channel");
+        expect(selected.baseUrl).toBe("/api/ai/system/image-channel");
     });
 });
 

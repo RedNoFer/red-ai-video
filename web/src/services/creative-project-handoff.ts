@@ -7,6 +7,7 @@ import { CanvasNodeType } from "@/app/(user)/canvas/types";
 import { nodeSizeFromRatio } from "@/app/(user)/canvas/utils/canvas-node-size";
 import type { DramaSourceAsset } from "@/app/(user)/drama/types";
 import type { CreativeAsset, CreativeProjectHandoff } from "@/lib/creative-runtime-contract";
+import { DRAMA_STYLE_NAME } from "@/lib/drama-style";
 
 export type MaterializedCreativeProject = {
     handoffId: string;
@@ -91,7 +92,7 @@ export function buildDramaHandoffInput(handoff: CreativeProjectHandoff) {
     return {
         title: handoff.title,
         summary: handoff.summary,
-        style: handoff.style || "写实电影感",
+        style: handoff.style || DRAMA_STYLE_NAME,
         ratio: handoff.ratio || ("9:16" as const),
         initialScript,
         sourceAssets,

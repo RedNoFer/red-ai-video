@@ -27,6 +27,33 @@ describe("canvas surface geometry", () => {
         expect(path).not.toContain(" C ");
     });
 
+    it("uses orthogonal routes for linked drama nodes", () => {
+        const dramaSource = { ...source, metadata: { sourceSurface: "drama" as const, dramaRole: "text" as const } };
+        const dramaTarget = { ...target, metadata: { sourceSurface: "drama" as const, dramaRole: "start" as const } };
+        const path = edgePath(dramaSource, dramaTarget);
+
+        expect(path).toContain(" Q ");
+        expect(path).not.toContain(" C ");
+    });
+
+    it("keeps internal drama links vertical within a shot block", () => {
+        const dramaSource = { ...source, position: { x: 80, y: 180 }, metadata: { sourceSurface: "drama" as const, dramaRole: "text" as const } };
+        const dramaTarget = { ...target, position: { x: 80, y: 470 }, height: 160, metadata: { sourceSurface: "drama" as const, dramaRole: "start" as const } };
+        const path = edgePath(dramaSource, dramaTarget);
+        expect(path).not.toContain(" C ");
+        expect(path).toContain("M 200 340");
+        expect(path).toContain("L 230 470");
+    });
+
+    it("routes drama flow links through the bottom horizontal corridor", () => {
+        const video = { ...source, position: { x: 80, y: 1050 }, width: 360, height: 220, metadata: { sourceSurface: "drama" as const, dramaRole: "video" as const } };
+        const text = { ...target, position: { x: 600, y: 180 }, width: 360, height: 220, metadata: { sourceSurface: "drama" as const, dramaRole: "text" as const } };
+        const path = edgePath(video, text);
+        expect(path).not.toContain(" C ");
+        expect(path).toContain("1334");
+        expect(path).toContain("L 554 1334");
+    });
+
     it("routes backward connections outside overlapping node bounds", () => {
         const from = { ...source, position: { x: 0, y: 0 }, width: 340, height: 240 };
         const to = { ...target, position: { x: 280, y: 80 }, width: 340, height: 240 };

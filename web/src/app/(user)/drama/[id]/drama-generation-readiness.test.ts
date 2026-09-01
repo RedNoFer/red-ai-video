@@ -4,14 +4,15 @@ import type { DramaProject, DramaShot } from "../types";
 import { summarizeDramaGeneration } from "./drama-generation-readiness";
 
 describe("drama generation readiness", () => {
-    it("separates queueable shots from prompt and reference blockers", () => {
-        const project = projectFixture([shotFixture({ id: "direct", videoMode: "direct" }), shotFixture({ id: "missing-prompt", videoMode: "storyboard", imagePrompt: "" }), shotFixture({ id: "missing-reference", videoMode: "reference" })]);
+    it("separates queueable shots from prompt and baseline blockers", () => {
+        const project = projectFixture([shotFixture({ id: "direct", videoMode: "direct" }), shotFixture({ id: "missing-prompt", videoMode: "storyboard", imagePrompt: "" }), shotFixture({ id: "legacy-reference", videoMode: "reference" })]);
 
         const summary = summarizeDramaGeneration(project, project.episodes[0]);
 
-        expect(summary.queueableShotIds).toEqual(["direct"]);
+        expect(summary.queueableShotIds).toEqual([]);
+        expect(summary.missingBaselineShotIds).toHaveLength(3);
         expect(summary.missingPromptShotIds).toEqual(["missing-prompt"]);
-        expect(summary.missingReferenceShotIds).toEqual(["missing-reference"]);
+        expect(summary.missingReferenceShotIds).toEqual([]);
     });
 
     it("tracks real video and required voiceover completion without treating active tasks as queueable", () => {

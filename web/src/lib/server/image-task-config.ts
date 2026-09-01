@@ -1,7 +1,8 @@
-export function resolveImageTaskOptions(config: { quality?: unknown; size?: unknown }, defaults: { imageQuality: string; imageSize: string }) {
+export function resolveImageTaskOptions(config: { quality?: unknown; size?: unknown; count?: unknown }, defaults: { imageQuality: string; imageSize: string }) {
     return {
         quality: text(config.quality) || defaults.imageQuality,
         size: text(config.size) || defaults.imageSize,
+        count: resolveImageGenerationCount(config.count),
     };
 }
 

@@ -1,9 +1,10 @@
 "use client";
 
-import { AutoComplete, Input, InputNumber, Select } from "antd";
+import { AutoComplete, Button, Input, InputNumber, Select } from "antd";
 import { CircleGauge, SlidersHorizontal, Sparkles } from "lucide-react";
 
 import type { AuthSettings } from "@/lib/auth/store";
+import { DRAMA_PROVIDER_VOICE_POOL } from "@/lib/drama-voice";
 import { resolveLogicalModelConfig } from "@/lib/model-routing-config";
 import { LabeledControl, SectionTitle } from "@/components/admin/admin-settings-controls";
 
@@ -119,7 +120,7 @@ export function GenerationDefaultsPanel({ settings, onChange }: { settings: Auth
                 <LabeledControl label="默认视频秒数">
                     <InputNumber className="w-full" min={-1} precision={0} placeholder="-1 表示智能" value={settings.generationDefaults.videoSeconds} onChange={(value) => onChange("videoSeconds", value ?? 5)} />
                 </LabeledControl>
-                <LabeledControl label="默认音频音色">
+                <LabeledControl label="默认旁白音色">
                     <Input value={settings.generationDefaults.audioVoice} onChange={(event) => onChange("audioVoice", event.target.value)} />
                 </LabeledControl>
                 <LabeledControl label="默认音频格式">
@@ -127,6 +128,65 @@ export function GenerationDefaultsPanel({ settings, onChange }: { settings: Auth
                 </LabeledControl>
             </div>
             <div className="mt-2 text-xs leading-5 text-stone-500 dark:text-stone-400">新建画布生图节点和配置节点默认使用，单个节点仍可单独覆盖。</div>
+        </div>
+    );
+}
+
+export function CharacterVoicePoolPanel({ settings, onChange }: { settings: AuthSettings; onChange: (value: AuthSettings["characterVoicePool"]) => void }) {
+    const value = settings.characterVoicePool.map((item) => `${item.voiceId} | ${item.label} | ${item.logicalModelId} | ${item.channelId} | ${item.tags.join(",")} | ${item.verified ? "verified" : "unverified"}`).join("\n");
+    const audioModel = settings.defaultModels.audioModel;
+    const resolvedAudio = resolveLogicalModelConfig(settings.logicalModels, settings.systemChannels, "audio", audioModel);
+    const fillStandardPool = () => {
+        const channelId = resolvedAudio?.channel.id || resolvedAudio?.binding.channelId || "";
+        if (!audioModel || !channelId) return;
+        onChange(
+            DRAMA_PROVIDER_VOICE_POOL.map((voiceId) => ({
+                id: `${audioModel}:${voiceId}`,
+                label: voiceId,
+                voiceId,
+                logicalModelId: audioModel,
+                channelId,
+                language: "zh-CN",
+                tags: [],
+                enabled: true,
+                verified: true,
+            })),
+        );
+    };
+    return (
+        <div className={settingsPanelSurfaceClass}>
+            <div className="flex items-center justify-between gap-3">
+                <SectionTitle icon={<Sparkles className="size-4" />} title="角色音色池" />
+                <Button size="small" disabled={!audioModel || !resolvedAudio} onClick={fillStandardPool}>
+                    使用标准角色音色
+                </Button>
+            </div>
+            <div className="mt-2 text-xs leading-5 text-stone-500 dark:text-stone-400">这是短剧角色分配用的 voice ID 池，不是默认音频模型。每行：音色 ID | 名称 | 逻辑模型 ID | 渠道 ID | 标签 | verified。</div>
+            {!audioModel || !resolvedAudio ? <div className="mt-2 text-xs leading-5 text-amber-700 dark:text-amber-300">请先设置可解析的默认音频模型，才能生成标准角色音色池。</div> : null}
+            <Input.TextArea
+                className="mt-3"
+                autoSize={{ minRows: 4, maxRows: 10 }}
+                value={value}
+                onChange={(event) =>
+                    onChange(
+                        event.target.value
+                            .split("\n")
+                            .map((line) => line.split("|").map((part) => part.trim()))
+                            .filter((parts) => parts.length >= 4 && parts[0])
+                            .map(([voiceId, label, logicalModelId, channelId, tags = "", verified = ""]) => ({
+                                id: voiceId,
+                                label: label || voiceId,
+                                voiceId,
+                                logicalModelId,
+                                channelId,
+                                language: "zh-CN",
+                                tags: tags.split(",").filter(Boolean),
+                                enabled: true,
+                                verified: verified === "verified",
+                            })),
+                    )
+                }
+            />
         </div>
     );
 }

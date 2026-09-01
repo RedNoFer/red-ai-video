@@ -3,18 +3,21 @@
 import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 
 import { isGenerationTaskNeedsReviewError } from "@/services/api/generation-task-state";
+import { syncDramaCanvas } from "@/services/api/drama-projects";
 import { CanvasNodeType, isCanvasImageNodeType } from "../types";
 import { classifyCanvasVideoTaskFailure } from "./canvas-video-task-recovery";
 
 import { NODE_STATUS_ERROR, NODE_STATUS_LOADING } from "./canvas-page-elements";
 import { buildGenerationConfig, hydrateAssistantImages, hydrateCanvasImages, isGenerationCanceled, normalizeCanvasConfigNodeLayout } from "./canvas-page-utils";
 import { pauseCanvasGenerationReview } from "./canvas-generation-review";
+import { consumeDramaCanvasSynced } from "./canvas-drama-navigation";
 
 import type { CanvasPageState } from "./use-canvas-page-state";
 import type { CanvasTaskRuntime } from "./use-canvas-task-runtime";
 
 export function useCanvasPersistenceEffects({ state, tasks }: { state: CanvasPageState; tasks: CanvasTaskRuntime }) {
     const skipInitialProjectSyncRef = useRef(false);
+    const dramaSyncRef = useRef<string | null>(null);
     const {
         message,
         modal,
@@ -81,8 +84,6 @@ export function useCanvasPersistenceEffects({ state, tasks }: { state: CanvasPag
         setShowImageInfo,
         clearConfirmOpen,
         setClearConfirmOpen,
-        assetPickerOpen,
-        setAssetPickerOpen,
         projectLoaded,
         setProjectLoaded,
         toolbarNodeId,
@@ -164,7 +165,26 @@ export function useCanvasPersistenceEffects({ state, tasks }: { state: CanvasPag
         let cancelled = false;
         setProjectLoaded(false);
         void loadProject(projectId)
-            .then(async (project) => {
+            .then(async (loadedProject) => {
+                let project = loadedProject;
+                const skipDramaSync = consumeDramaCanvasSynced(projectId);
+                const linkedNode = project.nodes.find((node) => node.metadata?.sourceSurface === "drama" && node.metadata.dramaProjectId && node.metadata.dramaEpisodeId);
+                const linkedMetadata = linkedNode?.metadata;
+                const syncKey = projectId;
+                if (skipDramaSync) dramaSyncRef.current = syncKey;
+                if (!skipDramaSync && dramaSyncRef.current !== syncKey) {
+                    dramaSyncRef.current = syncKey;
+                    try {
+                        if (linkedMetadata?.dramaProjectId && linkedMetadata.dramaEpisodeId) {
+                            await syncDramaCanvas(projectId);
+                        } else if (project.sourceHandoffId?.startsWith("drama-episode-") || projectId.startsWith("canvas-drama-episode-")) {
+                            await syncDramaCanvas(projectId);
+                        }
+                        project = await loadProject(projectId, true);
+                    } catch (error) {
+                        message.warning(error instanceof Error ? error.message : "短剧镜头同步失败，已打开当前画布");
+                    }
+                }
                 const restoredNodes = (await hydrateCanvasImages(project.nodes)).map(normalizeCanvasConfigNodeLayout);
                 const restoredSessions = await hydrateAssistantImages(project.chatSessions || []);
                 if (cancelled) return;

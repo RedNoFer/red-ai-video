@@ -1,4 +1,5 @@
 import type { SystemChannelAdvancedConfig, SystemChannelProtocol, SystemModelChannel } from "@/lib/auth/store";
+import { normalizeModelId } from "@/lib/model-capability";
 import { textContainsUrlHost } from "@/lib/url-host";
 
 type ChannelExampleParseResult = {
@@ -6,7 +7,7 @@ type ChannelExampleParseResult = {
     summary: string[];
 };
 
-type ExampleKind = "text" | "image" | "image-edit" | "video" | "unknown";
+type ExampleKind = "text" | "image" | "image-edit" | "video" | "audio" | "unknown";
 
 type EndpointSpec = {
     marker: string;
@@ -21,6 +22,7 @@ type EndpointMatch = EndpointSpec & {
 
 const ENDPOINT_SPECS: EndpointSpec[] = [
     { marker: "/kyyReactApiServer/v2/model-center/tasks", kind: "unknown" },
+    { marker: "/audio/speech", kind: "audio" },
     { marker: "/v1/seedance-special/videos", kind: "video" },
     { marker: "/sdapi/v1/txt2img", kind: "image" },
     { marker: "/sdapi/v1/img2img", kind: "image-edit" },
@@ -35,7 +37,7 @@ const ENDPOINT_SPECS: EndpointSpec[] = [
     { marker: "/videos", kind: "video" },
 ];
 
-const IMAGE_REFERENCE_KEYS = new Set(["image", "images", "image_url", "image_urls", "input_image", "input_images", "ref_assets", "reference_image", "reference_images", "first_frame_url", "first_frame_image", "last_frame_url", "last_frame_image"]);
+const IMAGE_REFERENCE_KEYS = new Set(["image", "images", "image_url", "image_urls", "input_image", "input_images", "ref_assets", "reference_image", "reference_images", "referenceimages", "first_frame_url", "first_frame_image", "last_frame_url", "last_frame_image"]);
 const VIDEO_REFERENCE_KEYS = new Set(["referencevideo", "referencevideos", "reference_video", "reference_videos", "video", "videos", "input_video", "input_videos"]);
 const AUDIO_REFERENCE_KEYS = new Set(["referenceaudio", "referenceaudios", "reference_audio", "reference_audios", "audio", "audios", "input_audio", "input_audios"]);
 const RESULT_URL_KEYS = new Set([
@@ -106,15 +108,41 @@ export function parseChannelExampleConfig(example: string, channel: SystemModelC
     };
 
     if (kind === "video" && endpoint?.createPath) {
-        if (referenceFields.some((field) => IMAGE_REFERENCE_KEYS.has(field))) advancedPatch.imageToVideoPath = endpoint.createPath;
+        if (referenceFields.some(isImageReferenceKey)) advancedPatch.imageToVideoPath = endpoint.createPath;
         else advancedPatch.createPath = endpoint.createPath;
         advancedPatch.queryPath = videoQueryPath(endpoint.createPath);
         advancedPatch.durationRange = inferDurationRange(requestBody, endpoint.createPath);
     }
     if (kind === "image" && endpoint?.createPath) advancedPatch.createPath = endpoint.createPath;
     if (kind === "image-edit" && endpoint?.createPath) advancedPatch.editPath = endpoint.createPath;
+    if (kind === "audio" && endpoint?.createPath) advancedPatch.createPath = endpoint.createPath;
 
     const nextAdvanced: SystemChannelAdvancedConfig = { ...currentAdvanced, ...advancedPatch };
+    const modelCapability = kind === "image-edit" ? "image" : kind === "unknown" ? undefined : kind;
+    if (model && modelCapability && nextAdvanced.createPath && nextAdvanced.requestTemplate) {
+        const key = normalizeModelId(model);
+        const existing = nextAdvanced.modelConfigs?.[key];
+        nextAdvanced.modelCapabilities = { ...(nextAdvanced.modelCapabilities || {}), [key]: modelCapability };
+        nextAdvanced.modelConfigs = {
+            ...(nextAdvanced.modelConfigs || {}),
+            [key]: {
+                ...(existing || {}),
+                capability: modelCapability,
+                source: "manual",
+                protocol: "custom",
+                apiFormat: channel.apiFormat,
+                createPath: nextAdvanced.createPath,
+                requestTemplate: nextAdvanced.requestTemplate,
+                ...(nextAdvanced.resultField ? { resultField: nextAdvanced.resultField } : {}),
+                ...(nextAdvanced.statusField ? { statusField: nextAdvanced.statusField } : {}),
+                ...(nextAdvanced.durationRange ? { durationRange: nextAdvanced.durationRange } : {}),
+                ...(nextAdvanced.referenceRule ? { referenceRule: nextAdvanced.referenceRule } : {}),
+                supportsReferenceImage: nextAdvanced.supportsReferenceImage,
+                supportsReferenceVideo: nextAdvanced.supportsReferenceVideo,
+                supportsReferenceAudio: nextAdvanced.supportsReferenceAudio,
+            },
+        };
+    }
     const patch: Partial<SystemModelChannel> = { advancedConfig: nextAdvanced };
     if (endpoint?.baseUrl) patch.baseUrl = endpoint.baseUrl;
     if (apiKey) patch.apiKey = apiKey;
@@ -249,7 +277,8 @@ function looksLikeRequestBody(value: Record<string, unknown>) {
 function inferKind(endpoint: EndpointMatch | null, requestBody: unknown, raw: string): ExampleKind {
     if (endpoint?.kind && endpoint.kind !== "unknown") return endpoint.kind;
     if (isRecord(requestBody)) {
-        if (requestBody.messages || requestBody.input) return "text";
+        if (requestBody.messages) return "text";
+        if (requestBody.input) return "audio";
         if (/seedream|image-gen|图片模型/i.test(raw)) return Object.keys(requestBody).some((key) => isReferenceKey(key)) ? "image-edit" : "image";
         if (/seedance|video-gen|视频模型/i.test(raw)) return "video";
         if (requestBody.duration || requestBody.seconds || requestBody.ratio || requestBody.resolution || requestBody.referenceImages || requestBody.referenceVideos) return "video";
@@ -258,6 +287,7 @@ function inferKind(endpoint: EndpointMatch | null, requestBody: unknown, raw: st
     }
     if (/video|videos|i2v|t2v|图生视频|文生视频/i.test(raw)) return "video";
     if (/images\/edits|图生图|图片编辑/i.test(raw)) return "image-edit";
+    if (/audio\/speech|语音合成|文字转语音|tts|speech/i.test(raw)) return "audio";
     if (/images\/generations|文生图|生图/i.test(raw)) return "image";
     if (/"(?:video_url|videoUrl|media_url|mediaUrl|play_url|playUrl|stream_url|streamUrl)"\s*:|\.mp4\b|\.mov\b|\.webm\b/i.test(raw)) return "video";
     if (/"(?:b64_json|base64|image_url|imageUrl)"\s*:|\.png\b|\.jpe?g\b|\.webp\b/i.test(raw)) return "image";
@@ -277,10 +307,14 @@ function findModel(requestBody: unknown, blocks: unknown[], raw: string) {
 
 function inferProtocol(raw: string, endpoint: EndpointMatch | null, requestBody: unknown, current: SystemChannelProtocol): SystemChannelProtocol {
     const source = `${raw}\n${endpoint?.requestUrl || ""}`.toLowerCase();
+    if (endpoint?.kind === "audio" || /(?:audio\/speech|语音合成|文字转语音|tts|speech)/i.test(source)) return "openai";
+    if (textContainsUrlHost(source, ["api.tokengo.love"]) && (endpoint?.kind === "image" || endpoint?.kind === "image-edit" || source.includes("model-runtime"))) return "buming-image";
+    if (textContainsUrlHost(source, ["api.tokengo.love"]) || source.includes("/v1/tasks/") || source.includes("client_request_id")) return "buming-seedance";
     if (source.includes("/kyyreactapiserver/v2/model-center/tasks")) return "yumeng";
     if (source.includes("/v1/seedance-special/videos") || source.includes("sd_2.0_special_") || source.includes("sd_2.0_fast_special_")) return "custom";
     if (source.includes("/sdapi/v1/txt2img") || source.includes("/sdapi/v1/img2img") || source.includes("alwayson_scripts")) return "custom";
     if (source.includes("sub2api") || textContainsUrlHost(source, ["code2alita.com"])) return "sub2api";
+    if (source.includes("modalities") && source.includes("audio") && (source.includes("/chat/completions") || source.includes("/responses"))) return "openai-audio-dialogue";
     if (source.includes("megabyai")) return "newapi-video";
     if (/\bnew\s*api\b|new-api|one-api/i.test(source)) return "newapi";
     if (textContainsUrlHost(source, ["globalaiopc.com"]) || source.includes("/videos/videos") || source.includes("referenceimages")) return "custom";
@@ -305,6 +339,7 @@ function buildRequestTemplate(requestBody: unknown, kind: ExampleKind, protocol:
     if (kind === "video") return '{"model":"{{model}}","prompt":"{{prompt}}","duration":"{{duration}}","ratio":"{{ratio}}"}';
     if (kind === "image-edit" && protocol === "sub2api") return '{"model":"{{model}}","prompt":"{{prompt}}","image_urls":["{{image}}"]}';
     if (kind === "image-edit") return '{"model":"{{model}}","prompt":"{{prompt}}","image":"{{image}}"}';
+    if (kind === "audio") return '{"model":"{{model}}","input":"{{prompt}}","voice":"{{voice}}","response_format":"{{format}}"}';
     if (kind === "image") return '{"model":"{{model}}","prompt":"{{prompt}}","size":"{{size}}"}';
     return "";
 }
@@ -315,7 +350,9 @@ function templateValue(value: unknown, key = ""): unknown {
     if (typeof value !== "string" && typeof value !== "number" && typeof value !== "boolean") return value;
     const lowerKey = key.toLowerCase();
     if (lowerKey === "model") return "{{model}}";
-    if (lowerKey === "prompt" || lowerKey === "text" || lowerKey === "content") return "{{prompt}}";
+    if (lowerKey === "prompt" || lowerKey === "input" || lowerKey === "text" || lowerKey === "content") return "{{prompt}}";
+    if (lowerKey === "voice") return "{{voice}}";
+    if (lowerKey === "format" || lowerKey === "response_format") return "{{format}}";
     if (lowerKey === "size") return "{{size}}";
     if (lowerKey === "quality") return "{{quality}}";
     if (lowerKey === "duration") return "{{duration}}";
@@ -335,6 +372,7 @@ function inferResultField(blocks: unknown[], requestBody: unknown, kind: Example
     if (kind === "text") return "choices[0].message.content";
     if (kind === "video") return "video_url / media_url / output_url / result_url / url";
     if (kind === "image" || kind === "image-edit") return "data[0].url / data[0].b64_json / image_url / result_url";
+    if (kind === "audio") return "binary / audio_url / data[0].audio_url";
     return "";
 }
 
@@ -367,7 +405,7 @@ function collectReferenceFields(value: Record<string, unknown>) {
 
 function inferReferenceRule(raw: string, kind: ExampleKind, protocol: SystemChannelProtocol, fields: string[]) {
     if (/multipart\/form-data|\s-F\s|--form\b/i.test(raw)) return "参考图使用 multipart/form-data 文件上传，由平台自动组装。";
-    if (protocol === "sub2api") return "图生图使用 JSON 请求体；参考图字段为 image_urls 字符串数组。站内素材会先保存到服务器，再使用站点地址提供给上游读取。";
+    if (protocol === "sub2api") return "图生图使用 JSON 请求体；参考图字段为 image_urls 字符串数组。站内素材会先上传到供应商文件接口，再使用返回的公网 URL。";
     if (!fields.length && kind !== "image-edit" && kind !== "video") return "";
     const fieldText = fields.length ? fields.join("、") : kind === "image-edit" ? "image/images/ref_assets" : "image/images/referenceImages";
     if (kind === "video" && (protocol === "globalaiopc" || fields.some((field) => /^reference/i.test(field)))) return `参考素材使用 JSON 字段 ${fieldText}；站内图片、视频和音频会通过服务器媒体地址提供给上游读取。`;
@@ -434,6 +472,11 @@ function isReferenceKey(key: string) {
     return IMAGE_REFERENCE_KEYS.has(key) || IMAGE_REFERENCE_KEYS.has(normalized) || VIDEO_REFERENCE_KEYS.has(key) || VIDEO_REFERENCE_KEYS.has(normalized) || AUDIO_REFERENCE_KEYS.has(key) || AUDIO_REFERENCE_KEYS.has(normalized);
 }
 
+function isImageReferenceKey(key: string) {
+    const normalized = key.toLowerCase();
+    return IMAGE_REFERENCE_KEYS.has(key) || IMAGE_REFERENCE_KEYS.has(normalized);
+}
+
 function formatPath(path: Array<string | number>) {
     return path.map((item, index) => (typeof item === "number" ? `[${item}]` : index === 0 ? item : /^[a-zA-Z_$][\w$]*$/.test(item) ? `.${item}` : `[${JSON.stringify(item)}]`)).join("");
 }
@@ -441,6 +484,7 @@ function formatPath(path: Array<string | number>) {
 function protocolLabel(protocol: SystemChannelProtocol) {
     if (protocol === "yumeng") return "昱梦";
     if (protocol === "sub2api") return "sub2api";
+    if (protocol === "openai-audio-dialogue") return "OpenAI Chat/Responses 音频";
     if (protocol === "newapi") return "New API";
     if (protocol === "newapi-video") return "New API 视频";
     if (protocol === "vozeb-recommended") return "VOZEB推荐";
@@ -448,6 +492,8 @@ function protocolLabel(protocol: SystemChannelProtocol) {
     if (protocol === "seedance") return "Seedance";
     if (protocol === "volcengine-video") return "火山方舟视频";
     if (protocol === "seedance-special") return "Seedance 2.0 特价版";
+    if (protocol === "buming-seedance") return "不鸣 TokenGo Seedance";
+    if (protocol === "buming-image") return "不鸣 TokenGo 图片";
     if (protocol === "custom") return "自定义协议";
     if (protocol === "compatible") return "通用兼容";
     if (protocol === "openai") return "OpenAI";
@@ -459,6 +505,7 @@ function kindLabel(kind: ExampleKind) {
     if (kind === "image") return "文生图接口";
     if (kind === "image-edit") return "图生图接口";
     if (kind === "video") return "视频接口";
+    if (kind === "audio") return "音频接口";
     return "自定义接口";
 }
 

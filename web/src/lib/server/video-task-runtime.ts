@@ -28,8 +28,8 @@ export async function refreshVideoTaskFromUpstream(task: VideoTask, origin: stri
     return getVideoTask(claimed.id);
 }
 
-export async function queryVideoTaskUpstream(task: VideoTask, origin: string, cookie = "", workerUserId = ""): Promise<VideoUpstreamStep> {
-    if (task.upstream.resultUrl) return { state: "result_ready", status: "completed", resultUrl: task.upstream.resultUrl };
+export async function queryVideoTaskUpstream(task: VideoTask, origin: string, cookie = "", workerUserId = "", forceRefresh = false): Promise<VideoUpstreamStep> {
+    if (!forceRefresh && task.upstream.resultUrl) return { state: "result_ready", status: "completed", resultUrl: task.upstream.resultUrl };
     if (isGeminiVideoTask(task)) return queryGeminiVideoUpstream(task, origin, cookie, workerUserId);
     const data = await queryVideoUpstream(task, origin, cookie, workerUserId);
     const status = readVideoProviderStatus(data, task.config.advancedConfig?.statusField);
@@ -63,8 +63,8 @@ async function queryGeminiVideoUpstream(task: VideoTask, origin: string, cookie:
     return { state: "result_ready", status: operation.status, resultUrl: operation.resultUrl };
 }
 
-export async function persistVideoTaskResult(task: VideoTask, resultUrl: string, origin: string, cookie = "", workerUserId = "") {
-    return completeVideoTask(task, resultUrl, origin, cookie, workerUserId);
+export async function persistVideoTaskResult(task: VideoTask, resultUrl: string, origin: string, cookie = "", workerUserId = "", allowCompleted = false) {
+    return completeVideoTask(task, resultUrl, origin, cookie, workerUserId, allowCompleted);
 }
 
 export async function failVideoTaskFromWorker(task: VideoTask, error: string, retryable = false) {
@@ -75,7 +75,7 @@ function taskPollingPolicy(task: VideoTask) {
     return videoPollingPolicy(Boolean(globalAiOpcPreset(task)));
 }
 
-async function completeVideoTask(task: VideoTask, resultUrl: string, origin: string, cookie: string, workerUserId = "") {
+async function completeVideoTask(task: VideoTask, resultUrl: string, origin: string, cookie: string, workerUserId = "", allowCompleted = false) {
     const beforePersistence = await getVideoTask(task.id);
     if (!beforePersistence || beforePersistence.status === "cancelled") {
         if (beforePersistence?.status === "cancelled") await refundVideoTask(beforePersistence);
@@ -93,7 +93,7 @@ async function completeVideoTask(task: VideoTask, resultUrl: string, origin: str
     if (/^https?:\/\//i.test(resultUrl) && channelId) {
         Object.entries(generationMediaProxyHeaders({ userId: task.userId, taskType: "video", taskId: task.id, channelId, upstreamModel: task.config.model, url: resultUrl })).forEach(([key, value]) => workerHeaders.set(key, value));
     }
-    const result = task.result?.url
+    const result = task.result?.url && !/^https?:\/\//i.test(task.result.url) && task.result.url === resultUrl
         ? task.result
         : await normalizeVideoResult({
               url: videoProviderMediaUrl(task.config.baseUrl, resultUrl),
@@ -109,7 +109,7 @@ async function completeVideoTask(task: VideoTask, resultUrl: string, origin: str
               taskId: task.id,
               projectId: task.projectId,
           });
-    const completed = await completeReconciledVideoTask(task.id, result);
+    const completed = await completeReconciledVideoTask(task.id, result, allowCompleted);
     if (!completed) {
         const latest = await getVideoTask(task.id);
         if (latest?.status === "cancelled") await refundVideoTask(latest);

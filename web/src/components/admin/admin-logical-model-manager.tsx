@@ -6,7 +6,7 @@ import { useDeferredValue, useMemo, useState } from "react";
 
 import { LabeledControl, SectionTitle } from "@/components/admin/admin-settings-controls";
 import type { LogicalModel, LogicalModelBinding, LogicalModelCapability, LogicalModelCapabilityProfile, SystemDefaultModels, SystemModelChannel } from "@/lib/auth/store";
-import { capabilityLabel, isLogicalModelResolvable, normalizeDefaultModelsConfig, resolveLogicalModelConfig, synchronizeLogicalModelsWithChannels } from "@/lib/model-routing-config";
+import { capabilityLabel, isLogicalModelResolvable, modelRoutingValidationErrors, normalizeDefaultModelsConfig, resolveLogicalModelConfig, synchronizeLogicalModelsWithChannels } from "@/lib/model-routing-config";
 
 type Props = {
     channels: SystemModelChannel[];
@@ -26,7 +26,7 @@ const defaultFields: Array<{ capability: LogicalModelCapability; key: keyof Syst
     { capability: "text", key: "textModel", label: "默认文本模型" },
     { capability: "image", key: "imageModel", label: "默认图片模型" },
     { capability: "video", key: "videoModel", label: "默认视频模型" },
-    { capability: "audio", key: "audioModel", label: "默认音频模型" },
+    { capability: "audio", key: "audioModel", label: "默认音频模型（短剧 AI 配音）" },
 ];
 
 export function AdminLogicalModelManager({ channels, logicalModels, defaultModels, onChange }: Props) {
@@ -34,6 +34,7 @@ export function AdminLogicalModelManager({ channels, logicalModels, defaultModel
     const [drawerOpen, setDrawerOpen] = useState(false);
     const [editingId, setEditingId] = useState("");
     const [draft, setDraft] = useState<LogicalModel | null>(null);
+    const [draftCapabilities, setDraftCapabilities] = useState<LogicalModelCapability[]>([]);
     const [query, setQuery] = useState("");
     const [capabilityFilter, setCapabilityFilter] = useState<LogicalModelCapability | "all">("all");
     const deferredQuery = useDeferredValue(query.trim().toLowerCase());
@@ -46,11 +47,12 @@ export function AdminLogicalModelManager({ channels, logicalModels, defaultModel
     );
     const availableDefaultFields = defaultFields.filter(({ capability }) => logicalModels.some((model) => model.capability === capability && isLogicalModelResolvable(logicalModels, channels, capability, model.id)));
     const availableCapabilityOptions = capabilityOptions.filter(({ value }) => availableDefaultFields.some(({ capability }) => capability === value));
-    const readyCount = availableDefaultFields.filter(({ capability, key }) => isLogicalModelResolvable(logicalModels, channels, capability, defaultModels[key])).length;
+    const readyCount = availableDefaultFields.filter(({ capability, key }) => isLogicalModelResolvable(logicalModels, channels, capability, defaultModels[key] || "")).length;
 
     const openEdit = (model: LogicalModel) => {
         setEditingId(model.id);
         setDraft(cloneLogicalModel(model));
+        setDraftCapabilities(capabilitiesForModel(logicalModels, model));
         setDrawerOpen(true);
     };
 
@@ -61,8 +63,24 @@ export function AdminLogicalModelManager({ channels, logicalModels, defaultModel
             message.error("请填写前端展示昵称");
             return;
         }
-        const nextModels = logicalModels.map((model) => (model.id === editingId ? cloneLogicalModel({ ...draft, name }) : model));
-        onChange({ logicalModels: nextModels, defaultModels: normalizeDefaultModelsConfig(defaultModels, nextModels, channels) });
+        if (!draftCapabilities.length) {
+            message.error("至少选择一项能力类型");
+            return;
+        }
+        const original = logicalModels.find((model) => model.id === editingId);
+        if (!original) {
+            message.error("逻辑模型已变化，请重新打开设置");
+            return;
+        }
+        const normalizedDraft = cloneLogicalModel({ ...draft, name });
+        const nextModels = buildCapabilityVariants(logicalModels, original, normalizedDraft, draftCapabilities);
+        const nextDefaults = normalizeDefaultModelsConfig(defaultModels, nextModels, channels);
+        const errors = modelRoutingValidationErrors(nextModels, channels, nextDefaults);
+        if (errors.length) {
+            message.error(errors[0]);
+            return;
+        }
+        onChange({ logicalModels: nextModels, defaultModels: nextDefaults });
         setDrawerOpen(false);
         message.success("模型路由设置已更新，请保存渠道配置");
     };
@@ -89,7 +107,7 @@ export function AdminLogicalModelManager({ channels, logicalModels, defaultModel
                             默认能力 {readyCount}/{availableDefaultFields.length} 可用
                         </Tag>
                     </div>
-                    <p className="mt-1 text-xs leading-5 text-stone-500 dark:text-stone-400">逻辑模型由渠道模型目录自动生成；同名上游模型跨渠道合并，前端昵称可独立设置。</p>
+                    <p className="mt-1 text-xs leading-5 text-stone-500 dark:text-stone-400">逻辑模型按上游模型与能力独立路由；同名上游模型可同时用于文本、图片、视频和音频。</p>
                 </div>
                 <Button icon={<RefreshCw className="size-4" />} onClick={syncChannelModels}>
                     重新同步
@@ -141,7 +159,7 @@ export function AdminLogicalModelManager({ channels, logicalModels, defaultModel
                     <SectionTitle icon={<GitBranch className="size-4" />} title="默认模型" />
                     <div className="mt-4 space-y-4">
                         {availableDefaultFields.map(({ capability, key, label }) => {
-                            const options = logicalModels.filter((model) => model.capability === capability && isLogicalModelResolvable(logicalModels, channels, capability, model.id)).map((model) => ({ label: model.name, value: model.id }));
+                            const options = logicalModels.filter((model) => model.capability === capability && isLogicalModelResolvable(logicalModels, channels, capability, model.id)).map((model) => ({ label: formatLogicalModelOptionLabel(model, logicalModels), value: model.id }));
                             const selected = logicalModels.find((model) => model.id === defaultModels[key]);
                             const resolved = selected ? resolveLogicalModelConfig(logicalModels, channels, capability, selected.id) : null;
                             return (
@@ -187,8 +205,8 @@ export function AdminLogicalModelManager({ channels, logicalModels, defaultModel
                 {draft ? (
                     <>
                         <div className="rounded-lg border border-stone-200 bg-stone-50/70 p-3 dark:border-stone-800 dark:bg-stone-900/40">
-                            <div className="truncate text-xs text-stone-500 dark:text-stone-400">逻辑 ID：{draft.id}（由上游模型自动建立）</div>
-                            <div className="mt-2 grid gap-3 sm:max-w-[456px] sm:grid-cols-[192px_144px_96px]">
+                            <div className="truncate text-xs text-stone-500 dark:text-stone-400">逻辑 ID 将按上游模型与能力分别建立（例如 `gpt-5.5::text`、`gpt-5.5::audio`）</div>
+                            <div className="mt-2 grid gap-3 sm:max-w-[620px] sm:grid-cols-[192px_minmax(220px,1fr)_96px]">
                                 <LabeledControl label="前端昵称">
                                     <Input
                                         className="!w-full"
@@ -199,8 +217,19 @@ export function AdminLogicalModelManager({ channels, logicalModels, defaultModel
                                         onChange={(event) => setDraft((current) => (current ? { ...current, name: event.target.value } : current))}
                                     />
                                 </LabeledControl>
-                                <LabeledControl label="能力类型">
-                                    <Select className="w-full" value={draft.capability} options={capabilityOptions} onChange={(capability) => setDraft((current) => (current ? { ...current, capability } : current))} />
+                                <LabeledControl label="能力类型（可多选）">
+                                    <Select
+                                        className="w-full"
+                                        mode="multiple"
+                                        maxTagCount="responsive"
+                                        value={draftCapabilities}
+                                        options={capabilityOptions}
+                                        onChange={(capabilities) => {
+                                            const nextCapabilities = normalizeCapabilities(capabilities);
+                                            setDraftCapabilities(nextCapabilities);
+                                            setDraft((current) => (current && nextCapabilities.length ? { ...current, capability: nextCapabilities[0] } : current));
+                                        }}
+                                    />
                                 </LabeledControl>
                                 <LabeledControl label="模型状态">
                                     <div className="flex h-8 items-center">
@@ -211,7 +240,7 @@ export function AdminLogicalModelManager({ channels, logicalModels, defaultModel
                         </div>
                         <div className="mt-5">
                             <h3 className="text-sm font-semibold text-stone-950 dark:text-stone-100">同名渠道绑定</h3>
-                            <p className="mt-1 text-xs text-stone-500 dark:text-stone-400">渠道与上游模型由目录自动同步；这里调整路由优先级、启停和能力档案。</p>
+                            <p className="mt-1 text-xs text-stone-500 dark:text-stone-400">渠道与上游模型由目录自动同步；这里调整能力、路由优先级、启停和能力档案。</p>
                             <div className="mt-3 space-y-3">
                                 {draft.bindings.map((binding) => (
                                     <BindingEditor
@@ -283,6 +312,12 @@ function BindingEditor({ binding, capability, channels, onChange }: { binding: L
                         <Checkbox checked={profile.supportsReferenceAudio === true} onChange={(event) => updateProfile({ supportsReferenceAudio: event.target.checked })}>
                             参考音频
                         </Checkbox>
+                        {capability === "video" ? (
+                            <Checkbox checked={profile.supportsKeyframes === true} onChange={(event) => updateProfile({ supportsKeyframes: event.target.checked })}>
+                                连续关键帧
+                            </Checkbox>
+                        ) : null}
+                        {capability === "video" ? <Checkbox checked={profile.supportsKeyframes === true} onChange={(event) => updateProfile({ supportsKeyframes: event.target.checked })}>全能帧（2–5 张有序关键帧）</Checkbox> : null}
                         <Checkbox checked={effectiveAsync} onChange={(event) => updateProfile({ supportsAsync: event.target.checked })}>
                             异步查询
                         </Checkbox>
@@ -336,4 +371,55 @@ function BindingEditor({ binding, capability, channels, onChange }: { binding: L
 
 function cloneLogicalModel(model: LogicalModel): LogicalModel {
     return { ...model, bindings: model.bindings.map((binding) => ({ ...binding, capabilityProfile: binding.capabilityProfile ? { ...binding.capabilityProfile } : undefined })) };
+}
+
+function capabilitiesForModel(models: LogicalModel[], model: LogicalModel) {
+    const family = models.filter((candidate) => sameLogicalModelFamily(candidate, model));
+    return normalizeCapabilities(family.map((candidate) => candidate.capability));
+}
+
+function normalizeCapabilities(values: LogicalModelCapability[]) {
+    const order: LogicalModelCapability[] = ["text", "image", "video", "audio"];
+    return order.filter((capability) => values.includes(capability));
+}
+
+function sameLogicalModelFamily(left: LogicalModel, right: LogicalModel) {
+    const rightModels = new Set(right.bindings.map((binding) => upstreamKey(binding.upstreamModel)));
+    return left.bindings.some((binding) => rightModels.has(upstreamKey(binding.upstreamModel)));
+}
+
+function upstreamKey(value: string) {
+    return value.trim().replace(/^models\//i, "").toLowerCase();
+}
+
+function buildCapabilityVariants(models: LogicalModel[], original: LogicalModel, draft: LogicalModel, capabilities: LogicalModelCapability[]) {
+    const selected = normalizeCapabilities(capabilities);
+    const family = models.filter((model) => sameLogicalModelFamily(model, original));
+    const sourceModel = draft.bindings[0]?.upstreamModel || original.bindings[0]?.upstreamModel || original.id;
+    const sourceName = sourceModel.trim().replace(/^models\//i, "");
+    const usedIds = new Set(models.filter((model) => !family.includes(model)).map((model) => model.id.toLowerCase()));
+    const variants = selected.map((capability) => {
+        const existing = family.find((model) => model.capability === capability);
+        const base = existing && existing.id !== original.id ? existing : draft;
+        const id = existing?.id || uniqueVariantId(sourceName, capability, usedIds);
+        usedIds.add(id.toLowerCase());
+        return cloneLogicalModel({ ...base, id, name: draft.name, enabled: draft.enabled, capability, bindings: draft.bindings.map((binding) => ({ ...binding, capabilityProfile: existing?.bindings.find((item) => item.id === binding.id)?.capabilityProfile || binding.capabilityProfile })) });
+    });
+    const withoutFamily = models.filter((model) => !family.includes(model));
+    const originalIndex = models.findIndex((model) => model.id === original.id);
+    withoutFamily.splice(Math.min(Math.max(originalIndex, 0), withoutFamily.length), 0, ...variants);
+    return withoutFamily;
+}
+
+function uniqueVariantId(sourceName: string, capability: LogicalModelCapability, usedIds: Set<string>) {
+    const base = `${sourceName}::${capability}`;
+    let candidate = base;
+    let suffix = 2;
+    while (usedIds.has(candidate.toLowerCase())) candidate = `${base}-${suffix++}`;
+    return candidate;
+}
+
+function formatLogicalModelOptionLabel(model: LogicalModel, logicalModels: LogicalModel[]) {
+    const sameNameCount = logicalModels.filter((item) => item.id !== model.id && item.name.trim().toLowerCase() === model.name.trim().toLowerCase()).length;
+    return sameNameCount ? `${model.name} · ${capabilityLabel(model.capability)}` : model.name;
 }

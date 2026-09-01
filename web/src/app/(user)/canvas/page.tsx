@@ -9,6 +9,7 @@ import { readZip } from "@/lib/zip";
 import { APP_EXPORT_ID } from "@/lib/storage-keys";
 import { uploadMediaFile } from "@/services/file-storage";
 import { uploadImage } from "@/services/image-storage";
+import { cn } from "@/lib/utils";
 import { CanvasDeleteProjectsDialog } from "./components/canvas-delete-projects-dialog";
 import { CanvasProjectCard } from "./components/canvas-project-card";
 import type { CanvasExportFile } from "./export-types";
@@ -42,7 +43,8 @@ export default function CanvasPage() {
     const importProject = useCanvasStore((state) => state.importProject);
     const selectedIds = useCanvasUiStore((state) => state.selectedProjectIds);
     const setDeleteIds = useCanvasUiStore((state) => state.setDeleteProjectIds);
-    const ready = Boolean(userId && hydrated && hydratedUserId === userId);
+    const hasCurrentUserState = Boolean(userId && hydratedUserId === userId);
+    const ready = Boolean(hasCurrentUserState && hydrated);
 
     const mode = searchParams.get("mode");
     const agentMode = mode === "new" || mode === "recent" || mode === "choose";
@@ -158,29 +160,33 @@ export default function CanvasPage() {
                     </div>
                 </header>
 
-                {!ready ? (
-                    <section className="flex min-h-24 flex-col items-center justify-center gap-3 border-y border-stone-200 px-4 text-center text-sm text-stone-500 sm:min-h-48 dark:border-stone-800">
-                        <span>{syncError || "正在加载画布..."}</span>
-                        {syncError ? (
-                            <Button size="small" onClick={() => void hydrate(true)}>
-                                重新加载
-                            </Button>
-                        ) : null}
+                {syncError ? (
+                    <section className="flex min-h-16 flex-col items-center justify-center gap-3 border-y border-amber-200 px-4 text-center text-sm text-amber-700 sm:min-h-24 dark:border-amber-500/30 dark:text-amber-200">
+                        <span>{syncError}</span>
+                        <Button size="small" onClick={() => void hydrate(true)}>
+                            重新加载
+                        </Button>
                     </section>
-                ) : projects.length ? (
+                ) : null}
+
+                {hasCurrentUserState && projects.length ? (
                     <>
-                        <div className="grid gap-2 sm:grid-cols-2 sm:gap-5 xl:grid-cols-3">
+                        <div className={cn("grid gap-2 transition-opacity sm:grid-cols-2 sm:gap-5 xl:grid-cols-3", !hydrated && "opacity-60")} aria-busy={!hydrated}>
                             {projects.map((project) => (
                                 <CanvasProjectCard key={project.id} project={project} />
                             ))}
                         </div>
                         {total > pageSize ? (
                             <div className="flex justify-center py-2 sm:py-0">
-                                <Pagination current={page} pageSize={pageSize} total={total} showSizeChanger={false} onChange={(nextPage) => void hydrate(true, nextPage)} />
+                                <Pagination current={page} pageSize={pageSize} total={total} showSizeChanger={false} disabled={!ready} onChange={(nextPage) => void hydrate(true, nextPage)} />
                             </div>
                         ) : null}
                     </>
-                ) : (
+                ) : !ready && !syncError ? (
+                    <section className="flex min-h-24 flex-col items-center justify-center gap-3 border-y border-stone-200 px-4 text-center text-sm text-stone-500 sm:min-h-48 dark:border-stone-800">
+                        正在加载画布...
+                    </section>
+                ) : ready ? (
                     <section className="flex min-h-24 flex-col items-center justify-center border-y border-stone-200 px-3 py-5 text-center sm:min-h-56 sm:py-8 dark:border-stone-800">
                         <h2 className="text-lg font-medium sm:text-xl">还没有画布</h2>
                         <p className="mt-1.5 text-xs text-stone-500 sm:mt-3 sm:text-sm">新建一个画布后，就可以独立保存节点、连线和画布外观。</p>
@@ -188,6 +194,8 @@ export default function CanvasPage() {
                             新建画布
                         </Button>
                     </section>
+                ) : (
+                    <section className="min-h-16 border-y border-stone-200 dark:border-stone-800" />
                 )}
             </div>
 

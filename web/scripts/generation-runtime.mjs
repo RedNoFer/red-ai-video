@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import path from "node:path";
 import { randomBytes } from "node:crypto";
 
 const MIN_TOKEN_LENGTH = 32;
@@ -26,12 +27,55 @@ export function generationRuntimeEnvironment({ environment = process.env, allowE
     };
 }
 
+export function resolveDevelopmentEnvironment({ webRoot, environment = process.env } = {}) {
+    const source = { ...environment };
+    if (webRoot) {
+        const localDataDir = path.join(webRoot, ".data");
+        if (!source.VOZEB_PRO_DATA_DIR?.trim() || source.VOZEB_PRO_DATA_DIR === "/app/web/.data") {
+            source.VOZEB_PRO_DATA_DIR = localDataDir;
+        }
+    }
+
+    if (!source.DATABASE_URL?.trim() && !source.POSTGRES_URL?.trim() && source.VOZEB_PRO_DATABASE_PROVIDER !== "file") {
+        const databaseUrl = resolveDevelopmentDatabaseUrl(source);
+        if (databaseUrl) source.DATABASE_URL = databaseUrl;
+    }
+    source.VOZEB_PRO_INTERNAL_ORIGIN = resolveDevelopmentInternalOrigin(source);
+
+    return source;
+}
+
+export function resolveDevelopmentDatabaseUrl(environment = process.env) {
+    const database = environment.POSTGRES_DB?.trim() || "";
+    const username = environment.POSTGRES_USER?.trim() || "";
+    const password = environment.POSTGRES_PASSWORD ?? "";
+    const host = environment.POSTGRES_HOST?.trim() || "";
+    const port = environment.POSTGRES_PORT?.trim() || "";
+    if (!database || !username) return "";
+    if (!host || !port) throw new Error("Local PostgreSQL startup requires explicit POSTGRES_HOST and POSTGRES_PORT");
+
+    return `postgres://${encodeURIComponent(username)}:${encodeURIComponent(password)}@${host}:${port}/${encodeURIComponent(database)}`;
+}
+
 export function resolveGenerationWorkerOrigin({ environment = process.env, fallbackOrigin = "http://127.0.0.1:3000" } = {}) {
     const raw = environment.VOZEB_PRO_WORKER_API_ORIGIN?.trim() || environment.VOZEB_PRO_INTERNAL_ORIGIN?.trim() || environment.NEXT_PUBLIC_SITE_URL?.trim() || fallbackOrigin;
     const value = /^[a-z][a-z\d+.-]*:\/\//i.test(raw) ? raw : `http://${raw}`;
     const url = new URL(value);
     if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error("Generation worker origin must use HTTP or HTTPS");
     return url.origin;
+}
+
+function resolveDevelopmentInternalOrigin(environment) {
+    const port = validPort(environment.PORT);
+    const origin = environment.VOZEB_PRO_INTERNAL_ORIGIN?.trim() || "";
+    if (!port) return origin;
+    if (!origin) return `http://127.0.0.1:${port}`;
+    try {
+        const url = new URL(/^[a-z][a-z\d+.-]*:\/\//i.test(origin) ? origin : `http://${origin}`);
+        return ["localhost", "127.0.0.1", "::1", "[::1]"].includes(url.hostname) ? `http://127.0.0.1:${port}` : origin;
+    } catch {
+        return origin;
+    }
 }
 
 export function superviseGenerationRuntime({ app, workerScript, environment }) {

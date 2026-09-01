@@ -1,10 +1,12 @@
 import type { SystemChannelAdvancedConfig } from "@/lib/auth/store";
 import type { LogicalModelCapability } from "@/lib/auth/store";
-import { channelProtocolDefinition, protocolModelConfig } from "@/lib/channel-protocol-registry";
+import { channelProtocolDefinition, protocolModelConfig, resolveBumingSeedanceVideoModelContract } from "@/lib/channel-protocol-registry";
 import { hasProviderReadSignatureShape, isReferenceAssetUrl } from "@/lib/reference-asset-url";
 import type { VideoGenerationReference, VideoReferenceRole } from "@/lib/video-reference-contract";
 
 type TemplateValues = Record<string, unknown>;
+
+const MAX_PROVIDER_TEMPLATE_DEPTH = 128;
 
 export function videoPollingPolicy(globalAiOpc: boolean) {
     return globalAiOpc ? { attempts: 40, intervalMs: 30_000 } : { attempts: 180, intervalMs: 2_500 };
@@ -31,6 +33,20 @@ export function providerQueryPaths(config: SystemChannelAdvancedConfig | undefin
 export function buildProviderRequest(template: string | undefined, defaults: Record<string, unknown>, values: TemplateValues) {
     if (!template?.trim()) return defaults;
     return renderProviderRequest(template, values);
+}
+
+/**
+ * Provider payloads cross a JSON boundary. Keep this serialization in one
+ * place so a malformed template value fails before fetch receives it.
+ */
+export function serializeProviderRequest(value: unknown) {
+    try {
+        return JSON.stringify(value) ?? "null";
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "";
+        if (/circular|call stack|nested/i.test(message)) throw new Error("生成请求参数包含循环引用或嵌套层级过深");
+        throw error;
+    }
 }
 
 export function buildVideoProviderRequest(template: string | undefined, defaults: Record<string, unknown>, values: TemplateValues) {
@@ -76,6 +92,17 @@ export function readProviderString(value: unknown, configuredPath: string | unde
     return findString(value, new Set(fallbackKeys));
 }
 
+export function readProviderValue(value: unknown, configuredPath: string | undefined, fallbackKeys: string[]) {
+    for (const path of (configuredPath || "")
+        .split(/\s+\/\s+/)
+        .map((item) => item.trim())
+        .filter(Boolean)) {
+        const configured = readFieldPath(value, path);
+        if (configured !== undefined && configured !== null) return configured;
+    }
+    return findValue(value, new Set(fallbackKeys));
+}
+
 export function readProviderError(value: unknown) {
     return findString(value, new Set(["error_message", "errorMessage", "error", "msg", "message", "detail"]));
 }
@@ -100,24 +127,38 @@ export function assertReferenceCapabilities(config: SystemChannelAdvancedConfig 
     if (unsupported) throw new Error(`当前渠道未启用${unsupported.type === "image" ? "参考图" : unsupported.type === "video" ? "参考视频" : "参考音频"}能力`);
 }
 
-export function assertVideoReferenceRoles(config: SystemChannelAdvancedConfig | undefined, references: readonly VideoGenerationReference[], declaredRoles?: readonly VideoReferenceRole[]) {
-    const requestedRoles = Array.from(new Set(references.map((reference) => reference.role).filter((role): role is "first_frame" | "last_frame" => role === "first_frame" || role === "last_frame")));
-    if (!requestedRoles.length) return;
+export function assertVideoReferenceRoles(config: SystemChannelAdvancedConfig | undefined, references: readonly VideoGenerationReference[], declaredRoles?: readonly VideoReferenceRole[], model?: string) {
+    const requestedRoles = Array.from(new Set(references.map((reference) => reference.role).filter((role): role is VideoReferenceRole => Boolean(role) && role !== "reference")));
     const protocol = config?.protocol || "auto";
+    if (protocol === "buming-seedance") {
+        const contract = resolveBumingSeedanceVideoModelContract(model || "");
+        const keyframes = references.filter((reference) => reference.role === "keyframe");
+        const regularReferences = references.filter((reference) => reference.role === "reference");
+        const firstFrame = references.some((reference) => reference.role === "first_frame");
+        const lastFrame = references.some((reference) => reference.role === "last_frame");
+        const requestedMode = keyframes.length ? "all_frames" : firstFrame ? (lastFrame ? "first_last" : "first_frame") : regularReferences.length ? "reference" : undefined;
+        if (requestedMode && !contract.videoReferenceModes.includes(requestedMode)) {
+            if (requestedMode === "all_frames") throw new Error("当前不鸣视频模型不支持全能帧连续参考");
+            throw new Error(`当前不鸣视频模型不支持${requestedMode === "reference" ? "普通参考素材" : requestedMode === "first_last" ? "首尾帧" : "首帧"}`);
+        }
+        if (contract.maxReferenceImages && references.filter((reference) => reference.type === "image").length > contract.maxReferenceImages) throw new Error(`当前不鸣视频模型最多支持 ${contract.maxReferenceImages} 张参考图`);
+        return;
+    }
+    if (!requestedRoles.length) return;
     const supported = new Set<VideoReferenceRole>(
         declaredRoles ||
             (protocol === "seedance" || protocol === "volcengine-video" || protocol === "seedance-special"
                 ? ["reference", "first_frame", "last_frame"]
                 : protocol === "yumeng"
                   ? templateVideoReferenceRoles(config?.requestTemplate)
-                  : protocol === "openai" || protocol === "newapi" || protocol === "sub2api"
+                  : protocol === "openai" || protocol === "newapi" || protocol === "sub2api" || protocol === "openai-audio-dialogue"
                     ? ["reference", "first_frame"]
                     : protocol === "custom" || protocol === "compatible" || protocol === "auto"
                       ? templateVideoReferenceRoles(config?.requestTemplate)
                       : ["reference"]),
     );
     const unsupported = requestedRoles.find((role) => !supported.has(role));
-    if (unsupported) throw new Error(unsupported === "last_frame" ? "当前视频模型不支持尾帧输入" : "当前视频模型不支持显式首帧输入");
+    if (unsupported) throw new Error(unsupported === "keyframe" ? "当前视频模型不支持全能帧连续参考" : unsupported === "last_frame" ? "当前视频模型不支持尾帧输入" : "当前视频模型不支持显式首帧输入");
 }
 
 export function templateVideoReferenceRoles(template: string | undefined): VideoReferenceRole[] {
@@ -127,6 +168,7 @@ export function templateVideoReferenceRoles(template: string | undefined): Video
         "reference" as const,
         ...(structured || /\{\{\s*(?:first_frame|first_frame_url)\s*\}\}/i.test(value) ? (["first_frame"] as const) : []),
         ...(structured || /\{\{\s*(?:last_frame|last_frame_url)\s*\}\}/i.test(value) ? (["last_frame"] as const) : []),
+        ...(structured ? (["keyframe"] as const) : []),
     ];
 }
 
@@ -138,13 +180,38 @@ export function providerTaskPath(path: string, taskId: string) {
     return `${path}${separator}${encoded}`;
 }
 
-function renderTemplateValue(value: unknown, values: TemplateValues): unknown {
-    if (Array.isArray(value)) return value.map((item) => renderTemplateValue(item, values));
-    if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, renderTemplateValue(item, values)]));
+function renderTemplateValue(value: unknown, values: TemplateValues, seen = new Set<object>(), depth = 0): unknown {
+    assertProviderTemplateDepth(depth);
+    if (Array.isArray(value)) {
+        if (seen.has(value)) throw new Error("高级请求模板包含循环引用");
+        seen.add(value);
+        const result = value.map((item) => renderTemplateValue(item, values, seen, depth + 1));
+        seen.delete(value);
+        return result;
+    }
+    if (value && typeof value === "object") {
+        if (seen.has(value)) throw new Error("高级请求模板包含循环引用");
+        seen.add(value);
+        const result = Object.fromEntries(Object.entries(value).map(([key, item]) => [key, renderTemplateValue(item, values, seen, depth + 1)]));
+        seen.delete(value);
+        return result;
+    }
     if (typeof value !== "string") return value;
     const exact = value.match(/^\{\{\s*([\w.]+)\s*\}\}$/);
-    if (exact) return values[exact[1]] ?? value;
+    if (exact) return values[exact[1]] === undefined ? value : cloneProviderValue(values[exact[1]]);
     return value.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (match, key: string) => String(values[key] ?? match));
+}
+
+function cloneProviderValue(value: unknown, seen = new Set<object>(), depth = 0): unknown {
+    assertProviderTemplateDepth(depth);
+    if (!value || typeof value !== "object") return value;
+    if (seen.has(value)) throw new Error("高级请求模板动态值包含循环引用");
+    seen.add(value);
+    const cloned = Array.isArray(value)
+        ? value.map((item) => cloneProviderValue(item, seen, depth + 1))
+        : Object.fromEntries(Object.entries(value).map(([key, item]) => [key, cloneProviderValue(item, seen, depth + 1)]));
+    seen.delete(value);
+    return cloned;
 }
 
 function alignVideoProviderFields(payload: Record<string, unknown>, values: TemplateValues) {
@@ -154,11 +221,11 @@ function alignVideoProviderFields(payload: Record<string, unknown>, values: Temp
         const dynamicValueKey = VIDEO_DYNAMIC_VALUE_KEYS[normalizedKey];
         if (dynamicValueKey && values[dynamicValueKey] !== undefined) {
             const value = values[dynamicValueKey];
-            next[key] = normalizedKey === "seconds" && typeof current === "string" ? String(value) : value;
+            next[key] = normalizedKey === "seconds" && typeof current === "string" ? String(value) : cloneProviderValue(value);
             continue;
         }
         const referenceValueKey = VIDEO_REFERENCE_VALUE_KEYS[normalizedKey];
-        if (referenceValueKey && shouldAlignReferenceTemplateValue(current)) next[key] = values[referenceValueKey];
+        if (referenceValueKey && shouldAlignReferenceTemplateValue(current)) next[key] = cloneProviderValue(values[referenceValueKey]);
     }
     return next;
 }
@@ -187,37 +254,58 @@ function isExternallyReachableReferenceUrl(value: string) {
     }
 }
 
-function pruneEmptyReferenceFields(value: unknown): unknown {
-    if (Array.isArray(value)) return value.map(pruneEmptyReferenceFields);
+function pruneEmptyReferenceFields(value: unknown, seen = new Set<object>(), depth = 0): unknown {
+    assertProviderTemplateDepth(depth);
+    if (Array.isArray(value)) {
+        if (seen.has(value)) throw new Error("高级请求模板包含循环引用");
+        seen.add(value);
+        const result = value.map((item) => pruneEmptyReferenceFields(item, seen, depth + 1));
+        seen.delete(value);
+        return result;
+    }
     if (!value || typeof value !== "object") return value;
+    if (seen.has(value)) throw new Error("高级请求模板包含循环引用");
+    seen.add(value);
     const entries = Object.entries(value).flatMap(([key, item]) => {
-        const next = REFERENCE_FIELD_KEYS.has(normalizeFieldKey(key)) ? normalizeReferenceValue(item) : pruneEmptyReferenceFields(item);
+        const next = REFERENCE_FIELD_KEYS.has(normalizeFieldKey(key)) ? normalizeReferenceValue(item, seen, depth + 1) : pruneEmptyReferenceFields(item, seen, depth + 1);
         return next === EMPTY_REFERENCE ? [] : [[key, next] as const];
     });
+    seen.delete(value);
     return Object.fromEntries(entries);
 }
 
-function normalizeReferenceValue(value: unknown): unknown {
+function normalizeReferenceValue(value: unknown, seen = new Set<object>(), depth = 0): unknown {
+    assertProviderTemplateDepth(depth);
     if (value === null || value === undefined) return EMPTY_REFERENCE;
     if (typeof value === "string") {
         const text = value.trim();
         return !text || /^\{\{[^{}]+\}\}$/.test(text) || /^https?:\/\/\.{3}(?:\/|$)/i.test(text) ? EMPTY_REFERENCE : value;
     }
     if (Array.isArray(value)) {
-        const items = value.map(normalizeReferenceValue).filter((item) => item !== EMPTY_REFERENCE);
+        if (seen.has(value)) throw new Error("高级请求模板包含循环引用");
+        seen.add(value);
+        const items = value.map((item) => normalizeReferenceValue(item, seen, depth + 1)).filter((item) => item !== EMPTY_REFERENCE);
+        seen.delete(value);
         return items.length ? items : EMPTY_REFERENCE;
     }
     if (typeof value !== "object") return value;
+    if (seen.has(value)) throw new Error("高级请求模板包含循环引用");
+    seen.add(value);
     const source = Object.entries(value);
     const entries = source.flatMap(([key, item]) => {
         const normalizedKey = normalizeFieldKey(key);
-        const next = REFERENCE_FIELD_KEYS.has(normalizedKey) || REFERENCE_VALUE_KEYS.has(normalizedKey) ? normalizeReferenceValue(item) : pruneEmptyReferenceFields(item);
+        const next = REFERENCE_FIELD_KEYS.has(normalizedKey) || REFERENCE_VALUE_KEYS.has(normalizedKey) ? normalizeReferenceValue(item, seen, depth + 1) : pruneEmptyReferenceFields(item, seen, depth + 1);
         return next === EMPTY_REFERENCE ? [] : [[key, next] as const];
     });
+    seen.delete(value);
     if (!entries.length || entries.every(([key]) => REFERENCE_METADATA_KEYS.has(normalizeFieldKey(key)))) return EMPTY_REFERENCE;
     const hadReferenceValue = source.some(([key]) => REFERENCE_FIELD_KEYS.has(normalizeFieldKey(key)) || REFERENCE_VALUE_KEYS.has(normalizeFieldKey(key)));
     const hasReferenceValue = entries.some(([key]) => REFERENCE_FIELD_KEYS.has(normalizeFieldKey(key)) || REFERENCE_VALUE_KEYS.has(normalizeFieldKey(key)));
     return hadReferenceValue && !hasReferenceValue ? EMPTY_REFERENCE : Object.fromEntries(entries);
+}
+
+function assertProviderTemplateDepth(depth: number) {
+    if (depth > MAX_PROVIDER_TEMPLATE_DEPTH) throw new Error("高级请求模板嵌套层级过深");
 }
 
 function normalizeFieldKey(key: string) {
@@ -239,25 +327,38 @@ function readFieldPath(value: unknown, path: string) {
     return current;
 }
 
-function findString(value: unknown, keys: Set<string>, depth = 0): string {
-    if (!value || depth > 6) return "";
-    if (Array.isArray(value)) {
-        for (const item of value) {
-            const found = findString(item, keys, depth + 1);
-            if (found) return found;
+function findString(value: unknown, keys: Set<string>): string {
+    const queue: Array<{ value: unknown; depth: number }> = [{ value, depth: 0 }];
+    const visited = new Set<object>();
+    for (let index = 0; index < queue.length; index += 1) {
+        const current = queue[index];
+        if (current.depth > 6 || !current.value || typeof current.value !== "object") continue;
+        if (visited.has(current.value)) continue;
+        visited.add(current.value);
+        const entries = Object.entries(current.value);
+        for (const [key, item] of entries) {
+            if (keys.has(key) && (typeof item === "string" || typeof item === "number") && String(item).trim()) return String(item).trim();
         }
-        return "";
-    }
-    if (typeof value !== "object") return "";
-    const record = value as Record<string, unknown>;
-    for (const [key, item] of Object.entries(record)) {
-        if (keys.has(key) && (typeof item === "string" || typeof item === "number") && String(item).trim()) return String(item).trim();
-    }
-    for (const item of Object.values(record)) {
-        const found = findString(item, keys, depth + 1);
-        if (found) return found;
+        entries.forEach(([, item]) => queue.push({ value: item, depth: current.depth + 1 }));
     }
     return "";
+}
+
+function findValue(value: unknown, keys: Set<string>): unknown {
+    const queue: Array<{ value: unknown; depth: number }> = [{ value, depth: 0 }];
+    const visited = new Set<object>();
+    for (let index = 0; index < queue.length; index += 1) {
+        const current = queue[index];
+        if (current.depth > 8 || !current.value || typeof current.value !== "object") continue;
+        if (visited.has(current.value)) continue;
+        visited.add(current.value);
+        const entries = Object.entries(current.value);
+        for (const [key, item] of entries) {
+            if (keys.has(key) && item !== undefined && item !== null) return item;
+        }
+        entries.forEach(([, item]) => queue.push({ value: item, depth: current.depth + 1 }));
+    }
+    return undefined;
 }
 
 function uniquePaths(paths: string[]) {
@@ -288,9 +389,11 @@ const REFERENCE_FIELD_KEYS = new Set([
     "referenceimages",
     "firstframeurl",
     "firstframeimage",
+    "firstframe",
     "firstimage",
     "lastframeurl",
     "lastframeimage",
+    "lastframe",
     "lastimage",
     "video",
     "videos",

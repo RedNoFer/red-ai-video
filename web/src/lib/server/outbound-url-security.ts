@@ -2,6 +2,8 @@ import { lookup } from "node:dns/promises";
 import { BlockList, isIP } from "node:net";
 
 const BLOCKED_HOSTNAMES = ["metadata.google.internal", "metadata.goog", "metadata.azure.com", "instance-data"];
+const TRUSTED_PRIVATE_UPSTREAM_HOSTNAMES = new Set(["raw.githubusercontent.com"]);
+const PROXY_FAKE_DNS_IPV4_ADDRESSES = addressBlockList([["198.18.0.0", 15, "ipv4"]]);
 const NON_PUBLIC_IPV4_ADDRESSES = addressBlockList([
     ["0.0.0.0", 8, "ipv4"],
     ["10.0.0.0", 8, "ipv4"],
@@ -64,14 +66,14 @@ export async function resolveSafeOutboundTarget(value: string | URL, options?: {
 
     const hostname = normalizeHostname(url.hostname);
     if (!hostname || isBlockedHostname(hostname)) return null;
-    const privateAllowed = privateUpstreamHostAllowed(hostname);
+    const privateAllowed = privateUpstreamHostAllowed(hostname) || TRUSTED_PRIVATE_UPSTREAM_HOSTNAMES.has(hostname);
     if ((hostname === "localhost" || hostname.endsWith(".localhost")) && !privateAllowed) return null;
     const directFamily = isIP(hostname);
-    if (directFamily) return addressAllowed(hostname, privateAllowed) ? { url, address: hostname, family: directFamily as 4 | 6 } : null;
+    if (directFamily) return addressAllowed(hostname, privateAllowed, hostname) ? { url, address: hostname, family: directFamily as 4 | 6 } : null;
 
     try {
         const addresses = dedupeAddresses(await lookup(hostname, { all: true, verbatim: true }));
-        if (!addresses.length || !addresses.every((item) => addressAllowed(item.address, privateAllowed))) return null;
+        if (!addresses.length || !addresses.every((item) => addressAllowed(item.address, privateAllowed, hostname))) return null;
         return { url, address: addresses[0].address, family: addresses[0].family as 4 | 6 };
     } catch {
         return null;
@@ -90,8 +92,14 @@ export function isPublicIpAddress(address: string) {
     return !addressBlockListContains(address, version, NON_PUBLIC_IPV4_ADDRESSES, NON_PUBLIC_IPV6_ADDRESSES);
 }
 
-function addressAllowed(address: string, privateAllowed: boolean) {
-    return isPublicIpAddress(address) || (privateAllowed && isPrivateAllowlistableAddress(address));
+function addressAllowed(address: string, privateAllowed: boolean, hostname: string) {
+    if (isPublicIpAddress(address)) return true;
+    if (isProxyFakeDnsAddress(address) && !isIP(hostname)) return true;
+    return privateAllowed && isPrivateAllowlistableAddress(address);
+}
+
+export function isProxyFakeDnsAddress(address: string) {
+    return isIP(address) === 4 && PROXY_FAKE_DNS_IPV4_ADDRESSES.check(address, "ipv4");
 }
 
 function isPrivateAllowlistableAddress(address: string) {

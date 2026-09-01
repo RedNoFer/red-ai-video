@@ -20,6 +20,7 @@ export type AgentRunReference = {
     url: string;
     type: "image" | "video" | "audio";
     role?: VideoReferenceRole;
+    keyframeIndex?: number;
 };
 export type AgentRunChildTask = {
     id: string;
@@ -66,6 +67,8 @@ export type AgentRun = {
     clientRequestId: string;
     surface: CreativeSurface;
     projectId?: string;
+    episodeId?: string;
+    workflow?: "drama-script";
     inputMessageId: string;
     assistantMessageId: string;
     prompt: string;
@@ -82,6 +85,7 @@ export type AgentRun = {
     tasks: AgentRunTask[];
     foundation?: CreativeFoundation;
     projectHandoff?: CreativeProjectHandoffPlan;
+    dramaScriptPackage?: { markdown: string; preview: unknown };
     projectHandoffEmitted?: boolean;
     review?: CreativeReview;
     reviewed: boolean;
@@ -128,6 +132,8 @@ export async function createAgentRun(userId: string, input: CreativeRunRequest) 
         clientRequestId: input.clientRequestId,
         surface: input.surface,
         projectId: input.projectId,
+        episodeId: input.episodeId,
+        workflow: input.workflow,
         inputMessageId: `message-${nanoid()}`,
         assistantMessageId: `message-${nanoid()}`,
         prompt: input.prompt,
@@ -165,8 +171,8 @@ async function assertVideoFrameAssets(userId: string, input: CreativeRunRequest)
     const byId = new Map(assets.map((asset) => [asset.id, asset]));
     for (const id of frameIds) {
         const asset = byId.get(id);
-        if (!asset || asset.userId !== userId || asset.status !== "ready") throw new CreativeRuntimeInputError("视频首尾帧图片不存在或已失效");
-        if (asset.type !== "image") throw new CreativeRuntimeInputError("视频首尾帧只能使用图片素材");
+        if (!asset || asset.userId !== userId || asset.status !== "ready") throw new CreativeRuntimeInputError(input.preferences?.video?.referenceMode === "all_frames" ? "视频帧图片不存在或已失效" : "视频首尾帧图片不存在或已失效");
+        if (asset.type !== "image") throw new CreativeRuntimeInputError(input.preferences?.video?.referenceMode === "all_frames" ? "视频帧只能使用图片素材" : "视频首尾帧只能使用图片素材");
     }
 }
 
@@ -212,7 +218,7 @@ export async function updateAgentRunById(
     patch: Partial<
         Pick<
             AgentRun,
-            "status" | "executionId" | "tasks" | "foundation" | "projectHandoff" | "projectHandoffEmitted" | "review" | "reviewed" | "reviewStatus" | "reviewAttempts" | "plannerContext" | "plannerAudit" | "cancellation" | "assetIds" | "timings"
+            "status" | "executionId" | "tasks" | "foundation" | "projectHandoff" | "projectHandoffEmitted" | "dramaScriptPackage" | "review" | "reviewed" | "reviewStatus" | "reviewAttempts" | "plannerContext" | "plannerAudit" | "cancellation" | "assetIds" | "timings"
         >
     >,
     event?: { type: string; data?: unknown },
@@ -319,6 +325,7 @@ function assistantUpdate(run: AgentRun, event?: { type: string; data?: unknown }
                 assetIds: run.assetIds,
                 taskIds: Array.from(new Set(run.tasks.flatMap((task) => task.taskIds || (task.taskId ? [task.taskId] : [])))),
                 projectHandoff: data.projectHandoff,
+                dramaScriptPackage: data.dramaScriptPackage || run.dramaScriptPackage,
             },
         };
     }

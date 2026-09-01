@@ -20,8 +20,9 @@ import { DramaStageHeader } from "./drama-editor-elements";
 import { DramaGenerationPanel } from "./drama-generation-panel";
 import { DramaReviewPanel, missingReviewFieldsForShot } from "./drama-review-panel";
 import { DramaStoryboardShotCard } from "./drama-storyboard-shot-card";
+import { markDramaCanvasSynced } from "../../canvas/[id]/canvas-drama-navigation";
 import { DramaVersionModal } from "./drama-project-modals";
-import { dramaShotVideoMode } from "./drama-shot-generation-utils";
+import { dramaShotVideoMode, resolveDramaVisualRunSync } from "./drama-shot-generation-utils";
 import { DramaEpisodeSidebar, DramaScriptPanel, DramaWorkspaceHeader, type DramaProjectStage } from "./drama-project-sections";
 
 export default function DramaProjectPage() {
@@ -66,6 +67,7 @@ function DramaProjectEditor({ project }: { project: DramaProject }) {
     const applyContentAnalysis = useDramaStore((state) => state.applyContentAnalysis);
     const applyVisualAnalysis = useDramaStore((state) => state.applyVisualAnalysis);
     const applyReviewCompletion = useDramaStore((state) => state.applyReviewCompletion);
+    const replaceProject = useDramaStore((state) => state.replaceProject);
     const saveProjectNow = useDramaStore((state) => state.saveProjectNow);
     const createVersion = useDramaStore((state) => state.createVersion);
     const listVersions = useDramaStore((state) => state.listVersions);
@@ -103,12 +105,20 @@ function DramaProjectEditor({ project }: { project: DramaProject }) {
     const hasEpisode = project.episodes.length > 0;
     const openEpisodeCanvas = async () => {
         try {
+            if (episode.canvasProjectId) {
+                router.push(`/canvas/${encodeURIComponent(episode.canvasProjectId)}`);
+                return;
+            }
             const canvas = await ensureDramaEpisodeCanvas(project.id, episode.id);
             updateEpisode(project.id, episode.id, { canvasProjectId: canvas.canvasProjectId });
+            markDramaCanvasSynced(canvas.canvasProjectId);
             router.push(canvas.href);
         } catch (error) {
             message.error(error instanceof Error ? error.message : "本集画布打开失败");
         }
+    };
+    const prefetchEpisodeCanvas = () => {
+        if (episode.canvasProjectId) router.prefetch(`/canvas/${encodeURIComponent(episode.canvasProjectId)}`);
     };
     const changeStage = (nextStage: DramaProjectStage) => {
         setStage(nextStage);
@@ -382,19 +392,26 @@ function DramaProjectEditor({ project }: { project: DramaProject }) {
         }
     };
     useEffect(() => {
+        if (stage === "generate" && !assetsOpen) return;
         const hasPendingStoryboard = episode.shots.some(
             (shot) => [shot.storyboardStatus, shot.storyboardEndStatus].some((status) => status === "queued" || status === "running") || (shot.storyboardFrames || []).some((frame) => frame.status === "queued" || frame.status === "running"),
         );
         let active = true;
         let syncing = false;
+        let timer: number | undefined;
         const syncVisualRun = async () => {
             if (syncing) return;
             syncing = true;
+            let shouldContinue = hasPendingStoryboard;
             try {
                 const { run } = await getLatestDramaProductionRun(project.id, episode.id, "visual");
                 if (!active || !run) return;
-                const hasResolvedStep = run.steps.some((step) => step.taskId && ["success", "failed", "cancelled", "needs_review"].includes(step.status));
-                if (hasResolvedStep && run.updatedAt !== visualRunSyncVersionRef.current) {
+                const currentProject = useDramaStore.getState().projects.find((item) => item.id === project.id);
+                if (!currentProject) return;
+                const decision = resolveDramaVisualRunSync(currentProject, episode.id, run);
+                shouldContinue = decision.shouldContinue;
+                if (decision.project !== currentProject) replaceProject(decision.project);
+                if (decision.shouldReload && run.updatedAt !== visualRunSyncVersionRef.current) {
                     visualRunSyncVersionRef.current = run.updatedAt;
                     await loadProject(project.id, true);
                 }
@@ -402,19 +419,15 @@ function DramaProjectEditor({ project }: { project: DramaProject }) {
                 // A later sync pass will surface the persisted task state.
             } finally {
                 syncing = false;
+                if (active && shouldContinue) timer = window.setTimeout(() => void syncVisualRun(), 2500);
             }
         };
         void syncVisualRun();
-        if (!hasPendingStoryboard)
-            return () => {
-                active = false;
-            };
-        const timer = window.setInterval(() => void syncVisualRun(), 2500);
         return () => {
             active = false;
-            window.clearInterval(timer);
+            if (timer) window.clearTimeout(timer);
         };
-    }, [episode.id, episode.shots, loadProject, project.id]);
+    }, [assetsOpen, episode.id, episode.shots, loadProject, project.id, replaceProject, stage]);
 
     useEffect(() => {
         const running = episode.shots.find((shot) => shot.generationStatus === "running" && shot.generationTaskId);
@@ -523,7 +536,6 @@ function DramaProjectEditor({ project }: { project: DramaProject }) {
                                     onStageChange={changeStage}
                                     selectedShotId={selectedShotId}
                                     onSelectedShotChange={setSelectedShotId}
-                                    onSaveSettings={() => saveProjectNow(project.id).then(() => undefined)}
                                     onOpenScriptAgent={() => {
                                         setAgentOpen(false);
                                         setScriptAgentOpen(true);
@@ -539,12 +551,8 @@ function DramaProjectEditor({ project }: { project: DramaProject }) {
                                         step="03"
                                         title="分镜编辑"
                                         description="精调画面、镜头运动、生成方式和配音策略；完成后进入统一镜头生产队列。"
-                                        status={
-                                            !episode.shots.length ? "等待镜头" : episode.shots.every((shot) => shot.videoPrompt.trim() && (dramaShotVideoMode(project, shot) !== "storyboard" || shot.imagePrompt.trim())) ? "配置就绪" : "需要补充"
-                                        }
-                                        tone={
-                                            !episode.shots.length ? "attention" : episode.shots.every((shot) => shot.videoPrompt.trim() && (dramaShotVideoMode(project, shot) !== "storyboard" || shot.imagePrompt.trim())) ? "ready" : "attention"
-                                        }
+                                        status={!episode.shots.length ? "等待镜头" : episode.shots.every((shot) => shot.videoPrompt.trim() && (dramaShotVideoMode(project, shot) !== "storyboard" || shot.imagePrompt.trim())) ? "配置就绪" : "需要补充"}
+                                        tone={!episode.shots.length ? "attention" : episode.shots.every((shot) => shot.videoPrompt.trim() && (dramaShotVideoMode(project, shot) !== "storyboard" || shot.imagePrompt.trim())) ? "ready" : "attention"}
                                         metrics={
                                             episode.shots.length
                                                 ? [
@@ -556,7 +564,15 @@ function DramaProjectEditor({ project }: { project: DramaProject }) {
                                         }
                                         action={
                                             <div className="flex w-full min-w-0 flex-col gap-2 sm:w-auto sm:flex-row">
-                                                <Button className="!h-9 !w-full sm:!w-auto" icon={<GitBranch className="size-4" />} disabled={!episode.shots.length} onClick={() => void openEpisodeCanvas()}>
+                                                <Button
+                                                    className="!h-9 !w-full sm:!w-auto"
+                                                    icon={<GitBranch className="size-4" />}
+                                                    disabled={!episode.shots.length}
+                                                    onMouseEnter={prefetchEpisodeCanvas}
+                                                    onFocus={prefetchEpisodeCanvas}
+                                                    onPointerDown={prefetchEpisodeCanvas}
+                                                    onClick={() => void openEpisodeCanvas()}
+                                                >
                                                     打开本集画布
                                                 </Button>
                                                 <Button
@@ -581,6 +597,7 @@ function DramaProjectEditor({ project }: { project: DramaProject }) {
                                                     shot={shot}
                                                     expanded={expandedStoryboardShotId === shot.id}
                                                     onToggle={() => setExpandedStoryboardShotId((current) => (current === shot.id ? "" : shot.id))}
+                                                    onPrefetchCanvas={prefetchEpisodeCanvas}
                                                     onOpenCanvas={() => void openEpisodeCanvas()}
                                                 />
                                             ))}

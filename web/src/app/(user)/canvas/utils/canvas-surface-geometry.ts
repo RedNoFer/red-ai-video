@@ -13,6 +13,7 @@ export function nodeAnchor(node: CanvasNodeData, handleType: "source" | "target"
 }
 
 export function edgePath(from: CanvasNodeData, to: CanvasNodeData) {
+    if (from.metadata?.sourceSurface === "drama" && to.metadata?.sourceSurface === "drama") return dramaEdgePath(from, to);
     const start = nodeAnchor(from, "source");
     const end = nodeAnchor(to, "target");
     const forwardDistance = end.x - start.x;
@@ -30,6 +31,26 @@ export function edgePath(from: CanvasNodeData, to: CanvasNodeData) {
     const outerRight = Math.max(start.x, to.position.x + to.width) + HANDLE_CLEARANCE;
     const outerLeft = Math.min(end.x, from.position.x) - HANDLE_CLEARANCE;
     return roundedPolyline([start, { x: outerRight, y: start.y }, { x: outerRight, y: routeY }, { x: outerLeft, y: routeY }, { x: outerLeft, y: end.y }, end]);
+}
+
+/** Keep linked drama lanes readable even when their nodes share an x-column. */
+function dramaEdgePath(from: CanvasNodeData, to: CanvasNodeData) {
+    const fromRole = from.metadata?.dramaRole;
+    const toRole = to.metadata?.dramaRole;
+    if (fromRole !== "video" && (toRole === "start" || toRole === "end" || toRole === "video")) {
+        const start = { x: from.position.x + from.width / 2, y: from.position.y + from.height };
+        const end = { x: to.position.x + to.width / 2, y: to.position.y };
+        return roundedPolyline([start, { x: start.x, y: start.y + HANDLE_CLEARANCE / 2 }, { x: end.x, y: start.y + HANDLE_CLEARANCE / 2 }, end]);
+    }
+    if (fromRole === "video" && toRole === "text") {
+        const start = { x: from.position.x + from.width, y: from.position.y + from.height / 2 };
+        const end = { x: to.position.x, y: to.position.y + to.height / 2 };
+        const corridorY = Math.max(from.position.y + from.height, to.position.y + to.height) + HANDLE_CLEARANCE * 2;
+        return roundedPolyline([start, { x: start.x + HANDLE_CLEARANCE, y: start.y }, { x: start.x + HANDLE_CLEARANCE, y: corridorY }, { x: end.x - HANDLE_CLEARANCE, y: corridorY }, { x: end.x - HANDLE_CLEARANCE, y: end.y }, end]);
+    }
+    const start = nodeAnchor(from, "source");
+    const end = nodeAnchor(to, "target");
+    return roundedPolyline([start, { x: start.x + HANDLE_CLEARANCE, y: start.y }, { x: end.x - HANDLE_CLEARANCE, y: end.y }, end]);
 }
 
 export function previewPath(start: Position, end: Position, handleType: "source" | "target") {

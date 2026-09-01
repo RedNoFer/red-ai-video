@@ -161,7 +161,21 @@ describe("GlobalAiOpc image task paths", () => {
 
         await expect(parseImagePayloadOrPoll(openAiConfig, { success: true, data: [], trace_id: "upstream-trace" } as never, "http://localhost/api/ai/system/openai-image", "", "http://localhost/api/ai/system/openai-image", true)).rejects.toMatchObject({
             name: "GenerationSubmissionUncertainError",
-            diagnostics: { responseKeys: ["data", "success", "trace_id"], containerKeys: ["data"] },
+            message: "图片接口返回了空结果（没有图片或任务 ID），创建结果待确认",
+            diagnostics: { responseKeys: ["data", "success", "trace_id"], containerKeys: ["data"], dataType: "array", dataLength: 0 },
+        } satisfies Partial<GenerationSubmissionUncertainError>);
+    });
+
+    it("records only bounded keys for an unparseable provider data item", async () => {
+        const openAiConfig = {
+            baseUrl: "/api/ai/system/openai-image",
+            model: "gpt-image-2",
+            apiFormat: "openai",
+            advancedConfig: { protocol: "sub2api", createPath: "/images/generations" },
+        } as never;
+
+        await expect(parseImagePayloadOrPoll(openAiConfig, { created: 1, data: [{ revised_prompt: "ok" }], usage: {} } as never, "http://localhost/api/ai/system/openai-image", "", "http://localhost/api/ai/system/openai-image", true)).rejects.toMatchObject({
+            diagnostics: { dataType: "array", dataLength: 1, firstDataItemKeys: ["revised_prompt"] },
         } satisfies Partial<GenerationSubmissionUncertainError>);
     });
 
@@ -188,6 +202,19 @@ describe("GlobalAiOpc image task paths", () => {
 
         expect(result?.dataUrl).toBe("https://cdn.example.com/first.png");
         expect(result?.results?.map((item) => item.dataUrl)).toEqual(["https://cdn.example.com/first.png", "https://cdn.example.com/second.png"]);
+    });
+
+    it("uses the configured result field when a provider returns an opaque image URL", () => {
+        const config = {
+            baseUrl: "https://provider.example/v1",
+            model: "gpt-image-2",
+            apiFormat: "openai",
+            advancedConfig: { protocol: "sub2api", resultField: "data[0].output" },
+        } as never;
+
+        expect(parseImagePayloadCompat({ created: 1, data: [{ output: "https://provider.example/image-token-123" }] } as never, "https://provider.example/v1/images/edits", config)).toMatchObject({
+            dataUrl: "https://provider.example/image-token-123",
+        });
     });
 
     it("classifies an HTML polling response as an invalid query contract", async () => {

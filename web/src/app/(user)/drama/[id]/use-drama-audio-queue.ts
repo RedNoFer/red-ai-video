@@ -2,11 +2,13 @@ import { useEffect, useRef } from "react";
 
 import type { AiConfig } from "@/stores/use-config-store";
 import { syncUserPointsFromHeaders } from "@/services/api/points";
-import type { DramaEpisode, DramaProject, DramaShot } from "../types";
+import type { DramaCharacter, DramaEpisode, DramaProject, DramaShot } from "../types";
+import { compileDramaDialogueAudioInstructions } from "@/lib/drama-prompt-compiler";
 
 type UpdateShot = (projectId: string, episodeId: string, shotId: string, patch: Partial<DramaShot>) => void;
+type UpdateAsset = (projectId: string, kind: "characters", id: string, patch: Partial<DramaCharacter>, options?: { markShotsStale?: boolean }) => void;
 
-export function useDramaAudioQueue(project: DramaProject, episode: DramaEpisode, config: AiConfig, updateShot: UpdateShot) {
+export function useDramaAudioQueue(project: DramaProject, episode: DramaEpisode, config: AiConfig, updateShot: UpdateShot, _updateAsset?: UpdateAsset) {
     const startingRef = useRef("");
 
     useEffect(() => {
@@ -30,9 +32,13 @@ export function useDramaAudioQueue(project: DramaProject, episode: DramaEpisode,
         if (!config.audioModel.trim()) return updateShot(project.id, episode.id, next.id, { audioStatus: "error", audioError: "后台尚未配置可用的默认音频模型" });
         const prompt = (next.subtitle || next.dialogue).trim();
         if (!prompt) return updateShot(project.id, episode.id, next.id, { audioStatus: "error", audioError: "请先填写对白或字幕" });
-        const speaker = next.utterances.find((item) => item.type === "dialogue" && item.speaker.trim())?.speaker.trim();
+        const speakers = [...new Set(next.utterances.filter((item) => item.type === "dialogue" && item.speaker.trim()).map((item) => item.speaker.trim()))];
+        if (speakers.length > 1) return updateShot(project.id, episode.id, next.id, { audioStatus: "error", audioError: "一个镜头包含多个角色对白，请拆分镜头后分别配音" });
+        const speaker = speakers[0];
         const character = speaker ? project.characters.find((item) => item.name.trim().toLocaleLowerCase() === speaker.toLocaleLowerCase()) : undefined;
+        if (speaker && !character) return updateShot(project.id, episode.id, next.id, { audioStatus: "error", audioError: `未找到对白角色“${speaker}”，请先绑定项目角色和音色` });
         const voice = character?.voiceProfile;
+        if (character && !voice?.voiceId) return updateShot(project.id, episode.id, next.id, { audioStatus: "error", audioError: "请先完成角色音色维护并生成试听" });
         startingRef.current = next.id;
         void fetch("/api/audio-tasks", {
             method: "POST",
@@ -40,11 +46,12 @@ export function useDramaAudioQueue(project: DramaProject, episode: DramaEpisode,
             body: JSON.stringify({
                 config: {
                     model: config.audioModel,
-                    voice: voice?.voice.trim() || config.audioVoice,
+                    voice: voice?.voiceId?.trim() || (!character ? config.audioVoice : ""),
                     format: config.audioFormat,
                     speed: voice?.speed || config.audioSpeed,
-                    instructions: [config.audioInstructions, voice?.instructions].filter(Boolean).join("\n"),
+                    instructions: [config.audioInstructions, voice?.instructions, compileDramaDialogueAudioInstructions(next)].filter(Boolean).join("\n"),
                 },
+                preferredChannelId: character ? voice?.channelId : undefined,
                 prompt,
                 context: {
                     conversationId: project.creativeConversationId,
@@ -61,7 +68,12 @@ export function useDramaAudioQueue(project: DramaProject, episode: DramaEpisode,
             .then(async (response) => {
                 const payload = (await response.json().catch(() => ({}))) as { task?: { id?: string }; error?: string };
                 if (!response.ok || !payload.task?.id) throw new Error(payload.error || "音频任务创建失败");
-                updateShot(project.id, episode.id, next.id, { audioStatus: "running", audioTaskId: payload.task.id, audioError: undefined });
+                updateShot(project.id, episode.id, next.id, {
+                    audioStatus: "running",
+                    audioTaskId: payload.task.id,
+                    audioError: undefined,
+                    ...(character ? { characterId: character.id, voiceIdentityId: `${project.id}:${character.id}`, voiceId: voice?.voiceId, voiceBlueprintVersion: voice?.blueprintVersion, voiceAssignmentSource: voice?.assignmentSource } : {}),
+                });
             })
             .catch((error) => updateShot(project.id, episode.id, next.id, { audioStatus: "error", audioError: error instanceof Error ? error.message : "音频任务创建失败" }))
             .finally(() => {

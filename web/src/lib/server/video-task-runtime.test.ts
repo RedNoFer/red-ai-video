@@ -30,7 +30,7 @@ vi.mock("@/lib/server/video-task-store", () => ({
 }));
 vi.mock("@/lib/server/generation-media-authorization", () => ({ generationMediaProxyHeaders: vi.fn(() => ({ "x-media-auth": "signed" })) }));
 
-import { queryVideoTaskUpstream, refreshVideoTaskFromUpstream } from "./video-task-runtime";
+import { persistVideoTaskResult, queryVideoTaskUpstream, refreshVideoTaskFromUpstream } from "./video-task-runtime";
 import type { VideoTask } from "./video-task-store";
 import { createProtocolFixtureServer } from "../../../scripts/protocol-fixture-server.mjs";
 
@@ -62,6 +62,38 @@ describe("video task upstream reconciliation", () => {
         expect(headers.has("cookie")).toBe(false);
     });
 
+    it("reads TokenGo completed video URLs from the nested result.videos response", async () => {
+        vi.stubEnv("VOZEB_PRO_WORKER_TOKEN", "worker-token-for-buming-video-test-1234567890");
+        vi.stubEnv("VOZEB_PRO_MAINTENANCE_TOKEN", "maintenance-token-for-buming-video-test-1234567890");
+        const task = videoTask({
+            config: {
+                channelId: "buming-video",
+                apiSource: "system",
+                baseUrl: "https://api.tokengo.love",
+                apiKey: "system",
+                apiFormat: "openai",
+                model: "seedance-2-0-official",
+                advancedConfig: { protocol: "buming-seedance", queryPath: "/v1/tasks/:task_id", statusField: "state / status", resultField: "output_url / result_url / result.videos[0].url / result.videos[0].video_url" } as NonNullable<VideoTask["config"]["advancedConfig"]>,
+            },
+            upstream: { id: "buming-task", provider: "generation", model: "seedance-2-0-official", pollPath: "/v1/videos/generations" },
+        });
+        mocks.fetchInternalApi.mockResolvedValue(json({ is_final: true, state: "success", result: { videos: [{ url: "https://cdn.example.com/seedance.mp4" }] } }));
+
+        await expect(queryVideoTaskUpstream(task, "http://localhost", "", task.userId)).resolves.toEqual({ state: "result_ready", status: "success", resultUrl: "https://cdn.example.com/seedance.mp4" });
+    });
+
+    it("refreshes the supplier even when task creation already stored a result URL", async () => {
+        const task = videoTask({ upstream: { ...videoTask().upstream, resultUrl: "https://cdn.example.com/stale.mp4" } });
+        mocks.fetchInternalApi.mockResolvedValue(json({ status: "completed", video_url: "https://cdn.example.com/current.mp4" }));
+
+        await expect(queryVideoTaskUpstream(task, "http://localhost", "session=test", "", true)).resolves.toEqual({
+            state: "result_ready",
+            status: "completed",
+            resultUrl: "https://cdn.example.com/current.mp4",
+        });
+        expect(mocks.fetchInternalApi).toHaveBeenCalledOnce();
+    });
+
     it("recovers a locally timed-out task after the provider later returns a video", async () => {
         const task = videoTask({ status: "error", error: "视频任务长时间未更新，请重新查询或生成。" });
         const completed = { ...task, status: "success", result: { url: "/api/reference-assets/result.mp4", mimeType: "video/mp4", durationMs: 5_000 } };
@@ -74,9 +106,30 @@ describe("video task upstream reconciliation", () => {
 
         expect(result).toEqual(completed);
         expect(mocks.normalize).toHaveBeenCalledWith(expect.objectContaining({ url: expect.stringContaining("/_media?url="), requestedDurationSeconds: 5 }));
-        expect(mocks.complete).toHaveBeenCalledWith(task.id, expect.objectContaining({ url: "/api/reference-assets/result.mp4" }));
+        expect(mocks.complete).toHaveBeenCalledWith(task.id, expect.objectContaining({ url: "/api/reference-assets/result.mp4" }), false);
         expect(mocks.register).toHaveBeenCalledOnce();
         expect(mocks.refund).not.toHaveBeenCalled();
+    });
+
+    it("re-downloads legacy remote task results instead of treating them as local backups", async () => {
+        const task = videoTask({ status: "success", result: { url: "https://supplier.example/result.mp4", mimeType: "video/mp4" } });
+        mocks.get.mockResolvedValue(task);
+        mocks.complete.mockResolvedValue({ ...task, result: { url: "/api/reference-assets/result.mp4", mimeType: "video/mp4" } });
+
+        await persistVideoTaskResult(task, "https://supplier.example/result.mp4", "http://localhost", "session=test");
+
+        expect(mocks.normalize).toHaveBeenCalledWith(expect.objectContaining({ url: expect.stringContaining("https%3A%2F%2Fsupplier.example%2Fresult.mp4"), ownerUserId: task.userId }));
+        expect(mocks.complete).toHaveBeenCalledWith(task.id, expect.objectContaining({ url: "/api/reference-assets/result.mp4" }), false);
+    });
+
+    it("does not reuse a stale local result when a new provider URL is available", async () => {
+        const task = videoTask({ status: "success", result: { url: "/api/reference-assets/old.mp4", mimeType: "video/mp4" } });
+        mocks.get.mockResolvedValue(task);
+        mocks.complete.mockResolvedValue({ ...task, result: { url: "/api/reference-assets/new.mp4", mimeType: "video/mp4" } });
+
+        await persistVideoTaskResult(task, "https://supplier.example/new.mp4", "http://localhost", "session=test");
+
+        expect(mocks.normalize).toHaveBeenCalledOnce();
     });
 
     it("polls and completes through a live Seedance-compatible fixture", async () => {
@@ -108,9 +161,66 @@ describe("video task upstream reconciliation", () => {
 
             await expect(refreshVideoTaskFromUpstream(task, "", "")).resolves.toEqual(completed);
             expect(fixture.requests.map((request) => request.path)).toEqual(["/v1/seedance-special/videos", `/v1/result/${created.task_id}`]);
-            expect(mocks.normalize).toHaveBeenCalledWith(expect.objectContaining({ url: expect.stringContaining(`${origin}/_media?url=`), requestedDurationSeconds: 5 }));
+            expect(mocks.normalize).toHaveBeenCalledWith(expect.objectContaining({ url: `${origin}/media/fixture.mp4`, requestedDurationSeconds: 5 }));
             expect(mocks.complete).toHaveBeenCalledOnce();
             expect(mocks.refund).not.toHaveBeenCalled();
+        } finally {
+            await new Promise<void>((resolve, reject) => fixture.server.close((error) => (error ? reject(error) : resolve())));
+        }
+    });
+
+    it("submits and polls the dedicated New API video fixture contract", async () => {
+        const fixture = createProtocolFixtureServer();
+        await new Promise<void>((resolve) => fixture.server.listen(0, "127.0.0.1", resolve));
+        const address = fixture.server.address();
+        if (!address || typeof address === "string") throw new Error("Protocol fixture did not bind a TCP port");
+        const origin = `http://127.0.0.1:${address.port}`;
+
+        try {
+            const createdResponse = await fetch(`${origin}/v1/videos`, {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({
+                    model: "alibaba/wan-3.0",
+                    prompt: "生成一段协议测试视频",
+                    duration: 5,
+                    ratio: "16:9",
+                    resolution: "720p",
+                    referenceImages: ["https://cdn.example.com/reference.jpg"],
+                }),
+            });
+            expect(createdResponse.status).toBe(200);
+            const created = (await createdResponse.json()) as { task_id: string; status: string };
+            expect(created).toMatchObject({ status: "queued", task_id: expect.stringContaining("newapi-video") });
+
+            const task = videoTask({
+                config: {
+                    channelId: "fixture-newapi-video",
+                    apiSource: "system",
+                    baseUrl: origin,
+                    apiKey: "system",
+                    apiFormat: "openai",
+                    model: "alibaba/wan-3.0",
+                    advancedConfig: { protocol: "newapi-video", queryPath: "/v1/videos/:task_id", statusField: "status", resultField: "video_url / data.url / url" } as NonNullable<VideoTask["config"]["advancedConfig"]>,
+                },
+                upstream: { id: created.task_id, provider: "generation", model: "alibaba/wan-3.0", pollPath: "/v1/videos", pointsCost: 1, pointsUnits: 1, pointsRecordId: "points-newapi-video-fixture" },
+            });
+            const completed = { ...task, status: "success" as const, result: { url: "/api/reference-assets/result.mp4", mimeType: "video/mp4", durationMs: 5_000 } };
+            mocks.claim.mockResolvedValue(task);
+            mocks.get.mockResolvedValue(task);
+            mocks.fetchInternalApi.mockImplementation((url: string | URL | Request, init?: RequestInit) => fetch(url, init));
+            mocks.complete.mockResolvedValue(completed);
+
+            await expect(refreshVideoTaskFromUpstream(task, "", "")).resolves.toEqual(completed);
+            expect(fixture.requests.map((request) => request.path)).toEqual(["/v1/videos", `/v1/videos/${created.task_id}`]);
+            expect(JSON.parse(fixture.requests[0]?.body.toString("utf8") || "{}")).toMatchObject({
+                model: "alibaba/wan-3.0",
+                duration: 5,
+                ratio: "16:9",
+                resolution: "720p",
+                referenceImages: ["https://cdn.example.com/reference.jpg"],
+            });
+            expect(mocks.complete).toHaveBeenCalledOnce();
         } finally {
             await new Promise<void>((resolve, reject) => fixture.server.close((error) => (error ? reject(error) : resolve())));
         }
@@ -155,7 +265,7 @@ describe("video task upstream reconciliation", () => {
 
             await expect(refreshVideoTaskFromUpstream(task, "", "")).resolves.toEqual(completed);
             expect(fixture.requests.map((request) => request.path)).toEqual(["/v1beta/models/veo-3.1-generate-preview:predictLongRunning", `/v1beta/models/veo-3.1-generate-preview/operations/${operationId}`]);
-            expect(mocks.complete).toHaveBeenCalledWith(task.id, expect.objectContaining({ url: "/api/reference-assets/result.mp4" }));
+            expect(mocks.complete).toHaveBeenCalledWith(task.id, expect.objectContaining({ url: "/api/reference-assets/result.mp4" }), false);
         } finally {
             await new Promise<void>((resolve, reject) => fixture.server.close((error) => (error ? reject(error) : resolve())));
         }
@@ -241,18 +351,18 @@ describe("video task upstream reconciliation", () => {
             config: {
                 ...videoTask().config,
                 model: "seedance-2.5",
-                advancedConfig: { protocol: "newapi-video", queryPath: "/v1/video/generations/:task_id", statusField: "status", resultField: "url" } as NonNullable<VideoTask["config"]["advancedConfig"]>,
+                advancedConfig: { protocol: "newapi-video", queryPath: "/v1/videos/:task_id", statusField: "status", resultField: "video_url / data.url / url" } as NonNullable<VideoTask["config"]["advancedConfig"]>,
             },
-            upstream: { ...videoTask().upstream, model: "seedance-2.5", pollPath: "/v1/video/generations" },
+            upstream: { ...videoTask().upstream, model: "seedance-2.5", pollPath: "/v1/videos" },
         });
-        mocks.fetchInternalApi.mockResolvedValue(json({ task_id: task.upstream.id, status: "completed", url: "https://cdn.example.com/result.mp4" }));
+        mocks.fetchInternalApi.mockResolvedValue(json({ task_id: task.upstream.id, status: "completed", data: { url: "https://cdn.example.com/result.mp4" } }));
 
         await expect(queryVideoTaskUpstream(task, "http://localhost", "session=test")).resolves.toEqual({
             state: "result_ready",
             status: "completed",
             resultUrl: "https://cdn.example.com/result.mp4",
         });
-        expect(mocks.fetchInternalApi).toHaveBeenCalledWith(`http://localhost/api/ai/system/channel/v1/video/generations/${task.upstream.id}`, expect.objectContaining({ cache: "no-store" }));
+        expect(mocks.fetchInternalApi).toHaveBeenCalledWith(`http://localhost/api/ai/system/channel/v1/videos/${task.upstream.id}`, expect.objectContaining({ cache: "no-store" }));
     });
 
     it("does not query upstream again before the polling interval elapses", async () => {

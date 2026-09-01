@@ -1,8 +1,9 @@
 import { Agent, ProxyAgent, fetch as undiciFetch, type Dispatcher } from "undici";
+import { isIP } from "node:net";
 
 import { GENERATION_TRANSPORT_TIMEOUT_MS } from "@/lib/server/generation-http-lifecycle";
 import { resolveServerProxyUrl } from "@/lib/server/proxy-dispatcher";
-import { isPublicIpAddress, resolveSafeOutboundTarget } from "@/lib/server/outbound-url-security";
+import { isProxyFakeDnsAddress, isPublicIpAddress, resolveSafeOutboundTarget } from "@/lib/server/outbound-url-security";
 import { toUndiciRequestBody } from "@/lib/server/undici-request-body";
 
 type CachedDispatcher = { dispatcher: Dispatcher; lastUsedAt: number };
@@ -78,7 +79,7 @@ function redirectedRequestInit(currentUrl: URL, nextUrl: URL, status: number, in
 }
 
 function dispatcherFor(url: URL, address: string, family: 4 | 6) {
-    const proxyUrl = isPublicIpAddress(address) ? resolveServerProxyUrl() : "";
+    const proxyUrl = isPublicIpAddress(address) || (isProxyFakeDnsAddress(address) && !isIP(url.hostname)) ? resolveServerProxyUrl() : "";
     const servername = /^\d+(?:\.\d+){3}$/.test(url.hostname) || url.hostname.includes(":") ? undefined : url.hostname;
     const key = [proxyUrl, url.protocol, url.host, address, family].join("|");
     const now = Date.now();

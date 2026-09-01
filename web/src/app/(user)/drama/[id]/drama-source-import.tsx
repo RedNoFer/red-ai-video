@@ -2,15 +2,17 @@
 
 import { useMemo, useRef, useState } from "react";
 import { App, Button, Input, Modal, Pagination } from "antd";
-import { BookOpenText, FileJson2, FileText, PackageOpen, Search, TriangleAlert, Upload } from "lucide-react";
+import { BookOpenText, Download, FileJson2, FileText, PackageOpen, Search, TriangleAlert, Upload } from "lucide-react";
 
 import type { DramaProductionPackagePreview } from "@/lib/drama-project-contract";
+import { serializeDramaProductionPackageJson, serializeDramaProductionPackageMarkdown } from "@/lib/drama-production-package-serializer";
 import { splitDramaSource, type DramaSourceEpisodeDraft } from "@/lib/drama-source-splitter";
 import { applyDramaProductionPackage, previewDramaProductionPackage } from "@/services/api/drama-projects";
 import type { DramaProject } from "../types";
 import { useDramaStore } from "../stores/use-drama-store";
 
 const IMPORT_PAGE_SIZE = 20;
+const PRODUCTION_PACKAGE_TEMPLATE_URL = "/drama-production-package-v1-template.md";
 
 export function DramaSourceImport({ project, onImported }: { project: DramaProject; onImported: () => void }) {
     const { message } = App.useApp();
@@ -30,7 +32,24 @@ export function DramaSourceImport({ project, onImported }: { project: DramaProje
     const [packageImportOpen, setPackageImportOpen] = useState(false);
     const [packagePreview, setPackagePreview] = useState<DramaProductionPackagePreview>();
     const [previewingPackage, setPreviewingPackage] = useState(false);
+    const applyingPackageRef = useRef(false);
     const open = drafts.length > 0;
+    const downloadPackage = (format: "json" | "markdown") => {
+        if (!packagePreview) return;
+        const content = format === "json" ? serializeDramaProductionPackageJson(packagePreview.package) : serializeDramaProductionPackageMarkdown(packagePreview.package);
+        const url = URL.createObjectURL(new Blob([content], { type: format === "json" ? "application/json;charset=utf-8" : "text/markdown;charset=utf-8" }));
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = `${packagePreview.package.project.title}-production-package.${format === "json" ? "json" : "md"}`;
+        anchor.click();
+        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    };
+    const downloadPackageTemplate = () => {
+        const anchor = document.createElement("a");
+        anchor.href = PRODUCTION_PACKAGE_TEMPLATE_URL;
+        anchor.download = "drama-production-package-v1-template.md";
+        anchor.click();
+    };
     const totalCharacters = useMemo(() => drafts.reduce((total, draft) => total + draft.script.length, 0), [drafts]);
     const filtered = useMemo(() => {
         const keyword = query.trim().toLocaleLowerCase();
@@ -111,7 +130,8 @@ export function DramaSourceImport({ project, onImported }: { project: DramaProje
     };
 
     const confirmPackage = async () => {
-        if (!packagePreview) return;
+        if (!packagePreview || applyingPackageRef.current) return;
+        applyingPackageRef.current = true;
         setImporting(true);
         try {
             const nextProject = await applyDramaProductionPackage(project, packagePreview, packageSource, packageFileName);
@@ -125,6 +145,7 @@ export function DramaSourceImport({ project, onImported }: { project: DramaProje
         } catch (error) {
             message.error(error instanceof Error ? error.message : "制作包导入失败");
         } finally {
+            applyingPackageRef.current = false;
             setImporting(false);
         }
     };
@@ -149,6 +170,17 @@ export function DramaSourceImport({ project, onImported }: { project: DramaProje
                 okText="识别并预览"
                 cancelText="取消"
                 okButtonProps={{ disabled: !packageDraft.trim() }}
+                footer={(_, { OkBtn, CancelBtn }) => (
+                    <div className="flex w-full flex-wrap items-center justify-between gap-2">
+                        <Button type="link" className="!px-0" icon={<Download className="size-4" />} onClick={downloadPackageTemplate}>
+                            下载制作包模板
+                        </Button>
+                        <div className="ml-auto flex shrink-0 items-center gap-2">
+                            <CancelBtn />
+                            <OkBtn />
+                        </div>
+                    </div>
+                )}
                 onOk={() => void previewPackageSource(packageDraft, "粘贴制作包文本.md")}
                 onCancel={() => {
                     if (!previewingPackage) setPackageImportOpen(false);
@@ -255,7 +287,9 @@ export function DramaSourceImport({ project, onImported }: { project: DramaProje
                     <div className="space-y-4 pt-1" data-drama-production-package-preview>
                         <div className="flex min-w-0 items-center gap-2 rounded-md border border-border bg-muted/25 px-3 py-2.5">
                             <FileJson2 className="size-4 shrink-0 text-muted-foreground" />
-                            <span className="min-w-0 flex-1 truncate text-sm font-medium" title={packageFileName}>{packageFileName}</span>
+                            <span className="min-w-0 flex-1 truncate text-sm font-medium" title={packageFileName}>
+                                {packageFileName}
+                            </span>
                             <span className="shrink-0 text-xs uppercase text-muted-foreground">{packagePreview.format}</span>
                         </div>
                         <div className="grid grid-cols-2 gap-px overflow-hidden rounded-md border border-border bg-border sm:grid-cols-3">
@@ -268,6 +302,9 @@ export function DramaSourceImport({ project, onImported }: { project: DramaProje
                                 ["总时长", `${packagePreview.summary.duration} 秒`],
                                 ["档案章节", packagePreview.summary.archiveSections],
                                 ["Prompt 资产", packagePreview.summary.promptAssets],
+                                ["表演规划", `${packagePreview.summary.performancePlans}/${packagePreview.summary.shots}`],
+                                ["灯光规划", `${packagePreview.summary.lightingPlans}/${packagePreview.summary.shots}`],
+                                ["连续性规划", `${packagePreview.summary.continuityPlans}/${packagePreview.summary.shots}`],
                             ].map(([label, value]) => (
                                 <div key={String(label)} className="bg-card px-3 py-2.5">
                                     <div className="text-[11px] text-muted-foreground">{label}</div>
@@ -282,10 +319,25 @@ export function DramaSourceImport({ project, onImported }: { project: DramaProje
                             <PackageFact label="字段策略" value="人工编辑 > 制作包 > AI 补全" />
                             <PackageFact label="格式版本" value={packagePreview.package.archive?.formatVersion || "基础制作包 v1"} />
                         </div>
+                        <div className="flex flex-wrap gap-2">
+                            <Button size="small" icon={<Download className="size-3.5" />} onClick={() => downloadPackage("json")}>
+                                下载权威 JSON
+                            </Button>
+                            <Button size="small" icon={<Download className="size-3.5" />} onClick={() => downloadPackage("markdown")}>
+                                导出固定 Markdown
+                            </Button>
+                        </div>
                         {packagePreview.warnings.length ? (
                             <div className="rounded-md border border-amber-300/70 bg-amber-50/70 p-3 text-xs text-amber-900 dark:border-amber-700/60 dark:bg-amber-950/20 dark:text-amber-100">
-                                <div className="flex items-center gap-1.5 font-medium"><TriangleAlert className="size-3.5" />解析警告</div>
-                                <ul className="mt-1.5 space-y-1">{packagePreview.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>
+                                <div className="flex items-center gap-1.5 font-medium">
+                                    <TriangleAlert className="size-3.5" />
+                                    解析警告
+                                </div>
+                                <ul className="mt-1.5 space-y-1">
+                                    {packagePreview.warnings.map((warning) => (
+                                        <li key={warning}>{warning}</li>
+                                    ))}
+                                </ul>
                             </div>
                         ) : null}
                         <p className="text-xs leading-5 text-muted-foreground">应用前会自动创建恢复版本；制作包正文保存为项目来源素材，文学剧本、资产、镜头参数和连续性关系分别进入对应数据结构。</p>
@@ -297,5 +349,12 @@ export function DramaSourceImport({ project, onImported }: { project: DramaProje
 }
 
 function PackageFact({ label, value }: { label: string; value: string }) {
-    return <div className="flex min-w-0 items-center justify-between gap-3 rounded-md border border-border px-2.5 py-2"><span className="text-muted-foreground">{label}</span><span className="min-w-0 truncate font-medium" title={value}>{value}</span></div>;
+    return (
+        <div className="flex min-w-0 items-center justify-between gap-3 rounded-md border border-border px-2.5 py-2">
+            <span className="text-muted-foreground">{label}</span>
+            <span className="min-w-0 truncate font-medium" title={value}>
+                {value}
+            </span>
+        </div>
+    );
 }

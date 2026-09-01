@@ -15,4 +15,5 @@ export type ReferenceImage = {
     width?: number;
     height?: number;
     videoRole?: VideoReferenceRole;
+    keyframeIndex?: number;
 };

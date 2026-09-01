@@ -19,7 +19,7 @@ type RequestOptions = {
 
 export type AudioGenerationTask = { id: string; status?: "pending" | "running" | "success" | "error" | "cancelled"; model: string };
 
-type AudioTaskPayload = { task?: AudioGenerationTask & GenerationTaskExecutionState & { result?: { url: string; mimeType: string }; error?: string }; error?: string };
+type AudioTaskPayload = { task?: AudioGenerationTask & GenerationTaskExecutionState & { result?: { url: string; mimeType: string; assetId?: string }; error?: string }; error?: string };
 
 const AUDIO_TASK_POLL_INTERVAL_MS = 1800;
 const AUDIO_TASK_TIMEOUT_MS = 30 * 60 * 1000;

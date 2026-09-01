@@ -466,6 +466,7 @@ export function buildSub2ApiImageEditPrompt(prompt: string, references: readonly
     const fieldHint = references.length === 1 ? "images[0].image_url" : "images[].image_url";
     return [
         `Use the actual reference image supplied in the JSON field ${fieldHint} as visual input, not as a text-only hint.`,
+        "Use every supplied reference image in array order and preserve each image's assigned role; do not ignore or merge away later references.",
         "The first reference image, images[0].image_url, is the primary identity and character reference. Keep the same person or character, face proportions, hairstyle, body shape, clothing, and main pose as much as possible.",
         "Only apply the user's requested edit to the existing referenced subject. Do not replace the referenced person or character with a new unrelated person.",
         "",

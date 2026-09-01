@@ -67,9 +67,17 @@ export type CanvasVideoReferenceSnapshot = {
     width?: number;
     height?: number;
     durationMs?: number;
+    keyframeIndex?: number;
 };
 
 export type CanvasNodeMetadata = {
+    canvasOrigin?: "user" | "agent" | "drama";
+    sourceSurface?: "drama";
+    dramaRole?: "text" | "start" | "end" | "video";
+    dramaProjectId?: string;
+    dramaEpisodeId?: string;
+    dramaShotId?: string;
+    dramaField?: "storyboardImageUrl" | "storyboardEndImageUrl" | "videoUrl";
     agentRunId?: string;
     agentTaskId?: string;
     agentGenerationTaskIds?: string[];
@@ -123,6 +131,7 @@ export type CanvasNodeMetadata = {
     videoReferenceMode?: CreativeVideoReferenceMode;
     videoFirstFrame?: CanvasVideoFrameSelection;
     videoLastFrame?: CanvasVideoFrameSelection;
+    videoKeyframes?: CanvasVideoFrameSelection[];
     videoReferences?: CanvasVideoReferenceSnapshot[];
     audioVoice?: string;
     audioFormat?: string;

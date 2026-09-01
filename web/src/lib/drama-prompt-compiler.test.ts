@@ -2,11 +2,158 @@ import { describe, expect, it } from "vitest";
 
 import type { DramaEpisode, DramaProject, DramaShot } from "./drama-project-contract";
 import { DRAMA_STYLE_DESCRIPTION, DRAMA_STYLE_NAME } from "./drama-style";
-import { compileDramaAssetReferencePrompt, compileDramaAssetRefinementPrompt, compileDramaDialogueAudioInstructions, compileDramaShotExecutionPrompts, compileDramaShotPrompts, preflightDramaAssetGeneration } from "./drama-prompt-compiler";
+import {
+    appendDramaImageReferenceBindings,
+    compileDramaAssetReferencePrompt,
+    compileDramaAssetRefinementPrompt,
+    compileDramaDialogueAudioInstructions,
+    compileDramaFrameSupplierPrompt,
+    compileDramaShotExecutionPrompts,
+    compileDramaShotPrompts,
+    preflightDramaAssetGeneration,
+} from "./drama-prompt-compiler";
 
 describe("drama prompt compiler", () => {
-    it("compiles project assets and continuity into both media prompts", () => {
+    it("embeds exact image duties in the editable supplier prompt", () => {
+        const prompt = appendDramaImageReferenceBindings("静态关键帧：Karin站在黑湖边", [
+            { id: "character-one", label: "角色固定资产「Karin」", binding: "锁定身份与服装" },
+            { id: "scene-one", label: "场景固定资产「黑湖记忆」", binding: "锁定空间拓扑与主光方向" },
+        ]);
+
+        expect(prompt).toContain("@图片1：角色固定资产「Karin」；绑定规则：锁定身份与服装");
+        expect(prompt).toContain("@图片2：场景固定资产「黑湖记忆」；绑定规则：锁定空间拓扑与主光方向");
+        expect(appendDramaImageReferenceBindings(prompt, [{ id: "scene-one", label: "场景固定资产「黑湖记忆」", binding: "锁定空间拓扑与主光方向" }])).toContain("@图片1：场景固定资产「黑湖记忆」");
+        expect(appendDramaImageReferenceBindings(prompt, [{ id: "scene-one", label: "场景固定资产「黑湖记忆」", binding: "锁定空间拓扑与主光方向" }])).not.toContain("@图片2：");
+    });
+
+    it("does not keep legacy reference sections when rebinding images", () => {
+        const prompt = appendDramaImageReferenceBindings("动态意图：Karin握紧断剑\n参考图顺序（与视频请求数组完全一致）：\n@图片1：旧顺序帧\n必须逐图按上述职责使用；顺序帧用于锁定对应时间段的可见状态，不能用固定资产图替代。\n单一主运镜：缓慢推进", [
+            { id: "frame-one", label: "顺序帧 1（开始）", binding: "作为开始阶段画面依据" },
+        ]);
+
+        expect(prompt.match(/实际参考图绑定（编号与本次请求图片数组完全一致）/gu)).toHaveLength(1);
+        expect(prompt).not.toContain("参考图顺序（与视频请求数组完全一致）");
+        expect(prompt).toContain("单一主运镜：缓慢推进");
+        expect(prompt).toContain("@图片1：顺序帧 1（开始）；绑定规则：作为开始阶段画面依据");
+    });
+
+    it("keeps supplier-facing frame prompts focused on visible image facts", () => {
         const project = createProject();
+        const shot = project.episodes[0].shots[0];
+        const prompt = compileDramaFrameSupplierPrompt(project, project.episodes[0], shot, {
+            id: "frame-one",
+            sequenceIndex: 1,
+            startSecond: 0,
+            endSecond: 2,
+            actionPrompt: "抬头看向门边",
+            imagePrompt: "女主在门边抬头，血迹进入前景",
+        });
+
+        expect(prompt).toContain("画面：女主在门边抬头，血迹进入前景");
+        expect(prompt).toContain("当前状态：抬头看向门边");
+        expect(prompt).toContain("一致性：严格以已绑定参考图为准");
+        expect(prompt).not.toContain("章节文案");
+        expect(prompt).not.toContain("统一表现媒介");
+        expect(prompt.length).toBeLessThan(1200);
+    });
+
+    it("uses one static shot size when continuity stores a camera transition", () => {
+        const project = createProject();
+        const shot = project.episodes[0].shots[0];
+        shot.continuity = { ...shot.continuity!, shotSize: "ELS→ECU" };
+        const prompt = compileDramaFrameSupplierPrompt(project, project.episodes[0], shot, {
+            id: "frame-one",
+            sequenceIndex: 1,
+            startSecond: 0,
+            endSecond: 2,
+            actionPrompt: "黑湖无波，倒悬古塔与倒影对齐",
+            imagePrompt: "黑湖无波，倒悬古塔与倒影对齐；主体保持静止",
+        });
+
+        expect(prompt).toContain("镜头：ELS");
+        expect(prompt).not.toContain("ELS→ECU");
+    });
+
+    it("includes structured prop identity in supplier-facing frame prompts", () => {
+        const project = createProject();
+        const propId = "prop-sword";
+        project.props = [
+            {
+                id: propId,
+                name: "Karin的断剑",
+                description: "暗银色的断刃短剑",
+                profile: {
+                    visualIdentity: "不对称双翼护手",
+                    styling: "剑柄缠深蓝旧布",
+                    colorPalette: "暗银与深蓝",
+                    consistencyRules: "断口形态固定，不得变为完整剑刃",
+                },
+            },
+        ];
+        const shot = project.episodes[0].shots[0];
+        shot.propIds = [propId];
+
+        const prompt = compileDramaFrameSupplierPrompt(project, project.episodes[0], shot, undefined, "keyframe");
+
+        expect(prompt).toContain("道具：Karin的断剑：暗银色的断刃短剑");
+        expect(prompt).toContain("不对称双翼护手");
+        expect(prompt).toContain("断口形态固定，不得变为完整剑刃");
+
+        const savedPrompt = compileDramaFrameSupplierPrompt(project, project.episodes[0], shot, {
+            id: "frame-one",
+            sequenceIndex: 1,
+            startSecond: 0,
+            endSecond: 2,
+            actionPrompt: "握紧短剑",
+            imagePrompt: "握紧短剑",
+            supplierPrompt: "只按这段手工画面生成",
+        });
+        expect(savedPrompt).toContain("只按这段手工画面生成");
+        expect(savedPrompt).toContain("道具锚点：Karin的断剑：暗银色的断刃短剑");
+    });
+
+    it("includes structured character and scene identity in the final supplier frame prompt", () => {
+        const project = createProject();
+        project.characters[0] = {
+            ...project.characters[0],
+            name: "Karin",
+            description: "黑发少年，腰间佩戴断剑",
+            profile: { visualIdentity: "灰蓝眼睛与旧伤", styling: "深色旅行斗篷", colorPalette: "深蓝与暗银", consistencyRules: "断剑始终由 Karin 持有" },
+        };
+        project.scenes[0] = {
+            ...project.scenes[0],
+            name: "黑湖记忆",
+            description: "无风黑湖、倒悬古塔与雪地边界",
+            profile: { visualIdentity: "倒悬塔位置、无波黑湖、雪地边界", styling: "冷白无源光", colorPalette: "深蓝黑与雪白", consistencyRules: "湖面无波，古塔倒悬位置固定" },
+        };
+
+        const prompt = compileDramaFrameSupplierPrompt(project, project.episodes[0], project.episodes[0].shots[0], {
+            id: "frame-one",
+            sequenceIndex: 1,
+            startSecond: 0,
+            endSecond: 2,
+            actionPrompt: "Karin 在湖边握紧断剑",
+            imagePrompt: "Karin、断剑、无波黑湖与倒悬古塔同框",
+        });
+
+        expect(prompt).toContain("主体：Karin：黑发少年，腰间佩戴断剑");
+        expect(prompt).toContain("灰蓝眼睛与旧伤");
+        expect(prompt).toContain("断剑始终由 Karin 持有");
+        expect(prompt).toContain("场景：黑湖记忆：无风黑湖、倒悬古塔与雪地边界");
+        expect(prompt).toContain("倒悬塔位置、无波黑湖、雪地边界");
+        expect(prompt).toContain("湖面无波，古塔倒悬位置固定");
+    });
+
+    it("keeps video prompts compact while image prompts retain full asset context", () => {
+        const project = createProject();
+        project.episodes[0].shots[0].framePlan = {
+            start: { source: "independent" },
+            end: { required: true },
+            frames: [
+                { id: "frame-one", sequenceIndex: 1, startSecond: 0, endSecond: 2, actionPrompt: "女主停在门边", imagePrompt: "女主停在门边" },
+                { id: "frame-two", sequenceIndex: 2, startSecond: 2, endSecond: 5, actionPrompt: "女主抬头看向血迹", imagePrompt: "女主抬头看向血迹" },
+            ],
+        };
         const prompts = compileDramaShotPrompts(project, project.episodes[0], project.episodes[0].shots[0]);
 
         expect(prompts.imagePrompt).toContain(`统一风格：${DRAMA_STYLE_NAME}`);
@@ -14,10 +161,49 @@ describe("drama prompt compiler", () => {
         expect(prompts.imagePrompt).toContain("轴线 保持同侧");
         expect(prompts.startFramePrompt).toContain("动作起始");
         expect(prompts.endFramePrompt).toContain("动作结束");
-        expect(prompts.videoPrompt).toContain("从“动作起始”自然过渡到“动作结束”");
-        expect(prompts.videoPrompt).toContain(`最终视觉锁定：${DRAMA_STYLE_DESCRIPTION}`);
-        expect(prompts.videoPrompt).toContain("半写实动漫幻想风");
-        expect(prompts.videoPrompt).toContain("不是3D游戏渲染");
+        expect(prompts.videoPrompt).toContain("0-2s：女主停在门边");
+        expect(prompts.videoPrompt).toContain("2-5s：女主抬头看向血迹");
+        expect(prompts.videoPrompt).toContain("单一主运镜：缓慢推进");
+        expect(prompts.videoPrompt).toContain("结束画面：动作结束");
+        expect(prompts.videoPrompt).toContain(`风格：${DRAMA_STYLE_NAME}`);
+        expect(prompts.videoPrompt).not.toContain("5s 9:16 视频");
+        expect(prompts.videoPrompt).not.toContain("女主：红色外套");
+        expect(prompts.videoPrompt).not.toContain("场景设定：");
+        expect(prompts.videoPrompt).not.toContain("统一表现媒介");
+        expect(prompts.videoPrompt.length).toBeLessThan(prompts.imagePrompt.length);
+    });
+
+    it("does not nest a previously compiled execution prompt", () => {
+        const project = createProject();
+        const shot = project.episodes[0].shots[0];
+        shot.videoPrompt = "Karin握紧断剑并停住";
+        shot.executionVideoPrompt = [
+            "动态意图：起始可见状态：黑湖无波；触发：四只手扣紧；主体动作与反应：剑刃裂开；主运镜：缓慢推进；结束画面：冷银断口占据中心；约束：无字幕、无额外肢体",
+            "参考图顺序（与视频请求数组完全一致）：",
+            "@图片1：顺序帧 1（开始）",
+            "必须逐图按上述职责使用；顺序帧用于锁定对应时间段的可见状态，不能用固定资产图替代。",
+        ].join("\n");
+
+        const prompt = compileDramaShotExecutionPrompts(project, project.episodes[0], shot).videoPrompt;
+
+        expect(prompt).toContain("动态意图：Karin握紧断剑并停住");
+        expect(prompt).not.toContain("动态意图：起始可见状态");
+        expect(prompt).not.toContain("参考图顺序（与视频请求数组完全一致）");
+        expect(prompt.match(/单一主运镜：/gu)).toHaveLength(1);
+        expect(prompt.match(/结束画面：/gu)).toHaveLength(1);
+    });
+
+    it("falls back to the shot fact when only a legacy compiled prompt remains", () => {
+        const project = createProject();
+        const shot = project.episodes[0].shots[0];
+        shot.description = "Karin在黑湖边停住";
+        shot.videoPrompt = "";
+        shot.executionVideoPrompt = "动态意图：起始可见状态：黑湖无波；主体动作与反应：Karin停住；结束画面：黑湖与倒影稳定";
+
+        const prompt = compileDramaShotExecutionPrompts(project, project.episodes[0], shot).videoPrompt;
+
+        expect(prompt).toContain("动态意图：Karin在黑湖边停住");
+        expect(prompt).not.toContain("动态意图：起始可见状态");
     });
 
     it("creates a focused asset reference brief", () => {
@@ -69,9 +255,13 @@ describe("drama prompt compiler", () => {
             transitionToNext: "逐渐压暗",
         };
         const prompts = compileDramaShotPrompts(project, project.episodes[0], shot);
-        expect(prompts.videoPrompt).toContain("表演目标：掩饰恐惧");
-        expect(prompts.videoPrompt).toContain("微表情中段：情绪紧张");
-        expect(prompts.videoPrompt).toContain("色彩与灯光：色板冷灰蓝");
+        expect(prompts.videoPrompt).toContain("表演变化：起始情绪平静，面部眉眼放松，视线看向门，身体站定");
+        expect(prompts.videoPrompt).toContain("中段情绪紧张，面部眉心收紧，视线短暂移开，身体肩部绷紧");
+        expect(prompts.videoPrompt).toContain("结束情绪压回冷静，面部嘴角压住，视线重新锁定，身体微微后退");
+        expect(prompts.videoPrompt).toContain("呼吸先屏息再呼气");
+        expect(prompts.videoPrompt).toContain("光色：冷灰蓝；左上冷光");
+        expect(prompts.videoPrompt).not.toContain("表演目标：掩饰恐惧");
+        expect(prompts.videoPrompt).not.toContain("色温4200K");
         expect(compileDramaDialogueAudioInstructions(shot)).toContain("重读怎么");
     });
 
@@ -80,16 +270,20 @@ describe("drama prompt compiler", () => {
         project.characters[0].id = "character-bA6c36imfwcVQWcJhLdlB";
         project.characters[0].name = "Karin";
         project.episodes[0].shots[0].characterIds = [project.characters[0].id];
-        project.episodes[0].shots[0].entryState = { characters: [{ assetId: project.characters[0].id, position: "左侧", gaze: "右方", pose: "站立", action: `持有 ${project.characters[0].id}` }], props: [{ assetId: "prop-UoZ5m2wJEjWYW6lmsmyA", state: "完整", holderId: project.characters[0].id }], environment: "天台", lighting: "冷光" };
+        project.episodes[0].shots[0].entryState = {
+            characters: [{ assetId: project.characters[0].id, position: "左侧", gaze: "右方", pose: "站立", action: `持有 ${project.characters[0].id}` }],
+            props: [{ assetId: "prop-UoZ5m2wJEjWYW6lmsmyA", state: "完整", holderId: project.characters[0].id }],
+            environment: "天台",
+            lighting: "冷光",
+        };
         const prompt = compileDramaShotExecutionPrompts(project, project.episodes[0], project.episodes[0].shots[0]).videoPrompt;
 
-        expect(prompt).toContain("角色 Karin");
-        expect(prompt).toContain("由Karin持有");
+        expect(prompt).not.toContain("参考职责：");
         expect(prompt).not.toContain("character-bA6c36imfwcVQWcJhLdlB");
         expect(prompt).not.toContain("prop-UoZ5m2wJEjWYW6lmsmyA");
     });
 
-    it("normalizes manifest aliases without producing double-at references", () => {
+    it("binds manifest duties to named assets without inventing request image numbers", () => {
         const project = createProject();
         project.episodes[0].shots[0].framePlan = {
             start: { source: "independent" },
@@ -99,8 +293,8 @@ describe("drama prompt compiler", () => {
         };
         const prompt = compileDramaShotExecutionPrompts(project, project.episodes[0], project.episodes[0].shots[0]).videoPrompt;
 
-        expect(prompt).toContain("@图片1=character_anchor");
-        expect(prompt).not.toContain("@@图片1");
+        expect(prompt).not.toContain("参考职责：");
+        expect(prompt).not.toContain("@图片1=character_anchor");
     });
 
     it("compiles identity, spatial and forbidden rules before the first generation", () => {
@@ -138,6 +332,8 @@ describe("drama prompt compiler", () => {
 
         expect(prompts.imagePrompt.length).toBeGreaterThan(8000);
         expect(prompts.imagePrompt).toContain("最终识别标记");
+        expect(prompts.videoPrompt).not.toContain("最终识别标记");
+        expect(prompts.videoPrompt.length).toBeLessThan(prompts.imagePrompt.length);
         expect(assetPrompt.length).toBeGreaterThan(8000);
         expect(assetPrompt).toContain("最终识别标记");
     });
@@ -189,11 +385,12 @@ describe("drama prompt compiler", () => {
         const prompts = compileDramaShotExecutionPrompts(project, project.episodes[0], project.episodes[0].shots[0]);
 
         expect(prompts.imagePrompt).toContain(`最终视觉锁定：${DRAMA_STYLE_DESCRIPTION}`);
-        expect(prompts.videoPrompt).toContain(`最终视觉锁定：${DRAMA_STYLE_DESCRIPTION}`);
+        expect(prompts.videoPrompt).toContain(`风格：${DRAMA_STYLE_NAME}`);
         expect(prompts.imagePrompt).not.toContain("VS14");
         expect(prompts.imagePrompt).not.toContain("中性浅灰背景");
         expect(prompts.videoPrompt).not.toContain("写实电影感");
         expect(prompts.videoPrompt).toContain("旧版视频");
+        expect(prompts.videoPrompt).not.toContain("统一视觉风格（最高级风格约束）");
     });
 
     it.each(["角色", "场景", "道具"] as const)("sanitizes legacy visual fields for %s assets", (kind) => {

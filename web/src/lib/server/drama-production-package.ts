@@ -18,7 +18,7 @@ import type {
     DramaStoryScene,
 } from "@/lib/drama-project-contract";
 import { normalizeDramaProductionPlan } from "@/lib/drama-production-plan";
-import { defaultDramaFrameBeats, normalizeDramaFrameBeats, upgradeDramaFrameImagePrompt } from "@/lib/drama-frame-sequence";
+import { defaultDramaFrameBeats, normalizeDramaFrameBeats, upgradeDramaFrameImagePrompt, validateDramaFramePlanVisuals } from "@/lib/drama-frame-sequence";
 import { resolveDramaShotDuration } from "@/lib/server/drama-shot-config";
 
 export class DramaProductionPackageError extends Error {}
@@ -28,7 +28,9 @@ export function previewDramaProductionPackage(source: string, fileName = "produc
     if (!trimmed) throw new DramaProductionPackageError("制作包内容不能为空");
     const embedded = trimmed.match(/```(?:json|drama-production-package)\s*([\s\S]*?)```/i)?.[1];
     const format = fileName.toLowerCase().endsWith(".json") || trimmed.startsWith("{") ? "json" : "markdown";
-    const parsed = format === "markdown" ? parseDirectorMarkdown(trimmed) || parseObject(embedded || "") : parseObject(trimmed);
+    // The serialized Markdown embeds the canonical package object. Prefer it so
+    // preview and apply use the same normalized source of truth.
+    const parsed = format === "markdown" ? parseObject(embedded || "") || parseDirectorMarkdown(trimmed) : parseObject(trimmed);
     if (!parsed) throw new DramaProductionPackageError("Markdown 制作包缺少可读取的标准清单或导演执行表");
     const productionPackage = normalizeProductionPackage(parsed);
     return {
@@ -302,6 +304,8 @@ function normalizeProductionPackage(value: unknown): DramaProductionPackageV1 {
         };
     });
     const synchronizedEpisodes = normalizedEpisodes.map((episode) => synchronizeContinuityStates(repairOpeningCut(episode, text(project.title))));
+    validateProductionPackageCompleteness({ ...input, project: { ...project, productionBible: bible }, assets: normalizedAssets, episodes: synchronizedEpisodes });
+    validateSplitShotFramePlans(synchronizedEpisodes);
     return {
         schemaVersion: 1,
         project: {
@@ -330,37 +334,104 @@ function normalizeProductionPackage(value: unknown): DramaProductionPackageV1 {
     };
 }
 
+function validateProductionPackageCompleteness(value: Record<string, unknown>) {
+    const project = object(value.project);
+    const bible = object(project.productionBible);
+    const plan = normalizeDramaProductionPlan(bible.productionPlan);
+    if (!plan?.skills.some((skill) => skill.id === "seedance-director")) throw new DramaProductionPackageError("制作包缺少必需的 Seedance 2.0 导演 Skill");
+    const assets = object(value.assets);
+    const assetCodes = (key: string) =>
+        new Set(
+            array(assets[key])
+                .map((item) => text(object(item).code))
+                .filter(Boolean),
+        );
+    const characters = assetCodes("characters");
+    const locations = assetCodes("locations");
+    const props = assetCodes("props");
+    for (const episode of array(value.episodes)) {
+        for (const shot of array(object(episode).shots)) {
+            const item = object(shot);
+            const label = text(item.code) || text(item.title) || "镜头";
+            if (!text(item.locationCode) || !locations.has(text(item.locationCode))) throw new DramaProductionPackageError(`${label}缺少有效场景资产引用`);
+            for (const code of strings(item.characterCodes)) if (!characters.has(code)) throw new DramaProductionPackageError(`${label}引用了不存在的角色资产 ${code}`);
+            for (const code of strings(item.propCodes)) if (!props.has(code)) throw new DramaProductionPackageError(`${label}引用了不存在的道具资产 ${code}`);
+            if (/(?:运镜|焦段|推近|拉远|摇镜|跟拍|滑轨|环绕|吊臂|慢推|慢拉|后拉|时间段|时间轴|动作过程|对白|声音|口型)/u.test(text(item.imagePrompt)))
+                throw new DramaProductionPackageError(`${label}的 imagePrompt 必须是单一静态画面，不能包含运镜、时间过程、对白或声音`);
+            if (/(?:本内部镜头只执行|内部 ID|assetId|参考图清单|URL)/u.test(text(item.videoPrompt))) throw new DramaProductionPackageError(`${label}的 videoPrompt 不能包含内部说明、资产 ID、URL 或参考图清单`);
+            const manifest = array(object(item.framePlan).referenceManifest);
+            const has = (role: string, code: string) => manifest.some((entry) => object(entry).role === role && text(object(entry).assetId) === code);
+            if (!has("scene_anchor", text(item.locationCode))) throw new DramaProductionPackageError(`${label}的 referenceManifest 缺少当前场景锚点`);
+            for (const code of strings(item.characterCodes)) if (!has("character_anchor", code)) throw new DramaProductionPackageError(`${label}的 referenceManifest 缺少角色 ${code} 锚点`);
+            for (const code of strings(item.propCodes)) if (!has("prop_anchor", code)) throw new DramaProductionPackageError(`${label}的 referenceManifest 缺少道具 ${code} 锚点`);
+        }
+    }
+}
+
 function repairOpeningCut<T extends DramaProductionPackageEpisode>(episode: T, projectTitle: string): T {
     const first = episode.shots[0];
     const second = episode.shots[1];
-    if (!/Mahadel|四界之心/u.test(projectTitle) || !first || !second || first.code !== "SH001" || second.code !== "SH002" || first.title !== "黑湖记忆 1/2" || second.title !== "黑湖记忆 2/2" || !/黑湖/.test(first.description) || !/马车/.test(second.description || second.sourceText)) return episode;
+    const legacyOpening = first?.continuity?.actionStart === "黑湖、倒塔、四手与裂剑" && second?.continuity?.actionStart === "黑湖、倒塔、四手与裂剑";
+    if (
+        !/Mahadel|四界之心/u.test(projectTitle) ||
+        !first ||
+        !second ||
+        first.code !== "SH001" ||
+        second.code !== "SH002" ||
+        first.title !== "黑湖记忆 1/2" ||
+        second.title !== "黑湖记忆 2/2" ||
+        !/黑湖/.test(first.description) ||
+        !/马车/.test(second.description || second.sourceText) ||
+        !legacyOpening
+    )
+        return episode;
     const firstActionEnd = "Karin掌心的完整剑刃裂开，手指仍扣住断口";
     const secondActionStart = firstActionEnd;
     const nextShots = episode.shots.map((shot, index) => {
         if (index === 0) {
             return {
                 ...shot,
-                duration: 5,
-                timecode: "0-5s",
+                duration: first.duration,
+                timecode: first.timecode,
                 description: "黑湖、倒塔、四手与裂剑；剑刃在 Karin 掌心裂开",
                 sourceText: shot.sourceText.split(/Karin猛然睁眼/u)[0].trim(),
-                videoPrompt: "黑湖记忆中，倒悬高塔压在黑色湖面上，四只手在雪地中央扣紧；Karin握住完整剑刃，断口从掌心向外裂开。镜头沿倒塔轴线缓慢推进，冷风掠过无波湖面，裂剑发出细碎金属声，停在断口与仍未松开的手指上。结束画面：断裂剑刃的冷银断口占据画面中心。",
+                videoPrompt:
+                    "黑湖记忆中，倒悬高塔压在黑色湖面上，四只手在雪地中央扣紧；Karin握住完整剑刃，断口从掌心向外裂开。镜头沿倒塔轴线缓慢推进，冷风掠过无波湖面，裂剑发出细碎金属声，停在断口与仍未松开的手指上。结束画面：断裂剑刃的冷银断口占据画面中心。",
                 continuity: { ...shot.continuity, actionStart: "黑湖、倒塔、四手与完整剑刃", actionEnd: firstActionEnd, continuityNotes: "断口匹配切" },
-                framePlan: { ...shot.framePlan, start: { source: "independent" }, frames: defaultDramaFrameBeats(5, "黑湖记忆中的倒塔、四手与裂剑", "黑湖、倒塔、四手与裂剑的静态状态") },
+                framePlan: {
+                    ...shot.framePlan,
+                    start: { source: "independent" },
+                    frames: openingCutFrames("SH001", first.duration, [
+                        "黑湖无波，倒悬古塔与Karin模糊倒影对齐",
+                        "雪地中央四只手彼此扣紧，Karin掌心握住完整剑刃",
+                        "完整剑刃从掌心断口向外裂开，四只手仍未松开",
+                        "冷银断口占据画面中心，Karin手指扣住碎裂剑刃并停住",
+                    ]),
+                },
             };
         }
         if (index === 1) {
             return {
                 ...shot,
-                duration: 2.5,
-                timecode: "5-7.5s",
+                duration: second.duration,
+                timecode: second.timecode,
+                locationCode: "S06",
                 description: "马车中的 Karin 从裂剑匹配切中惊醒，手扣住断剑，呼吸急促",
                 sourceText: "裂开的剑刃断口与 Karin 扣紧的手指匹配切到马车内；Karin 猛然睁眼，手扣住断剑，呼吸急促。",
                 videoPrompt: "从上一镜裂开的冷银断口匹配切到马车内同一只扣紧的手。Karin猛然睁眼，肩膀先绷紧再吸气，手掌继续压住断剑；车轮震动和急促呼吸成为声音锚点。镜头只做一次短促推近，结束画面停在他睁开的灰绿色眼睛与断剑握柄之间。",
                 startFramePrompt: "上一镜已验收实际尾帧中的裂剑断口与扣紧手指作为唯一首帧依据；匹配切进入马车内，保持手指、断口方向和冷光连续。",
                 endFramePrompt: "Karin在马车中睁眼并扣住断剑，呼吸急促，肩膀绷紧。",
                 continuity: { ...shot.continuity, actionStart: secondActionStart, actionEnd: "Karin在马车中睁眼并扣住断剑，呼吸急促", continuityNotes: "继承上一镜断口，匹配切入马车" },
-                framePlan: { ...shot.framePlan, start: { source: "previous_accepted_actual_tail" }, frames: fractionalDramaFrameBeats(2.5, "从裂剑断口匹配切入马车，Karin惊醒并扣住断剑", "马车内 Karin 惊醒、手扣断剑的静态状态") },
+                framePlan: {
+                    ...shot.framePlan,
+                    start: { source: "previous_accepted_actual_tail" },
+                    frames: openingCutFrames("SH002", second.duration, [
+                        "上一镜冷银断口与扣紧手指作为马车内匹配切入口",
+                        "马车内同一只手继续压住断剑，Karin肩膀绷紧",
+                        "Karin睁开灰绿色眼睛，视线落向断剑，呼吸急促并保持握持",
+                        "Karin完全惊醒，手扣断剑、肩膀绷紧、视线稳定锁定握柄",
+                    ]),
+                },
             };
         }
         return shot;
@@ -368,16 +439,20 @@ function repairOpeningCut<T extends DramaProductionPackageEpisode>(episode: T, p
     return { ...episode, shots: nextShots };
 }
 
-function fractionalDramaFrameBeats(duration: number, actionPrompt: string, imagePrompt: string) {
-    const boundaries = [0, 0.8, 1.7, duration];
-    return boundaries.slice(0, -1).map((startSecond, index) => ({
-        id: `frame-${index + 1}`,
-        sequenceIndex: index + 1,
-        startSecond,
-        endSecond: boundaries[index + 1],
-        actionPrompt: `${actionPrompt}；${["匹配切入", "睁眼吸气", "扣住断剑"][index]}`,
-        imagePrompt: `${imagePrompt}；${["裂剑断口与手指连续", "马车内睁眼瞬间", "断剑握柄与绷紧肩膀"][index]}静态锚点`,
-    }));
+function openingCutFrames(code: string, duration: number, actions: string[]) {
+    const stateLabels = ["入口构图已建立", "手部与道具关系发生可见变化", "表情、视线与道具状态同步变化", "动作完成后的稳定尾帧"];
+    return actions.map((action, index) => {
+        const startSecond = Number(((duration * index) / actions.length).toFixed(3));
+        const endSecond = index === actions.length - 1 ? duration : Number(((duration * (index + 1)) / actions.length).toFixed(3));
+        return {
+            id: `${code}-F${String(index + 1).padStart(2, "0")}`,
+            sequenceIndex: index + 1,
+            startSecond,
+            endSecond,
+            actionPrompt: action,
+            imagePrompt: `静态关键帧：${action}；可见状态：${stateLabels[index]}；保持人物身份、服装、道具材质、空间结构、光向、构图和轴线连续；只呈现当前时间点的静态画面，不表现运动过程。`,
+        };
+    });
 }
 
 /**
@@ -574,22 +649,19 @@ function normalizePackageShot(value: unknown, index: number): DramaProductionPac
     let frames;
     try {
         const rawFrames = array(framePlan.frames);
-        frames = normalizeDramaFrameBeats(
-            rawFrames.length
-                ? rawFrames.map((value, frameIndex) => {
-                      const frame = object(value);
-                      return {
-                          id: text(frame.id) || `${text(shot.code) || `shot-${index + 1}`}-frame-${frameIndex + 1}`,
-                          sequenceIndex: positiveNumber(frame.sequenceIndex) || frameIndex + 1,
-                          startSecond: Number(frame.startSecond),
-                          endSecond: Number(frame.endSecond),
-                          actionPrompt: text(frame.actionPrompt),
-                          imagePrompt: text(frame.imagePrompt),
-                      };
-                  })
-                : defaultDramaFrameBeats(duration, actionEnd, text(shot.imagePrompt) || description || title),
-            duration,
-        );
+        if (!rawFrames.length) throw new DramaProductionPackageError("缺少逐帧计划，必须由制作包明确提供每帧动作与静态画面状态");
+        const sourceFrames = rawFrames.map((value, frameIndex) => {
+            const frame = object(value);
+            return {
+                id: text(frame.id) || `${text(shot.code) || `shot-${index + 1}`}-frame-${frameIndex + 1}`,
+                sequenceIndex: positiveNumber(frame.sequenceIndex) || frameIndex + 1,
+                startSecond: Number(frame.startSecond),
+                endSecond: Number(frame.endSecond),
+                actionPrompt: text(frame.actionPrompt),
+                imagePrompt: text(frame.imagePrompt),
+            };
+        });
+        frames = normalizeDramaFrameBeats(sourceFrames, duration);
         frames = frames.map((frame) => ({
             ...frame,
             imagePrompt: upgradeDramaFrameImagePrompt(frame.imagePrompt, frame.actionPrompt, {
@@ -601,9 +673,12 @@ function normalizePackageShot(value: unknown, index: number): DramaProductionPac
                 gazeDirection: text(continuity.gazeDirection),
                 lighting,
                 colorPalette,
+                performanceState: performanceStateForFrame(performancePlan, frame.sequenceIndex, frames.length),
                 sequenceIndex: frame.sequenceIndex,
             }),
         }));
+        const visualErrors = rawFrames.length ? validateDramaFramePlanVisuals(frames) : [];
+        if (visualErrors.length) throw new DramaProductionPackageError(`镜头 ${text(shot.code) || index + 1} 的逐帧画面无效：${visualErrors.join("；")}`);
     } catch (error) {
         throw new DramaProductionPackageError(`镜头 ${text(shot.code) || index + 1} 的逐帧计划无效：${error instanceof Error ? error.message : "无法解析"}`);
     }
@@ -618,7 +693,7 @@ function normalizePackageShot(value: unknown, index: number): DramaProductionPac
         narration: text(shot.narration),
         utterances,
         imagePrompt: text(shot.imagePrompt),
-        videoPrompt: text(shot.videoPrompt),
+        videoPrompt: normalizePackageVideoPrompt(text(shot.videoPrompt), description),
         cameraMotion: text(shot.cameraMotion),
         negativePrompt: optionalText(shot.negativePrompt),
         continuity: {
@@ -665,6 +740,20 @@ function normalizePackageShot(value: unknown, index: number): DramaProductionPac
         videoMode: shot.videoMode === "direct" ? "direct" : "storyboard",
         storyboardFrameMode: shot.storyboardFrameMode === "single" ? "single" : shot.storyboardFrameMode === "first_last" ? "first_last" : "all_frames",
     };
+}
+
+function performanceStateForFrame(plan: DramaShot["performancePlan"], sequenceIndex: number, frameCount: number) {
+    const beat = sequenceIndex <= 1 ? plan?.beats.start : sequenceIndex >= frameCount ? plan?.beats.end : plan?.beats.middle;
+    return beat ? `情绪${beat.emotion}；面部${beat.facialAction}；视线${beat.gaze}；身体与手部${beat.bodyAction}` : "";
+}
+
+function normalizePackageVideoPrompt(value: string, fallback: string) {
+    return (
+        value
+            .replace(/^\s*生成\s*\d+(?:\.\d+)?\s*(?:秒|s)\s*[^。；\n]*视频[，,。；;：:]*/iu, "")
+            .replace(/(?:视频)?时长\s*[：:]?\s*\d+(?:\.\d+)?\s*(?:秒|s)/giu, "")
+            .trim() || fallback
+    );
 }
 
 function normalizeReferenceManifest(value: unknown) {
@@ -1376,6 +1465,7 @@ function splitDirectorShots<T extends DramaProductionPackageEpisode["shots"][num
         const segmentDurations = integerPartitions(shot.duration, count);
         const utteranceGroups = Array.from({ length: count }, () => [] as typeof shot.utterances);
         shot.utterances.forEach((utterance, index) => utteranceGroups[Math.min(count - 1, Math.floor((index * count) / Math.max(1, shot.utterances.length)))].push(utterance));
+        const actions = splitDirectorShotActions(shot, count);
         let previousExitState = cloneState(shot.entryState);
         let previousActionEnd = shot.continuity?.actionStart || shot.description;
         const finalActionEnd = shot.continuity?.actionEnd || shot.description;
@@ -1385,13 +1475,27 @@ function splitDirectorShots<T extends DramaProductionPackageEpisode["shots"][num
             const duration = segmentDurations[part];
             const to = from + duration;
             const utterances = utteranceGroups[part].map((utterance, index) => ({ ...utterance, order: index + 1 }));
-            const action = part === 0 ? shot.continuity?.actionStart || shot.description : part === count - 1 ? shot.continuity?.actionEnd || shot.description : `${shot.title}的连续反应与动作过渡`;
+            const action = actions[part];
             const actionStart = part === 0 ? shot.continuity?.actionStart || shot.description : previousActionEnd;
-            const actionEnd = part === 0 ? finalActionEnd : part === count - 1 ? finalActionEnd : action;
+            const actionEnd = part === count - 1 ? finalActionEnd : action;
             const entryState = part === 0 ? cloneState(shot.entryState) : cloneState(previousExitState);
             const exitState = part === count - 1 ? shot.exitState : directorState(shot.characterCodes, shot.propCodes, shot.exitState?.environment || shot.title, shot.lighting || "延续主光", actionEnd);
             previousExitState = cloneState(exitState);
             previousActionEnd = actionEnd;
+            const splitFrames = defaultDramaFrameBeats(duration, action, action).map((frame) => ({
+                ...frame,
+                imagePrompt: upgradeDramaFrameImagePrompt(frame.imagePrompt, frame.actionPrompt, {
+                    description: action,
+                    shotSize: shot.continuity?.shotSize || "中景",
+                    cameraAngle: shot.continuity?.cameraAngle || "视线高度平视",
+                    composition: shot.continuity?.composition || "主体关系清晰，保留空间纵深",
+                    characterBlocking: shot.continuity?.characterBlocking || "按当前动作关系安排站位",
+                    gazeDirection: shot.continuity?.gazeDirection || "视线朝向当前主体",
+                    lighting: shot.lighting || "延续主光",
+                    colorPalette: shot.colorPalette || "沿用本场色板",
+                    sequenceIndex: frame.sequenceIndex,
+                }),
+            }));
             return {
                 ...shot,
                 code: `SH${String(order).padStart(3, "0")}`,
@@ -1409,21 +1513,68 @@ function splitDirectorShots<T extends DramaProductionPackageEpisode["shots"][num
                     .filter((item) => item.type === "voiceover")
                     .map((item) => `${item.speaker}：${item.text}`)
                     .join("\n"),
-                imagePrompt: `${action}，${shot.continuity?.shotSize || "电影景别"}，${shot.lighting || "延续主光"}，9:16安全构图，人物头顶与底部字幕区留白`,
-                videoPrompt: `本内部镜头只执行：${action}。保持角色、道具、轴线和前后状态连续。`,
-                startFramePrompt: undefined,
-                endFramePrompt: undefined,
+                imagePrompt: splitFrames[0].imagePrompt,
+                videoPrompt: `动态意图：${actionStart}到${actionEnd}；起始可见状态：${actionStart}；主体动作与反应：${action}；一个主运镜：${shot.cameraMotion || "固定机位"}；结束画面：${actionEnd}；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：${shot.negativePrompt || "无闪烁、无形变、无背景漂移、无身份跳变、无水印文字"}。`,
+                startFramePrompt: splitFrames[0].imagePrompt,
+                endFramePrompt: splitFrames.at(-1)?.imagePrompt || splitFrames[0].imagePrompt,
                 continuity: { ...shot.continuity, actionStart, actionEnd },
                 framePlan: {
                     start: { source: part === 0 ? "independent" : "previous_accepted_actual_tail" },
                     end: { required: part === count - 1 || shot.framePlan?.end.required === true },
-                    frames: defaultDramaFrameBeats(duration, `本内部镜头只执行：${action}`, `${action}，${shot.continuity?.shotSize || "电影景别"}，${shot.lighting || "延续主光"}，9:16安全构图`),
+                    frames: splitFrames,
                 },
                 entryState,
                 exitState,
             } as T;
         });
     });
+}
+
+function splitDirectorShotActions(shot: DramaProductionPackageEpisode["shots"][number], count: number) {
+    const candidates = splitVisualActions(shot.sourceText);
+    if (!candidates.length) candidates.push(shot.continuity?.actionStart || shot.description || shot.title);
+    return Array.from({ length: count }, (_, part) => {
+        const from = Math.floor((part * candidates.length) / count);
+        const to = Math.max(from + 1, Math.floor(((part + 1) * candidates.length) / count));
+        return candidates.slice(from, to).join("；");
+    });
+}
+
+function splitVisualActions(source: string) {
+    return [
+        ...new Set(
+            source
+                .split(/[\n。！？!?]+/u)
+                .map((value) => value.trim().replace(/^[^：:]{1,24}[：:]\s*/u, ""))
+                .filter((value) => value.length >= 4)
+                .filter((value) => !/^(?:生成|镜头|无字幕|无水印|无logo|禁止|避免|不得)/u.test(value)),
+        ),
+    ];
+}
+
+function validateSplitShotFramePlans(episodes: DramaProductionPackageEpisode[]) {
+    for (const episode of episodes) {
+        for (let index = 0; index < episode.shots.length; index += 1) {
+            const parsed = splitShotTitle(episode.shots[index].title);
+            if (!parsed || parsed.part !== 1) continue;
+            const group = episode.shots.slice(index, index + parsed.total);
+            if (group.length !== parsed.total || group.some((shot, part) => !sameSplitShotTitle(shot.title, parsed.base, part + 1, parsed.total))) continue;
+            const plans = group.map((shot) => JSON.stringify(shot.framePlan.frames.map((frame) => [frame.actionPrompt, frame.imagePrompt])));
+            if (new Set(plans).size !== plans.length) throw new DramaProductionPackageError(`${parsed.base}的拆分镜头复用了整套逐帧计划，请分别提供每段的独立动作与静态状态`);
+            index += parsed.total - 1;
+        }
+    }
+}
+
+function splitShotTitle(title: string) {
+    const match = title.match(/^(.*?)\s+(\d+)\/(\d+)$/u);
+    if (!match) return undefined;
+    return { base: match[1].trim(), part: Number(match[2]), total: Number(match[3]) };
+}
+
+function sameSplitShotTitle(title: string, base: string, part: number, total: number) {
+    const parsed = splitShotTitle(title);
+    return parsed?.base === base && parsed.part === part && parsed.total === total;
 }
 function inheritCarriedStates<T extends DramaProductionPackageEpisode["shots"][number]>(shots: T[]): T[] {
     return shots.map((shot, index) => {

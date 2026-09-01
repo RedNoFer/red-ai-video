@@ -1,26 +1,56 @@
 "use client";
 
-import { Button, Input, InputNumber, Modal, Segmented, Tag } from "antd";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { App, Button, Input, InputNumber, Modal, Segmented, Tag } from "antd";
 import { ArrowLeft, Check, ChevronDown, SlidersHorizontal } from "lucide-react";
-import { useEffect, useState } from "react";
 
-import type { DramaEpisode, DramaProject } from "@/lib/drama-project-contract";
+import { AgentMarkdown } from "@/components/agent/agent-markdown";
+import { latestFrameEvidence } from "@/lib/drama-continuity-policy";
+import { decideDramaContinuityFrame } from "@/services/api/drama-projects";
+import type { DramaEpisode, DramaProject, DramaShot } from "@/lib/drama-project-contract";
 import { useDramaStore } from "../stores/use-drama-store";
 import { DramaStageHeader } from "./drama-editor-elements";
 import type { DramaProjectStage } from "./drama-project-sections";
 import { DramaShotDialogueEditor } from "./drama-shot-dialogue-editor";
 
-export function DramaReviewPanel({ project, episode, onDesignVisuals, designing, onStageChange }: { project: DramaProject; episode: DramaEpisode; onDesignVisuals: () => void; designing: boolean; onStageChange: (stage: DramaProjectStage) => void }) {
+export function DramaReviewPanel({
+    project,
+    episode,
+    onDesignVisuals,
+    designing,
+    onStageChange,
+}: {
+    project: DramaProject;
+    episode: DramaEpisode;
+    onDesignVisuals: () => void;
+    designing: boolean;
+    onStageChange: (stage: DramaProjectStage) => void;
+}) {
+    const { message } = App.useApp();
     const updateEpisode = useDramaStore((state) => state.updateEpisode);
     const updateShot = useDramaStore((state) => state.updateShot);
+    const replaceProject = useDramaStore((state) => state.replaceProject);
     const [episodeInfoOpen, setEpisodeInfoOpen] = useState(false);
-    const [view, setView] = useState<"content" | "production" | "continuity" | "package">("content");
+    const [view, setView] = useState<"content" | "production" | "performance" | "continuity" | "package">("content");
     const [expandedShotIds, setExpandedShotIds] = useState<Set<string>>(() => new Set(episode.shots.slice(0, 1).map((shot) => shot.id)));
+    const firstShotId = episode.shots[0]?.id;
     useEffect(() => {
-        setExpandedShotIds(new Set(episode.shots.slice(0, 1).map((shot) => shot.id)));
-    }, [episode.id]);
+        setExpandedShotIds(new Set(firstShotId ? [firstShotId] : []));
+    }, [episode.id, firstShotId]);
     const updateContentShot = (shotId: string, patch: Parameters<typeof updateShot>[3]) => {
-        updateShot(project.id, episode.id, shotId, patch);
+        const shot = episode.shots.find((item) => item.id === shotId);
+        const fields = Object.keys(patch);
+        const planningChanged = fields.some((field) => ["performancePlan", "dialoguePerformance", "lightingPlan", "continuity", "entryState", "exitState"].includes(field));
+        updateShot(project.id, episode.id, shotId, {
+            ...patch,
+            fieldOrigins: { ...(shot?.fieldOrigins || {}), ...Object.fromEntries(fields.map((field) => [field, "manual" as const])) },
+            ...(planningChanged
+                ? {
+                      continuityStatus: shot?.videoUrl ? ("stale" as const) : ("ready" as const),
+                      continuityError: shot?.videoUrl ? "人工修改了审核计划，需要重新生成或复核实际首尾帧" : undefined,
+                  }
+                : {}),
+        });
         if (episode.reviewStatus !== "content_review") updateEpisode(project.id, episode.id, { reviewStatus: "content_review" });
     };
     const toggleShot = (shotId: string) => {
@@ -34,6 +64,20 @@ export function DramaReviewPanel({ project, episode, onDesignVisuals, designing,
     const totalDuration = episode.shots.reduce((total, shot) => total + shot.duration, 0);
     const dialogueCount = episode.shots.reduce((total, shot) => total + (shot.utterances.filter((item) => item.type === "dialogue").length || shot.dialogue.split(/\n+/).filter((line) => line.trim()).length), 0);
     const hasPackageVisualPlan = episode.reviewStatus === "visual_ready" && episode.shots.every((shot) => shot.imagePrompt.trim() && shot.videoPrompt.trim() && shot.fieldOrigins?.imagePrompt === "package" && shot.fieldOrigins?.videoPrompt === "package");
+    const missingReviewFields = episode.shots.flatMap((shot) => missingReviewFieldsForShot(shot));
+    const tabCompletionLabels = view === "performance" ? ["表演规划", "对白表演", "色彩灯光"] : view === "continuity" ? ["连续性"] : [];
+    const tabMissingReviewCount = missingReviewFields.filter((item) => tabCompletionLabels.some((label) => item.endsWith(`：${label}`))).length;
+    const reviewTask = episode.reviewCompletionTask;
+    const decideTail = async (shot: DramaShot, decision: "accept" | "reject") => {
+        const tail = latestFrameEvidence(shot, "actual_end", ["candidate"]);
+        if (!tail || !shot.videoUrl) return;
+        try {
+            replaceProject(await decideDramaContinuityFrame(project.id, episode.id, shot.id, { frameEvidenceId: tail.id, decision, expectedVideoRevision: shot.videoUrl }));
+            message.success(decision === "accept" ? "实际尾帧已验收，后续连续镜头可以引用。" : "实际尾帧已拒绝，后续连续镜头已阻塞。");
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : "连续性验收保存失败");
+        }
+    };
     return (
         <div>
             <DramaStageHeader
@@ -69,17 +113,28 @@ export function DramaReviewPanel({ project, episode, onDesignVisuals, designing,
                 }
             />
             {episode.shots.length ? (
-                <div className="mt-2.5 overflow-x-auto hide-scrollbar">
-                    <Segmented
-                        value={view}
-                        onChange={(value) => setView(value as typeof view)}
-                        options={[
-                            { label: "内容结构", value: "content" },
-                            { label: "制作参数", value: "production" },
-                            { label: "连续性", value: "continuity" },
-                            ...(project.productionArchive ? [{ label: "制作包资料", value: "package" }] : []),
-                        ]}
-                    />
+                <div className="mt-2.5 flex min-w-0 flex-wrap items-center gap-2">
+                    <div className="min-w-0 flex-1 overflow-x-auto hide-scrollbar">
+                        <Segmented
+                            value={view}
+                            onChange={(value) => setView(value as typeof view)}
+                            options={[
+                                { label: "内容结构", value: "content" },
+                                { label: "制作参数", value: "production" },
+                                { label: "表演与光色", value: "performance" },
+                                { label: "连续性", value: "continuity" },
+                                ...(project.productionArchive ? [{ label: "制作包资料", value: "package" }] : []),
+                            ]}
+                        />
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                        {reviewTask ? (
+                            <Tag className="!m-0 !rounded-md" color={reviewTask.status === "running" ? "processing" : reviewTask.status === "success" ? "success" : "error"}>
+                                {reviewTask.status === "running" ? `历史批量补全进行中 · 已完成 ${reviewTask.completedCount}/${reviewTask.missingCount} 项` : reviewTask.status === "success" ? `历史批量补全已完成 ${reviewTask.completedCount} 项` : "历史批量补全失败，请在镜头任务逐个补全"}
+                            </Tag>
+                        ) : null}
+                        {tabMissingReviewCount ? <span className="text-xs text-muted-foreground">缺失参数请在镜头任务中逐个智能补全</span> : null}
+                    </div>
                 </div>
             ) : null}
             {episode.shots.length && view === "content" ? (
@@ -101,7 +156,7 @@ export function DramaReviewPanel({ project, episode, onDesignVisuals, designing,
                                         size="small"
                                         className="!h-8 !shrink-0 !rounded-md !border-border/80 !px-2 !text-xs"
                                         icon={<ChevronDown className={`size-3.5 transition-transform ${expanded ? "rotate-180" : ""}`} />}
-                                        iconPosition="end"
+                                        iconPlacement="end"
                                         aria-expanded={expanded}
                                         onClick={() => toggleShot(shot.id)}
                                     >
@@ -153,7 +208,7 @@ export function DramaReviewPanel({ project, episode, onDesignVisuals, designing,
                                         </div>
                                         <div className="mt-3 grid grid-cols-[auto_72px_auto] items-center gap-2 text-sm text-muted-foreground sm:grid-cols-[auto_88px_auto_minmax(0,1fr)]">
                                             <span className="whitespace-nowrap">镜头时长</span>
-                                            <InputNumber className="!h-9 !w-[72px] sm:!w-[88px]" min={1} max={20} value={shot.duration} onChange={(value) => updateContentShot(shot.id, { duration: Number(value) || 5 })} />
+                                            <InputNumber className="!h-9 !w-[72px] sm:!w-[88px]" min={1} max={20} step={1} precision={0} value={shot.duration} onChange={(value) => updateContentShot(shot.id, { duration: Number(value) || 5 })} />
                                             <span>秒</span>
                                             <span className="hidden min-w-0 text-right text-xs sm:block">视觉提示词将在确认后生成</span>
                                         </div>
@@ -199,12 +254,101 @@ export function DramaReviewPanel({ project, episode, onDesignVisuals, designing,
                     ))}
                 </div>
             ) : null}
+            {episode.shots.length && view === "performance" ? (
+                <div className="mt-2.5 space-y-2.5">
+                    {episode.shots.map((shot) => {
+                        const plan = shot.performancePlan;
+                        const light = shot.lightingPlan;
+                        return (
+                            <article key={shot.id} className="rounded-lg border border-border bg-background p-3">
+                                <div className="mb-2 flex items-center gap-2">
+                                    <span className="text-xs font-semibold">{shot.code || `镜头 ${shot.order}`}</span>
+                                    <span className="min-w-0 truncate text-sm font-medium">{shot.title}</span>
+                                </div>
+                                <div className="grid gap-2 xl:grid-cols-2">
+                                    <label className="space-y-1 text-xs">
+                                        <span className="text-muted-foreground">表演目标与情绪递进</span>
+                                        <Input.TextArea
+                                            autoSize={{ minRows: 2, maxRows: 5 }}
+                                            value={[plan?.emotionalObjective, plan?.emotionalArc].filter(Boolean).join("\n")}
+                                            onChange={(event) =>
+                                                updateContentShot(shot.id, {
+                                                    performanceNotes: event.target.value,
+                                                    performancePlan: {
+                                                        ...(plan || {
+                                                            emotionalObjective: "",
+                                                            emotionalArc: "",
+                                                            speechStyle: "",
+                                                            pace: "",
+                                                            breath: "",
+                                                            restraintLevel: "",
+                                                            beats: {
+                                                                start: { emotion: "", facialAction: "", gaze: "", bodyAction: "" },
+                                                                middle: { emotion: "", facialAction: "", gaze: "", bodyAction: "" },
+                                                                end: { emotion: "", facialAction: "", gaze: "", bodyAction: "" },
+                                                            },
+                                                        }),
+                                                        emotionalObjective: event.target.value.split("\n")[0] || "",
+                                                        emotionalArc: event.target.value.split("\n")[1] || "",
+                                                    },
+                                                })
+                                            }
+                                            placeholder="第一行写人物目标，第二行写情绪递进"
+                                        />
+                                    </label>
+                                    <label className="space-y-1 text-xs">
+                                        <span className="text-muted-foreground">色彩与灯光</span>
+                                        <Input.TextArea
+                                            autoSize={{ minRows: 2, maxRows: 5 }}
+                                            value={light ? `色板：${light.palette}\n色温：${light.colorTemperature}\n主光：${light.keyLight}\n补光：${light.fillLight}\n轮廓光：${light.rimLight}` : ""}
+                                            onChange={(event) =>
+                                                updateContentShot(shot.id, {
+                                                    lightingPlan: {
+                                                        ...(light || {
+                                                            palette: "",
+                                                            colorTemperature: "",
+                                                            keyLight: "",
+                                                            fillLight: "",
+                                                            rimLight: "",
+                                                            contrast: "",
+                                                            materialResponse: "",
+                                                            skinToneProtection: "",
+                                                            inheritFromPrevious: "",
+                                                            transitionToNext: "",
+                                                        }),
+                                                        palette: event.target.value.split("\n")[0]?.replace(/^色板：/, "") || "",
+                                                        colorTemperature: event.target.value.split("\n")[1]?.replace(/^色温：/, "") || "",
+                                                        keyLight: event.target.value.split("\n")[2]?.replace(/^主光：/, "") || "",
+                                                        fillLight: event.target.value.split("\n")[3]?.replace(/^补光：/, "") || "",
+                                                        rimLight: event.target.value.split("\n")[4]?.replace(/^轮廓光：/, "") || "",
+                                                    },
+                                                })
+                                            }
+                                            placeholder="色板、色温、主光、补光、轮廓光各占一行"
+                                        />
+                                    </label>
+                                </div>
+                                <div className="mt-2 grid gap-2 text-xs text-muted-foreground sm:grid-cols-3">
+                                    <span>语气：{plan?.speechStyle || "待补全"}</span>
+                                    <span>节奏：{plan?.pace || "待补全"}</span>
+                                    <span>呼吸：{plan?.breath || "待补全"}</span>
+                                </div>
+                            </article>
+                        );
+                    })}
+                </div>
+            ) : null}
             {episode.shots.length && view === "continuity" ? (
                 <div className="mt-2.5 space-y-2">
+                    <div className="rounded-md border border-border bg-muted/35 px-3 py-2 text-xs leading-5 text-muted-foreground">
+                        计划值来自制作包、人工维护或 AI 补全；AI 补全只填写空白计划字段，不覆盖人工值。实际首尾帧只会在镜头视频生成后提取；“需重新验证”表示视频已经存在，但资产或审核计划后来发生了修改，需要重新生成或重新做连续性 QC。
+                    </div>
                     {episode.shots.map((shot) => {
                         const edge = episode.continuityEdges?.find((item) => item.toShotId === shot.id);
                         const previous = edge ? episode.shots.find((item) => item.id === edge.fromShotId) : undefined;
-                        const status = shot.continuityStatus || "ready";
+                        const status = effectiveContinuityStatus(shot);
+                        const candidateTail = latestFrameEvidence(shot, "actual_end", ["candidate"]);
+                        const acceptedTail = latestFrameEvidence(shot, "actual_end", ["accepted"]);
                         return (
                             <article key={shot.id} className="rounded-lg border border-border bg-background px-3 py-3">
                                 <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -213,12 +357,19 @@ export function DramaReviewPanel({ project, episode, onDesignVisuals, designing,
                                     <Tag color={status === "passed" ? "success" : status === "blocked" ? "warning" : status === "needs_review" || status === "stale" ? "processing" : "default"}>{continuityStatusLabel(status)}</Tag>
                                 </div>
                                 <div className="mt-2 grid gap-1 text-xs text-muted-foreground sm:grid-cols-2">
-                                    <span>{edge ? `${previous?.code || previous?.title || "上一镜头"} → ${shot.code || shot.title}` : "场次起始镜头，无前镜继承"}</span>
-                                    <span>{edge ? `${transitionLabel(edge.transition)} · ${edge.inheritActualEndFrame ? "继承实际尾帧" : "不继承尾帧"}` : "独立起始状态"}</span>
-                                    <span>实际首帧：{shot.actualStartFrameUrl ? "已提取" : "未提取"}</span>
-                                    <span>实际尾帧：{shot.actualEndFrameUrl ? "已提取" : "未提取"}</span>
+                                    <span>计划关系：{edge ? `${previous?.code || previous?.title || "上一镜头"} → ${shot.code || shot.title}` : "场次起始镜头，无前镜继承"}</span>
+                                    <span>计划转场：{edge ? `${transitionLabel(edge.transition)} · ${edge.inheritActualEndFrame ? "生成后继承实际尾帧" : "不继承实际尾帧"}` : "独立起始状态"}</span>
+                                    <span>计划状态：{hasContinuityPlan(shot) ? `已填写（${continuityPlanOrigin(shot)}）` : "待补全"}</span>
+                                    <span>实际首帧：{latestFrameEvidence(shot, "actual_start", ["candidate", "accepted"]) ? "已提取" : "未提取"}</span>
+                                    <span>实际尾帧：{acceptedTail ? "已人工验收" : candidateTail ? "待人工验收" : "未提取"}</span>
                                 </div>
-                                {shot.continuityError ? <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">阻塞原因：{shot.continuityError}</p> : null}
+                                {candidateTail ? (
+                                    <div className="mt-2 flex flex-wrap gap-2">
+                                        <Button size="small" type="primary" onClick={() => void decideTail(shot, "accept")}>验收实际尾帧</Button>
+                                        <Button size="small" danger onClick={() => void decideTail(shot, "reject")}>拒绝实际尾帧</Button>
+                                    </div>
+                                ) : null}
+                                {shot.continuityError ? <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">状态说明：{shot.continuityError}</p> : null}
                             </article>
                         );
                     })}
@@ -250,24 +401,47 @@ export function DramaReviewPanel({ project, episode, onDesignVisuals, designing,
 }
 
 function DramaProductionArchiveView({ archive }: { archive: NonNullable<DramaProject["productionArchive"]> }) {
+    const sectionRefs = useRef(new Map<string, HTMLElement>());
+    const sectionSummary = useMemo(
+        () => [
+            ["原文章节", archive.sections.length],
+            ["视觉 Prompt 资产", archive.promptAssets.length],
+            ["台词表演指令", archive.dialogueDirections.length],
+            ["资产引用计划", archive.referencePlan.length],
+        ],
+        [archive],
+    );
     return (
         <div className="mt-2.5 space-y-3" data-drama-production-archive>
             <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-4">
-                {[
-                    ["原文章节", archive.sections.length],
-                    ["视觉 Prompt 资产", archive.promptAssets.length],
-                    ["台词表演指令", archive.dialogueDirections.length],
-                    ["资产引用计划", archive.referencePlan.length],
-                ].map(([label, value]) => (
-                    <div key={String(label)} className="bg-card px-3 py-2.5"><div className="text-[11px] text-muted-foreground">{label}</div><div className="mt-0.5 text-sm font-semibold tabular-nums">{value}</div></div>
+                {sectionSummary.map(([label, value]) => (
+                    <div key={String(label)} className="bg-card px-3 py-2.5">
+                        <div className="text-[11px] text-muted-foreground">{label}</div>
+                        <div className="mt-0.5 text-sm font-semibold tabular-nums">{value}</div>
+                    </div>
                 ))}
             </div>
+            <section className="rounded-lg border border-border bg-background p-3">
+                <div className="flex items-center justify-between gap-3">
+                    <h3 className="text-sm font-semibold">章节导览</h3>
+                    <span className="text-[11px] text-muted-foreground">点击跳转到对应章节</span>
+                </div>
+                <div className="hide-scrollbar mt-2 flex gap-2 overflow-x-auto">
+                    {archive.sections.map((section) => (
+                        <Button key={section.code} size="small" className="!h-7 !rounded-md !px-2.5" onClick={() => sectionRefs.current.get(section.code)?.scrollIntoView({ block: "start", behavior: "smooth" })}>
+                            {section.title}
+                        </Button>
+                    ))}
+                </div>
+            </section>
             <section className="rounded-lg border border-border bg-background p-3">
                 <h3 className="text-sm font-semibold">关键帧与全案板 Prompt</h3>
                 <div className="mt-2 grid gap-2 lg:grid-cols-2">
                     {archive.promptAssets.map((asset) => (
                         <details key={asset.code} className="rounded-md border border-border bg-card px-3 py-2 open:pb-3">
-                            <summary className="cursor-pointer text-xs font-medium">{asset.code} · {asset.title} <span className="ml-1 text-muted-foreground">{asset.shotCodes.join("、") || "未绑定镜头"}</span></summary>
+                            <summary className="cursor-pointer text-xs font-medium">
+                                {asset.code} · {asset.title} <span className="ml-1 text-muted-foreground">{asset.shotCodes.join("、") || "未绑定镜头"}</span>
+                            </summary>
                             <pre className="mt-2 whitespace-pre-wrap break-words font-sans text-xs leading-5 text-muted-foreground">{asset.prompt}</pre>
                         </details>
                     ))}
@@ -284,15 +458,39 @@ function DramaProductionArchiveView({ archive }: { archive: NonNullable<DramaPro
                 <div className="mt-3 grid gap-2 sm:grid-cols-2">
                     {archive.referencePlan.map((item) => (
                         <div key={`${item.priority}-${item.asset}`} className="rounded-md border border-border px-2.5 py-2 text-xs">
-                            <div className="font-medium">{item.priority}. {item.asset}</div>
-                            <div className="mt-1 text-muted-foreground">{item.planType} · {item.purpose} · {item.shotCodes.join("、") || "未绑定镜头"}</div>
+                            <div className="font-medium">
+                                {item.priority}. {item.asset}
+                            </div>
+                            <div className="mt-1 text-muted-foreground">
+                                {item.planType} · {item.purpose} · {item.shotCodes.join("、") || "未绑定镜头"}
+                            </div>
                         </div>
                     ))}
                 </div>
                 <div className="mt-3 overflow-x-auto hide-scrollbar">
                     <table className="w-full min-w-[680px] text-left text-xs">
-                        <thead className="text-muted-foreground"><tr><th className="pb-2">ID</th><th className="pb-2">镜头</th><th className="pb-2">说话人</th><th className="pb-2">台词</th><th className="pb-2">表演与节奏</th><th className="pb-2">口型</th></tr></thead>
-                        <tbody>{archive.dialogueDirections.map((item) => <tr key={item.id} className="border-t border-border"><td className="py-2">{item.id}</td><td>{item.shotCode}</td><td>{item.speaker}</td><td>{item.text}</td><td>{item.performance}</td><td>{item.lipSync ? "是" : "否"}</td></tr>)}</tbody>
+                        <thead className="text-muted-foreground">
+                            <tr>
+                                <th className="pb-2">ID</th>
+                                <th className="pb-2">镜头</th>
+                                <th className="pb-2">说话人</th>
+                                <th className="pb-2">台词</th>
+                                <th className="pb-2">表演与节奏</th>
+                                <th className="pb-2">口型</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {archive.dialogueDirections.map((item, index) => (
+                                <tr key={dialogueDirectionKey(item, index)} className="border-t border-border">
+                                    <td className="py-2">{item.id}</td>
+                                    <td>{item.shotCode}</td>
+                                    <td>{item.speaker}</td>
+                                    <td>{item.text}</td>
+                                    <td>{item.performance}</td>
+                                    <td>{item.lipSync ? "是" : "否"}</td>
+                                </tr>
+                            ))}
+                        </tbody>
                     </table>
                 </div>
             </section>
@@ -300,16 +498,34 @@ function DramaProductionArchiveView({ archive }: { archive: NonNullable<DramaPro
                 <h3 className="text-sm font-semibold">原制作包章节与 QC</h3>
                 <div className="mt-2 space-y-2">
                     {archive.sections.map((section) => (
-                        <details key={section.code} className="rounded-md border border-border bg-card px-3 py-2 open:pb-3">
-                            <summary className="cursor-pointer text-xs font-medium">{section.title}</summary>
-                            <pre className="mt-2 whitespace-pre-wrap break-words font-sans text-xs leading-5 text-muted-foreground">{section.content}</pre>
+                        <details
+                            key={section.code}
+                            ref={(element) => {
+                                if (element) sectionRefs.current.set(section.code, element);
+                                else sectionRefs.current.delete(section.code);
+                            }}
+                            className="rounded-md border border-border bg-card px-3 py-2 open:pb-3"
+                            data-drama-production-archive-section={section.code}
+                        >
+                            <summary className="cursor-pointer text-xs font-medium">
+                                {section.title} <span className="ml-1 font-normal text-muted-foreground">{compactReviewText(section.content) || "无内容"}</span>
+                            </summary>
+                            {section.content.trim() ? (
+                                <AgentMarkdown className="mt-2 text-xs leading-5 text-muted-foreground">{section.content}</AgentMarkdown>
+                            ) : (
+                                <div className="mt-2 rounded-md bg-muted/35 px-3 py-2 text-xs text-muted-foreground">无内容</div>
+                            )}
                         </details>
                     ))}
                 </div>
-                {archive.qcReport ? <pre className="mt-3 whitespace-pre-wrap break-words rounded-md bg-muted/45 p-3 font-sans text-xs leading-5">{archive.qcReport}</pre> : null}
+                {archive.qcReport ? <AgentMarkdown className="mt-3 rounded-md bg-muted/45 p-3 text-xs leading-5">{archive.qcReport}</AgentMarkdown> : <div className="mt-3 rounded-md bg-muted/35 p-3 text-xs text-muted-foreground">QC 报告：无内容</div>}
             </section>
         </div>
     );
+}
+
+export function dialogueDirectionKey(item: Pick<NonNullable<DramaProject["productionArchive"]>["dialogueDirections"][number], "id" | "shotCode">, index: number) {
+    return `${item.shotCode || "shot"}:${item.id || "dialogue"}:${index}`;
 }
 
 function compactReviewText(value: string) {
@@ -328,8 +544,58 @@ function Parameter({ label, value }: { label: string; value?: string }) {
     );
 }
 
+function hasPerformancePlan(value: DramaShot["performancePlan"]) {
+    return Boolean(value?.emotionalObjective && value.emotionalArc && value.speechStyle && value.pace && value.breath && value.beats.start.facialAction && value.beats.middle.facialAction && value.beats.end.facialAction);
+}
+
+function hasLightingPlan(value: DramaShot["lightingPlan"]) {
+    return Boolean(value?.palette && value.colorTemperature && value.keyLight && value.fillLight && value.rimLight && value.materialResponse && value.skinToneProtection);
+}
+
+function hasContinuityPlan(shot: DramaEpisode["shots"][number]) {
+    return Boolean(
+        shot.continuity?.shotSize &&
+        shot.continuity.cameraAngle &&
+        shot.continuity.composition &&
+        shot.continuity.characterBlocking &&
+        shot.continuity.gazeDirection &&
+        shot.continuity.actionStart &&
+        shot.continuity.actionEnd &&
+        shot.continuity.screenDirection &&
+        shot.continuity.axisRule &&
+        shot.entryState &&
+        hasStateContent(shot.entryState) &&
+        shot.exitState &&
+        hasStateContent(shot.exitState),
+    );
+}
+
+export function missingReviewFieldsForShot(shot: DramaShot) {
+    const missing: string[] = [];
+    if (!hasPerformancePlan(shot.performancePlan)) missing.push("表演规划");
+    const dialogueCount = shot.utterances.filter((item) => item.type === "dialogue").length || (shot.dialogue.trim() ? 1 : 0);
+    if (dialogueCount && (!shot.dialoguePerformance?.length || shot.dialoguePerformance.length < dialogueCount)) missing.push("对白表演");
+    if (!hasLightingPlan(shot.lightingPlan)) missing.push("色彩灯光");
+    if (!hasContinuityPlan(shot)) missing.push("连续性");
+    return missing.map((field) => `${shot.code || `镜头 ${shot.order}`}：${field}`);
+}
+
+function hasStateContent(value: NonNullable<DramaShot["entryState"]>) {
+    return Object.values(value).some((item) => (Array.isArray(item) ? item.length > 0 : Boolean(String(item || "").trim())));
+}
+
+function continuityPlanOrigin(shot: DramaShot) {
+    const origin = shot.fieldOrigins?.continuity || shot.fieldOrigins?.entryState || shot.fieldOrigins?.exitState;
+    return origin === "package" ? "制作包" : origin === "manual" ? "人工" : origin === "ai" ? "AI" : "默认";
+}
+
 function continuityStatusLabel(status: NonNullable<DramaEpisode["shots"][number]["continuityStatus"]>) {
-    return { ready: "待生产", stale: "已过期", blocked: "已阻塞", needs_review: "待 QC", passed: "已通过" }[status];
+    return { ready: "待生产", stale: "需重新验证", blocked: "已阻塞", needs_review: "待 QC", passed: "已通过" }[status];
+}
+
+function effectiveContinuityStatus(shot: DramaShot): NonNullable<DramaShot["continuityStatus"]> {
+    if (shot.continuityStatus === "stale" && !shot.videoUrl && !shot.actualStartFrameUrl && !shot.actualEndFrameUrl) return "ready";
+    return shot.continuityStatus || "ready";
 }
 
 function transitionLabel(value: NonNullable<DramaEpisode["continuityEdges"]>[number]["transition"]) {

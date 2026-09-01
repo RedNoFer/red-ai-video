@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { DEFAULT_CHANNEL_CONNECT_ERROR, toSafeGenerationErrorMessage } from "./generation-errors";
+import { DEFAULT_ACCOUNT_AVAILABILITY_ERROR, DEFAULT_CHANNEL_CONNECT_ERROR, toSafeGenerationErrorMessage } from "./generation-errors";
 
 describe("generation error messages", () => {
     it("keeps actionable business errors", () => {
         expect(toSafeGenerationErrorMessage(new Error("当前用户视频任务已达到并发上限"), "视频生成失败")).toBe("当前用户视频任务已达到并发上限");
         expect(toSafeGenerationErrorMessage(new Error('{"code":400,"data":null,"msg":"积分不足，无法生成"}'), "生成失败")).toBe("积分不足");
         expect(toSafeGenerationErrorMessage(new Error('{"error":{"message":"MetaJing video requests must use application/json"}}'), "生成失败")).toBe("MetaJing video requests must use application/json");
+        expect(toSafeGenerationErrorMessage(new Error("No available compatible accounts"), "生成失败")).toBe(DEFAULT_ACCOUNT_AVAILABILITY_ERROR);
     });
 
     it("does not expose infrastructure addresses or environment names", () => {

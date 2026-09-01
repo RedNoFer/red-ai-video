@@ -25,8 +25,13 @@ describe("selectAgentSkills", () => {
     });
 
     it("keeps drama skills inside drama projects", () => {
-        expect(selectAgentSkills(DEFAULT_SETTINGS, "drama", ["drama-planning"]).map((skill) => skill.id)).toEqual(["drama-planning"]);
-        expect(selectAgentSkills(DEFAULT_SETTINGS, "drama", ["image-motion"])).toEqual([]);
+        expect(selectAgentSkills(DEFAULT_SETTINGS, "drama", ["drama-planning"]).map((skill) => skill.id)).toEqual(["seedance-director", "drama-planning"]);
+        expect(selectAgentSkills(DEFAULT_SETTINGS, "drama", ["image-motion"]).map((skill) => skill.id)).toEqual(["seedance-director"]);
+    });
+
+    it("restores the mandatory Seedance skill when settings omit it", () => {
+        const settings = { ...DEFAULT_SETTINGS, agentSkills: DEFAULT_SETTINGS.agentSkills.filter((skill) => skill.id !== "seedance-director") };
+        expect(selectAgentSkills(settings, "drama", []).map((skill) => skill.id)).toEqual(["seedance-director"]);
     });
 });
 
@@ -37,8 +42,13 @@ describe("agentPlannerInput", () => {
         expect(prompt).toContain("projectSnapshot 是本次短剧生产的权威上下文");
         expect(prompt).toContain("currentStage");
         expect(prompt).toContain("project.ratio");
+        expect(prompt).toContain("系列圣经锁定、剧情结构校验、资产清单、场次与镜头预算、连续性状态、Prompt、静态导演QC");
+        expect(prompt).toContain("只返回明确阻断报告");
         expect(prompt).toContain("currentTurnReferences");
         expect(prompt).toContain("不得把短剧入口当成脱离项目的通用图片或视频工作台");
+        expect(prompt).toContain("change、preserve、constraints");
+        expect(prompt).toContain("一个主运镜");
+        expect(prompt).toContain("稳定 assetId 绑定");
     });
 
     it("keeps selected Canvas nodes, one-hop relations and exact size while dropping unrelated nodes", () => {

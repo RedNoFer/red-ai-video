@@ -109,7 +109,6 @@ describe("drama director visual plan", () => {
 
         const run = buildDramaVisualProductionRun(project, project.episodes[0], { imageModel: "image-pro", shotIds: ["shot-two"] });
 
-        expect(run.steps.find((step) => step.type === "start_frame")?.prompt).toContain("环境 马车内");
         expect(run.steps.find((step) => step.type === "start_frame")?.prompt).toContain("起始动作状态：环境 马车内");
         expect(run.steps.find((step) => step.type === "start_frame")?.prompt).not.toContain("Karin在马车中惊醒，手扣断剑，呼吸急促");
     });
@@ -144,7 +143,8 @@ describe("drama director visual plan", () => {
         ]);
         expect(frames[1].dependsOn).toEqual(["frame-shot-one-f1"]);
         expect(frames[0].prompt).toContain("P01-F01（0-2s）");
-        expect(frames[1].prompt).toContain("两人缩短距离");
+        expect(frames[1].prompt).toContain("画面：两人缩短距离");
+        expect(frames[1].prompt).toContain("当前状态：靠近");
     });
 
     it("injects the previous generated frame when unlocking the next beat", () => {
@@ -168,6 +168,64 @@ describe("drama director visual plan", () => {
             steps: run.steps.map((step) => (step.id === first.id ? { ...step, status: "success" as const, outputUrls: ["/api/f1.png"], outputRemoteUrls: ["https://cdn.example/f1.png"] } : step)),
         });
         expect(ready.steps.find((step) => step.frameId === "f2")).toMatchObject({ status: "ready", referenceImageUrls: ["/api/f1.png"], referenceImageRemoteUrls: ["https://cdn.example/f1.png"] });
+    });
+
+    it("does not unlock an unselected later frame after a single-frame request completes", () => {
+        const project = fixture();
+        project.characters[0].references = [{ id: "approved", url: "/api/character.png", source: "generated", status: "approved", label: "角色", createdAt: new Date(0).toISOString() }];
+        project.characters[0].primaryReferenceId = "approved";
+        project.episodes[0].shots[0].storyboardFrameMode = "all_frames";
+        project.episodes[0].shots[0].framePlan = {
+            start: { source: "independent" },
+            end: { required: false },
+            frames: [
+                { id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 2, actionPrompt: "相遇", imagePrompt: "对视" },
+                { id: "f2", sequenceIndex: 2, startSecond: 2, endSecond: 5, actionPrompt: "靠近", imagePrompt: "靠近" },
+            ],
+        };
+
+        const run = buildDramaVisualProductionRun(project, project.episodes[0], { imageModel: "image-pro", frameType: "all_frames", frameIds: ["f1"] });
+        const first = run.steps.find((step) => step.frameId === "f1")!;
+        const unlocked = unlockDramaVisualSteps({
+            ...run,
+            confirmedAt: new Date().toISOString(),
+            steps: run.steps.map((step) => (step.id === first.id ? { ...step, status: "success" as const, outputUrls: ["/api/f1.png"] } : step)),
+        });
+
+        expect(unlocked.steps.find((step) => step.frameId === "f2")?.status).toBe("stale");
+    });
+
+    it("dispatches a selected later frame without generating its missing predecessors", () => {
+        const project = fixture();
+        project.characters[0].references = [{ id: "approved", url: "/api/character.png", source: "generated", status: "approved", label: "角色", createdAt: new Date(0).toISOString() }];
+        project.characters[0].primaryReferenceId = "approved";
+        project.episodes[0].shots[0].storyboardFrameMode = "all_frames";
+        project.episodes[0].shots[0].framePlan = {
+            start: { source: "independent" },
+            end: { required: false },
+            frames: [
+                { id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 2, actionPrompt: "相遇", imagePrompt: "对视" },
+                { id: "f2", sequenceIndex: 2, startSecond: 2, endSecond: 5, actionPrompt: "靠近", imagePrompt: "靠近" },
+            ],
+        };
+
+        const run = buildDramaVisualProductionRun(project, project.episodes[0], { imageModel: "image-pro", frameType: "all_frames", frameIds: ["f2"] });
+        const unlocked = unlockDramaVisualSteps({ ...run, confirmedAt: new Date().toISOString() });
+
+        expect(unlocked.steps.find((step) => step.frameId === "f1")?.status).toBe("stale");
+        expect(unlocked.steps.find((step) => step.frameId === "f2")?.status).toBe("ready");
+    });
+
+    it("uses the generated start frame as the end-frame continuity reference", () => {
+        const project = fixture();
+        project.characters[0].references = [{ id: "approved", url: "/api/character.png", source: "generated", status: "approved", label: "角色", createdAt: new Date(0).toISOString() }];
+        project.characters[0].primaryReferenceId = "approved";
+        project.episodes[0].shots[0].frameEvidence = [createFrameEvidence({ role: "storyboard_start", source: "generated", mediaUrl: "/api/start.png", validity: "candidate" })];
+
+        const run = buildDramaVisualProductionRun(project, project.episodes[0], { imageModel: "image-pro", frameType: "end_frame" });
+        const ready = unlockDramaVisualSteps({ ...run, confirmedAt: new Date().toISOString() });
+
+        expect(ready.steps.find((step) => step.type === "end_frame")).toMatchObject({ status: "ready", referenceImageUrls: ["/api/start.png"] });
     });
 
     it("regenerates an explicitly selected valid frame without submitting later frames", () => {
@@ -251,7 +309,7 @@ describe("drama director visual plan", () => {
 
         const prompt = compileDramaVisualStepPrompt(project, project.episodes[0], step);
 
-        expect(prompt).toContain("最终视觉锁定：半写实动漫幻想风");
+        expect(prompt).toContain("风格：半写实动漫幻想风");
         expect(prompt).not.toContain("VS14");
     });
 });

@@ -672,12 +672,28 @@ describe("executeAgentRun backend settings", () => {
         expect(mocks.refundUserPoints).not.toHaveBeenCalled();
     });
 
-    it("rejects an unstructured prose planner response instead of pretending generation completed", async () => {
-        mocks.run = planningRun("你在吗？");
+    it("accepts an unstructured prose planner response for ordinary chat", async () => {
+        mocks.run = runFixture({ surface: "chat", projectId: undefined, prompt: "你在吗？" });
         mocks.getAuthSettings.mockResolvedValue(canvasSettings("image-default", "image-default-channel"));
         mocks.fetchInternalApi.mockImplementation(async (url: string) => {
             if (url.endsWith("/responses")) return new Response("unsupported", { status: 404 });
             if (url.endsWith("/chat/completions")) return Response.json({ choices: [{ message: { content: "在的，需要我帮你做什么？" } }] });
+            throw new Error(`unexpected request: ${url}`);
+        });
+
+        await executeAgentRun(mocks.run, "http://localhost", "session=test");
+
+        expect(mocks.run?.status).toBe("completed");
+        expect(mocks.events.find((event) => event.type === "run.completed")?.data).toMatchObject({ completed: 0, reply: "在的，需要我帮你做什么？" });
+        expect(mocks.events.some((event) => event.type === "run.failed")).toBe(false);
+    });
+
+    it("keeps prose responses strict for text generation prompts", async () => {
+        mocks.run = runFixture({ surface: "chat", projectId: undefined, prompt: "帮我写一段文案" });
+        mocks.getAuthSettings.mockResolvedValue(canvasSettings("image-default", "image-default-channel"));
+        mocks.fetchInternalApi.mockImplementation(async (url: string) => {
+            if (url.endsWith("/responses")) return new Response("unsupported", { status: 404 });
+            if (url.endsWith("/chat/completions")) return Response.json({ choices: [{ message: { content: "当然可以，我先帮你起一个更自然的版本。" } }] });
             throw new Error(`unexpected request: ${url}`);
         });
 
@@ -984,7 +1000,7 @@ describe("executeAgentRun backend settings", () => {
         const plan = {
             ...canvasPlan("image-default"),
             deliverables: [],
-            projectHandoff: { surface: "drama", title: "都市悬疑", summary: "女主追查失踪案", style: "写实电影感", ratio: "9:16", assetIds: ["asset-source"] },
+            projectHandoff: { surface: "drama", title: "都市悬疑", summary: "女主追查失踪案", style: "暗黑学院史诗奇幻", ratio: "9:16", assetIds: ["asset-source"] },
         };
         mocks.fetchInternalApi.mockResolvedValue(Response.json({ output: [{ type: "function_call", name: "create_agent_plan", arguments: JSON.stringify(plan) }] }));
 

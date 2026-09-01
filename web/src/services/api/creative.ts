@@ -50,9 +50,10 @@ export type CreativeAgentRun = {
 
 type ApiResponse<T> = { code: number; data: T; msg: string };
 
-export function listCreativeConversationPage(input: { surface?: CreativeConversation["surface"]; source?: CreativeConversationSource; projectId?: string; offset?: number; limit?: number } = {}) {
+export function listCreativeConversationPage(input: { surface?: CreativeConversation["surface"]; source?: CreativeConversationSource; projectId?: string; episodeId?: string; offset?: number; limit?: number } = {}) {
     const query = new URLSearchParams({ surface: input.surface || "chat", source: input.source || "agent", status: "active", limit: String(input.limit || 50), offset: String(input.offset || 0) });
     if (input.projectId) query.set("projectId", input.projectId);
+    if (input.episodeId) query.set("episodeId", input.episodeId);
     return request<{ conversations: CreativeConversation[]; hasMore: boolean }>(`/api/creative/conversations?${query}`);
 }
 
@@ -74,7 +75,7 @@ export function listCreativeAssets(conversationId: string) {
     return request<{ assets: CreativeAsset[] }>(`/api/creative/conversations/${encodeURIComponent(conversationId)}/assets`).then((data) => data.assets);
 }
 
-export function createCreativeConversation(input: { surface: "chat" | "canvas" | "drama"; source?: CreativeConversation["source"]; projectId?: string; title?: string }) {
+export function createCreativeConversation(input: { surface: "chat" | "canvas" | "drama"; source?: CreativeConversation["source"]; projectId?: string; episodeId?: string; title?: string }) {
     return request<{ conversation: CreativeConversation }>("/api/creative/conversations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CanvasProject, CanvasProjectSummary } from "@/lib/canvas-project-contract";
 import { summarizeCanvasProjectRecord } from "@/lib/canvas-project-summary";
 import type { DramaProject, DramaProjectSummary } from "@/lib/drama-project-contract";
+import { defaultDramaProductionPlan } from "@/lib/drama-production-plan";
 import { summarizeDramaProject } from "@/lib/drama-project-summary";
 import type { Asset } from "@/lib/library-asset-contract";
 
@@ -449,7 +450,14 @@ describe("client store session isolation", () => {
             mocks.saveDramaProject.mockImplementation(async (value: DramaProject) => value);
             useUserStore.getState().setUser(user("user-a"));
             const project = dramaProject("drama-a", "用户 A 短剧");
-            project.characters = [{ id: "character-hero", name: "主角", description: "角色设定", references: [{ id: "candidate-one", url: "/api/generation-log-assets/permanent/hero.png", source: "generated", label: "AI 候选图", status: "candidate", createdAt: project.updatedAt }] }];
+            project.characters = [
+                {
+                    id: "character-hero",
+                    name: "主角",
+                    description: "角色设定",
+                    references: [{ id: "candidate-one", url: "/api/generation-log-assets/permanent/hero.png", source: "generated", label: "AI 候选图", status: "candidate", createdAt: project.updatedAt }],
+                },
+            ];
             useDramaStore.setState({ projects: [project], hydrated: true, hydratedUserId: "user-a" });
 
             useDramaStore.getState().approveAssetReference(project.id, "characters", "character-hero", "candidate-one");
@@ -480,6 +488,68 @@ describe("client store session isolation", () => {
         await Promise.all([first, second]);
 
         expect(mocks.saveDramaProject).toHaveBeenLastCalledWith(expect.objectContaining({ title: "最新主基准状态" }));
+    });
+
+    it("commits a locked production plan after cancelling a queued autosave", async () => {
+        mocks.saveDramaProject.mockImplementation(async (value: DramaProject) => value);
+        useUserStore.getState().setUser(user("user-a"));
+        const project = dramaProject("drama-a", "用户 A 短剧");
+        useDramaStore.setState({ projects: [project], hydrated: true, hydratedUserId: "user-a" });
+
+        const draftPlan = defaultDramaProductionPlan("new-project");
+        useDramaStore.getState().updateProject(project.id, {
+            productionBible: { language: "zh-CN", ratio: project.ratio, visualStyle: project.style, continuityMode: "strict", productionPlan: { ...draftPlan, video: { ...draftPlan.video, resolution: "480p" }, lockedAt: undefined } },
+        });
+        const saved = await useDramaStore.getState().saveProjectNow(project.id, (current) => ({
+            ...current,
+            productionBible: {
+                ...(current.productionBible || { language: "中文", ratio: current.ratio, visualStyle: current.style, continuityMode: "strict" as const }),
+                productionPlan: { ...draftPlan, video: { ...draftPlan.video, resolution: "480p" as const }, lockedAt: "2026-08-31T00:00:00.000Z", source: "manual" },
+            },
+        }));
+
+        expect(mocks.saveDramaProject).toHaveBeenCalledTimes(1);
+        expect(saved.productionBible?.productionPlan).toEqual(expect.objectContaining({ lockedAt: "2026-08-31T00:00:00.000Z", source: "manual", video: expect.objectContaining({ resolution: "480p" }) }));
+    });
+
+    it("keeps the latest locked production plan when a draft edit is immediately followed by lock save", async () => {
+        vi.useFakeTimers();
+        try {
+            mocks.saveDramaProject.mockImplementation(async (value: DramaProject) => value);
+            useUserStore.getState().setUser(user("user-a"));
+            const project = dramaProject("drama-a", "用户 A 短剧");
+            useDramaStore.setState({ projects: [project], hydrated: true, hydratedUserId: "user-a" });
+
+            useDramaStore.getState().updateProject(project.id, {
+                productionBible: {
+                    language: "zh-CN",
+                    ratio: project.ratio,
+                    visualStyle: project.style,
+                    continuityMode: "strict",
+                    productionPlan: {
+                        ...defaultDramaProductionPlan("new-project"),
+                        video: { ...defaultDramaProductionPlan("new-project").video, resolution: "480p" },
+                        lockedAt: undefined,
+                    },
+                },
+            });
+
+            const saved = await useDramaStore.getState().saveProjectNow(project.id, (current) => ({
+                ...current,
+                productionBible: {
+                    ...(current.productionBible || { language: "中文", ratio: current.ratio, visualStyle: current.style, continuityMode: "strict" as const }),
+                    productionPlan: { ...defaultDramaProductionPlan("new-project"), video: { ...defaultDramaProductionPlan("new-project").video, resolution: "480p" as const }, lockedAt: "2026-08-31T00:00:00.000Z", source: "manual" },
+                },
+            }));
+
+            await vi.advanceTimersByTimeAsync(250);
+
+            expect(mocks.saveDramaProject).toHaveBeenCalledTimes(1);
+            expect(saved.productionBible?.productionPlan).toEqual(expect.objectContaining({ lockedAt: "2026-08-31T00:00:00.000Z", source: "manual", video: expect.objectContaining({ resolution: "480p" }) }));
+            expect(useDramaStore.getState().projects[0].productionBible?.productionPlan).toEqual(expect.objectContaining({ lockedAt: "2026-08-31T00:00:00.000Z", video: expect.objectContaining({ resolution: "480p" }) }));
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it("does not reset queued or running Drama shot tasks", () => {

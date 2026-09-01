@@ -7,12 +7,14 @@ import { stableMediaUrl, writeImageGenerationLog } from "@/app/api/image-tasks/i
 import { getAuthSettings, refundUserPoints } from "@/lib/auth/store";
 import { dedupeImageResults } from "@/lib/image-result-dedupe";
 import { registerGenerationTaskAssetsForUser } from "@/lib/server/creative-runtime-service";
+import { persistDramaGeneratedCandidates } from "@/lib/server/drama-generated-candidate-persistence";
 import { finishGenerationAttempt, startGenerationAttempt } from "@/lib/server/generation-attempt";
 import { generationModelId, systemGenerationChannelId } from "@/lib/server/generation-channel";
 import { generationMediaProxyHeaders } from "@/lib/server/generation-media-authorization";
 import { refundImageTask } from "@/lib/server/image-task-refund";
 import { scheduleGenerationTask } from "@/lib/server/generation-task-scheduler";
 import { GenerationSubmissionSafeFailure, generationSubmissionUncertainError } from "@/lib/server/generation-submission-error";
+import { toSafeGenerationErrorMessage } from "@/lib/server/generation-errors";
 import { getImageTask, transitionImageTask, updateImageTask, type ImageTask } from "@/lib/server/image-task-store";
 import { maintenanceWorkerContext } from "@/lib/server/maintenance-auth";
 
@@ -56,14 +58,50 @@ export async function createImageTaskUpstreamStep(task: ImageTask, origin: strin
                   : await runOpenAiImageTask(candidate, origin, publicOrigin, authContext, true);
             return await handleImageProviderResult(candidate, result, origin, authContext);
         } catch (error) {
-            if (!(error instanceof GenerationSubmissionSafeFailure)) throw generationSubmissionUncertainError(error, "图片任务创建结果未知");
-            latestError = error.message;
+            const classified = error instanceof GenerationSubmissionSafeFailure ? error : generationSubmissionUncertainError(error, "图片任务创建结果未知");
+            if (!(classified instanceof GenerationSubmissionSafeFailure)) throw classified;
+            latestError = toSafeGenerationErrorMessage(classified, "图片生成失败");
             attempts = finishGenerationAttempt(attempts, candidate.attemptNo, { status: "failed", error: latestError });
             await refundImageCandidate(candidate);
             await updateImageTask(task.id, { attempts, attemptNo: candidate.attemptNo, upstream: undefined, billing: undefined });
+            await scheduleGenerationTask("image", task.id, {
+                executionPhase: "completed",
+                nextPollAt: undefined,
+                lastUpstreamStatus: `submission_failed:${classified.status || "unknown"}`,
+                resultPayload: {
+                    error: latestError,
+                    providerError: classified.message.slice(0, 500),
+                    request: imageTaskRequestDiagnostic(candidate),
+                },
+            });
         }
     }
     return { state: "failed", error: latestError, status: "failed" };
+}
+
+export function imageTaskRequestDiagnostic(task: ImageTask) {
+    const protocol = task.config.advancedConfig?.protocol || task.config.apiFormat;
+    const isSub2Api = protocol === "sub2api";
+    const endpoint = isSub2Api ? (task.kind === "edit" ? "/images/edits" : "/images/generations") : task.kind === "edit" ? task.config.advancedConfig?.editPath || "/images/edits" : task.config.advancedConfig?.createPath || "/images/generations";
+    return {
+        provider: protocol,
+        model: generationModelId(task.config),
+        kind: task.kind,
+        configuredSize: task.config.size || "auto",
+        resolvedSize: task.config.advancedConfig?.protocol === "sub2api" ? resolveDiagnosticSub2ApiSize(task.config.size) : undefined,
+        quality: task.config.quality || "auto",
+        referenceCount: task.references.length,
+        configuredPath: endpoint,
+        requestShape: isSub2Api ? (task.kind === "edit" ? "json.images[].image_url" : "json.model,prompt,n,quality,size,output_format") : task.kind === "edit" ? "provider-configured image edit body" : "provider-configured image generation body",
+    };
+}
+
+function resolveDiagnosticSub2ApiSize(size?: string) {
+    const value = (size || "").trim();
+    if (value === "9:16") return "1024x1536";
+    if (value === "16:9") return "1536x1024";
+    if (value === "1:1") return "1024x1024";
+    return value || "auto";
 }
 
 export async function queryImageTaskUpstreamStep(task: ImageTask, origin: string, cookie = "", workerUserId = ""): Promise<ImageUpstreamStep> {
@@ -268,7 +306,26 @@ async function completeImageResult(task: ImageTask, result: ImageTaskRunResult, 
             title: finalized.title || finalized.prompt.slice(0, 80),
             assets,
         }).catch((error) => console.error("Creative image asset registration failed", error));
+    const dramaAssetTarget = resolveDramaAssetTarget(finalized);
+    if (finalized.surface === "drama" && finalized.projectId && dramaAssetTarget)
+        await persistDramaGeneratedCandidates({
+            ownerUserId: finalized.userId,
+            projectId: finalized.projectId,
+            ...dramaAssetTarget,
+            taskId: finalized.id,
+            prompt: finalized.prompt,
+            generationStage: finalized.generationStage,
+            results: finalResults,
+        }).catch((error) => console.error("Drama candidate reference persistence failed", error));
     return finalized;
+}
+
+function resolveDramaAssetTarget(task: ImageTask) {
+    if (task.assetKind && task.assetId) return { assetKind: task.assetKind, assetId: task.assetId };
+    const legacy = task.clientRequestId?.match(/^drama-reference:([^:]+):([^:]+):[^:]+$/);
+    if (!legacy || legacy[1] !== task.projectId) return null;
+    const assetId = legacy[2];
+    return { assetId };
 }
 
 function imageTaskMediaResults(result: ImageTaskResult): ImageTaskMediaResult[] {
@@ -277,7 +334,7 @@ function imageTaskMediaResults(result: ImageTaskResult): ImageTaskMediaResult[] 
 }
 
 function usesDeclarativeImageProtocol(protocol: NonNullable<ImageTask["config"]["advancedConfig"]>["protocol"] | undefined) {
-    return protocol === "custom" || protocol === "stable-diffusion" || protocol === "yumeng";
+    return protocol === "custom" || protocol === "stable-diffusion" || protocol === "yumeng" || protocol === "buming-image";
 }
 
 async function normalizeSafeImageResult(task: ImageTask, result: ImageTaskMediaResult, origin: string, authContext: string): Promise<ImageTaskMediaResult> {

@@ -1,7 +1,7 @@
 "use client";
 
 import { DataLifecyclePanel } from "@/components/admin/admin-data-lifecycle-settings";
-import { GenerationConcurrencyPanel, GenerationCostControlPanel, GenerationDefaultsPanel } from "@/components/admin/admin-generation-settings";
+import { CharacterVoicePoolPanel, GenerationConcurrencyPanel, GenerationCostControlPanel, GenerationDefaultsPanel } from "@/components/admin/admin-generation-settings";
 import { Panel, PanelHeader } from "@/components/admin/admin-panel";
 import { buildAdminSettingsPatch, resolveAdminSettingsAccess } from "@/components/admin/admin-settings-access";
 import { LabeledControl, SectionTitle, SettingInlineToggle, SettingToggle } from "@/components/admin/admin-settings-controls";
@@ -350,6 +350,7 @@ export function AdminSettingsSection({ controller }: { controller: AdminDashboar
                                     <GenerationCostControlPanel settings={settings} onChange={updateGenerationCostControl} />
                                 </div>
                                 <GenerationDefaultsPanel settings={settings} onChange={updateGenerationDefaults} />
+                                <CharacterVoicePoolPanel settings={settings} onChange={(value) => setSettings((current) => ({ ...current, characterVoicePool: value }))} />
                             </section>
                         ) : null}
                         {access.system ? (

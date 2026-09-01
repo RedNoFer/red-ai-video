@@ -4,6 +4,7 @@ import type { CanvasAssistantSession, CanvasConnection, CanvasNodeData, Viewport
 export type CanvasProject = {
     id: string;
     sourceHandoffId?: string;
+    canvasMigrationVersion?: number;
     creativeConversationId?: string;
     title: string;
     createdAt: string;

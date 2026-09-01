@@ -655,6 +655,50 @@ describe("Yumeng v2 model-center proxy", () => {
     });
 });
 
+describe("TokenGo image runtime proxy", () => {
+    beforeEach(() => {
+        vi.restoreAllMocks();
+        mocks.consumeUserPoints.mockReset().mockResolvedValue(undefined);
+        mocks.refundUserPoints.mockReset();
+        mocks.safeUrl.mockResolvedValue(true);
+        mocks.getAuthSettings.mockResolvedValue({
+            generationPointMultipliers: {},
+            logicalModels: [logicalModel("gpt-image-2-official", "image", "gpt-image-2-official")],
+            systemChannels: [
+                {
+                    id: "channel-one",
+                    enabled: true,
+                    baseUrl: "https://api.tokengo.example",
+                    apiKey: "tokengo-secret",
+                    apiFormat: "openai",
+                    models: ["gpt-image-2-official"],
+                    advancedConfig: {
+                        protocol: "buming-image",
+                        createPath: "/api/v1/model-runtime/invoke",
+                        queryPath: "/api/v1/model-runtime/tasks/:task_id",
+                    },
+                },
+            ],
+        });
+    });
+
+    it("reads model_id and forwards the literal runtime path", async () => {
+        const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(Response.json({ task_id: "tokengo-task" }));
+        const response = await POST(
+            new Request("http://localhost/api/ai/system/channel-one/api/v1/model-runtime/invoke", {
+                method: "POST",
+                headers: { "content-type": "application/json", "x-vozeb-pro-logical-model": "gpt-image-2-official" },
+                body: JSON.stringify({ modality: "image", model_id: "gpt-image-2-official", operation: "generate", params: { prompt: "test", images: ["https://cdn.example/reference.png"] } }),
+            }),
+            { params: Promise.resolve({ channelId: "channel-one", path: ["api", "v1", "model-runtime", "invoke"] }) },
+        );
+
+        expect(response.status).toBe(200);
+        expect(fetchMock.mock.calls[0]?.[0]).toBe("https://api.tokengo.example/api/v1/model-runtime/invoke");
+        expect(new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get("authorization")).toBe("Bearer tokengo-secret");
+    });
+});
+
 describe("configured versioned protocol billing", () => {
     beforeEach(() => {
         vi.restoreAllMocks();
@@ -760,6 +804,58 @@ describe("custom protocol model routing", () => {
     });
 });
 
+describe("strict image protocol routing", () => {
+    beforeEach(() => {
+        vi.restoreAllMocks();
+        mocks.consumeUserPoints.mockReset().mockResolvedValue(undefined);
+        mocks.refundUserPoints.mockReset();
+        mocks.safeUrl.mockResolvedValue(true);
+        mocks.taskAccess.mockReset().mockResolvedValue(true);
+        mocks.getAuthSettings.mockResolvedValue({
+            generationPointMultipliers: {},
+            logicalModels: [logicalModel("image-tool", "image", "gpt-image-2")],
+            systemChannels: [
+                {
+                    id: "channel-one",
+                    enabled: true,
+                    baseUrl: "https://api.example.com/v1",
+                    apiKey: "secret",
+                    apiFormat: "openai",
+                    models: ["gpt-image-2"],
+                    advancedConfig: {
+                        protocol: "sub2api",
+                        modelConfigs: {
+                            "gpt-image-2": {
+                                capability: "image",
+                                protocol: "sub2api",
+                                createPath: "/images/generations",
+                                editPath: "/images/edits",
+                                requestTemplate: '{"model":"{{model}}","prompt":"{{prompt}}","image_urls":"{{images}}"}',
+                                resultField: "data[0].url",
+                            },
+                        },
+                    },
+                },
+            ],
+        });
+    });
+
+    it("uses the canonical shared Sub2API image endpoint even when persisted editPath is stale", async () => {
+        const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(Response.json({ data: [{ url: "https://cdn.example.com/result.png" }] }));
+        const response = await POST(
+            new Request("http://localhost/api/ai/system/channel-one/images/generations", {
+                method: "POST",
+                headers: { "content-type": "application/json", ...systemModelHeaders("image-tool", "gpt-image-2") },
+                body: JSON.stringify({ model: "gpt-image-2", prompt: "test", image_urls: ["https://cdn.example.com/reference.png"] }),
+            }),
+            { params: Promise.resolve({ channelId: "channel-one", path: ["images", "generations"] }) },
+        );
+
+        expect(response.status).toBe(200);
+        expect(fetchMock.mock.calls[0]?.[0]).toBe("https://api.example.com/v1/images/generations");
+    });
+});
+
 describe("system proxy authorization", () => {
     beforeEach(() => {
         vi.restoreAllMocks();
@@ -789,6 +885,74 @@ describe("system proxy authorization", () => {
         expect(response.status).toBe(403);
         expect(fetchMock).not.toHaveBeenCalled();
         expect(mocks.consumeUserPoints).not.toHaveBeenCalled();
+    });
+
+    it("uses the preferred audio logical model when a configured path shares its upstream alias with text", async () => {
+        mocks.getAuthSettings.mockResolvedValue({
+            generationPointMultipliers: {},
+            logicalModels: [logicalModel("shared-model", "text", "shared-model"), logicalModel("shared-model::audio", "audio", "shared-model")],
+            systemChannels: [
+                {
+                    id: "channel-one",
+                    enabled: true,
+                    baseUrl: "https://api.example.com/v1",
+                    apiKey: "secret",
+                    apiFormat: "openai",
+                    models: ["shared-model"],
+                    advancedConfig: { protocol: "custom", createPath: "/custom/generate" },
+                },
+            ],
+        });
+        const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(Response.json({ ok: true }));
+        const response = await POST(
+            new Request("http://localhost/api/ai/system/channel-one/custom/generate", {
+                method: "POST",
+                headers: {
+                    "content-type": "application/json",
+                    ...systemModelHeaders("shared-model::audio", "shared-model"),
+                },
+                body: JSON.stringify({ model: "shared-model", prompt: "试听" }),
+            }),
+            { params: Promise.resolve({ channelId: "channel-one", path: ["custom", "generate"] }) },
+        );
+
+        expect(response.status).toBe(200);
+        expect(mocks.consumeUserPoints).toHaveBeenCalledWith("user-one", "shared-model::audio", 1, "audio", expect.stringMatching(/^system-ai:[a-f0-9]{64}$/), expect.stringMatching(/^[a-f0-9]{64}$/));
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps audio capability when an audio model uses the chat-compatible create path", async () => {
+        mocks.getAuthSettings.mockResolvedValue({
+            generationPointMultipliers: {},
+            logicalModels: [logicalModel("shared-model", "text", "shared-model"), logicalModel("shared-model::audio", "audio", "shared-model")],
+            systemChannels: [
+                {
+                    id: "channel-one",
+                    enabled: true,
+                    baseUrl: "https://api.example.com/v1",
+                    apiKey: "secret",
+                    apiFormat: "openai",
+                    models: ["shared-model"],
+                    advancedConfig: { protocol: "custom", createPath: "/chat/completions" },
+                },
+            ],
+        });
+        const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(Response.json({ ok: true }));
+        const response = await POST(
+            new Request("http://localhost/api/ai/system/channel-one/chat/completions", {
+                method: "POST",
+                headers: {
+                    "content-type": "application/json",
+                    ...systemModelHeaders("shared-model::audio", "shared-model"),
+                },
+                body: JSON.stringify({ model: "shared-model", input: "试听", voice: "alloy" }),
+            }),
+            textContext(),
+        );
+
+        expect(response.status).toBe(200);
+        expect(mocks.consumeUserPoints).toHaveBeenCalledWith("user-one", "shared-model::audio", 1, "audio", expect.stringMatching(/^system-ai:[a-f0-9]{64}$/), expect.stringMatching(/^[a-f0-9]{64}$/));
+        expect(fetchMock).toHaveBeenCalledTimes(1);
     });
 
     it("rejects unsupported HTTP methods without forwarding or charging", async () => {

@@ -64,7 +64,7 @@ function handoff(surface: CreativeProjectHandoff["surface"], assets: CreativeAss
         surface,
         title: surface === "canvas" ? "品牌画布" : "雨夜短剧",
         summary: "由创作 Agent 交接",
-        style: "写实电影感",
+        style: "暗黑学院史诗奇幻",
         ratio: surface === "canvas" ? "16:9" : "9:16",
         assetIds: assets.map((item) => item.id),
         assets,

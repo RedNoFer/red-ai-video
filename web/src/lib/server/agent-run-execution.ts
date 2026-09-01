@@ -5,7 +5,7 @@ import { creativeAssetReferenceAliases } from "@/lib/creative-asset-references";
 import { fetchInternalApi } from "@/lib/server/internal-origin";
 import { resolveLogicalModel } from "@/lib/server/logical-model-router";
 import { reviewCreativeOutputs } from "@/lib/server/creative-review-service";
-import { requestStructuredText, type TextPlanningCandidate } from "@/lib/server/text-planning-runtime";
+import { requestStructuredText, type TextPlanningCandidate, type TextPlanningTool } from "@/lib/server/text-planning-runtime";
 import { registerAgentTaskAssets } from "@/lib/server/agent-run-assets";
 import { buildAgentProjectHandoff } from "@/lib/server/agent-run-project-handoff";
 import { getAgentRun, updateAgentRunById, updateAgentRunTaskById, type AgentRun, type AgentRunChildTask, type AgentRunReference, type AgentRunTask } from "@/lib/server/agent-run-store";
@@ -20,7 +20,7 @@ import { linkStoredGenerationTask } from "@/lib/server/generation-task-store";
 import { maintenanceWorkerContextHeaders } from "@/lib/server/maintenance-auth";
 import { videoFrameAssetIds, type VideoReferenceRole } from "@/lib/video-reference-contract";
 import type { AgentFunctionCallResult } from "./agent-function-call";
-import { agentSurfaceImageSize, canvasReferenceContext, canvasReferenceSupportsTask, canvasSnapshotNodes, isMediaReferenceType, resolveAgentTaskRatio, resolveCanvasTaskTargetNodeId, selectedCanvasReferenceNodes } from "./agent-run-task-input";
+import { agentSurfaceImageSize, canvasReferenceContext, canvasReferenceSupportsTask, canvasSnapshotNodes, isMediaReferenceType, requestsSelectedTextEdit, resolveAgentTaskRatio, resolveCanvasTaskTargetNodeId, selectedCanvasReferenceNodes } from "./agent-run-task-input";
 import { hasSystemAiCharge, readSystemAiBilling, systemAiBillingHeaders } from "./system-ai-billing";
 import { acceptsMediaReference, mergeTaskReferences, taskImageUrls, taskReferences, textConstraintInstruction } from "./agent-run-execution-helpers";
 
@@ -173,7 +173,7 @@ export function normalizeTasks(
         const optimizedPrompt = item.prompt.trim();
         const preferredSize = item.type === "image" ? generationPreferences?.image?.size : item.type === "video" ? generationPreferences?.video?.size : undefined;
         const preferredQuality = item.type === "image" ? generationPreferences?.image?.quality : item.type === "video" ? generationPreferences?.video?.quality : undefined;
-        const targetNodeId = surface === "canvas" ? resolveCanvasTaskTargetNodeId(item.targetNodeId, item.type, selectedNodeIds, nodes) : undefined;
+        const targetNodeId = surface === "canvas" && (item.targetNodeId || item.type !== "text" || requestsSelectedTextEdit(requestPrompt)) ? resolveCanvasTaskTargetNodeId(item.targetNodeId, item.type, selectedNodeIds, nodes) : undefined;
         const target = targetNodeId ? nodes.get(targetNodeId) : undefined;
         const canvasReferences = selectedCanvasReferences.filter((reference) => canvasReferenceSupportsTask(reference.type, item.type));
         const frameIds = item.type === "video" ? videoFrameAssetIds(generationPreferences?.video) : [];
@@ -185,6 +185,7 @@ export function normalizeTasks(
             ...(generationPreferences?.video?.firstFrameAssetId ? ([[generationPreferences.video.firstFrameAssetId, "first_frame"]] as const) : []),
             ...(generationPreferences?.video?.lastFrameAssetId ? ([[generationPreferences.video.lastFrameAssetId, "last_frame"]] as const) : []),
         ]);
+        const keyframeIndexes = new Map((generationPreferences?.video?.frameAssetIds || []).map((assetId, keyframeIndex) => [assetId, keyframeIndex + 1]));
         const references = [
             ...(canvasReferences.length
                 ? canvasReferences.map((reference) => ({ nodeId: reference.nodeId, url: reference.url, type: reference.type }))
@@ -194,7 +195,8 @@ export function normalizeTasks(
             ...selectedAssets.flatMap((asset) => {
                 const url = assetAccessUrl(asset);
                 const role = frameRoles.get(asset.id);
-                return url && asset.type !== "text" ? [{ assetId: asset.id, url, type: asset.type, ...(role ? { role } : {}) }] : [];
+                const keyframeIndex = keyframeIndexes.get(asset.id);
+                return url && asset.type !== "text" ? [{ assetId: asset.id, url, type: asset.type, ...(role ? { role } : {}), ...(keyframeIndex ? { role: "keyframe" as const, keyframeIndex } : {}) }] : [];
             }),
         ] satisfies AgentRunReference[];
         const primaryReference = references[0];
@@ -466,7 +468,7 @@ export async function requestFunctionCall(
     cookie: string,
     candidate: TextPlanningCandidate,
     input: Array<{ role: string; content: string }>,
-    tool: typeof agentPlanTool,
+    tool: TextPlanningTool,
     name: string,
     signal: AbortSignal,
     userId: string,
@@ -655,7 +657,7 @@ export async function dispatchTask(task: AgentRunTask, origin: string, cookie: s
                   context,
               }
             : task.type === "video"
-              ? { config, prompt: task.prompt, references: references.map((item) => ({ type: item.type, url: item.url, ...(item.role ? { role: item.role } : {}) })), source, context }
+              ? { config, prompt: task.prompt, references: references.map((item) => ({ type: item.type, url: item.url, ...(item.role ? { role: item.role } : {}), ...(item.keyframeIndex ? { keyframeIndex: item.keyframeIndex } : {}) })), source, context }
               : task.type === "audio"
                 ? { config, prompt: task.prompt, source, context }
                 : { config, messages: [{ role: "user", content: task.prompt }] };

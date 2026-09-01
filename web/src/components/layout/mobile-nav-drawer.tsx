@@ -7,6 +7,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef } from "react";
 
 import { SiteLogo } from "@/components/layout/site-logo";
+import { prefetchNavigationToolData } from "@/components/layout/navigation-data-prefetch";
 import { navigationGroups, navigationTools, type NavigationToolSlug } from "@/constant/navigation-tools";
 import { cn } from "@/lib/utils";
 import { DEFAULT_SITE_TITLE, resolveSiteTitle } from "@/lib/site-brand";
@@ -56,13 +57,20 @@ export function MobileNavDrawer({ open, activeToolSlug, onClose }: MobileNavDraw
                             .map((tool) => {
                                 const Icon = tool.icon;
                                 const active = tool.slug === activeToolSlug;
+                                const href = `/${tool.slug}`;
+                                const prefetchTool = () => {
+                                    router.prefetch(href);
+                                    if (!active) prefetchNavigationToolData(tool.slug);
+                                };
                                 return (
                                     <Link
                                         key={tool.slug}
-                                        href={`/${tool.slug}`}
+                                        href={href}
                                         prefetch
-                                        onMouseEnter={() => router.prefetch(`/${tool.slug}`)}
-                                        onFocus={() => router.prefetch(`/${tool.slug}`)}
+                                        onMouseEnter={prefetchTool}
+                                        onPointerEnter={prefetchTool}
+                                        onFocus={prefetchTool}
+                                        onPointerDown={prefetchTool}
                                         onClick={onClose}
                                         className={cn(
                                             "flex min-h-11 items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition",

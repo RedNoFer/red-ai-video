@@ -30,6 +30,7 @@ export type DramaFrameEvidence = {
     invalidReason?: string;
     sequenceIndex?: number;
     generationPrompt?: string;
+    generationReferences?: DramaImageReferenceBinding[];
 };
 
 export type DramaShotFramePlan = {
@@ -47,6 +48,17 @@ export type DramaFrameBeat = {
     endSecond: number;
     actionPrompt: string;
     imagePrompt: string;
+    supplierPrompt?: string;
+};
+
+export type DramaImageReferenceBinding = {
+    id: string;
+    label: string;
+    binding: string;
+    url: string;
+    remoteUrl?: string;
+    width?: number;
+    height?: number;
 };
 
 export type DramaReferenceManifestRole = "previous_actual_tail" | "character_anchor" | "scene_anchor" | "prop_anchor" | "action_keyframe" | "composition_keyframe";
@@ -450,6 +462,27 @@ export type DramaStoryboardFrame = {
     continuityStatus?: "pending" | "passed" | "needs_review" | "stale";
     continuityEvidenceId?: string;
     generationPrompt?: string;
+    generationReferences?: DramaImageReferenceBinding[];
+    candidateStatus?: DramaTaskStatus;
+    candidateTaskId?: string;
+    candidateError?: string;
+    candidates?: DramaStoryboardFrameCandidate[];
+};
+
+export type DramaStoryboardFrameCandidate = {
+    id: string;
+    mediaUrl: string;
+    remoteUrl?: string;
+    width?: number;
+    height?: number;
+    source: DramaFrameEvidenceSource;
+    taskId?: string;
+    createdAt: string;
+    continuityStatus?: "pending" | "passed" | "needs_review";
+    continuityEvidenceId?: string;
+    error?: string;
+    generationPrompt?: string;
+    generationReferences?: DramaImageReferenceBinding[];
 };
 
 export type DramaShot = {
@@ -676,7 +709,7 @@ export type DramaContentAnalysis = {
 export type DramaVisualAnalysis = {
     shots: Array<
         Pick<DramaShot, "imagePrompt" | "videoPrompt" | "cameraMotion"> &
-            Required<Pick<DramaShot, "startFramePrompt" | "endFramePrompt" | "negativePrompt" | "continuity" | "performancePlan" | "dialoguePerformance" | "lightingPlan">> & {
+            Required<Pick<DramaShot, "startFramePrompt" | "endFramePrompt" | "negativePrompt" | "continuity" | "performancePlan" | "dialoguePerformance" | "lightingPlan" | "framePlan">> & {
                 shotId: string;
             }
     >;
@@ -684,6 +717,10 @@ export type DramaVisualAnalysis = {
 
 export type DramaVideoPromptAnalysis = {
     shots: Array<{ shotId: string; videoPrompt: string }>;
+};
+
+export type DramaImagePromptAnalysis = {
+    shots: Array<{ shotId: string; imagePrompt: string }>;
 };
 
 export type DramaReviewCompletion = {
@@ -793,6 +830,7 @@ export type DramaProductionStep = {
     type: "asset_anchor" | "start_frame" | "end_frame" | "keyframe" | "video" | "extract_frames" | "continuity_qc" | "audio";
     dependsOn: string[];
     status: DramaProductionStepStatus;
+    attemptNo?: number;
     taskId?: string;
     clipIndex?: number;
     sequenceIndex?: number;
@@ -812,6 +850,7 @@ export type DramaProductionStep = {
     referenceImageRemoteUrls?: Array<string | undefined>;
     referenceManifest?: DramaReferenceManifestItem[];
     referenceBindingsSnapshot?: DramaVideoReferenceBinding[];
+    referenceImagesSnapshot?: DramaImageReferenceBinding[];
     frameId?: string;
     startSecond?: number;
     endSecond?: number;

@@ -27,6 +27,9 @@ type RequestOptions = {
     clientRequestId?: string;
     generationLogId?: string;
     generationSlotId?: string;
+    assetKind?: "characters" | "scenes" | "props";
+    assetId?: string;
+    generationStage?: "initial" | "refinement";
 };
 
 export type ImageGenerationTask = {
@@ -81,7 +84,7 @@ export function isImageGenerationTaskDeferredError(error: unknown) {
 }
 
 export async function createImageGenerationTask(config: AiConfig, prompt: string, references: ReferenceImage[] = [], mask?: ReferenceImage, options?: RequestOptions): Promise<ImageGenerationTask> {
-    const requestConfig = resolveModelRequestConfig(config, config.model || config.imageModel);
+    const requestConfig = resolveModelRequestConfig(config, config.imageModel || config.model);
     const taskReferences = await Promise.all(references.map(referenceToTaskInput));
     const taskMask = mask ? await referenceToTaskInput(mask) : undefined;
     const response = await fetch("/api/image-tasks", {
@@ -95,8 +98,10 @@ export async function createImageGenerationTask(config: AiConfig, prompt: string
             kind: references.length || mask ? "edit" : "generation",
             config: {
                 model: requestConfig.model,
+                channelId: requestConfig.channelId,
                 quality: requestConfig.quality,
                 size: requestConfig.size,
+                count: requestConfig.count,
             },
             prompt,
             references: taskReferences,
@@ -130,6 +135,9 @@ function taskContext(options?: RequestOptions) {
         clientRequestId: options.clientRequestId,
         generationLogId: options.generationLogId,
         generationSlotId: options.generationSlotId,
+        assetKind: options.assetKind,
+        assetId: options.assetId,
+        generationStage: options.generationStage,
     };
 }
 
@@ -200,6 +208,15 @@ export async function waitForImageGenerationTask(config: AiConfig, task: ImageGe
         }
         await delay(IMAGE_TASK_POLL_INTERVAL_MS, options?.signal);
     }
+}
+
+export async function getCompletedImageGenerationTask(taskId: string): Promise<ImageGenerationResult | null> {
+    const response = await fetch(`/api/image-tasks/${encodeURIComponent(taskId)}`, { cache: "no-store" }).catch(() => null);
+    if (!response?.ok) return null;
+    const payload = (await response.json().catch(() => null)) as ImageTaskPayload | null;
+    const task = payload?.task;
+    if (task?.status !== "success" || !task.result) return null;
+    return task.result;
 }
 
 function isDeferredPollStatus(status: number) {

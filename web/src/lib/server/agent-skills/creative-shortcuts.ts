@@ -8,7 +8,7 @@ export const CHARACTER_DESIGN_SKILL = {
     requiresReference: false,
     defaultConfig: { quality: "high", count: 4 },
     keywords: ["角色设定", "角色设计", "人物设定", "角色图", "人物立绘", "多视图", "角色表"],
-    instructions: `以角色设定工作流执行。先提炼身份、年龄、体态、脸部特征、发型、服装材质、配色、道具和情绪关键词，再生成同一角色的正面、侧面、背面和表情/动作参考。所有视图必须保持身份、比例、服装结构、发型轮廓和关键道具一致；采用清晰的角色设定板构图，给后续短剧、分镜和连续图片复用。不要随意改变种族、年龄、服装或脸部特征，也不要把四个视图生成成不同的人。`,
+    instructions: `以角色设定工作流执行。先锁定身份、年龄、体态、脸部特征、发型轮廓、服装结构、材质、配色、关键道具和情绪范围，再生成正面、侧面、背面及表情/动作参考。每张图先明确用途和参考图控制范围；身份、比例、服装结构、发型轮廓、关键道具和色彩锚点必须跨视图保持一致。角色板只承载当前设定事实，不把安装说明、供应商参数或说明文字画进图片。后续修改使用 change/preserve/constraints，只改一个已定位变量，明确保留脸部、服装、姿态、构图和光线中不变的部分。所有成功结果都保留为独立候选，不因只需要一张主图而丢弃其他结果；不要随意改变种族、年龄、服装或脸部特征，也不要把多个视图生成成不同的人。`,
 } as const;
 
 export const IMAGE_MOTION_SKILL = {
@@ -22,9 +22,9 @@ export const IMAGE_MOTION_SKILL = {
     workspaces: ["video"],
     action: "edit",
     requiresReference: true,
-    defaultConfig: { videoSeconds: 5, vquality: "720" },
+    defaultConfig: { videoSeconds: 5, vquality: "480" },
     keywords: ["图片动效", "图生视频", "图片转视频", "动效", "动画", "镜头推进", "首帧"],
-    instructions: `以图生视频工作流执行。必须使用用户提供的参考图作为主体和首帧，保持人物、商品、场景、构图、色彩和文字位置稳定，只规划明确的动作、镜头运动、景别、速度和时长。默认生成 5 秒短视频；避免新增人物、改变主体身份、重绘商品 Logo、过度运动、闪烁和不必要的场景切换。`,
+    instructions: `以图生视频工作流执行。必须使用用户提供的参考图作为主体和首帧，并先说明每张参考图只控制身份、场景、构图或道具中的哪一项。提示词按静态锚点、可见起点、触发、主体动作、次级反应、一个主运镜、声音意图和可验证终点组织；只规划一个主要变化，保持人物、商品、场景、构图、色彩和文字位置稳定。时长、比例和清晰度遵循用户与服务端配置，不在 Skill 中猜测供应商字段。避免新增人物、改变主体身份、重绘商品 Logo、过度运动、闪烁、瞬移、变形和无叙事理由的场景切换。失败重试只修改一个已定位变量，并保留已经通过验收的参考图与状态。`,
 } as const;
 
 export const DRAMA_PLANNING_SKILL = {
@@ -40,7 +40,35 @@ export const DRAMA_PLANNING_SKILL = {
     requiresReference: false,
     defaultConfig: { count: 1, videoSeconds: 5 },
     keywords: ["短剧策划", "短剧", "剧本", "分镜", "剧集", "镜头", "故事板"],
-    instructions: `以短剧生产工作流执行。先整理主题、受众、冲突、角色、场景、道具和叙事节奏，再拆成可审核的剧集与镜头；每个镜头明确画面主体、对白/旁白、时长、景别、机位和动作，并为后续角色图、场景图和视频任务保留稳定引用。不要直接跳过结构分析，也不要在用户未明确要求时擅自创建 Canvas 或短剧项目。`,
+    instructions: `以短剧生产工作流执行。按改编大纲、资产清单、剧本节拍、分镜、图片关键帧、视频提示词和审查的阶段顺序推进；每一阶段只修改自己的事实，不建立并行的文件或提示词真相。先核对主题、受众、冲突、角色、场景、道具、叙事节奏和集长，再按语速与动作节点核算时长。每个镜头必须有唯一戏剧职责、画面主体、对白/旁白、时长、景别、机位、声音、可见起点和终点，并通过稳定资产 ID 绑定角色、场景、道具和关键帧。对白和旁白可以不写进静态图片，但其可见后果必须进入对应帧；相邻帧必须有真实状态差异，禁止复制整镜提示词后只追加“起始/展开/结果”。生成前展示准确的任务、参考和参数，付费生产等待用户明确确认；不要跳过结构分析，也不要在用户未明确要求时创建 Canvas 或短剧项目。`,
 } as const;
 
-export const DEFAULT_CREATIVE_SHORTCUT_SKILLS = [CHARACTER_DESIGN_SKILL, IMAGE_MOTION_SKILL, DRAMA_PLANNING_SKILL] as const;
+/** Shared static-frame checks used by drama prompts and the Seedance optimizer. */
+export const SEEDANCE_STATIC_FRAME_RULES = `静态关键帧专用规则：这是单张冻结画面，不是完整视频提示词；不要添加时长、分时段、运镜过程、剪辑、对白或声音指令。输出前在内部完成一致性检查，但不得输出评估过程、思维链或检查清单。检查景别与细节是否相容：ELS/极远景只能承载远景空间关系，若同时要求清晰面部、手部或道具细节，必须消除冲突并改用能承载这些细节的远景全身或中远景，不得同时保留互相矛盾的景别。检查多手、多肢体、多主体的数量、来源、位置和连接关系；用户明确需要的手或肢体必须具体化，禁止用与目标冲突的笼统否定覆盖它们。凡是“上一帧/上一镜/严格连续”的要求，必须有对应的真实参考图或结构化入口状态；没有证据时改写为当前镜头可执行的独立构图约束，不得假定未绑定素材。每张 @图片、@视频、@音频只承担一个明确用途，编号必须与本次请求的 references 顺序一致；禁止凭标题、内部 ID 或文本相似度猜测用途。引用节点与画面正文分层：有 referenceManifest 时保留每项引用用途，不自行生成不存在的 @编号；最终供应商提示词中的 @图片节点必须由服务端按实际 references 数组顺序追加，编辑态 imagePrompt 未内嵌节点不代表引用丢失。把 Ras、Ref、内部编号等模型不可理解的内部词改为语义化的画面约束，除非它们是用户要求出现的可见内容。压缩重复的身份、服装、材质和禁止项，按主体与可见状态、场景、构图、光线、风格、连续性、负面约束排序；保留用户事实、数量、比例、参考职责和画幅，不新增剧情事实。`;
+
+/**
+ * Vetted through the GitHub Skill import contract. This is the mandatory
+ * default for drama; the server-side continuity policy still runs separately.
+ */
+export const SEEDANCE_DIRECTOR_SKILL = {
+    id: "seedance-director",
+    name: "Seedance 导演",
+    description: "为 Seedance 多镜头连续视频规划镜头、参考角色、续接和单变量返修。",
+    plannerSummary: "为短剧镜头明确参考角色、连续性锚点、首尾帧与返修范围。",
+    sourceUrl: "https://github.com/LeoYeAI/seedance-skills/blob/797e16efaa3c5ac01c0e391d0b8466a87cc5aadc/SKILL.md",
+    sourceRepository: "LeoYeAI/seedance-skills",
+    sourcePath: "SKILL.md",
+    sourceVersion: "797e16efaa3c5ac01c0e391d0b8466a87cc5aadc",
+    sourceCommit: "797e16efaa3c5ac01c0e391d0b8466a87cc5aadc",
+    sourceContentHash: "8cbc9b6d27460f5ef3ff8313ecf506650c006be4979274ec63aea0aade9e3d25",
+    license: "MIT",
+    enabled: true,
+    workspaces: ["drama"],
+    action: "generate",
+    requiresReference: false,
+    defaultConfig: { videoSeconds: 5 },
+    keywords: ["Seedance", "短剧导演", "连续性", "首尾帧", "镜头续接", "返修"],
+    instructions: `按 Seedance 2.0 多模态短剧工作流执行。把长故事视为有入口、出口和连续性边界的镜头序列，而不是互不相关的提示词；先锁定镜头职责、时长、入口状态、出口状态、屏幕方向、轴线和每张参考图的唯一用途。项目资产表中的角色名是正式业务事实，不得因为与 reference、ref 等英文缩写相似而改名、删除或当作内部占位符；已登记但本集/本镜不出镜的角色仍须保留在资产档案，并明确不得进入本集参考图请求。当前镜头只把实际出镜角色写入 characterCodes 和 referenceManifest；供应商提示词表达不出镜角色时，同时写角色名的不出镜约束和可观察画面限制，不得只写含义不清的“无可辨识的角色名”。参考图按角色、场景、道具、构图、首帧、尾帧或关键帧分工，@图片/@视频/@音频只表达用途，实际编号、顺序和 URL 由服务端绑定，提示词不得重复伪造参考清单。视频提示词按时间顺序写静态锚点、起始动作、触发、主体动作、次级反应、一个主运镜、环境压力、声音意图和明确结束画面；人物情绪必须转成起始/中段/结束可观察的眉眼、嘴角、下颌、视线、呼吸、手部或身体变化，禁止只写“电影感”“表情自然”“情绪丰富”等抽象词。只有上一镜当前视频版本且已人工验收的实际尾帧可以承担下一镜 first_frame；不得复制组内首镜起始状态，也不得引用旧分镜、旧任务或失效素材。用户明确的尺寸、比例、质量、时长和参考模式优先，不能擅自改选；每次返修只改变一个已定位变量，并保留已验收状态与引用。`,
+} as const;
+
+export const DEFAULT_CREATIVE_SHORTCUT_SKILLS = [CHARACTER_DESIGN_SKILL, IMAGE_MOTION_SKILL, DRAMA_PLANNING_SKILL, SEEDANCE_DIRECTOR_SKILL] as const;

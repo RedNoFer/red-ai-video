@@ -131,6 +131,14 @@ export function saveDramaProject(project: DramaProject) {
     return request<{ project: DramaProject }>(`/api/drama/projects/${encodeURIComponent(project.id)}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(project) }).then((data) => data.project);
 }
 
+export function acceptDramaStoryboardFrame(projectId: string, episodeId: string, shotId: string, frameId: string, candidateId?: string) {
+    return request<{ project: DramaProject }>(`/api/drama/projects/${encodeURIComponent(projectId)}/episodes/${encodeURIComponent(episodeId)}/shots/${encodeURIComponent(shotId)}/frames/${encodeURIComponent(frameId)}/accept`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(candidateId ? { candidateId } : {}),
+    }).then((data) => data.project);
+}
+
 export function deleteDramaProject(id: string) {
     return request<{ deleted: boolean }>(`/api/drama/projects/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
@@ -192,7 +200,7 @@ export function applyDramaEpisodeProductionPackage(project: DramaProject, episod
 }
 
 export function getLatestDramaProductionRun(projectId: string, episodeId: string, scope: "visual" | "production" = "production") {
-    return request<{ run: DramaProductionRun | null; preflight: DramaProductionPreflight }>(`/api/drama/projects/${encodeURIComponent(projectId)}/production-runs?episodeId=${encodeURIComponent(episodeId)}&scope=${scope}`);
+    return request<{ run: DramaProductionRun | null; preflight: DramaProductionPreflight | null }>(`/api/drama/projects/${encodeURIComponent(projectId)}/production-runs?episodeId=${encodeURIComponent(episodeId)}&scope=${scope}`);
 }
 
 export function preflightDramaGeneration(projectId: string, episodeId: string, shotIds: string[], requestId: string) {
@@ -203,21 +211,62 @@ export function preflightDramaGeneration(projectId: string, episodeId: string, s
     }).then((data) => data.preflight);
 }
 
-export function generateDramaVideoPrompt(input: { project: DramaProject; episode: DramaEpisode; shot: DramaShot; referenceMaterials: unknown[] }) {
+export function generateDramaVideoPrompt(input: { project: DramaProject; episode: DramaEpisode; shot: DramaShot; referenceMaterials: unknown[]; requestId?: string }) {
+    const shot = input.shot;
+    const episode: Partial<DramaEpisode> = {
+        id: input.episode.id,
+        code: input.episode.code,
+        title: input.episode.title,
+        continuityEdges: input.episode.continuityEdges?.filter((edge) => edge.fromShotId === shot.id || edge.toShotId === shot.id),
+    };
+    const characterIds = new Set([...(shot.characterIds || []), shot.characterId, shot.voiceIdentityId].filter(Boolean));
+    const propIds = new Set(shot.propIds || []);
+    const clueIds = new Set(shot.clueIds || []);
     return request<DramaVideoPromptAnalysis>("/api/drama/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
             phase: "video_prompt",
+            requestId: input.requestId || crypto.randomUUID(),
             summary: input.project.summary,
             style: input.project.style,
-            episode: input.episode,
-            characters: input.project.characters,
-            scenes: input.project.scenes,
-            props: input.project.props,
-            clues: input.project.clues,
-            shots: [input.shot],
+            episode,
+            characters: input.project.characters.filter((item) => characterIds.has(item.id)),
+            scenes: input.project.scenes.filter((item) => item.id === shot.sceneId),
+            props: input.project.props.filter((item) => propIds.has(item.id)),
+            clues: input.project.clues.filter((item) => clueIds.has(item.id)),
+            shots: [shot],
             referenceMaterials: input.referenceMaterials,
+        }),
+    });
+}
+
+export function generateDramaImagePrompt(input: { project: DramaProject; episode: DramaEpisode; shot: DramaShot; instruction?: string; requestId?: string }) {
+    const shot = input.shot;
+    const episode: Partial<DramaEpisode> = {
+        id: input.episode.id,
+        code: input.episode.code,
+        title: input.episode.title,
+        continuityEdges: input.episode.continuityEdges?.filter((edge) => edge.fromShotId === shot.id || edge.toShotId === shot.id),
+    };
+    const characterIds = new Set([...(shot.characterIds || []), shot.characterId, shot.voiceIdentityId].filter(Boolean));
+    const propIds = new Set(shot.propIds || []);
+    const clueIds = new Set(shot.clueIds || []);
+    return request<{ shots: Array<{ shotId: string; imagePrompt: string }> }>("/api/drama/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            phase: "image_prompt",
+            requestId: input.requestId || crypto.randomUUID(),
+            summary: input.project.summary,
+            style: input.project.style,
+            episode,
+            characters: input.project.characters.filter((item) => characterIds.has(item.id)),
+            scenes: input.project.scenes.filter((item) => item.id === shot.sceneId),
+            props: input.project.props.filter((item) => propIds.has(item.id)),
+            clues: input.project.clues.filter((item) => clueIds.has(item.id)),
+            shots: [shot],
+            instruction: input.instruction,
         }),
     });
 }
@@ -282,6 +331,22 @@ export function updateDramaShotMedia(projectId: string, episodeId: string, shotI
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(input),
+    }).then((data) => data.project);
+}
+
+export function updateDramaShotPrompt(projectId: string, episodeId: string, shotId: string, executionVideoPrompt: string) {
+    return request<{ project: DramaProject }>(`/api/drama/projects/${encodeURIComponent(projectId)}/episodes/${encodeURIComponent(episodeId)}/shots/${encodeURIComponent(shotId)}/prompt`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ executionVideoPrompt }),
+    }).then((data) => data.project);
+}
+
+export function updateDramaShotImagePrompt(projectId: string, episodeId: string, shotId: string, imagePrompt: string) {
+    return request<{ project: DramaProject }>(`/api/drama/projects/${encodeURIComponent(projectId)}/episodes/${encodeURIComponent(episodeId)}/shots/${encodeURIComponent(shotId)}/prompt`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imagePrompt }),
     }).then((data) => data.project);
 }
 

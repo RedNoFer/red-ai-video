@@ -61,7 +61,6 @@ async function assistProtocolDraftWithTextModel(input: { requestUrl: string; coo
                     { role: "system", content: "你是 API 协议分析器。只输出一个符合要求的 JSON 对象，不输出 Markdown、解释或代码。不得生成脚本。" },
                     { role: "user", content: prompt },
                 ],
-                response_format: { type: "json_object" },
             }),
         }).catch(() => null);
         if (!response?.ok) continue;

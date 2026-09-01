@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-import { prepareStandaloneAssets } from "./standalone-assets.mjs";
+import { prepareIsolatedStandaloneRuntime, prepareStandaloneAssets } from "./standalone-assets.mjs";
 
 const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const repoRoot = path.resolve(webRoot, "..");
@@ -76,10 +76,12 @@ describe("release type-check and build contract", () => {
             ]);
 
             const result = await prepareStandaloneAssets({ webRoot: fixtureRoot, distDir });
+            const repeated = await prepareStandaloneAssets({ webRoot: fixtureRoot, distDir });
 
             expect(result.staticFiles).toBe(1);
             expect(result.publicFiles).toBe(3);
             expect(result.sharpRuntimePackages).toEqual(["@img+sharp-libvips-linux-x64@1.3.2", "@img+sharp-linux-x64@0.35.3"]);
+            expect(repeated.sharpRuntimePackages).toEqual(result.sharpRuntimePackages);
             expect(existsSync(path.join(fixtureRoot, distDir, "standalone", distDir, "static", "chunks", "app.js"))).toBe(true);
             expect(existsSync(path.join(fixtureRoot, distDir, "standalone", "public", "logo.svg"))).toBe(true);
             expect(existsSync(path.join(fixtureRoot, distDir, "standalone", "public", "icons", "icon-192.png"))).toBe(true);
@@ -87,6 +89,24 @@ describe("release type-check and build contract", () => {
             expect(existsSync(path.join(fixtureRoot, distDir, "standalone", "node_modules", ".pnpm", "@img+sharp-libvips-linux-x64@1.3.2", "node_modules", "@img", "sharp-libvips-linux-x64", "lib", "libvips.so"))).toBe(true);
         } finally {
             await rm(fixtureRoot, { recursive: true, force: true });
+        }
+    });
+
+    it("keeps a running standalone copy independent from later build cleanup", async () => {
+        const fixtureRoot = await mkdtemp(path.join(os.tmpdir(), "vozeb-runtime-source-"));
+        const runtimeParent = await mkdtemp(path.join(os.tmpdir(), "vozeb-runtime-parent-"));
+        try {
+            const standaloneRoot = path.join(fixtureRoot, ".next", "standalone");
+            await mkdir(path.join(standaloneRoot, ".next", "static", "chunks"), { recursive: true });
+            await Promise.all([writeFile(path.join(standaloneRoot, "server.js"), "server"), writeFile(path.join(standaloneRoot, ".next", "static", "chunks", "app.js"), "chunk")]);
+
+            const runtime = await prepareIsolatedStandaloneRuntime({ standaloneRoot, runtimeParent });
+            await rm(path.join(fixtureRoot, ".next"), { recursive: true, force: true });
+
+            expect(existsSync(path.join(runtime.runtimeRoot, "server.js"))).toBe(true);
+            expect(existsSync(path.join(runtime.runtimeRoot, ".next", "static", "chunks", "app.js"))).toBe(true);
+        } finally {
+            await Promise.all([rm(fixtureRoot, { recursive: true, force: true }), rm(runtimeParent, { recursive: true, force: true })]);
         }
     });
 });

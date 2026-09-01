@@ -1,4 +1,5 @@
-import { cp, mkdir, readdir, stat } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readdir, rm, stat } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 
 export async function prepareStandaloneAssets({ webRoot, distDir = ".next" }) {
@@ -32,6 +33,20 @@ export async function prepareStandaloneAssets({ webRoot, distDir = ".next" }) {
     return { serverEntry, standaloneRoot, staticFiles: targetStaticFiles.length, publicFiles: targetPublicFiles.length, sharpRuntimePackages };
 }
 
+export async function prepareIsolatedStandaloneRuntime({ standaloneRoot, runtimeParent = os.tmpdir() }) {
+    const runtimeContainer = await mkdtemp(path.join(runtimeParent, "vozeb-pro-runtime-"));
+    const runtimeRoot = path.join(runtimeContainer, "standalone");
+    try {
+        await cp(standaloneRoot, runtimeRoot, { recursive: true, force: true });
+        await assertFile(path.join(runtimeRoot, "server.js"), `Standalone runtime server was not found: ${runtimeRoot}`);
+        if (!(await listRelativeFiles(path.join(runtimeRoot, ".next", "static"))).length) throw new Error(`Standalone runtime static directory is empty: ${runtimeRoot}`);
+        return { runtimeContainer, runtimeRoot };
+    } catch (error) {
+        await rm(runtimeContainer, { recursive: true, force: true });
+        throw error;
+    }
+}
+
 async function copySharpRuntimePackages(webRoot, standaloneRoot) {
     const sourcePnpmRoot = path.join(webRoot, "node_modules", ".pnpm");
     const targetPnpmRoot = path.join(standaloneRoot, "node_modules", ".pnpm");
@@ -45,7 +60,13 @@ async function copySharpRuntimePackages(webRoot, standaloneRoot) {
     }
 
     await mkdir(targetPnpmRoot, { recursive: true });
-    await Promise.all(packages.map((entry) => cp(path.join(sourcePnpmRoot, entry.name), path.join(targetPnpmRoot, entry.name), { recursive: true, force: true })));
+    await Promise.all(
+        packages.map(async (entry) => {
+            const target = path.join(targetPnpmRoot, entry.name);
+            await rm(target, { recursive: true, force: true });
+            await cp(path.join(sourcePnpmRoot, entry.name), target, { recursive: true, force: true });
+        }),
+    );
     return packages.map((entry) => entry.name).sort();
 }
 

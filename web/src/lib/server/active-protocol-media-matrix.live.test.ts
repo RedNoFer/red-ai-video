@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+const mocks = vi.hoisted(() => ({ fetchSafeOutbound: vi.fn() }));
+vi.mock("@/lib/server/safe-outbound-fetch", () => ({ fetchSafeOutbound: (...args: Parameters<typeof fetch>) => mocks.fetchSafeOutbound(...args) }));
+
 import { runCustomImageTask, pollCustomImageTask } from "@/app/api/image-tasks/image-task-custom";
 import { runOpenAiImageTask } from "@/app/api/image-tasks/image-task-openai";
 import { createUpstream } from "@/app/api/video-generation-tasks/video-generation-route";
@@ -29,6 +32,10 @@ describe("active media protocols over TCP fixtures", () => {
         const address = fixture.server.address();
         if (!address || typeof address === "string") throw new Error("Protocol fixture did not bind a TCP port");
         origin = `http://127.0.0.1:${address.port}`;
+        mocks.fetchSafeOutbound.mockImplementation((url: string | URL, init?: RequestInit) => {
+            if (String(url).startsWith("https://cdn.example.com/")) return Promise.resolve(new Response(new Uint8Array([137]), { status: 206, headers: { "content-type": "image/png" } }));
+            return fetch(url, init);
+        });
     });
 
     afterEach(async () => {
@@ -80,19 +87,19 @@ describe("active media protocols over TCP fixtures", () => {
     });
 
     it.each(ADVANCED_IMAGE_PROTOCOLS)("completes configured $id image creation", async (definition) => {
-        const baseUrl = definition.id === "custom" ? origin : `${origin}/v1`;
+        const baseUrl = ["custom", "buming-image"].includes(definition.id) ? origin : `${origin}/v1`;
         const task = imageTask(baseUrl, "mock-image", definition.id, imageConfig(definition.id));
-        const image = definition.id === "custom" ? await runCustomImageTask(task, origin, origin, "", true) : await runOpenAiImageTask(task, origin, origin, "", true);
+        const image = ["custom", "buming-image"].includes(definition.id) ? await runCustomImageTask(task, origin, origin, "", true) : await runOpenAiImageTask(task, origin, origin, "", true);
         await expectImageResult(image);
-        expectCreateRequest(definition.id === "custom" ? "/custom/images" : "/v1/images/generations", false);
+        expectCreateRequest(definition.id === "custom" ? "/custom/images" : definition.id === "buming-image" ? "/api/v1/model-runtime/invoke" : "/v1/images/generations", false);
     });
 
     it.each(ADVANCED_IMAGE_PROTOCOLS)("completes configured $id image editing with a transmitted reference", async (definition) => {
-        const baseUrl = definition.id === "custom" ? origin : `${origin}/v1`;
+        const baseUrl = ["custom", "buming-image"].includes(definition.id) ? origin : `${origin}/v1`;
         const task = imageTask(baseUrl, "mock-image", definition.id, imageConfig(definition.id), true);
-        const image = definition.id === "custom" ? await runCustomImageTask(task, origin, origin, "", true) : await runOpenAiImageTask(task, origin, origin, "", true);
+        const image = ["custom", "buming-image"].includes(definition.id) ? await runCustomImageTask(task, origin, origin, "", true) : await runOpenAiImageTask(task, origin, origin, "", true);
         await expectImageResult(image);
-        expectCreateRequest(definition.id === "custom" ? "/custom/images" : "/v1/images/edits", true);
+        expectCreateRequest(definition.id === "custom" ? "/custom/images" : definition.id === "buming-image" ? "/api/v1/model-runtime/invoke" : "/v1/images/edits", true);
     });
 
     it.each(ADVANCED_VIDEO_PROTOCOLS)("completes configured $id video creation and polling", async (definition) => {
@@ -140,7 +147,7 @@ function imageTask(baseUrl: string, model: string, protocol: string, advancedCon
                       id: "reference",
                       name: "reference.png",
                       type: "image/png",
-                      dataUrl: protocol === "yumeng" ? `${origin}/media/fixture.png` : protocol === "sub2api" || protocol === "custom" ? "https://cdn.example.com/reference.png" : PNG_DATA_URL,
+                      dataUrl: protocol === "yumeng" ? `${origin}/media/fixture.png` : protocol === "sub2api" || protocol === "custom" || protocol === "buming-image" ? "https://cdn.example.com/reference.png" : PNG_DATA_URL,
                   },
               ]
             : [],
@@ -198,7 +205,7 @@ function videoConfig(protocol: SystemChannelProtocol, baseUrl: string, model: st
 }
 
 async function runImageTask(task: ImageTask, protocol: SystemChannelProtocol) {
-    const declarative = protocol === "stable-diffusion" || protocol === "yumeng";
+    const declarative = protocol === "stable-diffusion" || protocol === "yumeng" || protocol === "buming-image";
     const submitted = declarative ? await runCustomImageTask(task, origin, origin, "", protocol === "yumeng") : await runOpenAiImageTask(task, origin, origin, "", true);
     return submitted.pending ? pollCustomImageTask(task, submitted.pending.id, submitted.pending.pollBaseUrl, "") : submitted;
 }

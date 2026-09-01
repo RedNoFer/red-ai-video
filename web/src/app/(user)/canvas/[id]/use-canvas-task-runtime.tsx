@@ -83,8 +83,6 @@ export function useCanvasTaskRuntime({ state }: { state: CanvasPageState }) {
         setShowImageInfo,
         clearConfirmOpen,
         setClearConfirmOpen,
-        assetPickerOpen,
-        setAssetPickerOpen,
         projectLoaded,
         setProjectLoaded,
         toolbarNodeId,

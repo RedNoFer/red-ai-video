@@ -742,6 +742,78 @@ describe("video generation candidate failover", () => {
         expect(body).not.toHaveProperty("params");
     });
 
+    it("uses a declared all-frame-capable drama binding before submission", async () => {
+        const bumingChannel = applyChannelProtocol(
+            { ...channels[1], models: ["seedance-2-0-official"], advancedConfig: emptyAdvancedConfig() },
+            "buming-seedance",
+        );
+        mocks.getAuthSettings.mockResolvedValue({
+            ...settings,
+            systemChannels: [channels[0], bumingChannel],
+            logicalModels: [
+                {
+                    ...settings.logicalModels[0],
+                    bindings: [
+                        settings.logicalModels[0].bindings[0],
+                        { ...settings.logicalModels[0].bindings[1], channelId: bumingChannel.id, upstreamModel: "seedance-2-0-official" },
+                    ],
+                },
+            ],
+        });
+        mocks.fetchInternalApi.mockResolvedValue(json({ id: "buming-drama-frame-task", state: "queued" }));
+
+        const response = await POST(
+            request(
+                { model: "video", videoSeconds: "8", size: "9:16", vquality: "720" },
+                [
+                    { type: "image", url: "https://cdn.example.com/frame-1.png", role: "keyframe", keyframeIndex: 1 },
+                    { type: "image", url: "https://cdn.example.com/frame-2.png", role: "keyframe", keyframeIndex: 2 },
+                    { type: "image", url: "https://cdn.example.com/frame-3.png", role: "keyframe", keyframeIndex: 3 },
+                    { type: "image", url: "https://cdn.example.com/frame-4.png", role: "keyframe", keyframeIndex: 4 },
+                ],
+                { surface: "drama", runId: "run-one" },
+            ),
+        );
+
+        expect(response.status).toBe(200);
+        expect(mocks.fetchInternalApi).toHaveBeenCalledTimes(1);
+        expect(mocks.fetchInternalApi.mock.calls[0]?.[0]).toContain("/api/ai/system/two/");
+    });
+
+    it("does not switch a drama all-frame request to another logical model", async () => {
+        const bumingChannel = applyChannelProtocol(
+            { ...channels[1], models: ["seedance-2-0-official"], advancedConfig: emptyAdvancedConfig() },
+            "buming-seedance",
+        );
+        mocks.getAuthSettings.mockResolvedValue({
+            ...settings,
+            systemChannels: [channels[0], bumingChannel],
+            logicalModels: [
+                { id: "default-video", name: "Default", capability: "video", enabled: true, bindings: [{ id: "default", channelId: channels[0].id, upstreamModel: "video-one", enabled: true, priority: 1 }] },
+                { id: "storyboard-video", name: "Storyboard", capability: "video", enabled: true, bindings: [{ id: "storyboard", channelId: bumingChannel.id, upstreamModel: "seedance-2-0-official", enabled: true, priority: 1 }] },
+            ],
+        });
+        mocks.fetchInternalApi.mockResolvedValue(json({ id: "fallback-drama-frame-task", state: "queued" }));
+
+        const response = await POST(
+            request(
+                { model: "default-video", videoSeconds: "8", size: "9:16", vquality: "720" },
+                [
+                    { type: "image", url: "https://cdn.example.com/frame-1.png", role: "keyframe", keyframeIndex: 1 },
+                    { type: "image", url: "https://cdn.example.com/frame-2.png", role: "keyframe", keyframeIndex: 2 },
+                    { type: "image", url: "https://cdn.example.com/frame-3.png", role: "keyframe", keyframeIndex: 3 },
+                    { type: "image", url: "https://cdn.example.com/frame-4.png", role: "keyframe", keyframeIndex: 4 },
+                ],
+                { surface: "drama", runId: "run-fallback" },
+            ),
+        );
+
+        expect(response.status).toBe(400);
+        expect(await response.json()).toMatchObject({ error: "当前模型未声明支持 4 张全能帧关键图，请切换支持全能帧的模型" });
+        expect(mocks.fetchInternalApi).not.toHaveBeenCalled();
+        expect(mocks.createVideoTask).not.toHaveBeenCalled();
+    });
+
     it("blocks Buming manju special before creating an unsupported all-frame task", async () => {
         const bumingChannel = applyChannelProtocol(
             { ...channels[0], baseUrl: "", models: ["seedance-2-0-manju-special"], advancedConfig: emptyAdvancedConfig() },

@@ -33,15 +33,24 @@ describe("/api/drama/projects/[id]/production-runs", () => {
         mocks.createDramaProductionRunForUser.mockResolvedValue({ id: "run-created", scope: "visual", status: "running" });
     });
 
-    it("finishes project preflight recovery before syncing visual task results", async () => {
+    it("does not rerun production preflight while syncing visual task results", async () => {
         const response = await GET(new Request("http://localhost/api/drama/projects/drama-one/production-runs?episodeId=episode-one&scope=visual"), {
             params: Promise.resolve({ id: "drama-one" }),
         });
 
         expect(response.status).toBe(200);
-        expect(mocks.getDramaProductionPreflightForUser).toHaveBeenCalledWith("user-one", "drama-one", "episode-one");
-        expect(mocks.getDramaProductionPreflightForUser.mock.invocationCallOrder[0]).toBeLessThan(mocks.getLatestDramaProductionRunForUser.mock.invocationCallOrder[0]);
+        expect(mocks.getDramaProductionPreflightForUser).not.toHaveBeenCalled();
         expect(mocks.getLatestDramaProductionRunForUser).toHaveBeenCalledWith("user-one", "drama-one", "episode-one", expect.objectContaining({ scope: "visual" }));
+    });
+
+    it("still returns production preflight for the production scope", async () => {
+        const response = await GET(new Request("http://localhost/api/drama/projects/drama-one/production-runs?episodeId=episode-one&scope=production"), {
+            params: Promise.resolve({ id: "drama-one" }),
+        });
+
+        expect(response.status).toBe(200);
+        expect(mocks.getDramaProductionPreflightForUser).toHaveBeenCalledWith("user-one", "drama-one", "episode-one");
+        await expect(response.json()).resolves.toMatchObject({ data: { preflight: { status: "passed" } } });
     });
 
     it("injects the trusted internal origin and request cookie before creating the run", async () => {

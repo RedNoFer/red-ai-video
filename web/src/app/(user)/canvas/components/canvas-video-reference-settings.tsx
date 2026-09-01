@@ -17,6 +17,7 @@ const referenceModes: Array<{ value: CreativeVideoReferenceMode; label: string; 
     { value: "reference", label: "普通参考", description: "素材参与整体创作" },
     { value: "first_frame", label: "首帧", description: "固定开始画面" },
     { value: "first_last", label: "首尾帧", description: "固定开始和结束" },
+    { value: "all_frames", label: "全能帧", description: "2–5 张有序关键帧" },
 ];
 
 export function CanvasVideoReferenceSettings({
@@ -59,7 +60,7 @@ export function CanvasVideoReferenceSettings({
             <div className="text-xs font-medium" style={{ color: theme.node.muted }}>
                 参考方式
             </div>
-            <div className={compact ? "grid grid-cols-3 gap-1" : "grid grid-cols-3 gap-2"}>
+            <div className={compact ? "grid grid-cols-4 gap-1" : "grid grid-cols-4 gap-2"}>
                 {referenceModes.map((item) => {
                     const selected = item.value === mode;
                     return (
@@ -88,6 +89,49 @@ export function CanvasVideoReferenceSettings({
                 <p className="text-[11px] leading-4" style={{ color: theme.node.faint }}>
                     提示词中选中的图片、视频和音频会按普通参考素材发送。
                 </p>
+            ) : mode === "all_frames" ? (
+                <>
+                    <div className="flex items-center justify-between gap-2">
+                        <span className="text-[11px] font-medium" style={{ color: theme.node.muted }}>
+                            选择 2–5 张关键帧
+                        </span>
+                        <span className="text-[10px]" style={{ color: theme.node.faint }}>
+                            {metadata?.videoKeyframes?.length || 0}/5
+                        </span>
+                    </div>
+                    <div className="hide-scrollbar grid max-h-36 grid-cols-4 gap-1.5 overflow-y-auto pr-0.5">
+                        {frameOptions.map(({ reference, selection }) => {
+                            const index = selection ? (metadata?.videoKeyframes?.findIndex((frame) => sameFrameSelection(frame, selection)) ?? -1) : -1;
+                            return (
+                                <button
+                                    key={reference.nodeId}
+                                    type="button"
+                                    disabled={!selection || (index < 0 && (metadata?.videoKeyframes?.length || 0) >= 5)}
+                                    className="relative aspect-square min-w-0 overflow-hidden rounded-lg border transition hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40"
+                                    style={{ background: theme.node.fill, borderColor: index >= 0 ? theme.node.text : theme.node.stroke }}
+                                    onMouseDown={(event) => event.stopPropagation()}
+                                    onClick={() => {
+                                        if (!selection) return;
+                                        const frames = metadata?.videoKeyframes || [];
+                                        onChange({ videoKeyframes: index >= 0 ? frames.filter((_, itemIndex) => itemIndex !== index) : [...frames, selection] });
+                                        setFeedback(index >= 0 ? "已移除关键帧" : `已添加第 ${frames.length + 1} 帧`);
+                                    }}
+                                    aria-label={`${index >= 0 ? "移除" : "添加"}关键帧：${reference.title}`}
+                                >
+                                    {reference.previewUrl ? <img src={imagePreviewUrl(reference.previewUrl, 320)} alt="" className="size-full object-cover" /> : <ImageIcon className="absolute inset-0 m-auto size-4" style={{ color: theme.node.muted }} />}
+                                    {index >= 0 ? (
+                                        <span className="absolute bottom-1 right-1 rounded px-1 py-0.5 text-[9px] font-medium" style={{ background: theme.node.action, color: theme.node.actionText }}>
+                                            第 {index + 1}
+                                        </span>
+                                    ) : null}
+                                </button>
+                            );
+                        })}
+                    </div>
+                    <p aria-live="polite" className="min-h-4 text-[10px] leading-4" style={{ color: feedback ? theme.node.muted : theme.node.faint }}>
+                        {feedback || "关键帧按选择顺序发送，可在节点元数据中持久恢复。"}
+                    </p>
+                </>
             ) : (
                 <>
                     <div className={`grid gap-2 ${mode === "first_last" ? "grid-cols-2" : "grid-cols-1"}`}>

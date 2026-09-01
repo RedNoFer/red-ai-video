@@ -18,9 +18,9 @@ export async function GET(request: Request, context: Context) {
         const projectId = (await context.params).id;
         const episodeId = new URL(request.url).searchParams.get("episodeId") || "";
         const scope = new URL(request.url).searchParams.get("scope") === "visual" ? ("visual" as const) : ("production" as const);
-        const preflight = await getDramaProductionPreflightForUser(user.id, projectId, episodeId);
+        const preflight = scope === "production" ? await getDramaProductionPreflightForUser(user.id, projectId, episodeId) : undefined;
         const run = await getLatestDramaProductionRunForUser(user.id, projectId, episodeId, { origin: resolveInternalOrigin(new URL(request.url).origin), cookie: request.headers.get("cookie") || "", scope });
-        return NextResponse.json({ code: 0, data: { run, preflight }, msg: "OK" });
+        return NextResponse.json({ code: 0, data: { run, preflight: preflight || null }, msg: "OK" });
     } catch (error) {
         if (error instanceof DramaProjectServiceError) return NextResponse.json({ code: error.status, data: null, msg: error.message }, { status: error.status });
         throw error;

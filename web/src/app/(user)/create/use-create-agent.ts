@@ -645,6 +645,7 @@ function remapDraftAssetIds(preferences: CreativeGenerationPreferences | undefin
             ...preferences.video,
             firstFrameAssetId: remap(preferences.video.firstFrameAssetId),
             lastFrameAssetId: remap(preferences.video.lastFrameAssetId),
+            frameAssetIds: preferences.video.frameAssetIds?.map((id) => remap(id)).filter((id): id is string => Boolean(id)),
         },
     };
 }

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 
 import { SiteLogo } from "@/components/layout/site-logo";
+import { prefetchNavigationToolData } from "@/components/layout/navigation-data-prefetch";
 import { navigationGroups, navigationTools, type NavigationToolSlug } from "@/constant/navigation-tools";
 import { cn } from "@/lib/utils";
 import { DEFAULT_SITE_TITLE, resolveSiteTitle } from "@/lib/site-brand";
@@ -35,14 +36,21 @@ export function AppSidebar({ activeToolSlug, expanded }: { activeToolSlug?: Navi
                                     const Icon = tool.icon;
                                     const active = tool.slug === activeToolSlug;
                                     const primary = "primary" in tool && tool.primary;
+                                    const href = `/${tool.slug}`;
+                                    const prefetchTool = () => {
+                                        router.prefetch(href);
+                                        if (!active) prefetchNavigationToolData(tool.slug);
+                                    };
                                     return (
                                         <Link
                                             key={tool.slug}
-                                            href={`/${tool.slug}`}
+                                            href={href}
                                             prefetch
                                             title={tool.label}
-                                            onMouseEnter={() => router.prefetch(`/${tool.slug}`)}
-                                            onFocus={() => router.prefetch(`/${tool.slug}`)}
+                                            onMouseEnter={prefetchTool}
+                                            onPointerEnter={prefetchTool}
+                                            onFocus={prefetchTool}
+                                            onPointerDown={prefetchTool}
                                             className={cn(
                                                 "group relative flex h-[42px] items-center rounded-lg px-2 text-sm font-medium transition-colors duration-150",
                                                 expanded ? "justify-start gap-3 px-3" : "justify-center",

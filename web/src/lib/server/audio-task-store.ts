@@ -18,6 +18,9 @@ export type AudioTaskConfig = {
     format?: string;
     speed?: string;
     instructions?: string;
+    voiceOperation?: "voice-design" | "voice-clone";
+    designPrompt?: string;
+    cloneSampleUrl?: string;
 };
 export type AudioTask = GenerationTaskContext & {
     id: string;
@@ -29,12 +32,13 @@ export type AudioTask = GenerationTaskContext & {
     prompt: string;
     source?: string;
     upstream?: { id: string; createPath: string };
-    result?: { url: string; mimeType: string };
+    result?: { url: string; mimeType: string; assetId?: string; voiceId?: string };
     billing?: { pointsCost: number; pointsRecordId?: string; refunded: boolean };
     error?: string;
     candidateConfigs?: AudioTaskConfig[];
     attempts?: GenerationAttempt[];
     attemptNo?: number;
+    voiceCreation?: { projectId: string; characterId: string; fingerprint: string };
 };
 
 export function createAudioTask(input: Omit<AudioTask, "id" | "status" | "createdAt" | "updatedAt">) {

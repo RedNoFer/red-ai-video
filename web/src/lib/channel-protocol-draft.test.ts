@@ -42,6 +42,21 @@ curl --url https://api.example.com/v1/images/edits --header 'Authorization: Bear
         expect(draft?.operations[1].config).toMatchObject({ cancelPath: "/videos/:task_id/cancel", cancelMethod: "POST" });
     });
 
+    it("keeps a documented audio speech operation as audio", () => {
+        const draft = parseDeterministicProtocolDraft({
+            text: `POST /v1/audio/speech
+Body {"model":"gemini-3.1-flash-tts","input":"{{prompt}}","voice":"{{voice}}","response_format":"{{format}}"}
+Response binary audio/mpeg`,
+        });
+
+        expect(draft?.operations).toHaveLength(1);
+        expect(draft?.operations[0]).toMatchObject({
+            capability: "audio",
+            models: ["gemini-3.1-flash-tts"],
+            config: { createPath: "/v1/audio/speech", requestTemplate: expect.stringContaining('"input":"{{prompt}}"') },
+        });
+    });
+
     it("accepts explicit first-frame and last-frame video template variables", () => {
         const draft = protocolDraftFromUnknown({
             baseUrl: "https://api.example.com/v1",

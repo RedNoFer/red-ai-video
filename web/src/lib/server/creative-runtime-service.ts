@@ -29,22 +29,26 @@ export async function createConversationForUser(userId: string, value: unknown) 
     const surface = normalizeCreativeSurface(input.surface);
     const source = input.source === undefined ? (surface ? creativeConversationSourceForSurface(surface) : null) : normalizeCreativeConversationSource(input.source);
     const projectId = optionalText(input.projectId, 160);
+    const episodeId = optionalText(input.episodeId, 160);
     const title = optionalText(input.title, 120);
     if (!surface) throw new CreativeRuntimeServiceError("创作入口不正确", 400);
     if (!source || !isCreativeConversationSourceCompatible(surface, source)) throw new CreativeRuntimeServiceError("创作会话来源不正确", 400);
     if (surface === "chat" && projectId) throw new CreativeRuntimeServiceError("普通对话不接受项目标识", 400);
     if (surface !== "chat" && !projectId) throw new CreativeRuntimeServiceError(surface === "canvas" ? "画布标识不能为空" : "短剧项目标识不能为空", 400);
-    return createCreativeConversation(userId, { surface, source, projectId, title });
+    if (source === "drama-script" && !episodeId) throw new CreativeRuntimeServiceError("剧本 Agent 必须绑定当前集", 400);
+    if (source !== "drama-script" && episodeId) throw new CreativeRuntimeServiceError("只有剧本 Agent 会话接受集数标识", 400);
+    return createCreativeConversation(userId, { surface, source, projectId, episodeId, title });
 }
 
-export function listConversationsForUser(userId: string, input: { surface?: string | null; source?: string | null; projectId?: string | null; status?: string | null; limit?: string | null; offset?: string | null }) {
+export function listConversationsForUser(userId: string, input: { surface?: string | null; source?: string | null; projectId?: string | null; episodeId?: string | null; status?: string | null; limit?: string | null; offset?: string | null }) {
     const surface = input.surface ? normalizeCreativeSurface(input.surface) : undefined;
     const source = input.source ? normalizeCreativeConversationSource(input.source) : undefined;
     if (input.surface && !surface) throw new CreativeRuntimeServiceError("创作入口不正确", 400);
     if (input.source && !source) throw new CreativeRuntimeServiceError("创作会话来源不正确", 400);
     const projectId = optionalText(input.projectId, 160);
+    const episodeId = optionalText(input.episodeId, 160);
     const status = normalizeStatus(input.status);
-    return listCreativeConversations(userId, { surface: surface || undefined, source: source || undefined, projectId, status, limit: Number(input.limit), offset: Number(input.offset) });
+    return listCreativeConversations(userId, { surface: surface || undefined, source: source || undefined, projectId, episodeId, status, limit: Number(input.limit), offset: Number(input.offset) });
 }
 
 export async function getConversationForUser(userId: string, id: string) {

@@ -1,9 +1,20 @@
 import type { DramaEpisode, DramaNamedAsset, DramaProject } from "@/lib/drama-project-contract";
 import type { DramaAssetKind } from "./drama-asset-definitions";
 import { dramaAssetReferences } from "./drama-asset-reference-utils";
+import { hasApprovedAssetReference } from "@/lib/drama-asset-baseline";
+import { getDramaAssetMissingItems } from "@/lib/drama-asset-completion";
 
 export type DramaAssetFilter = "all" | "current-episode" | "missing-reference" | "incomplete" | "used" | "unused";
 export type DramaAssetSort = "default" | "attention" | "usage" | "name";
+
+export function dramaAssetAutoCompletionItems(asset: DramaNamedAsset, kind: DramaAssetKind) {
+    const references = dramaAssetReferences(asset);
+    return getDramaAssetMissingItems(asset, kind).filter((item) => item.task !== "reference" || references.length === 0);
+}
+
+export function dramaAssetMissingFields(asset: DramaNamedAsset, kind: DramaAssetKind) {
+    return dramaAssetAutoCompletionItems(asset, kind).map((item) => item.label);
+}
 
 export type DramaAssetLibraryRow = {
     asset: DramaNamedAsset;
@@ -27,7 +38,7 @@ export function filterAndSortDramaAssets(rows: DramaAssetLibraryRow[], filter: D
     const normalizedQuery = query.trim().toLocaleLowerCase();
     const filtered = rows.filter((row) => {
         if (filter === "current-episode" && row.currentEpisodeUsageCount === 0) return false;
-        if (filter === "missing-reference" && row.referenceCount > 0) return false;
+        if (filter === "missing-reference" && hasApprovedAssetReference(row.asset)) return false;
         if (filter === "incomplete" && !row.incomplete) return false;
         if (filter === "used" && row.usageCount === 0) return false;
         if (filter === "unused" && row.usageCount > 0) return false;
@@ -47,9 +58,7 @@ export function filterAndSortDramaAssets(rows: DramaAssetLibraryRow[], filter: D
 }
 
 function isDramaAssetIncomplete(asset: DramaNamedAsset, kind: DramaAssetKind) {
-    const profile = asset.profile;
-    if (!asset.description.trim() || !profile || Object.values(profile).some((value) => !value.trim())) return true;
-    return kind === "clues" && "payoff" in asset ? typeof asset.payoff !== "string" || !asset.payoff.trim() : false;
+    return dramaAssetAutoCompletionItems(asset, kind).length > 0;
 }
 
 function assetAttentionScore(row: DramaAssetLibraryRow) {

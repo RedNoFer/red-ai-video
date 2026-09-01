@@ -7,6 +7,7 @@ import { canvasThemes, type CanvasBackgroundMode, type CanvasColorTheme, type Ca
 import { useThemeStore } from "@/stores/use-theme-store";
 import { AnimatedThemeToggler } from "@/components/ui/animated-theme-toggler";
 import type { CanvasInteractionMode } from "./canvas-surface";
+import { useCanvasUiStore } from "../stores/use-canvas-ui-store";
 
 export function CanvasToolbar({
     selectedCount,
@@ -30,7 +31,6 @@ export function CanvasToolbar({
     onInteractionModeChange,
     onBackgroundModeChange,
     onShowImageInfoChange,
-    onOpenAssets,
 }: {
     selectedCount: number;
     canUndo: boolean;
@@ -53,12 +53,12 @@ export function CanvasToolbar({
     onInteractionModeChange: (mode: CanvasInteractionMode) => void;
     onBackgroundModeChange: (mode: CanvasBackgroundMode) => void;
     onShowImageInfoChange: (show: boolean) => void;
-    onOpenAssets: () => void;
 }) {
     const wrapRef = useRef<HTMLDivElement>(null);
     const colorTheme = useThemeStore((state) => state.theme);
     const setTheme = useThemeStore((state) => state.setTheme);
     const theme = canvasThemes[colorTheme];
+    const toggleAssets = useCanvasUiStore((state) => state.toggleAssets);
     const [hovered, setHovered] = useState<string | null>(null);
     const [tipX, setTipX] = useState(0);
     const [appearanceOpen, setAppearanceOpen] = useState(false);
@@ -130,7 +130,7 @@ export function CanvasToolbar({
                     <Upload className="size-4.5" />
                 </ToolbarButton>
                 <Divider theme={theme} />
-                <ToolbarButton id="tool-assets" label="资产" hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onOpenAssets}>
+                <ToolbarButton id="tool-assets" label="资产" hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={toggleAssets}>
                     <FolderOpen className="size-4.5" />
                 </ToolbarButton>
                 <ToolbarButton

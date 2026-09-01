@@ -41,6 +41,14 @@ describe("统一创作 Agent 事件流", () => {
     });
     afterEach(() => vi.unstubAllGlobals());
 
+    it("filters script conversations by project and episode", async () => {
+        const fetchMock = vi.fn(async () => new Response(JSON.stringify({ code: 0, data: { conversations: [], hasMore: false }, msg: "OK" }), { status: 200, headers: { "Content-Type": "application/json" } }));
+        vi.stubGlobal("fetch", fetchMock);
+        await listCreativeConversationPage({ surface: "drama", source: "drama-script", projectId: "project-one", episodeId: "episode-one" });
+        const url = new URL(String((fetchMock.mock.calls as unknown as Array<[unknown]>)[0]?.[0]), "http://localhost");
+        expect(Object.fromEntries(url.searchParams)).toMatchObject({ surface: "drama", source: "drama-script", projectId: "project-one", episodeId: "episode-one" });
+    });
+
     it("returns planning, task and final replies to one conversation", () => {
         vi.stubGlobal("EventSource", FakeEventSource);
         const progress: string[] = [];

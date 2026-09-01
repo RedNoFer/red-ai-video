@@ -68,7 +68,6 @@ export function useCanvasPageState() {
     const [backgroundMode, setBackgroundMode] = useState<CanvasBackgroundMode>("lines");
     const [showImageInfo, setShowImageInfo] = useState(false);
     const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
-    const [assetPickerOpen, setAssetPickerOpen] = useState(false);
     const [projectLoaded, setProjectLoaded] = useState(false);
     const [toolbarNodeId, setToolbarNodeId] = useState<string | null>(null);
     const [nodeImageSettingsOpen, setNodeImageSettingsOpen] = useState(false);
@@ -173,8 +172,6 @@ export function useCanvasPageState() {
         setShowImageInfo,
         clearConfirmOpen,
         setClearConfirmOpen,
-        assetPickerOpen,
-        setAssetPickerOpen,
         projectLoaded,
         setProjectLoaded,
         toolbarNodeId,

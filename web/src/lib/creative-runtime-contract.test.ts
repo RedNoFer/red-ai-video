@@ -86,11 +86,31 @@ describe("normalizeCreativeRunRequest", () => {
         });
     });
 
+    it("normalizes ordered all-frame preferences", () => {
+        expect(normalizeCreativeRunRequest({ clientRequestId: "req-all-frames", surface: "chat", prompt: "生成连续动作", assetIds: ["a", "b"], skillIds: [], modelIds: [], preferences: { mode: "video", video: { referenceMode: "all_frames", frameAssetIds: ["a", "b"] } } })).toMatchObject({ preferences: { video: { referenceMode: "all_frames", frameAssetIds: ["a", "b"] } } });
+    });
+
+    it("keeps ordered all-frame asset IDs", () => {
+        expect(
+            normalizeCreativeRunRequest({
+                clientRequestId: "req-all-frames",
+                surface: "chat",
+                prompt: "按关键帧连续生成",
+                assetIds: ["frame-1", "frame-2", "frame-3"],
+                skillIds: [],
+                modelIds: [],
+                preferences: { mode: "video", video: { referenceMode: "all_frames", frameAssetIds: ["frame-2", "frame-1", "frame-3"] } },
+            }).preferences?.video,
+        ).toMatchObject({ referenceMode: "all_frames", frameAssetIds: ["frame-2", "frame-1", "frame-3"] });
+    });
+
     it.each([
         [{ referenceMode: "first_frame" }, ["first-image"], "首帧模式需要选择首帧图片"],
         [{ referenceMode: "first_last", firstFrameAssetId: "first-image" }, ["first-image"], "首尾帧模式需要同时选择首帧和尾帧图片"],
         [{ referenceMode: "first_last", firstFrameAssetId: "same-image", lastFrameAssetId: "same-image" }, ["same-image"], "首帧和尾帧不能使用同一张图片"],
         [{ referenceMode: "first_frame", firstFrameAssetId: "missing-image" }, ["other-image"], "视频首尾帧必须来自本轮已选择的图片素材"],
+        [{ referenceMode: "all_frames", frameAssetIds: ["first-image"] }, ["first-image"], "全能帧必须选择 2 到 5 张图片"],
+        [{ referenceMode: "all_frames", frameAssetIds: ["first-image", "first-image"] }, ["first-image"], "全能帧图片不能重复"],
     ])("rejects invalid video frame preferences", (video, assetIds, message) => {
         expect(() =>
             normalizeCreativeRunRequest({
@@ -137,5 +157,48 @@ describe("isCreativeProjectHandoff", () => {
             }),
         ).toBe(true);
         expect(isCreativeProjectHandoff({ id: "handoff-one", surface: "canvas", title: "品牌画布", assets: [] })).toBe(false);
+    });
+});
+
+describe("drama script Agent contract", () => {
+    it("requires a project and episode and rejects media controls", () => {
+        expect(() =>
+            normalizeCreativeRunRequest({
+                clientRequestId: "request",
+                surface: "drama",
+                workflow: "drama-script",
+                projectId: "project",
+                episodeId: "episode",
+                prompt: "继续当前集冲突",
+                assetIds: [],
+                skillIds: [],
+                modelIds: [],
+            }),
+        ).not.toThrow();
+        expect(() =>
+            normalizeCreativeRunRequest({
+                clientRequestId: "request",
+                surface: "drama",
+                workflow: "drama-script",
+                projectId: "project",
+                episodeId: "episode",
+                prompt: "生成图片",
+                assetIds: ["asset"],
+                skillIds: [],
+                modelIds: [],
+            }),
+        ).toThrow("不接受媒体");
+        expect(() =>
+            normalizeCreativeRunRequest({
+                clientRequestId: "request",
+                surface: "drama",
+                workflow: "drama-script",
+                projectId: "project",
+                prompt: "继续当前集冲突",
+                assetIds: [],
+                skillIds: [],
+                modelIds: [],
+            }),
+        ).toThrow("当前集");
     });
 });

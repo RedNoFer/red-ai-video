@@ -25,7 +25,7 @@ function handoff(assets: CreativeAsset[], surface: CreativeProjectHandoff["surfa
         surface,
         title: "城市夜行",
         summary: "一部发生在雨夜城市的悬疑短剧",
-        style: "写实电影感",
+        style: "暗黑学院史诗奇幻",
         ratio: "16:9",
         assetIds: assets.map((item) => item.id),
         assets,
@@ -52,7 +52,7 @@ describe("创作项目交接转换", () => {
         expect(input).toMatchObject({
             title: "城市夜行",
             summary: "一部发生在雨夜城市的悬疑短剧",
-            style: "写实电影感",
+            style: "暗黑学院史诗奇幻",
             ratio: "16:9",
             initialScript: "【第一幕】\n女主走进雨夜车站。",
         });

@@ -2,6 +2,7 @@ import { channelWorkspaceStatusLabel, type ChannelWorkspaceStatus } from "./admi
 
 const statusTone: Record<ChannelWorkspaceStatus, string> = {
     enabled: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/45 dark:text-emerald-300",
+    incomplete: "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/70 dark:bg-amber-950/35 dark:text-amber-200",
     draft: "border-stone-200 bg-stone-50 text-stone-600 dark:border-stone-800 dark:bg-stone-900 dark:text-stone-300",
     disabled: "border-stone-200 bg-stone-100 text-stone-500 dark:border-stone-800 dark:bg-stone-900/70 dark:text-stone-400",
 };

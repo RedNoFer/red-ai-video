@@ -38,6 +38,8 @@ import { deleteDramaAgentConversation } from "@/services/api/drama-projects";
 import { usePublicSessionStore } from "@/stores/use-public-session-store";
 import { useDramaStore } from "../stores/use-drama-store";
 import { agentRequirementAcknowledgement } from "@/lib/agent-requirement-acknowledgement";
+import { createFrameEvidence, replaceFrameEvidence } from "@/lib/drama-continuity-policy";
+import { compileDramaShotPrompts } from "@/lib/drama-prompt-compiler";
 import type { DramaProjectStage } from "./drama-project-sections";
 import { DramaAgentMentionPicker } from "./drama-agent-mention-picker";
 import { DramaAgentHistory } from "./drama-agent-history";
@@ -162,6 +164,7 @@ function DramaAgentContent({
 }) {
     const { message, modal } = App.useApp();
     const replaceProject = useDramaStore((state) => state.replaceProject);
+    const updateShot = useDramaStore((state) => state.updateShot);
     const site = usePublicSessionStore((state) => state.payload?.settings?.site) || { logoUrl: "/logo.svg" };
     const { skills, skillsLoading, models } = useCreativeAgentOptions("drama");
     const [messages, setMessages] = useState<CreativeMessage[]>([]);
@@ -201,6 +204,19 @@ function DramaAgentContent({
     const mentionCandidates = useMemo(() => dramaAgentMentionCandidates(mentionItems, mentionQuery || ""), [mentionItems, mentionQuery]);
     const referencedProjectItems = useMemo(() => referencedDramaAgentItems(prompt, mentionItems), [mentionItems, prompt]);
     const stageGuide = DRAMA_AGENT_STAGE_GUIDES[stage];
+    const selectedShot = episode.shots.find((shot) => shot.id === selectedShotId);
+
+    useEffect(() => {
+        if (!selectedShot) return;
+        setPrompt(`请在当前镜头文案基础上做更细致的整改，完成后给出可直接使用的视频提示词。\n\n当前镜头：${selectedShot.title || `镜头 ${selectedShot.order}`}\n当前文案：${selectedShot.videoPrompt || compileDramaShotPrompts(project, episode, selectedShot).videoPrompt}`);
+    }, [episode, project, selectedShot]);
+
+    const applyAgentPromptToShot = (content: string) => {
+        if (!selectedShotId || !content.trim()) return;
+        const cleaned = content.replace(/^```(?:\w+)?\s*/i, "").replace(/```\s*$/i, "").trim();
+        updateShot(project.id, episode.id, selectedShotId, { videoPrompt: cleaned });
+        message.success("已回填当前镜头文案");
+    };
 
     useEffect(() => {
         if (project.creativeConversationId) activeConversationIdRef.current = project.creativeConversationId;
@@ -652,6 +668,7 @@ function DramaAgentContent({
                     <div className="flex min-w-0 items-center gap-2 font-medium">
                         <SiteLogo logoUrl={site.logoUrl} className="size-5" />
                         <span className="truncate">{stageGuide.label}</span>
+                        {selectedShot ? <span className="max-w-40 truncate text-xs font-normal text-muted-foreground">整改：{selectedShot.title || `镜头 ${selectedShot.order}`}</span> : null}
                     </div>
                     <div className="flex shrink-0 items-center gap-0.5">
                         <Tooltip title="新建对话">
@@ -763,6 +780,11 @@ function DramaAgentContent({
                                     aria-label="重试本次项目 Agent 请求"
                                 >
                                     重试
+                                </Button>
+                            ) : null}
+                            {message.role === "assistant" && message.status === "completed" && selectedShotId ? (
+                                <Button type="text" size="small" className="!mt-1 !h-7 !px-1.5 !text-xs !text-primary" onClick={() => applyAgentPromptToShot(message.content)}>
+                                    应用到当前镜头文案
                                 </Button>
                             ) : null}
                             {message.status !== "running" ? (
@@ -957,15 +979,31 @@ function DramaAgentAssets({ assets, project, episode }: { assets: CreativeAsset[
         const shot = episode.shots.find((item) => item.id === shotId);
         const url = referenceAsset?.serverUrl || referenceAsset?.remoteUrl || "";
         if (!shot || !url) return;
+        const role = frameKind === "start" ? "storyboard_start" : "storyboard_end";
+        const frameEvidence = replaceFrameEvidence(
+            shot.frameEvidence,
+            createFrameEvidence({
+                role,
+                source: "upload",
+                mediaUrl: url,
+                remoteUrl: referenceAsset?.remoteUrl,
+                sourceShotId: shot.id,
+                assetId: referenceAsset?.id,
+                validity: "candidate",
+            }),
+            "已替换为项目 Agent 引用帧",
+        );
         updateShot(project.id, episode.id, shot.id, {
+            frameEvidence,
             ...(frameKind === "start"
-                ? { storyboardStatus: "success" as const, storyboardTaskId: undefined, storyboardError: undefined, storyboardImageUrl: url, storyboardImageWidth: referenceAsset?.width, storyboardImageHeight: referenceAsset?.height }
+                ? { storyboardStatus: "success" as const, storyboardTaskId: undefined, storyboardError: undefined, storyboardImageUrl: url, storyboardImageRemoteUrl: referenceAsset?.remoteUrl, storyboardImageWidth: referenceAsset?.width, storyboardImageHeight: referenceAsset?.height }
                 : {
                       storyboardFrameMode: "first_last" as const,
                       storyboardEndStatus: "success" as const,
                       storyboardEndTaskId: undefined,
                       storyboardEndError: undefined,
                       storyboardEndImageUrl: url,
+                      storyboardEndImageRemoteUrl: referenceAsset?.remoteUrl,
                       storyboardEndImageWidth: referenceAsset?.width,
                       storyboardEndImageHeight: referenceAsset?.height,
                   }),
@@ -989,28 +1027,30 @@ function DramaAgentAssets({ assets, project, episode }: { assets: CreativeAsset[
         const reference: DramaAssetReference = {
             id: `reference-${nanoid()}`,
             url,
+            remoteUrl: sourceAsset.remoteUrl,
             storageKey: sourceAsset.storageKey,
             source: "generated",
             label: sourceAsset.title || "Agent 生成图",
             width: sourceAsset.width,
             height: sourceAsset.height,
             createdAt: new Date().toISOString(),
+            status: "candidate",
         };
         const selected = project[visualKind].find((item) => item.id === visualAssetId);
         const name = newVisualAssetName.trim() || sourceAsset.title.trim() || `${visualKind === "characters" ? "角色" : visualKind === "scenes" ? "场景" : visualKind === "props" ? "道具" : "线索"}参考`;
         if (selected) {
             const references = [...(selected.references || []), reference];
-            updateAsset(project.id, visualKind, selected.id, { references, primaryReferenceId: reference.id, referenceImageUrl: reference.url, referenceStorageKey: reference.storageKey });
-            message.success(`已加入${selected.name}的视觉参考图`);
+            updateAsset(project.id, visualKind, selected.id, { references });
+            message.success(`已加入${selected.name}的候选图，请在资产库确认主基准图`);
         } else if (visualKind === "characters") {
-            addCharacter(project.id, { name, description: "来自项目 Agent 的视觉参考", profile: emptyAssetProfile(), references: [reference], primaryReferenceId: reference.id, referenceImageUrl: reference.url, referenceStorageKey: reference.storageKey });
-            message.success(`已创建角色“${name}”并加入参考图`);
+            addCharacter(project.id, { name, description: "来自项目 Agent 的视觉参考", profile: emptyAssetProfile(), references: [reference] });
+            message.success(`已创建角色“${name}”并加入候选图`);
         } else if (visualKind === "scenes") {
-            addScene(project.id, { name, description: "来自项目 Agent 的视觉参考", profile: emptyAssetProfile(), references: [reference], primaryReferenceId: reference.id, referenceImageUrl: reference.url, referenceStorageKey: reference.storageKey });
-            message.success(`已创建场景“${name}”并加入参考图`);
+            addScene(project.id, { name, description: "来自项目 Agent 的视觉参考", profile: emptyAssetProfile(), references: [reference] });
+            message.success(`已创建场景“${name}”并加入候选图`);
         } else if (visualKind === "props") {
-            addProp(project.id, { name, description: "来自项目 Agent 的视觉参考", profile: emptyAssetProfile(), references: [reference], primaryReferenceId: reference.id, referenceImageUrl: reference.url, referenceStorageKey: reference.storageKey });
-            message.success(`已创建道具“${name}”并加入参考图`);
+            addProp(project.id, { name, description: "来自项目 Agent 的视觉参考", profile: emptyAssetProfile(), references: [reference] });
+            message.success(`已创建道具“${name}”并加入候选图`);
         } else {
             addClue(project.id, {
                 name,
@@ -1018,9 +1058,6 @@ function DramaAgentAssets({ assets, project, episode }: { assets: CreativeAsset[
                 payoff: "",
                 profile: emptyAssetProfile(),
                 references: [reference],
-                primaryReferenceId: reference.id,
-                referenceImageUrl: reference.url,
-                referenceStorageKey: reference.storageKey,
             });
             message.success(`已创建线索“${name}”并加入参考图`);
         }
@@ -1266,10 +1303,12 @@ function dramaSnapshot(project: DramaProject, episode: DramaEpisode, stage: Dram
             imagePrompt: shot.imagePrompt,
             videoPrompt: shot.videoPrompt,
             cameraMotion: shot.cameraMotion,
-            startFramePrompt: shot.startFramePrompt,
-            endFramePrompt: shot.endFramePrompt,
             negativePrompt: shot.negativePrompt,
             continuity: shot.continuity,
+            entryState: shot.entryState,
+            exitState: shot.exitState,
+            framePlan: shot.framePlan,
+            frameEvidence: shot.frameEvidence,
             duration: shot.duration,
             characterIds: shot.characterIds,
             sceneId: shot.sceneId,
@@ -1279,10 +1318,8 @@ function dramaSnapshot(project: DramaProject, episode: DramaEpisode, stage: Dram
             storyboardFrameMode: shot.storyboardFrameMode,
             storyboardStatus: shot.storyboardStatus,
             storyboardError: shot.storyboardError,
-            storyboardImageUrl: shot.storyboardImageUrl,
             storyboardEndStatus: shot.storyboardEndStatus,
             storyboardEndError: shot.storyboardEndError,
-            storyboardEndImageUrl: shot.storyboardEndImageUrl,
             generationStatus: shot.generationStatus,
             generationError: shot.generationError,
             videoUrl: shot.videoUrl,

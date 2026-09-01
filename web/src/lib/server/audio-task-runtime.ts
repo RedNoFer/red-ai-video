@@ -1,4 +1,4 @@
-import { getAuthSettings, refundUserPoints } from "@/lib/auth/store";
+import { refundUserPoints } from "@/lib/auth/store";
 import { fileTypeFromBuffer } from "file-type";
 import { mediaTaskSource } from "@/lib/media-management-contract";
 import { audioTaskRefundIdempotencyKey, refundAudioTask } from "@/lib/server/audio-task-refund";
@@ -9,7 +9,7 @@ import { finishGenerationAttempt, startGenerationAttempt } from "@/lib/server/ge
 import { fetchInternalApi, isInternalApiBaseUrl } from "@/lib/server/internal-origin";
 import { maintenanceWorkerHeaders } from "@/lib/server/maintenance-auth";
 import { resolveModelRequestTimeoutMs } from "@/lib/server/model-request-policy";
-import { buildProviderRequest, isProviderBusinessError, providerQueryPaths, readProviderError, readProviderString, resolvedProviderCreatePaths } from "@/lib/server/provider-task-config";
+import { buildProviderRequest, isProviderBusinessError, providerQueryPaths, readProviderError, readProviderString, readProviderValue, resolvedProviderCreatePaths } from "@/lib/server/provider-task-config";
 import { writePersistentMediaDataUrl } from "@/lib/server/reference-asset-store";
 import { registerGenerationTaskAssetsForUser } from "@/lib/server/creative-runtime-service";
 import { scheduleGenerationTask } from "@/lib/server/generation-task-scheduler";
@@ -19,7 +19,7 @@ import { fetchSafeOutbound } from "@/lib/server/safe-outbound-fetch";
 
 export type AudioUpstreamStep =
     | { state: "pending"; status: string; upstreamTaskId: string; createPath: string; pointsCost?: number; pointsRecordId?: string }
-    | { state: "result_ready"; status: string; resultUrl: string; pointsCost?: number; pointsRecordId?: string }
+    | { state: "result_ready"; status: string; resultUrl: string; voiceId?: string; pointsCost?: number; pointsRecordId?: string }
     | { state: "completed" }
     | { state: "failed"; status: string; error: string };
 
@@ -47,6 +47,11 @@ export async function createAudioTaskUpstreamStep(task: AudioTask, origin: strin
                 prompt: candidate.prompt,
                 text: candidate.prompt,
                 voice: config.voice,
+                design_prompt: config.designPrompt,
+                voice_prompt: config.designPrompt,
+                clone_sample_url: config.cloneSampleUrl,
+                sample_audio_url: config.cloneSampleUrl,
+                sample_url: config.cloneSampleUrl,
                 response_format: config.format,
                 format: config.format,
                 speed: Number(config.speed) || 1,
@@ -63,6 +68,7 @@ export async function createAudioTaskUpstreamStep(task: AudioTask, origin: strin
             if (billing.pointsRecordId) await updateAudioTask(task.id, { billing: { pointsCost: billing.pointsCost ?? 0, pointsRecordId: billing.pointsRecordId, refunded: false } });
             const contentType = response.headers.get("content-type")?.split(";")[0].toLowerCase() || "";
             if (!contentType.includes("json")) {
+                if (config.voiceOperation) throw new GenerationSubmissionSafeFailure("声纹创建接口未返回 voice_id，未覆盖原有角色声纹");
                 const completed = await persistAudioBytes(candidate, origin, Buffer.from(await response.arrayBuffer()), contentType);
                 if (completed?.status === "success") {
                     await markAudioAttemptSucceeded(candidate, billing);
@@ -78,8 +84,29 @@ export async function createAudioTaskUpstreamStep(task: AudioTask, origin: strin
                 throw new GenerationSubmissionUncertainError("音频接口返回了无效 JSON，创建结果待确认");
             }
             if (isProviderBusinessError(data)) throw new GenerationSubmissionSafeFailure(readProviderError(data) || "音频接口返回失败");
-            const directUrl = readProviderString(data, config.advancedConfig?.resultField, AUDIO_KEYS);
-            if (directUrl) {
+            const voiceId = readVoiceId(data, config);
+            if (config.voiceOperation && !voiceId) throw new GenerationSubmissionSafeFailure("声纹创建接口未返回 voice_id，未覆盖原有角色声纹");
+            const audioField = config.advancedConfig?.previewAudioField || config.advancedConfig?.resultField;
+            const directUrl = readProviderString(data, audioField, AUDIO_KEYS);
+            const audio = readProviderAudio(data, audioField);
+            if (audio?.base64) {
+                const completed = await persistAudioTaskResult(candidate, origin, audioDataUrl(audio.base64, audio.mimeType || mimeFromFormat(candidate.config.format || "wav")), cookie, workerUserId, voiceId);
+                if (completed?.status === "success") {
+                    await markAudioAttemptSucceeded(candidate, billing);
+                    return { state: "completed" };
+                }
+                return { state: "failed", status: completed?.status || "cancelled", error: completed?.error || "任务已取消" };
+            }
+            if (audio?.hex) {
+                const completed = await persistAudioTaskResult(candidate, origin, audioHexDataUrl(audio.hex, audio.mimeType || mimeFromFormat(candidate.config.format || "mp3")), cookie, workerUserId, voiceId);
+                if (completed?.status === "success") {
+                    await markAudioAttemptSucceeded(candidate, billing);
+                    return { state: "completed" };
+                }
+                return { state: "failed", status: completed?.status || "cancelled", error: completed?.error || "任务已取消" };
+            }
+            const resolvedUrl = audio?.url || directUrl;
+            if (resolvedUrl) {
                 const submittedAt = Date.now();
                 await scheduleGenerationTask("audio", task.id, {
                     executionPhase: "result_ready",
@@ -88,12 +115,15 @@ export async function createAudioTaskUpstreamStep(task: AudioTask, origin: strin
                     submittedAt,
                     nextPollAt: submittedAt,
                     lastUpstreamStatus: "completed",
-                    resultPayload: { url: directUrl },
+                    resultPayload: { url: resolvedUrl, ...(voiceId ? { voiceId } : {}) },
                 });
-                return { state: "result_ready", status: "completed", resultUrl: directUrl, ...billing };
+                return { state: "result_ready", status: "completed", resultUrl: resolvedUrl, ...(voiceId ? { voiceId } : {}), ...billing };
             }
             const id = readProviderString(data, undefined, ID_KEYS);
             if (!id) throw new GenerationSubmissionUncertainError("音频接口没有返回音频或任务 ID，创建结果待确认");
+            if (config.advancedConfig?.protocol === "openai-audio-dialogue" && !config.advancedConfig.queryPath?.trim()) {
+                throw new GenerationSubmissionUncertainError("Chat/Responses 音频接口只返回了任务 ID，未返回可播放音频；未配置官方查询路径，已停止猜测查询地址");
+            }
             await updateAudioTask(task.id, { upstream: { id, createPath: path } });
             const submittedAt = Date.now();
             await scheduleGenerationTask("audio", task.id, {
@@ -120,6 +150,9 @@ export async function createAudioTaskUpstreamStep(task: AudioTask, origin: strin
 
 export async function queryAudioTaskUpstreamStep(task: AudioTask, origin: string, cookie = "", workerUserId = ""): Promise<AudioUpstreamStep> {
     if (!task.upstream?.id) return { state: "failed", status: "missing_upstream_id", error: "音频任务缺少上游任务 ID" };
+    if (task.config.advancedConfig?.protocol === "openai-audio-dialogue" && !task.config.advancedConfig.queryPath?.trim()) {
+        throw new GenerationSubmissionUncertainError("Chat/Responses 音频接口只返回了任务 ID，未返回可播放音频；未配置官方查询路径，已停止猜测查询地址");
+    }
     let lastError = "";
     for (const path of providerQueryPaths(task.config.advancedConfig, task.upstream.id, [`${task.upstream.createPath.replace(/\/+$/, "")}/${encodeURIComponent(task.upstream.id)}`])) {
         const response = await providerFetch(task, origin, cookie, workerUserId, path, { cache: "no-store", signal: AbortSignal.timeout(Math.min(resolveModelRequestTimeoutMs(task.config, "audio"), 60_000)) });
@@ -135,24 +168,32 @@ export async function queryAudioTaskUpstreamStep(task: AudioTask, origin: string
             lastError = "音频任务查询返回了无效 JSON";
             continue;
         }
-        const result = readProviderString(data, task.config.advancedConfig?.resultField, AUDIO_KEYS);
+        const voiceId = readVoiceId(data, task.config);
+        if (task.config.voiceOperation && !voiceId) throw new GenerationSubmissionSafeFailure("声纹创建接口未返回 voice_id，未覆盖原有角色声纹");
+        const audioField = task.config.advancedConfig?.previewAudioField || task.config.advancedConfig?.resultField;
+        const audio = readProviderAudio(data, audioField);
+        const result = audio?.base64 ? audioDataUrl(audio.base64, audio.mimeType || mimeFromFormat(task.config.format || "wav")) : audio?.hex ? audioHexDataUrl(audio.hex, audio.mimeType || mimeFromFormat(task.config.format || "mp3")) : audio?.url || readProviderString(data, audioField, AUDIO_KEYS);
         const status = readProviderString(data, task.config.advancedConfig?.statusField, STATUS_KEYS).toLowerCase();
-        if (result) return { state: "result_ready", status: status || "completed", resultUrl: result };
+        if (result) return { state: "result_ready", status: status || "completed", resultUrl: result, ...(voiceId ? { voiceId } : {}) };
         if (FAILED.has(status)) return { state: "failed", status, error: readProviderString(data, undefined, ERROR_KEYS) || "音频生成失败" };
         return { state: "pending", status: status || "processing", upstreamTaskId: task.upstream.id, createPath: task.upstream.createPath };
     }
     throw new Error(lastError || "音频任务查询失败");
 }
 
-export async function persistAudioTaskResult(task: AudioTask, origin: string, resultUrl: string, cookie = "", workerUserId = "") {
+export async function persistAudioTaskResult(task: AudioTask, origin: string, resultUrl: string, cookie = "", workerUserId = "", voiceId = "") {
     if (/^data:audio\//i.test(resultUrl)) {
         const asset = await writePersistentMediaDataUrl(resultUrl, "audio", mediaContext(task));
-        return completeAudioTask(task, asset.url || `${origin}/api/reference-assets/${asset.token}`, resultUrl.slice(5, resultUrl.indexOf(";")) || mimeFromFormat(task.config.format || "mp3"));
+        return completeAudioTask(task, asset.url || `${origin}/api/reference-assets/${asset.token}`, resultUrl.slice(5, resultUrl.indexOf(";")) || mimeFromFormat(task.config.format || "mp3"), asset.token, voiceId);
     }
     const path = /^https?:\/\//i.test(resultUrl) ? `/_media?url=${encodeURIComponent(resultUrl)}` : `/${resultUrl.replace(/^\/+/, "")}`;
     const response = await providerFetch(task, origin, cookie, workerUserId, path, { signal: AbortSignal.timeout(resolveModelRequestTimeoutMs(task.config, "audio")) });
-    if (!response.ok) throw new Error(readAudioError(await response.text(), response.status));
-    return persistAudioBytes(task, origin, Buffer.from(await response.arrayBuffer()), response.headers.get("content-type")?.split(";")[0] || "");
+    if (!response.ok) {
+        const error = readAudioError(await response.text(), response.status);
+        if (response.status >= 400 && response.status < 500) throw new GenerationSubmissionSafeFailure(`音频结果下载失败：${error}`, response.status);
+        throw new Error(`音频结果下载失败：${error}`);
+    }
+    return persistAudioBytes(task, origin, Buffer.from(await response.arrayBuffer()), response.headers.get("content-type")?.split(";")[0] || "", voiceId);
 }
 
 export async function markAudioTaskFailed(task: AudioTask, error: string) {
@@ -171,7 +212,9 @@ export async function markAudioTaskFailed(task: AudioTask, error: string) {
 async function createAudioUpstream(task: AudioTask, origin: string, cookie: string, workerUserId: string, payload: Record<string, unknown>) {
     let lastError = "";
     const idempotencyKey = `audio-task:${task.id}:attempt:${task.attemptNo || 1}`;
-    for (const path of resolvedProviderCreatePaths(task.config.advancedConfig, "audio", ["/audio/speech"])) {
+    const dialogueProtocol = task.config.advancedConfig?.protocol === "openai-audio-dialogue";
+    const fallbackPaths = dialogueProtocol ? ["/chat/completions"] : ["/audio/speech"];
+    for (const path of resolvedProviderCreatePaths(task.config.advancedConfig, "audio", fallbackPaths)) {
         let response: Response;
         try {
             response = await providerFetch(task, origin, cookie, workerUserId, path, {
@@ -203,7 +246,7 @@ async function refundAudioCandidate(task: AudioTask) {
     await refundUserPoints(task.userId, generationModelId(task.config), billing.pointsCost, "audio", 1, audioTaskRefundIdempotencyKey({ id: task.id, attemptNo: task.attemptNo }), billing.pointsRecordId);
 }
 
-async function persistAudioBytes(task: AudioTask, origin: string, bytes: Buffer, responseMime: string) {
+async function persistAudioBytes(task: AudioTask, origin: string, bytes: Buffer, responseMime: string, voiceId = "") {
     if (!bytes.length || bytes.length > 30 * 1024 * 1024) throw new Error("音频结果为空或超过 30MB 限制");
     const detected = await fileTypeFromBuffer(bytes);
     const detectedMime = detected?.mime.startsWith("audio/") ? detected.mime : "";
@@ -211,7 +254,7 @@ async function persistAudioBytes(task: AudioTask, origin: string, bytes: Buffer,
     if (!detectedMime && (!declaredMime || looksLikeTextResponse(bytes))) throw new GenerationSubmissionSafeFailure("音频接口返回的不是有效音频文件");
     const mimeType = detectedMime || declaredMime || mimeFromFormat(task.config.format || "mp3");
     const asset = await writePersistentMediaDataUrl(`data:${mimeType};base64,${bytes.toString("base64")}`, "audio", mediaContext(task));
-    return completeAudioTask(task, asset.url || `${origin}/api/reference-assets/${asset.token}`, mimeType);
+    return completeAudioTask(task, asset.url || `${origin}/api/reference-assets/${asset.token}`, mimeType, asset.token, voiceId);
 }
 
 function looksLikeTextResponse(bytes: Buffer) {
@@ -219,13 +262,13 @@ function looksLikeTextResponse(bytes: Buffer) {
     return prefix.startsWith("<!doctype") || prefix.startsWith("<html") || prefix.startsWith("{") || prefix.startsWith("[");
 }
 
-async function completeAudioTask(task: AudioTask, url: string, mimeType: string) {
+async function completeAudioTask(task: AudioTask, url: string, mimeType: string, assetId?: string, voiceId = "") {
     const current = await getAudioTask(task.id);
     if (!current || current.status === "cancelled") {
         if (current?.status === "cancelled") await refundAudioTask(current);
         return current;
     }
-    const completed = await transitionAudioTask(current, ["pending", "running"], { status: "success", result: { url, mimeType }, config: { ...current.config, apiKey: "" }, billing: current.billing });
+    const completed = await transitionAudioTask(current, ["pending", "running"], { status: "success", result: { url, mimeType, ...(assetId ? { assetId } : {}), ...(voiceId ? { voiceId } : {}) }, config: { ...current.config, apiKey: "" }, billing: current.billing });
     if (!completed) {
         const latest = await getAudioTask(task.id);
         if (latest?.status === "cancelled") await refundAudioTask(latest);
@@ -293,8 +336,74 @@ function readAudioError(value: string, status: number) {
     }
 }
 
+function readVoiceId(value: unknown, config: AudioTask["config"]) {
+    return readProviderString(value, config.advancedConfig?.voiceIdField, ["voice_id", "voiceId", "voice_profile_id", "voiceProfileId"]);
+}
+
 const ID_KEYS = ["task_id", "taskId", "id", "job_id", "jobId", "generation_id", "generationId"];
 const STATUS_KEYS = ["status", "state", "task_status", "taskStatus"];
 const AUDIO_KEYS = ["audio_url", "audioUrl", "media_url", "mediaUrl", "output_url", "outputUrl", "result_url", "resultUrl", "url", "uri"];
 const ERROR_KEYS = ["error_message", "errorMessage", "message", "msg", "error"];
 const FAILED = new Set(["failed", "failure", "error", "cancelled", "canceled", "expired"]);
+
+type ProviderAudioValue = { base64?: string; hex?: string; url?: string; mimeType?: string };
+
+function readProviderAudio(value: unknown, configuredPath?: string): ProviderAudioValue | undefined {
+    const configured = readProviderValue(value, configuredPath, ["audio", "audio_url", "audioUrl", "output_audio", "outputAudio", "audio_data", "audioData", "b64_json", "base64"]);
+    const result = extractProviderAudio(configured, configuredPath || "audio");
+    if (result) return result;
+    return extractProviderAudio(value);
+}
+
+function extractProviderAudio(value: unknown, key = "", depth = 0): ProviderAudioValue | undefined {
+    if (value === undefined || value === null || depth > 8) return undefined;
+    if (typeof value === "string") {
+        const text = value.trim();
+        const compact = text.replace(/\s/g, "");
+        if (!text) return undefined;
+        if (/^data:audio\//i.test(text)) return { url: text };
+        if (/^https?:\/\//i.test(text) || text.startsWith("/api/") || text.startsWith("/media/")) return { url: text };
+        if (isLikelyHexAudio(compact, key)) return { hex: compact.toLowerCase() };
+        if (isLikelyBase64Audio(compact, key)) return { base64: compact };
+        return undefined;
+    }
+    if (Array.isArray(value)) {
+        for (const item of value) {
+            const result = extractProviderAudio(item, key, depth + 1);
+            if (result) return result;
+        }
+        return undefined;
+    }
+    if (typeof value !== "object") return undefined;
+    const record = value as Record<string, unknown>;
+    const mimeType = typeof record.mime_type === "string" ? record.mime_type : typeof record.mimeType === "string" ? record.mimeType : undefined;
+    for (const [name, item] of Object.entries(record)) {
+        const normalized = name.replace(/[^a-z0-9]/gi, "").toLowerCase();
+        if (["data", "base64", "b64json", "audiodata", "content"].includes(normalized) && typeof item === "string") {
+            const result = extractProviderAudio(item, normalized, depth + 1);
+            if (result?.base64) return { ...result, mimeType: result.mimeType || mimeType };
+        }
+        if (["url", "uri", "audiourl", "mediaurl", "outputurl"].includes(normalized) && typeof item === "string" && item.trim()) return { url: item.trim(), mimeType };
+    }
+    for (const [name, item] of Object.entries(record)) {
+        const result = extractProviderAudio(item, name, depth + 1);
+        if (result) return { ...result, mimeType: result.mimeType || mimeType };
+    }
+    return undefined;
+}
+
+function isLikelyBase64Audio(value: string, key: string) {
+    return value.length >= 32 && /^(?:data|base64|b64|audio)/i.test(key) && /^[a-z0-9+/=\s]+$/i.test(value);
+}
+
+function isLikelyHexAudio(value: string, key: string) {
+    return value.length >= 32 && value.length % 2 === 0 && /(?:audio|trial|preview|voice|sound)/i.test(key) && /^[0-9a-f]+$/i.test(value);
+}
+
+function audioDataUrl(base64: string, mimeType: string) {
+    return `data:${mimeType};base64,${base64.replace(/\s/g, "")}`;
+}
+
+function audioHexDataUrl(hex: string, mimeType: string) {
+    return audioDataUrl(Buffer.from(hex.replace(/\s/g, ""), "hex").toString("base64"), mimeType);
+}

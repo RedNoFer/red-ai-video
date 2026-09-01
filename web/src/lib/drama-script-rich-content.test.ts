@@ -10,6 +10,13 @@ describe("drama script rich content", () => {
         expect(JSON.stringify(content)).not.toContain("<p>");
     });
 
+    it("renders markdown scene headings as real headings while preserving plain-text format", () => {
+        const content = plainTextToDramaRichContent("### 场1｜黑湖记忆\n正文");
+
+        expect(content.content?.[0]).toMatchObject({ type: "heading", attrs: { level: 3 }, content: [{ type: "text", text: "场1｜黑湖记忆" }] });
+        expect(dramaRichContentToPlainText(content)).toBe("### 场1｜黑湖记忆\n正文");
+    });
+
     it("keeps supported formatting and removes unsafe data", () => {
         const content = normalizeDramaScriptRichContent({
             type: "doc",

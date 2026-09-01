@@ -62,6 +62,9 @@ describe("drama mobile list layout", () => {
         expect(page).toContain('episode.reviewStatus === "draft"');
         expect(page).toContain('updateEpisode(project.id, episode.id, { reviewStatus: "content_review" })');
         expect(page).toContain('setStage("review")');
+        expect(page).toContain("reviewCompletionTask: runningTask");
+        expect(sections).toContain("审核补全中");
+        expect(page).toContain("当前短剧项目还没有剧集");
         expect(agent).not.toContain("data-drama-right-workspace");
         expect(agent).not.toContain("DramaEpisodeSettings");
         expect(sections).not.toContain("<Tabs");

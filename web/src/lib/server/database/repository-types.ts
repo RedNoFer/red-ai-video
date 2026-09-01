@@ -130,6 +130,7 @@ export type AppSettingsRecord = {
     defaultPlanId: string;
     generationConcurrency: JsonValue;
     generationDefaults: JsonValue;
+    characterVoicePool: JsonValue;
     paymentConfig: JsonValue;
     logicalModels: JsonValue;
     defaultModels: JsonValue;

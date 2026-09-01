@@ -9,6 +9,7 @@ describe("resolveDramaShotDuration", () => {
 
     it("keeps an explicit model duration", () => {
         expect(resolveDramaShotDuration(6, 10)).toBe(6);
+        expect(resolveDramaShotDuration(7.5, 10)).toBe(8);
     });
 
     it("keeps durations above the former platform ceiling", () => {

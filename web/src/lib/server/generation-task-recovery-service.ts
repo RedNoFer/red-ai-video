@@ -5,7 +5,7 @@ import { failVideoTaskFromWorker, persistVideoTaskResult, queryVideoTaskUpstream
 import { getVideoTask, type VideoTask } from "@/lib/server/video-task-store";
 import { createAudioTaskUpstreamStep, markAudioTaskFailed, persistAudioTaskResult, queryAudioTaskUpstreamStep } from "@/lib/server/audio-task-runtime";
 import { getAudioTask, updateAudioTask, type AudioTask } from "@/lib/server/audio-task-store";
-import { createImageTaskUpstreamStep, markImageTaskFailed, persistImageTaskResult, queryCancelledImageTaskUpstreamStep, queryImageTaskUpstreamStep } from "@/lib/server/image-task-runtime";
+import { createImageTaskUpstreamStep, imageTaskRequestDiagnostic, markImageTaskFailed, persistImageTaskResult, queryCancelledImageTaskUpstreamStep, queryImageTaskUpstreamStep } from "@/lib/server/image-task-runtime";
 import { getImageTask, updateImageTask, type ImageTask } from "@/lib/server/image-task-store";
 import { getTextTask, updateTextTask } from "@/lib/server/text-task-store";
 import { queryCancelledTextTaskUpstreamStep, runTextTaskStep } from "@/lib/server/text-task-runtime";
@@ -21,6 +21,7 @@ import { refundTextTask } from "@/lib/server/text-task-refund";
 import { refundVideoTask } from "@/lib/server/video-task-refund";
 import { toSafeGenerationErrorMessage } from "@/lib/server/generation-errors";
 import { getAuthSettings } from "@/lib/auth/store";
+import { GenerationSubmissionSafeFailure, GenerationSubmissionUncertainError } from "@/lib/server/generation-submission-error";
 
 type RecoveryResult = "pending" | "result_ready" | "completed" | "failed" | "needs_review" | "deferred";
 
@@ -414,11 +415,27 @@ async function processImageLease(lease: GenerationTaskLease, workerId: string, o
             executionPhase: "needs_review",
             nextPollAt: undefined,
             lastUpstreamStatus: "submission_outcome_unknown",
-            resultPayload: reviewPayload(lease, "图片任务在提交阶段中断，未取得上游任务 ID"),
+            resultPayload: {
+                ...reviewPayload(lease, task.error || "图片任务在提交阶段中断，未取得上游任务 ID"),
+                providerError: task.error || task.attempts?.at(-1)?.error || "图片任务在提交阶段中断，未取得上游任务 ID",
+                request: imageTaskRequestDiagnostic(task),
+            },
         });
         return "needs_review";
     }
     if (needsPersistence(lease)) return persistImageLease(task, lease, workerId, origin, cookie);
+    const submittedAt = lease.submittedAt;
+    const requestTimeoutMs = resolveModelRequestTimeoutMs(task.config, "image");
+    if (task.upstream?.id && submittedAt && Date.now() - submittedAt >= requestTimeoutMs) {
+        await markImageTaskFailed(task, "图片任务生成超时，已停止继续轮询（超过模型允许的最长等待时间）");
+        await releaseGenerationTaskLease("image", task.id, workerId, {
+            executionPhase: "completed",
+            nextPollAt: undefined,
+            lastPollAt: Date.now(),
+            lastUpstreamStatus: "timeout",
+        });
+        return "failed";
+    }
     try {
         const step = task.upstream?.id ? await queryImageTaskUpstreamStep(task, origin, cookie, cookie ? "" : task.userId) : await createImageTaskUpstreamStep(task, origin, publicOrigin, cookie, cookie ? "" : task.userId);
         const now = Date.now();
@@ -465,9 +482,21 @@ async function processImageLease(lease: GenerationTaskLease, workerId: string, o
         return "pending";
     } catch (error) {
         const latest = await getImageTask(task.id);
+        if (error instanceof GenerationSubmissionSafeFailure) {
+            await markImageTaskFailed(task, toSafeGenerationErrorMessage(error, "图片生成失败"));
+            await releaseGenerationTaskLease("image", task.id, workerId, {
+                executionPhase: "completed",
+                nextPollAt: undefined,
+                lastPollAt: Date.now(),
+                lastUpstreamStatus: "submission_failed",
+            });
+            return "failed";
+        }
         const count = errorCount(lease.lastUpstreamStatus) + 1;
         const upstreamTaskId = latest?.upstream?.id || lease.upstreamTaskId;
         const submitted = Boolean(upstreamTaskId);
+        const imageTask = latest || (lease.payload as unknown as ImageTask);
+        const diagnostics = error instanceof GenerationSubmissionUncertainError ? error.diagnostics : undefined;
         await releaseGenerationTaskLease("image", task.id, workerId, {
             executionPhase: submitted ? "polling" : "needs_review",
             upstreamTaskId,
@@ -477,7 +506,16 @@ async function processImageLease(lease: GenerationTaskLease, workerId: string, o
             nextPollAt: submitted ? generationTaskNextPollAt({ consecutiveErrors: count }) : undefined,
             lastPollAt: Date.now(),
             lastUpstreamStatus: submitted ? `query_error:${count}` : "submission_outcome_unknown",
-            ...(!submitted ? { resultPayload: reviewPayload(lease, safeReviewReason(error, "图片任务创建结果未知")) } : {}),
+            ...(!submitted
+                ? {
+                      resultPayload: {
+                          ...reviewPayload(lease, safeReviewReason(error, "图片任务创建结果未知")),
+                          providerError: safeError(error),
+                          ...(diagnostics ? { submissionDiagnostics: diagnostics } : {}),
+                          ...(imageTask?.config ? { request: imageTaskRequestDiagnostic(imageTask) } : {}),
+                      },
+                  }
+                : {}),
         });
         console.warn("Image task step deferred", { taskId: task.id, error: safeError(error) });
         return submitted ? "deferred" : "needs_review";
@@ -544,11 +582,19 @@ async function processAudioLease(lease: GenerationTaskLease, workerId: string, o
             return "failed";
         }
         if (step.state === "completed") {
+            const completedTask = await getAudioTask(task.id);
+            await applyVoiceCreationResult(completedTask);
             await releaseGenerationTaskLease("audio", task.id, workerId, { executionPhase: "completed", nextPollAt: undefined, lastUpstreamStatus: "persisted" });
             return "completed";
         }
         if (step.state === "result_ready") {
-            await releaseGenerationTaskLease("audio", task.id, workerId, { executionPhase: "result_ready", nextPollAt: now, lastPollAt: now, lastUpstreamStatus: step.status, resultPayload: { url: step.resultUrl } });
+            await releaseGenerationTaskLease("audio", task.id, workerId, {
+                executionPhase: "result_ready",
+                nextPollAt: now,
+                lastPollAt: now,
+                lastUpstreamStatus: step.status,
+                resultPayload: { url: step.resultUrl, ...(step.voiceId ? { voiceId: step.voiceId } : {}) },
+            });
             return "result_ready";
         }
         const latest = (await getAudioTask(task.id)) || task;
@@ -568,40 +614,64 @@ async function processAudioLease(lease: GenerationTaskLease, workerId: string, o
         const latest = await getAudioTask(task.id);
         const upstreamTaskId = latest?.upstream?.id || lease.upstreamTaskId;
         const count = errorCount(lease.lastUpstreamStatus) + 1;
+        const needsReview = error instanceof GenerationSubmissionUncertainError;
         await releaseGenerationTaskLease("audio", task.id, workerId, {
-            executionPhase: upstreamTaskId ? "polling" : "needs_review",
+            executionPhase: needsReview || !upstreamTaskId ? "needs_review" : "polling",
             upstreamTaskId,
             channelId: latest?.config.channelId,
             provider: latest ? latest.config.advancedConfig?.protocol || latest.config.apiFormat : undefined,
             queryPath: latest?.config.advancedConfig?.queryPath,
-            nextPollAt: upstreamTaskId ? generationTaskNextPollAt({ consecutiveErrors: count }) : undefined,
+            nextPollAt: needsReview || !upstreamTaskId ? undefined : generationTaskNextPollAt({ consecutiveErrors: count }),
             lastPollAt: Date.now(),
-            lastUpstreamStatus: upstreamTaskId ? `query_error:${count}` : "submission_outcome_unknown",
-            ...(!upstreamTaskId ? { resultPayload: reviewPayload(lease, safeReviewReason(error, "音频任务创建结果未知")) } : {}),
+            lastUpstreamStatus: needsReview || !upstreamTaskId ? "query_contract_missing" : `query_error:${count}`,
+            ...(needsReview || !upstreamTaskId ? { resultPayload: reviewPayload(lease, safeReviewReason(error, "音频任务创建结果未知")) } : {}),
         });
-        return upstreamTaskId ? "deferred" : "needs_review";
+        return needsReview || !upstreamTaskId ? "needs_review" : "deferred";
     }
 }
 
 async function persistAudioLease(task: AudioTask, lease: GenerationTaskLease, workerId: string, origin: string, cookie: string): Promise<RecoveryResult> {
     const resultUrl = typeof lease.resultPayload?.url === "string" ? lease.resultPayload.url.trim() : "";
-    if (!resultUrl) {
-        await markAudioTaskFailed(task, "音频任务已完成但没有返回音频地址");
-        await releaseGenerationTaskLease("audio", task.id, workerId, { executionPhase: "completed", nextPollAt: undefined, lastUpstreamStatus: "result_url_missing" });
+    if (!isAudioResultLocation(resultUrl)) {
+        await markAudioTaskFailed(task, resultUrl ? "音频接口返回了文本而不是可播放音频" : "音频任务已完成但没有返回音频地址");
+        await releaseGenerationTaskLease("audio", task.id, workerId, { executionPhase: "completed", nextPollAt: undefined, lastUpstreamStatus: resultUrl ? "invalid_audio_result" : "result_url_missing" });
         return "failed";
     }
     await scheduleGenerationTask("audio", task.id, { executionPhase: "persisting", nextPollAt: lease.nextPollAt });
     try {
-        const completed = await persistAudioTaskResult(task, origin, resultUrl, cookie, cookie ? "" : task.userId);
+        const voiceId = typeof lease.resultPayload?.voiceId === "string" ? lease.resultPayload.voiceId : "";
+        const completed = await persistAudioTaskResult(task, origin, resultUrl, cookie, cookie ? "" : task.userId, voiceId);
         if (!completed || completed.status !== "success") throw new Error("音频结果保存后未进入成功状态");
+        await applyVoiceCreationResult(completed);
         await releaseGenerationTaskLease("audio", task.id, workerId, { executionPhase: "completed", nextPollAt: undefined, lastUpstreamStatus: "persisted" });
         return "completed";
     } catch (error) {
+        if (isPermanentAudioPersistenceFailure(error)) {
+            const detail = error instanceof Error ? error.message : "音频结果不可用";
+            const status = error instanceof GenerationSubmissionSafeFailure ? error.status : undefined;
+            await markAudioTaskFailed(task, `试听音频落盘失败：${detail}`);
+            await releaseGenerationTaskLease("audio", task.id, workerId, { executionPhase: "completed", nextPollAt: undefined, lastUpstreamStatus: `persist_failed:${status || "invalid"}` });
+            return "failed";
+        }
         const count = errorCount(lease.lastUpstreamStatus) + 1;
         await releaseGenerationTaskLease("audio", task.id, workerId, { executionPhase: "persisting", nextPollAt: generationTaskNextPollAt({ consecutiveErrors: count }), lastUpstreamStatus: `persist_error:${count}` });
         console.warn("Audio result persistence deferred", { taskId: task.id, error: safeError(error) });
         return "deferred";
     }
+}
+
+async function applyVoiceCreationResult(task: AudioTask | null | undefined) {
+    if (!task?.voiceCreation) return;
+    const { applyDramaVoiceCreationTask } = await import("@/lib/server/drama-voice-creation");
+    await applyDramaVoiceCreationTask(task);
+}
+
+function isPermanentAudioPersistenceFailure(error: unknown): error is Error & { status?: number } {
+    return error instanceof GenerationSubmissionSafeFailure || (error instanceof Error && error.name === "GenerationSubmissionSafeFailure");
+}
+
+function isAudioResultLocation(value: string) {
+    return /^data:audio\//i.test(value) || /^https?:\/\//i.test(value) || /^\//.test(value);
 }
 
 async function processVideoLease(lease: GenerationTaskLease, workerId: string, origin: string, cookie: string): Promise<RecoveryResult> {

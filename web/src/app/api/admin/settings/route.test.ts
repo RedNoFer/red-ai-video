@@ -16,6 +16,7 @@ vi.mock("@/lib/server/audit-log-store", () => ({ auditActorFromRequest: vi.fn(()
 
 import { GET, PATCH } from "./route";
 import { DEFAULT_SITE_SETTINGS } from "@/lib/auth/store";
+import { applyChannelProtocol, protocolModelConfig } from "@/lib/channel-protocol-registry";
 
 const savedSettings = {
     systemChannels: [{ id: "one", name: "主渠道", baseUrl: "https://api.example.com/v1", apiKey: "saved-secret", webhookSecret: "0123456789abcdef0123456789abcdef", apiFormat: "openai", models: ["vendor/writer"], enabled: true }],
@@ -48,6 +49,38 @@ describe("admin settings model routing", () => {
             }),
         );
         expect(mocks.safeRecordAuditLog).toHaveBeenCalledWith(expect.objectContaining({ action: "admin.settings.update", metadata: { fields: expect.arrayContaining(["systemChannels", "logicalModels", "defaultModels"]) } }));
+    });
+
+    it("repairs a stale Buming Seedance request template before validating and saving", async () => {
+        const channel = applyChannelProtocol(
+            { id: "buming", name: "不鸣 TokenGo Seedance 渠道", baseUrl: "https://api.tokengo.love", apiKey: "saved-secret", apiFormat: "openai", models: ["seedance-2-0-official"], enabled: true },
+            "buming-seedance",
+        );
+        channel.advancedConfig = {
+            ...channel.advancedConfig!,
+            modelConfigs: {
+                ...channel.advancedConfig!.modelConfigs,
+                "seedance-2-0-official": {
+                    ...channel.advancedConfig!.modelConfigs!["seedance-2-0-official"],
+                    requestTemplate: '{"model":"{{model}}","prompt":"{{prompt}}","first_frame":"{{first_frame}}","last_frame":"{{last_frame}}"}',
+                },
+            },
+        };
+
+        const response = await PATCH(
+            request({
+                systemChannels: [channel],
+                logicalModels: [{ id: "seedance-2-0-official", name: "Seedance", capability: "video", enabled: true, bindings: [{ id: "video", channelId: "buming", upstreamModel: "seedance-2-0-official", enabled: true, priority: 1 }] }],
+                defaultModels: { textModel: "", imageModel: "", videoModel: "seedance-2-0-official", audioModel: "" },
+            }),
+        );
+
+        expect(response.status).toBe(200);
+        expect(mocks.setAuthSettings).toHaveBeenCalledWith(
+            expect.objectContaining({
+                systemChannels: [expect.objectContaining({ advancedConfig: expect.objectContaining({ modelConfigs: expect.objectContaining({ "seedance-2-0-official": expect.objectContaining({ requestTemplate: expect.stringContaining('"mode":"{{mode}}"') }) }) }) })],
+            }),
+        );
     });
 
     it("deletes a channel together with stale logical bindings and defaults", async () => {
@@ -83,6 +116,105 @@ describe("admin settings model routing", () => {
 
         expect(response.status).toBe(200);
         expect(mocks.setAuthSettings).toHaveBeenCalledWith(expect.objectContaining({ defaultModels: expect.objectContaining({ textModel: "" }) }));
+    });
+
+    it("removes a text model configured as a Chat/Responses audio route", async () => {
+        const multiCapabilityChannel = applyChannelProtocol(
+            {
+                id: "multi",
+                name: "多能力渠道",
+                baseUrl: "https://api.example.com/v1",
+                apiKey: "saved-secret",
+                apiFormat: "openai",
+                models: ["gpt-5.5"],
+                enabled: true,
+            },
+            "sub2api",
+        );
+        multiCapabilityChannel.advancedConfig = {
+            ...multiCapabilityChannel.advancedConfig!,
+            operationConfigs: {
+                ...multiCapabilityChannel.advancedConfig?.operationConfigs,
+                audio: protocolModelConfig("openai-audio-dialogue", "audio", "gpt-5.5"),
+            },
+        };
+        const logicalModels = [
+            { id: "gpt-5.5", name: "gpt-5.5", capability: "text" as const, enabled: true, bindings: [{ id: "text", channelId: "multi", upstreamModel: "gpt-5.5", enabled: true, priority: 1 }] },
+            { id: "gpt-5.5::audio", name: "gpt-5.5", capability: "audio" as const, enabled: true, bindings: [{ id: "audio", channelId: "multi", upstreamModel: "gpt-5.5", enabled: true, priority: 1 }] },
+        ];
+        const response = await PATCH(
+            request({
+                systemChannels: [multiCapabilityChannel],
+                logicalModels,
+                defaultModels: { textModel: "gpt-5.5", imageModel: "", videoModel: "", audioModel: "gpt-5.5::audio" },
+            }),
+        );
+
+        expect(response.status).toBe(200);
+        expect(mocks.setAuthSettings).toHaveBeenCalledWith(
+            expect.objectContaining({
+                logicalModels: [expect.objectContaining({ id: "gpt-5.5", capability: "text" })],
+                defaultModels: expect.objectContaining({ textModel: "gpt-5.5", audioModel: "" }),
+            }),
+        );
+    });
+
+    it("saves a document-derived custom audio route on a mixed channel", async () => {
+        const audioChannel = {
+            id: "buming",
+            name: "不鸣音频",
+            baseUrl: "https://buming.token6688.com/v1",
+            apiKey: "saved-secret",
+            apiFormat: "openai" as const,
+            models: ["gemini-3.1-flash-tts"],
+            enabled: true,
+            advancedConfig: {
+                protocol: "custom" as const,
+                authMode: "bearer" as const,
+                textModel: "",
+                imageModel: "",
+                videoModel: "",
+                createPath: "",
+                editPath: "",
+                imageToVideoPath: "",
+                queryPath: "",
+                requestTemplate: "",
+                resultField: "",
+                statusField: "",
+                durationRange: "",
+                referenceRule: "",
+                supportsReferenceImage: false,
+                supportsReferenceVideo: false,
+                supportsReferenceAudio: false,
+                modelCapabilities: { "gemini-3.1-flash-tts": "audio" as const },
+                modelConfigs: {
+                    "gemini-3.1-flash-tts": {
+                        capability: "audio" as const,
+                        source: "manual" as const,
+                        protocol: "custom" as const,
+                        apiFormat: "openai" as const,
+                        createPath: "/audio/speech",
+                        requestTemplate: '{"model":"{{model}}","input":"{{prompt}}","voice":"{{voice}}","response_format":"{{format}}"}',
+                        resultField: "binary",
+                    },
+                },
+            },
+        };
+
+        const response = await PATCH(
+            request({
+                systemChannels: [audioChannel],
+                logicalModels: [],
+                defaultModels: { textModel: "", imageModel: "", videoModel: "", audioModel: "" },
+            }),
+        );
+
+        expect(response.status).toBe(200);
+        expect(mocks.setAuthSettings).toHaveBeenCalledWith(
+            expect.objectContaining({
+                logicalModels: [expect.objectContaining({ id: "gemini-3.1-flash-tts", capability: "audio" })],
+            }),
+        );
     });
 
     it("rejects a newly submitted short webhook secret instead of silently keeping the old value", async () => {

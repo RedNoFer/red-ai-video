@@ -1,7 +1,110 @@
 import { describe, expect, it } from "vitest";
 
 import { createFrameEvidence } from "@/lib/drama-continuity-policy";
-import { characterReferenceAudios, dramaShotVideoMode, shotReferenceImages, storyboardReferenceImages, videoReferenceImages } from "./drama-shot-generation-utils";
+import { characterReferenceAudios, dramaShotVideoMode, resolveDramaVisualRunSync, shotReferenceImages, storyboardReferenceImages, videoReferenceImages } from "./drama-shot-generation-utils";
+
+describe("resolveDramaVisualRunSync", () => {
+    it("restores an active frame task when the persisted project still says it is idle", () => {
+        const project = {
+            id: "project-one",
+            episodes: [{ id: "episode-one", shots: [{ id: "shot-one", storyboardFrames: [] }] }],
+        } as never;
+        const run = {
+            id: "run-one",
+            projectId: "project-one",
+            episodeId: "episode-one",
+            scope: "visual",
+            status: "running",
+            steps: [{ id: "frame-shot-one-f1", shotId: "shot-one", frameId: "f1", sequenceIndex: 1, type: "keyframe", status: "running", taskId: "task-one", dependsOn: [] }],
+        } as never;
+
+        const decision = resolveDramaVisualRunSync(project, "episode-one", run);
+
+        expect(decision.shouldContinue).toBe(true);
+        expect(decision.project.episodes[0].shots[0].storyboardFrames).toEqual([expect.objectContaining({ id: "f1", sequenceIndex: 1, status: "running", taskId: "task-one" })]);
+    });
+
+    it("restores regeneration as a candidate task without clearing the current frame", () => {
+        const project = {
+            id: "project-one",
+            episodes: [
+                {
+                    id: "episode-one",
+                    shots: [
+                        {
+                            id: "shot-one",
+                            storyboardFrames: [{ id: "f1", sequenceIndex: 1, source: "generated", status: "success", taskId: "task-old", mediaUrl: "/current.png", continuityStatus: "passed" }],
+                        },
+                    ],
+                },
+            ],
+        } as never;
+        const run = {
+            id: "run-one",
+            projectId: "project-one",
+            episodeId: "episode-one",
+            scope: "visual",
+            status: "running",
+            steps: [{ id: "frame-shot-one-f1", shotId: "shot-one", frameId: "f1", sequenceIndex: 1, type: "keyframe", status: "running", taskId: "task-new", dependsOn: [] }],
+        } as never;
+
+        const decision = resolveDramaVisualRunSync(project, "episode-one", run);
+
+        expect(decision.shouldContinue).toBe(true);
+        expect(decision.project.episodes[0].shots[0].storyboardFrames).toEqual([
+            expect.objectContaining({
+                id: "f1",
+                status: "success",
+                taskId: "task-old",
+                mediaUrl: "/current.png",
+                continuityStatus: "passed",
+                candidateStatus: "running",
+                candidateTaskId: "task-new",
+            }),
+        ]);
+    });
+
+    it("does not let a resolved older run overwrite a newly queued frame", () => {
+        const project = {
+            id: "project-one",
+            episodes: [{ id: "episode-one", shots: [{ id: "shot-one", storyboardFrames: [{ id: "f1", sequenceIndex: 1, source: "generated", status: "queued" }] }] }],
+        } as never;
+        const oldRun = {
+            id: "run-old",
+            projectId: "project-one",
+            episodeId: "episode-one",
+            scope: "visual",
+            status: "needs_review",
+            steps: [{ id: "frame-shot-one-f1", shotId: "shot-one", frameId: "f1", sequenceIndex: 1, type: "keyframe", status: "failed", taskId: "task-old", dependsOn: [] }],
+        } as never;
+
+        const decision = resolveDramaVisualRunSync(project, "episode-one", oldRun);
+
+        expect(decision.shouldReload).toBe(false);
+        expect(decision.shouldContinue).toBe(true);
+        expect(decision.project).toBe(project);
+    });
+
+    it("reloads the project when the tracked frame task reaches a terminal state", () => {
+        const project = {
+            id: "project-one",
+            episodes: [{ id: "episode-one", shots: [{ id: "shot-one", storyboardFrames: [{ id: "f1", sequenceIndex: 1, source: "generated", status: "running", taskId: "task-one" }] }] }],
+        } as never;
+        const completedRun = {
+            id: "run-one",
+            projectId: "project-one",
+            episodeId: "episode-one",
+            scope: "visual",
+            status: "completed",
+            steps: [{ id: "frame-shot-one-f1", shotId: "shot-one", frameId: "f1", sequenceIndex: 1, type: "keyframe", status: "success", taskId: "task-one", dependsOn: [], outputUrls: ["/result.png"] }],
+        } as never;
+
+        const decision = resolveDramaVisualRunSync(project, "episode-one", completedRun);
+
+        expect(decision.shouldReload).toBe(true);
+        expect(decision.shouldContinue).toBe(false);
+    });
+});
 
 describe("dramaShotVideoMode", () => {
     it("preserves an explicit shot mode over the project default", () => {

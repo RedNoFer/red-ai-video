@@ -87,6 +87,40 @@ describe("image task runtime submission safety", () => {
         expect(mocks.schedule).toHaveBeenLastCalledWith("image", "image-one", expect.objectContaining({ executionPhase: "submitted", upstreamTaskId: "upstream-two", channelId: "channel-two", provider: "gemini", lastUpstreamStatus: "submitted" }));
     });
 
+    it("switches image candidates when an upstream account pool has no compatible account", async () => {
+        mocks.runCustom.mockRejectedValueOnce(new GenerationSubmissionSafeFailure("No available compatible accounts", 502));
+        mocks.runGemini.mockResolvedValueOnce({ dataUrl: "", pending: { id: "upstream-two", mediaBaseUrl: "https://two.example", pollBaseUrl: "https://two.example" } });
+
+        await expect(createImageTaskUpstreamStep(state, "http://internal", "https://public.example")).resolves.toMatchObject({ state: "pending", upstream: { id: "upstream-two" } });
+        expect(mocks.runCustom).toHaveBeenCalledOnce();
+        expect(mocks.runGemini).toHaveBeenCalledOnce();
+        expect(state.config.channelId).toBe("channel-two");
+    });
+
+    it("records the strict Sub2API endpoint and request shape on a terminal rejection", async () => {
+        state.config = {
+            ...state.config,
+            advancedConfig: { ...emptyAdvancedConfig(), protocol: "sub2api" },
+        };
+        state.candidateConfigs = [];
+        mocks.runOpenAi.mockRejectedValueOnce(new GenerationSubmissionSafeFailure("No available compatible accounts", 502));
+
+        await expect(createImageTaskUpstreamStep(state, "http://internal", "https://public.example")).resolves.toMatchObject({ state: "failed" });
+        expect(mocks.schedule).toHaveBeenLastCalledWith(
+            "image",
+            "image-one",
+            expect.objectContaining({
+                executionPhase: "completed",
+                resultPayload: expect.objectContaining({
+                    request: expect.objectContaining({
+                        configuredPath: "/images/generations",
+                        requestShape: "json.model,prompt,n,quality,size,output_format",
+                    }),
+                }),
+            }),
+        );
+    });
+
     it("routes Yumeng image tasks through the declarative async runtime", async () => {
         state.config = { ...state.config, advancedConfig: { ...state.config.advancedConfig!, protocol: "yumeng", createPath: "/kyyReactApiServer/v2/model-center/tasks", queryPath: "/kyyReactApiServer/v2/model-center/tasks/:task_id" } };
         state.candidateConfigs = [];

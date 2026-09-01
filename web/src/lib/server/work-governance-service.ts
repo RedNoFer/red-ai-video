@@ -16,6 +16,7 @@ export class WorkGovernanceServiceError extends Error {
 }
 
 export async function listPublicGallery(input: { limit?: number; sort?: unknown; category?: unknown; tag?: unknown; keyword?: unknown; featured?: unknown; cursor?: unknown } = {}) {
+    if (getDatabaseProvider() !== "postgres") return { items: [], nextCursor: undefined };
     await assertReady();
     const sort = gallerySort(input.sort);
     const after = decodeCursor(input.cursor, sort);

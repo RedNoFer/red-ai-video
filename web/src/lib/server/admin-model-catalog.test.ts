@@ -200,6 +200,13 @@ describe("admin model catalog", () => {
         );
     });
 
+    it("recognizes explicit audio output capability metadata", () => {
+        expect(parseModelCatalog({ data: [{ id: "vendor-audio", supports_audio_output: true, output_modalities: ["audio"] }, { id: "vendor-text", supports_audio_output: false }] })).toEqual([
+            { id: "vendor-audio", capability: "audio", source: "provider" },
+            { id: "vendor-text", capability: "text", source: "provider" },
+        ]);
+    });
+
     it("recognizes provider routes that do not expose a model catalog", () => {
         expect(isModelCatalogUnsupported(404, { message: "No handler found for GET /kyyReactApiServer/v1/models" })).toBe(true);
         expect(isModelCatalogUnsupported(404, { message: "No handler found for GET /kyyReactApiServer/v1/videos/videos" })).toBe(false);
