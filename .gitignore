@@ -34,3 +34,6 @@ VOZEB-PRO项目缺陷检查报告.md
 scripts/capture-readme-screenshots.mjs
 **/__pycache__/
 *.pyc
+tmp-audio/
+tmp-debug-drama.py
+web/test-results/
