@@ -4,6 +4,7 @@ import type { DramaFrameBeat, DramaStoryboardFrame } from "./drama-project-contr
 import {
     defaultDramaFrameBeats,
     deleteDramaFrameBeat,
+    formatPromptFieldLines,
     insertDramaFrameBeat,
     normalizeDramaFrameBeats,
     planDramaVideoSegments,
@@ -21,6 +22,11 @@ const beats: DramaFrameBeat[] = [
 ];
 
 describe("drama frame sequence", () => {
+    it("normalizes known prompt fields onto independent lines", () => {
+        expect(formatPromptFieldLines("静态关键帧：角色站立；可见状态：手掌扣住剑柄，景别：中景；机位与构图：平视")).toBe("静态关键帧：角色站立\n可见状态：手掌扣住剑柄\n景别：中景\n机位与构图：平视");
+        expect(formatPromptFieldLines("动态意图：角色抬头，单一主运镜：固定机位；结束画面：视线锁定目标", "video")).toBe("动态意图：角色抬头\n单一主运镜：固定机位\n结束画面：视线锁定目标");
+    });
+
     it("rejects dialogue-only or camera-only frame content", () => {
         expect(validateDramaFrameVisualContent('耳语："你又来迟了"', '耳语："你又来迟了"')).toContain("每帧必须描述");
         expect(validateDramaFrameVisualContent("85mm沿铁砧慢推", "镜头沿铁砧慢推")).toContain("每帧必须描述");
@@ -37,6 +43,10 @@ describe("drama frame sequence", () => {
                 { ...beats[1], imagePrompt: "角色站在门边" },
             ]),
         ).toEqual(["第 2 帧与上一帧的可见画面没有变化，请补充本帧状态变化"]);
+    });
+
+    it("rejects generic phase labels as the only visible frame state", () => {
+        expect(validateDramaFrameVisualContent("静态关键帧：角色站在门边；可见状态：入口构图已建立", "建立场景")).toContain("动作节点已经造成的可见状态变化");
     });
 
     it("keeps image prompts static and strips video-only direction", () => {
@@ -74,7 +84,7 @@ describe("drama frame sequence", () => {
             sequenceIndex: 1,
         });
 
-        expect(prompt).toContain("景别：ELS");
+        expect(prompt).toContain("景别：中远景");
         expect(prompt).not.toContain("ELS→ECU");
     });
 
@@ -141,6 +151,8 @@ describe("drama frame sequence", () => {
             [12, 15],
         ]);
         expect(defaults.every((frame) => Number.isInteger(frame.startSecond) && Number.isInteger(frame.endSecond))).toBe(true);
+        expect(defaults.every((frame) => frame.actionPrompt.includes("动作") && frame.imagePrompt.includes("可见状态："))).toBe(true);
+        expect(new Set(defaults.map((frame) => frame.imagePrompt.match(/可见状态：([^；。]+)/u)?.[1])).size).toBeGreaterThan(1);
         expect(defaultDramaFrameBeats(30, "角色拔剑", "角色站在黑湖边", 7)).toHaveLength(7);
     });
 

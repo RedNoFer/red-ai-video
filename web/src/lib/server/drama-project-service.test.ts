@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { DramaProject } from "@/lib/drama-project-contract";
 import { createFrameEvidence } from "@/lib/drama-continuity-policy";
-import { DRAMA_STYLE_NAME } from "@/lib/drama-style";
+import { DRAMA_STYLE_COLOR_SCRIPT, DRAMA_STYLE_NAME } from "@/lib/drama-style";
 import { defaultDramaProductionPlan } from "@/lib/drama-production-plan";
 
 const mocks = vi.hoisted(() => {
@@ -98,6 +98,7 @@ import {
     getDramaProjectForUser,
     getLatestDramaProductionRunForUser,
     getDramaProductionPreflightForUser,
+    mergeDramaShotMediaReferences,
     normalizeProject,
     recoverInvalidDramaEpisodes,
     recoverStaleDramaBoundaryFrames,
@@ -105,6 +106,7 @@ import {
     restoreDramaProjectVersionForUser,
     updateDramaProductionRunForUser,
     updateDramaProjectForUser,
+    saveDramaEpisodeSettingsForUser,
 } from "./drama-project-service";
 import { DramaProjectStoreError } from "./drama-project-store";
 
@@ -664,6 +666,163 @@ describe("drama project service updates", () => {
         expect(body.context).toMatchObject({ runId, frameId: "f1" });
     });
 
+    it("keeps the persisted continuity URL when creating a run from a local-only shot snapshot", async () => {
+        const current = project("2026-07-19T08:00:00.000Z", "项目");
+        const frames = [
+            {
+                id: "f1",
+                sequenceIndex: 1,
+                startSecond: 0,
+                endSecond: 3,
+                actionPrompt: "动作一",
+                imagePrompt: "画面一",
+                mediaUrl: "/api/generation-log-assets/f1.png",
+                remoteUrl: "https://cdn.example.com/f1.png",
+                source: "generated" as const,
+                status: "success" as const,
+            },
+            {
+                id: "f2",
+                sequenceIndex: 2,
+                startSecond: 3,
+                endSecond: 6,
+                actionPrompt: "动作二",
+                imagePrompt: "画面二",
+                mediaUrl: "/api/generation-log-assets/f2.png",
+                remoteUrl: "https://cdn.example.com/f2.png",
+                source: "generated" as const,
+                status: "success" as const,
+            },
+        ];
+        current.episodes[0].shots = [
+            {
+                id: "shot-one",
+                title: "镜头",
+                description: "连续动作",
+                characterIds: [],
+                propIds: [],
+                clueIds: [],
+                imagePrompt: "画面",
+                videoPrompt: "动作",
+                cameraMotion: "固定",
+                duration: 6,
+                storyboardFrameMode: "all_frames",
+                framePlan: { start: { source: "independent" }, end: { required: false }, frames: frames.map(({ mediaUrl: _mediaUrl, remoteUrl: _remoteUrl, source: _source, status: _status, ...beat }) => beat) },
+                storyboardFrames: frames,
+            },
+        ] as never;
+        mocks.getDramaProject.mockResolvedValue(current);
+        const snapshot = structuredClone(current.episodes[0].shots[0]);
+        delete snapshot.storyboardFrames;
+        delete snapshot.frameEvidence;
+
+        const run = await createDramaProductionRunForUser("user-one", current.id, { episodeId: "episode-one", scope: "visual", shotIds: ["shot-one"], frameType: "all_frames", frameIds: ["f2"], shotSnapshot: snapshot });
+
+        expect(run.steps.find((step) => step.frameId === "f2")).toMatchObject({ referenceImageUrls: ["/api/generation-log-assets/f1.png"], referenceImageRemoteUrls: ["https://cdn.example.com/f1.png"] });
+    });
+
+    it("submits the declared scene reference for a storyboard frame", async () => {
+        const current = project("2026-07-19T08:00:00.000Z", "项目");
+        const reference = { id: "carriage-ref", url: "https://cdn.example.com/carriage.png", source: "generated" as const, status: "approved" as const, label: "马车基准图", createdAt: new Date(0).toISOString() };
+        current.scenes = [{ id: "scene-carriage", name: "前往阿佐雷斯的马车", description: "封闭木马车，左右长凳与右侧车窗", references: [reference], primaryReferenceId: reference.id }];
+        current.episodes[0].shots = [
+            {
+                id: "shot-one",
+                title: "马车内惊醒",
+                characterIds: [],
+                sceneId: "scene-carriage",
+                propIds: [],
+                clueIds: [],
+                imagePrompt: "马车内Karin惊醒",
+                videoPrompt: "动作",
+                cameraMotion: "固定",
+                duration: 6,
+                storyboardFrameMode: "all_frames",
+                storyboardFrames: [],
+            },
+        ] as never;
+        const run = {
+            id: "run-carriage-reference",
+            projectId: current.id,
+            episodeId: "episode-one",
+            status: "ready",
+            scope: "visual",
+            mode: "strict",
+            confirmedAt: current.updatedAt,
+            parameterSnapshot: { imageModel: "image-default", videoModel: "", ratio: "9:16" },
+            steps: [
+                {
+                    id: "frame-shot-one-f1",
+                    type: "keyframe",
+                    shotId: "shot-one",
+                    frameId: "f1",
+                    sequenceIndex: 1,
+                    dependsOn: [],
+                    status: "ready",
+                    prompt: "马车中景提示词",
+                    referenceAssetIds: ["scene-carriage"],
+                    referenceManifest: [{ alias: "@车", role: "scene_anchor", purpose: "锁定马车内部空间", assetId: "scene-carriage" }],
+                },
+            ],
+            blockers: [],
+            createdAt: current.updatedAt,
+            updatedAt: current.updatedAt,
+        } as never;
+        mocks.getDramaProject.mockResolvedValue(current);
+        mocks.findLatestDramaProductionRun.mockResolvedValue(run);
+        mocks.fetchInternalApi.mockResolvedValue({ ok: true, json: async () => ({ task: { id: "image-task-carriage" } }) });
+
+        await getLatestDramaProductionRunForUser("user-one", current.id, "episode-one", { scope: "visual", origin: "http://localhost:3010", cookie: "session=test" });
+
+        const body = JSON.parse(String(mocks.fetchInternalApi.mock.calls[0]?.[1]?.body));
+        expect(body.references).toEqual(expect.arrayContaining([expect.objectContaining({ id: "asset-scene-carriage", url: "https://cdn.example.com/carriage.png" })]));
+        expect(body.prompt).toContain("锁定马车内部空间");
+    });
+
+    it("fails a frame locally when a declared scene reference cannot be submitted", async () => {
+        const current = project("2026-07-19T08:00:00.000Z", "项目");
+        current.scenes = [{ id: "scene-carriage", name: "前往阿佐雷斯的马车", description: "封闭木马车", references: [], primaryReferenceId: "missing" }];
+        current.episodes[0].shots = [
+            {
+                id: "shot-one",
+                title: "马车内惊醒",
+                characterIds: [],
+                sceneId: "scene-carriage",
+                propIds: [],
+                clueIds: [],
+                imagePrompt: "马车内Karin惊醒",
+                videoPrompt: "动作",
+                cameraMotion: "固定",
+                duration: 6,
+                storyboardFrameMode: "all_frames",
+                storyboardFrames: [],
+            },
+        ] as never;
+        const run = {
+            id: "run-missing-reference",
+            projectId: current.id,
+            episodeId: "episode-one",
+            status: "ready",
+            scope: "visual",
+            mode: "strict",
+            confirmedAt: current.updatedAt,
+            parameterSnapshot: { imageModel: "image-default", videoModel: "", ratio: "9:16" },
+            steps: [{ id: "frame-shot-one-f1", type: "keyframe", shotId: "shot-one", frameId: "f1", sequenceIndex: 1, dependsOn: [], status: "ready", prompt: "马车中景提示词", referenceAssetIds: ["scene-carriage"] }],
+            blockers: [],
+            createdAt: current.updatedAt,
+            updatedAt: current.updatedAt,
+        } as never;
+        mocks.getDramaProject.mockResolvedValue(current);
+        mocks.findLatestDramaProductionRun.mockResolvedValue(run);
+
+        const result = await getLatestDramaProductionRunForUser("user-one", current.id, "episode-one", { scope: "visual", origin: "http://localhost:3010", cookie: "session=test" });
+
+        expect(result).not.toBeNull();
+        if (!result) return;
+        expect(result.steps[0]).toMatchObject({ status: "failed", error: expect.stringContaining("scene-carriage") });
+        expect(mocks.fetchInternalApi).not.toHaveBeenCalled();
+    });
+
     it("reconciles a running image task whose persisted execution phase needs review", async () => {
         const current = project("2026-07-19T08:00:00.000Z", "项目");
         current.episodes[0].shots = [
@@ -909,6 +1068,73 @@ describe("drama project service updates", () => {
         expect(saved.episodes[0].shots[0]).toMatchObject({ storyboardStatus: "success", storyboardImageUrl: "/api/start.png", frameEvidence: [expect.objectContaining({ role: "storyboard_start", mediaUrl: "/api/start.png", validity: "candidate" })] });
     });
 
+    it("restores persisted remote image URLs when a browser shot snapshot only has local mirrors", () => {
+        const current = project("2026-07-19T08:00:01.000Z", "项目");
+        current.episodes[0].shots = [
+            {
+                id: "shot-one",
+                title: "镜头",
+                characterIds: [],
+                propIds: [],
+                clueIds: [],
+                imagePrompt: "原始提示词",
+                videoPrompt: "动作",
+                cameraMotion: "固定",
+                duration: 5,
+                storyboardImageUrl: "/api/generation-log-assets/start.png",
+                storyboardImageRemoteUrl: "https://cdn.example.com/start.png",
+                storyboardFrames: [
+                    {
+                        id: "f1",
+                        sequenceIndex: 1,
+                        mediaUrl: "/api/generation-log-assets/frame.png",
+                        remoteUrl: "https://cdn.example.com/frame.png",
+                        source: "generated",
+                        status: "success",
+                        candidates: [{ id: "candidate-1", mediaUrl: "/api/generation-log-assets/candidate.png", remoteUrl: "https://cdn.example.com/candidate.png", source: "generated", taskId: "task-old", createdAt: current.updatedAt }],
+                    },
+                ],
+                frameEvidence: [
+                    {
+                        id: "evidence-1",
+                        role: "storyboard_keyframe",
+                        source: "generated",
+                        mediaUrl: "/api/generation-log-assets/frame.png",
+                        remoteUrl: "https://cdn.example.com/frame.png",
+                        validity: "candidate",
+                        contentHash: "hash",
+                        createdAt: current.updatedAt,
+                    },
+                ],
+                framePlan: {
+                    start: { source: "independent" },
+                    end: { required: false },
+                    frames: [],
+                    manualReferenceImages: [{ id: "manual-1", label: "场景", binding: "锁定场景", url: "/api/generation-log-assets/manual.png", remoteUrl: "https://cdn.example.com/manual.png" }],
+                },
+            } as never,
+        ];
+        const persisted = current.episodes[0].shots[0];
+        const snapshot = structuredClone(persisted);
+        delete snapshot.storyboardImageRemoteUrl;
+        snapshot.storyboardFrames?.forEach((frame) => {
+            delete frame.remoteUrl;
+            frame.candidates?.forEach((candidate) => delete candidate.remoteUrl);
+        });
+        snapshot.frameEvidence?.forEach((frame) => delete frame.remoteUrl);
+        snapshot.framePlan?.manualReferenceImages?.forEach((reference) => delete reference.remoteUrl);
+        snapshot.storyboardFrames?.[0] && (snapshot.storyboardFrames[0].remoteUrl = "https://cdn.example.com/stale-frame.png");
+        snapshot.imagePrompt = "用户刚编辑的提示词";
+
+        const merged = mergeDramaShotMediaReferences(persisted, snapshot);
+
+        expect(merged.imagePrompt).toBe("用户刚编辑的提示词");
+        expect(merged.storyboardImageRemoteUrl).toBe("https://cdn.example.com/start.png");
+        expect(merged.storyboardFrames?.[0]).toMatchObject({ remoteUrl: "https://cdn.example.com/frame.png", candidates: [{ remoteUrl: "https://cdn.example.com/candidate.png" }] });
+        expect(merged.frameEvidence?.[0]).toMatchObject({ remoteUrl: "https://cdn.example.com/frame.png" });
+        expect(merged.framePlan?.manualReferenceImages?.[0]).toMatchObject({ remoteUrl: "https://cdn.example.com/manual.png" });
+    });
+
     it("accepts only the current video tail and rejects it by blocking downstream evidence", async () => {
         const current = project("2026-07-19T08:00:01.000Z", "项目");
         const tail = createFrameEvidence({ role: "actual_end", source: "video_extraction", mediaUrl: "/api/reference-assets/tail.png", sourceVideoUrl: "/api/reference-assets/shot-one.mp4", validity: "candidate" });
@@ -1118,18 +1344,60 @@ describe("drama project service updates", () => {
         );
     });
 
+    it("saves compact episode settings against the latest large project", async () => {
+        const current = project("2026-07-19T08:00:01.000Z", "项目");
+        current.productionArchive = {
+            formatVersion: "vozeb-drama-production-package-v1",
+            sections: [{ code: "01", title: "大型制作包", content: "制作包内容".repeat(1_000_000) }],
+            promptAssets: [],
+            dialogueDirections: [],
+            voiceDirections: [],
+            silenceDirections: [],
+            referencePlan: [],
+            generationOrder: [],
+            qcReport: "",
+        };
+        mocks.getDramaProject.mockResolvedValue(current);
+        const productionPlan = { ...defaultDramaProductionPlan("manual"), lockedAt: "2026-07-19T08:00:02.000Z", video: { ...defaultDramaProductionPlan("manual").video, resolution: "480p" as const } };
+
+        const saved = await saveDramaEpisodeSettingsForUser("user-one", current.id, "episode-one", { title: "新集名", summary: "新摘要", style: "黑暗学院", productionPlan });
+
+        expect(saved).toMatchObject({
+            summary: "新摘要",
+            style: "黑暗学院",
+            episodes: [{ id: "episode-one", title: "新集名" }],
+            productionBible: { visualStyle: "黑暗学院", productionPlan: { lockedAt: productionPlan.lockedAt, video: { resolution: "480p" } } },
+        });
+        expect(saved.productionArchive).toBe(current.productionArchive);
+        expect(mocks.updateDramaProject).toHaveBeenCalledWith("user-one", expect.objectContaining({ id: current.id, productionArchive: current.productionArchive }), current.updatedAt);
+    });
+
+    it("synchronizes episode settings style and removes a stale default color script", async () => {
+        const current = project("2026-07-19T08:00:01.000Z", "项目");
+        const customStyle = "ARRI自然光真人影视感，冷灰蓝；禁止动漫与游戏CG";
+        current.style = customStyle;
+        current.productionBible = { ...current.productionBible!, visualStyle: DRAMA_STYLE_NAME, colorScript: DRAMA_STYLE_COLOR_SCRIPT };
+        mocks.getDramaProject.mockResolvedValue(current);
+        mocks.updateDramaProject.mockImplementation(async (_userId: string, value: DramaProject) => value);
+
+        const saved = await saveDramaEpisodeSettingsForUser("user-one", current.id, "episode-one", {
+            style: customStyle,
+            productionPlan: current.productionBible?.productionPlan || defaultDramaProductionPlan("manual"),
+        });
+
+        expect(saved.style).toBe(customStyle);
+        expect(saved.productionBible?.visualStyle).toBe(customStyle);
+        expect(saved.productionBible?.colorScript).toBeUndefined();
+    });
+
     it("applies a stale lock request to the latest project without overwriting other fields", async () => {
         const current = { ...project("2026-07-19T08:00:05.000Z", "最新标题"), summary: "保留服务端摘要" };
         mocks.getDramaProject.mockResolvedValue(current);
         const incomingPlan = { ...defaultDramaProductionPlan("manual"), video: { ...defaultDramaProductionPlan("manual").video, resolution: "480p" as const }, lockedAt: "2026-07-19T08:00:02.000Z", source: "manual" as const };
 
         const saved = await updateDramaProjectForUser("user-one", current.id, {
-            ...current,
-            title: "旧客户端标题",
-            summary: "旧客户端摘要",
-            updatedAt: "2026-07-19T08:00:01.000Z",
             defaultVideoMode: "storyboard",
-            productionBible: { ...current.productionBible, productionPlan: incomingPlan },
+            productionBible: { productionPlan: incomingPlan },
         });
 
         expect(saved).toMatchObject({ title: "最新标题", summary: "保留服务端摘要", defaultVideoMode: "storyboard", productionBible: { productionPlan: { lockedAt: incomingPlan.lockedAt, video: { resolution: "480p" } } } });
@@ -1211,7 +1479,7 @@ describe("drama project service updates", () => {
         expect(mocks.updateDramaProject).toHaveBeenCalledWith("user-one", expect.objectContaining({ summary: expect.stringContaining("保留") }), current.updatedAt);
     });
 
-    it("upgrades a legacy project style before the next generation request", async () => {
+    it("preserves an imported project style before the next generation request", async () => {
         const current = project("2026-07-19T08:00:01.000Z", "Mahadel");
         current.style = "VS14 中世纪史诗的学院奇幻变体；宏大空间与克制人物近景并重";
         current.productionBible = { ...current.productionBible!, visualStyle: current.style, colorScript: "深蓝灰、旧银、墨绿、少量暖金" };
@@ -1219,8 +1487,19 @@ describe("drama project service updates", () => {
 
         const recovered = await getDramaProjectForUser("user-one", current.id);
 
-        expect(recovered).toMatchObject({ style: DRAMA_STYLE_NAME, productionBible: { visualStyle: DRAMA_STYLE_NAME } });
-        expect(mocks.updateDramaProject).toHaveBeenCalledWith("user-one", expect.objectContaining({ style: DRAMA_STYLE_NAME, productionBible: expect.objectContaining({ visualStyle: DRAMA_STYLE_NAME }) }), current.updatedAt);
+        expect(recovered).toMatchObject({ style: current.style, productionBible: { visualStyle: current.style, colorScript: "深蓝灰、旧银、墨绿、少量暖金" } });
+        expect(mocks.updateDramaProject).not.toHaveBeenCalled();
+    });
+
+    it("does not add the default color script to a custom imported style", () => {
+        const current = project("2026-07-19T08:00:01.000Z", "Mahadel");
+        const customStyle = "现实悬疑电影感，冷蓝灰低饱和";
+
+        const normalized = normalizeProject({ ...current, style: customStyle, productionBible: { ...current.productionBible, visualStyle: customStyle, colorScript: undefined } }, current);
+
+        expect(normalized.style).toBe(customStyle);
+        expect(normalized.productionBible?.visualStyle).toBe(customStyle);
+        expect(normalized.productionBible?.colorScript).toBeUndefined();
     });
 
     it("does not infer character styling for a location asset", () => {

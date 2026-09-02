@@ -97,18 +97,29 @@ function resolveBumingImageResolution(quality: ImageTask["config"]["quality"]) {
     return "2K";
 }
 
-async function bumingImageReferenceUrl(config: ImageTask["config"], reference: ImageTask["references"][number], origin: string, publicOrigin: string, cookie: string, context: { ownerUserId: string; taskId: string }, index: number) {
-    if (isExternalPublicOrigin(publicOrigin)) return publicImageReferenceRequestUrl(reference, origin, publicOrigin, context);
-    const external = referenceRequestUrlCandidates(reference, origin).find(isExternalPublicMediaUrl);
-    if (external) return external;
+export async function bumingImageReferenceUrl(config: ImageTask["config"], reference: ImageTask["references"][number], origin: string, publicOrigin: string, cookie: string, context: { ownerUserId: string; taskId: string }, index: number) {
+    if (!isExternalPublicOrigin(publicOrigin)) {
+        const external = referenceRequestUrlCandidates(reference, origin).find(isExternalPublicMediaUrl);
+        if (external) return external;
+    }
+    try {
+        return await publicImageReferenceRequestUrl(reference, origin, publicOrigin, context);
+    } catch {
+        // Buming accepts a public file URL. If the saved provider URL or site tunnel is stale,
+        // upload the readable local mirror instead of submitting a dead URL.
+    }
 
+    return uploadImageReferenceToProvider(config, reference, origin, cookie, index);
+}
+
+export async function uploadImageReferenceToProvider(config: ImageTask["config"], reference: ImageTask["references"][number], origin: string, cookie: string, index: number) {
     const dataUrl = await imageReferenceToDataUrl(reference, reference.name || `reference-${index + 1}.png`, origin, cookie);
     const file = dataUrlToFile(dataUrl, reference.name || `reference-${index + 1}.png`, reference.type);
     const channel = config.apiKey === "system" && config.channelId ? (await getAuthSettings()).systemChannels.find((item) => item.id === config.channelId) : undefined;
     const apiKey = config.apiKey !== "system" ? config.apiKey : channel?.apiKey || "";
     const baseUrl = channel?.baseUrl || config.baseUrl;
     if (!apiKey || !baseUrl) throw new GenerationSubmissionSafeFailure("图片渠道缺少可用的上传凭证，请检查渠道配置");
-    const uploadUrl = `${bumingApiRoot(baseUrl)}/v1/files`;
+    const uploadUrl = `${providerApiRoot(baseUrl)}/v1/files`;
     const form = new FormData();
     form.set("file", file);
     const response = await fetchSafeOutbound(uploadUrl, { method: "POST", headers: { authorization: `Bearer ${apiKey}` }, body: form, cache: "no-store" });
@@ -119,8 +130,12 @@ async function bumingImageReferenceUrl(config: ImageTask["config"], reference: I
     return uploadedUrl;
 }
 
-function bumingApiRoot(value: string) {
-    return value.trim().replace(/\/+$/, "").replace(/\/api\/v1$/i, "").replace(/\/v1$/i, "");
+function providerApiRoot(value: string) {
+    return value
+        .trim()
+        .replace(/\/+$/, "")
+        .replace(/\/api\/v1$/i, "")
+        .replace(/\/v1$/i, "");
 }
 
 function findPublicUrl(value: unknown): string {

@@ -53,6 +53,23 @@ describe("drama director visual plan", () => {
         expect(run.steps.find((step) => step.type === "start_frame")?.referenceAssetIds).toEqual(["clue-one", "source-one"]);
     });
 
+    it("uses maintained image references instead of inferred asset anchors", () => {
+        const project = fixture();
+        const shot = project.episodes[0].shots[0];
+        const manualReferenceImages = [{ id: "scene-one:rain", url: "/api/reference-assets/rain.png", label: "场景基准图", binding: "锁定雨巷空间与主光方向" }];
+        shot.framePlan = {
+            start: { source: "independent" },
+            end: { required: false },
+            frames: [],
+            manualReferenceImages,
+        };
+
+        const run = buildDramaVisualProductionRun(project, project.episodes[0], { imageModel: "image-pro" });
+
+        expect(run.steps.filter((step) => step.type === "asset_anchor")).toHaveLength(0);
+        expect(run.steps.find((step) => step.type === "start_frame")).toMatchObject({ referenceAssetIds: [], manualReferenceImages });
+    });
+
     it("carries the previous shot actual tail into an Agent storyboard start frame", () => {
         const project = fixture();
         const reference = { id: "character-ref", url: "/api/reference-assets/character.png", source: "generated" as const, status: "approved" as const, label: "已审核", createdAt: new Date(0).toISOString() };
@@ -72,7 +89,7 @@ describe("drama director visual plan", () => {
         expect(start.referenceImageUrls).toEqual(["/api/reference-assets/shot-one-tail.png"]);
         expect(start.status).toBe("blocked");
         expect(start.prompt).toContain("静态关键帧：");
-        expect(start.prompt).toContain("参考图职责：");
+        expect(start.prompt).toContain("三层空间：");
         expect(compileDramaVisualStepPrompt(project, project.episodes[0], start)).toContain("上一镜成片实际尾帧是唯一开场依据");
     });
 
@@ -147,6 +164,62 @@ describe("drama director visual plan", () => {
         expect(frames[0].prompt).toContain("P01-F01（0-2s）");
         expect(frames[1].prompt).toContain("静态关键帧：两人在雨夜相遇");
         expect(frames[1].prompt).toContain("可见表演状态：");
+    });
+
+    it("binds each storyboard frame to the scene visible in that frame", () => {
+        const project = fixture();
+        project.scenes[0] = { ...project.scenes[0], name: "黑湖记忆", description: "无风黑湖与倒悬古塔" };
+        project.scenes.push({ id: "scene-carriage", name: "前往阿佐雷斯的马车", description: "中世纪封闭木马车", profile: { visualIdentity: "左右长凳与车窗", styling: "木质车厢", colorPalette: "冷灰", consistencyRules: "车窗在右侧" } });
+        const shot = project.episodes[0].shots[0];
+        shot.sceneId = "scene-one";
+        shot.storyboardFrameMode = "all_frames";
+        shot.framePlan = {
+            start: { source: "independent" },
+            end: { required: true },
+            frames: [
+                { id: "lake", sequenceIndex: 1, startSecond: 0, endSecond: 3, actionPrompt: "黑湖中的断剑裂开", imagePrompt: "静态关键帧：黑湖与倒悬古塔，断剑已经裂开" },
+                { id: "carriage", sequenceIndex: 2, startSecond: 3, endSecond: 6, actionPrompt: "马车中Karin惊醒", imagePrompt: "静态关键帧：马车内Karin完全惊醒，手扣住断剑" },
+            ],
+            referenceManifest: [
+                { alias: "@湖", role: "scene_anchor", purpose: "黑湖场景", assetId: "scene-one" },
+                { alias: "@车", role: "scene_anchor", purpose: "马车场景", assetId: "scene-carriage" },
+            ],
+        };
+
+        const run = buildDramaVisualProductionRun(project, project.episodes[0], { imageModel: "image-pro", frameType: "all_frames" });
+        const lakeReferences = run.steps.find((step) => step.frameId === "lake")?.referenceAssetIds || [];
+        const carriageReferences = run.steps.find((step) => step.frameId === "carriage")?.referenceAssetIds || [];
+        expect(lakeReferences.filter((id) => id.startsWith("scene-"))).toEqual(["scene-one"]);
+        expect(carriageReferences.filter((id) => id.startsWith("scene-"))).toEqual(["scene-carriage"]);
+        expect(run.steps.find((step) => step.frameId === "carriage")?.dependsOn).toContain("asset-scene-carriage");
+    });
+
+    it("recovers a frame scene anchor missing from a legacy manifest", () => {
+        const project = fixture();
+        project.scenes[0] = { ...project.scenes[0], name: "黑湖记忆", description: "无风黑湖与倒悬古塔" };
+        project.scenes.push({
+            id: "scene-carriage",
+            name: "前往阿佐雷斯的马车",
+            description: "中世纪封闭木马车，左右长凳与右侧竖向车窗",
+            profile: { visualIdentity: "左右长凳、右侧竖窗", styling: "木质车厢", colorPalette: "冷灰", consistencyRules: "车窗在右侧" },
+        });
+        const shot = project.episodes[0].shots[0];
+        shot.sceneId = "scene-one";
+        shot.storyboardFrameMode = "all_frames";
+        shot.framePlan = {
+            start: { source: "independent" },
+            end: { required: true },
+            frames: [{ id: "carriage", sequenceIndex: 1, startSecond: 0, endSecond: 6, actionPrompt: "马车中Karin惊醒", imagePrompt: "静态关键帧：马车内Karin完全惊醒，手扣住断剑" }],
+            referenceManifest: [{ alias: "@湖", role: "scene_anchor", purpose: "黑湖场景", assetId: "scene-one" }],
+        };
+
+        const run = buildDramaVisualProductionRun(project, project.episodes[0], { imageModel: "image-pro", frameType: "all_frames" });
+        const frame = run.steps.find((step) => step.frameId === "carriage")!;
+
+        expect(frame.referenceAssetIds?.filter((id) => id.startsWith("scene-"))).toEqual(["scene-carriage"]);
+        expect(frame.referenceManifest).toEqual(expect.arrayContaining([expect.objectContaining({ role: "scene_anchor", assetId: "scene-carriage" })]));
+        expect(frame.referenceManifest).not.toEqual(expect.arrayContaining([expect.objectContaining({ role: "scene_anchor", assetId: "scene-one" })]));
+        expect(frame.dependsOn).toContain("asset-scene-carriage");
     });
 
     it("injects the previous generated frame when unlocking the next beat", () => {
@@ -300,7 +373,7 @@ describe("drama director visual plan", () => {
         const framePrompts = run.steps.filter((step) => step.type === "start_frame" || step.type === "end_frame").map((step) => step.prompt || "");
 
         expect(framePrompts.every((prompt) => prompt.includes("光色与风格："))).toBe(true);
-        expect(framePrompts.join("\n")).not.toContain("VS14");
+        expect(framePrompts.join("\n")).toContain("VS14 中世纪史诗学院奇幻");
         expect(framePrompts.join("\n")).not.toContain("中性浅灰背景");
     });
 
@@ -312,8 +385,7 @@ describe("drama director visual plan", () => {
         const prompt = compileDramaVisualStepPrompt(project, project.episodes[0], step);
 
         expect(prompt).toContain("光色与风格：");
-        expect(prompt).toContain("半写实动漫幻想风");
-        expect(prompt).not.toContain("VS14");
+        expect(prompt).toContain("VS14 中世纪史诗学院奇幻");
     });
 });
 

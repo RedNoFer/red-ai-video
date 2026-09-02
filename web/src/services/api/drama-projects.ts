@@ -131,6 +131,22 @@ export function saveDramaProject(project: DramaProject) {
     return request<{ project: DramaProject }>(`/api/drama/projects/${encodeURIComponent(project.id)}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(project) }).then((data) => data.project);
 }
 
+export function saveDramaProductionPlan(projectId: string, productionPlan: DramaProductionPlan) {
+    return request<{ project: DramaProject }>(`/api/drama/projects/${encodeURIComponent(projectId)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ defaultVideoMode: productionPlan.video.mode === "text-to-video" ? "direct" : "storyboard", productionBible: { productionPlan } }),
+    }).then((data) => data.project);
+}
+
+export function saveDramaEpisodeSettings(projectId: string, episodeId: string, input: { title: string; summary: string; style: string; productionPlan: DramaProductionPlan }) {
+    return request<{ project: DramaProject }>(`/api/drama/projects/${encodeURIComponent(projectId)}/episodes/${encodeURIComponent(episodeId)}/settings`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+    }).then((data) => data.project);
+}
+
 export function acceptDramaStoryboardFrame(projectId: string, episodeId: string, shotId: string, frameId: string, candidateId?: string) {
     return request<{ project: DramaProject }>(`/api/drama/projects/${encodeURIComponent(projectId)}/episodes/${encodeURIComponent(episodeId)}/shots/${encodeURIComponent(shotId)}/frames/${encodeURIComponent(frameId)}/accept`, {
         method: "POST",

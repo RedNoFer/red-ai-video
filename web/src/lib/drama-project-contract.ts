@@ -38,6 +38,8 @@ export type DramaShotFramePlan = {
     end: { required: boolean };
     frames: DramaFrameBeat[];
     referenceManifest?: DramaReferenceManifestItem[];
+    /** User-maintained image references used in addition to continuity frames. */
+    manualReferenceImages?: DramaImageReferenceBinding[];
     referenceCount?: { min: number; max: number };
 };
 
@@ -855,6 +857,7 @@ export type DramaProductionStep = {
     referenceManifest?: DramaReferenceManifestItem[];
     referenceBindingsSnapshot?: DramaVideoReferenceBinding[];
     referenceImagesSnapshot?: DramaImageReferenceBinding[];
+    manualReferenceImages?: DramaImageReferenceBinding[];
     frameId?: string;
     startSecond?: number;
     endSecond?: number;

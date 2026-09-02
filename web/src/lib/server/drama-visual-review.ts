@@ -6,7 +6,8 @@ export function normalizeDramaVisualReviewInput(value: unknown): { foundation: C
     const input = object(value);
     const project = object(input.project);
     const episode = object(input.episode);
-    const style = resolveDramaVisualStyle({ style: text(project.style) });
+    const productionBible = object(project.productionBible);
+    const style = resolveDramaVisualStyle({ style: text(project.style), productionBible: { visualStyle: text(productionBible.visualStyle) } });
     const ratio = text(project.ratio);
     const tasks = array(episode.shots).flatMap((item) => {
         const shot = object(item);
@@ -57,7 +58,7 @@ export function normalizeDramaVisualReviewInput(value: unknown): { foundation: C
                 summary: style || "保持镜头叙事清晰、主体稳定、相邻画面连续",
                 style,
                 composition: "检查景别、构图、人物站位、视线和屏幕运动方向",
-                avoid: ["角色身份漂移", "服装或道具无依据变化", "空间关系跳变", "轴线与视线错误", "纯写实摄影或真人影视感", "3D游戏渲染", "文字和水印"],
+                avoid: ["角色身份漂移", "服装或道具无依据变化", "空间关系跳变", "轴线与视线错误", "文字和水印"],
             },
         },
         tasks,

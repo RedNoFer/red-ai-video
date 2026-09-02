@@ -1,7 +1,19 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { applyDramaProductionPackage, createDramaProductionRun, generateDramaImagePrompt, generateDramaVideoPrompt, getLatestDramaProductionRun, listDramaProjectSummaries, updateDramaShotImagePrompt, updateDramaShotPrompt } from "./drama-projects";
+import {
+    applyDramaProductionPackage,
+    createDramaProductionRun,
+    generateDramaImagePrompt,
+    generateDramaVideoPrompt,
+    getLatestDramaProductionRun,
+    listDramaProjectSummaries,
+    saveDramaEpisodeSettings,
+    saveDramaProductionPlan,
+    updateDramaShotImagePrompt,
+    updateDramaShotPrompt,
+} from "./drama-projects";
 import type { DramaProductionPackagePreview, DramaProject } from "@/lib/drama-project-contract";
+import { defaultDramaProductionPlan } from "@/lib/drama-production-plan";
 
 describe("drama project api", () => {
     afterEach(() => vi.unstubAllGlobals());
@@ -115,6 +127,32 @@ describe("drama project api", () => {
         await expect(updateDramaShotPrompt("project-one", "episode-one", "shot-one", "Seedance 动作提示词")).resolves.toEqual(project);
         expect(fetchMock).toHaveBeenCalledWith("/api/drama/projects/project-one/episodes/episode-one/shots/shot-one/prompt", expect.objectContaining({ method: "PATCH" }));
         expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({ executionVideoPrompt: "Seedance 动作提示词" });
+    });
+
+    it("saves a production plan without serializing the full drama project", async () => {
+        const project = { id: "project-one", updatedAt: "2026-08-31T00:00:00.000Z" } as DramaProject;
+        const plan = { ...defaultDramaProductionPlan("manual"), lockedAt: "2026-09-02T12:00:00.000Z" };
+        const fetchMock = vi.fn().mockResolvedValue(Response.json({ code: 0, data: { project }, msg: "OK" }));
+        vi.stubGlobal("fetch", fetchMock);
+
+        await expect(saveDramaProductionPlan(project.id, plan)).resolves.toEqual(project);
+
+        const body = String(fetchMock.mock.calls[0]?.[1]?.body);
+        expect(fetchMock).toHaveBeenCalledWith("/api/drama/projects/project-one", expect.objectContaining({ method: "PATCH" }));
+        expect(Buffer.byteLength(body)).toBeLessThan(8 * 1024 * 1024);
+        expect(JSON.parse(body)).toEqual({ defaultVideoMode: "storyboard", productionBible: { productionPlan: plan } });
+    });
+
+    it("saves episode settings through the compact settings endpoint", async () => {
+        const project = { id: "project-one", updatedAt: "2026-08-31T00:00:00.000Z" } as DramaProject;
+        const plan = { ...defaultDramaProductionPlan("manual"), lockedAt: "2026-09-02T12:00:00.000Z" };
+        const fetchMock = vi.fn().mockResolvedValue(Response.json({ code: 0, data: { project }, msg: "OK" }));
+        vi.stubGlobal("fetch", fetchMock);
+
+        await expect(saveDramaEpisodeSettings(project.id, "episode-one", { title: "第 1 集", summary: "故事摘要", style: "黑暗学院", productionPlan: plan })).resolves.toEqual(project);
+
+        expect(fetchMock).toHaveBeenCalledWith("/api/drama/projects/project-one/episodes/episode-one/settings", expect.objectContaining({ method: "PATCH" }));
+        expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({ title: "第 1 集", summary: "故事摘要", style: "黑暗学院", productionPlan: plan });
     });
 
     it("updates an image prompt through the prompt endpoint", async () => {

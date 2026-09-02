@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 import { nanoid } from "nanoid";
 
-import { compileDramaAssetReferencePrompt, compileDramaFrameSupplierPrompt } from "@/lib/drama-prompt-compiler";
+import { compileDramaAssetReferencePrompt, compileDramaFrameSupplierPrompt, resolveDramaFrameScene } from "@/lib/drama-prompt-compiler";
 import { approvedAssetReference } from "@/lib/drama-asset-baseline";
 import { continuityStartEvidence, latestFrameEvidence } from "@/lib/drama-continuity-policy";
 import { defaultDramaFrameBeats } from "@/lib/drama-frame-sequence";
@@ -20,7 +20,8 @@ type VisualParameters = {
 };
 
 type AssetKind = "characters" | "scenes" | "props";
-const VISUAL_DISPATCH_REVISION = "reference-edit-kind-v2";
+// Reference-scene resolution changed: existing visual runs must not reuse stale snapshots.
+const VISUAL_DISPATCH_REVISION = "reference-edit-kind-v3";
 
 export function buildDramaVisualProductionRun(project: DramaProject, episode: DramaEpisode, parameters: VisualParameters): DramaProductionRun {
     const steps: DramaProductionStep[] = [];
@@ -51,7 +52,7 @@ export function buildDramaVisualProductionRun(project: DramaProject, episode: Dr
         const previous = requiresAcceptedTail && incoming ? episode.shots.find((candidate) => candidate.id === incoming.fromShotId) : undefined;
         const actualTail = previous ? continuityStartEvidence(previous) : undefined;
         const actualTailReady = !requiresAcceptedTail || Boolean(actualTail);
-        const references = orderedVisualReferenceIds(shot);
+        const references = orderedVisualReferenceIds(project, shot);
         const dependencies = references.map((id) => assetSteps.get(id)).filter((id): id is string => Boolean(id));
         const startId = `start-${shot.id}`;
         const startFrame = latestFrameEvidence(shot, "storyboard_start", ["candidate", "accepted"]);
@@ -63,19 +64,23 @@ export function buildDramaVisualProductionRun(project: DramaProject, episode: Dr
             const beats = shot.framePlan?.frames?.length ? shot.framePlan.frames : defaultDramaFrameBeats(shot.duration, shot.videoPrompt, shot.imagePrompt);
             const selectedFrameIds = new Set(parameters.frameIds || []);
             for (const [index, beat] of beats.entries()) {
+                const frameReferences = orderedVisualReferenceIds(project, shot, beat);
+                const frameDependencies = frameReferences.map((id) => assetSteps.get(id)).filter((id): id is string => Boolean(id));
                 const previousBeat = beats[index - 1];
                 const previousStored = previousBeat ? shot.storyboardFrames?.find((frame) => frame.id === previousBeat.id || frame.sequenceIndex === previousBeat.sequenceIndex) : undefined;
                 const existing = shot.storyboardFrames?.find((frame) => frame.id === beat.id || frame.sequenceIndex === beat.sequenceIndex);
                 const previousUrl = index ? previousStored?.mediaUrl : actualTail?.mediaUrl;
                 const inputHash = createHash("sha256")
-                    .update(JSON.stringify({ beat, previousUrl, referenceUrls: references }))
+                    .update(JSON.stringify({ beat, previousUrl, referenceUrls: frameReferences }))
                     .digest("hex");
                 const explicitlySelected = !selectedFrameIds.size || selectedFrameIds.has(beat.id);
                 const selectedForRegeneration = selectedFrameIds.size > 0 && selectedFrameIds.has(beat.id);
                 const existingReady = Boolean(existing?.mediaUrl && existing.status === "success" && (existing.source === "upload" || existing.inputHash === inputHash) && !parameters.regenerateAll && !selectedForRegeneration);
                 const previousStepId = previousBeat ? `frame-${shot.id}-${previousBeat.id}` : undefined;
                 const previousStep = previousStepId ? steps.find((step) => step.id === previousStepId) : undefined;
-                const stepDependencies = previousStepId && previousStep?.status !== "stale" ? [previousStepId] : dependencies;
+                const inheritedDependencies = previousStepId && previousStep?.status !== "stale" ? [previousStepId] : [];
+                const previousAssetDependencies = new Set(previousStep?.dependsOn || []);
+                const stepDependencies = Array.from(new Set([...inheritedDependencies, ...frameDependencies.filter((dependency) => !previousAssetDependencies.has(dependency))]));
                 steps.push({
                     id: `frame-${shot.id}-${beat.id}`,
                     frameId: beat.id,
@@ -86,8 +91,9 @@ export function buildDramaVisualProductionRun(project: DramaProject, episode: Dr
                     endSecond: beat.endSecond,
                     title: `${shot.title} · 帧 ${beat.sequenceIndex}`,
                     prompt: compileDramaFrameBeatPrompt(project, episode, shot, beat),
-                    referenceAssetIds: references,
-                    referenceManifest: shot.framePlan?.referenceManifest,
+                    referenceAssetIds: frameReferences,
+                    manualReferenceImages: shot.framePlan?.manualReferenceImages,
+                    referenceManifest: scopedReferenceManifest(project, shot, beat),
                     dependsOn: stepDependencies,
                     status: existingReady ? "success" : !explicitlySelected ? "stale" : stepDependencies.length || !actualTailReady ? "blocked" : "ready",
                     referenceShotId: index === 0 && requiresAcceptedTail ? incoming?.fromShotId : undefined,
@@ -107,6 +113,7 @@ export function buildDramaVisualProductionRun(project: DramaProject, episode: Dr
                 title: `${shot.title} · 起始帧`,
                 prompt: compileDramaVisualStartFramePrompt(project, episode, shot),
                 referenceAssetIds: references,
+                manualReferenceImages: shot.framePlan?.manualReferenceImages,
                 dependsOn: dependencies,
                 status: generateEndFrame ? (startReady ? "success" : "blocked") : startReady ? "success" : dependencies.length || !actualTailReady ? "blocked" : "ready",
                 referenceShotId: requiresAcceptedTail ? incoming?.fromShotId : undefined,
@@ -121,6 +128,7 @@ export function buildDramaVisualProductionRun(project: DramaProject, episode: Dr
                 title: `${shot.title} · 结束帧`,
                 prompt: compileDramaFrameSupplierPrompt(project, episode, shot, undefined, "end"),
                 referenceAssetIds: references,
+                manualReferenceImages: shot.framePlan?.manualReferenceImages,
                 dependsOn: [startId],
                 status: endFrame ? "success" : "blocked",
                 outputUrls: endFrame ? [endFrame.mediaUrl] : undefined,
@@ -211,14 +219,46 @@ function selectedEpisodeShots(episode: DramaEpisode, shotIds?: string[]) {
     return selected.size ? episode.shots.filter((shot) => selected.has(shot.id)) : episode.shots;
 }
 
-function orderedVisualReferenceIds(shot: DramaEpisode["shots"][number]) {
-    const available = [shot.sceneId, ...shot.characterIds, ...shot.propIds, ...shot.clueIds, ...(shot.sourceAssetIds || [])].filter((id): id is string => Boolean(id));
-    const preferred = (shot.framePlan?.referenceManifest || []).flatMap((item) => (item.assetId && available.includes(item.assetId) ? [item.assetId] : []));
+function orderedVisualReferenceIds(project: DramaProject, shot: DramaEpisode["shots"][number], beat?: NonNullable<DramaEpisode["shots"][number]["framePlan"]>["frames"][number]) {
+    // An explicitly maintained list replaces inferred shot assets; continuity frames remain separate.
+    if (shot.framePlan?.manualReferenceImages) return [];
+    const manifest = scopedReferenceManifest(project, shot, beat);
+    const sceneIds = new Set((shot.framePlan?.referenceManifest || []).filter((item) => item.role === "scene_anchor" && item.assetId).map((item) => item.assetId));
+    const frameScene = resolveDramaFrameScene(project, shot, beat);
+    const declared = [frameScene?.id || shot.sceneId, ...shot.characterIds, ...shot.propIds, ...shot.clueIds, ...(shot.sourceAssetIds || [])].filter((id): id is string => Boolean(id));
+    const available = beat && sceneIds.size > 1 ? declared.filter((id) => !sceneIds.has(id)) : declared;
+    const preferred = manifest.flatMap((item) => (item.assetId && (available.includes(item.assetId) || project.scenes.some((scene) => scene.id === item.assetId)) ? [item.assetId] : []));
     return Array.from(new Set([...preferred, ...available]));
 }
 
+function scopedReferenceManifest(project: DramaProject, shot: DramaEpisode["shots"][number], beat?: NonNullable<DramaEpisode["shots"][number]["framePlan"]>["frames"][number]) {
+    const manifest = shot.framePlan?.referenceManifest || [];
+    if (!beat) return manifest;
+    const sceneReferences = manifest.filter((item) => item.role === "scene_anchor" && item.assetId);
+    const selected = resolveDramaFrameScene(project, shot, beat)?.id;
+    if (!selected) return manifest;
+    const selectedReference = sceneReferences.find((item) => item.assetId === selected);
+    const selectedManifestItem = selectedReference || { alias: "@场景帧", role: "scene_anchor" as const, purpose: "按当前帧画面恢复的场景基准图", assetId: selected };
+    return [...manifest.filter((item) => item.role !== "scene_anchor"), selectedManifestItem];
+}
+
 function visualAssets(project: DramaProject, shots: DramaEpisode["shots"]) {
-    const ids = new Set(shots.flatMap((shot) => [...shot.characterIds, ...(shot.sceneId ? [shot.sceneId] : []), ...shot.propIds]));
+    const ids = new Set(
+        shots.flatMap((shot) =>
+            shot.framePlan?.manualReferenceImages
+                ? []
+                : [
+                      ...shot.characterIds,
+                      ...(shot.sceneId ? [shot.sceneId] : []),
+                      ...shot.propIds,
+                      ...(shot.framePlan?.referenceManifest || []).flatMap((item) => (item.assetId ? [item.assetId] : [])),
+                      ...(shot.framePlan?.frames || []).flatMap((beat) => {
+                          const scene = resolveDramaFrameScene(project, shot, beat);
+                          return scene ? [scene.id] : [];
+                      }),
+                  ],
+        ),
+    );
     return (
         [
             ...project.characters.map((asset) => ({ asset, kind: "characters" as const, label: "角色" as const })),

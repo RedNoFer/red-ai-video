@@ -18,7 +18,8 @@ import type {
     DramaStoryScene,
 } from "@/lib/drama-project-contract";
 import { normalizeDramaProductionPlan } from "@/lib/drama-production-plan";
-import { defaultDramaFrameBeats, normalizeDramaFrameBeats, upgradeDramaFrameImagePrompt, validateDramaFramePlanVisuals } from "@/lib/drama-frame-sequence";
+import { defaultDramaFrameBeats, formatPromptFieldLines, normalizeDramaFrameBeats, upgradeDramaFrameImagePrompt, validateDramaFramePlanVisuals } from "@/lib/drama-frame-sequence";
+import { resolveDramaStyleContract } from "@/lib/drama-style";
 import { resolveDramaShotDuration } from "@/lib/server/drama-shot-config";
 
 export class DramaProductionPackageError extends Error {}
@@ -76,13 +77,23 @@ export function applyDramaProductionPackage(project: DramaProject, source: Drama
         sourceHash,
     };
     const sourceAssets = [...(project.sourceAssets || []).filter((asset) => asset.id !== sourceAsset.id), sourceAsset];
+    const productionBible = project.fieldOrigins?.productionBible === "manual" ? project.productionBible : projectPatch.productionBible;
+    const preferredStyle = preferred(project.style, project.fieldOrigins, "style", projectPatch.style);
+    const nextStyle = project.fieldOrigins?.productionBible === "manual" && project.fieldOrigins?.style !== "manual" ? productionBible?.visualStyle || preferredStyle : preferredStyle;
+    const styleContract = resolveDramaStyleContract({ style: nextStyle, productionBible });
+    const synchronizedBible = productionBible
+        ? (() => {
+              const { colorScript: _oldColorScript, ...bibleWithoutColorScript } = productionBible;
+              return { ...bibleWithoutColorScript, visualStyle: styleContract.name, ...(styleContract.colorScript ? { colorScript: styleContract.colorScript } : {}) };
+          })()
+        : undefined;
     return {
         ...project,
         title: preferred(project.title, project.fieldOrigins, "title", projectPatch.title),
         summary: preferred(project.summary, project.fieldOrigins, "summary", projectPatch.summary),
-        style: preferred(project.style, project.fieldOrigins, "style", projectPatch.style),
+        style: styleContract.name,
         ratio: preferred(project.ratio, project.fieldOrigins, "ratio", projectPatch.ratio),
-        productionBible: project.fieldOrigins?.productionBible === "manual" ? project.productionBible : projectPatch.productionBible,
+        productionBible: synchronizedBible,
         seriesBible: productionPackage.seriesBible || project.seriesBible,
         productionArchive: productionPackage.archive,
         fieldOrigins: { ...packageOrigins(["title", "summary", "style", "ratio", "productionBible"]), ...project.fieldOrigins },
@@ -188,7 +199,16 @@ function shouldPreserveManualFramePlan(framePlan: DramaShot["framePlan"], origin
     if (origin !== "manual" || !framePlan?.frames?.length) return false;
     return framePlan.frames.every((frame) => {
         const prompt = frame.supplierPrompt || frame.imagePrompt;
-        return prompt.startsWith("静态关键帧：") && prompt.includes("可见表演状态：") && prompt.includes("景别：") && prompt.includes("机位与构图：") && prompt.includes("站位与视线：") && prompt.includes("三层空间：") && prompt.includes("光色与风格：") && prompt.includes("参考图职责：") && prompt.includes("负面约束：");
+        return (
+            prompt.startsWith("静态关键帧：") &&
+            prompt.includes("可见表演状态：") &&
+            prompt.includes("景别：") &&
+            prompt.includes("机位与构图：") &&
+            prompt.includes("站位与视线：") &&
+            prompt.includes("三层空间：") &&
+            prompt.includes("光色与风格：") &&
+            prompt.includes("负面约束：")
+        );
     });
 }
 
@@ -318,22 +338,31 @@ function normalizeProductionPackage(value: unknown): DramaProductionPackageV1 {
     const shotDuration = Object.prototype.hasOwnProperty.call(rawProductionPlan, "shotDuration") ? normalizeDramaProductionPlan(rawProductionPlan)?.video.shotDuration : undefined;
     const rebalancedEpisodes = shotDuration ? normalizedEpisodes.map((episode) => mergeTargetDurationShots(episode, shotDuration)) : normalizedEpisodes;
     const synchronizedEpisodes = rebalancedEpisodes.map((episode) => synchronizeContinuityStates(repairOpeningCut(episode, text(project.title))));
-    validateProductionPackageCompleteness({ ...input, project: { ...project, productionBible: bible }, assets: normalizedAssets, episodes: synchronizedEpisodes });
+    const styleContract = resolveDramaStyleContract({
+        style: text(project.style),
+        productionBible: { visualStyle: text(bible.visualStyle), colorScript: optionalText(bible.colorScript) },
+    });
+    const normalizedBible = {
+        ...bible,
+        visualStyle: styleContract.name,
+        ...(styleContract.colorScript ? { colorScript: styleContract.colorScript } : {}),
+    };
+    validateProductionPackageCompleteness({ ...input, project: { ...project, productionBible: normalizedBible }, assets: normalizedAssets, episodes: synchronizedEpisodes });
     validateSplitShotFramePlans(synchronizedEpisodes);
     return {
         schemaVersion: 1,
         project: {
             title: text(project.title) || "未命名短剧",
             summary: text(project.summary),
-            style: text(project.style),
+            style: styleContract.name,
             ratio: text(project.ratio) || "9:16",
             productionBible: {
                 targetPlatform: optionalText(bible.targetPlatform),
                 language: text(bible.language) || "中文",
                 ratio: text(bible.ratio) || text(project.ratio) || "9:16",
                 targetDuration: positiveNumber(bible.targetDuration),
-                visualStyle: text(bible.visualStyle) || text(project.style),
-                colorScript: optionalText(bible.colorScript),
+                visualStyle: styleContract.name,
+                ...(styleContract.colorScript ? { colorScript: styleContract.colorScript } : {}),
                 soundBible: optionalText(bible.soundBible),
                 globalNegativePrompt: optionalText(bible.globalNegativePrompt),
                 subtitleSafeArea: optionalText(bible.subtitleSafeArea),
@@ -416,10 +445,10 @@ function repairOpeningCut<T extends DramaProductionPackageEpisode>(episode: T, p
                     ...shot.framePlan,
                     start: { source: "independent" },
                     frames: openingCutFrames("SH001", first.duration, [
-                        "黑湖无波，倒悬古塔与Karin模糊倒影对齐",
-                        "雪地中央四只手彼此扣紧，Karin掌心握住完整剑刃",
-                        "完整剑刃从掌心断口向外裂开，四只手仍未松开",
-                        "冷银断口占据画面中心，Karin手指扣住碎裂剑刃并停住",
+                        { action: "镜头由黑湖远景缓慢推进至雪地；Karin低头，完整剑刃贴在掌心，四只手刚刚扣住", image: "黑湖无波，倒悬古塔与Karin模糊倒影对齐；雪地中央四只手刚刚扣住，Karin低头看向掌心的完整剑刃" },
+                        { action: "镜头继续推进到四只手与剑；Karin抬头看向倒悬古塔，双手收紧，剑身出现第一道裂纹", image: "雪地中央四只手彼此扣紧；Karin抬头看向倒悬古塔，双手收紧，完整剑刃出现第一道银色裂纹" },
+                        { action: "剑刃从掌心断口向外裂开，冷银碎屑飞出；Karin眉眼骤然睁大，四只手仍未松开", image: "剑刃已经从掌心断口向外裂开，冷银碎屑停在断口周围；Karin眉眼骤然睁大、下颌绷紧，四只手仍扣住断剑" },
+                        { action: "镜头骤停在冷银断口，Karin手指扣住碎裂剑刃；断口冷光匹配切入马车", image: "冷银断口占据前景中心，Karin手指扣住碎裂剑刃，视线锁定断口；断口冷光形成下一镜马车窗光的匹配切入口" },
                     ]),
                 },
             };
@@ -440,10 +469,10 @@ function repairOpeningCut<T extends DramaProductionPackageEpisode>(episode: T, p
                     ...shot.framePlan,
                     start: { source: "previous_accepted_actual_tail" },
                     frames: openingCutFrames("SH002", second.duration, [
-                        "上一镜冷银断口与扣紧手指作为马车内匹配切入口",
-                        "马车内同一只手继续压住断剑，Karin肩膀绷紧",
-                        "Karin睁开灰绿色眼睛，视线落向断剑，呼吸急促并保持握持",
-                        "Karin完全惊醒，手扣断剑、肩膀绷紧、视线稳定锁定握柄",
+                        { action: "冷银断口匹配切入马车内同一只扣紧的手；车厢开始震动，Karin仍闭眼", image: "马车内同一只手压住断剑，指节发白，Karin闭眼伏在座位上；冷银断口方向与上一镜一致" },
+                        { action: "车轮震动传入车厢；Karin肩膀骤然绷紧，手掌继续压住断剑", image: "马车内Karin肩膀绷紧，手掌压住断剑，指节发白；车窗冷光在剑柄上形成短促反光" },
+                        { action: "Karin猛然睁开灰绿色眼睛，视线落向断剑，呼吸急促；手指收紧握柄", image: "Karin灰绿色眼睛已经睁开，视线落向断剑，嘴唇微张急促吸气；手指收紧握住断剑" },
+                        { action: "镜头短促推近眼睛与剑柄之间；Karin完全惊醒，视线锁定握柄，肩膀保持绷紧", image: "Karin完全惊醒，灰绿色眼睛锁定断剑握柄，肩膀绷紧，手掌稳定扣住断剑；车厢冷光与暗影关系已经落定" },
                     ]),
                 },
             };
@@ -453,18 +482,22 @@ function repairOpeningCut<T extends DramaProductionPackageEpisode>(episode: T, p
     return { ...episode, shots: nextShots };
 }
 
-function openingCutFrames(code: string, duration: number, actions: string[]) {
-    const stateLabels = ["入口构图已建立", "手部与道具关系发生可见变化", "表情、视线与道具状态同步变化", "动作完成后的稳定尾帧"];
-    return actions.map((action, index) => {
-        const startSecond = Number(((duration * index) / actions.length).toFixed(3));
-        const endSecond = index === actions.length - 1 ? duration : Number(((duration * (index + 1)) / actions.length).toFixed(3));
+function openingCutFrames(code: string, duration: number, actions: Array<string | { action: string; image: string }>) {
+    const stateLabels = ["场景与动作入口已建立", "镜头推进后的姿态与道具位置已改变", "关键动作结果已经发生", "结果状态与转场落点已经成立"];
+    const entries = actions;
+    const boundaries = entries.map((_, index) => Number(((duration * index) / entries.length).toFixed(3))).concat(duration);
+    return entries.map((entry, index) => {
+        const action = typeof entry === "string" ? entry : entry.action;
+        const image = typeof entry === "string" ? entry : entry.image;
         return {
             id: `${code}-F${String(index + 1).padStart(2, "0")}`,
             sequenceIndex: index + 1,
-            startSecond,
-            endSecond,
+            startSecond: boundaries[index],
+            endSecond: boundaries[index + 1],
             actionPrompt: action,
-            imagePrompt: `静态关键帧：${action}；可见状态：${stateLabels[index]}；保持人物身份、服装、道具材质、空间结构、光向、构图和轴线连续；只呈现当前时间点的静态画面，不表现运动过程。`,
+            imagePrompt: formatPromptFieldLines(
+                `静态关键帧：${image}；可见状态：${stateLabels[index] || "动作节点的可见结果已经成立"}；可见表演状态：${image}中的眉眼、视线、呼吸与手部/身体关系清晰可见；保持人物身份、服装、道具材质、空间轴线和光向连续；只呈现当前时间点已经发生的静态结果，不表现运动过程。`,
+            ),
         };
     });
 }
@@ -547,7 +580,8 @@ function normalizeProductionArchive(value: unknown): DramaProductionPackageV1["a
             const asset = object(item);
             const code = text(asset.code);
             const prompt = text(asset.prompt);
-            return code && prompt ? [{ code, category: asset.category === "storyboard" ? ("storyboard" as const) : ("keyframe" as const), title: text(asset.title) || code, prompt, shotCodes: strings(asset.shotCodes) }] : [];
+            const category = asset.category === "storyboard" ? ("storyboard" as const) : ("keyframe" as const);
+            return code && prompt ? [{ code, category, title: text(asset.title) || code, prompt: formatPromptFieldLines(prompt, category === "storyboard" ? "video" : "static"), shotCodes: strings(asset.shotCodes) }] : [];
         }),
         dialogueDirections: array(input.dialogueDirections).flatMap((item) => {
             const direction = object(item);
@@ -689,6 +723,7 @@ function normalizePackageShot(value: unknown, index: number): DramaProductionPac
                 colorPalette,
                 performanceState: performanceStateForFrame(performancePlan, frame.sequenceIndex, frames.length),
                 sequenceIndex: frame.sequenceIndex,
+                frameCount: frames.length,
             }),
         }));
         const visualErrors = rawFrames.length ? validateDramaFramePlanVisuals(frames) : [];
@@ -706,7 +741,7 @@ function normalizePackageShot(value: unknown, index: number): DramaProductionPac
         dialogue: text(shot.dialogue),
         narration: text(shot.narration),
         utterances,
-        imagePrompt: text(shot.imagePrompt),
+        imagePrompt: formatPromptFieldLines(text(shot.imagePrompt), "static"),
         videoPrompt: normalizePackageVideoPrompt(text(shot.videoPrompt), description),
         cameraMotion: text(shot.cameraMotion),
         negativePrompt: optionalText(shot.negativePrompt),
@@ -762,12 +797,11 @@ function performanceStateForFrame(plan: DramaShot["performancePlan"], sequenceIn
 }
 
 function normalizePackageVideoPrompt(value: string, fallback: string) {
-    return (
-        value
-            .replace(/^\s*生成\s*\d+(?:\.\d+)?\s*(?:秒|s)\s*[^。；\n]*视频[，,。；;：:]*/iu, "")
-            .replace(/(?:视频)?时长\s*[：:]?\s*\d+(?:\.\d+)?\s*(?:秒|s)/giu, "")
-            .trim() || fallback
-    );
+    const cleaned = value
+        .replace(/^\s*生成\s*\d+(?:\.\d+)?\s*(?:秒|s)\s*[^。；\n]*视频[，,。；;：:]*/iu, "")
+        .replace(/(?:视频)?时长\s*[：:]?\s*\d+(?:\.\d+)?\s*(?:秒|s)/giu, "")
+        .trim();
+    return formatPromptFieldLines(cleaned || fallback, "video");
 }
 
 function normalizeReferenceManifest(value: unknown) {
@@ -1489,7 +1523,7 @@ export function mergeDramaProductionPackageShotDurations(value: DramaProductionP
 function mergeTargetDurationShots(episode: DramaProductionPackageEpisode, targetDuration: 15 | 20 | 30): DramaProductionPackageEpisode {
     const groups: DramaProductionPackageEpisode["shots"][] = [];
     let changed = false;
-    for (let index = 0; index < episode.shots.length; ) {
+    for (let index = 0; index < episode.shots.length;) {
         const group = explicitDurationGroup(episode.shots, index, targetDuration);
         if (group.length > 1) {
             groups.push(group);
@@ -1537,10 +1571,14 @@ function explicitDurationGroup(shots: DramaProductionPackageEpisode["shots"], st
     const first = splitShotTitle(shots[startIndex]?.title || "");
     if (!first || first.part !== 1 || first.total < 2) return [];
     const group = shots.slice(startIndex, startIndex + first.total);
-    if (group.length !== first.total || group.some((shot, index) => {
-        const parsed = splitShotTitle(shot.title);
-        return parsed?.base !== first.base || parsed.part !== index + 1 || parsed.total !== first.total || shot.storySceneCode !== group[0].storySceneCode;
-    })) return [];
+    if (
+        group.length !== first.total ||
+        group.some((shot, index) => {
+            const parsed = splitShotTitle(shot.title);
+            return parsed?.base !== first.base || parsed.part !== index + 1 || parsed.total !== first.total || shot.storySceneCode !== group[0].storySceneCode || shot.locationCode !== group[0].locationCode;
+        })
+    )
+        return [];
     const total = group.reduce((sum, shot) => sum + shot.duration, 0);
     if (total !== targetDuration) return [];
     const firstTime = parseTimecode(group[0].timecode);
@@ -1558,10 +1596,11 @@ function mergeShotGroup(group: DramaProductionPackageEpisode["shots"]) {
     const last = group.at(-1)!;
     const firstTitle = splitShotTitle(first.title)?.base || first.title;
     const offsets = group.reduce<number[]>((values, shot, index) => [...values, (values[index - 1] || 0) + (index ? group[index - 1].duration : 0)], []);
-    const mergedFrames = group.flatMap((shot, index) =>
-        shot.framePlan.frames.map((frame) => ({ ...frame, startSecond: Number((frame.startSecond + offsets[index]).toFixed(3)), endSecond: Number((frame.endSecond + offsets[index]).toFixed(3)) })),
+    const mergedFrames = group.flatMap((shot, index) => shot.framePlan.frames.map((frame) => ({ ...frame, startSecond: Number((frame.startSecond + offsets[index]).toFixed(3)), endSecond: Number((frame.endSecond + offsets[index]).toFixed(3)) })));
+    const frames = compactMergedFrames(
+        mergedFrames,
+        group.reduce((sum, shot) => sum + shot.duration, 0),
     );
-    const frames = compactMergedFrames(mergedFrames, group.reduce((sum, shot) => sum + shot.duration, 0));
     const references = dedupeReferenceManifest(group.flatMap((shot, index) => (shot.framePlan.referenceManifest || []).filter((item) => index === 0 || item.role !== "previous_actual_tail")));
     const firstTime = parseTimecode(first.timecode);
     const lastTime = parseTimecode(last.timecode);
@@ -1581,7 +1620,12 @@ function mergeShotGroup(group: DramaProductionPackageEpisode["shots"]) {
         startFramePrompt: first.startFramePrompt,
         endFramePrompt: last.endFramePrompt,
         negativePrompt: joinTexts(group.map((shot) => shot.negativePrompt)),
-        continuity: { ...first.continuity, actionStart: first.continuity?.actionStart || first.description, actionEnd: last.continuity?.actionEnd || last.description, continuityNotes: joinTexts([first.continuity?.continuityNotes, last.continuity?.continuityNotes]) },
+        continuity: {
+            ...first.continuity,
+            actionStart: first.continuity?.actionStart || first.description,
+            actionEnd: last.continuity?.actionEnd || last.description,
+            continuityNotes: joinTexts([first.continuity?.continuityNotes, last.continuity?.continuityNotes]),
+        },
         duration: group.reduce((sum, shot) => sum + shot.duration, 0),
         characterCodes: dedupeStrings(group.flatMap((shot) => shot.characterCodes)),
         propCodes: dedupeStrings(group.flatMap((shot) => shot.propCodes)),
@@ -1614,7 +1658,9 @@ function mergeVideoPromptGroup(group: DramaProductionPackageEpisode["shots"]) {
         environment.length ? `环境压力与声音：${joinTexts(environment)}` : "",
         `结束画面：${end}`,
         `针对性约束：${constraints}`,
-    ].filter(Boolean).join("；");
+    ]
+        .filter(Boolean)
+        .join("\n");
 }
 
 function extractVideoMarker(value: string, marker: string) {
@@ -1732,7 +1778,10 @@ function splitDirectorShots<T extends DramaProductionPackageEpisode["shots"][num
                     .map((item) => `${item.speaker}：${item.text}`)
                     .join("\n"),
                 imagePrompt: splitFrames[0].imagePrompt,
-                videoPrompt: `动态意图：${actionStart}到${actionEnd}；起始可见状态：${actionStart}；主体动作与反应：${action}；一个主运镜：${shot.cameraMotion || "固定机位"}；结束画面：${actionEnd}；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：${shot.negativePrompt || "无闪烁、无形变、无背景漂移、无身份跳变、无水印文字"}。`,
+                videoPrompt: formatPromptFieldLines(
+                    `动态意图：${actionStart}到${actionEnd}；起始可见状态：${actionStart}；主体动作与反应：${action}；单一主运镜：${shot.cameraMotion || "固定机位"}；结束画面：${actionEnd}；连续性锁：保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：${shot.negativePrompt || "无闪烁、无形变、无背景漂移、无身份跳变、无水印文字"}。`,
+                    "video",
+                ),
                 startFramePrompt: splitFrames[0].imagePrompt,
                 endFramePrompt: splitFrames.at(-1)?.imagePrompt || splitFrames[0].imagePrompt,
                 continuity: { ...shot.continuity, actionStart, actionEnd },

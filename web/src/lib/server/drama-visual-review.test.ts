@@ -17,6 +17,18 @@ describe("normalizeDramaVisualReviewInput", () => {
 
         expect(result.tasks).toEqual([expect.objectContaining({ id: "shot-one", imageUrls: ["/api/media-assets/one", "https://example.com/end.png"] })]);
         expect(result.foundation.direction.avoid).toContain("轴线与视线错误");
+        expect(result.foundation.direction.avoid).not.toContain("纯写实摄影或真人影视感");
+        expect(result.foundation.direction.avoid).not.toContain("3D游戏渲染");
+    });
+
+    it("keeps the bible style when project.style is empty", () => {
+        const result = normalizeDramaVisualReviewInput({
+            project: { title: "真实摄影短剧", productionBible: { visualStyle: "ARRI自然光真人影视感，冷灰蓝" }, ratio: "16:9" },
+            episode: { title: "第 1 集", shots: [{ id: "shot-one", storyboardImageUrl: "/api/media-assets/one", imagePrompt: "雨夜" }] },
+        });
+
+        expect(result.foundation.direction.style).toBe("ARRI自然光真人影视感，冷灰蓝");
+        expect(result.foundation.direction.summary).toContain("ARRI自然光真人影视感");
     });
 
     it("reviews every completed storyboard instead of sampling the first six", () => {

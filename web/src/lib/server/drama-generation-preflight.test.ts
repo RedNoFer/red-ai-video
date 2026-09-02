@@ -43,6 +43,9 @@ describe("drama generation preflight", () => {
         const result = await preflightDramaGeneration({ origin: "http://localhost", cookie: "", userId: "user", requestId: "request", project, episode: project.episodes[0] });
         expect(result.revisedPrompts?.["shot-one"]).toEqual({ imagePrompt: "修订后的分镜提示词", videoPrompt: "修订后的视频提示词" });
         expect(project.episodes[0].shots[0].videoPrompt).toBe("Karin站在门前");
+        const messages = mocks.requestStructuredText.mock.calls[0]?.[0]?.messages as Array<{ role: string; content: string }>;
+        expect(messages[0]?.content).toContain("项目视觉风格：写实");
+        expect(messages[0]?.content).not.toContain("纯写实摄影或真人影视感");
     });
 
     it("does not inherit blockers from shots outside a targeted retry", async () => {
@@ -97,8 +100,31 @@ function fixture(): DramaProject {
                 utterances: [],
                 imagePrompt: "9:16门前",
                 videoPrompt: "Karin站在门前",
-                performancePlan: { emotionalObjective: "保持警觉", emotionalArc: "平静到紧张", speechStyle: "低声", pace: "慢速", breath: "屏息", restraintLevel: "克制", beats: { start: { emotion: "平静", facialAction: "眉眼放松", gaze: "向前", bodyAction: "站定" }, middle: { emotion: "紧张", facialAction: "眉心收紧", gaze: "移开", bodyAction: "肩部绷紧" }, end: { emotion: "压制", facialAction: "嘴角压住", gaze: "锁定", bodyAction: "后退" } } },
-                lightingPlan: { palette: "冷灰", colorTemperature: "4200K", keyLight: "左上冷光", fillLight: "低补光", rimLight: "蓝轮廓", contrast: "中高", materialResponse: "湿地反射", skinToneProtection: "保留肤色", inheritFromPrevious: "无", transitionToNext: "延续" },
+                performancePlan: {
+                    emotionalObjective: "保持警觉",
+                    emotionalArc: "平静到紧张",
+                    speechStyle: "低声",
+                    pace: "慢速",
+                    breath: "屏息",
+                    restraintLevel: "克制",
+                    beats: {
+                        start: { emotion: "平静", facialAction: "眉眼放松", gaze: "向前", bodyAction: "站定" },
+                        middle: { emotion: "紧张", facialAction: "眉心收紧", gaze: "移开", bodyAction: "肩部绷紧" },
+                        end: { emotion: "压制", facialAction: "嘴角压住", gaze: "锁定", bodyAction: "后退" },
+                    },
+                },
+                lightingPlan: {
+                    palette: "冷灰",
+                    colorTemperature: "4200K",
+                    keyLight: "左上冷光",
+                    fillLight: "低补光",
+                    rimLight: "蓝轮廓",
+                    contrast: "中高",
+                    materialResponse: "湿地反射",
+                    skinToneProtection: "保留肤色",
+                    inheritFromPrevious: "无",
+                    transitionToNext: "延续",
+                },
                 cameraMotion: "固定",
                 framePlan: { start: { source: "independent" }, end: { required: true }, frames: [{ id: "frame-one", sequenceIndex: 1, startSecond: 0, endSecond: 15, actionPrompt: "Karin站在门前", imagePrompt: "9:16门前" }] },
                 duration: 15,

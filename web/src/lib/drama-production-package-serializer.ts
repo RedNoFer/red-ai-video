@@ -1,4 +1,5 @@
 import type { DramaProductionPackageV1 } from "@/lib/drama-project-contract";
+import { formatPromptFieldLines } from "@/lib/drama-frame-sequence";
 
 export function serializeDramaProductionPackageJson(value: DramaProductionPackageV1) {
     return `${JSON.stringify(withDeterministicVideoSection(value), null, 2)}\n`;
@@ -64,7 +65,9 @@ function videoPromptSection(value: DramaProductionPackageV1) {
                 const frames = [...shot.framePlan.frames]
                     .sort((left, right) => left.sequenceIndex - right.sequenceIndex)
                     .map((frame) => `${promptCode}-F${String(frame.sequenceIndex).padStart(2, "0")} ${frame.startSecond}-${frame.endSecond}s：${frame.actionPrompt}`);
-                const references = (shot.framePlan.referenceManifest || []).map((item) => `${item.alias}仅用于${item.purpose || item.role}`).join("；");
+                const references = (shot.framePlan.referenceManifest || []).map((item) => `${item.alias}仅用于${item.purpose || item.role}`);
+                const videoPrompt = formatPromptFieldLines(cleanPackageVideoBrief(shot.videoPrompt), "video");
+                const promptLines = videoPrompt.includes("动态意图：") || videoPrompt.includes("动态意图:") ? videoPrompt.split("\n").filter(Boolean) : [`动态意图：${videoPrompt || shot.description}`];
                 const endState =
                     shot.exitState?.characters
                         .map((item) => item.action)
@@ -75,10 +78,10 @@ function videoPromptSection(value: DramaProductionPackageV1) {
                     shot.description;
                 const lines = [
                     `${shot.duration}s ${value.project.ratio} 视频`,
-                    `动态意图：${cleanPackageVideoBrief(shot.videoPrompt) || shot.description}`,
-                    `单一主运镜：${shot.cameraMotion || "固定机位"}`,
+                    ...promptLines,
+                    ...(promptLines.some((line) => /(?:单一主运镜|主运镜)[：:]/u.test(line)) ? [] : [`单一主运镜：${shot.cameraMotion || "固定机位"}`]),
                     ...frames,
-                    references ? `参考职责：${references}` : "参考职责：按资产映射表和实际绑定图片执行",
+                    references.length ? ["参考图职责：", ...references.map((reference) => `- ${reference}`)].join("\n") : "参考图职责：按资产映射表和实际绑定图片执行",
                     `结束画面：${endState}`,
                     `风格：${value.project.style}`,
                     `针对性约束：${shot.negativePrompt || "无闪烁、无形变、无背景漂移、无道具消失、无身份跳变、无水印文字"}`,

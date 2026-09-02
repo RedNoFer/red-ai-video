@@ -22,6 +22,7 @@ import { createSignedReferenceAssetUrl, signReferenceAssetInputUrl } from "@/lib
 import { assertCapabilityConstraints } from "@/lib/server/capability-constraints";
 import { GenerationSubmissionSafeFailure } from "@/lib/server/generation-submission-error";
 import { resolveChannelModelConfig } from "@/lib/channel-protocol-registry";
+import { uploadImageReferenceToProvider } from "./image-task-custom";
 
 import {
     type CreateImageTaskBody,
@@ -393,11 +394,16 @@ export async function buildJsonImageEditBodies(
     imageUrlObjectOnlyMode = false,
     includeCompatibilityFields = true,
 ) {
+    const config = task.config;
     const referenceContext = { ownerUserId: task.userId, taskId: task.id };
     const requestReferenceUrl = async (reference: ImageTaskReference, index: number) => {
         if (publicUrlReferenceMode) return publicImageReferenceRequestUrl(reference, origin, publicOrigin, referenceContext);
         if (!imageUrlObjectOnlyMode) return jsonImageReferenceRequestUrl(reference, origin);
-        return publicImageReferenceRequestUrl(reference, origin, publicOrigin, referenceContext);
+        try {
+            return await publicImageReferenceRequestUrl(reference, origin, publicOrigin, referenceContext);
+        } catch {
+            return uploadImageReferenceToProvider(config, reference, origin, cookie, index);
+        }
     };
     let images: string[];
     let mask = "";

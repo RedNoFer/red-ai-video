@@ -63,6 +63,28 @@ describe("production package boundary", () => {
         });
     });
 
+    it("normalizes shot and prompt-asset fields onto independent lines", () => {
+        const source = structuredClone(productionPackage);
+        source.episodes[0].shots[0].imagePrompt = "静态关键帧：Karin握住断剑；可见状态：指节发白，景别：中景；机位与构图：平视";
+        source.episodes[0].shots[0].videoPrompt = "动态意图：Karin抬头；单一主运镜：固定机位；结束画面：视线锁定断剑";
+        source.archive = {
+            formatVersion: "vozeb-drama-production-package-v1",
+            sections: [],
+            promptAssets: [{ code: "P01", category: "keyframe", title: "关键帧", prompt: "静态关键帧：Karin握剑；景别：中景", shotCodes: ["SH01"] }],
+            dialogueDirections: [],
+            voiceDirections: [],
+            silenceDirections: [],
+            referencePlan: [],
+            generationOrder: [],
+            qcReport: "",
+        };
+
+        const normalized = previewDramaProductionPackage(JSON.stringify(source), "package.json").package;
+        expect(normalized.episodes[0].shots[0].imagePrompt).toContain("可见状态：指节发白\n景别：中景");
+        expect(normalized.episodes[0].shots[0].videoPrompt).toContain("动态意图：Karin抬头\n单一主运镜：固定机位\n结束画面：视线锁定断剑");
+        expect(normalized.archive?.promptAssets[0]?.prompt).toBe("静态关键帧：Karin握剑\n景别：中景");
+    });
+
     it("deduplicates package assets by stable code before preview and apply", () => {
         const source = structuredClone(productionPackage);
         source.assets.characters.push({ code: "C01", name: "Karin", description: "重复记录" });
@@ -78,7 +100,11 @@ describe("production package boundary", () => {
         const source = structuredClone(productionPackage);
         source.episodes[0].shots[0].storyboardFrameMode = "all_frames";
         const preview = previewDramaProductionPackage(JSON.stringify(source), "package.json");
-        console.log("DEBUG", preview.package.project.productionBible.productionPlan?.video, preview.package.episodes[0].shots.map((shot) => ({ title: shot.title, duration: shot.duration, scene: shot.storySceneCode, location: shot.locationCode })));
+        console.log(
+            "DEBUG",
+            preview.package.project.productionBible.productionPlan?.video,
+            preview.package.episodes[0].shots.map((shot) => ({ title: shot.title, duration: shot.duration, scene: shot.storySceneCode, location: shot.locationCode })),
+        );
         expect(preview.package.episodes[0].shots[0].storyboardFrameMode).toBe("all_frames");
     });
 
@@ -143,11 +169,11 @@ describe("production package boundary", () => {
         second.timecode = "8-15s";
         first.storySceneCode = "SC01";
         second.storySceneCode = "SC01";
+        first.locationCode = "S02";
         second.locationCode = "S02";
-        second.framePlan.referenceManifest = [
-            ...(second.framePlan.referenceManifest || []).filter((item) => item.role !== "scene_anchor"),
-            { alias: "@场景2", role: "scene_anchor", purpose: "马车场景基准", assetId: "S02" },
-        ];
+        first.framePlan.referenceManifest = first.framePlan.referenceManifest?.map((item) => (item.role === "scene_anchor" ? { ...item, assetId: "S02" } : item));
+        second.framePlan.referenceManifest = second.framePlan.referenceManifest?.map((item) => (item.role === "scene_anchor" ? { ...item, assetId: "S02" } : item));
+        second.framePlan.referenceManifest = [...(second.framePlan.referenceManifest || []).filter((item) => item.role !== "scene_anchor"), { alias: "@场景2", role: "scene_anchor", purpose: "马车场景基准", assetId: "S02" }];
         first.framePlan.frames = first.framePlan.frames.map((frame) => ({ ...frame, startSecond: 0, endSecond: 8 }));
         second.framePlan.frames = second.framePlan.frames.map((frame) => ({ ...frame, startSecond: 0, endSecond: 7 }));
         source.episodes[0].storyScenes[0].shotCodes = ["SH01", "SH02"];
@@ -157,6 +183,34 @@ describe("production package boundary", () => {
         expect(preview.package.episodes[0].shots[0].framePlan.frames.at(-1)?.endSecond).toBe(15);
         expect(preview.package.episodes[0].storyScenes[0].shotCodes).toEqual(["SH001"]);
         expect(preview.package.assets.characters.map((asset) => asset.code)).toEqual(["C01", "C02"]);
+    });
+
+    it("does not merge duration fragments across a scene change", () => {
+        const source = structuredClone(productionPackage);
+        source.assets.locations.push({ code: "S02", name: "马车", description: "封闭木马车" });
+        const [first, second] = source.episodes[0].shots;
+        first.title = "黑湖记忆 1/2";
+        second.title = "黑湖记忆 2/2";
+        first.description = "黑湖中的完整剑刃裂开";
+        second.description = "马车中Karin惊醒";
+        first.sourceText = first.description;
+        second.sourceText = second.description;
+        first.duration = 8;
+        second.duration = 7;
+        first.timecode = "0-8s";
+        second.timecode = "8-15s";
+        first.storySceneCode = "SC01";
+        second.storySceneCode = "SC01";
+        first.locationCode = "S01";
+        second.locationCode = "S02";
+        second.framePlan.referenceManifest = second.framePlan.referenceManifest?.map((item) => (item.role === "scene_anchor" ? { ...item, assetId: "S02" } : item));
+        first.framePlan.frames = first.framePlan.frames.map((frame) => ({ ...frame, startSecond: 0, endSecond: 8 }));
+        second.framePlan.frames = second.framePlan.frames.map((frame) => ({ ...frame, startSecond: 0, endSecond: 7 }));
+        source.episodes[0].storyScenes[0].shotCodes = ["SH01", "SH02"];
+
+        const preview = previewDramaProductionPackage(JSON.stringify(source), "package.json");
+        expect(preview.package.episodes[0].shots).toHaveLength(2);
+        expect(preview.package.episodes[0].shots.map((shot) => shot.locationCode)).toEqual(["S01", "S02"]);
     });
 
     it("recognizes the generated multiframe Markdown package", () => {
@@ -212,6 +266,18 @@ describe("production package boundary", () => {
         const plans = shots.map((shot) => JSON.stringify(shot.framePlan.frames.map((frame) => [frame.actionPrompt, frame.imagePrompt])));
 
         expect(new Set(plans)).toHaveLength(plans.length);
+    });
+
+    it("gives every generated Mahadel frame a distinct dynamic image state", () => {
+        const source = readFileSync(new URL("../../../../output/mahadel-episode-01-production-package-v2-multiframe.json", import.meta.url), "utf8");
+        const shots = previewDramaProductionPackage(source, "mahadel-episode-01-production-package-v2-multiframe.json").package.episodes[0].shots;
+
+        for (const shot of shots) {
+            const prompts = shot.framePlan.frames.map((frame) => frame.imagePrompt);
+            const states = prompts.map((prompt) => prompt.match(/^静态关键帧：([^；]+)/u)?.[1] || prompt);
+            expect(new Set(prompts)).toHaveLength(prompts.length);
+            expect(new Set(states)).toHaveLength(states.length);
+        }
     });
 
     it("rejects a copied frame plan across split director shots", () => {
@@ -393,22 +459,40 @@ describe("production package boundary", () => {
         expect(second.productionArchive).toEqual(productionPackage.archive);
     });
 
+    it("preserves an imported package visual style instead of replacing it with the app default", () => {
+        const importedStyle = "VS14 中世纪史诗的学院奇幻变体；宏大空间与克制人物近景并重，不使用现代元素或科幻 UI。";
+        const imported = structuredClone(productionPackage);
+        imported.project.style = importedStyle;
+        imported.project.productionBible.visualStyle = importedStyle;
+
+        const applied = applyDramaProductionPackage(project(), imported, "hash-custom-style");
+
+        expect(applied.style).toBe(importedStyle);
+        expect(applied.productionBible?.visualStyle).toBe(importedStyle);
+        expect(applied.productionBible?.colorScript).toBeUndefined();
+    });
+
     it("replaces legacy manual frame plans when importing a newly structured package", () => {
         const first = applyDramaProductionPackage(project(), productionPackage, "hash-legacy-frame");
         const legacyShot = first.episodes[0].shots[0];
         const legacy: DramaProject = {
             ...first,
-            episodes: [{
-                ...first.episodes[0],
-                shots: [{
-                    ...legacyShot,
-                    fieldOrigins: { ...legacyShot.fieldOrigins, framePlan: "manual" },
-                    framePlan: {
-                        ...legacyShot.framePlan!,
-                        frames: legacyShot.framePlan!.frames.map((frame) => ({ ...frame, supplierPrompt: "静态画面：旧版长提示词；主体锚点：历史文本" })),
-                    },
-                }, ...first.episodes[0].shots.slice(1)],
-            }],
+            episodes: [
+                {
+                    ...first.episodes[0],
+                    shots: [
+                        {
+                            ...legacyShot,
+                            fieldOrigins: { ...legacyShot.fieldOrigins, framePlan: "manual" },
+                            framePlan: {
+                                ...legacyShot.framePlan!,
+                                frames: legacyShot.framePlan!.frames.map((frame) => ({ ...frame, supplierPrompt: "静态画面：旧版长提示词；主体锚点：历史文本" })),
+                            },
+                        },
+                        ...first.episodes[0].shots.slice(1),
+                    ],
+                },
+            ],
         };
         const imported = applyDramaProductionPackage(legacy, productionPackage, "hash-new-frame");
         const prompt = imported.episodes[0].shots[0].framePlan!.frames[0].imagePrompt;

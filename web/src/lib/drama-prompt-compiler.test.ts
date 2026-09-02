@@ -56,7 +56,7 @@ describe("drama prompt compiler", () => {
         expect(prompt).toContain("站位与视线：");
         expect(prompt).toContain("三层空间：");
         expect(prompt).toContain("光色与风格：");
-        expect(prompt).toContain("参考图职责：");
+        expect(prompt).not.toContain("参考图职责：");
         expect(prompt).toContain("负面约束：");
         expect(prompt).not.toMatch(/(?:主体|场景|画面|当前状态|镜头|一致性)：/u);
         expect(prompt).not.toContain("章节文案");
@@ -77,8 +77,76 @@ describe("drama prompt compiler", () => {
             imagePrompt: "黑湖无波，倒悬古塔与倒影对齐；主体保持静止",
         });
 
-        expect(prompt).toContain("景别：ELS");
+        expect(prompt).toContain("景别：中远景");
         expect(prompt).not.toContain("ELS→ECU");
+    });
+
+    it("rebases a frame onto its scene-change asset and keeps the interior readable", () => {
+        const project = createProject();
+        const lake = project.scenes[0];
+        lake.id = "scene-lake";
+        lake.name = "黑湖记忆";
+        lake.description = "无风黑湖与倒悬古塔";
+        const carriage = {
+            id: "scene-carriage",
+            name: "前往阿佐雷斯的马车",
+            description: "中世纪封闭木马车，左右长凳与右侧竖向车窗",
+            profile: { visualIdentity: "左右长凳、右侧竖窗", styling: "木质车厢", colorPalette: "冷灰", consistencyRules: "车窗固定在右侧" },
+        };
+        project.scenes.push(carriage);
+        const shot = project.episodes[0].shots[0];
+        shot.sceneId = lake.id;
+        shot.continuity = { ...shot.continuity!, shotSize: "ELS→ECU" };
+        shot.framePlan = {
+            start: { source: "independent" },
+            end: { required: true },
+            referenceManifest: [
+                { alias: "@湖", role: "scene_anchor", purpose: "黑湖场景", assetId: lake.id },
+                { alias: "@车", role: "scene_anchor", purpose: "马车场景", assetId: carriage.id },
+            ],
+            frames: [],
+        };
+
+        const prompt = compileDramaFrameSupplierPrompt(project, project.episodes[0], shot, {
+            id: "frame-carriage",
+            sequenceIndex: 5,
+            startSecond: 12,
+            endSecond: 15,
+            actionPrompt: "Karin在马车中完全惊醒，手扣住断剑",
+            imagePrompt: "静态关键帧：马车内Karin完全惊醒，手扣住断剑",
+            supplierPrompt: "静态关键帧：黑湖外景Karin特写；可见状态：稳定；可见表演状态：清晰；景别：特写；机位与构图：平视；站位与视线：居中；三层空间：背景；光色与风格：冷光；参考图职责：场景；负面约束：无水印",
+        });
+
+        expect(prompt).toContain("左右长凳");
+        expect(prompt).toContain("车厢");
+        expect(prompt).toContain("景别：中景");
+        expect(prompt).not.toContain("无风黑湖");
+        expect(prompt).not.toContain("景别：特写");
+    });
+
+    it("uses a carriage cue from the saved supplier prompt when the frame image text is stale", () => {
+        const project = createProject();
+        project.scenes[0] = { ...project.scenes[0], id: "scene-lake", name: "黑湖记忆", description: "无风黑湖与倒悬古塔" };
+        project.scenes.push({
+            id: "scene-carriage",
+            name: "前往阿佐雷斯的马车",
+            description: "中世纪封闭木马车，左右长凳与右侧竖向车窗",
+            profile: { visualIdentity: "左右长凳、右侧竖窗", styling: "木质车厢", colorPalette: "冷灰", consistencyRules: "车窗固定在右侧" },
+        });
+        const shot = project.episodes[0].shots[0];
+        shot.sceneId = "scene-lake";
+        const prompt = compileDramaFrameSupplierPrompt(project, project.episodes[0], shot, {
+            id: "frame-carriage",
+            sequenceIndex: 5,
+            startSecond: 12,
+            endSecond: 15,
+            actionPrompt: "结果状态落定",
+            imagePrompt: "静态关键帧：Karin完全惊醒，手扣住断剑",
+            supplierPrompt: "马车内Karin完全惊醒，车厢空间清晰可见",
+        });
+
+        expect(prompt).toContain("左右长凳");
+        expect(prompt).not.toContain("无风黑湖");
     });
 
     it("includes structured prop identity in supplier-facing frame prompts", () => {
@@ -103,7 +171,7 @@ describe("drama prompt compiler", () => {
         const prompt = compileDramaFrameSupplierPrompt(project, project.episodes[0], shot, undefined, "keyframe");
 
         expect(prompt).toContain("静态关键帧：冷色天台");
-        expect(prompt).toContain("参考图职责：");
+        expect(prompt).not.toContain("参考图职责：");
 
         const savedPrompt = compileDramaFrameSupplierPrompt(project, project.episodes[0], shot, {
             id: "frame-one",
@@ -144,7 +212,7 @@ describe("drama prompt compiler", () => {
         });
 
         expect(prompt).toContain("静态关键帧：Karin、断剑、无波黑湖与倒悬古塔同框");
-        expect(prompt).toContain("参考图职责：");
+        expect(prompt).not.toContain("参考图职责：");
         expect(prompt).not.toContain("角色锚点：");
         expect(prompt).not.toContain("场景锚点：");
     });
@@ -170,7 +238,7 @@ describe("drama prompt compiler", () => {
         expect(prompts.videoPrompt).toContain("2-5s：女主抬头看向血迹");
         expect(prompts.videoPrompt).toContain("单一主运镜：缓慢推进");
         expect(prompts.videoPrompt).toContain("结束画面：动作结束");
-        expect(prompts.videoPrompt).toContain(`风格：${DRAMA_STYLE_NAME}`);
+        expect(prompts.videoPrompt).toContain(`风格：${DRAMA_STYLE_DESCRIPTION}`);
         expect(prompts.videoPrompt).not.toContain("5s 9:16 视频");
         expect(prompts.videoPrompt).not.toContain("女主：红色外套");
         expect(prompts.videoPrompt).not.toContain("场景设定：");
@@ -343,7 +411,7 @@ describe("drama prompt compiler", () => {
         expect(assetPrompt).toContain("最终识别标记");
     });
 
-    it("replaces legacy project style and ignores historical asset layout instructions", () => {
+    it("preserves an imported project style while ignoring historical asset layout instructions", () => {
         const project = createProject();
         project.style = "VS14 中世纪史诗的学院奇幻变体；宏大空间与克制人物近景并重";
         project.productionBible = { ...project.productionBible!, visualStyle: project.style, colorScript: "深蓝灰、旧银、墨绿、少量暖金" };
@@ -354,12 +422,24 @@ describe("drama prompt compiler", () => {
 
         const prompt = compileDramaAssetReferencePrompt(project, project.characters[0], "角色");
 
-        expect(prompt).toContain(`最终风格锁定：${DRAMA_STYLE_DESCRIPTION}`);
-        expect(prompt).toContain("暗黑学院魔法背景");
+        expect(prompt).toContain(`最终风格锁定：${project.style}`);
+        expect(prompt).toContain("全局色彩脚本：深蓝灰、旧银、墨绿、少量暖金");
         expect(prompt).toContain("短发");
-        expect(prompt).not.toContain("VS14");
         expect(prompt).not.toContain("六模块");
         expect(prompt).not.toContain("中性浅灰背景");
+    });
+
+    it("uses a custom project visual style in generated prompts", () => {
+        const project = createProject();
+        project.style = "现实悬疑电影感，冷蓝灰低饱和，手持摄影";
+        project.productionBible = { ...project.productionBible!, visualStyle: project.style, colorScript: "冷蓝灰、低饱和" };
+
+        const prompt = compileDramaShotExecutionPrompts(project, project.episodes[0], project.episodes[0].shots[0]);
+
+        expect(prompt.imagePrompt).toContain(project.style);
+        expect(prompt.videoPrompt).toContain(`风格：${project.style}`);
+        expect(prompt.imagePrompt).not.toContain("暗黑学院魔法环境");
+        expect(prompt.imagePrompt).not.toContain("暮色金紫主调");
     });
 
     it("recompiles cached refinement proposals with the current project style", () => {
@@ -383,18 +463,18 @@ describe("drama prompt compiler", () => {
 
     it("does not let legacy cached shot prompts bypass the current project style", () => {
         const project = createProject();
-        project.style = "VS14 中世纪史诗学院奇幻，写实电影感";
+        project.style = "冷色悬疑电影感，低饱和手持摄影";
         project.episodes[0].shots[0].executionImagePrompt = "旧版 VS14 分镜图，中性浅灰背景，多视角设定板";
-        project.episodes[0].shots[0].executionVideoPrompt = "旧版写实电影感视频，保持中性灰背景";
+        project.episodes[0].shots[0].executionVideoPrompt = "旧版 VS14 视频，保持中性灰背景";
 
         const prompts = compileDramaShotExecutionPrompts(project, project.episodes[0], project.episodes[0].shots[0]);
 
-        expect(prompts.imagePrompt).toContain(`最终视觉锁定：${DRAMA_STYLE_DESCRIPTION}`);
-        expect(prompts.videoPrompt).toContain(`风格：${DRAMA_STYLE_NAME}`);
+        expect(prompts.imagePrompt).toContain(`最终视觉锁定：${project.style}`);
+        expect(prompts.videoPrompt).toContain(`风格：${project.style}`);
         expect(prompts.imagePrompt).not.toContain("VS14");
         expect(prompts.imagePrompt).not.toContain("中性浅灰背景");
-        expect(prompts.videoPrompt).not.toContain("写实电影感");
-        expect(prompts.videoPrompt).toContain("旧版视频");
+        expect(prompts.videoPrompt).not.toContain("VS14");
+        expect(prompts.videoPrompt).toContain("旧版 视频");
         expect(prompts.videoPrompt).not.toContain("统一视觉风格（最高级风格约束）");
     });
 

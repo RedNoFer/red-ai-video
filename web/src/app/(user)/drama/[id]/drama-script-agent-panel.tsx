@@ -9,7 +9,7 @@ import type { CreativeConversation, CreativeMessage } from "@/lib/creative-runti
 import type { DramaProductionPackagePreview, DramaProject, DramaEpisode } from "@/lib/drama-project-contract";
 import { AgentMarkdown } from "@/components/agent/agent-markdown";
 import { createCreativeAgentRun, createCreativeConversation, listCreativeConversationPage, listCreativeMessages, watchCreativeAgentRun } from "@/services/api/creative";
-import { applyDramaEpisodeProductionPackage } from "@/services/api/drama-projects";
+import { applyDramaEpisodeProductionPackage, saveDramaProductionPlan } from "@/services/api/drama-projects";
 import { useDramaStore } from "../stores/use-drama-store";
 import { useCreativeAgentOptions } from "@/hooks/use-creative-agent-options";
 import { defaultDramaProductionPlan, DRAMA_SHOT_DURATION_OPTIONS, DRAMA_VIDEO_RESOLUTION_OPTIONS, normalizeDramaProductionPlan } from "@/lib/drama-production-plan";
@@ -20,7 +20,6 @@ type Props = { project: DramaProject; episode: DramaEpisode; open: boolean; onOp
 export function DramaScriptAgentPanel({ project, episode, open, onOpenChange }: Props) {
     const { message } = App.useApp();
     const replaceProject = useDramaStore((state) => state.replaceProject);
-    const saveProjectNow = useDramaStore((state) => state.saveProjectNow);
     const [conversation, setConversation] = useState<CreativeConversation>();
     const [conversations, setConversations] = useState<CreativeConversation[]>([]);
     const [messages, setMessages] = useState<CreativeMessage[]>([]);
@@ -135,19 +134,11 @@ export function DramaScriptAgentPanel({ project, episode, open, onOpenChange }: 
     };
     const savePlan = async () => {
         const next = normalizeDramaProductionPlan(planDraft, defaultDramaProductionPlan("new-project"))!;
-        const productionBible = {
-            ...(project.productionBible || {}),
-            language: project.productionBible?.language || "zh-CN",
-            ratio: project.productionBible?.ratio || "9:16",
-            visualStyle: project.productionBible?.visualStyle || "",
-            continuityMode: project.productionBible?.continuityMode || "strict",
-            productionPlan: { ...next, lockedAt: new Date().toISOString(), source: "manual" as const },
-        };
-        const defaultVideoMode = next.video.mode === "text-to-video" ? "direct" : "storyboard";
-        useDramaStore.getState().updateProject(project.id, { productionBible, defaultVideoMode });
-        setPlanDraft(productionBible.productionPlan);
+        const lockedPlan = { ...next, lockedAt: new Date().toISOString(), source: "manual" as const };
+        const saved = await saveDramaProductionPlan(project.id, lockedPlan);
+        replaceProject(saved);
+        setPlanDraft(normalizeDramaProductionPlan(saved.productionBible?.productionPlan, lockedPlan)!);
         setPlanOpen(false);
-        await saveProjectNow(project.id);
         if (pendingPackage) {
             setPendingPackage(false);
             const packageRequest = prompt.trim();
@@ -393,7 +384,9 @@ export function DramaScriptAgentPanel({ project, episode, open, onOpenChange }: 
                             />
                         </label>
                     </div>
-                    <p className="text-xs leading-5 text-muted-foreground">Agent 会按每镜 {planDraft.video.shotDuration || 15} 秒、{planDraft.video.frameCount || 5} 帧重新切分剧情；相邻碎片镜头会合并为完整逻辑镜头。连续性固定为严格模式：下一镜只能引用上一镜当前视频版本且已人工验收的实际尾帧。</p>
+                    <p className="text-xs leading-5 text-muted-foreground">
+                        Agent 会按每镜 {planDraft.video.shotDuration || 15} 秒、{planDraft.video.frameCount || 5} 帧重新切分剧情；相邻碎片镜头会合并为完整逻辑镜头。连续性固定为严格模式：下一镜只能引用上一镜当前视频版本且已人工验收的实际尾帧。
+                    </p>
                 </div>
             </Modal>
         </div>

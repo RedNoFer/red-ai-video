@@ -53,15 +53,22 @@ export async function publicImageReferenceRequestUrl(reference: ImageTaskReferen
 }
 
 async function isReachableProviderImage(url: string) {
-    try {
+    const probe = async (init: RequestInit) => {
         const response = await fetchSafeOutbound(url, {
-            headers: { accept: "image/*", range: "bytes=0-0" },
+            ...init,
             cache: "no-store",
             signal: AbortSignal.timeout(INLINE_IMAGE_TIMEOUT_MS),
         });
         const contentType = response.headers.get("content-type")?.toLowerCase() || "";
+        const reachable = response.ok && contentType.startsWith("image/");
         await response.body?.cancel().catch(() => undefined);
-        return response.ok && contentType.startsWith("image/");
+        return { reachable, status: response.status };
+    };
+    try {
+        const head = await probe({ method: "HEAD", headers: { accept: "image/*" } });
+        if (head.reachable) return true;
+        if (head.status !== 405 && head.status !== 501) return false;
+        return (await probe({ headers: { accept: "image/*", range: "bytes=0-0" } })).reachable;
     } catch {
         return false;
     }

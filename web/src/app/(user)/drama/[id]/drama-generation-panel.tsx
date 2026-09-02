@@ -1350,7 +1350,9 @@ type ProductionPromptRow = { shot: DramaShot; references: PromptReferenceBinding
 function ProductionPromptPreview({ project, rows, onChange }: { project: DramaProject; rows: ProductionPromptRow[]; onChange: (value: { selections: Record<string, string[]>; invalid: boolean }) => void }) {
     const [selections, setSelections] = useState<Record<string, string[]>>(() => Object.fromEntries(rows.map((row) => [row.shot.id, row.references.map((reference) => reference.id)])));
     const invalid = rows.some((row) => (selections[row.shot.id] || []).length > dramaReferenceImageBudget(row.shot.duration));
-    useEffect(() => onChange({ selections, invalid }), [invalid, onChange, selections]);
+    useEffect(() => {
+        onChange({ selections, invalid });
+    }, [invalid, onChange, selections]);
     return (
         <div className="max-h-[60vh] overflow-y-auto pr-1 text-sm">
             <div className="mb-3 grid gap-2 rounded-md border border-border bg-muted/20 p-3 text-xs sm:grid-cols-2">
@@ -1361,9 +1363,7 @@ function ProductionPromptPreview({ project, rows, onChange }: { project: DramaPr
             </div>
             {rows.map(({ shot, basePrompt, references }) => {
                 const selectedIds = selections[shot.id] || [];
-                const selectedReferences = references
-                    .filter((reference) => selectedIds.includes(reference.id))
-                    .map((reference, index) => ({ ...reference, alias: `@图片${index + 1}` }));
+                const selectedReferences = references.filter((reference) => selectedIds.includes(reference.id)).map((reference, index) => ({ ...reference, alias: `@图片${index + 1}` }));
                 const limit = dramaReferenceImageBudget(shot.duration);
                 const prompt = appendDramaImageReferenceBindings(
                     basePrompt,
@@ -1434,20 +1434,40 @@ function previewVideoReferenceBindings(project: DramaProject, episode: DramaEpis
     if (tail) frameBindings.push({ id: `tail-${previous?.id || shot.id}`, alias: "@图片1", label: "上一镜实际尾帧", purpose: "作为当前镜头唯一开场画面", url: tail.mediaUrl, alt: "上一镜实际尾帧", required: true });
     if (shot.storyboardFrameMode === "all_frames") {
         frames.forEach((frame) =>
-            frameBindings.push({ id: frame.id, alias: `@图片${frameBindings.length + 1}`, label: `顺序帧 ${frame.sequenceIndex}`, purpose: `对应 ${frame.sequenceIndex === 1 ? "开始" : frame.sequenceIndex === frames.length ? "结束" : "中间"}阶段的画面依据`, url: frame.mediaUrl!, width: frame.width, height: frame.height, alt: `顺序帧 ${frame.sequenceIndex}`, required: frame.sequenceIndex === 1 || frame.sequenceIndex === frames.length }),
+            frameBindings.push({
+                id: frame.id,
+                alias: `@图片${frameBindings.length + 1}`,
+                label: `顺序帧 ${frame.sequenceIndex}`,
+                purpose: `对应 ${frame.sequenceIndex === 1 ? "开始" : frame.sequenceIndex === frames.length ? "结束" : "中间"}阶段的画面依据`,
+                url: frame.mediaUrl!,
+                width: frame.width,
+                height: frame.height,
+                alt: `顺序帧 ${frame.sequenceIndex}`,
+                required: frame.sequenceIndex === 1 || frame.sequenceIndex === frames.length,
+            }),
         );
     } else {
         const start = activeFrameEvidence(shot, "storyboard_start")[0];
         const end = activeFrameEvidence(shot, "storyboard_end")[0];
         for (const frame of [start, end]) {
             if (!frame?.mediaUrl || frameBindings.some((item) => item.url === frame.mediaUrl)) continue;
-            frameBindings.push({ id: frame.id, alias: `@图片${frameBindings.length + 1}`, label: frame === start ? "本镜首帧" : "本镜尾帧", purpose: frame === start ? "锁定视频开场画面" : "锁定视频结束画面", url: frame.mediaUrl, alt: frame === start ? "本镜首帧" : "本镜尾帧", required: true });
+            frameBindings.push({
+                id: frame.id,
+                alias: `@图片${frameBindings.length + 1}`,
+                label: frame === start ? "本镜首帧" : "本镜尾帧",
+                purpose: frame === start ? "锁定视频开场画面" : "锁定视频结束画面",
+                url: frame.mediaUrl,
+                alt: frame === start ? "本镜首帧" : "本镜尾帧",
+                required: true,
+            });
         }
     }
     const assets = shotReferenceAssets(project, shot);
     const manifest = shot.framePlan?.referenceManifest || [];
     const fallbackOrder = [shot.sceneId, ...shot.characterIds, ...shot.propIds, ...shot.clueIds, ...(shot.sourceAssetIds || [])];
-    const orderedAssets = [...manifest.flatMap((item) => assets.filter((asset) => asset.id === item.assetId)), ...fallbackOrder.flatMap((id) => assets.filter((asset) => asset.id === id)), ...assets].filter((asset, index, all) => all.findIndex((item) => item.id === asset.id) === index);
+    const orderedAssets = [...manifest.flatMap((item) => assets.filter((asset) => asset.id === item.assetId)), ...fallbackOrder.flatMap((id) => assets.filter((asset) => asset.id === id)), ...assets].filter(
+        (asset, index, all) => all.findIndex((item) => item.id === asset.id) === index,
+    );
     orderedAssets.forEach((asset) => {
         const manifestItem = manifest.find((item) => item.assetId === asset.id);
         frameBindings.push({ ...asset, alias: `@图片${frameBindings.length + 1}`, purpose: manifestItem?.purpose || asset.label, alt: asset.label, required: true });

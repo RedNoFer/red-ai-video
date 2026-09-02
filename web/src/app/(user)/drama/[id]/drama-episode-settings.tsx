@@ -7,58 +7,42 @@ import { Save } from "lucide-react";
 import { DRAMA_STYLE_NAME } from "@/lib/drama-style";
 import { defaultDramaProductionPlan, DRAMA_SHOT_DURATION_OPTIONS, DRAMA_VIDEO_RESOLUTION_OPTIONS, normalizeDramaProductionPlan } from "@/lib/drama-production-plan";
 import type { DramaProductionPlan } from "@/lib/drama-project-contract";
+import { saveDramaEpisodeSettings } from "@/services/api/drama-projects";
 import type { DramaEpisode, DramaProject } from "../types";
 import { useDramaStore } from "../stores/use-drama-store";
 
 export function DramaEpisodeSettings({ project, episode, embedded = false }: { project: DramaProject; episode: DramaEpisode; embedded?: boolean }) {
     const { message } = App.useApp();
-    const updateProject = useDramaStore((state) => state.updateProject);
-    const updateEpisode = useDramaStore((state) => state.updateEpisode);
-    const saveProjectNow = useDramaStore((state) => state.saveProjectNow);
+    const replaceProject = useDramaStore((state) => state.replaceProject);
     const [saving, setSaving] = useState(false);
     const [savedLockAt, setSavedLockAt] = useState<string>();
+    const [titleDraft, setTitleDraft] = useState(episode.title);
+    const [summaryDraft, setSummaryDraft] = useState(project.summary);
+    const [styleDraft, setStyleDraft] = useState(project.style);
     const paragraphCount = episode.script.trim() ? episode.script.split(/\n+/).filter(Boolean).length : 0;
     const characterCount = new Set(episode.shots.flatMap((shot) => shot.characterIds)).size;
     const duration = episode.shots.reduce((total, shot) => total + (Number.isFinite(shot.duration) ? shot.duration : 0), 0);
     const [planDraft, setPlanDraft] = useState<DramaProductionPlan>(() => normalizeDramaProductionPlan(project.productionBible?.productionPlan, defaultDramaProductionPlan("new-project"))!);
     useEffect(() => {
         setPlanDraft(normalizeDramaProductionPlan(project.productionBible?.productionPlan, defaultDramaProductionPlan("new-project"))!);
+        setTitleDraft(episode.title);
+        setSummaryDraft(project.summary);
+        setStyleDraft(project.style);
         setSavedLockAt(undefined);
-    }, [project.id, episode.id]);
+    }, [episode.id, episode.title, project.id, project.productionBible?.productionPlan, project.style, project.summary]);
     const productionPlan = planDraft;
     const updateProductionPlan = (patch: Partial<DramaProductionPlan["video"]>) => {
         setSavedLockAt(undefined);
         const nextPlan = { ...productionPlan, video: { ...productionPlan.video, ...patch }, source: "manual" as const, lockedAt: undefined };
         setPlanDraft(nextPlan);
-        updateProject(project.id, {
-            defaultVideoMode: nextPlan.video.mode === "text-to-video" ? "direct" : "storyboard",
-            productionBible: {
-                ...(project.productionBible || {}),
-                language: project.productionBible?.language || "zh-CN",
-                ratio: project.productionBible?.ratio || project.ratio,
-                visualStyle: project.productionBible?.visualStyle || project.style,
-                continuityMode: project.productionBible?.continuityMode || "strict",
-                productionPlan: nextPlan,
-            },
-        });
     };
     const saveSettings = async () => {
         const lockedAt = new Date().toISOString();
         const lockedPlan = { ...planDraft, lockedAt, source: "manual" as const };
-        const saved = await saveProjectNow(project.id, (current) => ({
-            ...current,
-            defaultVideoMode: lockedPlan.video.mode === "text-to-video" ? "direct" : "storyboard",
-            productionBible: {
-                ...(current.productionBible || {}),
-                language: current.productionBible?.language || "zh-CN",
-                ratio: current.productionBible?.ratio || current.ratio,
-                visualStyle: current.productionBible?.visualStyle || current.style,
-                continuityMode: current.productionBible?.continuityMode || "strict",
-                productionPlan: lockedPlan,
-            },
-        }));
+        const saved = await saveDramaEpisodeSettings(project.id, episode.id, { title: titleDraft, summary: summaryDraft, style: styleDraft, productionPlan: lockedPlan });
         const persistedPlan = normalizeDramaProductionPlan(saved.productionBible?.productionPlan);
         if (!persistedPlan?.lockedAt || persistedPlan.video.resolution !== lockedPlan.video.resolution) throw new Error("本集生产方案保存后未生效，请刷新后重试");
+        replaceProject(saved);
         setPlanDraft(persistedPlan);
         setSavedLockAt(persistedPlan.lockedAt);
     };
@@ -67,21 +51,21 @@ export function DramaEpisodeSettings({ project, episode, embedded = false }: { p
             {!embedded ? (
                 <>
                     <h3 className="text-sm font-semibold">本集设置</h3>
-                    <p className="mt-1 text-xs leading-5 text-muted-foreground">设置会自动保存到当前项目</p>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">锁定后保存到当前项目</p>
                 </>
             ) : null}
             <div className={`${embedded ? "space-y-3" : "mt-4 space-y-4"}`}>
                 <label className="block space-y-1.5">
                     <span className="text-xs font-medium text-foreground">本集名称</span>
-                    <Input className="!h-8" value={episode.title} onChange={(event) => updateEpisode(project.id, episode.id, { title: event.target.value })} />
+                    <Input className="!h-8" value={titleDraft} onChange={(event) => setTitleDraft(event.target.value)} />
                 </label>
                 <label className="block space-y-1.5">
                     <span className="text-xs font-medium text-foreground">故事简介</span>
-                    <Input.TextArea value={project.summary} onChange={(event) => updateProject(project.id, { summary: event.target.value })} autoSize={{ minRows: 3, maxRows: 6 }} />
+                    <Input.TextArea value={summaryDraft} onChange={(event) => setSummaryDraft(event.target.value)} autoSize={{ minRows: 3, maxRows: 6 }} />
                 </label>
                 <label className="block space-y-1.5">
                     <span className="text-xs font-medium text-foreground">视觉风格</span>
-                    <Input className="!h-8" value={project.style} placeholder={`例如：${DRAMA_STYLE_NAME}`} onChange={(event) => updateProject(project.id, { style: event.target.value })} />
+                    <Input className="!h-8" value={styleDraft} placeholder={`例如：${DRAMA_STYLE_NAME}`} onChange={(event) => setStyleDraft(event.target.value)} />
                 </label>
                 <div className="space-y-1.5">
                     <span className="text-xs font-medium text-foreground">视频生产模式</span>

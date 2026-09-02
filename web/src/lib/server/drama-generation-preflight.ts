@@ -1,6 +1,6 @@
 import type { DramaEpisode, DramaProductionPreflight, DramaProject } from "@/lib/drama-project-contract";
 import { compileDramaShotPrompts } from "@/lib/drama-prompt-compiler";
-import { DRAMA_STYLE_DESCRIPTION, resolveDramaVisualStyle } from "@/lib/drama-style";
+import { resolveDramaVisualStyle } from "@/lib/drama-style";
 import { getAuthSettings, refundUserPoints } from "@/lib/auth/store";
 import { resolveLogicalModelCandidates } from "@/lib/server/logical-model-router";
 import { rankTextPlanningCandidates, requestStructuredText } from "@/lib/server/text-planning-runtime";
@@ -53,7 +53,10 @@ export async function preflightDramaGeneration(input: DramaGenerationPreflightIn
         },
     };
     const messages = [
-        { role: "system", content: `你是影视生成前质检导演。只修订公开的镜头提示词，不输出思维过程。所有图片和视频必须保持${DRAMA_STYLE_DESCRIPTION}。必须保留镜头事实、角色和场景，不新增无依据主体；明确景别、主体位置、光照连续性、动作起止，并禁止文字、水印和 Logo。不得把提示词改成纯写实摄影、真人影视感或3D游戏渲染。` },
+        {
+            role: "system",
+            content: `你是影视生成前质检导演。只修订公开的镜头提示词，不输出思维过程。所有图片和视频必须保持项目视觉风格：${resolveDramaVisualStyle(input.project)}。必须保留镜头事实、角色和场景，不新增无依据主体；明确景别、主体位置、光照连续性、动作起止，并禁止文字、水印和 Logo；不得擅自替换项目已声明的视觉风格。`,
+        },
         { role: "user", content: JSON.stringify({ project: { title: input.project.title, summary: input.project.summary, style: resolveDramaVisualStyle(input.project), ratio: input.project.ratio }, shots }) },
     ];
     for (const candidate of rankTextPlanningCandidates(candidates)) {

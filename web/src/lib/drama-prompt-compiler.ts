@@ -1,5 +1,5 @@
 import type { DramaAssetRefinementProposal, DramaEpisode, DramaFrameBeat, DramaNamedAsset, DramaProject, DramaReferenceManifestItem, DramaShot, DramaShotContinuity } from "@/lib/drama-project-contract";
-import { DRAMA_STYLE_COLOR_SCRIPT, DRAMA_STYLE_DESCRIPTION, DRAMA_STYLE_NAME, DRAMA_STYLE_VISUAL, resolveDramaVisualStyle, sanitizeDramaVisualPrompt } from "@/lib/drama-style";
+import { resolveDramaStyleContract, sanitizeDramaVisualPrompt } from "@/lib/drama-style";
 import { upgradeDramaFrameImagePrompt } from "@/lib/drama-frame-sequence";
 
 export type DramaAssetGenerationPreflight = { ok: true; constraints: string[] } | { ok: false; errors: string[]; constraints: string[] };
@@ -69,6 +69,7 @@ export function appendDramaImageReferenceBindings(prompt: string, references: Ar
 }
 
 export function compileDramaShotPrompts(project: DramaProject, episode: DramaEpisode, shot: DramaShot): CompiledDramaPrompts {
+    const styleContract = resolveDramaStyleContract(project);
     const scene = project.scenes.find((item) => item.id === shot.sceneId);
     const characters = project.characters.filter((item) => shot.characterIds.includes(item.id));
     const props = project.props.filter((item) => shot.propIds.includes(item.id));
@@ -81,12 +82,13 @@ export function compileDramaShotPrompts(project: DramaProject, episode: DramaEpi
     const exitState = stateLines(shot.exitState, project);
     const inheritedTail = shot.framePlan?.start.source === "previous_accepted_actual_tail";
     const referenceManifest = shot.framePlan?.referenceManifest || [];
-    const finalStyleLock = `最终视觉锁定：${DRAMA_STYLE_DESCRIPTION}；镜头中已有视觉方案若与统一风格冲突，必须以本风格为准。`;
+    const styleName = styleContract.name;
+    const visualStyle = styleContract.visualDescription;
+    const finalStyleLock = `最终视觉锁定：${visualStyle}；镜头中已有视觉方案若与统一风格冲突，必须以本风格为准。`;
     const shared = compact([
         `项目：${project.title} / ${episode.title}`,
-        `统一风格：${DRAMA_STYLE_NAME}`,
-        `统一视觉风格（最高级风格约束）：${resolveDramaVisualStyle(project)}`,
-        `统一表现媒介（所有图片与视频必须遵守）：${DRAMA_STYLE_VISUAL}`,
+        `统一风格：${styleName}`,
+        `统一视觉风格（最高级风格约束）：${visualStyle}`,
         `画幅：${project.ratio}`,
         scene ? `场景设定：${assetText(scene, project)}` : "",
         characters.length ? `角色设定：${characters.map((item) => assetText(item, project)).join("；")}` : "",
@@ -101,7 +103,7 @@ export function compileDramaShotPrompts(project: DramaProject, episode: DramaEpi
             ? `参考图职责计划：${referenceManifest.map((item) => `${manifestTarget(item, project)}=${item.role}${item.purpose ? `（${item.purpose}）` : ""}`).join("；")}。最终图片编号必须以本次请求末尾的“实际参考图绑定”为准，不得沿用计划别名猜测顺序。`
             : "",
         shot.negativePrompt ? `避免：${shot.negativePrompt}` : "",
-        `全局色彩脚本：${project.productionBible?.colorScript || DRAMA_STYLE_COLOR_SCRIPT}`,
+        styleContract.colorScript ? `全局色彩脚本：${styleContract.colorScript}` : "",
     ]);
     const imagePrompt = compact([
         ...shared,
@@ -128,6 +130,7 @@ export function compileDramaShotPrompts(project: DramaProject, episode: DramaEpi
  * in every video request.
  */
 export function compileDramaShotVideoBasePrompt(project: DramaProject, _episode: DramaEpisode, shot: DramaShot) {
+    const styleContract = resolveDramaStyleContract(project);
     const videoPlan = cleanDramaVideoMotionBrief(
         shot.executionVideoPrompt || shot.videoPrompt,
         project,
@@ -154,7 +157,7 @@ export function compileDramaShotVideoBasePrompt(project: DramaProject, _episode:
             sound ? `声音母题：${sanitizeDramaSupplierText(sound, project)}` : "",
             shot.dialogue ? `对白与口型：${sanitizeDramaSupplierText(shot.dialogue, project)}` : shot.narration ? `画外音节奏：${sanitizeDramaSupplierText(shot.narration, project)}` : "",
             `结束画面：${sanitizeDramaSupplierText(actionEnd, project)}`,
-            `风格：${DRAMA_STYLE_NAME}`,
+            `风格：${styleContract.visualDescription}`,
             `针对性约束：${sanitizeDramaSupplierText(shot.negativePrompt || "无闪烁、无形变、无背景漂移、无道具消失、无身份跳变、无水印文字", project)}`,
         ]).join("\n"),
         project,
@@ -173,8 +176,57 @@ export function compileDramaShotExecutionPrompts(project: DramaProject, episode:
     return compileDramaShotPrompts(project, episode, shot);
 }
 
+export function resolveDramaFrameScene(project: DramaProject, shot: DramaShot, beat?: DramaFrameBeat) {
+    const fallback = project.scenes.find((item) => item.id === shot.sceneId);
+    if (!beat) return fallback;
+    const sceneReferences = Array.from(
+        new Map(
+            [...(shot.framePlan?.referenceManifest || []).filter((item) => item.role === "scene_anchor" && item.assetId).map((item) => project.scenes.find((scene) => scene.id === item.assetId)), ...project.scenes]
+                .filter((scene): scene is NonNullable<typeof scene> => Boolean(scene))
+                .map((scene) => [scene.id, scene] as const),
+        ).values(),
+    );
+    const frameText = `${beat.imagePrompt} ${beat.actionPrompt}`.toLocaleLowerCase();
+    const candidates = sceneReferences.length > 1 ? sceneReferences : project.scenes;
+    const direct = candidates
+        .map((scene) => {
+            const terms = sceneMatchTerms(scene.name)
+                .filter((term) => term.length >= 2)
+                .map((term) => term.toLocaleLowerCase());
+            const positions = terms.map((term) => frameText.lastIndexOf(term)).filter((position) => position >= 0);
+            return { scene, position: positions.length ? Math.max(...positions) : -1, termLength: positions.length ? Math.max(...terms.filter((term) => frameText.includes(term)).map((term) => term.length)) : 0 };
+        })
+        .filter((item) => item.position >= 0)
+        .sort((left, right) => right.position - left.position || right.termLength - left.termLength);
+    if (direct[0]) return direct[0].scene;
+    const scoreScenes = (text: string) =>
+        candidates
+            .map((scene) => {
+                const fields = [scene.name, scene.description, scene.profile?.visualIdentity, scene.profile?.consistencyRules].filter(Boolean) as string[];
+                const score = fields.reduce((total, field, index) => {
+                    const terms = sceneMatchTerms(field);
+                    return total + (terms.some((term) => text.includes(term.toLocaleLowerCase())) ? (index === 0 ? 100 : 10) : 0);
+                }, 0);
+                return { scene, score };
+            })
+            .sort((left, right) => right.score - left.score);
+    const scored = scoreScenes(frameText);
+    if (scored[0]?.score) return scored[0].scene;
+    const savedScored = beat.supplierPrompt ? scoreScenes(beat.supplierPrompt.toLocaleLowerCase()) : [];
+    return savedScored[0]?.score ? savedScored[0].scene : sceneReferences.find((scene) => scene.id === shot.sceneId) || fallback;
+}
+
+function sceneMatchTerms(value: string) {
+    return (value.match(/[\p{Script=Han}]+|[A-Za-z0-9][A-Za-z0-9_-]*/gu) || [value]).flatMap((term) => {
+        if (!/^[\p{Script=Han}]+$/u.test(term) || term.length < 2) return [term];
+        return [term, ...Array.from({ length: term.length - 1 }, (_, index) => term.slice(index, index + 2))];
+    });
+}
+
 export function compileDramaFrameSupplierPrompt(project: DramaProject, episode: DramaEpisode, shot: DramaShot, beat?: DramaFrameBeat, phase: "start" | "end" | "keyframe" = "keyframe") {
-    const scene = project.scenes.find((item) => item.id === shot.sceneId);
+    const styleContract = resolveDramaStyleContract(project);
+    const scene = resolveDramaFrameScene(project, shot, beat);
+    const frameSceneChanged = Boolean(beat && scene && scene.id !== shot.sceneId);
     const characters = project.characters.filter((item) => shot.characterIds.includes(item.id)).map((item) => assetText(item, project));
     const props = project.props.filter((item) => shot.propIds.includes(item.id)).map((item) => assetText(item, project));
     const clues = project.clues.filter((item) => shot.clueIds.includes(item.id)).map((item) => item.name);
@@ -186,23 +238,40 @@ export function compileDramaFrameSupplierPrompt(project: DramaProject, episode: 
     // static-frame contract. Legacy prompts are rebuilt from the canonical beat
     // image prompt so old asset-anchor text cannot leak back into the preview.
     const savedPrompt = saved?.trim();
-    const sourceImage = savedPrompt && isCurrentStaticFramePrompt(savedPrompt) ? savedPrompt : image;
+    const sourceImage = !frameSceneChanged && savedPrompt && isCurrentStaticFramePrompt(savedPrompt) ? savedPrompt : image;
+    const sceneText = scene ? assetText(scene, project) : "";
+    const frameSceneComposition =
+        frameSceneChanged && scene
+            ? /(?:马车|车厢|车内)/u.test(`${scene.name} ${scene.description} ${scene.profile?.visualIdentity || ""}`)
+                ? `当前帧场景：${sceneText}；用中景完整建立车厢空间，人物不得超过画面主体的45%，左右长凳、右侧竖向车窗和车厢纵深必须同时清晰可辨，禁止人物特写或肖像构图`
+                : `当前帧场景：${sceneText}；用中景完整建立场景空间，主体与环境关系必须同时清晰可辨，禁止人物特写遮挡场景`
+            : "";
     const staticPrompt = upgradeDramaFrameImagePrompt(sourceImage, action, {
-        description: [shot.description, characters.length ? characters.join("；") : "", scene ? assetText(scene, project) : "", props.length ? props.join("；") : "", clues.length ? `线索：${clues.join("、")}` : ""].filter(Boolean).join("；") || image,
-        shotSize: shot.continuity?.shotSize || "中景",
+        description: [frameSceneChanged ? image : shot.description, characters.length ? characters.join("；") : "", sceneText, props.length ? props.join("；") : "", clues.length ? `线索：${clues.join("、")}` : ""].filter(Boolean).join("；") || image,
+        shotSize: frameSceneChanged ? "中景" : shot.continuity?.shotSize || "中景",
         cameraAngle: shot.continuity?.cameraAngle || "视线高度平视",
-        composition: shot.continuity?.composition || "主体位于9:16安全区，前景有具体框景",
-        characterBlocking: shot.continuity?.characterBlocking || "按当前动作关系安排主体站位",
+        composition: [shot.continuity?.composition, frameSceneComposition].filter(Boolean).join("；") || "主体位于9:16安全区，前景有具体框景",
+        characterBlocking: frameSceneChanged && scene ? `人物位于${scene.name}内部，以中景与场景同框并保持空间纵深` : shot.continuity?.characterBlocking || "按当前动作关系安排主体站位",
         gazeDirection: shot.continuity?.gazeDirection || "视线落向当前叙事目标",
         lighting: shot.lighting || "延续本场主光",
-        colorPalette: [shot.colorPalette || "沿用本场色板", `统一风格：${DRAMA_STYLE_NAME}`].join("；"),
+        colorPalette: [shot.colorPalette || "沿用本场色板", `统一风格：${styleContract.visualDescription}`].join("；"),
         sequenceIndex,
+        forceRefresh: frameSceneChanged,
     });
     return sanitizeDramaSupplierText(staticPrompt, project);
 }
 
 function isCurrentStaticFramePrompt(value: string) {
-    return value.startsWith("静态关键帧：") && value.includes("可见表演状态：") && value.includes("景别：") && value.includes("机位与构图：") && value.includes("站位与视线：") && value.includes("三层空间：") && value.includes("光色与风格：") && value.includes("参考图职责：") && value.includes("负面约束：");
+    return (
+        value.startsWith("静态关键帧：") &&
+        value.includes("可见表演状态：") &&
+        value.includes("景别：") &&
+        value.includes("机位与构图：") &&
+        value.includes("站位与视线：") &&
+        value.includes("三层空间：") &&
+        value.includes("光色与风格：") &&
+        value.includes("负面约束：")
+    );
 }
 
 export function compileDramaDialogueAudioInstructions(shot: DramaShot) {
@@ -281,14 +350,18 @@ function stateActions(value: DramaShot["entryState"], project: DramaProject) {
 }
 
 export function compileDramaAssetReferencePrompt(project: Pick<DramaProject, "title" | "style" | "ratio" | "productionBible">, asset: DramaNamedAsset, kind: "角色" | "场景" | "道具") {
+    const styleContract = resolveDramaStyleContract(project);
     const constraints = compileDramaAssetConstraints(project, asset, kind);
+    const styleName = styleContract.name;
+    const visualStyle = styleContract.visualDescription;
     return compact([
         "这是严格的资产基准图生成任务，不是自由创作或概念发挥。请先核对全部硬约束，再生成一张可直接用于后续镜头的基准图。",
         "约束优先级：统一视觉风格 > 身份锚点与固定规则 > 用户明确设定 > 画幅和构图约束；资产历史提示词不得覆盖统一视觉风格。",
         `${kind}设定图，画幅 ${project.ratio}`,
-        `统一风格：${DRAMA_STYLE_NAME}`,
-        `统一视觉风格（最高级风格约束）：${resolveDramaVisualStyle(project)}`,
-        `风格指引：${DRAMA_STYLE_VISUAL}；${kind}必须融入暗黑学院魔法环境、哥特建筑或微光符文法阵的氛围层。`,
+        `统一风格：${styleName}`,
+        `统一视觉风格（最高级风格约束）：${visualStyle}`,
+        `风格指引：${visualStyle}`,
+        styleContract.colorScript ? `全局色彩脚本：${styleContract.colorScript}` : "",
         `名称：${asset.name}`,
         `基础描述：${asset.description}`,
         asset.profile?.visualIdentity ? `视觉识别：${sanitizeDramaVisualPrompt(asset.profile.visualIdentity)}` : "",
@@ -304,7 +377,7 @@ export function compileDramaAssetReferencePrompt(project: Pick<DramaProject, "ti
             : "",
         kind === "角色" ? "角色视觉刻画优先级：完整头部与脸部入画 > 肖像级面部刻画 > 脸部比例与审美 > 五官质感 > 光线 > 服装 > 背景；构图仍必须是完整全身角色模型图，不得裁切身体。" : "",
         ...constraints.map((item) => `输出约束：${item}`),
-        `最终风格锁定：${DRAMA_STYLE_DESCRIPTION}。不得回退到历史 designPrompt 的旧风格或中性灰设定板。`,
+        `最终风格锁定：${visualStyle}。不得回退到历史 designPrompt 的旧风格或中性灰设定板。`,
         `最终自检：只能有一个主体，${kind === "角色" ? "全身、头部、躯干、双臂、双手、双腿和鞋靴必须完整入画；脸部作为最高细节区域，优先清晰且具有审美表现" : "主体结构和关键材质必须完整入画"}，必须能从身份锚点准确识别；若无法同时满足全部约束，宁可保持设定的简洁原貌，也不得自行添加、替换或拼版。`,
     ]).join("\n");
 }
@@ -314,10 +387,10 @@ export function compileDramaAssetConstraints(project: Pick<DramaProject, "ratio"
     return compact([
         `只输出一张完整、独立的 ${project.ratio || "9:16"} 设定图，不要拼版、联系表、多视角或分格模块。`,
         kind === "角色"
-            ? "角色基准图必须是单人完整全身角色模型图：头顶、完整头部、脸部、颈部、躯干、双臂、双手、双腿和鞋靴全部入画，采用全身立姿或自然站姿，人物占画面约 70%–85%，上下左右均保留安全边距；脸部必须在画面上方清晰可见，不能被画面边缘截断；脸部是最高细节区域，使用协调耐看的半写实动漫审美比例，眼神有神，眉眼、鼻唇、面部轮廓、自然肤质和发丝精细清晰，脸部刻画精致但不放大到占据大部分画面；服装、体态和关键识别配件完整可见；暗黑学院魔法背景使用适度景深，哥特建筑或微光符文法阵作为氛围层。"
+            ? "角色基准图必须是单人完整全身角色模型图：头顶、完整头部、脸部、颈部、躯干、双臂、双手、双腿和鞋靴全部入画，采用全身立姿或自然站姿，人物占画面约 70%–85%，上下左右均保留安全边距；脸部必须在画面上方清晰可见，不能被画面边缘截断；脸部是最高细节区域，使用项目视觉风格要求的审美比例与材质表现，脸部刻画精致但不放大到占据大部分画面；服装、体态和关键识别配件完整可见；背景与光线按项目视觉风格呈现，避免无依据的固定场景。"
             : kind === "场景"
-              ? "单一场景主体完整可见，结构轮廓和关键材质清晰，暗黑学院魔法环境，哥特建筑、符文法阵和暮色金紫光线形成空间层次。"
-              : "单一道具主体完整可见，结构轮廓和关键材质清晰，置于暗黑学院氛围环境或深色展示台中，使用暮色金紫轮廓光。",
+              ? "单一场景主体完整可见，结构轮廓和关键材质清晰，环境、光线与色彩按项目视觉风格呈现。"
+              : "单一道具主体完整可见，结构轮廓和关键材质清晰，置于符合项目视觉风格的环境或展示台中。",
         kind === "角色" ? "负面构图词：无头、无脸、缺失头部、裁掉头部、裁脸、画面外人头、半身、胸像、躯干特写、身体局部、只画服装。" : "",
         "不得添加设定中没有出现的主体、装饰或剧情信息，不添加文字、水印、logo、边框。",
         `严格保留${kind}的身份、轮廓、年龄感、色彩和一致性规则，不得擅自改写。`,

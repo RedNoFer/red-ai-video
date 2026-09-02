@@ -68,11 +68,29 @@ describe("prompt optimization service", () => {
         const systemMessage = vi.mocked(requestStructuredText).mock.calls[0]?.[0].messages.find((message) => message.role === "system")?.content || "";
         expect(systemMessage).toContain("Seedance 2.0 静态图片帧提示词导演");
         expect(systemMessage).toContain("Seedance 导演 Skill（固定版本");
-        expect(systemMessage).toContain("每张参考图的唯一用途");
-        expect(systemMessage).toContain("静态关键帧专用规则");
-        expect(systemMessage).toContain("ELS/极远景");
+        expect(systemMessage).toContain("静态关键帧写法模板");
+        expect(systemMessage).toContain("静态帧提示词公开布局");
+        expect(systemMessage).toContain("每个非空字段必须独立成行");
+        expect(systemMessage).toContain("不得用逗号或分号压成一段");
+        expect(systemMessage).toContain("前景必须是具体框景或遮挡物");
+        expect(systemMessage).toContain("ELS/极远景只能保留远景空间关系");
+        expect(systemMessage).toContain("静态帧不是无动作的氛围图");
+        expect(systemMessage).toContain("不预设固定秒数");
         expect(systemMessage).toContain("上一帧/上一镜");
         expect(systemMessage).toContain("只返回优化后的公开提示词");
+    });
+
+    it("optimizes video prompts around visible action beats", async () => {
+        vi.mocked(requestStructuredText).mockResolvedValue({ arguments: JSON.stringify({ optimizedPrompt: "0-2秒建立黑湖，2-4秒镜头推进，4-5秒Karin收紧握剑，5-6秒断口冷光匹配切入马车。" }), headers: new Headers(), protocol: "chat", elapsedMs: 10 });
+
+        await optimizeCreativePrompt({ origin: "http://localhost:3000", cookie: "session=1", userId: "user-one", requestId: "video-request", prompt: "黑湖边的人握剑", mode: "video" });
+
+        const systemMessage = vi.mocked(requestStructuredText).mock.calls[0]?.[0].messages.find((message) => message.role === "system")?.content || "";
+        expect(systemMessage).toContain("主体动作推进");
+        expect(systemMessage).toContain("起始可见状态");
+        expect(systemMessage).toContain("每个非空字段必须独立一行");
+        expect(systemMessage).toContain("每个时间段都必须让姿态");
+        expect(systemMessage).toContain("减少“保持构图、主体稳定、情绪不变”");
     });
 
     it("refunds an invalid charged response instead of accepting hidden or empty output", async () => {

@@ -1077,6 +1077,10 @@ test("drama candidate generation does not require the approved baseline image", 
 });
 
 test("drama shot generation previews prompt before confirmation", async ({ page }) => {
+    const effectCleanupErrors: string[] = [];
+    page.on("console", (message) => {
+        if (message.type() === "error" && message.text().includes("useEffect must not return anything besides a function")) effectCleanupErrors.push(message.text());
+    });
     const adminState = JSON.parse(readFileSync(".e2e-data/admin-state.json", "utf8")) as { cookies: Array<{ name: string; value: string }> };
     const cookie = adminState.cookies.map((item) => `${item.name}=${item.value}`).join("; ");
     const created = await page.request.post("/api/drama/projects", { headers: { cookie }, data: { title: "E2E 镜头提示词预览", summary: "验证镜头生成前先看提示词", ratio: "9:16" } });
@@ -1252,6 +1256,10 @@ test("drama shot generation previews prompt before confirmation", async ({ page 
             },
         });
     });
+    await page.route("**/api/drama/preflight", async (route) => {
+        if (route.request().method() !== "POST") return route.fallback();
+        await route.fulfill({ json: { code: 0, data: { preflight: { status: "passed", issues: [], revisedPrompts: {}, changeSummary: [] } }, msg: "OK" } });
+    });
 
     await page.goto(`/drama/${project.id}`, { waitUntil: "domcontentloaded" });
     await page.getByRole("button", { name: "切换到镜头生成" }).click();
@@ -1262,13 +1270,14 @@ test("drama shot generation previews prompt before confirmation", async ({ page 
 
     const previewDialog = page.getByRole("dialog", { name: "确认生成 1 个镜头" });
     await expect(previewDialog).toBeVisible();
+    expect(effectCleanupErrors).toEqual([]);
     await expect(previewDialog.getByText("清晰度：", { exact: false })).toBeVisible();
     await expect(previewDialog.getByText("Karin 在黑湖边缓慢转身", { exact: false })).toBeVisible();
     await expect(previewDialog.getByText("0-2s：Karin 在湖岸停住", { exact: false })).toBeVisible();
     await expect(previewDialog.getByText("2-5s：Karin 转身看向湖心", { exact: false })).toBeVisible();
     await expect(previewDialog.getByText("实际参考图绑定（编号与本次请求图片数组完全一致）", { exact: false })).toBeVisible();
     await expect(previewDialog.getByText("@图片1：顺序帧 1", { exact: false })).toBeVisible();
-    await expect(previewDialog.getByText("@图片4：场景 · 黑湖", { exact: false })).toBeVisible();
+    await expect(previewDialog.getByText("@图片3：场景 · 黑湖", { exact: false })).toBeVisible();
     const referenceGallery = previewDialog.locator("[data-drama-prompt-reference-gallery]");
     await expect(referenceGallery).toBeVisible();
     await expect(referenceGallery.getByRole("img")).toHaveCount(4);

@@ -2,11 +2,11 @@ import fs from "node:fs";
 import path from "node:path";
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), "../..");
-const sourcePath = path.join(root, "output", "mahadel-episode-01-production-package.json");
-const targetPath = path.join(root, "output", "mahadel-episode-01-production-package-v2-multiframe.json");
-const targetMarkdownPath = path.join(root, "output", "mahadel-episode-01-production-package-v2-multiframe.md");
+const sourcePath = path.join(root, "output", "mahadel-episode-01-production-package-v2-multiframe.json");
+const targetPath = path.join(root, "output", "mahadel-episode-01-production-package-v3-static-frame.json");
+const targetMarkdownPath = path.join(root, "output", "mahadel-episode-01-production-package-v3-static-frame.md");
 const source = JSON.parse(fs.readFileSync(sourcePath, "utf8"));
-const videoModel = process.env.VOZEB_VIDEO_MODEL?.trim();
+const videoModel = process.env.VOZEB_VIDEO_MODEL?.trim() || source.project.productionBible?.productionPlan?.video?.model || source.project.productionBible?.targetPlatform?.trim();
 if (!videoModel) throw new Error("VOZEB_VIDEO_MODEL is required; set it to the exact enabled logical video model ID from the admin model routing settings");
 
 const productionPlan = {
@@ -14,13 +14,15 @@ const productionPlan = {
     skills: [{ id: "seedance-director", name: "Seedance 导演", version: "2.0" }],
     video: {
         model: videoModel,
-        mode: "reference",
+        mode: "storyboard",
         ratio: "9:16",
         resolution: "720p",
         durationPolicy: "shot",
         count: 1,
         audioMode: "native",
         allowExplicitFallback: false,
+        modelParameters: {},
+        frameCount: 5,
     },
     references: {
         strategy: "adaptive",
@@ -91,19 +93,37 @@ function referencesForShot(shot, previous) {
 function frameBeatsForShot(shot) {
     const duration = Math.max(1, Number(shot.duration) || 5);
     const beats = frameStatesForShot(shot);
+    const boundaries = beats.map((_, index) => Number(((duration * index) / beats.length).toFixed(3))).concat(duration);
     return beats.map((actionPrompt, index) => ({
         id: `${shot.code}-F${String(index + 1).padStart(2, "0")}`,
         sequenceIndex: index + 1,
-        startSecond: Number(((duration * index) / beats.length).toFixed(3)),
-        endSecond: Number(((duration * (index + 1)) / beats.length).toFixed(3)),
-        actionPrompt,
+        startSecond: boundaries[index],
+        endSecond: boundaries[index + 1],
+        actionPrompt: `${actionPhase(index, beats.length)}：${actionPrompt}`,
         imagePrompt: staticImagePrompt(shot, actionPrompt, index, beats.length),
     }));
 }
 
+function actionPhase(index, count) {
+    if (index === 0) return "建立场景与动作入口";
+    if (index === count - 1) return "落到结果、反应或转场";
+    if (index === count - 2) return "执行关键动作";
+    return "镜头推进并改变主体状态";
+}
+
 const EXPLICIT_FRAME_STATES = {
-    SH001: ["黑湖无波，倒悬古塔与Karin模糊倒影对齐", "雪地中央四只手彼此扣紧，Karin掌心握住完整剑刃", "完整剑刃从掌心断口向外裂开，四只手仍未松开", "冷银断口占据画面中心，Karin手指扣住碎裂剑刃并停住"],
-    SH002: ["马车内同一只手继续压住断剑，Karin肩膀绷紧", "Karin睁开灰绿色眼睛，视线落向断剑，呼吸急促并保持握持", "Karin完全惊醒，手扣断剑、肩膀绷紧、视线稳定锁定握柄"],
+    SH001: [
+        "黑湖无波，倒悬古塔与Karin模糊倒影对齐；雪地中央四只手刚刚扣住，Karin低头看向掌心的完整剑刃",
+        "雪地中央四只手彼此扣紧；Karin抬头看向倒悬古塔，双手收紧，完整剑刃出现第一道银色裂纹",
+        "剑刃已经从掌心断口向外裂开，冷银碎屑停在断口周围；Karin眉眼骤然睁大、下颌绷紧，四只手仍扣住断剑",
+        "冷银断口占据前景中心，Karin手指扣住碎裂剑刃，视线锁定断口；断口冷光形成下一镜马车窗光的匹配切入口",
+    ],
+    SH002: [
+        "马车内同一只手压住断剑，指节发白，Karin闭眼伏在座位上；冷银断口方向与上一镜一致",
+        "马车内Karin肩膀绷紧，手掌继续压住断剑；车窗冷光在剑柄上形成短促反光",
+        "Karin灰绿色眼睛已经睁开，视线落向断剑，嘴唇微张急促吸气；手指收紧握住断剑",
+        "Karin完全惊醒，灰绿色眼睛锁定断剑握柄，肩膀绷紧，手掌稳定扣住断剑；车厢冷光与暗影关系已经落定",
+    ],
     SH003: ["马车内Rifa看向Karin，Karin的手仍扣住断剑", "Karin避开Rifa的视线，Rifa眉心收紧并等待回答", "Karin接住水囊，Rifa移开目光，车厢关系恢复克制"],
     SH004: ["Rifa观察Karin的呼吸，Karin仍坐在车厢内", "Karin避开Rifa的视线，嘴角压住，手仍靠近断剑", "Rifa把水囊推到Karin手边，Karin抬手准备接住"],
     SH005: ["水囊停在Karin手边，Rifa收回目光", "Karin双手接住水囊，肩膀从绷紧转为放松", "Karin握住水囊，Rifa望向车窗，车厢恢复日常站位"],
@@ -135,6 +155,10 @@ const EXPLICIT_FRAME_STATES = {
 };
 
 function frameStatesForShot(shot) {
+    const existingStates = (shot.framePlan?.frames || [])
+        .map((frame) => String(frame.imagePrompt || "").match(/静态关键帧：([\s\S]*?)(?:；可见状态：|\n可见状态：)/u)?.[1]?.trim() || "")
+        .filter(Boolean);
+    if (existingStates.length) return existingStates;
     const explicit = EXPLICIT_FRAME_STATES[shot.code];
     if (explicit) return explicit;
     const raw = [shot.continuity?.actionStart, shot.description, shot.continuity?.actionEnd]
@@ -142,7 +166,7 @@ function frameStatesForShot(shot) {
         .flatMap((item, index, list) => splitVisibleState(item, index, list.length))
         .filter(Boolean);
     const unique = [...new Map(raw.map((state) => [state, state])).values()];
-    return (unique.length ? unique : ["主体与当前场景保持明确的静态关系"]).slice(0, 5);
+    return (unique.length ? unique : ["主体处于动作入口，当前目标关系清晰"]).slice(0, 5);
 }
 
 function splitVisibleState(value, index, count) {
@@ -162,23 +186,82 @@ function splitVisibleState(value, index, count) {
 }
 
 function staticImagePrompt(shot, state, index, count) {
-    const beat = shot.performancePlan?.beats?.[index === 0 ? "start" : index === count - 1 ? "end" : "middle"];
-    const rawPerformance = [beat?.facialAction, beat?.gaze, beat?.bodyAction].filter(Boolean).join("；");
-    const performance = cleanPerformanceText(isGenericPerformance(rawPerformance) ? visiblePerformanceState(state, index, count) : rawPerformance || visiblePerformanceState(state, index, count));
-    const size = staticShotSize(shot.continuity?.shotSize || "中景", index + 1);
-    const composition = cleanStaticText(shot.continuity?.composition || "主体关系清晰，保留前景、中景与背景纵深");
+    const performance = cleanPerformanceText(visiblePerformanceState(state, index, count));
+    const size = staticShotSize(shot.continuity?.shotSize || "中景", index + 1, `${state}；${performance}`);
+    const cameraAngle = cleanStaticText(shot.continuity?.cameraAngle || "视线高度平视，沿动作轴线拍摄");
+    const composition = cleanStaticText(shot.continuity?.composition || "主体置于9:16安全区，画面前方保留空间");
+    const blocking = cleanStaticText(shot.continuity?.characterBlocking || "主体站位明确");
+    const gaze = cleanStaticText(shot.continuity?.gazeDirection || "视线落向当前叙事目标");
     const lighting = cleanStaticText(shot.lighting || "延续本场主光");
     const palette = cleanStaticText(shot.colorPalette || "沿用本场色板");
-    return `静态关键帧：${state}；可见状态：主体、道具与环境在当前瞬间的明确状态；可见表演状态：${performance}；景别：${size}；机位与构图：${composition}，9:16安全区，前景有具体框景；站位与视线：主体站位明确，视线落向当前叙事目标；三层空间：前景为框景遮挡，中景承载主体与道具，背景交代环境纵深；光色与风格：${lighting}，${palette}，材质纹理自然；参考图职责：按本镜已绑定角色、场景、道具和连续性图片各司其职；负面约束：无字幕、无水印、无logo、无HUD、无现代元素、无额外主体、无额外肢体、无变形。`;
+    const foreground = foregroundForShot(shot);
+    const middle = visibleAssetsForShot(shot);
+    const background = backgroundForLocation(shot.locationCode);
+    const negative = cleanNegativeText(shot.negativePrompt);
+    return [
+        `静态关键帧：${state}`,
+        `可见状态：${state}`,
+        `可见表演状态：${performance}`,
+        `景别：${size}`,
+        `机位与构图：${cameraAngle}；${composition}；前景以${foreground}形成具体框景`,
+        `站位与视线：${blocking}；${gaze}；画面前方保留前进空间`,
+        `三层空间：前景为${foreground}；中景承载${middle}；背景为${background}`,
+        `光色与风格：${lighting}；${palette}；半写实动漫幻想风，暗黑学院史诗奇幻，保留皮肤、亚麻、皮革与金属的自然纹理`,
+        `负面约束：${negative}`,
+    ].join("\n");
 }
 
-function staticShotSize(value, sequenceIndex = 1) {
+const FOREGROUND_BY_SHOT = {
+    SH001: "结霜的黑色湖岸与低矮枯枝",
+    SH002: "马车内侧木窗框",
+    SH003: "马车右侧竖向车窗框",
+    SH004: "马车木窗框与结界反光",
+    SH005: "检查台的黄铜边缘",
+    SH006: "城门前的银色界碑",
+    SH007: "城门检查台的黄铜边缘",
+    SH008: "上行坡道的黑石路沿",
+    SH009: "铸剑铺的木门框",
+    SH010: "铁砧的黑色边缘",
+    SH011: "铁砧上方的烟黑铜镜边缘",
+    SH012: "铁砧与窄木匣的边缘",
+};
+
+const BACKGROUND_BY_LOCATION = {
+    S02: "阿佐雷斯双塔城门、透明皇家结界与盘查道路",
+    S03: "阿佐雷斯层叠塔楼、吊桥、水渠与上行坡道",
+    S04: "Edia Knight铸剑铺、炉膛、柜台与铁砧上方的烟黑铜镜",
+    S05: "无波黑湖、倒悬古塔、雪地边界与对齐的模糊倒影",
+    S06: "封闭木马车内的长凳、右侧竖向车窗与车外冷色结界",
+};
+
+function foregroundForShot(shot) {
+    return FOREGROUND_BY_SHOT[shot.code] || (shot.locationCode === "S04" ? "铸剑铺入口木框" : "场景中可见的具体建筑边缘");
+}
+
+function backgroundForLocation(locationCode) {
+    return BACKGROUND_BY_LOCATION[locationCode] || "已绑定场景中的建筑结构与环境纵深";
+}
+
+function visibleAssetsForShot(shot) {
+    const names = [...(shot.characterCodes || []).map((code) => characters.find((asset) => asset.code === code)?.name), ...(shot.propCodes || []).map((code) => props.find((asset) => asset.code === code)?.name)].filter(Boolean);
+    return names.length ? names.join("、") : "主体与当前可见道具";
+}
+
+function cleanNegativeText(value) {
+    return String(value || "无字幕、无水印、无logo、无HUD、无现代元素、无未声明角色、无额外主体、无额外肢体、无变形")
+        .replace(/无可辨识的?Ras或Ref/gu, "无未声明角色的可辨识面孔")
+        .replace(/无可辨识的?(?:Ras|Ref)/gu, "无未声明角色的可辨识面孔")
+        .replace(/[。；;]+$/u, "");
+}
+
+function staticShotSize(value, sequenceIndex = 1, visibleContent = "") {
     const labels = { ELS: "大远景", WS: "全景", LS: "远景", MS: "中景", MCU: "中近景", CU: "近景", ECU: "特写", OTS: "过肩中景" };
     const parts = String(value || "中景")
         .split(/\s*(?:→|->|至|\/)\s*/u)
         .map((part) => part.trim())
         .filter(Boolean);
     const selected = parts[Math.min(Math.max(sequenceIndex - 1, 0), parts.length - 1)] || "中景";
+    if (/(?:ELS|极远景)/u.test(selected) && /(?:面部|眉眼|眼睛|下颌|嘴角|手部|手指|道具|剑刃|断剑|细节)/u.test(visibleContent)) return "中远景";
     return labels[selected] || selected;
 }
 
@@ -220,8 +303,12 @@ function videoPromptForShot(shot) {
 
 function visiblePerformanceState(action, index, count) {
     if (/惊醒|睁眼|呼吸急促/u.test(action)) return index === 0 ? "表情：眉眼骤然睁开、下颌绷紧；视线：先落向断剑；手部：继续扣住握柄" : "表情：惊惧收束为警觉、嘴唇闭合；视线：稳定锁定断剑；肩膀：保持绷紧";
+    if (/低头|掌心|完整剑刃/u.test(action)) return "表情：眉眼收紧、下颌保持克制；视线：向下落在掌心的完整剑刃；手部：四只手保持明确扣紧关系";
+    if (/抬头|裂纹/u.test(action)) return "表情：眉眼睁大、下颌开始绷紧；视线：从掌心抬向倒悬古塔与剑刃裂纹；手部：双手收紧但不松开剑刃";
+    if (/碎裂|断口|冷银碎屑/u.test(action)) return "表情：眉眼骤然睁大、下颌绷紧；视线：锁定断口；手部：手指继续扣住碎裂剑刃";
+    if (/水囊|接住/u.test(action)) return "表情：紧张略缓、嘴角压住；视线：跟随水囊后短暂回看对方；手部：从待接变为握稳水囊";
+    if (/车窗|结界|检查台|探测器/u.test(action)) return "表情：眉心收紧、眼神警觉；视线：锁定车窗外结界或黄铜探测器；手部：握紧当前道具";
     if (/否认|避开|隐瞒/u.test(action)) return "表情：嘴角压住、眉心轻收；视线：避开对方后短暂回看；手部：保持断剑接触";
-    if (/接住|推过去|水囊/u.test(action)) return "表情：紧张略有缓和；视线：跟随水囊移动；手部：从待接变为握稳水囊";
     if (/护符|警觉|注视|探测器|结界/u.test(action)) return "表情：眉心收紧、眼神警觉；视线：锁定结界或探测器；手部：握紧当前道具";
     if (/解封|封印|力量|收力/u.test(action)) return "表情：下颌收紧后放松；视线：正对前方目标；手部：由蓄力转为稳定收力";
     if (/木匣|铜镜|短刃|断口|铁砧|裂纹/u.test(action)) return "表情：疑惑转为戒备；视线：锁定关键道具；手部：保持与断剑或道具的明确接触";
@@ -252,9 +339,7 @@ function buildSegmentPromptSection(episodes) {
     return episodes
         .flatMap((episode) =>
             episode.shots.map((shot) => {
-                const frames = shot.framePlan.frames
-                    .map((frame) => `P${String(shot.order).padStart(2, "0")}-F${String(frame.sequenceIndex).padStart(2, "0")} ${frame.startSecond}-${frame.endSecond}s：${frame.actionPrompt}`)
-                    .join("\n");
+                const frames = shot.framePlan.frames.map((frame) => `P${String(shot.order).padStart(2, "0")}-F${String(frame.sequenceIndex).padStart(2, "0")} ${frame.startSecond}-${frame.endSecond}s：${frame.actionPrompt}`).join("\n");
                 return `### P${String(shot.order).padStart(2, "0")}｜${shot.code}\n\n${shot.videoPrompt}\n\n${frames}`;
             }),
         )
@@ -271,7 +356,7 @@ source.episodes[0].shots = shots.map((shot, index) => {
         ...normalizedShot,
         videoMode: "reference",
         storyboardFrameMode: "all_frames",
-        imagePrompt: staticImagePrompt(normalizedShot, frames[0].actionPrompt, 0, frames.length),
+        imagePrompt: frames[0].imagePrompt,
         videoPrompt: videoPromptForShot(normalizedShot),
         framePlan: {
             start: { source: previous ? "previous_accepted_actual_tail" : "independent" },
@@ -281,9 +366,18 @@ source.episodes[0].shots = shots.map((shot, index) => {
             referenceManifest,
         },
         continuityStatus: "planned",
-        startFramePrompt: `${frames[0].imagePrompt}${previous ? `；首帧仅继承${referenceManifest[0].alias}对应的上一镜已验收实际尾帧状态。` : "；本镜以独立入口状态开始。"}`,
-        endFramePrompt: `${frames.at(-1).imagePrompt}；出口状态保存为当前视频版本实际尾帧并在下游继承前人工验收。`,
+        startFramePrompt: frames[0].imagePrompt,
+        endFramePrompt: frames.at(-1).imagePrompt,
     };
+});
+
+const keyframeAssetFrames = { V01: ["SH001", 0], V02: ["SH007", 4], V03: ["SH008", 2], V04: ["SH012", 4] };
+source.archive.promptAssets = (source.archive.promptAssets || []).map((asset) => {
+    const frame = keyframeAssetFrames[asset.code];
+    if (!frame) return asset;
+    const shot = source.episodes.flatMap((episode) => episode.shots).find((item) => item.code === frame[0]);
+    const framePrompt = shot?.framePlan.frames[Math.min(frame[1], shot.framePlan.frames.length - 1)]?.imagePrompt;
+    return framePrompt ? { ...asset, prompt: framePrompt } : asset;
 });
 source.archive.sections = (source.archive.sections || []).map((section) => (/分段视频 Prompt/u.test(section.title) ? { ...section, content: buildSegmentPromptSection(source.episodes) } : section));
 

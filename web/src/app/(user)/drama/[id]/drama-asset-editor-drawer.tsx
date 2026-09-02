@@ -15,7 +15,17 @@ import { imageToDataUrl, uploadImage } from "@/services/image-storage";
 import { serverMediaUrl, uploadServerMedia } from "@/services/server-media-storage";
 import { useEffectiveConfig } from "@/stores/use-config-store";
 import { useDramaStore } from "../stores/use-drama-store";
-import { approveDramaAssetReference, completeDramaAsset, createDramaAssetGenerationBatch, createDramaVoiceProfile, refineDramaAsset, retryDramaVoicePreview, reviewDramaAssetCandidates, syncDramaVoiceCreation, syncDramaVoicePreview } from "@/services/api/drama-projects";
+import {
+    approveDramaAssetReference,
+    completeDramaAsset,
+    createDramaAssetGenerationBatch,
+    createDramaVoiceProfile,
+    refineDramaAsset,
+    retryDramaVoicePreview,
+    reviewDramaAssetCandidates,
+    syncDramaVoiceCreation,
+    syncDramaVoicePreview,
+} from "@/services/api/drama-projects";
 import { DRAMA_ASSET_DEFINITIONS, type DramaAssetKind } from "./drama-asset-definitions";
 import { dramaAssetReferences, ensureUniqueDramaAssetReferenceIds, imageResultsToReferences } from "./drama-asset-reference-utils";
 import { dramaAssetAutoCompletionItems, dramaAssetMissingFields } from "./drama-asset-library-utils";
@@ -695,7 +705,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                                         <summary className="cursor-pointer font-medium text-foreground">查看本次生成依据</summary>
                                         <div className="mt-2 grid gap-1 text-muted-foreground">
                                             <div>· 统一风格：{resolveDramaVisualStyle(project)}</div>
-                                            <div>· 视觉方向：暗黑学院魔法环境、哥特建筑、符文法阵、暮色金紫对撞、黑金长袍、强轮廓光</div>
+                                            <div>· 视觉方向：{resolveDramaVisualStyle(project)}</div>
                                             {asset.profile?.designPrompt ? <div>· 历史 designPrompt：不直接发送，只使用已结构化的身份、服装、材质和固定道具字段</div> : null}
                                             {compileDramaAssetConstraints(project, asset, kind === "characters" ? "角色" : kind === "scenes" ? "场景" : "道具").map((constraint) => (
                                                 <div key={constraint}>· {constraint}</div>

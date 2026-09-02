@@ -1,14 +1,15 @@
 "use client";
 
 import { App, Button, Image, Input, InputNumber, Modal, Segmented, Tag } from "antd";
-import { ImagePlus, LoaderCircle, Maximize2, Plus, RotateCcw, Save, Sparkles, Trash2, Upload } from "lucide-react";
+import { Check, ImagePlus, LoaderCircle, Maximize2, Plus, RotateCcw, Save, Sparkles, Trash2, Upload } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 
 import { approvedAssetReference } from "@/lib/drama-asset-baseline";
 import { activeFrameEvidence, continuityStartEvidence, createFrameEvidence, latestFrameEvidence, replaceFrameEvidence, supersedeFrameEvidenceByRole } from "@/lib/drama-continuity-policy";
 import { defaultDramaFrameBeats, deleteDramaFrameBeat, dramaFrameVisualSubject, insertDramaFrameBeat, updateDramaFrameBeat, validateDramaFrameVisualContent } from "@/lib/drama-frame-sequence";
-import { appendDramaImageReferenceBindings, compileDramaFrameSupplierPrompt } from "@/lib/drama-prompt-compiler";
+import { appendDramaImageReferenceBindings, compileDramaFrameSupplierPrompt, resolveDramaFrameScene } from "@/lib/drama-prompt-compiler";
 import { imagePreviewUrl } from "@/lib/media-image-url";
+import { dramaAssetReferences } from "./drama-asset-reference-utils";
 import type { DramaFrameBeat, DramaImageReferenceBinding, DramaProductionStep, DramaProject, DramaStoryboardFrame, DramaStoryboardFrameCandidate } from "@/lib/drama-project-contract";
 import { acceptDramaStoryboardFrame, createDramaProductionRun, updateDramaProductionRun } from "@/services/api/drama-projects";
 import { optimizeDramaFramePrompt } from "@/services/api/prompt-optimization";
@@ -37,6 +38,8 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
     const [promptDraft, setPromptDraft] = useState("");
     const [promptOriginal, setPromptOriginal] = useState("");
     const [optimizingPrompt, setOptimizingPrompt] = useState(false);
+    const [assetPickerOpen, setAssetPickerOpen] = useState(false);
+    const [manualReferenceDraft, setManualReferenceDraft] = useState<DramaImageReferenceBinding[]>([]);
     const frameMode = shot.storyboardFrameMode || "single";
     const startFrame = latestFrameEvidence(shot, "storyboard_start", ["candidate", "accepted"]);
     const endFrame = latestFrameEvidence(shot, "storyboard_end", ["candidate", "accepted"]);
@@ -142,6 +145,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                 end: shot.framePlan?.end || { required: false },
                 frames: nextBeats,
                 referenceManifest: shot.framePlan?.referenceManifest,
+                manualReferenceImages: shot.framePlan?.manualReferenceImages,
                 referenceCount: shot.framePlan?.referenceCount,
             },
             storyboardFrames: nextFrames,
@@ -450,6 +454,47 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
         }
     };
 
+    const openAssetPicker = () => {
+        const options = availableManualReferenceImages(project);
+        const existing = shot.framePlan?.manualReferenceImages || (promptPreview?.references || []).filter((reference) => !reference.id.startsWith("continuity-"));
+        setManualReferenceDraft(existing.flatMap((reference) => options.find((option) => option.url === reference.url) || reference));
+        setAssetPickerOpen(true);
+    };
+
+    const saveManualReferences = () => {
+        const nextManual = manualReferenceDraft;
+        const current = promptPreview;
+        updateShot(project.id, episodeId, shot.id, {
+            framePlan: { ...(shot.framePlan || { start: { source: "independent" as const }, end: { required: false }, frames: beats }), manualReferenceImages: nextManual },
+        });
+        if (current) {
+            const continuity = current.references.filter((reference) => reference.id.startsWith("continuity-"));
+            const nextReferences = [...continuity, ...nextManual].filter((reference, index, all) => all.findIndex((item) => item.url === reference.url) === index);
+            const nextPrompt = appendDramaImageReferenceBindings(promptDraft, nextReferences);
+            setPromptPreview({ ...current, references: nextReferences });
+            setPromptDraft(nextPrompt);
+            setPromptOriginal((original) => appendDramaImageReferenceBindings(original, nextReferences));
+        }
+        setAssetPickerOpen(false);
+        message.success(nextManual.length ? `已手动引用 ${nextManual.length} 张资产图` : "已清空手动引用资产图");
+    };
+
+    const removePromptReference = (reference: DramaImageReferenceBinding) => {
+        const current = promptPreview;
+        if (!current || reference.id.startsWith("continuity-")) return;
+        const currentManual = shot.framePlan?.manualReferenceImages || current.references.filter((item) => !item.id.startsWith("continuity-"));
+        const nextManual = currentManual.filter((item) => item.url !== reference.url);
+        const nextReferences = current.references.filter((item) => item.url !== reference.url);
+        updateShot(project.id, episodeId, shot.id, {
+            framePlan: { ...(shot.framePlan || { start: { source: "independent" as const }, end: { required: false }, frames: beats }), manualReferenceImages: nextManual },
+        });
+        setManualReferenceDraft(nextManual);
+        setPromptPreview({ ...current, references: nextReferences });
+        setPromptDraft((draft) => appendDramaImageReferenceBindings(draft, nextReferences));
+        setPromptOriginal((original) => appendDramaImageReferenceBindings(original, nextReferences));
+        message.success(`已移除引用：${reference.label}`);
+    };
+
     return (
         <div className="mt-3.5 border-t border-border/70 pt-3.5">
             <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -564,7 +609,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                                                 openPromptPreview({
                                                     title: "帧 " + beat.sequenceIndex + " 图片提示词",
                                                     prompt: plannedFramePrompt(project, episodeId, shot, beat),
-                                                    references: frame?.generationReferences || plannedFrameReferences(project, episodeId, shot, beat.sequenceIndex, storedFrames),
+                                                    references: plannedFrameReferences(project, episodeId, shot, beat.sequenceIndex, storedFrames),
                                                     frameId: beat.id,
                                                     visibleSubject: dramaFrameVisualSubject(beat.imagePrompt, beat.actionPrompt, shot.description),
                                                     readOnly: false,
@@ -778,23 +823,50 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                     {promptPreview?.references.length ? (
                         <div className="mb-2 grid grid-cols-3 gap-2" data-drama-prompt-references aria-label="提示词中的参考图片">
                             {promptPreview.references.map((reference, index) => (
-                                <button
-                                    key={`${reference.id}:${index}`}
-                                    type="button"
-                                    className="group min-w-0 overflow-hidden rounded border border-border/70 bg-muted/15 text-left transition hover:border-primary/60 hover:bg-primary/[0.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
-                                    onClick={() => setReferencePreview({ reference, index })}
-                                    aria-label={`查看提示词引用图片 ${index + 1}：${reference.label}`}
-                                >
-                                    <div className="relative aspect-video overflow-hidden bg-muted">
-                                        <Image preview={false} rootClassName="!size-full" className="!size-full !object-cover transition group-hover:scale-[1.02]" src={imagePreviewUrl(reference.url, 320)} alt={`图片${index + 1} ${reference.label}`} />
-                                        <span className="absolute left-1 top-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] text-white">@图片{index + 1}</span>
-                                        <span className="absolute bottom-1 right-1 grid size-5 place-items-center rounded bg-black/70 text-white" aria-hidden="true">
-                                            <Maximize2 className="size-3" />
-                                        </span>
-                                    </div>
-                                    <div className="truncate px-1.5 py-1 text-[10px] font-medium text-foreground">{reference.label}</div>
-                                </button>
+                                <div key={`${reference.id}:${index}`} className="min-w-0 overflow-hidden rounded border border-border/70 bg-muted/15">
+                                    <button
+                                        type="button"
+                                        className="group block w-full text-left transition hover:bg-primary/[0.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/60"
+                                        onClick={() => setReferencePreview({ reference, index })}
+                                        aria-label={`查看提示词引用图片 ${index + 1}：${reference.label}`}
+                                    >
+                                        <div className="relative aspect-video overflow-hidden bg-muted">
+                                            <Image preview={false} rootClassName="!size-full" className="!size-full !object-cover transition group-hover:scale-[1.02]" src={imagePreviewUrl(reference.url, 320)} alt={`图片${index + 1} ${reference.label}`} />
+                                            <span className="absolute left-1 top-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] text-white">@图片{index + 1}</span>
+                                            <span className="absolute bottom-1 right-1 grid size-5 place-items-center rounded bg-black/70 text-white" aria-hidden="true">
+                                                <Maximize2 className="size-3" />
+                                            </span>
+                                        </div>
+                                        <div className="truncate px-1.5 py-1 text-[10px] font-medium text-foreground">{reference.label}</div>
+                                    </button>
+                                    {!promptPreview.readOnly ? (
+                                        <div className="flex items-center justify-between gap-1 border-t border-border/60 px-1.5 py-1">
+                                            <span className="truncate text-[10px] text-muted-foreground">{reference.id.startsWith("continuity-") ? "连续性帧 · 必保留" : "当前已引用"}</span>
+                                            {!reference.id.startsWith("continuity-") ? (
+                                                <Button
+                                                    type="text"
+                                                    size="small"
+                                                    danger
+                                                    icon={<Trash2 className="size-3" />}
+                                                    className="!h-6 shrink-0 !px-1.5 !text-[10px]"
+                                                    onClick={() => removePromptReference(reference)}
+                                                    aria-label={`取消引用 ${reference.label}`}
+                                                >
+                                                    取消引用
+                                                </Button>
+                                            ) : null}
+                                        </div>
+                                    ) : null}
+                                </div>
                             ))}
+                        </div>
+                    ) : null}
+                    {!promptPreview?.readOnly ? (
+                        <div className="mb-2 flex items-center justify-between gap-2 rounded border border-dashed border-primary/35 bg-primary/[0.03] px-2.5 py-2">
+                            <span className="text-xs text-muted-foreground">Agent 未涉及的资产可在这里手动补充或移除</span>
+                            <Button size="small" icon={<ImagePlus className="size-3.5" />} onClick={openAssetPicker}>
+                                手动引用资产图
+                            </Button>
                         </div>
                     ) : null}
                     <Input.TextArea value={promptDraft} readOnly={promptPreview?.readOnly} onChange={(event) => setPromptDraft(event.target.value)} autoSize={{ minRows: 8, maxRows: 18 }} className="text-xs leading-5" />
@@ -815,6 +887,43 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                         </>
                     ) : null}
                 </div>
+            </Modal>
+            <Modal
+                open={assetPickerOpen}
+                title="手动引用资产图"
+                centered
+                zIndex={1100}
+                width="min(760px, calc(100vw - 24px))"
+                okText="保存引用"
+                cancelText="取消"
+                onCancel={() => setAssetPickerOpen(false)}
+                onOk={saveManualReferences}
+                styles={{ body: { maxHeight: "min(62vh, 520px)", overflowY: "auto" } }}
+            >
+                <p className="mb-3 text-xs leading-5 text-muted-foreground">勾选需要随本镜头图片提示词提交的资产图，当前已勾选 {manualReferenceDraft.length} 张。取消勾选即可移除 Agent 或手动引用的资产图；系统连续性帧仍会自动保留。</p>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    {availableManualReferenceImages(project).map((reference) => {
+                        const checked = manualReferenceDraft.some((item) => item.id === reference.id);
+                        return (
+                            <button
+                                key={reference.id}
+                                type="button"
+                                className={`group min-w-0 overflow-hidden rounded-md border text-left transition ${checked ? "border-primary ring-1 ring-primary/35" : "border-border/70 hover:border-primary/50"}`}
+                                onClick={() => setManualReferenceDraft((current) => (checked ? current.filter((item) => item.id !== reference.id) : [...current, reference]))}
+                                aria-pressed={checked}
+                            >
+                                <div className="relative aspect-video overflow-hidden bg-muted">
+                                    <Image preview={false} rootClassName="!size-full" className="!size-full !object-cover transition group-hover:scale-[1.02]" src={imagePreviewUrl(reference.url, 480)} alt={reference.label} />
+                                    <span className={`absolute right-1.5 top-1.5 grid size-5 place-items-center rounded-full ${checked ? "bg-primary text-primary-foreground" : "bg-black/60 text-white"}`}>
+                                        {checked ? <Check className="size-3.5" /> : <span className="size-2.5 rounded-sm border border-white/80" aria-hidden />}
+                                    </span>
+                                </div>
+                                <div className="truncate px-2 py-1.5 text-xs font-medium text-foreground">{reference.label}</div>
+                            </button>
+                        );
+                    })}
+                </div>
+                {!availableManualReferenceImages(project).length ? <p className="py-8 text-center text-sm text-muted-foreground">当前项目暂无可用资产图</p> : null}
             </Modal>
             <Modal
                 open={Boolean(referencePreview)}
@@ -1051,7 +1160,13 @@ function plannedFrameReferences(project: DramaProject, episodeId: string, shot: 
         if (tail?.mediaUrl && previous)
             references.push({ id: "continuity-tail", label: "上一镜「" + previous.title + "」已验收实际尾帧", binding: "作为当前帧唯一动作起点，锁定人物姿态、服装、道具状态、场景空间、构图、光向和轴线", url: tail.mediaUrl, remoteUrl: tail.remoteUrl });
     }
-    const available = [shot.sceneId, ...shot.characterIds, ...shot.propIds, ...shot.clueIds, ...(shot.sourceAssetIds || [])].filter((id): id is string => Boolean(id));
+    const beat = frame === "end" ? undefined : frameBeats(shot, project.productionBible?.productionPlan?.video.frameCount || 5).find((item) => item.sequenceIndex === frame);
+    const frameScene = beat ? resolveDramaFrameScene(project, shot, beat) : project.scenes.find((item) => item.id === shot.sceneId);
+    const available = [frameScene?.id, ...shot.characterIds, ...shot.propIds, ...shot.clueIds, ...(shot.sourceAssetIds || [])].filter((id): id is string => Boolean(id));
+    if (shot.framePlan?.manualReferenceImages) {
+        const manual = shot.framePlan.manualReferenceImages;
+        return [...references, ...manual].filter((reference, index, all) => all.findIndex((item) => item.url === reference.url) === index);
+    }
     const preferred = (shot.framePlan?.referenceManifest || []).flatMap((item) => (item.assetId && available.includes(item.assetId) ? [item.assetId] : []));
     for (const id of Array.from(new Set([...preferred, ...available]))) {
         const character = project.characters.find((item) => item.id === id);
@@ -1076,6 +1191,42 @@ function plannedFrameReferences(project: DramaProject, episodeId: string, shot: 
         });
     }
     return references.filter((reference, index, all) => all.findIndex((item) => item.url === reference.url) === index);
+}
+
+function availableManualReferenceImages(project: DramaProject): DramaImageReferenceBinding[] {
+    const output: DramaImageReferenceBinding[] = [];
+    const addAsset = (asset: DramaProject["characters"][number], category: string, binding: string) => {
+        for (const reference of dramaAssetReferences(asset)) {
+            if (!reference.url) continue;
+            output.push({
+                id: `${asset.id}:${reference.id}`,
+                label: `${category}「${asset.name}」${reference.label ? ` · ${reference.label}` : ""}`,
+                binding,
+                url: reference.url,
+                remoteUrl: reference.remoteUrl,
+                width: reference.width,
+                height: reference.height,
+            });
+        }
+    };
+    project.characters.forEach((asset) => addAsset(asset, "角色", "锁定身份、脸部、发型、服装和识别特征"));
+    project.scenes.forEach((asset) => addAsset(asset, "场景", "锁定空间拓扑、建筑结构、材质、陈设和主光方向"));
+    project.props.forEach((asset) => addAsset(asset, "道具", "锁定造型、材质、色彩、位置和可识别细节"));
+    project.clues.forEach((asset) => addAsset(asset, "线索", "锁定外观、材质、位置和可识别细节"));
+    for (const source of project.sourceAssets || []) {
+        const url = source.serverUrl || source.remoteUrl;
+        if (source.type === "image" && url)
+            output.push({
+                id: `${source.id}:source`,
+                label: `来源素材「${source.title || "未命名图片"}」`,
+                binding: "仅用于当前提示词声明的视觉信息，不覆盖角色或场景固定资产",
+                url,
+                remoteUrl: source.remoteUrl,
+                width: source.width,
+                height: source.height,
+            });
+    }
+    return output.filter((reference, index, all) => all.findIndex((item) => item.id === reference.id || item.url === reference.url) === index);
 }
 
 const clearedGeneratedMedia = { generationStatus: "idle" as const, generationTaskId: undefined, generationError: undefined, videoUrl: undefined, audioStatus: "idle" as const, audioTaskId: undefined, audioError: undefined, audioUrl: undefined };

@@ -107,6 +107,102 @@ test("drama all-frame editor keeps one beat per row across desktop, mobile and d
     await expectNoHorizontalOverflow(page, "1672px dark frame sequence");
 });
 
+test("drama frame prompt lets users maintain asset references before optimization", async ({ page, request }) => {
+    const created = await request.post("/api/drama/projects", { data: { title: "E2E 手动引用资产图", summary: "验证提示词资产维护", ratio: "9:16" } });
+    expect(created.ok(), await created.text()).toBe(true);
+    const project = ((await created.json()) as { data: { project: DramaProject } }).data.project;
+    const episode = project.episodes[0];
+    const seeded: DramaProject = {
+        ...project,
+        characters: [
+            {
+                id: "auto-character",
+                name: "Agent 多引用角色",
+                description: "Agent 自动引用的角色",
+                primaryReferenceId: "auto-character-ref",
+                references: [{ id: "auto-character-ref", url: "/auto-character.png", source: "generated", status: "approved", label: "基准图", createdAt: "2026-01-01T00:00:00.000Z" }],
+            },
+            {
+                id: "manual-character",
+                name: "未自动涉及角色",
+                description: "需要人工补充的角色",
+                primaryReferenceId: "manual-character-ref",
+                references: [{ id: "manual-character-ref", url: "/manual-character.png", source: "generated", status: "approved", label: "基准图", createdAt: "2026-01-01T00:00:00.000Z" }],
+            },
+        ],
+        episodes: [
+            {
+                ...episode,
+                reviewStatus: "visual_ready",
+                shots: [
+                    {
+                        ...episode.shots[0],
+                        id: "manual-shot",
+                        title: "手动引用镜头",
+                        imagePrompt: "人物站在雨巷中",
+                        videoPrompt: "人物抬头",
+                        characterIds: ["auto-character"],
+                        sceneId: undefined,
+                        propIds: [],
+                        clueIds: [],
+                        storyboardFrameMode: "all_frames",
+                        framePlan: {
+                            start: { source: "independent" },
+                            end: { required: false },
+                            frames: [{ id: "manual-frame", sequenceIndex: 1, startSecond: 0, endSecond: 5, actionPrompt: "人物抬头", imagePrompt: "人物站在雨巷中" }],
+                        },
+                    },
+                ],
+            },
+        ],
+    };
+    const saved = await request.patch(`/api/drama/projects/${project.id}`, { data: seeded });
+    expect(saved.ok(), await saved.text()).toBe(true);
+
+    let optimizationPrompt = "";
+    await page.route(/\/api\/agent\/prompt-optimization$/, async (route) => {
+        const body = (await route.request().postDataJSON()) as { prompt?: string; mode?: string };
+        optimizationPrompt = body.prompt || "";
+        await route.fulfill({ json: { code: 0, data: { prompt: "优化后的帧提示词" }, msg: "OK" } });
+    });
+
+    await page.goto(`/drama/${project.id}`, { waitUntil: "domcontentloaded" });
+    await page.getByRole("button", { name: "切换到分镜" }).click();
+    await page.getByRole("button", { name: "展开" }).click();
+    const sequence = page.locator("[data-drama-frame-sequence]");
+    await sequence.getByRole("button", { name: "查看完整提示词" }).click();
+    const promptDialog = page.getByRole("dialog", { name: "帧 1 图片提示词" });
+    await expect(promptDialog).toBeVisible();
+    const autoReference = promptDialog.getByRole("button", { name: /查看提示词引用图片.*Agent 多引用角色/ });
+    await expect(autoReference).toBeVisible();
+    await promptDialog.getByRole("button", { name: /取消引用.*Agent 多引用角色/ }).click();
+    await expect(autoReference).toBeHidden();
+    await promptDialog.getByRole("button", { name: "手动引用资产图" }).click();
+    const picker = page.getByRole("dialog", { name: "手动引用资产图" });
+    await expect(picker).toBeVisible();
+    for (const viewport of [
+        { width: 390, height: 844 },
+        { width: 430, height: 932 },
+    ]) {
+        await page.setViewportSize(viewport);
+        await expect(picker).toBeVisible();
+        await expectNoHorizontalOverflow(page, `${viewport.width}px manual asset picker`);
+    }
+    const assetCard = picker.getByRole("button", { name: /未自动涉及角色/ });
+    await expect(assetCard).toHaveAttribute("aria-pressed", "false");
+    await assetCard.click();
+    await expect(assetCard).toHaveAttribute("aria-pressed", "true");
+    await picker.getByRole("button", { name: "保存引用" }).click();
+    await expect(picker).toBeHidden();
+    await expect(promptDialog.getByRole("button", { name: /查看提示词引用图片.*未自动涉及角色/ })).toBeVisible();
+
+    await promptDialog.getByRole("button", { name: "提示词优化" }).click();
+    await expect(promptDialog.getByRole("textbox")).toHaveValue(/优化后的帧提示词/);
+    expect(optimizationPrompt).toContain("未自动涉及角色");
+    expect(optimizationPrompt).not.toContain("Agent 多引用角色");
+    expect(optimizationPrompt).toContain("实际参考图绑定");
+});
+
 async function assertVerticalRows(sequence: import("@playwright/test").Locator) {
     const boxes = await sequence.locator("[data-drama-frame-row]").evaluateAll((rows) =>
         rows.map((row) => {

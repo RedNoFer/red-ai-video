@@ -15,7 +15,7 @@ import type {
     DramaUtterance,
     DramaVisualAnalysis,
 } from "@/lib/drama-project-contract";
-import { normalizeDramaFrameBeats, validateDramaFramePlanVisuals } from "@/lib/drama-frame-sequence";
+import { formatPromptFieldLines, normalizeDramaFrameBeats, validateDramaFramePlanVisuals } from "@/lib/drama-frame-sequence";
 import { resolveDramaShotDuration } from "@/lib/server/drama-shot-config";
 import { strictJsonObjectText } from "@/lib/server/structured-model-output";
 
@@ -88,7 +88,7 @@ export function normalizeDramaVisualAnalysis(value: unknown, shotIds: string[], 
         const shot = object(item);
         const shotId = text(shot.shotId);
         const imagePrompt = text(shot.imagePrompt);
-        const videoPrompt = text(shot.videoPrompt);
+        const videoPrompt = formatPromptFieldLines(text(shot.videoPrompt), "video");
         const framePlan = normalizeVisualFramePlan(shot.framePlan, sourceFramePlans.get(shotId));
         if (!allowed.has(shotId) || seen.has(shotId) || !imagePrompt || !videoPrompt || !framePlan) return [];
         seen.add(shotId);
@@ -218,7 +218,16 @@ function normalizeReferenceManifest(value: unknown) {
         const alias = text(entry.alias);
         const role = text(entry.role) as DramaReferenceManifestRole;
         if (!alias || !roles.includes(role)) return [];
-        return [{ alias, role, purpose: text(entry.purpose), ...(text(entry.assetId) ? { assetId: text(entry.assetId) } : {}), ...(text(entry.shotId) ? { shotId: text(entry.shotId) } : {}), ...(text(entry.frameEvidenceId) ? { frameEvidenceId: text(entry.frameEvidenceId) } : {}) }];
+        return [
+            {
+                alias,
+                role,
+                purpose: text(entry.purpose),
+                ...(text(entry.assetId) ? { assetId: text(entry.assetId) } : {}),
+                ...(text(entry.shotId) ? { shotId: text(entry.shotId) } : {}),
+                ...(text(entry.frameEvidenceId) ? { frameEvidenceId: text(entry.frameEvidenceId) } : {}),
+            },
+        ];
     });
 }
 
@@ -249,7 +258,7 @@ export function normalizeDramaImagePromptAnalysis(value: unknown, shotIds: strin
     const shots = array(object(value).shots).flatMap((item) => {
         const shot = object(item);
         const shotId = text(shot.shotId);
-        const imagePrompt = text(shot.imagePrompt);
+        const imagePrompt = formatPromptFieldLines(text(shot.imagePrompt), "static");
         if (!allowed.has(shotId) || seen.has(shotId) || !imagePrompt) return [];
         seen.add(shotId);
         return [{ shotId, imagePrompt }];
@@ -1059,7 +1068,7 @@ export const dramaVisualTool = {
 
 export const dramaVideoPromptTool = {
     name: "generate_drama_video_prompts",
-    description: "根据已经生成并验收的顺序帧、固定资产和连续性信息，为每个镜头生成可直接提交给视频供应商的图生视频提示词",
+    description: "根据已经生成并验收的顺序帧、固定资产和连续性信息，为每个镜头生成按固定字段逐行组织、可直接提交给视频供应商的图生视频提示词",
     parameters: {
         type: "object",
         additionalProperties: false,
@@ -1075,7 +1084,8 @@ export const dramaVideoPromptTool = {
                         shotId: { type: "string" },
                         videoPrompt: {
                             type: "string",
-                            description: "只写当前镜头的图生视频执行提示词，按起始可见状态、触发、主体动作与反应、一个主运镜、声音意图、结束画面和针对性约束组织；每镜只保留一个主要变化，不重复项目档案、URL、画幅、时长、参考图清单、逐帧时间线或内部说明",
+                            description:
+                                "只写当前镜头的图生视频执行提示词；使用动态意图、起始可见状态、触发、主体动作与反应、阶段节拍（必要时）、单一主运镜、环境压力与视觉母题、声音意图、结束画面、连续性锁和针对性约束等固定字段，每个非空字段独立一行。每镜只保留一个主要变化，不重复项目档案、URL、画幅、时长、参考图清单、逐帧时间线或内部说明",
                         },
                     },
                 },
@@ -1086,7 +1096,7 @@ export const dramaVideoPromptTool = {
 
 export const dramaImagePromptTool = {
     name: "generate_drama_image_prompts",
-    description: "根据当前镜头事实、固定资产和连续性约束，生成可直接用于 Seedance 2.0 图片参考帧的静态画面提示词",
+    description: "根据当前镜头事实、固定资产和连续性约束，生成可直接用于 Seedance 2.0 图片参考帧的静态画面提示词；必须按固定字段逐行组织，每个非空字段独立一行",
     parameters: {
         type: "object",
         additionalProperties: false,
@@ -1102,7 +1112,8 @@ export const dramaImagePromptTool = {
                         shotId: { type: "string" },
                         imagePrompt: {
                             type: "string",
-                            description: "只写可执行的单一静态画面提示词，包含主体身份、场景、当前可见姿态/表情/视线/手部或道具状态、景别、构图、光线和必要约束；不得写运镜、焦段、时间段、动作过程、对白、声音、内部 ID、URL 或解释",
+                            description:
+                                "只写可执行的单一静态画面提示词；按静态关键帧、可见状态、可见表演状态、景别、机位与构图、站位与视线、三层空间、光色与风格、参考图职责、负面约束组织，每个非空字段独立一行，字段之间不得用逗号或分号压成一段；不得写运镜、焦段、时间段、动作过程、对白、声音、内部 ID、URL 或解释",
                         },
                     },
                 },

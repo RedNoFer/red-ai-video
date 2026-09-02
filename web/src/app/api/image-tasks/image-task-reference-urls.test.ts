@@ -48,17 +48,9 @@ describe("image task reference request URLs", () => {
         mocks.fetchSafeOutbound.mockResolvedValue(new Response('{"error":"not found"}', { status: 404, headers: { "content-type": "application/json" } }));
 
         await expect(
-            publicImageReferenceRequestUrl(
-                { id: "reference-one", type: "image/png", dataUrl: "", remoteUrl: "https://provider.example/expired.png" },
-                "http://127.0.0.1:3010",
-                "https://vozeb.example",
-                { ownerUserId: "user-one", taskId: "task-one" },
-            ),
+            publicImageReferenceRequestUrl({ id: "reference-one", type: "image/png", dataUrl: "", remoteUrl: "https://provider.example/expired.png" }, "http://127.0.0.1:3010", "https://vozeb.example", { ownerUserId: "user-one", taskId: "task-one" }),
         ).rejects.toThrow("供应商参考图已失效且没有可用本地副本");
-        expect(mocks.fetchSafeOutbound).toHaveBeenCalledWith(
-            "https://provider.example/expired.png",
-            expect.objectContaining({ headers: { accept: "image/*", range: "bytes=0-0" } }),
-        );
+        expect(mocks.fetchSafeOutbound).toHaveBeenCalledWith("https://provider.example/expired.png", expect.objectContaining({ method: "HEAD", headers: { accept: "image/*" } }));
     });
 
     it("signs a local mirror only when no provider URL exists", async () => {
@@ -91,11 +83,7 @@ describe("image task reference request URLs", () => {
                 { ownerUserId: "user-one", taskId: "task-one" },
             ),
         ).resolves.toMatch(/^https:\/\/vozeb\.example\/api\/reference-assets\/local\.png\?purpose=provider-read/);
-        expect(mocks.fetchSafeOutbound).toHaveBeenNthCalledWith(
-            1,
-            "https://provider.example/expired.png",
-            expect.objectContaining({ headers: { accept: "image/*", range: "bytes=0-0" } }),
-        );
+        expect(mocks.fetchSafeOutbound).toHaveBeenNthCalledWith(1, "https://provider.example/expired.png", expect.objectContaining({ method: "HEAD", headers: { accept: "image/*" } }));
         expect(mocks.fetchSafeOutbound).toHaveBeenCalledTimes(2);
     });
 
@@ -108,6 +96,21 @@ describe("image task reference request URLs", () => {
                 taskId: "task-one",
             }),
         ).rejects.toThrow("本地参考图公网地址不可访问");
+    });
+
+    it("falls back to a ranged GET when the image host does not support HEAD", async () => {
+        mocks.fetchSafeOutbound
+            .mockResolvedValueOnce(new Response("method not allowed", { status: 405, headers: { "content-type": "text/plain" } }))
+            .mockResolvedValueOnce(new Response(new Uint8Array([137]), { status: 206, headers: { "content-type": "image/png" } }));
+
+        await expect(
+            publicImageReferenceRequestUrl({ id: "reference-one", type: "image/png", dataUrl: "", remoteUrl: "https://provider.example/generated.png" }, "http://127.0.0.1:3010", "https://vozeb.example", {
+                ownerUserId: "user-one",
+                taskId: "task-one",
+            }),
+        ).resolves.toBe("https://provider.example/generated.png");
+        expect(mocks.fetchSafeOutbound).toHaveBeenNthCalledWith(1, "https://provider.example/generated.png", expect.objectContaining({ method: "HEAD" }));
+        expect(mocks.fetchSafeOutbound).toHaveBeenNthCalledWith(2, "https://provider.example/generated.png", expect.objectContaining({ headers: { accept: "image/*", range: "bytes=0-0" } }));
     });
 
     it("keeps an already signed local asset when the worker cannot sign again", async () => {

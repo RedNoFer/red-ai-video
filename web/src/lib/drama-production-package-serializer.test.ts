@@ -16,7 +16,7 @@ describe("drama production package serialization", () => {
         const markdownPrompt = markdownPackage.episodes[0].shots[0].framePlan.frames[0].imagePrompt;
         expect(markdownPrompt).toContain("静态关键帧：");
         expect(markdownPrompt).toContain("机位与构图：");
-        expect(markdownPrompt).toContain("参考图职责：");
+        expect(markdownPrompt).not.toContain("参考图职责：");
     });
 
     it("rebuilds exported video prompts from the canonical frame timeline", () => {
@@ -35,6 +35,17 @@ describe("drama production package serialization", () => {
         expect(markdown).toContain("动态意图：角色站立");
         expect(markdown).not.toContain("生成15秒9:16竖屏电影级视频");
         expect(markdown).not.toContain("生成15秒旧视频提示词");
+    });
+
+    it("exports structured video prompt fields one per line", () => {
+        const value = fixture();
+        value.episodes[0].shots[0].videoPrompt = "动态意图：角色抬头；单一主运镜：固定机位；结束画面：视线锁定断剑";
+        value.archive!.sections = [{ code: "SEC11", title: "十一、分段视频 Prompt", content: "旧内容" }];
+
+        const markdown = serializeDramaProductionPackageMarkdown(value);
+
+        expect(markdown).toContain("动态意图：角色抬头\n单一主运镜：固定机位\n结束画面：视线锁定断剑");
+        expect(markdown).not.toContain("动态意图：动态意图：");
     });
 });
 

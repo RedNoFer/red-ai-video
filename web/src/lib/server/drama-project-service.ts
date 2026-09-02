@@ -41,7 +41,7 @@ import { dramaRichContentToPlainText, normalizeDramaScriptRichContent } from "@/
 import { appendDramaImageReferenceBindings, stripDramaReferenceBindingSections } from "@/lib/drama-prompt-compiler";
 import { approvedAssetReference } from "@/lib/drama-asset-baseline";
 import { createFrameEvidence, decideActualEndFrame, invalidateFrameEvidence, replaceFrameEvidence, supersedeFrameEvidence } from "@/lib/drama-continuity-policy";
-import { DRAMA_STYLE_COLOR_SCRIPT, DRAMA_STYLE_NAME, normalizeDramaStyleName } from "@/lib/drama-style";
+import { DRAMA_STYLE_NAME, normalizeDramaStyleName, resolveDramaStyleContract } from "@/lib/drama-style";
 import { normalizeDramaImageSize } from "@/lib/drama-image-size";
 import { defaultDramaFrameBeats, normalizeDramaFrameBeats, upgradeDramaFrameImagePrompt } from "@/lib/drama-frame-sequence";
 import { defaultDramaProductionPlan, dramaReferenceImageBudget, normalizeDramaProductionPlan } from "@/lib/drama-production-plan";
@@ -369,16 +369,32 @@ function frameEvidenceMaterialChanged(previous: DramaFrameEvidence[] | undefined
 }
 
 function recoverLegacyDramaStyle(project: DramaProject) {
-    const style = normalizeDramaStyleName(project.style);
+    const resolved = resolveDramaStyleContract(project);
+    const style = resolved.name;
     const productionBible = project.productionBible
-        ? {
-              ...project.productionBible,
-              visualStyle: normalizeDramaStyleName(project.productionBible.visualStyle),
-              colorScript: project.productionBible.colorScript || DRAMA_STYLE_COLOR_SCRIPT,
-          }
+        ? (() => {
+              const { colorScript: _oldColorScript, ...bibleWithoutColorScript } = project.productionBible;
+              return {
+                  ...bibleWithoutColorScript,
+                  visualStyle: style,
+                  ...(resolved.colorScript ? { colorScript: resolved.colorScript } : {}),
+              };
+          })()
         : undefined;
-    if (style === project.style && JSON.stringify(productionBible) === JSON.stringify(project.productionBible)) return null;
+    if (style === project.style && stableSerialize(productionBible) === stableSerialize(project.productionBible)) return null;
     return { ...project, style, productionBible };
+}
+
+function stableSerialize(value: unknown): string {
+    if (Array.isArray(value)) return `[${value.map(stableSerialize).join(",")}]`;
+    if (value && typeof value === "object") {
+        return `{${Object.entries(value as Record<string, unknown>)
+            .filter(([, item]) => item !== undefined)
+            .sort(([left], [right]) => left.localeCompare(right))
+            .map(([key, item]) => `${JSON.stringify(key)}:${stableSerialize(item)}`)
+            .join(",")}}`;
+    }
+    return JSON.stringify(value);
 }
 
 function recoverMissingSeriesBible(project: DramaProject) {
@@ -527,18 +543,19 @@ export async function createDramaProjectForUser(userId: string, value: unknown) 
         shots: [],
     };
     const conversation = await createCreativeConversation(userId, { surface: "drama", projectId, title: input.title });
+    const styleContract = resolveDramaStyleContract({ style: input.style });
     const project: DramaProject = {
         id: projectId,
         sourceHandoffId: input.sourceHandoffId,
         title: input.title,
         summary: input.summary,
-        style: input.style,
+        style: styleContract.name,
         ratio: input.ratio,
         productionBible: {
             language: "中文",
             ratio: input.ratio,
-            visualStyle: input.style || DRAMA_STYLE_NAME,
-            colorScript: DRAMA_STYLE_COLOR_SCRIPT,
+            visualStyle: styleContract.name,
+            ...(styleContract.colorScript ? { colorScript: styleContract.colorScript } : {}),
             soundBible: "按镜头声音设计表执行，保留对白空间与静默段落",
             globalNegativePrompt: "无字幕、无水印、无logo、无现代元素、无角色身份漂移",
             subtitleSafeArea: "角色头顶与画面底部保留安全区",
@@ -584,6 +601,7 @@ export async function updateDramaProjectForUser(userId: string, id: string, valu
     const incomingProductionBible = object(input.productionBible);
     const incomingPlan = normalizeDramaProductionPlan(incomingProductionBible.productionPlan, currentPlan);
     const lockRequested = Boolean(object(incomingProductionBible.productionPlan).lockedAt);
+    const requestedStyle = normalizeDramaStyleName(cleanText(input.style) || current.style || cleanText(incomingProductionBible.visualStyle));
     if (!lockRequested && incomingUpdatedAt && incomingUpdatedAt < parseTimestamp(current.updatedAt)) {
         return current;
     }
@@ -591,7 +609,14 @@ export async function updateDramaProjectForUser(userId: string, id: string, valu
         ? {
               ...current,
               defaultVideoMode: videoMode(input.defaultVideoMode),
-              productionBible: current.productionBible ? { ...current.productionBible, productionPlan: incomingPlan } : normalizeProductionBible(incomingProductionBible, current.ratio, current.style),
+              style: requestedStyle,
+              productionBible: (() => {
+                  const currentBible = current.productionBible ? { ...current.productionBible, productionPlan: incomingPlan } : normalizeProductionBible(incomingProductionBible, current.ratio, requestedStyle);
+                  if (!currentBible) return currentBible;
+                  const styleContract = resolveDramaStyleContract({ style: requestedStyle, productionBible: currentBible });
+                  const { colorScript: _oldColorScript, ...bibleWithoutColorScript } = currentBible;
+                  return { ...bibleWithoutColorScript, visualStyle: styleContract.name, ...(styleContract.colorScript ? { colorScript: styleContract.colorScript } : {}) };
+              })(),
               updatedAt: nextTimestamp(current.updatedAt),
           }
         : normalizeProject(value, current);
@@ -615,6 +640,43 @@ export async function updateDramaProjectForUser(userId: string, id: string, valu
     project = invalidateChangedDramaFrameEvidence(current, project);
     try {
         return await updateDramaProject(userId, project, current.updatedAt);
+    } catch (error) {
+        if (error instanceof DramaProjectStoreError) throw new DramaProjectServiceError(error.message, error.status);
+        throw error;
+    }
+}
+
+export async function saveDramaEpisodeSettingsForUser(userId: string, id: string, episodeIdValue: string, value: unknown) {
+    const current = await getDramaProjectForUser(userId, id);
+    const episodeId = cleanText(episodeIdValue);
+    const episode = current.episodes.find((item) => item.id === episodeId);
+    if (!episode) throw new DramaProjectServiceError("短剧剧集不存在", 404);
+    const input = object(value);
+    const productionPlan = normalizeDramaProductionPlan(input.productionPlan, normalizeDramaProductionPlan(current.productionBible?.productionPlan, defaultDramaProductionPlan("new-project")))!;
+    const style = normalizeDramaStyleName(cleanText(input.style) || current.style);
+    const styleContract = resolveDramaStyleContract({ style, productionBible: current.productionBible });
+    const nextProject: DramaProject = {
+        ...current,
+        summary: typeof input.summary === "string" ? cleanText(input.summary) : current.summary,
+        style: styleContract.name,
+        defaultVideoMode: productionPlan.video.mode === "text-to-video" ? "direct" : "storyboard",
+        productionBible: (() => {
+            const { colorScript: _oldColorScript, ...bibleWithoutColorScript } = current.productionBible || {};
+            return {
+                ...bibleWithoutColorScript,
+                language: current.productionBible?.language || "zh-CN",
+                ratio: current.productionBible?.ratio || current.ratio,
+                visualStyle: styleContract.name,
+                ...(styleContract.colorScript ? { colorScript: styleContract.colorScript } : {}),
+                continuityMode: current.productionBible?.continuityMode || "strict",
+                productionPlan,
+            };
+        })(),
+        episodes: current.episodes.map((item) => (item.id === episodeId ? { ...item, title: cleanText(input.title) || item.title } : item)),
+        updatedAt: nextTimestamp(current.updatedAt),
+    };
+    try {
+        return await updateDramaProject(userId, nextProject, current.updatedAt);
     } catch (error) {
         if (error instanceof DramaProjectStoreError) throw new DramaProjectServiceError(error.message, error.status);
         throw error;
@@ -848,8 +910,24 @@ export async function createDramaProductionRunForUser(userId: string, projectId:
                 },
                 project,
             );
-            runProject = merged;
-            runEpisode = merged.episodes.find((candidate) => candidate.id === episode.id) || episode;
+            const currentShot = episode.shots.find((shot) => shot.id === snapshotId);
+            const mergedEpisode = merged.episodes.find((candidate) => candidate.id === episode.id);
+            const normalizedSnapshot = mergedEpisode?.shots.find((shot) => shot.id === snapshotId);
+            if (currentShot && normalizedSnapshot && mergedEpisode) {
+                const snapshotForMerge = {
+                    ...normalizedSnapshot,
+                    ...(Object.prototype.hasOwnProperty.call(shotSnapshot, "storyboardFrames") ? {} : { storyboardFrames: undefined }),
+                    ...(Object.prototype.hasOwnProperty.call(shotSnapshot, "frameEvidence") ? {} : { frameEvidence: undefined }),
+                } as DramaShot;
+                const mergedShot = mergeDramaShotMediaReferences(currentShot, snapshotForMerge);
+                runProject = {
+                    ...merged,
+                    episodes: merged.episodes.map((candidate) => (candidate.id === episode.id ? { ...candidate, shots: candidate.shots.map((shot) => (shot.id === snapshotId ? mergedShot : shot)) } : candidate)),
+                };
+            } else {
+                runProject = merged;
+            }
+            runEpisode = runProject.episodes.find((candidate) => candidate.id === episode.id) || episode;
         }
         const transport = { origin: cleanText(object(value).origin), cookie: cleanText(object(value).cookie) };
         const settings = await getAuthSettings();
@@ -902,7 +980,10 @@ export async function createDramaProductionRunForUser(userId: string, projectId:
     const videoCandidate = requiresAllFrames ? videoCandidates.find((candidate) => supportsVideoKeyframeReferences(candidate, requiredKeyframeCount)) : videoCandidates[0];
     if (!videoCandidate) {
         if (!videoCandidates.length)
-            throw new DramaProjectServiceError(`本集锁定的视频模型 ${requestedVideoModel} 未在后台启用或没有可用渠道；后台默认视频模型为 ${settings.defaultModels.videoModel || "未配置"}。请在本集设置中明确选择已启用模型并重新锁定，系统不会自动切换模型`, 409);
+            throw new DramaProjectServiceError(
+                `本集锁定的视频模型 ${requestedVideoModel} 未在后台启用或没有可用渠道；后台默认视频模型为 ${settings.defaultModels.videoModel || "未配置"}。请在本集设置中明确选择已启用模型并重新锁定，系统不会自动切换模型`,
+                409,
+            );
         throw new DramaProjectServiceError(`当前视频模型 ${requestedVideoModel} 未声明支持 ${requiredKeyframeCount} 张全能帧关键图，请在后台为该模型声明全能帧能力或调整本集帧模式；系统不会自动切换模型`, 409);
     }
     validateDramaReferenceSelections(project, episode, productionShots, referenceSelections, videoCandidate.capabilityProfile?.maxReferenceImages);
@@ -959,6 +1040,48 @@ export async function createDramaProductionRunForUser(userId: string, projectId:
     const refreshedProject = await getDramaProjectForUser(userId, project.id);
     const refreshedRun = await getDramaProductionRun(userId, project.id, imageRun.id);
     return refreshedRun ? dispatchReadyDramaProductionSteps(userId, refreshedProject, refreshedRun, origin, cookie) : imageRun;
+}
+
+export function mergeDramaShotMediaReferences(current: DramaShot, snapshot: DramaShot): DramaShot {
+    const remoteByMediaUrl = new Map<string, string>();
+    const remember = (mediaUrl: string | undefined, remoteUrl: string | undefined) => {
+        if (mediaUrl && remoteUrl && /^https?:\/\//i.test(remoteUrl)) remoteByMediaUrl.set(mediaUrl, remoteUrl);
+    };
+    for (const frame of current.storyboardFrames || []) {
+        remember(frame.mediaUrl, frame.remoteUrl);
+        for (const candidate of frame.candidates || []) remember(candidate.mediaUrl, candidate.remoteUrl);
+    }
+    for (const frame of current.frameEvidence || []) remember(frame.mediaUrl, frame.remoteUrl);
+    remember(current.storyboardImageUrl, current.storyboardImageRemoteUrl);
+    remember(current.storyboardEndImageUrl, current.storyboardEndImageRemoteUrl);
+    for (const reference of current.framePlan?.manualReferenceImages || []) remember(reference.url, reference.remoteUrl);
+
+    const recoverRemote = (mediaUrl: string | undefined, remoteUrl: string | undefined) => (mediaUrl ? remoteByMediaUrl.get(mediaUrl) : undefined) || remoteUrl;
+    const mergeMediaReference = <T extends { mediaUrl?: string; remoteUrl?: string }>(reference: T): T => {
+        const recovered = recoverRemote(reference.mediaUrl, reference.remoteUrl);
+        return recovered && recovered !== reference.remoteUrl ? { ...reference, remoteUrl: recovered } : reference;
+    };
+    const manualReferenceImages = snapshot.framePlan?.manualReferenceImages?.map((reference) => {
+        const recovered = recoverRemote(reference.url, reference.remoteUrl);
+        return recovered && recovered !== reference.remoteUrl ? { ...reference, remoteUrl: recovered } : reference;
+    });
+    const storyboardFrames = snapshot.storyboardFrames === undefined ? current.storyboardFrames : snapshot.storyboardFrames.map((frame) => ({ ...mergeMediaReference(frame), candidates: frame.candidates?.map(mergeMediaReference) }));
+    const frameEvidence = snapshot.frameEvidence === undefined ? current.frameEvidence : snapshot.frameEvidence.map(mergeMediaReference);
+    const framePlan =
+        snapshot.framePlan === undefined
+            ? current.framePlan
+            : {
+                  ...snapshot.framePlan,
+                  ...(manualReferenceImages ? { manualReferenceImages } : snapshot.framePlan.manualReferenceImages === undefined && current.framePlan?.manualReferenceImages ? { manualReferenceImages: current.framePlan.manualReferenceImages } : {}),
+              };
+    return {
+        ...snapshot,
+        ...(framePlan ? { framePlan } : {}),
+        storyboardImageRemoteUrl: recoverRemote(snapshot.storyboardImageUrl, snapshot.storyboardImageRemoteUrl) || (snapshot.storyboardImageUrl === current.storyboardImageUrl ? current.storyboardImageRemoteUrl : undefined),
+        storyboardEndImageRemoteUrl: recoverRemote(snapshot.storyboardEndImageUrl, snapshot.storyboardEndImageRemoteUrl) || (snapshot.storyboardEndImageUrl === current.storyboardEndImageUrl ? current.storyboardEndImageRemoteUrl : undefined),
+        storyboardFrames,
+        frameEvidence,
+    };
 }
 
 export async function getLatestDramaProductionRunForUser(userId: string, projectId: string, episodeId: string, transport: { origin?: string; cookie?: string; scope?: "visual" | "production" } = {}) {
@@ -1545,6 +1668,9 @@ async function dispatchReadyDramaVisualSteps(userId: string, project: DramaProje
                     return createDramaVisualImageReference(`continuity-${index}`, url, origin, step.referenceImageRemoteUrls?.[index], label, "作为当前帧的连续性起点，锁定人物姿态、服装、道具状态、场景空间、构图、光向和轴线；不得重绘成无关画面");
                 })
                 .filter((reference): reference is NonNullable<typeof reference> => Boolean(reference)),
+            ...(step.manualReferenceImages || [])
+                .map((reference) => createDramaVisualImageReference(`manual-${reference.id}`, reference.url, origin, reference.remoteUrl, reference.label, reference.binding))
+                .filter((reference): reference is NonNullable<typeof reference> => Boolean(reference)),
             ...(step.referenceAssetIds || [])
                 .map((id) => ({ id, reference: assetUrls.get(id) }))
                 .map(({ id, reference }) => {
@@ -1553,6 +1679,16 @@ async function dispatchReadyDramaVisualSteps(userId: string, project: DramaProje
                 })
                 .filter((reference): reference is NonNullable<typeof reference> => Boolean(reference)),
         ];
+        const missingAssetIds = Array.from(new Set(step.referenceAssetIds || [])).filter((assetId) => !references.some((reference) => reference.id === `asset-${assetId}`));
+        if (missingAssetIds.length) {
+            const error = `参考素材不可用：${missingAssetIds.join("、")} 没有已审核且可读的图片，已停止提交当前帧。`;
+            const nextStep = { ...step, status: "failed" as const, error };
+            current = { ...current, steps: current.steps.map((item) => (item.id === step.id ? nextStep : item)), status: "running", updatedAt: new Date().toISOString() };
+            const failedProject = applyDramaVisualStepFailure(project, run.episodeId, step, error);
+            if (failedProject !== project) await updateDramaProject(userId, failedProject, project.updatedAt);
+            await updateDramaProductionRun(userId, current);
+            continue;
+        }
         if ((step.referenceImageUrls || []).length && !references.some((reference) => reference.id.startsWith("continuity-"))) {
             const nextStep = {
                 ...step,
@@ -2131,14 +2267,15 @@ export function normalizeProject(value: unknown, current: DramaProject): DramaPr
     const activeEpisodeId = cleanText(input.activeEpisodeId);
     const ratio = input.ratio === undefined ? normalizeDramaImageSize(current.ratio) : normalizeDramaImageSize(input.ratio);
     if (!ratio) throw new DramaProjectServiceError("短剧尺寸无效", 400);
+    const style = normalizeDramaStyleName(cleanText(input.style) || current.style || cleanText(object(input.productionBible).visualStyle));
     return {
         id: current.id,
         sourceHandoffId: current.sourceHandoffId,
         title: cleanText(input.title) || current.title,
         summary: cleanText(input.summary),
-        style: normalizeDramaStyleName(cleanText(input.style) || current.style),
+        style,
         ratio,
-        productionBible: normalizeProductionBible(input.productionBible, ratio, normalizeDramaStyleName(cleanText(input.style) || current.style)),
+        productionBible: normalizeProductionBible(input.productionBible === undefined ? current.productionBible : input.productionBible, ratio, style),
         seriesBible: normalizeSeriesBible(input.seriesBible, current.seriesBible),
         productionArchive: input.productionArchive === undefined ? current.productionArchive : normalizeProductionArchive(input.productionArchive),
         fieldOrigins: normalizeFieldOrigins(input.fieldOrigins),
@@ -2442,6 +2579,16 @@ function normalizeShotFramePlan(value: unknown, duration: number, actionPrompt: 
             { alias, role: role as DramaReferenceManifestItem["role"], purpose: cleanText(itemInput.purpose), assetId: optionalText(itemInput.assetId), shotId: optionalText(itemInput.shotId), frameEvidenceId: optionalText(itemInput.frameEvidenceId) },
         ];
     });
+    const hasManualReferenceImages = Object.prototype.hasOwnProperty.call(input, "manualReferenceImages");
+    const manualReferenceImages = array(input.manualReferenceImages).flatMap((item) => {
+        const reference = object(item);
+        const id = cleanText(reference.id);
+        const url = stableUrl(reference.url);
+        const label = cleanText(reference.label);
+        const binding = cleanText(reference.binding);
+        if (!id || !url || !label || !binding) return [];
+        return [{ id, url, label, binding, remoteUrl: optionalText(reference.remoteUrl), width: optionalPositiveInteger(reference.width), height: optionalPositiveInteger(reference.height) }];
+    });
     return {
         start: { source: start.source === "previous_accepted_actual_tail" ? "previous_accepted_actual_tail" : "independent" },
         end: { required: Boolean(end.required) },
@@ -2476,6 +2623,7 @@ function normalizeShotFramePlan(value: unknown, duration: number, actionPrompt: 
             }),
         })),
         ...(manifest.length ? { referenceManifest: manifest } : {}),
+        ...(hasManualReferenceImages ? { manualReferenceImages } : {}),
         ...(Object.keys(object(input.referenceCount)).length ? { referenceCount: { min: Math.max(1, Math.floor(Number(object(input.referenceCount).min) || 1)), max: Math.max(1, Math.floor(Number(object(input.referenceCount).max) || 1)) } } : {}),
     };
 }
@@ -2913,13 +3061,15 @@ function normalizeSourceAssets(value: unknown) {
 function normalizeProductionBible(value: unknown, ratio: string, style: unknown): DramaProductionBible | undefined {
     const input = object(value);
     if (!Object.keys(input).length) return undefined;
+    const visualStyle = normalizeDramaStyleName(cleanText(style) || cleanText(input.visualStyle));
+    const resolved = resolveDramaStyleContract({ style: visualStyle, productionBible: { visualStyle, colorScript: optionalText(input.colorScript) } });
     return {
         targetPlatform: optionalText(input.targetPlatform),
         language: cleanText(input.language) || "中文",
         ratio: normalizeDramaImageSize(input.ratio) || ratio,
         targetDuration: optionalPositiveInteger(input.targetDuration),
-        visualStyle: normalizeDramaStyleName(cleanText(input.visualStyle) || cleanText(style)),
-        colorScript: optionalText(input.colorScript) || DRAMA_STYLE_COLOR_SCRIPT,
+        visualStyle: resolved.name,
+        ...(resolved.colorScript ? { colorScript: resolved.colorScript } : {}),
         soundBible: optionalText(input.soundBible),
         globalNegativePrompt: optionalText(input.globalNegativePrompt),
         subtitleSafeArea: optionalText(input.subtitleSafeArea),

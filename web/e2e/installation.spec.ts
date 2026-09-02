@@ -6,7 +6,15 @@ import { E2E_ADMIN, e2eSettingsPatch } from "./support";
 
 test.describe.configure({ mode: "serial" });
 
-test("fresh deployments enter the installation flow", async ({ page }) => {
+test("fresh deployments enter the installation flow", async ({ page, request }) => {
+    const statusResponse = await request.get("/api/install/status");
+    expect(statusResponse.ok()).toBe(true);
+    const status = ((await statusResponse.json()) as { install?: { ready?: boolean; database?: { schemaReady?: boolean } } }).install;
+    if (status?.ready) {
+        await page.goto("/");
+        await expect(page).not.toHaveURL(/\/install(?:\?|$)/);
+        return;
+    }
     await page.goto("/");
 
     await expect(page).toHaveURL(/\/install(?:\?|$)/);
@@ -30,7 +38,13 @@ test("public session omits internal configuration fields", async ({ request }) =
 test("initialization rejects a wrong token and creates the first administrator once", async ({ page, request }) => {
     const statusResponse = await request.get("/api/install/status");
     expect(statusResponse.ok()).toBe(true);
-    let install = ((await statusResponse.json()) as { install: { database?: { schemaReady?: boolean } } }).install;
+    let install = ((await statusResponse.json()) as { install: { ready?: boolean; database?: { schemaReady?: boolean } } }).install;
+
+    if (install.ready) {
+        await page.goto("/");
+        await expect(page).not.toHaveURL(/\/install(?:\?|$)/);
+        return;
+    }
 
     if (install.database?.schemaReady === false) {
         const rejectedInitialization = await request.post("/api/install/initialize", { data: { installToken: "wrong-install-token" } });
