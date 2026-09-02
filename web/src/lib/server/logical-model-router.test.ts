@@ -2,7 +2,16 @@ import { describe, expect, it } from "vitest";
 
 import type { SystemModelChannel } from "@/lib/auth/store";
 import { applyChannelProtocol, emptyAdvancedConfig } from "@/lib/channel-protocol-registry";
-import { resolveAudioLogicalModelCandidates, resolveLogicalBillingModel, resolveLogicalModel, resolveLogicalModelCandidates, resolveTextPlanningModelCandidates, resolveVideoKeyframeModelCandidates, supportsVideoKeyframeReferences } from "./logical-model-router";
+import {
+    resolveAudioLogicalModelCandidates,
+    resolveLogicalBillingModel,
+    resolveLogicalModel,
+    resolveLogicalModelCandidates,
+    resolveTextPlanningModelCandidates,
+    resolveVideoKeyframeModelCandidates,
+    resolveVideoLogicalModelCandidates,
+    supportsVideoKeyframeReferences,
+} from "./logical-model-router";
 
 const channel = (id: string, models: string[], enabled = true): SystemModelChannel => ({ id, name: id, baseUrl: `https://${id}.example.com`, apiKey: "secret", apiFormat: "openai", models, enabled });
 
@@ -122,6 +131,98 @@ describe("resolveLogicalModel", () => {
         expect(candidates[0].capabilityProfile).toMatchObject({ supportsReferenceImage: true, maxReferenceImages: 2, maxDurationSeconds: 10, timeoutMs: 12 * 60_000 });
     });
 
+    it("expands configured video fallback logical models in configured order", () => {
+        const settings = {
+            systemChannels: [channel("wan", ["alibaba/wan-3.0"]), channel("seedance", ["seedance-2.0"])],
+            logicalModels: [
+                {
+                    id: "wan-route",
+                    name: "视频主路由",
+                    capability: "video" as const,
+                    enabled: true,
+                    fallbackModelIds: ["seedance-route"],
+                    bindings: [{ id: "wan", channelId: "wan", upstreamModel: "alibaba/wan-3.0", enabled: true, priority: 1 }],
+                },
+                {
+                    id: "seedance-route",
+                    name: "Seedance 后备",
+                    capability: "video" as const,
+                    enabled: true,
+                    bindings: [{ id: "seedance", channelId: "seedance", upstreamModel: "seedance-2.0", enabled: true, priority: 1 }],
+                },
+            ],
+        };
+
+        expect(resolveVideoLogicalModelCandidates(settings, "wan-route").map((item) => item.upstreamModel)).toEqual(["alibaba/wan-3.0", "seedance-2.0"]);
+    });
+
+    it("orders comparable video candidates by configured estimated cost", () => {
+        const settings = {
+            systemChannels: [channel("wan", ["alibaba/wan-3.0"]), channel("seedance", ["seedance-2.0"])],
+            logicalModels: [
+                {
+                    id: "wan-route",
+                    name: "视频主路由",
+                    capability: "video" as const,
+                    enabled: true,
+                    fallbackModelIds: ["seedance-route"],
+                    fallbackStrategy: "cheapest" as const,
+                    bindings: [{ id: "wan", channelId: "wan", upstreamModel: "alibaba/wan-3.0", enabled: true, priority: 1, capabilityProfile: { unitCost: 1, unitCostCurrency: "CNY", unitCostBasis: "second" as const } }],
+                },
+                {
+                    id: "seedance-route",
+                    name: "Seedance 后备",
+                    capability: "video" as const,
+                    enabled: true,
+                    bindings: [{ id: "seedance", channelId: "seedance", upstreamModel: "seedance-2.0", enabled: true, priority: 1, capabilityProfile: { unitCost: 0, unitCostCurrency: "CNY", unitCostBasis: "second" as const } }],
+                },
+            ],
+        };
+
+        const candidates = resolveVideoLogicalModelCandidates(settings, "wan-route", "", 5);
+        expect(candidates.map((item) => ({ model: item.upstreamModel, profile: item.capabilityProfile }))).toEqual(expect.any(Array));
+        expect(candidates.map((item) => item.upstreamModel)).toEqual(["seedance-2.0", "alibaba/wan-3.0"]);
+    });
+
+    it("keeps priority order when video candidate costs are not comparable", () => {
+        const settings = {
+            systemChannels: [channel("wan", ["alibaba/wan-3.0"]), channel("seedance", ["seedance-2.0"])],
+            logicalModels: [
+                {
+                    id: "wan-route",
+                    name: "视频主路由",
+                    capability: "video" as const,
+                    enabled: true,
+                    fallbackModelIds: ["seedance-route"],
+                    fallbackStrategy: "cheapest" as const,
+                    bindings: [{ id: "wan", channelId: "wan", upstreamModel: "alibaba/wan-3.0", enabled: true, priority: 1, capabilityProfile: { unitCost: 4, unitCostCurrency: "CNY", unitCostBasis: "call" as const } }],
+                },
+                {
+                    id: "seedance-route",
+                    name: "Seedance 后备",
+                    capability: "video" as const,
+                    enabled: true,
+                    bindings: [{ id: "seedance", channelId: "seedance", upstreamModel: "seedance-2.0", enabled: true, priority: 1, capabilityProfile: { unitCost: 0.5, unitCostCurrency: "USD", unitCostBasis: "second" as const } }],
+                },
+            ],
+        };
+
+        expect(resolveVideoLogicalModelCandidates(settings, "wan-route", "", 5).map((item) => item.upstreamModel)).toEqual(["alibaba/wan-3.0", "seedance-2.0"]);
+    });
+
+    it("does not follow a nested fallback route at runtime", () => {
+        const settings = {
+            systemChannels: [channel("primary", ["video-primary"]), channel("nested", ["video-nested"]), channel("leaf", ["video-leaf"])],
+            logicalModels: [
+                { id: "primary", name: "主路由", capability: "video" as const, enabled: true, fallbackModelIds: ["nested"], bindings: [{ id: "primary", channelId: "primary", upstreamModel: "video-primary", enabled: true, priority: 1 }] },
+                { id: "nested", name: "嵌套后备", capability: "video" as const, enabled: true, fallbackModelIds: ["leaf"], bindings: [{ id: "nested", channelId: "nested", upstreamModel: "video-nested", enabled: true, priority: 1 }] },
+                { id: "leaf", name: "末级后备", capability: "video" as const, enabled: true, bindings: [{ id: "leaf", channelId: "leaf", upstreamModel: "video-leaf", enabled: true, priority: 1 }] },
+            ],
+        };
+
+        expect(resolveVideoLogicalModelCandidates(settings, "primary").map((item) => item.upstreamModel)).toEqual(["video-primary"]);
+    });
+
     it("selects only a video binding that explicitly supports the requested all-frame references", () => {
         const buming = applyChannelProtocol({ ...channel("seedance", ["seedance-2-0-official"]), advancedConfig: emptyAdvancedConfig() }, "buming-seedance");
         const settings = {
@@ -140,7 +241,11 @@ describe("resolveLogicalModel", () => {
             ],
         };
 
-        expect(resolveLogicalModelCandidates(settings, "video", "video").filter((candidate) => supportsVideoKeyframeReferences(candidate, 4)).map((candidate) => candidate.channelId)).toEqual(["seedance"]);
+        expect(
+            resolveLogicalModelCandidates(settings, "video", "video")
+                .filter((candidate) => supportsVideoKeyframeReferences(candidate, 4))
+                .map((candidate) => candidate.channelId),
+        ).toEqual(["seedance"]);
     });
 
     it("finds an enabled all-frame model when the preferred video model lacks that capability", () => {
@@ -153,9 +258,7 @@ describe("resolveLogicalModel", () => {
             ],
         };
 
-        expect(resolveVideoKeyframeModelCandidates(settings, ["missing-plan-model", "default-video"], 4)).toEqual([
-            expect.objectContaining({ logicalModelId: "storyboard-video", channelId: "seedance", upstreamModel: "seedance-2-0-official" }),
-        ]);
+        expect(resolveVideoKeyframeModelCandidates(settings, ["missing-plan-model", "default-video"], 4)).toEqual([expect.objectContaining({ logicalModelId: "storyboard-video", channelId: "seedance", upstreamModel: "seedance-2-0-official" })]);
     });
 
     it("does not route a logical model through a binding missing from the channel model list", () => {

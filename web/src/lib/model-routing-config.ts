@@ -1,4 +1,4 @@
-import type { LogicalModel, LogicalModelBinding, LogicalModelCapability, LogicalModelCapabilityProfile, SystemChannelProtocol, SystemDefaultModels, SystemModelChannel } from "@/lib/auth/store";
+import type { LogicalModel, LogicalModelBinding, LogicalModelCapability, LogicalModelCapabilityProfile, LogicalModelCostBasis, SystemChannelProtocol, SystemDefaultModels, SystemModelChannel } from "@/lib/auth/store";
 import { resolveGlobalAiOpcPreset } from "@/lib/globalaiopc-catalog";
 import { inferModelCapability, isCreativeGenerationModel, normalizeModelId } from "@/lib/model-capability";
 import { channelConnectionReady, channelProtocolDefinition, protocolCatalogCapability, resolveChannelCapabilityConfig, resolveChannelModelConfig } from "@/lib/channel-protocol-registry";
@@ -71,12 +71,15 @@ export function synchronizeLogicalModelsWithChannels(existingModels: LogicalMode
                 };
             })
             .sort((left, right) => left.priority - right.priority || left.id.localeCompare(right.id));
+        const fallbackModelIds = catalogModel.capability === "video" ? normalizeFallbackModelIds(existing?.fallbackModelIds, id) : [];
         return {
             id,
             name: text(existing?.name, 120) || catalogModel.upstreamModel,
             capability: catalogModel.capability,
             enabled: existing?.enabled !== false,
             bindings,
+            ...(fallbackModelIds.length ? { fallbackModelIds } : {}),
+            ...(catalogModel.capability === "video" && existing?.fallbackStrategy === "cheapest" ? { fallbackStrategy: "cheapest" as const } : {}),
         };
     });
 }
@@ -110,12 +113,50 @@ export function isLogicalModelResolvable(logicalModels: LogicalModel[], channels
 export function resolveLogicalModelConfig(logicalModels: LogicalModel[], channels: SystemModelChannel[], capability: LogicalModelCapability, modelId: string) {
     const logical = logicalModels.find((model) => model.enabled && model.capability === capability && model.id.toLowerCase() === rawModelName(modelId).toLowerCase());
     if (!logical) return null;
-    const bindings = [...logical.bindings].filter((binding) => binding.enabled).sort((left, right) => left.priority - right.priority || left.id.localeCompare(right.id));
-    for (const binding of bindings) {
-        const channel = channels.find((item) => item.id === binding.channelId && item.enabled && channelConnectionReady(item) && channelSupportsModel(item, binding.upstreamModel));
-        if (channel) return { logicalModel: logical, binding, channel };
+    for (const routeModel of [logical, ...fallbackLogicalModels(logicalModels, logical)]) {
+        const bindings = [...routeModel.bindings].filter((binding) => binding.enabled).sort((left, right) => left.priority - right.priority || left.id.localeCompare(right.id));
+        for (const binding of bindings) {
+            const channel = channels.find((item) => item.id === binding.channelId && item.enabled && channelConnectionReady(item) && channelSupportsModel(item, binding.upstreamModel));
+            if (channel) return { logicalModel: logical, binding, channel };
+        }
     }
     return null;
+}
+
+/** Validate only fields supplied in an admin routing payload before catalog synchronization. */
+export function logicalModelRoutingInputErrors(logicalModels: LogicalModel[]) {
+    const errors: string[] = [];
+    for (const model of logicalModels) {
+        const key = rawModelName(model.id).toLowerCase();
+        if (model.fallbackStrategy && model.capability !== "video") errors.push(`只有视频逻辑模型可以配置后备排序策略：${model.id}`);
+        if (model.fallbackStrategy && !["priority", "cheapest"].includes(model.fallbackStrategy)) errors.push(`视频逻辑模型 ${model.id} 的候选排序策略无效`);
+        if (model.fallbackModelIds?.length && model.capability !== "video") errors.push(`只有视频逻辑模型可以配置后备模型：${model.id}`);
+        const fallbackIds = new Set<string>();
+        for (const fallbackId of model.fallbackModelIds || []) {
+            const normalizedFallbackId = rawModelName(fallbackId).toLowerCase();
+            if (normalizedFallbackId === key) {
+                errors.push(`视频逻辑模型 ${model.id} 不能引用自身作为后备模型`);
+                continue;
+            }
+            if (fallbackIds.has(normalizedFallbackId)) {
+                errors.push(`视频逻辑模型 ${model.id} 存在重复后备模型：${fallbackId}`);
+                continue;
+            }
+            fallbackIds.add(normalizedFallbackId);
+            const fallback = logicalModels.find((candidate) => rawModelName(candidate.id).toLowerCase() === normalizedFallbackId);
+            if (!fallback) errors.push(`视频逻辑模型 ${model.id} 引用了不存在的后备模型：${fallbackId}`);
+            else if (fallback.capability !== "video") errors.push(`视频逻辑模型 ${model.id} 只能引用视频逻辑模型：${fallback.id}`);
+            else if (fallback.fallbackModelIds?.length) errors.push(`视频逻辑模型 ${model.id} 不能继续引用后备模型：${fallback.id}`);
+        }
+        for (const binding of model.bindings || []) {
+            const profile = binding.capabilityProfile;
+            if (profile && "unitCost" in profile && profile.unitCost !== undefined && (!Number.isFinite(profile.unitCost) || profile.unitCost < 0)) errors.push(`逻辑模型 ${model.id} 的估算单价必须是大于等于 0 的有限数字`);
+            if (profile && "unitCostCurrency" in profile && profile.unitCostCurrency !== undefined && (typeof profile.unitCostCurrency !== "string" || !profile.unitCostCurrency.trim() || profile.unitCostCurrency.trim().length > 12))
+                errors.push(`逻辑模型 ${model.id} 的成本货币无效`);
+            if (profile && "unitCostBasis" in profile && profile.unitCostBasis !== undefined && profile.unitCostBasis !== "call" && profile.unitCostBasis !== "second") errors.push(`逻辑模型 ${model.id} 的计费单位无效`);
+        }
+    }
+    return Array.from(new Set(errors));
 }
 
 export function modelRoutingValidationErrors(logicalModels: LogicalModel[], channels: SystemModelChannel[], defaults: SystemDefaultModels) {
@@ -127,6 +168,26 @@ export function modelRoutingValidationErrors(logicalModels: LogicalModel[], chan
         else if (modelIds.has(key)) errors.push(`逻辑模型 ID 重复：${model.id}`);
         modelIds.add(key);
         if (!model.bindings.length) errors.push(`逻辑模型 ${model.name || model.id} 至少需要一个渠道绑定`);
+        if (model.fallbackStrategy && model.capability !== "video") errors.push(`只有视频逻辑模型可以配置后备排序策略：${model.id}`);
+        if (model.fallbackStrategy && !["priority", "cheapest"].includes(model.fallbackStrategy)) errors.push(`视频逻辑模型 ${model.id} 的候选排序策略无效`);
+        if (model.fallbackModelIds?.length && model.capability !== "video") errors.push(`只有视频逻辑模型可以配置后备模型：${model.id}`);
+        const fallbackIds = new Set<string>();
+        for (const fallbackId of model.fallbackModelIds || []) {
+            const normalizedFallbackId = rawModelName(fallbackId).toLowerCase();
+            if (normalizedFallbackId === key) {
+                errors.push(`视频逻辑模型 ${model.id} 不能引用自身作为后备模型`);
+                continue;
+            }
+            if (fallbackIds.has(normalizedFallbackId)) {
+                errors.push(`视频逻辑模型 ${model.id} 存在重复后备模型：${fallbackId}`);
+                continue;
+            }
+            fallbackIds.add(normalizedFallbackId);
+            const fallback = logicalModels.find((candidate) => rawModelName(candidate.id).toLowerCase() === normalizedFallbackId);
+            if (!fallback) errors.push(`视频逻辑模型 ${model.id} 引用了不存在的后备模型：${fallbackId}`);
+            else if (fallback.capability !== "video") errors.push(`视频逻辑模型 ${model.id} 只能引用视频逻辑模型：${fallback.id}`);
+            else if (fallback.fallbackModelIds?.length) errors.push(`视频逻辑模型 ${model.id} 不能继续引用后备模型：${fallback.id}`);
+        }
         const bindingKeys = new Set<string>();
         for (const binding of model.bindings) {
             const channel = channels.find((item) => item.id === binding.channelId);
@@ -139,6 +200,11 @@ export function modelRoutingValidationErrors(logicalModels: LogicalModel[], chan
             }
             if (bindingKeys.has(bindingKey)) errors.push(`逻辑模型 ${model.id} 存在重复绑定`);
             bindingKeys.add(bindingKey);
+            const profile = binding.capabilityProfile;
+            if (profile && "unitCost" in profile && profile.unitCost !== undefined && (!Number.isFinite(profile.unitCost) || profile.unitCost < 0)) errors.push(`逻辑模型 ${model.id} 的估算单价必须是大于等于 0 的有限数字`);
+            if (profile && "unitCostCurrency" in profile && profile.unitCostCurrency !== undefined && (typeof profile.unitCostCurrency !== "string" || !profile.unitCostCurrency.trim() || profile.unitCostCurrency.trim().length > 12))
+                errors.push(`逻辑模型 ${model.id} 的成本货币无效`);
+            if (profile && "unitCostBasis" in profile && profile.unitCostBasis !== undefined && profile.unitCostBasis !== "call" && profile.unitCostBasis !== "second") errors.push(`逻辑模型 ${model.id} 的计费单位无效`);
         }
     }
     for (const [capability, key] of Object.entries(CAPABILITY_DEFAULT_KEYS) as Array<[LogicalModelCapability, keyof SystemDefaultModels]>) {
@@ -193,8 +259,9 @@ export function resolveLogicalModelCapabilityProfile(binding: Pick<LogicalModelB
         supportsWebhook: booleanValue(stored.supportsWebhook),
         timeoutMs: timeoutMilliseconds(stored.timeoutMs),
         concurrencyLimit: positiveInteger(stored.concurrencyLimit),
-        unitCost: positiveNumber(stored.unitCost),
+        unitCost: nonNegativeNumber(stored.unitCost),
         unitCostCurrency: text(stored.unitCostCurrency, 12) || undefined,
+        unitCostBasis: normalizeCostBasis(stored.unitCostBasis),
     };
 }
 
@@ -299,10 +366,36 @@ function normalizeStoredCapabilityProfile(value: unknown): LogicalModelCapabilit
         supportsWebhook: optionalBoolean(input.supportsWebhook),
         timeoutMs: timeoutMilliseconds(input.timeoutMs),
         concurrencyLimit: positiveInteger(input.concurrencyLimit),
-        unitCost: positiveNumber(input.unitCost),
+        unitCost: nonNegativeNumber(input.unitCost),
         unitCostCurrency: text(input.unitCostCurrency, 12) || undefined,
+        unitCostBasis: normalizeCostBasis(input.unitCostBasis),
     };
     return Object.values(profile).some((item) => item !== undefined && (!Array.isArray(item) || item.length > 0)) ? profile : undefined;
+}
+
+function normalizeFallbackModelIds(value: unknown, currentId: string) {
+    if (!Array.isArray(value)) return [];
+    const current = rawModelName(currentId).toLowerCase();
+    const seen = new Set<string>();
+    return value.flatMap((item) => {
+        if (typeof item !== "string") return [];
+        const id = rawModelName(item).trim();
+        const normalized = id.toLowerCase();
+        if (!id || normalized === current || seen.has(normalized)) return [];
+        seen.add(normalized);
+        return [id];
+    });
+}
+
+function fallbackLogicalModels(models: LogicalModel[], logical: LogicalModel) {
+    return (logical.fallbackModelIds || []).flatMap((id) => {
+        const target = models.find((model) => model.enabled && model.capability === "video" && model.id.toLowerCase() === rawModelName(id).toLowerCase());
+        return target && !target.fallbackModelIds?.length ? [target] : [];
+    });
+}
+
+function normalizeCostBasis(value: unknown): LogicalModelCostBasis | undefined {
+    return value === "call" || value === "second" ? value : undefined;
 }
 
 function optionalBoolean(value: unknown) {
@@ -326,6 +419,12 @@ function timeoutMilliseconds(value: unknown) {
 function positiveNumber(value: unknown) {
     const number = Number(value);
     return Number.isFinite(number) && number > 0 ? Math.min(number, 100000000) : undefined;
+}
+
+function nonNegativeNumber(value: unknown) {
+    if (value === undefined || value === null || value === "") return undefined;
+    const number = Number(value);
+    return Number.isFinite(number) && number >= 0 ? Math.min(number, 100000000) : undefined;
 }
 
 function normalizeAspectRatios(value: unknown) {

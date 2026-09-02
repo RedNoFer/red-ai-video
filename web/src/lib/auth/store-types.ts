@@ -8,7 +8,24 @@ import { VOZEB_QQ_GROUP_URL } from "@/constant/community";
 
 export type ApiCallFormat = "openai" | "gemini";
 export type SystemChannelProtocol =
-    "auto" | "openai" | "openai-audio-dialogue" | "yumeng" | "gemini" | "sub2api" | "newapi" | "newapi-video" | "vozeb-recommended" | "globalaiopc" | "seedance" | "stable-diffusion" | "volcengine-video" | "seedance-special" | "buming-seedance" | "buming-image" | "custom" | "compatible";
+    | "auto"
+    | "openai"
+    | "openai-audio-dialogue"
+    | "yumeng"
+    | "gemini"
+    | "sub2api"
+    | "newapi"
+    | "newapi-video"
+    | "vozeb-recommended"
+    | "globalaiopc"
+    | "seedance"
+    | "stable-diffusion"
+    | "volcengine-video"
+    | "seedance-special"
+    | "buming-seedance"
+    | "buming-image"
+    | "custom"
+    | "compatible";
 export type SystemChannelAuthMode = "none" | "bearer" | "x-api-key" | "custom-header";
 
 export type SystemChannelModelConfig = {
@@ -108,6 +125,8 @@ export type SystemModelChannel = {
 };
 
 export type LogicalModelCapability = "text" | "image" | "video" | "audio";
+export type LogicalModelFallbackStrategy = "priority" | "cheapest";
+export type LogicalModelCostBasis = "call" | "second";
 
 export type LogicalModelCapabilityProfile = {
     supportsReferenceImage?: boolean;
@@ -126,6 +145,7 @@ export type LogicalModelCapabilityProfile = {
     concurrencyLimit?: number;
     unitCost?: number;
     unitCostCurrency?: string;
+    unitCostBasis?: LogicalModelCostBasis;
 };
 
 export type LogicalModelBinding = {
@@ -144,6 +164,8 @@ export type LogicalModel = {
     capability: LogicalModelCapability;
     enabled: boolean;
     bindings: LogicalModelBinding[];
+    fallbackModelIds?: string[];
+    fallbackStrategy?: LogicalModelFallbackStrategy;
 };
 
 export type SystemDefaultModels = {

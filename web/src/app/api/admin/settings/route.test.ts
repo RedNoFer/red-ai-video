@@ -51,11 +51,96 @@ describe("admin settings model routing", () => {
         expect(mocks.safeRecordAuditLog).toHaveBeenCalledWith(expect.objectContaining({ action: "admin.settings.update", metadata: { fields: expect.arrayContaining(["systemChannels", "logicalModels", "defaultModels"]) } }));
     });
 
-    it("repairs a stale Buming Seedance request template before validating and saving", async () => {
-        const channel = applyChannelProtocol(
-            { id: "buming", name: "不鸣 TokenGo Seedance 渠道", baseUrl: "https://api.tokengo.love", apiKey: "saved-secret", apiFormat: "openai", models: ["seedance-2-0-official"], enabled: true },
-            "buming-seedance",
+    it("persists video fallback models, sorting strategy, and cost basis", async () => {
+        const channels = [
+            { id: "wan", name: "Wan", baseUrl: "https://wan.example.com/v1", apiKey: "wan-secret", apiFormat: "openai" as const, models: ["alibaba/wan-3.0"], enabled: true },
+            { id: "seedance", name: "Seedance", baseUrl: "https://seedance.example.com/v1", apiKey: "seedance-secret", apiFormat: "openai" as const, models: ["seedance-2.0"], enabled: true },
+        ];
+        const logicalModels = [
+            {
+                id: "wan-route",
+                name: "Wan 主路由",
+                capability: "video" as const,
+                enabled: true,
+                fallbackModelIds: ["seedance-route"],
+                fallbackStrategy: "cheapest" as const,
+                bindings: [{ id: "wan-binding", channelId: "wan", upstreamModel: "alibaba/wan-3.0", enabled: true, priority: 1, capabilityProfile: { unitCost: 4, unitCostCurrency: "CNY", unitCostBasis: "call" as const } }],
+            },
+            {
+                id: "seedance-route",
+                name: "Seedance 后备",
+                capability: "video" as const,
+                enabled: true,
+                bindings: [{ id: "seedance-binding", channelId: "seedance", upstreamModel: "seedance-2.0", enabled: true, priority: 1, capabilityProfile: { unitCost: 0.5, unitCostCurrency: "CNY", unitCostBasis: "second" as const } }],
+            },
+        ];
+
+        const response = await PATCH(
+            request({
+                systemChannels: channels,
+                logicalModels,
+                defaultModels: { textModel: "", imageModel: "", videoModel: "wan-route", audioModel: "" },
+            }),
         );
+
+        expect(response.status).toBe(200);
+        expect(mocks.setAuthSettings).toHaveBeenCalledWith(
+            expect.objectContaining({
+                logicalModels: expect.arrayContaining([
+                    expect.objectContaining({ id: "wan-route", fallbackModelIds: ["seedance-route"], fallbackStrategy: "cheapest", bindings: [expect.objectContaining({ capabilityProfile: expect.objectContaining({ unitCostBasis: "call" }) })] }),
+                ]),
+            }),
+        );
+    });
+
+    it("rejects invalid fallback references and estimated prices before normalization", async () => {
+        const response = await PATCH(
+            request({
+                systemChannels: [{ id: "video", name: "视频", baseUrl: "https://video.example.com/v1", apiKey: "video-secret", apiFormat: "openai" as const, models: ["video-model"], enabled: true }],
+                logicalModels: [
+                    {
+                        id: "video-route",
+                        name: "视频",
+                        capability: "video" as const,
+                        enabled: true,
+                        fallbackModelIds: ["video-route"],
+                        fallbackStrategy: "priority",
+                        bindings: [{ id: "video-binding", channelId: "video", upstreamModel: "video-model", enabled: true, priority: 1, capabilityProfile: { unitCost: -1, unitCostCurrency: "", unitCostBasis: "minute" as never } }],
+                    },
+                ],
+                defaultModels: { textModel: "", imageModel: "", videoModel: "video-route", audioModel: "" },
+            }),
+        );
+
+        expect(response.status).toBe(400);
+        expect(mocks.setAuthSettings).not.toHaveBeenCalled();
+        expect((await response.json()).error).toContain("不能引用自身");
+    });
+
+    it("rejects invalid estimated price fields before normalization", async () => {
+        const response = await PATCH(
+            request({
+                systemChannels: [{ id: "video", name: "视频", baseUrl: "https://video.example.com/v1", apiKey: "video-secret", apiFormat: "openai" as const, models: ["video-model"], enabled: true }],
+                logicalModels: [
+                    {
+                        id: "video-route",
+                        name: "视频",
+                        capability: "video" as const,
+                        enabled: true,
+                        bindings: [{ id: "video-binding", channelId: "video", upstreamModel: "video-model", enabled: true, priority: 1, capabilityProfile: { unitCost: -1, unitCostCurrency: "", unitCostBasis: "minute" as never } }],
+                    },
+                ],
+                defaultModels: { textModel: "", imageModel: "", videoModel: "video-route", audioModel: "" },
+            }),
+        );
+
+        expect(response.status).toBe(400);
+        expect(mocks.setAuthSettings).not.toHaveBeenCalled();
+        expect((await response.json()).error).toContain("估算单价");
+    });
+
+    it("repairs a stale Buming Seedance request template before validating and saving", async () => {
+        const channel = applyChannelProtocol({ id: "buming", name: "不鸣 TokenGo Seedance 渠道", baseUrl: "https://api.tokengo.love", apiKey: "saved-secret", apiFormat: "openai", models: ["seedance-2-0-official"], enabled: true }, "buming-seedance");
         channel.advancedConfig = {
             ...channel.advancedConfig!,
             modelConfigs: {
@@ -78,7 +163,9 @@ describe("admin settings model routing", () => {
         expect(response.status).toBe(200);
         expect(mocks.setAuthSettings).toHaveBeenCalledWith(
             expect.objectContaining({
-                systemChannels: [expect.objectContaining({ advancedConfig: expect.objectContaining({ modelConfigs: expect.objectContaining({ "seedance-2-0-official": expect.objectContaining({ requestTemplate: expect.stringContaining('"mode":"{{mode}}"') }) }) }) })],
+                systemChannels: [
+                    expect.objectContaining({ advancedConfig: expect.objectContaining({ modelConfigs: expect.objectContaining({ "seedance-2-0-official": expect.objectContaining({ requestTemplate: expect.stringContaining('"mode":"{{mode}}"') }) }) }) }),
+                ],
             }),
         );
     });

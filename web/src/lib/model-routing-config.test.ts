@@ -379,7 +379,7 @@ describe("model routing config", () => {
                                 maxBatchSize: 2,
                                 timeoutMs: 600000,
                                 concurrencyLimit: 3,
-                                unitCost: 0.25,
+                                unitCost: 0,
                                 unitCostCurrency: "USD",
                             },
                         },
@@ -391,8 +391,84 @@ describe("model routing config", () => {
 
         expect(models[0].bindings[0]).toMatchObject({
             weight: 250,
-            capabilityProfile: { supportsReferenceImage: true, maxReferenceImages: 4, aspectRatios: ["16:9", "9:16"], maxDurationSeconds: 10, maxBatchSize: 2, timeoutMs: 600000, concurrencyLimit: 3, unitCost: 0.25, unitCostCurrency: "USD" },
+            capabilityProfile: { supportsReferenceImage: true, maxReferenceImages: 4, aspectRatios: ["16:9", "9:16"], maxDurationSeconds: 10, maxBatchSize: 2, timeoutMs: 600000, concurrencyLimit: 3, unitCost: 0, unitCostCurrency: "USD" },
         });
+    });
+
+    it("preserves video fallback routing and cost strategy during channel synchronization", () => {
+        const channels = [channel("one", ["wan-video"]), channel("two", ["seedance-video"])];
+        const models: LogicalModel[] = [
+            {
+                id: "video-primary",
+                name: "视频主路由",
+                capability: "video",
+                enabled: true,
+                fallbackModelIds: ["video-backup"],
+                fallbackStrategy: "cheapest",
+                bindings: [{ id: "one", channelId: "one", upstreamModel: "wan-video", enabled: true, priority: 1, capabilityProfile: { unitCost: 4, unitCostCurrency: "CNY", unitCostBasis: "call" } }],
+            },
+            {
+                id: "video-backup",
+                name: "视频后备",
+                capability: "video",
+                enabled: true,
+                bindings: [{ id: "two", channelId: "two", upstreamModel: "seedance-video", enabled: true, priority: 1, capabilityProfile: { unitCost: 2, unitCostCurrency: "CNY", unitCostBasis: "call" } }],
+            },
+        ];
+
+        const normalized = normalizeLogicalModelsConfig(models, channels);
+
+        expect(normalized.find((model) => model.id === "video-primary")).toMatchObject({ fallbackModelIds: ["video-backup"], fallbackStrategy: "cheapest" });
+        expect(normalized.find((model) => model.id === "video-primary")?.bindings[0].capabilityProfile).toMatchObject({ unitCostBasis: "call" });
+    });
+
+    it("rejects invalid video fallback references and nested fallback routes", () => {
+        const channels = [channel("one", ["wan-video"]), channel("two", ["seedance-video"]), channel("three", ["text-model"])];
+        const models: LogicalModel[] = [
+            {
+                id: "video-primary",
+                name: "视频主路由",
+                capability: "video",
+                enabled: true,
+                fallbackModelIds: ["video-primary", "video-backup", "missing", "text-route"],
+                bindings: [{ id: "one", channelId: "one", upstreamModel: "wan-video", enabled: true, priority: 1 }],
+            },
+            { id: "video-backup", name: "视频后备", capability: "video", enabled: true, fallbackModelIds: ["video-third"], bindings: [{ id: "two", channelId: "two", upstreamModel: "seedance-video", enabled: true, priority: 1 }] },
+            { id: "video-third", name: "视频第三候选", capability: "video", enabled: true, bindings: [{ id: "two-third", channelId: "two", upstreamModel: "seedance-video", enabled: true, priority: 2 }] },
+            { id: "text-route", name: "文本", capability: "text", enabled: true, bindings: [{ id: "three", channelId: "three", upstreamModel: "text-model", enabled: true, priority: 1 }] },
+        ];
+
+        expect(modelRoutingValidationErrors(models, channels, { textModel: "", imageModel: "", videoModel: "video-primary", audioModel: "" })).toEqual(
+            expect.arrayContaining([
+                "视频逻辑模型 video-primary 不能引用自身作为后备模型",
+                "视频逻辑模型 video-primary 不能继续引用后备模型：video-backup",
+                "视频逻辑模型 video-primary 引用了不存在的后备模型：missing",
+                "视频逻辑模型 video-primary 只能引用视频逻辑模型：text-route",
+            ]),
+        );
+    });
+
+    it("keeps invalid fallback IDs visible for API validation instead of dropping them during synchronization", () => {
+        const models: LogicalModel[] = [
+            { id: "video-primary", name: "视频主路由", capability: "video", enabled: true, fallbackModelIds: ["missing-video"], bindings: [{ id: "one", channelId: "one", upstreamModel: "wan-video", enabled: true, priority: 1 }] },
+        ];
+        const normalized = normalizeLogicalModelsConfig(models, [channel("one", ["wan-video"])]);
+
+        expect(normalized[0]?.fallbackModelIds).toEqual(["missing-video"]);
+        expect(modelRoutingValidationErrors(normalized, [channel("one", ["wan-video"])], { textModel: "", imageModel: "", videoModel: "video-primary", audioModel: "" })).toContain("视频逻辑模型 video-primary 引用了不存在的后备模型：missing-video");
+    });
+
+    it("rejects fallback strategies on non-video models and duplicate fallback IDs", () => {
+        const channels = [channel("one", ["writer"]), channel("two", ["video-model"])];
+        const models: LogicalModel[] = [
+            { id: "writer", name: "文本", capability: "text", enabled: true, fallbackStrategy: "cheapest", fallbackModelIds: ["video-model"], bindings: [{ id: "one", channelId: "one", upstreamModel: "writer", enabled: true, priority: 1 }] },
+            { id: "video-model", name: "视频", capability: "video", enabled: true, bindings: [{ id: "two", channelId: "two", upstreamModel: "video-model", enabled: true, priority: 1 }] },
+            { id: "video-primary", name: "视频主路由", capability: "video", enabled: true, fallbackModelIds: ["video-model", "VIDEO-MODEL"], bindings: [{ id: "two-primary", channelId: "two", upstreamModel: "video-model", enabled: true, priority: 2 }] },
+        ];
+
+        expect(modelRoutingValidationErrors(models, channels, { textModel: "writer", imageModel: "", videoModel: "video-primary", audioModel: "" })).toEqual(
+            expect.arrayContaining(["只有视频逻辑模型可以配置后备排序策略：writer", "只有视频逻辑模型可以配置后备模型：writer", "视频逻辑模型 video-primary 存在重复后备模型：VIDEO-MODEL"]),
+        );
     });
 
     it("reports duplicate bindings and invalid defaults", () => {

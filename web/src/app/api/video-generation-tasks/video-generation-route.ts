@@ -5,7 +5,7 @@ import { getAuthSettings, isAuthInputError, refundUserPoints } from "@/lib/auth/
 import { generationModelId, toSystemGenerationChannel } from "@/lib/server/generation-channel";
 import { finishGenerationAttempt, startGenerationAttempt, type GenerationAttempt } from "@/lib/server/generation-attempt";
 import { fetchInternalApi, resolveInternalOrigin } from "@/lib/server/internal-origin";
-import { resolveLogicalModelCandidates, supportsVideoKeyframeReferences } from "@/lib/server/logical-model-router";
+import { resolveVideoLogicalModelCandidates, supportsVideoKeyframeReferences } from "@/lib/server/logical-model-router";
 import {
     assertReferenceCapabilities,
     assertReferenceUrls,
@@ -73,7 +73,8 @@ export async function POST(request: Request) {
     const response = await withGenerationConcurrencyLimit(user.id, "video", 30 * 60_000, settings.generationConcurrency.video, async () => {
         const requestedModel = typeof body.config?.model === "string" && body.config.model.trim() ? body.config.model : settings.defaultModels.videoModel;
         const requestedChannelId = typeof body.config?.channelId === "string" ? body.config.channelId.trim() : "";
-        const candidates = resolveLogicalModelCandidates(settings, "video", requestedModel, requestedChannelId);
+        const requestedParameters = resolveVideoGenerationParameters(body.config || {}, settings.generationDefaults);
+        const candidates = resolveVideoLogicalModelCandidates(settings, requestedModel, requestedChannelId, requestedParameters.videoSeconds === -1 ? undefined : requestedParameters.videoSeconds);
         const prompt = String(body.prompt || "").trim();
         if (!prompt) return NextResponse.json({ error: "视频任务参数不完整或渠道不支持" }, { status: 400 });
         const publicOrigin = requestPublicOrigin(request);
@@ -88,15 +89,15 @@ export async function POST(request: Request) {
         // A drama run must honor the logical model selected by the user. Keep only
         // compatible bindings of that model; never scan another logical model to
         // hide a configuration error.
-        const compatibleDramaCandidates = candidates.filter((candidate) => supportsVideoKeyframeReferences(candidate, keyframeCount));
+        const compatibleDramaCandidates = candidates.filter((candidate) => candidate.logicalModelId.toLowerCase() === requestedModel.trim().toLowerCase() && supportsVideoKeyframeReferences(candidate, keyframeCount));
         const selectedCandidates = isDramaRun && keyframeCount ? (compatibleDramaCandidates.length ? compatibleDramaCandidates : candidates).slice(0, 1) : candidates;
         if (!selectedCandidates.length) return NextResponse.json({ error: "视频任务参数不完整或渠道不支持" }, { status: 400 });
         const channels = selectedCandidates.map(toSystemGenerationChannel);
         const providerPrompt = withVideoReferenceFidelity(prompt, references);
         const origin = resolveInternalOrigin(new URL(request.url).origin);
         const cookie = requestRuntimeCredential(request, user.id);
-        const requestedParameters = resolveVideoGenerationParameters(body.config || {}, settings.generationDefaults);
         const billingRequestId = clean(body.context?.clientRequestId) || clean(request.headers.get("x-vozeb-pro-client-request-id")) || `video-request:${user.id}:${Date.now()}`;
+        const attemptRequestId = body.context?.attemptNo ? `${billingRequestId}:attempt:${body.context.attemptNo}` : billingRequestId;
         let lastError: unknown;
         let capabilityError: unknown;
         let attempts: GenerationAttempt[] = [];
@@ -110,10 +111,13 @@ export async function POST(request: Request) {
             const maxReferenceImages = bumingContract?.maxReferenceImages || capabilityProfile?.maxReferenceImages || 0;
             if (keyframeCount && (!supportsKeyframes || maxReferenceImages < keyframeCount)) {
                 if (bumingContract && !bumingContract.videoReferenceModes.includes("all_frames")) {
-                    return NextResponse.json({ error: "当前不鸣视频模型不支持全能帧连续参考" }, { status: 400 });
+                    const error = new Error("当前不鸣视频模型不支持全能帧连续参考");
+                    if (isDramaRun) return NextResponse.json({ error: error.message }, { status: 400 });
+                    capabilityError = error;
+                    continue;
                 }
                 const error = new Error(`当前模型未声明支持 ${keyframeCount} 张全能帧关键图，请切换支持全能帧的模型`);
-                if (channel.advancedConfig?.protocol === "buming-seedance") return NextResponse.json({ error: error.message }, { status: 400 });
+                if (isDramaRun) return NextResponse.json({ error: error.message }, { status: 400 });
                 capabilityError = error;
                 continue;
             }
@@ -156,7 +160,7 @@ export async function POST(request: Request) {
                     assertReferenceUrls(channel.advancedConfig, references, Boolean(globalPreset));
                 }
             } catch (error) {
-                if (channel.advancedConfig?.protocol === "buming-seedance") return NextResponse.json({ error: error instanceof Error ? error.message : "当前不鸣视频模型不支持参考素材" }, { status: 400 });
+                if (isDramaRun) return NextResponse.json({ error: error instanceof Error ? error.message : "当前不鸣视频模型不支持参考素材" }, { status: 400 });
                 capabilityError = error;
                 continue;
             }
@@ -202,7 +206,8 @@ export async function POST(request: Request) {
                 lastUpstreamStatus: "submitting",
             });
             try {
-                const upstream = await createUpstream(user.id, origin, cookie, channel, providerPrompt, parameters, references, settings.generationPointMultipliers, billingRequestId);
+                const candidateRequestId = index === 0 ? attemptRequestId : `${attemptRequestId}:candidate:${index + 1}`;
+                const upstream = await createUpstream(user.id, origin, cookie, channel, providerPrompt, parameters, references, settings.generationPointMultipliers, attemptRequestId, candidateRequestId);
                 await updateVideoTask(localTask.id, { config: channel, upstream, requestedDurationSeconds: parameters.videoSeconds === -1 ? undefined : parameters.videoSeconds, attempts });
                 const task = { ...localTask, config: channel, upstream, requestedDurationSeconds: parameters.videoSeconds === -1 ? undefined : parameters.videoSeconds, attempts };
                 const submittedAt = Date.now();
@@ -253,6 +258,7 @@ export async function createUpstream(
     references: VideoGenerationReference[],
     multipliers: Awaited<ReturnType<typeof getAuthSettings>>["generationPointMultipliers"],
     billingRequestId: string,
+    candidateRequestId = billingRequestId,
 ) {
     let lastError = "";
     const regularReferences = regularVideoReferences(references);
@@ -271,7 +277,7 @@ export async function createUpstream(
     const bumingContract = bumingSeedance ? resolveBumingSeedanceVideoModelContract(channel.model) : undefined;
     const providerPrompt = bumingSeedance ? bumingSeedancePrompt(prompt, firstFrame, lastFrame, keyframes.length, bumingImages.length - keyframes.length - Number(Boolean(firstFrame)) - Number(Boolean(lastFrame)), videos.length, audios.length) : prompt;
     if (isGeminiVideoChannel(channel)) {
-        return createGeminiVideoUpstream({ userId, origin, cookie, channel, prompt, raw, references, generateAudio, multipliers, billingRequestId });
+        return createGeminiVideoUpstream({ userId, origin, cookie, channel, prompt, raw, references, generateAudio, multipliers, billingRequestId: candidateRequestId });
     }
     const values = {
         model: channel.model,
@@ -317,7 +323,7 @@ export async function createUpstream(
                 : images.length
                   ? "image-to-video"
                   : "text-to-video",
-        client_request_id: billingRequestId,
+        client_request_id: candidateRequestId,
     };
     const defaults = {
         model: channel.model,
@@ -338,7 +344,7 @@ export async function createUpstream(
         ...(firstFrameUrl ? { first_frame: firstFrameUrl, first_frame_url: firstFrameUrl } : {}),
         ...(lastFrameUrl ? { last_frame: lastFrameUrl, last_frame_url: lastFrameUrl } : {}),
         mode: values.mode,
-        ...(channel.advancedConfig?.protocol === "buming-seedance" ? { client_request_id: billingRequestId } : {}),
+        ...(channel.advancedConfig?.protocol === "buming-seedance" ? { client_request_id: candidateRequestId } : {}),
     };
     const globalPreset = globalAiOpcVideoPreset(channel.advancedConfig, channel.model);
     const multipart = channel.advancedConfig?.requestTemplate?.trim().toLowerCase().startsWith("multipart/form-data") === true;
@@ -405,9 +411,9 @@ export async function createUpstream(
             method: "POST",
             headers: {
                 ...(multipart ? {} : { "Content-Type": "application/json" }),
-                "Idempotency-Key": billingRequestId,
-                "X-Client-Request-Id": billingRequestId,
-                ...systemAiBillingHeaders(generationModelId(channel), `video-request:${billingRequestId}`, channel.model),
+                "Idempotency-Key": candidateRequestId,
+                "X-Client-Request-Id": candidateRequestId,
+                ...systemAiBillingHeaders(generationModelId(channel), `video-request:${candidateRequestId}`, channel.model),
             },
             body: requestBody,
             signal: AbortSignal.timeout(resolveModelRequestTimeoutMs(channel, "video")),
@@ -415,7 +421,7 @@ export async function createUpstream(
         const text = await response.text();
         if (!response.ok) {
             lastError = readVideoProviderHttpError(text, response.status);
-            if (!SAFE_CREATE_FAILURE_STATUSES.has(response.status)) throw new Error(lastError);
+            if (!isSafeCreateFailure(response.status, lastError, text)) throw new Error(lastError);
             continue;
         }
         let data: unknown;
@@ -494,7 +500,7 @@ async function createGeminiVideoUpstream(input: {
     const text = await response.text();
     if (!response.ok) {
         const message = readVideoProviderHttpError(text, response.status);
-        if (SAFE_CREATE_FAILURE_STATUSES.has(response.status)) throw new SafeCandidateFailure(message);
+        if (isSafeCreateFailure(response.status, message, text)) throw new SafeCandidateFailure(message);
         throw new Error(message);
     }
     let data: unknown;
@@ -569,8 +575,7 @@ function bumingSeedancePrompt(prompt: string, firstFrame: VideoGenerationReferen
     if (keyframeCount) {
         const firstKeyframe = Number(Boolean(firstFrame)) + 1;
         references.push(`${firstFrame ? "首帧使用@图片1；" : ""}连续关键帧按时间顺序使用@图片${firstKeyframe}至@图片${firstKeyframe + keyframeCount - 1}`);
-    }
-    else if (firstFrame && lastFrame) references.push("首帧使用@图片1，尾帧使用@图片2");
+    } else if (firstFrame && lastFrame) references.push("首帧使用@图片1，尾帧使用@图片2");
     else if (firstFrame) references.push("首帧使用@图片1");
     const regularImageStart = keyframeCount + Number(Boolean(firstFrame)) + Number(Boolean(lastFrame)) + 1;
     if (regularImageCount) references.push(`普通参考图片使用@图片${regularImageStart}${regularImageCount > 1 ? `至@图片${regularImageStart + regularImageCount - 1}` : ""}`);
@@ -636,6 +641,11 @@ function normalizePublicOrigin(value: string) {
 }
 const MEDIA_KEYS = VIDEO_PROVIDER_MEDIA_KEYS;
 const SAFE_CREATE_FAILURE_STATUSES = new Set([400, 401, 403, 404, 405, 413, 415, 422, 429]);
+
+function isSafeCreateFailure(status: number, message: string, body = "") {
+    if (SAFE_CREATE_FAILURE_STATUSES.has(status)) return true;
+    return status === 503 && /model[\s_-]*not[\s_-]*found|模型(?:不存在|未找到)/i.test(`${message} ${body}`);
+}
 
 class SafeCandidateFailure extends Error {}
 

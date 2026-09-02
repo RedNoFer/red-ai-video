@@ -28,7 +28,9 @@ export function resolveLogicalModelCandidates(settings: Pick<AuthSettings, "logi
         const preferred = preferredChannelId ? bindings.find((binding) => binding.channelId === preferredChannelId) : undefined;
         const resolved: ResolvedLogicalModel[] = [];
         for (const binding of preferred ? [preferred, ...bindings.filter((item) => item !== preferred)] : bindings) {
-            const channel = settings.systemChannels.find((item) => item.id === binding.channelId && item.enabled && channelConnectionReady(item) && channelSupportsModel(item.models, binding.upstreamModel) && logicalBindingSupportsCapability(item, binding.upstreamModel, capability));
+            const channel = settings.systemChannels.find(
+                (item) => item.id === binding.channelId && item.enabled && channelConnectionReady(item) && channelSupportsModel(item.models, binding.upstreamModel) && logicalBindingSupportsCapability(item, binding.upstreamModel, capability),
+            );
             if (channel)
                 resolved.push({ logicalModelId: logical.id, capability, upstreamModel: binding.upstreamModel, channelId: channel.id, channel, capabilityProfile: resolveLogicalModelCapabilityProfile(binding, capability, channel, binding.upstreamModel) });
         }
@@ -42,9 +44,79 @@ export function resolveLogicalModelCandidates(settings: Pick<AuthSettings, "logi
     if (!upstreamRequested) return [];
     const ordered = preferredChannelId ? [...settings.systemChannels.filter((channel) => channel.id === preferredChannelId), ...settings.systemChannels.filter((channel) => channel.id !== preferredChannelId)] : settings.systemChannels;
     const resolved = ordered
-        .filter((item) => item.enabled && channelConnectionReady(item) && channelSupportsModel(item.models, upstreamRequested) && channelModelCapability(item, upstreamRequested) === capability && logicalBindingSupportsCapability(item, upstreamRequested, capability))
+        .filter(
+            (item) =>
+                item.enabled &&
+                channelConnectionReady(item) &&
+                channelSupportsModel(item.models, upstreamRequested) &&
+                channelModelCapability(item, upstreamRequested) === capability &&
+                logicalBindingSupportsCapability(item, upstreamRequested, capability),
+        )
         .map((channel) => ({ logicalModelId: upstreamRequested, capability, upstreamModel: upstreamRequested, channelId: channel.id, channel, capabilityProfile: resolveLogicalModelCapabilityProfile({}, capability, channel, upstreamRequested) }));
     return capability === "text" ? resolved : filterHealthyRuntimeCandidates(resolved, capability);
+}
+
+export function resolveVideoLogicalModelCandidates(settings: Pick<AuthSettings, "logicalModels" | "systemChannels">, requestedModelId: string, preferredChannelId = "", durationSeconds?: number): ResolvedLogicalModel[] {
+    const requested = settings.logicalModels.find((model) => model.enabled && model.capability === "video" && model.id.toLowerCase() === requestedModelId.trim().toLowerCase());
+    if (!requested) return resolveLogicalModelCandidates(settings, "video", requestedModelId, preferredChannelId);
+
+    const modelIds = [
+        requested.id,
+        ...(requested.fallbackModelIds || []).flatMap((id) => {
+            const fallback = settings.logicalModels.find((model) => model.enabled && model.capability === "video" && model.id.toLowerCase() === id.trim().toLowerCase());
+            return fallback && !fallback.fallbackModelIds?.length ? [fallback.id] : [];
+        }),
+    ];
+    const seenModels = new Set<string>();
+    const resolved = modelIds.flatMap((modelId) => {
+        const key = modelId.trim().toLowerCase();
+        if (!key || seenModels.has(key)) return [];
+        seenModels.add(key);
+        return resolveLogicalModelCandidates(settings, "video", modelId, modelId === requested.id ? preferredChannelId : "");
+    });
+    const candidates = deduplicateVideoCandidates(resolved);
+    if (requested.fallbackStrategy !== "cheapest") return candidates;
+    return sortVideoCandidatesByCost(settings, candidates, durationSeconds);
+}
+
+function deduplicateVideoCandidates(candidates: ResolvedLogicalModel[]) {
+    const seen = new Set<string>();
+    return candidates.filter((candidate) => {
+        const key = `${candidate.channelId}:${candidate.upstreamModel.trim().toLowerCase()}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
+}
+
+function sortVideoCandidatesByCost(settings: Pick<AuthSettings, "logicalModels" | "systemChannels">, candidates: ResolvedLogicalModel[], durationSeconds?: number) {
+    const priced = candidates.map((candidate, index) => {
+        const profile = candidate.capabilityProfile;
+        const basis = profile?.unitCostBasis;
+        const cost = profile?.unitCost;
+        const currency = profile?.unitCostCurrency?.trim().toUpperCase();
+        if (cost === undefined || !currency || !basis || (basis === "second" && (!durationSeconds || durationSeconds <= 0))) return null;
+        const binding = settings.logicalModels
+            .find((model) => model.id.toLowerCase() === candidate.logicalModelId.toLowerCase())
+            ?.bindings.find((item) => item.channelId === candidate.channelId && item.upstreamModel.trim().toLowerCase() === candidate.upstreamModel.trim().toLowerCase());
+        return { candidate, index, cost: basis === "second" ? cost * durationSeconds! : cost, currency, basis, priority: binding?.priority || Number.MAX_SAFE_INTEGER, weight: binding?.weight || 100 };
+    });
+    if (priced.some((item) => !item)) return candidates;
+    const comparable = priced.filter((item): item is NonNullable<typeof item> => Boolean(item));
+    const currency = comparable[0]?.currency;
+    const basis = comparable[0]?.basis;
+    if (!currency || !basis || comparable.some((item) => item.currency !== currency || item.basis !== basis)) return candidates;
+    return comparable
+        .sort(
+            (left, right) =>
+                left.cost - right.cost ||
+                left.priority - right.priority ||
+                right.weight - left.weight ||
+                left.candidate.channelId.localeCompare(right.candidate.channelId) ||
+                left.candidate.upstreamModel.localeCompare(right.candidate.upstreamModel) ||
+                left.index - right.index,
+        )
+        .map((item) => item.candidate);
 }
 
 /** Only declared capabilities may opt a model into ordered all-frame video generation. */
@@ -56,15 +128,8 @@ export function supportsVideoKeyframeReferences(candidate: ResolvedLogicalModel,
     return Boolean(supportsKeyframes) && maxReferenceImages >= keyframeCount;
 }
 
-export function resolveVideoKeyframeModelCandidates(
-    settings: Pick<AuthSettings, "logicalModels" | "systemChannels">,
-    preferredModelIds: string[],
-    keyframeCount: number,
-) {
-    const modelIds = [
-        ...preferredModelIds,
-        ...settings.logicalModels.filter((model) => model.enabled && model.capability === "video").map((model) => model.id),
-    ];
+export function resolveVideoKeyframeModelCandidates(settings: Pick<AuthSettings, "logicalModels" | "systemChannels">, preferredModelIds: string[], keyframeCount: number) {
+    const modelIds = [...preferredModelIds, ...settings.logicalModels.filter((model) => model.enabled && model.capability === "video").map((model) => model.id)];
     const seenModels = new Set<string>();
     const seenCandidates = new Set<string>();
     return modelIds
@@ -86,17 +151,16 @@ export function resolveVideoKeyframeModelCandidates(
 
 export function resolveTextPlanningModelCandidates(settings: Pick<AuthSettings, "logicalModels" | "systemChannels">, requestedModelId: string, preferredChannelId = "") {
     const requested = requestedModelId.trim().toLowerCase();
-    const modelIds = [
-        requestedModelId,
-        ...settings.logicalModels.filter((model) => model.enabled && model.capability === "text" && model.id.trim().toLowerCase() !== requested).map((model) => model.id),
-    ];
+    const modelIds = [requestedModelId, ...settings.logicalModels.filter((model) => model.enabled && model.capability === "text" && model.id.trim().toLowerCase() !== requested).map((model) => model.id)];
     const seen = new Set<string>();
-    return modelIds.flatMap((modelId) => resolveLogicalModelCandidates(settings, "text", modelId, preferredChannelId)).filter((candidate) => {
-        const key = `${candidate.channelId}:${candidate.upstreamModel.toLowerCase()}`;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-    });
+    return modelIds
+        .flatMap((modelId) => resolveLogicalModelCandidates(settings, "text", modelId, preferredChannelId))
+        .filter((candidate) => {
+            const key = `${candidate.channelId}:${candidate.upstreamModel.toLowerCase()}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
 }
 
 function logicalBindingSupportsCapability(channel: SystemModelChannel, model: string, capability: LogicalModelCapability) {

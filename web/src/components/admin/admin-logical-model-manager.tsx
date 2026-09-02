@@ -1,7 +1,7 @@
 "use client";
 
 import { App, Button, Checkbox, Drawer, Empty, Input, InputNumber, Select, Space, Switch, Tag } from "antd";
-import { AlertTriangle, GitBranch, Pencil, RefreshCw, Route, Search } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, GitBranch, Pencil, RefreshCw, Route, Search } from "lucide-react";
 import { useDeferredValue, useMemo, useState } from "react";
 
 import { LabeledControl, SectionTitle } from "@/components/admin/admin-settings-controls";
@@ -159,7 +159,9 @@ export function AdminLogicalModelManager({ channels, logicalModels, defaultModel
                     <SectionTitle icon={<GitBranch className="size-4" />} title="默认模型" />
                     <div className="mt-4 space-y-4">
                         {availableDefaultFields.map(({ capability, key, label }) => {
-                            const options = logicalModels.filter((model) => model.capability === capability && isLogicalModelResolvable(logicalModels, channels, capability, model.id)).map((model) => ({ label: formatLogicalModelOptionLabel(model, logicalModels), value: model.id }));
+                            const options = logicalModels
+                                .filter((model) => model.capability === capability && isLogicalModelResolvable(logicalModels, channels, capability, model.id))
+                                .map((model) => ({ label: formatLogicalModelOptionLabel(model, logicalModels), value: model.id }));
                             const selected = logicalModels.find((model) => model.id === defaultModels[key]);
                             const resolved = selected ? resolveLogicalModelConfig(logicalModels, channels, capability, selected.id) : null;
                             return (
@@ -253,6 +255,7 @@ export function AdminLogicalModelManager({ channels, logicalModels, defaultModel
                                 ))}
                             </div>
                         </div>
+                        {draft.capability === "video" ? <VideoFallbackEditor model={draft} models={logicalModels} channels={channels} onChange={(patch) => setDraft((current) => (current ? { ...current, ...patch } : current))} /> : null}
                     </>
                 ) : null}
             </Drawer>
@@ -317,7 +320,11 @@ function BindingEditor({ binding, capability, channels, onChange }: { binding: L
                                 连续关键帧
                             </Checkbox>
                         ) : null}
-                        {capability === "video" ? <Checkbox checked={profile.supportsKeyframes === true} onChange={(event) => updateProfile({ supportsKeyframes: event.target.checked })}>全能帧（2–5 张有序关键帧）</Checkbox> : null}
+                        {capability === "video" ? (
+                            <Checkbox checked={profile.supportsKeyframes === true} onChange={(event) => updateProfile({ supportsKeyframes: event.target.checked })}>
+                                全能帧（2–5 张有序关键帧）
+                            </Checkbox>
+                        ) : null}
                         <Checkbox checked={effectiveAsync} onChange={(event) => updateProfile({ supportsAsync: event.target.checked })}>
                             异步查询
                         </Checkbox>
@@ -357,20 +364,133 @@ function BindingEditor({ binding, capability, channels, onChange }: { binding: L
                     <LabeledControl label="并发上限">
                         <InputNumber className="w-full" min={1} max={1000} precision={0} value={profile.concurrencyLimit} onChange={(value) => updateProfile({ concurrencyLimit: Number(value) || 1 })} />
                     </LabeledControl>
-                    <LabeledControl label="单次成本">
+                    <LabeledControl label="估算单价">
                         <InputNumber className="w-full" min={0} precision={4} value={profile.unitCost} onChange={(value) => updateProfile({ unitCost: Number(value) || 0 })} />
                     </LabeledControl>
                     <LabeledControl label="成本货币">
                         <Input value={profile.unitCostCurrency || ""} maxLength={12} placeholder="USD / CNY" onChange={(event) => updateProfile({ unitCostCurrency: event.target.value.trim().toUpperCase() })} />
                     </LabeledControl>
+                    {capability === "video" ? (
+                        <LabeledControl label="计费单位">
+                            <Select
+                                className="w-full"
+                                allowClear
+                                value={profile.unitCostBasis}
+                                placeholder="选择单位"
+                                options={[
+                                    { label: "按次", value: "call" },
+                                    { label: "按秒", value: "second" },
+                                ]}
+                                onChange={(value) => updateProfile({ unitCostBasis: value || undefined })}
+                            />
+                        </LabeledControl>
+                    ) : null}
                 </div>
             </div>
         </div>
     );
 }
 
+function VideoFallbackEditor({ model, models, channels, onChange }: { model: LogicalModel; models: LogicalModel[]; channels: SystemModelChannel[]; onChange: (patch: Pick<LogicalModel, "fallbackModelIds" | "fallbackStrategy">) => void }) {
+    const fallbackModels = (model.fallbackModelIds || []).map((id) => models.find((candidate) => candidate.id.toLowerCase() === id.toLowerCase())).filter((candidate): candidate is LogicalModel => Boolean(candidate));
+    const options = models
+        .filter((candidate) => candidate.id !== model.id && candidate.capability === "video" && candidate.enabled && !candidate.fallbackModelIds?.length && isLogicalModelResolvable(models, channels, "video", candidate.id))
+        .map((candidate) => ({ label: formatLogicalModelOptionLabel(candidate, models), value: candidate.id }));
+    return (
+        <div className="mt-5 rounded-lg border border-stone-200 bg-stone-50/70 p-3 dark:border-stone-800 dark:bg-stone-900/40">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                    <h3 className="text-sm font-semibold text-stone-950 dark:text-stone-100">视频后备候选</h3>
+                    <p className="mt-1 text-xs leading-5 text-stone-500 dark:text-stone-400">仅在创建请求明确未受理时按顺序切换；供应商已接受后的异步失败不会自动创建新任务。</p>
+                </div>
+                <Tag color="gold" className="m-0">
+                    价格为估算值
+                </Tag>
+            </div>
+            <div className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_180px]">
+                <LabeledControl label="后备逻辑模型（按选择顺序）">
+                    <Select className="w-full" mode="multiple" maxTagCount="responsive" value={model.fallbackModelIds || []} options={options} placeholder="选择其他视频模型" onChange={(value) => onChange({ fallbackModelIds: value })} />
+                </LabeledControl>
+                <LabeledControl label="候选排序">
+                    <Select
+                        className="w-full"
+                        value={model.fallbackStrategy || "priority"}
+                        options={[
+                            { label: "管理员优先级", value: "priority" },
+                            { label: "可比较成本最低", value: "cheapest" },
+                        ]}
+                        onChange={(value) => onChange({ fallbackStrategy: value })}
+                    />
+                </LabeledControl>
+            </div>
+            <div className="mt-3 space-y-2">
+                {[model, ...fallbackModels].map((candidate, index) => {
+                    const resolved = resolveLogicalModelConfig(models, channels, "video", candidate.id);
+                    return (
+                        <div key={candidate.id} className="min-w-0 rounded-md border border-stone-200 bg-white px-3 py-2 text-xs dark:border-stone-800 dark:bg-stone-950">
+                            <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+                                <span className="min-w-0 truncate font-medium text-stone-800 dark:text-stone-200">
+                                    {index + 1}. {candidate.name}
+                                </span>
+                                <span className={resolved ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}>{resolved ? "当前可用" : "当前不可用"}</span>
+                            </div>
+                            <div className="mt-1 flex min-w-0 flex-wrap gap-x-3 gap-y-1 text-stone-500 dark:text-stone-400">
+                                {candidate.bindings
+                                    .filter((binding) => binding.enabled)
+                                    .map((binding) => {
+                                        const channel = channels.find((item) => item.id === binding.channelId);
+                                        const profile = binding.capabilityProfile;
+                                        const price = profile?.unitCost !== undefined && profile.unitCostCurrency ? `${profile.unitCost} ${profile.unitCostCurrency}${profile.unitCostBasis === "second" ? "/秒" : "/次"}` : "未设置估算价";
+                                        return (
+                                            <span key={binding.id}>
+                                                {channel?.name || "渠道已移除"} / 优先级 {binding.priority} / {price}
+                                            </span>
+                                        );
+                                    })}
+                                {!candidate.bindings.some((binding) => binding.enabled) ? <span>没有启用的渠道绑定</span> : null}
+                            </div>
+                            {index > 0 ? (
+                                <Space.Compact size="small">
+                                    <Button
+                                        type="text"
+                                        title="上移后备候选"
+                                        aria-label={`上移 ${candidate.name}`}
+                                        icon={<ArrowUp className="size-3.5" />}
+                                        disabled={index === 1}
+                                        onClick={() => moveFallback(fallbackModels, index - 1, index - 2, onChange)}
+                                    />
+                                    <Button
+                                        type="text"
+                                        title="下移后备候选"
+                                        aria-label={`下移 ${candidate.name}`}
+                                        icon={<ArrowDown className="size-3.5" />}
+                                        disabled={index === fallbackModels.length}
+                                        onClick={() => moveFallback(fallbackModels, index - 1, index, onChange)}
+                                    />
+                                </Space.Compact>
+                            ) : null}
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
+}
+
+function moveFallback(models: LogicalModel[], from: number, to: number, onChange: (patch: Pick<LogicalModel, "fallbackModelIds" | "fallbackStrategy">) => void) {
+    if (from < 0 || to < 0 || from >= models.length || to > models.length) return;
+    const ids = models.map((model) => model.id);
+    const [moved] = ids.splice(from, 1);
+    ids.splice(to, 0, moved);
+    onChange({ fallbackModelIds: ids });
+}
+
 function cloneLogicalModel(model: LogicalModel): LogicalModel {
-    return { ...model, bindings: model.bindings.map((binding) => ({ ...binding, capabilityProfile: binding.capabilityProfile ? { ...binding.capabilityProfile } : undefined })) };
+    return {
+        ...model,
+        fallbackModelIds: model.fallbackModelIds ? [...model.fallbackModelIds] : undefined,
+        bindings: model.bindings.map((binding) => ({ ...binding, capabilityProfile: binding.capabilityProfile ? { ...binding.capabilityProfile } : undefined })),
+    };
 }
 
 function capabilitiesForModel(models: LogicalModel[], model: LogicalModel) {
@@ -389,7 +509,10 @@ function sameLogicalModelFamily(left: LogicalModel, right: LogicalModel) {
 }
 
 function upstreamKey(value: string) {
-    return value.trim().replace(/^models\//i, "").toLowerCase();
+    return value
+        .trim()
+        .replace(/^models\//i, "")
+        .toLowerCase();
 }
 
 function buildCapabilityVariants(models: LogicalModel[], original: LogicalModel, draft: LogicalModel, capabilities: LogicalModelCapability[]) {
@@ -403,7 +526,20 @@ function buildCapabilityVariants(models: LogicalModel[], original: LogicalModel,
         const base = existing && existing.id !== original.id ? existing : draft;
         const id = existing?.id || uniqueVariantId(sourceName, capability, usedIds);
         usedIds.add(id.toLowerCase());
-        return cloneLogicalModel({ ...base, id, name: draft.name, enabled: draft.enabled, capability, bindings: draft.bindings.map((binding) => ({ ...binding, capabilityProfile: existing?.bindings.find((item) => item.id === binding.id)?.capabilityProfile || binding.capabilityProfile })) });
+        return cloneLogicalModel({
+            ...base,
+            id,
+            name: draft.name,
+            enabled: draft.enabled,
+            capability,
+            ...(capability === "video"
+                ? {
+                      fallbackModelIds: draft.capability === "video" ? draft.fallbackModelIds : base.fallbackModelIds,
+                      fallbackStrategy: draft.capability === "video" ? draft.fallbackStrategy : base.fallbackStrategy,
+                  }
+                : { fallbackModelIds: undefined, fallbackStrategy: undefined }),
+            bindings: draft.bindings.map((binding) => ({ ...binding, capabilityProfile: existing?.bindings.find((item) => item.id === binding.id)?.capabilityProfile || binding.capabilityProfile })),
+        });
     });
     const withoutFamily = models.filter((model) => !family.includes(model));
     const originalIndex = models.findIndex((model) => model.id === original.id);

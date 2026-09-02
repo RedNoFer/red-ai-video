@@ -102,6 +102,116 @@ describe("video generation candidate failover", () => {
         mocks.after.mockImplementation(() => undefined);
     });
 
+    it("tries a different configured video logical model after an explicit primary failure", async () => {
+        mocks.getAuthSettings.mockResolvedValue({
+            ...settings,
+            logicalModels: [
+                { ...settings.logicalModels[0], bindings: [settings.logicalModels[0].bindings[0]], fallbackModelIds: ["video-backup"] },
+                { id: "video-backup", name: "备用视频", capability: "video", enabled: true, bindings: [{ id: "backup", channelId: "two", upstreamModel: "video-two", enabled: true, priority: 1 }] },
+            ],
+        });
+        mocks.fetchInternalApi.mockImplementation(async (url: string) => (url.includes("/api/ai/system/one/") ? json({ code: "model_not_found" }, 503) : json({ id: "upstream-two", status: "queued" })));
+
+        const response = await POST(request({ model: "video" }, [], { clientRequestId: "fallback-request" }));
+        const payload = await response.json();
+
+        expect(response.status).toBe(200);
+        expect(payload.task).toMatchObject({ id: "local-task", upstreamId: "upstream-two" });
+        expect(mocks.fetchInternalApi).toHaveBeenCalledTimes(2);
+        expect(new Headers((mocks.fetchInternalApi.mock.calls[0][1] as RequestInit).headers).get("Idempotency-Key")).toBe("fallback-request");
+        expect(new Headers((mocks.fetchInternalApi.mock.calls[1][1] as RequestInit).headers).get("Idempotency-Key")).toBe("fallback-request:candidate:2");
+        expect(mocks.createVideoTask).toHaveBeenCalledOnce();
+    });
+
+    it("skips a deterministic unsupported Buming keyframe candidate for a capable backup", async () => {
+        const primary = applyChannelProtocol({ ...channels[0], models: ["seedance-2-0-manju-special"], advancedConfig: emptyAdvancedConfig() }, "buming-seedance");
+        const backup = applyChannelProtocol({ ...channels[1], models: ["seedance-2-0-official"], advancedConfig: emptyAdvancedConfig() }, "buming-seedance");
+        mocks.getAuthSettings.mockResolvedValue({
+            ...settings,
+            systemChannels: [primary, backup],
+            logicalModels: [
+                { ...settings.logicalModels[0], bindings: [{ ...settings.logicalModels[0].bindings[0], channelId: primary.id, upstreamModel: "seedance-2-0-manju-special" }], fallbackModelIds: ["video-backup"] },
+                { id: "video-backup", name: "备用视频", capability: "video", enabled: true, bindings: [{ id: "backup", channelId: backup.id, upstreamModel: "seedance-2-0-official", enabled: true, priority: 1 }] },
+            ],
+        });
+        mocks.fetchInternalApi.mockResolvedValue(json({ id: "buming-backup", state: "queued" }));
+
+        const response = await POST(
+            request({ model: "video" }, [
+                { type: "image", url: "https://cdn.example.com/frame-1.png", role: "keyframe", keyframeIndex: 1 },
+                { type: "image", url: "https://cdn.example.com/frame-2.png", role: "keyframe", keyframeIndex: 2 },
+            ]),
+        );
+
+        expect(response.status).toBe(200);
+        expect(mocks.fetchInternalApi).toHaveBeenCalledTimes(1);
+        expect(mocks.fetchInternalApi.mock.calls[0]?.[0]).toContain(`/api/ai/system/${backup.id}/`);
+    });
+
+    it("does not fail over a generic 503 whose acceptance state is unknown", async () => {
+        mocks.getAuthSettings.mockResolvedValue({
+            ...settings,
+            logicalModels: [
+                { ...settings.logicalModels[0], bindings: [settings.logicalModels[0].bindings[0]], fallbackModelIds: ["video-backup"] },
+                { id: "video-backup", name: "备用视频", capability: "video", enabled: true, bindings: [{ id: "backup", channelId: "two", upstreamModel: "video-two", enabled: true, priority: 1 }] },
+            ],
+        });
+        mocks.fetchInternalApi.mockResolvedValue(json({ error: "service unavailable" }, 503));
+
+        const response = await POST(request({ model: "video" }));
+
+        expect(response.status).toBe(202);
+        expect(mocks.fetchInternalApi).toHaveBeenCalledTimes(1);
+    });
+
+    it("records one local terminal failure after all configured candidates are explicitly rejected", async () => {
+        mocks.getAuthSettings.mockResolvedValue({
+            ...settings,
+            logicalModels: [
+                { ...settings.logicalModels[0], bindings: [settings.logicalModels[0].bindings[0]], fallbackModelIds: ["video-backup"] },
+                { id: "video-backup", name: "备用视频", capability: "video", enabled: true, bindings: [{ id: "backup", channelId: "two", upstreamModel: "video-two", enabled: true, priority: 1 }] },
+            ],
+        });
+        mocks.fetchInternalApi.mockImplementation(async (url: string) => (url.includes("/api/ai/system/one/") ? json({ error: "not found" }, 404) : json({ error: "rate limited" }, 429)));
+
+        const response = await POST(request({ model: "video" }, [], { clientRequestId: "all-failed" }));
+        const payload = await response.json();
+
+        expect(response.status).toBe(502);
+        expect(payload).toMatchObject({ canRetry: true });
+        expect(mocks.createVideoTask).toHaveBeenCalledOnce();
+        expect(mocks.transitionVideoTask).toHaveBeenCalledWith(expect.objectContaining({ id: "local-task" }), expect.objectContaining({ status: "error", retryable: true }));
+        expect(mocks.writeVideoGenerationLog).toHaveBeenCalledOnce();
+    });
+
+    it("keeps a drama keyframe run on the selected logical model even when it has fallbacks", async () => {
+        const primary = applyChannelProtocol({ ...channels[0], models: ["seedance-2-0-official"], advancedConfig: emptyAdvancedConfig() }, "buming-seedance");
+        mocks.getAuthSettings.mockResolvedValue({
+            ...settings,
+            systemChannels: [primary, channels[1]],
+            logicalModels: [
+                { ...settings.logicalModels[0], bindings: [{ ...settings.logicalModels[0].bindings[0], channelId: primary.id, upstreamModel: "seedance-2-0-official" }], fallbackModelIds: ["video-backup"] },
+                { id: "video-backup", name: "备用视频", capability: "video", enabled: true, bindings: [{ id: "backup", channelId: "two", upstreamModel: "video-two", enabled: true, priority: 1 }] },
+            ],
+        });
+        mocks.fetchInternalApi.mockResolvedValue(json({ id: "drama-primary", state: "queued" }));
+
+        const response = await POST(
+            request(
+                { model: "video" },
+                [
+                    { type: "image", url: "https://cdn.example.com/frame-1.png", role: "keyframe", keyframeIndex: 1 },
+                    { type: "image", url: "https://cdn.example.com/frame-2.png", role: "keyframe", keyframeIndex: 2 },
+                ],
+                { surface: "drama", runId: "run-one" },
+            ),
+        );
+
+        expect(response.status).toBe(200);
+        expect(mocks.fetchInternalApi).toHaveBeenCalledTimes(1);
+        expect(mocks.fetchInternalApi.mock.calls[0]?.[0]).toContain(`/api/ai/system/${primary.id}/`);
+    });
+
     it("tries the next binding after explicit route failures", async () => {
         const startedAt = Date.now();
         mocks.fetchInternalApi.mockImplementation(async (url: string) => (url.includes("/api/ai/system/one/") ? json({ error: "not found" }, 404) : json({ id: "upstream-two", status: "queued" })));
@@ -134,6 +244,15 @@ describe("video generation candidate failover", () => {
         expect(mocks.getAuthSettings).not.toHaveBeenCalled();
         expect(mocks.withGenerationConcurrencyLimit).not.toHaveBeenCalled();
         expect(mocks.fetchInternalApi).not.toHaveBeenCalled();
+    });
+
+    it("derives a new provider idempotency scope for an explicit retry attempt", async () => {
+        mocks.fetchInternalApi.mockResolvedValue(json({ id: "retry-upstream", status: "queued" }));
+
+        const response = await POST(request({ model: "video" }, [], { clientRequestId: "same-request", attemptNo: 3 }));
+
+        expect(response.status).toBe(200);
+        expect(new Headers((mocks.fetchInternalApi.mock.calls[0][1] as RequestInit).headers).get("Idempotency-Key")).toBe("same-request:attempt:3");
     });
 
     it("does not retry another binding after an ambiguous 2xx response", async () => {
@@ -454,13 +573,21 @@ describe("video generation candidate failover", () => {
         mocks.getAuthSettings.mockResolvedValue({
             ...settings,
             systemChannels: [bumingChannel, newApiChannel],
-            logicalModels: [{ id: "wan-3.0", name: "Wan 3.0", capability: "video", enabled: true, bindings: [
-                { id: "buming-binding", channelId: "buming", upstreamModel: "wan-3.0", enabled: true, priority: bumingPriority },
-                { id: "newapi-binding", channelId: "newapi-video", upstreamModel: "wan-3.0", enabled: true, priority: newApiPriority },
-            ] }],
+            logicalModels: [
+                {
+                    id: "wan-3.0",
+                    name: "Wan 3.0",
+                    capability: "video",
+                    enabled: true,
+                    bindings: [
+                        { id: "buming-binding", channelId: "buming", upstreamModel: "wan-3.0", enabled: true, priority: bumingPriority },
+                        { id: "newapi-binding", channelId: "newapi-video", upstreamModel: "wan-3.0", enabled: true, priority: newApiPriority },
+                    ],
+                },
+            ],
             defaultModels: { ...settings.defaultModels, videoModel: "wan-3.0" },
         });
-        mocks.fetchInternalApi.mockImplementation(async (url: string) => url.includes("/buming/") ? json({ id: "buming-task", state: "queued" }) : json({ task_id: "newapi-task", status: "queued" }));
+        mocks.fetchInternalApi.mockImplementation(async (url: string) => (url.includes("/buming/") ? json({ id: "buming-task", state: "queued" }) : json({ task_id: "newapi-task", status: "queued" })));
 
         const response = await POST(request({ model: "wan-3.0" }));
 
@@ -652,10 +779,7 @@ describe("video generation candidate failover", () => {
     });
 
     it("submits the documented Buming flat Seedance request and keeps the task query path explicit", async () => {
-        const bumingChannel = applyChannelProtocol(
-            { ...channels[0], baseUrl: "", models: ["seedance-2-5"], advancedConfig: emptyAdvancedConfig() },
-            "buming-seedance",
-        );
+        const bumingChannel = applyChannelProtocol({ ...channels[0], baseUrl: "", models: ["seedance-2-5"], advancedConfig: emptyAdvancedConfig() }, "buming-seedance");
         mocks.getAuthSettings.mockResolvedValue({
             ...settings,
             systemChannels: [bumingChannel],
@@ -674,16 +798,23 @@ describe("video generation candidate failover", () => {
 
         expect(response.status).toBe(200);
         expect(url).toContain("/api/ai/system/one/v1/videos/generations");
-        expect(body).toMatchObject({ model: "seedance-2-5", prompt: expect.stringContaining("A test video"), mode: "reference", duration: 8, aspect_ratio: "16:9", resolution: "1080p", client_request_id: expect.any(String), images: ["https://cdn.example.com/reference.png"], videos: ["https://cdn.example.com/reference.mp4"] });
+        expect(body).toMatchObject({
+            model: "seedance-2-5",
+            prompt: expect.stringContaining("A test video"),
+            mode: "reference",
+            duration: 8,
+            aspect_ratio: "16:9",
+            resolution: "1080p",
+            client_request_id: expect.any(String),
+            images: ["https://cdn.example.com/reference.png"],
+            videos: ["https://cdn.example.com/reference.mp4"],
+        });
         expect(body).not.toHaveProperty("first_frame");
         expect(mocks.createVideoTask).toHaveBeenCalledWith(expect.objectContaining({ upstream: expect.objectContaining({ pollPath: "/v1/videos/generations" }) }));
     });
 
     it("uses Buming Seedance documented mode values and image ordering for first-last", async () => {
-        const bumingChannel = applyChannelProtocol(
-            { ...channels[0], baseUrl: "", models: ["seedance-2-0-official"], advancedConfig: emptyAdvancedConfig() },
-            "buming-seedance",
-        );
+        const bumingChannel = applyChannelProtocol({ ...channels[0], baseUrl: "", models: ["seedance-2-0-official"], advancedConfig: emptyAdvancedConfig() }, "buming-seedance");
         mocks.getAuthSettings.mockResolvedValue({
             ...settings,
             systemChannels: [bumingChannel],
@@ -702,17 +833,24 @@ describe("video generation candidate failover", () => {
         const body = JSON.parse(String(init.body));
 
         expect(response.status).toBe(200);
-        expect(body).toMatchObject({ model: "seedance-2-0-official", mode: "first-last", duration: 8, aspect_ratio: "9:16", resolution: "720p", quality: "mini", images: ["https://cdn.example.com/first.png", "https://cdn.example.com/last.png", "https://cdn.example.com/character.png"], count: 1, prompt: expect.stringContaining("首帧使用@图片1，尾帧使用@图片2") });
+        expect(body).toMatchObject({
+            model: "seedance-2-0-official",
+            mode: "first-last",
+            duration: 8,
+            aspect_ratio: "9:16",
+            resolution: "720p",
+            quality: "mini",
+            images: ["https://cdn.example.com/first.png", "https://cdn.example.com/last.png", "https://cdn.example.com/character.png"],
+            count: 1,
+            prompt: expect.stringContaining("首帧使用@图片1，尾帧使用@图片2"),
+        });
         expect(body).not.toHaveProperty("first_frame");
         expect(body).not.toHaveProperty("last_frame");
         expect(body).not.toHaveProperty("generate_audio");
     });
 
     it("submits Buming all-frame references as one ordered reference request", async () => {
-        const bumingChannel = applyChannelProtocol(
-            { ...channels[0], baseUrl: "", models: ["seedance-2-0-official"], advancedConfig: emptyAdvancedConfig() },
-            "buming-seedance",
-        );
+        const bumingChannel = applyChannelProtocol({ ...channels[0], baseUrl: "", models: ["seedance-2-0-official"], advancedConfig: emptyAdvancedConfig() }, "buming-seedance");
         mocks.getAuthSettings.mockResolvedValue({
             ...settings,
             systemChannels: [bumingChannel],
@@ -743,20 +881,14 @@ describe("video generation candidate failover", () => {
     });
 
     it("uses a declared all-frame-capable drama binding before submission", async () => {
-        const bumingChannel = applyChannelProtocol(
-            { ...channels[1], models: ["seedance-2-0-official"], advancedConfig: emptyAdvancedConfig() },
-            "buming-seedance",
-        );
+        const bumingChannel = applyChannelProtocol({ ...channels[1], models: ["seedance-2-0-official"], advancedConfig: emptyAdvancedConfig() }, "buming-seedance");
         mocks.getAuthSettings.mockResolvedValue({
             ...settings,
             systemChannels: [channels[0], bumingChannel],
             logicalModels: [
                 {
                     ...settings.logicalModels[0],
-                    bindings: [
-                        settings.logicalModels[0].bindings[0],
-                        { ...settings.logicalModels[0].bindings[1], channelId: bumingChannel.id, upstreamModel: "seedance-2-0-official" },
-                    ],
+                    bindings: [settings.logicalModels[0].bindings[0], { ...settings.logicalModels[0].bindings[1], channelId: bumingChannel.id, upstreamModel: "seedance-2-0-official" }],
                 },
             ],
         });
@@ -781,10 +913,7 @@ describe("video generation candidate failover", () => {
     });
 
     it("does not switch a drama all-frame request to another logical model", async () => {
-        const bumingChannel = applyChannelProtocol(
-            { ...channels[1], models: ["seedance-2-0-official"], advancedConfig: emptyAdvancedConfig() },
-            "buming-seedance",
-        );
+        const bumingChannel = applyChannelProtocol({ ...channels[1], models: ["seedance-2-0-official"], advancedConfig: emptyAdvancedConfig() }, "buming-seedance");
         mocks.getAuthSettings.mockResolvedValue({
             ...settings,
             systemChannels: [channels[0], bumingChannel],
@@ -815,10 +944,7 @@ describe("video generation candidate failover", () => {
     });
 
     it("blocks Buming manju special before creating an unsupported all-frame task", async () => {
-        const bumingChannel = applyChannelProtocol(
-            { ...channels[0], baseUrl: "", models: ["seedance-2-0-manju-special"], advancedConfig: emptyAdvancedConfig() },
-            "buming-seedance",
-        );
+        const bumingChannel = applyChannelProtocol({ ...channels[0], baseUrl: "", models: ["seedance-2-0-manju-special"], advancedConfig: emptyAdvancedConfig() }, "buming-seedance");
         mocks.getAuthSettings.mockResolvedValue({
             ...settings,
             systemChannels: [bumingChannel],
