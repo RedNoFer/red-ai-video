@@ -43,7 +43,7 @@ import { approvedAssetReference } from "@/lib/drama-asset-baseline";
 import { createFrameEvidence, decideActualEndFrame, invalidateFrameEvidence, replaceFrameEvidence, supersedeFrameEvidence } from "@/lib/drama-continuity-policy";
 import { DRAMA_STYLE_NAME, normalizeDramaStyleName, resolveDramaStyleContract } from "@/lib/drama-style";
 import { normalizeDramaImageSize } from "@/lib/drama-image-size";
-import { defaultDramaFrameBeats, normalizeDramaFrameBeats, upgradeDramaFrameImagePrompt } from "@/lib/drama-frame-sequence";
+import { defaultDramaFrameBeats, formatPromptFieldLines, normalizeDramaFrameBeats, upgradeDramaFrameImagePrompt } from "@/lib/drama-frame-sequence";
 import { defaultDramaProductionPlan, dramaReferenceImageBudget, normalizeDramaProductionPlan } from "@/lib/drama-production-plan";
 import { resolveDramaShotDuration } from "@/lib/server/drama-shot-config";
 import { TEXT_MODEL_REQUEST_TIMEOUT_MS } from "@/lib/server/model-request-policy";
@@ -2106,7 +2106,7 @@ export async function updateDramaShotPromptForUser(userId: string, projectId: st
                           return {
                               ...shot,
                               ...(videoPrompt ? { executionVideoPrompt: videoPrompt, fieldOrigins: { ...(shot.fieldOrigins || {}), executionVideoPrompt: "ai" } } : {}),
-                              ...(imagePrompt ? { imagePrompt, executionImagePrompt: undefined, fieldOrigins: { ...(shot.fieldOrigins || {}), imagePrompt: "ai", executionImagePrompt: "ai" } } : {}),
+                              ...(imagePrompt ? { imagePrompt: formatPromptFieldLines(imagePrompt, "static"), executionImagePrompt: undefined, fieldOrigins: { ...(shot.fieldOrigins || {}), imagePrompt: "ai", executionImagePrompt: "ai" } } : {}),
                           };
                       }),
                   },
@@ -2482,8 +2482,8 @@ function normalizeShot(value: unknown, index: number): DramaShot {
         performancePlan: normalizePerformancePlan(input.performancePlan),
         dialoguePerformance: normalizeDialoguePerformance(input.dialoguePerformance),
         lightingPlan: normalizeLightingPlan(input.lightingPlan),
-        imagePrompt: cleanText(input.imagePrompt),
-        videoPrompt: cleanText(input.videoPrompt),
+        imagePrompt: formatPromptFieldLines(cleanText(input.imagePrompt), "static"),
+        videoPrompt: formatPromptFieldLines(cleanText(input.videoPrompt), "video"),
         executionVideoPrompt: optionalText(input.executionVideoPrompt),
         executionImagePrompt: optionalText(input.executionImagePrompt),
         cameraMotion: cleanText(input.cameraMotion),

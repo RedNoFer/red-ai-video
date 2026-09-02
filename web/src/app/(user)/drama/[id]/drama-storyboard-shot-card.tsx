@@ -12,6 +12,7 @@ import { DramaShotContinuityEditor } from "./drama-shot-continuity-editor";
 import { DramaShotDialogueEditor } from "./drama-shot-dialogue-editor";
 import { DramaShotFrameEditor } from "./drama-shot-frame-editor";
 import { dramaShotVideoMode } from "./drama-shot-generation-utils";
+import { formatPromptFieldLines } from "@/lib/drama-frame-sequence";
 import { updateDramaShotImagePrompt } from "@/services/api/drama-projects";
 import { optimizeDramaFramePrompt } from "@/services/api/prompt-optimization";
 
@@ -43,6 +44,7 @@ export function DramaStoryboardShotCard({
     const [imagePromptOriginal, setImagePromptOriginal] = useState("");
     const [imagePromptGenerating, setImagePromptGenerating] = useState(false);
     const [imagePromptSaving, setImagePromptSaving] = useState(false);
+    const formattedImagePrompt = formatPromptFieldLines(shot.imagePrompt, "static");
     const dialogueLines = shot.dialogue
         .split(/\n+/)
         .map((line) => line.trim())
@@ -63,8 +65,9 @@ export function DramaStoryboardShotCard({
     const generateImagePrompt = async () => {
         setImagePromptGenerating(true);
         try {
-            setImagePromptOriginal(shot.imagePrompt || shot.description);
-            setImagePromptDraft(await optimizeDramaFramePrompt(shot.imagePrompt || shot.description));
+            const sourcePrompt = formattedImagePrompt || shot.description;
+            setImagePromptOriginal(sourcePrompt);
+            setImagePromptDraft(formatPromptFieldLines(await optimizeDramaFramePrompt(sourcePrompt), "static"));
             setImagePromptModalOpen(true);
         } catch (error) {
             message.error(error instanceof Error ? error.message : "Agent 图片提示词生成失败");
@@ -74,7 +77,7 @@ export function DramaStoryboardShotCard({
     };
 
     const saveImagePrompt = async () => {
-        const prompt = imagePromptDraft.trim();
+        const prompt = formatPromptFieldLines(imagePromptDraft, "static");
         if (!prompt) return;
         setImagePromptSaving(true);
         try {
@@ -160,7 +163,7 @@ export function DramaStoryboardShotCard({
                                 </span>
                                 <Input.TextArea
                                     className={shotFieldClass}
-                                    value={shot.imagePrompt}
+                                    value={formattedImagePrompt}
                                     onChange={(event) => updateShot(project.id, episodeId, shot.id, { imagePrompt: event.target.value })}
                                     autoSize={{ minRows: 2, maxRows: 5 }}
                                     placeholder="例如：女主站在雨夜天台，中景，侧逆光，压抑冷色调"

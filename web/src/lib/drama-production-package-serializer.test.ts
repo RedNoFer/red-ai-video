@@ -30,8 +30,10 @@ describe("drama production package serialization", () => {
 
         const markdown = serializeDramaProductionPackageMarkdown(value);
 
-        expect(markdown).toContain("P01-F01 0-2s：角色停住");
-        expect(markdown).toContain("P01-F02 2-6s：角色抬头");
+        expect(markdown).toContain("P01-F01 0-2s｜动作与触发：角色停住");
+        expect(markdown).toContain("P01-F02 2-6s｜动作与触发：角色抬头");
+        expect(markdown).toContain("0-2s｜起点：站立");
+        expect(markdown).toContain("2-6s｜可见衔接：承接上一段终点");
         expect(markdown).toContain("动态意图：角色站立");
         expect(markdown).not.toContain("生成15秒9:16竖屏电影级视频");
         expect(markdown).not.toContain("生成15秒旧视频提示词");

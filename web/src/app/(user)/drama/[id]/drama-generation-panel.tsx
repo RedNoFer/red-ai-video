@@ -20,6 +20,7 @@ import {
 } from "@/services/api/drama-projects";
 import { resolveModelRequestConfig, useEffectiveConfig } from "@/stores/use-config-store";
 import { appendDramaImageReferenceBindings, compileDramaShotExecutionPrompts, sanitizeDramaSupplierText } from "@/lib/drama-prompt-compiler";
+import { formatPromptFieldLines } from "@/lib/drama-frame-sequence";
 import { approvedAssetReference } from "@/lib/drama-asset-baseline";
 import { dramaReferenceImageBudget } from "@/lib/drama-production-plan";
 import { activeFrameEvidence, continuityStartEvidence } from "@/lib/drama-continuity-policy";
@@ -1175,7 +1176,10 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
             .slice(0, 1)
             .map((frame) => ({ ...frame, label: "本镜尾帧" })),
     ];
-    const supplierVideoPrompt = shot.executionVideoPrompt?.trim() || compileDramaShotExecutionPrompts(project, episode, shot).videoPrompt;
+    const compiledVideoPrompt = compileDramaShotExecutionPrompts(project, episode, shot).videoPrompt;
+    const supplierVideoPrompt = shot.framePlan?.frames?.length
+        ? compiledVideoPrompt
+        : formatPromptFieldLines(shot.executionVideoPrompt?.trim() || compiledVideoPrompt, "video");
     useEffect(() => {
         setVideoPromptDraft(supplierVideoPrompt);
         setVideoPromptOriginal(supplierVideoPrompt);

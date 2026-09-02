@@ -234,8 +234,12 @@ describe("drama prompt compiler", () => {
         expect(prompts.imagePrompt).toContain("轴线 保持同侧");
         expect(prompts.startFramePrompt).toContain("动作起始");
         expect(prompts.endFramePrompt).toContain("动作结束");
-        expect(prompts.videoPrompt).toContain("0-2s：女主停在门边");
-        expect(prompts.videoPrompt).toContain("2-5s：女主抬头看向血迹");
+        expect(prompts.videoPrompt).toContain("时间段动作：");
+        expect(prompts.videoPrompt).toContain("0-2s｜起点：动作起始");
+        expect(prompts.videoPrompt).toContain("0-2s｜动作与触发：女主停在门边");
+        expect(prompts.videoPrompt).toContain("0-2s｜终点：女主停在门边");
+        expect(prompts.videoPrompt).toContain("2-5s｜可见衔接：承接上一段终点");
+        expect(prompts.videoPrompt).toContain("2-5s｜动作与触发：女主抬头看向血迹");
         expect(prompts.videoPrompt).toContain("单一主运镜：缓慢推进");
         expect(prompts.videoPrompt).toContain("结束画面：动作结束");
         expect(prompts.videoPrompt).toContain(`风格：${DRAMA_STYLE_DESCRIPTION}`);
@@ -328,11 +332,9 @@ describe("drama prompt compiler", () => {
             transitionToNext: "逐渐压暗",
         };
         const prompts = compileDramaShotPrompts(project, project.episodes[0], shot);
-        expect(prompts.videoPrompt).toContain("表演变化：起始情绪平静，面部眉眼放松，视线看向门，身体站定");
-        expect(prompts.videoPrompt).toContain("中段情绪紧张，面部眉心收紧，视线短暂移开，身体肩部绷紧");
-        expect(prompts.videoPrompt).toContain("结束情绪压回冷静，面部嘴角压住，视线重新锁定，身体微微后退");
-        expect(prompts.videoPrompt).toContain("呼吸先屏息再呼气");
-        expect(prompts.videoPrompt).toContain("光色：冷灰蓝；左上冷光");
+        expect(prompts.videoPrompt).toContain("视觉风格与光色：冷灰蓝；左上冷光；湿地面反射");
+        expect(prompts.videoPrompt).not.toContain("表演变化：");
+        expect(prompts.videoPrompt).not.toContain("呼吸先屏息再呼气");
         expect(prompts.videoPrompt).not.toContain("表演目标：掩饰恐惧");
         expect(prompts.videoPrompt).not.toContain("色温4200K");
         expect(compileDramaDialogueAudioInstructions(shot)).toContain("重读怎么");

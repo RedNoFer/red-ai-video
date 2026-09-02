@@ -115,7 +115,7 @@ export function compileDramaShotPrompts(project: DramaProject, episode: DramaEpi
     ]).join("\n");
     const startFramePrompt = compact([...shared, `起始动作状态：${shot.entryState ? entryState.join("；") : shot.continuity?.actionStart || shot.description}`, startPlan, finalStyleLock]).join("\n");
     const endFramePrompt = compact([...shared, `结束动作状态：${shot.exitState ? exitState.join("；") : shot.continuity?.actionEnd || shot.description}`, endPlan, finalStyleLock]).join("\n");
-    const videoPrompt = compact([compileDramaShotVideoBasePrompt(project, episode, shot), ...(shot.framePlan?.frames || []).map((frame) => `${frame.startSecond}-${frame.endSecond}s：${sanitizeDramaSupplierText(frame.actionPrompt, project)}`)]).join("\n");
+    const videoPrompt = compact([compileDramaShotVideoBasePrompt(project, episode, shot), compileDramaShotVideoTimeline(project, shot)]).join("\n");
     return {
         imagePrompt: sanitizeDramaSupplierText(imagePrompt, project),
         startFramePrompt: sanitizeDramaSupplierText(startFramePrompt, project),
@@ -136,27 +136,18 @@ export function compileDramaShotVideoBasePrompt(project: DramaProject, _episode:
         project,
         shot.executionVideoPrompt && !hasStructuredDramaVideoPrompt(shot.videoPrompt) ? shot.videoPrompt || shot.description : shot.executionVideoPrompt ? shot.description : undefined,
     );
-    const actionStart = shot.continuity?.actionStart || stateActions(shot.entryState, project) || shot.description;
-    const actionEnd = shot.continuity?.actionEnd || stateActions(shot.exitState, project) || shot.description;
-    const middle = shot.performancePlan?.beats.middle;
-    const performance = shot.performancePlan?.beats;
-    const breath = shot.performancePlan?.breath;
     const light = shot.lightingPlan;
     const sound = compact([shot.sound?.ambience, shot.sound?.soundEffects, shot.sound?.music]).join("；");
+    const ending = shot.exitState ? stateActions(shot.exitState, project) : shot.continuity?.actionEnd || shot.description;
     return sanitizeDramaSupplierText(
         compact([
-            `动态意图：${videoPlan || sanitizeDramaSupplierText(shot.description || shot.sourceText, project)}`,
+            `动态意图：${shot.dramaticFunction || videoPlan || "本镜只完成一个主要可见变化，并落到明确结束状态"}`,
             `单一主运镜：${shot.cameraMotion || "固定机位"}`,
-            `动作连续：${sanitizeDramaSupplierText(actionStart, project)} → ${sanitizeDramaSupplierText(actionEnd, project)}`,
-            performance
-                ? `表演变化：${performanceBeatLine("起始", performance.start)}；${performanceBeatLine("中段", performance.middle)}；${performanceBeatLine("结束", performance.end)}${breath ? `；呼吸${breath}` : ""}`
-                : middle
-                  ? `微动作：${compact([middle.facialAction, middle.gaze, middle.bodyAction]).join("，")}`
-                  : "",
-            light ? `光色：${compact([light.palette, light.keyLight]).join("；")}` : shot.colorPalette || shot.lighting ? `光色：${compact([shot.colorPalette, shot.lighting]).join("；")}` : "",
-            sound ? `声音母题：${sanitizeDramaSupplierText(sound, project)}` : "",
+            shot.continuity?.continuityNotes ? `连续性锁：${sanitizeDramaSupplierText(shot.continuity.continuityNotes, project)}` : "",
+            shot.lightingPlan ? `视觉风格与光色：${compact([light?.palette, light?.keyLight, light?.materialResponse]).join("；")}` : shot.colorPalette || shot.lighting ? `视觉风格与光色：${compact([shot.colorPalette, shot.lighting]).join("；")}` : "",
+            sound ? `声音意图：${sanitizeDramaSupplierText(sound, project)}` : "",
             shot.dialogue ? `对白与口型：${sanitizeDramaSupplierText(shot.dialogue, project)}` : shot.narration ? `画外音节奏：${sanitizeDramaSupplierText(shot.narration, project)}` : "",
-            `结束画面：${sanitizeDramaSupplierText(actionEnd, project)}`,
+            `结束画面：${sanitizeDramaSupplierText(ending, project)}`,
             `风格：${styleContract.visualDescription}`,
             `针对性约束：${sanitizeDramaSupplierText(shot.negativePrompt || "无闪烁、无形变、无背景漂移、无道具消失、无身份跳变、无水印文字", project)}`,
         ]).join("\n"),
@@ -164,8 +155,37 @@ export function compileDramaShotVideoBasePrompt(project: DramaProject, _episode:
     );
 }
 
-function performanceBeatLine(label: string, beat: NonNullable<NonNullable<DramaShot["performancePlan"]>["beats"]>["start"]) {
-    return `${label}情绪${beat.emotion}，面部${beat.facialAction}，视线${beat.gaze}，身体${beat.bodyAction}`;
+export function compileDramaShotVideoTimeline(project: DramaProject, shot: DramaShot) {
+    const frames = [...(shot.framePlan?.frames || [])].sort((left, right) => left.sequenceIndex - right.sequenceIndex);
+    if (!frames.length) return "";
+    const continuity = shot.continuity?.continuityNotes || "角色身份、服装、道具持握、空间轴线与主光方向保持连续";
+    const lines = frames.flatMap((frame, index) => {
+        const previous = frames[index - 1];
+        const start = previous ? frameVisibleState(previous) : shot.continuity?.actionStart || stateActions(shot.entryState, project) || frameVisibleState(frame);
+        const end = frameVisibleState(frame) || sanitizeDramaSupplierText(frame.actionPrompt, project);
+        const action = sanitizeDramaSupplierText(frame.actionPrompt, project);
+        const transition = previous
+            ? `承接上一段终点；${sanitizeDramaSupplierText(continuity, project)}；只执行本段新增的可见变化`
+            : `从镜头入口直接承接；${sanitizeDramaSupplierText(continuity, project)}`;
+        return [
+            `${frame.startSecond}-${frame.endSecond}s｜起点：${sanitizeDramaSupplierText(start, project)}`,
+            `${frame.startSecond}-${frame.endSecond}s｜动作与触发：${action}`,
+            `${frame.startSecond}-${frame.endSecond}s｜可见衔接：${transition}`,
+            `${frame.startSecond}-${frame.endSecond}s｜终点：${sanitizeDramaSupplierText(end, project)}`,
+        ];
+    });
+    return ["时间段动作：", ...lines].join("\n");
+}
+
+function frameVisibleState(frame: DramaFrameBeat) {
+    return extractPromptField(frame.imagePrompt, "可见状态") || extractPromptField(frame.imagePrompt, "静态关键帧") || frame.actionPrompt;
+}
+
+function extractPromptField(value: string, label: string) {
+    const labels = ["静态关键帧", "可见状态", "可见表演状态", "景别", "机位与构图", "站位与视线", "三层空间", "光色与风格", "负面约束"];
+    const nextLabels = labels.filter((item) => item !== label).join("|");
+    const match = value.match(new RegExp(`(?:^|[\\n；])\\s*${label}[：:]\\s*([\\s\\S]*?)(?=(?:[\\n；]\\s*(?:${nextLabels})[：:]|$))`, "u"));
+    return match?.[1]?.trim().replace(/[；。]+$/u, "") || "";
 }
 
 /**

@@ -57,7 +57,9 @@ describe("creative shortcut skills", () => {
     it("keeps the shared video prompt layout", () => {
         expect(SEEDANCE_VIDEO_PROMPT_LAYOUT).toContain("起始可见状态");
         expect(SEEDANCE_VIDEO_PROMPT_LAYOUT).toContain("全局设定");
-        expect(SEEDANCE_VIDEO_PROMPT_LAYOUT).toContain("阶段节拍");
+        expect(SEEDANCE_VIDEO_PROMPT_LAYOUT).toContain("时间段动作");
+        expect(SEEDANCE_VIDEO_PROMPT_LAYOUT).toContain("起点、动作与触发、可见衔接、终点");
+        expect(SEEDANCE_VIDEO_PROMPT_LAYOUT).toContain("镜头级字段只做摘要");
         expect(SEEDANCE_VIDEO_PROMPT_LAYOUT).toContain("视觉风格与光色");
         expect(SEEDANCE_VIDEO_PROMPT_LAYOUT).toContain("每个非空字段必须独立一行");
     });

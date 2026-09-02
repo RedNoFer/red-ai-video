@@ -369,7 +369,7 @@ describe("OpenAI image provider over a live compatible fixture", () => {
         }
     });
 
-    it("uploads a local reference before TokenGo image editing", async () => {
+    it("rejects a local reference when the strict image protocol requires a public URL", async () => {
         const fixture = createProtocolFixtureServer();
         await new Promise<void>((resolve) => fixture.server.listen(0, "127.0.0.1", resolve));
         const address = fixture.server.address();
@@ -400,40 +400,8 @@ describe("OpenAI image provider over a live compatible fixture", () => {
         });
 
         try {
-            await expect(runCustomImageTask(task, origin, "", "", true)).resolves.toMatchObject({ pending: { id: expect.stringMatching(/^fixture-buming-image-/) } });
-            expect(fixture.requests.map((request) => request.path)).toEqual(["/v1/files", "/api/v1/model-runtime/invoke"]);
-            expect(fixture.requests[0]?.contentType).toMatch(/^multipart\/form-data; boundary=/);
-            expect(JSON.parse(fixture.requests[1]?.body.toString("utf8") || "{}").params).toMatchObject({ mode: "image-edit", images: ["https://cdn.example.com/fixture-upload.png"] });
-        } finally {
-            await new Promise<void>((resolve, reject) => fixture.server.close((error?: Error) => (error ? reject(error) : resolve())));
-        }
-    });
-
-    it("uploads a local reference when a Sub2API public URL is unavailable", async () => {
-        const fixture = createProtocolFixtureServer();
-        await new Promise<void>((resolve) => fixture.server.listen(0, "127.0.0.1", resolve));
-        const address = fixture.server.address();
-        if (!address || typeof address === "string") throw new Error("Protocol fixture did not bind a TCP port");
-        const origin = `http://127.0.0.1:${address.port}`;
-        const task = liveImageTask(origin, {
-            id: "image-sub2api-local-reference",
-            kind: "edit",
-            references: [{ name: "candidate.png", type: "image/png", dataUrl: PNG_DATA_URL }],
-            config: {
-                baseUrl: origin,
-                apiKey: "fixture-key",
-                apiFormat: "openai",
-                model: "gpt-image-2",
-                channelId: "fixture-sub2api",
-                advancedConfig: { ...emptyAdvancedConfig(), protocol: "sub2api", supportsReferenceImage: true },
-            },
-        });
-
-        try {
-            await expect(runOpenAiImageTask(task, origin, "", "", true)).resolves.toMatchObject({ dataUrl: expect.stringMatching(/^data:image\/png;base64,/) });
-            expect(fixture.requests.map((request) => request.path)).toEqual(["/v1/files", "/v1/images/edits"]);
-            expect(fixture.requests[0]?.contentType).toMatch(/^multipart\/form-data; boundary=/);
-            expect(JSON.parse(fixture.requests[1]?.body.toString("utf8") || "{}").images).toEqual([{ image_url: "https://cdn.example.com/fixture-upload.png" }]);
+            await expect(runCustomImageTask(task, origin, "", "", true)).rejects.toThrow("参考图需要公网图片 URL");
+            expect(fixture.requests).toHaveLength(0);
         } finally {
             await new Promise<void>((resolve, reject) => fixture.server.close((error?: Error) => (error ? reject(error) : resolve())));
         }

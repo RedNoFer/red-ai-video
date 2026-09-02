@@ -22,7 +22,6 @@ import { createSignedReferenceAssetUrl, signReferenceAssetInputUrl } from "@/lib
 import { assertCapabilityConstraints } from "@/lib/server/capability-constraints";
 import { GenerationSubmissionSafeFailure } from "@/lib/server/generation-submission-error";
 import { resolveChannelModelConfig } from "@/lib/channel-protocol-registry";
-import { uploadImageReferenceToProvider } from "./image-task-custom";
 
 import {
     type CreateImageTaskBody,
@@ -394,22 +393,17 @@ export async function buildJsonImageEditBodies(
     imageUrlObjectOnlyMode = false,
     includeCompatibilityFields = true,
 ) {
-    const config = task.config;
     const referenceContext = { ownerUserId: task.userId, taskId: task.id };
-    const requestReferenceUrl = async (reference: ImageTaskReference, index: number) => {
+    const requestReferenceUrl = async (reference: ImageTaskReference) => {
         if (publicUrlReferenceMode) return publicImageReferenceRequestUrl(reference, origin, publicOrigin, referenceContext);
         if (!imageUrlObjectOnlyMode) return jsonImageReferenceRequestUrl(reference, origin);
-        try {
-            return await publicImageReferenceRequestUrl(reference, origin, publicOrigin, referenceContext);
-        } catch {
-            return uploadImageReferenceToProvider(config, reference, origin, cookie, index);
-        }
+        return publicImageReferenceRequestUrl(reference, origin, publicOrigin, referenceContext);
     };
     let images: string[];
     let mask = "";
     try {
         images = (await Promise.all(task.references.map(requestReferenceUrl))).filter(Boolean);
-        if (task.mask) mask = await requestReferenceUrl(task.mask, task.references.length);
+        if (task.mask) mask = await requestReferenceUrl(task.mask);
     } catch (error) {
         throw new GenerationSubmissionSafeFailure(error instanceof Error ? error.message : "参考图读取失败，请重新上传参考图");
     }

@@ -294,11 +294,34 @@ function videoPromptForShot(shot) {
     const states = frameStatesForShot(shot);
     const start = states[0];
     const end = states.at(-1) || start;
-    const middle = states.length > 2 ? states[Math.floor(states.length / 2)] : end;
-    const beat = shot.performancePlan?.beats?.middle;
-    const performance = cleanPerformanceText([beat?.facialAction, beat?.gaze, beat?.bodyAction].filter(Boolean).join("；") || visiblePerformanceState(middle, 1, Math.max(states.length, 3)));
     const sound = [shot.sound?.ambience, shot.sound?.soundEffects, shot.sound?.music].filter(Boolean).join("；") || "保留现场环境声";
-    return `动态意图：${start}到${end}；起始可见状态：${start}；触发：${middle}；主体动作与反应：${performance}；一个主运镜：${shot.cameraMotion || "固定机位"}；声音：${sound}；结束画面：${end}；仅执行一个主要变化，保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：${shot.negativePrompt || "无闪烁、无形变、无背景漂移、无身份跳变、无水印文字"}。`;
+    const summary = shot.dramaticFunction ? `${shot.dramaticFunction}，完成本镜唯一主要变化` : "本镜完成唯一主要变化并落到明确结束状态";
+    const continuity = shot.continuity?.continuityNotes || "角色身份、服装、道具归属、空间轴线与主光方向保持连续";
+    const lines = [
+        `动态意图：${summary}`,
+        `单一主运镜：${shot.cameraMotion || "固定机位"}`,
+        `环境压力与视觉母题：${sound}`,
+        `结束画面：${end}`,
+        `连续性锁：${continuity}`,
+        `风格：半写实动漫幻想风，暗黑学院史诗奇幻`,
+        `针对性约束：${shot.negativePrompt || "无闪烁、无形变、无背景漂移、无身份跳变、无水印文字"}`,
+        "时间段动作：",
+    ];
+    const frames = frameStatesForShot(shot);
+    for (let index = 0; index < frames.length; index += 1) {
+        const previous = frames[index - 1];
+        const startState = previous || start;
+        const endState = frames[index];
+        const startSecond = Number(((shot.duration * index) / frames.length).toFixed(3));
+        const endSecond = Number(((shot.duration * (index + 1)) / frames.length).toFixed(3));
+        lines.push(
+            `${startSecond}-${endSecond}s｜起点：${startState}`,
+            `${startSecond}-${endSecond}s｜动作与触发：${shot.framePlan?.frames?.[index]?.actionPrompt || `${actionPhase(index, frames.length)}：${endState}`}`,
+            `${startSecond}-${endSecond}s｜可见衔接：${previous ? "承接上一段终点" : "从镜头入口直接承接"}；${continuity}；只执行本段新增的可见变化`,
+            `${startSecond}-${endSecond}s｜终点：${endState}`,
+        );
+    }
+    return lines.join("\n");
 }
 
 function visiblePerformanceState(action, index, count) {
@@ -339,8 +362,7 @@ function buildSegmentPromptSection(episodes) {
     return episodes
         .flatMap((episode) =>
             episode.shots.map((shot) => {
-                const frames = shot.framePlan.frames.map((frame) => `P${String(shot.order).padStart(2, "0")}-F${String(frame.sequenceIndex).padStart(2, "0")} ${frame.startSecond}-${frame.endSecond}s：${frame.actionPrompt}`).join("\n");
-                return `### P${String(shot.order).padStart(2, "0")}｜${shot.code}\n\n${shot.videoPrompt}\n\n${frames}`;
+                return `### P${String(shot.order).padStart(2, "0")}｜${shot.code}\n\n${shot.videoPrompt}`;
             }),
         )
         .join("\n\n");
