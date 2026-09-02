@@ -47,7 +47,7 @@
         "entities": "8.0.0",
         "fflate": "^0.8.3",
         "file-saver": "^2.0.5",
-        "file-type": "^20.5.0",
+        "file-type": "^21.3.2",
         "jsjianyingdraft": "1.0.0",
         "lucide-react": "^1.28.0",
         "motion": "^12.43.0",
