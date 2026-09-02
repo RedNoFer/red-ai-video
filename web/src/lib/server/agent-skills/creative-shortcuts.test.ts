@@ -60,6 +60,7 @@ describe("creative shortcut skills", () => {
         expect(SEEDANCE_VIDEO_PROMPT_LAYOUT).toContain("时间段动作");
         expect(SEEDANCE_VIDEO_PROMPT_LAYOUT).toContain("起点、动作与触发、可见衔接、终点");
         expect(SEEDANCE_VIDEO_PROMPT_LAYOUT).toContain("镜头级字段只做摘要");
+        expect(SEEDANCE_VIDEO_PROMPT_LAYOUT).not.toContain("阶段节拍：只有多事件");
         expect(SEEDANCE_VIDEO_PROMPT_LAYOUT).toContain("视觉风格与光色");
         expect(SEEDANCE_VIDEO_PROMPT_LAYOUT).toContain("每个非空字段必须独立一行");
     });

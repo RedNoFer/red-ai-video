@@ -6,7 +6,7 @@ import { useMemo, useRef, useState } from "react";
 
 import { approvedAssetReference } from "@/lib/drama-asset-baseline";
 import { activeFrameEvidence, continuityStartEvidence, createFrameEvidence, latestFrameEvidence, replaceFrameEvidence, supersedeFrameEvidenceByRole } from "@/lib/drama-continuity-policy";
-import { defaultDramaFrameBeats, deleteDramaFrameBeat, dramaFrameVisualSubject, insertDramaFrameBeat, updateDramaFrameBeat, validateDramaFrameVisualContent } from "@/lib/drama-frame-sequence";
+import { defaultDramaFrameBeats, deleteDramaFrameBeat, dramaFrameVisualSubject, formatPromptFieldLines, insertDramaFrameBeat, updateDramaFrameBeat, validateDramaFrameVisualContent } from "@/lib/drama-frame-sequence";
 import { appendDramaImageReferenceBindings, compileDramaFrameSupplierPrompt, resolveDramaFrameScene } from "@/lib/drama-prompt-compiler";
 import { imagePreviewUrl } from "@/lib/media-image-url";
 import { dramaAssetReferences } from "./drama-asset-reference-utils";
@@ -403,15 +403,15 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
     };
 
     const openPromptPreview = (input: PromptPreview) => {
-        const prompt = appendDramaImageReferenceBindings(input.prompt, input.references);
+        const prompt = appendDramaImageReferenceBindings(formatPromptFieldLines(input.prompt, "static"), input.references);
         setPromptPreview({ ...input, prompt });
-        setPromptDraft(prompt);
-        setPromptOriginal(prompt);
+        setPromptDraft(formatPromptFieldLines(prompt, "static"));
+        setPromptOriginal(formatPromptFieldLines(prompt, "static"));
     };
 
     const savePromptPreview = () => {
         const current = promptPreview;
-        const prompt = promptDraft.trim();
+        const prompt = formatPromptFieldLines(promptDraft, "static");
         if (!current || current.readOnly || !prompt) return;
         if (current.frameId) {
             const visualError = validateDramaFrameVisualContent(prompt);
@@ -445,7 +445,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
         if (!current || current.readOnly || !prompt || optimizingPrompt) return;
         setOptimizingPrompt(true);
         try {
-            setPromptDraft(appendDramaImageReferenceBindings(await optimizeDramaFramePrompt(prompt), current.references));
+            setPromptDraft(formatPromptFieldLines(appendDramaImageReferenceBindings(await optimizeDramaFramePrompt(prompt), current.references), "static"));
             message.success("已按 Seedance 2.0 规则生成新的帧提示词，请确认后保存");
         } catch (error) {
             message.error(error instanceof Error ? error.message : "帧提示词优化失败");
@@ -655,7 +655,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                                     </label>
                                     <label className="block text-xs text-muted-foreground">
                                         静态帧提示词
-                                        <Input.TextArea className="mt-1" autoSize={{ minRows: 2, maxRows: 4 }} value={beat.imagePrompt} disabled={rowBusy} onChange={(event) => editBeat(beat, { imagePrompt: event.target.value })} />
+                                        <Input.TextArea className="mt-1" autoSize={{ minRows: 2, maxRows: 4 }} value={formatPromptFieldLines(beat.imagePrompt, "static")} disabled={rowBusy} onChange={(event) => editBeat(beat, { imagePrompt: event.target.value })} />
                                     </label>
                                     {frame?.mediaUrl && frame.continuityStatus === "needs_review" ? (
                                         <div

@@ -301,7 +301,7 @@ function videoPromptForShot(shot) {
         `动态意图：${summary}`,
         `单一主运镜：${shot.cameraMotion || "固定机位"}`,
         `环境压力与视觉母题：${sound}`,
-        `结束画面：${end}`,
+        `结束画面：${shot.framePlan?.frames?.length ? "以时间段动作最后一段终点作为本镜唯一收束画面" : end}`,
         `连续性锁：${continuity}`,
         `风格：半写实动漫幻想风，暗黑学院史诗奇幻`,
         `针对性约束：${shot.negativePrompt || "无闪烁、无形变、无背景漂移、无身份跳变、无水印文字"}`,

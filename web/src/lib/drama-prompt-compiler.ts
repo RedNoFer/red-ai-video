@@ -139,15 +139,17 @@ export function compileDramaShotVideoBasePrompt(project: DramaProject, _episode:
     const light = shot.lightingPlan;
     const sound = compact([shot.sound?.ambience, shot.sound?.soundEffects, shot.sound?.music]).join("；");
     const ending = shot.exitState ? stateActions(shot.exitState, project) : shot.continuity?.actionEnd || shot.description;
+    const hasTimeline = Boolean(shot.framePlan?.frames?.length);
+    const dynamicIntent = shot.dramaticFunction || (hasTimeline ? "本镜完成一个主要可见变化并落到明确结束状态" : videoPlan || "本镜完成一个主要可见变化并落到明确结束状态");
     return sanitizeDramaSupplierText(
         compact([
-            `动态意图：${shot.dramaticFunction || videoPlan || "本镜只完成一个主要可见变化，并落到明确结束状态"}`,
+            `动态意图：${dynamicIntent}`,
             `单一主运镜：${shot.cameraMotion || "固定机位"}`,
             shot.continuity?.continuityNotes ? `连续性锁：${sanitizeDramaSupplierText(shot.continuity.continuityNotes, project)}` : "",
             shot.lightingPlan ? `视觉风格与光色：${compact([light?.palette, light?.keyLight, light?.materialResponse]).join("；")}` : shot.colorPalette || shot.lighting ? `视觉风格与光色：${compact([shot.colorPalette, shot.lighting]).join("；")}` : "",
             sound ? `声音意图：${sanitizeDramaSupplierText(sound, project)}` : "",
             shot.dialogue ? `对白与口型：${sanitizeDramaSupplierText(shot.dialogue, project)}` : shot.narration ? `画外音节奏：${sanitizeDramaSupplierText(shot.narration, project)}` : "",
-            `结束画面：${sanitizeDramaSupplierText(ending, project)}`,
+            `结束画面：${shot.framePlan?.frames?.length ? "以时间段动作最后一段终点作为本镜唯一收束画面" : sanitizeDramaSupplierText(ending, project)}`,
             `风格：${styleContract.visualDescription}`,
             `针对性约束：${sanitizeDramaSupplierText(shot.negativePrompt || "无闪烁、无形变、无背景漂移、无道具消失、无身份跳变、无水印文字", project)}`,
         ]).join("\n"),
@@ -164,9 +166,7 @@ export function compileDramaShotVideoTimeline(project: DramaProject, shot: Drama
         const start = previous ? frameVisibleState(previous) : shot.continuity?.actionStart || stateActions(shot.entryState, project) || frameVisibleState(frame);
         const end = frameVisibleState(frame) || sanitizeDramaSupplierText(frame.actionPrompt, project);
         const action = sanitizeDramaSupplierText(frame.actionPrompt, project);
-        const transition = previous
-            ? `承接上一段终点；${sanitizeDramaSupplierText(continuity, project)}；只执行本段新增的可见变化`
-            : `从镜头入口直接承接；${sanitizeDramaSupplierText(continuity, project)}`;
+        const transition = previous ? `承接上一段终点；${sanitizeDramaSupplierText(continuity, project)}；只执行本段新增的可见变化` : `从镜头入口直接承接；${sanitizeDramaSupplierText(continuity, project)}`;
         return [
             `${frame.startSecond}-${frame.endSecond}s｜起点：${sanitizeDramaSupplierText(start, project)}`,
             `${frame.startSecond}-${frame.endSecond}s｜动作与触发：${action}`,

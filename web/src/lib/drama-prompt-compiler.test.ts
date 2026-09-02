@@ -241,7 +241,7 @@ describe("drama prompt compiler", () => {
         expect(prompts.videoPrompt).toContain("2-5s｜可见衔接：承接上一段终点");
         expect(prompts.videoPrompt).toContain("2-5s｜动作与触发：女主抬头看向血迹");
         expect(prompts.videoPrompt).toContain("单一主运镜：缓慢推进");
-        expect(prompts.videoPrompt).toContain("结束画面：动作结束");
+        expect(prompts.videoPrompt).toContain("结束画面：以时间段动作最后一段终点作为本镜唯一收束画面");
         expect(prompts.videoPrompt).toContain(`风格：${DRAMA_STYLE_DESCRIPTION}`);
         expect(prompts.videoPrompt).not.toContain("5s 9:16 视频");
         expect(prompts.videoPrompt).not.toContain("女主：红色外套");
