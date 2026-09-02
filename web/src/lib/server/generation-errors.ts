@@ -7,6 +7,7 @@ export const DEFAULT_ACCOUNT_AVAILABILITY_ERROR = "上游图片渠道没有可�
 export function toSafeGenerationErrorMessage(error: unknown, fallback: string) {
     const message = generationErrorMessage(error);
     if (hasInsufficientPointsError(error)) return "积分不足";
+    if (/本地参考图公网地址不可访问/.test(message)) return "临时 CF 公网域名已失效，请更换 NEXT_PUBLIC_SITE_URL 后重启项目。";
     if (/no\s+available\s+(?:compatible\s+)?accounts?|no\s+compatible\s+accounts?|no\s+available\s+providers?/i.test(message)) return DEFAULT_ACCOUNT_AVAILABILITY_ERROR;
     if (isTimeoutError(error, message)) return "生成接口响应超时，请稍后重试或检查模型服务。";
     if (isFetchNetworkError(error, message)) return DEFAULT_CHANNEL_CONNECT_ERROR;

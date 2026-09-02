@@ -13,6 +13,7 @@ describe("generation error messages", () => {
     it("does not expose infrastructure addresses or environment names", () => {
         expect(toSafeGenerationErrorMessage(new Error("POST http://localhost:3000 failed"), "生成失败")).toBe(DEFAULT_CHANNEL_CONNECT_ERROR);
         expect(toSafeGenerationErrorMessage(new Error("参考图需要公网图片 URL，请配置 NEXT_PUBLIC_SITE_URL"), "生成失败")).toBe("参考素材暂时无法提交给当前生成渠道，请重新上传或稍后重试。");
+        expect(toSafeGenerationErrorMessage(new Error("本地参考图公网地址不可访问，请检查 NEXT_PUBLIC_SITE_URL 后重试"), "生成失败")).toBe("临时 CF 公网域名已失效，请更换 NEXT_PUBLIC_SITE_URL 后重启项目。");
         expect(toSafeGenerationErrorMessage(new Error("<html><head><title>502 Bad Gateway</title></head><body><center><h1>502 Bad Gateway</h1></center><hr><center>nginx</center></body></html>"), "生成失败")).toBe(DEFAULT_CHANNEL_CONNECT_ERROR);
     });
 });
