@@ -23,6 +23,12 @@ data/
 .codex/
 .trellis/
 .agents/
+!.agents/
+.agents/*
+!.agents/skills/
+.agents/skills/*
+!.agents/skills/seedance-25/
+!.agents/skills/seedance-25/**
 skills-lock.json
 docs/assets/
 VOZEB-PRO-审计报告.md

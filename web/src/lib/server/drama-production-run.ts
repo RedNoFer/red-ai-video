@@ -6,7 +6,7 @@ import { approvedAssetReference, hasApprovedAssetReference } from "@/lib/drama-a
 import { continuityStartEvidence, latestFrameEvidence } from "@/lib/drama-continuity-policy";
 import { planDramaVideoSegments } from "@/lib/drama-frame-sequence";
 import { dramaReferenceImageBudget } from "@/lib/drama-production-plan";
-import { compileDramaShotExecutionPrompts, compileDramaShotVideoBasePrompt, sanitizeDramaSupplierText } from "@/lib/drama-prompt-compiler";
+import { compileDramaShotExecutionPrompts, compileDramaShotVideoBasePrompt, compileDramaShotVideoTimeline, sanitizeDramaSupplierText } from "@/lib/drama-prompt-compiler";
 import type { DramaEpisode, DramaProductionPlan, DramaProductionRun, DramaProductionStep, DramaProject, DramaVideoReferenceBinding } from "@/lib/drama-project-contract";
 
 export type DramaProductionParameterInput = {
@@ -204,11 +204,14 @@ export function unlockDramaProductionSteps(run: DramaProductionRun) {
 
 export function compileDramaVideoSegmentPrompt(shot: DramaEpisode["shots"][number], frameIds: string[], basePrompt = shot.executionVideoPrompt || shot.videoPrompt, project?: DramaProject) {
     const frames = frameIds.flatMap((id) => shot.framePlan?.frames.find((frame) => frame.id === id) || []);
+    const fallbackTimeline = frames.flatMap((frame) => [
+        `P${String(shot.order).padStart(2, "0")}-F${String(frame.sequenceIndex).padStart(2, "0")}｜${frame.startSecond}-${frame.endSecond}s`,
+        `动作与触发：${frame.actionPrompt}`,
+        `终点：${frame.imagePrompt}`,
+    ]);
     return [
         basePrompt,
-        ...frames.map(
-            (frame) => `P${String(shot.order).padStart(2, "0")}-F${String(frame.sequenceIndex).padStart(2, "0")} ${frame.startSecond}-${frame.endSecond}s：${project ? sanitizeDramaSupplierText(frame.actionPrompt, project) : frame.actionPrompt}`,
-        ),
+        project ? compileDramaShotVideoTimeline(project, shot, frameIds) : fallbackTimeline.join("\n"),
     ]
         .filter(Boolean)
         .join("\n");

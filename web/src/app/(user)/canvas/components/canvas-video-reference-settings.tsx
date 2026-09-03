@@ -5,7 +5,7 @@ import { useState } from "react";
 
 import type { CanvasTheme } from "@/lib/canvas-theme";
 import { imagePreviewUrl } from "@/lib/media-image-url";
-import type { CreativeVideoReferenceMode, VideoReferenceRole } from "@/lib/video-reference-contract";
+import { MAX_VIDEO_IMAGE_REFERENCES, type CreativeVideoReferenceMode, type VideoReferenceRole } from "@/lib/video-reference-contract";
 
 import type { CanvasNodeMetadata, CanvasVideoFrameSelection } from "../types";
 import type { CanvasResourceReference } from "../utils/canvas-resource-references";
@@ -17,7 +17,7 @@ const referenceModes: Array<{ value: CreativeVideoReferenceMode; label: string; 
     { value: "reference", label: "普通参考", description: "素材参与整体创作" },
     { value: "first_frame", label: "首帧", description: "固定开始画面" },
     { value: "first_last", label: "首尾帧", description: "固定开始和结束" },
-    { value: "all_frames", label: "全能帧", description: "2–5 张有序关键帧" },
+    { value: "all_frames", label: "全能帧", description: "2–9 张有序关键帧" },
 ];
 
 export function CanvasVideoReferenceSettings({
@@ -93,10 +93,10 @@ export function CanvasVideoReferenceSettings({
                 <>
                     <div className="flex items-center justify-between gap-2">
                         <span className="text-[11px] font-medium" style={{ color: theme.node.muted }}>
-                            选择 2–5 张关键帧
+                            选择 2–9 张关键帧
                         </span>
                         <span className="text-[10px]" style={{ color: theme.node.faint }}>
-                            {metadata?.videoKeyframes?.length || 0}/5
+                            {metadata?.videoKeyframes?.length || 0}/{MAX_VIDEO_IMAGE_REFERENCES}
                         </span>
                     </div>
                     <div className="hide-scrollbar grid max-h-36 grid-cols-4 gap-1.5 overflow-y-auto pr-0.5">
@@ -106,7 +106,7 @@ export function CanvasVideoReferenceSettings({
                                 <button
                                     key={reference.nodeId}
                                     type="button"
-                                    disabled={!selection || (index < 0 && (metadata?.videoKeyframes?.length || 0) >= 5)}
+                                    disabled={!selection || (index < 0 && (metadata?.videoKeyframes?.length || 0) >= MAX_VIDEO_IMAGE_REFERENCES)}
                                     className="relative aspect-square min-w-0 overflow-hidden rounded-lg border transition hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40"
                                     style={{ background: theme.node.fill, borderColor: index >= 0 ? theme.node.text : theme.node.stroke }}
                                     onMouseDown={(event) => event.stopPropagation()}

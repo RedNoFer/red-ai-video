@@ -75,6 +75,17 @@ describe("Drama generation production workspace", () => {
         expect(source).toContain("-${index}");
     });
 
+    it("opens the prompt preview without waiting for the optional preflight", async () => {
+        const source = await readFile(resolve(process.cwd(), "src/app/(user)/drama/[id]/drama-generation-panel.tsx"), "utf8");
+        const start = source.indexOf("const startProduction =");
+        const preview = source.indexOf("showPromptPreview(shotIds", start);
+
+        expect(start).toBeGreaterThanOrEqual(0);
+        expect(preview).toBeGreaterThan(start);
+        expect(source.slice(start, preview)).not.toContain("preflightDramaGeneration");
+        expect(source).toContain("onClick={() => void checkProduction()}");
+    });
+
     it("uses the locked episode resolution and does not expose a client video-model selector", async () => {
         const [generationSource, settingsSource, scriptSource, frameEditorSource] = await Promise.all([
             readFile(resolve(process.cwd(), "src/app/(user)/drama/[id]/drama-generation-panel.tsx"), "utf8"),
@@ -109,6 +120,17 @@ describe("Drama generation production workspace", () => {
         expect(frameEditorSource).toContain("data-drama-prompt-references");
     });
 
+    it("does not save the full oversized project before confirming production", async () => {
+        const source = await readFile(resolve(process.cwd(), "src/app/(user)/drama/[id]/drama-generation-panel.tsx"), "utf8");
+        const lockStart = source.indexOf("const lockProduction = async");
+        const lockEnd = source.indexOf("const generateVideoPrompt", lockStart);
+        const lockProduction = source.slice(lockStart, lockEnd);
+
+        expect(lockProduction).not.toContain("saveProjectNow(project.id)");
+        expect(lockProduction).toContain('updateDramaShotPrompt(project.id, episode.id, shotId, prompts.videoPrompt || "", prompts.imagePrompt)');
+        expect(lockProduction).toContain("createDramaProductionRun(project.id, episode.id, undefined, check");
+    });
+
     it("shows persistent per-frame progress without blocking the whole storyboard area", async () => {
         const source = await readFile(resolve(process.cwd(), "src/app/(user)/drama/[id]/drama-shot-frame-editor.tsx"), "utf8");
 
@@ -134,6 +156,8 @@ describe("Drama generation production workspace", () => {
         expect(source).toContain("实际提交给供应商的完整提示词（已留档）");
         expect(source).toContain("readOnly={promptPreview?.readOnly}");
         expect(source).toContain("确认使用当前图并继续");
+        expect(source).toContain("检验图片");
+        expect(source).toContain("完成后可手动检验图片");
         expect(source).toContain("candidateStatus");
         expect(source).not.toContain('mediaUrl: undefined, remoteUrl: undefined, inputHash: undefined, continuityStatus: "pending"');
     });

@@ -502,6 +502,18 @@ describe("production package boundary", () => {
         expect(prompt).not.toContain("旧版长提示词");
     });
 
+    it("rebuilds old static prompts that contain reference duties on package import", () => {
+        const legacy = structuredClone(productionPackage);
+        legacy.episodes[0].shots[0].framePlan.frames[0].imagePrompt = "静态关键帧：旧画面；可见状态：手握断剑；可见表演状态：警觉；景别：中景；机位与构图：平视；站位与视线：看向断剑；三层空间：背景古塔；光色与风格：冷光；参考图职责：沿用旧绑定；负面约束：无水印";
+
+        const imported = previewDramaProductionPackage(JSON.stringify(legacy), "package.json").package;
+        const prompt = imported.episodes[0].shots[0].framePlan.frames[0].imagePrompt;
+
+        expect(prompt.split("\n")).toHaveLength(9);
+        expect(prompt).not.toContain("参考图职责：");
+        expect(prompt).toContain("静态关键帧：梦中惊醒");
+    });
+
     it("allows a regenerated package to be identified and applied again", () => {
         const first = applyDramaProductionPackage(project(), productionPackage, "hash-regenerated");
         const second = applyDramaProductionPackage(first, productionPackage, "hash-regenerated");

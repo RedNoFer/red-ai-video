@@ -91,8 +91,30 @@ describe("Canvas video references", () => {
             context: emptyContext(),
             availableInputs: [{ image: first }, { image: second }],
         });
-        expect(resolved.images.map((item) => [item.id, item.videoRole, item.keyframeIndex])).toEqual([["frame-two", "keyframe", 1], ["frame-one", "keyframe", 2]]);
+        expect(resolved.images.map((item) => [item.id, item.videoRole, item.keyframeIndex])).toEqual([
+            ["frame-two", "keyframe", 1],
+            ["frame-one", "keyframe", 2],
+        ]);
         expect(canvasVideoReferenceMetadata(resolved).videoReferences?.map((item) => item.keyframeIndex)).toEqual([1, 2]);
+    });
+
+    it("allows nine image references and rejects the tenth", () => {
+        const images = Array.from({ length: 10 }, (_, index) => image(`frame-${index + 1}`, `https://cdn.example.com/frame-${index + 1}.webp`));
+
+        expect(
+            resolveCanvasVideoGenerationReferences({
+                metadata: { videoReferenceMode: "all_frames", videoKeyframes: images.slice(0, 9).map((item) => frameSelection(item.id, item.url!)) },
+                context: emptyContext(),
+                availableInputs: images.slice(0, 9).map((image) => ({ image })),
+            }).images,
+        ).toHaveLength(9);
+        expect(() =>
+            resolveCanvasVideoGenerationReferences({
+                metadata: { videoReferenceMode: "all_frames", videoKeyframes: images.map((item) => frameSelection(item.id, item.url!)) },
+                context: emptyContext(),
+                availableInputs: images.map((image) => ({ image })),
+            }),
+        ).toThrow("全能帧必须选择 2 到 9 张图片");
     });
 });
 

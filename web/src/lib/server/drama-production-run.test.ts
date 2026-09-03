@@ -61,8 +61,10 @@ describe("drama production run planning", () => {
         ]);
         expect(videos.map((step) => step.duration)).toEqual([4, 4]);
         expect(videos[1].dependsOn).toContain(videos[0].id);
-        expect(videos[0].prompt).toContain("P01-F01 0-2s：动作1");
-        expect(compileDramaVideoSegmentPrompt(shot, ["f3", "f4"])).toContain("P01-F04 6-8s：动作4");
+        expect(videos[0].prompt).toContain("P01-F01｜0-2s");
+        expect(videos[0].prompt).toContain("动作与触发：动作1");
+        expect(compileDramaVideoSegmentPrompt(shot, ["f3", "f4"])).toContain("P01-F04｜6-8s");
+        expect(compileDramaVideoSegmentPrompt(shot, ["f3", "f4"])).toContain("动作与触发：动作4");
     });
 
     it("submits only checked intermediate frames while retaining fixed assets", () => {
@@ -149,7 +151,8 @@ describe("drama production run planning", () => {
 
         expect(refreshed.referenceImageUrls).toEqual(["/generated-f1.png", "/generated-f2.png"]);
         expect(refreshed.referenceBindingsSnapshot).toMatchObject([{ alias: "@图片1", frameId: "f1" }, { alias: "@图片2", frameId: "f2" }]);
-        expect(refreshed.prompt).toContain("P01-F01 0-2s：抬头");
+        expect(refreshed.prompt).toContain("P01-F01｜0-2s");
+        expect(refreshed.prompt).toContain("动作与触发：抬头");
     });
 
     it("blocks before submission when assets leave room for fewer than two frame anchors", () => {

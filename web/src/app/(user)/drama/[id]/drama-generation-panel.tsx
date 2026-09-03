@@ -308,11 +308,12 @@ export function DramaGenerationPanel({
     };
 
     const lockProduction = async (shotIds: string[], check: DramaProductionPreflight, referenceSelections: Record<string, string[]>) => {
-        for (const [shotId, prompts] of Object.entries(check.revisedPrompts || {})) updateShot(project.id, episode.id, shotId, { executionVideoPrompt: prompts.videoPrompt, executionImagePrompt: prompts.imagePrompt });
         setCreatingRun(true);
         try {
-            // Flush the editable episode plan (including resolution) before locking the run.
-            await saveProjectNow(project.id);
+            for (const [shotId, prompts] of Object.entries(check.revisedPrompts || {})) {
+                const saved = await updateDramaShotPrompt(project.id, episode.id, shotId, prompts.videoPrompt || "", prompts.imagePrompt);
+                replaceProject(saved);
+            }
             const run = await createDramaProductionRun(project.id, episode.id, undefined, check, { referenceSelections });
             setProductionRun(run);
             await loadProject(project.id, true);
@@ -388,40 +389,25 @@ export function DramaGenerationPanel({
         });
     };
 
-    const startProduction = async (shotIds: string[]) => {
-        if (preflighting || creatingRun) return;
+    const checkProduction = async (shotIds: string[] = episode.shots.map((shot) => shot.id)) => {
+        if (preflighting) return;
         setPreflighting(true);
         try {
             const check = await preflightDramaGeneration(project.id, episode.id, shotIds, `drama-preflight:${project.id}:${episode.id}:${shotIds.join(",")}:${project.updatedAt}`);
             setPreflight(check);
-            if (check.status === "blocked") return message.error("导演前置检查未通过，请先处理阻断项");
-            if (check.status === "needs_confirmation") {
-                const hasRevisions = Object.keys(check.revisedPrompts || {}).length > 0;
-                modal.confirm({
-                    title: "生成前发现可修订风险",
-                    content: (
-                        <div className="max-h-52 overflow-y-auto text-sm">
-                            {(check.changeSummary || check.issues.map((issue) => issue.message)).slice(0, 8).map((item, index) => (
-                                <p key={`${item}-${index}`} className="mb-1">
-                                    {item}
-                                </p>
-                            ))}
-                        </div>
-                    ),
-                    okText: hasRevisions ? "应用修订并查看提示词" : "查看提示词",
-                    cancelText: "取消",
-                    onOk: () => {
-                        showPromptPreview(shotIds, check);
-                    },
-                });
-                return;
-            }
-            showPromptPreview(shotIds, check);
+            if (check.status === "blocked") message.error("导演前置检查未通过，请先处理阻断项");
+            else if (check.status === "needs_confirmation") message.warning("生成前检查发现可确认风险，请查看下方详情");
+            else message.success("生成前检查已通过");
         } catch (error) {
             message.error(error instanceof Error ? error.message : "生成前预检失败");
         } finally {
             setPreflighting(false);
         }
+    };
+
+    const startProduction = (shotIds: string[]) => {
+        if (creatingRun) return;
+        showPromptPreview(shotIds, { status: "passed", issues: [], checkedShotIds: shotIds, changeSummary: [] });
     };
 
     const completeShotReviewAndRefresh = async (shotId: string) => {
@@ -619,7 +605,12 @@ export function DramaGenerationPanel({
                         </h3>
                         <p className="truncate text-xs text-muted-foreground">阻塞项会说明原因，并带你回到真正需要处理的位置。</p>
                     </div>
-                    <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{checklist.filter((item) => item.tone === "done" || item.tone === "optional").length}/4 可继续</span>
+                    <div className="flex shrink-0 items-center gap-2">
+                        <Button size="small" icon={<ScanSearch className="size-3.5" />} loading={preflighting} disabled={!readiness.totalShots} onClick={() => void checkProduction()}>
+                            检查生成条件
+                        </Button>
+                        <span className="text-xs tabular-nums text-muted-foreground">{checklist.filter((item) => item.tone === "done" || item.tone === "optional").length}/4 可继续</span>
+                    </div>
                 </div>
                 <div className={`mt-2 grid gap-1.5 ${readiness.totalShots ? "sm:grid-cols-2 xl:grid-cols-4" : "max-w-xl"}`}>
                     {(readiness.totalShots ? checklist : checklist.slice(0, 1)).map(({ id, ...item }) => (
@@ -1177,9 +1168,7 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
             .map((frame) => ({ ...frame, label: "本镜尾帧" })),
     ];
     const compiledVideoPrompt = compileDramaShotExecutionPrompts(project, episode, shot).videoPrompt;
-    const supplierVideoPrompt = shot.framePlan?.frames?.length
-        ? compiledVideoPrompt
-        : formatPromptFieldLines(shot.executionVideoPrompt?.trim() || compiledVideoPrompt, "video");
+    const supplierVideoPrompt = shot.framePlan?.frames?.length ? compiledVideoPrompt : formatPromptFieldLines(shot.executionVideoPrompt?.trim() || compiledVideoPrompt, "video");
     useEffect(() => {
         setVideoPromptDraft(supplierVideoPrompt);
         setVideoPromptOriginal(supplierVideoPrompt);

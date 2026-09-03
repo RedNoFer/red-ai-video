@@ -20,6 +20,7 @@ import { refundImageTask } from "@/lib/server/image-task-refund";
 import { refundTextTask } from "@/lib/server/text-task-refund";
 import { refundVideoTask } from "@/lib/server/video-task-refund";
 import { toSafeGenerationErrorMessage } from "@/lib/server/generation-errors";
+import { videoProviderResultUrlError } from "@/lib/server/video-provider-response";
 import { getAuthSettings } from "@/lib/auth/store";
 import { GenerationSubmissionSafeFailure, GenerationSubmissionUncertainError } from "@/lib/server/generation-submission-error";
 
@@ -748,6 +749,12 @@ async function persistVideoLease(task: VideoTask, lease: GenerationTaskLease, wo
     if (!resultUrl) {
         await failVideoTaskFromWorker(task, "视频任务已完成但没有返回视频地址");
         await releaseGenerationTaskLease("video", task.id, workerId, { executionPhase: "completed", nextPollAt: undefined, lastUpstreamStatus: "result_url_missing" });
+        return "failed";
+    }
+    const resultUrlError = videoProviderResultUrlError(resultUrl);
+    if (resultUrlError) {
+        await failVideoTaskFromWorker(task, resultUrlError);
+        await releaseGenerationTaskLease("video", task.id, workerId, { executionPhase: "completed", nextPollAt: undefined, lastUpstreamStatus: "provider_result_error" });
         return "failed";
     }
     await scheduleGenerationTask("video", task.id, { executionPhase: "persisting", nextPollAt: lease.nextPollAt });

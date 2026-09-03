@@ -19,7 +19,21 @@ function withDeterministicVideoSection(value: DramaProductionPackageV1): DramaPr
         ...value,
         episodes: value.episodes.map((episode) => ({
             ...episode,
-            shots: episode.shots.map((shot) => ({ ...shot, videoPrompt: cleanPackageVideoBrief(shot.videoPrompt) || shot.description })),
+            shots: episode.shots.map((shot) => ({
+                ...shot,
+                imagePrompt: formatPromptFieldLines(shot.imagePrompt, "static"),
+                ...(shot.startFramePrompt ? { startFramePrompt: formatPromptFieldLines(shot.startFramePrompt, "static") } : {}),
+                ...(shot.endFramePrompt ? { endFramePrompt: formatPromptFieldLines(shot.endFramePrompt, "static") } : {}),
+                videoPrompt: cleanPackageVideoBrief(shot.videoPrompt) || shot.description,
+                framePlan: {
+                    ...shot.framePlan,
+                    frames: shot.framePlan.frames.map((frame) => ({
+                        ...frame,
+                        imagePrompt: formatPromptFieldLines(frame.imagePrompt, "static"),
+                        ...(frame.supplierPrompt ? { supplierPrompt: formatPromptFieldLines(frame.supplierPrompt, "static") } : {}),
+                    })),
+                },
+            })),
         })),
     };
     if (!canonical.archive?.sections.some((section) => section.title.includes("分段视频 Prompt"))) return canonical;
@@ -73,10 +87,11 @@ function videoPromptSection(value: DramaProductionPackageV1) {
                     const end = frameVisibleState(frame) || frame.actionPrompt;
                     const continuity = shot.continuity?.continuityNotes || "角色身份、服装、道具归属、空间轴线与主光方向保持连续";
                     return [
-                        `${frame.startSecond}-${frame.endSecond}s｜起点：${start}`,
-                        `${promptCode}-F${String(frame.sequenceIndex).padStart(2, "0")} ${frame.startSecond}-${frame.endSecond}s｜动作与触发：${frame.actionPrompt}`,
-                        `${frame.startSecond}-${frame.endSecond}s｜可见衔接：${previous ? "承接上一段终点" : "从镜头入口直接承接"}；${continuity}；只执行本段新增的可见变化`,
-                        `${frame.startSecond}-${frame.endSecond}s｜终点：${end}`,
+                        `${promptCode}-F${String(frame.sequenceIndex).padStart(2, "0")}｜${frame.startSecond}-${frame.endSecond}s`,
+                        `起点：${start}`,
+                        `动作与触发：${frame.actionPrompt}`,
+                        `可见衔接：${previous ? "承接上一段终点" : "从镜头入口直接承接"}；${continuity}；只执行本段新增的可见变化`,
+                        `终点：${end}`,
                     ];
                 });
                 const endState =

@@ -92,10 +92,7 @@ test("管理员可以应用并保存音频逻辑模型路由", async ({ page, re
     const currentSettingsResponse = await request.get("/api/admin/settings");
     expect(currentSettingsResponse.ok(), await currentSettingsResponse.text()).toBe(true);
     const currentSettings = ((await currentSettingsResponse.json()) as { settings: Record<string, unknown> }).settings;
-    const fixtureChannel = applyChannelProtocol(
-        { id: "e2e-routing-audio", name: "E2E 路由音频夹具", baseUrl: "http://127.0.0.1:4010/v1", apiKey: "fixture-key", apiFormat: "openai", models: ["mock-audio"], enabled: true },
-        "openai",
-    );
+    const fixtureChannel = applyChannelProtocol({ id: "e2e-routing-audio", name: "E2E 路由音频夹具", baseUrl: "http://127.0.0.1:4010/v1", apiKey: "fixture-key", apiFormat: "openai", models: ["mock-audio"], enabled: true }, "openai");
     const settingsResponse = await request.patch("/api/admin/settings", {
         data: {
             systemChannels: [fixtureChannel],
@@ -120,13 +117,10 @@ test("管理员可以应用并保存音频逻辑模型路由", async ({ page, re
     await expect(page.getByText("模型路由设置", { exact: true })).toBeVisible();
 
     await page.getByLabel("前端展示昵称").fill("Mock Audio Saved");
-    await page.getByRole("button", { name: "应用修改" }).click();
-    await expect(page.getByText("模型路由设置已更新，请保存渠道配置", { exact: true })).toBeVisible();
-
     const saveResponse = page.waitForResponse((response) => response.url().includes("/api/admin/settings") && response.request().method() === "PATCH");
-    await page.getByRole("button", { name: "保存模型渠道配置" }).click();
+    await page.getByRole("button", { name: "应用修改" }).click();
     expect((await saveResponse).status()).toBe(200);
-    await expect(page.getByText("模型渠道配置已保存", { exact: true })).toBeVisible();
+    await expect(page.getByText("模型路由设置已保存", { exact: true })).toBeVisible();
 
     const savedSettingsResponse = await request.get("/api/admin/settings");
     expect(savedSettingsResponse.ok(), await savedSettingsResponse.text()).toBe(true);

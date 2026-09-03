@@ -30,7 +30,7 @@ import { resolveModelRequestTimeoutMs } from "@/lib/server/model-request-policy"
 import { mediaTaskSource } from "@/lib/media-management-contract";
 import { runGenerationTaskRecoveryBatch } from "@/lib/server/generation-task-recovery-service";
 import { scheduleGenerationTask } from "@/lib/server/generation-task-scheduler";
-import { VIDEO_PROVIDER_MEDIA_KEYS, parseVideoProviderJson, readVideoProviderHttpError, readVideoProviderId, readVideoProviderUrl } from "@/lib/server/video-provider-response";
+import { VIDEO_PROVIDER_MEDIA_KEYS, parseVideoProviderJson, readVideoProviderHttpError, readVideoProviderId, readVideoProviderUrl, videoProviderResultUrlError } from "@/lib/server/video-provider-response";
 import { buildSeedanceSpecialRequest } from "@/lib/seedance-special";
 import { resolveBumingSeedanceVideoModelContract } from "@/lib/channel-protocol-registry";
 import { assertVozebRecommendedVideoReferences, buildVozebRecommendedVideoRequest } from "@/lib/vozeb-recommended-video";
@@ -108,15 +108,14 @@ export async function POST(request: Request) {
             const capabilityProfile = channel.capabilityProfile;
             const bumingContract = channel.advancedConfig?.protocol === "buming-seedance" ? resolveBumingSeedanceVideoModelContract(channel.model) : undefined;
             const supportsKeyframes = bumingContract ? bumingContract.videoReferenceModes.includes("all_frames") : capabilityProfile?.supportsKeyframes;
-            const maxReferenceImages = bumingContract?.maxReferenceImages || capabilityProfile?.maxReferenceImages || 0;
-            if (keyframeCount && (!supportsKeyframes || maxReferenceImages < keyframeCount)) {
+            if (keyframeCount && !supportsKeyframes) {
                 if (bumingContract && !bumingContract.videoReferenceModes.includes("all_frames")) {
                     const error = new Error("当前不鸣视频模型不支持全能帧连续参考");
                     if (isDramaRun) return NextResponse.json({ error: error.message }, { status: 400 });
                     capabilityError = error;
                     continue;
                 }
-                const error = new Error(`当前模型未声明支持 ${keyframeCount} 张全能帧关键图，请切换支持全能帧的模型`);
+                const error = new Error("当前模型未声明支持全能帧关键图，请切换支持全能帧的模型");
                 if (isDramaRun) return NextResponse.json({ error: error.message }, { status: 400 });
                 capabilityError = error;
                 continue;
@@ -134,7 +133,7 @@ export async function POST(request: Request) {
             try {
                 assertCapabilityConstraints(capabilityProfile, {
                     capability: "video",
-                    referenceCount: references.filter((reference) => reference.type === "image").length,
+                    referenceCount: undefined,
                     durationSeconds: parameters.videoSeconds === -1 ? undefined : parameters.videoSeconds,
                     aspectRatio: normalizeVideoAspectRatio(parameters.size),
                 });
@@ -441,6 +440,13 @@ export async function createUpstream(
             throw new SafeCandidateFailure(providerError || "视频接口请求失败");
         }
         const resultUrl = readVideoProviderUrl(data, channel.advancedConfig?.resultField);
+        const resultUrlError = videoProviderResultUrlError(resultUrl);
+        if (resultUrlError) {
+            const pointsCost = billedPointsCost(response.headers.get("x-vozeb-pro-points-cost"));
+            const pointsRecordId = response.headers.get("x-vozeb-pro-points-record-id") || undefined;
+            if (pointsCost !== undefined && pointsRecordId) await refundUserPoints(userId, generationModelId(channel), pointsCost, "video", videoUnits(raw, multipliers), undefined, pointsRecordId);
+            throw new SafeCandidateFailure(resultUrlError);
+        }
         const id = readVideoProviderId(data) || (resultUrl ? `direct:${Date.now()}` : "");
         if (!id) {
             const pointsCost = billedPointsCost(response.headers.get("x-vozeb-pro-points-cost"));

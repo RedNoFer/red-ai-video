@@ -11,7 +11,10 @@ if (!videoModel) throw new Error("VOZEB_VIDEO_MODEL is required; set it to the e
 
 const productionPlan = {
     version: "drama-production-plan-v1",
-    skills: [{ id: "seedance-director", name: "Seedance 导演", version: "2.0" }],
+    skills: [
+        { id: "seedance-director", name: "Seedance 导演", version: "2.0" },
+        { id: "seedance-25-director", name: "Seedance 2.5 导演", version: "2.5" },
+    ],
     video: {
         model: videoModel,
         mode: "storyboard",
@@ -156,7 +159,12 @@ const EXPLICIT_FRAME_STATES = {
 
 function frameStatesForShot(shot) {
     const existingStates = (shot.framePlan?.frames || [])
-        .map((frame) => String(frame.imagePrompt || "").match(/静态关键帧：([\s\S]*?)(?:；可见状态：|\n可见状态：)/u)?.[1]?.trim() || "")
+        .map(
+            (frame) =>
+                String(frame.imagePrompt || "")
+                    .match(/静态关键帧：([\s\S]*?)(?:；可见状态：|\n可见状态：)/u)?.[1]
+                    ?.trim() || "",
+        )
         .filter(Boolean);
     if (existingStates.length) return existingStates;
     const explicit = EXPLICIT_FRAME_STATES[shot.code];
@@ -293,20 +301,25 @@ function isGenericPerformance(value) {
 function videoPromptForShot(shot) {
     const states = frameStatesForShot(shot);
     const start = states[0];
-    const end = states.at(-1) || start;
     const sound = [shot.sound?.ambience, shot.sound?.soundEffects, shot.sound?.music].filter(Boolean).join("；") || "保留现场环境声";
     const summary = shot.dramaticFunction ? `${shot.dramaticFunction}，完成本镜唯一主要变化` : "本镜完成唯一主要变化并落到明确结束状态";
     const continuity = shot.continuity?.continuityNotes || "角色身份、服装、道具归属、空间轴线与主光方向保持连续";
-    const lines = [
+    return [
         `动态意图：${summary}`,
         `单一主运镜：${shot.cameraMotion || "固定机位"}`,
         `环境压力与视觉母题：${sound}`,
-        `结束画面：${shot.framePlan?.frames?.length ? "以时间段动作最后一段终点作为本镜唯一收束画面" : end}`,
+        `结束画面：以时间段动作最后一段终点作为本镜唯一收束画面`,
         `连续性锁：${continuity}`,
         `风格：半写实动漫幻想风，暗黑学院史诗奇幻`,
         `针对性约束：${shot.negativePrompt || "无闪烁、无形变、无背景漂移、无身份跳变、无水印文字"}`,
-        "时间段动作：",
-    ];
+    ].join("\n");
+}
+
+function videoTimelineForShot(shot) {
+    const states = frameStatesForShot(shot);
+    const start = states[0];
+    const continuity = shot.continuity?.continuityNotes || "角色身份、服装、道具归属、空间轴线与主光方向保持连续";
+    const lines = ["时间段动作："];
     const frames = frameStatesForShot(shot);
     for (let index = 0; index < frames.length; index += 1) {
         const previous = frames[index - 1];
@@ -315,10 +328,11 @@ function videoPromptForShot(shot) {
         const startSecond = Number(((shot.duration * index) / frames.length).toFixed(3));
         const endSecond = Number(((shot.duration * (index + 1)) / frames.length).toFixed(3));
         lines.push(
-            `${startSecond}-${endSecond}s｜起点：${startState}`,
-            `${startSecond}-${endSecond}s｜动作与触发：${shot.framePlan?.frames?.[index]?.actionPrompt || `${actionPhase(index, frames.length)}：${endState}`}`,
-            `${startSecond}-${endSecond}s｜可见衔接：${previous ? "承接上一段终点" : "从镜头入口直接承接"}；${continuity}；只执行本段新增的可见变化`,
-            `${startSecond}-${endSecond}s｜终点：${endState}`,
+            `P${String(shot.order).padStart(2, "0")}-F${String(index + 1).padStart(2, "0")}｜${startSecond}-${endSecond}s`,
+            `起点：${startState}`,
+            `动作与触发：${shot.framePlan?.frames?.[index]?.actionPrompt || `${actionPhase(index, frames.length)}：${endState}`}`,
+            `可见衔接：${previous ? "承接上一段终点" : "从镜头入口直接承接"}；${continuity}；只执行本段新增的可见变化`,
+            `终点：${endState}`,
         );
     }
     return lines.join("\n");
@@ -362,7 +376,7 @@ function buildSegmentPromptSection(episodes) {
     return episodes
         .flatMap((episode) =>
             episode.shots.map((shot) => {
-                return `### P${String(shot.order).padStart(2, "0")}｜${shot.code}\n\n${shot.videoPrompt}`;
+                return `### P${String(shot.order).padStart(2, "0")}｜${shot.code}\n\n${shot.videoPrompt}\n${videoTimelineForShot(shot)}`;
             }),
         )
         .join("\n\n");

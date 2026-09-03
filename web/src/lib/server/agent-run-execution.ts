@@ -30,6 +30,8 @@ export { acceptsMediaReference, mergeTaskReferences, requestedTextLimit, reviewC
 class AgentChildTaskTerminalError extends Error {}
 class AgentChildTaskDeferredError extends Error {}
 
+const PROMPT_AUTHORING_ONLY_SKILL_IDS = new Set(["seedance-25-director"]);
+
 export async function canContinue(id: string, executionId: string) {
     const run = await getAgentRun(id);
     return Boolean(run && run.executionId === executionId && !["paused", "cancelled", "completed"].includes(run.status));
@@ -156,6 +158,7 @@ export function normalizeTasks(
 ): AgentRunTask[] {
     const defaults = Object.assign({}, ...skills.map((skill) => skill.defaultConfig || {})) as Record<string, unknown>;
     const skillInstructions = skills
+        .filter((skill) => !PROMPT_AUTHORING_ONLY_SKILL_IDS.has(skill.id))
         .map((skill) => skill.instructions.trim())
         .filter(Boolean)
         .join("\n\n");

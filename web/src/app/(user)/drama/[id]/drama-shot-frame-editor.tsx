@@ -1,7 +1,7 @@
 "use client";
 
 import { App, Button, Image, Input, InputNumber, Modal, Segmented, Tag } from "antd";
-import { Check, ImagePlus, LoaderCircle, Maximize2, Plus, RotateCcw, Save, Sparkles, Trash2, Upload } from "lucide-react";
+import { Check, ImagePlus, LoaderCircle, Maximize2, Plus, RotateCcw, Save, ScanSearch, Sparkles, Trash2, Upload } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 
 import { approvedAssetReference } from "@/lib/drama-asset-baseline";
@@ -11,7 +11,7 @@ import { appendDramaImageReferenceBindings, compileDramaFrameSupplierPrompt, res
 import { imagePreviewUrl } from "@/lib/media-image-url";
 import { dramaAssetReferences } from "./drama-asset-reference-utils";
 import type { DramaFrameBeat, DramaImageReferenceBinding, DramaProductionStep, DramaProject, DramaStoryboardFrame, DramaStoryboardFrameCandidate } from "@/lib/drama-project-contract";
-import { acceptDramaStoryboardFrame, createDramaProductionRun, updateDramaProductionRun } from "@/services/api/drama-projects";
+import { acceptDramaStoryboardFrame, createDramaProductionRun, reviewDramaStoryboardFrame, updateDramaProductionRun, updateDramaStoryboardFramePrompt } from "@/services/api/drama-projects";
 import { optimizeDramaFramePrompt } from "@/services/api/prompt-optimization";
 import { uploadImage } from "@/services/image-storage";
 import { resolveModelRequestConfig, useEffectiveConfig } from "@/stores/use-config-store";
@@ -30,14 +30,17 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
     const imageRequestConfig = resolveModelRequestConfig(config, config.imageModel || config.model);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const submittingRef = useRef(false);
+    const savingPromptRef = useRef(false);
     const [uploadTarget, setUploadTarget] = useState<{ kind: FrameKind; frameId?: string }>({ kind: "start" });
     const [uploading, setUploading] = useState("");
     const [submitting, setSubmitting] = useState("");
+    const [reviewingFrameId, setReviewingFrameId] = useState("");
     const [promptPreview, setPromptPreview] = useState<PromptPreview | null>(null);
     const [referencePreview, setReferencePreview] = useState<ReferencePreview | null>(null);
     const [promptDraft, setPromptDraft] = useState("");
     const [promptOriginal, setPromptOriginal] = useState("");
     const [optimizingPrompt, setOptimizingPrompt] = useState(false);
+    const [savingPrompt, setSavingPrompt] = useState(false);
     const [assetPickerOpen, setAssetPickerOpen] = useState(false);
     const [manualReferenceDraft, setManualReferenceDraft] = useState<DramaImageReferenceBinding[]>([]);
     const frameMode = shot.storyboardFrameMode || "single";
@@ -225,6 +228,24 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
         });
     };
 
+    const inspectFrame = async (beat: DramaFrameBeat) => {
+        if (reviewingFrameId) return;
+        const frame = frameById.get(beat.id);
+        if (!frame?.mediaUrl) return;
+        setReviewingFrameId(beat.id);
+        try {
+            const result = await reviewDramaStoryboardFrame(project.id, episodeId, shot.id, beat.id);
+            replaceProject(result.project);
+            if (result.review.status === "passed") message.success(`帧 ${beat.sequenceIndex} 检验通过`);
+            else if (result.review.status === "needs_revision") message.warning(`帧 ${beat.sequenceIndex} 检验未通过，请查看结果后处理`);
+            else message.info(result.review.summary || "图片检验暂不可用");
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : "图片检验失败");
+        } finally {
+            setReviewingFrameId("");
+        }
+    };
+
     const selectFrameCandidate = (beat: DramaFrameBeat, candidate: DramaStoryboardFrameCandidate) => {
         modal.confirm({
             title: `确认将此候选设为帧 ${beat.sequenceIndex}？`,
@@ -311,7 +332,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
             if (failed) message.error(failed.error || `${failed.title}启动失败`);
             else if (!created && confirmed.status === "completed") message.info("当前帧序列已经完整，无需创建新的图片任务");
             else if (!created) message.error("图片供应商任务没有创建，请查看当前帧状态");
-            else message.success(`${input.label}已提交，系统会按帧顺序生成并逐帧检查连续性`);
+            else message.success(`${input.label}已提交，系统会按帧顺序生成；完成后可手动检验图片`);
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : "导演 Agent 生图启动失败";
             const liveFrames =
@@ -409,10 +430,10 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
         setPromptOriginal(formatPromptFieldLines(prompt, "static"));
     };
 
-    const savePromptPreview = () => {
+    const savePromptPreview = async () => {
         const current = promptPreview;
         const prompt = formatPromptFieldLines(promptDraft, "static");
-        if (!current || current.readOnly || !prompt) return;
+        if (!current || current.readOnly || !prompt || savingPromptRef.current) return;
         if (current.frameId) {
             const visualError = validateDramaFrameVisualContent(prompt);
             if (visualError) {
@@ -420,12 +441,17 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                 return;
             }
             try {
-                const next = updateDramaFrameBeat(beats, storedFrames, current.frameId, { supplierPrompt: prompt });
-                saveFramePlan(next.beats, next.frames);
+                savingPromptRef.current = true;
+                setSavingPrompt(true);
+                const supplierPrompt = prompt;
+                replaceProject(await updateDramaStoryboardFramePrompt(project.id, episodeId, shot.id, current.frameId, supplierPrompt));
                 message.success("图片提示词已保存，当前帧已标记为待重新生成");
             } catch (error) {
                 message.error(error instanceof Error ? error.message : "图片提示词保存失败");
                 return;
+            } finally {
+                savingPromptRef.current = false;
+                setSavingPrompt(false);
             }
         } else if (current.phase) {
             updateShot(
@@ -542,7 +568,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                 <div className="mt-3 space-y-2.5" data-drama-frame-sequence>
                     {beats.map((beat, index) => {
                         const frame = frameById.get(beat.id);
-                        const rowBusy = submitting === beat.id || frame?.status === "queued" || frame?.status === "running" || frame?.candidateStatus === "queued" || frame?.candidateStatus === "running";
+                        const rowBusy = reviewingFrameId === beat.id || submitting === beat.id || frame?.status === "queued" || frame?.status === "running" || frame?.candidateStatus === "queued" || frame?.candidateStatus === "running";
                         const previous = index ? frameById.get(beats[index - 1].id) : undefined;
                         const canGenerate = index === 0 || Boolean(previous?.mediaUrl && previous.status === "success" && previous.continuityStatus !== "needs_review" && previous.continuityStatus !== "stale");
                         const candidates = visibleFrameCandidates(frame);
@@ -619,6 +645,17 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                                             查看完整提示词
                                         </Button>
                                         <div className="ml-auto flex items-center gap-1">
+                                            {frame?.mediaUrl ? (
+                                                <Button
+                                                    size="small"
+                                                    icon={<ScanSearch className="size-3.5" />}
+                                                    loading={reviewingFrameId === beat.id}
+                                                    disabled={Boolean(submitting) || generationActive || reviewingFrameId !== ""}
+                                                    onClick={() => void inspectFrame(beat)}
+                                                >
+                                                    检验图片
+                                                </Button>
+                                            ) : null}
                                             <Button
                                                 size="small"
                                                 icon={rowBusy ? <LoaderCircle className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
@@ -664,7 +701,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                                         >
                                             <div className="min-w-0 text-xs leading-5">
                                                 <div className="font-medium">当前图片已保留，等待你确认</div>
-                                                <p className="break-words text-amber-800 dark:text-amber-200">{frame.error || "自动连续性复盘未通过，请查看大图后决定使用或重新生成。"}</p>
+                                                <p className="break-words text-amber-800 dark:text-amber-200">{frame.error || "图片检验未通过，请查看大图后决定使用或重新生成。"}</p>
                                             </div>
                                             <div className="flex shrink-0 flex-wrap items-center gap-2">
                                                 <Button size="small" type="primary" className="!shrink-0 !whitespace-nowrap" onClick={() => acceptCurrentFrame(beat)}>
@@ -747,7 +784,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                             </div>
                         );
                     })}
-                    <p className="text-xs leading-5 text-muted-foreground">系统严格按顺序生成：当前帧通过相邻画面连续性检查后，才会提交下一帧。单帧生成只创建当前图片任务。</p>
+                    <p className="text-xs leading-5 text-muted-foreground">系统按帧顺序生成图片；生成完成后可点击“检验图片”核对当前帧与提示词及相邻画面的连续性。单帧生成只创建当前图片任务。</p>
                 </div>
             ) : (
                 <div className="mt-3 grid min-w-0 gap-2.5 sm:grid-cols-2">
@@ -881,7 +918,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                             <Button icon={<Sparkles className="size-3.5" />} loading={optimizingPrompt} disabled={!promptDraft.trim()} onClick={() => void optimizePromptPreview()}>
                                 提示词优化
                             </Button>
-                            <Button type="primary" icon={<Save className="size-3.5" />} disabled={!promptDraft.trim() || optimizingPrompt} onClick={savePromptPreview}>
+                            <Button type="primary" icon={<Save className="size-3.5" />} loading={savingPrompt} disabled={!promptDraft.trim() || optimizingPrompt || savingPrompt} onClick={() => void savePromptPreview()}>
                                 保存提示词
                             </Button>
                         </>
@@ -1002,7 +1039,7 @@ function FrameStatusTag({ frame }: { frame?: DramaStoryboardFrame }) {
         idle: "待生成",
         queued: frame?.mediaUrl ? "候选排队中" : "排队中",
         running: frame?.mediaUrl ? "候选生成中" : "生成中",
-        success: frame?.continuityStatus === "needs_review" ? "连续性需调整" : "已完成",
+        success: frame?.continuityStatus === "needs_review" ? "连续性需调整" : frame?.continuityStatus === "pending" ? "待检验" : "已完成",
         stale: "已失效",
         needs_review: "连续性需调整",
         error: frame?.mediaUrl ? "候选失败" : "失败",

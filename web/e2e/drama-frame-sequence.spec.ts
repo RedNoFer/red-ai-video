@@ -80,6 +80,20 @@ test("drama all-frame editor keeps one beat per row across desktop, mobile and d
     await expect(sequence.locator("[data-drama-frame-row]")).toHaveCount(4);
     await expect(page.getByRole("button", { name: "一键补齐" })).toBeVisible();
     await expect(page.getByRole("button", { name: "重新生成全部" })).toBeVisible();
+    const firstFrame = sequence.locator("[data-drama-frame-row='beat-1']");
+    const inspectionButton = firstFrame.getByRole("button", { name: "检验图片" });
+    await expect(inspectionButton).toBeVisible();
+    let inspectionRequested = false;
+    await page.route(`**/api/drama/projects/${project.id}/episodes/${episode.id}/shots/shot-frame-sequence/frames/beat-1/review`, async (route) => {
+        inspectionRequested = true;
+        await route.fulfill({
+            contentType: "application/json",
+            body: JSON.stringify({ code: 0, data: { project: seeded, review: { mode: "visual", status: "passed", summary: "当前帧符合设定", issues: [], retryTaskIds: [] } }, msg: "图片检验完成" }),
+        });
+    });
+    await inspectionButton.click();
+    await expect(page.getByText("帧 1 检验通过")).toBeVisible();
+    expect(inspectionRequested).toBe(true);
     await assertVerticalRows(sequence);
     await expectNoHorizontalOverflow(page, "1672px light frame sequence");
 
@@ -195,6 +209,28 @@ test("drama frame prompt lets users maintain asset references before optimizatio
     await picker.getByRole("button", { name: "保存引用" }).click();
     await expect(picker).toBeHidden();
     await expect(promptDialog.getByRole("button", { name: /查看提示词引用图片.*未自动涉及角色/ })).toBeVisible();
+
+    const editedPrompt = [
+        "静态关键帧：用户保存后的雨巷画面",
+        "可见状态：人物抬头并握紧断剑",
+        "可见表演状态：眉眼紧绷，视线锁定巷口",
+        "景别：中景",
+        "机位与构图：平视，主体位于画面中央",
+        "站位与视线：人物站在雨巷右侧，视线落向巷口",
+        "三层空间：前景为湿润石墙，中景承载人物与断剑，背景交代雨巷纵深",
+        "光色与风格：冷色侧光，半写实动漫幻想风",
+        "负面约束：无字幕、无水印、无logo、无HUD、无额外主体、无额外肢体、无变形",
+    ].join("\n");
+    await promptDialog.getByRole("textbox").fill(editedPrompt);
+    const saveRequest = page.waitForRequest((request) => request.method() === "PATCH" && request.url().includes(`/frames/manual-frame/prompt`));
+    await promptDialog.getByRole("button", { name: "保存提示词" }).click();
+    await saveRequest;
+    await expect(promptDialog).toBeHidden();
+
+    await sequence.getByRole("button", { name: "查看完整提示词" }).click();
+    await expect(page.getByRole("dialog", { name: "帧 1 图片提示词" }).getByRole("textbox")).toHaveValue(/用户保存后的雨巷画面/);
+    const persisted = ((await (await request.get(`/api/drama/projects/${project.id}`)).json()) as { data: { project: DramaProject } }).data.project;
+    expect(persisted.episodes[0].shots[0].framePlan?.frames[0].supplierPrompt).toContain("用户保存后的雨巷画面");
 
     await promptDialog.getByRole("button", { name: "提示词优化" }).click();
     await expect(promptDialog.getByRole("textbox")).toHaveValue(/优化后的帧提示词/);

@@ -98,7 +98,7 @@ function KeyframeControls({
                 onOpenChange={setOpen}
                 content={
                     <div className="w-64 max-w-[calc(100vw-40px)] py-0.5 sm:w-80">
-                        <p className="px-1 pb-2 text-xs font-semibold text-[#303943] dark:text-[#eef1f4]">选择 2–5 张有序关键帧</p>
+                        <p className="px-1 pb-2 text-xs font-semibold text-[#303943] dark:text-[#eef1f4]">选择 2–9 张有序关键帧</p>
                         <div className="hide-scrollbar grid max-h-52 grid-cols-3 gap-1.5 overflow-y-auto">
                             {images.map((item) => {
                                 const url = assetUrl(item);
@@ -107,7 +107,7 @@ function KeyframeControls({
                                     <button
                                         key={item.id}
                                         type="button"
-                                        disabled={!url || (!selected && assetIds.length >= 5)}
+                                        disabled={!url || (!selected && assetIds.length >= 9)}
                                         className={cn(
                                             "relative aspect-square min-w-0 overflow-hidden rounded-lg border bg-[#f1f3f5] transition disabled:opacity-40 dark:bg-[#2a2f36]",
                                             selected ? "border-[#4d7f99] ring-2 ring-[#4d7f99]/20 dark:border-[#82adc3]" : "border-[#e0e4e8] hover:border-[#aeb8c2] dark:border-[#3b424b]",

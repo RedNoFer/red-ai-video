@@ -29,11 +29,20 @@ const VIDEO_PROMPT_LABELS = [
 export function formatPromptFieldLines(value: string, kind: "static" | "video" = "static") {
     const labels = kind === "video" ? VIDEO_PROMPT_LABELS : STATIC_FRAME_PROMPT_LABELS;
     const pattern = labels.join("|");
-    return value
+    const normalized = kind === "static" ? stripLegacyStaticReferenceRole(value) : value;
+    return normalized
         .trim()
         .replace(new RegExp(`[\\s,，;；。]+(?=(?:${pattern})[：:])`, "gu"), "\n")
         .replace(/[ \t]*\n[ \t]*/gu, "\n")
         .trim();
+}
+
+/** Reference roles belong to referenceManifest, never to a static image prompt. */
+export function stripLegacyStaticReferenceRole(value: string) {
+    return value.replace(
+        /(?:^|[,，；;\n])\s*参考图职责[：:][\s\S]*?(?=(?:[,，；;\n]\s*(?:静态关键帧|可见状态|可见表演状态|景别|机位与构图|站位与视线|三层空间|光色与风格|负面约束)[：:]|$))/gu,
+        "",
+    );
 }
 
 export function normalizeDramaFrameBeats(value: readonly DramaFrameBeat[], duration: number): DramaFrameBeat[] {
@@ -70,6 +79,7 @@ export function dramaFrameVisualSubject(imagePrompt: string, actionPrompt = "", 
 export function validateDramaFrameVisualContent(imagePrompt: string, actionPrompt = "") {
     const subject = staticFrameSubject(imagePrompt, actionPrompt, "");
     const visibleState = imagePrompt.match(/可见状态：([^；。\n]+)/u)?.[1]?.trim() || "";
+    if (/参考图职责[：:]/u.test(imagePrompt)) return "参考图职责属于资产绑定数据，不能写入静态图片提示词正文";
     if (/(?:运镜|焦段|推镜|拉镜|摇镜|跟拍|滑轨|环绕|吊臂|慢推|慢拉|后拉|时间段|时间轴|动作过程|对白|声音|口型)/u.test(imagePrompt)) return "每帧必须描述当前可见画面，且静态图片帧不能包含运镜、时间过程、对白或声音指令";
     if (/(?:景别|镜头)(?:（[^）]*）)?\s*[：:]\s*[^；。\n]*(?:→|->|至)/u.test(imagePrompt)) return "每帧只能使用一个固定景别，不能保留景别切换过程";
     if (/(?:ELS|极远景)/u.test(imagePrompt) && /(?:清晰面部|面部清晰|眉眼|嘴角|下颌|手部|手指|道具|细节)/u.test(imagePrompt)) return "ELS/极远景只能承载远景空间关系，不能与清晰面部、手部或道具细节同时出现";
@@ -132,17 +142,12 @@ export function upgradeDramaFrameImagePrompt(
         forceRefresh?: boolean;
     },
 ) {
-    const existingVisibleState = imagePrompt.match(/可见状态：([^；。\n]+)/u)?.[1]?.trim() || "";
+    const existingVisibleState = imagePrompt.match(/可见状态[：:]([^；。\n]+)/u)?.[1]?.trim() || "";
     if (
         !context.forceRefresh &&
-        imagePrompt.trim().startsWith("静态关键帧：") &&
-        imagePrompt.includes("可见表演状态：") &&
-        imagePrompt.includes("景别：") &&
-        imagePrompt.includes("机位与构图：") &&
-        imagePrompt.includes("站位与视线：") &&
-        imagePrompt.includes("三层空间：") &&
-        imagePrompt.includes("光色与风格：") &&
-        imagePrompt.includes("负面约束：") &&
+        /^静态关键帧[：:]/u.test(imagePrompt.trim()) &&
+        ["可见表演状态", "景别", "机位与构图", "站位与视线", "三层空间", "光色与风格", "负面约束"].every((label) => new RegExp(`${label}[：:]`, "u").test(imagePrompt)) &&
+        !/参考图职责[：:]/u.test(imagePrompt) &&
         !isGenericFrameState(existingVisibleState) &&
         !/(?:景别|镜头)(?:（[^）]*）)?\s*[：:]\s*[^；。\n]*(?:→|->|至)/u.test(imagePrompt)
     )

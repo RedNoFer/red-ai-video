@@ -2,21 +2,23 @@ import type { DramaProductionPlan, DramaProductionBible, DramaReferenceManifestR
 
 export const DRAMA_PRODUCTION_PLAN_VERSION = "drama-production-plan-v1" as const;
 export const DEFAULT_DRAMA_SKILL = { id: "seedance-director", name: "Seedance 导演", version: "2.0" } as const;
+export const DEFAULT_DRAMA_VIDEO_SKILL = { id: "seedance-25-director", name: "Seedance 2.5 导演", version: "2.5" } as const;
 export const DRAMA_REFERENCE_ROLES: DramaReferenceManifestRole[] = ["previous_actual_tail", "character_anchor", "scene_anchor", "prop_anchor", "action_keyframe", "composition_keyframe"];
 export const DRAMA_VIDEO_RESOLUTION_OPTIONS = ["480p", "720p", "1080p"] as const;
 export const DRAMA_SHOT_DURATION_OPTIONS = [15, 20, 30] as const;
 export type DramaShotDuration = (typeof DRAMA_SHOT_DURATION_OPTIONS)[number];
 export const DRAMA_FRAME_COUNT_DEFAULT = 5;
 export const DRAMA_FRAME_COUNT_MAX = 9;
+export const DRAMA_VIDEO_REFERENCE_IMAGE_LIMIT = 9;
 
-export function dramaReferenceImageBudget(duration: DramaShotDuration | number): number {
-    return Number(duration) >= 30 ? 30 : 9;
+export function dramaReferenceImageBudget(_: DramaShotDuration | number): number {
+    return DRAMA_VIDEO_REFERENCE_IMAGE_LIMIT;
 }
 
 export function defaultDramaProductionPlan(source: DramaProductionPlan["source"] = "new-project"): DramaProductionPlan {
     return {
         version: DRAMA_PRODUCTION_PLAN_VERSION,
-        skills: [DEFAULT_DRAMA_SKILL],
+        skills: [DEFAULT_DRAMA_SKILL, DEFAULT_DRAMA_VIDEO_SKILL],
         video: {
             model: "seedance-2-0-official",
             mode: "storyboard",
@@ -53,7 +55,7 @@ export function normalizeDramaProductionPlan(value: unknown, fallback?: DramaPro
               return id ? [{ id, name: text(skill.name) || id, version: text(skill.version) || "unknown" }] : [];
           })
         : base.skills;
-    const normalizedSkills = skills.some((skill) => skill.id === DEFAULT_DRAMA_SKILL.id) ? skills : [DEFAULT_DRAMA_SKILL, ...skills];
+    const normalizedSkills = [DEFAULT_DRAMA_SKILL, DEFAULT_DRAMA_VIDEO_SKILL].reduce((current, required) => (current.some((skill) => skill.id === required.id) ? current : [...current, required]), skills);
     const requestedMode = text(videoInput.mode);
     const baseMode = base.video.mode === "text-to-video" ? "text-to-video" : "storyboard";
     const mode = requestedMode === "text-to-video" ? "text-to-video" : ["storyboard", "reference", "first-frame", "first-last"].includes(requestedMode) ? "storyboard" : baseMode;
@@ -87,17 +89,13 @@ export function normalizeDramaProductionPlan(value: unknown, fallback?: DramaPro
 }
 
 export function resolveDramaShotDurationPreference(prompt: string, fallback: DramaShotDuration = 15): DramaShotDuration {
-    const values = Array.from(prompt.matchAll(/(?:^|[^\d])(15|20|30)\s*(?:秒|s)(?!\w)/giu), (match) => Number(match[1])).filter(
-        (value): value is DramaShotDuration => DRAMA_SHOT_DURATION_OPTIONS.includes(value as DramaShotDuration),
-    );
+    const values = Array.from(prompt.matchAll(/(?:^|[^\d])(15|20|30)\s*(?:秒|s)(?!\w)/giu), (match) => Number(match[1])).filter((value): value is DramaShotDuration => DRAMA_SHOT_DURATION_OPTIONS.includes(value as DramaShotDuration));
     const unique = [...new Set(values)];
     return unique.length === 1 ? unique[0] : fallback;
 }
 
 export function resolveDramaFrameCountPreference(prompt: string, fallback = DRAMA_FRAME_COUNT_DEFAULT): number {
-    const values = Array.from(prompt.matchAll(/(?:分\s*)?(\d+)\s*(?:个)?\s*帧/giu), (match) => Number(match[1])).filter(
-        (value) => Number.isInteger(value) && value >= 1 && value <= DRAMA_FRAME_COUNT_MAX,
-    );
+    const values = Array.from(prompt.matchAll(/(?:分\s*)?(\d+)\s*(?:个)?\s*帧/giu), (match) => Number(match[1])).filter((value) => Number.isInteger(value) && value >= 1 && value <= DRAMA_FRAME_COUNT_MAX);
     return values.length ? values.at(-1)! : Math.max(1, Math.min(DRAMA_FRAME_COUNT_MAX, Math.floor(fallback)));
 }
 

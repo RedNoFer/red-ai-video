@@ -11,6 +11,7 @@ import {
     saveDramaProductionPlan,
     updateDramaShotImagePrompt,
     updateDramaShotPrompt,
+    updateDramaStoryboardFramePrompt,
 } from "./drama-projects";
 import type { DramaProductionPackagePreview, DramaProject } from "@/lib/drama-project-contract";
 import { defaultDramaProductionPlan } from "@/lib/drama-production-plan";
@@ -54,6 +55,24 @@ describe("drama project api", () => {
         await createDramaProductionRun("project-one", "episode-one", "visual", undefined, { shotIds: ["shot-one"], frameType: "all_frames", frameIds: ["f2"], regenerateAll: true });
 
         expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({ episodeId: "episode-one", scope: "visual", shotIds: ["shot-one"], frameType: "all_frames", frameIds: ["f2"], regenerateAll: true });
+    });
+
+    it("does not resend full AI prompt revisions when locking a production run", async () => {
+        const fetchMock = vi.fn().mockResolvedValue(Response.json({ code: 0, data: { run: { id: "run-one" } }, msg: "OK" }));
+        vi.stubGlobal("fetch", fetchMock);
+
+        await createDramaProductionRun("project-one", "episode-one", undefined, {
+            status: "needs_confirmation",
+            checkedShotIds: ["shot-one"],
+            issues: [{ code: "LIGHTING_UNCLEAR", severity: "warning", message: "需要补充光照方向", shotId: "shot-one" }],
+            revisedPrompts: { "shot-one": { imagePrompt: "x".repeat(300 * 1024), videoPrompt: "y".repeat(300 * 1024) } },
+            changeSummary: ["补充光照方向"],
+        });
+
+        const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+        expect(body.preflight).toMatchObject({ checkedShotIds: ["shot-one"], changeSummary: ["补充光照方向"] });
+        expect(body.preflight).not.toHaveProperty("revisedPrompts");
+        expect(String(fetchMock.mock.calls[0]?.[1]?.body).length).toBeLessThan(256 * 1024);
     });
 
     it("uses a fresh request identity for each video prompt generation", async () => {
@@ -129,6 +148,15 @@ describe("drama project api", () => {
         expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({ executionVideoPrompt: "Seedance 动作提示词" });
     });
 
+    it("saves a preflight video and image revision through the compact prompt endpoint", async () => {
+        const project = { id: "project-one", updatedAt: "2026-08-31T00:00:00.000Z" } as DramaProject;
+        const fetchMock = vi.fn().mockResolvedValue(Response.json({ code: 0, data: { project }, msg: "OK" }));
+        vi.stubGlobal("fetch", fetchMock);
+
+        await expect(updateDramaShotPrompt("project-one", "episode-one", "shot-one", "视频修订", "图片修订")).resolves.toEqual(project);
+        expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({ executionVideoPrompt: "视频修订", imagePrompt: "图片修订" });
+    });
+
     it("saves a production plan without serializing the full drama project", async () => {
         const project = { id: "project-one", updatedAt: "2026-08-31T00:00:00.000Z" } as DramaProject;
         const plan = { ...defaultDramaProductionPlan("manual"), lockedAt: "2026-09-02T12:00:00.000Z" };
@@ -161,5 +189,15 @@ describe("drama project api", () => {
         vi.stubGlobal("fetch", fetchMock);
         await expect(updateDramaShotImagePrompt("project-one", "episode-one", "shot-one", "图片提示词")).resolves.toEqual(project);
         expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({ imagePrompt: "图片提示词" });
+    });
+
+    it("updates one storyboard frame prompt through its stable frame endpoint", async () => {
+        const project = { id: "project-one", updatedAt: "2026-08-31T00:00:00.000Z" } as DramaProject;
+        const fetchMock = vi.fn().mockResolvedValue(Response.json({ code: 0, data: { project }, msg: "OK" }));
+        vi.stubGlobal("fetch", fetchMock);
+
+        await expect(updateDramaStoryboardFramePrompt("project-one", "episode-one", "shot-one", "frame-five", "静态关键帧：已编辑")).resolves.toEqual(project);
+        expect(fetchMock).toHaveBeenCalledWith("/api/drama/projects/project-one/episodes/episode-one/shots/shot-one/frames/frame-five/prompt", expect.objectContaining({ method: "PATCH" }));
+        expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({ supplierPrompt: "静态关键帧：已编辑" });
     });
 });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { normalizeAgentSkill } from "./store-normalizers";
+import { normalizeAgentSkill, normalizeAgentSkills } from "./store-normalizers";
 
 describe("normalizeAgentSkill", () => {
     it("derives a zero-configuration planner summary and preserves full execution instructions", () => {
@@ -44,5 +44,11 @@ describe("normalizeAgentSkill", () => {
             sourceContentHash: "a".repeat(64),
             license: "MIT",
         });
+    });
+
+    it("adds the built-in Seedance 2.5 skill to legacy settings", () => {
+        expect(normalizeAgentSkills([{ id: "custom", name: "自定义", description: "", instructions: "自定义规则", enabled: true, keywords: [] }])).toEqual(
+            expect.arrayContaining([expect.objectContaining({ id: "seedance-25-director", sourceRepository: "liyue-aigc/seedance-2-5-video-director" })]),
+        );
     });
 });

@@ -6,6 +6,7 @@ describe("drama production plan", () => {
     it("defaults new projects to locked-by-confirmation storyboard settings", () => {
         const plan = defaultDramaProductionPlan();
         expect(plan.video).toMatchObject({ model: "seedance-2-0-official", mode: "storyboard", resolution: "720p", shotDuration: 15, frameCount: 5, count: 1, allowExplicitFallback: false });
+        expect(plan.skills.map((skill) => skill.id)).toEqual(["seedance-director", "seedance-25-director"]);
         expect(plan.references).toMatchObject({ strategy: "adaptive", minImages: 3, maxImages: 5 });
         expect(plan.continuity).toMatchObject({ mode: "strict", requireAcceptedActualTail: true });
     });
@@ -13,6 +14,7 @@ describe("drama production plan", () => {
     it("normalizes legacy multi-reference plans into storyboard workflow", () => {
         const plan = normalizeDramaProductionPlan({ video: { model: "seedance-2-5", mode: "reference", resolution: "720p", count: 2 }, references: { minImages: 3, maxImages: 5 }, continuity: { requireAcceptedActualTail: true } });
         expect(plan).toMatchObject({ video: { model: "seedance-2-5", mode: "storyboard", count: 2 }, references: { minImages: 3, maxImages: 5 }, continuity: { requireAcceptedActualTail: true } });
+        expect(plan?.skills.map((skill) => skill.id)).toEqual(["seedance-director", "seedance-25-director"]);
     });
 
     it("normalizes episode resolution to the editable 480p/720p/1080p set", () => {
@@ -32,6 +34,6 @@ describe("drama production plan", () => {
         expect(resolveDramaFrameCountPreference("请分 6 帧")).toBe(6);
         expect(dramaReferenceImageBudget(15)).toBe(9);
         expect(dramaReferenceImageBudget(20)).toBe(9);
-        expect(dramaReferenceImageBudget(30)).toBe(30);
+        expect(dramaReferenceImageBudget(30)).toBe(9);
     });
 });

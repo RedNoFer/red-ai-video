@@ -83,7 +83,7 @@ describe("prompt optimization service", () => {
     it("optimizes video prompts around visible action beats", async () => {
         vi.mocked(requestStructuredText).mockResolvedValue({ arguments: JSON.stringify({ optimizedPrompt: "0-2秒建立黑湖，2-4秒镜头推进，4-5秒Karin收紧握剑，5-6秒断口冷光匹配切入马车。" }), headers: new Headers(), protocol: "chat", elapsedMs: 10 });
 
-        await optimizeCreativePrompt({ origin: "http://localhost:3000", cookie: "session=1", userId: "user-one", requestId: "video-request", prompt: "黑湖边的人握剑", mode: "video" });
+        await optimizeCreativePrompt({ origin: "http://localhost:3000", cookie: "session=1", userId: "user-one", requestId: "video-request", prompt: "30 秒黑湖边的人握剑", mode: "video" });
 
         const systemMessage = vi.mocked(requestStructuredText).mock.calls[0]?.[0].messages.find((message) => message.role === "system")?.content || "";
         expect(systemMessage).toContain("主体动作推进");
@@ -91,6 +91,7 @@ describe("prompt optimization service", () => {
         expect(systemMessage).toContain("每个非空字段必须独立一行");
         expect(systemMessage).toContain("每个时间段都必须让姿态");
         expect(systemMessage).toContain("减少“保持构图、主体稳定、情绪不变”");
+        expect(systemMessage).toContain("本次加载参考：30 秒精确时间轴");
     });
 
     it("refunds an invalid charged response instead of accepting hidden or empty output", async () => {

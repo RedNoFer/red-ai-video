@@ -1,0 +1,20 @@
+{
+  "id": "seedance-25-director",
+  "name": "Seedance 2.5 导演",
+  "sourceRepository": "liyue-aigc/seedance-2-5-video-director",
+  "sourceCommit": "ad0e68ba6ce24fb9ae9c67c9276061cef37663f1",
+  "sourceLicense": "MIT",
+  "sourceContentHash": "3af15674df144be79c0f47a125ebc6d0988d2c140b8a1d48ae87e4f9d60747f1",
+  "runtimeModule": "web/src/lib/server/agent-skills/seedance-25.generated.ts",
+  "references": [
+    "references/capabilities-and-limits.md",
+    "references/example-adaptation.md",
+    "references/failure-diagnosis.md",
+    "references/mode-routing.md",
+    "references/multi-character-blocking.md",
+    "references/multimodal-patterns.md",
+    "references/prompt-blueprints.md",
+    "references/realistic-direction-patterns.md"
+  ],
+  "execution": "planning-only; provider submission remains in VOZEB PRO task runtime"
+}

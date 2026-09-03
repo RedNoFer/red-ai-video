@@ -10,7 +10,7 @@ import { CREATIVE_UPLOAD_ACCEPT, CREATIVE_UPLOAD_MAX_BYTES, isCreativeUploadMime
 import type { CreateOverviewAsset } from "@/lib/create-workbench-overview";
 import type { CreativeAsset, CreativeGenerationMode, CreativeGenerationPreferences, CreativeMessage } from "@/lib/creative-runtime-contract";
 import { cn } from "@/lib/utils";
-import type { VideoReferenceRole } from "@/lib/video-reference-contract";
+import { MAX_VIDEO_IMAGE_REFERENCES, type VideoReferenceRole } from "@/lib/video-reference-contract";
 import { useCreativeAgentModels } from "@/hooks/use-creative-agent-options";
 import { listAgentSkills, type AgentSkillSummary } from "@/services/api/agent-skills";
 import type { CreativeAgentRun } from "@/services/api/creative";
@@ -198,8 +198,8 @@ export default function CreatePage() {
             message.warning("请先同时选择视频首帧和尾帧图片");
             return;
         }
-        if (videoFrameModeActive && videoPreference?.referenceMode === "all_frames" && ((videoPreference.frameAssetIds?.length || 0) < 2 || (videoPreference.frameAssetIds?.length || 0) > 5)) {
-            message.warning("全能帧需要按顺序选择 2 到 5 张图片");
+        if (videoFrameModeActive && videoPreference?.referenceMode === "all_frames" && ((videoPreference.frameAssetIds?.length || 0) < 2 || (videoPreference.frameAssetIds?.length || 0) > MAX_VIDEO_IMAGE_REFERENCES)) {
+            message.warning(`全能帧需要按顺序选择 2 到 ${MAX_VIDEO_IMAGE_REFERENCES} 张图片`);
             return;
         }
         promptRevisionRef.current += 1;
@@ -406,7 +406,10 @@ export default function CreatePage() {
         setGenerationPreferences((current) => {
             const video = current.video || {};
             const ids = video.frameAssetIds || [];
-            return { ...current, video: { ...video, referenceMode: "all_frames", firstFrameAssetId: undefined, lastFrameAssetId: undefined, frameAssetIds: ids.includes(assetId) ? ids.filter((id) => id !== assetId) : ids.length < 5 ? [...ids, assetId] : ids } };
+            return {
+                ...current,
+                video: { ...video, referenceMode: "all_frames", firstFrameAssetId: undefined, lastFrameAssetId: undefined, frameAssetIds: ids.includes(assetId) ? ids.filter((id) => id !== assetId) : ids.length < 5 ? [...ids, assetId] : ids },
+            };
         });
     };
     const moveVideoKeyframe = (assetId: string, direction: -1 | 1) => {

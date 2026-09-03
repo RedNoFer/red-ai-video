@@ -119,9 +119,56 @@ describe("drama prompt compiler", () => {
 
         expect(prompt).toContain("左右长凳");
         expect(prompt).toContain("车厢");
+        expect(prompt).toContain("中央过道保持通行");
+        expect(prompt).toContain("坐姿必须落在左右长凳或明确座位");
+        expect(prompt).toContain("若原文和资产未指定座位侧，必须选择与动作和机位相容的左侧或右侧座位");
         expect(prompt).toContain("景别：中景");
         expect(prompt).not.toContain("无风黑湖");
         expect(prompt).not.toContain("景别：特写");
+    });
+
+    it("preserves a manually saved structured prompt for a frame-scene change", () => {
+        const project = createProject();
+        project.scenes[0] = { ...project.scenes[0], id: "scene-lake", name: "黑湖记忆", description: "无风黑湖与倒悬古塔" };
+        project.scenes.push({
+            id: "scene-carriage",
+            name: "前往阿佐雷斯的马车",
+            description: "中世纪封闭木马车，左右长凳与右侧竖向车窗",
+            profile: { visualIdentity: "左右长凳、右侧竖窗", styling: "木质车厢", colorPalette: "冷灰", consistencyRules: "车窗固定在右侧" },
+        });
+        const shot = project.episodes[0].shots[0];
+        shot.sceneId = "scene-lake";
+        shot.framePlan = { start: { source: "independent" }, end: { required: true }, referenceManifest: [{ alias: "@车", role: "scene_anchor", purpose: "马车场景", assetId: "scene-carriage" }], frames: [] };
+
+        const prompt = compileDramaFrameSupplierPrompt(project, project.episodes[0], shot, {
+            id: "frame-carriage",
+            sequenceIndex: 5,
+            startSecond: 12,
+            endSecond: 15,
+            actionPrompt: "Karin在马车中完全惊醒，手扣住断剑",
+            imagePrompt: "静态关键帧：Karin完全惊醒，手扣住断剑",
+            supplierPrompt:
+                "静态关键帧：马车内Karin完全惊醒，右侧车窗映入冷光\n可见状态：Karin手扣断剑，肩膀绷紧\n可见表演状态：眉眼骤然睁开，视线锁定断剑\n景别：中景\n机位与构图：平视，左右长凳与右侧竖向车窗清晰可见\n站位与视线：Karin坐在车厢中央，视线落向断剑\n三层空间：前景为车厢门框，中景承载Karin与断剑，背景交代车厢纵深\n光色与风格：冷色雪白侧光，半写实动漫幻想风\n负面约束：无字幕、无水印、无logo、无HUD、无现代元素、无额外主体、无额外肢体、无变形。",
+        });
+
+        expect(prompt).toContain("右侧车窗映入冷光");
+        expect(prompt).toContain("Karin手扣断剑，肩膀绷紧");
+    });
+
+    it("preserves a manually saved prompt when fields use ASCII colons", () => {
+        const project = createProject();
+        const shot = project.episodes[0].shots[0];
+        const prompt = compileDramaFrameSupplierPrompt(project, project.episodes[0], shot, {
+            id: "frame-ascii-colon",
+            sequenceIndex: 1,
+            startSecond: 0,
+            endSecond: 5,
+            actionPrompt: "人物抬头",
+            imagePrompt: "人物抬头",
+            supplierPrompt: "静态关键帧: 用户编辑画面\n可见状态: 人物抬头\n可见表演状态: 眉眼紧绷\n景别: 中景\n机位与构图: 平视，主体居中\n站位与视线: 视线落向门边\n三层空间: 前景为门框，中景承载人物，背景交代空间纵深\n光色与风格: 冷色侧光，半写实动漫幻想风\n负面约束: 无字幕、无水印、无logo、无HUD、无变形",
+        });
+
+        expect(prompt).toContain("用户编辑画面");
     });
 
     it("uses a carriage cue from the saved supplier prompt when the frame image text is stale", () => {
@@ -146,7 +193,27 @@ describe("drama prompt compiler", () => {
         });
 
         expect(prompt).toContain("左右长凳");
+        expect(prompt).toContain("中央过道保持通行");
+        expect(prompt).toContain("若原文和资产未指定座位侧，必须选择与动作和机位相容的左侧或右侧座位");
         expect(prompt).not.toContain("无风黑湖");
+    });
+
+    it("rebuilds a legacy structured supplier prompt instead of preserving its reference duty", () => {
+        const project = createProject();
+        const shot = project.episodes[0].shots[0];
+        const prompt = compileDramaFrameSupplierPrompt(project, project.episodes[0], shot, {
+            id: "frame-legacy",
+            sequenceIndex: 1,
+            startSecond: 0,
+            endSecond: 2,
+            actionPrompt: "女主握住断剑",
+            imagePrompt: "女主握住断剑",
+            supplierPrompt: "静态关键帧：旧画面；可见状态：手握断剑；可见表演状态：紧张；景别：中景；机位与构图：平视；站位与视线：居中；三层空间：背景；光色与风格：冷光；参考图职责：沿用旧图；负面约束：无水印",
+        });
+
+        expect(prompt).not.toContain("参考图职责：");
+        expect(prompt).toContain("静态关键帧：女主握住断剑");
+        expect(prompt.split("\n")).toHaveLength(9);
     });
 
     it("includes structured prop identity in supplier-facing frame prompts", () => {
@@ -235,11 +302,13 @@ describe("drama prompt compiler", () => {
         expect(prompts.startFramePrompt).toContain("动作起始");
         expect(prompts.endFramePrompt).toContain("动作结束");
         expect(prompts.videoPrompt).toContain("时间段动作：");
-        expect(prompts.videoPrompt).toContain("0-2s｜起点：动作起始");
-        expect(prompts.videoPrompt).toContain("0-2s｜动作与触发：女主停在门边");
-        expect(prompts.videoPrompt).toContain("0-2s｜终点：女主停在门边");
-        expect(prompts.videoPrompt).toContain("2-5s｜可见衔接：承接上一段终点");
-        expect(prompts.videoPrompt).toContain("2-5s｜动作与触发：女主抬头看向血迹");
+        expect(prompts.videoPrompt).toContain("P01-F01｜0-2s");
+        expect(prompts.videoPrompt).toContain("起点：动作起始");
+        expect(prompts.videoPrompt).toContain("动作与触发：女主停在门边");
+        expect(prompts.videoPrompt).toContain("终点：女主停在门边");
+        expect(prompts.videoPrompt).toContain("P01-F02｜2-5s");
+        expect(prompts.videoPrompt).toContain("可见衔接：承接上一段终点");
+        expect(prompts.videoPrompt).toContain("动作与触发：女主抬头看向血迹");
         expect(prompts.videoPrompt).toContain("单一主运镜：缓慢推进");
         expect(prompts.videoPrompt).toContain("结束画面：以时间段动作最后一段终点作为本镜唯一收束画面");
         expect(prompts.videoPrompt).toContain(`风格：${DRAMA_STYLE_DESCRIPTION}`);
@@ -248,6 +317,32 @@ describe("drama prompt compiler", () => {
         expect(prompts.videoPrompt).not.toContain("场景设定：");
         expect(prompts.videoPrompt).not.toContain("统一表现媒介");
         expect(prompts.videoPrompt.length).toBeLessThan(prompts.imagePrompt.length);
+    });
+
+    it("carries physical carriage blocking into the video execution prompt", () => {
+        const project = createProject();
+        project.scenes[0] = {
+            ...project.scenes[0],
+            name: "前往阿佐雷斯的马车",
+            description: "中世纪封闭木马车，左右长凳与右侧竖向车窗",
+            profile: { visualIdentity: "左右长凳、右侧竖窗", styling: "木质车厢", colorPalette: "冷灰", consistencyRules: "车窗固定在右侧", spatialRules: ["左侧长凳供主角就坐", "右侧长凳保持空位", "右侧车窗固定"] },
+        };
+        const shot = project.episodes[0].shots[0];
+        shot.sceneId = project.scenes[0].id;
+        shot.description = "Karin在马车中惊醒并扣住断剑";
+        shot.videoPrompt = "惊醒后扣住断剑";
+        shot.framePlan = {
+            start: { source: "independent" },
+            end: { required: true },
+            frames: [{ id: "frame-carriage", sequenceIndex: 1, startSecond: 0, endSecond: 5, actionPrompt: "Karin坐在右侧长凳上惊醒", imagePrompt: "Karin坐在右侧长凳上，手扣住断剑，车厢过道清晰可见" }],
+        };
+
+        const prompt = compileDramaShotExecutionPrompts(project, project.episodes[0], shot).videoPrompt;
+
+        expect(prompt).toContain("空间与动作可行性：");
+        expect(prompt).toContain("中央过道保持通行");
+        expect(prompt).toContain("坐姿必须落在左右长凳或明确座位");
+        expect(prompt).toContain("资产固定布局：左侧长凳供主角就坐；右侧长凳保持空位；右侧车窗固定");
     });
 
     it("does not nest a previously compiled execution prompt", () => {

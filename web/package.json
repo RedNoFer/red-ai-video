@@ -5,7 +5,10 @@
     "type": "module",
     "scripts": {
         "dev": "node --env-file-if-exists=../.env --env-file-if-exists=.env.local scripts/run-app.mjs dev",
+        "compile:seedance-25": "node scripts/compile-seedance-25-skill.mjs",
+        "predev": "pnpm run compile:seedance-25",
         "build": "node scripts/production-build.mjs",
+        "prebuild": "pnpm run compile:seedance-25",
         "start": "node --env-file-if-exists=../.env --env-file-if-exists=.env.local scripts/start-standalone.mjs",
         "start:standalone": "node --env-file-if-exists=../.env --env-file-if-exists=.env.local scripts/start-standalone.mjs",
         "start:hot": "node --env-file-if-exists=../.env --env-file-if-exists=.env.local scripts/start-hot.mjs",
@@ -13,6 +16,7 @@
         "backup:disaster": "node --env-file-if-exists=.env.local scripts/disaster-backup.mjs",
         "restore:disaster": "node --env-file-if-exists=.env.local scripts/disaster-restore.mjs",
         "test": "vitest run",
+        "pretest": "pnpm run compile:seedance-25",
         "test:protocols": "vitest run scripts/protocol-fixture-server.test.mjs src/lib/server/active-protocol-media-matrix.live.test.ts src/lib/server/active-protocol-media-proxy-matrix.live.test.ts src/lib/server/protocol-media-matrix.live.test.ts src/lib/server/protocol-model-catalog.live.test.ts src/lib/server/text-planning-runtime.integration.test.ts src/lib/server/audio-task-runtime.test.ts --reporter=verbose",
         "lint": "eslint . --quiet",
         "pree2e": "node scripts/prepare-e2e.mjs",
@@ -22,6 +26,7 @@
         "reset:admin-mfa": "node --env-file-if-exists=.env.local scripts/reset-admin-mfa.mjs",
         "check:release": "node scripts/release-check.mjs",
         "typecheck": "tsc --noEmit --pretty false",
+        "pretypecheck": "pnpm run compile:seedance-25",
         "format": "prettier --write .",
         "format:check": "prettier --check ."
     },

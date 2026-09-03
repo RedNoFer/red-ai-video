@@ -277,6 +277,24 @@ describe("video generation candidate failover", () => {
         expect(mocks.createVideoTask).toHaveBeenCalledOnce();
     });
 
+    it("rejects a provider error encoded as a video result URL without creating another upstream task", async () => {
+        const newApiChannel = applyChannelProtocol({ ...channels[0], models: ["video-one"], advancedConfig: emptyAdvancedConfig() }, "newapi-video");
+        mocks.getAuthSettings.mockResolvedValue({
+            ...settings,
+            systemChannels: [newApiChannel],
+            logicalModels: [{ ...settings.logicalModels[0], bindings: [{ ...settings.logicalModels[0].bindings[0], channelId: newApiChannel.id, upstreamModel: "video-one" }] }],
+        });
+        mocks.fetchInternalApi.mockImplementation(async () =>
+            json({ id: "provider-error", status: "completed", video_url: "http://provider.example/%E5%8F%82%E8%80%83%E7%B4%A0%E6%9D%90%E7%AC%AC%201%20%E4%B8%AA%E5%9B%BE%E7%89%87%E4%B8%8B%E8%BD%BD%E5%A4%B1%E8%B4%A5%EF%BC%9AHTTP%20404" }),
+        );
+
+        const response = await POST(request({ model: "video" }));
+
+        expect(response.status).toBe(502);
+        expect((await response.json()).error).toContain("参考素材第 1 个图片下载失败");
+        expect(mocks.fetchInternalApi).toHaveBeenCalledOnce();
+    });
+
     it("surfaces an explicit HTTP 200 business failure after safe candidate fallback", async () => {
         mocks.fetchInternalApi.mockImplementation(async () => json({ code: "204", msg: "登录验证失败" }));
 
@@ -912,6 +930,27 @@ describe("video generation candidate failover", () => {
         expect(mocks.fetchInternalApi.mock.calls[0]?.[0]).toContain("/api/ai/system/two/");
     });
 
+    it("allows a drama run to submit eight total images when its model declares all-frame support", async () => {
+        const newApiChannel = applyChannelProtocol({ ...channels[0], models: ["video-one"], advancedConfig: emptyAdvancedConfig() }, "newapi-video");
+        mocks.getAuthSettings.mockResolvedValue({
+            ...settings,
+            systemChannels: [newApiChannel],
+            logicalModels: [
+                {
+                    ...settings.logicalModels[0],
+                    bindings: [{ ...settings.logicalModels[0].bindings[0], channelId: newApiChannel.id, upstreamModel: "video-one", capabilityProfile: { supportsKeyframes: true, maxReferenceImages: 5 } }],
+                },
+            ],
+        });
+        mocks.fetchInternalApi.mockResolvedValue(json({ id: "newapi-nine-images", status: "queued" }));
+        const references = Array.from({ length: 8 }, (_, index) => ({ type: "image", url: `https://cdn.example.com/reference-${index + 1}.png`, ...(index < 4 ? { role: "keyframe", keyframeIndex: index + 1 } : { role: "reference" }) }));
+
+        const response = await POST(request({ model: "video", videoSeconds: "15", size: "9:16", vquality: "720" }, references, { surface: "drama", runId: "run-nine-images" }));
+
+        expect(response.status).toBe(200);
+        expect(mocks.fetchInternalApi).toHaveBeenCalledOnce();
+    });
+
     it("does not switch a drama all-frame request to another logical model", async () => {
         const bumingChannel = applyChannelProtocol({ ...channels[1], models: ["seedance-2-0-official"], advancedConfig: emptyAdvancedConfig() }, "buming-seedance");
         mocks.getAuthSettings.mockResolvedValue({
@@ -938,7 +977,7 @@ describe("video generation candidate failover", () => {
         );
 
         expect(response.status).toBe(400);
-        expect(await response.json()).toMatchObject({ error: "当前模型未声明支持 4 张全能帧关键图，请切换支持全能帧的模型" });
+        expect(await response.json()).toMatchObject({ error: "当前模型未声明支持全能帧关键图，请切换支持全能帧的模型" });
         expect(mocks.fetchInternalApi).not.toHaveBeenCalled();
         expect(mocks.createVideoTask).not.toHaveBeenCalled();
     });

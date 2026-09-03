@@ -15,6 +15,16 @@ describe("selectAgentSkills", () => {
         expect(selectAgentSkills(DEFAULT_SETTINGS, "chat", [])).toEqual([]);
     });
 
+    it("automatically applies the Seedance 2.5 prompt contract to video requests", () => {
+        expect(selectAgentSkills(DEFAULT_SETTINGS, "chat", [], { prompt: "生成一段短视频", requestedModelIds: [], generationPreferences: {} }).map((skill) => skill.id)).toEqual(["seedance-25-director"]);
+        expect(selectAgentSkills(DEFAULT_SETTINGS, "chat", [], { prompt: "生成一张商品图", requestedModelIds: [], generationPreferences: {} })).toEqual([]);
+        expect(selectAgentSkills(DEFAULT_SETTINGS, "chat", ["character-design"], { prompt: "生成视频", requestedModelIds: [], generationPreferences: {} }).map((skill) => skill.id)).toEqual(["seedance-25-director", "character-design"]);
+    });
+
+    it("uses video preferences as a default trigger even without video words", () => {
+        expect(selectAgentSkills(DEFAULT_SETTINGS, "chat", [], { prompt: "做一个作品", requestedModelIds: [], generationPreferences: { video: { seconds: 15 } } }).map((skill) => skill.id)).toEqual(["seedance-25-director"]);
+    });
+
     it("does not allow disabled or incompatible skills to be forced", () => {
         const settings = {
             ...DEFAULT_SETTINGS,
@@ -27,6 +37,10 @@ describe("selectAgentSkills", () => {
     it("keeps drama skills inside drama projects", () => {
         expect(selectAgentSkills(DEFAULT_SETTINGS, "drama", ["drama-planning"]).map((skill) => skill.id)).toEqual(["seedance-director", "drama-planning"]);
         expect(selectAgentSkills(DEFAULT_SETTINGS, "drama", ["image-motion"]).map((skill) => skill.id)).toEqual(["seedance-director"]);
+    });
+
+    it("adds the Seedance 2.5 video director when generating a drama production package", () => {
+        expect(selectAgentSkills(DEFAULT_SETTINGS, "drama", ["seedance-director"], { workflow: "drama-script", prompt: "生成完整制作包" }).map((skill) => skill.id)).toEqual(["seedance-director", "seedance-25-director"]);
     });
 
     it("restores the mandatory Seedance skill when settings omit it", () => {
@@ -132,6 +146,22 @@ describe("agentPlannerInput", () => {
         expect(skill).not.toHaveProperty("instructions");
         expect(JSON.stringify(input).length).toBeGreaterThan(12_000);
         expect(input).not.toHaveProperty("planningBudget");
+    });
+
+    it("passes full instructions for an explicitly selected Skill to the planner", () => {
+        const skill = DEFAULT_SETTINGS.agentSkills.find((item) => item.id === "seedance-25-director");
+        expect(skill).toBeTruthy();
+        const input = agentPlannerInput(
+            { surface: "chat", prompt: "生成 30 秒多模态视频", referencedAssetIds: [], selectedSkillIds: ["seedance-25-director"] } as never,
+            { summary: "", summaryThroughSequence: 0, recentMessages: [] } as never,
+            [],
+            "none",
+            [skill!],
+            [{ id: "video-model", name: "视频模型", capability: "video" }],
+            DEFAULT_SETTINGS,
+        ) as Record<string, unknown>;
+        expect(input.selectedSkillInstructions).toEqual([expect.objectContaining({ id: skill!.id, name: skill!.name, instructions: expect.stringContaining("本次加载参考：30 秒精确时间轴") })]);
+        expect((input.availableSkills as Array<Record<string, unknown>>)[0]).not.toHaveProperty("instructions");
     });
 
     it("keeps the complete capability-filtered model catalog without fixed truncation", () => {

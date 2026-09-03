@@ -27,9 +27,21 @@ describe("drama frame sequence", () => {
         expect(formatPromptFieldLines("动态意图：角色抬头，单一主运镜：固定机位；结束画面：视线锁定目标", "video")).toBe("动态意图：角色抬头\n单一主运镜：固定机位\n结束画面：视线锁定目标");
     });
 
+    it("removes legacy reference duties from static prompts", () => {
+        const prompt = formatPromptFieldLines("静态关键帧：Karin站在黑湖边；可见状态：四只手扣住断剑；可见表演状态：眉眼清晰；景别：中景；机位与构图：平视；站位与视线：视线落向断剑；三层空间：前景雪地，中景Karin，背景倒悬古塔；光色与风格：冷白无源光；参考图职责：按角色、场景、道具图片执行；负面约束：无水印");
+
+        expect(prompt.split("\n")).toHaveLength(9);
+        expect(prompt).not.toContain("参考图职责：");
+        expect(prompt).toContain("负面约束：无水印");
+    });
+
     it("rejects dialogue-only or camera-only frame content", () => {
         expect(validateDramaFrameVisualContent('耳语："你又来迟了"', '耳语："你又来迟了"')).toContain("每帧必须描述");
         expect(validateDramaFrameVisualContent("85mm沿铁砧慢推", "镜头沿铁砧慢推")).toContain("每帧必须描述");
+    });
+
+    it("rejects reference duties embedded in static frame content", () => {
+        expect(validateDramaFrameVisualContent("静态关键帧：Karin站立；参考图职责：角色图、场景图；负面约束：无水印", "站立")).toContain("参考图职责属于资产绑定数据");
     });
 
     it("rejects ELS prompts that also demand readable facial or hand detail", () => {

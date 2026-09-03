@@ -30,10 +30,10 @@ describe("drama production package serialization", () => {
 
         const markdown = serializeDramaProductionPackageMarkdown(value);
 
-        expect(markdown).toContain("P01-F01 0-2s｜动作与触发：角色停住");
-        expect(markdown).toContain("P01-F02 2-6s｜动作与触发：角色抬头");
-        expect(markdown).toContain("0-2s｜起点：站立");
-        expect(markdown).toContain("2-6s｜可见衔接：承接上一段终点");
+        expect(markdown).toContain("P01-F01｜0-2s");
+        expect(markdown).toContain("动作与触发：角色停住");
+        expect(markdown).toContain("P01-F02｜2-6s");
+        expect(markdown).toContain("可见衔接：承接上一段终点");
         expect(markdown).toContain("动态意图：角色站立");
         expect(markdown).not.toContain("生成15秒9:16竖屏电影级视频");
         expect(markdown).not.toContain("生成15秒旧视频提示词");
@@ -48,6 +48,17 @@ describe("drama production package serialization", () => {
 
         expect(markdown).toContain("动态意图：角色抬头\n单一主运镜：固定机位\n结束画面：视线锁定断剑");
         expect(markdown).not.toContain("动态意图：动态意图：");
+    });
+
+    it("cleans legacy static reference duties during deterministic export", () => {
+        const value = fixture();
+        value.episodes[0].shots[0].framePlan.frames[0].imagePrompt = "静态关键帧：Karin站立；可见状态：手握断剑；可见表演状态：警觉；景别：中景；机位与构图：平视；站位与视线：看向断剑；三层空间：前景雪地，中景人物，背景古塔；光色与风格：冷光；参考图职责：沿用旧绑定；负面约束：无水印";
+
+        const json = JSON.parse(serializeDramaProductionPackageJson(value)) as DramaProductionPackageV1;
+        const prompt = json.episodes[0].shots[0].framePlan.frames[0].imagePrompt;
+
+        expect(prompt.split("\n")).toHaveLength(9);
+        expect(prompt).not.toContain("参考图职责：");
     });
 });
 

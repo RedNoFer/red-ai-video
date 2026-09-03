@@ -66,4 +66,20 @@ describe("/api/drama/projects/[id]/production-runs", () => {
         expect(response.status).toBe(200);
         expect(mocks.createDramaProductionRunForUser).toHaveBeenCalledWith("user-one", "drama-one", expect.objectContaining({ episodeId: "episode-one", scope: "visual", frameIds: ["f1"], origin: expect.any(String), cookie: "session=test" }));
     });
+
+    it("returns a structured error when production run creation throws unexpectedly", async () => {
+        mocks.createDramaProductionRunForUser.mockRejectedValueOnce(new Error("并发状态更新冲突"));
+
+        const response = await POST(
+            new Request("http://localhost/api/drama/projects/drama-one/production-runs", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ episodeId: "episode-one" }),
+            }),
+            { params: Promise.resolve({ id: "drama-one" }) },
+        );
+
+        expect(response.status).toBe(500);
+        await expect(response.json()).resolves.toMatchObject({ code: 500, data: null, msg: "并发状态更新冲突" });
+    });
 });

@@ -1,5 +1,6 @@
 import type { ImageTaskReference } from "@/lib/server/image-task-store";
 import { isRemoteMediaUrl } from "@/lib/browser-media-url";
+import { imagePreviewUrl } from "@/lib/media-image-url";
 import { writeReferenceImageDataUrl } from "@/lib/server/reference-asset-store";
 import { createSignedReferenceAssetUrl, signReferenceAssetInputUrl } from "@/lib/server/reference-asset-access";
 import { resolvePublicRequestOrigin } from "@/lib/server/public-request-origin";
@@ -27,13 +28,15 @@ export async function publicImageReferenceRequestUrl(reference: ImageTaskReferen
 
     if (localCandidate) {
         if (hasUsableProviderReadSignature(localCandidate)) {
-            if (await isReachableProviderImage(localCandidate)) return localCandidate;
+            const providerUrl = imagePreviewUrl(localCandidate);
+            if (await isReachableProviderImage(providerUrl)) return providerUrl;
             throw new Error("本地参考图公网地址不可访问，请检查 NEXT_PUBLIC_SITE_URL 后重试");
         }
         if (isExternalPublicOrigin(publicOrigin)) {
             const signedUrl = signReferenceAssetInputUrl(localCandidate, publicOrigin);
             if (signedUrl !== localCandidate) {
-                if (await isReachableProviderImage(signedUrl)) return signedUrl;
+                const providerUrl = imagePreviewUrl(signedUrl);
+                if (await isReachableProviderImage(providerUrl)) return providerUrl;
                 throw new Error("本地参考图公网地址不可访问，请检查 NEXT_PUBLIC_SITE_URL 后重试");
             }
             throw new Error("站内参考素材签名不可用，请配置 VOZEB_PRO_ENCRYPTION_KEY");

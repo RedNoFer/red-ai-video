@@ -12,7 +12,7 @@ export type VideoGenerationReference = {
 };
 
 export const ALL_FRAMES_MIN = 2;
-export const ALL_FRAMES_MAX = 5;
+export const MAX_VIDEO_IMAGE_REFERENCES = 9;
 
 export function normalizeVideoReferenceRole(value: unknown): VideoReferenceRole | undefined {
     return typeof value === "string" && videoReferenceRoles.includes(value.trim() as VideoReferenceRole) ? (value.trim() as VideoReferenceRole) : undefined;
@@ -31,7 +31,7 @@ export function normalizeVideoGenerationReferences(value: unknown): VideoGenerat
         if (!type || !url || !role) throw new Error("视频参考素材类型、地址或角色不正确");
         if (role !== "reference" && type !== "image") throw new Error(role === "keyframe" ? "全能帧只能使用图片素材" : "视频首尾帧只能使用图片素材");
         const keyframeIndex = source.keyframeIndex === undefined ? undefined : Number(source.keyframeIndex);
-        if (role === "keyframe" && (!Number.isInteger(keyframeIndex) || !keyframeIndex || keyframeIndex < 1 || keyframeIndex > ALL_FRAMES_MAX)) throw new Error("全能帧序号必须是 1 到 5 的整数");
+        if (role === "keyframe" && (!Number.isInteger(keyframeIndex) || !keyframeIndex || keyframeIndex < 1)) throw new Error("全能帧序号必须是从 1 开始的整数");
         references.push({ type, url, role, ...(keyframeIndex === undefined ? {} : { keyframeIndex }) });
     }
     const firstFrames = references.filter((reference) => reference.role === "first_frame");
@@ -41,13 +41,14 @@ export function normalizeVideoGenerationReferences(value: unknown): VideoGenerat
     if (lastFrames.length && !firstFrames.length) throw new Error("指定尾帧时必须同时指定首帧");
     if (firstFrames.length && lastFrames.length && firstFrames[0].url === lastFrames[0].url) throw new Error("首帧和尾帧不能使用同一张图片");
     const keyframes = references.filter((reference) => reference.role === "keyframe");
-    if (keyframes.length && (keyframes.length < ALL_FRAMES_MIN || keyframes.length > ALL_FRAMES_MAX)) throw new Error("全能帧必须提供 2 到 5 张图片");
+    if (keyframes.length && keyframes.length < ALL_FRAMES_MIN) throw new Error("全能帧至少需要 2 张图片");
     if (keyframes.length) {
         if (lastFrames.length) throw new Error("全能帧不能与尾帧混用");
         if (new Set(keyframes.map((reference) => reference.url)).size !== keyframes.length) throw new Error("全能帧图片不能重复");
         const indexes = keyframes.map((reference) => reference.keyframeIndex).sort((left, right) => (left || 0) - (right || 0));
         if (new Set(indexes).size !== indexes.length || indexes.some((index, position) => index !== position + 1)) throw new Error("全能帧序号必须从 1 连续排列");
     }
+    if (references.filter((reference) => reference.type === "image").length > MAX_VIDEO_IMAGE_REFERENCES) throw new Error(`视频最多支持 ${MAX_VIDEO_IMAGE_REFERENCES} 张参考图`);
     return Array.from(new Map(references.map((reference) => [`${reference.type}:${reference.role}:${reference.keyframeIndex || ""}:${reference.url}`, reference])).values());
 }
 

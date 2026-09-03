@@ -207,7 +207,8 @@ function shouldPreserveManualFramePlan(framePlan: DramaShot["framePlan"], origin
             prompt.includes("站位与视线：") &&
             prompt.includes("三层空间：") &&
             prompt.includes("光色与风格：") &&
-            prompt.includes("负面约束：")
+            prompt.includes("负面约束：") &&
+            !/参考图职责[：:]/u.test(prompt)
         );
     });
 }
@@ -382,6 +383,7 @@ function validateProductionPackageCompleteness(value: Record<string, unknown>) {
     const bible = object(project.productionBible);
     const plan = normalizeDramaProductionPlan(bible.productionPlan);
     if (!plan?.skills.some((skill) => skill.id === "seedance-director")) throw new DramaProductionPackageError("制作包缺少必需的 Seedance 2.0 导演 Skill");
+    if (!plan.skills.some((skill) => skill.id === "seedance-25-director")) throw new DramaProductionPackageError("制作包缺少必需的 Seedance 2.5 视频导演 Skill");
     const assets = object(value.assets);
     const assetCodes = (key: string) =>
         new Set(

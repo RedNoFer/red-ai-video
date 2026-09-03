@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
     queryAudioTaskUpstreamStep: vi.fn(),
     markAudioTaskFailed: vi.fn(),
     persistAudioTaskResult: vi.fn(),
+    persistVideoTaskResult: vi.fn(),
     queryCancelledImageTaskUpstreamStep: vi.fn(),
     queryImageTaskUpstreamStep: vi.fn(),
     imageTaskRequestDiagnostic: vi.fn(() => ({ provider: "openai", kind: "generation", referenceCount: 0 })),
@@ -45,7 +46,7 @@ vi.mock("@/lib/server/agent-run-executor", () => ({ executeAgentRun: mocks.execu
 vi.mock("@/lib/server/agent-run-execution", () => ({ processAgentRunReview: mocks.processAgentRunReview }));
 vi.mock("@/lib/server/agent-run-store", () => ({ getAgentRun: mocks.getAgentRun }));
 vi.mock("@/lib/server/maintenance-auth", () => ({ maintenanceWorkerContext: vi.fn((userId: string) => `worker-context:${userId}`) }));
-vi.mock("@/lib/server/video-task-runtime", () => ({ failVideoTaskFromWorker: vi.fn(), persistVideoTaskResult: vi.fn(), queryVideoTaskUpstream: mocks.queryVideoTaskUpstream }));
+vi.mock("@/lib/server/video-task-runtime", () => ({ failVideoTaskFromWorker: vi.fn(), persistVideoTaskResult: mocks.persistVideoTaskResult, queryVideoTaskUpstream: mocks.queryVideoTaskUpstream }));
 vi.mock("@/lib/server/video-task-store", () => ({ getVideoTask: mocks.getVideoTask }));
 vi.mock("@/lib/server/audio-task-runtime", () => ({
     createAudioTaskUpstreamStep: vi.fn(),
@@ -442,6 +443,30 @@ describe("generation task recovery service", () => {
 
         expect(mocks.markAudioTaskFailed).toHaveBeenCalledWith(task, "试听音频落盘失败：音频结果下载失败：404 page not found");
         expect(mocks.release).toHaveBeenCalledWith("audio", task.id, "worker-one", expect.objectContaining({ executionPhase: "completed", nextPollAt: undefined, lastUpstreamStatus: "persist_failed:404" }));
+        expect(result).toMatchObject({ claimed: 1, failed: 1, deferred: 0 });
+    });
+
+    it("finalizes a video task when the provider returned an encoded reference-download error as its result URL", async () => {
+        const task = { id: "video-provider-error", userId: "user-one", status: "running", upstream: { id: "upstream-video", provider: "generation", model: "video" }, config: { channelId: "channel-video", apiFormat: "openai" } };
+        mocks.claim.mockResolvedValue([
+            {
+                ...lease(),
+                id: task.id,
+                userId: task.userId,
+                type: "video",
+                status: "running",
+                executionPhase: "persisting",
+                resultPayload: { url: "http://provider.example/%E5%8F%82%E8%80%83%E7%B4%A0%E6%9D%90%E7%AC%AC%201%20%E4%B8%AA%E5%9B%BE%E7%89%87%E4%B8%8B%E8%BD%BD%E5%A4%B1%E8%B4%A5%EF%BC%9AHTTP%20404" },
+            },
+        ]);
+        mocks.getVideoTask.mockResolvedValue(task);
+
+        const result = await runGenerationTaskRecoveryBatch({ origin: "http://internal", workerId: "worker-one" });
+
+        const videoRuntime = await import("@/lib/server/video-task-runtime");
+        expect(videoRuntime.failVideoTaskFromWorker).toHaveBeenCalledWith(task, expect.stringContaining("参考素材第 1 个图片下载失败"));
+        expect(mocks.persistVideoTaskResult).not.toHaveBeenCalled();
+        expect(mocks.release).toHaveBeenCalledWith("video", task.id, "worker-one", expect.objectContaining({ executionPhase: "completed", lastUpstreamStatus: "provider_result_error" }));
         expect(result).toMatchObject({ claimed: 1, failed: 1, deferred: 0 });
     });
 

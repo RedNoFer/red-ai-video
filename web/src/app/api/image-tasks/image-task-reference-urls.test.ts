@@ -87,6 +87,24 @@ describe("image task reference request URLs", () => {
         expect(mocks.fetchSafeOutbound).toHaveBeenCalledTimes(2);
     });
 
+    it("uses a bounded WebP variant for a signed local fallback", async () => {
+        mocks.fetchSafeOutbound
+            .mockResolvedValueOnce(new Response('{"error":"not found"}', { status: 404, headers: { "content-type": "application/json" } }))
+            .mockResolvedValueOnce(new Response(new Uint8Array([137]), { status: 200, headers: { "content-type": "image/webp" } }));
+
+        const result = await publicImageReferenceRequestUrl(
+            { id: "reference-one", type: "image/png", dataUrl: "", serverUrl: "/api/generation-log-assets/local.png", remoteUrl: "https://provider.example/expired.png" },
+            "http://127.0.0.1:3010",
+            "https://vozeb.example",
+            { ownerUserId: "user-one", taskId: "task-one" },
+        );
+        const parsed = new URL(result);
+        expect(parsed.pathname).toBe("/api/generation-log-assets/local.png");
+        expect(parsed.searchParams.get("purpose")).toBe("provider-read");
+        expect(parsed.searchParams.get("format")).toBe("webp");
+        expect(parsed.searchParams.get("width")).toBe("1600");
+    });
+
     it("rejects an unreachable local public URL before creating a provider task", async () => {
         mocks.fetchSafeOutbound.mockResolvedValue(new Response("gateway unavailable", { status: 502, headers: { "content-type": "text/plain" } }));
 
@@ -116,11 +134,16 @@ describe("image task reference request URLs", () => {
     it("keeps an already signed local asset when the worker cannot sign again", async () => {
         delete process.env.VOZEB_PRO_REFERENCE_ASSET_SIGNING_KEY;
         const signedUrl = "https://vozeb.example/api/generation-log-assets/permanent/frame.png?purpose=provider-read&expires=4102444800&signature=already-signed";
-        await expect(
-            publicImageReferenceRequestUrl({ id: "reference-one", type: "image/png", dataUrl: "", url: signedUrl }, "http://127.0.0.1:3010", "https://vozeb.example", {
-                ownerUserId: "user-one",
-                taskId: "task-one",
-            }),
-        ).resolves.toBe(signedUrl);
+        const result = await publicImageReferenceRequestUrl({ id: "reference-one", type: "image/png", dataUrl: "", url: signedUrl }, "http://127.0.0.1:3010", "https://vozeb.example", {
+            ownerUserId: "user-one",
+            taskId: "task-one",
+        });
+        const parsed = new URL(result);
+        expect(parsed.origin + parsed.pathname).toBe("https://vozeb.example/api/generation-log-assets/permanent/frame.png");
+        expect(parsed.searchParams.get("purpose")).toBe("provider-read");
+        expect(parsed.searchParams.get("expires")).toBe("4102444800");
+        expect(parsed.searchParams.get("signature")).toBe("already-signed");
+        expect(parsed.searchParams.get("format")).toBe("webp");
+        expect(parsed.searchParams.get("width")).toBe("1600");
     });
 });

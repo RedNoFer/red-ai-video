@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { SEEDANCE_25_DIRECTOR_SKILL } from "./agent-skills/seedance-25";
 import { directAgentPlan, normalizeTasks, planToOps, readFunctionCallResult, taskResultOps } from "./agent-run-execution";
 import { agentSurfaceImageSize, normalizeCanvasPlanForSelection, resolveAgentTaskRatio } from "./agent-run-task-input";
 
@@ -173,6 +174,24 @@ describe("directAgentPlan", () => {
 
         expect(video).toMatchObject({ type: "video", quality: "2160", seconds: 60, generateAudio: false, watermark: true });
         expect(audio).toMatchObject({ type: "audio", voice: "nova", format: "wav", speed: 1.25 });
+    });
+
+    it("只在 Planner 生成提示词时使用 Seedance 2.5 导演规则，不把正文追加给视频供应商", () => {
+        const plan = {
+            intent: "generation",
+            objective: "生成产品视频",
+            reply: "开始生成",
+            decisions: [],
+            foundation: { complexity: "simple", brief: { objective: "生成产品视频" }, direction: { summary: "干净产品镜头" } },
+            deliverables: [{ id: "video", title: "产品视频", type: "video", model: "video-pro", prompt: "动态意图：产品从静止转为缓慢旋转", count: 1, dependencies: [] }],
+        };
+
+        const [task] = normalizeTasks(plan as never, [SEEDANCE_25_DIRECTOR_SKILL] as never, generationSettings() as never, undefined, "生成产品视频", "chat", []);
+
+        expect(task.optimizedPrompt).toBe("动态意图：产品从静止转为缓慢旋转");
+        expect(task).toMatchObject({ seconds: 5, quality: "720p" });
+        expect(task.prompt).not.toContain("执行以下已选 Skill 约束");
+        expect(task.prompt).not.toContain("按 Seedance 2.5 导演工作流编排视频");
     });
 
     it("即使 Planner 漏掉资产也会把用户明确选择的首尾帧注入视频任务", () => {

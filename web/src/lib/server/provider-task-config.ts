@@ -151,11 +151,13 @@ export function assertVideoReferenceRoles(config: SystemChannelAdvancedConfig | 
                 ? ["reference", "first_frame", "last_frame"]
                 : protocol === "yumeng"
                   ? templateVideoReferenceRoles(config?.requestTemplate)
-                  : protocol === "openai" || protocol === "newapi" || protocol === "sub2api" || protocol === "openai-audio-dialogue"
-                    ? ["reference", "first_frame"]
-                    : protocol === "custom" || protocol === "compatible" || protocol === "auto"
-                      ? templateVideoReferenceRoles(config?.requestTemplate)
-                      : ["reference"]),
+                  : protocol === "newapi-video"
+                    ? ["reference", "keyframe"]
+                    : protocol === "openai" || protocol === "newapi" || protocol === "sub2api" || protocol === "openai-audio-dialogue"
+                      ? ["reference", "first_frame"]
+                      : protocol === "custom" || protocol === "compatible" || protocol === "auto"
+                        ? templateVideoReferenceRoles(config?.requestTemplate)
+                        : ["reference"]),
     );
     const unsupported = requestedRoles.find((role) => !supported.has(role));
     if (unsupported) throw new Error(unsupported === "keyframe" ? "当前视频模型不支持全能帧连续参考" : unsupported === "last_frame" ? "当前视频模型不支持尾帧输入" : "当前视频模型不支持显式首帧输入");
@@ -207,9 +209,7 @@ function cloneProviderValue(value: unknown, seen = new Set<object>(), depth = 0)
     if (!value || typeof value !== "object") return value;
     if (seen.has(value)) throw new Error("高级请求模板动态值包含循环引用");
     seen.add(value);
-    const cloned = Array.isArray(value)
-        ? value.map((item) => cloneProviderValue(item, seen, depth + 1))
-        : Object.fromEntries(Object.entries(value).map(([key, item]) => [key, cloneProviderValue(item, seen, depth + 1)]));
+    const cloned = Array.isArray(value) ? value.map((item) => cloneProviderValue(item, seen, depth + 1)) : Object.fromEntries(Object.entries(value).map(([key, item]) => [key, cloneProviderValue(item, seen, depth + 1)]));
     seen.delete(value);
     return cloned;
 }

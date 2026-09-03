@@ -26,22 +26,40 @@ describe("video reference contract", () => {
                 { type: "image", url: "https://cdn.example.com/one.png", role: "keyframe", keyframeIndex: 1 },
                 { type: "image", url: "https://cdn.example.com/two.png", role: "keyframe", keyframeIndex: 2 },
             ]),
-        ).toMatchObject([{ role: "keyframe", keyframeIndex: 1 }, { role: "keyframe", keyframeIndex: 2 }]);
-        expect(normalizeVideoGenerationReferences([{ type: "image", url: "https://cdn.example.com/first.png", role: "first_frame" }, { type: "image", url: "https://cdn.example.com/one.png", role: "keyframe", keyframeIndex: 1 }, { type: "image", url: "https://cdn.example.com/two.png", role: "keyframe", keyframeIndex: 2 }])).toHaveLength(3);
-        expect(() => normalizeVideoGenerationReferences([{ type: "image", url: "https://cdn.example.com/first.png", role: "first_frame" }, { type: "image", url: "https://cdn.example.com/one.png", role: "keyframe", keyframeIndex: 1 }, { type: "image", url: "https://cdn.example.com/two.png", role: "keyframe", keyframeIndex: 2 }, { type: "image", url: "https://cdn.example.com/last.png", role: "last_frame" }])).toThrow("全能帧不能与尾帧混用");
+        ).toMatchObject([
+            { role: "keyframe", keyframeIndex: 1 },
+            { role: "keyframe", keyframeIndex: 2 },
+        ]);
+        expect(
+            normalizeVideoGenerationReferences([
+                { type: "image", url: "https://cdn.example.com/first.png", role: "first_frame" },
+                { type: "image", url: "https://cdn.example.com/one.png", role: "keyframe", keyframeIndex: 1 },
+                { type: "image", url: "https://cdn.example.com/two.png", role: "keyframe", keyframeIndex: 2 },
+            ]),
+        ).toHaveLength(3);
+        expect(() =>
+            normalizeVideoGenerationReferences([
+                { type: "image", url: "https://cdn.example.com/first.png", role: "first_frame" },
+                { type: "image", url: "https://cdn.example.com/one.png", role: "keyframe", keyframeIndex: 1 },
+                { type: "image", url: "https://cdn.example.com/two.png", role: "keyframe", keyframeIndex: 2 },
+                { type: "image", url: "https://cdn.example.com/last.png", role: "last_frame" },
+            ]),
+        ).toThrow("全能帧不能与尾帧混用");
     });
 
-    it("enforces the 2-5 frame range, unique images, and contiguous indexes", () => {
+    it("enforces the total nine-image limit, unique images, and contiguous indexes", () => {
         const frame = (index: number, url = `https://cdn.example.com/${index}.png`) => ({ type: "image" as const, url, role: "keyframe" as const, keyframeIndex: index });
-        expect(() => normalizeVideoGenerationReferences([frame(1)])).toThrow("全能帧必须提供 2 到 5 张图片");
-        expect(() => normalizeVideoGenerationReferences([frame(1), frame(2), frame(3), frame(4), frame(5), frame(6)])).toThrow("全能帧序号必须是 1 到 5 的整数");
+        expect(() => normalizeVideoGenerationReferences([frame(1)])).toThrow("全能帧至少需要 2 张图片");
+        expect(normalizeVideoGenerationReferences(Array.from({ length: 9 }, (_, index) => frame(index + 1)))).toHaveLength(9);
+        expect(() => normalizeVideoGenerationReferences(Array.from({ length: 10 }, (_, index) => frame(index + 1)))).toThrow("视频最多支持 9 张参考图");
         expect(() => normalizeVideoGenerationReferences([frame(1), frame(2, "https://cdn.example.com/1.png")])).toThrow("全能帧图片不能重复");
         expect(() => normalizeVideoGenerationReferences([frame(1), frame(3)])).toThrow("全能帧序号必须从 1 连续排列");
     });
 
-    it("keeps all ordinary references when no upstream capability limit is declared", () => {
-        const references = Array.from({ length: 24 }, (_, index) => ({ type: "image" as const, url: `https://cdn.example.com/reference-${index}.png` }));
+    it("enforces the shared total nine-image reference limit", () => {
+        const references = Array.from({ length: 9 }, (_, index) => ({ type: "image" as const, url: `https://cdn.example.com/reference-${index}.png` }));
         expect(normalizeVideoGenerationReferences(references)).toHaveLength(references.length);
+        expect(() => normalizeVideoGenerationReferences([...references, { type: "image" as const, url: "https://cdn.example.com/reference-9.png" }])).toThrow("视频最多支持 9 张参考图");
     });
 
     it.each([

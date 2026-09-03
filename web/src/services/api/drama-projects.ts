@@ -155,6 +155,12 @@ export function acceptDramaStoryboardFrame(projectId: string, episodeId: string,
     }).then((data) => data.project);
 }
 
+export function reviewDramaStoryboardFrame(projectId: string, episodeId: string, shotId: string, frameId: string) {
+    return request<{ project: DramaProject; review: CreativeReview }>(`/api/drama/projects/${encodeURIComponent(projectId)}/episodes/${encodeURIComponent(episodeId)}/shots/${encodeURIComponent(shotId)}/frames/${encodeURIComponent(frameId)}/review`, {
+        method: "POST",
+    });
+}
+
 export function deleteDramaProject(id: string) {
     return request<{ deleted: boolean }>(`/api/drama/projects/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
@@ -306,13 +312,21 @@ export function createDramaProductionRun(
         referenceSelections?: Record<string, string[]>;
     } = {},
 ) {
+    const compactPreflight = preflight
+        ? {
+              status: preflight.status,
+              checkedShotIds: preflight.checkedShotIds,
+              issues: preflight.issues,
+              changeSummary: preflight.changeSummary,
+          }
+        : undefined;
     return request<{ run: DramaProductionRun }>(`/api/drama/projects/${encodeURIComponent(projectId)}/production-runs`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
             episodeId,
             ...(scope ? { scope } : {}),
-            ...(preflight ? { preflight } : {}),
+            ...(compactPreflight ? { preflight: compactPreflight } : {}),
             ...(options.shotIds?.length ? { shotIds: options.shotIds } : {}),
             ...(options.imageModel ? { imageModel: options.imageModel } : {}),
             ...(options.imageChannelId ? { imageChannelId: options.imageChannelId } : {}),
@@ -352,11 +366,11 @@ export function updateDramaShotMedia(projectId: string, episodeId: string, shotI
     }).then((data) => data.project);
 }
 
-export function updateDramaShotPrompt(projectId: string, episodeId: string, shotId: string, executionVideoPrompt: string) {
+export function updateDramaShotPrompt(projectId: string, episodeId: string, shotId: string, executionVideoPrompt?: string, imagePrompt?: string) {
     return request<{ project: DramaProject }>(`/api/drama/projects/${encodeURIComponent(projectId)}/episodes/${encodeURIComponent(episodeId)}/shots/${encodeURIComponent(shotId)}/prompt`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ executionVideoPrompt }),
+        body: JSON.stringify({ ...(executionVideoPrompt ? { executionVideoPrompt } : {}), ...(imagePrompt ? { imagePrompt } : {}) }),
     }).then((data) => data.project);
 }
 
@@ -365,6 +379,14 @@ export function updateDramaShotImagePrompt(projectId: string, episodeId: string,
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ imagePrompt }),
+    }).then((data) => data.project);
+}
+
+export function updateDramaStoryboardFramePrompt(projectId: string, episodeId: string, shotId: string, frameId: string, supplierPrompt: string) {
+    return request<{ project: DramaProject }>(`/api/drama/projects/${encodeURIComponent(projectId)}/episodes/${encodeURIComponent(episodeId)}/shots/${encodeURIComponent(shotId)}/frames/${encodeURIComponent(frameId)}/prompt`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ supplierPrompt }),
     }).then((data) => data.project);
 }
 

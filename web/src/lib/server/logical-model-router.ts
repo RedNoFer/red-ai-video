@@ -124,8 +124,7 @@ export function supportsVideoKeyframeReferences(candidate: ResolvedLogicalModel,
     if (candidate.capability !== "video" || keyframeCount < 1) return false;
     const contract = candidate.channel.advancedConfig?.protocol === "buming-seedance" ? resolveBumingSeedanceVideoModelContract(candidate.upstreamModel) : undefined;
     const supportsKeyframes = contract ? contract.videoReferenceModes.includes("all_frames") : candidate.capabilityProfile?.supportsKeyframes;
-    const maxReferenceImages = contract?.maxReferenceImages || candidate.capabilityProfile?.maxReferenceImages || 0;
-    return Boolean(supportsKeyframes) && maxReferenceImages >= keyframeCount;
+    return Boolean(supportsKeyframes);
 }
 
 export function resolveVideoKeyframeModelCandidates(settings: Pick<AuthSettings, "logicalModels" | "systemChannels">, preferredModelIds: string[], keyframeCount: number) {

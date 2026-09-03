@@ -73,7 +73,9 @@ describe("video task upstream reconciliation", () => {
                 apiKey: "system",
                 apiFormat: "openai",
                 model: "seedance-2-0-official",
-                advancedConfig: { protocol: "buming-seedance", queryPath: "/v1/tasks/:task_id", statusField: "state / status", resultField: "output_url / result_url / result.videos[0].url / result.videos[0].video_url" } as NonNullable<VideoTask["config"]["advancedConfig"]>,
+                advancedConfig: { protocol: "buming-seedance", queryPath: "/v1/tasks/:task_id", statusField: "state / status", resultField: "output_url / result_url / result.videos[0].url / result.videos[0].video_url" } as NonNullable<
+                    VideoTask["config"]["advancedConfig"]
+                >,
             },
             upstream: { id: "buming-task", provider: "generation", model: "seedance-2-0-official", pollPath: "/v1/videos/generations" },
         });
@@ -92,6 +94,20 @@ describe("video task upstream reconciliation", () => {
             resultUrl: "https://cdn.example.com/current.mp4",
         });
         expect(mocks.fetchInternalApi).toHaveBeenCalledOnce();
+    });
+
+    it("fails an encoded provider error URL instead of treating it as completed media", async () => {
+        const task = videoTask({ upstream: { ...videoTask().upstream, resultUrl: "http://provider.example/%E5%8F%82%E8%80%83%E7%B4%A0%E6%9D%90%E7%AC%AC%201%20%E4%B8%AA%E5%9B%BE%E7%89%87%E4%B8%8B%E8%BD%BD%E5%A4%B1%E8%B4%A5%EF%BC%9AHTTP%20404" } });
+
+        await expect(queryVideoTaskUpstream(task, "http://localhost", "", task.userId)).resolves.toMatchObject({ state: "failed", error: expect.stringContaining("参考素材第 1 个图片下载失败") });
+        expect(mocks.fetchInternalApi).not.toHaveBeenCalled();
+    });
+
+    it("fails a provider timeout status even when the response includes a timeout URL", async () => {
+        const task = videoTask({ upstream: { ...videoTask().upstream, resultUrl: undefined } });
+        mocks.fetchInternalApi.mockResolvedValue(json({ status: "failed", video_url: "http://provider.example/video%20generation%20timed%20out" }));
+
+        await expect(queryVideoTaskUpstream(task, "http://localhost", "session=test")).resolves.toMatchObject({ state: "failed", error: "video generation timed out" });
     });
 
     it("recovers a locally timed-out task after the provider later returns a video", async () => {

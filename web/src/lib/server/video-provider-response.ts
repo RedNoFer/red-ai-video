@@ -37,6 +37,23 @@ export function readVideoProviderUrl(value: unknown, configuredPath?: string) {
     return readProviderString(value, configuredPath, VIDEO_PROVIDER_MEDIA_KEYS);
 }
 
+/** Some gateways return an HTTP URL whose path is an encoded provider error instead of video media. */
+export function videoProviderResultUrlError(value: string | undefined) {
+    const url = value?.trim() || "";
+    if (!url) return "";
+    let detail = url;
+    try {
+        detail = decodeURIComponent(new URL(url).pathname).replace(/^\/+/, "");
+    } catch {
+        try {
+            detail = decodeURIComponent(url);
+        } catch {
+            // Keep the raw provider value for the error pattern check below.
+        }
+    }
+    return /(?:参考素材|reference\s*(?:image|asset)|素材).{0,120}(?:下载失败|download\s*failed|fetch\s*failed)|(?:HTTP\s*4\d{2}|资源不存在|resource\s+not\s+found|已过期|timed?\s*out|timeout)/iu.test(detail) ? detail.slice(0, 300) : "";
+}
+
 export function videoProviderMediaUrl(baseUrl: string, url: string) {
     const base = baseUrl.replace(/\/+$/, "");
     if (/^https?:\/\//i.test(base)) return /^https?:\/\//i.test(url) ? url : `${base}/${url.replace(/^\/+/, "")}`;

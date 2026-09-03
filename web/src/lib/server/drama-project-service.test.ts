@@ -29,6 +29,7 @@ const mocks = vi.hoisted(() => {
         listDramaProjectSummaries: vi.fn(),
         updateDramaProject: vi.fn(),
         getStoredGenerationTask: vi.fn(),
+        getStoredGenerationTaskByRequest: vi.fn(),
         queryStoredGenerationTasks: vi.fn(),
         createDramaProjectVersion: vi.fn(),
         getDramaProjectVersion: vi.fn(),
@@ -42,6 +43,8 @@ const mocks = vi.hoisted(() => {
         getDramaProductionRun: vi.fn(),
         updateDramaProductionRun: vi.fn(),
         fetchInternalApi: vi.fn(),
+        fetchSafeOutbound: vi.fn(),
+        reviewCreativeOutputs: vi.fn(),
     };
 });
 
@@ -71,7 +74,7 @@ vi.mock("@/lib/server/drama-project-version-store", () => ({
     getDramaProjectVersion: mocks.getDramaProjectVersion,
     listDramaProjectVersions: mocks.listDramaProjectVersions,
 }));
-vi.mock("@/lib/server/generation-task-store", () => ({ getStoredGenerationTask: mocks.getStoredGenerationTask, queryStoredGenerationTasks: mocks.queryStoredGenerationTasks }));
+vi.mock("@/lib/server/generation-task-store", () => ({ getStoredGenerationTask: mocks.getStoredGenerationTask, getStoredGenerationTaskByRequest: mocks.getStoredGenerationTaskByRequest, queryStoredGenerationTasks: mocks.queryStoredGenerationTasks }));
 vi.mock("@/lib/server/local-media-storage", () => ({ deleteUserLocalMediaAssets: mocks.deleteUserLocalMediaAssets }));
 vi.mock("@/lib/server/logical-model-router", () => ({ resolveLogicalModelCandidates: mocks.resolveLogicalModelCandidates, supportsVideoKeyframeReferences: mocks.supportsVideoKeyframeReferences }));
 vi.mock("@/lib/server/drama-production-run-store", () => ({
@@ -81,9 +84,12 @@ vi.mock("@/lib/server/drama-production-run-store", () => ({
     updateDramaProductionRun: mocks.updateDramaProductionRun,
 }));
 vi.mock("@/lib/server/internal-origin", () => ({ fetchInternalApi: mocks.fetchInternalApi }));
+vi.mock("@/lib/server/safe-outbound-fetch", () => ({ fetchSafeOutbound: mocks.fetchSafeOutbound }));
+vi.mock("@/lib/server/creative-review-service", () => ({ reviewCreativeOutputs: mocks.reviewCreativeOutputs }));
 
 import {
     acceptDramaStoryboardFrameForUser,
+    reviewDramaStoryboardFrameForUser,
     createDramaProjectForUser,
     applyDramaVisualStepResult,
     applyDramaVisualStepFailure,
@@ -103,9 +109,13 @@ import {
     recoverInvalidDramaEpisodes,
     recoverStaleDramaBoundaryFrames,
     resolveDramaVisualReferenceUrl,
+    resolveReadableDramaVideoReferenceUrl,
+    reconcileDramaVideoStepTask,
     restoreDramaProjectVersionForUser,
     updateDramaProductionRunForUser,
     updateDramaProjectForUser,
+    updateDramaStoryboardFramePromptForUser,
+    validateDramaReferenceSelections,
     saveDramaEpisodeSettingsForUser,
 } from "./drama-project-service";
 import { DramaProjectStoreError } from "./drama-project-store";
@@ -120,7 +130,9 @@ describe("drama project service updates", () => {
         mocks.listCreativeConversations.mockResolvedValue([{ id: "conversation-one" }, { id: "conversation-two" }]);
         mocks.listAgentRuns.mockResolvedValue([]);
         mocks.getStoredGenerationTask.mockResolvedValue(null);
+        mocks.getStoredGenerationTaskByRequest.mockResolvedValue(null);
         mocks.queryStoredGenerationTasks.mockResolvedValue([]);
+        mocks.fetchSafeOutbound.mockResolvedValue(new Response(new Uint8Array([137]), { status: 206, headers: { "content-type": "image/png" } }));
         mocks.deleteDramaConversationAggregate.mockResolvedValue({ deletedConversations: 1, mediaStorageKeys: ["permanent/agent.png"], dramaProject: { ...project("2026-07-19T08:00:03.000Z", "项目"), creativeConversationId: "conversation-two" } });
         mocks.findDramaProjectBySourceHandoffId.mockResolvedValue(null);
         mocks.listDramaProjectSummaries.mockResolvedValue([]);
@@ -132,6 +144,51 @@ describe("drama project service updates", () => {
         mocks.findLatestDramaProductionRun.mockResolvedValue(null);
         mocks.getDramaProductionRun.mockResolvedValue(null);
         mocks.updateDramaProductionRun.mockImplementation(async (_userId: string, run: unknown) => run);
+    });
+
+    it("allows eight total image references for a 15-second shot", () => {
+        const shot = {
+            id: "shot-one",
+            title: "镜头一",
+            duration: 15,
+            sceneId: "scene-one",
+            characterIds: ["character-one", "character-two"],
+            propIds: ["prop-one"],
+            clueIds: [],
+            sourceAssetIds: [],
+            storyboardFrameMode: "all_frames",
+            framePlan: { frames: ["f1", "f2", "f3", "f4"].map((id, index) => ({ id, sequenceIndex: index + 1 })) },
+        } as never;
+
+        expect(() => validateDramaReferenceSelections({} as DramaProject, { continuityEdges: [] } as never, [shot], { "shot-one": ["scene-one", "character-one", "character-two", "prop-one", "f1", "f2", "f3", "f4"] })).not.toThrow();
+    });
+
+    it("reattaches a video step to the active task created by the same request", () => {
+        const step = { id: "video-shot-one", type: "video", status: "failed", error: "当前用户视频任务已达到并发上限" } as never;
+        const task = { id: "video-task-one", status: "running", userId: "user-one" } as never;
+
+        expect(reconcileDramaVideoStepTask(step, task)).toMatchObject({ id: "video-shot-one", taskId: "video-task-one", status: "running", error: undefined });
+    });
+
+    it("uses a signed local reference copy when the provider URL is no longer readable", async () => {
+        const originalKey = process.env.VOZEB_PRO_REFERENCE_ASSET_SIGNING_KEY;
+        const originalSite = process.env.NEXT_PUBLIC_SITE_URL;
+        process.env.VOZEB_PRO_REFERENCE_ASSET_SIGNING_KEY = "test-signing-key";
+        process.env.NEXT_PUBLIC_SITE_URL = "https://vozeb.example";
+        mocks.fetchSafeOutbound
+            .mockResolvedValueOnce(new Response("not found", { status: 404, headers: { "content-type": "text/plain" } }))
+            .mockResolvedValueOnce(new Response(new Uint8Array([137]), { status: 206, headers: { "content-type": "image/png" } }));
+
+        try {
+            await expect(resolveReadableDramaVideoReferenceUrl("/api/generation-log-assets/permanent/frame.png", "https://provider.example/expired.png", "http://127.0.0.1:3010")).resolves.toMatch(
+                /^https:\/\/vozeb\.example\/api\/generation-log-assets\/permanent\/frame\.png\?purpose=provider-read/,
+            );
+        } finally {
+            if (originalKey === undefined) delete process.env.VOZEB_PRO_REFERENCE_ASSET_SIGNING_KEY;
+            else process.env.VOZEB_PRO_REFERENCE_ASSET_SIGNING_KEY = originalKey;
+            if (originalSite === undefined) delete process.env.NEXT_PUBLIC_SITE_URL;
+            else process.env.NEXT_PUBLIC_SITE_URL = originalSite;
+        }
     });
 
     it("removes invalid historical episode entries before recovery reads their shots", async () => {
@@ -193,6 +250,69 @@ describe("drama project service updates", () => {
         });
     });
 
+    it("does not run continuity review when a generated frame is synchronized", async () => {
+        const current = project("2026-07-19T08:00:00.000Z", "项目");
+        current.episodes[0].shots = [
+            { id: "shot-one", title: "镜头", characterIds: [], propIds: [], clueIds: [], imagePrompt: "画面", videoPrompt: "动作", cameraMotion: "固定", duration: 5, storyboardFrameMode: "all_frames", storyboardFrames: [] } as never,
+        ];
+        mocks.getDramaProject.mockResolvedValue(current);
+        mocks.findLatestDramaProductionRun.mockResolvedValue({
+            id: "run-frame-one",
+            projectId: current.id,
+            episodeId: "episode-one",
+            status: "running",
+            scope: "visual",
+            mode: "strict",
+            confirmedAt: current.updatedAt,
+            parameterSnapshot: { imageModel: "image-default", videoModel: "", ratio: "9:16" },
+            steps: [{ id: "frame-shot-one-f1", type: "keyframe", shotId: "shot-one", frameId: "f1", sequenceIndex: 1, taskId: "task-one", dependsOn: [], status: "running" }],
+            blockers: [],
+            createdAt: current.updatedAt,
+            updatedAt: current.updatedAt,
+        } as never);
+        mocks.getStoredGenerationTask.mockResolvedValue({ status: "success", result: { serverUrl: "/api/frame-one.png", width: 640, height: 960 } });
+
+        await getLatestDramaProductionRunForUser("user-one", current.id, "episode-one", { scope: "visual" });
+
+        expect(mocks.reviewCreativeOutputs).not.toHaveBeenCalled();
+        expect(mocks.updateDramaProject).toHaveBeenCalledWith(
+            "user-one",
+            expect.objectContaining({ episodes: [expect.objectContaining({ shots: [expect.objectContaining({ storyboardFrames: [expect.objectContaining({ continuityStatus: "pending" })] })] })] }),
+            current.updatedAt,
+        );
+    });
+
+    it("reviews only the requested generated frame and persists the result", async () => {
+        const current = project("2026-07-19T08:00:00.000Z", "项目");
+        current.episodes[0].shots = [
+            {
+                id: "shot-one",
+                title: "镜头",
+                description: "人物在房间内抬头",
+                sourceText: "人物在房间内抬头",
+                characterIds: [],
+                propIds: [],
+                clueIds: [],
+                imagePrompt: "画面",
+                videoPrompt: "动作",
+                cameraMotion: "固定",
+                duration: 5,
+                storyboardFrameMode: "all_frames",
+                framePlan: { start: { source: "independent" }, end: { required: false }, frames: [{ id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 5, actionPrompt: "抬头", imagePrompt: "人物抬头" }] },
+                storyboardFrames: [{ id: "f1", sequenceIndex: 1, source: "generated", status: "success", taskId: "task-one", mediaUrl: "/api/frame-one.png", continuityStatus: "pending" }],
+            } as never,
+        ];
+        mocks.getDramaProject.mockResolvedValue(current);
+        mocks.reviewCreativeOutputs.mockResolvedValue({ mode: "visual", status: "passed", summary: "符合当前帧", issues: [], retryTaskIds: [] });
+
+        const result = await reviewDramaStoryboardFrameForUser("user-one", current.id, "episode-one", "shot-one", "f1", { origin: "http://localhost:3010", cookie: "session=1" });
+
+        expect(mocks.reviewCreativeOutputs).toHaveBeenCalledWith(expect.objectContaining({ billingId: expect.stringContaining("drama-frame-review:"), tasks: [expect.objectContaining({ id: "f1", imageUrls: ["/api/frame-one.png"] })] }));
+        expect(result.review.status).toBe("passed");
+        expect(result.project.episodes[0].shots[0].storyboardFrames?.[0]).toMatchObject({ continuityStatus: "passed", error: undefined });
+        expect(mocks.updateDramaProject).toHaveBeenCalled();
+    });
+
     it("stores a generated frame against the package frame id and its stable input hash", () => {
         const current = project("2026-07-19T08:00:00.000Z", "项目");
         current.episodes[0].shots = [
@@ -215,6 +335,8 @@ describe("drama project service updates", () => {
             {
                 id: "shot-one",
                 title: "镜头",
+                description: "人物在门边握住断剑",
+                sourceText: "人物在门边握住断剑",
                 characterIds: [],
                 propIds: [],
                 clueIds: [],
@@ -281,6 +403,49 @@ describe("drama project service updates", () => {
             expect.objectContaining({ episodes: [expect.objectContaining({ shots: [expect.objectContaining({ storyboardFrames: [expect.objectContaining({ continuityStatus: "passed" })] })] })] }),
             current.updatedAt,
         );
+    });
+
+    it("persists a manual prompt on the requested storyboard frame and invalidates its generated result", async () => {
+        const current = project("2026-07-19T08:00:00.000Z", "项目");
+        current.episodes[0].shots = [
+            {
+                id: "shot-one",
+                title: "镜头",
+                description: "人物在门边握住断剑",
+                sourceText: "人物在门边握住断剑",
+                characterIds: [],
+                propIds: [],
+                clueIds: [],
+                imagePrompt: "旧画面",
+                videoPrompt: "动作",
+                cameraMotion: "固定",
+                duration: 5,
+                storyboardFrameMode: "all_frames",
+                framePlan: {
+                    start: { source: "independent" },
+                    end: { required: false },
+                    frames: [
+                        { id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 2.5, actionPrompt: "前半段", imagePrompt: "前半画面" },
+                        { id: "f2", sequenceIndex: 2, startSecond: 2.5, endSecond: 5, actionPrompt: "后半段", imagePrompt: "后半画面" },
+                    ],
+                },
+                storyboardFrames: [
+                    { id: "f1", sequenceIndex: 1, source: "generated", status: "success", mediaUrl: "/api/f1.png", continuityStatus: "passed" },
+                    { id: "f2", sequenceIndex: 2, source: "generated", status: "success", mediaUrl: "/api/f2.png", continuityStatus: "passed" },
+                ],
+            } as never,
+        ];
+        mocks.getDramaProject.mockResolvedValue(current);
+        const supplierPrompt =
+            "静态关键帧：用户编辑后的画面\n可见状态：人物握住断剑\n可见表演状态：眉眼紧绷\n景别：中景\n机位与构图：平视，主体位于画面中央\n站位与视线：人物站在门边，视线落向断剑\n三层空间：前景为门框，中景承载人物，背景交代房间纵深\n光色与风格：冷色侧光，半写实动漫幻想风\n负面约束：无字幕、无水印、无logo、无HUD、无变形";
+
+        const saved = await updateDramaStoryboardFramePromptForUser("user-one", current.id, "episode-one", "shot-one", "f2", { supplierPrompt });
+        const shot = saved.episodes[0].shots[0];
+
+        expect(shot.framePlan?.frames[1].supplierPrompt).toContain("用户编辑后的画面");
+        expect(shot.storyboardFrames).toEqual([expect.objectContaining({ id: "f1", status: "success", mediaUrl: "/api/f1.png" }), expect.objectContaining({ id: "f2", status: "stale", mediaUrl: "/api/f2.png", continuityStatus: "stale" })]);
+        expect(mocks.updateDramaProject.mock.calls.at(-1)?.[0]).toBe("user-one");
+        expect((mocks.updateDramaProject.mock.calls.at(-1)?.[1] as DramaProject).episodes[0].shots[0].framePlan?.frames[1].supplierPrompt).toContain("用户编辑后的画面");
     });
 
     it("persists a missing frame placeholder before confirming its visual run", async () => {
@@ -1464,7 +1629,7 @@ describe("drama project service updates", () => {
             episodeId: current.episodes[0].id,
             preflight: { checkedShotIds: ["shot-one"] },
         });
-        await expect(pending).rejects.toMatchObject({ status: 409, message: "当前视频模型 selected-video 未声明支持 4 张全能帧关键图，请在后台为该模型声明全能帧能力或调整本集帧模式；系统不会自动切换模型" });
+        await expect(pending).rejects.toMatchObject({ status: 409, message: "当前视频模型 selected-video 未声明支持全能帧关键图，请在后台为该模型声明全能帧能力或调整本集帧模式；系统不会自动切换模型" });
         expect(mocks.resolveLogicalModelCandidates).toHaveBeenCalledWith(expect.anything(), "video", "selected-video", undefined);
         expect(mocks.createDramaProductionRun).not.toHaveBeenCalled();
     });

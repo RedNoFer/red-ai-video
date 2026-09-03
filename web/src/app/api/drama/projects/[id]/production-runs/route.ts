@@ -23,7 +23,8 @@ export async function GET(request: Request, context: Context) {
         return NextResponse.json({ code: 0, data: { run, preflight: preflight || null }, msg: "OK" });
     } catch (error) {
         if (error instanceof DramaProjectServiceError) return NextResponse.json({ code: error.status, data: null, msg: error.message }, { status: error.status });
-        throw error;
+        console.error("Drama production run read failed", error);
+        return NextResponse.json({ code: 500, data: null, msg: error instanceof Error ? error.message : "短剧生产运行读取失败" }, { status: 500 });
     }
 }
 
@@ -38,6 +39,7 @@ export async function POST(request: Request, context: Context) {
         return NextResponse.json({ code: 0, data: { run }, msg: "连续性生产计划已锁定" });
     } catch (error) {
         if (error instanceof DramaProjectServiceError) return NextResponse.json({ code: error.status, data: null, msg: error.message }, { status: error.status });
-        throw error;
+        console.error("Drama production run creation failed", error);
+        return NextResponse.json({ code: 500, data: null, msg: error instanceof Error ? error.message : "短剧生产计划创建失败" }, { status: 500 });
     }
 }

@@ -1,4 +1,4 @@
-import { normalizeVideoReferenceRole, type CreativeVideoReferenceMode, type VideoReferenceRole } from "@/lib/video-reference-contract";
+import { MAX_VIDEO_IMAGE_REFERENCES, normalizeVideoReferenceRole, type CreativeVideoReferenceMode, type VideoReferenceRole } from "@/lib/video-reference-contract";
 import type { ReferenceImage } from "@/types/image";
 import type { ReferenceAudio, ReferenceVideo } from "@/types/media";
 
@@ -96,7 +96,7 @@ export function resolveCanvasVideoGenerationReferences({
     if (mode === "all_frames") {
         const selections = metadata?.videoKeyframes?.length
             ? metadata.videoKeyframes
-            : availableImages.slice(0, 5).flatMap((image, index) => {
+            : availableImages.slice(0, MAX_VIDEO_IMAGE_REFERENCES).flatMap((image, index) => {
                   const selection = frameSelectionFromImage(image);
                   return selection ? [{ ...selection, title: `关键帧 ${index + 1}` }] : [];
               });
@@ -104,7 +104,7 @@ export function resolveCanvasVideoGenerationReferences({
             const image = resolveFrameImage(selection, availableImages);
             return image ? [image] : [];
         });
-        if (keyframes.length < 2 || keyframes.length > 5) throw new Error("全能帧必须选择 2 到 5 张图片");
+        if (keyframes.length < 2 || keyframes.length > MAX_VIDEO_IMAGE_REFERENCES) throw new Error(`全能帧必须选择 2 到 ${MAX_VIDEO_IMAGE_REFERENCES} 张图片`);
         const images = keyframes.map((image, index) => ({ ...image, videoRole: "keyframe" as const, keyframeIndex: index + 1 }));
         const regularImages = context.referenceImages.filter((image) => !keyframes.some((frame) => sameReferenceImage(frame, image))).map((image) => withVideoRole(image, "reference"));
         const frames: CanvasVideoFrameSelection[] = [];
@@ -312,12 +312,13 @@ function assertFrameRoles(images: ReferenceImage[]) {
     if (lastFrames.length && !firstFrames.length) throw new Error("指定视频尾帧时必须同时指定首帧");
     if (firstFrames[0] && lastFrames[0] && sameReferenceImage(firstFrames[0], lastFrames[0])) throw new Error("视频首帧和尾帧不能使用同一张图片");
     const keyframes = images.filter((image) => image.videoRole === "keyframe").sort((left, right) => (left.keyframeIndex || 0) - (right.keyframeIndex || 0));
-    if (keyframes.length && (keyframes.length < 2 || keyframes.length > 5 || keyframes.some((image, index) => image.keyframeIndex !== index + 1))) throw new Error("全能帧必须按顺序选择 2 到 5 张图片");
+    if (images.length > MAX_VIDEO_IMAGE_REFERENCES) throw new Error(`视频最多支持 ${MAX_VIDEO_IMAGE_REFERENCES} 张参考图`);
+    if (keyframes.length && (keyframes.length < 2 || keyframes.some((image, index) => image.keyframeIndex !== index + 1))) throw new Error(`全能帧必须按顺序选择 2 到 ${MAX_VIDEO_IMAGE_REFERENCES} 张图片`);
 }
 
 function assertReferenceModeFrames(mode: CreativeVideoReferenceMode, images: ReferenceImage[]) {
     if (mode === "all_frames") {
-        if (images.filter((image) => image.videoRole === "keyframe").length < 2) throw new Error("全能帧必须选择 2 到 5 张图片");
+        if (images.filter((image) => image.videoRole === "keyframe").length < 2) throw new Error(`全能帧必须选择 2 到 ${MAX_VIDEO_IMAGE_REFERENCES} 张图片`);
         return;
     }
     if (mode !== "reference" && !images.some((image) => image.videoRole === "first_frame")) throw new Error("请先选择视频首帧图片");

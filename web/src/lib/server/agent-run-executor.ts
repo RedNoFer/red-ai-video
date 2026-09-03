@@ -20,7 +20,8 @@ import { mergeDramaProductionPackageShotDurations, previewDramaProductionPackage
 import { serializeDramaProductionPackageMarkdown } from "@/lib/drama-production-package-serializer";
 import { defaultDramaProductionPlan, normalizeDramaProductionPlan, resolveDramaFrameCountPreference, resolveDramaShotDurationPreference } from "@/lib/drama-production-plan";
 import { DRAMA_PACKAGE_ARCHITECTURE_RULES } from "@/lib/server/drama-production-package-rules";
-import { SEEDANCE_STATIC_FRAME_RULES } from "@/lib/server/agent-skills/creative-shortcuts";
+import { SEEDANCE_25_DIRECTOR_SKILL, SEEDANCE_STATIC_FRAME_RULES } from "@/lib/server/agent-skills/creative-shortcuts";
+import { resolveSeedance25DirectorInstructions } from "@/lib/server/agent-skills/seedance-25";
 
 const globalAgentExecutors = globalThis as typeof globalThis & { __vozebProAgentRunControllers?: Map<string, AbortController> };
 const controllers = (globalAgentExecutors.__vozebProAgentRunControllers ??= new Map<string, AbortController>());
@@ -70,7 +71,7 @@ export async function executeAgentRun(run: AgentRun, origin: string, cookie: str
         const allModels = agentModelOptions(settings);
         const availableModels = prioritizeAgentPlannerModels(filterAgentPlannerModels(allModels, claimed), claimed, settings);
         const skillOptions = plannerAgentSkills(settings, claimed);
-        const skills = selectAgentSkills(settings, claimed.surface, claimed.selectedSkillIds);
+        const skills = selectAgentSkills(settings, claimed.surface, claimed.selectedSkillIds, claimed);
         if (!(await canContinue(run.id, executionId))) return;
         if (claimed.requestedModelIds?.length) {
             const directModelOptions = claimed.generationPreferences?.mode ? availableModels : allModels;
@@ -225,16 +226,16 @@ async function executeDramaScriptRun(run: AgentRun, origin: string, cookie: stri
     const index = project.episodes.findIndex((episode) => episode.id === episodeId);
     if (index < 0) throw new Error("当前集不存在或已被删除");
     const current = project.episodes[index];
-    const selectedSkills = selectAgentSkills(settings, "drama", run.selectedSkillIds || []);
-    const skillInstructions = selectedSkills.map((skill) => `${skill.name}@${skill.id}：${skill.instructions}`).join("\n");
-    const skillRule = `本次短剧制作包必须执行以下 Skill 正文，不能只记录 Skill 名称：\n${skillInstructions}`;
+    const selectedSkills = selectAgentSkills(settings, "drama", run.selectedSkillIds || [], run);
     const snapshotPlan = run.snapshot && typeof run.snapshot === "object" && !Array.isArray(run.snapshot) ? (run.snapshot as { productionPlan?: unknown }).productionPlan : undefined;
     const normalizedSnapshotPlan = snapshotPlan ? normalizeDramaProductionPlan(snapshotPlan, defaultDramaProductionPlan("manual")) : undefined;
     const requestedShotDuration = resolveDramaShotDurationPreference(run.prompt, normalizedSnapshotPlan?.video.shotDuration || 15);
     const requestedFrameCount = resolveDramaFrameCountPreference(run.prompt, normalizedSnapshotPlan?.video.frameCount || 5);
-    const lockedPlan = normalizedSnapshotPlan
-        ? { ...normalizedSnapshotPlan, video: { ...normalizedSnapshotPlan.video, shotDuration: requestedShotDuration, frameCount: requestedFrameCount } }
-        : undefined;
+    const lockedPlan = normalizedSnapshotPlan ? { ...normalizedSnapshotPlan, video: { ...normalizedSnapshotPlan.video, shotDuration: requestedShotDuration, frameCount: requestedFrameCount } } : undefined;
+    const skillInstructions = selectedSkills
+        .map((skill) => `${skill.name}@${skill.id}：${skill.id === SEEDANCE_25_DIRECTOR_SKILL.id ? resolveSeedance25DirectorInstructions({ prompt: run.prompt, durationSeconds: requestedShotDuration }).instructions : skill.instructions}`)
+        .join("\n");
+    const skillRule = `本次短剧制作包必须执行以下 Skill 正文，不能只记录 Skill 名称：\n${skillInstructions}`;
     if (isOutsideDramaScriptScope(run.prompt)) {
         const reply = `当前窗口只处理${current.title}的新剧本内容。请继续提供本集剧情、人物、冲突或制作包要求。`;
         await updateAgentRunById(

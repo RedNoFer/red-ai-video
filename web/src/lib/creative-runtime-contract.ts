@@ -1,4 +1,4 @@
-import { videoFrameAssetIds, type CreativeVideoReferenceMode } from "@/lib/video-reference-contract";
+import { MAX_VIDEO_IMAGE_REFERENCES, videoFrameAssetIds, type CreativeVideoReferenceMode } from "@/lib/video-reference-contract";
 
 export const creativeSurfaces = ["chat", "canvas", "drama"] as const;
 export type CreativeSurface = (typeof creativeSurfaces)[number];
@@ -242,7 +242,7 @@ function normalizeVideoPreferences(value: unknown) {
     if (referenceMode === "reference" && (firstFrameAssetId || lastFrameAssetId)) throw new CreativeRuntimeInputError("智能参考模式不能保留首尾帧角色");
     if (referenceMode === "first_frame" && !firstFrameAssetId) throw new CreativeRuntimeInputError("首帧模式需要选择首帧图片");
     if (referenceMode === "first_last" && (!firstFrameAssetId || !lastFrameAssetId)) throw new CreativeRuntimeInputError("首尾帧模式需要同时选择首帧和尾帧图片");
-    if (referenceMode === "all_frames" && (frameAssetIds.length < 2 || frameAssetIds.length > 5)) throw new CreativeRuntimeInputError("全能帧必须选择 2 到 5 张图片");
+    if (referenceMode === "all_frames" && (frameAssetIds.length < 2 || frameAssetIds.length > MAX_VIDEO_IMAGE_REFERENCES)) throw new CreativeRuntimeInputError(`全能帧必须选择 2 到 ${MAX_VIDEO_IMAGE_REFERENCES} 张图片`);
     if (referenceMode === "all_frames" && (firstFrameAssetId || lastFrameAssetId)) throw new CreativeRuntimeInputError("全能帧不能与首帧或尾帧混用");
     if (referenceMode !== "all_frames" && frameAssetIds.length) throw new CreativeRuntimeInputError("全能帧图片只能用于全能帧模式");
     if (new Set(frameAssetIds).size !== frameAssetIds.length) throw new CreativeRuntimeInputError("全能帧图片不能重复");

@@ -1,9 +1,10 @@
+import { createHash } from "node:crypto";
 import { nanoid } from "nanoid";
 import { assertUniqueDramaVoices, normalizeDramaVoiceProfile } from "@/lib/drama-voice";
 
 import { getAuthSettings } from "@/lib/auth/store";
 import { fetchInternalApi } from "@/lib/server/internal-origin";
-import { getStoredGenerationTask, queryStoredGenerationTasks } from "@/lib/server/generation-task-store";
+import { getStoredGenerationTask, getStoredGenerationTaskByRequest, queryStoredGenerationTasks } from "@/lib/server/generation-task-store";
 import type { CanvasProject } from "@/lib/canvas-project-contract";
 import { applyDramaCanvasMediaField, buildDramaEpisodeCanvasTitle, dramaEpisodeCanvasHandoffId, mergeDramaEpisodeCanvasProject, type DramaCanvasMediaField } from "@/lib/drama-canvas-bridge";
 import type {
@@ -43,7 +44,7 @@ import { approvedAssetReference } from "@/lib/drama-asset-baseline";
 import { createFrameEvidence, decideActualEndFrame, invalidateFrameEvidence, replaceFrameEvidence, supersedeFrameEvidence } from "@/lib/drama-continuity-policy";
 import { DRAMA_STYLE_NAME, normalizeDramaStyleName, resolveDramaStyleContract } from "@/lib/drama-style";
 import { normalizeDramaImageSize } from "@/lib/drama-image-size";
-import { defaultDramaFrameBeats, formatPromptFieldLines, normalizeDramaFrameBeats, upgradeDramaFrameImagePrompt } from "@/lib/drama-frame-sequence";
+import { defaultDramaFrameBeats, formatPromptFieldLines, normalizeDramaFrameBeats, updateDramaFrameBeat, upgradeDramaFrameImagePrompt, validateDramaFrameVisualContent } from "@/lib/drama-frame-sequence";
 import { defaultDramaProductionPlan, dramaReferenceImageBudget, normalizeDramaProductionPlan } from "@/lib/drama-production-plan";
 import { resolveDramaShotDuration } from "@/lib/server/drama-shot-config";
 import { TEXT_MODEL_REQUEST_TIMEOUT_MS } from "@/lib/server/model-request-policy";
@@ -56,10 +57,11 @@ import { createDramaProjectVersion, getDramaProjectVersion, listDramaProjectVers
 import { collectLocalMediaStorageKeys } from "@/lib/server/local-media-references";
 import { deleteUserLocalMediaAssets } from "@/lib/server/local-media-storage";
 import { signReferenceAssetInputUrl } from "@/lib/server/reference-asset-access";
+import { fetchSafeOutbound } from "@/lib/server/safe-outbound-fetch";
 import { applyDramaProductionPackage, DramaProductionPackageError, previewDramaProductionPackage } from "@/lib/server/drama-production-package";
 import { buildDramaProductionRun, refreshDramaVideoStepReferences, unlockDramaProductionSteps } from "@/lib/server/drama-production-run";
 import { composeDramaVideoSegments } from "@/lib/server/drama-video-sequence";
-import { buildDramaVisualProductionRun, compileDramaVisualStepPrompt, unlockDramaVisualSteps } from "@/lib/server/drama-visual-production-run";
+import { buildDramaVisualProductionRun, compileDramaFrameBeatPrompt, compileDramaVisualStepPrompt, unlockDramaVisualSteps } from "@/lib/server/drama-visual-production-run";
 import { preflightDramaProduction } from "@/lib/server/drama-production-preflight";
 import { preflightDramaGeneration } from "@/lib/server/drama-generation-preflight";
 import { createDramaProductionRun, findLatestDramaProductionRun, getDramaProductionRun, updateDramaProductionRun } from "@/lib/server/drama-production-run-store";
@@ -70,6 +72,7 @@ import { getVideoTask } from "@/lib/server/video-task-store";
 const MAX_PROJECT_BYTES = 2 * 1024 * 1024;
 const REVIEW_COMPLETION_STALE_MS = TEXT_MODEL_REQUEST_TIMEOUT_MS * 4;
 const dramaImageDispatchLocks = new Map<string, Promise<DramaProductionRun>>();
+const dramaProductionDispatchLocks = new Map<string, Promise<DramaProductionRun>>();
 
 export class DramaProjectServiceError extends Error {
     constructor(
@@ -796,6 +799,92 @@ export async function acceptDramaStoryboardFrameForUser(userId: string, id: stri
     }
 }
 
+export async function reviewDramaStoryboardFrameForUser(userId: string, id: string, episodeId: string, shotId: string, frameId: string, transport: { origin?: string; cookie?: string } = {}) {
+    const current = await getDramaProjectForUser(userId, id);
+    const episode = current.episodes.find((item) => item.id === cleanText(episodeId));
+    if (!episode) throw new DramaProjectServiceError("短剧剧集不存在", 404);
+    const shot = episode.shots.find((item) => item.id === cleanText(shotId));
+    if (!shot) throw new DramaProjectServiceError("短剧镜头不存在", 404);
+    const frame = (shot.storyboardFrames || []).find((item) => item.id === cleanText(frameId));
+    if (!frame?.mediaUrl || frame.status !== "success") throw new DramaProjectServiceError("当前分镜帧没有可检验图片", 409);
+    const beat = shot.framePlan?.frames?.find((item) => item.id === frame.id || item.sequenceIndex === frame.sequenceIndex);
+    const previous = (shot.storyboardFrames || []).find((item) => item.sequenceIndex === frame.sequenceIndex - 1 && item.mediaUrl && item.status === "success");
+    const prompt = beat ? compileDramaFrameBeatPrompt(current, episode, shot, beat) : shot.imagePrompt || shot.description;
+    const review = await reviewCreativeOutputs({
+        origin: transport.origin || "",
+        cookie: transport.cookie || "",
+        userId,
+        billingId: `drama-frame-review:${current.id}:${episode.id}:${shot.id}:${frame.id}:${frame.taskId || frame.mediaUrl}:${createHash("sha256").update(prompt).digest("hex")}`,
+        foundation: {
+            complexity: "complex",
+            brief: {
+                objective: `${current.title} · ${shot.title} · 帧 ${frame.sequenceIndex} 图片检验`,
+                constraints: [`当前帧图片提示词：${prompt}`, shot.continuity?.continuityNotes || "保持当前帧的人物、场景、道具、构图和动作状态符合镜头设定"],
+                referenceStrategy: previous ? "第一张是上一帧，第二张是当前帧；同时核对当前帧提示词" : "只核对当前帧图片与当前帧提示词",
+            },
+            direction: {
+                summary: "判断当前图片是否符合当前帧，不做审美偏好打分",
+                composition: shot.continuity?.composition || "核对景别、机位、构图、站位和视线",
+                lighting: shot.lightingPlan?.palette || shot.lighting || undefined,
+                avoid: ["人物身份漂移", "服装或道具无依据变化", "空间关系跳变", "动作状态不符合当前帧"],
+            },
+        },
+        tasks: [
+            {
+                id: frame.id,
+                title: `${shot.title} · 帧 ${frame.sequenceIndex}`,
+                type: "image",
+                prompt,
+                resultSummary: previous ? "第一张是上一帧，第二张是当前帧；请检验当前帧是否符合提示词并保持连续" : "请检验当前帧是否符合提示词",
+                imageUrls: previous ? [previous.mediaUrl!, frame.mediaUrl] : [frame.mediaUrl],
+            },
+        ],
+    });
+    if (review.status === "unavailable") return { project: current, review };
+    const passed = review.status === "passed";
+    const evidenceId = `frame-review:${frame.taskId || frame.id}:${Date.now()}`;
+    const summary = review.summary || (passed ? "图片检验通过" : "当前图片与帧设定不一致，请调整后重试");
+    const nextProject = {
+        ...current,
+        episodes: current.episodes.map((item) =>
+            item.id !== episode.id
+                ? item
+                : {
+                      ...item,
+                      shots: item.shots.map((candidate) =>
+                          candidate.id !== shot.id
+                              ? candidate
+                              : {
+                                    ...candidate,
+                                    storyboardFrames: (candidate.storyboardFrames || []).map((storyboardFrame) =>
+                                        storyboardFrame.id !== frame.id
+                                            ? storyboardFrame
+                                            : {
+                                                  ...storyboardFrame,
+                                                  continuityStatus: passed ? ("passed" as const) : ("needs_review" as const),
+                                                  continuityEvidenceId: evidenceId,
+                                                  error: passed ? undefined : summary,
+                                                  candidates: storyboardFrame.candidates?.map((candidateFrame) =>
+                                                      candidateFrame.mediaUrl === frame.mediaUrl
+                                                          ? { ...candidateFrame, continuityStatus: passed ? ("passed" as const) : ("needs_review" as const), continuityEvidenceId: evidenceId, error: passed ? undefined : summary }
+                                                          : candidateFrame,
+                                                  ),
+                                              },
+                                    ),
+                                },
+                      ),
+                  },
+        ),
+        updatedAt: new Date().toISOString(),
+    };
+    try {
+        return { project: await updateDramaProject(userId, nextProject, current.updatedAt), review };
+    } catch (error) {
+        if (error instanceof DramaProjectStoreError) throw new DramaProjectServiceError(error.message, error.status);
+        throw error;
+    }
+}
+
 function staleStoryboardFrame(frame: NonNullable<DramaShot["storyboardFrames"]>[number]) {
     return {
         ...frame,
@@ -984,9 +1073,9 @@ export async function createDramaProductionRunForUser(userId: string, projectId:
                 `本集锁定的视频模型 ${requestedVideoModel} 未在后台启用或没有可用渠道；后台默认视频模型为 ${settings.defaultModels.videoModel || "未配置"}。请在本集设置中明确选择已启用模型并重新锁定，系统不会自动切换模型`,
                 409,
             );
-        throw new DramaProjectServiceError(`当前视频模型 ${requestedVideoModel} 未声明支持 ${requiredKeyframeCount} 张全能帧关键图，请在后台为该模型声明全能帧能力或调整本集帧模式；系统不会自动切换模型`, 409);
+        throw new DramaProjectServiceError(`当前视频模型 ${requestedVideoModel} 未声明支持全能帧关键图，请在后台为该模型声明全能帧能力或调整本集帧模式；系统不会自动切换模型`, 409);
     }
-    validateDramaReferenceSelections(project, episode, productionShots, referenceSelections, videoCandidate.capabilityProfile?.maxReferenceImages);
+    validateDramaReferenceSelections(project, episode, productionShots, referenceSelections);
     const preflight = preflightDramaProduction(project, episode, checkedShotIds.length ? checkedShotIds : undefined);
     if (preflight.status === "blocked") {
         const detail = preflight.issues
@@ -1007,7 +1096,6 @@ export async function createDramaProductionRunForUser(userId: string, projectId:
             productionPlan: requestedPlan || project.productionBible?.productionPlan,
             minVideoSeconds: videoCandidate.capabilityProfile?.minDurationSeconds,
             maxVideoSeconds: videoCandidate.capabilityProfile?.maxDurationSeconds,
-            maxReferenceImages: videoCandidate.capabilityProfile?.maxReferenceImages,
             referenceSelections,
         }),
         preflightSnapshot: {
@@ -1037,9 +1125,8 @@ export async function createDramaProductionRunForUser(userId: string, projectId:
     const origin = cleanText(object(value).origin);
     const cookie = cleanText(object(value).cookie);
     const imageRun = await dispatchDramaImageSteps(userId, project, created, origin, cookie);
-    const refreshedProject = await getDramaProjectForUser(userId, project.id);
     const refreshedRun = await getDramaProductionRun(userId, project.id, imageRun.id);
-    return refreshedRun ? dispatchReadyDramaProductionSteps(userId, refreshedProject, refreshedRun, origin, cookie) : imageRun;
+    return refreshedRun ? dispatchDramaProductionRun(userId, project.id, refreshedRun, origin, cookie) : imageRun;
 }
 
 export function mergeDramaShotMediaReferences(current: DramaShot, snapshot: DramaShot): DramaShot {
@@ -1091,11 +1178,9 @@ export async function getLatestDramaProductionRunForUser(userId: string, project
     if (!run.scope || run.scope !== "visual") {
         const imageSynced = await syncDramaVisualRun(userId, project, run, transport);
         const imageDispatched = imageSynced.confirmedAt && ["running", "ready"].includes(imageSynced.status) ? await dispatchDramaImageSteps(userId, project, imageSynced, transport.origin || "", transport.cookie || "") : imageSynced;
-        const refreshedProject = await getDramaProjectForUser(userId, projectId);
         const refreshedRun = await getDramaProductionRun(userId, projectId, imageDispatched.id);
         if (!refreshedRun) return imageDispatched;
-        const synced = await syncDramaProductionRun(userId, refreshedProject, refreshedRun, transport);
-        return synced.confirmedAt && ["running", "ready"].includes(synced.status) ? dispatchReadyDramaProductionSteps(userId, refreshedProject, synced, transport.origin || "", transport.cookie || "") : synced;
+        return dispatchDramaProductionRun(userId, projectId, refreshedRun, transport.origin || "", transport.cookie || "");
     }
     const synced = await syncDramaVisualRun(userId, project, run, transport);
     return synced.confirmedAt && ["running", "ready"].includes(synced.status) ? dispatchDramaImageSteps(userId, project, synced, transport.origin || "", transport.cookie || "") : synced;
@@ -1186,7 +1271,7 @@ async function syncDramaVisualRun(userId: string, project: DramaProject, run: Dr
             continue;
         }
         nextProject = applyDramaVisualStepResult(nextProject, run.episodeId, step, results);
-        let completed: DramaProductionRun["steps"][number] = {
+        const completed: DramaProductionRun["steps"][number] = {
             ...step,
             status: step.type === "asset_anchor" ? ("needs_review" as const) : ("success" as const),
             outputUrls: results.map((item) => item.url),
@@ -1195,19 +1280,6 @@ async function syncDramaVisualRun(userId: string, project: DramaProject, run: Dr
             outputHeight: results[0].height,
             error: step.type === "asset_anchor" ? "候选图已生成，请在项目资产库确认主基准图" : undefined,
         };
-        if (step.type === "keyframe" && (step.sequenceIndex || 1) > 1) {
-            const previous = [...steps].reverse().find((item) => item.type === "keyframe" && item.shotId === step.shotId && item.sequenceIndex === (step.sequenceIndex || 1) - 1);
-            if (!previous?.outputUrls?.[0]) completed = { ...completed, status: "needs_review", error: "缺少上一帧实际结果，无法执行连续性检查" };
-            else {
-                const review = await reviewDramaFramePair(userId, run, step, previous.outputUrls[0], results[0].url, transport.origin || "", transport.cookie || "");
-                const passed = review.status === "passed";
-                completed = { ...completed, status: passed ? "success" : "needs_review", continuityEvidenceId: `frame-qc:${run.id}:${step.frameId || step.sequenceIndex}`, error: passed ? undefined : review.summary };
-                nextProject = applyDramaFrameContinuityResult(nextProject, run.episodeId, step, passed, completed.continuityEvidenceId!, review.summary);
-            }
-        } else if (step.type === "keyframe") {
-            completed.continuityEvidenceId = `frame-qc:${run.id}:${step.frameId || step.sequenceIndex}:origin`;
-            nextProject = applyDramaFrameContinuityResult(nextProject, run.episodeId, step, true, completed.continuityEvidenceId, "首帧已建立");
-        }
         steps.push(completed);
     }
     if (!changed) return run;
@@ -1242,55 +1314,6 @@ function reconcileTerminalDramaVisualFailures(project: DramaProject, run: DramaP
         if (!newerSubmissionPending) nextProject = applyDramaVisualStepFailure(nextProject, run.episodeId, step, step.error || (step.status === "cancelled" ? "图片任务已取消" : "图片任务失败"));
     }
     return nextProject;
-}
-
-async function reviewDramaFramePair(userId: string, run: DramaProductionRun, step: DramaProductionStep, previousUrl: string, currentUrl: string, origin: string, cookie: string) {
-    return reviewCreativeOutputs({
-        origin,
-        cookie,
-        userId,
-        billingId: `drama-frame-qc:${run.id}:${step.frameId || step.sequenceIndex}`,
-        foundation: {
-            complexity: "complex",
-            brief: { objective: "检查短剧相邻锚点帧能否自然连续", constraints: ["人物身份、服装、道具、场景拓扑、光向、构图、站位和轴线保持连续"], referenceStrategy: "第一张为上一帧，第二张为当前帧" },
-            direction: { summary: "只判断相邻画面连续性", composition: "核对空间关系、人物姿态和动作推进", avoid: ["身份漂移", "服装突变", "空间跳变", "动作倒退", "轴线错误"] },
-        },
-        tasks: [{ id: step.id, title: step.title || "相邻帧连续性", type: "image", prompt: step.prompt || "", resultSummary: "第一张是上一帧，第二张是当前帧", imageUrls: [previousUrl, currentUrl] }],
-    });
-}
-
-function applyDramaFrameContinuityResult(project: DramaProject, episodeId: string, step: DramaProductionStep, passed: boolean, evidenceId: string, error: string) {
-    return {
-        ...project,
-        episodes: project.episodes.map((episode) =>
-            episode.id !== episodeId
-                ? episode
-                : {
-                      ...episode,
-                      shots: episode.shots.map((shot) =>
-                          shot.id !== step.shotId
-                              ? shot
-                              : {
-                                    ...shot,
-                                    storyboardFrames: (shot.storyboardFrames || []).map((frame) =>
-                                        frame.id === step.frameId || frame.sequenceIndex === step.sequenceIndex
-                                            ? {
-                                                  ...frame,
-                                                  ...(frame.taskId === step.taskId ? { continuityStatus: passed ? ("passed" as const) : ("needs_review" as const), continuityEvidenceId: evidenceId, ...(passed ? { error: undefined } : { error }) } : {}),
-                                                  candidates: frame.candidates?.map((candidate) =>
-                                                      candidate.taskId === step.taskId
-                                                          ? { ...candidate, continuityStatus: passed ? ("passed" as const) : ("needs_review" as const), continuityEvidenceId: evidenceId, ...(passed ? { error: undefined } : { error }) }
-                                                          : candidate,
-                                                  ),
-                                              }
-                                            : frame,
-                                    ),
-                                },
-                      ),
-                  },
-        ),
-        updatedAt: new Date().toISOString(),
-    };
 }
 
 export function applyDramaVisualStepResult(project: DramaProject, episodeId: string, step: DramaProductionRun["steps"][number], results: Array<{ url: string; remoteUrl?: string; width?: number; height?: number }>) {
@@ -1761,17 +1784,14 @@ async function syncDramaProductionRun(userId: string, project: DramaProject, run
     let steps = [...run.steps];
     let nextProject = project;
     for (const step of steps) {
-        if (step.type !== "video" || step.status !== "running" || !step.taskId) continue;
-        const task = await getVideoTask(step.taskId);
-        if (!task || task.userId !== userId || !["success", "error", "cancelled"].includes(task.status)) continue;
+        if (step.type !== "video") continue;
+        const requestId = dramaVideoStepRequestId(run.id, step);
+        const task = step.taskId ? await getVideoTask(step.taskId) : await getStoredGenerationTaskByRequest<import("@/lib/server/video-task-store").VideoTask>("video", userId, requestId, step.attemptNo || 1);
+        if (!task || task.userId !== userId) continue;
+        const reconciled = reconcileDramaVideoStepTask(step, task);
+        if (JSON.stringify(reconciled) === JSON.stringify(step)) continue;
         changed = true;
-        steps = steps.map((item) =>
-            item.id !== step.id
-                ? item
-                : task.status === "success" && task.result?.url
-                  ? { ...item, status: "success" as const, outputUrls: [task.result.url], outputRemoteUrls: task.result.remoteUrl ? [task.result.remoteUrl] : undefined, error: undefined }
-                  : { ...item, status: task.status === "cancelled" ? ("cancelled" as const) : ("failed" as const), error: task.error || "视频子段生成失败" },
-        );
+        steps = steps.map((item) => (item.id === step.id ? reconciled : item));
     }
 
     let nextRun = unlockDramaProductionSteps({ ...run, steps });
@@ -1862,74 +1882,203 @@ async function dispatchReadyDramaProductionSteps(userId: string, project: DramaP
             step = refreshedStep;
         }
         const shot = episode?.shots.find((item) => item.id === step.shotId);
-        const snapshot = step.referenceBindingsSnapshot || [];
-        const references = snapshot.length
-            ? snapshot.flatMap((binding) => {
-                  const asset = binding.sourceId ? assetUrls.get(binding.sourceId) : undefined;
-                  const url = asset?.remoteUrl || asset?.url || binding.remoteUrl || binding.url;
-                  if (!url) return [];
-                  const role = binding.role === "first_frame" || binding.role === "last_frame" || binding.role === "keyframe" ? binding.role : "reference";
-                  return [{ type: "image" as const, role, purpose: binding.purpose, ...(binding.keyframeIndex ? { keyframeIndex: binding.keyframeIndex } : {}), url }];
-              })
-            : [
-                  ...(step.referenceImageUrls || []).map((url, index) =>
-                      shot?.storyboardFrameMode === "all_frames"
-                          ? { type: "image" as const, role: "keyframe", keyframeIndex: index + 1, url: step.referenceImageRemoteUrls?.[index] || url }
-                          : { type: "image" as const, role: index === 0 ? "first_frame" : "last_frame", url: step.referenceImageRemoteUrls?.[index] || url },
-                  ),
-                  ...(step.referenceAssetIds || []).flatMap((assetId) => {
-                      const reference = assetUrls.get(assetId);
-                      return reference ? [{ type: "image" as const, role: "reference", url: reference.remoteUrl || reference.url }] : [];
-                  }),
-              ];
         const attemptNo = step.attemptNo || 1;
-        const requestId = `drama-video:${run.id}:${step.id}:attempt-${attemptNo}`;
+        const requestId = dramaVideoStepRequestId(run.id, step);
+        const existingTask = await getStoredGenerationTaskByRequest<import("@/lib/server/video-task-store").VideoTask>("video", userId, requestId, attemptNo);
         let nextStep: DramaProductionStep;
-        try {
-            const response = await fetchInternalApi(`${origin}/api/video-generation-tasks`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json", cookie, "X-VOZEB-PRO-Client-Request-Id": requestId, "X-VOZEB-PRO-Attempt-No": String(attemptNo) },
-                body: JSON.stringify({
-                    config: {
-                        model: run.parameterSnapshot.videoModel,
-                        channelId: run.parameterSnapshot.videoChannelId,
-                        size: run.parameterSnapshot.ratio,
-                        vquality: String(run.parameterSnapshot.productionPlan?.video.resolution || run.parameterSnapshot.videoQuality || "720p").replace(/p$/i, ""),
-                        videoSeconds: step.duration,
-                        videoGenerateAudio: true,
-                    },
-                    prompt: compileDramaVideoReferencePrompt(step.prompt!, references),
-                    references,
-                    source: "drama",
-                    context: { runId: run.id, surface: "drama", projectId: project.id, episodeId: run.episodeId, shotId: step.shotId, clientRequestId: requestId, attemptNo },
-                }),
-            });
-            const payload = (await response.json().catch(() => ({}))) as { task?: { id?: string; needsReview?: boolean }; error?: string; warning?: string };
-            nextStep =
-                response.ok && payload.task?.id
-                    ? {
-                          ...step,
-                          taskId: payload.task.id,
-                          executionPrompt: compileDramaVideoReferencePrompt(step.prompt!, references),
-                          status: payload.task.needsReview ? "needs_review" : "running",
-                          error: payload.task.needsReview ? payload.warning || "视频任务提交结果待审核" : undefined,
-                      }
-                    : { ...step, status: "failed", error: payload.error || "视频子段任务创建失败" };
-        } catch {
-            nextStep = { ...step, status: "needs_review", error: "视频任务提交结果未知，请先在供应商任务记录中核对，禁止直接重复创建" };
+        if (existingTask?.userId === userId) {
+            nextStep = reconcileDramaVideoStepTask(step, existingTask);
+        } else {
+            const snapshot = step.referenceBindingsSnapshot || [];
+            const referenceInputs = snapshot.length
+                ? snapshot.flatMap((binding) => {
+                      const asset = binding.sourceId ? assetUrls.get(binding.sourceId) : undefined;
+                      const url = asset?.url || binding.url || asset?.remoteUrl || binding.remoteUrl;
+                      if (!url) return [];
+                      const role: "reference" | "first_frame" | "last_frame" | "keyframe" = binding.role === "first_frame" || binding.role === "last_frame" || binding.role === "keyframe" ? binding.role : "reference";
+                      return [{ type: "image" as const, role, purpose: binding.purpose, ...(binding.keyframeIndex ? { keyframeIndex: binding.keyframeIndex } : {}), url, remoteUrl: asset?.remoteUrl || binding.remoteUrl }];
+                  })
+                : [
+                      ...(step.referenceImageUrls || []).map((url, index) =>
+                          shot?.storyboardFrameMode === "all_frames"
+                              ? { type: "image" as const, role: "keyframe" as const, keyframeIndex: index + 1, url, remoteUrl: step.referenceImageRemoteUrls?.[index] }
+                              : { type: "image" as const, role: index === 0 ? ("first_frame" as const) : ("last_frame" as const), url, remoteUrl: step.referenceImageRemoteUrls?.[index] },
+                      ),
+                      ...(step.referenceAssetIds || []).flatMap((assetId) => {
+                          const reference = assetUrls.get(assetId);
+                          return reference ? [{ type: "image" as const, role: "reference" as const, url: reference.url, remoteUrl: reference.remoteUrl }] : [];
+                      }),
+                  ];
+            let references: Array<{ type: "image"; role: "reference" | "first_frame" | "last_frame" | "keyframe"; purpose?: string; keyframeIndex?: number; url: string }>;
+            try {
+                references = await Promise.all(
+                    referenceInputs.map(async ({ remoteUrl, ...reference }) => ({
+                        ...reference,
+                        url: await resolveReadableDramaVideoReferenceUrl(reference.url, remoteUrl, origin),
+                    })),
+                );
+            } catch (error) {
+                const message = error instanceof Error ? error.message : "参考素材不可读，未创建视频任务";
+                const nextStep = { ...step, status: "failed" as const, error: message };
+                current = unlockDramaProductionSteps({ ...current, steps: current.steps.map((item) => (item.id === step.id ? nextStep : item)) });
+                if (step.shotId) nextProject = updateDramaShotInProject(nextProject, run.episodeId, step.shotId, { generationStatus: "error", generationRunId: run.id, generationTaskId: undefined, generationError: message });
+                await updateDramaProductionRun(userId, current);
+                continue;
+            }
+            try {
+                const response = await fetchInternalApi(`${origin}/api/video-generation-tasks`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", cookie, "X-VOZEB-PRO-Client-Request-Id": requestId, "X-VOZEB-PRO-Attempt-No": String(attemptNo) },
+                    body: JSON.stringify({
+                        config: {
+                            model: run.parameterSnapshot.videoModel,
+                            channelId: run.parameterSnapshot.videoChannelId,
+                            size: run.parameterSnapshot.ratio,
+                            vquality: String(run.parameterSnapshot.productionPlan?.video.resolution || run.parameterSnapshot.videoQuality || "720p").replace(/p$/i, ""),
+                            videoSeconds: step.duration,
+                            videoGenerateAudio: true,
+                        },
+                        prompt: compileDramaVideoReferencePrompt(step.prompt!, references),
+                        references,
+                        source: "drama",
+                        context: { runId: run.id, surface: "drama", projectId: project.id, episodeId: run.episodeId, shotId: step.shotId, clientRequestId: requestId, attemptNo },
+                    }),
+                });
+                const payload = (await response.json().catch(() => ({}))) as { task?: { id?: string; needsReview?: boolean }; error?: string; warning?: string };
+                const concurrentTask = response.status === 429 ? await getStoredGenerationTaskByRequest<import("@/lib/server/video-task-store").VideoTask>("video", userId, requestId, attemptNo) : null;
+                nextStep =
+                    response.ok && payload.task?.id
+                        ? {
+                              ...step,
+                              taskId: payload.task.id,
+                              executionPrompt: compileDramaVideoReferencePrompt(step.prompt!, references),
+                              status: payload.task.needsReview ? "needs_review" : "running",
+                              error: payload.task.needsReview ? payload.warning || "视频任务提交结果待审核" : undefined,
+                          }
+                        : concurrentTask?.userId === userId
+                          ? reconcileDramaVideoStepTask(step, concurrentTask)
+                          : response.status === 429
+                            ? { ...step, status: "ready", error: undefined }
+                            : { ...step, status: "failed", error: payload.error || "视频子段任务创建失败" };
+            } catch {
+                nextStep = { ...step, status: "needs_review", error: "视频任务提交结果未知，请先在供应商任务记录中核对，禁止直接重复创建" };
+            }
         }
         current = unlockDramaProductionSteps({ ...current, steps: current.steps.map((item) => (item.id === step.id ? nextStep : item)) });
         if (step.shotId)
             nextProject = updateDramaShotInProject(nextProject, run.episodeId, step.shotId, {
-                generationStatus: nextStep.status === "running" ? "running" : nextStep.status === "failed" ? "error" : "needs_review",
+                generationStatus: nextStep.status === "running" ? "running" : nextStep.status === "ready" ? "queued" : nextStep.status === "failed" ? "error" : "needs_review",
                 generationRunId: run.id,
                 generationTaskId: undefined,
                 generationError: nextStep.error,
             });
         await updateDramaProductionRun(userId, current);
     }
-    if (JSON.stringify(nextProject) !== JSON.stringify(project)) await updateDramaProject(userId, { ...nextProject, updatedAt: nextTimestamp(project.updatedAt) }, project.updatedAt);
+    if (JSON.stringify(nextProject) !== JSON.stringify(project)) {
+        try {
+            await updateDramaProject(userId, { ...nextProject, updatedAt: nextTimestamp(project.updatedAt) }, project.updatedAt);
+        } catch (error) {
+            if (!(error instanceof DramaProjectStoreError) || error.status !== 409) throw error;
+            const latestProject = await getDramaProject(project.id, userId);
+            if (!latestProject) throw error;
+            const rebased = mergeDramaProductionTaskState(latestProject, project, nextProject);
+            if (rebased !== latestProject) {
+                try {
+                    await updateDramaProject(userId, rebased, latestProject.updatedAt);
+                } catch (rebasedError) {
+                    if (!(rebasedError instanceof DramaProjectStoreError) || rebasedError.status !== 409) throw rebasedError;
+                }
+            }
+        }
+    }
     return current;
+}
+
+function dispatchDramaProductionRun(userId: string, projectId: string, run: DramaProductionRun, origin: string, cookie: string) {
+    const key = `${userId}:${projectId}:${run.id}`;
+    const previous = dramaProductionDispatchLocks.get(key);
+    const execute = async () => {
+        const latestProject = (await getDramaProjectForUser(userId, projectId)) || undefined;
+        const latestRun = (await getDramaProductionRun(userId, projectId, run.id)) || run;
+        if (!latestProject) return latestRun;
+        const synced = await syncDramaProductionRun(userId, latestProject, latestRun, { origin, cookie });
+        if (!synced.confirmedAt || !["running", "ready"].includes(synced.status)) return synced;
+        const dispatchProject = (await getDramaProjectForUser(userId, projectId)) || latestProject;
+        const dispatchRun = (await getDramaProductionRun(userId, projectId, synced.id)) || synced;
+        return dispatchReadyDramaProductionSteps(userId, dispatchProject, dispatchRun, origin, cookie);
+    };
+    const operation = (previous ? previous.catch(() => undefined).then(execute) : execute()).finally(() => {
+        if (dramaProductionDispatchLocks.get(key) === operation) dramaProductionDispatchLocks.delete(key);
+    });
+    dramaProductionDispatchLocks.set(key, operation);
+    return operation;
+}
+
+function mergeDramaProductionTaskState(latest: DramaProject, base: DramaProject, desired: DramaProject) {
+    let changed = false;
+    const next = {
+        ...latest,
+        episodes: latest.episodes.map((episode) => {
+            const baseEpisode = base.episodes.find((item) => item.id === episode.id);
+            const desiredEpisode = desired.episodes.find((item) => item.id === episode.id);
+            if (!baseEpisode || !desiredEpisode) return episode;
+            const shots = episode.shots.map((shot) => {
+                const baseShot = baseEpisode.shots.find((item) => item.id === shot.id);
+                const desiredShot = desiredEpisode.shots.find((item) => item.id === shot.id);
+                if (
+                    !baseShot ||
+                    !desiredShot ||
+                    JSON.stringify({ generationStatus: baseShot.generationStatus, generationRunId: baseShot.generationRunId, generationTaskId: baseShot.generationTaskId, generationError: baseShot.generationError }) ===
+                        JSON.stringify({ generationStatus: desiredShot.generationStatus, generationRunId: desiredShot.generationRunId, generationTaskId: desiredShot.generationTaskId, generationError: desiredShot.generationError })
+                )
+                    return shot;
+                changed = true;
+                return { ...shot, generationStatus: desiredShot.generationStatus, generationRunId: desiredShot.generationRunId, generationTaskId: desiredShot.generationTaskId, generationError: desiredShot.generationError };
+            });
+            return shots === episode.shots ? episode : { ...episode, shots };
+        }),
+        updatedAt: nextTimestamp(latest.updatedAt),
+    };
+    return changed ? next : latest;
+}
+
+function dramaVideoStepRequestId(runId: string, step: DramaProductionStep) {
+    return `drama-video:${runId}:${step.id}:attempt-${step.attemptNo || 1}`;
+}
+
+export async function resolveReadableDramaVideoReferenceUrl(localUrl: string | undefined, remoteUrl: string | undefined, origin: string, publicOrigin = externalDramaOrigin(process.env.NEXT_PUBLIC_SITE_URL || "")) {
+    if (isExternalDramaUrl(remoteUrl) && (await isReadableDramaReferenceImage(remoteUrl!))) return remoteUrl!.trim();
+    const local = (localUrl || "").trim();
+    if (/\/api\/(?:reference-assets|generation-log-assets)\//.test(local) && publicOrigin) {
+        const absoluteLocal = local.startsWith("/") ? new URL(local, origin).toString() : local;
+        const signed = signReferenceAssetInputUrl(absoluteLocal, publicOrigin);
+        if (signed && signed !== absoluteLocal && (await isReadableDramaReferenceImage(signed))) return signed;
+    }
+    if (isExternalDramaUrl(local) && (await isReadableDramaReferenceImage(local))) return local;
+    if (remoteUrl && local) throw new Error("供应商参考图已失效，且站内副本公网不可读；请检查 NEXT_PUBLIC_SITE_URL 或重新上传参考图");
+    if (remoteUrl) throw new Error("供应商参考图已失效且没有可用站内副本，请重新上传参考图");
+    throw new Error("站内参考图公网地址不可访问，请检查 NEXT_PUBLIC_SITE_URL 后重试");
+}
+
+async function isReadableDramaReferenceImage(url: string) {
+    const probe = async (init: RequestInit) => {
+        const response = await fetchSafeOutbound(url, { ...init, cache: "no-store" });
+        const readable = response.ok && response.headers.get("content-type")?.toLowerCase().startsWith("image/");
+        await response.body?.cancel().catch(() => undefined);
+        return { readable, status: response.status };
+    };
+    try {
+        const head = await probe({ method: "HEAD", headers: { accept: "image/*" } });
+        return head.readable || ((head.status === 405 || head.status === 501) && (await probe({ headers: { accept: "image/*", range: "bytes=0-0" } })).readable);
+    } catch {
+        return false;
+    }
+}
+
+export function reconcileDramaVideoStepTask(step: DramaProductionStep, task: import("@/lib/server/video-task-store").VideoTask): DramaProductionStep {
+    if (task.status === "running") return { ...step, taskId: task.id, status: "running", error: undefined };
+    if (task.status === "success" && task.result?.url) return { ...step, taskId: task.id, status: "success", outputUrls: [task.result.url], outputRemoteUrls: task.result.remoteUrl ? [task.result.remoteUrl] : undefined, error: undefined };
+    return { ...step, taskId: task.id, status: task.status === "cancelled" ? "cancelled" : "failed", error: task.error || "视频子段生成失败" };
 }
 
 export function compileDramaVideoReferencePrompt(prompt: string, references: Array<{ role: string; purpose?: string }>) {
@@ -2114,6 +2263,60 @@ export async function updateDramaShotPromptForUser(userId: string, projectId: st
         updatedAt: nextTimestamp(project.updatedAt),
     };
     if (!matched) throw new DramaProjectServiceError("短剧镜头不存在", 404);
+    return updateDramaProject(userId, normalizeProject(nextProject, project), project.updatedAt);
+}
+
+export async function updateDramaStoryboardFramePromptForUser(userId: string, projectId: string, episodeIdValue: string, shotIdValue: string, frameIdValue: string, value: unknown) {
+    const project = await getDramaProjectForUser(userId, projectId);
+    const episodeId = cleanText(episodeIdValue);
+    const shotId = cleanText(shotIdValue);
+    const frameId = cleanText(frameIdValue);
+    const prompt = formatPromptFieldLines(cleanText(object(value).supplierPrompt), "static");
+    if (!prompt) throw new DramaProjectServiceError("提示词不能为空", 400);
+    const visualError = validateDramaFrameVisualContent(prompt);
+    if (visualError) throw new DramaProjectServiceError(visualError, 400);
+    let shotMatched = false;
+    let frameMatched = false;
+    const nextProject = {
+        ...project,
+        episodes: project.episodes.map((episode) =>
+            episode.id !== episodeId
+                ? episode
+                : {
+                      ...episode,
+                      renderTask: undefined,
+                      shots: episode.shots.map((shot) => {
+                          if (shot.id !== shotId) return shot;
+                          shotMatched = true;
+                          if (!shot.framePlan?.frames.length) return shot;
+                          const frame = shot.framePlan.frames.find((item) => item.id === frameId);
+                          if (!frame) return shot;
+                          frameMatched = true;
+                          const next = updateDramaFrameBeat(shot.framePlan.frames, shot.storyboardFrames || [], frame.id, { supplierPrompt: prompt });
+                          return {
+                              ...shot,
+                              storyboardFrameMode: "all_frames" as const,
+                              framePlan: { ...shot.framePlan, frames: next.beats },
+                              storyboardFrames: next.frames,
+                              storyboardPrompt: undefined,
+                              storyboardEndPrompt: undefined,
+                              fieldOrigins: { ...(shot.fieldOrigins || {}), framePlan: "manual" as const },
+                              generationStatus: "idle" as const,
+                              generationTaskId: undefined,
+                              generationError: undefined,
+                              videoUrl: undefined,
+                              audioStatus: "idle" as const,
+                              audioTaskId: undefined,
+                              audioError: undefined,
+                              audioUrl: undefined,
+                          };
+                      }),
+                  },
+        ),
+        updatedAt: nextTimestamp(project.updatedAt),
+    };
+    if (!shotMatched) throw new DramaProjectServiceError("短剧镜头不存在", 404);
+    if (!frameMatched) throw new DramaProjectServiceError("待更新帧不存在", 404);
     return updateDramaProject(userId, normalizeProject(nextProject, project), project.updatedAt);
 }
 
@@ -2487,8 +2690,8 @@ function normalizeShot(value: unknown, index: number): DramaShot {
         executionVideoPrompt: optionalText(input.executionVideoPrompt),
         executionImagePrompt: optionalText(input.executionImagePrompt),
         cameraMotion: cleanText(input.cameraMotion),
-        startFramePrompt: optionalText(input.startFramePrompt),
-        endFramePrompt: optionalText(input.endFramePrompt),
+        startFramePrompt: formatOptionalPromptField(input.startFramePrompt, "static"),
+        endFramePrompt: formatOptionalPromptField(input.endFramePrompt, "static"),
         negativePrompt: optionalText(input.negativePrompt),
         continuity: normalizeContinuity(input.continuity),
         storySceneId: optionalText(input.storySceneId),
@@ -2603,7 +2806,7 @@ function normalizeShotFramePlan(value: unknown, duration: number, actionPrompt: 
                           endSecond: Number(frame.endSecond),
                           actionPrompt: cleanText(frame.actionPrompt),
                           imagePrompt: cleanText(frame.imagePrompt),
-                          supplierPrompt: optionalText(frame.supplierPrompt),
+                          supplierPrompt: formatOptionalPromptField(frame.supplierPrompt, "static"),
                       };
                   })
                 : defaultDramaFrameBeats(duration, actionPrompt, imagePrompt),
@@ -2626,6 +2829,11 @@ function normalizeShotFramePlan(value: unknown, duration: number, actionPrompt: 
         ...(hasManualReferenceImages ? { manualReferenceImages } : {}),
         ...(Object.keys(object(input.referenceCount)).length ? { referenceCount: { min: Math.max(1, Math.floor(Number(object(input.referenceCount).min) || 1)), max: Math.max(1, Math.floor(Number(object(input.referenceCount).max) || 1)) } } : {}),
     };
+}
+
+function formatOptionalPromptField(value: unknown, kind: "static" | "video") {
+    const text = optionalText(value);
+    return text ? formatPromptFieldLines(text, kind) : undefined;
 }
 
 function normalizeFrameEvidence(value: unknown): DramaFrameEvidence[] {
@@ -3291,7 +3499,7 @@ function stringArrayRecord(value: unknown): Record<string, string[]> {
     );
 }
 
-function validateDramaReferenceSelections(project: DramaProject, episode: DramaEpisode, shots: DramaShot[], selections: Record<string, string[]>, providerLimit?: number) {
+export function validateDramaReferenceSelections(project: DramaProject, episode: DramaEpisode, shots: DramaShot[], selections: Record<string, string[]>) {
     for (const shot of shots) {
         const fixedAssetIds = Array.from(new Set([shot.sceneId, ...shot.characterIds, ...shot.propIds, ...shot.clueIds, ...(shot.sourceAssetIds || [])].filter((id): id is string => Boolean(id))));
         const frameIds = shot.framePlan?.frames.map((frame) => frame.id) || [];
@@ -3304,7 +3512,7 @@ function validateDramaReferenceSelections(project: DramaProject, episode: DramaE
         const legacyFrames = shot.storyboardFrameMode === "all_frames" ? 0 : shot.storyboardFrameMode === "first_last" ? 2 : 1;
         const selectedFixedAssetCount = selected ? fixedAssetIds.filter((id) => selected.includes(id)).length : fixedAssetIds.length;
         const total = selectedFixedAssetCount + incoming + selectedFrameIds.length + legacyFrames;
-        const limit = Math.min(dramaReferenceImageBudget(shot.duration), providerLimit && providerLimit > 0 ? providerLimit : Number.POSITIVE_INFINITY);
+        const limit = dramaReferenceImageBudget(shot.duration);
         if (total > limit) throw new DramaProjectServiceError(`${shot.title}本次引用 ${total} 张图片，超过 ${shot.duration} 秒视频的 ${limit} 张上限；请返回提示词预览取消部分中间帧`, 409);
     }
 }

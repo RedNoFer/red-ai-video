@@ -13,6 +13,8 @@ type Props = {
     logicalModels: LogicalModel[];
     defaultModels: SystemDefaultModels;
     onChange: (value: { logicalModels: LogicalModel[]; defaultModels: SystemDefaultModels }) => void;
+    onPersist: (value: { logicalModels: LogicalModel[]; defaultModels: SystemDefaultModels }, successText: string) => Promise<boolean>;
+    saving: boolean;
 };
 
 const capabilityOptions: Array<{ label: string; value: LogicalModelCapability }> = [
@@ -29,7 +31,7 @@ const defaultFields: Array<{ capability: LogicalModelCapability; key: keyof Syst
     { capability: "audio", key: "audioModel", label: "默认音频模型（短剧 AI 配音）" },
 ];
 
-export function AdminLogicalModelManager({ channels, logicalModels, defaultModels, onChange }: Props) {
+export function AdminLogicalModelManager({ channels, logicalModels, defaultModels, onChange, onPersist, saving }: Props) {
     const { message } = App.useApp();
     const [drawerOpen, setDrawerOpen] = useState(false);
     const [editingId, setEditingId] = useState("");
@@ -56,7 +58,7 @@ export function AdminLogicalModelManager({ channels, logicalModels, defaultModel
         setDrawerOpen(true);
     };
 
-    const saveDraft = () => {
+    const saveDraft = async () => {
         if (!draft) return;
         const name = draft.name.trim();
         if (!name) {
@@ -80,9 +82,9 @@ export function AdminLogicalModelManager({ channels, logicalModels, defaultModel
             message.error(errors[0]);
             return;
         }
-        onChange({ logicalModels: nextModels, defaultModels: nextDefaults });
-        setDrawerOpen(false);
-        message.success("模型路由设置已更新，请保存渠道配置");
+        const nextRouting = { logicalModels: nextModels, defaultModels: nextDefaults };
+        onChange(nextRouting);
+        if (await onPersist(nextRouting, "模型路由设置已保存")) setDrawerOpen(false);
     };
 
     const syncChannelModels = () => {
@@ -198,7 +200,7 @@ export function AdminLogicalModelManager({ channels, logicalModels, defaultModel
                 extra={
                     <Space>
                         <Button onClick={() => setDrawerOpen(false)}>取消</Button>
-                        <Button type="primary" disabled={!draft?.name.trim()} onClick={saveDraft}>
+                        <Button type="primary" loading={saving} disabled={!draft?.name.trim() || saving} onClick={() => void saveDraft()}>
                             应用修改
                         </Button>
                     </Space>
@@ -317,12 +319,7 @@ function BindingEditor({ binding, capability, channels, onChange }: { binding: L
                         </Checkbox>
                         {capability === "video" ? (
                             <Checkbox checked={profile.supportsKeyframes === true} onChange={(event) => updateProfile({ supportsKeyframes: event.target.checked })}>
-                                连续关键帧
-                            </Checkbox>
-                        ) : null}
-                        {capability === "video" ? (
-                            <Checkbox checked={profile.supportsKeyframes === true} onChange={(event) => updateProfile({ supportsKeyframes: event.target.checked })}>
-                                全能帧（2–5 张有序关键帧）
+                                全能帧（总参考图最多 9 张）
                             </Checkbox>
                         ) : null}
                         <Checkbox checked={effectiveAsync} onChange={(event) => updateProfile({ supportsAsync: event.target.checked })}>
@@ -515,7 +512,7 @@ function upstreamKey(value: string) {
         .toLowerCase();
 }
 
-function buildCapabilityVariants(models: LogicalModel[], original: LogicalModel, draft: LogicalModel, capabilities: LogicalModelCapability[]) {
+export function buildCapabilityVariants(models: LogicalModel[], original: LogicalModel, draft: LogicalModel, capabilities: LogicalModelCapability[]) {
     const selected = normalizeCapabilities(capabilities);
     const family = models.filter((model) => sameLogicalModelFamily(model, original));
     const sourceModel = draft.bindings[0]?.upstreamModel || original.bindings[0]?.upstreamModel || original.id;
@@ -538,7 +535,10 @@ function buildCapabilityVariants(models: LogicalModel[], original: LogicalModel,
                       fallbackStrategy: draft.capability === "video" ? draft.fallbackStrategy : base.fallbackStrategy,
                   }
                 : { fallbackModelIds: undefined, fallbackStrategy: undefined }),
-            bindings: draft.bindings.map((binding) => ({ ...binding, capabilityProfile: existing?.bindings.find((item) => item.id === binding.id)?.capabilityProfile || binding.capabilityProfile })),
+            bindings: draft.bindings.map((binding) => {
+                const storedProfile = existing?.bindings.find((item) => item.id === binding.id)?.capabilityProfile;
+                return { ...binding, capabilityProfile: existing?.id === original.id ? binding.capabilityProfile : storedProfile || binding.capabilityProfile };
+            }),
         });
     });
     const withoutFamily = models.filter((model) => !family.includes(model));

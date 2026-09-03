@@ -1256,8 +1256,10 @@ test("drama shot generation previews prompt before confirmation", async ({ page 
             },
         });
     });
+    let preflightCalls = 0;
     await page.route("**/api/drama/preflight", async (route) => {
         if (route.request().method() !== "POST") return route.fallback();
+        preflightCalls += 1;
         await route.fulfill({ json: { code: 0, data: { preflight: { status: "passed", issues: [], revisedPrompts: {}, changeSummary: [] } }, msg: "OK" } });
     });
 
@@ -1270,11 +1272,11 @@ test("drama shot generation previews prompt before confirmation", async ({ page 
 
     const previewDialog = page.getByRole("dialog", { name: "确认生成 1 个镜头" });
     await expect(previewDialog).toBeVisible();
+    expect(preflightCalls).toBe(0);
     expect(effectCleanupErrors).toEqual([]);
     await expect(previewDialog.getByText("清晰度：", { exact: false })).toBeVisible();
-    await expect(previewDialog.getByText("Karin 在黑湖边缓慢转身", { exact: false })).toBeVisible();
-    await expect(previewDialog.getByText("0-2s：Karin 在湖岸停住", { exact: false })).toBeVisible();
-    await expect(previewDialog.getByText("2-5s：Karin 转身看向湖心", { exact: false })).toBeVisible();
+    await expect(previewDialog.getByText("动态意图：", { exact: false })).toBeVisible();
+    await expect(previewDialog.getByText("时间段动作：", { exact: false })).toBeVisible();
     await expect(previewDialog.getByText("实际参考图绑定（编号与本次请求图片数组完全一致）", { exact: false })).toBeVisible();
     await expect(previewDialog.getByText("@图片1：顺序帧 1", { exact: false })).toBeVisible();
     await expect(previewDialog.getByText("@图片3：场景 · 黑湖", { exact: false })).toBeVisible();
@@ -1291,8 +1293,15 @@ test("drama shot generation previews prompt before confirmation", async ({ page 
     await expect(generationPanel.getByRole("button", { name: "生成镜头" })).toBeVisible();
     expect(productionRunCreates).toBe(0);
 
-    await previewDialog.getByRole("button", { name: "确认生成" }).click();
-    await expect(previewDialog).toBeHidden();
+    await previewDialog.getByRole("button", { name: "返回修改" }).click();
+    await generationPanel.getByRole("button", { name: "检查生成条件" }).click();
+    await expect.poll(() => preflightCalls).toBe(1);
+    await expect(page.getByText("生成前检查已通过", { exact: true })).toBeVisible();
+
+    await generationPanel.getByRole("button", { name: "生成镜头" }).click();
+    const reopenedPreviewDialog = page.getByRole("dialog", { name: "确认生成 1 个镜头" });
+    await reopenedPreviewDialog.getByRole("button", { name: "确认生成" }).click();
+    await expect(reopenedPreviewDialog).toBeHidden();
     expect(productionRunCreates).toBe(1);
 });
 

@@ -5,22 +5,43 @@ import type { AgentRun, AgentRunPlannerContextSummary, AgentRunTask } from "@/li
 import type { AgentPlan } from "@/lib/server/agent-run-validation";
 import { resolveAgentPlanningProfile } from "@/lib/server/agent-run-planning-profile";
 import { canvasSnapshotPlannerView, selectedCanvasNodeIds } from "./agent-run-canvas-snapshot";
-import { SEEDANCE_DIRECTOR_SKILL } from "./agent-skills/creative-shortcuts";
+import { SEEDANCE_25_DIRECTOR_SKILL, SEEDANCE_DIRECTOR_SKILL } from "./agent-skills/creative-shortcuts";
+import { inferSeedance25VideoDuration, resolveSeedance25DirectorInstructions } from "./agent-skills/seedance-25";
+
+const VIDEO_AGENT_REQUEST_RE = /视频|短片|动画|动效|镜头|运镜|图生视频|文生视频|动起来/u;
+type AgentSkillSelectionContext = {
+    prompt?: string;
+    generationPreferences?: AgentRun["generationPreferences"];
+    requestedModelIds?: AgentRun["requestedModelIds"];
+    workflow?: AgentRun["workflow"];
+};
 
 export function availableAgentSkills(settings: AuthSettings, surface: CreativeSurface) {
     const workspaces = surface === "canvas" ? new Set(["canvas"]) : surface === "drama" ? new Set(["drama"]) : new Set(["image", "video", "drama"]);
     return settings.agentSkills.filter((skill) => skill.enabled && (skill.workspaces || ["image"]).some((workspace) => workspaces.has(workspace)));
 }
 
-export function selectAgentSkills(settings: AuthSettings, surface: CreativeSurface, requestedSkillIds: string[] = []) {
+export function selectAgentSkills(settings: AuthSettings, surface: CreativeSurface, requestedSkillIds: string[] = [], context?: AgentSkillSelectionContext) {
     const available = new Map(availableAgentSkills(settings, surface).map((skill) => [skill.id, skill]));
     if (surface === "drama" && !available.has(SEEDANCE_DIRECTOR_SKILL.id)) available.set(SEEDANCE_DIRECTOR_SKILL.id, { ...SEEDANCE_DIRECTOR_SKILL, keywords: [...SEEDANCE_DIRECTOR_SKILL.keywords], workspaces: [...SEEDANCE_DIRECTOR_SKILL.workspaces] });
-    const ids = surface === "drama" ? ["seedance-director", ...requestedSkillIds] : requestedSkillIds;
+    const videoDefault = surface !== "canvas" && isVideoAgentRequest(settings, context);
+    if (videoDefault && !available.has(SEEDANCE_25_DIRECTOR_SKILL.id) && !settings.agentSkills.some((skill) => skill.id === SEEDANCE_25_DIRECTOR_SKILL.id && skill.enabled === false)) {
+        available.set(SEEDANCE_25_DIRECTOR_SKILL.id, { ...SEEDANCE_25_DIRECTOR_SKILL, keywords: [...SEEDANCE_25_DIRECTOR_SKILL.keywords], workspaces: [...SEEDANCE_25_DIRECTOR_SKILL.workspaces] });
+    }
+    const ids = [...(surface === "drama" ? ["seedance-director"] : []), ...(videoDefault ? [SEEDANCE_25_DIRECTOR_SKILL.id] : []), ...requestedSkillIds];
     return Array.from(new Set(ids.map((id) => id.trim()).filter(Boolean))).flatMap((id) => (available.has(id) ? [available.get(id)!] : []));
 }
 
-export function plannerAgentSkills(settings: AuthSettings, run: Pick<AgentRun, "surface" | "selectedSkillIds">) {
-    return selectAgentSkills(settings, run.surface, run.selectedSkillIds || []);
+export function plannerAgentSkills(settings: AuthSettings, run: Pick<AgentRun, "surface" | "selectedSkillIds"> & AgentSkillSelectionContext) {
+    return selectAgentSkills(settings, run.surface, run.selectedSkillIds || [], run);
+}
+
+function isVideoAgentRequest(settings: AuthSettings, context?: AgentSkillSelectionContext) {
+    if (context?.workflow === "drama-script" && /制作包/u.test(context.prompt || "")) return true;
+    if (context?.generationPreferences?.mode) return context.generationPreferences.mode === "video";
+    if (context?.generationPreferences?.video) return true;
+    if (context?.requestedModelIds?.some((id) => settings.logicalModels.some((model) => model.id === id && model.capability === "video"))) return true;
+    return VIDEO_AGENT_REQUEST_RE.test(context?.prompt || "");
 }
 
 export function agentPlannerSystemPrompt(surface: CreativeSurface, fallbackExample: string) {
@@ -47,10 +68,10 @@ export function agentPlannerSystemPrompt(surface: CreativeSurface, fallbackExamp
     const skillSelectionRule =
         surface === "drama"
             ? "短剧入口即使 requestedSkillIds 为空也必须执行 seedance-director；用户选择的其他兼容技能可以叠加，不能替换该默认技能。"
-            : "requestedSkillIds 非空时必须使用且只使用这些技能；requestedSkillIds 为空时 skillIds 必须为空，不得自动选择任何普通 Skill。";
+            : "视频创作需求（generationPreferences.mode=video，或自然语言明确要求视频/短片/动画/动效/镜头）即使 requestedSkillIds 为空也必须执行 seedance-25-director；用户选择的其他兼容技能可以叠加。非视频请求仍只使用用户显式选择的 Skill，requestedSkillIds 为空时不得自动选择普通 Skill。";
     const dialogueProtocol =
         "所有生成型对话都遵循统一创作协议：先锁定目标、受众、用途和参考素材，再给一个明确推荐方向。图片 Prompt 按主体/身份锚点、当前变化、构图、光色材质、用途和约束组织；编辑必须分别写 change、preserve、constraints，且一次只改一个变量。视频 Prompt 按静态锚点、可见起点、触发、主体动作、次级反应、一个主运镜、声音和可验证终点组织；每镜只保留一个主要变化，抽象情绪必须翻译成可观察的表情、视线、呼吸、手部或身体动作。多资产只能使用稳定 assetId 绑定，@引用只表达用途，不能按标题或文本相似度猜测；内部规划规则、供应商字段和执行提示词不得进入公开消息。";
-    return `${identity}先结合 conversationContext 的长期摘要和近期消息理解用户的自然语言、指代和连续创作关系，再判断 intent：问候、闲聊、能力咨询、使用说明和知识问答为 conversation；${surfaceRules}conversation 必须 deliverables=[]、decisions=[]，直接在 reply 回答。generationPreferences.mode 非空时代表用户本轮明确选择的产物类型，必须按该类型执行 generation，deliverables 只能使用该媒体类型；generationPreferences 中该类型的尺寸、画质、时长、音色和格式是用户本轮明确参数，不得改选。视频 generationPreferences.referenceMode 为 all_frames 时，必须规划视频任务并原样回显 all_frames，严格使用有序 frameAssetIds（2–5 张图片），不得猜测、交换、删除、改成普通参考图或首尾帧；首尾帧模式同样不得交换角色，服务端会强制注入对应资产。generation 必须先形成 foundation：brief 说明目标、受众、使用场景、核心信息、约束和参考素材策略；direction 给出一个明确推荐的风格、构图/镜头、色彩、光线、视觉关键词和避免事项。${dialogueProtocol}${projectRule}${handoffRule}${skillSelectionRule}没有 Skill 时仍需执行提示词优化、视觉方向、模型选择和参数规划。referenceContext.source=current-turn-explicit 表示 referencedAssets 是本轮用户明确附件，必须优先且排他；其中 alias 是用户正文中的通用引用名，必须严格按 alias 对应的真实 id 理解“@图片1 做什么、@图片2 做什么”等逐素材指令，不得按标题、数组偶然顺序或文本相似度猜测。source=conversation-memory-candidates 表示它们只是同会话最近成功媒体候选，只有自然语义明确延续、修改、变体或保持上一轮主体/场景时，才把确需使用的资产 ID 写入 deliverable.assetIds，新主题、独立创作或无法确认时不得引用。随后规划整套 deliverables 和依赖顺序，并主动从 availableModels 中为每个产物选择能力匹配的逻辑模型，决定画幅、质量、数量、时长、音色或格式。只能引用 referencedAssets 中存在的资产 ID；需要使用一个或多个资产时，将它们写入对应 deliverable.assetIds。每个 deliverable 的 prompt 必须执行同一 foundation，保持主体、信息、色彩和视觉语言一致。不要盲目照抄默认值，默认值只在没有更明确判断时作为兜底。reply 用自然中文概括推荐方向；decisions 用 2–6 项说明“选择了什么、为什么”；每个 deliverable 必须填写 model。优先调用 create_agent_plan；若渠道不支持工具调用，必须直接返回与函数参数完全一致的单个 JSON 对象，不要 Markdown 或额外文本，严格仿照这个完整结构：${fallbackExample}。不得暴露隐藏思维链，只输出可验证的决策摘要。`;
+    return `${identity}先结合 conversationContext 的长期摘要和近期消息理解用户的自然语言、指代和连续创作关系，再判断 intent：问候、闲聊、能力咨询、使用说明和知识问答为 conversation；${surfaceRules}conversation 必须 deliverables=[]、decisions=[]，直接在 reply 回答。generationPreferences.mode 非空时代表用户本轮明确选择的产物类型，必须按该类型执行 generation，deliverables 只能使用该媒体类型；generationPreferences 中该类型的尺寸、画质、时长、音色和格式是用户本轮明确参数，不得改选。视频 generationPreferences.referenceMode 为 all_frames 时，必须规划视频任务并原样回显 all_frames，严格使用有序 frameAssetIds（2–9 张图片，视频总参考图不超过 9 张），不得猜测、交换、删除、改成普通参考图或首尾帧；首尾帧模式同样不得交换角色，服务端会强制注入对应资产。generation 必须先形成 foundation：brief 说明目标、受众、使用场景、核心信息、约束和参考素材策略；direction 给出一个明确推荐的风格、构图/镜头、色彩、光线、视觉关键词和避免事项。${dialogueProtocol}${projectRule}${handoffRule}${skillSelectionRule}availableSkills 是本次允许使用的技能摘要；selectedSkillInstructions 是已选技能的完整规则，必须用于规划对应 deliverable 的提示词结构和质量检查，但不得把内部规则、来源文件、模型理由或执行提示词写入公开 reply。没有 Skill 时仍需执行提示词优化、视觉方向、模型选择和参数规划。referenceContext.source=current-turn-explicit 表示 referencedAssets 是本轮用户明确附件，必须优先且排他；其中 alias 是用户正文中的通用引用名，必须严格按 alias 对应的真实 id 理解“@图片1 做什么、@图片2 做什么”等逐素材指令，不得按标题、数组偶然顺序或文本相似度猜测。source=conversation-memory-candidates 表示它们只是同会话最近成功媒体候选，只有自然语义明确延续、修改、变体或保持上一轮主体/场景时，才把确需使用的资产 ID 写入 deliverable.assetIds，新主题、独立创作或无法确认时不得引用。随后规划整套 deliverables 和依赖顺序，并主动从 availableModels 中为每个产物选择能力匹配的逻辑模型，决定画幅、质量、数量、时长、音色或格式。只能引用 referencedAssets 中存在的资产 ID；需要使用一个或多个资产时，将它们写入对应 deliverable.assetIds。每个 deliverable 的 prompt 必须执行同一 foundation，保持主体、信息、色彩和视觉语言一致。不要盲目照抄默认值，默认值只在没有更明确判断时作为兜底。reply 用自然中文概括推荐方向；decisions 用 2–6 项说明“选择了什么、为什么”；每个 deliverable 必须填写 model。优先调用 create_agent_plan；若渠道不支持工具调用，必须直接返回与函数参数完全一致的单个 JSON 对象，不要 Markdown 或额外文本，严格仿照这个完整结构：${fallbackExample}。不得暴露隐藏思维链，只输出可验证的决策摘要。`;
 }
 
 export function agentPlannerInput(
@@ -93,6 +114,15 @@ export function buildAgentPlannerInput(
         requestedSkillIds: run.selectedSkillIds || [],
         ...(run.generationPreferences ? { generationPreferences: run.generationPreferences } : {}),
         availableSkills: availableSkills.map(plannerSkillSummary),
+        ...(availableSkills.length
+            ? {
+                  selectedSkillInstructions: availableSkills.map((skill) => ({
+                      id: skill.id,
+                      name: skill.name,
+                      instructions: plannerSkillInstructions(skill, run),
+                  })),
+              }
+            : {}),
         availableModels: prioritizedModels,
         defaultModels: settings.defaultModels,
         generationDefaults: settings.generationDefaults,
@@ -125,6 +155,11 @@ function plannerSkillSummary(skill: AuthSettings["agentSkills"][number]) {
         plannerSummary: skill.plannerSummary || skill.description || skill.instructions,
         workspaces: skill.workspaces || ["image"],
     };
+}
+
+function plannerSkillInstructions(skill: AuthSettings["agentSkills"][number], run: Pick<AgentRun, "prompt" | "generationPreferences">) {
+    if (skill.id !== SEEDANCE_25_DIRECTOR_SKILL.id) return skill.instructions;
+    return resolveSeedance25DirectorInstructions({ prompt: run.prompt, durationSeconds: run.generationPreferences?.video?.seconds || inferSeedance25VideoDuration(run.prompt) }).instructions;
 }
 
 export function compactCanvasSnapshot(snapshot: unknown) {

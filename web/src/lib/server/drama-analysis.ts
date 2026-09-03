@@ -921,7 +921,7 @@ export const dramaContentTool = {
 
 export const dramaVisualTool = {
     name: "design_drama_visuals",
-    description: "根据已经审核的镜头事实生成视觉结构，不改变镜头数量、顺序或内容",
+    description: "根据已经审核的镜头事实生成视觉结构，不改变镜头数量、顺序或内容；所有人物站位、坐姿、接触和空间关系必须符合当前场景的真实可用结构",
     parameters: {
         type: "object",
         additionalProperties: false,
@@ -999,8 +999,8 @@ export const dramaVisualTool = {
                                 shotSize: { type: "string" },
                                 cameraAngle: { type: "string" },
                                 composition: { type: "string" },
-                                characterBlocking: { type: "string" },
-                                gazeDirection: { type: "string" },
+                                characterBlocking: { type: "string", description: "按同一镜头或场景参照系写每位实际出镜人物相对座位/长凳/地面/通道/门窗/道具及其他人物的左右或前后位置、朝向、姿势支撑和接触关系；不得添加未声明人物。" },
+                                gazeDirection: { type: "string", description: "写每位实际出镜人物的视线目标，并与上述人物关系和可见场景结构一致。" },
                                 actionStart: { type: "string" },
                                 actionEnd: { type: "string" },
                                 screenDirection: { type: "string" },
@@ -1013,7 +1013,7 @@ export const dramaVisualTool = {
                             additionalProperties: false,
                             required: ["start", "end", "frames"],
                             description:
-                                "必须按真实可见动作节点拆分 1-9 个连续帧段；每帧 imagePrompt 只描述该时刻可见的姿态、表情、视线、手部/身体或道具/环境状态，不得复制整镜头提示词后追加通用阶段词。对白不必写入图片，但对白造成的表情、视线、手部或道具变化必须写入对应帧。",
+                                "必须按真实可见动作节点拆分 1-9 个连续帧段；每帧 imagePrompt 只描述该时刻可见的姿态、表情、视线、手部/身体或道具/环境状态，不得复制整镜头提示词后追加通用阶段词。每帧还要把人物放在当前场景可用的座位、长凳、地面、通道、门窗或其他结构关系中，坐姿有明确支撑，人与物接触和多人相对方位真实可行；原文未声明的人物不入画。对白不必写入图片，但对白造成的表情、视线、手部或道具变化必须写入对应帧。",
                             properties: {
                                 start: { type: "object", additionalProperties: false, required: ["source"], properties: { source: { type: "string", enum: ["independent", "previous_accepted_actual_tail"] } } },
                                 end: { type: "object", additionalProperties: false, required: ["required"], properties: { required: { type: "boolean" } } },
@@ -1085,7 +1085,7 @@ export const dramaVideoPromptTool = {
                         videoPrompt: {
                             type: "string",
                             description:
-                                "只写当前镜头的图生视频镜头级动态摘要；使用动态意图、单一主运镜、环境压力与视觉母题、声音意图、结束画面、连续性锁和针对性约束等固定字段，每个非空字段独立一行。具体动作、触发、每个连续时间段的起点、可见衔接和终点必须写入 framePlan.frames.actionPrompt 与 imagePrompt，由运行时按时间顺序组装；不要把同一动作同时详细写在 videoPrompt 和时间段中，不重复项目档案、URL、画幅、时长、参考图清单或内部说明",
+                                "只写当前镜头的图生视频镜头级动态摘要；使用动态意图、单一主运镜、环境压力与视觉母题、声音意图、结束画面、连续性锁和针对性约束等固定字段，每个非空字段独立一行。具体动作、触发、每个连续时间段的起点、可见衔接和终点必须写入 framePlan.frames.actionPrompt 与 imagePrompt，由运行时按时间顺序组装；每段动作都要维持可行的身体支撑、接触关系、通道和多人相对方位，不能让人物穿过场景结构或处于不合理坐姿。不要把同一动作同时详细写在 videoPrompt 和时间段中，不重复项目档案、URL、画幅、时长、参考图清单或内部说明",
                         },
                     },
                 },
@@ -1113,7 +1113,7 @@ export const dramaImagePromptTool = {
                         imagePrompt: {
                             type: "string",
                             description:
-                                "只写可执行的单一静态画面提示词；按静态关键帧、可见状态、可见表演状态、景别、机位与构图、站位与视线、三层空间、光色与风格、负面约束组织，每个非空字段独立一行，字段之间不得用逗号或分号压成一段；参考图用途由 framePlan.referenceManifest 和服务端实际绑定提供，不在图片正文新增参考图职责段；不得写运镜、焦段、时间段、动作过程、对白、声音、内部 ID、URL 或解释",
+                                "只写可执行的单一静态画面提示词；按静态关键帧、可见状态、可见表演状态、景别、机位与构图、站位与视线、三层空间、光色与风格、负面约束组织，每个非空字段独立一行，字段之间不得用逗号或分号压成一段；站位与视线必须在同一参照系下具体说明人物相对场景可用座位、长凳、通道、门窗、道具和其他实际出镜人物的位置、朝向、视线、支撑和接触关系，不能把人摆在不合场景常理的位置，也不得添加未声明人物；参考图用途由 framePlan.referenceManifest 和服务端实际绑定提供，不在图片正文新增参考图职责段；不得写运镜、焦段、时间段、动作过程、对白、声音、内部 ID、URL 或解释",
                         },
                     },
                 },
@@ -1205,8 +1205,8 @@ export const dramaReviewCompletionTool = {
                                 continuityNotes: { type: "string" },
                             },
                         },
-                        entryState: { type: "object", description: "镜头开始时的可观察状态：角色位置/姿态/视线/表情/动作，关键道具状态，环境、光色和轴线。" },
-                        exitState: { type: "object", description: "镜头结束时的可观察状态：角色位置/姿态/视线/表情/动作，关键道具状态，环境、光色和轴线，供下一镜继承。" },
+                        entryState: { type: "object", description: "镜头开始时的可观察状态：每位角色相对座位/长凳/床沿/地面/通道/门窗/道具及其他角色的位置、姿态、支撑或接触、视线和表情/动作，关键道具状态，环境、光色和轴线。" },
+                        exitState: { type: "object", description: "镜头结束时的可观察状态：每位角色相对座位/长凳/床沿/地面/通道/门窗/道具及其他角色的位置、姿态、支撑或接触、视线和表情/动作，关键道具状态，环境、光色和轴线，供下一镜继承。" },
                         continuityEdge: { type: "object" },
                     },
                 },
@@ -1241,9 +1241,9 @@ export function dramaReviewCompletionFieldInstructions(fields: string[]) {
         dialoguePerformance: "dialoguePerformance 必须按输入 utterances 的 utteranceId 逐句填写 intent、tone、pace、pause、emphasis、facialReactionBefore、facialReactionDuring、facialReactionAfter；没有对白时返回空数组。",
         lightingPlan: "lightingPlan 必须填写 palette、colorTemperature、keyLight、fillLight、rimLight、contrast、materialResponse、skinToneProtection、inheritFromPrevious、transitionToNext。",
         continuity:
-            "continuity 必须填写 shotSize（景别）、cameraAngle（机位角度）、composition（构图）、characterBlocking（人物站位）、gazeDirection（视线）、actionStart/actionEnd（动作起止）、screenDirection（屏幕运动方向）、axisRule（轴线规则）、continuityNotes（相邻镜头衔接）。",
-        entryState: "entryState 必须写镜头开始时角色位置/姿态/视线/表情/动作、关键道具、环境、光色和轴线等可观察状态。",
-        exitState: "exitState 必须写镜头结束时角色位置/姿态/视线/表情/动作、关键道具、环境、光色和轴线等可观察状态，供下一镜继承。",
+            "continuity 必须填写 shotSize（景别）、cameraAngle（机位角度）、composition（构图）、characterBlocking（按同一参照系写每位角色相对座位/长凳/床沿/地面/通道/门窗/道具及其他角色的左右或前后、朝向、支撑和接触）、gazeDirection（视线）、actionStart/actionEnd（动作起止）、screenDirection（屏幕运动方向）、axisRule（轴线规则）、continuityNotes（相邻镜头衔接）。",
+        entryState: "entryState 必须写镜头开始时每位角色相对场景结构和其他角色的位置、姿态、支撑/接触、视线/表情/动作、关键道具状态、环境、光色和轴线等可观察状态。",
+        exitState: "exitState 必须写镜头结束时每位角色相对场景结构和其他角色的位置、姿态、支撑/接触、视线/表情/动作、关键道具状态、环境、光色和轴线等可观察状态，供下一镜继承。",
     };
     return fields
         .map((field) => instructions[field])
