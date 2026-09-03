@@ -14,6 +14,7 @@ import {
     isProviderBusinessError,
     readProviderError,
     readProviderString,
+    requiresProviderReadableReferenceUrls,
     resolvedProviderCreatePaths,
     serializeProviderRequest,
 } from "@/lib/server/provider-task-config";
@@ -24,6 +25,7 @@ import { getStoredGenerationTaskByRequest, linkStoredGenerationTask, withGenerat
 import { normalizeVideoAspectRatio, resolveUpstreamVideoDuration, resolveVideoDuration, resolveVideoGenerationParameters, withVideoReferenceFidelity } from "@/lib/server/video-task-config";
 import { parseImageDimensions } from "@/lib/image-size";
 import { signReferenceAssetInputUrl } from "@/lib/server/reference-asset-access";
+import { resolveProviderReadableReferenceMedia } from "@/lib/server/provider-reference-media";
 import { assertCapabilityConstraints } from "@/lib/server/capability-constraints";
 import { checkGenerationRateLimit, rateLimitHeaders } from "@/lib/server/security";
 import { resolveModelRequestTimeoutMs } from "@/lib/server/model-request-policy";
@@ -80,7 +82,11 @@ export async function POST(request: Request) {
         const publicOrigin = requestPublicOrigin(request);
         let references: VideoGenerationReference[];
         try {
-            references = normalizeVideoGenerationReferences(body.references).map((reference) => ({ ...reference, url: signReferenceAssetInputUrl(reference.url, publicOrigin) }));
+            references = normalizeVideoGenerationReferences(body.references).map((reference) => ({
+                ...reference,
+                url: signReferenceAssetInputUrl(reference.url, publicOrigin),
+                ...(reference.serverUrl ? { serverUrl: signReferenceAssetInputUrl(reference.serverUrl, publicOrigin) } : {}),
+            }));
         } catch (error) {
             return NextResponse.json({ error: error instanceof Error ? error.message : "视频参考素材不正确" }, { status: 400 });
         }
@@ -130,6 +136,7 @@ export async function POST(request: Request) {
                           maxDurationSeconds: channel.capabilityProfile?.maxDurationSeconds,
                       }),
             };
+            let candidateReferences = references;
             try {
                 assertCapabilityConstraints(capabilityProfile, {
                     capability: "video",
@@ -139,9 +146,10 @@ export async function POST(request: Request) {
                 });
                 const globalPreset = globalAiOpcVideoPreset(channel.advancedConfig, channel.model);
                 if (geminiVideo) {
-                    assertGeminiVideoReferences(references);
+                    assertGeminiVideoReferences(candidateReferences);
                 } else {
-                    if (channel.advancedConfig?.protocol === "newapi-video") assertNewApiVideoReferences(references);
+                    if (requiresProviderReadableReferenceUrls(channel.advancedConfig, Boolean(globalPreset))) candidateReferences = await resolveProviderReadableReferenceMedia(candidateReferences);
+                    if (channel.advancedConfig?.protocol === "newapi-video") assertNewApiVideoReferences(candidateReferences);
                     assertReferenceCapabilities(
                         globalPreset
                             ? {
@@ -151,12 +159,12 @@ export async function POST(request: Request) {
                                   supportsReferenceAudio: Boolean(globalPreset.supportsReferenceAudio),
                               }
                             : channel.advancedConfig,
-                        references,
+                        candidateReferences,
                     );
-                    if (channel.advancedConfig?.protocol !== "yumeng") assertVideoReferenceRoles(channel.advancedConfig, references, globalPreset?.videoReferenceRoles, channel.model);
-                    if (channel.advancedConfig?.protocol === "vozeb-recommended") assertVozebRecommendedVideoReferences(channel.model, references);
-                    if (channel.advancedConfig?.protocol === "yumeng") assertYumengVideoReferences(channel.model, references);
-                    assertReferenceUrls(channel.advancedConfig, references, Boolean(globalPreset));
+                    if (channel.advancedConfig?.protocol !== "yumeng") assertVideoReferenceRoles(channel.advancedConfig, candidateReferences, globalPreset?.videoReferenceRoles, channel.model);
+                    if (channel.advancedConfig?.protocol === "vozeb-recommended") assertVozebRecommendedVideoReferences(channel.model, candidateReferences);
+                    if (channel.advancedConfig?.protocol === "yumeng") assertYumengVideoReferences(channel.model, candidateReferences);
+                    assertReferenceUrls(channel.advancedConfig, candidateReferences, Boolean(globalPreset));
                 }
             } catch (error) {
                 if (isDramaRun) return NextResponse.json({ error: error instanceof Error ? error.message : "当前不鸣视频模型不支持参考素材" }, { status: 400 });
@@ -206,7 +214,7 @@ export async function POST(request: Request) {
             });
             try {
                 const candidateRequestId = index === 0 ? attemptRequestId : `${attemptRequestId}:candidate:${index + 1}`;
-                const upstream = await createUpstream(user.id, origin, cookie, channel, providerPrompt, parameters, references, settings.generationPointMultipliers, attemptRequestId, candidateRequestId);
+                const upstream = await createUpstream(user.id, origin, cookie, channel, providerPrompt, parameters, candidateReferences, settings.generationPointMultipliers, attemptRequestId, candidateRequestId);
                 await updateVideoTask(localTask.id, { config: channel, upstream, requestedDurationSeconds: parameters.videoSeconds === -1 ? undefined : parameters.videoSeconds, attempts });
                 const task = { ...localTask, config: channel, upstream, requestedDurationSeconds: parameters.videoSeconds === -1 ? undefined : parameters.videoSeconds, attempts };
                 const submittedAt = Date.now();

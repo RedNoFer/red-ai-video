@@ -56,11 +56,15 @@ export function buildVideoProviderRequest(template: string | undefined, defaults
 
 export function assertReferenceUrls(config: SystemChannelAdvancedConfig | undefined, references: Array<{ url?: string }>, publicUrlRequired = false) {
     if (!references.length) return;
-    const ruleRequiresPublicUrl = /公网|public|next_public_site_url|must.*\burl\b|\burl\b.*only|必须.*\burl\b|仅.*\burl\b|只.*\burl\b/i.test(config?.referenceRule || "");
-    if (!publicUrlRequired && !ruleRequiresPublicUrl) return;
+    if (!requiresProviderReadableReferenceUrls(config, publicUrlRequired)) return;
     if (references.some((reference) => !isExternallyReachableReferenceUrl(reference.url || "") || isUnsignedReferenceAssetUrl(reference.url || ""))) {
         throw new Error("当前渠道无法读取站内参考素材，请联系管理员检查站点部署地址");
     }
+}
+
+export function requiresProviderReadableReferenceUrls(config: SystemChannelAdvancedConfig | undefined, publicUrlRequired = false) {
+    if (publicUrlRequired) return true;
+    return /公网|public|next_public_site_url|must.*\burl\b|\burl\b.*only|必须.*\burl\b|仅.*\burl\b|只.*\burl\b/i.test(config?.referenceRule || "");
 }
 
 function isUnsignedReferenceAssetUrl(value: string) {

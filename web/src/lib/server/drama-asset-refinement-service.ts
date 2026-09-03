@@ -6,6 +6,7 @@ import { toSafeGenerationErrorMessage } from "@/lib/server/generation-errors";
 import { resolveTextPlanningModelCandidates } from "@/lib/server/logical-model-router";
 import { hasSystemAiCharge, readSystemAiBilling, systemAiBillingHeaders, systemAiIdempotencyKey } from "@/lib/server/system-ai-billing";
 import { rankTextPlanningCandidates, requestStructuredText } from "@/lib/server/text-planning-runtime";
+import { DRAMA_ASSET_IMAGE_SKILL } from "@/lib/drama-image-skill";
 
 export class DramaAssetRefinementError extends Error {
     constructor(message: string, readonly status = 502) {
@@ -76,7 +77,7 @@ function refinementInstruction(kind: "characters" | "scenes" | "props") {
             : kind === "scenes"
               ? "允许调整材质、陈设、光线、天气和时间；空间结构、入口和主要物件位置默认不可改变。"
               : "允许调整材质、磨损、颜色和细节结构；外形轮廓和关键识别特征默认不可改变。";
-    return `你是 VOZEB PRO 影视资产设计师。根据用户要求生成字段级调整方案，未被用户明确要求修改的字段必须原样保留。${rules}只输出可验证的字段变更和公开生成约束，必须调用 refine_drama_asset，不得输出 Markdown、内部规划或思维链。`;
+    return `你是 VOZEB PRO 影视资产设计师。根据用户要求生成字段级调整方案，未被用户明确要求修改的字段必须原样保留。${DRAMA_ASSET_IMAGE_SKILL.refinementRules}${rules}只输出可验证的字段变更和公开生成约束，必须调用 refine_drama_asset，不得输出 Markdown、内部规划或思维链。`;
 }
 
 async function refundInvalid(userId: string, model: string, headers: Headers) {

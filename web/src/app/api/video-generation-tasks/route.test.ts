@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
     updateVideoTask: vi.fn(),
     writeVideoGenerationLog: vi.fn(),
     scheduleGenerationTask: vi.fn(),
+    fetchSafeOutbound: vi.fn(),
     withGenerationConcurrencyLimit: vi.fn(async (_userId, _type, _staleMs, _limit, handler) => handler()),
 }));
 
@@ -43,6 +44,7 @@ vi.mock("@/lib/server/security", () => ({
 vi.mock("@/lib/server/generation-task-recovery-service", () => ({ runGenerationTaskRecoveryBatch: vi.fn() }));
 vi.mock("@/lib/server/generation-task-scheduler", () => ({ scheduleGenerationTask: mocks.scheduleGenerationTask }));
 vi.mock("@/lib/server/video-task-log", () => ({ writeVideoGenerationLog: mocks.writeVideoGenerationLog }));
+vi.mock("@/lib/server/safe-outbound-fetch", () => ({ fetchSafeOutbound: mocks.fetchSafeOutbound }));
 vi.mock("@/lib/server/video-task-store", () => ({
     createVideoTask: mocks.createVideoTask,
     claimVideoTaskPoll: mocks.claimVideoTaskPoll,
@@ -90,6 +92,7 @@ describe("video generation candidate failover", () => {
     beforeEach(() => {
         vi.clearAllMocks();
         mocks.fetchInternalApi.mockReset();
+        mocks.fetchSafeOutbound.mockResolvedValue(new Response(null, { status: 200, headers: { "content-type": "image/png" } }));
         resetChannelRuntimeHealth();
         mocks.getAuthSettings.mockResolvedValue(settings);
         storedTask = undefined;
@@ -293,6 +296,88 @@ describe("video generation candidate failover", () => {
         expect(response.status).toBe(502);
         expect((await response.json()).error).toContain("参考素材第 1 个图片下载失败");
         expect(mocks.fetchInternalApi).toHaveBeenCalledOnce();
+    });
+
+    it("rejects a signed local image that is not publicly readable before creating a New API task", async () => {
+        const previousSiteUrl = process.env.NEXT_PUBLIC_SITE_URL;
+        const previousSigningKey = process.env.VOZEB_PRO_REFERENCE_ASSET_SIGNING_KEY;
+        process.env.NEXT_PUBLIC_SITE_URL = "https://app.example.com";
+        process.env.VOZEB_PRO_REFERENCE_ASSET_SIGNING_KEY = "test-signing-key";
+        mocks.getAuthSettings.mockResolvedValue(newApiVideoSettings());
+        mocks.fetchSafeOutbound.mockResolvedValue(new Response('{"error":"请先登录"}', { status: 401, headers: { "content-type": "application/json" } }));
+
+        try {
+            const response = await POST(request({ model: "seedance-2.5" }, [{ type: "image", url: "/api/generation-log-assets/permanent/reference.png" }]));
+
+            expect(response.status).toBe(400);
+            expect((await response.json()).error).toContain("参考素材第 1 个图片公网不可读");
+            expect(mocks.fetchInternalApi).not.toHaveBeenCalled();
+            expect(mocks.createVideoTask).not.toHaveBeenCalled();
+        } finally {
+            if (previousSiteUrl === undefined) delete process.env.NEXT_PUBLIC_SITE_URL;
+            else process.env.NEXT_PUBLIC_SITE_URL = previousSiteUrl;
+            if (previousSigningKey === undefined) delete process.env.VOZEB_PRO_REFERENCE_ASSET_SIGNING_KEY;
+            else process.env.VOZEB_PRO_REFERENCE_ASSET_SIGNING_KEY = previousSigningKey;
+        }
+    });
+
+    it("signs and verifies a local image before sending its public URL to New API", async () => {
+        const previousSiteUrl = process.env.NEXT_PUBLIC_SITE_URL;
+        const previousSigningKey = process.env.VOZEB_PRO_REFERENCE_ASSET_SIGNING_KEY;
+        process.env.NEXT_PUBLIC_SITE_URL = "https://app.example.com";
+        process.env.VOZEB_PRO_REFERENCE_ASSET_SIGNING_KEY = "test-signing-key";
+        mocks.getAuthSettings.mockResolvedValue(newApiVideoSettings());
+        mocks.fetchInternalApi.mockResolvedValue(json({ task_id: "newapi-video-task", status: "queued" }));
+        mocks.fetchSafeOutbound.mockResolvedValue(new Response(null, { status: 200, headers: { "content-type": "image/png" } }));
+
+        try {
+            const response = await POST(request({ model: "seedance-2.5" }, [{ type: "image", url: "/api/generation-log-assets/permanent/reference.png" }]));
+            const body = JSON.parse(String((mocks.fetchInternalApi.mock.calls[0]?.[1] as RequestInit).body));
+            const referenceUrl = body.referenceImages[0] as string;
+
+            expect(response.status).toBe(200);
+            expect(referenceUrl).toMatch(/^https:\/\/app\.example\.com\/api\/generation-log-assets\/permanent\/reference\.png\?purpose=provider-read&expires=\d+&signature=/);
+            expect(mocks.fetchSafeOutbound).toHaveBeenCalledWith(referenceUrl, expect.objectContaining({ method: "HEAD" }));
+        } finally {
+            if (previousSiteUrl === undefined) delete process.env.NEXT_PUBLIC_SITE_URL;
+            else process.env.NEXT_PUBLIC_SITE_URL = previousSiteUrl;
+            if (previousSigningKey === undefined) delete process.env.VOZEB_PRO_REFERENCE_ASSET_SIGNING_KEY;
+            else process.env.VOZEB_PRO_REFERENCE_ASSET_SIGNING_KEY = previousSigningKey;
+        }
+    });
+
+    it("falls back from an unreadable provider image URL to its signed local mirror", async () => {
+        const previousSiteUrl = process.env.NEXT_PUBLIC_SITE_URL;
+        const previousSigningKey = process.env.VOZEB_PRO_REFERENCE_ASSET_SIGNING_KEY;
+        process.env.NEXT_PUBLIC_SITE_URL = "https://app.example.com";
+        process.env.VOZEB_PRO_REFERENCE_ASSET_SIGNING_KEY = "test-signing-key";
+        mocks.getAuthSettings.mockResolvedValue(newApiVideoSettings());
+        mocks.fetchInternalApi.mockResolvedValue(json({ task_id: "newapi-video-task", status: "queued" }));
+        mocks.fetchSafeOutbound
+            .mockResolvedValueOnce(new Response('{"error":"not found"}', { status: 404, headers: { "content-type": "application/json" } }))
+            .mockResolvedValueOnce(new Response(null, { status: 200, headers: { "content-type": "image/png" } }));
+
+        try {
+            const response = await POST(
+                request({ model: "seedance-2.5" }, [
+                    {
+                        type: "image",
+                        url: "https://provider.example/expired.png",
+                        remoteUrl: "https://provider.example/expired.png",
+                        serverUrl: "/api/generation-log-assets/permanent/reference.png",
+                    },
+                ]),
+            );
+            const body = JSON.parse(String((mocks.fetchInternalApi.mock.calls[0]?.[1] as RequestInit).body));
+
+            expect(response.status).toBe(200);
+            expect(body.referenceImages[0]).toMatch(/^https:\/\/app\.example\.com\/api\/generation-log-assets\/permanent\/reference\.png\?purpose=provider-read&expires=\d+&signature=/);
+        } finally {
+            if (previousSiteUrl === undefined) delete process.env.NEXT_PUBLIC_SITE_URL;
+            else process.env.NEXT_PUBLIC_SITE_URL = previousSiteUrl;
+            if (previousSigningKey === undefined) delete process.env.VOZEB_PRO_REFERENCE_ASSET_SIGNING_KEY;
+            else process.env.VOZEB_PRO_REFERENCE_ASSET_SIGNING_KEY = previousSigningKey;
+        }
     });
 
     it("surfaces an explicit HTTP 200 business failure after safe candidate fallback", async () => {
@@ -1208,7 +1293,7 @@ describe("video generation candidate failover", () => {
     });
 });
 
-function request(config: Record<string, unknown> = { model: "video" }, references: Array<{ type: string; url: string; role?: string; keyframeIndex?: number }> = [], context?: Record<string, unknown>) {
+function request(config: Record<string, unknown> = { model: "video" }, references: Array<{ type: string; url: string; remoteUrl?: string; serverUrl?: string; role?: string; keyframeIndex?: number }> = [], context?: Record<string, unknown>) {
     const clientRequestId = typeof context?.clientRequestId === "string" ? context.clientRequestId : "";
     return new Request("http://localhost/api/video-generation-tasks", {
         method: "POST",

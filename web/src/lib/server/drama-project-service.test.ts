@@ -170,6 +170,36 @@ describe("drama project service updates", () => {
         expect(reconcileDramaVideoStepTask(step, task)).toMatchObject({ id: "video-shot-one", taskId: "video-task-one", status: "running", error: undefined });
     });
 
+    it("projects a reconciled video failure back to the owning shot", async () => {
+        const current = project("2026-07-19T08:00:00.000Z", "项目");
+        current.episodes[0].shots = [{ id: "shot-one", title: "镜头一", characterIds: [], propIds: [], clueIds: [], imagePrompt: "画面", videoPrompt: "动作", duration: 5, generationStatus: "idle" }] as never;
+        const run = {
+            id: "production-run-one",
+            projectId: current.id,
+            episodeId: "episode-one",
+            status: "running",
+            mode: "strict",
+            parameterSnapshot: { imageModel: "image-default", videoModel: "video-default", ratio: "9:16" },
+            steps: [{ id: "video-shot-one", type: "video", shotId: "shot-one", status: "running", dependsOn: [] }],
+            blockers: [],
+            confirmedAt: current.updatedAt,
+            createdAt: current.updatedAt,
+            updatedAt: current.updatedAt,
+        } as never;
+        mocks.getDramaProject.mockResolvedValue(current);
+        mocks.findLatestDramaProductionRun.mockResolvedValue(run);
+        mocks.getDramaProductionRun.mockResolvedValue(run);
+        mocks.getStoredGenerationTaskByRequest.mockResolvedValue({ id: "video-task-one", userId: "user-one", status: "error", error: "video generation timed out" });
+
+        await getLatestDramaProductionRunForUser("user-one", current.id, "episode-one");
+
+        expect(mocks.updateDramaProject).toHaveBeenCalledWith(
+            "user-one",
+            expect.objectContaining({ episodes: [expect.objectContaining({ shots: [expect.objectContaining({ id: "shot-one", generationStatus: "error", generationError: "video generation timed out", generationTaskId: "video-task-one" })] })] }),
+            current.updatedAt,
+        );
+    });
+
     it("uses a signed local reference copy when the provider URL is no longer readable", async () => {
         const originalKey = process.env.VOZEB_PRO_REFERENCE_ASSET_SIGNING_KEY;
         const originalSite = process.env.NEXT_PUBLIC_SITE_URL;

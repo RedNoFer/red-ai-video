@@ -1,6 +1,7 @@
 import type { DramaAssetRefinementProposal, DramaEpisode, DramaFrameBeat, DramaNamedAsset, DramaProject, DramaReferenceManifestItem, DramaShot, DramaShotContinuity } from "@/lib/drama-project-contract";
 import { resolveDramaStyleContract, sanitizeDramaVisualPrompt } from "@/lib/drama-style";
 import { upgradeDramaFrameImagePrompt } from "@/lib/drama-frame-sequence";
+import { DRAMA_ASSET_IMAGE_SKILL } from "@/lib/drama-image-skill";
 
 export type DramaAssetGenerationPreflight = { ok: true; constraints: string[] } | { ok: false; errors: string[]; constraints: string[] };
 
@@ -396,6 +397,7 @@ export function compileDramaAssetReferencePrompt(project: Pick<DramaProject, "ti
     const visualStyle = styleContract.visualDescription;
     return compact([
         "这是严格的资产基准图生成任务，不是自由创作或概念发挥。请先核对全部硬约束，再生成一张可直接用于后续镜头的基准图。",
+        `资产图片 Skill 规则：${DRAMA_ASSET_IMAGE_SKILL.promptRules}`,
         "约束优先级：统一视觉风格 > 身份锚点与固定规则 > 用户明确设定 > 画幅和构图约束；资产历史提示词不得覆盖统一视觉风格。",
         `${kind}设定图，画幅 ${project.ratio}`,
         `统一风格：${styleName}`,

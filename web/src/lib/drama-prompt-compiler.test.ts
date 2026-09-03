@@ -37,6 +37,18 @@ describe("drama prompt compiler", () => {
         expect(prompt).toContain("@图片1：顺序帧 1（开始）；绑定规则：作为开始阶段画面依据");
     });
 
+    it("applies the Markdown-backed asset image Skill to character, scene and prop prompts", () => {
+        const project = createProject();
+        const asset = project.characters[0];
+
+        for (const kind of ["角色", "场景", "道具"] as const) {
+            const prompt = compileDramaAssetReferencePrompt(project, asset, kind);
+            expect(prompt).toContain("资产图片 Skill 规则：");
+            expect(prompt).toContain("角色图只生成一个完整、独立、可识别的角色主体");
+            expect(prompt).toContain("禁止把角色表、参数、安装说明、分镜板、联系表、文字或水印画进图片");
+        }
+    });
+
     it("emits the current structured static-frame prompt contract", () => {
         const project = createProject();
         const shot = project.episodes[0].shots[0];

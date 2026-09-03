@@ -1,6 +1,6 @@
 .git
 .idea
-.agents
+.agents/skills/ai-gateway-skill
 .codex
 .tmp
 .trellis

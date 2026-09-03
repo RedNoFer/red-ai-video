@@ -3,6 +3,21 @@ name: seedance-25-director
 description: 为 Seedance 2.5 编排模式正确、素材职责清晰、时间状态可检查的中文视频提示词。
 version: ad0e68ba6ce24fb9ae9c67c9276061cef37663f1
 license: MIT
+displayName: Seedance 2.5 导演
+plannerSummary: 需要多模态参考、30 秒叙事、首尾帧、续写、编辑或严格时间轴时，使用 Seedance 2.5 导演规则。
+workspaces:
+  - video
+  - drama
+action: generate
+requiresReference: false
+keywords:
+  - Seedance 2.5
+  - 多模态参考
+  - 30秒叙事
+  - 首尾帧
+  - 视频续写
+  - 视频编辑
+  - 时间轴
 sourceRepository: liyue-aigc/seedance-2-5-video-director
 sourceCommit: ad0e68ba6ce24fb9ae9c67c9276061cef37663f1
 ---
@@ -46,7 +61,7 @@ sourceCommit: ad0e68ba6ce24fb9ae9c67c9276061cef37663f1
 4. 起始可见状态：写首帧已经可见的主体、道具、空间、站位、朝向和接触关系。
 5. 触发：写导致主要动作发生的可见事件；没有触发时省略，不编造剧情。
 6. 主体动作与反应：按准备、受力/接触、结果、恢复写可观察动作链。
-7. 时间段动作：多事件按阶段或连续时间段写“起点、动作与触发、可见衔接、终点”。
+7. 时间段动作：多事件按阶段或连续时间段写“起点 → 动作与触发 → 可见衔接 → 终点”。
 8. 单一主运镜：每镜只保留一个有动机的景别、机位或运镜。
 9. 环境压力与视觉母题：写具体环境压力及可听见或可看见的锚点。
 10. 视觉风格与光色：写色板、主光方向、材质反应和具体质感。

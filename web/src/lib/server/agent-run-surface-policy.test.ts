@@ -160,7 +160,7 @@ describe("agentPlannerInput", () => {
             [{ id: "video-model", name: "视频模型", capability: "video" }],
             DEFAULT_SETTINGS,
         ) as Record<string, unknown>;
-        expect(input.selectedSkillInstructions).toEqual([expect.objectContaining({ id: skill!.id, name: skill!.name, instructions: expect.stringContaining("本次加载参考：30 秒精确时间轴") })]);
+        expect(input.selectedSkillInstructions).toEqual([expect.objectContaining({ id: skill!.id, name: skill!.name, instructions: expect.stringContaining("模式：30 秒精确时间轴") })]);
         expect((input.availableSkills as Array<Record<string, unknown>>)[0]).not.toHaveProperty("instructions");
     });
 

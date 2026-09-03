@@ -7,6 +7,8 @@ export type CreativeVideoReferenceMode = (typeof creativeVideoReferenceModes)[nu
 export type VideoGenerationReference = {
     type: "image" | "video" | "audio";
     url: string;
+    remoteUrl?: string;
+    serverUrl?: string;
     role?: VideoReferenceRole;
     keyframeIndex?: number;
 };
@@ -26,13 +28,15 @@ export function normalizeVideoGenerationReferences(value: unknown): VideoGenerat
         if (!item || typeof item !== "object" || Array.isArray(item)) throw new Error("视频参考素材格式不正确");
         const source = item as Record<string, unknown>;
         const type = source.type === "image" || source.type === "video" || source.type === "audio" ? source.type : undefined;
-        const url = typeof source.url === "string" ? source.url.trim() : "";
+        const remoteUrl = typeof source.remoteUrl === "string" ? source.remoteUrl.trim() : "";
+        const serverUrl = typeof source.serverUrl === "string" ? source.serverUrl.trim() : "";
+        const url = (typeof source.url === "string" ? source.url.trim() : "") || remoteUrl || serverUrl;
         const role = source.role === undefined ? "reference" : normalizeVideoReferenceRole(source.role);
         if (!type || !url || !role) throw new Error("视频参考素材类型、地址或角色不正确");
         if (role !== "reference" && type !== "image") throw new Error(role === "keyframe" ? "全能帧只能使用图片素材" : "视频首尾帧只能使用图片素材");
         const keyframeIndex = source.keyframeIndex === undefined ? undefined : Number(source.keyframeIndex);
         if (role === "keyframe" && (!Number.isInteger(keyframeIndex) || !keyframeIndex || keyframeIndex < 1)) throw new Error("全能帧序号必须是从 1 开始的整数");
-        references.push({ type, url, role, ...(keyframeIndex === undefined ? {} : { keyframeIndex }) });
+        references.push({ type, url, ...(remoteUrl ? { remoteUrl } : {}), ...(serverUrl ? { serverUrl } : {}), role, ...(keyframeIndex === undefined ? {} : { keyframeIndex }) });
     }
     const firstFrames = references.filter((reference) => reference.role === "first_frame");
     const lastFrames = references.filter((reference) => reference.role === "last_frame");

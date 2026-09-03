@@ -91,7 +91,7 @@ describe("prompt optimization service", () => {
         expect(systemMessage).toContain("每个非空字段必须独立一行");
         expect(systemMessage).toContain("每个时间段都必须让姿态");
         expect(systemMessage).toContain("减少“保持构图、主体稳定、情绪不变”");
-        expect(systemMessage).toContain("本次加载参考：30 秒精确时间轴");
+        expect(systemMessage).toContain("模式：30 秒精确时间轴");
     });
 
     it("refunds an invalid charged response instead of accepting hidden or empty output", async () => {

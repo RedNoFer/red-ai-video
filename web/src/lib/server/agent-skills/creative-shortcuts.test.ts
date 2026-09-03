@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { DRAMA_ASSET_IMAGE_SKILL } from "@/lib/drama-image-skill";
 import { DRAMA_PACKAGE_ARCHITECTURE_RULES } from "../drama-production-package-rules";
 import {
     CHARACTER_DESIGN_SKILL,
@@ -53,9 +54,14 @@ describe("creative shortcut skills", () => {
         expect(SEEDANCE_25_DIRECTOR_SKILL.instructions).toContain("timestamp-30s");
         expect(SEEDANCE_25_DIRECTOR_SKILL.instructions).toContain("素材绑定");
         expect(SEEDANCE_25_DIRECTOR_SKILL.instructions).toContain("起点 → 动作与触发 → 可见衔接 → 终点");
-        expect(SEEDANCE_25_DIRECTOR_SKILL.instructions).toContain("只修改一个变量");
+        expect(SEEDANCE_25_DIRECTOR_SKILL.instructions).toContain("只修改一个已定位变量");
         expect(SEEDANCE_25_DIRECTOR_SKILL.sourceCommit).toHaveLength(40);
         expect(SEEDANCE_25_DIRECTOR_SKILL.defaultConfig).toEqual({});
+    });
+
+    it("keeps the drama asset image Skill available for character, scene and prop prompts", () => {
+        expect(DRAMA_ASSET_IMAGE_SKILL.promptRules).toContain("角色图");
+        expect(DRAMA_ASSET_IMAGE_SKILL.refinementRules).toContain("change / preserve / constraints");
     });
 
     it("keeps the shared static frame scheme in the Seedance rules", () => {

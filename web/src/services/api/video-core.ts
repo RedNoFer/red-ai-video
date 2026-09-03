@@ -145,7 +145,13 @@ export async function createServerVideoGenerationTask(
     const serverReferences = await Promise.all([
         ...references.map(async (item) => {
             const remoteUrl = item.remoteUrl || item.url || item.dataUrl;
-            return { type: "image", role: item.videoRole || "reference", ...(item.keyframeIndex ? { keyframeIndex: item.keyframeIndex } : {}), url: isPublicMediaUrl(remoteUrl) ? remoteUrl : await publishReferenceMedia("image", await imageToDataUrl(item)) };
+            return {
+                type: "image",
+                role: item.videoRole || "reference",
+                ...(item.keyframeIndex ? { keyframeIndex: item.keyframeIndex } : {}),
+                url: isPublicMediaUrl(remoteUrl) ? remoteUrl : await publishReferenceMedia("image", await imageToDataUrl(item)),
+                ...(item.serverUrl ? { serverUrl: item.serverUrl, ...(item.remoteUrl ? { remoteUrl: item.remoteUrl } : {}) } : {}),
+            };
         }),
         ...videoReferences.map(async (item) => {
             const remoteUrl = item.remoteUrl || item.url;

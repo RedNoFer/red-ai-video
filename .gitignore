@@ -29,6 +29,8 @@ data/
 .agents/skills/*
 !.agents/skills/seedance-25/
 !.agents/skills/seedance-25/**
+!.agents/skills/drama-image/
+!.agents/skills/drama-image/**
 skills-lock.json
 docs/assets/
 VOZEB-PRO-审计报告.md

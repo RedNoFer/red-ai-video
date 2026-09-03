@@ -63,6 +63,33 @@ describe("video API service", () => {
         expect(mocks.imageToDataUrl).not.toHaveBeenCalled();
     });
 
+    it("preserves the local mirror with its provider URL for server-side fallback", async () => {
+        const fetchMock = vi.fn().mockResolvedValue(json({ task: { id: "video-task-mirror", model: "video-v1" } }));
+        vi.stubGlobal("fetch", fetchMock);
+        const reference = {
+            id: "reference-mirror",
+            name: "人物参考",
+            type: "image/png",
+            dataUrl: "/api/generation-log-assets/permanent/person.png",
+            url: "/api/generation-log-assets/permanent/person.png",
+            serverUrl: "/api/generation-log-assets/permanent/person.png",
+            remoteUrl: "https://provider.example/person.png",
+        } as ReferenceImage;
+
+        await createServerVideoGenerationTask(config, "保持人物与场景不变，仅自然眨眼", [reference]);
+
+        const body = JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body));
+        expect(body.references).toEqual([
+            {
+                type: "image",
+                role: "reference",
+                url: "https://provider.example/person.png",
+                remoteUrl: "https://provider.example/person.png",
+                serverUrl: "/api/generation-log-assets/permanent/person.png",
+            },
+        ]);
+    });
+
     it("preserves explicit first and last frame roles in the server payload", async () => {
         const fetchMock = vi.fn().mockResolvedValue(json({ task: { id: "video-task-frames", model: "video-v1" } }));
         vi.stubGlobal("fetch", fetchMock);

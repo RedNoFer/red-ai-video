@@ -1792,6 +1792,13 @@ async function syncDramaProductionRun(userId: string, project: DramaProject, run
         if (JSON.stringify(reconciled) === JSON.stringify(step)) continue;
         changed = true;
         steps = steps.map((item) => (item.id === step.id ? reconciled : item));
+        if (step.shotId)
+            nextProject = updateDramaShotInProject(nextProject, run.episodeId, step.shotId, {
+                generationStatus: reconciled.status === "failed" ? "error" : reconciled.status === "cancelled" ? "cancelled" : "running",
+                generationRunId: run.id,
+                generationTaskId: reconciled.taskId,
+                generationError: reconciled.error,
+            });
     }
 
     let nextRun = unlockDramaProductionSteps({ ...run, steps });

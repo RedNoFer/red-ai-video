@@ -9,6 +9,7 @@ const trackedBuildFiles = ["tsconfig.json", "next-env.d.ts"].map((fileName) => (
 let exitCode = 0;
 
 try {
+    exitCode = runNode(path.join(webRoot, "scripts", "compile-all-skills.mjs"), [], "编译项目内置 Skills");
     if (!skipTypeCheck) {
         exitCode = runNode(path.join(webRoot, "node_modules/typescript/bin/tsc"), ["--noEmit", "--pretty", "false"], "TypeScript 类型检查");
     }
