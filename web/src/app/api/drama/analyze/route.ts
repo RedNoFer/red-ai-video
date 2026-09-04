@@ -102,17 +102,19 @@ export async function POST(request: Request) {
                 ? resolveSeedance25DirectorInstructions({ prompt: [dramaAnalysisText(body.instruction), videoPromptSource].filter(Boolean).join("\n"), durationSeconds: videoPromptDuration }).instructions
                 : "";
         const schemaInstruction = buildDramaAnalyzeSchemaInstruction(phase, tool.parameters, seedance25VideoInstructions);
-        const videoReferenceAliases =
+        const videoReferenceEntries =
             phase === "video_prompt"
                 ? Array.isArray(videoPromptInput?.payload.referenceMaterials)
                     ? videoPromptInput.payload.referenceMaterials.flatMap((value) => {
                           const reference = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
-                          return typeof reference.alias === "string" && reference.alias.trim() ? [reference.alias.trim()] : [];
+                          if (typeof reference.alias !== "string" || !reference.alias.trim()) return [];
+                          const purpose = typeof reference.purpose === "string" ? reference.purpose.trim() : "";
+                          return [`${reference.alias.trim()}${purpose ? `：${purpose}` : ""}`];
                       })
                     : []
                 : [];
-        const videoReferenceInstruction = videoReferenceAliases.length
-            ? `本次参考素材 alias 清单（必须逐字使用，不能猜测、改名或省略）：${videoReferenceAliases.join("、")}。公开视频的第一段必须写“素材绑定：”，并在该段或其紧邻句子中逐项列出这些 alias 及其唯一职责。`
+        const videoReferenceInstruction = videoReferenceEntries.length
+            ? `本次参考素材绑定清单（必须逐字使用，不能猜测、改名或省略）：${videoReferenceEntries.join("；")}。公开视频的第一段必须写“素材绑定：”，并逐项列出上述 alias 及其唯一职责。`
             : "";
         const completionFieldInstruction = phase === "review_completion" ? `本次请求字段必须逐项真实补全，禁止只返回 shotId 空壳。${dramaReviewCompletionFieldInstructions(reviewCompletionInput!.fields)}` : "";
         const messages = [
