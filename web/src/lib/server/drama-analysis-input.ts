@@ -211,6 +211,39 @@ export function validateDramaVideoPromptOutput(value: unknown, shotIds: string[]
     return "";
 }
 
+export function previewDramaVideoPromptOutput(value: unknown, shotIds: string[]) {
+    const output = object(value);
+    const allowed = new Set(shotIds);
+    const seen = new Set<string>();
+    return array(output.shots).flatMap((item) => {
+        const shot = object(item);
+        const shotId = dramaAnalysisText(shot.shotId);
+        const videoPrompt = dramaAnalysisText(shot.videoPrompt);
+        if (!shotId || !allowed.has(shotId) || seen.has(shotId) || !videoPrompt) return [];
+        seen.add(shotId);
+        const frames = array(object(shot.framePlan).frames).flatMap((value) => {
+            const frame = object(value);
+            const id = dramaAnalysisText(frame.id);
+            const sequenceIndex = Number(frame.sequenceIndex);
+            const startSecond = Number(frame.startSecond);
+            const endSecond = Number(frame.endSecond);
+            if (!id || !Number.isInteger(sequenceIndex) || !Number.isFinite(startSecond) || !Number.isFinite(endSecond) || endSecond <= startSecond) return [];
+            return [{
+                id,
+                sequenceIndex,
+                startSecond,
+                endSecond,
+                startPrompt: dramaAnalysisText(frame.startPrompt),
+                actionPrompt: dramaAnalysisText(frame.actionPrompt),
+                transitionPrompt: dramaAnalysisText(frame.transitionPrompt),
+                endPrompt: dramaAnalysisText(frame.endPrompt),
+                imagePrompt: dramaAnalysisText(frame.imagePrompt),
+            }];
+        });
+        return [{ shotId, videoPrompt, ...(frames.length ? { framePlan: { frames } } : {}) }];
+    });
+}
+
 function escapeRegExp(value: string) {
     return value.replace(/[.*+?^${}()|[\[\]\\]/gu, "\\$&");
 }

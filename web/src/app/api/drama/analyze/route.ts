@@ -24,7 +24,7 @@ import { resolveLogicalModelCandidates } from "@/lib/server/logical-model-router
 import { checkRateLimit } from "@/lib/server/security";
 import { hasSystemAiCharge, readSystemAiBilling, systemAiBillingHeaders, systemAiIdempotencyKey, type SystemAiBilling } from "@/lib/server/system-ai-billing";
 import { rankTextPlanningCandidates, requestStructuredText, type TextPlanningCandidate } from "@/lib/server/text-planning-runtime";
-import { dramaAnalysisText, DramaVideoPromptQualityError, normalizeDramaReviewCompletionInput, normalizeDramaVideoPromptInput, normalizeDramaImagePromptInput, normalizeDramaVisualInput, reviewCompletionFilledCount, validateDramaVideoPromptOutput, type DramaAnalyzeBody } from "@/lib/server/drama-analysis-input";
+import { dramaAnalysisText, DramaVideoPromptQualityError, normalizeDramaReviewCompletionInput, normalizeDramaVideoPromptInput, normalizeDramaImagePromptInput, normalizeDramaVisualInput, previewDramaVideoPromptOutput, reviewCompletionFilledCount, validateDramaVideoPromptOutput, type DramaAnalyzeBody } from "@/lib/server/drama-analysis-input";
 import { SEEDANCE_STATIC_FRAME_PROMPT_LAYOUT, SEEDANCE_STATIC_FRAME_RULES } from "@/lib/server/agent-skills/creative-shortcuts";
 import { resolveSeedance25DirectorInstructions } from "@/lib/server/agent-skills/seedance-25";
 import { buildDramaAnalyzeSchemaInstruction } from "@/lib/server/drama-analyze-prompt";
@@ -64,6 +64,7 @@ export async function POST(request: Request) {
     if (!model || !candidates.length) return NextResponse.json({ code: 400, data: null, msg: "后台尚未配置可用的默认文本模型" }, { status: 400 });
 
     let refundedPointsRemaining: number | undefined;
+    let videoPromptCandidate: ReturnType<typeof previewDramaVideoPromptOutput> = [];
     try {
         const tool =
             phase === "visual"
@@ -148,6 +149,7 @@ export async function POST(request: Request) {
                 );
                 try {
                     const parsed = JSON.parse(call.args);
+                    if (phase === "video_prompt") videoPromptCandidate = previewDramaVideoPromptOutput(parsed, videoPromptInput!.shotIds);
                     const data =
                         phase === "visual"
                             ? normalizeDramaVisualAnalysis(parsed, visualInput!.shotIds, visualInput!.payload.shots)
@@ -228,7 +230,7 @@ export async function POST(request: Request) {
         throw latestError instanceof Error ? latestError : new Error("没有可用的文本模型渠道");
     } catch (error) {
         const status = error instanceof DramaVideoPromptQualityError ? error.status : 502;
-        const response = NextResponse.json({ code: status, data: null, msg: error instanceof Error ? error.message : "剧本分析失败" }, { status });
+        const response = NextResponse.json({ code: status, data: phase === "video_prompt" && videoPromptCandidate.length ? { candidate: videoPromptCandidate[0] } : null, msg: error instanceof Error ? error.message : "剧本分析失败" }, { status });
         if (typeof refundedPointsRemaining === "number") response.headers.set("x-vozeb-pro-points-remaining", String(refundedPointsRemaining));
         return response;
     }

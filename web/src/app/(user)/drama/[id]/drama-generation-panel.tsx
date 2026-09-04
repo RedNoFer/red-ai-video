@@ -8,6 +8,7 @@ import { mediaDownloadFileName } from "@/lib/media-file";
 import { imagePreviewUrl, originalMediaDownloadUrl } from "@/lib/media-image-url";
 import {
     createDramaProductionRun,
+    DramaVideoPromptQualityError,
     ensureDramaEpisodeCanvas,
     exportDramaJianyingDraft,
     generateDramaVideoPrompt,
@@ -346,6 +347,10 @@ export function DramaGenerationPanel({
             replaceShot(project.id, episode.id, shot.id, saved.shot, saved.updatedAt);
             message.success("提示词已优化并保存");
         } catch (error) {
+            if (error instanceof DramaVideoPromptQualityError && error.candidate?.videoPrompt) {
+                message.warning("Agent 已返回候选提示词，但质量校验未通过；本次未自动保存，请在镜头详情中查看并修改");
+                return;
+            }
             message.error(error instanceof Error ? error.message : "提示词优化失败");
         }
     };
@@ -1176,6 +1181,12 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
             setOptimizedFramePlan(optimized.framePlan);
             message.success("视频提示词已优化，请确认后保存");
         } catch (error) {
+            if (error instanceof DramaVideoPromptQualityError && error.candidate?.videoPrompt) {
+                setVideoPromptDraft(error.candidate.videoPrompt);
+                setOptimizedFramePlan(error.candidate.framePlan);
+                message.warning(`${error.message}；Agent 候选已回填编辑框，未自动保存`);
+                return;
+            }
             message.error(error instanceof Error ? error.message : "视频提示词优化失败");
         } finally {
             setOptimizingVideoPrompt(false);

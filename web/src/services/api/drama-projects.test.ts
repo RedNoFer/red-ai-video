@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
     applyDramaProductionPackage,
     createDramaProductionRun,
+    DramaVideoPromptQualityError,
     generateDramaImagePrompt,
     generateDramaVideoPrompt,
     getLatestDramaProductionRun,
@@ -105,6 +106,19 @@ describe("drama project api", () => {
         const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
         expect(body.referenceMaterials).toEqual([{ alias: "@图片1", role: "keyframe", purpose: "顺序帧 1" }]);
         expect(JSON.stringify(body)).not.toContain("/private/frame.png");
+    });
+
+    it("exposes a rejected Agent candidate so the editor can show the generated prompt", async () => {
+        vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ code: 422, data: { candidate: { shotId: "shot-one", videoPrompt: "Agent 候选提示词" } }, msg: "缺少标准字段" }, { status: 422 })));
+
+        await expect(
+            generateDramaVideoPrompt({
+                project: { id: "project-one", summary: "", style: "", characters: [], scenes: [], props: [], clues: [] } as never,
+                episode: { id: "episode-one" } as never,
+                shot: { id: "shot-one" } as never,
+                referenceMaterials: [],
+            }),
+        ).rejects.toMatchObject({ name: "DramaVideoPromptQualityError", candidate: { videoPrompt: "Agent 候选提示词" } } satisfies Partial<DramaVideoPromptQualityError>);
     });
 
     it("sends bounded shot context for image prompt generation", async () => {

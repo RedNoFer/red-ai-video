@@ -244,7 +244,7 @@ export function generateDramaVideoPrompt(input: { project: DramaProject; episode
     const characterIds = new Set([...(shot.characterIds || []), shot.characterId, shot.voiceIdentityId].filter(Boolean));
     const propIds = new Set(shot.propIds || []);
     const clueIds = new Set(shot.clueIds || []);
-    return request<DramaVideoPromptAnalysis>("/api/drama/analyze", {
+    return requestDramaVideoPrompt<DramaVideoPromptAnalysis>("/api/drama/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -264,6 +264,28 @@ export function generateDramaVideoPrompt(input: { project: DramaProject; episode
             }),
         }),
     });
+}
+
+export class DramaVideoPromptQualityError extends Error {
+    candidate?: {
+        shotId?: string;
+        videoPrompt?: string;
+        framePlan?: DramaVideoPromptAnalysis["shots"][number]["framePlan"];
+    };
+
+    constructor(message: string, candidate?: DramaVideoPromptAnalysis["shots"][number]) {
+        super(message);
+        this.name = "DramaVideoPromptQualityError";
+        this.candidate = candidate;
+    }
+}
+
+async function requestDramaVideoPrompt<T>(url: string, init?: RequestInit) {
+    const response = await fetch(url, { cache: "no-store", ...init });
+    const payload = (await response.json().catch(() => ({}))) as { data?: T & { candidate?: DramaVideoPromptAnalysis["shots"][number] }; msg?: string };
+    if (!response.ok) throw new DramaVideoPromptQualityError(payload.msg || "视频提示词优化失败", payload.data?.candidate);
+    if (!payload.data) throw new Error(payload.msg || "短剧项目请求失败");
+    return payload.data;
 }
 
 export function generateDramaImagePrompt(input: { project: DramaProject; episode: DramaEpisode; shot: DramaShot; instruction?: string; requestId?: string }) {
