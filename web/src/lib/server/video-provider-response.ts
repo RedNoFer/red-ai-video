@@ -16,10 +16,17 @@ export function parseVideoProviderJson(value: string) {
 
 export function readVideoProviderHttpError(value: string, status: number) {
     try {
-        return readProviderError(JSON.parse(value)) || `视频接口请求失败（${status}）`;
+        return readVideoProviderError(JSON.parse(value)) || `视频接口请求失败（${status}）`;
     } catch {
         return value.slice(0, 300) || `视频接口请求失败（${status}）`;
     }
+}
+
+export function readVideoProviderError(value: unknown) {
+    const message = readProviderError(value);
+    const code = readProviderErrorCode(value);
+    if (code && message) return `${message}（${code}）`;
+    return message || (code ? `视频生成失败（${code}）` : "");
 }
 
 export function readVideoProviderId(value: unknown) {
@@ -35,6 +42,14 @@ export function readVideoProviderStatus(value: unknown, configuredPath?: string)
 
 export function readVideoProviderUrl(value: unknown, configuredPath?: string) {
     return readProviderString(value, configuredPath, VIDEO_PROVIDER_MEDIA_KEYS);
+}
+
+function readProviderErrorCode(value: unknown) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return "";
+    const record = value as Record<string, unknown>;
+    const nested = record.error && typeof record.error === "object" && !Array.isArray(record.error) ? (record.error as Record<string, unknown>) : undefined;
+    const code = nested?.code ?? record.error_code ?? record.errorCode;
+    return typeof code === "string" || typeof code === "number" ? String(code).trim().slice(0, 120) : "";
 }
 
 /** Some gateways return an HTTP URL whose path is an encoded provider error instead of video media. */

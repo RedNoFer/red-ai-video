@@ -17,9 +17,10 @@ import {
 } from "./provider-task-config";
 
 describe("provider task config", () => {
-    it("uses the documented slower polling window for GlobalAiOpc video tasks only", () => {
+    it("uses protocol-specific polling windows for documented video providers", () => {
         expect(videoPollingPolicy(true)).toEqual({ attempts: 40, intervalMs: 30_000 });
         expect(videoPollingPolicy(false)).toEqual({ attempts: 180, intervalMs: 2_500 });
+        expect(videoPollingPolicy(false, "newapi-video")).toEqual({ attempts: 180, intervalMs: 5_000 });
     });
 
     it("renders JSON request templates without converting arrays and numbers to strings", () => {

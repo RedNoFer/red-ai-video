@@ -17,6 +17,28 @@ vi.mock("@/lib/server/reference-asset-store", () => ({ writeReferenceMediaFile: 
 import { composeDramaVideoSegments } from "./drama-video-sequence";
 
 describe("composeDramaVideoSegments", () => {
+    it("returns a single completed video directly without requiring FFmpeg", async () => {
+        vi.clearAllMocks();
+
+        await expect(
+            composeDramaVideoSegments({
+                clips: [{ url: "/api/reference-assets/provider-result.mp4", duration: 15 }],
+                ratio: "9:16",
+                origin: "http://localhost:3010",
+                cookie: "session=test",
+                ownerUserId: "user-one",
+                projectId: "project-one",
+                runId: "run-one",
+                shotId: "shot-one",
+                title: "镜头一",
+            }),
+        ).resolves.toBe("/api/reference-assets/provider-result.mp4");
+
+        expect(mocks.ffmpegAvailable).not.toHaveBeenCalled();
+        expect(mocks.fetchInternalApi).not.toHaveBeenCalled();
+        expect(mocks.writeReferenceMediaFile).not.toHaveBeenCalled();
+    });
+
     it("normalizes each ordered clip and concatenates them without contacting a paid provider", async () => {
         vi.clearAllMocks();
         mocks.ffmpegAvailable.mockResolvedValue(true);

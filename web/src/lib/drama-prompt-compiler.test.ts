@@ -331,6 +331,27 @@ describe("drama prompt compiler", () => {
         expect(prompts.videoPrompt.length).toBeLessThan(prompts.imagePrompt.length);
     });
 
+    it("derives each timeline handoff from the adjacent frame states", () => {
+        const project = createProject();
+        const shot = project.episodes[0].shots[0];
+        shot.framePlan = {
+            start: { source: "independent" },
+            end: { required: true },
+            frames: [
+                { id: "frame-one", sequenceIndex: 1, startSecond: 0, endSecond: 2, actionPrompt: "手指扣住剑柄", imagePrompt: "静态关键帧：人物低头；可见状态：手指扣住剑柄" },
+                { id: "frame-two", sequenceIndex: 2, startSecond: 2, endSecond: 5, actionPrompt: "抬头看向门外", imagePrompt: "静态关键帧：人物抬头；可见状态：视线越过门框看向门外" },
+            ],
+        };
+
+        const prompt = compileDramaShotExecutionPrompts(project, project.episodes[0], shot).videoPrompt;
+
+        expect(prompt).toContain("可见衔接：从镜头入口“动作起始”进入当前帧“手指扣住剑柄”");
+        expect(prompt).toContain("可见衔接：承接上一段终点“手指扣住剑柄”，过渡到当前帧“视线越过门框看向门外”");
+        expect(prompt).toContain("终点：手指扣住剑柄");
+        expect(prompt).toContain("终点：视线越过门框看向门外");
+        expect(prompt).not.toContain("只执行本段新增的可见变化");
+    });
+
     it("carries physical carriage blocking into the video execution prompt", () => {
         const project = createProject();
         project.scenes[0] = {

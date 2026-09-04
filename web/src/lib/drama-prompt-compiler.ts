@@ -43,7 +43,7 @@ export function stripDramaReferenceBindingSections(prompt: string) {
     let skipping = false;
     for (const line of lines) {
         const value = line.trim();
-        if (/^(?:参考图顺序（与(?:视频)?请求数组完全一致）|实际参考图绑定（编号与本次请求图片数组完全一致）)[：:]?/u.test(value)) {
+        if (/^(?:参考图顺序（与(?:视频)?请求数组完全一致）|实际参考图绑定（编号与本次请求图片数组完全一致）|素材绑定|参考图职责(?:计划)?)[：:]?/u.test(value)) {
             skipping = true;
             continue;
         }
@@ -137,11 +137,9 @@ export function compileDramaShotVideoBasePrompt(project: DramaProject, _episode:
     const scene = project.scenes.find((item) => item.id === shot.sceneId);
     const characterCount = project.characters.filter((item) => shot.characterIds.includes(item.id)).length;
     const physicalConstraint = scenePhysicalConstraint(scene, characterCount);
-    const videoPlan = cleanDramaVideoMotionBrief(
-        shot.executionVideoPrompt || shot.videoPrompt,
-        project,
-        shot.executionVideoPrompt && !hasStructuredDramaVideoPrompt(shot.videoPrompt) ? shot.videoPrompt || shot.description : shot.executionVideoPrompt ? shot.description : undefined,
-    );
+    const manualExecutionPrompt = shot.fieldOrigins?.executionVideoPrompt === "manual" ? shot.executionVideoPrompt : "";
+    const videoSource = manualExecutionPrompt || shot.videoPrompt || shot.executionVideoPrompt;
+    const videoPlan = cleanDramaVideoMotionBrief(videoSource, project, manualExecutionPrompt && !hasStructuredDramaVideoPrompt(shot.videoPrompt) ? shot.videoPrompt || shot.description : manualExecutionPrompt ? shot.description : undefined);
     const light = shot.lightingPlan;
     const sound = compact([shot.sound?.ambience, shot.sound?.soundEffects, shot.sound?.music]).join("；");
     const ending = shot.exitState ? stateActions(shot.exitState, project) : shot.continuity?.actionEnd || shot.description;
@@ -173,17 +171,32 @@ export function compileDramaShotVideoTimeline(project: DramaProject, shot: Drama
     const lines = frames.flatMap((frame, index) => {
         const frameCode = `P${String(shot.order).padStart(2, "0")}-F${String(frame.sequenceIndex).padStart(2, "0")}`;
         const previous = allFrames[allFrames.findIndex((candidate) => candidate.id === frame.id) - 1];
-        const start = previous ? frameVisibleState(previous) : shot.continuity?.actionStart || stateActions(shot.entryState, project) || frameVisibleState(frame);
-        const end = frameVisibleState(frame) || sanitizeDramaSupplierText(frame.actionPrompt, project);
+        const start = previous ? dramaFrameVisibleState(previous.imagePrompt, previous.actionPrompt) : shot.continuity?.actionStart || stateActions(shot.entryState, project) || dramaFrameVisibleState(frame.imagePrompt, frame.actionPrompt);
+        const end = dramaFrameVisibleState(frame.imagePrompt, frame.actionPrompt) || sanitizeDramaSupplierText(frame.actionPrompt, project);
         const action = sanitizeDramaSupplierText(frame.actionPrompt, project);
-        const transition = previous ? `承接上一段终点；${sanitizeDramaSupplierText(continuity, project)}；只执行本段新增的可见变化` : `从镜头入口直接承接；${sanitizeDramaSupplierText(continuity, project)}`;
-        return [`${frameCode}｜${frame.startSecond}-${frame.endSecond}s`, `起点：${sanitizeDramaSupplierText(start, project)}`, `动作与触发：${action}`, `可见衔接：${transition}`, `终点：${sanitizeDramaSupplierText(end, project)}`];
+        const safeStart = sanitizeDramaSupplierText(start, project);
+        const safeEnd = sanitizeDramaSupplierText(end, project);
+        const transition = previous
+            ? `承接上一段终点“${safeStart}”，过渡到当前帧“${safeEnd}”；${sanitizeDramaSupplierText(continuity, project)}`
+            : `从镜头入口“${safeStart}”进入当前帧“${safeEnd}”；${sanitizeDramaSupplierText(continuity, project)}`;
+        return [`${frameCode}｜${frame.startSecond}-${frame.endSecond}s`, `起点：${safeStart}`, `动作与触发：${action}`, `可见衔接：${transition}`, `终点：${safeEnd}`];
     });
     return ["时间段动作：", ...lines].join("\n");
 }
 
-function frameVisibleState(frame: DramaFrameBeat) {
-    return extractPromptField(frame.imagePrompt, "可见状态") || extractPromptField(frame.imagePrompt, "静态关键帧") || frame.actionPrompt;
+export function dramaFrameVisibleState(imagePrompt: string, actionPrompt = "") {
+    const candidates = [
+        extractPromptField(imagePrompt, "可见状态"),
+        extractPromptField(imagePrompt, "可见表演状态"),
+        extractPromptField(imagePrompt, "站位与视线"),
+        extractPromptField(imagePrompt, "静态关键帧"),
+        actionPrompt,
+    ].map((value) => value.trim()).filter(Boolean);
+    return candidates.find((value) => !isGenericTimelineState(value)) || candidates[0] || "";
+}
+
+function isGenericTimelineState(value: string) {
+    return /^(?:动作入口已成立|镜头推进后主体重心、视线或手部位置已经改变|关键动作已经发生|结果状态继续发展|结果状态与转场落点已经成立|主体处于可辨识准备姿态|道具或环境出现可见结果|主体反应或道具关系已经转向)/u.test(value);
 }
 
 function extractPromptField(value: string, label: string) {

@@ -4,7 +4,7 @@
   "sourceRepository": "liyue-aigc/seedance-2-5-video-director",
   "sourceCommit": "ad0e68ba6ce24fb9ae9c67c9276061cef37663f1",
   "sourceLicense": "MIT",
-  "sourceContentHash": "b6966a40aac46bd35968527809581f096b530140b21263d5065c8150d9d8a23d",
+  "sourceContentHash": "c258165c1af5b1177427f3c17e34d184d0d3c0ddf6f2f49e137a6c024b56b044",
   "runtimeModule": "web/src/lib/server/agent-skills/seedance-25.generated.ts",
   "references": [
     "references/capabilities-and-limits.md",

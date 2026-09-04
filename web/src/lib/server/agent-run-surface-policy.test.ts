@@ -43,6 +43,21 @@ describe("selectAgentSkills", () => {
         expect(selectAgentSkills(DEFAULT_SETTINGS, "drama", ["seedance-director"], { workflow: "drama-script", prompt: "生成完整制作包" }).map((skill) => skill.id)).toEqual(["seedance-director", "seedance-25-director"]);
     });
 
+    it("uses the dedicated single-subject asset image skill for drama asset generation", () => {
+        const skills = selectAgentSkills(DEFAULT_SETTINGS, "drama", [], { prompt: "生成一个角色基准图", requestedModelIds: [], generationPreferences: {} });
+        expect(skills.map((skill) => skill.id)).toEqual(["seedance-director", "drama-asset-image-director"]);
+    });
+
+    it("keeps the asset image contract after a generic character skill is selected", () => {
+        const skills = selectAgentSkills(DEFAULT_SETTINGS, "drama", ["character-design"], { prompt: "生成一个角色候选图", requestedModelIds: [], generationPreferences: {} });
+        expect(skills.map((skill) => skill.id)).toEqual(["seedance-director", "character-design", "drama-asset-image-director"]);
+    });
+
+    it("does not add the static asset skill to drama video requests", () => {
+        const skills = selectAgentSkills(DEFAULT_SETTINGS, "drama", [], { prompt: "生成角色表演视频", requestedModelIds: [], generationPreferences: { mode: "video" } });
+        expect(skills.map((skill) => skill.id)).toEqual(["seedance-director", "seedance-25-director"]);
+    });
+
     it("restores the mandatory Seedance skill when settings omit it", () => {
         const settings = { ...DEFAULT_SETTINGS, agentSkills: DEFAULT_SETTINGS.agentSkills.filter((skill) => skill.id !== "seedance-director") };
         expect(selectAgentSkills(settings, "drama", []).map((skill) => skill.id)).toEqual(["seedance-director"]);

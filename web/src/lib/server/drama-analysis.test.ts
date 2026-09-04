@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
     describeDramaModelOutput,
+    dramaVideoPromptTool,
     dramaReviewCompletionTool,
     dramaReviewCompletionToolForFields,
     hasUsableDramaToolArguments,
@@ -16,6 +17,12 @@ import {
 } from "./drama-analysis";
 
 describe("drama analysis contracts", () => {
+    it("keeps material binding in the Skill-owned video prompt contract", () => {
+        expect(dramaVideoPromptTool.description).toContain("Seedance 2.5 导演 Skill");
+        expect(dramaVideoPromptTool.parameters.properties.shots.items.properties.videoPrompt.description).toContain("由 Skill 生成素材绑定");
+        expect(dramaVideoPromptTool.parameters.properties.shots.items.properties.videoPrompt.description).not.toContain("按固定字段逐行输出");
+    });
+
     it("accepts only requested image prompt results", () => {
         expect(normalizeDramaImagePromptAnalysis({ shots: [{ shotId: "shot-one", imagePrompt: "静态画面" }, { shotId: "unknown", imagePrompt: "忽略" }, { shotId: "shot-one", imagePrompt: "重复" }] }, ["shot-one"])).toEqual({ shots: [{ shotId: "shot-one", imagePrompt: "静态画面" }] });
     });

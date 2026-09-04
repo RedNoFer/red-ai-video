@@ -8,7 +8,8 @@ type TemplateValues = Record<string, unknown>;
 
 const MAX_PROVIDER_TEMPLATE_DEPTH = 128;
 
-export function videoPollingPolicy(globalAiOpc: boolean) {
+export function videoPollingPolicy(globalAiOpc: boolean, protocol?: string) {
+    if (protocol === "newapi-video") return { attempts: 180, intervalMs: 5_000 };
     return globalAiOpc ? { attempts: 40, intervalMs: 30_000 } : { attempts: 180, intervalMs: 2_500 };
 }
 

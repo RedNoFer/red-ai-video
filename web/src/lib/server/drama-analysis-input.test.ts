@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import {
-    compileDramaVideoPromptReferenceInstructions,
-    mergeDramaVideoPromptReferenceInstructions,
     normalizeDramaReviewCompletionInput,
+    normalizeDramaVideoPromptInput,
     normalizeDramaVisualInput,
     reviewCompletionFilledCount,
     reviewCompletionMissingFields,
     reviewCompletionSatisfies,
+    validateDramaVideoPromptReferenceBindings,
 } from "./drama-analysis-input";
 
 describe("normalizeDramaVisualInput", () => {
@@ -41,19 +41,25 @@ describe("normalizeDramaVisualInput", () => {
 });
 
 describe("video prompt reference instructions", () => {
-    it("preserves the exact reference order and sequence-frame roles", () => {
-        expect(
-            compileDramaVideoPromptReferenceInstructions([
-                { role: "keyframe", purpose: "顺序帧 1（开始）", sequenceIndex: 1 },
-                { role: "keyframe", purpose: "顺序帧 2（中间）", sequenceIndex: 2 },
-                { role: "asset_anchor", purpose: "角色基准图" },
-            ]),
-        ).toBe("参考图顺序（与视频请求数组完全一致）：\n@图片1：顺序帧 1（开始）\n@图片2：顺序帧 2（中间）\n@图片3：角色基准图\n必须逐图按上述职责使用；顺序帧用于锁定对应时间段的可见状态，不能用固定资产图替代。");
+    it("keeps reference duties as structured prompt context without media URLs", () => {
+        const result = normalizeDramaVideoPromptInput({
+            phase: "video_prompt",
+            shots: [{ id: "shot-one", videoPrompt: "动态意图：人物抬头", storyboardFrames: [{ id: "frame-one", mediaUrl: "data:image/png;base64,very-large-frame" }] }],
+            referenceMaterials: [{ role: "keyframe", purpose: "顺序帧 1", sequenceIndex: 1, url: "/private/frame.png" }],
+        });
+        expect(result.payload.referenceMaterials).toEqual([{ role: "keyframe", purpose: "顺序帧 1", sequenceIndex: 1 }]);
+        expect(result.payload.shots[0]).toMatchObject({ id: "shot-one", videoPrompt: "动态意图：人物抬头" });
+        expect(result.payload.shots[0]).not.toHaveProperty("storyboardFrames");
+        expect(JSON.stringify(result.payload)).not.toContain("very-large-frame");
+        expect(JSON.stringify(result.payload)).not.toContain("/private/frame.png");
     });
 
-    it("replaces a model-generated duplicate reference list with the canonical binding block", () => {
-        const merged = mergeDramaVideoPromptReferenceInstructions("动态意图：Karin 抬眼。\n参考图顺序（与视频请求数组完全一致）：\n@图片1：模型自写的错误职责", [{ role: "keyframe", purpose: "顺序帧 1（开始）", sequenceIndex: 1 }]);
-        expect(merged).toBe("动态意图：Karin 抬眼。\n参考图顺序（与视频请求数组完全一致）：\n@图片1：顺序帧 1（开始）\n必须逐图按上述职责使用；顺序帧用于锁定对应时间段的可见状态，不能用固定资产图替代。");
+    it("validates that the Agent returns every bound image alias", () => {
+        expect(validateDramaVideoPromptReferenceBindings("素材绑定：@图片1：顺序帧 1\n@图片2：角色基准图", [{ role: "keyframe" }, { role: "character_anchor" }])).toBe("");
+        expect(validateDramaVideoPromptReferenceBindings("动态意图：人物抬头", [{ role: "keyframe" }])).toContain("@图片1");
+        expect(validateDramaVideoPromptReferenceBindings("动态意图：@图片1：人物抬头", [{ role: "keyframe" }])).toContain("素材绑定字段");
+        expect(validateDramaVideoPromptReferenceBindings("素材绑定：@图片1：顺序帧\n主体动作：@图片1：重复", [{ role: "keyframe" }])).toContain("重复绑定");
+        expect(validateDramaVideoPromptReferenceBindings("素材绑定：@图片2：场景\n@图片1：角色", [{ role: "character_anchor" }, { role: "scene_anchor" }])).toContain("顺序");
     });
 });
 

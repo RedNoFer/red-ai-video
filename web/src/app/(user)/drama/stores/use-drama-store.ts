@@ -63,6 +63,7 @@ type DramaStore = {
     ) => void;
     buildStoryboard: (projectId: string, episodeId: string) => void;
     updateShot: (projectId: string, episodeId: string, shotId: string, patch: Partial<DramaShot>) => void;
+    replaceShot: (projectId: string, episodeId: string, shotId: string, shot: DramaShot, updatedAt?: string) => void;
     saveProjectNow: (projectId: string, updater?: (project: DramaProject) => DramaProject) => Promise<DramaProject>;
     queueShots: (projectId: string, episodeId: string, shotIds: string[]) => void;
     applyContentAnalysis: (projectId: string, episodeId: string, analysis: DramaContentAnalysis) => void;
@@ -339,6 +340,19 @@ export const useDramaStore = create<DramaStore>((set, get) => ({
             ...project,
             episodes: project.episodes.map((episode) => (episode.id === episodeId ? { ...episode, shots: episode.shots.map((shot) => (shot.id === shotId ? { ...shot, ...patch } : shot)) } : episode)),
         })),
+    replaceShot: (projectId, episodeId, shotId, shot, updatedAt) =>
+        set((state) => {
+            const projects = state.projects.map((project) => {
+                if (project.id !== projectId) return project;
+                return {
+                    ...project,
+                    ...(updatedAt ? { updatedAt } : {}),
+                    episodes: project.episodes.map((episode) => (episode.id === episodeId ? { ...episode, shots: episode.shots.map((current) => (current.id === shotId ? shot : current)) } : episode)),
+                };
+            });
+            const nextProject = projects.find((project) => project.id === projectId);
+            return nextProject ? { projects, summaries: upsertSummary(state.summaries, nextProject) } : state;
+        }),
     saveProjectNow: async (projectId, updater) => {
         const session = requireSession();
         clearProjectSave(session, projectId);

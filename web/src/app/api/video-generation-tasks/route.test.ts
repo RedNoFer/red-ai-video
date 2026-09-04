@@ -281,7 +281,7 @@ describe("video generation candidate failover", () => {
     });
 
     it("rejects a provider error encoded as a video result URL without creating another upstream task", async () => {
-        const newApiChannel = applyChannelProtocol({ ...channels[0], models: ["video-one"], advancedConfig: emptyAdvancedConfig() }, "newapi-video");
+        const newApiChannel = applyChannelProtocol({ ...channels[0], models: [...channels[0].models], advancedConfig: emptyAdvancedConfig() }, "newapi-video");
         mocks.getAuthSettings.mockResolvedValue({
             ...settings,
             systemChannels: [newApiChannel],
@@ -307,7 +307,7 @@ describe("video generation candidate failover", () => {
         mocks.fetchSafeOutbound.mockResolvedValue(new Response('{"error":"请先登录"}', { status: 401, headers: { "content-type": "application/json" } }));
 
         try {
-            const response = await POST(request({ model: "seedance-2.5" }, [{ type: "image", url: "/api/generation-log-assets/permanent/reference.png" }]));
+            const response = await POST(request({ model: "admin-configured-video" }, [{ type: "image", url: "/api/generation-log-assets/permanent/reference.png" }]));
 
             expect(response.status).toBe(400);
             expect((await response.json()).error).toContain("参考素材第 1 个图片公网不可读");
@@ -331,7 +331,7 @@ describe("video generation candidate failover", () => {
         mocks.fetchSafeOutbound.mockResolvedValue(new Response(null, { status: 200, headers: { "content-type": "image/png" } }));
 
         try {
-            const response = await POST(request({ model: "seedance-2.5" }, [{ type: "image", url: "/api/generation-log-assets/permanent/reference.png" }]));
+            const response = await POST(request({ model: "admin-configured-video" }, [{ type: "image", url: "/api/generation-log-assets/permanent/reference.png" }]));
             const body = JSON.parse(String((mocks.fetchInternalApi.mock.calls[0]?.[1] as RequestInit).body));
             const referenceUrl = body.referenceImages[0] as string;
 
@@ -359,7 +359,7 @@ describe("video generation candidate failover", () => {
 
         try {
             const response = await POST(
-                request({ model: "seedance-2.5" }, [
+                request({ model: "admin-configured-video" }, [
                     {
                         type: "image",
                         url: "https://provider.example/expired.png",
@@ -648,13 +648,13 @@ describe("video generation candidate failover", () => {
         mocks.getAuthSettings.mockResolvedValue(newApiVideoSettings());
         mocks.fetchInternalApi.mockResolvedValue(json({ task_id: "newapi-video-task", status: "queued" }));
 
-        const response = await POST(request({ model: "seedance-2.5", videoSeconds: "5", size: "1280x720" }, [{ type: "image", url: "https://cdn.example.com/reference.jpg" }]));
+        const response = await POST(request({ model: "admin-configured-video", videoSeconds: "5", size: "1280x720" }, [{ type: "image", url: "https://cdn.example.com/reference.jpg" }]));
         const [url, init] = mocks.fetchInternalApi.mock.calls[0] as [string, RequestInit];
 
         expect(response.status).toBe(200);
         expect(url).toContain("/api/ai/system/one/v1/videos");
         expect(JSON.parse(String(init.body))).toMatchObject({
-            model: "seedance-2.5",
+            model: "admin-configured-video",
             prompt: expect.stringContaining("A test video"),
             duration: 5,
             ratio: "16:9",
@@ -672,7 +672,7 @@ describe("video generation candidate failover", () => {
         ["New API", 2, 1, "/api/ai/system/newapi-video/v1/videos"],
     ] as const)("uses the %s protocol selected by logical-model binding priority", async (_label, bumingPriority, newApiPriority, expectedPath) => {
         const bumingChannel = applyChannelProtocol({ ...channels[0], id: "buming", name: "不鸣", baseUrl: "", models: ["wan-3.0"], advancedConfig: emptyAdvancedConfig() }, "buming-seedance");
-        const newApiChannel = applyChannelProtocol({ ...channels[1], id: "newapi-video", name: "New API 视频", baseUrl: "", models: ["wan-3.0"], advancedConfig: emptyAdvancedConfig() }, "newapi-video");
+        const newApiChannel = applyChannelProtocol({ ...channels[1], id: "newapi-video", name: "New API 视频", baseUrl: "", models: ["admin-configured-video"], advancedConfig: emptyAdvancedConfig() }, "newapi-video");
         mocks.getAuthSettings.mockResolvedValue({
             ...settings,
             systemChannels: [bumingChannel, newApiChannel],
@@ -684,7 +684,7 @@ describe("video generation candidate failover", () => {
                     enabled: true,
                     bindings: [
                         { id: "buming-binding", channelId: "buming", upstreamModel: "wan-3.0", enabled: true, priority: bumingPriority },
-                        { id: "newapi-binding", channelId: "newapi-video", upstreamModel: "wan-3.0", enabled: true, priority: newApiPriority },
+                        { id: "newapi-binding", channelId: "newapi-video", upstreamModel: "admin-configured-video", enabled: true, priority: newApiPriority },
                     ],
                 },
             ],
@@ -704,11 +704,11 @@ describe("video generation candidate failover", () => {
         mocks.fetchInternalApi.mockResolvedValue(json({ task_id: "newapi-video-task", status: "queued" }));
 
         const response = await POST(
-            request({ model: "seedance-2.5", videoSeconds: "8", size: "9:16", vquality: "1080" }, [
+            request({ model: "admin-configured-video", videoSeconds: "8", size: "9:16", vquality: "720" }, [
                 { type: "image", url: "https://cdn.example.com/reference-1.jpg" },
                 { type: "image", url: "https://cdn.example.com/reference-2.jpg" },
-                { type: "video", url: "https://cdn.example.com/reference.mp4" },
-                { type: "audio", url: "https://cdn.example.com/reference.mp3" },
+                { type: "video", url: "https://cdn.example.com/reference.mp4", durationMs: 8_000 },
+                { type: "audio", url: "https://cdn.example.com/reference.mp3", durationMs: 8_000 },
             ]),
         );
         const body = JSON.parse(String((mocks.fetchInternalApi.mock.calls[0]?.[1] as RequestInit).body));
@@ -717,7 +717,7 @@ describe("video generation candidate failover", () => {
         expect(body).toMatchObject({
             duration: 8,
             ratio: "9:16",
-            resolution: "1080p",
+            resolution: "720p",
             referenceImages: ["https://cdn.example.com/reference-1.jpg", "https://cdn.example.com/reference-2.jpg"],
             referenceVideos: ["https://cdn.example.com/reference.mp4"],
             referenceAudios: ["https://cdn.example.com/reference.mp3"],
@@ -726,6 +726,73 @@ describe("video generation candidate failover", () => {
         expect(body).not.toHaveProperty("images");
         expect(body).not.toHaveProperty("video");
         expect(body).not.toHaveProperty("audio");
+    });
+
+    it("records the final New API request shape for post-submit reference auditing", async () => {
+        mocks.getAuthSettings.mockResolvedValue(newApiVideoSettings());
+        mocks.fetchInternalApi.mockResolvedValue(json({ task_id: "newapi-video-task", status: "queued" }));
+
+        const response = await POST(
+            request({ model: "admin-configured-video", videoSeconds: "8", size: "9:16", vquality: "720" }, [
+                { type: "image", url: "https://cdn.example.com/frame.png" },
+                { type: "video", url: "https://cdn.example.com/source.m4v", durationMs: 8_000 },
+            ]),
+        );
+
+        expect(response.status).toBe(200);
+        expect(mocks.updateVideoTask).toHaveBeenCalledWith("local-task", expect.objectContaining({
+            upstream: expect.objectContaining({
+                requestSnapshot: expect.objectContaining({
+                    path: "/v1/videos",
+                    body: expect.objectContaining({ referenceImages: ["https://cdn.example.com/frame.png"], referenceVideos: ["https://cdn.example.com/source.m4v"] }),
+                    references: [
+                        { type: "image", role: "reference", url: "https://cdn.example.com/frame.png" },
+                        { type: "video", role: "reference", url: "https://cdn.example.com/source.m4v", durationMs: 8_000 },
+                    ],
+                }),
+            }),
+        }));
+    });
+
+    it.each([
+        [{ size: "4:3" }, "比例仅支持 16:9、9:16、1:1"],
+        [{ vquality: "1080" }, "清晰度仅支持 720p、480p"],
+    ])("rejects New API parameters outside its documented contract", async (config, message) => {
+        mocks.getAuthSettings.mockResolvedValue(newApiVideoSettings());
+
+        const response = await POST(request({ model: "admin-configured-video", ...config }));
+
+        expect(response.status).toBe(400);
+        expect((await response.json()).error).toContain(message);
+        expect(mocks.fetchInternalApi).not.toHaveBeenCalled();
+    });
+
+    it("rejects New API reference media whose documented total duration is exceeded", async () => {
+        mocks.getAuthSettings.mockResolvedValue(newApiVideoSettings());
+
+        const response = await POST(
+            request({ model: "admin-configured-video" }, [
+                { type: "video", url: "https://cdn.example.com/reference-1.mp4", durationMs: 8_000 },
+                { type: "video", url: "https://cdn.example.com/reference-2.mp4", durationMs: 8_000 },
+            ]),
+        );
+
+        expect(response.status).toBe(400);
+        expect((await response.json()).error).toContain("参考视频总时长不能超过 15 秒");
+        expect(mocks.fetchInternalApi).not.toHaveBeenCalled();
+    });
+
+    it("rejects New API media references without a verifiable duration or public URL", async () => {
+        mocks.getAuthSettings.mockResolvedValue(newApiVideoSettings());
+
+        const missingDuration = await POST(request({ model: "admin-configured-video" }, [{ type: "audio", url: "https://cdn.example.com/reference.mp3" }]));
+        expect(missingDuration.status).toBe(400);
+        expect((await missingDuration.json()).error).toContain("参考音频缺少可验证时长");
+
+        const nonPublicUrl = await POST(request({ model: "admin-configured-video" }, [{ type: "video", url: "assetId://reference-video", durationMs: 5_000 }]));
+        expect(nonPublicUrl.status).toBe(400);
+        expect((await nonPublicUrl.json()).error).toContain("公开的 http/https URL");
+        expect(mocks.fetchInternalApi).not.toHaveBeenCalled();
     });
 
     it("sends a compatible text-to-video request without empty reference fields", async () => {
@@ -749,7 +816,7 @@ describe("video generation candidate failover", () => {
 
         const response = await POST(
             request(
-                { model: "seedance-2.5" },
+                { model: "admin-configured-video" },
                 Array.from({ length: 10 }, (_, index) => ({ type: "image" as const, url: `https://cdn.example.com/reference-${index + 1}.jpg` })),
             ),
         );
@@ -763,7 +830,7 @@ describe("video generation candidate failover", () => {
         mocks.getAuthSettings.mockResolvedValue(newApiVideoSettings());
 
         const videoResponse = await POST(
-            request({ model: "seedance-2.5" }, [
+            request({ model: "admin-configured-video" }, [
                 { type: "video", url: "https://cdn.example.com/reference-1.mp4" },
                 { type: "video", url: "https://cdn.example.com/reference-2.mp4" },
                 { type: "video", url: "https://cdn.example.com/reference-3.mp4" },
@@ -774,7 +841,7 @@ describe("video generation candidate failover", () => {
         expect((await videoResponse.json()).error).toContain("最多支持 3 个参考视频");
 
         const audioResponse = await POST(
-            request({ model: "seedance-2.5" }, [
+            request({ model: "admin-configured-video" }, [
                 { type: "audio", url: "https://cdn.example.com/reference-1.mp3" },
                 { type: "audio", url: "https://cdn.example.com/reference-2.mp3" },
                 { type: "audio", url: "https://cdn.example.com/reference-3.mp3" },
@@ -789,12 +856,12 @@ describe("video generation candidate failover", () => {
     it("rejects first-frame references for the New API video protocol", async () => {
         mocks.getAuthSettings.mockResolvedValue(newApiVideoSettings());
 
-        const response = await POST(request({ model: "seedance-2.5" }, [{ type: "image", url: "https://cdn.example.com/first.jpg", role: "first_frame" }]));
+        const response = await POST(request({ model: "admin-configured-video" }, [{ type: "image", url: "https://cdn.example.com/first.jpg", role: "first_frame" }]));
 
         expect(response.status).toBe(400);
         expect((await response.json()).error).toContain("不支持显式首帧输入");
 
-        const lastFrameResponse = await POST(request({ model: "seedance-2.5" }, [{ type: "image", url: "https://cdn.example.com/last.jpg", role: "last_frame" }]));
+        const lastFrameResponse = await POST(request({ model: "admin-configured-video" }, [{ type: "image", url: "https://cdn.example.com/last.jpg", role: "last_frame" }]));
 
         expect(lastFrameResponse.status).toBe(400);
         expect((await lastFrameResponse.json()).error).toContain("指定尾帧");
@@ -1016,14 +1083,14 @@ describe("video generation candidate failover", () => {
     });
 
     it("allows a drama run to submit eight total images when its model declares all-frame support", async () => {
-        const newApiChannel = applyChannelProtocol({ ...channels[0], models: ["video-one"], advancedConfig: emptyAdvancedConfig() }, "newapi-video");
+        const newApiChannel = applyChannelProtocol({ ...channels[0], models: ["admin-configured-video"], advancedConfig: emptyAdvancedConfig() }, "newapi-video");
         mocks.getAuthSettings.mockResolvedValue({
             ...settings,
             systemChannels: [newApiChannel],
             logicalModels: [
                 {
                     ...settings.logicalModels[0],
-                    bindings: [{ ...settings.logicalModels[0].bindings[0], channelId: newApiChannel.id, upstreamModel: "video-one", capabilityProfile: { supportsKeyframes: true, maxReferenceImages: 5 } }],
+                    bindings: [{ ...settings.logicalModels[0].bindings[0], channelId: newApiChannel.id, upstreamModel: "admin-configured-video", capabilityProfile: { supportsKeyframes: true, maxReferenceImages: 5 } }],
                 },
             ],
         });
@@ -1293,7 +1360,7 @@ describe("video generation candidate failover", () => {
     });
 });
 
-function request(config: Record<string, unknown> = { model: "video" }, references: Array<{ type: string; url: string; remoteUrl?: string; serverUrl?: string; role?: string; keyframeIndex?: number }> = [], context?: Record<string, unknown>) {
+function request(config: Record<string, unknown> = { model: "video" }, references: Array<{ type: string; url: string; remoteUrl?: string; serverUrl?: string; durationMs?: number; role?: string; keyframeIndex?: number }> = [], context?: Record<string, unknown>) {
     const clientRequestId = typeof context?.clientRequestId === "string" ? context.clientRequestId : "";
     return new Request("http://localhost/api/video-generation-tasks", {
         method: "POST",
@@ -1347,7 +1414,7 @@ function publicUrlCompatibleSettings() {
 }
 
 function newApiVideoSettings() {
-    const model = "seedance-2.5";
+    const model = "admin-configured-video";
     const channel = applyChannelProtocol({ ...channels[0], baseUrl: "", models: [model], advancedConfig: emptyAdvancedConfig() }, "newapi-video");
     return {
         ...settings,

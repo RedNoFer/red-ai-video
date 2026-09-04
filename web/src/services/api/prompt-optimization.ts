@@ -4,7 +4,7 @@ import type { CreativeGenerationMode } from "@/lib/creative-runtime-contract";
 import { refreshUserPointsIfSystem } from "@/services/api/points";
 import { throwIfClientSessionExpired } from "@/services/api/session-expiration";
 
-export async function optimizePrompt(input: { requestId: string; prompt: string; mode: "agent" | CreativeGenerationMode | "drama-frame" }) {
+export async function optimizePrompt(input: { requestId: string; prompt: string; mode: "agent" | CreativeGenerationMode | "drama-frame" | "drama-asset" }) {
     try {
         const response = await fetch("/api/agent/prompt-optimization", {
             method: "POST",
@@ -23,4 +23,8 @@ export async function optimizePrompt(input: { requestId: string; prompt: string;
 
 export function optimizeDramaFramePrompt(prompt: string, requestId = crypto.randomUUID()) {
     return optimizePrompt({ requestId, prompt, mode: "drama-frame" });
+}
+
+export function optimizeDramaAssetPrompt(kind: "角色" | "场景" | "道具", prompt: string, requestId = crypto.randomUUID()) {
+    return optimizePrompt({ requestId, prompt: `【资产类型】${kind}\n【当前提示词】\n${prompt}`, mode: "drama-asset" });
 }

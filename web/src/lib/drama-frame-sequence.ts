@@ -6,11 +6,13 @@ export const MAX_FRAME_BEATS = 9;
 const TIME_EPSILON = 0.001;
 const STATIC_FRAME_PROMPT_LABELS = ["静态关键帧", "可见状态", "可见表演状态", "景别", "机位与构图", "站位与视线", "三层空间", "光色与风格", "负面约束"] as const;
 const VIDEO_PROMPT_LABELS = [
+    "素材绑定",
     "动态意图",
     "全局设定",
     "起始可见状态",
     "触发",
     "主体动作与反应",
+    "时间段动作",
     "阶段节拍",
     "单一主运镜",
     "主运镜",
@@ -23,6 +25,7 @@ const VIDEO_PROMPT_LABELS = [
     "连续性锁",
     "针对性约束",
     "约束",
+    "参考图职责",
 ] as const;
 
 /** Normalize known prompt fields to one line per field without rewriting field content. */

@@ -258,7 +258,10 @@ export function generateDramaVideoPrompt(input: { project: DramaProject; episode
             props: input.project.props.filter((item) => propIds.has(item.id)),
             clues: input.project.clues.filter((item) => clueIds.has(item.id)),
             shots: [shot],
-            referenceMaterials: input.referenceMaterials,
+            referenceMaterials: input.referenceMaterials.map((reference) => {
+                const item = reference && typeof reference === "object" ? (reference as Record<string, unknown>) : {};
+                return { role: typeof item.role === "string" ? item.role : "", purpose: typeof item.purpose === "string" ? item.purpose : "", sequenceIndex: typeof item.sequenceIndex === "number" ? item.sequenceIndex : undefined };
+            }),
         }),
     });
 }
@@ -366,12 +369,37 @@ export function updateDramaShotMedia(projectId: string, episodeId: string, shotI
     }).then((data) => data.project);
 }
 
-export function updateDramaShotPrompt(projectId: string, episodeId: string, shotId: string, executionVideoPrompt?: string, imagePrompt?: string) {
+export function updateDramaShotPrompt(
+    projectId: string,
+    episodeId: string,
+    shotId: string,
+    executionVideoPrompt?: string,
+    imagePrompt?: string,
+    options?: { executionVideoPromptOrigin?: "manual" | "ai" },
+) {
     return request<{ project: DramaProject }>(`/api/drama/projects/${encodeURIComponent(projectId)}/episodes/${encodeURIComponent(episodeId)}/shots/${encodeURIComponent(shotId)}/prompt`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...(executionVideoPrompt ? { executionVideoPrompt } : {}), ...(imagePrompt ? { imagePrompt } : {}) }),
+        body: JSON.stringify({ ...(executionVideoPrompt ? { executionVideoPrompt, ...(options?.executionVideoPromptOrigin ? { executionVideoPromptOrigin: options.executionVideoPromptOrigin } : {}) } : {}), ...(imagePrompt ? { imagePrompt } : {}) }),
     }).then((data) => data.project);
+}
+
+export function updateDramaShotPromptPatch(
+    projectId: string,
+    episodeId: string,
+    shotId: string,
+    executionVideoPrompt?: string,
+    imagePrompt?: string,
+    options?: { executionVideoPromptOrigin?: "manual" | "ai" },
+) {
+    return request<{ projectId: string; episodeId: string; shotId: string; updatedAt: string; shot: DramaShot }>(
+        `/api/drama/projects/${encodeURIComponent(projectId)}/episodes/${encodeURIComponent(episodeId)}/shots/${encodeURIComponent(shotId)}/prompt?response=shot`,
+        {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ...(executionVideoPrompt ? { executionVideoPrompt, ...(options?.executionVideoPromptOrigin ? { executionVideoPromptOrigin: options.executionVideoPromptOrigin } : {}) } : {}), ...(imagePrompt ? { imagePrompt } : {}) }),
+        },
+    );
 }
 
 export function updateDramaShotImagePrompt(projectId: string, episodeId: string, shotId: string, imagePrompt: string) {

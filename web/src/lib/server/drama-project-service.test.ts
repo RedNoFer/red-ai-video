@@ -114,6 +114,7 @@ import {
     restoreDramaProjectVersionForUser,
     updateDramaProductionRunForUser,
     updateDramaProjectForUser,
+    updateDramaShotPromptForUser,
     updateDramaStoryboardFramePromptForUser,
     validateDramaReferenceSelections,
     saveDramaEpisodeSettingsForUser,
@@ -198,6 +199,13 @@ describe("drama project service updates", () => {
             expect.objectContaining({ episodes: [expect.objectContaining({ shots: [expect.objectContaining({ id: "shot-one", generationStatus: "error", generationError: "video generation timed out", generationTaskId: "video-task-one" })] })] }),
             current.updatedAt,
         );
+    });
+
+    it("maps a completed supplier video result to the production step output", () => {
+        const step = { id: "video-shot-one", type: "video", shotId: "shot-one", status: "running", dependsOn: [] } as never;
+        const task = { id: "video-task-one", userId: "user-one", status: "success", result: { url: "/api/reference-assets/provider-result.mp4", remoteUrl: "https://provider.example/result.mp4" } } as never;
+
+        expect(reconcileDramaVideoStepTask(step, task)).toMatchObject({ status: "success", outputUrls: ["/api/reference-assets/provider-result.mp4"], outputRemoteUrls: ["https://provider.example/result.mp4"] });
     });
 
     it("uses a signed local reference copy when the provider URL is no longer readable", async () => {
@@ -476,6 +484,34 @@ describe("drama project service updates", () => {
         expect(shot.storyboardFrames).toEqual([expect.objectContaining({ id: "f1", status: "success", mediaUrl: "/api/f1.png" }), expect.objectContaining({ id: "f2", status: "stale", mediaUrl: "/api/f2.png", continuityStatus: "stale" })]);
         expect(mocks.updateDramaProject.mock.calls.at(-1)?.[0]).toBe("user-one");
         expect((mocks.updateDramaProject.mock.calls.at(-1)?.[1] as DramaProject).episodes[0].shots[0].framePlan?.frames[1].supplierPrompt).toContain("用户编辑后的画面");
+    });
+
+    it("persists a manually edited video prompt without rewriting the whole project", async () => {
+        const current = project("2026-07-19T08:00:00.000Z", "项目");
+        current.episodes[0].shots = [
+            {
+                id: "shot-one",
+                title: "镜头",
+                description: "Karin握住断剑",
+                sourceText: "Karin握住断剑",
+                characterIds: [],
+                propIds: [],
+                clueIds: [],
+                imagePrompt: "静态画面",
+                videoPrompt: "原始动态",
+                cameraMotion: "固定机位",
+                duration: 5,
+                storyboardFrameMode: "single",
+            } as never,
+        ];
+        mocks.getDramaProject.mockResolvedValue(current);
+
+        const saved = await updateDramaShotPromptForUser("user-one", current.id, "episode-one", "shot-one", { executionVideoPrompt: "动态意图：Karin握住断剑。", executionVideoPromptOrigin: "manual" });
+
+        expect(saved.episodes[0].shots[0]).toMatchObject({ executionVideoPrompt: "动态意图：Karin握住断剑。", fieldOrigins: { executionVideoPrompt: "manual" } });
+        expect(mocks.queryStoredGenerationTasks).not.toHaveBeenCalled();
+        expect(mocks.getStoredGenerationTask).not.toHaveBeenCalled();
+        expect(mocks.updateDramaProject).toHaveBeenCalledWith("user-one", expect.objectContaining({ episodes: [expect.objectContaining({ shots: [expect.objectContaining({ executionVideoPrompt: "动态意图：Karin握住断剑。" })] })] }), current.updatedAt);
     });
 
     it("persists a missing frame placeholder before confirming its visual run", async () => {
@@ -2066,6 +2102,7 @@ describe("drama visual reference URL resolution", () => {
 
         expect(prompt).toBe("动态意图：Karin停住");
     });
+
 
     it("preserves the local mirror when a provider CDN URL is available", () => {
         vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://app.example.com");

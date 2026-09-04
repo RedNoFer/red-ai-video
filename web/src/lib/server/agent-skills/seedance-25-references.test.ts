@@ -26,4 +26,12 @@ describe("Seedance 2.5 video reference routing", () => {
         expect(instructions).toContain("附加参考：失败诊断");
         expect(resolveSeedance25DirectorInstructions({ prompt: "产品缓慢旋转", durationSeconds: 15 }).instructions).not.toContain("附加参考：真人表演与对白");
     });
+
+    it("delegates ordered image aliases to the Skill instead of application prompt rewriting", () => {
+        const instructions = resolveSeedance25DirectorInstructions({ durationSeconds: 15 }).instructions;
+
+        expect(instructions).toContain("referenceMaterials");
+        expect(instructions).toContain("应用代码不得代写 Agent 的公开提示词正文");
+        expect(instructions).toContain("不得输出 `A线`、`B线`");
+    });
 });

@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { VideoProviderRequestSnapshot } from "@/lib/server/video-provider-request-snapshot";
 
 import { createStoredGenerationTask, getStoredGenerationTask, mutateStoredGenerationTask, touchStoredGenerationTask, transitionStoredGenerationTask, type GenerationTaskContext } from "@/lib/server/generation-task-store";
 import type { SystemGenerationChannelConfig } from "@/lib/server/generation-channel";
@@ -17,7 +18,7 @@ export type VideoTask = GenerationTaskContext & {
     createdAt: number;
     updatedAt: number;
     config: SystemGenerationChannelConfig;
-    upstream: { id: string; provider: "openai" | "seedance" | "generation"; model: string; pollPath?: string; queryPath?: string; resultUrl?: string; pointsCost?: number; pointsUnits?: number; pointsRecordId?: string; refunded?: boolean };
+    upstream: { id: string; provider: "openai" | "seedance" | "generation"; model: string; pollPath?: string; queryPath?: string; resultUrl?: string; pointsCost?: number; pointsUnits?: number; pointsRecordId?: string; refunded?: boolean; requestSnapshot?: VideoProviderRequestSnapshot };
     requestedDurationSeconds?: number;
     source?: string;
     prompt?: string;

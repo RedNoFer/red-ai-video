@@ -14,6 +14,7 @@ vi.mock("@/stores/use-config-store", () => ({
 
 import type { AiConfig } from "@/stores/use-config-store";
 import type { ReferenceImage } from "@/types/image";
+import type { ReferenceAudio, ReferenceVideo } from "@/types/media";
 import { cancelServerVideoGenerationTask, createServerVideoGenerationTask, createVideoGenerationTask, pollVideoGenerationTask } from "./video";
 import { createUpstreamVideoGenerationTask } from "./video-core";
 import { buildCompatibleVideoPayloadVariants, compatibleVideoCreatePaths, compatibleVideoPollPaths, isGlobalAiOpcVideoConfig } from "./video-providers";
@@ -104,6 +105,20 @@ describe("video API service", () => {
         expect(body.references).toEqual([
             { type: "image", role: "first_frame", url: "https://cdn.example.com/first.png" },
             { type: "image", role: "last_frame", url: "https://cdn.example.com/last.png" },
+        ]);
+    });
+
+    it("forwards media reference durations to the server contract", async () => {
+        const fetchMock = vi.fn().mockResolvedValue(json({ task: { id: "video-task-durations", model: "video-v1" } }));
+        vi.stubGlobal("fetch", fetchMock);
+        const video = { id: "video-reference", name: "参考视频", type: "video/mp4", url: "https://cdn.example.com/reference.mp4", durationMs: 8_000 } satisfies ReferenceVideo;
+        const audio = { id: "audio-reference", name: "参考音频", type: "audio/mpeg", url: "https://cdn.example.com/reference.mp3", durationMs: 7_000 } satisfies ReferenceAudio;
+
+        await createServerVideoGenerationTask(config, "让画面与声音自然衔接", [], [video], [audio]);
+
+        expect(JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body)).references).toEqual([
+            { type: "video", role: "reference", url: "https://cdn.example.com/reference.mp4", durationMs: 8_000 },
+            { type: "audio", role: "reference", url: "https://cdn.example.com/reference.mp3", durationMs: 7_000 },
         ]);
     });
 

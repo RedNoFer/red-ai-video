@@ -1068,7 +1068,7 @@ export const dramaVisualTool = {
 
 export const dramaVideoPromptTool = {
     name: "generate_drama_video_prompts",
-    description: "根据已经生成并验收的顺序帧、固定资产和连续性信息，为每个镜头生成按固定字段逐行组织、可直接提交给视频供应商的图生视频提示词",
+    description: "根据已经生成并验收的顺序帧、固定资产和连续性信息，执行当前 Seedance 2.5 导演 Skill，为每个镜头生成可直接提交给视频供应商的公开图生视频提示词",
     parameters: {
         type: "object",
         additionalProperties: false,
@@ -1085,7 +1085,7 @@ export const dramaVideoPromptTool = {
                         videoPrompt: {
                             type: "string",
                             description:
-                                "只写当前镜头的图生视频镜头级动态摘要；使用动态意图、单一主运镜、环境压力与视觉母题、声音意图、结束画面、连续性锁和针对性约束等固定字段，每个非空字段独立一行。具体动作、触发、每个连续时间段的起点、可见衔接和终点必须写入 framePlan.frames.actionPrompt 与 imagePrompt，由运行时按时间顺序组装；每段动作都要维持可行的身体支撑、接触关系、通道和多人相对方位，不能让人物穿过场景结构或处于不合理坐姿。不要把同一动作同时详细写在 videoPrompt 和时间段中，不重复项目档案、URL、画幅、时长、参考图清单或内部说明",
+                                "只返回执行当前 Seedance 2.5 导演 Skill 后的公开 videoPrompt 字符串；有 referenceMaterials 时由 Skill 生成素材绑定和对应别名。具体动作、触发、每个连续时间段的起点、可见衔接和终点必须写入 framePlan.frames.actionPrompt 与 imagePrompt，由运行时按时间顺序组装；每段动作都要维持可行的身体支撑、接触关系、通道和多人相对方位，不能让人物穿过场景结构或处于不合理坐姿。不要把同一动作同时详细写在 videoPrompt 和时间段中，不重复项目档案、URL、画幅、时长或内部说明",
                         },
                     },
                 },

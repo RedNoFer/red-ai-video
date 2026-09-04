@@ -197,7 +197,7 @@ describe("video task upstream reconciliation", () => {
                 method: "POST",
                 headers: { "content-type": "application/json" },
                 body: JSON.stringify({
-                    model: "alibaba/wan-3.0",
+                    model: "videos-mini",
                     prompt: "生成一段协议测试视频",
                     duration: 5,
                     ratio: "16:9",
@@ -216,10 +216,10 @@ describe("video task upstream reconciliation", () => {
                     baseUrl: origin,
                     apiKey: "system",
                     apiFormat: "openai",
-                    model: "alibaba/wan-3.0",
+                    model: "videos-mini",
                     advancedConfig: { protocol: "newapi-video", queryPath: "/v1/videos/:task_id", statusField: "status", resultField: "video_url / data.url / url" } as NonNullable<VideoTask["config"]["advancedConfig"]>,
                 },
-                upstream: { id: created.task_id, provider: "generation", model: "alibaba/wan-3.0", pollPath: "/v1/videos", pointsCost: 1, pointsUnits: 1, pointsRecordId: "points-newapi-video-fixture" },
+                upstream: { id: created.task_id, provider: "generation", model: "videos-mini", pollPath: "/v1/videos", pointsCost: 1, pointsUnits: 1, pointsRecordId: "points-newapi-video-fixture" },
             });
             const completed = { ...task, status: "success" as const, result: { url: "/api/reference-assets/result.mp4", mimeType: "video/mp4", durationMs: 5_000 } };
             mocks.claim.mockResolvedValue(task);
@@ -230,7 +230,7 @@ describe("video task upstream reconciliation", () => {
             await expect(refreshVideoTaskFromUpstream(task, "", "")).resolves.toEqual(completed);
             expect(fixture.requests.map((request) => request.path)).toEqual(["/v1/videos", `/v1/videos/${created.task_id}`]);
             expect(JSON.parse(fixture.requests[0]?.body.toString("utf8") || "{}")).toMatchObject({
-                model: "alibaba/wan-3.0",
+                model: "videos-mini",
                 duration: 5,
                 ratio: "16:9",
                 resolution: "720p",
@@ -366,10 +366,10 @@ describe("video task upstream reconciliation", () => {
         const task = videoTask({
             config: {
                 ...videoTask().config,
-                model: "seedance-2.5",
+                model: "videos-mini",
                 advancedConfig: { protocol: "newapi-video", queryPath: "/v1/videos/:task_id", statusField: "status", resultField: "video_url / data.url / url" } as NonNullable<VideoTask["config"]["advancedConfig"]>,
             },
-            upstream: { ...videoTask().upstream, model: "seedance-2.5", pollPath: "/v1/videos" },
+            upstream: { ...videoTask().upstream, model: "videos-mini", pollPath: "/v1/videos" },
         });
         mocks.fetchInternalApi.mockResolvedValue(json({ task_id: task.upstream.id, status: "completed", data: { url: "https://cdn.example.com/result.mp4" } }));
 
@@ -379,6 +379,19 @@ describe("video task upstream reconciliation", () => {
             resultUrl: "https://cdn.example.com/result.mp4",
         });
         expect(mocks.fetchInternalApi).toHaveBeenCalledWith(`http://localhost/api/ai/system/channel/v1/videos/${task.upstream.id}`, expect.objectContaining({ cache: "no-store" }));
+    });
+
+    it("keeps the New API error code with its failure message", async () => {
+        const task = videoTask({
+            config: {
+                ...videoTask().config,
+                advancedConfig: { protocol: "newapi-video", queryPath: "/v1/videos/:task_id", statusField: "status", resultField: "video_url / data.url / url" } as NonNullable<VideoTask["config"]["advancedConfig"]>,
+            },
+            upstream: { ...videoTask().upstream, pollPath: "/v1/videos" },
+        });
+        mocks.fetchInternalApi.mockResolvedValue(json({ task_id: task.upstream.id, status: "failed", error: { message: "素材格式不被支持", code: "unsupported_material" } }));
+
+        await expect(queryVideoTaskUpstream(task, "http://localhost", "session=test")).resolves.toEqual({ state: "failed", status: "failed", error: "素材格式不被支持（unsupported_material）" });
     });
 
     it("does not query upstream again before the polling interval elapses", async () => {

@@ -1,5 +1,6 @@
 import type { DramaProductionPackageV1 } from "@/lib/drama-project-contract";
 import { formatPromptFieldLines } from "@/lib/drama-frame-sequence";
+import { dramaFrameVisibleState } from "@/lib/drama-prompt-compiler";
 
 export function serializeDramaProductionPackageJson(value: DramaProductionPackageV1) {
     return `${JSON.stringify(withDeterministicVideoSection(value), null, 2)}\n`;
@@ -83,14 +84,17 @@ function videoPromptSection(value: DramaProductionPackageV1) {
                 const promptLines = videoPrompt.includes("动态意图：") || videoPrompt.includes("动态意图:") ? videoPrompt.split("\n").filter(Boolean) : [`动态意图：${videoPrompt || shot.description}`];
                 const timelineLines = frames.flatMap((frame, index) => {
                     const previous = frames[index - 1];
-                    const start = previous ? frameVisibleState(previous) : shot.continuity?.actionStart || shot.description;
-                    const end = frameVisibleState(frame) || frame.actionPrompt;
+                    const start = previous ? dramaFrameVisibleState(previous.imagePrompt, previous.actionPrompt) : shot.continuity?.actionStart || shot.description;
+                    const end = dramaFrameVisibleState(frame.imagePrompt, frame.actionPrompt) || frame.actionPrompt;
                     const continuity = shot.continuity?.continuityNotes || "角色身份、服装、道具归属、空间轴线与主光方向保持连续";
+                    const transition = previous
+                        ? `承接上一段终点“${start}”，过渡到当前帧“${end}”；${continuity}`
+                        : `从镜头入口“${start}”进入当前帧“${end}”；${continuity}`;
                     return [
                         `${promptCode}-F${String(frame.sequenceIndex).padStart(2, "0")}｜${frame.startSecond}-${frame.endSecond}s`,
                         `起点：${start}`,
                         `动作与触发：${frame.actionPrompt}`,
-                        `可见衔接：${previous ? "承接上一段终点" : "从镜头入口直接承接"}；${continuity}；只执行本段新增的可见变化`,
+                        `可见衔接：${transition}`,
                         `终点：${end}`,
                     ];
                 });
@@ -116,11 +120,6 @@ function videoPromptSection(value: DramaProductionPackageV1) {
             }),
         )
         .join("\n\n");
-}
-
-function frameVisibleState(frame: DramaProductionPackageV1["episodes"][number]["shots"][number]["framePlan"]["frames"][number]) {
-    const imagePrompt = frame.imagePrompt || "";
-    return imagePrompt.match(/(?:^|[\n；])\s*可见状态[：:]\s*([\s\S]*?)(?=(?:[\n；]\s*(?:可见表演状态|景别|机位与构图|站位与视线|三层空间|光色与风格|负面约束)[：:]|$))/u)?.[1]?.trim().replace(/[；。]+$/u, "") || imagePrompt.match(/静态关键帧[：:]\s*([^\n；。]+)/u)?.[1]?.trim() || frame.actionPrompt;
 }
 
 function cleanPackageVideoBrief(value: string) {

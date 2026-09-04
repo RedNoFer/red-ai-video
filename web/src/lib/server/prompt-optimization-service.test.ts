@@ -80,6 +80,30 @@ describe("prompt optimization service", () => {
         expect(systemMessage).toContain("只返回优化后的公开提示词");
     });
 
+    it("uses the dedicated drama asset skill and forces one single-subject candidate", async () => {
+        vi.mocked(requestStructuredText).mockResolvedValue({
+            arguments: JSON.stringify({ optimizedPrompt: "主体与资产类型：角色；身份/结构锚点：固定五官与黑色短发；构图与画幅：单人全身，9:16。" }),
+            headers: new Headers(),
+            protocol: "chat",
+            elapsedMs: 10,
+        });
+
+        await optimizeCreativePrompt({
+            origin: "http://localhost:3000",
+            cookie: "session=1",
+            userId: "user-one",
+            requestId: "asset-request",
+            prompt: "【资产类型】角色\n【当前提示词】\n旧版多视角设定板，黑色短发角色",
+            mode: "drama-asset",
+        });
+
+        const systemMessage = vi.mocked(requestStructuredText).mock.calls[0]?.[0].messages.find((message) => message.role === "system")?.content || "";
+        expect(systemMessage).toContain("短剧资产图片导演");
+        expect(systemMessage).toContain("只生成一个完整可识别的单人角色");
+        expect(systemMessage).toContain("绝对禁止多角度、三视图");
+        expect(systemMessage).toContain("主体与资产类型");
+    });
+
     it("optimizes video prompts around visible action beats", async () => {
         vi.mocked(requestStructuredText).mockResolvedValue({ arguments: JSON.stringify({ optimizedPrompt: "0-2秒建立黑湖，2-4秒镜头推进，4-5秒Karin收紧握剑，5-6秒断口冷光匹配切入马车。" }), headers: new Headers(), protocol: "chat", elapsedMs: 10 });
 
@@ -92,6 +116,22 @@ describe("prompt optimization service", () => {
         expect(systemMessage).toContain("每个时间段都必须让姿态");
         expect(systemMessage).toContain("减少“保持构图、主体稳定、情绪不变”");
         expect(systemMessage).toContain("模式：30 秒精确时间轴");
+    });
+
+    it("removes narrative planning labels from an optimized video prompt", async () => {
+        vi.mocked(requestStructuredText).mockResolvedValue({
+            arguments: JSON.stringify({ optimizedPrompt: "动态意图：B线钩子中，Karin握住完整断剑，断口从掌心裂开。\n结束画面：Karin惊醒后仍握住断剑。" }),
+            headers: new Headers(),
+            protocol: "chat",
+            elapsedMs: 10,
+        });
+
+        const result = await optimizeCreativePrompt({ origin: "http://localhost:3000", cookie: "session=1", userId: "user-one", requestId: "video-label-request", prompt: "Karin握住断剑后断口裂开", mode: "video" });
+
+        const systemMessage = vi.mocked(requestStructuredText).mock.calls[0]?.[0].messages.find((message) => message.role === "system")?.content || "";
+        expect(systemMessage).toContain("不得输出 A线、B线、主线、副线、钩子");
+        expect(result).toContain("Karin握住完整断剑");
+        expect(result).not.toMatch(/[AB]线|钩子/u);
     });
 
     it("refunds an invalid charged response instead of accepting hidden or empty output", async () => {

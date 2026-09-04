@@ -155,11 +155,21 @@ export async function createServerVideoGenerationTask(
         }),
         ...videoReferences.map(async (item) => {
             const remoteUrl = item.remoteUrl || item.url;
-            return { type: "video", role: "reference", url: isPublicMediaUrl(remoteUrl) ? remoteUrl : await publishReferenceMedia("video", await referenceBlobDataUrl(item.storageKey, item.url)) };
+            return {
+                type: "video",
+                role: "reference",
+                url: isPublicMediaUrl(remoteUrl) ? remoteUrl : await publishReferenceMedia("video", await referenceBlobDataUrl(item.storageKey, item.url)),
+                ...(item.durationMs ? { durationMs: item.durationMs } : {}),
+            };
         }),
         ...audioReferences.map(async (item) => {
             const remoteUrl = item.remoteUrl || item.url;
-            return { type: "audio", role: "reference", url: isPublicMediaUrl(remoteUrl) ? remoteUrl : await publishReferenceMedia("audio", await referenceBlobDataUrl(item.storageKey, item.url)) };
+            return {
+                type: "audio",
+                role: "reference",
+                url: isPublicMediaUrl(remoteUrl) ? remoteUrl : await publishReferenceMedia("audio", await referenceBlobDataUrl(item.storageKey, item.url)),
+                ...(item.durationMs ? { durationMs: item.durationMs } : {}),
+            };
         }),
     ]);
     const response = await fetch("/api/video-generation-tasks", {

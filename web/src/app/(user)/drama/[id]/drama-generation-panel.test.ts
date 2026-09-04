@@ -33,16 +33,28 @@ describe("Drama generation production workspace", () => {
         expect(source).toContain("data-drama-shot-task");
         expect(source).toContain("data-drama-shot-execution-details");
         expect(source).toContain("展开详情");
-        expect(source).toContain("实际执行提示词");
+        expect(source).toContain("用户/剧本原始提示词（仅记录）");
+        expect(source).toContain("视频执行提示词（当前标准）");
+        expect(source).toContain("generateDramaVideoPrompt({ project, episode");
+        expect(source).toContain("referenceMaterials");
+        expect(source).toContain("提示词已优化，请确认后保存");
+        expect(source).toContain("提示词优化");
+        expect(source).toContain('label: "提示词优化"');
+        expect(source).toContain('sm:flex-row sm:items-start sm:justify-between');
+        expect(source).toContain('shrink-0 flex-wrap items-center justify-end gap-1.5 sm:ml-3');
+        expect(source).toContain("onOptimizePrompt");
+        expect(source).toContain("提示词已优化并保存");
+        expect(source).not.toContain('label: "Agent 生成提示词"');
+        expect(source).toContain("generateDramaVideoPrompt");
+        expect(source).not.toContain("已提交供应商的执行快照");
+        expect(source).not.toContain('["视频执行提示词（当前标准）", supplierVideoPrompt]');
+        expect(source).toContain("上方原始提示词只用于追溯；生成与重试以此执行版为准");
         expect(source).toContain("实际引用资产");
         expect(source).toContain("data-drama-shot-reference-assets");
         expect(source).toContain("引用资产图片");
         expect(source).toContain("data-drama-shot-supplier-prompt");
         expect(source).toContain("data-drama-shot-boundary-frames");
-        expect(source).toContain("视频供应商提示词");
-        expect(source).toContain("Agent 生成提示词");
         expect(source).toContain("视频提示词已保存");
-        expect(source).toContain("请先按开始到结束顺序生成并验收全部顺序帧");
         expect(source).toContain("shotReferenceAssets");
         expect(source).toContain("[content-visibility:visible]");
         expect(source).toContain("sm:[content-visibility:auto]");
@@ -54,6 +66,25 @@ describe("Drama generation production workspace", () => {
         expect(source).toContain("videoPromptRuns");
         expect(source).toContain("beginVideoPrompt");
         expect(source).toContain("finishVideoPrompt");
+        const executionPromptStart = source.indexOf("function ShotExecutionDetails");
+        const executionPromptEnd = source.indexOf("function ProductionPromptPreview", executionPromptStart);
+        const executionPrompt = source.slice(executionPromptStart, executionPromptEnd);
+        expect(executionPrompt).toContain('updateDramaShotPromptPatch(project.id, episode.id, shot.id, prompt, undefined, { executionVideoPromptOrigin: "manual" })');
+        expect(executionPrompt).toContain("videoPromptDraft.trim() === videoPromptOriginal.trim()");
+        expect(executionPrompt).not.toContain("saveProjectNow(project.id)");
+        expect(executionPrompt).not.toContain("updateShot(project.id, episode.id, shot.id");
+    });
+
+    it("cancels video tasks through their server action instead of a writable status field", async () => {
+        const source = await readFile(resolve(process.cwd(), "src/app/(user)/drama/[id]/drama-generation-panel.tsx"), "utf8");
+
+        const cancelStart = source.indexOf("Array.from(videoTaskIds");
+        expect(cancelStart).toBeGreaterThanOrEqual(0);
+        const cancelBlock = source.slice(cancelStart, source.indexOf("const downloadSubtitles", cancelStart));
+        expect(cancelBlock).toContain('JSON.stringify({ action: "cancel" })');
+        expect(cancelBlock).not.toContain('JSON.stringify({ status: "cancelled" })');
+        expect(source).toContain("productionRun?.steps.filter((step) => step.shotId === shot.id && step.type === \"video\")");
+        expect(source).toContain("await loadProject(project.id, true)");
     });
 
     it("groups shot-level AI actions under one Agent creation entry", async () => {
@@ -62,7 +93,7 @@ describe("Drama generation production workspace", () => {
         expect(source).toContain("Agent 创作");
         expect(source).toContain("当前镜头 AI 操作");
         expect(source).toContain('key: "complete-review"');
-        expect(source).toContain('key: "generate-prompt"');
+        expect(source).toContain('key: "optimize-prompt"');
         expect(source).toContain('key: "open-agent"');
         expect(source).toContain('label: "打开 Agent 对话"');
         expect(source).not.toContain(">交给创作 Agent<");
@@ -123,11 +154,11 @@ describe("Drama generation production workspace", () => {
     it("does not save the full oversized project before confirming production", async () => {
         const source = await readFile(resolve(process.cwd(), "src/app/(user)/drama/[id]/drama-generation-panel.tsx"), "utf8");
         const lockStart = source.indexOf("const lockProduction = async");
-        const lockEnd = source.indexOf("const generateVideoPrompt", lockStart);
+        const lockEnd = source.indexOf("const optimizeVideoPrompt", lockStart);
         const lockProduction = source.slice(lockStart, lockEnd);
 
         expect(lockProduction).not.toContain("saveProjectNow(project.id)");
-        expect(lockProduction).toContain('updateDramaShotPrompt(project.id, episode.id, shotId, prompts.videoPrompt || "", prompts.imagePrompt)');
+        expect(lockProduction).toContain('updateDramaShotPromptPatch(project.id, episode.id, shotId, prompts.videoPrompt || "", prompts.imagePrompt)');
         expect(lockProduction).toContain("createDramaProductionRun(project.id, episode.id, undefined, check");
     });
 

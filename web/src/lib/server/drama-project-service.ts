@@ -1828,7 +1828,7 @@ async function syncDramaProductionRun(userId: string, project: DramaProject, run
                     nextProject = updateDramaShotInProject(nextProject, run.episodeId, shot.id, {
                         generationStatus: "success",
                         generationRunId: run.id,
-                        generationTaskId: undefined,
+                        generationTaskId: videoSteps.length === 1 ? videoSteps[0].taskId : undefined,
                         generationError: undefined,
                         videoUrl,
                         frameEvidence: supersedeFrameEvidence(shot.frameEvidence, "当前镜头视频已重新生成"),
@@ -1976,7 +1976,7 @@ async function dispatchReadyDramaProductionSteps(userId: string, project: DramaP
             nextProject = updateDramaShotInProject(nextProject, run.episodeId, step.shotId, {
                 generationStatus: nextStep.status === "running" ? "running" : nextStep.status === "ready" ? "queued" : nextStep.status === "failed" ? "error" : "needs_review",
                 generationRunId: run.id,
-                generationTaskId: undefined,
+                generationTaskId: nextStep.taskId,
                 generationError: nextStep.error,
             });
         await updateDramaProductionRun(userId, current);
@@ -2240,11 +2240,15 @@ export async function updateDramaShotMediaForUser(userId: string, projectId: str
 }
 
 export async function updateDramaShotPromptForUser(userId: string, projectId: string, episodeIdValue: string, shotIdValue: string, value: unknown) {
-    const project = await getDramaProjectForUser(userId, projectId);
+    // A prompt edit only touches one shot. Skip the general project recovery
+    // pipeline here; GET/normal project saves can still perform those repairs.
+    const project = await getDramaProject(cleanText(projectId), userId);
+    if (!project) throw new DramaProjectServiceError("短剧项目不存在", 404);
     const episodeId = cleanText(episodeIdValue);
     const shotId = cleanText(shotIdValue);
     const input = object(value);
     const videoPrompt = cleanText(input.executionVideoPrompt);
+    const videoPromptOrigin: DramaFieldOrigin = input.executionVideoPromptOrigin === "manual" ? "manual" : "ai";
     const imagePrompt = cleanText(input.imagePrompt);
     if (!videoPrompt && !imagePrompt) throw new DramaProjectServiceError("提示词不能为空", 400);
     let matched = false;
@@ -2259,10 +2263,16 @@ export async function updateDramaShotPromptForUser(userId: string, projectId: st
                       shots: episode.shots.map((shot) => {
                           if (shot.id !== shotId) return shot;
                           matched = true;
+                          const fieldOrigins = {
+                              ...(shot.fieldOrigins || {}),
+                              ...(videoPrompt ? { executionVideoPrompt: videoPromptOrigin } : {}),
+                              ...(imagePrompt ? { imagePrompt: "ai" as const, executionImagePrompt: "ai" as const } : {}),
+                          };
                           return {
                               ...shot,
-                              ...(videoPrompt ? { executionVideoPrompt: videoPrompt, fieldOrigins: { ...(shot.fieldOrigins || {}), executionVideoPrompt: "ai" } } : {}),
-                              ...(imagePrompt ? { imagePrompt: formatPromptFieldLines(imagePrompt, "static"), executionImagePrompt: undefined, fieldOrigins: { ...(shot.fieldOrigins || {}), imagePrompt: "ai", executionImagePrompt: "ai" } } : {}),
+                              ...(videoPrompt ? { executionVideoPrompt: videoPrompt } : {}),
+                              ...(imagePrompt ? { imagePrompt: formatPromptFieldLines(imagePrompt, "static"), executionImagePrompt: undefined } : {}),
+                              fieldOrigins,
                           };
                       }),
                   },

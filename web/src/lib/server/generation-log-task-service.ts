@@ -225,6 +225,7 @@ function recordStandaloneGenerationTaskLog(input: GenerationTaskLogResultInput) 
         successCount: input.status === "success" ? Math.max(1, input.assets?.length || (input.asset?.url ? 1 : 0)) : 0,
         failCount: input.status === "failed" ? 1 : 0,
         assets: input.assets?.length ? input.assets : input.asset?.url ? [input.asset] : [],
+        requestSnapshot: input.requestSnapshot,
         error: input.error,
         createdAt: input.createdAt,
         completedAt: Date.now(),

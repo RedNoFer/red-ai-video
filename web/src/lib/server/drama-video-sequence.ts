@@ -10,6 +10,7 @@ import { fetchSafeOutbound } from "@/lib/server/safe-outbound-fetch";
 
 export async function composeDramaVideoSegments(input: { clips: Array<{ url: string; duration: number }>; ratio: string; origin: string; cookie: string; ownerUserId: string; projectId: string; runId: string; shotId: string; title: string }) {
     if (!input.clips.length) throw new Error("没有可拼接的视频子段");
+    if (input.clips.length === 1) return input.clips[0].url;
     if (!(await ffmpegAvailable())) throw new Error("当前服务器未安装 FFmpeg，无法拼接视频子段");
     const workdir = await mkdtemp(join(tmpdir(), "vozeb-pro-drama-shot-"));
     try {

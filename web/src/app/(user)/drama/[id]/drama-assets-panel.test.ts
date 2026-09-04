@@ -93,6 +93,9 @@ describe("drama asset image results", () => {
         expect(editor).toContain("从来源选择");
         expect(editor).toContain("上传候选");
         expect(editor).toContain("生成候选");
+        expect(editor).toContain("提示词优化");
+        expect(editor).toContain("optimizedAssetPrompt");
+        expect(editor).toContain("生成候选将使用");
         expect(editor).not.toContain("Voice Design");
         expect(editor).not.toContain("声音设计提示词");
         expect(editor).toContain('mode: "clone"');

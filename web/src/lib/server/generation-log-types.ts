@@ -86,6 +86,7 @@ export type GenerationTaskLogResultInput = {
     taskPollPath?: string;
     serverTaskId?: string;
     createdAt: string | number;
+    requestSnapshot?: GenerationLogRequestSnapshot;
 };
 
 export type GenerationLogListOptions = {

@@ -1,4 +1,5 @@
 import { SEEDANCE_25_DIRECTOR_SKILL } from "./seedance-25";
+import { DRAMA_ASSET_IMAGE_SKILL } from "@/lib/drama-image-skill";
 
 export { SEEDANCE_25_DIRECTOR_SKILL } from "./seedance-25";
 
@@ -133,4 +134,4 @@ export const SEEDANCE_DIRECTOR_SKILL = {
     instructions: `按 Seedance 2.0 多模态短剧工作流执行。把长故事视为有入口、出口和连续性边界的镜头序列，而不是互不相关的提示词；先锁定镜头职责、时长、入口状态、出口状态、屏幕方向、轴线和每张参考图的唯一用途。每个镜头先从场景资产推演实际可用的座位、长凳、地面、通道、门窗、隔断和遮挡，再给每个实际出镜角色确定同一参照系下的位置、朝向、视线、支撑/接触对象与相对关系；坐姿必须落在可见座位或其他合理支撑面，封闭车厢内惊醒的人应坐在明确一侧长凳或座位而不是中央过道。多人必须写明彼此左右/前后和视线关系；没有原文或资产依据的人物不得补入画面。项目资产表中的角色名是正式业务事实，不得因为与 reference、ref 等英文缩写相似而改名、删除或当作内部占位符；已登记但本集/本镜不出镜的角色仍须保留在资产档案，并明确不得进入本集参考图请求。当前镜头只把实际出镜角色写入 characterCodes 和 referenceManifest；供应商提示词表达不出镜角色时，同时写角色名的不出镜约束和可观察画面限制，不得只写含义不清的“无可辨识的角色名”。参考图按角色、场景、道具、构图、首帧、尾帧或关键帧分工，@图片/@视频/@音频只表达用途，实际编号、顺序和 URL 由服务端绑定，提示词不得重复伪造参考清单。视频提示词按时间顺序写静态锚点、起始动作、触发、主体动作、次级反应、一个主运镜、环境压力、声音意图和明确结束画面；人物情绪必须转成起始/中段/结束可观察的眉眼、嘴角、下颌、视线、呼吸、手部或身体变化，禁止只写“电影感”“表情自然”“情绪丰富”等抽象词。只有上一镜当前视频版本且已人工验收的实际尾帧可以承担下一镜 first_frame；不得复制组内首镜起始状态，也不得引用旧分镜、旧任务或失效素材。用户明确的尺寸、比例、质量、时长和参考模式优先，不能擅自改选；每次返修只改变一个已定位变量，并保留已验收状态与引用。`,
 } as const;
 
-export const DEFAULT_CREATIVE_SHORTCUT_SKILLS = [CHARACTER_DESIGN_SKILL, IMAGE_MOTION_SKILL, DRAMA_PLANNING_SKILL, SEEDANCE_DIRECTOR_SKILL, SEEDANCE_25_DIRECTOR_SKILL] as const;
+export const DEFAULT_CREATIVE_SHORTCUT_SKILLS = [CHARACTER_DESIGN_SKILL, IMAGE_MOTION_SKILL, DRAMA_PLANNING_SKILL, SEEDANCE_DIRECTOR_SKILL, SEEDANCE_25_DIRECTOR_SKILL, DRAMA_ASSET_IMAGE_SKILL] as const;

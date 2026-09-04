@@ -11,6 +11,7 @@ import { approvedAssetReference } from "@/lib/drama-asset-baseline";
 import type { DramaAssetProfile, DramaAssetReference, DramaAssetRefinementMessage, DramaAssetRefinementProposal, DramaCharacter, DramaNamedAsset, DramaProject, DramaVoiceProfile } from "@/lib/drama-project-contract";
 import { imagePreviewUrl } from "@/lib/media-image-url";
 import { createImageGenerationTask, waitForImageGenerationTask } from "@/services/api/image";
+import { optimizeDramaAssetPrompt } from "@/services/api/prompt-optimization";
 import { imageToDataUrl, uploadImage } from "@/services/image-storage";
 import { serverMediaUrl, uploadServerMedia } from "@/services/server-media-storage";
 import { useEffectiveConfig } from "@/stores/use-config-store";
@@ -67,6 +68,8 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
     const [saving, setSaving] = useState(false);
     const [refinementPrompt, setRefinementPrompt] = useState("");
     const [refinementProposal, setRefinementProposal] = useState<DramaAssetRefinementProposal>();
+    const [optimizedAssetPrompt, setOptimizedAssetPrompt] = useState("");
+    const [optimizingAssetPrompt, setOptimizingAssetPrompt] = useState(false);
     const [refining, setRefining] = useState(false);
     const [creatingVoice, setCreatingVoice] = useState(false);
     const [uploadingVoiceSample, setUploadingVoiceSample] = useState(false);
@@ -90,6 +93,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
             editorKeyRef.current = "";
             setRefinementPrompt("");
             setRefinementProposal(undefined);
+            setOptimizedAssetPrompt("");
             return;
         }
         const editorKey = `${kind}:${assetId || "new"}`;
@@ -101,6 +105,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
         }
         const latestRefinement = asset.refinementHistory?.at(-1)?.proposal;
         setRefinementProposal(latestRefinement);
+        setOptimizedAssetPrompt("");
         setDraft({
             name: asset.name,
             description: asset.description,
@@ -201,6 +206,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
 
     const requestRefinement = async () => {
         if (!asset || kind === "clues" || !refinementPrompt.trim()) return;
+        setOptimizedAssetPrompt("");
         setRefining(true);
         try {
             const proposal = await refineDramaAsset(project.id, kind as "characters" | "scenes" | "props", asset.id, refinementPrompt.trim(), `${asset.id}:${Date.now()}`);
@@ -217,8 +223,28 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
 
     const applyRefinementDraft = () => {
         if (!asset || !refinementProposal) return;
+        setOptimizedAssetPrompt("");
         setDraft((current) => ({ ...current, profile: refinementProposal.updatedProfile, description: refinementProposal.updatedDescription || current.description }));
         message.success("调整已应用到未保存草稿");
+    };
+
+    const optimizeAssetPrompt = async () => {
+        if (!asset || kind === "clues" || optimizingAssetPrompt) return;
+        const assetKind = kind === "characters" ? "角色" : kind === "scenes" ? "场景" : "道具";
+        const promptAsset = { ...asset, name: draft.name.trim() || asset.name, description: draft.description.trim(), profile: draft.profile };
+        const preflight = preflightDramaAssetGeneration(project, promptAsset, assetKind);
+        if (!preflight.ok) return void message.warning(`暂不能优化：${preflight.errors.join("；")}`);
+        setOptimizingAssetPrompt(true);
+        try {
+            const prompt = compileDramaAssetReferencePrompt(project, promptAsset, assetKind);
+            const optimized = await optimizeDramaAssetPrompt(assetKind, prompt, `drama-asset:${project.id}:${asset.id}:${nanoid()}`);
+            setOptimizedAssetPrompt(optimized);
+            message.success("资产生图提示词已优化，生成候选时将优先使用");
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : "资产提示词优化失败");
+        } finally {
+            setOptimizingAssetPrompt(false);
+        }
     };
 
     const completeMissingSettings = () => {
@@ -272,6 +298,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
             .filter(Boolean)
             .join("；");
         const request = correction ? `请根据审核建议调整：${correction}` : "请修正这张候选图中审核指出的问题，并保留角色身份、五官、年龄和一致性规则。";
+        setOptimizedAssetPrompt("");
         setRefinementPrompt((current) => (current.trim() ? `${current.trim()}；${request}` : request));
         refinementSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
         message.info("已回填审核建议，你可以继续修改后再生成调整方案");
@@ -367,7 +394,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                 message.warning(`暂不能生成：${preflight.errors.join("；")}`);
                 return;
             }
-            const prompt = activeProposal ? compileDramaAssetRefinementPrompt(project, asset, assetKind, activeProposal, refinementPrompt) : compileDramaAssetReferencePrompt(project, asset, assetKind);
+            const prompt = optimizedAssetPrompt || (activeProposal ? compileDramaAssetRefinementPrompt(project, asset, assetKind, activeProposal, refinementPrompt) : compileDramaAssetReferencePrompt(project, asset, assetKind));
             const imageModel = config.imageModel || config.imageModels[0] || "";
             if (!imageModel) throw new Error("后台尚未配置可用的图片模型，请先在管理后台配置图片渠道");
             const imageConfig = { ...config, model: imageModel, imageModel, size: dramaGenerationSize(project, prompt), count: "1" };
@@ -437,6 +464,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
             updateAsset(project.id, kind, asset.id, { references: ensureUniqueDramaAssetReferenceIds([...latestReferences, ...reviewedReferences]) }, { markShotsStale: false });
             message.success(`已生成 ${nextReferences.length} 张候选图${review.status === "passed" ? "，可直接使用" : "，图片已保留，请查看审核建议"}`);
             setRefinementProposal(undefined);
+            setOptimizedAssetPrompt("");
         } catch (error) {
             message.error(error instanceof Error ? error.message : "候选图生成失败");
         } finally {
@@ -474,11 +502,26 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                 <div className="grid min-w-0 content-start gap-3">
                     <label className="grid gap-1.5 text-sm">
                         <span className="font-medium">{definition.label}名称</span>
-                        <Input value={draft.name} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} placeholder={definition.placeholder} />
+                        <Input
+                            value={draft.name}
+                            onChange={(event) => {
+                                setOptimizedAssetPrompt("");
+                                setDraft((current) => ({ ...current, name: event.target.value }));
+                            }}
+                            placeholder={definition.placeholder}
+                        />
                     </label>
                     <label className="grid gap-1.5 text-sm">
                         <span className="font-medium">剧情身份或用途</span>
-                        <Input.TextArea value={draft.description} onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))} autoSize={{ minRows: asset ? 3 : 2, maxRows: 5 }} placeholder="一句话说明它在故事中的作用" />
+                        <Input.TextArea
+                            value={draft.description}
+                            onChange={(event) => {
+                                setOptimizedAssetPrompt("");
+                                setDraft((current) => ({ ...current, description: event.target.value }));
+                            }}
+                            autoSize={{ minRows: asset ? 3 : 2, maxRows: 5 }}
+                            placeholder="一句话说明它在故事中的作用"
+                        />
                     </label>
                     {kind === "clues" ? (
                         <label className="grid gap-1.5 text-sm">
@@ -508,7 +551,14 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                     {(["visualIdentity", "styling", "colorPalette", "consistencyRules"] as const).map((key, index) => (
                         <label key={key} className="grid gap-1.5 text-sm">
                             <span className="font-medium">{definition.profileLabels[index]}</span>
-                            <Input.TextArea value={draft.profile[key]} onChange={(event) => setDraft((current) => ({ ...current, profile: { ...current.profile, [key]: event.target.value } }))} autoSize={{ minRows: asset ? 2 : 1, maxRows: 4 }} />
+                            <Input.TextArea
+                                value={draft.profile[key]}
+                                onChange={(event) => {
+                                    setOptimizedAssetPrompt("");
+                                    setDraft((current) => ({ ...current, profile: { ...current.profile, [key]: event.target.value } }));
+                                }}
+                                autoSize={{ minRows: asset ? 2 : 1, maxRows: 4 }}
+                            />
                         </label>
                     ))}
                 </div>
@@ -659,7 +709,15 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                                     ))}
                                 </div>
                             ) : null}
-                            <Input.TextArea value={refinementPrompt} onChange={(event) => setRefinementPrompt(event.target.value)} autoSize={{ minRows: 3, maxRows: 6 }} placeholder={`${asset.name} 的肤色、服装、造型或材质需要怎样调整？`} />
+                            <Input.TextArea
+                                value={refinementPrompt}
+                                onChange={(event) => {
+                                    setOptimizedAssetPrompt("");
+                                    setRefinementPrompt(event.target.value);
+                                }}
+                                autoSize={{ minRows: 3, maxRows: 6 }}
+                                placeholder={`${asset.name} 的肤色、服装、造型或材质需要怎样调整？`}
+                            />
                             <div className="mt-2 flex justify-end">
                                 <Button type="primary" ghost icon={<Send className="size-3.5" />} loading={refining} disabled={!refinementPrompt.trim()} onClick={() => void requestRefinement()}>
                                     生成调整方案
@@ -706,6 +764,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                                         <div className="mt-2 grid gap-1 text-muted-foreground">
                                             <div>· 统一风格：{resolveDramaVisualStyle(project)}</div>
                                             <div>· 视觉方向：{resolveDramaVisualStyle(project)}</div>
+                                            <div>· 提示词 Skill：短剧资产图片导演（drama-asset-image-director）</div>
                                             {asset.profile?.designPrompt ? <div>· 历史 designPrompt：不直接发送，只使用已结构化的身份、服装、材质和固定道具字段</div> : null}
                                             {compileDramaAssetConstraints(project, asset, kind === "characters" ? "角色" : kind === "scenes" ? "场景" : "道具").map((constraint) => (
                                                 <div key={constraint}>· {constraint}</div>
@@ -721,6 +780,11 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                                             GPT 调整{definition.title}
                                         </Button>
                                     ) : null}
+                                    {kind !== "clues" ? (
+                                        <Button icon={<Sparkles className="size-3.5" />} loading={optimizingAssetPrompt} onClick={() => void optimizeAssetPrompt()}>
+                                            提示词优化
+                                        </Button>
+                                    ) : null}
                                     <DramaSourceImagePicker project={project} onSelect={appendSourceReference} />
                                     <Button icon={<Upload className="size-3.5" />} loading={uploading} onClick={() => fileInputRef.current?.click()}>
                                         上传候选
@@ -733,6 +797,12 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                                 </div>
                             ) : null}
                         </div>
+                        {optimizedAssetPrompt ? (
+                            <details className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50/60 px-3 py-2 text-xs leading-5 dark:border-emerald-900/60 dark:bg-emerald-950/20" data-drama-asset-optimized-prompt>
+                                <summary className="cursor-pointer font-medium text-emerald-800 dark:text-emerald-200">已优化提示词（生成候选将使用）</summary>
+                                <pre className="mt-2 max-h-56 overflow-y-auto whitespace-pre-wrap font-sans text-muted-foreground">{optimizedAssetPrompt}</pre>
+                            </details>
+                        ) : null}
                         {!references.length ? <div className="mt-4 rounded-lg border border-dashed border-border bg-muted/25 px-4 py-4 text-center text-sm text-muted-foreground">还没有参考图，可上传已有设定或生成候选图。</div> : null}
                         {references.length ? (
                             <Image.PreviewGroup>

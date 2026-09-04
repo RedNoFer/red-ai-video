@@ -1305,6 +1305,124 @@ test("drama shot generation previews prompt before confirmation", async ({ page 
     expect(productionRunCreates).toBe(1);
 });
 
+test("drama shot prompt optimization is available from the Agent menu and persists the result", async ({ page }) => {
+    const adminState = JSON.parse(readFileSync(".e2e-data/admin-state.json", "utf8")) as { cookies: Array<{ name: string; value: string }> };
+    const cookie = adminState.cookies.map((item) => `${item.name}=${item.value}`).join("; ");
+    const created = await page.request.post("/api/drama/projects", { headers: { cookie }, data: { title: "E2E 提示词优化菜单", summary: "验证镜头菜单的提示词优化", ratio: "9:16" } });
+    expect(created.ok(), await created.text()).toBe(true);
+    const project = ((await created.json()) as { data: { project: DramaProject } }).data.project;
+    const episode = project.episodes[0];
+    const shot = {
+        id: "optimize-shot",
+        code: "SH01",
+        order: 1,
+        title: "提示词优化镜头",
+        description: "人物在湖边抬头",
+        sourceText: "人物在湖边抬头。",
+        shotBoundary: "湖边中景",
+        dialogue: "",
+        narration: "",
+        utterances: [],
+        imagePrompt: "湖边中景，人物站立",
+        videoPrompt: "人物在湖边抬头，镜头缓慢推进",
+        generationStatus: "idle",
+        storyboardStatus: "idle",
+        audioMode: "source",
+        audioStatus: "idle",
+        characterIds: [],
+        propIds: [],
+        clueIds: [],
+        duration: 5,
+        storyboardFrameMode: "single",
+        videoMode: "reference",
+    };
+    const seeded = {
+        ...project,
+        episodes: project.episodes.map((item) => (item.id === episode.id ? { ...item, reviewStatus: "visual_ready", shots: [shot] } : item)),
+    } as DramaProject;
+    const saved = await page.request.patch(`/api/drama/projects/${project.id}`, { headers: { cookie }, data: seeded });
+    expect(saved.ok(), await saved.text()).toBe(true);
+
+    let optimizationBody: { phase?: string; shots?: Array<{ id?: string }>; referenceMaterials?: unknown[] } = {};
+    await page.route(/\/api\/drama\/analyze$/, async (route) => {
+        optimizationBody = (await route.request().postDataJSON()) as typeof optimizationBody;
+        await route.fulfill({ json: { code: 0, data: { shots: [{ shotId: "optimize-shot", videoPrompt: "动态意图：优化后的镜头视频提示词" }] }, msg: "OK" } });
+    });
+
+    await page.goto(`/drama/${project.id}`, { waitUntil: "domcontentloaded" });
+    await page.getByRole("button", { name: "切换到镜头生成" }).click();
+    const row = page.locator("[data-drama-shot-task]").filter({ hasText: "提示词优化镜头" });
+    await expect(row).toBeVisible();
+    await row.getByRole("button", { name: "打开 Agent 创作操作" }).click();
+    const optimizeItem = page.getByRole("menuitem", { name: "提示词优化" });
+    await expect(optimizeItem).toBeVisible();
+    await expect(optimizeItem).not.toHaveAttribute("aria-disabled", "true");
+    const saveRequest = page.waitForRequest((request) => request.method() === "PATCH" && request.url().includes(`/episodes/${episode.id}/shots/optimize-shot/prompt`));
+    await optimizeItem.click();
+    await expect.poll(() => optimizationBody.phase).toBe("video_prompt");
+    await expect.poll(() => optimizationBody.shots?.[0]?.id).toBe("optimize-shot");
+    const patchRequest = await saveRequest;
+    expect(patchRequest.postDataJSON()).toMatchObject({ executionVideoPrompt: "优化后的镜头视频提示词" });
+    await expect(page.getByText("提示词已优化并保存", { exact: true })).toBeVisible();
+
+    const persisted = ((await (await page.request.get(`/api/drama/projects/${project.id}`, { headers: { cookie } })).json()) as { data: { project: DramaProject } }).data.project;
+    expect(persisted.episodes[0].shots[0].executionVideoPrompt).toBe("优化后的镜头视频提示词");
+});
+
+test("drama execution prompt saves through its scoped shot endpoint", async ({ page, request }) => {
+    const created = await request.post("/api/drama/projects", { data: { title: "E2E 执行提示词保存", summary: "验证镜头级保存", ratio: "9:16" } });
+    expect(created.ok(), await created.text()).toBe(true);
+    const project = ((await created.json()) as { data: { project: DramaProject } }).data.project;
+    const episode = project.episodes[0];
+    const shot = {
+        id: "execution-prompt-shot",
+        code: "SH01",
+        order: 1,
+        title: "执行提示词保存镜头",
+        description: "人物在黑湖边抬眼。",
+        sourceText: "人物在黑湖边抬眼。",
+        shotBoundary: "黑湖边中景",
+        dialogue: "",
+        narration: "",
+        utterances: [],
+        imagePrompt: "黑湖边中景，人物站立",
+        videoPrompt: "人物在黑湖边抬眼，镜头缓慢推进",
+        generationStatus: "idle",
+        storyboardStatus: "idle",
+        audioMode: "source",
+        audioStatus: "idle",
+        characterIds: [],
+        propIds: [],
+        clueIds: [],
+        duration: 5,
+        storyboardFrameMode: "single",
+        videoMode: "reference",
+    };
+    const seeded = {
+        ...project,
+        episodes: project.episodes.map((item) => (item.id === episode.id ? { ...item, reviewStatus: "visual_ready", shots: [shot] } : item)),
+    } as DramaProject;
+    const seedResponse = await request.patch(`/api/drama/projects/${project.id}`, { data: seeded });
+    expect(seedResponse.ok(), await seedResponse.text()).toBe(true);
+
+    await page.goto(`/drama/${project.id}`, { waitUntil: "domcontentloaded" });
+    await page.getByRole("button", { name: "切换到镜头生成" }).click();
+    const row = page.locator("[data-drama-shot-task]").filter({ hasText: "执行提示词保存镜头" });
+    await row.getByRole("button", { name: "展开详情" }).click();
+    const editor = row.locator("[data-drama-shot-supplier-prompt]");
+    const prompt = "动态意图：人物在黑湖边抬眼，指尖收紧断剑。\n单一主运镜：中景缓慢推进。\n结束画面：人物直视塔影。";
+    await editor.locator("textarea").fill(prompt);
+    await expect(editor.getByRole("button", { name: "保存" })).toBeEnabled();
+    const saveRequest = page.waitForRequest((candidate) => candidate.method() === "PATCH" && candidate.url().includes(`/episodes/${episode.id}/shots/${shot.id}/prompt`));
+    await editor.getByRole("button", { name: "保存" }).click();
+    const patchRequest = await saveRequest;
+    expect(patchRequest.postDataJSON()).toEqual({ executionVideoPrompt: prompt, executionVideoPromptOrigin: "manual" });
+    await expect(page.getByText("视频提示词已保存", { exact: true })).toBeVisible();
+
+    const persisted = ((await (await request.get(`/api/drama/projects/${project.id}`)).json()) as { data: { project: DramaProject } }).data.project;
+    expect(persisted.episodes[0].shots[0]).toMatchObject({ executionVideoPrompt: prompt, fieldOrigins: { executionVideoPrompt: "manual" } });
+});
+
 test("creative workspaces remain usable without horizontal overflow in light and dark themes", async ({ page, request }) => {
     const created = await request.post("/api/drama/projects", { data: { title: "E2E 短剧项目", ratio: "9:16" } });
     expect(created.ok(), await created.text()).toBe(true);

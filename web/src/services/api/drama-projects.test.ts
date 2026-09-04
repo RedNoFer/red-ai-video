@@ -11,6 +11,7 @@ import {
     saveDramaProductionPlan,
     updateDramaShotImagePrompt,
     updateDramaShotPrompt,
+    updateDramaShotPromptPatch,
     updateDramaStoryboardFramePrompt,
 } from "./drama-projects";
 import type { DramaProductionPackagePreview, DramaProject } from "@/lib/drama-project-contract";
@@ -90,6 +91,22 @@ describe("drama project api", () => {
         expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({ phase: "video_prompt", requestId: "prompt-request-one" });
     });
 
+    it("sends only structured reference duties to the drama prompt Agent", async () => {
+        const fetchMock = vi.fn().mockResolvedValue(Response.json({ code: 0, data: { shots: [{ shotId: "shot-one", videoPrompt: "素材绑定：@图片1：顺序帧 1" }] }, msg: "OK" }));
+        vi.stubGlobal("fetch", fetchMock);
+
+        await generateDramaVideoPrompt({
+            project: { id: "project-one", summary: "", style: "", characters: [], scenes: [], props: [], clues: [] } as never,
+            episode: { id: "episode-one" } as never,
+            shot: { id: "shot-one" } as never,
+            referenceMaterials: [{ role: "keyframe", purpose: "顺序帧 1", url: "/private/frame.png" }],
+        });
+
+        const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+        expect(body.referenceMaterials).toEqual([{ role: "keyframe", purpose: "顺序帧 1" }]);
+        expect(JSON.stringify(body)).not.toContain("/private/frame.png");
+    });
+
     it("sends bounded shot context for image prompt generation", async () => {
         const fetchMock = vi.fn().mockResolvedValue(Response.json({ code: 0, data: { shots: [{ shotId: "shot-one", imagePrompt: "优化后的静态画面" }] }, msg: "OK" }));
         vi.stubGlobal("fetch", fetchMock);
@@ -146,6 +163,25 @@ describe("drama project api", () => {
         await expect(updateDramaShotPrompt("project-one", "episode-one", "shot-one", "Seedance 动作提示词")).resolves.toEqual(project);
         expect(fetchMock).toHaveBeenCalledWith("/api/drama/projects/project-one/episodes/episode-one/shots/shot-one/prompt", expect.objectContaining({ method: "PATCH" }));
         expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({ executionVideoPrompt: "Seedance 动作提示词" });
+    });
+
+    it("preserves a manual execution prompt origin through the scoped endpoint", async () => {
+        const project = { id: "project-one", updatedAt: "2026-08-31T00:00:00.000Z" } as DramaProject;
+        const fetchMock = vi.fn().mockResolvedValue(Response.json({ code: 0, data: { project }, msg: "OK" }));
+        vi.stubGlobal("fetch", fetchMock);
+
+        await expect(updateDramaShotPrompt("project-one", "episode-one", "shot-one", "手动修订", undefined, { executionVideoPromptOrigin: "manual" })).resolves.toEqual(project);
+        expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({ executionVideoPrompt: "手动修订", executionVideoPromptOrigin: "manual" });
+    });
+
+    it("requests only the updated shot for prompt edits", async () => {
+        const shot = { id: "shot-one", title: "镜头" } as never;
+        const fetchMock = vi.fn().mockResolvedValue(Response.json({ code: 0, data: { projectId: "project-one", episodeId: "episode-one", shotId: "shot-one", updatedAt: "2026-08-31T00:00:01.000Z", shot }, msg: "OK" }));
+        vi.stubGlobal("fetch", fetchMock);
+
+        await expect(updateDramaShotPromptPatch("project-one", "episode-one", "shot-one", "手动修订", undefined, { executionVideoPromptOrigin: "manual" })).resolves.toMatchObject({ shot });
+        expect(fetchMock).toHaveBeenCalledWith("/api/drama/projects/project-one/episodes/episode-one/shots/shot-one/prompt?response=shot", expect.objectContaining({ method: "PATCH" }));
+        expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({ executionVideoPrompt: "手动修订", executionVideoPromptOrigin: "manual" });
     });
 
     it("saves a preflight video and image revision through the compact prompt endpoint", async () => {

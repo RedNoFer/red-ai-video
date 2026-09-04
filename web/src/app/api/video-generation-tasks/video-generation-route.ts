@@ -32,9 +32,9 @@ import { resolveModelRequestTimeoutMs } from "@/lib/server/model-request-policy"
 import { mediaTaskSource } from "@/lib/media-management-contract";
 import { runGenerationTaskRecoveryBatch } from "@/lib/server/generation-task-recovery-service";
 import { scheduleGenerationTask } from "@/lib/server/generation-task-scheduler";
-import { VIDEO_PROVIDER_MEDIA_KEYS, parseVideoProviderJson, readVideoProviderHttpError, readVideoProviderId, readVideoProviderUrl, videoProviderResultUrlError } from "@/lib/server/video-provider-response";
+import { VIDEO_PROVIDER_MEDIA_KEYS, parseVideoProviderJson, readVideoProviderError, readVideoProviderHttpError, readVideoProviderId, readVideoProviderUrl, videoProviderResultUrlError } from "@/lib/server/video-provider-response";
 import { buildSeedanceSpecialRequest } from "@/lib/seedance-special";
-import { resolveBumingSeedanceVideoModelContract } from "@/lib/channel-protocol-registry";
+import { NEW_API_VIDEO_RATIOS, NEW_API_VIDEO_RESOLUTIONS, resolveBumingSeedanceVideoModelContract } from "@/lib/channel-protocol-registry";
 import { assertVozebRecommendedVideoReferences, buildVozebRecommendedVideoRequest } from "@/lib/vozeb-recommended-video";
 import { assertGeminiVideoReferences, buildGeminiVideoRequest, geminiVideoCreatePath, normalizeGeminiVideoDuration, parseGeminiVideoCreateResponse } from "@/lib/server/gemini-video-provider";
 import { systemAiBillingHeaders } from "@/lib/server/system-ai-billing";
@@ -44,6 +44,7 @@ import { writeVideoGenerationLog } from "@/lib/server/video-task-log";
 import { buildOpenAiVideoFormData } from "./video-task-openai";
 import { normalizeVideoGenerationReferences, regularVideoReferences, videoFrameReferences, type VideoGenerationReference } from "@/lib/video-reference-contract";
 import { assertYumengVideoReferences, buildYumengVideoRequest } from "@/lib/yumeng-model-center";
+import { createVideoProviderRequestSnapshot } from "@/lib/server/video-provider-request-snapshot";
 
 const CREATE_PATHS = ["/video/generations", "/videos/generations", "/videos/videos", "/videos"];
 type CreateVideoTaskBody = { config?: Record<string, unknown>; prompt?: string; references?: VideoGenerationReference[]; source?: string; context?: GenerationTaskContext };
@@ -128,9 +129,15 @@ export async function POST(request: Request) {
             }
             const parameters = {
                 ...requestedParameters,
+                ...(channel.advancedConfig?.protocol === "newapi-video"
+                    ? {
+                          size: clean(body.config?.size) ? requestedParameters.size : "16:9",
+                          vquality: clean(body.config?.vquality) ? requestedParameters.vquality : "720",
+                      }
+                    : {}),
                 videoSeconds: geminiVideo
                     ? normalizeGeminiVideoDuration(requestedParameters.videoSeconds)
-                    : resolveUpstreamVideoDuration(requestedParameters.videoSeconds, settings.generationDefaults.videoSeconds, {
+                    : resolveUpstreamVideoDuration(channel.advancedConfig?.protocol === "newapi-video" && !clean(body.config?.videoSeconds) ? 5 : requestedParameters.videoSeconds, channel.advancedConfig?.protocol === "newapi-video" ? 5 : settings.generationDefaults.videoSeconds, {
                           durationRange: channel.advancedConfig?.durationRange,
                           minDurationSeconds: channel.capabilityProfile?.minDurationSeconds,
                           maxDurationSeconds: channel.capabilityProfile?.maxDurationSeconds,
@@ -149,7 +156,7 @@ export async function POST(request: Request) {
                     assertGeminiVideoReferences(candidateReferences);
                 } else {
                     if (requiresProviderReadableReferenceUrls(channel.advancedConfig, Boolean(globalPreset))) candidateReferences = await resolveProviderReadableReferenceMedia(candidateReferences);
-                    if (channel.advancedConfig?.protocol === "newapi-video") assertNewApiVideoReferences(candidateReferences);
+                    if (channel.advancedConfig?.protocol === "newapi-video") assertNewApiVideoContract(parameters, candidateReferences);
                     assertReferenceCapabilities(
                         globalPreset
                             ? {
@@ -440,7 +447,7 @@ export async function createUpstream(
             if (pointsCost !== undefined && pointsRecordId) await refundUserPoints(userId, generationModelId(channel), pointsCost, "video", videoUnits(raw, multipliers), undefined, pointsRecordId);
             throw error instanceof Error ? error : new Error("视频接口返回了无效 JSON");
         }
-        const providerError = readProviderError(data);
+        const providerError = readVideoProviderError(data);
         if (isProviderBusinessError(data)) {
             const pointsCost = billedPointsCost(response.headers.get("x-vozeb-pro-points-cost"));
             const pointsRecordId = response.headers.get("x-vozeb-pro-points-record-id") || undefined;
@@ -472,6 +479,7 @@ export async function createUpstream(
             pointsCost: billedPointsCost(response.headers.get("x-vozeb-pro-points-cost")),
             pointsUnits: videoUnits(raw, multipliers),
             pointsRecordId: response.headers.get("x-vozeb-pro-points-record-id") || undefined,
+            requestSnapshot: createVideoProviderRequestSnapshot(path, providerPrompt, references, requestBody, multipart),
         };
     }
     throw new SafeCandidateFailure(lastError || "没有可用的视频创建接口");
@@ -663,13 +671,38 @@ function isSafeCreateFailure(status: number, message: string, body = "") {
 
 class SafeCandidateFailure extends Error {}
 
-function assertNewApiVideoReferences(references: readonly VideoGenerationReference[]) {
+function assertNewApiVideoContract(parameters: { videoSeconds: number; size: unknown; vquality: unknown }, references: readonly VideoGenerationReference[]) {
+    if (!Number.isInteger(parameters.videoSeconds) || parameters.videoSeconds < 4 || parameters.videoSeconds > 15) throw new Error("New API 视频时长需要在 4-15 秒之间");
+    const aspectRatio = normalizeVideoAspectRatio(parameters.size);
+    if (!NEW_API_VIDEO_RATIOS.includes(aspectRatio as (typeof NEW_API_VIDEO_RATIOS)[number])) throw new Error("New API 视频比例仅支持 16:9、9:16、1:1");
+    const videoResolution = resolution(parameters.vquality);
+    if (!NEW_API_VIDEO_RESOLUTIONS.includes(videoResolution as (typeof NEW_API_VIDEO_RESOLUTIONS)[number])) throw new Error("New API 视频清晰度仅支持 720p、480p");
+
     const imageCount = references.filter((reference) => reference.type === "image").length;
     const videoCount = references.filter((reference) => reference.type === "video").length;
     const audioCount = references.filter((reference) => reference.type === "audio").length;
     if (imageCount > 9) throw new Error("New API 视频最多支持 9 张参考图");
     if (videoCount > 3) throw new Error("New API 视频最多支持 3 个参考视频");
     if (audioCount > 3) throw new Error("New API 视频最多支持 3 个参考音频");
+    if (references.some((reference) => !isNewApiPublicReferenceUrl(reference.url))) throw new Error("New API 参考素材必须使用公开的 http/https URL");
+    assertNewApiReferenceDuration(references, "video", "参考视频");
+    assertNewApiReferenceDuration(references, "audio", "参考音频");
+}
+
+function assertNewApiReferenceDuration(references: readonly VideoGenerationReference[], type: "video" | "audio", label: string) {
+    const media = references.filter((reference) => reference.type === type);
+    if (media.some((reference) => !Number.isFinite(reference.durationMs) || !reference.durationMs || reference.durationMs < 1)) throw new Error(`New API ${label}缺少可验证时长`);
+    const totalDurationMs = media.reduce((total, reference) => total + reference.durationMs!, 0);
+    if (totalDurationMs > 15_000) throw new Error(`New API ${label}总时长不能超过 15 秒`);
+}
+
+function isNewApiPublicReferenceUrl(value: string) {
+    try {
+        const url = new URL(value);
+        return url.protocol === "http:" || url.protocol === "https:";
+    } catch {
+        return false;
+    }
 }
 
 function serializeVideoProviderRequest(value: unknown) {

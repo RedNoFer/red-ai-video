@@ -24,10 +24,10 @@ import { resolveLogicalModelCandidates } from "@/lib/server/logical-model-router
 import { checkRateLimit } from "@/lib/server/security";
 import { hasSystemAiCharge, readSystemAiBilling, systemAiBillingHeaders, systemAiIdempotencyKey, type SystemAiBilling } from "@/lib/server/system-ai-billing";
 import { rankTextPlanningCandidates, requestStructuredText, type TextPlanningCandidate } from "@/lib/server/text-planning-runtime";
-import { dramaAnalysisText, normalizeDramaReviewCompletionInput, normalizeDramaVideoPromptInput, normalizeDramaImagePromptInput, normalizeDramaVisualInput, reviewCompletionFilledCount, type DramaAnalyzeBody } from "@/lib/server/drama-analysis-input";
-import { SEEDANCE_DIRECTOR_SKILL, SEEDANCE_STATIC_FRAME_PROMPT_LAYOUT, SEEDANCE_STATIC_FRAME_RULES, SEEDANCE_VIDEO_PROMPT_LAYOUT } from "@/lib/server/agent-skills/creative-shortcuts";
+import { dramaAnalysisText, normalizeDramaReviewCompletionInput, normalizeDramaVideoPromptInput, normalizeDramaImagePromptInput, normalizeDramaVisualInput, reviewCompletionFilledCount, validateDramaVideoPromptReferenceBindings, type DramaAnalyzeBody } from "@/lib/server/drama-analysis-input";
+import { SEEDANCE_STATIC_FRAME_PROMPT_LAYOUT, SEEDANCE_STATIC_FRAME_RULES } from "@/lib/server/agent-skills/creative-shortcuts";
 import { resolveSeedance25DirectorInstructions } from "@/lib/server/agent-skills/seedance-25";
-import { DRAMA_PACKAGE_ARCHITECTURE_RULES } from "@/lib/server/drama-production-package-rules";
+import { buildDramaAnalyzeSchemaInstruction } from "@/lib/server/drama-analyze-prompt";
 
 export const runtime = "nodejs";
 
@@ -87,8 +87,21 @@ export async function POST(request: Request) {
                       : { script, summary: dramaAnalysisText(body.summary) };
         const requestId = dramaAnalysisText(body.requestId);
         const videoPromptDuration = videoPromptInput?.payload.shots.reduce((maximum, shot) => Math.max(maximum, shot.duration), 0);
-        const seedance25VideoInstructions = phase === "video_prompt" ? resolveSeedance25DirectorInstructions({ prompt: dramaAnalysisText(body.instruction), durationSeconds: videoPromptDuration }).instructions : "";
-        const schemaInstruction = `${phase === "visual" || phase === "video_prompt" || phase === "image_prompt" ? `本次视觉任务强制执行 Seedance 2.0 导演 Skill：${SEEDANCE_DIRECTOR_SKILL.instructions}\n${phase === "visual" ? DRAMA_PACKAGE_ARCHITECTURE_RULES + "\n" : ""}` : ""}${seedance25VideoInstructions ? `本次视频提示词同时执行 Seedance 2.5 导演参考：${seedance25VideoInstructions}\n` : ""}即使渠道没有传递工具定义，也必须只返回符合以下 JSON Schema 的对象，不能返回输入对象，不能把 script 或 summary 作为顶层字段：${JSON.stringify(tool.parameters)}`;
+        const videoPromptSource =
+            phase === "video_prompt"
+                ? (Array.isArray(body.shots) ? body.shots : [])
+                      .map((value: unknown) => {
+                          const shot = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+                          return [shot.videoPrompt, shot.executionVideoPrompt, shot.description].map(dramaAnalysisText).filter(Boolean).join("\n");
+                      })
+                      .filter(Boolean)
+                      .join("\n")
+                : "";
+        const seedance25VideoInstructions =
+            phase === "video_prompt"
+                ? resolveSeedance25DirectorInstructions({ prompt: [dramaAnalysisText(body.instruction), videoPromptSource].filter(Boolean).join("\n"), durationSeconds: videoPromptDuration }).instructions
+                : "";
+        const schemaInstruction = buildDramaAnalyzeSchemaInstruction(phase, tool.parameters, seedance25VideoInstructions);
         const completionFieldInstruction = phase === "review_completion" ? `本次请求字段必须逐项真实补全，禁止只返回 shotId 空壳。${dramaReviewCompletionFieldInstructions(reviewCompletionInput!.fields)}` : "";
         const messages = [
             {
@@ -97,7 +110,7 @@ export async function POST(request: Request) {
                     phase === "visual"
                         ? `你是影视视觉导演和表演导演。输入内容已经由用户审核，必须严格保留每个 shotId、镜头数量、顺序、人物、场景、对白、旁白、原文和时长。为每个镜头补充图片提示词、视频提示词、起始/结束帧提示词、镜头运动、连续性、结构化人物表演计划、逐句对白表演、色彩灯光计划和 framePlan。生成前先根据场景资产完成现实可行的调度：场景有哪些座椅、长凳、地面、通道、门窗、车辆舱位或遮挡；每名实际出镜者在同一参照系下位于哪里、朝向哪里、看向谁或什么、身体如何被支撑、和其他出镜者怎样相对。坐姿必须落在可见的合理支撑面；多人必须写清左右/前后和视线关系；没有原文或资产依据的人物不得新增。表演必须写成可执行的外在行为：情绪目标、情绪起中止递进、眉眼嘴角下颌、视线、呼吸、身体反应、语气、停顿、重音和节奏；禁止只写“表情自然”“情绪丰富”等抽象词。对白和旁白可以不进入静态图片文字，但对白引发的表情、视线、手部/身体姿态、道具或环境变化必须进入对应 framePlan.frames 的 imagePrompt。每帧 imagePrompt 必须是独立可执行的静态画面，写明本帧可见状态并与上一帧有真实可见差异；禁止复制整镜头提示词后追加“起始状态/动作展开/关键变化/结果状态”等通用词。framePlan 必须提供 1-9 个按真实动作节点连续覆盖镜头时长的帧段。灯光必须明确色板、色温、主光、补光、轮廓光、反差、材质反射、肤色保护和跨镜继承/过渡。连续性必须明确景别、机位、构图、人物站位、视线、动作起止、屏幕运动方向和轴线规则。镜头之间要保持人物服装、道具、空间、表演状态和光色关系连续。不得新增输入中没有的剧情事实。必须调用 design_drama_visuals。不要使用 Markdown。${schemaInstruction}`
                         : phase === "video_prompt"
-                          ? `你是图生视频执行提示词导演。输入包含当前镜头全部已生成并验收的顺序帧、相邻帧的时间段和动作、固定资产基准图、连续性入口/出口状态以及上一镜实际尾帧（若有）。只能根据这些现有素材生成一个可直接提交给视频供应商的自然语言提示词，不得生成图片提示词，不得改变镜头事实或顺序。主体与动作前置，只保留一个主运镜，写出环境压力、声音或视觉母题、明确结束画面、针对性负面约束；如果画面有人物，必须把情绪转为可观察的表演变化，至少写起始、中段、结束的眉眼/嘴角/下颌、视线、呼吸和身体或手部动作，禁止只写“表情自然”“情绪丰富”等抽象词。参考图职责由服务端按视频请求数组统一追加，模型只需在动作中使用已提供的参考图，不要再次输出参考图顺序清单。${SEEDANCE_VIDEO_PROMPT_LAYOUT}不得输出任何内部 ID、URL、JSON、Markdown 标题或解释文字。必须调用 generate_drama_video_prompts。${schemaInstruction}`
+                          ? `你是图生视频执行提示词导演。仅根据输入的镜头事实、已验收帧、连续性状态和脱敏 referenceMaterials 执行当前 Seedance 2.5 导演 Skill，生成公开 videoPrompt；不得生成图片提示词、改变镜头事实、输出 URL、内部 ID、JSON、Markdown 标题或解释文字。必须调用 generate_drama_video_prompts。${schemaInstruction}`
                           : phase === "image_prompt"
                             ? `你是 Seedance 2.0 静态生图提示词导演。只优化当前镜头的图片提示词，不改变剧情事实、人物身份、资产造型或镜头数量。${SEEDANCE_STATIC_FRAME_RULES}${SEEDANCE_STATIC_FRAME_PROMPT_LAYOUT}输出一条可直接提交给图片供应商的静态画面提示词，主体和可见状态前置，明确场景空间、景别、机位、构图、光线色彩、材质细节、风格与针对性负面约束；参考图职责由 referenceManifest 和服务端绑定单独承载；禁止运镜、时间段、动作过程、对白转述、内部 ID、URL、JSON、Markdown 标题或解释文字。必须使用固定资产的身份、空间和道具约束，并保持与连续性入口状态一致。${schemaInstruction}`
                             : phase === "review_completion"
@@ -137,6 +150,11 @@ export async function POST(request: Request) {
                                   ...(data as ReturnType<typeof normalizeDramaVideoPromptAnalysis>),
                               }
                             : data;
+                    const referenceError =
+                        phase === "video_prompt"
+                            ? (data as ReturnType<typeof normalizeDramaVideoPromptAnalysis>).shots.map((shot) => validateDramaVideoPromptReferenceBindings(shot.videoPrompt, videoPromptInput?.payload.referenceMaterials)).find(Boolean) || ""
+                            : "";
+                    if (referenceError) throw new Error(referenceError);
                     const resultCount = data.shots.length;
                     const visualErrors = phase === "visual" ? validateDramaVisualAnalysis(data as ReturnType<typeof normalizeDramaVisualAnalysis>) : [];
                     const expectedCount =

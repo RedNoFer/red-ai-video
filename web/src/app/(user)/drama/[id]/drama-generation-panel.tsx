@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { App, Button, Checkbox, Dropdown, Input, Popconfirm, Progress, Select, Tag, type MenuProps } from "antd";
+import { App, Button, Checkbox, Dropdown, Input, Popconfirm, Progress, Tag, type MenuProps } from "antd";
 import { ArrowRight, Captions, ChevronDown, ChevronUp, CircleAlert, CircleCheck, CircleDashed, Download, Film, GitBranch, LoaderCircle, Pause, Play, RefreshCw, Save, ScanSearch, Send, Sparkles, Volume2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { mediaDownloadFileName } from "@/lib/media-file";
@@ -16,7 +16,7 @@ import {
     preflightDramaGeneration,
     reviewDramaEpisode,
     updateDramaProductionRun,
-    updateDramaShotPrompt,
+    updateDramaShotPromptPatch,
 } from "@/services/api/drama-projects";
 import { resolveModelRequestConfig, useEffectiveConfig } from "@/stores/use-config-store";
 import { appendDramaImageReferenceBindings, compileDramaShotExecutionPrompts, sanitizeDramaSupplierText } from "@/lib/drama-prompt-compiler";
@@ -62,8 +62,7 @@ export function DramaGenerationPanel({
     const updateEpisode = useDramaStore((state) => state.updateEpisode);
     const updateShot = useDramaStore((state) => state.updateShot);
     const loadProject = useDramaStore((state) => state.loadProject);
-    const saveProjectNow = useDramaStore((state) => state.saveProjectNow);
-    const replaceProject = useDramaStore((state) => state.replaceProject);
+    const replaceShot = useDramaStore((state) => state.replaceShot);
     const queueAudio = useDramaStore((state) => state.queueAudio);
     const [costSummary, setCostSummary] = useState<DramaCostSummary | null>(null);
     const [renderReady, setRenderReady] = useState<boolean | null>(null);
@@ -210,13 +209,22 @@ export function DramaGenerationPanel({
     }, [episode.id, project.id, renderTask?.id, renderTask?.status, updateEpisode]);
 
     const cancelShot = async (shot: DramaShot) => {
+        const imageTaskIds = new Set([shot.storyboardTaskId, shot.storyboardEndTaskId].filter((id): id is string => Boolean(id)));
+        const videoTaskIds = new Set([shot.generationTaskId, ...(productionRun?.steps.filter((step) => step.shotId === shot.id && step.type === "video").map((step) => step.taskId) || [])].filter((id): id is string => Boolean(id)));
         const requests = [
-            shot.storyboardTaskId ? fetch(`/api/image-tasks/${encodeURIComponent(shot.storyboardTaskId)}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "cancelled" }) }) : undefined,
-            shot.storyboardEndTaskId ? fetch(`/api/image-tasks/${encodeURIComponent(shot.storyboardEndTaskId)}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "cancelled" }) }) : undefined,
-            shot.generationTaskId ? fetch(`/api/video-tasks/${encodeURIComponent(shot.generationTaskId)}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "cancelled" }) }) : undefined,
-        ].filter(Boolean) as Promise<Response>[];
-        await Promise.all(requests.map((request) => request.catch(() => undefined)));
-        updateShot(project.id, episode.id, shot.id, shot.storyboardTaskId || shot.storyboardEndTaskId ? { storyboardStatus: "cancelled", storyboardEndStatus: "cancelled", generationStatus: "cancelled" } : { generationStatus: "cancelled" });
+            ...Array.from(imageTaskIds, (taskId) => fetch(`/api/image-tasks/${encodeURIComponent(taskId)}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "cancelled" }) })),
+            ...Array.from(videoTaskIds, (taskId) => fetch(`/api/video-tasks/${encodeURIComponent(taskId)}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "cancel" }) })),
+        ];
+        try {
+            const responses = await Promise.all(requests);
+            const failed = responses.find((response) => !response.ok);
+            if (failed) throw new Error((await failed.json().catch(() => ({})) as { error?: string }).error || "取消生成失败");
+            updateShot(project.id, episode.id, shot.id, imageTaskIds.size ? { storyboardStatus: "cancelled", storyboardEndStatus: "cancelled", generationStatus: "cancelled" } : { generationStatus: "cancelled" });
+            await loadProject(project.id, true);
+            message.success("已取消当前镜头生成");
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : "取消生成失败");
+        }
     };
 
     const downloadSubtitles = () => {
@@ -311,8 +319,8 @@ export function DramaGenerationPanel({
         setCreatingRun(true);
         try {
             for (const [shotId, prompts] of Object.entries(check.revisedPrompts || {})) {
-                const saved = await updateDramaShotPrompt(project.id, episode.id, shotId, prompts.videoPrompt || "", prompts.imagePrompt);
-                replaceProject(saved);
+                const saved = await updateDramaShotPromptPatch(project.id, episode.id, shotId, prompts.videoPrompt || "", prompts.imagePrompt);
+                replaceShot(project.id, episode.id, shotId, saved.shot, saved.updatedAt);
             }
             const run = await createDramaProductionRun(project.id, episode.id, undefined, check, { referenceSelections });
             setProductionRun(run);
@@ -325,40 +333,19 @@ export function DramaGenerationPanel({
         }
     };
 
-    const generateVideoPrompt = async (shot: DramaShot) => {
-        const frames = (shot.storyboardFrames || []).filter((frame) => frame.mediaUrl && frame.status === "success" && frame.continuityStatus !== "stale").sort((left, right) => left.sequenceIndex - right.sequenceIndex);
-        const start = activeFrameEvidence(shot, "storyboard_start")[0];
-        const end = activeFrameEvidence(shot, "storyboard_end")[0];
-        if (shot.storyboardFrameMode === "all_frames" && (frames.length < (shot.framePlan?.frames.length || 2) || frames.some((frame, index) => frame.sequenceIndex !== index + 1))) return message.warning("请先按开始到结束顺序生成并验收全部顺序帧");
-        if (shot.storyboardFrameMode === "first_last" && (!start || !end)) return message.warning("请先生成并验收本镜首帧和尾帧");
-        if (shot.storyboardFrameMode !== "all_frames" && shot.storyboardFrameMode !== "first_last" && !frames.length && !start) return message.warning("请先生成并验收本镜起始帧");
-        const incoming = episode.continuityEdges?.find((edge) => edge.toShotId === shot.id && edge.inheritActualEndFrame);
-        const previous = incoming ? episode.shots.find((item) => item.id === incoming.fromShotId) : undefined;
-        const tail = previous ? continuityStartEvidence(previous) : undefined;
-        const referenceMaterials = [
-            ...(tail ? [{ role: "first_frame", purpose: "上一镜当前视频版本的已人工验收实际尾帧", url: tail.mediaUrl }] : []),
-            ...(shot.storyboardFrameMode === "first_last"
-                ? [
-                      start ? { role: tail ? "reference" : "first_frame", purpose: tail ? "本镜已验收首帧构图参考（供应商首帧由上一镜尾帧承担）" : "本镜已验收首帧", url: start.mediaUrl } : undefined,
-                      end ? { role: "last_frame", purpose: "本镜已验收尾帧", url: end.mediaUrl } : undefined,
-                  ].filter(Boolean)
-                : frames.map((frame) => ({
-                      role: "keyframe",
-                      purpose: `顺序帧 ${frame.sequenceIndex}（${frame.sequenceIndex === 1 ? "开始" : frame.sequenceIndex === frames.length ? "结束" : "中间"}）`,
-                      sequenceIndex: frame.sequenceIndex,
-                      url: frame.mediaUrl!,
-                  }))),
-            ...shotReferenceAssets(project, shot).map((asset) => ({ role: "asset_anchor", purpose: asset.label, url: asset.url })),
-        ];
+    const optimizeVideoPrompt = async (shot: DramaShot) => {
+        const references = resolveShotVideoReferences(project, episode, shot, productionRun);
+        const source = resolveShotVideoPrompt(project, episode, shot, productionRun);
+        if (!source) return message.warning("当前镜头没有可优化的视频提示词");
         try {
-            const result = await generateDramaVideoPrompt({ project, episode, shot, referenceMaterials, requestId: "drama-video-prompt:" + project.id + ":" + episode.id + ":" + shot.id + ":" + crypto.randomUUID() });
-            const generated = result.shots.find((item) => item.shotId === shot.id)?.videoPrompt;
-            if (!generated) throw new Error("Agent 未返回当前镜头的视频提示词");
-            const saved = await updateDramaShotPrompt(project.id, episode.id, shot.id, sanitizeDramaSupplierText(generated, project));
-            replaceProject(saved);
-            message.success("Agent 视频提示词已生成并保存");
+            const result = await generateDramaVideoPrompt({ project, episode, shot: { ...shot, videoPrompt: source }, referenceMaterials: references, requestId: `drama-video-optimize:${project.id}:${episode.id}:${shot.id}:${crypto.randomUUID()}` });
+            const optimized = result.shots.find((item) => item.shotId === shot.id)?.videoPrompt?.trim();
+            if (!optimized) throw new Error("Agent 未返回当前镜头的视频提示词");
+            const saved = await updateDramaShotPromptPatch(project.id, episode.id, shot.id, sanitizeDramaSupplierText(formatPromptFieldLines(optimized, "video"), project));
+            replaceShot(project.id, episode.id, shot.id, saved.shot, saved.updatedAt);
+            message.success("提示词已优化并保存");
         } catch (error) {
-            message.error(error instanceof Error ? error.message : "Agent 视频提示词生成失败");
+            message.error(error instanceof Error ? error.message : "提示词优化失败");
         }
     };
 
@@ -757,7 +744,7 @@ export function DramaGenerationPanel({
                                 onOpenCanvas={() => void openEpisodeCanvas()}
                                 onCompleteReview={() => completeShotReviewAndRefresh(shot.id)}
                                 onGenerate={() => void startProduction([shot.id])}
-                                onGenerateVideoPrompt={() => generateVideoPrompt(shot)}
+                                onOptimizePrompt={() => optimizeVideoPrompt(shot)}
                                 blocked={readiness.missingBaselineShotIds.includes(shot.id)}
                                 preflightIssues={preflight?.issues.filter((issue) => issue.shotId === shot.id && issue.severity === "blocking") || []}
                                 onMaintain={(action) => {
@@ -907,7 +894,7 @@ function ShotTaskRow({
     onOpenCanvas,
     onCompleteReview,
     onGenerate,
-    onGenerateVideoPrompt,
+    onOptimizePrompt,
     blocked,
     preflightIssues,
     onMaintain,
@@ -923,7 +910,7 @@ function ShotTaskRow({
     onOpenCanvas: () => void;
     onCompleteReview: () => Promise<boolean>;
     onGenerate: () => void;
-    onGenerateVideoPrompt: () => Promise<unknown>;
+    onOptimizePrompt: () => Promise<unknown>;
     blocked: boolean;
     preflightIssues: DramaProductionPreflight["issues"];
     onMaintain: (action: "assets" | "storyboard" | "review") => void;
@@ -949,7 +936,7 @@ function ShotTaskRow({
             label: "当前镜头 AI 操作",
             children: [
                 { key: "complete-review", icon: <Sparkles className="size-3.5" />, label: "智能补全参数", disabled: generating || completingReview },
-                { key: "generate-prompt", icon: <Sparkles className="size-3.5" />, label: "Agent 生成提示词", disabled: generating || blocked || generatingVideoPrompt },
+                { key: "optimize-prompt", icon: <Sparkles className="size-3.5" />, label: "提示词优化", disabled: generating || generatingVideoPrompt },
                 {
                     key: audioRunning ? "cancel-audio" : "audio",
                     icon: audioRunning ? <Pause className="size-3.5" /> : <Volume2 className="size-3.5" />,
@@ -967,9 +954,9 @@ function ShotTaskRow({
             void onCompleteReview().finally(() => setCompletingReview(false));
             return;
         }
-        if (key === "generate-prompt") {
+        if (key === "optimize-prompt") {
             if (!beginVideoPrompt(project.id, episode.id, shot.id)) return;
-            void onGenerateVideoPrompt().finally(() => finishVideoPrompt(project.id, episode.id, shot.id));
+            void onOptimizePrompt().finally(() => finishVideoPrompt(project.id, episode.id, shot.id));
             return;
         }
         if (key === "cancel-audio") {
@@ -1056,7 +1043,7 @@ function ShotTaskRow({
                         aria-busy={generatingVideoPrompt || undefined}
                         aria-label="打开 Agent 创作操作"
                     >
-                        <span>{generatingVideoPrompt ? "正在分析当前镜头" : "Agent 创作"}</span>
+                        <span>{generatingVideoPrompt ? "正在优化提示词" : "Agent 创作"}</span>
                         <ChevronDown className="size-3.5 opacity-60" aria-hidden />
                     </Button>
                 </Dropdown>
@@ -1145,15 +1132,14 @@ function publicUpstreamError(raw: string) {
 
 function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview }: { project: DramaProject; episode: DramaEpisode; shot: DramaShot; productionRun: DramaProductionRun | null; onPreview: (media: DramaPreviewMedia) => void }) {
     const { message } = App.useApp();
-    const updateShot = useDramaStore((state) => state.updateShot);
-    const saveProjectNow = useDramaStore((state) => state.saveProjectNow);
+    const replaceShot = useDramaStore((state) => state.replaceShot);
     const [videoPromptDraft, setVideoPromptDraft] = useState("");
     const [videoPromptOriginal, setVideoPromptOriginal] = useState("");
+    const [optimizingVideoPrompt, setOptimizingVideoPrompt] = useState(false);
+    const [savingVideoPrompt, setSavingVideoPrompt] = useState(false);
     const promptSnapshot = productionRun?.preflightSnapshot?.prompts?.[shot.id];
     const sourceImagePrompt = promptSnapshot?.sourceImagePrompt || shot.imagePrompt;
     const sourceVideoPrompt = promptSnapshot?.sourceVideoPrompt || shot.videoPrompt;
-    const executionImagePrompt = shot.executionImagePrompt || promptSnapshot?.executionImagePrompt;
-    const executionVideoPrompt = shot.executionVideoPrompt || promptSnapshot?.executionVideoPrompt;
     const assets = shotAssetLabels(project, shot);
     const referenceAssets = shotReferenceAssets(project, shot);
     const videoStep = productionRun?.steps.filter((step) => step.shotId === shot.id && step.type === "video").sort((left, right) => (right.clipIndex || 0) - (left.clipIndex || 0))[0];
@@ -1168,11 +1154,45 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
             .map((frame) => ({ ...frame, label: "本镜尾帧" })),
     ];
     const compiledVideoPrompt = compileDramaShotExecutionPrompts(project, episode, shot).videoPrompt;
-    const supplierVideoPrompt = shot.framePlan?.frames?.length ? compiledVideoPrompt : formatPromptFieldLines(shot.executionVideoPrompt?.trim() || compiledVideoPrompt, "video");
+    const executionReferences = resolveShotVideoReferences(project, episode, shot, productionRun);
+    const manualExecutionPrompt = shot.fieldOrigins?.executionVideoPrompt === "manual" ? shot.executionVideoPrompt?.trim() : "";
+    const supplierVideoPrompt = formatPromptFieldLines(manualExecutionPrompt || compiledVideoPrompt || shot.videoPrompt?.trim() || videoStep?.executionPrompt?.trim() || "", "video");
     useEffect(() => {
         setVideoPromptDraft(supplierVideoPrompt);
         setVideoPromptOriginal(supplierVideoPrompt);
     }, [shot.id, supplierVideoPrompt]);
+    const optimizeVideoPrompt = async () => {
+        const source = videoPromptDraft.trim();
+        if (!source || optimizingVideoPrompt) return;
+        setOptimizingVideoPrompt(true);
+        try {
+            const result = await generateDramaVideoPrompt({ project, episode, shot: { ...shot, videoPrompt: source }, referenceMaterials: executionReferences, requestId: `drama-video-optimize:${project.id}:${episode.id}:${shot.id}:${crypto.randomUUID()}` });
+            const optimized = result.shots.find((item) => item.shotId === shot.id)?.videoPrompt?.trim();
+            if (!optimized) throw new Error("Agent 未返回当前镜头的视频提示词");
+            setVideoPromptDraft(formatPromptFieldLines(optimized, "video"));
+            message.success("视频提示词已优化，请确认后保存");
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : "视频提示词优化失败");
+        } finally {
+            setOptimizingVideoPrompt(false);
+        }
+    };
+    const saveVideoPrompt = async () => {
+        const prompt = formatPromptFieldLines(videoPromptDraft.trim(), "video");
+        if (!prompt || savingVideoPrompt) return;
+        setSavingVideoPrompt(true);
+        try {
+            const saved = await updateDramaShotPromptPatch(project.id, episode.id, shot.id, prompt, undefined, { executionVideoPromptOrigin: "manual" });
+            replaceShot(project.id, episode.id, shot.id, saved.shot, saved.updatedAt);
+            setVideoPromptDraft(prompt);
+            setVideoPromptOriginal(prompt);
+            message.success("视频提示词已保存");
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : "视频提示词保存失败");
+        } finally {
+            setSavingVideoPrompt(false);
+        }
+    };
     const continuityEdge = episode.continuityEdges?.find((edge) => edge.toShotId === shot.id && edge.inheritActualEndFrame);
     const continuitySource = continuityEdge ? episode.shots.find((item) => item.id === continuityEdge.fromShotId) : undefined;
     const voiceSource = shot.audioMode === "mute" ? "静音" : shot.audioMode === "source" ? "视频原声" : shotVoiceSource(project, shot);
@@ -1182,8 +1202,7 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
         ["镜头事实", shot.shotBoundary || shot.sourceText],
         ["对白/旁白", [shot.dialogue, shot.narration].filter(Boolean).join("\n")],
         ["原文依据", shot.sourceText],
-        ["用户/剧本提示词", [sourceImagePrompt ? `画面：${sourceImagePrompt}` : "", sourceVideoPrompt ? `动态：${sourceVideoPrompt}` : ""].filter(Boolean).join("\n")],
-        ["实际执行提示词", [executionImagePrompt ? `生图：${executionImagePrompt}` : "", executionVideoPrompt ? `生视频：${executionVideoPrompt}` : ""].filter(Boolean).join("\n")],
+        ["用户/剧本原始提示词（仅记录）", [sourceImagePrompt ? `画面：${sourceImagePrompt}` : "", sourceVideoPrompt ? `动态：${sourceVideoPrompt}` : ""].filter(Boolean).join("\n")],
         ["实际引用资产", assets.length ? assets.join("、") : "无显式资产引用"],
         ["连续性来源", continuitySource ? `继承 ${continuitySource.title || `镜头 ${continuitySource.order}`} 的实际尾帧${continuityStartEvidence(continuitySource) ? "，已人工验收" : "，等待上镜尾帧验收"}` : "未继承上一镜实际尾帧"],
         ["模型与方式", `${modelText}；${dramaShotVideoMode(project, shot) === "storyboard" ? "分镜驱动" : "直接生成"}；${shot.storyboardFrameMode === "first_last" ? "首尾帧，起止约束不代表质量保证" : "单帧"}`],
@@ -1312,23 +1331,29 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
                 ) : null}
             </div>
             <div className="mt-1 border-t border-border/70 pt-3" data-drama-shot-supplier-prompt>
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="font-medium text-foreground">视频供应商提示词</div>
-                    <Button size="small" icon={<RefreshCw className="size-3.5" />} disabled={videoPromptDraft === videoPromptOriginal} onClick={() => setVideoPromptDraft(videoPromptOriginal)}>
-                        还原上次
-                    </Button>
-                    <Button
-                        size="small"
-                        icon={<Save className="size-3.5" />}
-                        disabled={!videoPromptDraft.trim() || videoPromptDraft.trim() === supplierVideoPrompt.trim()}
-                        onClick={async () => {
-                            updateShot(project.id, episode.id, shot.id, { executionVideoPrompt: videoPromptDraft.trim(), fieldOrigins: { ...(shot.fieldOrigins || {}), executionVideoPrompt: "manual" } });
-                            await saveProjectNow(project.id);
-                            message.success("视频提示词已保存");
-                        }}
-                    >
-                        保存
-                    </Button>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
+                        <div className="font-medium text-foreground">视频执行提示词（当前标准）</div>
+                        <p className="mt-1 text-[11px] text-muted-foreground">上方原始提示词只用于追溯；生成与重试以此执行版为准。</p>
+                    </div>
+                    <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5 sm:ml-3">
+                        <Button size="small" className="shrink-0" icon={<Sparkles className="size-3.5" />} loading={optimizingVideoPrompt} disabled={!videoPromptDraft.trim() || optimizingVideoPrompt} onClick={() => void optimizeVideoPrompt()}>
+                            提示词优化
+                        </Button>
+                        <Button size="small" className="shrink-0" icon={<RefreshCw className="size-3.5" />} disabled={videoPromptDraft === videoPromptOriginal} onClick={() => setVideoPromptDraft(videoPromptOriginal)}>
+                            还原上次
+                        </Button>
+                        <Button
+                            size="small"
+                            className="shrink-0"
+                            icon={<Save className="size-3.5" />}
+                            loading={savingVideoPrompt}
+                            disabled={!videoPromptDraft.trim() || videoPromptDraft.trim() === videoPromptOriginal.trim() || savingVideoPrompt}
+                            onClick={() => void saveVideoPrompt()}
+                        >
+                            保存
+                        </Button>
+                    </div>
                 </div>
                 <Input.TextArea className="mt-2" value={videoPromptDraft} onChange={(event) => setVideoPromptDraft(event.target.value)} autoSize={{ minRows: 5, maxRows: 14 }} placeholder="先生成并验收顺序帧，再生成或编辑视频提示词" />
             </div>
@@ -1466,6 +1491,22 @@ function previewVideoReferenceBindings(project: DramaProject, episode: DramaEpis
         frameBindings.push({ ...asset, alias: `@图片${frameBindings.length + 1}`, purpose: manifestItem?.purpose || asset.label, alt: asset.label, required: true });
     });
     return frameBindings;
+}
+
+function resolveShotVideoPrompt(project: DramaProject, episode: DramaEpisode, shot: DramaShot, productionRun: DramaProductionRun | null) {
+    const submittedPrompt = productionRun?.steps
+        .filter((step) => step.shotId === shot.id && step.type === "video")
+        .sort((left, right) => (right.clipIndex || 0) - (left.clipIndex || 0))[0]
+        ?.executionPrompt?.trim();
+    const compiledPrompt = compileDramaShotExecutionPrompts(project, episode, shot).videoPrompt;
+    return formatPromptFieldLines(shot.executionVideoPrompt?.trim() || shot.videoPrompt?.trim() || submittedPrompt || compiledPrompt || "", "video").trim();
+}
+
+function resolveShotVideoReferences(project: DramaProject, episode: DramaEpisode, shot: DramaShot, productionRun: DramaProductionRun | null) {
+    const videoStep = productionRun?.steps
+        .filter((step) => step.shotId === shot.id && step.type === "video")
+        .sort((left, right) => (right.clipIndex || 0) - (left.clipIndex || 0))[0];
+    return videoStep?.referenceBindingsSnapshot?.length ? videoStep.referenceBindingsSnapshot : previewVideoReferenceBindings(project, episode, shot);
 }
 
 function shotReferenceAssets(project: DramaProject, shot: DramaShot): ShotReferenceAsset[] {

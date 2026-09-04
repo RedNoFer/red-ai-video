@@ -72,36 +72,54 @@ export function normalizeDramaVisualInput(body: DramaAnalyzeBody) {
 
 export function normalizeDramaVideoPromptInput(body: DramaAnalyzeBody) {
     const visual = normalizeDramaVisualInput(body);
+    const sourcePrompts = new Map(
+        array(body.shots).flatMap((value) => {
+            const shot = object(value);
+            const id = dramaAnalysisText(shot.id);
+            const prompt = dramaAnalysisText(shot.videoPrompt) || dramaAnalysisText(shot.executionVideoPrompt);
+            return id && prompt ? [[id, prompt] as const] : [];
+        }),
+    );
     return {
         shotIds: visual.shotIds,
-        payload: { ...visual.payload, instruction: dramaAnalysisText(body.instruction) },
+        payload: {
+            ...visual.payload,
+            shots: visual.payload.shots.map((shot) => {
+                const { storyboardFrames, ...compactShot } = shot;
+                void storyboardFrames;
+                return { ...compactShot, videoPrompt: sourcePrompts.get(shot.id) || "" };
+            }),
+            instruction: dramaAnalysisText(body.instruction),
+            referenceMaterials: normalizeReferenceMaterials(body.referenceMaterials),
+        },
     };
+}
+
+export function validateDramaVideoPromptReferenceBindings(prompt: string, references: unknown) {
+    const expectedCount = array(references).filter((item) => {
+        const reference = object(item);
+        return dramaAnalysisText(reference.role) || dramaAnalysisText(reference.purpose);
+    }).length;
+    if (!expectedCount) return "";
+    const lines = prompt.split(/\r?\n/u);
+    const bindingLineIndex = lines.findIndex((line) => /^\s*素材绑定\s*[：:]/u.test(line));
+    if (bindingLineIndex < 0) return `模型生成的视频提示词缺少素材绑定字段（应包含 ${Array.from({ length: expectedCount }, (_, index) => `@图片${index + 1}`).join("、")}）；请按当前 Skill 重新生成`;
+    const bindingEnd = lines.findIndex((line, index) => index > bindingLineIndex && /^(?:\s*)(?:动态意图|全局设定|起始可见状态|触发|主体动作与反应|时间段动作|单一主运镜|环境压力与视觉母题|视觉风格与光色|声音意图|结束画面|连续性锁|针对性约束)\s*[：:]/u.test(line));
+    const bindingText = lines.slice(bindingLineIndex, bindingEnd < 0 ? lines.length : bindingEnd).join("\n");
+    const aliases = Array.from(bindingText.matchAll(/@图片(\d+)\s*[：:]/gu), (match) => Number(match[1])).filter((value) => Number.isInteger(value));
+    const duplicate = aliases.find((alias, index) => aliases.indexOf(alias) !== index);
+    if (duplicate) return `模型生成的视频提示词重复绑定 @图片${duplicate}；请按当前 Skill 重新生成`;
+    if (aliases.some((alias, index) => alias !== index + 1)) return "模型生成的视频提示词参考图顺序与输入不一致；请按当前 Skill 重新生成";
+    const missing = Array.from({ length: expectedCount }, (_, index) => index + 1).filter((index) => !aliases.includes(index));
+    const unexpected = aliases.find((index) => index > expectedCount);
+    if (missing.length) return `模型生成的视频提示词缺少参考图绑定：${missing.map((index) => `@图片${index}`).join("、")}；请按当前 Skill 重新生成`;
+    if (unexpected) return `模型生成的视频提示词包含未绑定的 @图片${unexpected}；请按当前 Skill 重新生成`;
+    return "";
 }
 
 export function normalizeDramaImagePromptInput(body: DramaAnalyzeBody) {
     const visual = normalizeDramaVisualInput(body);
     return { shotIds: visual.shotIds, payload: { ...visual.payload, instruction: dramaAnalysisText(body.instruction) } };
-}
-
-export function compileDramaVideoPromptReferenceInstructions(value: unknown) {
-    const references = array(value).flatMap((item, index) => {
-        const reference = object(item);
-        const role = dramaAnalysisText(reference.role);
-        const purpose = dramaAnalysisText(reference.purpose);
-        const sequenceIndex = Number(reference.sequenceIndex);
-        if (!role && !purpose) return [];
-        const label = purpose || (role === "keyframe" ? `顺序帧 ${Number.isFinite(sequenceIndex) && sequenceIndex > 0 ? sequenceIndex : index + 1}` : role === "first_frame" ? "视频首帧" : role === "last_frame" ? "视频尾帧" : "项目资产基准图");
-        return [`@图片${index + 1}：${label}`];
-    });
-    return references.length ? `参考图顺序（与视频请求数组完全一致）：\n${references.join("\n")}\n必须逐图按上述职责使用；顺序帧用于锁定对应时间段的可见状态，不能用固定资产图替代。` : "";
-}
-
-export function mergeDramaVideoPromptReferenceInstructions(prompt: string, value: unknown) {
-    const withoutReferenceList = prompt
-        .trim()
-        .replace(/\n?参考图顺序（与(?:视频)?请求数组完全一致）：\n(?:@图片[^\n]*\n?)+(?:必须逐图按上述职责使用；顺序帧用于锁定对应时间段的可见状态，不能用固定资产图替代。)?/u, "")
-        .trim();
-    return [withoutReferenceList, compileDramaVideoPromptReferenceInstructions(value)].filter(Boolean).join("\n");
 }
 
 export function normalizeDramaReviewCompletionInput(body: DramaAnalyzeBody) {
@@ -220,6 +238,17 @@ function normalizeVisualAssets(value: unknown) {
                 payoff: dramaAnalysisText(asset.payoff),
             },
         ];
+    });
+}
+
+function normalizeReferenceMaterials(value: unknown) {
+    return array(value).flatMap((item) => {
+        const reference = object(item);
+        const role = dramaAnalysisText(reference.role);
+        const purpose = dramaAnalysisText(reference.purpose);
+        if (!role && !purpose) return [];
+        const sequenceIndex = Number(reference.sequenceIndex);
+        return [{ role, purpose, ...(Number.isFinite(sequenceIndex) && sequenceIndex > 0 ? { sequenceIndex } : {}) }];
     });
 }
 

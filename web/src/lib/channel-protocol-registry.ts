@@ -103,6 +103,9 @@ const seedanceSpecialOperation: ProtocolOperation = {
     supportsReferenceAudio: true,
 };
 
+export const NEW_API_VIDEO_RATIOS = ["16:9", "9:16", "1:1"] as const;
+export const NEW_API_VIDEO_RESOLUTIONS = ["720p", "480p"] as const;
+
 const newApiVideoOperation: ProtocolOperation = {
     capability: "video",
     createPath: "/v1/videos",
@@ -112,7 +115,8 @@ const newApiVideoOperation: ProtocolOperation = {
         '{"model":"{{model}}","prompt":"{{prompt}}","duration":"{{duration}}","ratio":"{{ratio}}","resolution":"{{resolution}}","referenceImages":"{{images}}","referenceVideos":"{{videos}}","referenceAudios":"{{audios}}"}',
     resultField: "video_url / data.url / url",
     statusField: "status",
-    referenceRule: "参考图片最多 9 张、参考视频最多 3 个、参考音频最多 3 个；所有素材必须是公网可访问的 http/https URL 或站点签名地址；不支持显式首帧或尾帧。",
+    durationRange: "4-15 秒",
+    referenceRule: "时长 4-15 秒，比例仅限 16:9、9:16、1:1，清晰度仅限 720p、480p。参考图片最多 9 张、参考视频最多 3 个、参考音频最多 3 个，视频和音频参考各自总时长不超过 15 秒；所有素材必须是公网可访问的 http/https URL 或站点签名地址；不支持显式首帧或尾帧。模型列表以后台渠道配置为准。",
     supportsReferenceImage: true,
     supportsReferenceVideo: true,
     supportsReferenceAudio: true,

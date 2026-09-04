@@ -44,6 +44,7 @@ describe("channel protocol registry", () => {
             modelCatalogPaths: ["/v1/models"],
             capabilities: ["video"],
         });
+        expect(channelProtocolDefinition("newapi-video").builtInModels).toBeUndefined();
         expect(channelProtocolDefinition("seedance").modelCatalogPaths).toEqual(["/models"]);
         expect(channelProtocolDefinition("volcengine-video").modelCatalogPaths).toEqual(["/api/v3/models"]);
         expect(channelProtocolDefinition("buming-seedance")).toMatchObject({
@@ -119,6 +120,7 @@ describe("channel protocol registry", () => {
             requestTemplate: expect.stringContaining('"referenceImages":"{{images}}"'),
             resultField: "video_url / data.url / url",
             statusField: "status",
+            durationRange: "4-15 秒",
             supportsReferenceImage: true,
             supportsReferenceVideo: true,
             supportsReferenceAudio: true,
@@ -235,13 +237,20 @@ describe("channel protocol registry", () => {
             },
         } as unknown as SystemChannelAdvancedConfig;
 
-        expect(resolveChannelCapabilityConfig(config, "alibaba/wan-3.0", "video")).toMatchObject({
+        expect(resolveChannelCapabilityConfig(config, "admin-configured-video", "video")).toMatchObject({
             protocol: "newapi-video",
             createPath: "/v1/videos",
             queryPath: "/v1/videos/:task_id",
             requestTemplate: expect.stringContaining('"referenceImages":"{{images}}"'),
             resultField: "video_url / data.url / url",
         });
+    });
+
+    it("keeps backend-configured New API video models instead of replacing them with presets", () => {
+        const configured = applyChannelProtocol({ ...channel, models: ["admin-configured-video"] }, "newapi-video");
+
+        expect(configured.models).toEqual(["admin-configured-video"]);
+        expect(channelProtocolValidationErrors(configured)).toEqual([]);
     });
 
     it("keeps every strict capability executable and every asynchronous video query explicit", () => {
