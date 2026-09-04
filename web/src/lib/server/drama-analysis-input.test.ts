@@ -129,6 +129,28 @@ describe("video prompt reference instructions", () => {
 
         expect(error).toContain("逐段写出");
     });
+
+    it("accepts a complete Agent prompt when fields are separated by semicolons or escaped newlines", () => {
+        const prompt = [
+            "素材绑定：@图片1：顺序帧 1；动态意图：人物抬头；全局设定：冷蓝夜景；起始可见状态：人物低头；主体动作与反应：手指收紧后抬头；时间段动作：0-3s 起点：人物低头；动作与触发：手指收紧；可见衔接：视线转向门外；终点：人物抬头；单一主运镜：固定机位；环境压力与视觉母题：远处风声；视觉风格与光色：冷蓝灰；声音意图：低声耳语；结束画面：人物看向门外；连续性锁：身份不变；针对性约束：无变形",
+        ].join("\\n");
+        const error = validateDramaVideoPromptOutput(
+            {
+                shots: [
+                    {
+                        shotId: "shot-one",
+                        videoPrompt: prompt,
+                        framePlan: { frames: [{ sequenceIndex: 1, startSecond: 0, endSecond: 3, startPrompt: "人物低头", actionPrompt: "手指收紧", transitionPrompt: "视线转向门外", endPrompt: "人物抬头", imagePrompt: "人物抬头看向门外" }] },
+                    },
+                ],
+            },
+            ["shot-one"],
+            [{ id: "shot-one", framePlan: { frames: [{ id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 3 }] } }],
+            [{ alias: "@图片1", role: "keyframe", purpose: "顺序帧 1" }],
+        );
+
+        expect(error).toBe("");
+    });
 });
 
 describe("review completion input", () => {
