@@ -9,9 +9,11 @@ import {
     compileDramaDialogueAudioInstructions,
     compileDramaFrameSupplierPrompt,
     compileDramaShotExecutionPrompts,
+    compileDramaShotVideoBasePrompt,
     compileDramaShotPrompts,
     preflightDramaAssetGeneration,
 } from "./drama-prompt-compiler";
+import { compileDramaVideoSegmentPrompt } from "@/lib/server/drama-production-run";
 
 describe("drama prompt compiler", () => {
     it("embeds exact image duties in the editable supplier prompt", () => {
@@ -396,6 +398,46 @@ describe("drama prompt compiler", () => {
         expect(prompt).not.toContain("参考图顺序（与视频请求数组完全一致）");
         expect(prompt.match(/单一主运镜：/gu)).toHaveLength(1);
         expect(prompt.match(/结束画面：/gu)).toHaveLength(1);
+    });
+
+    it("uses the latest Agent or manual execution prompt in the preview and generation path", () => {
+        const project = createProject();
+        const shot = project.episodes[0].shots[0];
+        shot.videoPrompt = "B线钩子：旧的动态规划";
+        shot.executionVideoPrompt = [
+            "素材绑定：@图片1：顺序帧 1",
+            "动态意图：Karin从低头状态抬眼锁定门外",
+            "全局设定：冷蓝夜景与倒悬古塔保持连续",
+            "起始可见状态：Karin低头，双手扣住断剑",
+            "主体动作与反应：手指收紧后抬头，视线转向门外",
+            "时间段动作：",
+            "P01-F01｜0-3s",
+            "起点：Karin低头，双手扣住断剑",
+            "动作与触发：手指收紧并抬头",
+            "可见衔接：视线沿剑柄移向门外",
+            "终点：Karin抬头看向门外",
+            "单一主运镜：固定机位",
+            "环境压力与视觉母题：远处风声和冷银断口",
+            "视觉风格与光色：冷蓝灰低饱和",
+            "声音意图：低声耳语，保留断剑金属声",
+            "结束画面：Karin抬头看向门外",
+            "连续性锁：身份、服装、断剑归属和轴线不变",
+            "针对性约束：无水印、无额外肢体",
+        ].join("\n");
+        shot.framePlan = {
+            start: { source: "independent" },
+            end: { required: true },
+            frames: [{ id: "frame-one", sequenceIndex: 1, startSecond: 0, endSecond: 5, actionPrompt: "抬头", imagePrompt: "人物抬头" }],
+        };
+        shot.fieldOrigins = { executionVideoPrompt: "ai" };
+
+        const previewPrompt = compileDramaShotExecutionPrompts(project, project.episodes[0], shot).videoPrompt;
+        const segmentPrompt = compileDramaVideoSegmentPrompt(shot, ["frame-one"], compileDramaShotVideoBasePrompt(project, project.episodes[0], shot), project);
+
+        expect(previewPrompt).toContain("动态意图：Karin从低头状态抬眼锁定门外");
+        expect(previewPrompt).not.toContain("B线钩子");
+        expect(segmentPrompt).toContain("动态意图：Karin从低头状态抬眼锁定门外");
+        expect(segmentPrompt).not.toContain("B线钩子");
     });
 
     it("falls back to the shot fact when only a legacy compiled prompt remains", () => {
