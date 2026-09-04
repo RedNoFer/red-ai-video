@@ -5,7 +5,7 @@ import { getAuthSettings, isAuthInputError, refundUserPoints } from "@/lib/auth/
 import { generationModelId, toSystemGenerationChannel } from "@/lib/server/generation-channel";
 import { finishGenerationAttempt, startGenerationAttempt, type GenerationAttempt } from "@/lib/server/generation-attempt";
 import { fetchInternalApi, resolveInternalOrigin } from "@/lib/server/internal-origin";
-import { resolveVideoLogicalModelCandidates, supportsVideoKeyframeReferences } from "@/lib/server/logical-model-router";
+import { resolveLogicalModelCandidates, supportsVideoKeyframeReferences } from "@/lib/server/logical-model-router";
 import {
     assertReferenceCapabilities,
     assertReferenceUrls,
@@ -74,10 +74,13 @@ export async function POST(request: Request) {
     if (headerRequestId) body.context = { ...(body.context || {}), clientRequestId: headerRequestId, ...(headerAttemptNo ? { attemptNo: headerAttemptNo } : {}) };
     const settings = await getAuthSettings();
     const response = await withGenerationConcurrencyLimit(user.id, "video", 30 * 60_000, settings.generationConcurrency.video, async () => {
-        const requestedModel = typeof body.config?.model === "string" && body.config.model.trim() ? body.config.model : settings.defaultModels.videoModel;
-        const requestedChannelId = typeof body.config?.channelId === "string" ? body.config.channelId.trim() : "";
+        // Video execution is controlled by the administrator's default logical
+        // model. Client/project model fields are presentation hints only and
+        // must never select a different provider model at the submission edge.
+        const requestedModel = settings.defaultModels.videoModel;
+        const requestedChannelId = "";
         const requestedParameters = resolveVideoGenerationParameters(body.config || {}, settings.generationDefaults);
-        const candidates = resolveVideoLogicalModelCandidates(settings, requestedModel, requestedChannelId, requestedParameters.videoSeconds === -1 ? undefined : requestedParameters.videoSeconds);
+        const candidates = resolveLogicalModelCandidates(settings, "video", requestedModel, requestedChannelId);
         const prompt = String(body.prompt || "").trim();
         if (!prompt) return NextResponse.json({ error: "视频任务参数不完整或渠道不支持" }, { status: 400 });
         const publicOrigin = requestPublicOrigin(request);
@@ -93,11 +96,11 @@ export async function POST(request: Request) {
         }
         const keyframeCount = references.filter((reference) => reference.role === "keyframe").length;
         const isDramaRun = body.context?.surface === "drama" && Boolean(body.context.runId);
-        // A drama run must honor the logical model selected by the user. Keep only
-        // compatible bindings of that model; never scan another logical model to
-        // hide a configuration error.
-        const compatibleDramaCandidates = candidates.filter((candidate) => candidate.logicalModelId.toLowerCase() === requestedModel.trim().toLowerCase() && supportsVideoKeyframeReferences(candidate, keyframeCount));
-        const selectedCandidates = isDramaRun && keyframeCount ? (compatibleDramaCandidates.length ? compatibleDramaCandidates : candidates).slice(0, 1) : candidates;
+        // Drama runs use the same backend default as every other video task.
+        // For all-frame references, keep the default model's compatible binding
+        // and never switch to a different logical model as a hidden fallback.
+        const compatibleDefaultCandidates = candidates.filter((candidate) => supportsVideoKeyframeReferences(candidate, keyframeCount));
+        const selectedCandidates = isDramaRun && keyframeCount ? (compatibleDefaultCandidates.length ? compatibleDefaultCandidates : candidates).slice(0, 1) : candidates;
         if (!selectedCandidates.length) return NextResponse.json({ error: "视频任务参数不完整或渠道不支持" }, { status: 400 });
         const channels = selectedCandidates.map(toSystemGenerationChannel);
         const providerPrompt = withVideoReferenceFidelity(prompt, references);

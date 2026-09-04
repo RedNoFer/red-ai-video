@@ -1702,7 +1702,7 @@ describe("drama project service updates", () => {
         expect(saved.productionBible?.productionPlan).toMatchObject({ lockedAt: lockedPlan.lockedAt, video: { resolution: "480p" } });
     });
 
-    it("does not replace an incompatible production-plan video model for all-frame shots", async () => {
+    it("uses the backend default video model instead of a project's locked model", async () => {
         const plan = { ...defaultDramaProductionPlan("manual"), lockedAt: "2026-07-19T08:00:00.000Z", video: { ...defaultDramaProductionPlan("manual").video, model: "selected-video" } };
         const current = project("2026-07-19T08:00:01.000Z", "项目");
         current.productionBible = { ...current.productionBible!, productionPlan: plan };
@@ -1733,16 +1733,36 @@ describe("drama project service updates", () => {
             defaultModels: { imageModel: "image-default", videoModel: "other-compatible-video", audioModel: "" },
             generationDefaults: { imageQuality: "standard", videoQuality: "720" },
         });
-        mocks.resolveLogicalModelCandidates.mockReturnValue([{ logicalModelId: "selected-video", channelId: "selected-channel" }]);
+        mocks.resolveLogicalModelCandidates.mockReturnValue([{ logicalModelId: "other-compatible-video", channelId: "default-video-channel" }]);
         mocks.supportsVideoKeyframeReferences.mockReturnValue(false);
 
         const pending = createDramaProductionRunForUser("user-one", current.id, {
             episodeId: current.episodes[0].id,
             preflight: { checkedShotIds: ["shot-one"] },
         });
-        await expect(pending).rejects.toMatchObject({ status: 409, message: "当前视频模型 selected-video 未声明支持全能帧关键图，请在后台为该模型声明全能帧能力或调整本集帧模式；系统不会自动切换模型" });
-        expect(mocks.resolveLogicalModelCandidates).toHaveBeenCalledWith(expect.anything(), "video", "selected-video", undefined);
+        await expect(pending).rejects.toMatchObject({ status: 409, message: "后台默认视频模型 other-compatible-video 未声明支持全能帧关键图，请在后台为该模型声明全能帧能力或调整本集帧模式" });
+        expect(mocks.resolveLogicalModelCandidates).toHaveBeenCalledWith(expect.anything(), "video", "other-compatible-video");
         expect(mocks.createDramaProductionRun).not.toHaveBeenCalled();
+    });
+
+    it("captures the backend default model in a drama run even when the project plan is stale", async () => {
+        const plan = { ...defaultDramaProductionPlan("manual"), lockedAt: "2026-07-19T08:00:00.000Z", video: { ...defaultDramaProductionPlan("manual").video, model: "alibaba/wan-3.0" } };
+        const current = project("2026-07-19T08:00:01.000Z", "项目");
+        current.productionBible = { ...current.productionBible!, productionPlan: plan };
+        current.seriesBible = { version: "series-bible-v1", canonCharacters: [], immutableRules: [], relationshipState: "", worldRules: [], unresolvedThreads: [], visualMotifs: [], soundMotifs: [] };
+        current.episodes[0].reviewStatus = "visual_ready";
+        mocks.getDramaProject.mockResolvedValue(current);
+        mocks.getAuthSettings.mockResolvedValue({
+            defaultModels: { imageModel: "image-default", videoModel: "backend-default-video", audioModel: "" },
+            generationDefaults: { imageQuality: "standard", videoQuality: "720" },
+        });
+        mocks.resolveLogicalModelCandidates.mockImplementation((_settings: unknown, capability: string, model: string) => capability === "video" && model === "backend-default-video" ? [{ logicalModelId: "backend-default-video", channelId: "backend-video-channel" }] : [{ logicalModelId: "image-default", channelId: "image-channel" }]);
+        mocks.supportsVideoKeyframeReferences.mockReturnValue(true);
+
+        const run = await createDramaProductionRunForUser("user-one", current.id, { episodeId: current.episodes[0].id });
+
+        expect(run.parameterSnapshot).toMatchObject({ videoModel: "backend-default-video", videoChannelId: "backend-video-channel", productionPlan: { video: { model: "backend-default-video", channelId: "backend-video-channel" } } });
+        expect(mocks.resolveLogicalModelCandidates).toHaveBeenCalledWith(expect.anything(), "video", "backend-default-video");
     });
 
     it("allows settings updates for a project that already exceeds the snapshot size guard", async () => {

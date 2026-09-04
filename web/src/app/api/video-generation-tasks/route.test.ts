@@ -105,7 +105,7 @@ describe("video generation candidate failover", () => {
         mocks.after.mockImplementation(() => undefined);
     });
 
-    it("tries a different configured video logical model after an explicit primary failure", async () => {
+    it("does not switch to a fallback logical model after the backend default fails", async () => {
         mocks.getAuthSettings.mockResolvedValue({
             ...settings,
             logicalModels: [
@@ -113,20 +113,33 @@ describe("video generation candidate failover", () => {
                 { id: "video-backup", name: "备用视频", capability: "video", enabled: true, bindings: [{ id: "backup", channelId: "two", upstreamModel: "video-two", enabled: true, priority: 1 }] },
             ],
         });
-        mocks.fetchInternalApi.mockImplementation(async (url: string) => (url.includes("/api/ai/system/one/") ? json({ code: "model_not_found" }, 503) : json({ id: "upstream-two", status: "queued" })));
+        mocks.fetchInternalApi.mockResolvedValue(json({ code: "model_not_found" }, 503));
 
         const response = await POST(request({ model: "video" }, [], { clientRequestId: "fallback-request" }));
         const payload = await response.json();
 
-        expect(response.status).toBe(200);
-        expect(payload.task).toMatchObject({ id: "local-task", upstreamId: "upstream-two" });
-        expect(mocks.fetchInternalApi).toHaveBeenCalledTimes(2);
+        expect(response.status).toBe(502);
+        expect(payload).toMatchObject({ canRetry: true });
+        expect(mocks.fetchInternalApi).toHaveBeenCalledTimes(1);
         expect(new Headers((mocks.fetchInternalApi.mock.calls[0][1] as RequestInit).headers).get("Idempotency-Key")).toBe("fallback-request");
-        expect(new Headers((mocks.fetchInternalApi.mock.calls[1][1] as RequestInit).headers).get("Idempotency-Key")).toBe("fallback-request:candidate:2");
+        expect(mocks.fetchInternalApi.mock.calls.some(([url]) => String(url).includes("/api/ai/system/two/"))).toBe(false);
         expect(mocks.createVideoTask).toHaveBeenCalledOnce();
     });
 
-    it("skips a deterministic unsupported Buming keyframe candidate for a capable backup", async () => {
+    it("always routes the provider request through the backend default video model", async () => {
+        mocks.fetchInternalApi.mockResolvedValue(json({ id: "default-video-task", status: "queued" }));
+
+        const response = await POST(request({ model: "alibaba/wan-3.0" }, [], { clientRequestId: "backend-default-video" }));
+        const payload = await response.json();
+
+        expect(response.status).toBe(200);
+        expect(payload.task).toMatchObject({ id: "local-task", upstreamId: "default-video-task", model: "video" });
+        expect(mocks.fetchInternalApi).toHaveBeenCalledTimes(1);
+        expect(mocks.fetchInternalApi.mock.calls[0]?.[0]).toContain("/api/ai/system/one/");
+        expect(((mocks.fetchInternalApi.mock.calls[0]?.[1] as RequestInit).body as FormData).get("model")).toBe("video-one");
+    });
+
+    it("does not switch a drama keyframe request to a capable fallback logical model", async () => {
         const primary = applyChannelProtocol({ ...channels[0], models: ["seedance-2-0-manju-special"], advancedConfig: emptyAdvancedConfig() }, "buming-seedance");
         const backup = applyChannelProtocol({ ...channels[1], models: ["seedance-2-0-official"], advancedConfig: emptyAdvancedConfig() }, "buming-seedance");
         mocks.getAuthSettings.mockResolvedValue({
@@ -137,8 +150,6 @@ describe("video generation candidate failover", () => {
                 { id: "video-backup", name: "备用视频", capability: "video", enabled: true, bindings: [{ id: "backup", channelId: backup.id, upstreamModel: "seedance-2-0-official", enabled: true, priority: 1 }] },
             ],
         });
-        mocks.fetchInternalApi.mockResolvedValue(json({ id: "buming-backup", state: "queued" }));
-
         const response = await POST(
             request({ model: "video" }, [
                 { type: "image", url: "https://cdn.example.com/frame-1.png", role: "keyframe", keyframeIndex: 1 },
@@ -146,9 +157,9 @@ describe("video generation candidate failover", () => {
             ]),
         );
 
-        expect(response.status).toBe(200);
-        expect(mocks.fetchInternalApi).toHaveBeenCalledTimes(1);
-        expect(mocks.fetchInternalApi.mock.calls[0]?.[0]).toContain(`/api/ai/system/${backup.id}/`);
+        expect(response.status).toBe(400);
+        expect(await response.json()).toMatchObject({ error: "当前不鸣视频模型不支持全能帧连续参考" });
+        expect(mocks.fetchInternalApi).not.toHaveBeenCalled();
     });
 
     it("does not fail over a generic 503 whose acceptance state is unknown", async () => {
@@ -187,7 +198,7 @@ describe("video generation candidate failover", () => {
         expect(mocks.writeVideoGenerationLog).toHaveBeenCalledOnce();
     });
 
-    it("keeps a drama keyframe run on the selected logical model even when it has fallbacks", async () => {
+    it("keeps a drama keyframe run on the backend default logical model even when it has fallbacks", async () => {
         const primary = applyChannelProtocol({ ...channels[0], models: ["seedance-2-0-official"], advancedConfig: emptyAdvancedConfig() }, "buming-seedance");
         mocks.getAuthSettings.mockResolvedValue({
             ...settings,
@@ -599,14 +610,16 @@ describe("video generation candidate failover", () => {
         expect(mocks.linkStoredGenerationTask).toHaveBeenCalledWith("video", "local-task", context);
     });
 
-    it("rejects a raw upstream model when the logical catalog exists", async () => {
+    it("ignores a raw upstream model and still uses the backend default", async () => {
+        mocks.fetchInternalApi.mockResolvedValue(json({ id: "default-after-raw", status: "queued" }));
+
         const response = await POST(request({ model: "video-one" }));
 
-        expect(response.status).toBe(400);
-        expect(mocks.fetchInternalApi).not.toHaveBeenCalled();
+        expect(response.status).toBe(200);
+        expect(((mocks.fetchInternalApi.mock.calls[0]?.[1] as RequestInit).body as FormData).get("model")).toBe("video-one");
     });
 
-    it("rejects an image logical model for a video task", async () => {
+    it("does not let an image model hint override the backend video default", async () => {
         mocks.getAuthSettings.mockResolvedValue({
             ...settings,
             systemChannels: [...channels, { id: "image", name: "图片渠道", baseUrl: "https://image.example.com/v1", apiKey: "image-secret", apiFormat: "openai", models: ["stable-diffusion-2.0"], enabled: true, advancedConfig: { protocol: "openai" } }],
@@ -622,10 +635,11 @@ describe("video generation candidate failover", () => {
             ],
         });
 
+        mocks.fetchInternalApi.mockResolvedValue(json({ id: "default-after-image-hint", status: "queued" }));
         const response = await POST(request({ model: "stable-diffusion-2.0" }));
 
-        expect(response.status).toBe(400);
-        expect(mocks.fetchInternalApi).not.toHaveBeenCalled();
+        expect(response.status).toBe(200);
+        expect(((mocks.fetchInternalApi.mock.calls[0]?.[1] as RequestInit).body as FormData).get("model")).toBe("video-one");
     });
 
     it("sends a compatible image-to-video request with the real reference and current parameters", async () => {
@@ -1112,6 +1126,7 @@ describe("video generation candidate failover", () => {
                 { id: "default-video", name: "Default", capability: "video", enabled: true, bindings: [{ id: "default", channelId: channels[0].id, upstreamModel: "video-one", enabled: true, priority: 1 }] },
                 { id: "storyboard-video", name: "Storyboard", capability: "video", enabled: true, bindings: [{ id: "storyboard", channelId: bumingChannel.id, upstreamModel: "seedance-2-0-official", enabled: true, priority: 1 }] },
             ],
+            defaultModels: { ...settings.defaultModels, videoModel: "default-video" },
         });
         mocks.fetchInternalApi.mockResolvedValue(json({ id: "fallback-drama-frame-task", state: "queued" }));
 
@@ -1474,6 +1489,7 @@ function yumengSettings() {
                 bindings: [{ id: "yumeng-seedance", channelId: "yumeng", upstreamModel: model, enabled: true, priority: 1 }],
             },
         ],
+        defaultModels: { ...settings.defaultModels, videoModel: model },
     };
 }
 

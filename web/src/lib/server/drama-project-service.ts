@@ -25,6 +25,7 @@ import type {
     DramaNamedAsset,
     DramaProductionArchive,
     DramaProductionBible,
+    DramaProductionPlan,
     DramaProductionRun,
     DramaProductionStep,
     DramaProject,
@@ -1042,7 +1043,7 @@ export async function createDramaProductionRunForUser(userId: string, projectId:
     if (episode.reviewStatus !== "visual_ready") throw new DramaProjectServiceError("请先完成内容审核和视觉方案", 409);
     const requestedPlan = normalizeDramaProductionPlan(object(value).productionPlan, project.productionBible?.productionPlan);
     if (!requestedPlan && !project.productionBible?.productionPlan) throw new DramaProjectServiceError("请先锁定本集生产方案", 409);
-    if (requestedPlan && project.productionBible?.productionPlan && JSON.stringify(requestedPlan.video) !== JSON.stringify(project.productionBible.productionPlan.video)) throw new DramaProjectServiceError("生产方案已变化，请重新保存并预检", 409);
+    if (requestedPlan && project.productionBible?.productionPlan && !sameDramaVideoPlanExceptModel(requestedPlan, project.productionBible.productionPlan)) throw new DramaProjectServiceError("生产方案已变化，请重新保存并预检", 409);
     const settings = await getAuthSettings();
     const parameters = {
         imageModel: settings.defaultModels.imageModel,
@@ -1058,8 +1059,8 @@ export async function createDramaProductionRunForUser(userId: string, projectId:
     const checkedShotIds = ids(submittedPreflight.checkedShotIds);
     const productionShots = checkedShotIds.length ? episode.shots.filter((shot) => checkedShotIds.includes(shot.id)) : episode.shots;
     const requiresAllFrames = productionShots.some((shot) => shot.storyboardFrameMode === "all_frames" && Boolean(shot.framePlan?.frames.length));
-    const requestedVideoModel = parameters.productionPlan?.video.model || parameters.videoModel;
-    const videoCandidates = resolveLogicalModelCandidates(settings, "video", requestedVideoModel, parameters.productionPlan?.video.channelId);
+    const requestedVideoModel = parameters.videoModel;
+    const videoCandidates = resolveLogicalModelCandidates(settings, "video", requestedVideoModel);
     const requiredKeyframeCount = Math.max(
         0,
         ...productionShots
@@ -1070,11 +1071,14 @@ export async function createDramaProductionRunForUser(userId: string, projectId:
     if (!videoCandidate) {
         if (!videoCandidates.length)
             throw new DramaProjectServiceError(
-                `本集锁定的视频模型 ${requestedVideoModel} 未在后台启用或没有可用渠道；后台默认视频模型为 ${settings.defaultModels.videoModel || "未配置"}。请在本集设置中明确选择已启用模型并重新锁定，系统不会自动切换模型`,
+                `后台默认视频模型 ${requestedVideoModel || "未配置"} 未启用或没有可用渠道，请先在后台配置可用的视频逻辑模型`,
                 409,
             );
-        throw new DramaProjectServiceError(`当前视频模型 ${requestedVideoModel} 未声明支持全能帧关键图，请在后台为该模型声明全能帧能力或调整本集帧模式；系统不会自动切换模型`, 409);
+        throw new DramaProjectServiceError(`后台默认视频模型 ${requestedVideoModel} 未声明支持全能帧关键图，请在后台为该模型声明全能帧能力或调整本集帧模式`, 409);
     }
+    const executionPlan = parameters.productionPlan
+        ? { ...parameters.productionPlan, video: { ...parameters.productionPlan.video, model: videoCandidate.logicalModelId, channelId: videoCandidate.channelId } }
+        : undefined;
     validateDramaReferenceSelections(project, episode, productionShots, referenceSelections);
     const preflight = preflightDramaProduction(project, episode, checkedShotIds.length ? checkedShotIds : undefined);
     if (preflight.status === "blocked") {
@@ -1093,7 +1097,7 @@ export async function createDramaProductionRunForUser(userId: string, projectId:
             ...parameters,
             videoModel: videoCandidate.logicalModelId,
             videoChannelId: videoCandidate.channelId,
-            productionPlan: requestedPlan || project.productionBible?.productionPlan,
+            productionPlan: executionPlan,
             minVideoSeconds: videoCandidate.capabilityProfile?.minDurationSeconds,
             maxVideoSeconds: videoCandidate.capabilityProfile?.maxDurationSeconds,
             referenceSelections,
@@ -3566,6 +3570,11 @@ function stringArrayRecord(value: unknown): Record<string, string[]> {
             return key.trim() && values.length ? [[key.trim(), values]] : [];
         }),
     );
+}
+
+function sameDramaVideoPlanExceptModel(left: DramaProductionPlan, right: DramaProductionPlan) {
+    const stripModel = ({ model: _model, channelId: _channelId, ...video }: DramaProductionPlan["video"]) => video;
+    return JSON.stringify(stripModel(left.video)) === JSON.stringify(stripModel(right.video));
 }
 
 export function validateDramaReferenceSelections(project: DramaProject, episode: DramaEpisode, shots: DramaShot[], selections: Record<string, string[]>) {
