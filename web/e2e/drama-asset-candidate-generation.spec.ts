@@ -35,12 +35,24 @@ test("生成候选通过真实图片任务链路完成", async ({ page, request 
 
     const pageErrors: string[] = [];
     let submittedPrompt = "";
+    let submittedSize = "";
     page.on("pageerror", (error) => pageErrors.push(error.message));
-    await page.route(/\/api\/agent\/prompt-optimization$/, (route) => route.fulfill({ json: { code: 0, data: { prompt: "主体与资产类型：角色\n身份/结构锚点：单人完整全身，固定黑发与黑金长袍。\n构图与画幅：9:16 单张基准图。" }, msg: "OK" } }));
+    await page.route(/\/api\/agent\/prompt-optimization$/, (route) =>
+        route.fulfill({
+            json: {
+                code: 0,
+                data: {
+                    prompt: "主体与资产类型：角色\n身份/结构锚点：固定黑发与黑金学院长袍。\n可见状态与材质：三视图均为完整全身立姿。\n构图与画幅：9:16，纯白色无缝背景，正面、侧面、背面等距水平排列，侧面固定为左侧。\n光色与风格：角色本体保持半写实动漫幻想材质。\n用途：短剧角色基准板。\n负面约束：无主立绘、无肖像特写、无表情组、无文字、无水印。",
+                },
+                msg: "OK",
+            },
+        }),
+    );
     await page.route(/\/api\/image-tasks$/, async (route) => {
         if (route.request().method() === "POST") {
-            const body = route.request().postDataJSON() as { prompt?: unknown };
+            const body = route.request().postDataJSON() as { prompt?: unknown; config?: { size?: unknown } };
             submittedPrompt = typeof body.prompt === "string" ? body.prompt : "";
+            submittedSize = typeof body.config?.size === "string" ? body.config.size : "";
         }
         await route.fallback();
     });
@@ -82,6 +94,10 @@ test("生成候选通过真实图片任务链路完成", async ({ page, request 
     const imageRequest = fixture.requests.find((item) => item.method === "POST" && item.path.endsWith("/images/generations"));
     expect(imageRequest).toBeTruthy();
     expect(submittedPrompt).toContain("主体与资产类型：角色");
+    expect(submittedPrompt).toContain("纯白色无缝背景");
+    expect(submittedPrompt).toContain("正面、侧面、背面");
+    expect(submittedPrompt).toContain("侧面固定为左侧");
+    expect(submittedSize).toBe("16:9");
 });
 
 test("生成调整候选通过历史方案链路完成", async ({ page, request }) => {

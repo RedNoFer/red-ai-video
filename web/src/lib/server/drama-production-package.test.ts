@@ -63,7 +63,7 @@ describe("production package boundary", () => {
         });
     });
 
-    it("normalizes shot and prompt-asset fields onto independent lines", () => {
+    it("preserves Agent video prompt text while normalizing static fields", () => {
         const source = structuredClone(productionPackage);
         source.episodes[0].shots[0].imagePrompt = "静态关键帧：Karin握住断剑；可见状态：指节发白，景别：中景；机位与构图：平视";
         source.episodes[0].shots[0].videoPrompt = "动态意图：Karin抬头；单一主运镜：固定机位；结束画面：视线锁定断剑";
@@ -81,7 +81,7 @@ describe("production package boundary", () => {
 
         const normalized = previewDramaProductionPackage(JSON.stringify(source), "package.json").package;
         expect(normalized.episodes[0].shots[0].imagePrompt).toContain("可见状态：指节发白\n景别：中景");
-        expect(normalized.episodes[0].shots[0].videoPrompt).toContain("动态意图：Karin抬头\n单一主运镜：固定机位\n结束画面：视线锁定断剑");
+        expect(normalized.episodes[0].shots[0].videoPrompt).toBe("动态意图：Karin抬头；单一主运镜：固定机位；结束画面：视线锁定断剑");
         expect(normalized.archive?.promptAssets[0]?.prompt).toBe("静态关键帧：Karin握剑\n景别：中景");
     });
 
@@ -322,14 +322,13 @@ describe("production package boundary", () => {
         expect(preview.package.episodes[0].shots[1].timecode).toBe("15-23s");
     });
 
-    it("stores only the compact motion brief in package videoPrompt", () => {
+    it("preserves the complete Agent video prompt in package videoPrompt", () => {
         const source = structuredClone(productionPackage);
         source.episodes[0].shots[0].videoPrompt = "生成15秒9:16竖屏电影级视频。角色抬手后停住";
 
         const shot = previewDramaProductionPackage(JSON.stringify(source), "package.json").package.episodes[0].shots[0];
 
-        expect(shot.videoPrompt).toBe("角色抬手后停住");
-        expect(shot.videoPrompt).not.toContain("15秒");
+        expect(shot.videoPrompt).toBe("生成15秒9:16竖屏电影级视频。角色抬手后停住");
     });
 
     it("upgrades repetitive frame image prompts into independent visual states", () => {

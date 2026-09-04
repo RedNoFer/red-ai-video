@@ -148,7 +148,7 @@ describe("drama asset generation batches", () => {
             id: "batch-recovery",
             projectId: "project-one",
             status: "queued",
-            executionConfig: { completeSettings: false },
+            executionConfig: { completeSettings: false, count: "4", size: "9:16" },
             totalCount: 1,
             completedCount: 0,
             successCount: 0,
@@ -168,6 +168,7 @@ describe("drama asset generation batches", () => {
 
         await runDramaAssetGenerationBatchInBackground({ userId: "user-one", projectId: "project-one", batchId: "batch-recovery", config: current.executionConfig || {}, origin: "http://localhost:3000", cookie: "session=one" });
 
+        expect(JSON.parse(String(fetchInternalApi.mock.calls[0]?.[1]?.body))).toMatchObject({ config: { count: "1", size: "16:9" } });
         expect(runRecovery).toHaveBeenCalledWith({ origin: "http://localhost:3000", cookie: "session=one", limit: 1, taskIds: ["image-task-one"] });
         expect(current.items[0]).toMatchObject({ status: "running", generationTaskId: "image-task-one" });
     });

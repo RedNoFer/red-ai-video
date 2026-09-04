@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { SEEDANCE_25_DIRECTOR_SKILL } from "./agent-skills/seedance-25";
 import { directAgentPlan, normalizeTasks, planToOps, readFunctionCallResult, taskResultOps } from "./agent-run-execution";
 import { agentSurfaceImageSize, normalizeCanvasPlanForSelection, resolveAgentTaskRatio } from "./agent-run-task-input";
+import { DRAMA_ASSET_IMAGE_SKILL } from "@/lib/drama-image-skill";
 
 describe("directAgentPlan", () => {
     it("使用用户指定的媒体模型创建单任务计划", () => {
@@ -131,6 +132,21 @@ describe("directAgentPlan", () => {
         const [task] = normalizeTasks(plan as never, [], generationSettings() as never, undefined, "产品海报", "chat", [], undefined, { mode: "image", image: { size: "16:9", quality: "high", count: 4 } });
 
         expect(task).toMatchObject({ type: "image", ratio: "16:9", quality: "high", count: 4 });
+    });
+
+    it("短剧资产 Agent 始终只提交一张固定格式候选图", () => {
+        const plan = {
+            intent: "generation",
+            objective: "生成角色候选图",
+            reply: "开始生成",
+            decisions: [],
+            foundation: { complexity: "simple", brief: { objective: "生成角色候选图" }, direction: { summary: "白底三视图" } },
+            deliverables: [{ id: "character-sheet", title: "角色候选图", type: "image", model: "image-pro", prompt: "白底角色三视图", count: 4, dependencies: [] }],
+        };
+
+        const [task] = normalizeTasks(plan as never, [DRAMA_ASSET_IMAGE_SKILL] as never, generationSettings() as never, { project: { ratio: "9:16" } }, "生成角色候选图", "drama", []);
+
+        expect(task).toMatchObject({ type: "image", count: 1, ratio: "16:9" });
     });
 
     it("将逐图引用别名和稳定资产 ID 一起写入真实上游提示词", () => {

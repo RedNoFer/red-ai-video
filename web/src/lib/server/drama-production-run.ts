@@ -6,7 +6,7 @@ import { approvedAssetReference, hasApprovedAssetReference } from "@/lib/drama-a
 import { continuityStartEvidence, latestFrameEvidence } from "@/lib/drama-continuity-policy";
 import { planDramaVideoSegments } from "@/lib/drama-frame-sequence";
 import { dramaReferenceImageBudget } from "@/lib/drama-production-plan";
-import { compileDramaShotExecutionPrompts, compileDramaShotVideoBasePrompt, compileDramaShotVideoTimeline, sanitizeDramaSupplierText } from "@/lib/drama-prompt-compiler";
+import { compileDramaShotExecutionPrompts, sanitizeDramaSupplierText } from "@/lib/drama-prompt-compiler";
 import type { DramaEpisode, DramaProductionPlan, DramaProductionRun, DramaProductionStep, DramaProject, DramaVideoReferenceBinding } from "@/lib/drama-project-contract";
 
 export type DramaProductionParameterInput = {
@@ -140,7 +140,7 @@ export function buildDramaProductionRun(project: DramaProject, episode: DramaEpi
                 dependsOn: Array.from(new Set(dependencies)),
                 status: dependencies.every((dependency) => steps.find((step) => step.id === dependency)?.status === "success") ? "ready" : "blocked",
                 title: `${shot.title} · 视频段 ${index + 1}/${videoSegments.length}`,
-                prompt: allFrames ? compileDramaVideoSegmentPrompt(shot, segment.frameIds, compileDramaShotVideoBasePrompt(project, episode, shot), project) : compileDramaShotExecutionPrompts(project, episode, shot).videoPrompt,
+                prompt: compileDramaShotExecutionPrompts(project, episode, shot).videoPrompt,
                 referenceAssetIds: assetIds,
                 referenceImageUrls: orderedFrames.map((frame) => frame.mediaUrl!),
                 referenceImageRemoteUrls: orderedFrames.map((frame) => frame.remoteUrl),
@@ -202,21 +202,6 @@ export function unlockDramaProductionSteps(run: DramaProductionRun) {
     return { ...run, steps, status: failed ? ("needs_review" as const) : active ? ("running" as const) : ("completed" as const), updatedAt: new Date().toISOString() };
 }
 
-export function compileDramaVideoSegmentPrompt(shot: DramaEpisode["shots"][number], frameIds: string[], basePrompt = shot.executionVideoPrompt || shot.videoPrompt, project?: DramaProject) {
-    const frames = frameIds.flatMap((id) => shot.framePlan?.frames.find((frame) => frame.id === id) || []);
-    const fallbackTimeline = frames.flatMap((frame) => [
-        `P${String(shot.order).padStart(2, "0")}-F${String(frame.sequenceIndex).padStart(2, "0")}｜${frame.startSecond}-${frame.endSecond}s`,
-        `动作与触发：${frame.actionPrompt}`,
-        `终点：${frame.imagePrompt}`,
-    ]);
-    return [
-        basePrompt,
-        project ? compileDramaShotVideoTimeline(project, shot, frameIds) : fallbackTimeline.join("\n"),
-    ]
-        .filter(Boolean)
-        .join("\n");
-}
-
 export function refreshDramaVideoStepReferences(project: DramaProject, episode: DramaEpisode, step: DramaProductionStep): DramaProductionStep {
     if (step.type !== "video" || !step.shotId) return step;
     const shot = episode.shots.find((item) => item.id === step.shotId);
@@ -233,10 +218,10 @@ export function refreshDramaVideoStepReferences(project: DramaProject, episode: 
     const previousShot = incoming ? episodeShot(project, episode, incoming.fromShotId) : undefined;
     const continuityTail = allFrames && step.clipIndex === 1 && previousShot ? continuityStartEvidence(previousShot) : undefined;
     const orderedFrames = continuityTail ? [{ mediaUrl: continuityTail.mediaUrl, remoteUrl: continuityTail.remoteUrl }, ...frameRefs] : frameRefs;
-    const basePrompt = allFrames ? compileDramaShotVideoBasePrompt(project, episode, shot) : compileDramaShotExecutionPrompts(project, episode, shot).videoPrompt;
+    const basePrompt = compileDramaShotExecutionPrompts(project, episode, shot).videoPrompt;
     return {
         ...step,
-        prompt: allFrames ? compileDramaVideoSegmentPrompt(shot, frameIds, basePrompt, project) : basePrompt,
+        prompt: basePrompt,
         referenceImageUrls: orderedFrames.map((frame) => frame.mediaUrl),
         referenceImageRemoteUrls: orderedFrames.map((frame) => frame.remoteUrl),
         referenceBindingsSnapshot: buildVideoReferenceBindings(project, shot, orderedFrames, shotReferenceIds(project, shot), incoming?.fromShotId),

@@ -20,12 +20,12 @@ import {
     updateDramaShotPromptPatch,
 } from "@/services/api/drama-projects";
 import { resolveModelRequestConfig, useEffectiveConfig } from "@/stores/use-config-store";
-import { appendDramaImageReferenceBindings, compileDramaShotExecutionPrompts, sanitizeDramaSupplierText } from "@/lib/drama-prompt-compiler";
+import { appendDramaImageReferenceBindings, compileDramaShotExecutionPrompts } from "@/lib/drama-prompt-compiler";
 import { formatPromptFieldLines } from "@/lib/drama-frame-sequence";
 import { approvedAssetReference } from "@/lib/drama-asset-baseline";
 import { dramaReferenceImageBudget } from "@/lib/drama-production-plan";
 import { activeFrameEvidence, continuityStartEvidence } from "@/lib/drama-continuity-policy";
-import { dramaVideoPromptRunKey, useDramaStore } from "../stores/use-drama-store";
+import { dramaVideoPromptRunKey, hasActiveDramaVideoPromptRun, useDramaStore } from "../stores/use-drama-store";
 import { buildSrt } from "../subtitle";
 import type { DramaCostSummary, DramaEpisode, DramaProductionPreflight, DramaProductionRun, DramaProject, DramaRenderTask, DramaShot } from "../types";
 import { cancelDramaAudioTask } from "./use-drama-audio-queue";
@@ -34,7 +34,7 @@ import { summarizeDramaGeneration } from "./drama-generation-readiness";
 import { DramaMediaPreviewModal, DramaMediaThumbnail, type DramaPreviewMedia } from "./drama-media-preview";
 import { DramaJianyingModal, DramaSubtitleModal } from "./drama-project-modals";
 import type { DramaProjectStage } from "./drama-project-sections";
-import { dramaShotVideoMode, estimateEpisodePoints } from "./drama-shot-generation-utils";
+import { applyDramaProductionRunStep, applyDramaVisualRunTerminalStep, dramaShotVideoMode, estimateEpisodePoints, resolveDramaVisualRunSync } from "./drama-shot-generation-utils";
 import { markDramaCanvasSynced } from "../../canvas/[id]/canvas-drama-navigation";
 import type { DramaVideoPromptAnalysis } from "@/lib/drama-project-contract";
 
@@ -66,6 +66,7 @@ export function DramaGenerationPanel({
     const loadProject = useDramaStore((state) => state.loadProject);
     const replaceShot = useDramaStore((state) => state.replaceShot);
     const queueAudio = useDramaStore((state) => state.queueAudio);
+    const promptOptimizationActive = useDramaStore((state) => hasActiveDramaVideoPromptRun(state.videoPromptRuns, project.id, episode.id));
     const [costSummary, setCostSummary] = useState<DramaCostSummary | null>(null);
     const [renderReady, setRenderReady] = useState<boolean | null>(null);
     const [reviewingVisuals, setReviewingVisuals] = useState(false);
@@ -109,6 +110,7 @@ export function DramaGenerationPanel({
     };
 
     useEffect(() => {
+        if (promptOptimizationActive) return;
         let active = true;
         setRenderReady(null);
         void fetch("/api/drama/render-capability", { cache: "no-store" })
@@ -118,7 +120,7 @@ export function DramaGenerationPanel({
         return () => {
             active = false;
         };
-    }, [episode.id, project.id]);
+    }, [episode.id, project.id, promptOptimizationActive]);
 
     useEffect(() => {
         let active = true;
@@ -129,11 +131,23 @@ export function DramaGenerationPanel({
             try {
                 const { run } = await getLatestDramaProductionRun(project.id, episode.id, "visual");
                 if (!active || run?.scope !== "visual") return;
-                setVisualRun(run);
+                setVisualRun((current) => (current?.updatedAt === run.updatedAt ? current : run));
                 const hasResolvedShotStep = run.steps.some((step) => step.type !== "asset_anchor" && step.taskId && ["success", "failed", "cancelled", "needs_review"].includes(step.status));
-                if (hasResolvedShotStep && run.updatedAt !== visualSyncVersion.current) {
+                if (hasResolvedShotStep && run.updatedAt !== visualSyncVersion.current && !hasActiveDramaVideoPromptRun(useDramaStore.getState().videoPromptRuns, project.id, episode.id)) {
                     visualSyncVersion.current = run.updatedAt;
-                    void loadProject(project.id, true).catch(() => undefined);
+                    const currentProject = useDramaStore.getState().projects.find((item) => item.id === project.id);
+                    if (currentProject) {
+                        const decision = resolveDramaVisualRunSync(currentProject, episode.id, run);
+                        const currentEpisode = currentProject.episodes.find((item) => item.id === episode.id);
+                        const nextEpisode = decision.project.episodes.find((item) => item.id === episode.id);
+                        if (currentEpisode && nextEpisode) {
+                            for (const currentShot of currentEpisode.shots) {
+                                let nextShot = nextEpisode.shots.find((item) => item.id === currentShot.id) || currentShot;
+                                for (const step of run.steps.filter((item) => item.shotId === currentShot.id)) nextShot = applyDramaVisualRunTerminalStep(nextShot, step);
+                                if (JSON.stringify(nextShot) !== JSON.stringify(currentShot)) useDramaStore.getState().replaceShot(project.id, episode.id, currentShot.id, nextShot);
+                            }
+                        }
+                    }
                 }
             } catch {
                 // A later pass will surface the persisted task state.
@@ -147,9 +161,10 @@ export function DramaGenerationPanel({
             active = false;
             window.clearInterval(timer);
         };
-    }, [episode.id, project.id, visualRun?.confirmedAt, visualRun?.status, loadProject]);
+    }, [episode.id, project.id, promptOptimizationActive, visualRun?.confirmedAt, visualRun?.status]);
 
     useEffect(() => {
+        if (promptOptimizationActive) return;
         let active = true;
         let loading = false;
         const load = async () => {
@@ -158,11 +173,18 @@ export function DramaGenerationPanel({
             try {
                 const data = await getLatestDramaProductionRun(project.id, episode.id);
                 if (!active) return;
-                setProductionRun(data.run);
-                setPreflight(data.preflight);
-                if (data.run?.updatedAt && data.run.updatedAt !== productionSyncVersion.current) {
+                setProductionRun((current) => (current?.updatedAt === data.run?.updatedAt ? current : data.run));
+                setPreflight((current) => (JSON.stringify(current) === JSON.stringify(data.preflight) ? current : data.preflight));
+                if (data.run?.updatedAt && data.run.updatedAt !== productionSyncVersion.current && !hasActiveDramaVideoPromptRun(useDramaStore.getState().videoPromptRuns, project.id, episode.id)) {
                     productionSyncVersion.current = data.run.updatedAt;
-                    void loadProject(project.id, true).catch(() => undefined);
+                    const currentProject = useDramaStore.getState().projects.find((item) => item.id === project.id);
+                    const currentEpisode = currentProject?.episodes.find((item) => item.id === episode.id);
+                    if (currentProject && currentEpisode && data.run) {
+                        for (const currentShot of currentEpisode.shots) {
+                            const nextShot = data.run.steps.filter((step) => step.shotId === currentShot.id).reduce((shot, step) => applyDramaProductionRunStep(shot, step, data.run?.id), currentShot);
+                            if (JSON.stringify(nextShot) !== JSON.stringify(currentShot)) useDramaStore.getState().replaceShot(project.id, episode.id, currentShot.id, nextShot);
+                        }
+                    }
                 }
             } catch {
                 if (!active) return;
@@ -178,13 +200,14 @@ export function DramaGenerationPanel({
             active = false;
             window.clearInterval(timer);
         };
-    }, [episode.id, project.id, productionRun?.status, loadProject]);
+    }, [episode.id, project.id, productionRun?.status, promptOptimizationActive]);
 
     useEffect(() => {
+        if (promptOptimizationActive) return;
         let active = true;
         const load = () =>
             void getDramaProjectCosts(project.id)
-                .then((value) => active && setCostSummary(value))
+                .then((value) => active && setCostSummary((current) => (JSON.stringify(current) === JSON.stringify(value) ? current : value)))
                 .catch(() => active && setCostSummary(null));
         load();
         const timer = window.setInterval(load, 5000);
@@ -192,7 +215,7 @@ export function DramaGenerationPanel({
             active = false;
             window.clearInterval(timer);
         };
-    }, [project.id]);
+    }, [project.id, promptOptimizationActive]);
 
     useEffect(() => {
         if (!renderTask?.id || !["pending", "running"].includes(renderTask.status)) return;
@@ -343,12 +366,21 @@ export function DramaGenerationPanel({
             const result = await generateDramaVideoPrompt({ project, episode, shot: { ...shot, videoPrompt: source }, referenceMaterials: references, requestId: `drama-video-optimize:${project.id}:${episode.id}:${shot.id}:${crypto.randomUUID()}` });
             const optimized = result.shots.find((item) => item.shotId === shot.id);
             if (!optimized?.videoPrompt?.trim() || !optimized.framePlan?.frames?.length) throw new Error("Agent 未返回当前镜头的标准视频提示词和逐帧计划");
-            const saved = await updateDramaShotPromptPatch(project.id, episode.id, shot.id, sanitizeDramaSupplierText(optimized.videoPrompt.trim(), project), undefined, { executionVideoPromptOrigin: "ai", framePlan: optimized.framePlan, framePlanOrigin: "ai" });
+            const saved = await updateDramaShotPromptPatch(project.id, episode.id, shot.id, optimized.videoPrompt.trim(), undefined, { executionVideoPromptOrigin: "ai", framePlan: optimized.framePlan, framePlanOrigin: "ai" });
             replaceShot(project.id, episode.id, shot.id, saved.shot, saved.updatedAt);
             message.success("提示词已优化并保存");
         } catch (error) {
             if (error instanceof DramaVideoPromptQualityError && error.candidate?.videoPrompt) {
-                message.warning("Agent 已返回候选提示词，但质量校验未通过；本次未自动保存，请在镜头详情中查看并修改");
+                modal.warning({
+                    title: "Agent 候选提示词未保存",
+                    content: (
+                        <div>
+                            <p className="mb-2 text-sm text-muted-foreground">{error.message}</p>
+                            <Input.TextArea value={error.candidate.videoPrompt} readOnly autoSize={{ minRows: 8, maxRows: 18 }} />
+                        </div>
+                    ),
+                    okText: "知道了",
+                });
                 return;
             }
             message.error(error instanceof Error ? error.message : "提示词优化失败");
@@ -1139,6 +1171,8 @@ function publicUpstreamError(raw: string) {
 function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview }: { project: DramaProject; episode: DramaEpisode; shot: DramaShot; productionRun: DramaProductionRun | null; onPreview: (media: DramaPreviewMedia) => void }) {
     const { message } = App.useApp();
     const replaceShot = useDramaStore((state) => state.replaceShot);
+    const beginVideoPrompt = useDramaStore((state) => state.beginVideoPrompt);
+    const finishVideoPrompt = useDramaStore((state) => state.finishVideoPrompt);
     const [videoPromptDraft, setVideoPromptDraft] = useState("");
     const [videoPromptOriginal, setVideoPromptOriginal] = useState("");
     const [optimizedFramePlan, setOptimizedFramePlan] = useState<DramaVideoPromptAnalysis["shots"][number]["framePlan"]>();
@@ -1160,10 +1194,8 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
             .slice(0, 1)
             .map((frame) => ({ ...frame, label: "本镜尾帧" })),
     ];
-    const compiledVideoPrompt = compileDramaShotExecutionPrompts(project, episode, shot).videoPrompt;
     const executionReferences = resolveShotVideoReferences(project, episode, shot, productionRun);
-    const manualExecutionPrompt = shot.fieldOrigins?.executionVideoPrompt === "manual" ? shot.executionVideoPrompt?.trim() : "";
-    const supplierVideoPrompt = formatPromptFieldLines(manualExecutionPrompt || compiledVideoPrompt || shot.videoPrompt?.trim() || videoStep?.executionPrompt?.trim() || "", "video");
+    const supplierVideoPrompt = shot.executionVideoPrompt?.trim() || shot.videoPrompt?.trim() || videoStep?.executionPrompt?.trim() || "";
     useEffect(() => {
         setVideoPromptDraft(supplierVideoPrompt);
         setVideoPromptOriginal(supplierVideoPrompt);
@@ -1171,7 +1203,7 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
     }, [shot.id, supplierVideoPrompt]);
     const optimizeVideoPrompt = async () => {
         const source = videoPromptDraft.trim() !== videoPromptOriginal.trim() ? videoPromptDraft.trim() : resolveShotVideoOptimizationSource(shot);
-        if (!source || optimizingVideoPrompt) return;
+        if (!source || optimizingVideoPrompt || !beginVideoPrompt(project.id, episode.id, shot.id)) return;
         setOptimizingVideoPrompt(true);
         try {
             const result = await generateDramaVideoPrompt({ project, episode, shot: { ...shot, videoPrompt: source }, referenceMaterials: executionReferences, requestId: `drama-video-optimize:${project.id}:${episode.id}:${shot.id}:${crypto.randomUUID()}` });
@@ -1190,10 +1222,11 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
             message.error(error instanceof Error ? error.message : "视频提示词优化失败");
         } finally {
             setOptimizingVideoPrompt(false);
+            finishVideoPrompt(project.id, episode.id, shot.id);
         }
     };
     const saveVideoPrompt = async () => {
-        const prompt = formatPromptFieldLines(videoPromptDraft.trim(), "video");
+        const prompt = videoPromptDraft.trim();
         if (!prompt || savingVideoPrompt) return;
         setSavingVideoPrompt(true);
         try {
@@ -1508,19 +1541,16 @@ function previewVideoReferenceBindings(project: DramaProject, episode: DramaEpis
     return frameBindings;
 }
 
-function resolveShotVideoPrompt(project: DramaProject, episode: DramaEpisode, shot: DramaShot, productionRun: DramaProductionRun | null) {
+function resolveShotVideoPrompt(_project: DramaProject, _episode: DramaEpisode, shot: DramaShot, productionRun: DramaProductionRun | null) {
     const submittedPrompt = productionRun?.steps
         .filter((step) => step.shotId === shot.id && step.type === "video")
         .sort((left, right) => (right.clipIndex || 0) - (left.clipIndex || 0))[0]
         ?.executionPrompt?.trim();
-    const compiledPrompt = compileDramaShotExecutionPrompts(project, episode, shot).videoPrompt;
-    return formatPromptFieldLines(shot.executionVideoPrompt?.trim() || shot.videoPrompt?.trim() || submittedPrompt || compiledPrompt || "", "video").trim();
+    return shot.executionVideoPrompt?.trim() || shot.videoPrompt?.trim() || submittedPrompt || "";
 }
 
 function resolveShotVideoOptimizationSource(shot: DramaShot) {
-    const executionPrompt = shot.executionVideoPrompt?.trim() || "";
-    if (executionPrompt && !/(?:时间段动作|P\d{2}-F\d{2}\s*[｜|])/u.test(executionPrompt)) return executionPrompt;
-    return shot.videoPrompt?.trim() || shot.description?.trim() || "";
+    return shot.executionVideoPrompt?.trim() || shot.videoPrompt?.trim() || shot.description?.trim() || "";
 }
 
 function resolveShotVideoReferences(project: DramaProject, episode: DramaEpisode, shot: DramaShot, productionRun: DramaProductionRun | null) {

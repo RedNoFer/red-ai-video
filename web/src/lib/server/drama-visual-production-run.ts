@@ -5,7 +5,6 @@ import { nanoid } from "nanoid";
 import { compileDramaAssetReferencePrompt, compileDramaFrameSupplierPrompt, resolveDramaFrameScene } from "@/lib/drama-prompt-compiler";
 import { approvedAssetReference } from "@/lib/drama-asset-baseline";
 import { continuityStartEvidence, latestFrameEvidence } from "@/lib/drama-continuity-policy";
-import { defaultDramaFrameBeats } from "@/lib/drama-frame-sequence";
 import type { DramaEpisode, DramaNamedAsset, DramaProductionRun, DramaProductionStep, DramaProject } from "@/lib/drama-project-contract";
 
 type VisualParameters = {
@@ -61,7 +60,8 @@ export function buildDramaVisualProductionRun(project: DramaProject, episode: Dr
         const generateEndFrame = parameters.frameType === "end_frame";
         const allFrames = parameters.frameType === "all_frames" || shot.storyboardFrameMode === "all_frames";
         if (allFrames) {
-            const beats = shot.framePlan?.frames?.length ? shot.framePlan.frames : defaultDramaFrameBeats(shot.duration, shot.videoPrompt, shot.imagePrompt);
+            const beats = shot.framePlan?.frames || [];
+            if (!beats.length) continue;
             const selectedFrameIds = new Set(parameters.frameIds || []);
             for (const [index, beat] of beats.entries()) {
                 const frameReferences = orderedVisualReferenceIds(project, shot, beat);

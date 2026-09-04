@@ -157,7 +157,7 @@ export function assertVideoReferenceRoles(config: SystemChannelAdvancedConfig | 
                 : protocol === "yumeng"
                   ? templateVideoReferenceRoles(config?.requestTemplate)
                   : protocol === "newapi-video"
-                    ? ["reference", "keyframe"]
+                    ? ["reference"]
                     : protocol === "openai" || protocol === "newapi" || protocol === "sub2api" || protocol === "openai-audio-dialogue"
                       ? ["reference", "first_frame"]
                       : protocol === "custom" || protocol === "compatible" || protocol === "auto"

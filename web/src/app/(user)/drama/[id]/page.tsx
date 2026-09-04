@@ -10,7 +10,7 @@ import { syncUserPointsFromHeaders } from "@/services/api/points";
 import { createFrameEvidence, latestFrameEvidence, supersedeFrameEvidence } from "@/lib/drama-continuity-policy";
 import { useEffectiveConfig } from "@/stores/use-config-store";
 import { useUserStore } from "@/stores/use-user-store";
-import { useDramaStore } from "../stores/use-drama-store";
+import { hasActiveDramaVideoPromptRun, useDramaStore } from "../stores/use-drama-store";
 import type { DramaContentAnalysis, DramaProject, DramaProjectVersion, DramaProductionPreflightIssue, DramaReviewCompletion, DramaReviewCompletionTask, DramaShot, DramaShotContinuity, DramaVisualAnalysis } from "../types";
 import { useDramaAudioQueue } from "./use-drama-audio-queue";
 import { DramaAgentPanel } from "./drama-agent-panel";
@@ -22,7 +22,7 @@ import { DramaReviewPanel, missingReviewFieldsForShot } from "./drama-review-pan
 import { DramaStoryboardShotCard } from "./drama-storyboard-shot-card";
 import { markDramaCanvasSynced } from "../../canvas/[id]/canvas-drama-navigation";
 import { DramaVersionModal } from "./drama-project-modals";
-import { dramaShotVideoMode, resolveDramaVisualRunSync } from "./drama-shot-generation-utils";
+import { applyDramaVisualRunTerminalStep, dramaShotVideoMode, resolveDramaVisualRunSync } from "./drama-shot-generation-utils";
 import { DramaEpisodeSidebar, DramaScriptPanel, DramaWorkspaceHeader, type DramaProjectStage } from "./drama-project-sections";
 
 export default function DramaProjectPage() {
@@ -63,11 +63,10 @@ function DramaProjectEditor({ project }: { project: DramaProject }) {
     const updateEpisode = useDramaStore((state) => state.updateEpisode);
     const updateShot = useDramaStore((state) => state.updateShot);
     const updateAsset = useDramaStore((state) => state.updateAsset);
-    const loadProject = useDramaStore((state) => state.loadProject);
     const applyContentAnalysis = useDramaStore((state) => state.applyContentAnalysis);
     const applyVisualAnalysis = useDramaStore((state) => state.applyVisualAnalysis);
     const applyReviewCompletion = useDramaStore((state) => state.applyReviewCompletion);
-    const replaceProject = useDramaStore((state) => state.replaceProject);
+    const replaceShot = useDramaStore((state) => state.replaceShot);
     const saveProjectNow = useDramaStore((state) => state.saveProjectNow);
     const createVersion = useDramaStore((state) => state.createVersion);
     const listVersions = useDramaStore((state) => state.listVersions);
@@ -102,7 +101,21 @@ function DramaProjectEditor({ project }: { project: DramaProject }) {
         shots: [],
     };
     const episode = project.episodes.find((item) => item.id === project.activeEpisodeId) || fallbackEpisode;
+    const promptOptimizationActive = useDramaStore((state) => hasActiveDramaVideoPromptRun(state.videoPromptRuns, project.id, episode.id));
     const hasEpisode = project.episodes.length > 0;
+    const runningVideo = episode.shots.find((shot) => shot.generationStatus === "running" && shot.generationTaskId);
+    const boundaryTarget = episode.shots.find((item) => {
+        const frames = item.frameEvidence || [];
+        return (
+            item.generationStatus === "success" &&
+            item.videoUrl &&
+            !frames.some((frame) => frame.role === "actual_start" && frame.sourceVideoUrl === item.videoUrl && frame.validity !== "superseded" && frame.validity !== "unavailable") &&
+            !frames.some((frame) => frame.role === "actual_end" && frame.sourceVideoUrl === item.videoUrl && frame.validity !== "superseded" && frame.validity !== "unavailable")
+        );
+    });
+    const boundaryTargetEvidenceKey = boundaryTarget
+        ? (boundaryTarget.frameEvidence || []).map((frame) => `${frame.role}:${frame.sourceVideoUrl || ""}:${frame.validity}`).join("|")
+        : "";
     const openEpisodeCanvas = async () => {
         try {
             if (episode.canvasProjectId) {
@@ -392,17 +405,15 @@ function DramaProjectEditor({ project }: { project: DramaProject }) {
         }
     };
     useEffect(() => {
+        if (promptOptimizationActive) return;
         if (stage === "generate" && !assetsOpen) return;
-        const hasPendingStoryboard = episode.shots.some(
-            (shot) => [shot.storyboardStatus, shot.storyboardEndStatus].some((status) => status === "queued" || status === "running") || (shot.storyboardFrames || []).some((frame) => frame.status === "queued" || frame.status === "running"),
-        );
         let active = true;
         let syncing = false;
         let timer: number | undefined;
         const syncVisualRun = async () => {
             if (syncing) return;
             syncing = true;
-            let shouldContinue = hasPendingStoryboard;
+            let shouldContinue = false;
             try {
                 const { run } = await getLatestDramaProductionRun(project.id, episode.id, "visual");
                 if (!active || !run) return;
@@ -410,11 +421,16 @@ function DramaProjectEditor({ project }: { project: DramaProject }) {
                 if (!currentProject) return;
                 const decision = resolveDramaVisualRunSync(currentProject, episode.id, run);
                 shouldContinue = decision.shouldContinue;
-                if (decision.project !== currentProject) replaceProject(decision.project);
-                if (decision.shouldReload && run.updatedAt !== visualRunSyncVersionRef.current) {
-                    visualRunSyncVersionRef.current = run.updatedAt;
-                    await loadProject(project.id, true);
+                const nextEpisode = decision.project.episodes.find((item) => item.id === episode.id);
+                const currentEpisode = currentProject.episodes.find((item) => item.id === episode.id);
+                if (currentEpisode && nextEpisode) {
+                    for (const currentShot of currentEpisode.shots) {
+                        let nextShot = nextEpisode.shots.find((item) => item.id === currentShot.id) || currentShot;
+                        for (const step of run.steps.filter((item) => item.shotId === currentShot.id)) nextShot = applyDramaVisualRunTerminalStep(nextShot, step);
+                        if (JSON.stringify(nextShot) !== JSON.stringify(currentShot)) replaceShot(project.id, episode.id, currentShot.id, nextShot);
+                    }
                 }
+                if (decision.shouldReload && run.updatedAt !== visualRunSyncVersionRef.current) visualRunSyncVersionRef.current = run.updatedAt;
             } catch {
                 // A later sync pass will surface the persisted task state.
             } finally {
@@ -427,10 +443,10 @@ function DramaProjectEditor({ project }: { project: DramaProject }) {
             active = false;
             if (timer) window.clearTimeout(timer);
         };
-    }, [assetsOpen, episode.id, episode.shots, loadProject, project.id, replaceProject, stage]);
+    }, [assetsOpen, episode.id, project.id, promptOptimizationActive, replaceShot, stage]);
 
     useEffect(() => {
-        const running = episode.shots.find((shot) => shot.generationStatus === "running" && shot.generationTaskId);
+        const running = runningVideo;
         if (!running) return;
         const timer = window.setInterval(async () => {
             const response = await fetch(`/api/video-tasks/${encodeURIComponent(running.generationTaskId!)}`, { cache: "no-store" });
@@ -451,18 +467,10 @@ function DramaProjectEditor({ project }: { project: DramaProject }) {
             if (payload.task?.status === "error" || payload.task?.status === "cancelled") updateShot(project.id, episode.id, running.id, { generationStatus: payload.task.status, generationError: payload.task.error });
         }, 2500);
         return () => window.clearInterval(timer);
-    }, [audioReady, episode.id, episode.shots, project.id, updateShot]);
+    }, [audioReady, episode.id, project.id, runningVideo?.audioMode, runningVideo?.dialogue, runningVideo?.generationTaskId, runningVideo?.id, runningVideo?.subtitle, updateShot]);
 
     useEffect(() => {
-        const shot = episode.shots.find((item) => {
-            const frames = item.frameEvidence || [];
-            return (
-                item.generationStatus === "success" &&
-                item.videoUrl &&
-                !frames.some((frame) => frame.role === "actual_start" && frame.sourceVideoUrl === item.videoUrl && frame.validity !== "superseded" && frame.validity !== "unavailable") &&
-                !frames.some((frame) => frame.role === "actual_end" && frame.sourceVideoUrl === item.videoUrl && frame.validity !== "superseded" && frame.validity !== "unavailable")
-            );
-        });
+        const shot = boundaryTarget;
         const attemptKey = shot?.videoUrl ? `${shot.id}:${shot.videoUrl}` : "";
         if (!shot || boundaryFrameTaskRef.current || boundaryFrameAttemptRef.current === attemptKey) return;
         boundaryFrameTaskRef.current = shot.id;
@@ -492,7 +500,7 @@ function DramaProjectEditor({ project }: { project: DramaProject }) {
             .finally(() => {
                 boundaryFrameTaskRef.current = "";
             });
-    }, [episode.id, episode.shots, project.id, updateShot]);
+    }, [boundaryTarget?.id, boundaryTarget?.videoUrl, boundaryTargetEvidenceKey, episode.id, project.id, updateShot]);
 
     return hasEpisode ? (
         <main className="flex h-full min-h-0 flex-col overflow-hidden bg-background text-foreground" data-drama-workspace aria-label="短剧制作工作区">

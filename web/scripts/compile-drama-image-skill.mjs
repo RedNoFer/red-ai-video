@@ -32,7 +32,7 @@ writeFileSync(
             workspaces: Array.isArray(frontmatter.workspaces) ? frontmatter.workspaces.map(String) : ["image", "drama"],
             action: String(frontmatter.action || "generate"),
             requiresReference: Boolean(frontmatter.requiresReference),
-            defaultConfig: {},
+            defaultConfig: frontmatter.defaultConfig && typeof frontmatter.defaultConfig === "object" ? frontmatter.defaultConfig : {},
             keywords: Array.isArray(frontmatter.keywords) ? frontmatter.keywords.map(String) : [],
             instructions: body,
             promptRules,

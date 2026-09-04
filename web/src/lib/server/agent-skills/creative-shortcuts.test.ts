@@ -59,8 +59,9 @@ describe("creative shortcut skills", () => {
         expect(SEEDANCE_25_DIRECTOR_SKILL.defaultConfig).toEqual({});
     });
 
-    it("keeps the drama asset image Skill available for character, scene and prop prompts", () => {
-        expect(DRAMA_ASSET_IMAGE_SKILL.promptRules).toContain("角色图");
+    it("keeps the fixed character-sheet and single-subject asset rules available", () => {
+        expect(DRAMA_ASSET_IMAGE_SKILL.promptRules).toContain("纯白色无缝背景的三视图角色基准板");
+        expect(DRAMA_ASSET_IMAGE_SKILL.promptRules).toContain("场景图只生成一个没有人物的空间");
         expect(DRAMA_ASSET_IMAGE_SKILL.refinementRules).toContain("change / preserve / constraints");
     });
 
@@ -85,7 +86,7 @@ describe("creative shortcut skills", () => {
         expect(SEEDANCE_VIDEO_PROMPT_LAYOUT).toContain("全局设定");
         expect(SEEDANCE_VIDEO_PROMPT_LAYOUT).toContain("时间段动作");
         expect(SEEDANCE_VIDEO_PROMPT_LAYOUT).toContain("起点、动作与触发、可见衔接、终点");
-        expect(SEEDANCE_VIDEO_PROMPT_LAYOUT).toContain("镜头级字段只做摘要");
+        expect(SEEDANCE_VIDEO_PROMPT_LAYOUT).toContain("公开 videoPrompt 必须由 Agent 直接完整写出");
         expect(SEEDANCE_VIDEO_PROMPT_LAYOUT).not.toContain("阶段节拍：只有多事件");
         expect(SEEDANCE_VIDEO_PROMPT_LAYOUT).toContain("视觉风格与光色");
         expect(SEEDANCE_VIDEO_PROMPT_LAYOUT).toContain("每个非空字段必须独立一行");

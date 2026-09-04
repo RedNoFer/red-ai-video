@@ -681,6 +681,19 @@ describe("video generation candidate failover", () => {
         expect(JSON.parse(String(init.body)).prompt).toContain("参考素材一致性要求");
     });
 
+    it("preserves numeric durations from drama production steps on New API", async () => {
+        mocks.getAuthSettings.mockResolvedValue(newApiVideoSettings());
+        mocks.fetchInternalApi.mockResolvedValue(json({ task_id: "newapi-drama-video-task", status: "queued" }));
+
+        const response = await POST(request({ model: "admin-configured-video", videoSeconds: 15, size: "9:16", vquality: "480" }, [{ type: "image", url: "https://cdn.example.com/frame.png" }], { surface: "drama", runId: "drama-run" }));
+        const body = JSON.parse(String((mocks.fetchInternalApi.mock.calls[0]?.[1] as RequestInit).body));
+
+        expect(response.status).toBe(200);
+        expect(body.duration).toBe(15);
+        expect(body.referenceImages).toEqual(["https://cdn.example.com/frame.png"]);
+        expect(mocks.createVideoTask).toHaveBeenCalledWith(expect.objectContaining({ requestedDurationSeconds: 15 }));
+    });
+
     it.each([
         ["不鸣", 1, 2, "/api/ai/system/buming/v1/videos/generations"],
         ["New API", 2, 1, "/api/ai/system/newapi-video/v1/videos"],
@@ -1096,7 +1109,7 @@ describe("video generation candidate failover", () => {
         expect(mocks.fetchInternalApi.mock.calls[0]?.[0]).toContain("/api/ai/system/two/");
     });
 
-    it("allows a drama run to submit eight total images when its model declares all-frame support", async () => {
+    it("blocks a New API drama keyframe run even when a binding claims all-frame support", async () => {
         const newApiChannel = applyChannelProtocol({ ...channels[0], models: ["admin-configured-video"], advancedConfig: emptyAdvancedConfig() }, "newapi-video");
         mocks.getAuthSettings.mockResolvedValue({
             ...settings,
@@ -1113,8 +1126,9 @@ describe("video generation candidate failover", () => {
 
         const response = await POST(request({ model: "video", videoSeconds: "15", size: "9:16", vquality: "720" }, references, { surface: "drama", runId: "run-nine-images" }));
 
-        expect(response.status).toBe(200);
-        expect(mocks.fetchInternalApi).toHaveBeenCalledOnce();
+        expect(response.status).toBe(400);
+        expect(await response.json()).toMatchObject({ error: "当前模型未声明支持全能帧关键图，请切换支持全能帧的模型" });
+        expect(mocks.fetchInternalApi).not.toHaveBeenCalled();
     });
 
     it("does not switch a drama all-frame request to another logical model", async () => {

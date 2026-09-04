@@ -106,30 +106,6 @@ export function validateDramaFramePlanVisuals(frames: readonly DramaFrameBeat[])
     return errors;
 }
 
-export function defaultDramaFrameBeats(duration: number, actionPrompt: string, imagePrompt: string, frameCount = 5): DramaFrameBeat[] {
-    const count = Math.max(1, Math.min(MAX_FRAME_BEATS, Math.floor(frameCount)));
-    const phases = ["建立动作入口", "动作推进", "关键动作结果", "结果反应/转场"];
-    const normalizedDuration = Math.max(1, Math.round(duration));
-    const activePhases = Array.from({ length: count }, (_, index) => phases[index] || `阶段${index + 1}`);
-    const normalizedActionPrompt = actionPrompt.trim();
-    const normalizedImagePrompt = imagePrompt.trim();
-    const boundaries = activePhases.map((_, index) => number((normalizedDuration * index) / activePhases.length)).concat(normalizedDuration);
-    return activePhases.map((phase, index) => {
-        const startSecond = boundaries[index];
-        const endSecond = boundaries[index + 1];
-        return {
-            id: `frame-${index + 1}`,
-            sequenceIndex: index + 1,
-            startSecond,
-            endSecond,
-            actionPrompt: `${phase}：${normalizedActionPrompt}；${frameProgressionState(index, count)}`,
-            imagePrompt: formatPromptFieldLines(
-                `静态关键帧：${normalizedImagePrompt}；可见状态：${frameProgressionState(index, count)}；可见表演状态：${phase}时眉眼、视线、呼吸与手部/身体关系呈现对应变化；景别：中景；机位与构图：平视，主体位于9:16安全区，前景有具体框景；站位与视线：主体站位明确，视线落向当前叙事目标；三层空间：前景为具体框景或遮挡物，中景承载主体与道具，背景交代环境纵深；光色与风格：延续本场主光与色板，材质纹理自然；负面约束：无字幕、无水印、无logo、无HUD、无现代元素、无额外主体、无额外肢体、无变形。`,
-            ),
-        };
-    });
-}
-
 export function upgradeDramaFrameImagePrompt(
     imagePrompt: string,
     actionPrompt: string,

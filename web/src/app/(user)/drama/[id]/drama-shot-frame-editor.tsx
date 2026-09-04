@@ -6,7 +6,7 @@ import { useMemo, useRef, useState } from "react";
 
 import { approvedAssetReference } from "@/lib/drama-asset-baseline";
 import { activeFrameEvidence, continuityStartEvidence, createFrameEvidence, latestFrameEvidence, replaceFrameEvidence, supersedeFrameEvidenceByRole } from "@/lib/drama-continuity-policy";
-import { defaultDramaFrameBeats, deleteDramaFrameBeat, dramaFrameVisualSubject, formatPromptFieldLines, insertDramaFrameBeat, updateDramaFrameBeat, validateDramaFrameVisualContent } from "@/lib/drama-frame-sequence";
+import { deleteDramaFrameBeat, dramaFrameVisualSubject, formatPromptFieldLines, insertDramaFrameBeat, updateDramaFrameBeat, validateDramaFrameVisualContent } from "@/lib/drama-frame-sequence";
 import { appendDramaImageReferenceBindings, compileDramaFrameSupplierPrompt, resolveDramaFrameScene } from "@/lib/drama-prompt-compiler";
 import { imagePreviewUrl } from "@/lib/media-image-url";
 import { dramaAssetReferences } from "./drama-asset-reference-utils";
@@ -50,7 +50,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
     const endPromptEvidence = latestPromptEvidence(shot, "storyboard_end");
     const startFrames = activeFrameEvidence(shot, "storyboard_start");
     const endFrames = activeFrameEvidence(shot, "storyboard_end");
-    const beats = useMemo(() => frameBeats(shot, project.productionBible?.productionPlan?.video.frameCount || 5), [project.productionBible?.productionPlan?.video.frameCount, shot]);
+    const beats = useMemo(() => frameBeats(shot), [shot]);
     const storedFrames = useMemo(() => [...(shot.storyboardFrames || [])].sort((left, right) => left.sequenceIndex - right.sequenceIndex), [shot.storyboardFrames]);
     const frameById = useMemo(() => new Map(storedFrames.map((frame) => [frame.id, frame])), [storedFrames]);
     const generationActive =
@@ -1049,8 +1049,8 @@ function FrameStatusTag({ frame }: { frame?: DramaStoryboardFrame }) {
     return <Tag color={colors[state]}>{labels[state] || state}</Tag>;
 }
 
-function frameBeats(shot: DramaShot, frameCount: number): DramaFrameBeat[] {
-    return shot.framePlan?.frames?.length ? [...shot.framePlan.frames].sort((left, right) => left.sequenceIndex - right.sequenceIndex) : defaultDramaFrameBeats(shot.duration, shot.videoPrompt, shot.imagePrompt, frameCount);
+function frameBeats(shot: DramaShot): DramaFrameBeat[] {
+    return shot.framePlan?.frames?.length ? [...shot.framePlan.frames].sort((left, right) => left.sequenceIndex - right.sequenceIndex) : [];
 }
 
 function emptyStoryboardFrame(beat: DramaFrameBeat): DramaStoryboardFrame {
@@ -1197,7 +1197,7 @@ function plannedFrameReferences(project: DramaProject, episodeId: string, shot: 
         if (tail?.mediaUrl && previous)
             references.push({ id: "continuity-tail", label: "上一镜「" + previous.title + "」已验收实际尾帧", binding: "作为当前帧唯一动作起点，锁定人物姿态、服装、道具状态、场景空间、构图、光向和轴线", url: tail.mediaUrl, remoteUrl: tail.remoteUrl });
     }
-    const beat = frame === "end" ? undefined : frameBeats(shot, project.productionBible?.productionPlan?.video.frameCount || 5).find((item) => item.sequenceIndex === frame);
+    const beat = frame === "end" ? undefined : frameBeats(shot).find((item) => item.sequenceIndex === frame);
     const frameScene = beat ? resolveDramaFrameScene(project, shot, beat) : project.scenes.find((item) => item.id === shot.sceneId);
     const available = [frameScene?.id, ...shot.characterIds, ...shot.propIds, ...shot.clueIds, ...(shot.sourceAssetIds || [])].filter((id): id is string => Boolean(id));
     if (shot.framePlan?.manualReferenceImages) {

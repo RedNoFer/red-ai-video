@@ -12,6 +12,7 @@ import { inferSeedance25VideoDuration, resolveSeedance25DirectorInstructions } f
 const VIDEO_AGENT_REQUEST_RE = /视频|短片|动画|动效|镜头|运镜|图生视频|文生视频|动起来/u;
 type AgentSkillSelectionContext = {
     prompt?: string;
+    snapshot?: unknown;
     generationPreferences?: AgentRun["generationPreferences"];
     requestedModelIds?: AgentRun["requestedModelIds"];
     workflow?: AgentRun["workflow"];
@@ -26,11 +27,13 @@ export function selectAgentSkills(settings: AuthSettings, surface: CreativeSurfa
     const available = new Map(availableAgentSkills(settings, surface).map((skill) => [skill.id, skill]));
     if (surface === "drama" && !available.has(SEEDANCE_DIRECTOR_SKILL.id)) available.set(SEEDANCE_DIRECTOR_SKILL.id, { ...SEEDANCE_DIRECTOR_SKILL, keywords: [...SEEDANCE_DIRECTOR_SKILL.keywords], workspaces: [...SEEDANCE_DIRECTOR_SKILL.workspaces] });
     const videoDefault = surface !== "canvas" && isVideoAgentRequest(settings, context);
-    const dramaAssetDefault = surface === "drama" && !videoDefault && isDramaAssetImageRequest(context?.prompt);
+    const dramaAssetDefault = surface === "drama" && !videoDefault && isDramaAssetImageRequest(context?.prompt, context?.snapshot);
     if (videoDefault && !available.has(SEEDANCE_25_DIRECTOR_SKILL.id) && !settings.agentSkills.some((skill) => skill.id === SEEDANCE_25_DIRECTOR_SKILL.id && skill.enabled === false)) {
         available.set(SEEDANCE_25_DIRECTOR_SKILL.id, { ...SEEDANCE_25_DIRECTOR_SKILL, keywords: [...SEEDANCE_25_DIRECTOR_SKILL.keywords], workspaces: [...SEEDANCE_25_DIRECTOR_SKILL.workspaces] });
     }
-    const ids = [...(surface === "drama" ? ["seedance-director"] : []), ...(videoDefault ? [SEEDANCE_25_DIRECTOR_SKILL.id] : []), ...requestedSkillIds, ...(dramaAssetDefault ? [DRAMA_ASSET_IMAGE_SKILL.id] : [])];
+    if (dramaAssetDefault && !available.has(DRAMA_ASSET_IMAGE_SKILL.id)) available.set(DRAMA_ASSET_IMAGE_SKILL.id, { ...DRAMA_ASSET_IMAGE_SKILL, keywords: [...DRAMA_ASSET_IMAGE_SKILL.keywords], workspaces: [...DRAMA_ASSET_IMAGE_SKILL.workspaces] });
+    const compatibleRequestedSkillIds = dramaAssetDefault ? requestedSkillIds.filter((id) => id.trim() !== "character-design") : requestedSkillIds;
+    const ids = [...(surface === "drama" ? ["seedance-director"] : []), ...(videoDefault ? [SEEDANCE_25_DIRECTOR_SKILL.id] : []), ...compatibleRequestedSkillIds, ...(dramaAssetDefault ? [DRAMA_ASSET_IMAGE_SKILL.id] : [])];
     return Array.from(new Set(ids.map((id) => id.trim()).filter(Boolean))).flatMap((id) => (available.has(id) ? [available.get(id)!] : []));
 }
 
@@ -46,8 +49,13 @@ function isVideoAgentRequest(settings: AuthSettings, context?: AgentSkillSelecti
     return VIDEO_AGENT_REQUEST_RE.test(context?.prompt || "");
 }
 
-function isDramaAssetImageRequest(prompt = "") {
-    return /(?:角色|场景|道具)(?:设定图|基准图|候选图|参考图|图片|生图|视觉资产|资产图)|(?:生成|生图|创建|补全).{0,20}(?:角色|场景|道具)(?:设定图|基准图|候选图|参考图|图片|生图|视觉资产|资产图)/u.test(prompt);
+function isDramaAssetImageRequest(prompt = "", snapshot?: unknown) {
+    if (/(?:角色|场景|道具)(?:设定图|基准图|候选图|参考图|图片|生图|视觉资产|资产图)|(?:生成|生图|创建|补全).{0,20}(?:角色|场景|道具)(?:设定图|基准图|候选图|参考图|图片|生图|视觉资产|资产图)/u.test(prompt)) return true;
+    if (!/(?:候选图|基准图|设定图|参考图|图片|生图|生成|创建|补全)/u.test(prompt)) return false;
+    return records(record(snapshot).characters).some((character) => {
+        const name = text(character.name);
+        return name.length > 1 && prompt.includes(name);
+    });
 }
 
 export function agentPlannerSystemPrompt(surface: CreativeSurface, fallbackExample: string) {

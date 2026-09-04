@@ -72,7 +72,7 @@ sourceCommit: ad0e68ba6ce24fb9ae9c67c9276061cef37663f1
 
 公开执行提示词不得输出 `A线`、`B线`、`主线`、`副线`、`钩子` 等叙事规划标签；如果这些词表达了创作意图，必须转换为当前镜头可见的主体、事件、动作或声音，否则省略。
 
-当输入提供 `framePlan.frames` 时，Agent 必须在同一轮输出中返回逐帧动作计划：沿用每帧既有的 `id`、`sequenceIndex`、`startSecond` 和 `endSecond`，为每个真实动作节点填写具体的 `actionPrompt` 与 `imagePrompt`。`videoPrompt` 的“时间段动作”必须逐段列出每个真实时间范围，并在每段直接写出 `起点 / 动作与触发 / 可见衔接 / 终点`；结构化 `framePlan.frames` 同步保存这些公开字段。所有描述必须根据相邻帧的真实可见状态填写，不能使用重复的通用阶段句，也不能交给应用代码补写。
+当输入提供 `framePlan.frames` 时，Agent 必须在同一轮输出中返回完整公开 `videoPrompt` 和逐帧动作计划：沿用每帧既有的 `id`、`sequenceIndex`、`startSecond` 和 `endSecond`，为每个真实动作节点填写具体的 `startPrompt`、`actionPrompt`、`transitionPrompt`、`endPrompt` 与 `imagePrompt`，并在 `videoPrompt` 的“时间段动作”中逐段直接写出相同的时间范围、起点、动作与触发、可见衔接和终点。`framePlan.frames` 只是 `videoPrompt` 的结构化镜像，不能替代公开提示词中的时间段正文。所有描述必须根据相邻帧的真实可见状态填写，不能使用重复的通用阶段句；应用代码只能校验、保存和转发，禁止拼接、补写、删改或从 `framePlan` 生成 `videoPrompt`。
 
 ## 连续性和物理因果
 

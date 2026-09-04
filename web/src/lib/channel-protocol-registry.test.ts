@@ -124,6 +124,8 @@ describe("channel protocol registry", () => {
             supportsReferenceImage: true,
             supportsReferenceVideo: true,
             supportsReferenceAudio: true,
+            supportsKeyframes: false,
+            videoReferenceModes: ["reference"],
         });
         expect(channelProtocolDefinition("seedance").operations.video).toMatchObject({ createPath: "/contents/generations/tasks", queryPath: "/contents/generations/tasks/:task_id", resultField: "content.video_url" });
         expect(channelProtocolDefinition("volcengine-video").operations.video).toEqual(channelProtocolDefinition("seedance").operations.video);

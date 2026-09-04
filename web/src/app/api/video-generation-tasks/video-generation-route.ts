@@ -117,7 +117,7 @@ export async function POST(request: Request) {
             const geminiVideo = isGeminiVideoChannel(channel);
             const capabilityProfile = channel.capabilityProfile;
             const bumingContract = channel.advancedConfig?.protocol === "buming-seedance" ? resolveBumingSeedanceVideoModelContract(channel.model) : undefined;
-            const supportsKeyframes = bumingContract ? bumingContract.videoReferenceModes.includes("all_frames") : capabilityProfile?.supportsKeyframes;
+            const supportsKeyframes = bumingContract ? bumingContract.videoReferenceModes.includes("all_frames") : channel.advancedConfig?.protocol === "newapi-video" ? false : capabilityProfile?.supportsKeyframes;
             if (keyframeCount && !supportsKeyframes) {
                 if (bumingContract && !bumingContract.videoReferenceModes.includes("all_frames")) {
                     const error = new Error("当前不鸣视频模型不支持全能帧连续参考");
@@ -140,7 +140,7 @@ export async function POST(request: Request) {
                     : {}),
                 videoSeconds: geminiVideo
                     ? normalizeGeminiVideoDuration(requestedParameters.videoSeconds)
-                    : resolveUpstreamVideoDuration(channel.advancedConfig?.protocol === "newapi-video" && !clean(body.config?.videoSeconds) ? 5 : requestedParameters.videoSeconds, channel.advancedConfig?.protocol === "newapi-video" ? 5 : settings.generationDefaults.videoSeconds, {
+                    : resolveUpstreamVideoDuration(channel.advancedConfig?.protocol === "newapi-video" && !hasProvidedValue(body.config?.videoSeconds) ? 5 : requestedParameters.videoSeconds, channel.advancedConfig?.protocol === "newapi-video" ? 5 : settings.generationDefaults.videoSeconds, {
                           durationRange: channel.advancedConfig?.durationRange,
                           minDurationSeconds: channel.capabilityProfile?.minDurationSeconds,
                           maxDurationSeconds: channel.capabilityProfile?.maxDurationSeconds,
@@ -624,6 +624,9 @@ function videoUnits(raw: Record<string, unknown>, multipliers: Awaited<ReturnTyp
 }
 function clean(value: unknown) {
     return typeof value === "string" ? value.trim() : "";
+}
+function hasProvidedValue(value: unknown) {
+    return value !== undefined && value !== null && String(value).trim() !== "";
 }
 function positiveAttemptNo(value: unknown) {
     const parsed = Math.floor(Number(value));

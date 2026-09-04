@@ -67,6 +67,8 @@ describe("Drama generation production workspace", () => {
         expect(source).toContain("videoPromptRuns");
         expect(source).toContain("beginVideoPrompt");
         expect(source).toContain("finishVideoPrompt");
+        expect(source).toContain("hasActiveDramaVideoPromptRun");
+        expect(source).toContain("if (promptOptimizationActive) return");
         const executionPromptStart = source.indexOf("function ShotExecutionDetails");
         const executionPromptEnd = source.indexOf("function ProductionPromptPreview", executionPromptStart);
         const executionPrompt = source.slice(executionPromptStart, executionPromptEnd);
@@ -74,6 +76,8 @@ describe("Drama generation production workspace", () => {
         expect(executionPrompt).toContain("framePlan");
         expect(executionPrompt).toContain("videoPromptDraft.trim() === videoPromptOriginal.trim()");
         expect(executionPrompt).toContain("resolveShotVideoOptimizationSource");
+        expect(executionPrompt).toContain("beginVideoPrompt(project.id, episode.id, shot.id)");
+        expect(executionPrompt).toContain("finishVideoPrompt(project.id, episode.id, shot.id)");
         expect(executionPrompt).not.toContain("saveProjectNow(project.id)");
         expect(executionPrompt).not.toContain("updateShot(project.id, episode.id, shot.id");
     });
@@ -87,7 +91,13 @@ describe("Drama generation production workspace", () => {
         expect(cancelBlock).toContain('JSON.stringify({ action: "cancel" })');
         expect(cancelBlock).not.toContain('JSON.stringify({ status: "cancelled" })');
         expect(source).toContain("productionRun?.steps.filter((step) => step.shotId === shot.id && step.type === \"video\")");
-        expect(source).toContain("await loadProject(project.id, true)");
+        expect(source).toContain("applyDramaVisualRunTerminalStep");
+        expect(source).toContain("replaceShot(project.id, episode.id, currentShot.id, nextShot)");
+        expect(source).toContain("setVisualRun((current) => (current?.updatedAt === run.updatedAt ? current : run))");
+        expect(source).toContain("applyDramaProductionRunStep");
+        expect(source).toContain("data.run.steps.filter((step) => step.shotId === currentShot.id)");
+        expect(source).not.toContain("replaceProject(decision.project)");
+        expect(source).toContain("data.run.steps.filter((step) => step.shotId === currentShot.id)");
     });
 
     it("groups shot-level AI actions under one Agent creation entry", async () => {
@@ -213,10 +223,17 @@ describe("Drama generation production workspace", () => {
 
         expect(source).toContain("const loadProject = useDramaStore((state) => state.loadProject)");
         expect(source).toContain('getLatestDramaProductionRun(project.id, episode.id, "visual")');
-        expect(source).toContain("hasPendingStoryboard");
+        expect(source).toContain("let shouldContinue = false");
         expect(source).toContain("resolveDramaVisualRunSync(currentProject, episode.id, run)");
-        expect(source).toContain("replaceProject(decision.project)");
+        expect(source).toContain("replaceShot(project.id, episode.id, currentShot.id, nextShot)");
         expect(source).toContain("if (active && shouldContinue) timer = window.setTimeout");
-        expect(source).toContain("await loadProject(project.id, true)");
+        expect(source).toContain("const runningVideo = episode.shots.find");
+        expect(source).toContain("const boundaryTarget = episode.shots.find");
+        expect(source).not.toContain("[audioReady, episode.id, episode.shots, project.id, updateShot]");
+        expect(source).not.toContain("[episode.id, episode.shots, project.id, updateShot]");
+        const visualSyncStart = source.indexOf("useEffect(() => {\n        if (promptOptimizationActive) return;", source.indexOf("const [preflighting"));
+        const visualSyncEnd = source.indexOf("useEffect(() => {\n        const running = runningVideo", visualSyncStart);
+        expect(visualSyncEnd).toBeGreaterThan(visualSyncStart);
+        expect(source.slice(visualSyncStart, visualSyncEnd)).not.toContain("loadProject(project.id, true)");
     });
 });

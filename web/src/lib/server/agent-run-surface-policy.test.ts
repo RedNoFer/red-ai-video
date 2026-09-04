@@ -48,9 +48,26 @@ describe("selectAgentSkills", () => {
         expect(skills.map((skill) => skill.id)).toEqual(["seedance-director", "drama-asset-image-director"]);
     });
 
-    it("keeps the asset image contract after a generic character skill is selected", () => {
+    it("uses the asset contract when a named project character requests a candidate", () => {
+        const skills = selectAgentSkills(DEFAULT_SETTINGS, "drama", [], {
+            prompt: "为 Karin 生成候选图",
+            requestedModelIds: [],
+            generationPreferences: {},
+            snapshot: { characters: [{ id: "character-karin", name: "Karin" }] },
+        });
+
+        expect(skills.map((skill) => skill.id)).toEqual(["seedance-director", "drama-asset-image-director"]);
+    });
+
+    it("restores the mandatory asset contract when old settings omit it", () => {
+        const settings = { ...DEFAULT_SETTINGS, agentSkills: DEFAULT_SETTINGS.agentSkills.filter((skill) => skill.id !== "drama-asset-image-director") };
+
+        expect(selectAgentSkills(settings, "drama", [], { prompt: "生成角色候选图", requestedModelIds: [], generationPreferences: {} }).map((skill) => skill.id)).toEqual(["seedance-director", "drama-asset-image-director"]);
+    });
+
+    it("uses the fixed asset sheet contract instead of mixing it with the generic character skill", () => {
         const skills = selectAgentSkills(DEFAULT_SETTINGS, "drama", ["character-design"], { prompt: "生成一个角色候选图", requestedModelIds: [], generationPreferences: {} });
-        expect(skills.map((skill) => skill.id)).toEqual(["seedance-director", "character-design", "drama-asset-image-director"]);
+        expect(skills.map((skill) => skill.id)).toEqual(["seedance-director", "drama-asset-image-director"]);
     });
 
     it("does not add the static asset skill to drama video requests", () => {

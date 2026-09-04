@@ -1,6 +1,5 @@
 import type { DramaProductionPackageV1 } from "@/lib/drama-project-contract";
 import { formatPromptFieldLines } from "@/lib/drama-frame-sequence";
-import { dramaFrameVisibleState } from "@/lib/drama-prompt-compiler";
 
 export function serializeDramaProductionPackageJson(value: DramaProductionPackageV1) {
     return `${JSON.stringify(withDeterministicVideoSection(value), null, 2)}\n`;
@@ -25,7 +24,7 @@ function withDeterministicVideoSection(value: DramaProductionPackageV1): DramaPr
                 imagePrompt: formatPromptFieldLines(shot.imagePrompt, "static"),
                 ...(shot.startFramePrompt ? { startFramePrompt: formatPromptFieldLines(shot.startFramePrompt, "static") } : {}),
                 ...(shot.endFramePrompt ? { endFramePrompt: formatPromptFieldLines(shot.endFramePrompt, "static") } : {}),
-                videoPrompt: cleanPackageVideoBrief(shot.videoPrompt) || shot.description,
+                videoPrompt: shot.videoPrompt.trim(),
                 framePlan: {
                     ...shot.framePlan,
                     frames: shot.framePlan.frames.map((frame) => ({
@@ -77,56 +76,10 @@ function videoPromptSection(value: DramaProductionPackageV1) {
         .flatMap((episode) =>
             episode.shots.map((shot) => {
                 const promptCode = `P${String(shot.order).padStart(2, "0")}`;
-                const frames = [...shot.framePlan.frames]
-                    .sort((left, right) => left.sequenceIndex - right.sequenceIndex)
-                const references = (shot.framePlan.referenceManifest || []).map((item) => `${item.alias}仅用于${item.purpose || item.role}`);
-                const videoPrompt = formatPromptFieldLines(cleanPackageVideoBrief(shot.videoPrompt), "video");
-                const promptLines = videoPrompt.includes("动态意图：") || videoPrompt.includes("动态意图:") ? videoPrompt.split("\n").filter(Boolean) : [`动态意图：${videoPrompt || shot.description}`];
-                const timelineLines = frames.flatMap((frame, index) => {
-                    const previous = frames[index - 1];
-                    const start = frame.startPrompt || (previous ? dramaFrameVisibleState(previous.imagePrompt, previous.actionPrompt) : shot.continuity?.actionStart || shot.description);
-                    const end = frame.endPrompt || dramaFrameVisibleState(frame.imagePrompt, frame.actionPrompt) || frame.actionPrompt;
-                    const continuity = shot.continuity?.continuityNotes || "角色身份、服装、道具归属、空间轴线与主光方向保持连续";
-                    const transition = frame.transitionPrompt || (previous
-                        ? `承接上一段终点“${start}”，过渡到当前帧“${end}”；${continuity}`
-                        : `从镜头入口“${start}”进入当前帧“${end}”；${continuity}`);
-                    return [
-                        `${promptCode}-F${String(frame.sequenceIndex).padStart(2, "0")}｜${frame.startSecond}-${frame.endSecond}s`,
-                        `起点：${start}`,
-                        `动作与触发：${frame.actionPrompt}`,
-                        `可见衔接：${transition}`,
-                        `终点：${end}`,
-                    ];
-                });
-                const endState =
-                    shot.exitState?.characters
-                        .map((item) => item.action)
-                        .filter(Boolean)
-                        .join("；") ||
-                    shot.continuity?.actionEnd ||
-                    shot.endFramePrompt ||
-                    shot.description;
-                const lines = [
-                    `${shot.duration}s ${value.project.ratio} 视频`,
-                    ...promptLines,
-                    ...(promptLines.some((line) => /(?:单一主运镜|主运镜)[：:]/u.test(line)) ? [] : [`单一主运镜：${shot.cameraMotion || "固定机位"}`]),
-                    ...(timelineLines.length ? ["时间段动作：", ...timelineLines] : []),
-                    references.length ? ["参考图职责：", ...references.map((reference) => `- ${reference}`)].join("\n") : "参考图职责：按资产映射表和实际绑定图片执行",
-                    `结束画面：${endState}`,
-                    `风格：${value.project.style}`,
-                    `针对性约束：${shot.negativePrompt || "无闪烁、无形变、无背景漂移、无道具消失、无身份跳变、无水印文字"}`,
-                ];
-                return `### ${promptCode}｜${shot.code} ${shot.title}\n\n\`\`\`text\n${lines.join("\n")}\n\`\`\``;
+                return `### ${promptCode}｜${shot.code} ${shot.title}\n\n\`\`\`text\n${shot.videoPrompt.trim()}\n\`\`\``;
             }),
         )
         .join("\n\n");
-}
-
-function cleanPackageVideoBrief(value: string) {
-    return value
-        .replace(/^\s*生成\s*\d+(?:\.\d+)?\s*(?:秒|s)\s*[^。；\n]*视频[，,。；;：:]*/iu, "")
-        .replace(/(?:视频)?时长\s*[：:]?\s*\d+(?:\.\d+)?\s*(?:秒|s)/giu, "")
-        .trim();
 }
 
 function shotTable(value: DramaProductionPackageV1) {

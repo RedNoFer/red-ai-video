@@ -96,6 +96,17 @@ export function dramaVideoPromptRunKey(projectId: string, episodeId: string, sho
     return JSON.stringify([projectId, episodeId, shotId]);
 }
 
+export function hasActiveDramaVideoPromptRun(runs: Record<string, unknown>, projectId: string, episodeId: string) {
+    return Object.keys(runs).some((key) => {
+        try {
+            const value = JSON.parse(key);
+            return Array.isArray(value) && value[0] === projectId && value[1] === episodeId;
+        } catch {
+            return false;
+        }
+    });
+}
+
 export const useDramaStore = create<DramaStore>((set, get) => ({
     hydrated: false,
     hydratedUserId: "",

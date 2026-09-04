@@ -45,7 +45,7 @@ import { approvedAssetReference } from "@/lib/drama-asset-baseline";
 import { createFrameEvidence, decideActualEndFrame, invalidateFrameEvidence, replaceFrameEvidence, supersedeFrameEvidence } from "@/lib/drama-continuity-policy";
 import { DRAMA_STYLE_NAME, normalizeDramaStyleName, resolveDramaStyleContract } from "@/lib/drama-style";
 import { normalizeDramaImageSize } from "@/lib/drama-image-size";
-import { defaultDramaFrameBeats, formatPromptFieldLines, normalizeDramaFrameBeats, updateDramaFrameBeat, upgradeDramaFrameImagePrompt, validateDramaFrameVisualContent } from "@/lib/drama-frame-sequence";
+import { formatPromptFieldLines, normalizeDramaFrameBeats, updateDramaFrameBeat, upgradeDramaFrameImagePrompt, validateDramaFrameVisualContent } from "@/lib/drama-frame-sequence";
 import { defaultDramaProductionPlan, dramaReferenceImageBudget, normalizeDramaProductionPlan } from "@/lib/drama-production-plan";
 import { resolveDramaShotDuration } from "@/lib/server/drama-shot-config";
 import { TEXT_MODEL_REQUEST_TIMEOUT_MS } from "@/lib/server/model-request-policy";
@@ -2756,7 +2756,7 @@ function normalizeShot(value: unknown, index: number): DramaShot {
         dialoguePerformance: normalizeDialoguePerformance(input.dialoguePerformance),
         lightingPlan: normalizeLightingPlan(input.lightingPlan),
         imagePrompt: formatPromptFieldLines(cleanText(input.imagePrompt), "static"),
-        videoPrompt: formatPromptFieldLines(cleanText(input.videoPrompt), "video"),
+        videoPrompt: cleanText(input.videoPrompt),
         executionVideoPrompt: optionalText(input.executionVideoPrompt),
         executionImagePrompt: optionalText(input.executionImagePrompt),
         cameraMotion: cleanText(input.cameraMotion),
@@ -2776,7 +2776,7 @@ function normalizeShot(value: unknown, index: number): DramaShot {
         sound: normalizeShotSound(input.sound),
         entryState: normalizeContinuityState(input.entryState),
         exitState: normalizeContinuityState(input.exitState),
-        framePlan: normalizeShotFramePlan(input.framePlan, resolveDramaShotDuration(input.duration, 5), cleanText(input.videoPrompt), cleanText(input.imagePrompt)),
+        framePlan: normalizeShotFramePlan(input.framePlan, resolveDramaShotDuration(input.duration, 5)),
         frameEvidence: normalizeFrameEvidence(input.frameEvidence),
         fieldOrigins: normalizeFieldOrigins(input.fieldOrigins),
         sourceAssetIds: ids(input.sourceAssetIds),
@@ -2838,11 +2838,11 @@ function normalizeShot(value: unknown, index: number): DramaShot {
     };
 }
 
-function normalizeShotFramePlan(value: unknown, duration: number, actionPrompt: string, imagePrompt: string): DramaShotFramePlan | undefined {
+function normalizeShotFramePlan(value: unknown, duration: number): DramaShotFramePlan | undefined {
     const input = object(value);
     const start = object(input.start);
     const end = object(input.end);
-    if (!Object.keys(input).length) return undefined;
+    if (!Object.keys(input).length || !array(input.frames).length) return undefined;
     const manifest = array(input.referenceManifest).flatMap((item) => {
         const itemInput = object(item);
         const alias = cleanText(itemInput.alias);
@@ -2866,23 +2866,21 @@ function normalizeShotFramePlan(value: unknown, duration: number, actionPrompt: 
         start: { source: start.source === "previous_accepted_actual_tail" ? "previous_accepted_actual_tail" : "independent" },
         end: { required: Boolean(end.required) },
         frames: normalizeDramaFrameBeats(
-            array(input.frames).length
-                ? array(input.frames).map((item, index) => {
-                      const frame = object(item);
-                      return {
-                          id: cleanText(frame.id) || `frame-${nanoid()}`,
-                          sequenceIndex: Math.max(1, Math.floor(Number(frame.sequenceIndex) || index + 1)),
-                          startSecond: Number(frame.startSecond),
-                          endSecond: Number(frame.endSecond),
-                          startPrompt: cleanText(frame.startPrompt),
-                          actionPrompt: cleanText(frame.actionPrompt),
-                          transitionPrompt: cleanText(frame.transitionPrompt),
-                          endPrompt: cleanText(frame.endPrompt),
-                          imagePrompt: cleanText(frame.imagePrompt),
-                          supplierPrompt: formatOptionalPromptField(frame.supplierPrompt, "static"),
-                      };
-                  })
-                : defaultDramaFrameBeats(duration, actionPrompt, imagePrompt),
+            array(input.frames).map((item, index) => {
+                const frame = object(item);
+                return {
+                    id: cleanText(frame.id) || `frame-${nanoid()}`,
+                    sequenceIndex: Math.max(1, Math.floor(Number(frame.sequenceIndex) || index + 1)),
+                    startSecond: Number(frame.startSecond),
+                    endSecond: Number(frame.endSecond),
+                    startPrompt: cleanText(frame.startPrompt),
+                    actionPrompt: cleanText(frame.actionPrompt),
+                    transitionPrompt: cleanText(frame.transitionPrompt),
+                    endPrompt: cleanText(frame.endPrompt),
+                    imagePrompt: cleanText(frame.imagePrompt),
+                    supplierPrompt: formatOptionalPromptField(frame.supplierPrompt, "static"),
+                };
+            }),
             duration,
         ).map((frame) => ({
             ...frame,

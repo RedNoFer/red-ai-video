@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import type { DramaFrameBeat, DramaStoryboardFrame } from "./drama-project-contract";
 import {
-    defaultDramaFrameBeats,
     deleteDramaFrameBeat,
     formatPromptFieldLines,
     insertDramaFrameBeat,
@@ -150,22 +149,6 @@ describe("drama frame sequence", () => {
         expect(prompt).toContain("静态关键帧：雨夜车站，两人隔着站台对视");
         expect(prompt).not.toContain("缩短距离");
         expect(prompt).not.toContain("向前靠近");
-    });
-
-    it("creates five continuous default beats and honors an explicit frame count", () => {
-        const defaults = defaultDramaFrameBeats(15, "角色拔剑", "角色站在黑湖边");
-        expect(defaults).toHaveLength(5);
-        expect(defaults.map((frame) => [frame.startSecond, frame.endSecond])).toEqual([
-            [0, 3],
-            [3, 6],
-            [6, 9],
-            [9, 12],
-            [12, 15],
-        ]);
-        expect(defaults.every((frame) => Number.isInteger(frame.startSecond) && Number.isInteger(frame.endSecond))).toBe(true);
-        expect(defaults.every((frame) => frame.actionPrompt.includes("动作") && frame.imagePrompt.includes("可见状态："))).toBe(true);
-        expect(new Set(defaults.map((frame) => frame.imagePrompt.match(/可见状态：([^；。]+)/u)?.[1])).size).toBeGreaterThan(1);
-        expect(defaultDramaFrameBeats(30, "角色拔剑", "角色站在黑湖边", 7)).toHaveLength(7);
     });
 
     it("preserves decimal frame boundaries inside an integer-second shot", () => {

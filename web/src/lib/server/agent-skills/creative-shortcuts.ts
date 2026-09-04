@@ -8,7 +8,7 @@ export const CHARACTER_DESIGN_SKILL = {
     name: "角色设定",
     description: "建立可持续复用的角色外观、服装、表情和多视图设定。",
     enabled: true,
-    workspaces: ["image", "canvas", "drama"],
+    workspaces: ["image", "canvas"],
     action: "generate",
     requiresReference: false,
     defaultConfig: { quality: "high", count: 4 },
@@ -58,7 +58,7 @@ export const SEEDANCE_VIDEO_PROMPT_LAYOUT = `
 结束画面：写最终可见的构图、姿态、道具位置、光色或声音状态。
 连续性锁：只保留身份、数量、服装、道具归属、空间方向、光向和轴线等高代价约束；多人物明确同一镜头/场景参照系下的左右、前后和视线关系，未声明人物不得入画。
 针对性约束：只列本镜头最可能且重做代价高的错误；不得添加内部 ID、URL、模型/API 参数或用户未提供的剧情事实。
-规则：有参考素材时只继承其声明的属性；静态图生视频只描述运动和变化，不重复整张静态图；每镜只保留一个主要变化。镜头级字段只做摘要，具体动作和状态变化只写在“时间段动作”中，不在上方摘要重复。每个非空字段必须独立一行，禁止把所有字段压成一段逗号串。`;
+规则：有参考素材时只继承其声明的属性；静态图生视频只描述运动和变化，不重复整张静态图；每镜只保留一个主要变化。公开 videoPrompt 必须由 Agent 直接完整写出每个真实时间段的时间范围、起点、动作与触发、可见衔接和终点；framePlan.frames 只是同一内容的结构化镜像。应用代码只能校验、保存和转发，禁止拼接、补写、删改或从 framePlan 生成 videoPrompt。每个非空字段必须独立一行，禁止把所有字段压成一段逗号串。`;
 
 export const DRAMA_PLANNING_SKILL = {
     id: "drama-planning",

@@ -18,7 +18,7 @@ import type {
     DramaStoryScene,
 } from "@/lib/drama-project-contract";
 import { normalizeDramaProductionPlan } from "@/lib/drama-production-plan";
-import { defaultDramaFrameBeats, formatPromptFieldLines, normalizeDramaFrameBeats, upgradeDramaFrameImagePrompt, validateDramaFramePlanVisuals } from "@/lib/drama-frame-sequence";
+import { formatPromptFieldLines, normalizeDramaFrameBeats, upgradeDramaFrameImagePrompt, validateDramaFramePlanVisuals } from "@/lib/drama-frame-sequence";
 import { resolveDramaStyleContract } from "@/lib/drama-style";
 import { resolveDramaShotDuration } from "@/lib/server/drama-shot-config";
 
@@ -747,7 +747,7 @@ function normalizePackageShot(value: unknown, index: number): DramaProductionPac
         narration: text(shot.narration),
         utterances,
         imagePrompt: formatPromptFieldLines(text(shot.imagePrompt), "static"),
-        videoPrompt: normalizePackageVideoPrompt(text(shot.videoPrompt), description),
+        videoPrompt: normalizePackageVideoPrompt(text(shot.videoPrompt)),
         cameraMotion: text(shot.cameraMotion),
         negativePrompt: optionalText(shot.negativePrompt),
         continuity: {
@@ -801,12 +801,10 @@ function performanceStateForFrame(plan: DramaShot["performancePlan"], sequenceIn
     return beat ? `情绪${beat.emotion}；面部${beat.facialAction}；视线${beat.gaze}；身体与手部${beat.bodyAction}` : "";
 }
 
-function normalizePackageVideoPrompt(value: string, fallback: string) {
-    const cleaned = value
-        .replace(/^\s*生成\s*\d+(?:\.\d+)?\s*(?:秒|s)\s*[^。；\n]*视频[，,。；;：:]*/iu, "")
-        .replace(/(?:视频)?时长\s*[：:]?\s*\d+(?:\.\d+)?\s*(?:秒|s)/giu, "")
-        .trim();
-    return formatPromptFieldLines(cleaned || fallback, "video");
+function normalizePackageVideoPrompt(value: string) {
+    const prompt = value.trim();
+    if (!prompt) throw new DramaProductionPackageError("镜头缺少 Agent 提供的视频提示词");
+    return prompt;
 }
 
 function normalizeReferenceManifest(value: unknown) {
@@ -1272,10 +1270,10 @@ function parseDirectorMarkdown(source: string): DramaProductionPackageV1 | null 
             videoMode: "storyboard" as const,
             storyboardFrameMode: "all_frames" as const,
             continuityStatus: "ready" as const,
-            framePlan: { start: { source: "independent" as const }, end: { required: true }, frames: defaultDramaFrameBeats(Math.max(1, duration[1] - duration[0]), prompt, `${row[9]}，${row[3]}，${row[6]}，${row[7]}，9:16竖屏电影分镜`) },
+            framePlan: { start: { source: "independent" as const }, end: { required: true }, frames: [] },
         };
     });
-    const shots = inheritCarriedStates(splitDirectorShots(baseShots));
+    const shots = inheritCarriedStates(baseShots);
     const resolvedStoryScenes = storyScenes.map((scene) => ({ ...scene, shotCodes: shots.filter((shot) => shot.storySceneCode === scene.code).map((shot) => shot.code) }));
     const edges = shots.slice(0, -1).map((shot, index) => {
         const next = shots[index + 1];
@@ -1621,7 +1619,7 @@ function mergeShotGroup(group: DramaProductionPackageEpisode["shots"]) {
         narration: joinTexts(group.map((shot) => shot.narration)),
         utterances: group.flatMap((shot) => shot.utterances).map((utterance, index) => ({ ...utterance, order: index + 1 })),
         imagePrompt: first.imagePrompt,
-        videoPrompt: mergeVideoPromptGroup(group),
+        videoPrompt: group.map((shot) => shot.videoPrompt.trim()).filter(Boolean).join("\n"),
         startFramePrompt: first.startFramePrompt,
         endFramePrompt: last.endFramePrompt,
         negativePrompt: joinTexts(group.map((shot) => shot.negativePrompt)),
@@ -1647,30 +1645,6 @@ function mergeShotGroup(group: DramaProductionPackageEpisode["shots"]) {
     } as DramaProductionPackageEpisode["shots"][number];
 }
 
-function mergeVideoPromptGroup(group: DramaProductionPackageEpisode["shots"]) {
-    const first = group[0];
-    const last = group.at(-1)!;
-    const start = extractVideoMarker(first.videoPrompt, "起始可见状态") || first.continuity?.actionStart || first.description;
-    const end = extractVideoMarker(last.videoPrompt, "结束画面") || last.continuity?.actionEnd || last.description;
-    const performance = group.map((shot) => shot.continuity?.actionEnd || shot.description).filter(Boolean);
-    const environment = group.flatMap((shot) => [shot.sound?.ambience, shot.sound?.soundEffects, shot.sound?.music]).filter(Boolean);
-    const constraints = last.negativePrompt || first.negativePrompt || "无闪烁、无形变、无背景漂移、无身份跳变、无水印文字";
-    return [
-        `动态意图：${start}到${end}`,
-        `起始可见状态：${start}`,
-        `主体动作与反应：${joinTexts(performance)}`,
-        `一个主运镜：${first.cameraMotion || "固定机位"}`,
-        environment.length ? `环境压力与声音：${joinTexts(environment)}` : "",
-        `结束画面：${end}`,
-        `针对性约束：${constraints}`,
-    ]
-        .filter(Boolean)
-        .join("\n");
-}
-
-function extractVideoMarker(value: string, marker: string) {
-    return value.match(new RegExp(`${marker}[：:]([^；。]+)`, "u"))?.[1]?.trim() || "";
-}
 
 function compactMergedFrames(frames: DramaProductionPackageEpisode["shots"][number]["framePlan"]["frames"], duration: number) {
     const unique = frames.filter((frame, index, all) => all.findIndex((item) => item.actionPrompt.trim() === frame.actionPrompt.trim()) === index);
@@ -1723,105 +1697,6 @@ function dedupeContinuityEdges(edges: DramaProductionPackageEpisode["continuityE
         seen.add(key);
         return true;
     });
-}
-
-function splitDirectorShots<T extends DramaProductionPackageEpisode["shots"][number]>(shots: T[]): T[] {
-    const counts = [2, 3, 2, 2, 3, 2, 3, 3, 2, 3, 3, 2];
-    let order = 0;
-    return shots.flatMap((shot, shotIndex) => {
-        const count = Math.min(Math.max(1, Math.round(shot.duration)), counts[shotIndex] || Math.max(1, Math.ceil(shot.duration / 8)));
-        const start = timeRangeSeconds(shot.timecode || "0-0s")[0];
-        const segmentDurations = integerPartitions(shot.duration, count);
-        const utteranceGroups = Array.from({ length: count }, () => [] as typeof shot.utterances);
-        shot.utterances.forEach((utterance, index) => utteranceGroups[Math.min(count - 1, Math.floor((index * count) / Math.max(1, shot.utterances.length)))].push(utterance));
-        const actions = splitDirectorShotActions(shot, count);
-        let previousExitState = cloneState(shot.entryState);
-        let previousActionEnd = shot.continuity?.actionStart || shot.description;
-        const finalActionEnd = shot.continuity?.actionEnd || shot.description;
-        return Array.from({ length: count }, (_, part) => {
-            order += 1;
-            const from = start + segmentDurations.slice(0, part).reduce((sum, value) => sum + value, 0);
-            const duration = segmentDurations[part];
-            const to = from + duration;
-            const utterances = utteranceGroups[part].map((utterance, index) => ({ ...utterance, order: index + 1 }));
-            const action = actions[part];
-            const actionStart = part === 0 ? shot.continuity?.actionStart || shot.description : previousActionEnd;
-            const actionEnd = part === count - 1 ? finalActionEnd : action;
-            const entryState = part === 0 ? cloneState(shot.entryState) : cloneState(previousExitState);
-            const exitState = part === count - 1 ? shot.exitState : directorState(shot.characterCodes, shot.propCodes, shot.exitState?.environment || shot.title, shot.lighting || "延续主光", actionEnd);
-            previousExitState = cloneState(exitState);
-            previousActionEnd = actionEnd;
-            const splitFrames = defaultDramaFrameBeats(duration, action, action).map((frame) => ({
-                ...frame,
-                imagePrompt: upgradeDramaFrameImagePrompt(frame.imagePrompt, frame.actionPrompt, {
-                    description: action,
-                    shotSize: shot.continuity?.shotSize || "中景",
-                    cameraAngle: shot.continuity?.cameraAngle || "视线高度平视",
-                    composition: shot.continuity?.composition || "主体关系清晰，保留空间纵深",
-                    characterBlocking: shot.continuity?.characterBlocking || "按当前动作关系安排站位",
-                    gazeDirection: shot.continuity?.gazeDirection || "视线朝向当前主体",
-                    lighting: shot.lighting || "延续主光",
-                    colorPalette: shot.colorPalette || "沿用本场色板",
-                    sequenceIndex: frame.sequenceIndex,
-                }),
-            }));
-            return {
-                ...shot,
-                code: `SH${String(order).padStart(3, "0")}`,
-                order,
-                title: `${shot.title} ${part + 1}/${count}`,
-                description: action,
-                duration,
-                timecode: `${trimSecond(from)}-${trimSecond(to)}s`,
-                utterances,
-                dialogue: utterances
-                    .filter((item) => item.type === "dialogue")
-                    .map((item) => `${item.speaker}：${item.text}`)
-                    .join("\n"),
-                narration: utterances
-                    .filter((item) => item.type === "voiceover")
-                    .map((item) => `${item.speaker}：${item.text}`)
-                    .join("\n"),
-                imagePrompt: splitFrames[0].imagePrompt,
-                videoPrompt: formatPromptFieldLines(
-                    `动态意图：${actionStart}到${actionEnd}；起始可见状态：${actionStart}；主体动作与反应：${action}；单一主运镜：${shot.cameraMotion || "固定机位"}；结束画面：${actionEnd}；连续性锁：保持角色身份、道具形态、空间结构和屏幕方向连续；针对性约束：${shot.negativePrompt || "无闪烁、无形变、无背景漂移、无身份跳变、无水印文字"}。`,
-                    "video",
-                ),
-                startFramePrompt: splitFrames[0].imagePrompt,
-                endFramePrompt: splitFrames.at(-1)?.imagePrompt || splitFrames[0].imagePrompt,
-                continuity: { ...shot.continuity, actionStart, actionEnd },
-                framePlan: {
-                    start: { source: part === 0 ? "independent" : "previous_accepted_actual_tail" },
-                    end: { required: part === count - 1 || shot.framePlan?.end.required === true },
-                    frames: splitFrames,
-                },
-                entryState,
-                exitState,
-            } as T;
-        });
-    });
-}
-
-function splitDirectorShotActions(shot: DramaProductionPackageEpisode["shots"][number], count: number) {
-    const candidates = splitVisualActions(shot.sourceText);
-    if (!candidates.length) candidates.push(shot.continuity?.actionStart || shot.description || shot.title);
-    return Array.from({ length: count }, (_, part) => {
-        const from = Math.floor((part * candidates.length) / count);
-        const to = Math.max(from + 1, Math.floor(((part + 1) * candidates.length) / count));
-        return candidates.slice(from, to).join("；");
-    });
-}
-
-function splitVisualActions(source: string) {
-    return [
-        ...new Set(
-            source
-                .split(/[\n。！？!?]+/u)
-                .map((value) => value.trim().replace(/^[^：:]{1,24}[：:]\s*/u, ""))
-                .filter((value) => value.length >= 4)
-                .filter((value) => !/^(?:生成|镜头|无字幕|无水印|无logo|禁止|避免|不得)/u.test(value)),
-        ),
-    ];
 }
 
 function validateSplitShotFramePlans(episodes: DramaProductionPackageEpisode[]) {

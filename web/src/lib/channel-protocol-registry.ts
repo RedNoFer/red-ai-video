@@ -116,10 +116,12 @@ const newApiVideoOperation: ProtocolOperation = {
     resultField: "video_url / data.url / url",
     statusField: "status",
     durationRange: "4-15 秒",
-    referenceRule: "时长 4-15 秒，比例仅限 16:9、9:16、1:1，清晰度仅限 720p、480p。参考图片最多 9 张、参考视频最多 3 个、参考音频最多 3 个，视频和音频参考各自总时长不超过 15 秒；所有素材必须是公网可访问的 http/https URL 或站点签名地址；不支持显式首帧或尾帧。模型列表以后台渠道配置为准。",
+    referenceRule: "时长 4-15 秒，比例仅限 16:9、9:16、1:1，清晰度仅限 720p、480p。参考图片最多 9 张、参考视频最多 3 个、参考音频最多 3 个，视频和音频参考各自总时长不超过 15 秒；所有素材必须是公网可访问的 http/https URL 或站点签名地址。referenceImages 仅声明多参考图数组，不声明按时间顺序的全能帧或显式首尾帧能力；模型列表以供应商文档和后台渠道配置为准。",
     supportsReferenceImage: true,
     supportsReferenceVideo: true,
     supportsReferenceAudio: true,
+    supportsKeyframes: false,
+    videoReferenceModes: ["reference"],
 };
 
 const vozebRecommendedVideoOperation: ProtocolOperation = {

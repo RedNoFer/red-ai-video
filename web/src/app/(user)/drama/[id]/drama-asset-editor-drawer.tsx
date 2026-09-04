@@ -5,7 +5,7 @@ import { Check, FolderInput, ImagePlus, MessageCircle, Send, Sparkles, Trash2, U
 import { nanoid } from "nanoid";
 import { useEffect, useRef, useState } from "react";
 
-import { compileDramaAssetConstraints, compileDramaAssetReferencePrompt, compileDramaAssetRefinementPrompt, preflightDramaAssetGeneration } from "@/lib/drama-prompt-compiler";
+import { compileDramaAssetConstraints, compileDramaAssetReferencePrompt, compileDramaAssetRefinementPrompt, DRAMA_CHARACTER_TURNAROUND_SIZE, preflightDramaAssetGeneration } from "@/lib/drama-prompt-compiler";
 import { resolveDramaVisualStyle } from "@/lib/drama-style";
 import { approvedAssetReference } from "@/lib/drama-asset-baseline";
 import type { DramaAssetProfile, DramaAssetReference, DramaAssetRefinementMessage, DramaAssetRefinementProposal, DramaCharacter, DramaNamedAsset, DramaProject, DramaVoiceProfile } from "@/lib/drama-project-contract";
@@ -397,7 +397,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
             const prompt = optimizedAssetPrompt || (activeProposal ? compileDramaAssetRefinementPrompt(project, asset, assetKind, activeProposal, refinementPrompt) : compileDramaAssetReferencePrompt(project, asset, assetKind));
             const imageModel = config.imageModel || config.imageModels[0] || "";
             if (!imageModel) throw new Error("后台尚未配置可用的图片模型，请先在管理后台配置图片渠道");
-            const imageConfig = { ...config, model: imageModel, imageModel, size: dramaGenerationSize(project, prompt), count: "1" };
+            const imageConfig = { ...config, model: imageModel, imageModel, size: kind === "characters" ? DRAMA_CHARACTER_TURNAROUND_SIZE : dramaGenerationSize(project, prompt), count: "1" };
             const referenceForRefinement = referenceOverride || (activeProposal ? primary : undefined);
             const existingReferenceUrl = referenceForRefinement ? serverMediaUrl(referenceForRefinement.storageKey, referenceForRefinement.url) : "";
             const referenceDataUrl = referenceForRefinement && !existingReferenceUrl ? await imageToDataUrl(referenceForRefinement) : "";
@@ -756,7 +756,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                                 <p className="mt-1 text-xs leading-5 text-muted-foreground">候选图不会进入镜头生成，必须明确确认一张主基准图。</p>
                                 <div className="mt-2 rounded-lg border border-border bg-muted/25 px-3 py-2 text-xs leading-5 text-muted-foreground">
                                     <span className="font-medium text-foreground">审核标准：</span>
-                                    与本次生成提示词使用同一套身份锚点、位置约束、单主体画幅、允许项和禁止项；审核建议不会阻止你选择有效候选。
+                                    与本次生成提示词使用同一套身份锚点、角色白底三视图或场景/道具单主体布局、允许项和禁止项；审核建议不会阻止你选择有效候选。
                                 </div>
                                 {asset && kind !== "clues" ? (
                                     <details className="mt-2 rounded-lg border border-border bg-background px-3 py-2 text-xs leading-5">

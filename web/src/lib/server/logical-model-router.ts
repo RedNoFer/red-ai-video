@@ -122,6 +122,7 @@ function sortVideoCandidatesByCost(settings: Pick<AuthSettings, "logicalModels" 
 /** Only declared capabilities may opt a model into ordered all-frame video generation. */
 export function supportsVideoKeyframeReferences(candidate: ResolvedLogicalModel, keyframeCount: number) {
     if (candidate.capability !== "video" || keyframeCount < 1) return false;
+    if (candidate.channel.advancedConfig?.protocol === "newapi-video") return false;
     const contract = candidate.channel.advancedConfig?.protocol === "buming-seedance" ? resolveBumingSeedanceVideoModelContract(candidate.upstreamModel) : undefined;
     const supportsKeyframes = contract ? contract.videoReferenceModes.includes("all_frames") : candidate.capabilityProfile?.supportsKeyframes;
     return Boolean(supportsKeyframes);

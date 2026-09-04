@@ -1346,13 +1346,33 @@ test("drama shot prompt optimization is available from the Agent menu and persis
     let optimizationBody: { phase?: string; shots?: Array<{ id?: string }>; referenceMaterials?: unknown[] } = {};
     await page.route(/\/api\/drama\/analyze$/, async (route) => {
         optimizationBody = (await route.request().postDataJSON()) as typeof optimizationBody;
-        await route.fulfill({ json: { code: 0, data: { shots: [{ shotId: "optimize-shot", videoPrompt: "动态意图：优化后的镜头视频提示词" }] }, msg: "OK" } });
+        await route.fulfill({
+            json: {
+                code: 0,
+                data: {
+                    shots: [
+                        {
+                            shotId: "optimize-shot",
+                            videoPrompt: "动态意图：优化后的镜头视频提示词\n时间段动作：\nP01-F01｜0-3s\n起点：人物低头\n动作与触发：手指收紧\n可见衔接：视线抬起\n终点：人物抬头\nP01-F02｜3-5s\n起点：人物抬头\n动作与触发：剑刃裂开\n可见衔接：冷光沿断口扩展\n终点：断口发亮\n单一主运镜：固定机位\n结束画面：断口发亮",
+                            framePlan: {
+                                frames: [
+                                    { id: "frame-one", sequenceIndex: 1, startSecond: 0, endSecond: 3, startPrompt: "人物低头", actionPrompt: "手指收紧", transitionPrompt: "视线抬起", endPrompt: "人物抬头", imagePrompt: "人物抬头" },
+                                    { id: "frame-two", sequenceIndex: 2, startSecond: 3, endSecond: 5, startPrompt: "人物抬头", actionPrompt: "剑刃裂开", transitionPrompt: "冷光沿断口扩展", endPrompt: "断口发亮", imagePrompt: "断口发亮" },
+                                ],
+                            },
+                        },
+                    ],
+                },
+                msg: "OK",
+            },
+        });
     });
 
     await page.goto(`/drama/${project.id}`, { waitUntil: "domcontentloaded" });
     await page.getByRole("button", { name: "切换到镜头生成" }).click();
     const row = page.locator("[data-drama-shot-task]").filter({ hasText: "提示词优化镜头" });
     await expect(row).toBeVisible();
+    await row.getByRole("button", { name: "展开详情" }).click();
     await row.getByRole("button", { name: "打开 Agent 创作操作" }).click();
     const optimizeItem = page.getByRole("menuitem", { name: "提示词优化" });
     await expect(optimizeItem).toBeVisible();
@@ -1362,11 +1382,14 @@ test("drama shot prompt optimization is available from the Agent menu and persis
     await expect.poll(() => optimizationBody.phase).toBe("video_prompt");
     await expect.poll(() => optimizationBody.shots?.[0]?.id).toBe("optimize-shot");
     const patchRequest = await saveRequest;
-    expect(patchRequest.postDataJSON()).toMatchObject({ executionVideoPrompt: "优化后的镜头视频提示词" });
+    expect(patchRequest.postDataJSON()).toMatchObject({ executionVideoPrompt: "动态意图：优化后的镜头视频提示词\n时间段动作：\nP01-F01｜0-3s\n起点：人物低头\n动作与触发：手指收紧\n可见衔接：视线抬起\n终点：人物抬头\nP01-F02｜3-5s\n起点：人物抬头\n动作与触发：剑刃裂开\n可见衔接：冷光沿断口扩展\n终点：断口发亮\n单一主运镜：固定机位\n结束画面：断口发亮" });
+    expect(patchRequest.postDataJSON().framePlan.frames).toEqual(expect.arrayContaining([expect.objectContaining({ startSecond: 0, endSecond: 3 }), expect.objectContaining({ startSecond: 3, endSecond: 5 })]));
+    await expect(row.locator("textarea").first()).toHaveValue(/P01-F01｜0-3s/);
     await expect(page.getByText("提示词已优化并保存", { exact: true })).toBeVisible();
 
     const persisted = ((await (await page.request.get(`/api/drama/projects/${project.id}`, { headers: { cookie } })).json()) as { data: { project: DramaProject } }).data.project;
-    expect(persisted.episodes[0].shots[0].executionVideoPrompt).toBe("优化后的镜头视频提示词");
+    expect(persisted.episodes[0].shots[0].executionVideoPrompt).toBe("动态意图：优化后的镜头视频提示词\n时间段动作：\nP01-F01｜0-3s\n起点：人物低头\n动作与触发：手指收紧\n可见衔接：视线抬起\n终点：人物抬头\nP01-F02｜3-5s\n起点：人物抬头\n动作与触发：剑刃裂开\n可见衔接：冷光沿断口扩展\n终点：断口发亮\n单一主运镜：固定机位\n结束画面：断口发亮");
+    expect(persisted.episodes[0].shots[0].framePlan?.frames).toEqual(expect.arrayContaining([expect.objectContaining({ startSecond: 0, endSecond: 3 }), expect.objectContaining({ startSecond: 3, endSecond: 5 })]));
 });
 
 test("drama execution prompt saves through its scoped shot endpoint", async ({ page, request }) => {

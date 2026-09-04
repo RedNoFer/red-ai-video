@@ -98,7 +98,7 @@ describe("video prompt reference instructions", () => {
         expect(error).toContain("内部模式");
     });
 
-    it("requires every source time range to be described in the public prompt", () => {
+    it("requires Agent time ranges and segment fields in the public prompt", () => {
         const error = validateDramaVideoPromptOutput(
             {
                 shots: [
@@ -127,7 +127,7 @@ describe("video prompt reference instructions", () => {
             [],
         );
 
-        expect(error).toContain("逐段写出");
+        expect(error).toContain("没有逐段写出起点、动作与触发、可见衔接和终点");
     });
 
     it("accepts a complete Agent prompt when fields are separated by semicolons or escaped newlines", () => {
@@ -177,6 +177,23 @@ describe("video prompt reference instructions", () => {
         );
 
         expect(error).toBe("");
+    });
+
+    it("rejects a concise shot summary when framePlan is present", () => {
+        const error = validateDramaVideoPromptOutput(
+            {
+                shots: [{
+                    shotId: "shot-one",
+                    videoPrompt: "动态意图：Karin从低头状态抬眼锁定门外\n单一主运镜：固定机位\n结束画面：Karin抬头看向门外\n针对性约束：无水印、无额外肢体",
+                    framePlan: { frames: [{ sequenceIndex: 1, startSecond: 0, endSecond: 3, startPrompt: "Karin低头，双手扣住断剑", actionPrompt: "手指收紧并抬头", transitionPrompt: "视线沿剑柄移向门外", endPrompt: "Karin抬头看向门外", imagePrompt: "Karin抬头看向门外，断剑仍在掌中" }] },
+                }],
+            },
+            ["shot-one"],
+            [{ id: "shot-one", framePlan: { frames: [{ id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 3 }] } }],
+            [],
+        );
+
+        expect(error).toContain("缺少标准字段：时间段动作");
     });
 });
 

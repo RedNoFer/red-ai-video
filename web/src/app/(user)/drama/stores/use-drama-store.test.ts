@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 
-import { dramaVideoPromptRunKey, useDramaStore } from "./use-drama-store";
+import { dramaVideoPromptRunKey, hasActiveDramaVideoPromptRun, useDramaStore } from "./use-drama-store";
 
 describe("drama video prompt run lock", () => {
     afterEach(() => useDramaStore.getState().reset());
@@ -15,5 +15,15 @@ describe("drama video prompt run lock", () => {
         useDramaStore.getState().finishVideoPrompt("project-one", "episode-one", "shot-one");
         expect(useDramaStore.getState().videoPromptRuns[key]).toBeUndefined();
         expect(useDramaStore.getState().beginVideoPrompt("project-one", "episode-one", "shot-one")).toBe(true);
+    });
+
+    it("recognizes prompt optimization runs without requiring a project reload", () => {
+        const runs = { [dramaVideoPromptRunKey("project-one", "episode-one", "shot-one")]: { startedAt: Date.now() } };
+        expect(hasActiveDramaVideoPromptRun(runs, "project-one", "episode-one")).toBe(true);
+        expect(hasActiveDramaVideoPromptRun(runs, "project-one", "episode-two")).toBe(false);
+    });
+
+    it("ignores malformed optimization keys when checking active runs", () => {
+        expect(hasActiveDramaVideoPromptRun({ broken: { startedAt: Date.now() } }, "project-one", "episode-one")).toBe(false);
     });
 });

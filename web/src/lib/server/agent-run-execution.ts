@@ -19,6 +19,7 @@ import { scheduleGenerationTask } from "@/lib/server/generation-task-scheduler";
 import { linkStoredGenerationTask } from "@/lib/server/generation-task-store";
 import { maintenanceWorkerContextHeaders } from "@/lib/server/maintenance-auth";
 import { videoFrameAssetIds, type VideoReferenceRole } from "@/lib/video-reference-contract";
+import { DRAMA_CHARACTER_TURNAROUND_SIZE } from "@/lib/drama-prompt-compiler";
 import type { AgentFunctionCallResult } from "./agent-function-call";
 import { agentSurfaceImageSize, canvasReferenceContext, canvasReferenceSupportsTask, canvasSnapshotNodes, isMediaReferenceType, requestsSelectedTextEdit, resolveAgentTaskRatio, resolveCanvasTaskTargetNodeId, selectedCanvasReferenceNodes } from "./agent-run-task-input";
 import { hasSystemAiCharge, readSystemAiBilling, systemAiBillingHeaders } from "./system-ai-billing";
@@ -174,6 +175,7 @@ export function normalizeTasks(
     const configuredImageSize = agentSurfaceImageSize(surface, snapshot);
     return plan.deliverables.map((item, index) => {
         const optimizedPrompt = item.prompt.trim();
+        const isDramaAssetCandidate = surface === "drama" && skills.some((skill) => skill.id === "drama-asset-image-director");
         const preferredSize = item.type === "image" ? generationPreferences?.image?.size : item.type === "video" ? generationPreferences?.video?.size : undefined;
         const preferredQuality = item.type === "image" ? generationPreferences?.image?.quality : item.type === "video" ? generationPreferences?.video?.quality : undefined;
         const targetNodeId = surface === "canvas" && (item.targetNodeId || item.type !== "text" || requestsSelectedTextEdit(requestPrompt)) ? resolveCanvasTaskTargetNodeId(item.targetNodeId, item.type, selectedNodeIds, nodes) : undefined;
@@ -219,11 +221,11 @@ export function normalizeTasks(
             prompt: `${withCreativeFoundation(optimizedPrompt, plan.foundation)}${skillInstructions ? `\n\n执行以下已选 Skill 约束：\n${skillInstructions}` : ""}${textConstraintInstruction(requestPrompt, item.type)}${target ? `\n\n基于画布已有节点进行局部修改：${target.summary}` : ""}${selectedCanvasContext ? `\n\n使用本轮画布引用：\n${selectedCanvasContext}` : ""}${referenceContext ? `\n\n使用已引用创作资产：${referenceContext}` : ""}`,
             count: resolveAgentTaskCount(
                 item.type,
-                item.type === "image" ? generationPreferences?.image?.count || item.count : item.type === "video" ? generationPreferences?.video?.count || item.count : item.count,
+                isDramaAssetCandidate && item.type === "image" ? 1 : item.type === "image" ? generationPreferences?.image?.count || item.count : item.type === "video" ? generationPreferences?.video?.count || item.count : item.count,
                 item.type === "video" ? defaults.videoCount || defaults.count : defaults.count,
                 item.type === "image" ? globalDefaults.canvasImageCount : undefined,
             ),
-            ratio: resolveAgentTaskRatio({
+            ratio: isDramaAssetCandidate && item.type === "image" ? DRAMA_CHARACTER_TURNAROUND_SIZE : resolveAgentTaskRatio({
                 type: item.type,
                 requestedImageSize,
                 configuredImageSize: preferredSize || configuredImageSize,

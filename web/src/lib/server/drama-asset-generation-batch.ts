@@ -1,7 +1,7 @@
 import { nanoid } from "nanoid";
 
 import type { DramaAssetGenerationBatch, DramaAssetGenerationBatchItem, DramaNamedAsset, DramaProject } from "@/lib/drama-project-contract";
-import { compileDramaAssetReferencePrompt } from "@/lib/drama-prompt-compiler";
+import { compileDramaAssetReferencePrompt, DRAMA_CHARACTER_TURNAROUND_SIZE } from "@/lib/drama-prompt-compiler";
 import { getDramaAssetMissingItems } from "@/lib/drama-asset-completion";
 import { createDramaAssetGenerationBatch, getDramaAssetGenerationBatch, listDramaAssetGenerationBatches, updateDramaAssetGenerationBatch } from "@/lib/server/drama-asset-generation-batch-store";
 import { getDramaProjectForUser } from "@/lib/server/drama-project-service";
@@ -164,7 +164,7 @@ async function submitBatchItem(input: { userId: string; projectId: string; batch
                 requestId: dramaAssetCompletionRequestId(batch.id, item.id, item.attempt),
                 origin: input.origin,
                 cookie: input.cookie,
-                config,
+                config: item.kind === "characters" ? { ...config, count: "1", size: DRAMA_CHARACTER_TURNAROUND_SIZE } : config,
                 skipReference: true,
                 skipVoice: true,
             });
@@ -192,7 +192,7 @@ async function submitBatchItem(input: { userId: string; projectId: string; batch
             method: "POST",
             headers: { "Content-Type": "application/json", cookie: input.cookie, "X-VOZEB-PRO-Client-Request-Id": `${batch.id}:${item.id}:${item.attempt}` },
             body: JSON.stringify({
-                config,
+                config: item.kind === "characters" ? { ...config, count: "1", size: DRAMA_CHARACTER_TURNAROUND_SIZE } : config,
                 prompt: compileDramaAssetBatchItemPrompt(project, item),
                 references,
                 source: "drama",

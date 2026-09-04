@@ -172,7 +172,7 @@ export function validateDramaVideoPromptOutput(value: unknown, shotIds: string[]
         const prompt = normalizePublicVideoPromptForValidation(dramaAnalysisText(shot.videoPrompt));
         if (!prompt) return `镜头 ${shotId} 缺少公开视频提示词，请按当前 Skill 重新生成`;
         if (/^\s*模式\s*[：:]/mu.test(prompt)) return `镜头 ${shotId} 的公开视频提示词暴露了内部模式字段，请按当前 Skill 重新生成`;
-        const requiredFields = ["动态意图", "全局设定", "起始可见状态", "主体动作与反应", "时间段动作", "单一主运镜", "环境压力与视觉母题", "视觉风格与光色", "声音意图", "结束画面", "连续性锁", "针对性约束"];
+        const requiredFields = ["动态意图", "时间段动作", "单一主运镜", "结束画面"];
         const missingFields = requiredFields.filter((field) => !new RegExp(`(?:^|\\n)\\s*${field}[：:]`, "u").test(prompt));
         if (missingFields.length) return `镜头 ${shotId} 的公开视频提示词缺少标准字段：${missingFields.join("、")}；请按当前 Skill 重新生成`;
         if (/(?:A线|B线|主线|副线|钩子)/u.test(prompt)) return `镜头 ${shotId} 的公开视频提示词包含内部叙事标签，请按当前 Skill 改写为可见动作、事件或声音`;
@@ -245,7 +245,7 @@ export function previewDramaVideoPromptOutput(value: unknown, shotIds: string[])
 }
 
 function escapeRegExp(value: string) {
-    return value.replace(/[.*+?^${}()|[\[\]\\]/gu, "\\$&");
+    return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }
 
 function normalizePublicVideoPromptForValidation(value: string) {

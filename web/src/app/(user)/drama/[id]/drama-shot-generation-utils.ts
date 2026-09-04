@@ -1,7 +1,7 @@
 import type { DramaAssetReference, DramaEpisode, DramaProject, DramaShot } from "../types";
-import type { DramaProductionPlan, DramaProductionRun } from "@/lib/drama-project-contract";
+import type { DramaProductionPlan, DramaProductionRun, DramaStoryboardFrameCandidate } from "@/lib/drama-project-contract";
 import { approvedAssetReference } from "@/lib/drama-asset-baseline";
-import { continuityStartEvidence, latestFrameEvidence } from "@/lib/drama-continuity-policy";
+import { createFrameEvidence, continuityStartEvidence, invalidateFrameEvidence, latestFrameEvidence, replaceFrameEvidence, supersedeFrameEvidence } from "@/lib/drama-continuity-policy";
 import type { useEffectiveConfig } from "@/stores/use-config-store";
 import { resolveDramaGenerationSize } from "@/lib/drama-image-size";
 import type { ReferenceImage } from "@/types/image";
@@ -61,6 +61,192 @@ export function resolveDramaVisualRunSync(project: DramaProject, episodeId: stri
     const shouldReload = Boolean(resolvedSteps.length && (!pending || resolvedSteps.some((step) => trackedTaskIds.has(step.taskId!))));
     const shouldContinue = !shouldReload && (pending || run.status === "ready" || run.status === "running");
     return { project: runtimeProject, shouldContinue, shouldReload };
+}
+
+export function applyDramaVisualRunTerminalStep(shot: DramaShot, step: DramaProductionRun["steps"][number]) {
+    if (!step.shotId || step.shotId !== shot.id || !["success", "failed", "cancelled", "needs_review"].includes(step.status)) return shot;
+    if (step.type === "start_frame" || step.type === "end_frame") {
+        const isEnd = step.type === "end_frame";
+        const resultUrl = step.outputUrls?.[0];
+        const status = step.status === "success" && resultUrl ? ("success" as const) : ("error" as const);
+        const role = isEnd ? "storyboard_end" : "storyboard_start";
+        const evidence = resultUrl
+            ? createFrameEvidence({
+                  role,
+                  source: "generated",
+                  mediaUrl: resultUrl,
+                  remoteUrl: step.outputRemoteUrls?.[0],
+                  sourceShotId: shot.id,
+                  generationTaskId: step.taskId,
+                  generationPrompt: step.executionPrompt || step.prompt,
+                  generationReferences: step.referenceImagesSnapshot,
+                  validity: "candidate",
+              })
+            : undefined;
+        const frameEvidence = evidence
+            ? replaceFrameEvidence(shot.frameEvidence, evidence, isEnd ? "新的分镜尾帧已生成" : "新的分镜首帧已生成")
+            : (shot.frameEvidence || []).map((frame) =>
+                  frame.role === role && frame.generationTaskId === step.taskId && (frame.validity === "candidate" || frame.validity === "accepted")
+                      ? invalidateFrameEvidence(frame, "unavailable", step.error || "图片任务失败")
+                      : frame,
+              );
+        return {
+            ...shot,
+            frameEvidence,
+            ...(isEnd
+                ? {
+                      storyboardEndStatus: status,
+                      storyboardEndTaskId: step.taskId,
+                      storyboardEndError: status === "error" ? step.error : undefined,
+                      ...(resultUrl
+                          ? {
+                                storyboardEndImageUrl: resultUrl,
+                                storyboardEndImageUrls: step.outputUrls,
+                                storyboardEndImageRemoteUrl: step.outputRemoteUrls?.[0],
+                                storyboardEndImageWidth: step.outputWidth,
+                                storyboardEndImageHeight: step.outputHeight,
+                                storyboardEndPrompt: step.executionPrompt || step.prompt,
+                            }
+                          : {}),
+                  }
+                : {
+                      storyboardStatus: status,
+                      storyboardTaskId: step.taskId,
+                      storyboardError: status === "error" ? step.error : undefined,
+                      ...(resultUrl
+                          ? {
+                                storyboardImageUrl: resultUrl,
+                                storyboardImageUrls: step.outputUrls,
+                                storyboardImageRemoteUrl: step.outputRemoteUrls?.[0],
+                                storyboardImageWidth: step.outputWidth,
+                                storyboardImageHeight: step.outputHeight,
+                                storyboardPrompt: step.executionPrompt || step.prompt,
+                            }
+                          : {}),
+                  }),
+        };
+    }
+    if (step.type !== "keyframe" || !(step.frameId || step.sequenceIndex)) return shot;
+    const sequenceIndex = step.sequenceIndex || 1;
+    const frameId = step.frameId || `frame-${sequenceIndex}`;
+    const currentFrames = [...(shot.storyboardFrames || [])];
+    const index = currentFrames.findIndex((frame) => frame.id === frameId || frame.sequenceIndex === sequenceIndex);
+    const current = index >= 0 ? currentFrames[index] : undefined;
+    if (step.status !== "success" || !step.outputUrls?.length) {
+        const failedFrame = current?.mediaUrl
+            ? { ...current, candidateStatus: "error" as const, candidateTaskId: step.taskId, candidateError: step.error }
+            : { ...(current || { id: frameId, sequenceIndex, source: "generated" as const }), status: "error" as const, taskId: step.taskId, error: step.error };
+        if (index >= 0) currentFrames[index] = failedFrame;
+        else currentFrames.push(failedFrame);
+        const frameEvidence = (shot.frameEvidence || []).map((frame) =>
+            frame.role === "storyboard_keyframe" && frame.sequenceIndex === sequenceIndex && frame.generationTaskId === step.taskId && (frame.validity === "candidate" || frame.validity === "accepted")
+                ? invalidateFrameEvidence(frame, "unavailable", step.error || "图片任务失败")
+                : frame,
+        );
+        return { ...shot, frameEvidence, storyboardFrameMode: "all_frames" as const, storyboardFrames: currentFrames.sort((left, right) => left.sequenceIndex - right.sequenceIndex) };
+    }
+    const evidence = step.outputUrls.map((url, index) =>
+        createFrameEvidence({
+            role: "storyboard_keyframe",
+            sequenceIndex,
+            source: "generated",
+            mediaUrl: url,
+            remoteUrl: step.outputRemoteUrls?.[index],
+            sourceShotId: shot.id,
+            generationTaskId: step.taskId,
+            generationPrompt: step.executionPrompt || step.prompt,
+            generationReferences: step.referenceImagesSnapshot,
+            validity: "candidate",
+        }),
+    );
+    const currentCandidate: DramaStoryboardFrameCandidate | undefined = current?.mediaUrl
+        ? {
+              id: `current-${current.taskId || current.id}`,
+              mediaUrl: current.mediaUrl,
+              remoteUrl: current.remoteUrl,
+              width: current.width,
+              height: current.height,
+              source: current.source,
+              taskId: current.taskId,
+              createdAt: new Date().toISOString(),
+              continuityStatus: current.continuityStatus === "stale" ? undefined : current.continuityStatus,
+              continuityEvidenceId: current.continuityEvidenceId,
+              error: current.error,
+              generationPrompt: current.generationPrompt,
+              generationReferences: current.generationReferences,
+          }
+        : undefined;
+    const generatedCandidates: DramaStoryboardFrameCandidate[] = step.outputUrls.map((url, index) => ({
+        id: `${step.taskId || frameId}-${index}`,
+        mediaUrl: url,
+        remoteUrl: step.outputRemoteUrls?.[index],
+        width: step.outputWidth,
+        height: step.outputHeight,
+        source: "generated",
+        taskId: step.taskId,
+        createdAt: new Date().toISOString(),
+        continuityStatus: "pending",
+        generationPrompt: step.executionPrompt || step.prompt,
+        generationReferences: step.referenceImagesSnapshot,
+    }));
+    const candidates = [...(current?.candidates || []), ...(currentCandidate ? [currentCandidate] : []), ...generatedCandidates].filter(
+        (candidate, candidateIndex, all) => all.findIndex((item) => item.mediaUrl === candidate.mediaUrl) === candidateIndex,
+    );
+    const selected = current?.mediaUrl ? current : generatedCandidates[0];
+    const nextFrame = {
+        id: frameId,
+        sequenceIndex,
+        mediaUrl: selected.mediaUrl,
+        remoteUrl: selected.remoteUrl,
+        width: selected.width,
+        height: selected.height,
+        source: selected.source,
+        status: "success" as const,
+        taskId: current?.mediaUrl ? current.taskId : step.taskId,
+        inputHash: current?.inputHash || step.inputHash,
+        continuityStatus: current?.mediaUrl ? current.continuityStatus : ("pending" as const),
+        continuityEvidenceId: current?.mediaUrl ? current.continuityEvidenceId : undefined,
+        error: current?.mediaUrl ? current.error : undefined,
+        generationPrompt: current?.mediaUrl ? current.generationPrompt : step.executionPrompt || step.prompt,
+        generationReferences: current?.mediaUrl ? current.generationReferences : step.referenceImagesSnapshot,
+        candidateStatus: undefined,
+        candidateTaskId: undefined,
+        candidateError: undefined,
+        candidates,
+    };
+    return {
+        ...shot,
+        frameEvidence: [...(shot.frameEvidence || []).filter((frame) => !evidence.some((item) => item.generationTaskId && item.generationTaskId === frame.generationTaskId)), ...evidence],
+        storyboardFrameMode: "all_frames" as const,
+        storyboardFrames: [...currentFrames.filter((frame) => frame.sequenceIndex !== sequenceIndex), nextFrame].sort((left, right) => left.sequenceIndex - right.sequenceIndex),
+    };
+}
+
+export function applyDramaProductionRunStep(shot: DramaShot, step: DramaProductionRun["steps"][number], runId?: string) {
+    if (!step.shotId || step.shotId !== shot.id) return shot;
+    if (step.type === "extract_frames") {
+        if (step.status === "success" && step.outputUrls?.[0])
+            return {
+                ...shot,
+                generationStatus: "success" as const,
+                generationRunId: runId || shot.generationRunId,
+                generationTaskId: shot.generationTaskId,
+                generationError: undefined,
+                videoUrl: step.outputUrls[0],
+                frameEvidence: supersedeFrameEvidence(shot.frameEvidence, "当前镜头视频已重新生成"),
+                actualStartFrameUrl: undefined,
+                actualEndFrameUrl: undefined,
+                actualFrameVideoUrl: undefined,
+                ...(shot.audioMode === "voiceover" && (shot.subtitle || shot.dialogue).trim() ? { audioStatus: "queued" as const, audioError: undefined } : {}),
+            };
+        if (step.status === "failed" || step.status === "needs_review") return { ...shot, generationStatus: step.status === "needs_review" ? ("needs_review" as const) : ("error" as const), generationRunId: runId || shot.generationRunId, generationError: step.error };
+        return step.status === "cancelled" ? { ...shot, generationStatus: "cancelled" as const, generationRunId: runId || shot.generationRunId, generationError: step.error } : shot;
+    }
+    if (step.type !== "video") return shot;
+    if (step.status === "running") return { ...shot, generationStatus: "running" as const, generationTaskId: step.taskId, generationRunId: runId || shot.generationRunId, generationError: undefined };
+    if (step.status === "failed" || step.status === "needs_review") return { ...shot, generationStatus: step.status === "needs_review" ? ("needs_review" as const) : ("error" as const), generationRunId: runId || shot.generationRunId, generationTaskId: step.taskId, generationError: step.error };
+    if (step.status === "cancelled") return { ...shot, generationStatus: "cancelled" as const, generationRunId: runId || shot.generationRunId, generationTaskId: step.taskId, generationError: step.error };
+    return shot;
 }
 
 export function shotReferenceImages(project: DramaProject, shot: DramaShot) {

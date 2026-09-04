@@ -144,6 +144,7 @@ describe("provider task config", () => {
         ];
         expect(() => assertVideoReferenceRoles({ protocol: "buming-seedance" } as never, frames, undefined, "seedance-2-0-official")).not.toThrow();
         expect(() => assertVideoReferenceRoles({ protocol: "buming-seedance" } as never, frames, undefined, "seedance-2-0-manju-special")).toThrow("不支持全能帧");
+        expect(() => assertVideoReferenceRoles({ protocol: "newapi-video" } as never, frames)).toThrow("当前视频模型不支持全能帧连续参考");
     });
 
     it("derives custom template frame roles only from explicit variables or structured references", () => {

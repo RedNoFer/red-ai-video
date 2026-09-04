@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { createFrameEvidence } from "@/lib/drama-continuity-policy";
-import { characterReferenceAudios, dramaShotVideoMode, resolveDramaVisualRunSync, shotReferenceImages, storyboardReferenceImages, videoReferenceImages } from "./drama-shot-generation-utils";
+import { applyDramaProductionRunStep, applyDramaVisualRunTerminalStep, characterReferenceAudios, dramaShotVideoMode, resolveDramaVisualRunSync, shotReferenceImages, storyboardReferenceImages, videoReferenceImages } from "./drama-shot-generation-utils";
 
 describe("resolveDramaVisualRunSync", () => {
     it("restores an active frame task when the persisted project still says it is idle", () => {
@@ -103,6 +103,24 @@ describe("resolveDramaVisualRunSync", () => {
 
         expect(decision.shouldReload).toBe(true);
         expect(decision.shouldContinue).toBe(false);
+    });
+});
+
+describe("applyDramaVisualRunTerminalStep", () => {
+    it("updates only the affected keyframe without reloading the project", () => {
+        const shot = { id: "shot-one", storyboardFrames: [{ id: "f1", sequenceIndex: 1, status: "running", source: "generated" }] } as never;
+        const next = applyDramaVisualRunTerminalStep(shot, { shotId: "shot-one", type: "keyframe", frameId: "f1", sequenceIndex: 1, status: "success", taskId: "task-one", outputUrls: ["/frame.png"] } as never);
+        expect(next).toMatchObject({ id: "shot-one", storyboardFrames: [{ id: "f1", status: "success", mediaUrl: "/frame.png" }] });
+    });
+});
+
+describe("applyDramaProductionRunStep", () => {
+    it("updates only the affected shot when a segmented video run changes", () => {
+        const shot = { id: "shot-one", generationStatus: "queued" } as never;
+        const running = applyDramaProductionRunStep(shot, { shotId: "shot-one", type: "video", status: "running", taskId: "video-task" } as never);
+        expect(running).toMatchObject({ generationStatus: "running", generationTaskId: "video-task" });
+        const completed = applyDramaProductionRunStep(running, { shotId: "shot-one", type: "extract_frames", status: "success", outputUrls: ["/video.mp4"] } as never);
+        expect(completed).toMatchObject({ generationStatus: "success", videoUrl: "/video.mp4" });
     });
 });
 
