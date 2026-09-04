@@ -1162,7 +1162,7 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
         setVideoPromptOriginal(supplierVideoPrompt);
     }, [shot.id, supplierVideoPrompt]);
     const optimizeVideoPrompt = async () => {
-        const source = videoPromptDraft.trim();
+        const source = videoPromptDraft.trim() !== videoPromptOriginal.trim() ? videoPromptDraft.trim() : resolveShotVideoOptimizationSource(shot);
         if (!source || optimizingVideoPrompt) return;
         setOptimizingVideoPrompt(true);
         try {
@@ -1500,6 +1500,12 @@ function resolveShotVideoPrompt(project: DramaProject, episode: DramaEpisode, sh
         ?.executionPrompt?.trim();
     const compiledPrompt = compileDramaShotExecutionPrompts(project, episode, shot).videoPrompt;
     return formatPromptFieldLines(shot.executionVideoPrompt?.trim() || shot.videoPrompt?.trim() || submittedPrompt || compiledPrompt || "", "video").trim();
+}
+
+function resolveShotVideoOptimizationSource(shot: DramaShot) {
+    const executionPrompt = shot.executionVideoPrompt?.trim() || "";
+    if (executionPrompt && !/(?:时间段动作|P\d{2}-F\d{2}\s*[｜|])/u.test(executionPrompt)) return executionPrompt;
+    return shot.videoPrompt?.trim() || shot.description?.trim() || "";
 }
 
 function resolveShotVideoReferences(project: DramaProject, episode: DramaEpisode, shot: DramaShot, productionRun: DramaProductionRun | null) {

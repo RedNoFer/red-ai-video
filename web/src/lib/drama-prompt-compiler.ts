@@ -137,10 +137,12 @@ export function compileDramaShotVideoBasePrompt(project: DramaProject, _episode:
     const scene = project.scenes.find((item) => item.id === shot.sceneId);
     const characterCount = project.characters.filter((item) => shot.characterIds.includes(item.id)).length;
     const physicalConstraint = scenePhysicalConstraint(scene, characterCount);
+    const executionPrompt = shot.executionVideoPrompt || "";
+    const videoSource = /(?:时间段动作|P\d{2}-F\d{2}\s*[｜|])/u.test(executionPrompt) ? shot.videoPrompt : executionPrompt || shot.videoPrompt;
     const videoPlan = cleanDramaVideoMotionBrief(
-        shot.executionVideoPrompt || shot.videoPrompt,
+        videoSource,
         project,
-        shot.executionVideoPrompt && !hasStructuredDramaVideoPrompt(shot.videoPrompt) ? shot.videoPrompt || shot.description : shot.executionVideoPrompt ? shot.description : undefined,
+        executionPrompt && !hasStructuredDramaVideoPrompt(shot.videoPrompt) ? shot.videoPrompt || shot.description : executionPrompt ? shot.description : undefined,
     );
     const light = shot.lightingPlan;
     const sound = compact([shot.sound?.ambience, shot.sound?.soundEffects, shot.sound?.music]).join("；");

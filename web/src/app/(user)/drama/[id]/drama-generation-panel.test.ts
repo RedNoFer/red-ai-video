@@ -71,6 +71,7 @@ describe("Drama generation production workspace", () => {
         const executionPrompt = source.slice(executionPromptStart, executionPromptEnd);
         expect(executionPrompt).toContain('updateDramaShotPromptPatch(project.id, episode.id, shot.id, prompt, undefined, { executionVideoPromptOrigin: "manual" })');
         expect(executionPrompt).toContain("videoPromptDraft.trim() === videoPromptOriginal.trim()");
+        expect(executionPrompt).toContain("resolveShotVideoOptimizationSource");
         expect(executionPrompt).not.toContain("saveProjectNow(project.id)");
         expect(executionPrompt).not.toContain("updateShot(project.id, episode.id, shot.id");
     });
