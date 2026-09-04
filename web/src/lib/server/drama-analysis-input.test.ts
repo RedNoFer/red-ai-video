@@ -50,6 +50,7 @@ describe("video prompt reference instructions", () => {
         expect(result.payload.referenceMaterials).toEqual([{ role: "keyframe", purpose: "顺序帧 1", sequenceIndex: 1 }]);
         expect(result.payload.shots[0]).toMatchObject({ id: "shot-one", videoPrompt: "动态意图：人物抬头" });
         expect(result.payload.shots[0]).not.toHaveProperty("storyboardFrames");
+        expect(result.payload.shots[0].framePlan).toEqual({});
         expect(JSON.stringify(result.payload)).not.toContain("very-large-frame");
         expect(JSON.stringify(result.payload)).not.toContain("/private/frame.png");
     });

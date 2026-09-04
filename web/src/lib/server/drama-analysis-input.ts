@@ -85,13 +85,37 @@ export function normalizeDramaVideoPromptInput(body: DramaAnalyzeBody) {
         payload: {
             ...visual.payload,
             shots: visual.payload.shots.map((shot) => {
-                const { storyboardFrames, ...compactShot } = shot;
+                const { storyboardFrames, framePlan, ...compactShot } = shot;
                 void storyboardFrames;
-                return { ...compactShot, videoPrompt: sourcePrompts.get(shot.id) || "" };
+                return { ...compactShot, framePlan: compactVideoFramePlan(framePlan), videoPrompt: sourcePrompts.get(shot.id) || "" };
             }),
             instruction: dramaAnalysisText(body.instruction),
             referenceMaterials: normalizeReferenceMaterials(body.referenceMaterials),
         },
+    };
+}
+
+function compactVideoFramePlan(value: unknown) {
+    const input = object(value);
+    const frames = array(input.frames).flatMap((item) => {
+        const frame = object(item);
+        const id = dramaAnalysisText(frame.id);
+        if (!id) return [];
+        return [
+            {
+                id,
+                sequenceIndex: Number(frame.sequenceIndex) || 0,
+                startSecond: Number(frame.startSecond),
+                endSecond: Number(frame.endSecond),
+                actionPrompt: dramaAnalysisText(frame.actionPrompt),
+                imagePrompt: dramaAnalysisText(frame.imagePrompt),
+            },
+        ];
+    });
+    return {
+        ...(object(input.start).source ? { start: { source: dramaAnalysisText(object(input.start).source) } } : {}),
+        ...(typeof object(input.end).required === "boolean" ? { end: { required: object(input.end).required } } : {}),
+        ...(frames.length ? { frames } : {}),
     };
 }
 
