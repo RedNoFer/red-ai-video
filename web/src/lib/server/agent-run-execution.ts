@@ -5,7 +5,7 @@ import { creativeAssetReferenceAliases } from "@/lib/creative-asset-references";
 import { fetchInternalApi } from "@/lib/server/internal-origin";
 import { resolveLogicalModel } from "@/lib/server/logical-model-router";
 import { reviewCreativeOutputs } from "@/lib/server/creative-review-service";
-import { requestStructuredText, type TextPlanningCandidate, type TextPlanningTool } from "@/lib/server/text-planning-runtime";
+import { requestStructuredText, requestTextResponse, type TextPlanningCandidate, type TextPlanningTool, type TextPlanningTiming } from "@/lib/server/text-planning-runtime";
 import { registerAgentTaskAssets } from "@/lib/server/agent-run-assets";
 import { buildAgentProjectHandoff } from "@/lib/server/agent-run-project-handoff";
 import { getAgentRun, updateAgentRunById, updateAgentRunTaskById, type AgentRun, type AgentRunChildTask, type AgentRunReference, type AgentRunTask } from "@/lib/server/agent-run-store";
@@ -495,7 +495,35 @@ export async function requestFunctionCall(
         allowNaturalLanguage,
         onInvalidResponse: (headers) => refundTextResponse(userId, billingModel, headers),
     });
-    return readFunctionCallResult(call.arguments, call.headers, call.protocol, call.elapsedMs);
+    return readFunctionCallResult(call.arguments, call.headers, call.protocol, call.elapsedMs, call.timings);
+}
+
+export async function requestConversationResponse(
+    origin: string,
+    cookie: string,
+    candidate: TextPlanningCandidate,
+    input: Array<{ role: string; content: string }>,
+    signal: AbortSignal,
+    userId: string,
+    billingModel: string,
+    pointsIdempotencyKey: string,
+) {
+    const requestHeaders = runtimeRequestHeaders(cookie, {
+        "Content-Type": "application/json",
+        "Idempotency-Key": pointsIdempotencyKey,
+        "X-Client-Request-Id": pointsIdempotencyKey,
+        ...systemAiBillingHeaders(billingModel, pointsIdempotencyKey, candidate.upstreamModel),
+    });
+    const call = await requestTextResponse({
+        origin,
+        cookie,
+        candidate,
+        messages: input,
+        headers: requestHeaders,
+        signal,
+        onInvalidResponse: (headers) => refundTextResponse(userId, billingModel, headers),
+    });
+    return { content: call.content, ...readFunctionCallResult("", call.headers, call.protocol, call.elapsedMs, call.timings) };
 }
 
 export function responseOutputText(payload: { output_text?: string; output?: Array<{ type?: string; content?: Array<{ type?: string; text?: string }> }> }) {
@@ -509,12 +537,13 @@ export function responseOutputText(payload: { output_text?: string; output?: Arr
     );
 }
 
-export function readFunctionCallResult(argumentsText: string, headers: Headers, protocol?: AgentFunctionCallResult["protocol"], elapsedMs?: number): AgentFunctionCallResult {
+export function readFunctionCallResult(argumentsText: string, headers: Headers, protocol?: AgentFunctionCallResult["protocol"], elapsedMs?: number, timings?: TextPlanningTiming): AgentFunctionCallResult {
     const pointsRemaining = Number(headers.get("x-vozeb-pro-points-remaining"));
     return {
         arguments: argumentsText,
         protocol,
         elapsedMs,
+        timings,
         pointsRemaining: Number.isFinite(pointsRemaining) ? pointsRemaining : undefined,
         ...readSystemAiBilling(headers),
     };

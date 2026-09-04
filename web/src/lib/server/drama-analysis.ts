@@ -180,7 +180,10 @@ function normalizeVisualFramePlan(value: unknown, fallbackValue?: unknown): Dram
             sequenceIndex: Number(frame.sequenceIndex) || index + 1,
             startSecond: Number(frame.startSecond),
             endSecond: Number(frame.endSecond),
+            startPrompt: text(frame.startPrompt),
             actionPrompt: text(frame.actionPrompt),
+            transitionPrompt: text(frame.transitionPrompt),
+            endPrompt: text(frame.endPrompt),
             imagePrompt: text(frame.imagePrompt),
         };
     });
@@ -238,16 +241,50 @@ function normalizeReferenceCount(value: unknown) {
     return { min: Math.min(30, min), max: Math.min(30, max) };
 }
 
-export function normalizeDramaVideoPromptAnalysis(value: unknown, shotIds: string[]): import("@/lib/drama-project-contract").DramaVideoPromptAnalysis {
+export function normalizeDramaVideoPromptAnalysis(
+    value: unknown,
+    shotIds: string[],
+    sourceShots: ReadonlyArray<{ id: string; framePlan?: unknown }> = [],
+): import("@/lib/drama-project-contract").DramaVideoPromptAnalysis {
     const allowed = new Set(shotIds);
     const seen = new Set<string>();
+    const sourcePlans = new Map(sourceShots.map((shot) => [shot.id, object(shot.framePlan)]));
     const shots = array(object(value).shots).flatMap((item) => {
         const shot = object(item);
         const shotId = text(shot.shotId);
         const videoPrompt = text(shot.videoPrompt);
-        if (!allowed.has(shotId) || seen.has(shotId) || !videoPrompt) return [];
+        const rawFrames = array(object(shot.framePlan).frames);
+        if (!allowed.has(shotId) || seen.has(shotId) || !videoPrompt || !rawFrames.length) return [];
         seen.add(shotId);
-        return [{ shotId, videoPrompt }];
+        const sourceFrames = array(sourcePlans.get(shotId)?.frames);
+        const frames = rawFrames.flatMap((value, index) => {
+            const frame = object(value);
+            const source = object(sourceFrames[index]);
+            const sequenceIndex = Math.floor(Number(frame.sequenceIndex) || index + 1);
+            const startSecond = Number(frame.startSecond);
+            const endSecond = Number(frame.endSecond);
+            const startPrompt = text(frame.startPrompt);
+            const actionPrompt = text(frame.actionPrompt);
+            const transitionPrompt = text(frame.transitionPrompt);
+            const endPrompt = text(frame.endPrompt);
+            const imagePrompt = text(frame.imagePrompt);
+            if (!Number.isInteger(sequenceIndex) || sequenceIndex < 1 || !Number.isFinite(startSecond) || !Number.isFinite(endSecond) || endSecond <= startSecond || !startPrompt || !actionPrompt || !transitionPrompt || !endPrompt || !imagePrompt) return [];
+            return [
+                {
+                    id: text(frame.id) || text(source.id) || `frame-${index + 1}`,
+                    sequenceIndex,
+                    startSecond,
+                    endSecond,
+                    startPrompt,
+                    actionPrompt,
+                    transitionPrompt,
+                    endPrompt,
+                    imagePrompt,
+                },
+            ];
+        });
+        if (!frames.length) return [];
+        return [{ shotId, videoPrompt, framePlan: { frames } }];
     });
     return { shots };
 }
@@ -1068,7 +1105,7 @@ export const dramaVisualTool = {
 
 export const dramaVideoPromptTool = {
     name: "generate_drama_video_prompts",
-    description: "根据已经生成并验收的顺序帧、固定资产和连续性信息，执行当前 Seedance 2.5 导演 Skill，为每个镜头生成可直接提交给视频供应商的公开图生视频提示词",
+    description: "根据已经生成并验收的顺序帧、固定资产和连续性信息，执行当前 Seedance 2.5 导演 Skill，为每个镜头生成符合公开格式的图生视频提示词和逐帧动作计划",
     parameters: {
         type: "object",
         additionalProperties: false,
@@ -1079,13 +1116,42 @@ export const dramaVideoPromptTool = {
                 items: {
                     type: "object",
                     additionalProperties: false,
-                    required: ["shotId", "videoPrompt"],
+                    required: ["shotId", "videoPrompt", "framePlan"],
                     properties: {
                         shotId: { type: "string" },
                         videoPrompt: {
                             type: "string",
                             description:
-                                "只返回执行当前 Seedance 2.5 导演 Skill 后的公开 videoPrompt 字符串；有 referenceMaterials 时由 Skill 生成素材绑定和对应别名。具体动作、触发、每个连续时间段的起点、可见衔接和终点必须写入 framePlan.frames.actionPrompt 与 imagePrompt，由运行时按时间顺序组装；每段动作都要维持可行的身体支撑、接触关系、通道和多人相对方位，不能让人物穿过场景结构或处于不合理坐姿。不要把同一动作同时详细写在 videoPrompt 和时间段中，不重复项目档案、URL、画幅、时长或内部说明",
+                                "只返回执行当前 Seedance 2.5 导演 Skill 后的公开 videoPrompt 字符串；必须按素材绑定、动态意图、全局设定、起始可见状态、主体动作与反应、时间段动作、单一主运镜、环境压力与视觉母题、视觉风格与光色、声音意图、结束画面、连续性锁、针对性约束逐行输出。输入 referenceMaterials 已提供每项的 alias、role、purpose 和顺序，素材绑定必须逐字使用这些 alias，不得自行猜编号；时间段动作必须逐段列出真实时间范围，并直接写出每段的起点、动作与触发、可见衔接和终点。有 referenceMaterials 时由 Skill 生成素材绑定和对应职责；不得输出模式、内部 ID、URL、JSON 或解释",
+                        },
+                        framePlan: {
+                            type: "object",
+                            additionalProperties: false,
+                            required: ["frames"],
+                            properties: {
+                                frames: {
+                                    type: "array",
+                                    minItems: 1,
+                                    maxItems: 9,
+                                    description: "必须由 Agent 为每个真实动作节点返回具体的起点、动作与触发、可见衔接、终点和画面状态；沿用输入帧的 sequenceIndex、startSecond 和 endSecond，不得用通用阶段词代替具体描述",
+                                    items: {
+                                        type: "object",
+                                        additionalProperties: false,
+                                        required: ["id", "sequenceIndex", "startSecond", "endSecond", "startPrompt", "actionPrompt", "transitionPrompt", "endPrompt", "imagePrompt"],
+                                        properties: {
+                                            id: { type: "string" },
+                                            sequenceIndex: { type: "integer", minimum: 1 },
+                                            startSecond: { type: "number", minimum: 0 },
+                                            endSecond: { type: "number", exclusiveMinimum: 0 },
+                                            startPrompt: { type: "string" },
+                                            actionPrompt: { type: "string" },
+                                            transitionPrompt: { type: "string" },
+                                            endPrompt: { type: "string" },
+                                            imagePrompt: { type: "string" },
+                                        },
+                                    },
+                                },
+                            },
                         },
                     },
                 },

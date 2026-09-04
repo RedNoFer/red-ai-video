@@ -656,6 +656,26 @@ describe("executeAgentRun backend settings", () => {
         expect(mocks.fetchInternalApi.mock.calls.some(([url]) => /\/api\/(?:image|video|audio|text)-tasks/.test(String(url)))).toBe(false);
     });
 
+    it("routes ordinary chat questions through the lightweight text response", async () => {
+        mocks.run = runFixture({ surface: "chat", projectId: undefined, prompt: "你是什么模型？" });
+        mocks.getAuthSettings.mockResolvedValue(canvasSettings("image-default", "image-default-channel"));
+        mocks.fetchInternalApi.mockImplementation(async (url: string) => {
+            if (url.endsWith("/chat/completions")) return Response.json({ choices: [{ message: { content: "当前使用 gpt-5.5。" } }] }, { headers: { "x-vozeb-pro-points-cost": "1", "x-vozeb-pro-points-record-id": "points-chat", "x-vozeb-pro-upstream-headers-ms": "37" } });
+            throw new Error(`unexpected request: ${url}`);
+        });
+
+        await executeAgentRun(mocks.run, "http://localhost", "session=test");
+
+        const call = mocks.fetchInternalApi.mock.calls.find(([url]) => String(url).endsWith("/chat/completions"));
+        const body = JSON.parse(String(call?.[1]?.body)) as { messages: Array<{ content: string }> };
+        expect(body.messages).toHaveLength(2);
+        expect(body.messages[0]?.content).toContain("普通问答");
+        expect(JSON.stringify(body)).not.toContain("create_agent_plan");
+        expect(mocks.run?.plannerAudit).toMatchObject({ mode: "conversation", protocol: "chat", elapsedMs: expect.any(Number), pointsCost: 1, timings: { upstreamHeadersMs: 37, firstByteMs: expect.any(Number), totalMs: expect.any(Number) } });
+        expect(mocks.events.find((event) => event.type === "run.completed")?.data).toMatchObject({ completed: 0, reply: "当前使用 gpt-5.5。" });
+        expect(mocks.run?.status).toBe("completed");
+    });
+
     it("falls back to structured Chat Completions when Responses returns prose", async () => {
         mocks.run = planningRun("你在吗？");
         mocks.getAuthSettings.mockResolvedValue(canvasSettings("image-default", "image-default-channel"));

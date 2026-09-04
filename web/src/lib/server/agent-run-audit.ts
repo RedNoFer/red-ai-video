@@ -1,5 +1,5 @@
 import type { AgentSkill, AgentSkillWorkspace } from "@/lib/auth/store-types";
-import type { TextPlanningProtocol } from "@/lib/server/text-planning-runtime";
+import type { TextPlanningProtocol, TextPlanningTiming } from "@/lib/server/text-planning-runtime";
 
 export const AGENT_PLAN_SCHEMA_VERSION = 2 as const;
 
@@ -26,12 +26,13 @@ export type AgentRunSkillSnapshot = {
 
 export type AgentRunPlannerAudit = {
     schemaVersion: typeof AGENT_PLAN_SCHEMA_VERSION;
-    mode: "direct" | "model";
+    mode: "direct" | "model" | "conversation";
     logicalModelId?: string;
     channelId?: string;
     upstreamModel?: string;
     protocol?: TextPlanningProtocol;
     elapsedMs?: number;
+    timings?: TextPlanningTiming;
     pointsCost?: number;
     pointsRecordId?: string;
     skills: AgentRunSkillSnapshot[];
@@ -44,6 +45,7 @@ export function buildAgentRunPlannerAudit(input: {
     upstreamModel?: string;
     protocol?: TextPlanningProtocol;
     elapsedMs?: number;
+    timings?: TextPlanningTiming;
     pointsCost?: number;
     pointsRecordId?: string;
     skills: AgentSkill[];
@@ -56,6 +58,7 @@ export function buildAgentRunPlannerAudit(input: {
         ...(input.upstreamModel ? { upstreamModel: input.upstreamModel } : {}),
         ...(input.protocol ? { protocol: input.protocol } : {}),
         ...(Number.isFinite(input.elapsedMs) && input.elapsedMs! >= 0 ? { elapsedMs: input.elapsedMs } : {}),
+        ...(input.timings ? { timings: input.timings } : {}),
         ...(Number.isFinite(input.pointsCost) && input.pointsCost! >= 0 ? { pointsCost: input.pointsCost } : {}),
         ...(input.pointsRecordId ? { pointsRecordId: input.pointsRecordId } : {}),
         skills: input.skills.map(snapshotAgentSkill),

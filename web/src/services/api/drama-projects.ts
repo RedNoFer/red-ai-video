@@ -260,7 +260,7 @@ export function generateDramaVideoPrompt(input: { project: DramaProject; episode
             shots: [shot],
             referenceMaterials: input.referenceMaterials.map((reference) => {
                 const item = reference && typeof reference === "object" ? (reference as Record<string, unknown>) : {};
-                return { role: typeof item.role === "string" ? item.role : "", purpose: typeof item.purpose === "string" ? item.purpose : "", sequenceIndex: typeof item.sequenceIndex === "number" ? item.sequenceIndex : undefined };
+                return { alias: typeof item.alias === "string" ? item.alias : undefined, role: typeof item.role === "string" ? item.role : "", purpose: typeof item.purpose === "string" ? item.purpose : "", sequenceIndex: typeof item.sequenceIndex === "number" ? item.sequenceIndex : undefined };
             }),
         }),
     });
@@ -375,12 +375,12 @@ export function updateDramaShotPrompt(
     shotId: string,
     executionVideoPrompt?: string,
     imagePrompt?: string,
-    options?: { executionVideoPromptOrigin?: "manual" | "ai" },
+    options?: { executionVideoPromptOrigin?: "manual" | "ai"; framePlan?: unknown; framePlanOrigin?: "manual" | "ai" },
 ) {
     return request<{ project: DramaProject }>(`/api/drama/projects/${encodeURIComponent(projectId)}/episodes/${encodeURIComponent(episodeId)}/shots/${encodeURIComponent(shotId)}/prompt`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...(executionVideoPrompt ? { executionVideoPrompt, ...(options?.executionVideoPromptOrigin ? { executionVideoPromptOrigin: options.executionVideoPromptOrigin } : {}) } : {}), ...(imagePrompt ? { imagePrompt } : {}) }),
+        body: JSON.stringify({ ...(executionVideoPrompt ? { executionVideoPrompt, ...(options?.executionVideoPromptOrigin ? { executionVideoPromptOrigin: options.executionVideoPromptOrigin } : {}) } : {}), ...(imagePrompt ? { imagePrompt } : {}), ...(options?.framePlan ? { framePlan: options.framePlan, ...(options.framePlanOrigin ? { framePlanOrigin: options.framePlanOrigin } : {}) } : {}) }),
     }).then((data) => data.project);
 }
 
@@ -390,14 +390,14 @@ export function updateDramaShotPromptPatch(
     shotId: string,
     executionVideoPrompt?: string,
     imagePrompt?: string,
-    options?: { executionVideoPromptOrigin?: "manual" | "ai" },
+    options?: { executionVideoPromptOrigin?: "manual" | "ai"; framePlan?: unknown; framePlanOrigin?: "manual" | "ai" },
 ) {
     return request<{ projectId: string; episodeId: string; shotId: string; updatedAt: string; shot: DramaShot }>(
         `/api/drama/projects/${encodeURIComponent(projectId)}/episodes/${encodeURIComponent(episodeId)}/shots/${encodeURIComponent(shotId)}/prompt?response=shot`,
         {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ ...(executionVideoPrompt ? { executionVideoPrompt, ...(options?.executionVideoPromptOrigin ? { executionVideoPromptOrigin: options.executionVideoPromptOrigin } : {}) } : {}), ...(imagePrompt ? { imagePrompt } : {}) }),
+            body: JSON.stringify({ ...(executionVideoPrompt ? { executionVideoPrompt, ...(options?.executionVideoPromptOrigin ? { executionVideoPromptOrigin: options.executionVideoPromptOrigin } : {}) } : {}), ...(imagePrompt ? { imagePrompt } : {}), ...(options?.framePlan ? { framePlan: options.framePlan, ...(options.framePlanOrigin ? { framePlanOrigin: options.framePlanOrigin } : {}) } : {}) }),
         },
     );
 }

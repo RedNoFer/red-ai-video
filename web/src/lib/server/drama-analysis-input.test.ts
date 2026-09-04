@@ -7,6 +7,7 @@ import {
     reviewCompletionFilledCount,
     reviewCompletionMissingFields,
     reviewCompletionSatisfies,
+    validateDramaVideoPromptOutput,
     validateDramaVideoPromptReferenceBindings,
 } from "./drama-analysis-input";
 
@@ -45,9 +46,9 @@ describe("video prompt reference instructions", () => {
         const result = normalizeDramaVideoPromptInput({
             phase: "video_prompt",
             shots: [{ id: "shot-one", videoPrompt: "动态意图：人物抬头", storyboardFrames: [{ id: "frame-one", mediaUrl: "data:image/png;base64,very-large-frame" }] }],
-            referenceMaterials: [{ role: "keyframe", purpose: "顺序帧 1", sequenceIndex: 1, url: "/private/frame.png" }],
+            referenceMaterials: [{ alias: "@图片1", role: "keyframe", purpose: "顺序帧 1", sequenceIndex: 1, url: "/private/frame.png" }],
         });
-        expect(result.payload.referenceMaterials).toEqual([{ role: "keyframe", purpose: "顺序帧 1", sequenceIndex: 1 }]);
+        expect(result.payload.referenceMaterials).toEqual([{ alias: "@图片1", role: "keyframe", purpose: "顺序帧 1", sequenceIndex: 1 }]);
         expect(result.payload.shots[0]).toMatchObject({ id: "shot-one", videoPrompt: "动态意图：人物抬头" });
         expect(result.payload.shots[0]).not.toHaveProperty("storyboardFrames");
         expect(result.payload.shots[0].framePlan).toEqual({});
@@ -55,12 +56,78 @@ describe("video prompt reference instructions", () => {
         expect(JSON.stringify(result.payload)).not.toContain("/private/frame.png");
     });
 
+    it("assigns deterministic aliases when older callers omit them", () => {
+        const result = normalizeDramaVideoPromptInput({
+            phase: "video_prompt",
+            shots: [{ id: "shot-one", videoPrompt: "动态意图：人物抬头" }],
+            referenceMaterials: [{ role: "keyframe", purpose: "顺序帧 1" }, { role: "scene_anchor", purpose: "场景基准图" }],
+        });
+
+        expect(result.payload.referenceMaterials).toEqual([
+            { alias: "@图片1", role: "keyframe", purpose: "顺序帧 1" },
+            { alias: "@图片2", role: "scene_anchor", purpose: "场景基准图" },
+        ]);
+    });
+
     it("validates that the Agent returns every bound image alias", () => {
         expect(validateDramaVideoPromptReferenceBindings("素材绑定：@图片1：顺序帧 1\n@图片2：角色基准图", [{ role: "keyframe" }, { role: "character_anchor" }])).toBe("");
+        expect(validateDramaVideoPromptReferenceBindings("素材绑定：@图片1（顺序帧 1）\n@图片2 用于角色基准图", [{ alias: "@图片1", role: "keyframe" }, { alias: "@图片2", role: "character_anchor" }])).toBe("");
+        expect(validateDramaVideoPromptReferenceBindings("素材绑定：先绑定顺序帧；参考图 @图片 1（顺序帧 1）、@图片 2 用于角色基准图", [{ alias: "@图片1", role: "keyframe" }, { alias: "@图片2", role: "character_anchor" }])).toBe("");
         expect(validateDramaVideoPromptReferenceBindings("动态意图：人物抬头", [{ role: "keyframe" }])).toContain("@图片1");
         expect(validateDramaVideoPromptReferenceBindings("动态意图：@图片1：人物抬头", [{ role: "keyframe" }])).toContain("素材绑定字段");
         expect(validateDramaVideoPromptReferenceBindings("素材绑定：@图片1：顺序帧\n主体动作：@图片1：重复", [{ role: "keyframe" }])).toContain("重复绑定");
         expect(validateDramaVideoPromptReferenceBindings("素材绑定：@图片2：场景\n@图片1：角色", [{ role: "character_anchor" }, { role: "scene_anchor" }])).toContain("顺序");
+    });
+
+    it("rejects a video prompt that exposes internal mode or omits concrete frame actions", () => {
+        const error = validateDramaVideoPromptOutput(
+            {
+                shots: [
+                    {
+                        shotId: "shot-one",
+                        videoPrompt: "素材绑定：@图片1：顺序帧\n动态意图：人物抬头\n模式：video-edit",
+                        framePlan: { frames: [{ sequenceIndex: 1, startSecond: 0, endSecond: 3, startPrompt: "", actionPrompt: "", transitionPrompt: "", endPrompt: "", imagePrompt: "" }] },
+                    },
+                ],
+            },
+            ["shot-one"],
+            [{ id: "shot-one", framePlan: { frames: [{ id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 3 }] } }],
+            [{ role: "keyframe", purpose: "顺序帧" }],
+        );
+
+        expect(error).toContain("内部模式");
+    });
+
+    it("requires every source time range to be described in the public prompt", () => {
+        const error = validateDramaVideoPromptOutput(
+            {
+                shots: [
+                    {
+                        shotId: "shot-one",
+                        videoPrompt: [
+                            "动态意图：人物抬头",
+                            "全局设定：冷色夜景",
+                            "起始可见状态：人物低头",
+                            "主体动作与反应：手指收紧后抬头",
+                            "时间段动作：0-3s",
+                            "单一主运镜：固定机位",
+                            "环境压力与视觉母题：风声",
+                            "视觉风格与光色：冷蓝",
+                            "声音意图：低声耳语",
+                            "结束画面：人物看向门外",
+                            "连续性锁：身份不变",
+                            "针对性约束：无变形",
+                        ].join("\n"),
+                        framePlan: { frames: [{ sequenceIndex: 1, startSecond: 0, endSecond: 3, startPrompt: "人物低头", actionPrompt: "手指收紧", transitionPrompt: "视线转向门外", endPrompt: "人物看向门外", imagePrompt: "人物看向门外" }] },
+                    },
+                ],
+            },
+            ["shot-one"],
+            [{ id: "shot-one", framePlan: { frames: [{ id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 3 }] } }],
+            [],
+        );
+
+        expect(error).toContain("逐段写出");
     });
 });
 

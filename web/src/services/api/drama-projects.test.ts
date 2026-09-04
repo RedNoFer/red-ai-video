@@ -77,7 +77,7 @@ describe("drama project api", () => {
     });
 
     it("uses a fresh request identity for each video prompt generation", async () => {
-        const fetchMock = vi.fn().mockResolvedValue(Response.json({ code: 0, data: { shots: [{ shotId: "shot-one", videoPrompt: "动作" }] }, msg: "OK" }));
+        const fetchMock = vi.fn().mockResolvedValue(Response.json({ code: 0, data: { shots: [{ shotId: "shot-one", videoPrompt: "动作", framePlan: { frames: [{ sequenceIndex: 1, startSecond: 0, endSecond: 3, actionPrompt: "动作", imagePrompt: "画面" }] } }] }, msg: "OK" }));
         vi.stubGlobal("fetch", fetchMock);
         vi.stubGlobal("crypto", { randomUUID: vi.fn().mockReturnValue("prompt-request-one") });
 
@@ -92,18 +92,18 @@ describe("drama project api", () => {
     });
 
     it("sends only structured reference duties to the drama prompt Agent", async () => {
-        const fetchMock = vi.fn().mockResolvedValue(Response.json({ code: 0, data: { shots: [{ shotId: "shot-one", videoPrompt: "素材绑定：@图片1：顺序帧 1" }] }, msg: "OK" }));
+        const fetchMock = vi.fn().mockResolvedValue(Response.json({ code: 0, data: { shots: [{ shotId: "shot-one", videoPrompt: "素材绑定：@图片1：顺序帧 1", framePlan: { frames: [{ sequenceIndex: 1, startSecond: 0, endSecond: 3, actionPrompt: "动作", imagePrompt: "画面" }] } }] }, msg: "OK" }));
         vi.stubGlobal("fetch", fetchMock);
 
         await generateDramaVideoPrompt({
             project: { id: "project-one", summary: "", style: "", characters: [], scenes: [], props: [], clues: [] } as never,
             episode: { id: "episode-one" } as never,
             shot: { id: "shot-one" } as never,
-            referenceMaterials: [{ role: "keyframe", purpose: "顺序帧 1", url: "/private/frame.png" }],
+            referenceMaterials: [{ alias: "@图片1", role: "keyframe", purpose: "顺序帧 1", url: "/private/frame.png" }],
         });
 
         const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
-        expect(body.referenceMaterials).toEqual([{ role: "keyframe", purpose: "顺序帧 1" }]);
+        expect(body.referenceMaterials).toEqual([{ alias: "@图片1", role: "keyframe", purpose: "顺序帧 1" }]);
         expect(JSON.stringify(body)).not.toContain("/private/frame.png");
     });
 

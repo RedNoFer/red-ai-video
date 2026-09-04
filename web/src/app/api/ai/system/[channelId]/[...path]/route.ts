@@ -193,6 +193,8 @@ async function proxySystemRequest(request: Request, context: RouteContext) {
     request.signal.addEventListener("abort", () => void refundConsumedPoints(), { once: true });
 
     let upstream: Response;
+    const upstreamStartedAt = performance.now();
+    let upstreamHeadersMs: number | undefined;
     try {
         upstream = await fetchSafeOutbound(target, {
             method: request.method,
@@ -202,6 +204,7 @@ async function proxySystemRequest(request: Request, context: RouteContext) {
             redirect: "manual",
             signal: request.signal,
         });
+        upstreamHeadersMs = Math.max(0, Math.round(performance.now() - upstreamStartedAt));
     } catch (error) {
         await refundConsumedPoints();
         console.error("System API proxy request failed", error instanceof Error ? error.message : error);
@@ -218,14 +221,14 @@ async function proxySystemRequest(request: Request, context: RouteContext) {
     if (upstream.ok) pointsSettled = true;
     if (globalAdaptation && upstream.ok) {
         const payload = await upstream.json().catch(() => null);
-        if (!payload) return NextResponse.json({ error: "上游文本接口返回了无效 JSON" }, { status: 502, headers: responseHeaders(upstream.headers, pointsResult, refundedPointsRemaining, target) });
-        return NextResponse.json(adaptGlobalAiOpcTextResponse(globalAdaptation.adapter, payload), { status: upstream.status, headers: responseHeaders(upstream.headers, pointsResult, refundedPointsRemaining, target) });
+        if (!payload) return NextResponse.json({ error: "上游文本接口返回了无效 JSON" }, { status: 502, headers: responseHeaders(upstream.headers, pointsResult, refundedPointsRemaining, target, upstreamHeadersMs) });
+        return NextResponse.json(adaptGlobalAiOpcTextResponse(globalAdaptation.adapter, payload), { status: upstream.status, headers: responseHeaders(upstream.headers, pointsResult, refundedPointsRemaining, target, upstreamHeadersMs) });
     }
 
     return new Response(upstream.body, {
         status: upstream.status,
         statusText: upstream.statusText,
-        headers: responseHeaders(upstream.headers, pointsResult, refundedPointsRemaining, target),
+        headers: responseHeaders(upstream.headers, pointsResult, refundedPointsRemaining, target, upstreamHeadersMs),
     });
 }
 
@@ -666,7 +669,7 @@ function normalizeApiBaseUrl(baseUrl: string, apiFormat: "openai" | "gemini", gl
     return `${normalized}/v1`;
 }
 
-function responseHeaders(headers: Headers, pointsResult?: Awaited<ReturnType<typeof consumeUserPoints>> | null, refundedPointsRemaining?: number | null, upstreamUrl?: string) {
+function responseHeaders(headers: Headers, pointsResult?: Awaited<ReturnType<typeof consumeUserPoints>> | null, refundedPointsRemaining?: number | null, upstreamUrl?: string, upstreamHeadersMs?: number) {
     const nextHeaders = new Headers();
     const passthrough = ["content-type", "cache-control", "content-disposition"];
     passthrough.forEach((key) => {
@@ -674,6 +677,7 @@ function responseHeaders(headers: Headers, pointsResult?: Awaited<ReturnType<typ
         if (value) nextHeaders.set(key, value);
     });
     if (upstreamUrl) nextHeaders.set("x-vozeb-pro-upstream-url", upstreamUrl);
+    if (typeof upstreamHeadersMs === "number" && Number.isFinite(upstreamHeadersMs)) nextHeaders.set("x-vozeb-pro-upstream-headers-ms", String(Math.max(0, Math.round(upstreamHeadersMs))));
     if (pointsResult) {
         nextHeaders.set("x-vozeb-pro-points-cost", String(pointsResult.cost));
         nextHeaders.set("x-vozeb-pro-points-remaining", String(pointsResult.remaining));

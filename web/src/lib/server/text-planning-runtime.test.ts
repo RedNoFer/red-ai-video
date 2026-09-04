@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { SystemChannelAdvancedConfig, SystemModelChannel } from "@/lib/auth/store";
 import { fetchInternalApi } from "@/lib/server/internal-origin";
-import { getTextPlanningRuntime, rankTextPlanningCandidates, requestStructuredText, resetTextPlanningRuntime, type TextPlanningCandidate } from "./text-planning-runtime";
+import { getTextPlanningRuntime, rankTextPlanningCandidates, requestStructuredText, requestTextResponse, resetTextPlanningRuntime, type TextPlanningCandidate } from "./text-planning-runtime";
 
 vi.mock("@/lib/server/internal-origin", () => ({ fetchInternalApi: vi.fn() }));
 vi.mock("@/lib/server/channel-runtime-health", () => ({ recordChannelRuntimeFailure: vi.fn(), recordChannelRuntimeSuccess: vi.fn() }));
@@ -40,6 +40,25 @@ describe("text planning runtime protocol matrix", () => {
         expect((requestBody().input as Array<{ role: string; content: string }>).find((message) => message.role === "system")?.content).toContain("json");
         expect(requestBody()).not.toHaveProperty("tools");
         expect(requestBody()).not.toHaveProperty("reasoning");
+    });
+
+    it("普通问答使用轻量文本请求，不注入规划 Schema", async () => {
+        mockedFetch.mockResolvedValue(Response.json({ choices: [{ message: { content: "在的，需要我帮你做什么？" } }] }, { headers: { "x-vozeb-pro-upstream-headers-ms": "42" } }));
+
+        const result = await requestTextResponse({
+            origin: "http://127.0.0.1:3000",
+            cookie: "session=test",
+            candidate: candidate("newapi"),
+            messages: [{ role: "system", content: "直接回答" }, { role: "user", content: "你在吗？" }],
+        });
+
+        expect(result.content).toBe("在的，需要我帮你做什么？");
+        expect(result.timings.upstreamHeadersMs).toBe(42);
+        expect(result.timings.firstByteMs).toBeGreaterThanOrEqual(0);
+        expect(result.timings.totalMs).toBeGreaterThanOrEqual(result.timings.firstByteMs);
+        expect(requestBody()).toMatchObject({ model: "model-one", messages: [{ role: "system", content: "直接回答" }, { role: "user", content: "你在吗？" }] });
+        expect(JSON.stringify(requestBody())).not.toContain("create_agent_plan");
+        expect(JSON.stringify(requestBody())).not.toContain("严格 JSON");
     });
 
     it("模型级 Responses 预设覆盖 New API 渠道的默认 Chat", async () => {

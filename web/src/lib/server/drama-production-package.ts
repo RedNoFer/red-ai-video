@@ -707,7 +707,10 @@ function normalizePackageShot(value: unknown, index: number): DramaProductionPac
                 sequenceIndex: positiveNumber(frame.sequenceIndex) || frameIndex + 1,
                 startSecond: Number(frame.startSecond),
                 endSecond: Number(frame.endSecond),
+                startPrompt: text(frame.startPrompt),
                 actionPrompt: text(frame.actionPrompt),
+                transitionPrompt: text(frame.transitionPrompt),
+                endPrompt: text(frame.endPrompt),
                 imagePrompt: text(frame.imagePrompt),
             };
         });

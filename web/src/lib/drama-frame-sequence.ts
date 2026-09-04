@@ -57,7 +57,10 @@ export function normalizeDramaFrameBeats(value: readonly DramaFrameBeat[], durat
         sequenceIndex: index + 1,
         startSecond: number(frame.startSecond),
         endSecond: number(frame.endSecond),
+        ...(frame.startPrompt?.trim() ? { startPrompt: frame.startPrompt.trim() } : {}),
         actionPrompt: frame.actionPrompt.trim(),
+        ...(frame.transitionPrompt?.trim() ? { transitionPrompt: frame.transitionPrompt.trim() } : {}),
+        ...(frame.endPrompt?.trim() ? { endPrompt: frame.endPrompt.trim() } : {}),
         imagePrompt: frame.imagePrompt.trim(),
         ...(frame.supplierPrompt?.trim() ? { supplierPrompt: frame.supplierPrompt.trim() } : {}),
     }));

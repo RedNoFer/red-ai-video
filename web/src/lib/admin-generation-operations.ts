@@ -37,12 +37,13 @@ export type AdminGenerationTask = {
     pointsBreakdown?: { planner: number; childTasks: number; total: number };
     plannerAudit?: {
         schemaVersion: number;
-        mode: "direct" | "model";
+        mode: "direct" | "model" | "conversation";
         logicalModelId?: string;
         channelId?: string;
         upstreamModel?: string;
         protocol?: "responses" | "chat" | "gemini" | "custom";
         elapsedMs?: number;
+        timings?: { upstreamHeadersMs?: number; firstByteMs: number; totalMs: number };
         pointsCost?: number;
         skills: Array<{ id: string; name: string; sourceVersion?: string; sourceCommit?: string; sourceContentHash?: string }>;
     };

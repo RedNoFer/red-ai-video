@@ -188,6 +188,22 @@ describe("drama frame sequence", () => {
         expect(() => normalizeDramaFrameBeats([...beats, ...Array.from({ length: 6 }, (_, index) => ({ ...beats[0], id: `extra-${index}`, sequenceIndex: index + 5 }))], 8)).toThrow("最多 9 帧");
     });
 
+    it("preserves Agent-authored frame start, transition and end descriptions", () => {
+        const result = normalizeDramaFrameBeats(
+            [
+                { ...beats[0], startPrompt: "人物低头，手掌已经扣住剑柄", transitionPrompt: "手指收紧，视线仍压在剑柄上", endPrompt: "剑柄被稳定握住" },
+                { ...beats[1], startPrompt: "剑柄被稳定握住", transitionPrompt: "人物抬头，视线沿门框移向门外", endPrompt: "人物抬头看向门外" },
+                ...beats.slice(2),
+            ],
+            8,
+        );
+
+        expect(result.slice(0, 2)).toMatchObject([
+            { startPrompt: "人物低头，手掌已经扣住剑柄", transitionPrompt: "手指收紧，视线仍压在剑柄上", endPrompt: "剑柄被稳定握住" },
+            { startPrompt: "剑柄被稳定握住", transitionPrompt: "人物抬头，视线沿门框移向门外", endPrompt: "人物抬头看向门外" },
+        ]);
+    });
+
     it("splits and merges time segments while preserving continuous coverage", () => {
         const inserted = insertDramaFrameBeat(beats, "f2");
         expect(inserted).toHaveLength(5);

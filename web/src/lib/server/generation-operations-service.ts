@@ -168,7 +168,7 @@ function generationAttempts(value: unknown): GenerationAttempt[] | undefined {
 
 function agentPlannerAudit(value: unknown): AdminGenerationTask["plannerAudit"] {
     const source = object(value);
-    const mode = source.mode === "direct" || source.mode === "model" ? source.mode : undefined;
+    const mode = source.mode === "direct" || source.mode === "model" || source.mode === "conversation" ? source.mode : undefined;
     const schemaVersion = Number(source.schemaVersion);
     if (!mode || !Number.isSafeInteger(schemaVersion) || schemaVersion <= 0) return undefined;
     const protocol = source.protocol === "responses" || source.protocol === "chat" || source.protocol === "gemini" || source.protocol === "custom" ? source.protocol : undefined;
@@ -190,6 +190,10 @@ function agentPlannerAudit(value: unknown): AdminGenerationTask["plannerAudit"] 
                   : [];
           })
         : [];
+    const timings = object(source.timings);
+    const firstByteMs = Number(timings.firstByteMs);
+    const totalMs = Number(timings.totalMs);
+    const upstreamHeadersMs = Number(timings.upstreamHeadersMs);
     return {
         schemaVersion,
         mode,
@@ -198,6 +202,9 @@ function agentPlannerAudit(value: unknown): AdminGenerationTask["plannerAudit"] 
         ...(text(source.upstreamModel) ? { upstreamModel: text(source.upstreamModel) } : {}),
         ...(protocol ? { protocol } : {}),
         ...(Number.isFinite(Number(source.elapsedMs)) && Number(source.elapsedMs) >= 0 ? { elapsedMs: Number(source.elapsedMs) } : {}),
+        ...(Number.isFinite(firstByteMs) && firstByteMs >= 0 && Number.isFinite(totalMs) && totalMs >= firstByteMs
+            ? { timings: { ...(Number.isFinite(upstreamHeadersMs) && upstreamHeadersMs >= 0 ? { upstreamHeadersMs } : {}), firstByteMs, totalMs } }
+            : {}),
         ...(Number.isFinite(Number(source.pointsCost)) && Number(source.pointsCost) >= 0 ? { pointsCost: Number(source.pointsCost) } : {}),
         skills,
     };

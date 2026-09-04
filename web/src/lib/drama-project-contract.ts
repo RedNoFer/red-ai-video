@@ -48,7 +48,10 @@ export type DramaFrameBeat = {
     sequenceIndex: number;
     startSecond: number;
     endSecond: number;
+    startPrompt?: string;
     actionPrompt: string;
+    transitionPrompt?: string;
+    endPrompt?: string;
     imagePrompt: string;
     supplierPrompt?: string;
 };
@@ -722,7 +725,13 @@ export type DramaVisualAnalysis = {
 };
 
 export type DramaVideoPromptAnalysis = {
-    shots: Array<{ shotId: string; videoPrompt: string }>;
+    shots: Array<{
+        shotId: string;
+        videoPrompt: string;
+        framePlan: {
+            frames: Array<Pick<DramaFrameBeat, "id" | "sequenceIndex" | "startSecond" | "endSecond" | "startPrompt" | "actionPrompt" | "transitionPrompt" | "endPrompt" | "imagePrompt">>;
+        };
+    }>;
 };
 
 export type DramaImagePromptAnalysis = {

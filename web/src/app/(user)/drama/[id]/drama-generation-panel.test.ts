@@ -37,6 +37,7 @@ describe("Drama generation production workspace", () => {
         expect(source).toContain("视频执行提示词（当前标准）");
         expect(source).toContain("generateDramaVideoPrompt({ project, episode");
         expect(source).toContain("referenceMaterials");
+        expect(source).toContain("framePlan");
         expect(source).toContain("提示词已优化，请确认后保存");
         expect(source).toContain("提示词优化");
         expect(source).toContain('label: "提示词优化"');
@@ -69,7 +70,8 @@ describe("Drama generation production workspace", () => {
         const executionPromptStart = source.indexOf("function ShotExecutionDetails");
         const executionPromptEnd = source.indexOf("function ProductionPromptPreview", executionPromptStart);
         const executionPrompt = source.slice(executionPromptStart, executionPromptEnd);
-        expect(executionPrompt).toContain('updateDramaShotPromptPatch(project.id, episode.id, shot.id, prompt, undefined, { executionVideoPromptOrigin: "manual" })');
+        expect(executionPrompt).toContain('updateDramaShotPromptPatch(project.id, episode.id, shot.id, prompt, undefined, { executionVideoPromptOrigin: "manual", ...(optimizedFramePlan ? { framePlan: optimizedFramePlan, framePlanOrigin: "ai" as const } : {}) })');
+        expect(executionPrompt).toContain("framePlan");
         expect(executionPrompt).toContain("videoPromptDraft.trim() === videoPromptOriginal.trim()");
         expect(executionPrompt).toContain("resolveShotVideoOptimizationSource");
         expect(executionPrompt).not.toContain("saveProjectNow(project.id)");

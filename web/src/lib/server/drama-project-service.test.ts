@@ -514,6 +514,51 @@ describe("drama project service updates", () => {
         expect(mocks.updateDramaProject).toHaveBeenCalledWith("user-one", expect.objectContaining({ episodes: [expect.objectContaining({ shots: [expect.objectContaining({ executionVideoPrompt: "动态意图：Karin握住断剑。" })] })] }), current.updatedAt);
     });
 
+    it("persists the Agent-generated frame plan without rewriting its prompt fields", async () => {
+        const current = project("2026-07-19T08:00:00.000Z", "项目");
+        current.episodes[0].shots = [
+            {
+                id: "shot-one",
+                title: "镜头",
+                description: "Karin握住断剑",
+                sourceText: "Karin握住断剑",
+                characterIds: [],
+                propIds: [],
+                clueIds: [],
+                imagePrompt: "静态画面",
+                videoPrompt: "原始动态",
+                cameraMotion: "固定机位",
+                duration: 6,
+                storyboardFrameMode: "all_frames",
+                framePlan: {
+                    start: { source: "independent" },
+                    end: { required: true },
+                    frames: [
+                        { id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 3, startPrompt: "人物低头", actionPrompt: "手指收紧", transitionPrompt: "手指压住剑柄并保持低头", endPrompt: "手指收紧剑柄", imagePrompt: "人物低头，手指收紧剑柄" },
+                        { id: "f2", sequenceIndex: 2, startSecond: 3, endSecond: 6, startPrompt: "手指收紧剑柄", actionPrompt: "人物抬头", transitionPrompt: "视线从剑柄转向门外", endPrompt: "视线越过门框看向门外", imagePrompt: "人物抬头，视线越过门框看向门外" },
+                    ],
+                },
+            } as never,
+        ];
+        mocks.getDramaProject.mockResolvedValue(current);
+
+        const agentFramePlan = {
+            frames: [
+                { id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 3, startPrompt: "人物低头", actionPrompt: "手指收紧并压住剑柄", transitionPrompt: "手指压住剑柄并保持低头", endPrompt: "手指收紧剑柄", imagePrompt: "静态关键帧：人物低头；可见状态：手指收紧并压住剑柄" },
+                { id: "f2", sequenceIndex: 2, startSecond: 3, endSecond: 6, startPrompt: "手指收紧剑柄", actionPrompt: "抬头锁定门外", transitionPrompt: "视线从剑柄转向门外", endPrompt: "视线越过门框锁定门外", imagePrompt: "静态关键帧：人物抬头；可见状态：视线越过门框锁定门外" },
+            ],
+        };
+        const saved = await updateDramaShotPromptForUser("user-one", current.id, "episode-one", "shot-one", {
+            executionVideoPrompt: "素材绑定：@图片1：顺序帧\n动态意图：Karin抬头",
+            executionVideoPromptOrigin: "ai",
+            framePlan: agentFramePlan,
+            framePlanOrigin: "ai",
+        });
+
+        expect(saved.episodes[0].shots[0].framePlan?.frames).toEqual(agentFramePlan.frames);
+        expect(saved.episodes[0].shots[0].fieldOrigins).toMatchObject({ executionVideoPrompt: "ai", framePlan: "ai" });
+    });
+
     it("persists a missing frame placeholder before confirming its visual run", async () => {
         const current = project("2026-07-19T08:00:00.000Z", "项目");
         current.episodes[0].shots = [

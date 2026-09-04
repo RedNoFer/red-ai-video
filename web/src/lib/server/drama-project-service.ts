@@ -2249,8 +2249,9 @@ export async function updateDramaShotPromptForUser(userId: string, projectId: st
     const input = object(value);
     const videoPrompt = cleanText(input.executionVideoPrompt);
     const videoPromptOrigin: DramaFieldOrigin = input.executionVideoPromptOrigin === "manual" ? "manual" : "ai";
+    const hasFramePlanPatch = Object.prototype.hasOwnProperty.call(input, "framePlan");
     const imagePrompt = cleanText(input.imagePrompt);
-    if (!videoPrompt && !imagePrompt) throw new DramaProjectServiceError("提示词不能为空", 400);
+    if (!videoPrompt && !imagePrompt && !hasFramePlanPatch) throw new DramaProjectServiceError("提示词不能为空", 400);
     let matched = false;
     const nextProject = {
         ...project,
@@ -2263,15 +2264,19 @@ export async function updateDramaShotPromptForUser(userId: string, projectId: st
                       shots: episode.shots.map((shot) => {
                           if (shot.id !== shotId) return shot;
                           matched = true;
+                          const framePlan = hasFramePlanPatch ? normalizeAgentFramePlan(input.framePlan, shot.framePlan, shot.duration) : undefined;
+                          if (hasFramePlanPatch && !framePlan) throw new DramaProjectServiceError("Agent 逐帧计划无效，未保存本次提示词", 422);
                           const fieldOrigins = {
                               ...(shot.fieldOrigins || {}),
                               ...(videoPrompt ? { executionVideoPrompt: videoPromptOrigin } : {}),
                               ...(imagePrompt ? { imagePrompt: "ai" as const, executionImagePrompt: "ai" as const } : {}),
+                              ...(framePlan ? { framePlan: input.framePlanOrigin === "manual" ? ("manual" as const) : ("ai" as const) } : {}),
                           };
                           return {
                               ...shot,
                               ...(videoPrompt ? { executionVideoPrompt: videoPrompt } : {}),
                               ...(imagePrompt ? { imagePrompt: formatPromptFieldLines(imagePrompt, "static"), executionImagePrompt: undefined } : {}),
+                              ...(framePlan ? { framePlan } : {}),
                               fieldOrigins,
                           };
                       }),
@@ -2280,7 +2285,51 @@ export async function updateDramaShotPromptForUser(userId: string, projectId: st
         updatedAt: nextTimestamp(project.updatedAt),
     };
     if (!matched) throw new DramaProjectServiceError("短剧镜头不存在", 404);
-    return updateDramaProject(userId, normalizeProject(nextProject, project), project.updatedAt);
+    const normalized = normalizeProject(nextProject, project);
+    if (hasFramePlanPatch) {
+        const sourceShot = nextProject.episodes.find((episode) => episode.id === episodeId)?.shots.find((shot) => shot.id === shotId);
+        normalized.episodes = normalized.episodes.map((episode) =>
+            episode.id === episodeId ? { ...episode, shots: episode.shots.map((shot) => (shot.id === shotId && sourceShot?.framePlan ? { ...shot, framePlan: sourceShot.framePlan } : shot)) } : episode,
+        );
+    }
+    return updateDramaProject(userId, normalized, project.updatedAt);
+}
+
+function normalizeAgentFramePlan(value: unknown, current: DramaShotFramePlan | undefined, duration: number): DramaShotFramePlan | undefined {
+    const input = object(value);
+    const rawFrames = array(input.frames);
+    if (!rawFrames.length) return undefined;
+    const currentFrames = current?.frames || [];
+    const frames = rawFrames.flatMap((item, index) => {
+        const frame = object(item);
+        const previous = currentFrames[index];
+        const sequenceIndex = Math.floor(Number(frame.sequenceIndex) || index + 1);
+        const startSecond = Number(frame.startSecond);
+        const endSecond = Number(frame.endSecond);
+        const startPrompt = cleanText(frame.startPrompt);
+        const actionPrompt = cleanText(frame.actionPrompt);
+        const transitionPrompt = cleanText(frame.transitionPrompt);
+        const endPrompt = cleanText(frame.endPrompt);
+        const imagePrompt = cleanText(frame.imagePrompt);
+        if (sequenceIndex !== index + 1 || !Number.isFinite(startSecond) || !Number.isFinite(endSecond) || endSecond <= startSecond || !startPrompt || !actionPrompt || !transitionPrompt || !endPrompt || !imagePrompt) return [];
+        if (previous && (Math.abs(startSecond - previous.startSecond) > 0.01 || Math.abs(endSecond - previous.endSecond) > 0.01)) return [];
+        return [{ id: cleanText(frame.id) || previous?.id || `frame-${nanoid()}`, sequenceIndex, startSecond, endSecond, startPrompt, actionPrompt, transitionPrompt, endPrompt, imagePrompt }];
+    });
+    if (frames.length !== rawFrames.length || (currentFrames.length && frames.length !== currentFrames.length)) return undefined;
+    try {
+        const normalizedFrames = normalizeDramaFrameBeats(frames, duration);
+        if (normalizedFrames.some((frame, index) => frames[index].actionPrompt !== frame.actionPrompt || frames[index].imagePrompt !== frame.imagePrompt)) return undefined;
+        return {
+            start: current?.start || { source: "independent" },
+            end: current?.end || { required: true },
+            frames,
+            ...(current?.referenceManifest?.length ? { referenceManifest: current.referenceManifest } : {}),
+            ...(current?.manualReferenceImages?.length ? { manualReferenceImages: current.manualReferenceImages } : {}),
+            ...(current?.referenceCount ? { referenceCount: current.referenceCount } : {}),
+        };
+    } catch {
+        return undefined;
+    }
 }
 
 export async function updateDramaStoryboardFramePromptForUser(userId: string, projectId: string, episodeIdValue: string, shotIdValue: string, frameIdValue: string, value: unknown) {
@@ -2821,7 +2870,10 @@ function normalizeShotFramePlan(value: unknown, duration: number, actionPrompt: 
                           sequenceIndex: Math.max(1, Math.floor(Number(frame.sequenceIndex) || index + 1)),
                           startSecond: Number(frame.startSecond),
                           endSecond: Number(frame.endSecond),
+                          startPrompt: cleanText(frame.startPrompt),
                           actionPrompt: cleanText(frame.actionPrompt),
+                          transitionPrompt: cleanText(frame.transitionPrompt),
+                          endPrompt: cleanText(frame.endPrompt),
                           imagePrompt: cleanText(frame.imagePrompt),
                           supplierPrompt: formatOptionalPromptField(frame.supplierPrompt, "static"),
                       };

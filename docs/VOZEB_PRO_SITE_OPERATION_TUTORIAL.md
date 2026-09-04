@@ -4,7 +4,7 @@
 
 当前本机实例已经完成基础初始化：
 
-- 访问地址：http://127.0.0.1:3010
+- 访问地址：http://localhost:3010
 - 管理员账号：`admin`
 - 管理员密码：`CJ7KMdNOkJ0axvuNIaCQ`
 - 本地协议测试渠道：http://127.0.0.1:4010
@@ -193,7 +193,7 @@ docker compose up -d
 登录管理员后，建议先打开：
 
 ```text
-http://127.0.0.1:3010/admin/setup
+http://localhost:3010/admin/setup
 ```
 
 按页面里的初始化项依次检查。
@@ -361,7 +361,7 @@ VOZEB_PRO_PRIVATE_UPSTREAM_HOSTS=host.docker.internal,你的内网IP
 统一入口：
 
 ```text
-http://127.0.0.1:3010/create
+http://localhost:3010/create
 ```
 
 `/image` 和 `/video` 当前都会重定向到 `/create`，所以日常创作统一从 `/create` 开始。
@@ -437,7 +437,7 @@ http://127.0.0.1:3010/create
 入口：
 
 ```text
-http://127.0.0.1:3010/canvas
+http://localhost:3010/canvas
 ```
 
 Canvas 适合做复杂项目，比如一套广告物料、一组角色设定、一条短视频的分镜素材流。
@@ -492,7 +492,7 @@ Canvas 适合做复杂项目，比如一套广告物料、一组角色设定、�
 入口：
 
 ```text
-http://127.0.0.1:3010/drama
+http://localhost:3010/drama
 ```
 
 短剧模块是最接近“AI 短视频制作流水线”的地方，推荐按阶段推进。

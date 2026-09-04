@@ -14,7 +14,13 @@ export type TextPlanningCandidate = {
     capabilityProfile?: { timeoutMs?: number };
 };
 export type TextPlanningTool = { name: string; description: string; parameters: Record<string, unknown> };
-export type TextPlanningCall = { arguments: string; headers: Headers; protocol: TextPlanningProtocol; elapsedMs: number };
+export type TextPlanningTiming = {
+    upstreamHeadersMs?: number;
+    firstByteMs: number;
+    totalMs: number;
+};
+export type TextPlanningCall = { arguments: string; headers: Headers; protocol: TextPlanningProtocol; elapsedMs: number; timings?: TextPlanningTiming };
+export type TextResponseCall = { content: string; headers: Headers; protocol: TextPlanningProtocol; elapsedMs: number; timings: TextPlanningTiming };
 
 type RuntimeState = {
     preferred?: TextPlanningProtocol;
@@ -73,11 +79,40 @@ export function preferredTextPlanningProtocol(candidate: TextPlanningCandidate):
 }
 
 export async function requestStructuredText(input: StructuredTextRequest): Promise<TextPlanningCall> {
-    const startedAt = Date.now();
+    const startedAt = performance.now();
     const request = planningProtocolRequest(input.candidate, planningMessages(input));
     try {
-        const response = await requestTextProtocol(input, request);
-        return await readStructuredResponse(input, request, response, startedAt);
+        const upstream = await requestTextProtocol(input, request);
+        return await readStructuredResponse(input, request, upstream, startedAt);
+    } catch (error) {
+        recordTextFailure(input.candidate, error);
+        throw error;
+    }
+}
+
+export async function requestTextResponse(input: Omit<StructuredTextRequest, "tool" | "allowNaturalLanguage">): Promise<TextResponseCall> {
+    const startedAt = performance.now();
+    const request = planningProtocolRequest(input.candidate, input.messages);
+    try {
+        const upstream = await requestTextProtocol(input, request);
+        if (!upstream.response.ok) {
+            const raw = await upstream.response.text();
+            throw new TextPlanningRequestError(safeUpstreamError(raw, upstream.response.status), upstream.response.status, retryableStatus(upstream.response.status));
+        }
+        const payload = (await upstream.response.json().catch(() => null)) as Record<string, unknown> | null;
+        if (!payload) {
+            await input.onInvalidResponse?.(upstream.response.headers);
+            throw new TextPlanningRequestError("文本模型返回了无效 JSON");
+        }
+        if (request.protocol === "custom" && isProviderBusinessError(payload)) throw new TextPlanningRequestError(readProviderError(payload) || "自定义文本协议返回失败");
+        const content = readProtocolText(payload, request).trim();
+        if (!content) {
+            await input.onInvalidResponse?.(upstream.response.headers);
+            throw new TextPlanningRequestError("文本模型没有返回有效内容", 502, false);
+        }
+        const timings = responseTimings(startedAt, upstream.firstByteMs, upstream.upstreamHeadersMs);
+        recordTextSuccess(input.candidate, request.protocol, timings.totalMs);
+        return { content, headers: upstream.response.headers, protocol: request.protocol, elapsedMs: timings.totalMs, timings };
     } catch (error) {
         recordTextFailure(input.candidate, error);
         throw error;
@@ -136,7 +171,7 @@ function customRequest(model: string, configuredPath: string, requestTemplate: s
     return { protocol: "custom", path: configuredPath, body: buildProviderRequest(requestTemplate, values, values), resultField };
 }
 
-async function requestTextProtocol(input: StructuredTextRequest, request: ProtocolRequest) {
+async function requestTextProtocol(input: Pick<StructuredTextRequest, "origin" | "cookie" | "candidate" | "headers" | "signal">, request: ProtocolRequest) {
     const base = `${input.origin}/api/ai/system/${encodeURIComponent(input.candidate.channelId)}`;
     const headers = new Headers(input.headers);
     headers.set("content-type", "application/json");
@@ -145,7 +180,9 @@ async function requestTextProtocol(input: StructuredTextRequest, request: Protoc
     const timeoutSignal = AbortSignal.timeout(resolveModelRequestTimeoutMs(input.candidate, "text"));
     const signal = input.signal ? AbortSignal.any([input.signal, timeoutSignal]) : timeoutSignal;
     try {
-        return await fetchInternalApi(`${base}${normalizePath(request.path)}`, { method: "POST", headers, body: JSON.stringify(request.body), cache: "no-store", signal });
+        const startedAt = performance.now();
+        const response = await fetchInternalApi(`${base}${normalizePath(request.path)}`, { method: "POST", headers, body: JSON.stringify(request.body), cache: "no-store", signal });
+        return { response, firstByteMs: elapsedMs(startedAt), upstreamHeadersMs: readTimingHeader(response.headers, "x-vozeb-pro-upstream-headers-ms") };
     } catch (error) {
         if (input.signal?.aborted) throw error;
         throw new TextPlanningRequestError(isTimeoutError(error) ? "文本模型规划响应超时，正在切换备用渠道" : "文本模型渠道暂时无法连接", 504);
@@ -159,7 +196,8 @@ function scopeProtocolIdempotency(headers: Headers, protocol: TextPlanningProtoc
     }
 }
 
-async function readStructuredResponse(input: StructuredTextRequest, request: ProtocolRequest, response: Response, startedAt: number): Promise<TextPlanningCall> {
+async function readStructuredResponse(input: StructuredTextRequest, request: ProtocolRequest, upstream: { response: Response; firstByteMs: number; upstreamHeadersMs?: number }, startedAt: number): Promise<TextPlanningCall> {
+    const response = upstream.response;
     if (!response.ok) {
         const raw = await response.text();
         throw new TextPlanningRequestError(safeUpstreamError(raw, response.status), response.status, retryableStatus(response.status));
@@ -172,9 +210,9 @@ async function readStructuredResponse(input: StructuredTextRequest, request: Pro
         await input.onInvalidResponse?.(response.headers);
         throw new TextPlanningRequestError("模型没有返回所需的结构化结果", 502, false);
     }
-    const elapsedMs = Date.now() - startedAt;
-    recordTextSuccess(input.candidate, request.protocol, elapsedMs);
-    return { arguments: argumentsText, headers: response.headers, protocol: request.protocol, elapsedMs };
+    const timings = responseTimings(startedAt, upstream.firstByteMs, upstream.upstreamHeadersMs);
+    recordTextSuccess(input.candidate, request.protocol, timings.totalMs);
+    return { arguments: argumentsText, headers: response.headers, protocol: request.protocol, elapsedMs: timings.totalMs, timings };
 }
 
 function readProtocolArguments(payload: Record<string, unknown>, toolName: string, request: ProtocolRequest, allowNaturalLanguage = false) {
@@ -185,6 +223,51 @@ function readProtocolArguments(payload: Record<string, unknown>, toolName: strin
         return strictJsonObjectText(content) || (allowNaturalLanguage ? content : "");
     }
     return chatArguments(payload, toolName, allowNaturalLanguage);
+}
+
+function readProtocolText(payload: Record<string, unknown>, request: ProtocolRequest) {
+    if (request.protocol === "responses") return responsesText(payload);
+    if (request.protocol === "gemini") return geminiText(payload);
+    if (request.protocol === "custom") return readProviderString(payload, request.resultField, TEXT_RESULT_KEYS);
+    return chatText(payload);
+}
+
+function responsesText(payload: Record<string, unknown>) {
+    const direct = typeof payload.output_text === "string" ? payload.output_text : "";
+    if (direct.trim()) return direct;
+    return records(payload.output)
+        .flatMap((item) => records(item.content))
+        .map((item) => (typeof item.text === "string" ? item.text : ""))
+        .join("");
+}
+
+function geminiText(payload: Record<string, unknown>) {
+    return records(record(record(firstRecord(payload.candidates))?.content)?.parts)
+        .map((item) => (typeof item.text === "string" ? item.text : ""))
+        .join("");
+}
+
+function chatText(payload: Record<string, unknown>) {
+    const message = firstRecord(payload.choices)?.message;
+    const content = record(message)?.content;
+    if (typeof content === "string") return content;
+    return records(content)
+        .map((item) => (typeof item.text === "string" ? item.text : ""))
+        .join("");
+}
+
+function responseTimings(startedAt: number, firstByteMs: number, upstreamHeadersMs?: number): TextPlanningTiming {
+    const totalMs = elapsedMs(startedAt);
+    return { ...(upstreamHeadersMs === undefined ? {} : { upstreamHeadersMs }), firstByteMs: Math.max(0, Math.round(firstByteMs)), totalMs };
+}
+
+function elapsedMs(startedAt: number) {
+    return Math.max(0, Math.round(performance.now() - startedAt));
+}
+
+function readTimingHeader(headers: Headers, name: string) {
+    const value = Number(headers.get(name));
+    return Number.isFinite(value) && value >= 0 ? value : undefined;
 }
 
 function planningMessages(input: StructuredTextRequest) {

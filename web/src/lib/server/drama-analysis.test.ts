@@ -17,10 +17,34 @@ import {
 } from "./drama-analysis";
 
 describe("drama analysis contracts", () => {
-    it("keeps material binding in the Skill-owned video prompt contract", () => {
+    it("keeps material binding and frame planning in the Skill-owned video prompt contract", () => {
         expect(dramaVideoPromptTool.description).toContain("Seedance 2.5 导演 Skill");
         expect(dramaVideoPromptTool.parameters.properties.shots.items.properties.videoPrompt.description).toContain("由 Skill 生成素材绑定");
         expect(dramaVideoPromptTool.parameters.properties.shots.items.properties.videoPrompt.description).not.toContain("按固定字段逐行输出");
+        expect(dramaVideoPromptTool.parameters.properties.shots.items.required).toEqual(expect.arrayContaining(["shotId", "videoPrompt", "framePlan"]));
+    });
+
+    it("requires the Agent to return concrete timeline frames with the video prompt", () => {
+        const result = normalizeDramaVideoPromptAnalysis(
+            {
+                shots: [
+                    {
+                        shotId: "shot-one",
+                        videoPrompt: "素材绑定：@图片1：顺序帧 1\n动态意图：人物抬头\n全局设定：冷色夜景\n起始可见状态：人物低头\n主体动作与反应：手指收紧\n时间段动作：0-3s 手指收紧；3-6s 人物抬头\n单一主运镜：缓慢推进\n环境压力与视觉母题：风声\n视觉风格与光色：冷蓝\n声音意图：低声耳语\n结束画面：人物抬头看向门外\n连续性锁：身份和轴线不变\n针对性约束：无变形",
+                        framePlan: {
+                            frames: [
+                                { id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 3, startPrompt: "人物低头", actionPrompt: "手指收紧", transitionPrompt: "手指压住剑柄并保持低头", endPrompt: "手指收紧剑柄", imagePrompt: "人物低头，手指收紧剑柄" },
+                                { id: "f2", sequenceIndex: 2, startSecond: 3, endSecond: 6, startPrompt: "手指收紧剑柄", actionPrompt: "人物抬头", transitionPrompt: "视线从剑柄转向门外", endPrompt: "视线越过门框看向门外", imagePrompt: "人物抬头，视线越过门框看向门外" },
+                            ],
+                        },
+                    },
+                ],
+            },
+            ["shot-one"],
+            [{ id: "shot-one", framePlan: { frames: [{ id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 3 }, { id: "f2", sequenceIndex: 2, startSecond: 3, endSecond: 6 }] } }],
+        );
+
+        expect(result.shots[0]).toMatchObject({ shotId: "shot-one", framePlan: { frames: [{ id: "f1", actionPrompt: "手指收紧" }, { id: "f2", actionPrompt: "人物抬头" }] } });
     });
 
     it("accepts only requested image prompt results", () => {
@@ -270,20 +294,20 @@ describe("drama analysis contracts", () => {
         expect(result.shots[0].framePlan.referenceManifest).toEqual([{ alias: "@图片1", role: "scene_anchor", purpose: "场景基准图", assetId: "scene-one" }]);
     });
 
-    it("only accepts one generated video prompt per requested shot", () => {
+    it("only accepts one generated video prompt and frame plan per requested shot", () => {
         expect(
             normalizeDramaVideoPromptAnalysis(
                 {
                     shots: [
-                        { shotId: "shot-one", videoPrompt: "用已验收帧完成匹配切" },
+                        { shotId: "shot-one", videoPrompt: "动态意图：用已验收帧完成匹配切\n时间段动作：0-2s 承接；2-4s 匹配切\n单一主运镜：固定机位\n结束画面：匹配切完成\n针对性约束：无变形", framePlan: { frames: [{ id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 2, startPrompt: "人物低头", actionPrompt: "承接", transitionPrompt: "保持低头并接入动作", endPrompt: "人物保持低头", imagePrompt: "人物保持低头" }] } },
                         { shotId: "unknown", videoPrompt: "不应进入" },
-                        { shotId: "shot-one", videoPrompt: "重复" },
+                        { shotId: "shot-one", videoPrompt: "重复", framePlan: { frames: [] } },
                     ],
                 },
                 ["shot-one"],
             ),
         ).toEqual({
-            shots: [{ shotId: "shot-one", videoPrompt: "用已验收帧完成匹配切" }],
+            shots: [{ shotId: "shot-one", videoPrompt: "动态意图：用已验收帧完成匹配切\n时间段动作：0-2s 承接；2-4s 匹配切\n单一主运镜：固定机位\n结束画面：匹配切完成\n针对性约束：无变形", framePlan: { frames: [{ id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 2, startPrompt: "人物低头", actionPrompt: "承接", transitionPrompt: "保持低头并接入动作", endPrompt: "人物保持低头", imagePrompt: "人物保持低头" }] } }],
         });
     });
 

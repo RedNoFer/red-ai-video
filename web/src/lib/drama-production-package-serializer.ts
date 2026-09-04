@@ -84,12 +84,12 @@ function videoPromptSection(value: DramaProductionPackageV1) {
                 const promptLines = videoPrompt.includes("动态意图：") || videoPrompt.includes("动态意图:") ? videoPrompt.split("\n").filter(Boolean) : [`动态意图：${videoPrompt || shot.description}`];
                 const timelineLines = frames.flatMap((frame, index) => {
                     const previous = frames[index - 1];
-                    const start = previous ? dramaFrameVisibleState(previous.imagePrompt, previous.actionPrompt) : shot.continuity?.actionStart || shot.description;
-                    const end = dramaFrameVisibleState(frame.imagePrompt, frame.actionPrompt) || frame.actionPrompt;
+                    const start = frame.startPrompt || (previous ? dramaFrameVisibleState(previous.imagePrompt, previous.actionPrompt) : shot.continuity?.actionStart || shot.description);
+                    const end = frame.endPrompt || dramaFrameVisibleState(frame.imagePrompt, frame.actionPrompt) || frame.actionPrompt;
                     const continuity = shot.continuity?.continuityNotes || "角色身份、服装、道具归属、空间轴线与主光方向保持连续";
-                    const transition = previous
+                    const transition = frame.transitionPrompt || (previous
                         ? `承接上一段终点“${start}”，过渡到当前帧“${end}”；${continuity}`
-                        : `从镜头入口“${start}”进入当前帧“${end}”；${continuity}`;
+                        : `从镜头入口“${start}”进入当前帧“${end}”；${continuity}`);
                     return [
                         `${promptCode}-F${String(frame.sequenceIndex).padStart(2, "0")}｜${frame.startSecond}-${frame.endSecond}s`,
                         `起点：${start}`,

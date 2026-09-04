@@ -35,6 +35,7 @@ import { DramaJianyingModal, DramaSubtitleModal } from "./drama-project-modals";
 import type { DramaProjectStage } from "./drama-project-sections";
 import { dramaShotVideoMode, estimateEpisodePoints } from "./drama-shot-generation-utils";
 import { markDramaCanvasSynced } from "../../canvas/[id]/canvas-drama-navigation";
+import type { DramaVideoPromptAnalysis } from "@/lib/drama-project-contract";
 
 const actionButtonClass = "!h-9 !px-3 [&>span:last-child]:whitespace-nowrap";
 
@@ -339,9 +340,9 @@ export function DramaGenerationPanel({
         if (!source) return message.warning("当前镜头没有可优化的视频提示词");
         try {
             const result = await generateDramaVideoPrompt({ project, episode, shot: { ...shot, videoPrompt: source }, referenceMaterials: references, requestId: `drama-video-optimize:${project.id}:${episode.id}:${shot.id}:${crypto.randomUUID()}` });
-            const optimized = result.shots.find((item) => item.shotId === shot.id)?.videoPrompt?.trim();
-            if (!optimized) throw new Error("Agent 未返回当前镜头的视频提示词");
-            const saved = await updateDramaShotPromptPatch(project.id, episode.id, shot.id, sanitizeDramaSupplierText(formatPromptFieldLines(optimized, "video"), project));
+            const optimized = result.shots.find((item) => item.shotId === shot.id);
+            if (!optimized?.videoPrompt?.trim() || !optimized.framePlan?.frames?.length) throw new Error("Agent 未返回当前镜头的标准视频提示词和逐帧计划");
+            const saved = await updateDramaShotPromptPatch(project.id, episode.id, shot.id, sanitizeDramaSupplierText(optimized.videoPrompt.trim(), project), undefined, { executionVideoPromptOrigin: "ai", framePlan: optimized.framePlan, framePlanOrigin: "ai" });
             replaceShot(project.id, episode.id, shot.id, saved.shot, saved.updatedAt);
             message.success("提示词已优化并保存");
         } catch (error) {
@@ -1135,6 +1136,7 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
     const replaceShot = useDramaStore((state) => state.replaceShot);
     const [videoPromptDraft, setVideoPromptDraft] = useState("");
     const [videoPromptOriginal, setVideoPromptOriginal] = useState("");
+    const [optimizedFramePlan, setOptimizedFramePlan] = useState<DramaVideoPromptAnalysis["shots"][number]["framePlan"]>();
     const [optimizingVideoPrompt, setOptimizingVideoPrompt] = useState(false);
     const [savingVideoPrompt, setSavingVideoPrompt] = useState(false);
     const promptSnapshot = productionRun?.preflightSnapshot?.prompts?.[shot.id];
@@ -1160,6 +1162,7 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
     useEffect(() => {
         setVideoPromptDraft(supplierVideoPrompt);
         setVideoPromptOriginal(supplierVideoPrompt);
+        setOptimizedFramePlan(undefined);
     }, [shot.id, supplierVideoPrompt]);
     const optimizeVideoPrompt = async () => {
         const source = videoPromptDraft.trim() !== videoPromptOriginal.trim() ? videoPromptDraft.trim() : resolveShotVideoOptimizationSource(shot);
@@ -1167,9 +1170,10 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
         setOptimizingVideoPrompt(true);
         try {
             const result = await generateDramaVideoPrompt({ project, episode, shot: { ...shot, videoPrompt: source }, referenceMaterials: executionReferences, requestId: `drama-video-optimize:${project.id}:${episode.id}:${shot.id}:${crypto.randomUUID()}` });
-            const optimized = result.shots.find((item) => item.shotId === shot.id)?.videoPrompt?.trim();
-            if (!optimized) throw new Error("Agent 未返回当前镜头的视频提示词");
-            setVideoPromptDraft(formatPromptFieldLines(optimized, "video"));
+            const optimized = result.shots.find((item) => item.shotId === shot.id);
+            if (!optimized?.videoPrompt?.trim() || !optimized.framePlan?.frames?.length) throw new Error("Agent 未返回当前镜头的标准视频提示词和逐帧计划");
+            setVideoPromptDraft(optimized.videoPrompt.trim());
+            setOptimizedFramePlan(optimized.framePlan);
             message.success("视频提示词已优化，请确认后保存");
         } catch (error) {
             message.error(error instanceof Error ? error.message : "视频提示词优化失败");
@@ -1182,7 +1186,7 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
         if (!prompt || savingVideoPrompt) return;
         setSavingVideoPrompt(true);
         try {
-            const saved = await updateDramaShotPromptPatch(project.id, episode.id, shot.id, prompt, undefined, { executionVideoPromptOrigin: "manual" });
+            const saved = await updateDramaShotPromptPatch(project.id, episode.id, shot.id, prompt, undefined, { executionVideoPromptOrigin: "manual", ...(optimizedFramePlan ? { framePlan: optimizedFramePlan, framePlanOrigin: "ai" as const } : {}) });
             replaceShot(project.id, episode.id, shot.id, saved.shot, saved.updatedAt);
             setVideoPromptDraft(prompt);
             setVideoPromptOriginal(prompt);

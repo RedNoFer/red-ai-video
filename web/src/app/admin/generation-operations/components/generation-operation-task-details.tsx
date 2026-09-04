@@ -9,8 +9,13 @@ export function AgentPlannerAuditSummary({ task }: { task: AdminGenerationTask }
     return (
         <div className="mt-1.5 space-y-1 text-[11px] leading-4 text-zinc-500 dark:text-zinc-400">
             <div className="truncate">
-                计划 Schema v{audit.schemaVersion} · {audit.mode === "direct" ? "用户直选模型" : planningProtocolLabel(audit.protocol)}
+                {audit.mode === "conversation" ? "轻量普通问答" : `计划 Schema v${audit.schemaVersion} · ${audit.mode === "direct" ? "用户直选模型" : planningProtocolLabel(audit.protocol)}`}
             </div>
+            {audit.timings ? (
+                <div className="truncate">
+                    上游响应头 {formatDuration(audit.timings.upstreamHeadersMs)} · 首字节 {formatDuration(audit.timings.firstByteMs)} · 完整响应 {formatDuration(audit.timings.totalMs)}
+                </div>
+            ) : null}
             {audit.channelId || audit.upstreamModel ? (
                 <Tooltip title={[audit.channelId, audit.upstreamModel].filter(Boolean).join(" → ")}>
                     <div className="truncate">{[audit.channelId, audit.upstreamModel].filter(Boolean).join(" → ")}</div>
@@ -79,6 +84,12 @@ function RuntimeFact({ label, value }: { label: string; value: string }) {
 function operationTimeLabel(value?: number) {
     if (!value || !Number.isFinite(value)) return "未记录";
     return new Date(value).toLocaleString("zh-CN", { hour12: false });
+}
+
+function formatDuration(value?: number) {
+    if (!Number.isFinite(value) || value === undefined) return "未记录";
+    if (value < 1000) return `${Math.round(value)}ms`;
+    return `${(value / 1000).toFixed(1)}s`;
 }
 
 function skillSourceLabel(skill: NonNullable<AdminGenerationTask["plannerAudit"]>["skills"][number]) {

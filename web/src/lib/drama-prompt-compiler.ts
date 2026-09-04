@@ -1,6 +1,6 @@
 import type { DramaAssetRefinementProposal, DramaEpisode, DramaFrameBeat, DramaNamedAsset, DramaProject, DramaReferenceManifestItem, DramaShot, DramaShotContinuity } from "@/lib/drama-project-contract";
 import { resolveDramaStyleContract, sanitizeDramaVisualPrompt } from "@/lib/drama-style";
-import { upgradeDramaFrameImagePrompt } from "@/lib/drama-frame-sequence";
+import { formatPromptFieldLines, upgradeDramaFrameImagePrompt } from "@/lib/drama-frame-sequence";
 import { DRAMA_ASSET_IMAGE_SKILL } from "@/lib/drama-image-skill";
 
 export type DramaAssetGenerationPreflight = { ok: true; constraints: string[] } | { ok: false; errors: string[]; constraints: string[] };
@@ -118,7 +118,8 @@ export function compileDramaShotPrompts(project: DramaProject, episode: DramaEpi
     ]).join("\n");
     const startFramePrompt = compact([...shared, `起始动作状态：${shot.entryState ? entryState.join("；") : shot.continuity?.actionStart || shot.description}`, startPlan, finalStyleLock]).join("\n");
     const endFramePrompt = compact([...shared, `结束动作状态：${shot.exitState ? exitState.join("；") : shot.continuity?.actionEnd || shot.description}`, endPlan, finalStyleLock]).join("\n");
-    const videoPrompt = compact([compileDramaShotVideoBasePrompt(project, episode, shot), compileDramaShotVideoTimeline(project, shot)]).join("\n");
+    const explicitExecutionPrompt = authoritativeDramaExecutionPrompt(project, shot);
+    const videoPrompt = explicitExecutionPrompt || compact([compileDramaShotVideoBasePrompt(project, episode, shot), compileDramaShotVideoTimeline(project, shot)]).join("\n");
     return {
         imagePrompt: sanitizeDramaSupplierText(imagePrompt, project),
         startFramePrompt: sanitizeDramaSupplierText(startFramePrompt, project),
@@ -138,6 +139,7 @@ export function compileDramaShotVideoBasePrompt(project: DramaProject, _episode:
     const characterCount = project.characters.filter((item) => shot.characterIds.includes(item.id)).length;
     const physicalConstraint = scenePhysicalConstraint(scene, characterCount);
     const executionPrompt = shot.executionVideoPrompt || "";
+    if (authoritativeDramaExecutionPrompt(project, shot)) return stripDramaVideoTimeline(authoritativeDramaExecutionPrompt(project, shot));
     const videoSource = /(?:时间段动作|P\d{2}-F\d{2}\s*[｜|])/u.test(executionPrompt) ? shot.videoPrompt : executionPrompt || shot.videoPrompt;
     const videoPlan = cleanDramaVideoMotionBrief(
         videoSource,
@@ -175,14 +177,14 @@ export function compileDramaShotVideoTimeline(project: DramaProject, shot: Drama
     const lines = frames.flatMap((frame, index) => {
         const frameCode = `P${String(shot.order).padStart(2, "0")}-F${String(frame.sequenceIndex).padStart(2, "0")}`;
         const previous = allFrames[allFrames.findIndex((candidate) => candidate.id === frame.id) - 1];
-        const start = previous ? dramaFrameVisibleState(previous.imagePrompt, previous.actionPrompt) : shot.continuity?.actionStart || stateActions(shot.entryState, project) || dramaFrameVisibleState(frame.imagePrompt, frame.actionPrompt);
-        const end = dramaFrameVisibleState(frame.imagePrompt, frame.actionPrompt) || sanitizeDramaSupplierText(frame.actionPrompt, project);
+        const start = frame.startPrompt || (previous ? dramaFrameVisibleState(previous.imagePrompt, previous.actionPrompt) : shot.continuity?.actionStart || stateActions(shot.entryState, project) || dramaFrameVisibleState(frame.imagePrompt, frame.actionPrompt));
+        const end = frame.endPrompt || dramaFrameVisibleState(frame.imagePrompt, frame.actionPrompt) || sanitizeDramaSupplierText(frame.actionPrompt, project);
         const action = sanitizeDramaSupplierText(frame.actionPrompt, project);
         const safeStart = sanitizeDramaSupplierText(start, project);
         const safeEnd = sanitizeDramaSupplierText(end, project);
-        const transition = previous
+        const transition = frame.transitionPrompt || (previous
             ? `承接上一段终点“${safeStart}”，过渡到当前帧“${safeEnd}”；${sanitizeDramaSupplierText(continuity, project)}`
-            : `从镜头入口“${safeStart}”进入当前帧“${safeEnd}”；${sanitizeDramaSupplierText(continuity, project)}`;
+            : `从镜头入口“${safeStart}”进入当前帧“${safeEnd}”；${sanitizeDramaSupplierText(continuity, project)}`);
         return [`${frameCode}｜${frame.startSecond}-${frame.endSecond}s`, `起点：${safeStart}`, `动作与触发：${action}`, `可见衔接：${transition}`, `终点：${safeEnd}`];
     });
     return ["时间段动作：", ...lines].join("\n");
@@ -216,6 +218,21 @@ function extractPromptField(value: string, label: string) {
  */
 export function compileDramaShotExecutionPrompts(project: DramaProject, episode: DramaEpisode, shot: DramaShot) {
     return compileDramaShotPrompts(project, episode, shot);
+}
+
+function authoritativeDramaExecutionPrompt(project: DramaProject, shot: DramaShot) {
+    const prompt = shot.executionVideoPrompt?.trim() || "";
+    const origin = shot.fieldOrigins?.executionVideoPrompt;
+    return prompt && (origin === "ai" || origin === "manual") ? sanitizeDramaSupplierText(formatPromptFieldLines(prompt, "video"), project) : "";
+}
+
+function stripDramaVideoTimeline(prompt: string) {
+    const lines = prompt.split(/\r?\n/u);
+    const start = lines.findIndex((line) => /^\s*时间段动作\s*[：:]/u.test(line));
+    if (start < 0) return prompt.trim();
+    const labels = new Set(["单一主运镜", "主运镜", "环境压力与视觉母题", "环境压力与声音", "视觉风格与光色", "声音意图", "声音母题", "结束画面", "连续性锁", "针对性约束", "约束"]);
+    const end = lines.findIndex((line, index) => index > start && labels.has(line.trim().split(/[：:]/u, 1)[0] || ""));
+    return [...lines.slice(0, start), ...(end < 0 ? [] : lines.slice(end))].join("\n").trim();
 }
 
 export function resolveDramaFrameScene(project: DramaProject, shot: DramaShot, beat?: DramaFrameBeat) {
