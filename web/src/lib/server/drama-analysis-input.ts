@@ -252,6 +252,7 @@ function normalizePublicVideoPromptForValidation(value: string) {
     return value
         .replace(/\\r?\\n/gu, "\n")
         .replace(/[；;\s]+(?=(?:素材绑定|动态意图|全局设定|起始可见状态|触发|主体动作与反应|时间段动作|起点|动作与触发|可见衔接|终点|单一主运镜|环境压力与视觉母题|视觉风格与光色|声音意图|结束画面|连续性锁|针对性约束)\s*[：:])/gu, "\n")
+        .replace(/(^|\n)\s*(?:[-*•]\s*|\d+[.)]\s*)/gu, "$1")
         .replace(/\n[ \t]*/gu, "\n")
         .trim();
 }
