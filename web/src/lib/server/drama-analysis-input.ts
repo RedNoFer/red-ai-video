@@ -132,11 +132,13 @@ function compactVideoFramePlan(value: unknown) {
 }
 
 export function validateDramaVideoPromptReferenceBindings(prompt: string, references: unknown) {
-    const referenceList = array(references).flatMap((item, index) => {
+    let referenceIndex = 0;
+    const referenceList = array(references).flatMap((item) => {
         const reference = object(item);
         if (!dramaAnalysisText(reference.role) && !dramaAnalysisText(reference.purpose)) return [];
+        referenceIndex += 1;
         const alias = normalizeReferenceAlias(dramaAnalysisText(reference.alias));
-        return [alias || `@图片${index + 1}`];
+        return [alias || `@图片${referenceIndex}`];
     });
     const expectedCount = referenceList.length;
     if (!expectedCount) return "";
@@ -145,7 +147,8 @@ export function validateDramaVideoPromptReferenceBindings(prompt: string, refere
     if (bindingLineIndex < 0) return `模型生成的视频提示词缺少素材绑定字段（应包含 ${referenceList.join("、")}）；请按当前 Skill 重新生成`;
     const bindingEnd = lines.findIndex((line, index) => index > bindingLineIndex && /^(?:\s*)(?:动态意图|全局设定|起始可见状态|触发|主体动作与反应|时间段动作|单一主运镜|环境压力与视觉母题|视觉风格与光色|声音意图|结束画面|连续性锁|针对性约束)\s*[：:]/u.test(line));
     const bindingText = lines.slice(bindingLineIndex, bindingEnd < 0 ? lines.length : bindingEnd).join("\n");
-    const aliases = parseReferenceAliases(bindingText).length ? parseReferenceAliases(bindingText) : parseReferenceAliases(prompt);
+    const bindingAliases = parseReferenceAliases(bindingText);
+    const aliases = bindingAliases.length ? bindingAliases : parseReferenceAliases(prompt);
     const expectedAliases = referenceList;
     const expectedNumbers = expectedAliases.map((alias) => Number(alias.match(/(\d+)$/u)?.[1])).filter((value) => Number.isInteger(value));
     const aliasNumbers = aliases.map((alias) => Number(alias.match(/(\d+)$/u)?.[1])).filter((value) => Number.isInteger(value));

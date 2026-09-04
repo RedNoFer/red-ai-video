@@ -88,6 +88,20 @@ describe("drama production run planning", () => {
         expect(video.prompt).not.toContain("P01-F02");
     });
 
+    it("uses the latest marked execution prompt when locking a production run", () => {
+        const project = fixture();
+        const shot = project.episodes[0].shots[0];
+        shot.videoPrompt = "B线钩子：旧动态提示词";
+        shot.executionVideoPrompt = "动态意图：Karin抬头锁定门外\n单一主运镜：固定机位\n结束画面：视线停在门外";
+        shot.fieldOrigins = { executionVideoPrompt: "ai" };
+
+        const run = buildDramaProductionRun(project, { ...project.episodes[0], shots: [shot], continuityEdges: [] }, { imageModel: "image", videoModel: "video" });
+        const video = run.steps.find((step) => step.type === "video");
+
+        expect(video?.prompt).toContain("动态意图：Karin抬头锁定门外");
+        expect(video?.prompt).not.toContain("B线钩子");
+    });
+
     it("keeps production-package reference order and accepts usable project source images", () => {
         const project = fixture();
         project.sourceAssets = [
