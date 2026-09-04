@@ -25,6 +25,7 @@ ${SEEDANCE_STATIC_FRAME_PROMPT_LAYOUT}
 ${SEEDANCE_STATIC_FRAME_PROMPT_SCHEME}
 ${DRAMA_CONTINUOUS_FRAME_RULES}
 制作包生成必须读取 productionPlan.video.shotDuration（仅允许 15、20 或 30 秒）作为逻辑镜头目标；同一场景且时间轴连续的 7s/8s 等碎片必须按目标时长合并，不能机械保留碎片；人物资产沿用项目已登记角色及基准图。productionPlan.video.frameCount 默认为 5，可按用户本轮要求调整为 1-9；Agent 必须据此重新切分每镜剧情和逐帧提示词。
+制作包生成前必须先读取当前项目固定资产目录（角色、场景、道具、线索的稳定 id、code、name、profile、基准图状态和 activeEpisodeCodes），再结合当前章节事实做资产复用分析。已登记资产必须原样保留在制作包资产表中；镜头只引用当前实际需要的已有 code。已有资产的身份、轮廓、材质、基准图和固定字段不得被 Agent 重设计，缺失的已有资产由服务端在规范化前补回；只有章节事实明确新增且通过资产登记的新资产才可进入包。
 framePlan.start.source 只能为 independent 或 previous_accepted_actual_tail；end.required 必须为布尔值；frames 必须为 productionPlan.video.frameCount 指定数量的真实动作节点，按 sequenceIndex 连续排列，从 0 秒无空白、无重叠覆盖完整镜头时长。每帧必须有稳定 id、startSecond、endSecond、actionPrompt、imagePrompt。
 每帧 imagePrompt 必须描述本时刻可见画面：主体、姿态、表情/眉眼、视线/头向、手部或身体、道具状态、空间/环境变化至少一项，并能与上一帧区分。对白和旁白可以不写成图片文字，但说话造成的表情、视线、手部/身体姿态、道具变化或对方反应必须写入对应帧；只写对白、口型、声音、运镜、焦段、色彩、约束或“起始/展开/结果状态”均不合格。
 referenceManifest 必须以 characterCodes、locationCode、propCodes、clueCodes 为主事实源；每个角色使用 character_anchor，每个场景使用 scene_anchor，每个道具使用 prop_anchor。角色资产表必须保留所有已登记角色及其固定身份，即使某集或某镜不出镜；characterCodes 和 referenceManifest 只能包含当前镜头实际出镜、实际需要约束的角色。已登记但不出镜的角色必须在项目/集级规则中明确“不出镜、不得进入本集参考图请求”，供应商提示词同时使用角色名的不出镜约束和可观察画面限制（例如“除 Karin 外不显示可辨识人物面孔”），不得把该角色从资产档案删除，也不得只写含义不清的“无可辨识的角色名”。场景改变必须切换 scene_anchor，不能因文本相似继续引用上一场景。Seedance 参考图按 @图片1、@图片2…连续编号，每张图必须标明唯一用途；previous_actual_tail 只能是上一镜当前视频版本、人工验收的实际尾帧。

@@ -24,7 +24,105 @@ import { resolveDramaShotDuration } from "@/lib/server/drama-shot-config";
 
 export class DramaProductionPackageError extends Error {}
 
-export function previewDramaProductionPackage(source: string, fileName = "production-package.json"): DramaProductionPackagePreview {
+type DramaProjectAssetCollection = Pick<DramaProject, "characters" | "scenes" | "props" | "clues">;
+
+/**
+ * Builds the stable, non-media asset catalog that a chapter package must reuse.
+ * URLs stay out of the planner context; the project IDs and reference status are
+ * enough for the later server-side binding step.
+ */
+export function buildDramaAssetReuseContext(project: DramaProjectAssetCollection, episode?: Pick<DramaEpisode, "code" | "shots">) {
+    const usedIds = new Set(
+        (episode?.shots || []).flatMap((shot) => [
+            ...(shot.characterIds || []),
+            ...(shot.propIds || []),
+            ...(shot.sceneId ? [shot.sceneId] : []),
+            ...(shot.clueIds || []),
+        ]),
+    );
+    return {
+        rule: "项目固定资产优先复用；已有资产的身份、轮廓、材质、基准图和稳定编码不得重设计。只有当前章节明确新增且完成资产登记时才可增加新资产。",
+        episodeCode: episode?.code || "",
+        characters: catalogAssets(project.characters, "C", usedIds),
+        locations: catalogAssets(project.scenes, "S", usedIds),
+        props: catalogAssets(project.props, "P", usedIds),
+        clues: catalogAssets(project.clues, "L", usedIds),
+    };
+}
+
+function catalogAssets(items: DramaNamedAsset[], prefix: string, usedIds: Set<string>) {
+    const codes = allocateAssetCodes(items, prefix);
+    return items.map((asset, index) => ({
+        code: codes[index],
+        id: asset.id,
+        name: asset.name,
+        description: asset.description,
+        profile: asset.profile,
+        fixed: true,
+        usedInCurrentEpisode: usedIds.has(asset.id),
+        activeEpisodeCodes: asset.activeEpisodeCodes || [],
+        references: (asset.references || []).map((reference) => ({ id: reference.id, label: reference.label, status: reference.status, reviewStatus: reference.reviewStatus })),
+        primaryReferenceId: asset.primaryReferenceId,
+    }));
+}
+
+function allocateAssetCodes(items: DramaNamedAsset[], prefix: string) {
+    const used = new Set(items.map((asset) => asset.code).filter((code): code is string => Boolean(code)));
+    let next = 1;
+    return items.map((asset) => {
+        if (asset.code) return asset.code;
+        while (used.has(`${prefix}${String(next).padStart(2, "0")}`)) next += 1;
+        const code = `${prefix}${String(next).padStart(2, "0")}`;
+        used.add(code);
+        next += 1;
+        return code;
+    });
+}
+
+/** Keep project-registered assets in a generated package and preserve their facts. */
+export function mergeProjectAssetsIntoProductionPackage<T extends DramaProductionPackageV1>(value: T, project: DramaProjectAssetCollection): T {
+    const assets = value.assets || { characters: [], locations: [], props: [], clues: [] };
+    const episodeCodes = new Set((value.episodes || []).map((episode) => episode.code).filter(Boolean));
+    const referenced = {
+        C: new Set((value.episodes || []).flatMap((episode) => episode.shots.flatMap((shot) => shot.characterCodes))),
+        S: new Set((value.episodes || []).flatMap((episode) => episode.shots.flatMap((shot) => (shot.locationCode ? [shot.locationCode] : [])))),
+        P: new Set((value.episodes || []).flatMap((episode) => episode.shots.flatMap((shot) => shot.propCodes))),
+        L: new Set((value.episodes || []).flatMap((episode) => episode.shots.flatMap((shot) => shot.clueCodes))),
+    };
+    return {
+        ...value,
+        assets: {
+            ...assets,
+            characters: mergeProjectAssetCollection(assets.characters, project.characters, "C", referenced.C, episodeCodes),
+            locations: mergeProjectAssetCollection(assets.locations, project.scenes, "S", referenced.S, episodeCodes),
+            props: mergeProjectAssetCollection(assets.props, project.props, "P", referenced.P, episodeCodes),
+            clues: mergeProjectAssetCollection(assets.clues, project.clues, "L", referenced.L, episodeCodes),
+        },
+    };
+}
+
+function mergeProjectAssetCollection(incoming: DramaProductionPackageAsset[], existing: DramaNamedAsset[], prefix: string, referenced: Set<string>, episodeCodes: Set<string>) {
+    const codes = allocateAssetCodes(existing, prefix);
+    const existingWithCodes = existing.map((asset, index) => ({ asset, code: codes[index] }));
+    const byCode = new Map(incoming.map((asset) => [asset.code, asset]));
+    const byName = new Map(incoming.map((asset) => [normalizeKey(asset.name), asset]));
+    const merged = existingWithCodes.map(({ asset, code }) => {
+        const current = asset.code ? byCode.get(code) || byName.get(normalizeKey(asset.name)) : byName.get(normalizeKey(asset.name)) || byCode.get(code);
+        const activeEpisodeCodes = asset.activeEpisodeCodes?.length ? asset.activeEpisodeCodes : current?.activeEpisodeCodes;
+        return {
+            ...(current || {}),
+            code,
+            name: asset.name,
+            description: asset.description,
+            ...(asset.profile ? { profile: asset.profile } : current?.profile ? { profile: current.profile } : {}),
+            ...(activeEpisodeCodes?.length || referenced.has(code) ? { activeEpisodeCodes: [...new Set([...(activeEpisodeCodes || []), ...(referenced.has(code) ? episodeCodes : [])])] } : {}),
+        } as DramaProductionPackageAsset;
+    });
+    const existingKeys = new Set(existingWithCodes.flatMap(({ asset, code }) => [code, normalizeKey(asset.name)]));
+    return [...merged, ...incoming.filter((asset) => !existingKeys.has(asset.code) && !existingKeys.has(normalizeKey(asset.name)))];
+}
+
+export function previewDramaProductionPackage(source: string, fileName = "production-package.json", project?: DramaProjectAssetCollection): DramaProductionPackagePreview {
     const trimmed = source.trim();
     if (!trimmed) throw new DramaProductionPackageError("制作包内容不能为空");
     const embedded = trimmed.match(/```(?:json|drama-production-package)[ \t]*\r?\n([\s\S]*?)```/i)?.[1];
@@ -33,7 +131,8 @@ export function previewDramaProductionPackage(source: string, fileName = "produc
     // preview and apply use the same normalized source of truth.
     const parsed = format === "markdown" ? parseObject(embedded || "") || parseObject((embedded || "").replace(/\\u0060/gu, "`")) || parseDirectorMarkdown(trimmed) : parseObject(trimmed);
     if (!parsed) throw new DramaProductionPackageError("Markdown 制作包缺少可读取的标准清单或导演执行表");
-    const normalizedPackage = normalizeProductionPackage(parsed);
+    const packageWithProjectAssets = project ? mergeProjectAssetsIntoProductionPackage(parsed as DramaProductionPackageV1, project) : parsed;
+    const normalizedPackage = normalizeProductionPackage(packageWithProjectAssets);
     const rawPlan = object(object(object(parsed).project).productionBible).productionPlan;
     const configuredShotDuration = Object.prototype.hasOwnProperty.call(object(rawPlan).video, "shotDuration") ? normalizedPackage.project.productionBible.productionPlan?.video.shotDuration : undefined;
     const productionPackage = configuredShotDuration ? mergeDramaProductionPackageShotDurations(normalizedPackage, configuredShotDuration) : normalizedPackage;

@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import type { DramaProductionPackageV1, DramaProject } from "@/lib/drama-project-contract";
 import { DRAMA_STYLE_COLOR_SCRIPT, DRAMA_STYLE_NAME } from "@/lib/drama-style";
 import { defaultDramaProductionPlan } from "@/lib/drama-production-plan";
-import { applyDramaProductionPackage, previewDramaProductionPackage } from "@/lib/server/drama-production-package";
+import { applyDramaProductionPackage, buildDramaAssetReuseContext, mergeProjectAssetsIntoProductionPackage, previewDramaProductionPackage } from "@/lib/server/drama-production-package";
 
 const productionPackage: DramaProductionPackageV1 = {
     schemaVersion: 1,
@@ -50,6 +50,69 @@ const productionPackage: DramaProductionPackageV1 = {
 };
 
 describe("production package boundary", () => {
+    it("builds a fixed-asset reuse catalog with stable codes and current-episode usage", () => {
+        const current = project();
+        current.characters = [{ id: "character-existing", code: "C07", name: "Karin", description: "锁定角色", references: [{ id: "ref-one", label: "角色基准图", url: "https://cdn.example.com/karin.png", source: "generated", status: "approved", createdAt: "2026-01-01" }] }];
+        current.scenes = [{ id: "scene-existing", name: "城门", description: "锁定场景" }];
+        current.props = [{ id: "prop-existing", name: "断剑", description: "锁定道具" }];
+        current.episodes[0] = { ...current.episodes[0], code: "E01", shots: [{ ...shot("SH01", 1, "0-15s", ["C07"], "Karin握住断剑"), characterIds: ["character-existing"], sceneId: "scene-existing", propIds: ["prop-existing"] } as never] };
+
+        const reuse = buildDramaAssetReuseContext(current, current.episodes[0]);
+
+        expect(reuse.rule).toContain("固定资产优先复用");
+        expect(reuse.characters[0]).toMatchObject({ code: "C07", id: "character-existing", fixed: true, usedInCurrentEpisode: true, primaryReferenceId: undefined });
+        expect(reuse.locations[0]).toMatchObject({ code: "S01", name: "城门", fixed: true, usedInCurrentEpisode: true });
+        expect(reuse.props[0]).toMatchObject({ code: "P01", name: "断剑", fixed: true, usedInCurrentEpisode: true });
+        expect(reuse.characters[0].references).toEqual([{ id: "ref-one", label: "角色基准图", status: "approved", reviewStatus: undefined }]);
+    });
+
+    it("restores omitted project assets and project facts before a package is persisted", () => {
+        const current = project();
+        current.characters = [{ id: "character-existing", code: "C01", name: "Karin", description: "项目固定描述", profile: { visualIdentity: "固定脸型", styling: "固定服装", colorPalette: "墨绿", consistencyRules: "不可换脸" } }];
+        current.scenes = [{ id: "scene-existing", code: "S01", name: "城门", description: "项目固定场景" }];
+        const incoming = structuredClone(productionPackage);
+        incoming.assets.characters = incoming.assets.characters.filter((asset) => asset.code !== "C01");
+        incoming.assets.locations = [];
+
+        const merged = mergeProjectAssetsIntoProductionPackage(incoming, current);
+
+        expect(merged.assets.characters).toEqual(expect.arrayContaining([expect.objectContaining({ code: "C01", name: "Karin", description: "项目固定描述", profile: expect.objectContaining({ visualIdentity: "固定脸型" }) })]));
+        expect(merged.assets.locations).toEqual(expect.arrayContaining([expect.objectContaining({ code: "S01", name: "城门", description: "项目固定场景" })]));
+    });
+
+    it("restores omitted assets before normalization so shot references are not filtered out", () => {
+        const current = project();
+        current.characters = [{ id: "character-existing", code: "C01", name: "Karin", description: "项目固定角色" }];
+        current.scenes = [{ id: "scene-existing", code: "S01", name: "城门", description: "项目固定场景" }];
+        const incoming = structuredClone(productionPackage);
+        incoming.assets.characters = incoming.assets.characters.filter((asset) => asset.code !== "C01");
+        incoming.assets.locations = [];
+        incoming.episodes[0].shots[0].characterCodes = ["C01"];
+        incoming.episodes[0].shots[0].locationCode = "S01";
+
+        const preview = previewDramaProductionPackage(JSON.stringify(incoming), "package.json", current);
+
+        expect(preview.package.episodes[0].shots[0].characterCodes).toEqual(["C01"]);
+        expect(preview.package.episodes[0].shots[0].locationCode).toBe("S01");
+    });
+
+    it("matches legacy project assets by name before allocating fallback codes", () => {
+        const current = project();
+        current.characters = [
+            { id: "character-a", name: "A", description: "项目 A" },
+            { id: "character-b", name: "B", description: "项目 B" },
+        ];
+        const incoming = structuredClone(productionPackage);
+        incoming.assets.characters = [
+            { code: "C01", name: "B", description: "Agent B" },
+            { code: "C02", name: "A", description: "Agent A" },
+        ];
+
+        const merged = mergeProjectAssetsIntoProductionPackage(incoming, current);
+
+        expect(merged.assets.characters).toEqual(expect.arrayContaining([expect.objectContaining({ code: "C01", name: "A", description: "项目 A" }), expect.objectContaining({ code: "C02", name: "B", description: "项目 B" })]));
+    });
+
     it("previews canonical JSON without losing production counts", () => {
         const preview = previewDramaProductionPackage(JSON.stringify(productionPackage), "package.json");
 
