@@ -24,6 +24,7 @@ imagePrompt、startFramePrompt、endFramePrompt 的推荐写法必须按“静�
 ${SEEDANCE_STATIC_FRAME_PROMPT_LAYOUT}
 ${SEEDANCE_STATIC_FRAME_PROMPT_SCHEME}
 ${DRAMA_CONTINUOUS_FRAME_RULES}
+视频提示词真相规则：每镜完整公开 videoPrompt 必须由 Agent 直接生成，并包含每个真实时间段的时间范围、起点、动作与触发、可见衔接、终点和具体画面状态；framePlan.frames 只保存同一内容的结构化镜像。应用代码、制作包序列化和运行时只能校验、保存和转发，不得从 framePlan 拼接、补写、清理、删改或重写 videoPrompt。此规则覆盖本协议中任何“videoPrompt 只保存摘要”或“第 11 章按 framePlan 重建”的旧表述。
 制作包生成必须读取 productionPlan.video.shotDuration（仅允许 15、20 或 30 秒）作为逻辑镜头目标；同一场景且时间轴连续的 7s/8s 等碎片必须按目标时长合并，不能机械保留碎片；人物资产沿用项目已登记角色及基准图。productionPlan.video.frameCount 默认为 5，可按用户本轮要求调整为 1-9；Agent 必须据此重新切分每镜剧情和逐帧提示词。
 制作包生成前必须先读取当前项目固定资产目录（角色、场景、道具、线索的稳定 id、code、name、profile、基准图状态和 activeEpisodeCodes），再结合当前章节事实做资产复用分析。已登记资产必须原样保留在制作包资产表中；镜头只引用当前实际需要的已有 code。已有资产的身份、轮廓、材质、基准图和固定字段不得被 Agent 重设计，缺失的已有资产由服务端在规范化前补回；只有章节事实明确新增且通过资产登记的新资产才可进入包。
 framePlan.start.source 只能为 independent 或 previous_accepted_actual_tail；end.required 必须为布尔值；frames 必须为 productionPlan.video.frameCount 指定数量的真实动作节点，按 sequenceIndex 连续排列，从 0 秒无空白、无重叠覆盖完整镜头时长。每帧必须有稳定 id、startSecond、endSecond、actionPrompt、imagePrompt。

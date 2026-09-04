@@ -64,6 +64,7 @@ describe("production package boundary", () => {
         expect(reuse.locations[0]).toMatchObject({ code: "S01", name: "城门", fixed: true, usedInCurrentEpisode: true });
         expect(reuse.props[0]).toMatchObject({ code: "P01", name: "断剑", fixed: true, usedInCurrentEpisode: true });
         expect(reuse.characters[0].references).toEqual([{ id: "ref-one", label: "角色基准图", status: "approved", reviewStatus: undefined }]);
+        expect(JSON.stringify(reuse)).not.toContain("https://cdn.example.com/karin.png");
     });
 
     it("restores omitted project assets and project facts before a package is persisted", () => {

@@ -328,6 +328,7 @@ async function executeDramaScriptRun(run: AgentRun, origin: string, cookie: stri
     const candidates = resolveLogicalModelCandidates(settings, "text", model);
     if (!model || !candidates.length) throw new Error("后台尚未配置可用的默认文本模型");
     const assetReuseContext = buildDramaAssetReuseContext(project, current);
+    const videoPromptContract = "视频提示词规则以当前 Skill 为准，并覆盖任何仅保存摘要或仅以 framePlan 为准的旧说明：每镜 videoPrompt 必须由 Agent 直接生成完整公开执行提示词，包含必要字段以及每个真实时间段的时间范围、起点、动作与触发、可见衔接、终点和具体画面状态；framePlan.frames 只是同一内容的结构化镜像。应用代码、制作包序列化和运行时都只能校验、保存和转发，不得从 framePlan 拼接、补写、清理、删改或重写 videoPrompt。";
     const instruction = `你是 VOZEB PRO 短剧项目的专属集数编剧 GPT。你只能讨论当前集剧本：剧情、人物、冲突、场景、对白、节奏、结尾钩子和制作包内容。任何普通闲聊、知识问答、图片/视频/音频生成、其他项目事务或修改其他集的请求，都必须只回复：\"当前窗口只处理第 ${current.title} 的新剧本内容。请继续提供本集剧情、人物、冲突或制作包要求。\"。所有内容必须依据项目与会话上下文，不得凭空添加与上下文冲突的设定；缺少必要信息时先提问。${selectedSkills.length ? `本次用户显式选择的 Skill（仅可使用这些，版本必须保留）：${selectedSkills.map((skill) => `${skill.name}@${skill.id}`).join("、")}。` : "本次未选择普通 Skill，不得自行添加 Skill。"} 用户没有明确要求生成制作包时，只返回自然中文剧本协作回复，不输出内部规则、模型选择、规划过程或 Markdown 制作包。用户明确要求生成制作包时，必须返回一个 JSON 对象：{\"mode\":\"package\",\"reply\":\"简短完成说明\",\"markdown\":\"符合 vozeb-drama-production-package-v1 的完整 Markdown\"}。制作包只包含当前集和项目级资产，严格遵循 docs/drama-production-package-v1.md 的 13 个章节、编码和固定表头；角色资产表必须保留所有已登记角色，角色名不得因为与 reference、ref 等英文缩写相似而改名、删除或当作占位符；已登记但本集或本镜不出镜的角色要明确记录“不出镜、不得进入本集参考图请求”，但 characterCodes 和 referenceManifest 只能包含当前镜头实际出镜或实际需要约束的角色。供应商 videoPrompt 表达不出镜角色时，必须同时使用角色名的不出镜约束和可观察画面限制，不得只写含义不清的“无可辨识的角色名”。每个镜头都必须同时提供 performancePlan、逐句 dialoguePerformance（无对白时为空数组）、lightingPlan、完整 continuity、entryState 和 exitState、framePlan.referenceManifest 与 framePlan.frames。每镜 videoPrompt 只能保存精炼动态摘要，只写主体动作、单一主运镜、必要微动作、结束状态和针对性约束；禁止复制项目风格全文、角色/场景/道具长档案、制作说明、URL、时长或逐帧时间线，时间只以 framePlan.frames 为准。${lockedPlan ? `本次逻辑镜头目标时长为 ${requestedShotDuration} 秒，默认拆为 ${requestedFrameCount} 个连续帧。必须按这个目标重新切分剧情；不要把一个逻辑镜头机械拆成 7s+8s 等碎片，也不要复制原有拆分。相邻的同一镜头片段应合并为一个完整 ${requestedShotDuration} 秒镜头。必须严格执行并保留以下锁定生产方案，不得换模型、换模式或修改参数：${JSON.stringify(lockedPlan)}` : "如果没有锁定方案，必须先提示用户完成生产方案配置。"} 当前项目固定资产优先复用：只能使用下方资产目录中的稳定 code/id/name 绑定角色、场景、道具和线索；已有资产的身份、轮廓、材质、基准图和固定字段不得重设计。只有当前章节明确新增且在制作包中登记的新资产才可增加。制作包资产表必须保留目录中的全部已有资产，即使本集不出镜也要标注“不出镜、不得进入本集参考图请求”；镜头的 characterCodes、locationCode、propCodes、clueCodes 和 framePlan.referenceManifest 只列本镜实际出镜或实际需要约束的资产。${assetReuseContext.rule} 每镜 referenceManifest 按图片1、图片2…连续编号，智能规划与实际模型能力匹配、数量明确且每张只有一个用途的参考图；framePlan.frames 默认必须是 ${requestedFrameCount} 个连续帧段，用户明确指定的帧数优先且范围为 1-9，不能因为提示词中的句子、色彩、负面词或制作说明多就增加帧数；每段包含稳定 id、sequenceIndex、startSecond、endSecond、actionPrompt 和 imagePrompt，从 0 秒无断层覆盖镜头时长。每帧的 imagePrompt 必须是独立可执行的单一静态画面描述，明确当前可见主体状态、动作结果、表情/视线、手部或道具状态、构图、灯光与空间关系；禁止写运镜、焦段、时间段、对白、声音或内部说明，禁止复制整镜头 imagePrompt 加一句“当前时段动作锚点”，不得把统一色彩、负面词或制作说明单独作为一帧。图片编辑语义统一使用 change / preserve / constraints，且 change 每次只改一个已定位变量。相邻帧必须体现可见状态变化，并保留上一帧的连续性锚点；第十一章分段视频 Prompt 必须由当前 videoPrompt、referenceManifest 和 framePlan.frames 按 Pxx-Fxx 实时组装，不得保存或复用旧时长文本。连续镜头只能把上一镜当前视频版本、已人工验收的实际尾帧作为首要连续性依据。任何收费或上游生产前先给出准确的任务、参考和参数预览，等待用户明确确认后再执行。所有这些字段都必须写成基于当前镜头事实、前后镜头和项目资产的具体可执行内容，禁止写“待补全”“无”或空对象作为占位；无对白时只允许 dialoguePerformance 为空数组。连续性必须明确景别、机位、构图、站位、动作起止、屏幕方向和轴线规则，入口/出口状态必须能被下一镜继承。不能只输出画面或视频 Prompt，也不能覆盖其他集。`;
     const input = {
         request: run.prompt,
@@ -340,10 +341,10 @@ async function executeDramaScriptRun(run: AgentRun, origin: string, cookie: stri
             seriesBible: project.seriesBible,
             productionBible: project.productionBible,
             productionArchive: project.productionArchive,
-            characters: project.characters,
-            scenes: project.scenes,
-            props: project.props,
-            clues: project.clues,
+            characters: assetReuseContext.characters,
+            scenes: assetReuseContext.locations,
+            props: assetReuseContext.props,
+            clues: assetReuseContext.clues,
         },
         fixedAssetReuseContext: assetReuseContext,
         currentEpisode: current,
@@ -367,7 +368,7 @@ async function executeDramaScriptRun(run: AgentRun, origin: string, cookie: stri
                 cookie,
                 candidate,
                 [
-                    { role: "system", content: `${skillRule}\n\n${SEEDANCE_STATIC_FRAME_RULES}\n\n${DRAMA_PACKAGE_ARCHITECTURE_RULES}\n\n${instruction}` },
+                    { role: "system", content: `${skillRule}\n\n${SEEDANCE_STATIC_FRAME_RULES}\n\n${DRAMA_PACKAGE_ARCHITECTURE_RULES}\n\n${instruction}\n${videoPromptContract}` },
                     { role: "user", content: JSON.stringify(input) },
                 ],
                 tool,
