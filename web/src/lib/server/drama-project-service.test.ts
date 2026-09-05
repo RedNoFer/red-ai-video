@@ -535,7 +535,17 @@ describe("drama project service updates", () => {
                     end: { required: true },
                     frames: [
                         { id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 3, startPrompt: "人物低头", actionPrompt: "手指收紧", transitionPrompt: "手指压住剑柄并保持低头", endPrompt: "手指收紧剑柄", imagePrompt: "人物低头，手指收紧剑柄" },
-                        { id: "f2", sequenceIndex: 2, startSecond: 3, endSecond: 6, startPrompt: "手指收紧剑柄", actionPrompt: "人物抬头", transitionPrompt: "视线从剑柄转向门外", endPrompt: "视线越过门框看向门外", imagePrompt: "人物抬头，视线越过门框看向门外" },
+                        {
+                            id: "f2",
+                            sequenceIndex: 2,
+                            startSecond: 3,
+                            endSecond: 6,
+                            startPrompt: "手指收紧剑柄",
+                            actionPrompt: "人物抬头",
+                            transitionPrompt: "视线从剑柄转向门外",
+                            endPrompt: "视线越过门框看向门外",
+                            imagePrompt: "人物抬头，视线越过门框看向门外",
+                        },
                     ],
                 },
             } as never,
@@ -544,8 +554,28 @@ describe("drama project service updates", () => {
 
         const agentFramePlan = {
             frames: [
-                { id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 3, startPrompt: "人物低头", actionPrompt: "手指收紧并压住剑柄", transitionPrompt: "手指压住剑柄并保持低头", endPrompt: "手指收紧剑柄", imagePrompt: "静态关键帧：人物低头；可见状态：手指收紧并压住剑柄" },
-                { id: "f2", sequenceIndex: 2, startSecond: 3, endSecond: 6, startPrompt: "手指收紧剑柄", actionPrompt: "抬头锁定门外", transitionPrompt: "视线从剑柄转向门外", endPrompt: "视线越过门框锁定门外", imagePrompt: "静态关键帧：人物抬头；可见状态：视线越过门框锁定门外" },
+                {
+                    id: "f1",
+                    sequenceIndex: 1,
+                    startSecond: 0,
+                    endSecond: 3,
+                    startPrompt: "人物低头",
+                    actionPrompt: "手指收紧并压住剑柄",
+                    transitionPrompt: "手指压住剑柄并保持低头",
+                    endPrompt: "手指收紧剑柄",
+                    imagePrompt: "静态关键帧：人物低头；可见状态：手指收紧并压住剑柄",
+                },
+                {
+                    id: "f2",
+                    sequenceIndex: 2,
+                    startSecond: 3,
+                    endSecond: 6,
+                    startPrompt: "手指收紧剑柄",
+                    actionPrompt: "抬头锁定门外",
+                    transitionPrompt: "视线从剑柄转向门外",
+                    endPrompt: "视线越过门框锁定门外",
+                    imagePrompt: "静态关键帧：人物抬头；可见状态：视线越过门框锁定门外",
+                },
             ],
         };
         const saved = await updateDramaShotPromptForUser("user-one", current.id, "episode-one", "shot-one", {
@@ -614,6 +644,49 @@ describe("drama project service updates", () => {
             }),
             current.updatedAt,
         );
+    });
+
+    it("redispatches an already confirmed visual run that still has a ready frame", async () => {
+        const current = project("2026-07-19T08:00:00.000Z", "项目");
+        current.episodes[0].shots = [
+            {
+                id: "shot-one",
+                title: "镜头",
+                characterIds: [],
+                propIds: [],
+                clueIds: [],
+                imagePrompt: "画面",
+                videoPrompt: "动作",
+                cameraMotion: "固定",
+                duration: 6,
+                storyboardFrameMode: "all_frames",
+                storyboardFrames: [{ id: "f1", sequenceIndex: 1, source: "generated", status: "queued" }],
+            } as never,
+        ];
+        const runId = "run-confirmed-ready";
+        const run = {
+            id: runId,
+            projectId: current.id,
+            episodeId: "episode-one",
+            planRevision: "revision-confirmed-ready",
+            status: "running",
+            scope: "visual",
+            mode: "strict",
+            confirmedAt: current.updatedAt,
+            parameterSnapshot: { imageModel: "image-default", imageChannelId: "image-channel", imageQuality: "standard", videoModel: "", ratio: "9:16" },
+            steps: [{ id: "frame-shot-one-f1", type: "keyframe", shotId: "shot-one", frameId: "f1", sequenceIndex: 1, dependsOn: [], status: "ready" }],
+            blockers: [],
+            createdAt: current.updatedAt,
+            updatedAt: current.updatedAt,
+        } as never;
+        mocks.getDramaProject.mockResolvedValue(current);
+        mocks.getDramaProductionRun.mockResolvedValue(run);
+        mocks.updateDramaProductionRun.mockImplementation(async (_userId: string, value: unknown) => value);
+        mocks.fetchInternalApi.mockResolvedValue({ ok: true, json: async () => ({ task: { id: "image-task-redispatched" } }) });
+
+        await updateDramaProductionRunForUser("user-one", current.id, runId, { action: "confirm", origin: "http://localhost:3010", cookie: "session=test" });
+
+        expect(mocks.fetchInternalApi).toHaveBeenCalledWith("http://localhost:3010/api/image-tasks", expect.objectContaining({ method: "POST" }));
     });
 
     it("rebases submission placeholders when an optimistic project save wins the race", async () => {
@@ -1756,7 +1829,9 @@ describe("drama project service updates", () => {
             defaultModels: { imageModel: "image-default", videoModel: "backend-default-video", audioModel: "" },
             generationDefaults: { imageQuality: "standard", videoQuality: "720" },
         });
-        mocks.resolveLogicalModelCandidates.mockImplementation((_settings: unknown, capability: string, model: string) => capability === "video" && model === "backend-default-video" ? [{ logicalModelId: "backend-default-video", channelId: "backend-video-channel" }] : [{ logicalModelId: "image-default", channelId: "image-channel" }]);
+        mocks.resolveLogicalModelCandidates.mockImplementation((_settings: unknown, capability: string, model: string) =>
+            capability === "video" && model === "backend-default-video" ? [{ logicalModelId: "backend-default-video", channelId: "backend-video-channel" }] : [{ logicalModelId: "image-default", channelId: "image-channel" }],
+        );
         mocks.supportsVideoKeyframeReferences.mockReturnValue(true);
 
         const run = await createDramaProductionRunForUser("user-one", current.id, { episodeId: current.episodes[0].id });
@@ -2167,7 +2242,6 @@ describe("drama visual reference URL resolution", () => {
 
         expect(prompt).toBe("动态意图：Karin停住");
     });
-
 
     it("preserves the local mirror when a provider CDN URL is available", () => {
         vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://app.example.com");

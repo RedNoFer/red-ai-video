@@ -1526,9 +1526,14 @@ export async function updateDramaProductionRunForUser(userId: string, projectId:
     const action = cleanText(object(value).action);
     let next: DramaProductionRun;
     if (action === "confirm" && run.scope === "visual") {
-        if (run.confirmedAt) return run;
-        if (run.blockers?.length) throw new DramaProjectServiceError(`视觉计划存在阻断项：${run.blockers.slice(0, 6).join("；")}`, 409);
-        next = unlockDramaVisualSteps({ ...run, confirmedAt: new Date().toISOString(), status: "running" });
+        if (run.confirmedAt) {
+            const unlocked = unlockDramaVisualSteps(run);
+            if (!unlocked.steps.some((step) => ["asset_anchor", "start_frame", "end_frame", "keyframe"].includes(step.type) && step.status === "ready" && !step.taskId)) return run;
+            next = unlocked;
+        } else {
+            if (run.blockers?.length) throw new DramaProjectServiceError(`视觉计划存在阻断项：${run.blockers.slice(0, 6).join("；")}`, 409);
+            next = unlockDramaVisualSteps({ ...run, confirmedAt: new Date().toISOString(), status: "running" });
+        }
     } else if (action === "cancel") {
         next = { ...run, status: "cancelled", steps: run.steps.map((step) => (["success", "cancelled"].includes(step.status) ? step : { ...step, status: "cancelled" })), updatedAt: new Date().toISOString() };
     } else if (action === "retry") {
