@@ -5,7 +5,7 @@ import type { AgentRun, AgentRunPlannerContextSummary, AgentRunTask } from "@/li
 import type { AgentPlan } from "@/lib/server/agent-run-validation";
 import { resolveAgentPlanningProfile } from "@/lib/server/agent-run-planning-profile";
 import { canvasSnapshotPlannerView, selectedCanvasNodeIds } from "./agent-run-canvas-snapshot";
-import { SEEDANCE_25_DIRECTOR_SKILL, SEEDANCE_DIRECTOR_SKILL } from "./agent-skills/creative-shortcuts";
+import { DRAMA_PLANNING_SKILL, SEEDANCE_25_DIRECTOR_SKILL, SEEDANCE_DIRECTOR_SKILL } from "./agent-skills/creative-shortcuts";
 import { DRAMA_ASSET_IMAGE_SKILL } from "@/lib/drama-image-skill";
 import { inferSeedance25VideoDuration, resolveSeedance25DirectorInstructions } from "./agent-skills/seedance-25";
 
@@ -26,6 +26,7 @@ export function availableAgentSkills(settings: AuthSettings, surface: CreativeSu
 export function selectAgentSkills(settings: AuthSettings, surface: CreativeSurface, requestedSkillIds: string[] = [], context?: AgentSkillSelectionContext) {
     const available = new Map(availableAgentSkills(settings, surface).map((skill) => [skill.id, skill]));
     if (surface === "drama" && !available.has(SEEDANCE_DIRECTOR_SKILL.id)) available.set(SEEDANCE_DIRECTOR_SKILL.id, { ...SEEDANCE_DIRECTOR_SKILL, keywords: [...SEEDANCE_DIRECTOR_SKILL.keywords], workspaces: [...SEEDANCE_DIRECTOR_SKILL.workspaces] });
+    if (surface === "drama" && context?.workflow === "drama-script" && !available.has(DRAMA_PLANNING_SKILL.id)) available.set(DRAMA_PLANNING_SKILL.id, { ...DRAMA_PLANNING_SKILL, keywords: [...DRAMA_PLANNING_SKILL.keywords], workspaces: [...DRAMA_PLANNING_SKILL.workspaces] });
     const videoDefault = surface !== "canvas" && isVideoAgentRequest(settings, context);
     const dramaAssetDefault = surface === "drama" && !videoDefault && isDramaAssetImageRequest(context?.prompt, context?.snapshot);
     if (videoDefault && !available.has(SEEDANCE_25_DIRECTOR_SKILL.id) && !settings.agentSkills.some((skill) => skill.id === SEEDANCE_25_DIRECTOR_SKILL.id && skill.enabled === false)) {
@@ -33,7 +34,7 @@ export function selectAgentSkills(settings: AuthSettings, surface: CreativeSurfa
     }
     if (dramaAssetDefault && !available.has(DRAMA_ASSET_IMAGE_SKILL.id)) available.set(DRAMA_ASSET_IMAGE_SKILL.id, { ...DRAMA_ASSET_IMAGE_SKILL, keywords: [...DRAMA_ASSET_IMAGE_SKILL.keywords], workspaces: [...DRAMA_ASSET_IMAGE_SKILL.workspaces] });
     const compatibleRequestedSkillIds = dramaAssetDefault ? requestedSkillIds.filter((id) => id.trim() !== "character-design") : requestedSkillIds;
-    const ids = [...(surface === "drama" ? ["seedance-director"] : []), ...(videoDefault ? [SEEDANCE_25_DIRECTOR_SKILL.id] : []), ...compatibleRequestedSkillIds, ...(dramaAssetDefault ? [DRAMA_ASSET_IMAGE_SKILL.id] : [])];
+    const ids = [...(surface === "drama" ? ["seedance-director"] : []), ...(context?.workflow === "drama-script" ? [DRAMA_PLANNING_SKILL.id] : []), ...(videoDefault ? [SEEDANCE_25_DIRECTOR_SKILL.id] : []), ...compatibleRequestedSkillIds, ...(dramaAssetDefault ? [DRAMA_ASSET_IMAGE_SKILL.id] : [])];
     return Array.from(new Set(ids.map((id) => id.trim()).filter(Boolean))).flatMap((id) => (available.has(id) ? [available.get(id)!] : []));
 }
 

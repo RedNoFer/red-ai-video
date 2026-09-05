@@ -19,6 +19,7 @@ import type {
 } from "@/lib/drama-project-contract";
 import { normalizeDramaProductionPlan } from "@/lib/drama-production-plan";
 import { formatPromptFieldLines, normalizeDramaFrameBeats, upgradeDramaFrameImagePrompt, validateDramaFramePlanVisuals } from "@/lib/drama-frame-sequence";
+import { dramaDialogueTimingIssue, dramaFrameDialogueTimingIssue, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
 import { resolveDramaStyleContract } from "@/lib/drama-style";
 import { resolveDramaShotDuration } from "@/lib/server/drama-shot-config";
 
@@ -790,6 +791,8 @@ function normalizePackageShot(value: unknown, index: number): DramaProductionPac
     const dialoguePerformance = mergeDialoguePerformance(normalizeDialoguePerformance(shot.dialoguePerformance), utterances);
     const timecode = parseTimecode(shot.timecode);
     const duration = timecode ? Math.max(1, timecode[1] - timecode[0]) : resolveDramaShotDuration(shot.duration, 5);
+    const dialogueTiming = dramaDialogueTimingIssue(duration, utterances as DramaDialogueTimingInput[], text(shot.dialogue), `${text(shot.code) || `镜头 ${index + 1}`}`);
+    if (dialogueTiming) throw new DramaProductionPackageError(dialogueTiming.message);
     let frames;
     try {
         const rawFrames = array(framePlan.frames);
@@ -809,6 +812,10 @@ function normalizePackageShot(value: unknown, index: number): DramaProductionPac
             };
         });
         frames = normalizeDramaFrameBeats(sourceFrames, duration);
+        for (const frame of frames) {
+            const frameTiming = dramaFrameDialogueTimingIssue(frame.startSecond, frame.endSecond, frame.actionPrompt, utterances as DramaDialogueTimingInput[], `${text(shot.code) || `镜头 ${index + 1}`} ${frame.id}`);
+            if (frameTiming) throw new DramaProductionPackageError(frameTiming.message);
+        }
         frames = frames.map((frame) => ({
             ...frame,
             imagePrompt: upgradeDramaFrameImagePrompt(frame.imagePrompt, frame.actionPrompt, {

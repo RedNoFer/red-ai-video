@@ -7,6 +7,7 @@ import {
     dramaReviewCompletionToolForFields,
     hasUsableDramaToolArguments,
     normalizeDramaContentAnalysis,
+    validateDramaContentAnalysisTiming,
     normalizeDramaImagePromptAnalysis,
     normalizeDramaReviewCompletion,
     normalizeDramaVideoPromptAnalysis,
@@ -17,6 +18,35 @@ import {
 } from "./drama-analysis";
 
 describe("drama analysis contracts", () => {
+    it("rejects content analysis that packs more dialogue into a shot than can be spoken", () => {
+        const analysis = normalizeDramaContentAnalysis(
+            {
+                episode: {},
+                characters: [],
+                scenes: [],
+                props: [],
+                clues: [],
+                shots: [
+                    {
+                        title: "争执",
+                        description: "两人争执",
+                        sourceText: "萧炎说：“纳兰小姐，你应该知道，在斗气大陆，女方悔婚会让对方有多难堪，可我的父亲他是一族之长，今日若是真答应了你的要求，他日后还如何掌管萧家？”",
+                        dialogue: "纳兰小姐，你应该知道，在斗气大陆，女方悔婚会让对方有多难堪，可我的父亲他是一族之长，今日若是真答应了你的要求，他日后还如何掌管萧家？",
+                        utterances: [{ type: "dialogue", speaker: "萧炎", text: "纳兰小姐，你应该知道，在斗气大陆，女方悔婚会让对方有多难堪，可我的父亲他是一族之长，今日若是真答应了你的要求，他日后还如何掌管萧家？" }],
+                        duration: 5,
+                        characterNames: [],
+                        sceneName: "大厅",
+                        propNames: [],
+                        clueNames: [],
+                    },
+                ],
+            },
+            5,
+        );
+
+        expect(validateDramaContentAnalysisTiming(analysis)).toEqual([expect.stringContaining("至少需要")]);
+    });
+
     it("keeps material binding and frame planning in the Skill-owned video prompt contract", () => {
         expect(dramaVideoPromptTool.description).toContain("Seedance 2.5 导演 Skill");
         expect(dramaVideoPromptTool.parameters.properties.shots.items.properties.videoPrompt.description).toContain("由 Skill 生成素材绑定");

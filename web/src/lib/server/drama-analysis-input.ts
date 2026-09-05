@@ -31,6 +31,15 @@ export class DramaVideoPromptQualityError extends Error {
     }
 }
 
+export class DramaContentQualityError extends Error {
+    readonly status = 422;
+
+    constructor(message: string) {
+        super(message);
+        this.name = "DramaContentQualityError";
+    }
+}
+
 export function normalizeDramaVisualInput(body: DramaAnalyzeBody) {
     const shots = array(body.shots).flatMap((value) => {
         const shot = object(value);

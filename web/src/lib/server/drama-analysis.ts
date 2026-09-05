@@ -16,6 +16,7 @@ import type {
     DramaVisualAnalysis,
 } from "@/lib/drama-project-contract";
 import { formatPromptFieldLines, normalizeDramaFrameBeats, validateDramaFramePlanVisuals } from "@/lib/drama-frame-sequence";
+import { dramaDialogueTimingIssue, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
 import { resolveDramaShotDuration } from "@/lib/server/drama-shot-config";
 import { strictJsonObjectText } from "@/lib/server/structured-model-output";
 
@@ -78,6 +79,13 @@ export function normalizeDramaContentAnalysis(value: unknown, defaultVideoSecond
         clues: normalizeClues(source.clues),
         shots: restoreMissingDialogueCoverage(shots, sourceScript),
     };
+}
+
+export function validateDramaContentAnalysisTiming(value: DramaContentAnalysis) {
+    return value.shots.flatMap((shot, index) => {
+        const issue = dramaDialogueTimingIssue(shot.duration, shot.utterances as DramaDialogueTimingInput[], shot.dialogue, `镜头 ${String(index + 1).padStart(2, "0")}`);
+        return issue ? [issue.message] : [];
+    });
 }
 
 export function normalizeDramaVisualAnalysis(value: unknown, shotIds: string[], sourceShots: ReadonlyArray<{ id: string; framePlan?: unknown }> = []): DramaVisualAnalysis {

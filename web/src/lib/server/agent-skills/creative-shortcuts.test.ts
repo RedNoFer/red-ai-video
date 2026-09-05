@@ -30,6 +30,8 @@ describe("creative shortcut skills", () => {
     it("keeps stage ownership and duration gates in drama planning", () => {
         expect(DRAMA_PLANNING_SKILL.instructions).toContain("改编大纲、资产清单、剧本节拍、分镜");
         expect(DRAMA_PLANNING_SKILL.instructions).toContain("按语速与动作节点核算时长");
+        expect(DRAMA_PLANNING_SKILL.instructions).toContain("人物欲望、阻力、空间几何、受控视线和剪辑节奏");
+        expect(DRAMA_PLANNING_SKILL.instructions).toContain("每个镜头至少承担情绪变化、推进动作或增加压力中的一项");
     });
 
     it("requires visible action changes across continuous frames", () => {
@@ -99,6 +101,8 @@ describe("creative shortcut skills", () => {
         expect(DRAMA_PACKAGE_ARCHITECTURE_RULES).toContain("制作包内所有提示词模块都必须按字段逐行书写");
         expect(DRAMA_PACKAGE_ARCHITECTURE_RULES).toContain("字段之间使用换行");
         expect(DRAMA_PACKAGE_ARCHITECTURE_RULES).toContain("seedance-25-director");
+        expect(DRAMA_PACKAGE_ARCHITECTURE_RULES).toContain("每秒约 5 个可发音字");
+        expect(DRAMA_PACKAGE_ARCHITECTURE_RULES).toContain("每个镜头至少落实一个环境压力");
     });
 
     it("keeps named non-appearing characters in the package and out of shot bindings", () => {

@@ -1,5 +1,6 @@
 import { SEEDANCE_25_DIRECTOR_SKILL } from "./seedance-25";
 import { DRAMA_ASSET_IMAGE_SKILL } from "@/lib/drama-image-skill";
+import { DRAMA_DIALOGUE_TIMING_RULES } from "@/lib/drama-dialogue-timing";
 
 export { SEEDANCE_25_DIRECTOR_SKILL } from "./seedance-25";
 
@@ -42,6 +43,8 @@ export const DRAMA_CONTINUOUS_FRAME_RULES = `
 
 必要的连续性只锁定身份、服装、道具材质、空间轴线和光向；不得用“构图不变、主体稳定、情绪保持不变”等静态约束压住动作变化。时间段按实际动作节点和帧数连续分配，不预设固定秒数。`;
 
+export const DRAMA_DIRECTOR_SCENE_RULES = `导演拆镜前置审计：每个场景先明确此刻人物欲望、阻力、空间几何、受控视线和剪辑节奏；每个镜头至少承担情绪变化、推进动作或增加压力中的一项。每个镜头至少落实一个环境压力、一个身体微动作和一个声音/视觉母题，不能只写“电影感”“紧张”或漂亮空镜。先按语速与动作节点核算时长，再完成对白容量、停顿和动作反应的可说时长核算，决定镜头边界、时间段和帧数；必须明确镜头结束时的可见结果，并在重大冲击前保留必要停顿。`;
+
 /** Shared public layout for generic video optimization and drama video prompts. */
 export const SEEDANCE_VIDEO_PROMPT_LAYOUT = `
 视频提示词公开布局（只输出提示词正文，不输出 Markdown 标题、解释或内部检查）：
@@ -71,7 +74,7 @@ export const DRAMA_PLANNING_SKILL = {
     requiresReference: false,
     defaultConfig: { count: 1, videoSeconds: 5 },
     keywords: ["短剧策划", "短剧", "剧本", "分镜", "剧集", "镜头", "故事板"],
-    instructions: `以短剧生产工作流执行。按改编大纲、资产清单、剧本节拍、分镜、图片关键帧、视频提示词和审查的阶段顺序推进；每一阶段只修改自己的事实，不建立并行的文件或提示词真相。先核对主题、受众、冲突、角色、场景、道具、叙事节奏和集长，再按语速与动作节点核算时长。每个镜头必须有唯一戏剧职责、画面主体、对白/旁白、时长、景别、机位、声音、可见起点和终点，并通过稳定资产 ID 绑定角色、场景、道具和关键帧。对白和旁白可以不写进静态图片，但其可见后果必须进入对应帧；相邻帧必须有真实状态差异，禁止复制整镜提示词后只追加“起始/展开/结果”。${DRAMA_CONTINUOUS_FRAME_RULES}生成前展示准确的任务、参考和参数，付费生产等待用户明确确认；不要跳过结构分析，也不要在用户未明确要求时创建 Canvas 或短剧项目。`,
+    instructions: `以短剧生产工作流执行。按改编大纲、资产清单、剧本节拍、分镜、图片关键帧、视频提示词和审查的阶段顺序推进；每一阶段只修改自己的事实，不建立并行的文件或提示词真相。先核对主题、受众、冲突、角色、场景、道具、叙事节奏和集长。${DRAMA_DIRECTOR_SCENE_RULES}${DRAMA_DIALOGUE_TIMING_RULES}每个镜头必须有唯一戏剧职责、画面主体、对白/旁白、时长、景别、机位、声音、可见起点和终点，并通过稳定资产 ID 绑定角色、场景、道具和关键帧。对白和旁白可以不写进静态图片，但其可见后果必须进入对应帧；相邻帧必须有真实状态差异，禁止复制整镜提示词后只追加“起始/展开/结果”。${DRAMA_CONTINUOUS_FRAME_RULES}生成前展示准确的任务、参考和参数，付费生产等待用户明确确认；不要跳过结构分析，也不要在用户未明确要求时创建 Canvas 或短剧项目。`,
 } as const;
 
 export const SEEDANCE_STATIC_FRAME_PROMPT_SCHEME = `静态关键帧写法模板：

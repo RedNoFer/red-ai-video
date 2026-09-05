@@ -2,6 +2,7 @@ import type { DramaEpisode, DramaProductionPreflight, DramaProductionPreflightIs
 import { hasApprovedAssetReference } from "@/lib/drama-asset-baseline";
 import { continuityStartEvidence } from "@/lib/drama-continuity-policy";
 import { normalizeDramaFrameBeats, validateDramaFrameVisualContent, dramaFrameVisualSubject } from "@/lib/drama-frame-sequence";
+import { dramaDialogueTimingIssue, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
 import { dramaReferenceImageBudget } from "@/lib/drama-production-plan";
 
 const blocking = (code: string, message: string, extra: Partial<DramaProductionPreflightIssue> = {}): DramaProductionPreflightIssue => ({ code, severity: "blocking", message, ...extra });
@@ -99,6 +100,8 @@ function checkShot(
     if (!light?.palette || !light.colorTemperature || !light.keyLight || !light.fillLight || !light.rimLight || !light.materialResponse || !light.skinToneProtection)
         issues.push(blocking("LIGHTING_PLAN_MISSING", `${label}缺少完整色彩与灯光规划`, { shotId: shot.id }));
     if (!Number.isFinite(shot.duration) || shot.duration <= 0) issues.push(blocking("DURATION", `${label}缺少有效时长`, { shotId: shot.id }));
+    const dialogueTiming = dramaDialogueTimingIssue(shot.duration, shot.utterances as DramaDialogueTimingInput[], shot.dialogue, label);
+    if (dialogueTiming) issues.push(blocking("DIALOGUE_TIMING", dialogueTiming.message, { shotId: shot.id, correction: "按自然分句、说话人转换或动作反应拆镜，确保对白有真实可说时长" }));
     if (targetShotDuration && shot.duration !== targetShotDuration)
         issues.push(warning("SHOT_DURATION_MISMATCH", `${label}当前为${shot.duration}秒，生产方案目标为${targetShotDuration}秒`, { shotId: shot.id, correction: `按生产方案重新生成或调整为${targetShotDuration}秒逻辑镜头` }));
     const fixedReferenceCount = new Set([shot.sceneId, ...shot.characterIds, ...shot.propIds, ...shot.clueIds, ...(shot.sourceAssetIds || [])].filter(Boolean)).size;

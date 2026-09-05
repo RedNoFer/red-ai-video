@@ -50,6 +50,22 @@ const productionPackage: DramaProductionPackageV1 = {
 };
 
 describe("production package boundary", () => {
+    it("rejects a five-second frame that carries a full speech", () => {
+        const source = structuredClone(productionPackage);
+        const shot = source.episodes[0].shots[0];
+        const speech = "纳兰小姐你应该知道女方悔婚会让对方难堪可我的父亲是一族之长";
+        shot.duration = 15;
+        shot.timecode = "0-15s";
+        shot.dialogue = speech;
+        shot.utterances = [{ id: "D01", order: 1, type: "dialogue", speaker: "萧炎", text: speech }];
+        shot.framePlan.frames = [
+            { ...shot.framePlan.frames[0], startSecond: 0, endSecond: 5, actionPrompt: `萧炎说“${speech}”` },
+            { ...shot.framePlan.frames[0], id: "SH01-F02", sequenceIndex: 2, startSecond: 5, endSecond: 15, actionPrompt: "萧炎收住视线", imagePrompt: "萧炎抬眼，手掌停在桌案边，视线锁定纳兰" },
+        ];
+
+        expect(() => previewDramaProductionPackage(JSON.stringify(source), "package.json")).toThrow(/SH01.*SH01-frame-1.*至少需要.*秒/u);
+    });
+
     it("builds a fixed-asset reuse catalog with stable codes and current-episode usage", () => {
         const current = project();
         current.characters = [{ id: "character-existing", code: "C07", name: "Karin", description: "锁定角色", references: [{ id: "ref-one", label: "角色基准图", url: "https://cdn.example.com/karin.png", source: "generated", status: "approved", createdAt: "2026-01-01" }] }];
