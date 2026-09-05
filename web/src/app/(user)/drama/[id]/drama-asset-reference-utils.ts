@@ -7,17 +7,17 @@ export function dramaAssetReferences(item: DramaNamedAsset): DramaAssetReference
     const references = item.references?.length
         ? item.references
         : item.referenceImageUrl
-        ? [
-              {
-                  id: `${item.id}-reference-legacy`,
-                  url: item.referenceImageUrl,
-                  storageKey: item.referenceStorageKey,
-                  source: "library" as const,
-                  label: "原参考图",
-                  createdAt: new Date(0).toISOString(),
-              },
-          ]
-        : [];
+          ? [
+                {
+                    id: `${item.id}-reference-legacy`,
+                    url: item.referenceImageUrl,
+                    storageKey: item.referenceStorageKey,
+                    source: "library" as const,
+                    label: "原参考图",
+                    createdAt: new Date(0).toISOString(),
+                },
+            ]
+          : [];
     return ensureUniqueDramaAssetReferenceIds(references);
 }
 
@@ -34,7 +34,29 @@ export function ensureUniqueDramaAssetReferenceIds(references: DramaAssetReferen
     });
 }
 
-export function imageResultsToReferences(result: ImageGenerationResult & { results?: ImageGenerationResult[] }, metadata: { promptVersion?: number; compiledPrompt?: string; promptChanges?: DramaAssetRefinementProposal["changes"]; refinement?: DramaAssetRefinementProposal; logicalModelId?: string; generationTaskId?: string; generationStage?: DramaAssetReference["generationStage"]; reviewStatus?: DramaAssetReference["reviewStatus"] } = {}): DramaAssetReference[] {
+/** Merge client-side review metadata without demoting a server-promoted baseline. */
+export function mergeGeneratedReferenceReviews(existing: DramaAssetReference[], reviewed: DramaAssetReference[]): DramaAssetReference[] {
+    const reviewedIds = new Set(reviewed.map((reference) => reference.id));
+    const merged = reviewed.map((reference) => {
+        const persisted = existing.find((candidate) => candidate.id === reference.id);
+        return persisted?.status === "approved" ? { ...persisted, ...reference, status: "approved" as const, approvedAt: persisted.approvedAt, version: persisted.version } : { ...persisted, ...reference };
+    });
+    return ensureUniqueDramaAssetReferenceIds([...existing.filter((reference) => !reviewedIds.has(reference.id)), ...merged]);
+}
+
+export function imageResultsToReferences(
+    result: ImageGenerationResult & { results?: ImageGenerationResult[] },
+    metadata: {
+        promptVersion?: number;
+        compiledPrompt?: string;
+        promptChanges?: DramaAssetRefinementProposal["changes"];
+        refinement?: DramaAssetRefinementProposal;
+        logicalModelId?: string;
+        generationTaskId?: string;
+        generationStage?: DramaAssetReference["generationStage"];
+        reviewStatus?: DramaAssetReference["reviewStatus"];
+    } = {},
+): DramaAssetReference[] {
     const images = result.results?.length ? result.results : [result];
     const createdAt = new Date().toISOString();
     return images.flatMap((image, index) => {

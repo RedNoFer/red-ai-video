@@ -48,11 +48,42 @@ describe("persistDramaGeneratedCandidates", () => {
                             expect.objectContaining({
                                 id: "reference-task-one-0",
                                 generationTaskId: "task-one",
-                                status: "candidate",
+                                status: "approved",
                                 reviewStatus: "pending",
                                 url: "/api/generation-log-assets/permanent/candidate.png",
+                                approvedAt: expect.any(String),
                             }),
                         ],
+                        primaryReferenceId: "reference-task-one-0",
+                        referenceImageUrl: "/api/generation-log-assets/permanent/candidate.png",
+                    }),
+                ],
+            }),
+        );
+    });
+
+    it("promotes the first generated reference to the primary baseline when the asset has none", async () => {
+        await expect(
+            persistDramaGeneratedCandidates({
+                ownerUserId: "user-one",
+                projectId: "drama-one",
+                assetKind: "characters",
+                assetId: "character-one",
+                taskId: "task-first",
+                prompt: "角色白底三视图",
+                results: [{ serverUrl: "/api/generation-log-assets/permanent/first.png", width: 2160, height: 3840 }],
+            }),
+        ).resolves.toBe(1);
+
+        expect(mocks.updateProject).toHaveBeenCalledWith(
+            "user-one",
+            "drama-one",
+            expect.objectContaining({
+                characters: [
+                    expect.objectContaining({
+                        primaryReferenceId: "reference-task-first-0",
+                        referenceImageUrl: "/api/generation-log-assets/permanent/candidate.png",
+                        references: [expect.objectContaining({ id: "reference-task-first-0", status: "approved", reviewStatus: "pending", approvedAt: expect.any(String) })],
                     }),
                 ],
             }),
@@ -63,7 +94,13 @@ describe("persistDramaGeneratedCandidates", () => {
         mocks.getProject.mockResolvedValueOnce({
             id: "drama-one",
             updatedAt: "2026-08-27T00:00:00.000Z",
-            characters: [{ id: "character-one", name: "城门检查官", references: [{ id: "reference-task-one-0", url: "/api/generation-log-assets/permanent/candidate.png", source: "generated", label: "AI 候选图", createdAt: "2026-08-27T00:00:00.000Z", generationTaskId: "task-one" }] }],
+            characters: [
+                {
+                    id: "character-one",
+                    name: "城门检查官",
+                    references: [{ id: "reference-task-one-0", url: "/api/generation-log-assets/permanent/candidate.png", source: "generated", label: "AI 候选图", createdAt: "2026-08-27T00:00:00.000Z", generationTaskId: "task-one" }],
+                },
+            ],
             scenes: [],
             props: [],
         });

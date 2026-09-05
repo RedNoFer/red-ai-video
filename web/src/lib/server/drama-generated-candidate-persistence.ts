@@ -28,6 +28,7 @@ export async function persistDramaGeneratedCandidates(input: CandidatePersistenc
     const asset = project[assetKind].find((item) => item.id === input.assetId);
     if (!asset) return 0;
     const existing = asset.references || [];
+    const promoteFirst = existing.length === 0;
     const promptVersion = existing.reduce((max, reference) => Math.max(max, reference.promptVersion || 0), 0);
     const additions: DramaAssetReference[] = [];
     for (const [index, result] of input.results.entries()) {
@@ -40,17 +41,19 @@ export async function persistDramaGeneratedCandidates(input: CandidatePersistenc
             originalName: `${asset.name}.png`,
         });
         if (!stored) continue;
+        const promoted = promoteFirst && index === 0;
+        const createdAt = new Date().toISOString();
         additions.push({
             id,
             url: stored.url,
             remoteUrl: stored.remoteUrl,
             storageKey: stored.storageKey,
             source: "generated",
-            label: input.results.length > 1 ? `AI 候选图 ${index + 1}` : "AI 候选图",
+            label: promoted ? `AI 基准图 · ${asset.name}` : input.results.length > 1 ? `AI 候选图 ${index + 1}` : "AI 候选图",
             width: result.width,
             height: result.height,
-            createdAt: new Date().toISOString(),
-            status: "candidate",
+            createdAt,
+            ...(promoted ? { status: "approved" as const, approvedAt: createdAt, version: 1 } : { status: "candidate" as const }),
             reviewStatus: "pending",
             generationTaskId: input.taskId,
             generationStage: input.generationStage || "initial",
@@ -61,7 +64,15 @@ export async function persistDramaGeneratedCandidates(input: CandidatePersistenc
     if (!additions.length) return 0;
     const nextProject: DramaProject = {
         ...project,
-        [assetKind]: project[assetKind].map((item) => (item.id === input.assetId ? { ...item, references: [...(item.references || []), ...additions] } : item)),
+        [assetKind]: project[assetKind].map((item) =>
+            item.id === input.assetId
+                ? {
+                      ...item,
+                      references: [...(item.references || []), ...additions],
+                      ...(promoteFirst && additions[0] ? { primaryReferenceId: additions[0].id, referenceImageUrl: additions[0].url, referenceStorageKey: additions[0].storageKey } : {}),
+                  }
+                : item,
+        ),
     };
     await updateDramaProjectForUser(input.ownerUserId, input.projectId, { ...nextProject, updatedAt: undefined });
     return additions.length;

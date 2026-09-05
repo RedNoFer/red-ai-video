@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { imageResultsToReferences } from "./drama-assets-panel";
 import { filterAndSortDramaAssets, type DramaAssetLibraryRow } from "./drama-asset-library-utils";
-import { dramaAssetReferences } from "./drama-asset-reference-utils";
+import { dramaAssetReferences, mergeGeneratedReferenceReviews } from "./drama-asset-reference-utils";
 
 describe("drama asset image results", () => {
     it("assigns unique ids when historical references contain duplicates", () => {
@@ -35,6 +35,27 @@ describe("drama asset image results", () => {
         expect(references.map((item) => item.url)).toEqual(["/api/generation-log-assets/first.png", "/api/generation-log-assets/second.png"]);
         expect(references[0]?.remoteUrl).toBe("https://provider.example/first.png");
         expect(references.map((item) => item.label)).toEqual(["AI 候选图 1", "AI 候选图 2"]);
+    });
+
+    it("keeps a server-promoted first reference primary when review metadata arrives later", () => {
+        const merged = mergeGeneratedReferenceReviews(
+            [
+                {
+                    id: "reference-task-first-0",
+                    url: "/api/generation-log-assets/first.png",
+                    source: "generated",
+                    label: "AI 候选图",
+                    status: "approved",
+                    reviewStatus: "pending",
+                    approvedAt: "2026-09-05T00:00:00.000Z",
+                    version: 1,
+                    createdAt: "2026-09-05T00:00:00.000Z",
+                },
+            ],
+            [{ id: "reference-task-first-0", url: "/api/generation-log-assets/first.png", source: "generated", label: "AI 候选图", status: "candidate", reviewStatus: "passed", createdAt: "2026-09-05T00:00:01.000Z" }],
+        );
+
+        expect(merged[0]).toMatchObject({ id: "reference-task-first-0", status: "approved", reviewStatus: "passed", approvedAt: "2026-09-05T00:00:00.000Z", version: 1 });
     });
 
     it("prefers the owned server media URL over a temporary provider URL", () => {
@@ -105,6 +126,10 @@ describe("drama asset image results", () => {
         expect(editor).toContain("referenceOverride || (activeProposal ? primary : undefined)");
         expect(editor).toContain("data-drama-primary-preview");
         expect(editor).toContain("aspectRatio: primary?.width && primary?.height");
+        expect(editor).toContain("实际供应商提示词");
+        expect(editor).toContain("mergeGeneratedReferenceReviews");
+        expect(editor).toContain("await loadProject(project.id, true)");
+        expect(editor).toContain("await saveProjectNow(project.id)");
     });
 
     it("filters derived readiness and usage states without changing project data", () => {

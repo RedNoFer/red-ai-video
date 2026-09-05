@@ -5,8 +5,7 @@ import { Check, FolderInput, ImagePlus, MessageCircle, Send, Sparkles, Trash2, U
 import { nanoid } from "nanoid";
 import { useEffect, useRef, useState } from "react";
 
-import { compileDramaAssetConstraints, compileDramaAssetReferencePrompt, compileDramaAssetRefinementPrompt, DRAMA_CHARACTER_TURNAROUND_SIZE, preflightDramaAssetGeneration } from "@/lib/drama-prompt-compiler";
-import { resolveDramaVisualStyle } from "@/lib/drama-style";
+import { compileDramaAssetReferencePrompt, compileDramaAssetRefinementPrompt, DRAMA_CHARACTER_TURNAROUND_SIZE, preflightDramaAssetGeneration } from "@/lib/drama-prompt-compiler";
 import { approvedAssetReference } from "@/lib/drama-asset-baseline";
 import type { DramaAssetProfile, DramaAssetReference, DramaAssetRefinementMessage, DramaAssetRefinementProposal, DramaCharacter, DramaNamedAsset, DramaProject, DramaVoiceProfile } from "@/lib/drama-project-contract";
 import { imagePreviewUrl } from "@/lib/media-image-url";
@@ -28,7 +27,7 @@ import {
     syncDramaVoicePreview,
 } from "@/services/api/drama-projects";
 import { DRAMA_ASSET_DEFINITIONS, type DramaAssetKind } from "./drama-asset-definitions";
-import { dramaAssetReferences, ensureUniqueDramaAssetReferenceIds, imageResultsToReferences } from "./drama-asset-reference-utils";
+import { dramaAssetReferences, ensureUniqueDramaAssetReferenceIds, imageResultsToReferences, mergeGeneratedReferenceReviews } from "./drama-asset-reference-utils";
 import { dramaAssetAutoCompletionItems, dramaAssetMissingFields } from "./drama-asset-library-utils";
 import { getDramaAssetMissingItems } from "@/lib/drama-asset-completion";
 import { dramaGenerationSize } from "./drama-shot-generation-utils";
@@ -54,6 +53,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
     const addClue = useDramaStore((state) => state.addClue);
     const updateAsset = useDramaStore((state) => state.updateAsset);
     const replaceProject = useDramaStore((state) => state.replaceProject);
+    const loadProject = useDramaStore((state) => state.loadProject);
     const saveProjectNow = useDramaStore((state) => state.saveProjectNow);
     const liveAsset = useDramaStore((state) => state.projects.find((item) => item.id === project.id)?.[kind].find((item) => item.id === assetId));
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -79,6 +79,17 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
     const character = kind === "characters" ? (asset as DramaCharacter | undefined) : undefined;
     const references = asset ? dramaAssetReferences(asset) : [];
     const primary = approvedAssetReference(asset);
+    const draftProfileHasValues = Object.values(draft.profile).some((value) => typeof value === "string" && value.trim());
+    const supplierPrompt =
+        asset && kind !== "clues"
+            ? references.at(-1)?.compiledPrompt?.trim() ||
+              optimizedAssetPrompt.trim() ||
+              compileDramaAssetReferencePrompt(
+                  project,
+                  { ...asset, name: draft.name.trim() || asset.name, description: draft.description.trim() || asset.description, profile: draftProfileHasValues ? draft.profile : asset.profile },
+                  kind === "characters" ? "角色" : kind === "scenes" ? "场景" : "道具",
+              )
+            : "";
     const cloneAvailable = config.channels.some((channel) =>
         Object.values(channel.advancedConfig?.modelConfigs || {}).some(
             (operation) => operation.audioOperation === "voice-clone" && Boolean(operation.cloneSampleField) && /\{\{\s*(?:clone_sample_url|sample_audio_url|sample_url)\s*\}\}/i.test(operation.requestTemplate || ""),
@@ -456,12 +467,17 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                 reviewSummary: review.summary,
                 reviewIssues: review.issues.filter((issue) => !issue.taskId || issue.taskId === reference.id).map(({ category, severity, message: issueMessage, correction }) => ({ category, severity, message: issueMessage, correction })),
             }));
-            const latestAsset = useDramaStore
-                .getState()
-                .projects.find((item) => item.id === project.id)
-                ?.[kind].find((item) => item.id === asset.id);
-            const latestReferences = latestAsset ? dramaAssetReferences(latestAsset) : references;
-            updateAsset(project.id, kind, asset.id, { references: ensureUniqueDramaAssetReferenceIds([...latestReferences, ...reviewedReferences]) }, { markShotsStale: false });
+            // The worker persists the finished media before the poll resolves. Reload
+            // that authoritative project snapshot before merging review metadata so a
+            // stale drawer snapshot cannot overwrite a just-created candidate.
+            const latestProject = await loadProject(project.id, true);
+            const latestAsset = latestProject[kind].find((item) => item.id === asset.id);
+            const latestReferences = latestAsset ? dramaAssetReferences(latestAsset) : [];
+            const mergedReferences = mergeGeneratedReferenceReviews(latestReferences, reviewedReferences);
+            replaceProject(latestProject);
+            updateAsset(project.id, kind, asset.id, { references: mergedReferences }, { markShotsStale: false });
+            const savedProject = await saveProjectNow(project.id);
+            replaceProject(savedProject);
             message.success(`已生成 ${nextReferences.length} 张候选图${review.status === "passed" ? "，可直接使用" : "，图片已保留，请查看审核建议"}`);
             setRefinementProposal(undefined);
             setOptimizedAssetPrompt("");
@@ -760,16 +776,10 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                                 </div>
                                 {asset && kind !== "clues" ? (
                                     <details className="mt-2 rounded-lg border border-border bg-background px-3 py-2 text-xs leading-5">
-                                        <summary className="cursor-pointer font-medium text-foreground">查看本次生成依据</summary>
-                                        <div className="mt-2 grid gap-1 text-muted-foreground">
-                                            <div>· 统一风格：{resolveDramaVisualStyle(project)}</div>
-                                            <div>· 视觉方向：{resolveDramaVisualStyle(project)}</div>
-                                            <div>· 提示词 Skill：短剧资产图片导演（drama-asset-image-director）</div>
-                                            {asset.profile?.designPrompt ? <div>· 历史 designPrompt：不直接发送，只使用已结构化的身份、服装、材质和固定道具字段</div> : null}
-                                            {compileDramaAssetConstraints(project, asset, kind === "characters" ? "角色" : kind === "scenes" ? "场景" : "道具").map((constraint) => (
-                                                <div key={constraint}>· {constraint}</div>
-                                            ))}
-                                        </div>
+                                        <summary className="cursor-pointer font-medium text-foreground">查看实际供应商提示词</summary>
+                                        <pre className="mt-2 max-h-[min(55vh,520px)] overflow-y-auto whitespace-pre-wrap break-words font-sans text-muted-foreground" data-drama-supplier-prompt>
+                                            {supplierPrompt || "暂无可发送的供应商提示词"}
+                                        </pre>
                                     </details>
                                 ) : null}
                             </div>
