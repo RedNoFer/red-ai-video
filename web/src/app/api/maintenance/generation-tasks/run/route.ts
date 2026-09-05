@@ -2,8 +2,10 @@ import { NextResponse } from "next/server";
 
 import { resolveInternalOrigin } from "@/lib/server/internal-origin";
 import { runGenerationTaskRecoveryBatch } from "@/lib/server/generation-task-recovery-service";
+import { runActiveDramaAssetGenerationBatches } from "@/lib/server/drama-asset-generation-batch";
 import { isAuthorizedWorkerRequest, isWorkerTokenConfigured } from "@/lib/server/maintenance-auth";
 import { getInstallStatus } from "@/lib/server/install-status";
+import { getAuthSettings } from "@/lib/auth/store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,7 +23,8 @@ export async function POST(request: Request) {
             limit: 50,
             workerId: workerId || undefined,
         });
-        return NextResponse.json({ code: 0, data: result, msg: result.claimed ? `已处理 ${result.claimed} 个生成任务` : "没有到期的生成任务" });
+        const batchResult = await runActiveDramaAssetGenerationBatches({ origin: resolveInternalOrigin(new URL(request.url).origin), limit: (await getAuthSettings()).dataLifecycle.maintenanceBatchSize });
+        return NextResponse.json({ code: 0, data: { ...result, batches: batchResult }, msg: result.claimed || batchResult.processed ? `已处理 ${result.claimed || 0} 个生成任务及 ${batchResult.processed} 个批量任务` : "没有到期的生成任务" });
     } catch (error) {
         console.error("Generation task recovery batch failed", error);
         return NextResponse.json({ code: 500, data: null, msg: "生成任务恢复失败" }, { status: 500 });

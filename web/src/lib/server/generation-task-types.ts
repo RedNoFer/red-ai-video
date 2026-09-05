@@ -18,6 +18,8 @@ export type GenerationTaskContext = {
     generationSlotId?: string;
     assetKind?: "characters" | "scenes" | "props";
     assetId?: string;
+    batchId?: string;
+    batchItemId?: string;
     generationStage?: "initial" | "refinement";
 };
 

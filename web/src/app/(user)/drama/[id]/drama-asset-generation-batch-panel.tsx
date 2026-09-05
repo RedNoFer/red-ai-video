@@ -27,6 +27,7 @@ export function DramaAssetGenerationBatchPanel({ project, onProjectReload }: { p
     const [completeSettings, setCompleteSettings] = useState(true);
     const [batchesLoading, setBatchesLoading] = useState(false);
     const [progressOpen, setProgressOpen] = useState(false);
+    const [progressError, setProgressError] = useState<string>();
 
     const assets = useMemo(() => kinds.flatMap((kind) => project[kind].map((asset) => ({ kind, asset, key: `${kind}:${asset.id}` }))), [project]);
     const missingKeys = assets.filter(({ asset }) => !dramaAssetReferences(asset).length).map(({ key }) => key);
@@ -48,14 +49,19 @@ export function DramaAssetGenerationBatchPanel({ project, onProjectReload }: { p
                 const latest = items[0];
                 if (!latest) return;
                 return getDramaAssetGenerationBatch(project.id, latest.id)
-                    .catch(() => latest)
+                    .catch((error) => {
+                        setProgressError(error instanceof Error ? error.message : "批量进度读取失败");
+                        return latest;
+                    })
                     .then((detail) => {
                         if (disposed) return;
                         setBatch(detail);
                         setCompleteSettings(detail.executionConfig?.completeSettings !== false);
                     });
             })
-            .catch(() => undefined)
+            .catch((error) => {
+                if (!disposed) setProgressError(error instanceof Error ? error.message : "批量进度读取失败");
+            })
             .finally(() => {
                 if (!disposed) setBatchesLoading(false);
             });
@@ -69,10 +75,11 @@ export function DramaAssetGenerationBatchPanel({ project, onProjectReload }: { p
         const timer = window.setInterval(() => {
             void getDramaAssetGenerationBatch(project.id, batch.id)
                 .then((next) => {
+                    setProgressError(undefined);
                     setBatch(next);
                     onProjectReload();
                 })
-                .catch(() => undefined);
+                .catch((error) => setProgressError(error instanceof Error ? error.message : "批量进度读取失败"));
         }, 5000);
         return () => window.clearInterval(timer);
     }, [active, batch?.id, onProjectReload, project.id]);
@@ -87,6 +94,7 @@ export function DramaAssetGenerationBatchPanel({ project, onProjectReload }: { p
                 { ...config, model: config.imageModel || config.model, imageModel: config.imageModel || config.model, count: "1", completeSettings },
             );
             setBatch(created);
+            setProgressError(undefined);
             setOpen(false);
             setSelected([]);
             message.success(`已提交 ${created.totalCount} 个素材的批量生成任务`);
@@ -102,6 +110,7 @@ export function DramaAssetGenerationBatchPanel({ project, onProjectReload }: { p
         setLoading(true);
         try {
             setBatch(await cancelDramaAssetGenerationBatch(project.id, batch.id));
+            setProgressError(undefined);
             message.success("批量任务已取消");
         } catch (error) {
             message.error(error instanceof Error ? error.message : "取消失败");
@@ -115,6 +124,7 @@ export function DramaAssetGenerationBatchPanel({ project, onProjectReload }: { p
         setLoading(true);
         try {
             setBatch(await retryDramaAssetGenerationBatch(project.id, batch.id, { ...config, model: config.imageModel || config.model, imageModel: config.imageModel || config.model, count: "1", completeSettings }));
+            setProgressError(undefined);
             message.success("失败项已重新排队");
         } catch (error) {
             message.error(error instanceof Error ? error.message : "重试失败");
@@ -145,6 +155,7 @@ export function DramaAssetGenerationBatchPanel({ project, onProjectReload }: { p
                                 percent={percent}
                                 active={Boolean(active)}
                                 loading={loading}
+                                error={progressError}
                                 onCancel={() => void cancel()}
                                 onRetry={() => void retry()}
                                 onClose={() => {
@@ -246,7 +257,25 @@ export function DramaAssetGenerationBatchPanel({ project, onProjectReload }: { p
     );
 }
 
-function BatchProgressDetails({ batch, percent, active, loading, onCancel, onRetry, onClose }: { batch: DramaAssetGenerationBatch; percent: number; active: boolean; loading: boolean; onCancel: () => void; onRetry: () => void; onClose: () => void }) {
+function BatchProgressDetails({
+    batch,
+    percent,
+    active,
+    loading,
+    error,
+    onCancel,
+    onRetry,
+    onClose,
+}: {
+    batch: DramaAssetGenerationBatch;
+    percent: number;
+    active: boolean;
+    loading: boolean;
+    error?: string;
+    onCancel: () => void;
+    onRetry: () => void;
+    onClose: () => void;
+}) {
     return (
         <div className="w-full min-w-0 max-w-full">
             <div className="flex items-center justify-between gap-3">
@@ -279,6 +308,7 @@ function BatchProgressDetails({ batch, percent, active, loading, onCancel, onRet
                 <Progress className="min-w-0 flex-1" percent={percent} showInfo={false} />
                 <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{percent}%</span>
             </div>
+            {error ? <div className="mt-2 rounded border border-rose-200 bg-rose-50 px-2 py-1.5 text-xs text-rose-700 dark:border-rose-900/70 dark:bg-rose-950/30 dark:text-rose-300">进度读取失败：{error}</div> : null}
             <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                 <span>成功 {batch.successCount}</span>
                 <span>失败 {batch.failedCount}</span>

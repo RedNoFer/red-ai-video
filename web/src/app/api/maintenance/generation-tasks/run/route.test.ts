@@ -4,6 +4,8 @@ const mocks = vi.hoisted(() => ({
     configured: vi.fn(),
     authorized: vi.fn(),
     recover: vi.fn(),
+    runBatches: vi.fn(),
+    authSettings: vi.fn(),
     install: vi.fn(),
 }));
 
@@ -12,8 +14,10 @@ vi.mock("@/lib/server/maintenance-auth", () => ({
     isAuthorizedWorkerRequest: mocks.authorized,
 }));
 vi.mock("@/lib/server/generation-task-recovery-service", () => ({ runGenerationTaskRecoveryBatch: mocks.recover }));
+vi.mock("@/lib/server/drama-asset-generation-batch", () => ({ runActiveDramaAssetGenerationBatches: mocks.runBatches }));
 vi.mock("@/lib/server/internal-origin", () => ({ resolveInternalOrigin: vi.fn(() => "http://internal:3000") }));
 vi.mock("@/lib/server/install-status", () => ({ getInstallStatus: mocks.install }));
+vi.mock("@/lib/auth/store", () => ({ getAuthSettings: mocks.authSettings }));
 
 import { maxDuration, POST } from "./route";
 
@@ -24,6 +28,8 @@ describe("POST /api/maintenance/generation-tasks/run", () => {
         mocks.configured.mockReturnValue(true);
         mocks.authorized.mockReturnValue(true);
         mocks.recover.mockResolvedValue({ claimed: 0 });
+        mocks.runBatches.mockResolvedValue({ discovered: 0, processed: 0, failed: 0 });
+        mocks.authSettings.mockResolvedValue({ dataLifecycle: { maintenanceBatchSize: 20 } });
         mocks.install.mockResolvedValue({ database: { schemaReady: true } });
     });
 
@@ -51,6 +57,7 @@ describe("POST /api/maintenance/generation-tasks/run", () => {
 
         expect(response.status).toBe(200);
         expect(mocks.recover).toHaveBeenCalledWith({ origin: "http://internal:3000", publicOrigin: "https://vozeb.example", limit: 50, workerId: "worker-one" });
+        expect(mocks.runBatches).toHaveBeenCalledWith({ origin: "http://internal:3000", limit: 20 });
         expect(await response.json()).toMatchObject({ code: 0, data: { claimed: 2 } });
     });
 

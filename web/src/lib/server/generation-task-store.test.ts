@@ -23,6 +23,7 @@ import {
     getStoredGenerationTask,
     getStoredGenerationTaskByRequest,
     getStoredGenerationTaskByUpstream,
+    getStoredGenerationTaskRecord,
     generationTaskPointsCost,
     listStoredGenerationTaskRecordsByRunIds,
     listStoredGenerationTaskRecords,
@@ -59,6 +60,29 @@ describe("mutateStoredGenerationTask", () => {
                 expiresAt: now + 60_000,
             },
         ];
+    });
+
+    it("restores drama batch context from a PostgreSQL task payload", async () => {
+        vi.mocked(getDatabaseProvider).mockReturnValue("postgres");
+        vi.mocked(postgresQuery).mockResolvedValueOnce({
+            rows: [
+                {
+                    id: "image-one",
+                    user_id: "user-one",
+                    task_type: "image",
+                    status: "running",
+                    payload: { assetKind: "characters", assetId: "rifa", batchId: "batch-one", batchItemId: "item-one" },
+                    created_at: new Date(1),
+                    updated_at: new Date(2),
+                    expires_at: new Date(Date.now() + 60_000),
+                    execution_phase: "polling",
+                    last_upstream_status: "processing",
+                    result_payload: null,
+                },
+            ],
+        } as never);
+
+        await expect(getStoredGenerationTaskRecord("image", "image-one")).resolves.toMatchObject({ assetKind: "characters", assetId: "rifa", batchId: "batch-one", batchItemId: "item-one", executionPhase: "polling" });
     });
 
     it("serializes file mutations so concurrent events are not lost", async () => {

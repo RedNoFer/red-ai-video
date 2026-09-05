@@ -111,4 +111,25 @@ describe("persistDramaGeneratedCandidates", () => {
         expect(mocks.persistMedia).not.toHaveBeenCalled();
         expect(mocks.updateProject).not.toHaveBeenCalled();
     });
+
+    it("keeps a caller-provided reference id stable for batch reconciliation", async () => {
+        await expect(
+            persistDramaGeneratedCandidates({
+                ownerUserId: "user-one",
+                projectId: "drama-one",
+                assetKind: "characters",
+                assetId: "character-one",
+                taskId: "task-batch",
+                referenceId: "batch-reference-item-one",
+                prompt: "角色白底三视图",
+                results: [{ serverUrl: "/api/generation-log-assets/permanent/batch.png" }],
+            }),
+        ).resolves.toBe(1);
+
+        expect(mocks.updateProject).toHaveBeenCalledWith(
+            "user-one",
+            "drama-one",
+            expect.objectContaining({ characters: [expect.objectContaining({ references: [expect.objectContaining({ id: "batch-reference-item-one" })], primaryReferenceId: "batch-reference-item-one" })] }),
+        );
+    });
 });

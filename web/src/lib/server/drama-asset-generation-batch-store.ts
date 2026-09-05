@@ -1,6 +1,6 @@
 import type { DramaAssetGenerationBatch } from "@/lib/drama-project-contract";
 import { readJsonDataFile, writeJsonDataFile } from "@/lib/server/data-adapter";
-import { ensurePostgresSchema, getDatabaseProvider, postgresQuery } from "@/lib/server/database";
+import { ensurePostgresSchema, getDatabaseProvider, postgresQuery, withPostgresTransaction } from "@/lib/server/database";
 
 type BatchRecord = DramaAssetGenerationBatch & { userId: string };
 type BatchDatabase = { version: 1; items: BatchRecord[] };
@@ -9,7 +9,15 @@ const FILE_NAME = "drama-asset-generation-batches.json";
 export async function createDramaAssetGenerationBatch(userId: string, batch: DramaAssetGenerationBatch) {
     if (getDatabaseProvider() === "postgres") {
         await ensurePostgresSchema();
-        await postgresQuery("INSERT INTO drama_asset_generation_batches (id, project_id, user_id, status, batch_json, created_at, updated_at) VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7)", [batch.id, batch.projectId, userId, batch.status, JSON.stringify(batch), new Date(batch.createdAt), new Date(batch.updatedAt)]);
+        await postgresQuery("INSERT INTO drama_asset_generation_batches (id, project_id, user_id, status, batch_json, created_at, updated_at) VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7)", [
+            batch.id,
+            batch.projectId,
+            userId,
+            batch.status,
+            JSON.stringify(batch),
+            new Date(batch.createdAt),
+            new Date(batch.updatedAt),
+        ]);
         return batch;
     }
     await mutate((db) => ({ version: 1, items: [{ ...batch, userId }, ...db.items] }));
@@ -35,18 +43,77 @@ export async function listDramaAssetGenerationBatches(userId: string, projectId:
         const result = await postgresQuery<{ batch_json: DramaAssetGenerationBatch }>("SELECT batch_json FROM drama_asset_generation_batches WHERE project_id = $1 AND user_id = $2 ORDER BY updated_at DESC LIMIT $3", [projectId, userId, safeLimit]);
         return result.rows.map((row) => row.batch_json);
     }
-    return (await readDatabase()).items.filter((batch) => batch.projectId === projectId && batch.userId === userId).sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)).slice(0, safeLimit).map(({ userId: _userId, ...batch }) => batch);
+    return (await readDatabase()).items
+        .filter((batch) => batch.projectId === projectId && batch.userId === userId)
+        .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+        .slice(0, safeLimit)
+        .map(({ userId: _userId, ...batch }) => batch);
+}
+
+export async function listActiveDramaAssetGenerationBatches(limit = 20) {
+    const safeLimit = Math.max(1, Math.min(50, Math.floor(Number(limit) || 20)));
+    if (getDatabaseProvider() === "postgres") {
+        await ensurePostgresSchema();
+        const result = await postgresQuery<{ user_id: string; batch_json: DramaAssetGenerationBatch }>("SELECT user_id, batch_json FROM drama_asset_generation_batches WHERE status IN ('queued', 'running') ORDER BY updated_at ASC LIMIT $1", [safeLimit]);
+        return result.rows.map((row) => ({ userId: row.user_id, batch: row.batch_json }));
+    }
+    return (await readDatabase()).items
+        .filter((item) => item.status === "queued" || item.status === "running")
+        .sort((left, right) => left.updatedAt.localeCompare(right.updatedAt))
+        .slice(0, safeLimit)
+        .map(({ userId, ...batch }) => ({ userId, batch }));
 }
 
 export async function updateDramaAssetGenerationBatch(userId: string, batch: DramaAssetGenerationBatch) {
     if (getDatabaseProvider() === "postgres") {
         await ensurePostgresSchema();
-        const result = await postgresQuery("UPDATE drama_asset_generation_batches SET status = $4, batch_json = $5::jsonb, updated_at = $6 WHERE id = $1 AND project_id = $2 AND user_id = $3 RETURNING id", [batch.id, batch.projectId, userId, batch.status, JSON.stringify(batch), new Date(batch.updatedAt)]);
+        const result = await postgresQuery("UPDATE drama_asset_generation_batches SET status = $4, batch_json = $5::jsonb, updated_at = $6 WHERE id = $1 AND project_id = $2 AND user_id = $3 RETURNING id", [
+            batch.id,
+            batch.projectId,
+            userId,
+            batch.status,
+            JSON.stringify(batch),
+            new Date(batch.updatedAt),
+        ]);
         return result.rows[0] ? batch : null;
     }
     let found = false;
-    await mutate((db) => ({ version: 1, items: db.items.map((item) => item.id === batch.id && item.projectId === batch.projectId && item.userId === userId ? (found = true, { ...batch, userId }) : item) }));
+    await mutate((db) => ({ version: 1, items: db.items.map((item) => (item.id === batch.id && item.projectId === batch.projectId && item.userId === userId ? ((found = true), { ...batch, userId }) : item)) }));
     return found ? batch : null;
+}
+
+export async function mutateDramaAssetGenerationBatch(userId: string, projectId: string, batchId: string, mutator: (batch: DramaAssetGenerationBatch) => DramaAssetGenerationBatch | null) {
+    if (getDatabaseProvider() === "postgres") {
+        await ensurePostgresSchema();
+        return withPostgresTransaction(async (client) => {
+            const current = await client.query<{ batch_json: DramaAssetGenerationBatch }>("SELECT batch_json FROM drama_asset_generation_batches WHERE id = $1 AND project_id = $2 AND user_id = $3 FOR UPDATE", [batchId, projectId, userId]);
+            const batch = current.rows[0]?.batch_json;
+            if (!batch) return null;
+            const next = mutator(batch);
+            if (!next) return null;
+            const updated = await client.query("UPDATE drama_asset_generation_batches SET status = $4, batch_json = $5::jsonb, updated_at = $6 WHERE id = $1 AND project_id = $2 AND user_id = $3 RETURNING id", [
+                batchId,
+                projectId,
+                userId,
+                next.status,
+                JSON.stringify(next),
+                new Date(next.updatedAt),
+            ]);
+            return updated.rows[0] ? next : null;
+        });
+    }
+    let result: DramaAssetGenerationBatch | null = null;
+    await mutate((db) => ({
+        version: 1,
+        items: db.items.map((item) => {
+            if (item.id !== batchId || item.projectId !== projectId || item.userId !== userId) return item;
+            const next = mutator(item);
+            if (!next) return item;
+            result = next;
+            return { ...next, userId };
+        }),
+    }));
+    return result;
 }
 
 function readDatabase() {
@@ -60,6 +127,9 @@ function mutate(mutator: (db: BatchDatabase) => BatchDatabase) {
         await writeJsonDataFile(FILE_NAME, next);
         return next;
     });
-    queue = operation.then(() => undefined, () => undefined);
+    queue = operation.then(
+        () => undefined,
+        () => undefined,
+    );
     return operation;
 }

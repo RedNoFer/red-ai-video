@@ -888,6 +888,8 @@ function normalizeGenerationTaskContext(context: GenerationTaskContext): Generat
         generationSlotId: cleanContextText(context.generationSlotId),
         assetKind: context.assetKind === "characters" || context.assetKind === "scenes" || context.assetKind === "props" ? context.assetKind : undefined,
         assetId: cleanContextText(context.assetId),
+        batchId: cleanContextText(context.batchId),
+        batchItemId: cleanContextText(context.batchItemId),
         generationStage: context.generationStage === "refinement" || context.generationStage === "initial" ? context.generationStage : undefined,
     };
 }
@@ -908,6 +910,8 @@ function preserveTaskContext(previous: StoredGenerationTaskRecord | undefined, n
         generationSlotId: next.generationSlotId || previous?.generationSlotId,
         assetKind: next.assetKind || previous?.assetKind,
         assetId: next.assetId || previous?.assetId,
+        batchId: next.batchId || previous?.batchId,
+        batchItemId: next.batchItemId || previous?.batchItemId,
         generationStage: next.generationStage || previous?.generationStage,
     };
 }
@@ -982,6 +986,11 @@ function mapStoredTaskRecord(row: Record<string, unknown>): StoredGenerationTask
         episodeId: cleanContextText(String(payload.episodeId || "")),
         shotId: cleanContextText(String(payload.shotId || "")),
         estimatedPoints: positiveContextNumber(payload.estimatedPoints),
+        assetKind: payload.assetKind === "characters" || payload.assetKind === "scenes" || payload.assetKind === "props" ? payload.assetKind : undefined,
+        assetId: cleanContextText(String(payload.assetId || "")),
+        batchId: cleanContextText(String(payload.batchId || "")),
+        batchItemId: cleanContextText(String(payload.batchItemId || "")),
+        generationStage: payload.generationStage === "initial" || payload.generationStage === "refinement" ? payload.generationStage : undefined,
         parentTaskId: cleanContextText(String(row.parent_task_id || "")),
         attemptNo: row.attempt_no === null || row.attempt_no === undefined ? undefined : Math.max(0, Math.floor(Number(row.attempt_no) || 0)),
         clientRequestId: cleanContextText(String(row.client_request_id || "")),

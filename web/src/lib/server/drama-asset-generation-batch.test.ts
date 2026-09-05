@@ -7,6 +7,9 @@ import {
     dramaAssetCompletionRequestId,
     isDramaAssetBatchCapacityError,
     runDramaAssetGenerationBatchInBackground,
+    runActiveDramaAssetGenerationBatches,
+    updateDramaAssetGenerationBatchForUser,
+    reconcileDramaAssetGenerationBatchItem,
     withDramaAssetBatchTerminalStatus,
 } from "./drama-asset-generation-batch";
 
@@ -14,6 +17,7 @@ const getBatch = vi.hoisted(() => vi.fn());
 const updateBatch = vi.hoisted(() => vi.fn());
 const fetchInternalApi = vi.hoisted(() => vi.fn());
 const runRecovery = vi.hoisted(() => vi.fn());
+const listActiveBatches = vi.hoisted(() => vi.fn());
 
 vi.mock("./drama-project-service", () => ({
     getDramaProjectForUser: vi.fn().mockResolvedValue({
@@ -31,11 +35,18 @@ vi.mock("./drama-project-service", () => ({
 vi.mock("./drama-asset-generation-batch-store", () => ({
     createDramaAssetGenerationBatch: async (_userId: string, batch: unknown) => batch,
     getDramaAssetGenerationBatch: getBatch,
+    listActiveDramaAssetGenerationBatches: listActiveBatches,
+    mutateDramaAssetGenerationBatch: async (userId: string, projectId: string, batchId: string, mutator: (batch: DramaAssetGenerationBatch) => DramaAssetGenerationBatch) => {
+        const current = await getBatch(userId, projectId, batchId);
+        const next = mutator(current);
+        return updateBatch(userId, next);
+    },
     updateDramaAssetGenerationBatch: updateBatch,
 }));
 vi.mock("./internal-origin", () => ({ fetchInternalApi }));
 vi.mock("./drama-asset-completion-service", () => ({ completeDramaAsset: vi.fn() }));
 vi.mock("./generation-task-recovery-service", () => ({ runGenerationTaskRecoveryBatch: runRecovery }));
+vi.mock("./maintenance-auth", () => ({ maintenanceWorkerHeaders: vi.fn(() => ({ authorization: "Bearer worker", "x-vozeb-pro-worker-user-id": "user-one" })), maintenanceWorkerContext: vi.fn(() => "worker-context:user-one") }));
 
 describe("drama asset generation batches", () => {
     it("uses a new billing identity for each explicit retry attempt", () => {
@@ -108,7 +119,7 @@ describe("drama asset generation batches", () => {
         } as never;
         const prompt = compileDramaAssetBatchItemPrompt(project, { kind: "scenes", assetId: "scene-one", outputType: "reference_image", prompt: "旧版 VS14，中性浅灰背景" });
 
-        expect(prompt).toContain("最终风格锁定：暗黑学院史诗奇幻");
+        expect(prompt).toContain("光色与风格：暗黑学院史诗奇幻");
         expect(prompt).not.toContain("VS14");
         expect(prompt).not.toContain("中性浅灰背景");
     });
@@ -168,8 +179,129 @@ describe("drama asset generation batches", () => {
 
         await runDramaAssetGenerationBatchInBackground({ userId: "user-one", projectId: "project-one", batchId: "batch-recovery", config: current.executionConfig || {}, origin: "http://localhost:3000", cookie: "session=one" });
 
-        expect(JSON.parse(String(fetchInternalApi.mock.calls[0]?.[1]?.body))).toMatchObject({ config: { count: "1", size: "16:9" } });
+        expect(JSON.parse(String(fetchInternalApi.mock.calls.at(-1)?.[1]?.body))).toMatchObject({
+            config: { count: "1", size: "16:9" },
+            context: { surface: "drama", projectId: "project-one", assetKind: "characters", assetId: "rifa", batchId: "batch-recovery", batchItemId: "item-recovery" },
+        });
         expect(runRecovery).toHaveBeenCalledWith({ origin: "http://localhost:3000", cookie: "session=one", limit: 1, taskIds: ["image-task-one"] });
         expect(current.items[0]).toMatchObject({ status: "running", generationTaskId: "image-task-one" });
+    });
+
+    it("reconciles a completed image task into its batch item even when the item was not saved yet", async () => {
+        let current: DramaAssetGenerationBatch = {
+            id: "batch-reconcile",
+            projectId: "project-one",
+            status: "running",
+            totalCount: 1,
+            completedCount: 0,
+            successCount: 0,
+            failedCount: 0,
+            cancelledCount: 0,
+            items: [{ id: "item-one", kind: "characters", outputType: "reference_image", assetId: "rifa", assetName: "Rifa", prompt: "prompt", status: "running", attempt: 1, referenceStatus: "running" }],
+            createdAt: "2026-08-27T00:00:00.000Z",
+            updatedAt: "2026-08-27T00:00:00.000Z",
+        };
+        getBatch.mockImplementation(async () => current);
+        updateBatch.mockImplementation(async (_userId: string, next: typeof current) => {
+            current = next;
+            return current;
+        });
+        const projectService = await import("./drama-project-service");
+        vi.mocked(projectService.getDramaProjectForUser).mockResolvedValueOnce({
+            id: "project-one",
+            title: "短剧",
+            style: "电影感",
+            ratio: "9:16",
+            characters: [{ id: "rifa", name: "Rifa", references: [{ id: "batch-reference-item-one", url: "/api/reference.png", status: "approved" }] }],
+            scenes: [],
+            props: [],
+            clues: [],
+            episodes: [],
+        } as never);
+
+        await reconcileDramaAssetGenerationBatchItem({ userId: "user-one", projectId: "project-one", batchId: "batch-reconcile", batchItemId: "item-one", taskId: "image-task-one", status: "success" });
+
+        expect(current).toMatchObject({ status: "completed", completedCount: 1, successCount: 1, items: [{ status: "success", generationTaskId: "image-task-one", candidateReferenceId: "batch-reference-item-one", referenceStatus: "primary" }] });
+    });
+
+    it("lets the worker wake an active batch without a user session cookie", async () => {
+        const activeBatch: DramaAssetGenerationBatch = {
+            id: "batch-worker",
+            projectId: "project-one",
+            status: "running",
+            totalCount: 1,
+            completedCount: 1,
+            successCount: 1,
+            failedCount: 0,
+            cancelledCount: 0,
+            items: [{ id: "item-worker", kind: "characters", outputType: "reference_image", assetId: "rifa", assetName: "Rifa", prompt: "prompt", status: "success", attempt: 1, referenceStatus: "candidate" }],
+            createdAt: "2026-08-27T00:00:00.000Z",
+            updatedAt: "2026-08-27T00:00:00.000Z",
+        };
+        listActiveBatches.mockResolvedValue([{ userId: "user-one", batch: activeBatch }]);
+        getBatch.mockResolvedValue(activeBatch);
+        fetchInternalApi.mockResolvedValue({ ok: true, arrayBuffer: async () => new ArrayBuffer(0) } as Response);
+
+        await expect(runActiveDramaAssetGenerationBatches({ origin: "http://internal:3000", limit: 1 })).resolves.toEqual({ discovered: 1, processed: 1, failed: 0 });
+        expect(fetchInternalApi).toHaveBeenCalledWith("http://internal:3000/api/drama/projects/project-one/asset-generation-batches/batch-worker", { headers: { authorization: "Bearer worker", "x-vozeb-pro-worker-user-id": "user-one" } });
+    });
+
+    it("does not let a stale queued snapshot erase a running task id", async () => {
+        const current: DramaAssetGenerationBatch = {
+            id: "batch-race",
+            projectId: "project-one",
+            status: "running",
+            totalCount: 1,
+            completedCount: 0,
+            successCount: 0,
+            failedCount: 0,
+            cancelledCount: 0,
+            items: [{ id: "item-race", kind: "characters", outputType: "reference_image", assetId: "rifa", assetName: "Rifa", prompt: "prompt", status: "running", attempt: 1, generationTaskId: "image-task-one", referenceStatus: "running" }],
+            createdAt: "2026-08-27T00:00:00.000Z",
+            updatedAt: "2026-08-27T00:00:00.000Z",
+        };
+        getBatch.mockResolvedValue(current);
+        updateBatch.mockImplementation(async (_userId: string, next: typeof current) => next);
+
+        const saved = await updateDramaAssetGenerationBatchForUser("user-one", { ...current, items: [{ ...current.items[0], status: "queued", generationTaskId: undefined, referenceStatus: "queued" }] });
+
+        expect(saved.items[0]).toMatchObject({ status: "running", generationTaskId: "image-task-one", referenceStatus: "running" });
+    });
+
+    it("does not regress a terminal failure back to running", async () => {
+        const current: DramaAssetGenerationBatch = {
+            id: "batch-error-race",
+            projectId: "project-one",
+            status: "failed",
+            totalCount: 1,
+            completedCount: 1,
+            successCount: 0,
+            failedCount: 1,
+            cancelledCount: 0,
+            items: [
+                {
+                    id: "item-error-race",
+                    kind: "characters",
+                    outputType: "reference_image",
+                    assetId: "rifa",
+                    assetName: "Rifa",
+                    prompt: "prompt",
+                    status: "error",
+                    attempt: 1,
+                    generationTaskId: "image-task-one",
+                    referenceStatus: "error",
+                    error: "上游失败",
+                    completedAt: "2026-08-27T00:01:00.000Z",
+                },
+            ],
+            createdAt: "2026-08-27T00:00:00.000Z",
+            updatedAt: "2026-08-27T00:01:00.000Z",
+        };
+        getBatch.mockResolvedValue(current);
+        updateBatch.mockImplementation(async (_userId: string, next: typeof current) => next);
+
+        const saved = await updateDramaAssetGenerationBatchForUser("user-one", { ...current, items: [{ ...current.items[0], status: "running", referenceStatus: "running" }] });
+
+        expect(saved.items[0]).toMatchObject({ status: "error", generationTaskId: "image-task-one", error: "上游失败" });
     });
 });

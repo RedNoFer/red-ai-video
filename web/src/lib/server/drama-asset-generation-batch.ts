@@ -3,12 +3,13 @@ import { nanoid } from "nanoid";
 import type { DramaAssetGenerationBatch, DramaAssetGenerationBatchItem, DramaNamedAsset, DramaProject } from "@/lib/drama-project-contract";
 import { compileDramaAssetReferencePrompt, DRAMA_CHARACTER_TURNAROUND_SIZE } from "@/lib/drama-prompt-compiler";
 import { getDramaAssetMissingItems } from "@/lib/drama-asset-completion";
-import { createDramaAssetGenerationBatch, getDramaAssetGenerationBatch, listDramaAssetGenerationBatches, updateDramaAssetGenerationBatch } from "@/lib/server/drama-asset-generation-batch-store";
+import { createDramaAssetGenerationBatch, getDramaAssetGenerationBatch, listActiveDramaAssetGenerationBatches, listDramaAssetGenerationBatches, mutateDramaAssetGenerationBatch } from "@/lib/server/drama-asset-generation-batch-store";
 import { getDramaProjectForUser } from "@/lib/server/drama-project-service";
 import { approvedAssetReference } from "@/lib/drama-asset-baseline";
 import { completeDramaAsset } from "@/lib/server/drama-asset-completion-service";
 import { fetchInternalApi } from "@/lib/server/internal-origin";
 import { runGenerationTaskRecoveryBatch } from "@/lib/server/generation-task-recovery-service";
+import { maintenanceWorkerContext, maintenanceWorkerHeaders } from "@/lib/server/maintenance-auth";
 
 export class DramaAssetGenerationBatchError extends Error {
     constructor(
@@ -92,6 +93,28 @@ export async function listDramaAssetGenerationBatchesForUser(userId: string, pro
     return listDramaAssetGenerationBatches(userId, projectId);
 }
 
+export async function runActiveDramaAssetGenerationBatches(input: { origin: string; limit?: number }) {
+    const active = await listActiveDramaAssetGenerationBatches(input.limit);
+    let processed = 0;
+    let failed = 0;
+    for (const record of active) {
+        try {
+            await runDramaAssetGenerationBatchInBackground({ userId: record.userId, projectId: record.batch.projectId, batchId: record.batch.id, origin: input.origin, cookie: "", config: record.batch.executionConfig || {} });
+            const response = await fetchInternalApi(`${input.origin}/api/drama/projects/${encodeURIComponent(record.batch.projectId)}/asset-generation-batches/${encodeURIComponent(record.batch.id)}`, { headers: maintenanceWorkerHeaders(record.userId) });
+            if (!response.ok) {
+                await response.arrayBuffer();
+                throw new Error(`批量进度回写失败（HTTP ${response.status}）`);
+            }
+            await response.arrayBuffer();
+            processed += 1;
+        } catch (error) {
+            failed += 1;
+            console.warn("Drama asset generation batch worker pass failed", { batchId: record.batch.id, error: error instanceof Error ? error.message : error });
+        }
+    }
+    return { discovered: active.length, processed, failed };
+}
+
 export async function getDramaAssetGenerationBatchForUser(userId: string, projectId: string, batchId: string) {
     const batch = await getDramaAssetGenerationBatch(userId, projectId, batchId);
     if (!batch) throw new DramaAssetGenerationBatchError("批量生成任务不存在", 404);
@@ -99,11 +122,48 @@ export async function getDramaAssetGenerationBatchForUser(userId: string, projec
 }
 
 export async function updateDramaAssetGenerationBatchForUser(userId: string, batch: DramaAssetGenerationBatch) {
-    const existing = await getDramaAssetGenerationBatchForUser(userId, batch.projectId, batch.id);
-    const next = recomputeBatch({ ...existing, ...batch, items: batch.items, updatedAt: new Date().toISOString() });
-    const saved = await updateDramaAssetGenerationBatch(userId, next);
+    const saved = await mutateDramaAssetGenerationBatch(userId, batch.projectId, batch.id, (existing) => recomputeBatch({ ...existing, ...batch, items: mergeDramaAssetBatchItems(existing.items, batch.items), updatedAt: new Date().toISOString() }));
     if (!saved) throw new DramaAssetGenerationBatchError("批量生成任务不存在", 404);
     return saved;
+}
+
+export async function reconcileDramaAssetGenerationBatchItem(input: { userId: string; projectId: string; batchId: string; batchItemId: string; taskId: string; status: "success" | "error" | "cancelled"; error?: string }) {
+    const batch = await getDramaAssetGenerationBatchForUser(input.userId, input.projectId, input.batchId);
+    const item = batch.items.find((candidate) => candidate.id === input.batchItemId);
+    if (!item || (item.generationTaskId && item.generationTaskId !== input.taskId) || ["success", "error", "cancelled"].includes(item.status)) return batch;
+    if (input.status !== "success") {
+        return updateDramaAssetGenerationBatchForUser(input.userId, {
+            ...batch,
+            items: batch.items.map((candidate) =>
+                candidate.id === item.id
+                    ? withDramaAssetBatchTerminalStatus({ ...candidate, generationTaskId: input.taskId }, input.status, {
+                          referenceStatus: input.status === "cancelled" ? "error" : "error",
+                          error: input.status === "cancelled" ? candidate.error : input.error || candidate.error || "图片生成失败",
+                          referenceError: input.status === "cancelled" ? candidate.referenceError : input.error || candidate.referenceError || "图片生成失败",
+                      })
+                    : candidate,
+            ),
+        });
+    }
+    const project = await getDramaProjectForUser(input.userId, input.projectId);
+    const asset = project[item.kind].find((candidate) => candidate.id === item.assetId);
+    const referenceId = `batch-reference-${item.id}`;
+    const reference = asset?.references?.find((candidate) => candidate.id === referenceId);
+    if (!reference) return batch;
+    return updateDramaAssetGenerationBatchForUser(input.userId, {
+        ...batch,
+        items: batch.items.map((candidate) =>
+            candidate.id === item.id
+                ? withDramaAssetBatchTerminalStatus(candidate, "success", {
+                      generationTaskId: input.taskId,
+                      candidateReferenceId: referenceId,
+                      referenceStatus: reference.status === "approved" ? "primary" : "candidate",
+                      generationExecutionPhase: "completed",
+                      generationTaskStatus: "success",
+                  })
+                : candidate,
+        ),
+    });
 }
 
 export function runDramaAssetGenerationBatchInBackground(input: { userId: string; projectId: string; batchId: string; config: BatchConfig; origin: string; cookie: string }) {
@@ -154,6 +214,7 @@ async function submitBatchItem(input: { userId: string; projectId: string; batch
     let voiceStatus = item.voiceStatus;
     let planningError: string | undefined;
     let voiceError: string | undefined;
+    const authContext = input.cookie || maintenanceWorkerContext(input.userId);
     if (config.completeSettings !== false) {
         try {
             const completion = await completeDramaAsset({
@@ -163,7 +224,7 @@ async function submitBatchItem(input: { userId: string; projectId: string; batch
                 assetId: item.assetId,
                 requestId: dramaAssetCompletionRequestId(batch.id, item.id, item.attempt),
                 origin: input.origin,
-                cookie: input.cookie,
+                cookie: authContext,
                 config: item.kind === "characters" ? { ...config, count: "1", size: DRAMA_CHARACTER_TURNAROUND_SIZE } : config,
                 skipReference: true,
                 skipVoice: true,
@@ -188,16 +249,17 @@ async function submitBatchItem(input: { userId: string; projectId: string; batch
     if (config.completeMissingOnly === true && primary) return withDramaAssetBatchTerminalStatus(common, "success", { referenceStatus: "primary" as const });
     const references = primary?.url ? [{ id: primary.id, name: primary.label, type: "image/png", dataUrl: primary.url, url: primary.url }] : [];
     try {
+        const authHeaders = input.cookie ? { cookie: input.cookie } : maintenanceWorkerHeaders(input.userId);
         const response = await fetchInternalApi(`${input.origin}/api/image-tasks`, {
             method: "POST",
-            headers: { "Content-Type": "application/json", cookie: input.cookie, "X-VOZEB-PRO-Client-Request-Id": `${batch.id}:${item.id}:${item.attempt}` },
+            headers: { "Content-Type": "application/json", ...authHeaders, "X-VOZEB-PRO-Client-Request-Id": `${batch.id}:${item.id}:${item.attempt}` },
             body: JSON.stringify({
                 config: item.kind === "characters" ? { ...config, count: "1", size: DRAMA_CHARACTER_TURNAROUND_SIZE } : config,
                 prompt: compileDramaAssetBatchItemPrompt(project, item),
                 references,
                 source: "drama",
                 title: `${project.title} · ${item.assetName}批量候选`,
-                context: { surface: "drama", projectId: input.projectId, clientRequestId: `${batch.id}:${item.id}:${item.attempt}` },
+                context: { surface: "drama", projectId: input.projectId, assetKind: item.kind, assetId: item.assetId, batchId: batch.id, batchItemId: item.id, clientRequestId: `${batch.id}:${item.id}:${item.attempt}` },
             }),
         });
         const payload = (await response.json().catch(() => ({}))) as { task?: { id?: string }; error?: string };
@@ -209,7 +271,7 @@ async function submitBatchItem(input: { userId: string; projectId: string; batch
             return { ...common, referenceStatus: "error" as const, referenceError: error, status: "error" as const, error, completedAt: new Date().toISOString() };
         }
         await runGenerationTaskRecoveryBatch({ origin: input.origin, cookie: input.cookie, limit: 1, taskIds: [payload.task.id] }).catch(() => undefined);
-        return { ...common, referenceStatus: "running" as const, status: "running" as const, generationTaskId: payload.task.id, startedAt: item.startedAt || new Date().toISOString() };
+        return { ...common, referenceStatus: "running" as const, status: "running" as const, generationTaskId: payload.task.id, candidateReferenceId: `batch-reference-${item.id}`, startedAt: item.startedAt || new Date().toISOString() };
     } catch (error) {
         const message = error instanceof Error ? error.message : "图片任务创建失败";
         return { ...common, status: "error" as const, error: message, completedAt: new Date().toISOString() };
@@ -224,6 +286,23 @@ function recomputeBatch(batch: DramaAssetGenerationBatch): DramaAssetGenerationB
     const active = batch.items.find((item) => item.status === "running");
     const status = completed.length < batch.totalCount ? (active ? "running" : "queued") : successCount === batch.totalCount ? "completed" : successCount ? "partial_failed" : cancelledCount === batch.totalCount ? "cancelled" : "failed";
     return { ...batch, status, completedCount: completed.length, successCount, failedCount, cancelledCount, currentItemId: active?.id };
+}
+
+function mergeDramaAssetBatchItems(existing: DramaAssetGenerationBatchItem[], incoming: DramaAssetGenerationBatchItem[]) {
+    const currentById = new Map(existing.map((item) => [item.id, item]));
+    return incoming.map((candidate) => {
+        const current = currentById.get(candidate.id);
+        if (!current) return candidate;
+        const candidateAttempt = candidate.attempt || 0;
+        const currentAttempt = current.attempt || 0;
+        if (candidateAttempt < currentAttempt) return current;
+        if (["success", "error", "cancelled"].includes(current.status) && !["success", "error", "cancelled"].includes(candidate.status) && candidateAttempt <= currentAttempt) {
+            const explicitRetry = candidate.status === "queued" && !candidate.generationTaskId && candidate.completedAt === undefined;
+            if (!explicitRetry) return current;
+        }
+        if (current.generationTaskId && !candidate.generationTaskId && candidateAttempt <= currentAttempt) return current;
+        return candidate;
+    });
 }
 
 export function withDramaAssetBatchTerminalStatus(item: DramaAssetGenerationBatchItem, status: "success" | "error" | "cancelled", patch: Partial<DramaAssetGenerationBatchItem> = {}): DramaAssetGenerationBatchItem {

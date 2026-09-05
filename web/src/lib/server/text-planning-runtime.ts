@@ -2,6 +2,7 @@ import type { SystemModelChannel } from "@/lib/auth/store";
 import { recordChannelRuntimeFailure, recordChannelRuntimeSuccess } from "@/lib/server/channel-runtime-health";
 import { fetchInternalApi } from "@/lib/server/internal-origin";
 import { resolveModelRequestTimeoutMs } from "@/lib/server/model-request-policy";
+import { maintenanceWorkerContextHeaders } from "@/lib/server/maintenance-auth";
 import { buildProviderRequest, isProviderBusinessError, readProviderError, readProviderString } from "@/lib/server/provider-task-config";
 import { strictJsonObjectText } from "@/lib/server/structured-model-output";
 import { resolveTextProtocol } from "@/lib/server/text-protocol-resolver";
@@ -175,7 +176,9 @@ async function requestTextProtocol(input: Pick<StructuredTextRequest, "origin" |
     const base = `${input.origin}/api/ai/system/${encodeURIComponent(input.candidate.channelId)}`;
     const headers = new Headers(input.headers);
     headers.set("content-type", "application/json");
-    if (input.cookie) headers.set("cookie", input.cookie);
+    const workerHeaders = maintenanceWorkerContextHeaders(input.cookie || "");
+    if (workerHeaders) Object.entries(workerHeaders).forEach(([key, value]) => headers.set(key, value));
+    else if (input.cookie) headers.set("cookie", input.cookie);
     scopeProtocolIdempotency(headers, request.protocol);
     const timeoutSignal = AbortSignal.timeout(resolveModelRequestTimeoutMs(input.candidate, "text"));
     const signal = input.signal ? AbortSignal.any([input.signal, timeoutSignal]) : timeoutSignal;

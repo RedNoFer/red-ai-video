@@ -171,6 +171,10 @@ export async function markImageTaskFailed(task: ImageTask, error: string) {
     await updateImageTask(current.id, { attempts, candidateConfigs: [], attemptNo: attempts.at(-1)?.attemptNo });
     const failed = await transitionImageTask(current, ["pending", "running"], { status: "error", error: error.slice(0, 500), retryable: true });
     await writeImageGenerationLog({ ...current, retryable: true }, "failed", "", Date.now() - current.createdAt, error).catch((logError) => console.error("Image generation failure log write failed", logError));
+    if (failed?.surface === "drama" && failed.projectId && failed.batchId && failed.batchItemId)
+        await reconcileDramaBatchItem({ userId: failed.userId, projectId: failed.projectId, batchId: failed.batchId, batchItemId: failed.batchItemId, taskId: failed.id, status: "error", error }).catch((reconcileError) =>
+            console.error("Drama batch failure reconciliation failed", reconcileError),
+        );
     return failed;
 }
 
@@ -191,6 +195,10 @@ async function handleImageProviderResult(task: ImageTask, result: ImageTaskRunRe
             lastUpstreamStatus: "query_contract_missing",
             resultPayload: { reviewReason: result.needsReview.reason.slice(0, 500) },
         });
+        if (task.surface === "drama" && task.projectId && task.batchId && task.batchItemId)
+            await reconcileDramaBatchItem({ userId: task.userId, projectId: task.projectId, batchId: task.batchId, batchItemId: task.batchItemId, taskId: task.id, status: "error", error: result.needsReview.reason }).catch((error) =>
+                console.error("Drama batch review reconciliation failed", error),
+            );
         return { state: "needs_review", reason: result.needsReview.reason, status: "query_contract_missing" };
     }
     if (result.pending) {
@@ -313,10 +321,15 @@ async function completeImageResult(task: ImageTask, result: ImageTaskRunResult, 
             projectId: finalized.projectId,
             ...dramaAssetTarget,
             taskId: finalized.id,
+            referenceId: finalized.batchItemId ? `batch-reference-${finalized.batchItemId}` : undefined,
             prompt: finalized.prompt,
             generationStage: finalized.generationStage,
             results: finalResults,
         }).catch((error) => console.error("Drama candidate reference persistence failed", error));
+    if (finalized.surface === "drama" && finalized.projectId && finalized.batchId && finalized.batchItemId)
+        await reconcileDramaBatchItem({ userId: finalized.userId, projectId: finalized.projectId, batchId: finalized.batchId, batchItemId: finalized.batchItemId, taskId: finalized.id, status: "success" }).catch((error) =>
+            console.error("Drama batch item reconciliation failed", error),
+        );
     return finalized;
 }
 
@@ -326,6 +339,11 @@ function resolveDramaAssetTarget(task: ImageTask) {
     if (!legacy || legacy[1] !== task.projectId) return null;
     const assetId = legacy[2];
     return { assetId };
+}
+
+async function reconcileDramaBatchItem(input: Parameters<typeof import("@/lib/server/drama-asset-generation-batch").reconcileDramaAssetGenerationBatchItem>[0]) {
+    const { reconcileDramaAssetGenerationBatchItem } = await import("@/lib/server/drama-asset-generation-batch");
+    return reconcileDramaAssetGenerationBatchItem(input);
 }
 
 function imageTaskMediaResults(result: ImageTaskResult): ImageTaskMediaResult[] {

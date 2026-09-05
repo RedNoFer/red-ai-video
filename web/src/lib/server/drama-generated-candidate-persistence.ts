@@ -18,6 +18,7 @@ type CandidatePersistenceInput = {
     taskId: string;
     prompt: string;
     generationStage?: DramaAssetReference["generationStage"];
+    referenceId?: string;
     results: GeneratedResult[];
 };
 
@@ -32,7 +33,7 @@ export async function persistDramaGeneratedCandidates(input: CandidatePersistenc
     const promptVersion = existing.reduce((max, reference) => Math.max(max, reference.promptVersion || 0), 0);
     const additions: DramaAssetReference[] = [];
     for (const [index, result] of input.results.entries()) {
-        const id = `reference-${input.taskId}-${index}`;
+        const id = index === 0 && input.referenceId?.trim() ? input.referenceId.trim() : `reference-${input.taskId}-${index}`;
         if (existing.some((reference) => reference.id === id || reference.generationTaskId === input.taskId)) continue;
         const stored = await persistDramaGeneratedImageReference(result, {
             ownerUserId: input.ownerUserId,

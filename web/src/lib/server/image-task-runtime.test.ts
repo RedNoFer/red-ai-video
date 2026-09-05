@@ -17,8 +17,10 @@ const mocks = vi.hoisted(() => ({
     mediaHeaders: vi.fn(() => ({ "x-media-auth": "signed" })),
     getSettings: vi.fn(),
     register: vi.fn(),
+    persistCandidates: vi.fn(),
     refund: vi.fn(),
     QueryContractError: class extends Error {},
+    reconcileBatchItem: vi.fn(),
 }));
 
 vi.mock("@/app/api/image-tasks/image-task-custom", () => ({ runCustomImageTask: mocks.runCustom, pollCustomImageTask: mocks.pollCustom }));
@@ -36,6 +38,8 @@ vi.mock("@/app/api/image-tasks/image-task-support", () => ({
 vi.mock("@/app/api/image-tasks/image-task-runner", () => ({ stableMediaUrl: vi.fn((value: string) => (value && !value.startsWith("data:") ? value : "")), writeImageGenerationLog: mocks.writeLog }));
 vi.mock("@/lib/auth/store", () => ({ getAuthSettings: mocks.getSettings, refundUserPoints: mocks.refund }));
 vi.mock("@/lib/server/creative-runtime-service", () => ({ registerGenerationTaskAssetsForUser: mocks.register }));
+vi.mock("@/lib/server/drama-generated-candidate-persistence", () => ({ persistDramaGeneratedCandidates: mocks.persistCandidates }));
+vi.mock("@/lib/server/drama-asset-generation-batch", () => ({ reconcileDramaAssetGenerationBatchItem: mocks.reconcileBatchItem }));
 vi.mock("@/lib/server/generation-task-scheduler", () => ({ scheduleGenerationTask: mocks.schedule }));
 vi.mock("@/lib/server/image-task-store", () => ({
     getImageTask: mocks.getTask,
@@ -69,6 +73,8 @@ describe("image task runtime submission safety", () => {
         mocks.getSettings.mockResolvedValue({ generationPointMultipliers: { imageQuality: {} } });
         mocks.inlineResult.mockImplementation(async (dataUrl: string) => ({ dataUrl }));
         mocks.register.mockResolvedValue(undefined);
+        mocks.persistCandidates.mockResolvedValue(0);
+        mocks.reconcileBatchItem.mockResolvedValue(undefined);
     });
 
     it("switches candidates only after an explicit safe rejection", async () => {
@@ -143,6 +149,7 @@ describe("image task runtime submission safety", () => {
     });
 
     it("keeps an OpenAI id-only response for manual review without trying another channel", async () => {
+        state = { ...state, surface: "drama", projectId: "project-one", assetKind: "characters", assetId: "rifa", batchId: "batch-one", batchItemId: "item-one" };
         state.config = { ...state.config, advancedConfig: { ...emptyAdvancedConfig(), protocol: "openai" } };
         mocks.runOpenAi.mockResolvedValueOnce({
             dataUrl: "",
@@ -170,6 +177,15 @@ describe("image task runtime submission safety", () => {
             }),
         );
         expect(mocks.refund).not.toHaveBeenCalled();
+        expect(mocks.reconcileBatchItem).toHaveBeenCalledWith({
+            userId: "user-one",
+            projectId: "project-one",
+            batchId: "batch-one",
+            batchItemId: "item-one",
+            taskId: "image-one",
+            status: "error",
+            error: "OpenAI 图片接口未返回图片，且渠道没有声明异步查询路径",
+        });
     });
 
     it("fails and refunds a corrupt synchronous image result without manual review", async () => {
@@ -240,6 +256,22 @@ describe("image task runtime submission safety", () => {
                 ],
             }),
         );
+    });
+
+    it("propagates batch asset context and reconciles the batch after image persistence", async () => {
+        state = { ...imageTask(), surface: "drama", projectId: "project-one", assetKind: "characters", assetId: "rifa", batchId: "batch-one", batchItemId: "item-one" };
+        state.config = { ...state.config, advancedConfig: { ...emptyAdvancedConfig(), protocol: "openai" } };
+        state.candidateConfigs = [];
+        mocks.runOpenAi.mockResolvedValueOnce({ dataUrl: "https://provider.example/batch.png", remoteUrl: "https://provider.example/batch.png" });
+        mocks.directResult.mockImplementation((url?: string) => (url ? { dataUrl: url, remoteUrl: url } : null));
+        mocks.writeLog.mockResolvedValueOnce({ assets: [{ type: "image", url: "/api/generation-log-assets/batch.png", serverUrl: "/api/generation-log-assets/batch.png" }] });
+
+        const step = await createImageTaskUpstreamStep(state, "http://internal", "https://public.example");
+        if (step.state !== "result_ready") throw new Error("image result was not ready");
+        await persistImageTaskResult(state, "http://internal", step.resultUrl);
+
+        expect(mocks.persistCandidates).toHaveBeenCalledWith(expect.objectContaining({ assetKind: "characters", assetId: "rifa", referenceId: "batch-reference-item-one", taskId: "image-one" }));
+        expect(mocks.reconcileBatchItem).toHaveBeenCalledWith({ userId: "user-one", projectId: "project-one", batchId: "batch-one", batchItemId: "item-one", taskId: "image-one", status: "success" });
     });
 });
 
