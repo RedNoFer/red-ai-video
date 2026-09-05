@@ -282,7 +282,9 @@ export async function createUpstream(
     const { firstFrame, lastFrame, keyframes } = videoFrameReferences(references);
     const images = referenceUrls([...keyframes, ...regularReferences.filter((reference) => reference.type === "image")], "image");
     const bumingSeedance = channel.advancedConfig?.protocol === "buming-seedance";
-    const bumingImages = referenceUrls([...keyframes, ...(firstFrame ? [firstFrame] : []), ...(lastFrame ? [lastFrame] : []), ...regularReferences.filter((reference) => reference.type === "image")], "image");
+    // Keep the provider image array aligned with the public reference order:
+    // an inherited first frame is followed by keyframes 1..N, then regular refs.
+    const bumingImages = referenceUrls([...(firstFrame ? [firstFrame] : []), ...(lastFrame ? [lastFrame] : []), ...keyframes, ...regularReferences.filter((reference) => reference.type === "image")], "image");
     const videos = referenceUrls(regularReferences, "video");
     const audios = referenceUrls(regularReferences, "audio");
     const requestImage = images[0] || "";

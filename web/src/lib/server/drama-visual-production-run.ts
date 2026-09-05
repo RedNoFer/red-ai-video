@@ -75,7 +75,7 @@ export function buildDramaVisualProductionRun(project: DramaProject, episode: Dr
                     .digest("hex");
                 const explicitlySelected = !selectedFrameIds.size || selectedFrameIds.has(beat.id);
                 const selectedForRegeneration = selectedFrameIds.size > 0 && selectedFrameIds.has(beat.id);
-                const existingReady = Boolean(existing?.mediaUrl && existing.status === "success" && (existing.source === "upload" || existing.inputHash === inputHash) && !parameters.regenerateAll && !selectedForRegeneration);
+                const existingReady = Boolean(existing?.mediaUrl && existing.status === "success" && existing.continuityStatus === "passed" && (existing.source === "upload" || existing.inputHash === inputHash) && !parameters.regenerateAll && !selectedForRegeneration);
                 const previousStepId = previousBeat ? `frame-${shot.id}-${previousBeat.id}` : undefined;
                 const previousStep = previousStepId ? steps.find((step) => step.id === previousStepId) : undefined;
                 const inheritedDependencies = previousStepId && previousStep?.status !== "stale" ? [previousStepId] : [];
@@ -136,7 +136,7 @@ export function buildDramaVisualProductionRun(project: DramaProject, episode: Dr
         }
     }
 
-    const blockers = visualPlanBlockers(project, episode, selectedShots);
+    const blockers = visualPlanBlockers(project, episode, selectedShots, project.productionBible?.productionPlan?.video.frameCount);
     const now = new Date().toISOString();
     const planRevision = createHash("sha256")
         .update(
@@ -210,8 +210,9 @@ export function unlockDramaVisualSteps(run: DramaProductionRun) {
 }
 
 export function compileDramaFrameBeatPrompt(project: DramaProject, episode: DramaEpisode, shot: DramaEpisode["shots"][number], beat: NonNullable<DramaEpisode["shots"][number]["framePlan"]>["frames"][number]) {
-    const base = compileDramaFrameSupplierPrompt(project, episode, shot, beat);
-    return base + `\n帧：P${String(shot.order).padStart(2, "0")}-F${String(beat.sequenceIndex).padStart(2, "0")}（${beat.startSecond}-${beat.endSecond}s）`;
+    // Frame identity and timing belong to the production step metadata, not
+    // the static image prompt sent to the image provider.
+    return compileDramaFrameSupplierPrompt(project, episode, shot, beat);
 }
 
 function selectedEpisodeShots(episode: DramaEpisode, shotIds?: string[]) {
@@ -268,7 +269,7 @@ function visualAssets(project: DramaProject, shots: DramaEpisode["shots"]) {
     ).filter(({ asset }) => ids.has(asset.id));
 }
 
-function visualPlanBlockers(project: DramaProject, episode: DramaEpisode, shots: DramaEpisode["shots"]) {
+function visualPlanBlockers(project: DramaProject, episode: DramaEpisode, shots: DramaEpisode["shots"], targetFrameCount?: number) {
     const blockers: string[] = [];
     if (!shots.length) blockers.push("当前范围还没有可生成的镜头");
     for (const shot of shots) {
@@ -276,6 +277,7 @@ function visualPlanBlockers(project: DramaProject, episode: DramaEpisode, shots:
         if (shot.sceneId && !project.scenes.some((asset) => asset.id === shot.sceneId)) blockers.push(`${shot.title}引用了不存在的场景`);
         if (shot.characterIds.some((id) => !project.characters.some((asset) => asset.id === id))) blockers.push(`${shot.title}引用了不存在的角色`);
         if (shot.propIds.some((id) => !project.props.some((asset) => asset.id === id))) blockers.push(`${shot.title}引用了不存在的道具`);
+        if (shot.storyboardFrameMode === "all_frames" && targetFrameCount && shot.framePlan?.frames.length !== targetFrameCount) blockers.push(`${shot.title}当前有 ${shot.framePlan?.frames.length || 0} 个关键帧，生产方案要求 ${targetFrameCount} 个`);
         if (shot.framePlan?.start.source === "previous_accepted_actual_tail" && !episode.continuityEdges?.some((edge) => edge.toShotId === shot.id && edge.inheritActualEndFrame)) blockers.push(`${shot.title}声明继承实际尾帧，但没有有效的连续性边来源`);
     }
     return Array.from(new Set(blockers));

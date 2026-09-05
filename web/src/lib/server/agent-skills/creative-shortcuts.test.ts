@@ -22,7 +22,7 @@ describe("creative shortcut skills", () => {
     });
 
     it("keeps the extracted timeline and repair rules in image motion", () => {
-        expect(IMAGE_MOTION_SKILL.instructions).toContain("静态锚点、可见起点、触发");
+        expect(IMAGE_MOTION_SKILL.instructions).toContain("动态意图、全局设定、起始可见状态、时间段动作");
         expect(IMAGE_MOTION_SKILL.instructions).toContain("失败重试只修改一个已定位变量");
         expect(IMAGE_MOTION_SKILL.instructions).toContain("座位、支撑面、通道、门窗和遮挡");
     });
@@ -86,7 +86,7 @@ describe("creative shortcut skills", () => {
         expect(SEEDANCE_VIDEO_PROMPT_LAYOUT).toContain("全局设定");
         expect(SEEDANCE_VIDEO_PROMPT_LAYOUT).toContain("时间段动作");
         expect(SEEDANCE_VIDEO_PROMPT_LAYOUT).toContain("起点、动作与触发、可见衔接、终点");
-        expect(SEEDANCE_VIDEO_PROMPT_LAYOUT).toContain("公开 videoPrompt 必须由 Agent 直接完整写出");
+        expect(SEEDANCE_VIDEO_PROMPT_LAYOUT).toContain("公开 videoPrompt 只使用本布局字段");
         expect(SEEDANCE_VIDEO_PROMPT_LAYOUT).not.toContain("阶段节拍：只有多事件");
         expect(SEEDANCE_VIDEO_PROMPT_LAYOUT).toContain("视觉风格与光色");
         expect(SEEDANCE_VIDEO_PROMPT_LAYOUT).toContain("每个非空字段必须独立一行");

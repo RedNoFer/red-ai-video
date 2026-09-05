@@ -15,6 +15,7 @@ export function preflightDramaProduction(project: DramaProject, episode: DramaEp
     if (!project.seriesBible) issues.push(blocking("SERIES_BIBLE", "项目缺少已锁定的系列圣经，不能跨集生产"));
     const plan = project.productionBible?.productionPlan;
     const targetShotDuration = plan?.video.shotDuration;
+    const targetFrameCount = plan?.video.frameCount;
     if (plan) {
         // The executable video model is selected by the backend channel binding at task creation.
         // Do not gate production on the stale model label persisted in the editable plan.
@@ -28,7 +29,7 @@ export function preflightDramaProduction(project: DramaProject, episode: DramaEp
     const shotById = new Map(episode.shots.map((shot) => [shot.id, shot]));
     const edgeByTo = new Map((episode.continuityEdges || []).map((edge) => [edge.toShotId, edge]));
 
-    for (const shot of episode.shots) if (selected.has(shot.id)) checkShot(shot, episode.code || episode.id, project, characters, scenes, props, clues, edgeByTo, shotById, issues, targetShotDuration);
+    for (const shot of episode.shots) if (selected.has(shot.id)) checkShot(shot, episode.code || episode.id, project, characters, scenes, props, clues, edgeByTo, shotById, issues, targetShotDuration, targetFrameCount);
     for (const edge of episode.continuityEdges || []) {
         if (!selected.has(edge.toShotId)) continue;
         const from = shotById.get(edge.fromShotId);
@@ -84,6 +85,7 @@ function checkShot(
     shotById: Map<string, DramaShot>,
     issues: DramaProductionPreflightIssue[],
     targetShotDuration?: 15 | 20 | 30,
+    targetFrameCount?: number,
 ) {
     const label = shot.code || shot.title;
     if (!shot.imagePrompt.trim() || !shot.videoPrompt.trim()) issues.push(blocking("PROMPT_MISSING", `${label}缺少图像或视频Prompt`, { shotId: shot.id }));
@@ -159,11 +161,20 @@ function checkShot(
         if (shot.storyboardFrameMode === "all_frames" || shot.fieldOrigins?.framePlan === "package") {
             try {
                 normalizeDramaFrameBeats(shot.framePlan.frames, shot.duration);
+                if (shot.storyboardFrameMode === "all_frames" && shot.framePlan.frames.length < 2)
+                    issues.push(blocking("FRAME_COUNT_MIN", `${label}的 all_frames 至少需要 2 个有序关键帧`, { shotId: shot.id, correction: "补充至少一张具有真实可见变化的关键帧" }));
+                if (shot.storyboardFrameMode === "all_frames" && targetFrameCount && shot.framePlan.frames.length !== targetFrameCount)
+                    issues.push(blocking("FRAME_COUNT_MISMATCH", `${label}包含 ${shot.framePlan.frames.length} 个关键帧，但当前生产方案要求 ${targetFrameCount} 个`, { shotId: shot.id, correction: `按当前生产方案重新生成 ${targetFrameCount} 个连续关键帧` }));
                 shot.framePlan.frames.forEach((frame, index, frames) => {
                     const visualError = validateDramaFrameVisualContent(frame.imagePrompt, frame.actionPrompt);
                     if (visualError) issues.push(blocking("FRAME_VISUAL_CONTENT", `${label}第${index + 1}帧${visualError}`, { shotId: shot.id }));
                     if (index > 0 && dramaFrameVisualSubject(frame.imagePrompt, frame.actionPrompt) === dramaFrameVisualSubject(frames[index - 1].imagePrompt, frames[index - 1].actionPrompt))
                         issues.push(blocking("FRAME_VISUAL_DUPLICATE", `${label}第${index + 1}帧与上一帧的可见画面没有变化`, { shotId: shot.id, correction: "补充当前帧新的姿态、道具状态、表情或环境变化" }));
+                    if (shot.storyboardFrameMode === "all_frames") {
+                        const stored = shot.storyboardFrames?.find((candidate) => candidate.id === frame.id || candidate.sequenceIndex === frame.sequenceIndex);
+                        if (!stored?.mediaUrl?.trim() || stored.status !== "success" || stored.continuityStatus !== "passed")
+                            issues.push(blocking("FRAME_ASSET_NOT_ACCEPTED", `${label}第${index + 1}帧（${frame.id}）尚未生成并验收通过，不能提交有序关键帧视频`, { shotId: shot.id, correction: "先生成当前帧真实图片并完成连续性人工验收" }));
+                    }
                 });
             } catch (error) {
                 issues.push(blocking("FRAME_PLAN_INVALID", `${label}逐帧计划无效：${error instanceof Error ? error.message : "时间轴必须连续覆盖镜头时长"}`, { shotId: shot.id }));

@@ -64,7 +64,7 @@ describe("drama production run planning", () => {
         expect(videos[0].prompt).toBe("视频");
     });
 
-    it("submits only checked intermediate frames while retaining fixed assets", () => {
+    it("keeps every ordered keyframe while retaining fixed assets", () => {
         const project = fixture();
         const shot = project.episodes[0].shots[0];
         shot.storyboardFrameMode = "all_frames";
@@ -79,10 +79,35 @@ describe("drama production run planning", () => {
         const run = buildDramaProductionRun(project, { ...project.episodes[0], shots: [shot], continuityEdges: [] }, { imageModel: "image", videoModel: "video", referenceSelections: { [shot.id]: ["f1", "f3", "f5"] } });
         const video = run.steps.find((step) => step.type === "video")!;
 
-        expect(video.referenceImageUrls).toEqual(["/f1.png", "/f3.png", "/f5.png"]);
-        expect(video.referenceBindingsSnapshot?.filter((binding) => binding.role === "keyframe").map((binding) => binding.frameId)).toEqual(["f1", "f3", "f5"]);
+        expect(video.referenceImageUrls).toEqual(["/f1.png", "/f2.png", "/f3.png", "/f4.png", "/f5.png"]);
+        expect(video.referenceBindingsSnapshot?.filter((binding) => binding.role === "keyframe").map((binding) => binding.frameId)).toEqual(["f1", "f2", "f3", "f4", "f5"]);
         expect(video.referenceAssetIds).toEqual(expect.arrayContaining(shot.characterIds));
         expect(video.prompt).not.toContain("P01-F02");
+    });
+
+    it("keeps every all-frames node as a blocking dependency even when only some references are selected", () => {
+        const project = fixture();
+        const shot = project.episodes[0].shots[0];
+        shot.storyboardFrameMode = "all_frames";
+        shot.duration = 6;
+        shot.framePlan = {
+            start: { source: "independent" },
+            end: { required: true },
+            frames: [
+                { id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 2, actionPrompt: "动作1", imagePrompt: "人物抬头" },
+                { id: "f2", sequenceIndex: 2, startSecond: 2, endSecond: 4, actionPrompt: "动作2", imagePrompt: "人物握紧断剑" },
+                { id: "f3", sequenceIndex: 3, startSecond: 4, endSecond: 6, actionPrompt: "动作3", imagePrompt: "人物退到门边" },
+            ],
+        };
+        shot.storyboardFrames = shot.framePlan.frames.map((frame) => ({ id: frame.id, sequenceIndex: frame.sequenceIndex, mediaUrl: `/${frame.id}.png`, source: "upload", status: "success", continuityStatus: "passed" }));
+        shot.storyboardFrames[1] = { ...shot.storyboardFrames[1], continuityStatus: "needs_review" };
+
+        const run = buildDramaProductionRun(project, { ...project.episodes[0], shots: [shot], continuityEdges: [] }, { imageModel: "image", videoModel: "video", referenceSelections: { [shot.id]: ["f1", "f3"] } });
+        const video = run.steps.find((step) => step.type === "video");
+
+        expect(run.steps.filter((step) => step.type === "keyframe")).toHaveLength(3);
+        expect(video?.dependsOn).toEqual(expect.arrayContaining(["frame-shot-one-f1", "frame-shot-one-f2", "frame-shot-one-f3"]));
+        expect(video?.status).toBe("blocked");
     });
 
     it("uses the latest marked execution prompt when locking a production run", () => {

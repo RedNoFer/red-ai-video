@@ -31,7 +31,9 @@ export { acceptsMediaReference, mergeTaskReferences, requestedTextLimit, reviewC
 class AgentChildTaskTerminalError extends Error {}
 class AgentChildTaskDeferredError extends Error {}
 
-const PROMPT_AUTHORING_ONLY_SKILL_IDS = new Set(["seedance-25-director"]);
+// Director skills shape the planner's public prompt contract. Their internal
+// rules must never be appended verbatim to a paid provider request.
+const PROMPT_AUTHORING_ONLY_SKILL_IDS = new Set(["seedance-director", "seedance-25-director"]);
 
 export async function canContinue(id: string, executionId: string) {
     const run = await getAgentRun(id);
@@ -183,9 +185,18 @@ export function normalizeTasks(
         const canvasReferences = selectedCanvasReferences.filter((reference) => canvasReferenceSupportsTask(reference.type, item.type));
         const frameIds = item.type === "video" ? videoFrameAssetIds(generationPreferences?.video) : [];
         const frameIdSet = new Set(frameIds);
+        if (item.type === "video" && generationPreferences?.video?.referenceMode === "all_frames") {
+            const unavailable = frameIds.filter((assetId) => {
+                const asset = assets.get(assetId);
+                return asset?.type !== "image" || asset.status !== "ready" || !assetAccessUrl(asset);
+            });
+            if (unavailable.length) throw new Error(`全能帧只能使用已存在、可读取且未删除的图片素材：${unavailable.join("、")}`);
+        }
         const explicitFrameAssets = resolveTaskReferences(frameIds, assets, item.type);
         const plannedAssets = target ? [] : resolveTaskReferences(item.assetIds, assets, item.type).filter((asset) => !frameIdSet.has(asset.id));
         const selectedAssets = [...explicitFrameAssets, ...plannedAssets];
+        if (item.type === "video" && generationPreferences?.video?.referenceMode === "all_frames" && selectedAssets.some((asset) => asset.type !== "image" || asset.status !== "ready" || !assetAccessUrl(asset)))
+            throw new Error("全能帧模式只接受已有、可读取且未删除的图片素材");
         const frameRoles = new Map<string, VideoReferenceRole>([
             ...(generationPreferences?.video?.firstFrameAssetId ? ([[generationPreferences.video.firstFrameAssetId, "first_frame"]] as const) : []),
             ...(generationPreferences?.video?.lastFrameAssetId ? ([[generationPreferences.video.lastFrameAssetId, "last_frame"]] as const) : []),

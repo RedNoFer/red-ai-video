@@ -1031,7 +1031,7 @@ export async function createDramaProductionRunForUser(userId: string, projectId:
             imageQuality: cleanText(object(value).imageQuality) || settings.generationDefaults.imageQuality,
             shotIds: requestedShotIds,
             frameType: ["start_frame", "end_frame", "all_frames"].includes(cleanText(object(value).frameType)) ? (cleanText(object(value).frameType) as "start_frame" | "end_frame" | "all_frames") : undefined,
-            frameCount: Math.max(1, Math.min(9, Math.floor(Number(object(value).frameCount) || 1))),
+            frameCount: Math.max(1, Math.min(9, Math.floor(Number(object(value).frameCount) || runProject.productionBible?.productionPlan?.video.frameCount || 5))),
             frameIds: ids(object(value).frameIds),
             regenerateAll: object(value).regenerateAll === true,
         });
@@ -1065,7 +1065,7 @@ export async function createDramaProductionRunForUser(userId: string, projectId:
         0,
         ...productionShots
             .filter((shot) => shot.storyboardFrameMode === "all_frames")
-            .map((shot) => (referenceSelections[shot.id] ? (shot.framePlan?.frames || []).filter((frame) => referenceSelections[shot.id].includes(frame.id)).length : shot.framePlan?.frames.length || 0)),
+            .map((shot) => shot.framePlan?.frames.length || 0),
     );
     const videoCandidate = requiresAllFrames ? videoCandidates.find((candidate) => supportsVideoKeyframeReferences(candidate, requiredKeyframeCount)) : videoCandidates[0];
     if (!videoCandidate) {
@@ -3583,7 +3583,7 @@ export function validateDramaReferenceSelections(project: DramaProject, episode:
         if (selected && fixedAssetIds.some((id) => !selected.includes(id))) throw new DramaProjectServiceError(`${shot.title}的固定资产引用不能取消`, 409);
         const selectedFrameIds = shot.storyboardFrameMode === "all_frames" ? (selected ? frameIds.filter((id) => selected.includes(id)) : frameIds) : [];
         if (shot.storyboardFrameMode === "all_frames" && selectedFrameIds.length < 2) throw new DramaProjectServiceError(`${shot.title}至少需要保留首帧和尾帧两张顺序帧`, 409);
-        if (shot.storyboardFrameMode === "all_frames" && selected && (selectedFrameIds[0] !== frameIds[0] || selectedFrameIds.at(-1) !== frameIds.at(-1))) throw new DramaProjectServiceError(`${shot.title}的首帧和尾帧不能取消引用`, 409);
+        if (shot.storyboardFrameMode === "all_frames" && selected && selectedFrameIds.length !== frameIds.length) throw new DramaProjectServiceError(`${shot.title}的 all_frames 必须按顺序保留全部关键帧，不能把帧计划裁剪成普通参考图`, 409);
         const incoming = episode.continuityEdges?.some((edge) => edge.toShotId === shot.id && edge.inheritActualEndFrame) ? 1 : 0;
         const legacyFrames = shot.storyboardFrameMode === "all_frames" ? 0 : shot.storyboardFrameMode === "first_last" ? 2 : 1;
         const selectedFixedAssetCount = selected ? fixedAssetIds.filter((id) => selected.includes(id)).length : fixedAssetIds.length;

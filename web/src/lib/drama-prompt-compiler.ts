@@ -1,4 +1,4 @@
-import type { DramaAssetRefinementProposal, DramaEpisode, DramaFrameBeat, DramaNamedAsset, DramaProject, DramaReferenceManifestItem, DramaShot, DramaShotContinuity } from "@/lib/drama-project-contract";
+import type { DramaAssetRefinementProposal, DramaContinuityState, DramaEpisode, DramaFrameBeat, DramaNamedAsset, DramaProject, DramaReferenceManifestItem, DramaShot, DramaShotContinuity } from "@/lib/drama-project-contract";
 import { resolveDramaStyleContract, sanitizeDramaVisualPrompt } from "@/lib/drama-style";
 import { upgradeDramaFrameImagePrompt } from "@/lib/drama-frame-sequence";
 import { DRAMA_ASSET_IMAGE_SKILL } from "@/lib/drama-image-skill";
@@ -12,7 +12,40 @@ export type CompiledDramaPrompts = {
     videoPrompt: string;
 };
 
+/** Server-derived contract shared by video and keyframe generation. */
+export type DerivedShotPromptContract = {
+    references: DramaReferenceManifestItem[];
+    entryState: DramaContinuityState;
+    exitState: DramaContinuityState;
+    beats: Array<Pick<DramaFrameBeat, "id" | "sequenceIndex" | "startSecond" | "endSecond" | "startPrompt" | "actionPrompt" | "transitionPrompt" | "endPrompt" | "imagePrompt">>;
+    camera: { shotSize: string; cameraAngle: string; composition: string; movement: string; reason: string };
+    visual: { environmentPressure: string; motif: string; palette: string; lighting: string; texture: string };
+    audio?: string;
+    constraints: string[];
+};
+
 export const DRAMA_CHARACTER_TURNAROUND_SIZE = "16:9";
+
+export function deriveDramaShotPromptContract(project: DramaProject, _episode: DramaEpisode, shot: DramaShot): DerivedShotPromptContract {
+    const scene = project.scenes.find((item) => item.id === shot.sceneId);
+    const continuity = shot.continuity;
+    const lighting = shot.lightingPlan;
+    const entryState = shot.entryState || { characters: [], props: [] };
+    const exitState = shot.exitState || { characters: [], props: [] };
+    const environmentPressure = scene?.profile?.spatialRules?.find(Boolean) || scene?.description || entryState.environment || "";
+    const palette = lighting?.palette || shot.colorPalette || project.productionBible?.colorScript || "";
+    const lightingText = [lighting?.keyLight, lighting?.fillLight, lighting?.rimLight].filter(Boolean).join("；") || shot.lighting || entryState.lighting || "";
+    return {
+        references: shot.framePlan?.referenceManifest || [],
+        entryState,
+        exitState,
+        beats: (shot.framePlan?.frames || []).map(({ id, sequenceIndex, startSecond, endSecond, startPrompt, actionPrompt, transitionPrompt, endPrompt, imagePrompt }) => ({ id, sequenceIndex, startSecond, endSecond, startPrompt, actionPrompt, transitionPrompt, endPrompt, imagePrompt })),
+        camera: { shotSize: continuity?.shotSize || "", cameraAngle: continuity?.cameraAngle || "", composition: continuity?.composition || "", movement: shot.cameraMotion || "", reason: continuity?.actionEnd ? `响应动作变化：${continuity.actionEnd}` : "" },
+        visual: { environmentPressure, motif: project.seriesBible?.visualMotifs?.find(Boolean) || "", palette, lighting: lightingText, texture: resolveDramaStyleContract(project).visualDescription },
+        audio: [shot.sound?.ambience, shot.sound?.soundEffects, shot.sound?.music].filter(Boolean).join("；") || undefined,
+        constraints: [shot.negativePrompt, continuity?.continuityNotes].filter(Boolean) as string[],
+    };
+}
 
 /** Remove reference manifests before the current request order is appended. */
 export function stripDramaReferenceBindingSections(prompt: string) {
@@ -49,6 +82,7 @@ export function appendDramaImageReferenceBindings(prompt: string, references: Ar
 
 export function compileDramaShotPrompts(project: DramaProject, episode: DramaEpisode, shot: DramaShot): CompiledDramaPrompts {
     const styleContract = resolveDramaStyleContract(project);
+    const derived = deriveDramaShotPromptContract(project, episode, shot);
     const scene = project.scenes.find((item) => item.id === shot.sceneId);
     const characters = project.characters.filter((item) => shot.characterIds.includes(item.id));
     const props = project.props.filter((item) => shot.propIds.includes(item.id));
@@ -58,10 +92,10 @@ export function compileDramaShotPrompts(project: DramaProject, episode: DramaEpi
     const imagePlan = sanitizeDramaSupplierText(sanitizeDramaVisualPrompt(shot.executionImagePrompt || shot.imagePrompt), project);
     const startPlan = sanitizeDramaSupplierText(sanitizeDramaVisualPrompt(shot.startFramePrompt || imagePlan), project);
     const endPlan = sanitizeDramaSupplierText(sanitizeDramaVisualPrompt(shot.endFramePrompt || shot.executionVideoPrompt || shot.videoPrompt || imagePlan), project);
-    const entryState = stateLines(shot.entryState, project);
-    const exitState = stateLines(shot.exitState, project);
+    const entryState = stateLines(derived.entryState, project);
+    const exitState = stateLines(derived.exitState, project);
     const inheritedTail = shot.framePlan?.start.source === "previous_accepted_actual_tail";
-    const referenceManifest = shot.framePlan?.referenceManifest || [];
+    const referenceManifest = derived.references;
     const styleName = styleContract.name;
     const visualStyle = styleContract.visualDescription;
     const finalStyleLock = `最终视觉锁定：${visualStyle}；镜头中已有视觉方案若与统一风格冲突，必须以本风格为准。`;

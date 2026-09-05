@@ -1122,7 +1122,7 @@ export const dramaVideoPromptTool = {
                         videoPrompt: {
                             type: "string",
                             description:
-                                "只返回执行当前 Seedance 2.5 导演 Skill 后的完整公开视频提示词字符串；按素材绑定（有参考图时）、动态意图、必要的环境/声音母题、单一主运镜、结束画面和针对性约束逐行输出，有事实才写全局设定、起始可见状态、触发、主体动作与反应、视觉风格与光色、声音意图和连续性锁。输入 referenceMaterials 已提供每项的 alias、role、purpose 和顺序，素材绑定必须逐字使用这些 alias，不得自行猜编号；videoPrompt 本身必须逐段写出每个真实时间范围以及起点、动作与触发、可见衔接和终点，具体画面状态必须与 framePlan.frames 一致。framePlan.frames 是同一公开提示词的结构化镜像，不得用它替代 videoPrompt 正文。有 referenceMaterials 时由 Skill 生成素材绑定和对应职责；不得输出模式、内部 ID、URL、JSON 或解释",
+                                "只返回执行当前 Seedance 2.5 导演 Skill 后的完整公开视频提示词字符串；公开字段固定按素材绑定（有参考图时）、动态意图、全局设定、起始可见状态、时间段动作、单一主运镜、环境压力与视觉母题、视觉风格与光色、声音意图、结束画面、连续性锁、针对性约束逐行输出；不另设顶层触发或主体动作与反应字段，动作与触发只写在每个时间段内部。输入 referenceMaterials 已提供每项的 alias、role、purpose 和顺序，素材绑定必须逐字使用这些 alias，不得自行猜编号；videoPrompt 本身必须逐段写出每个真实时间范围以及起点、动作与触发、可见衔接和终点，具体画面状态必须与 framePlan.frames 一致。framePlan.frames 是同一公开提示词的结构化镜像，不得用它替代 videoPrompt 正文。有 referenceMaterials 时由 Skill 生成素材绑定和对应职责；不得输出模式、内部 ID、URL、JSON 或解释",
                         },
                         framePlan: {
                             type: "object",

@@ -242,10 +242,11 @@ describe("production package boundary", () => {
         second.framePlan.frames = second.framePlan.frames.map((frame) => ({ ...frame, startSecond: 0, endSecond: 7 }));
         source.episodes[0].storyScenes[0].shotCodes = ["SH01", "SH02"];
         const preview = previewDramaProductionPackage(JSON.stringify(source), "package.json");
-        expect(preview.package.episodes[0].shots).toHaveLength(1);
-        expect(preview.package.episodes[0].shots[0]).toMatchObject({ duration: 15, timecode: "0-15s", title: "黑湖记忆" });
-        expect(preview.package.episodes[0].shots[0].framePlan.frames.at(-1)?.endSecond).toBe(15);
-        expect(preview.package.episodes[0].storyScenes[0].shotCodes).toEqual(["SH001"]);
+        expect(preview.package.episodes[0].shots).toHaveLength(2);
+        expect(preview.package.episodes[0].shots.map((shot) => shot.duration)).toEqual([8, 7]);
+        expect(preview.package.episodes[0].shots.map((shot) => shot.timecode)).toEqual(["0-8s", "8-15s"]);
+        expect(preview.package.episodes[0].shots[1].framePlan.frames.at(-1)?.endSecond).toBe(7);
+        expect(preview.package.episodes[0].storyScenes[0].shotCodes).toEqual(["SH01", "SH02"]);
         expect(preview.package.assets.characters.map((asset) => asset.code)).toEqual(["C01", "C02"]);
     });
 

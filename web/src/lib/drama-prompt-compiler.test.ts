@@ -11,10 +11,34 @@ import {
     compileDramaShotExecutionPrompts,
     dramaFrameVisibleState,
     compileDramaShotPrompts,
+    deriveDramaShotPromptContract,
     preflightDramaAssetGeneration,
 } from "./drama-prompt-compiler";
 
 describe("drama prompt compiler", () => {
+    it("derives one server-side shot contract for video and keyframe consumers", () => {
+        const project = createProject();
+        const shot = project.episodes[0].shots[0];
+        shot.cameraMotion = "沿轴线缓慢推进";
+        shot.framePlan = {
+            start: { source: "independent" },
+            end: { required: true },
+            referenceManifest: [{ alias: "@图片1", role: "scene_anchor", purpose: "场景", assetId: shot.sceneId }],
+            frames: [{ id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 5, actionPrompt: "抬头", imagePrompt: "人物抬头看向门缝" }],
+        };
+
+        const contract = deriveDramaShotPromptContract(project, project.episodes[0], shot);
+
+        expect(contract).toMatchObject({
+            references: [{ alias: "@图片1", role: "scene_anchor" }],
+            camera: { movement: "沿轴线缓慢推进" },
+            beats: [{ id: "f1", startSecond: 0, endSecond: 5, actionPrompt: "抬头" }],
+        });
+        expect(contract.entryState).toEqual({ characters: [], props: [] });
+        expect(contract.exitState).toEqual({ characters: [], props: [] });
+        expect(contract).not.toHaveProperty("project");
+    });
+
     it("embeds exact image duties in the editable supplier prompt", () => {
         const prompt = appendDramaImageReferenceBindings("静态关键帧：Karin站在黑湖边", [
             { id: "character-one", label: "角色固定资产「Karin」", binding: "锁定身份与服装" },

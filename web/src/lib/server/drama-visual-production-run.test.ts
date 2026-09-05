@@ -161,7 +161,8 @@ describe("drama director visual plan", () => {
             { id: "frame-shot-one-f2", type: "keyframe", status: "blocked" },
         ]);
         expect(frames[1].dependsOn).toEqual(["frame-shot-one-f1"]);
-        expect(frames[0].prompt).toContain("P01-F01（0-2s）");
+        expect(frames[0].prompt).not.toMatch(/P01-F01|0-2s/u);
+        expect(frames[0].prompt).toContain("静态关键帧：");
         expect(frames[1].prompt).toContain("静态关键帧：两人在雨夜相遇");
         expect(frames[1].prompt).toContain("可见表演状态：");
     });

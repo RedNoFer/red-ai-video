@@ -128,6 +128,31 @@ describe("drama production preflight", () => {
         expect(preflightDramaProduction(project, project.episodes[0]).issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "REFERENCE_IMAGE_BUDGET", severity: "warning" })]));
     });
 
+    it("blocks all-frames production until every real frame is accepted", () => {
+        const project = fixture();
+        const shot = project.episodes[0].shots[0];
+        shot.storyboardFrameMode = "all_frames";
+        shot.framePlan!.frames = [
+            { id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 7.5, actionPrompt: "抬头", imagePrompt: "人物抬头，手握断剑" },
+            { id: "f2", sequenceIndex: 2, startSecond: 7.5, endSecond: 15, actionPrompt: "后退", imagePrompt: "人物后退到门边，视线锁定门缝" },
+        ];
+        shot.storyboardFrames = [{ id: "f1", sequenceIndex: 1, mediaUrl: "/f1.png", source: "generated", status: "success", continuityStatus: "passed" }];
+
+        const result = preflightDramaProduction(project, project.episodes[0]);
+
+        expect(result.issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "FRAME_ASSET_NOT_ACCEPTED", shotId: shot.id, severity: "blocking" })]));
+    });
+
+    it("requires at least two ordered frames for all-frames mode", () => {
+        const project = fixture();
+        const shot = project.episodes[0].shots[0];
+        shot.storyboardFrameMode = "all_frames";
+        shot.framePlan!.frames = [{ id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 15, actionPrompt: "抬头", imagePrompt: "人物抬头，手握断剑" }];
+        shot.storyboardFrames = [{ id: "f1", sequenceIndex: 1, mediaUrl: "/f1.png", source: "generated", status: "success", continuityStatus: "passed" }];
+
+        expect(preflightDramaProduction(project, project.episodes[0]).issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "FRAME_COUNT_MIN", severity: "blocking" })]));
+    });
+
     it("warns when adjacent carried states conflict", () => {
         const project = fixture();
         const first = project.episodes[0].shots[0];

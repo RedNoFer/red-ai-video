@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { SEEDANCE_25_DIRECTOR_SKILL } from "./agent-skills/seedance-25";
+import { SEEDANCE_DIRECTOR_SKILL } from "./agent-skills/creative-shortcuts";
 import { directAgentPlan, normalizeTasks, planToOps, readFunctionCallResult, taskResultOps } from "./agent-run-execution";
 import { agentSurfaceImageSize, normalizeCanvasPlanForSelection, resolveAgentTaskRatio } from "./agent-run-task-input";
 import { DRAMA_ASSET_IMAGE_SKILL } from "@/lib/drama-image-skill";
@@ -210,6 +211,22 @@ describe("directAgentPlan", () => {
         expect(task.prompt).not.toContain("按 Seedance 2.5 导演工作流编排视频");
     });
 
+    it("短剧 Seedance 导演规则只参与提示词编排，不进入供应商执行文本", () => {
+        const plan = {
+            intent: "generation",
+            objective: "生成短剧视频",
+            reply: "开始生成",
+            decisions: [],
+            foundation: { complexity: "complex", brief: { objective: "生成短剧视频" }, direction: { summary: "连续镜头" } },
+            deliverables: [{ id: "video", title: "短剧镜头", type: "video", model: "video-pro", prompt: "动态意图：角色沿门廊前进", count: 1, dependencies: [] }],
+        };
+
+        const [task] = normalizeTasks(plan as never, [SEEDANCE_DIRECTOR_SKILL] as never, generationSettings() as never, undefined, "生成短剧视频", "drama", []);
+
+        expect(task.prompt).not.toContain("按 Seedance 2.0 多模态短剧工作流执行");
+        expect(task.prompt).not.toContain("prompt-authoring-only");
+    });
+
     it("即使 Planner 漏掉资产也会把用户明确选择的首尾帧注入视频任务", () => {
         const plan = {
             intent: "generation",
@@ -239,6 +256,37 @@ describe("directAgentPlan", () => {
                 { assetId: "last-image", type: "image", role: "last_frame", url: "/api/reference-assets/last.png" },
             ],
         });
+    });
+
+    it("全能帧只接受已有且可读取的图片资产，并保持用户顺序", () => {
+        const plan = {
+            intent: "generation",
+            objective: "生成关键帧视频",
+            reply: "开始生成",
+            decisions: [],
+            foundation: { complexity: "simple", brief: { objective: "生成关键帧视频" }, direction: { summary: "连续动作" } },
+            deliverables: [{ id: "video", title: "关键帧视频", type: "video", model: "video-pro", prompt: "按顺序连接关键帧", count: 1, dependencies: [] }],
+        };
+        const assets = [
+            { id: "frame-2", userId: "user", conversationId: "conversation", type: "image", title: "第二帧", status: "ready", serverUrl: "/frame-2.png", createdAt: 1, updatedAt: 1 },
+            { id: "frame-1", userId: "user", conversationId: "conversation", type: "image", title: "第一帧", status: "ready", serverUrl: "/frame-1.png", createdAt: 1, updatedAt: 1 },
+        ];
+
+        const [task] = normalizeTasks(plan as never, [], generationSettings() as never, undefined, "关键帧视频", "chat", assets as never, undefined, {
+            mode: "video",
+            video: { referenceMode: "all_frames", frameAssetIds: ["frame-2", "frame-1"] },
+        });
+
+        expect(task.references?.filter((reference) => reference.role === "keyframe")).toEqual([
+            expect.objectContaining({ assetId: "frame-2", keyframeIndex: 1 }),
+            expect.objectContaining({ assetId: "frame-1", keyframeIndex: 2 }),
+        ]);
+        expect(() =>
+            normalizeTasks(plan as never, [], generationSettings() as never, undefined, "关键帧视频", "chat", [{ ...assets[0], status: "failed" }] as never, undefined, {
+                mode: "video",
+                video: { referenceMode: "all_frames", frameAssetIds: ["frame-2", "frame-1"] },
+            }),
+        ).toThrow("全能帧只能使用已存在、可读取且未删除的图片素材");
     });
 
     it("短剧 Agent 使用项目自定义画幅覆盖规划画幅", () => {

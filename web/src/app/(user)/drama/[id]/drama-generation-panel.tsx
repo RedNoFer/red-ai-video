@@ -396,7 +396,11 @@ export function DramaGenerationPanel({
         }));
         const selectionState = {
             selections: Object.fromEntries(promptRows.map((row) => [row.shot.id, row.references.map((reference) => reference.id)])),
-            invalid: promptRows.some((row) => row.references.length > dramaReferenceImageBudget(row.shot.duration)),
+            invalid: promptRows.some((row) => {
+                const frameIds = new Set(row.shot.framePlan?.frames.map((frame) => frame.id) || []);
+                const availableFrameCount = row.references.filter((reference) => frameIds.has(reference.id)).length;
+                return row.references.length > dramaReferenceImageBudget(row.shot.duration) || (row.shot.storyboardFrameMode === "all_frames" && (frameIds.size < 2 || availableFrameCount !== frameIds.size));
+            }),
         };
         modal.confirm({
             title: `确认生成 ${selectedShots.length} 个镜头`,
@@ -406,7 +410,7 @@ export function DramaGenerationPanel({
             cancelText: "返回修改",
             onOk: () => {
                 if (selectionState.invalid) {
-                    message.error("仍有镜头的参考图超过供应商上限，请先取消部分中间帧");
+                    message.error("仍有镜头的关键帧未全部生成并验收，或参考图超过供应商上限，请先完成帧验收");
                     return Promise.reject();
                 }
                 return lockProduction(shotIds, check, selectionState.selections);
@@ -1185,7 +1189,7 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
     const referenceAssets = shotReferenceAssets(project, shot);
     const videoStep = productionRun?.steps.filter((step) => step.shotId === shot.id && step.type === "video").sort((left, right) => (right.clipIndex || 0) - (left.clipIndex || 0))[0];
     const referenceBindings = videoStep?.referenceBindingsSnapshot || [];
-    const sequenceFrames = (shot.storyboardFrames || []).filter((frame) => frame.mediaUrl && frame.status === "success" && frame.continuityStatus !== "stale").sort((left, right) => left.sequenceIndex - right.sequenceIndex);
+    const sequenceFrames = (shot.storyboardFrames || []).filter((frame) => frame.mediaUrl && frame.status === "success" && frame.continuityStatus === "passed").sort((left, right) => left.sequenceIndex - right.sequenceIndex);
     const boundaryFrames = [
         ...activeFrameEvidence(shot, "storyboard_start")
             .slice(0, 1)
@@ -1415,7 +1419,14 @@ type ProductionPromptRow = { shot: DramaShot; references: PromptReferenceBinding
 
 function ProductionPromptPreview({ project, rows, onChange }: { project: DramaProject; rows: ProductionPromptRow[]; onChange: (value: { selections: Record<string, string[]>; invalid: boolean }) => void }) {
     const [selections, setSelections] = useState<Record<string, string[]>>(() => Object.fromEntries(rows.map((row) => [row.shot.id, row.references.map((reference) => reference.id)])));
-    const invalid = rows.some((row) => (selections[row.shot.id] || []).length > dramaReferenceImageBudget(row.shot.duration));
+    const invalid = rows.some((row) => {
+        const selected = selections[row.shot.id] || [];
+        const frameIds = new Set(row.shot.framePlan?.frames.map((frame) => frame.id) || []);
+        const availableFrameCount = row.references.filter((reference) => frameIds.has(reference.id)).length;
+                const allFramesReady = row.shot.storyboardFrameMode !== "all_frames" || (frameIds.size >= 2 && availableFrameCount === frameIds.size);
+                const allFramesSelected = row.shot.storyboardFrameMode !== "all_frames" || (frameIds.size >= 2 && frameIds.size === selected.filter((id) => frameIds.has(id)).length);
+        return selected.length > dramaReferenceImageBudget(row.shot.duration) || !allFramesReady || !allFramesSelected;
+    });
     useEffect(() => {
         onChange({ selections, invalid });
     }, [invalid, onChange, selections]);
@@ -1435,6 +1446,9 @@ function ProductionPromptPreview({ project, rows, onChange }: { project: DramaPr
                     basePrompt,
                     selectedReferences.map((reference) => ({ id: reference.id, label: reference.label, binding: reference.purpose })),
                 );
+                const allFrames = shot.storyboardFrameMode === "all_frames";
+                const frameIds = new Set(shot.framePlan?.frames.map((frame) => frame.id) || []);
+                const allFramesReady = !allFrames || (frameIds.size >= 2 && references.filter((reference) => frameIds.has(reference.id)).length === frameIds.size);
                 const overLimit = selectedReferences.length > limit;
                 return (
                     <section key={shot.id} className={`mb-3 rounded-md border p-3 last:mb-0 ${overLimit ? "border-red-500" : "border-border"}`}>
@@ -1449,7 +1463,9 @@ function ProductionPromptPreview({ project, rows, onChange }: { project: DramaPr
                             <div className="mt-3 border-t border-border/70 pt-3" data-drama-prompt-reference-gallery>
                                 <div className="flex items-center justify-between gap-2 text-xs">
                                     <span className="font-medium text-foreground">本次实际引用图片</span>
-                                    <span className={overLimit ? "text-red-600" : "text-muted-foreground"}>{overLimit ? `超出 ${selectedReferences.length - limit} 张` : "顺序与供应商请求一致"}</span>
+                                    <span className={overLimit || !allFramesReady ? "text-red-600" : "text-muted-foreground"}>
+                                        {overLimit ? `超出 ${selectedReferences.length - limit} 张` : !allFramesReady ? "仍有关键帧未生成并验收" : allFrames ? "全量关键帧，顺序固定" : "顺序与供应商请求一致"}
+                                    </span>
                                 </div>
                                 <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-[repeat(4,minmax(0,1fr))]">
                                     {references.map((reference) => {
@@ -1464,7 +1480,7 @@ function ProductionPromptPreview({ project, rows, onChange }: { project: DramaPr
                                                 <div className="space-y-1 px-2 py-1.5 text-[11px] leading-4">
                                                     <Checkbox
                                                         checked={checked}
-                                                        disabled={reference.required}
+                                                        disabled={reference.required || allFrames}
                                                         onChange={(event) =>
                                                             setSelections((current) => ({
                                                                 ...current,
@@ -1472,7 +1488,7 @@ function ProductionPromptPreview({ project, rows, onChange }: { project: DramaPr
                                                             }))
                                                         }
                                                     >
-                                                        {reference.required ? "必须引用" : "引用此图"}
+                                                        {allFrames ? "全量关键帧" : reference.required ? "必须引用" : "引用此图"}
                                                     </Checkbox>
                                                     <div className="truncate font-medium text-foreground">{reference.label}</div>
                                                     <div className="break-words text-muted-foreground">{reference.purpose}</div>
@@ -1486,7 +1502,7 @@ function ProductionPromptPreview({ project, rows, onChange }: { project: DramaPr
                     </section>
                 );
             })}
-            <p className="mt-3 text-xs text-muted-foreground">未勾选图片会同时从供应商请求和提示词引用块移除；确认后才会创建视频任务并消耗额度。</p>
+            <p className="mt-3 text-xs text-muted-foreground">全能帧必须全量按时间顺序引用并完成验收；普通参考图可按需选择。确认后才会创建视频任务并消耗额度。</p>
         </div>
     );
 }
@@ -1495,7 +1511,7 @@ function previewVideoReferenceBindings(project: DramaProject, episode: DramaEpis
     const incoming = episode.continuityEdges?.find((edge) => edge.toShotId === shot.id && edge.inheritActualEndFrame);
     const previous = incoming ? episode.shots.find((item) => item.id === incoming.fromShotId) : undefined;
     const tail = previous ? continuityStartEvidence(previous) : undefined;
-    const frames = (shot.storyboardFrames || []).filter((frame) => frame.mediaUrl && frame.status === "success" && frame.continuityStatus !== "stale").sort((left, right) => left.sequenceIndex - right.sequenceIndex);
+    const frames = (shot.storyboardFrames || []).filter((frame) => frame.mediaUrl && frame.status === "success" && frame.continuityStatus === "passed").sort((left, right) => left.sequenceIndex - right.sequenceIndex);
     const frameBindings: PromptReferenceBinding[] = [];
     if (tail) frameBindings.push({ id: `tail-${previous?.id || shot.id}`, alias: "@图片1", label: "上一镜实际尾帧", purpose: "作为当前镜头唯一开场画面", url: tail.mediaUrl, alt: "上一镜实际尾帧", required: true });
     if (shot.storyboardFrameMode === "all_frames") {

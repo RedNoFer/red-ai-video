@@ -133,9 +133,7 @@ export function previewDramaProductionPackage(source: string, fileName = "produc
     if (!parsed) throw new DramaProductionPackageError("Markdown 制作包缺少可读取的标准清单或导演执行表");
     const packageWithProjectAssets = project ? mergeProjectAssetsIntoProductionPackage(parsed as DramaProductionPackageV1, project) : parsed;
     const normalizedPackage = normalizeProductionPackage(packageWithProjectAssets);
-    const rawPlan = object(object(object(parsed).project).productionBible).productionPlan;
-    const configuredShotDuration = Object.prototype.hasOwnProperty.call(object(rawPlan).video, "shotDuration") ? normalizedPackage.project.productionBible.productionPlan?.video.shotDuration : undefined;
-    const productionPackage = configuredShotDuration ? mergeDramaProductionPackageShotDurations(normalizedPackage, configuredShotDuration) : normalizedPackage;
+    const productionPackage = normalizedPackage;
     return {
         package: productionPackage,
         sourceHash: createHash("sha256").update(source).digest("hex"),
@@ -434,10 +432,7 @@ function normalizeProductionPackage(value: unknown): DramaProductionPackageV1 {
             })),
         };
     });
-    const rawProductionPlan = object(bible.productionPlan);
-    const shotDuration = Object.prototype.hasOwnProperty.call(rawProductionPlan, "shotDuration") ? normalizeDramaProductionPlan(rawProductionPlan)?.video.shotDuration : undefined;
-    const rebalancedEpisodes = shotDuration ? normalizedEpisodes.map((episode) => mergeTargetDurationShots(episode, shotDuration)) : normalizedEpisodes;
-    const synchronizedEpisodes = rebalancedEpisodes.map((episode) => synchronizeContinuityStates(repairOpeningCut(episode, text(project.title))));
+    const synchronizedEpisodes = normalizedEpisodes.map((episode) => synchronizeContinuityStates(repairOpeningCut(episode, text(project.title))));
     const styleContract = resolveDramaStyleContract({
         style: text(project.style),
         productionBible: { visualStyle: text(bible.visualStyle), colorScript: optionalText(bible.colorScript) },

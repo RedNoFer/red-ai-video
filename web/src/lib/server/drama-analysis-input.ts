@@ -145,7 +145,7 @@ export function validateDramaVideoPromptReferenceBindings(prompt: string, refere
     const lines = prompt.split(/\r?\n/u);
     const bindingLineIndex = lines.findIndex((line) => /^\s*素材绑定\s*[：:]/u.test(line));
     if (bindingLineIndex < 0) return `模型生成的视频提示词缺少素材绑定字段（应包含 ${referenceList.join("、")}）；请按当前 Skill 重新生成`;
-    const bindingEnd = lines.findIndex((line, index) => index > bindingLineIndex && /^(?:\s*)(?:动态意图|全局设定|起始可见状态|触发|主体动作与反应|时间段动作|单一主运镜|环境压力与视觉母题|视觉风格与光色|声音意图|结束画面|连续性锁|针对性约束)\s*[：:]/u.test(line));
+    const bindingEnd = lines.findIndex((line, index) => index > bindingLineIndex && /^(?:\s*)(?:动态意图|全局设定|起始可见状态|时间段动作|单一主运镜|环境压力与视觉母题|视觉风格与光色|声音意图|结束画面|连续性锁|针对性约束)\s*[：:]/u.test(line));
     const bindingText = lines.slice(bindingLineIndex, bindingEnd < 0 ? lines.length : bindingEnd).join("\n");
     const bindingAliases = parseReferenceAliases(bindingText);
     const aliases = bindingAliases.length ? bindingAliases : parseReferenceAliases(prompt);
@@ -175,8 +175,11 @@ export function validateDramaVideoPromptOutput(value: unknown, shotIds: string[]
         const requiredFields = ["动态意图", "时间段动作", "单一主运镜", "结束画面"];
         const missingFields = requiredFields.filter((field) => !new RegExp(`(?:^|\\n)\\s*${field}[：:]`, "u").test(prompt));
         if (missingFields.length) return `镜头 ${shotId} 的公开视频提示词缺少标准字段：${missingFields.join("、")}；请按当前 Skill 重新生成`;
+        const orderError = validatePublicVideoPromptFieldOrder(prompt);
+        if (orderError) return `镜头 ${shotId} 的公开视频提示词${orderError}；请按当前 Skill 重新生成`;
+        if (/(?:^|\n)\s*(?:触发|主体动作与反应)\s*[：:]/u.test(prompt)) return `镜头 ${shotId} 的公开视频提示词仍使用旧的顶层动作字段；请将触发和主体反应写入每个时间段的“动作与触发”`;
         if (/(?:A线|B线|主线|副线|钩子)/u.test(prompt)) return `镜头 ${shotId} 的公开视频提示词包含内部叙事标签，请按当前 Skill 改写为可见动作、事件或声音`;
-        if (/(?:https?:\/\/|data:image\/|\b(?:模式|内部 ID|来源文件|API)\s*[：:])/iu.test(prompt)) return `镜头 ${shotId} 的公开视频提示词包含内部执行信息，请按当前 Skill 重新生成`;
+        if (/(?:https?:\/\/|data:image\/|\b(?:Skill|prompt-authoring-only|seedance-director|seedance-25-director)\b|\b(?:模式|内部 ID|来源文件|API|供应商字段)\s*[：:])/iu.test(prompt)) return `镜头 ${shotId} 的公开视频提示词包含内部执行信息，请按当前 Skill 重新生成`;
         const referenceError = validateDramaVideoPromptReferenceBindings(prompt, references);
         if (referenceError) return `镜头 ${shotId}：${referenceError}`;
         const expectedFrames = array(sourcePlans.get(shotId)?.frames);
@@ -189,6 +192,7 @@ export function validateDramaVideoPromptOutput(value: unknown, shotIds: string[]
         const seenStates = new Set<string>();
         for (const [index, frame] of outputFrames.entries()) {
             const expected = object(expectedFrames[index]);
+            const frameId = dramaAnalysisText(frame.id);
             const sequenceIndex = Number(frame.sequenceIndex);
             const startSecond = Number(frame.startSecond);
             const endSecond = Number(frame.endSecond);
@@ -197,6 +201,7 @@ export function validateDramaVideoPromptOutput(value: unknown, shotIds: string[]
             const transitionPrompt = dramaAnalysisText(frame.transitionPrompt);
             const endPrompt = dramaAnalysisText(frame.endPrompt);
             const imagePrompt = dramaAnalysisText(frame.imagePrompt);
+            if (!frameId || (expected.id && frameId !== dramaAnalysisText(expected.id))) return `镜头 ${shotId} 的第 ${index + 1} 个时间段帧 ID 与输入不一致，请按当前 Skill 原样保留 ${dramaAnalysisText(expected.id) || `frame-${index + 1}`}`;
             if (!Number.isInteger(sequenceIndex) || sequenceIndex !== index + 1 || !Number.isFinite(startSecond) || !Number.isFinite(endSecond) || endSecond <= startSecond || !startPrompt || !actionPrompt || !transitionPrompt || !endPrompt || !imagePrompt) return `镜头 ${shotId} 的第 ${index + 1} 个时间段缺少具体起点、动作、衔接、终点或画面描述`;
             if (expectedFrames.length && (Math.abs(startSecond - Number(expected.startSecond)) > 0.01 || Math.abs(endSecond - Number(expected.endSecond)) > 0.01)) return `镜头 ${shotId} 的第 ${index + 1} 个时间段改变了既有时间边界；请按当前 Skill 保留 ${expected.startSecond}-${expected.endSecond}s`;
             const expectedStart = expectedFrames.length ? Number(expected.startSecond) : startSecond;
@@ -205,6 +210,7 @@ export function validateDramaVideoPromptOutput(value: unknown, shotIds: string[]
             if (!new RegExp(rangePattern, "iu").test(prompt)) return `镜头 ${shotId} 的第 ${index + 1} 个时间段未在公开视频提示词中写出 ${expectedStart}-${expectedEnd}s，请按当前 Skill 逐段输出`;
             const stateKey = `${startPrompt}\n${actionPrompt}\n${transitionPrompt}\n${endPrompt}\n${imagePrompt}`;
             if (seenStates.has(stateKey)) return `镜头 ${shotId} 的第 ${index + 1} 个时间段与其他阶段重复，请返回具体可见变化`;
+            if (!promptContainsFact(prompt, actionPrompt) || !promptContainsFact(prompt, endPrompt)) return `镜头 ${shotId} 的第 ${index + 1} 个时间段动作或结束状态没有在 videoPrompt 中逐字镜像，请按当前 Skill 重新生成`;
             seenStates.add(stateKey);
         }
     }
@@ -248,10 +254,28 @@ function escapeRegExp(value: string) {
     return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }
 
+function promptContainsFact(prompt: string, fact: string) {
+    const normalizedPrompt = prompt.replace(/[\s；;，,。]+/gu, "");
+    const normalizedFact = fact.replace(/[\s；;，,。]+/gu, "");
+    return Boolean(normalizedFact) && normalizedPrompt.includes(normalizedFact);
+}
+
+function validatePublicVideoPromptFieldOrder(prompt: string) {
+    const fields = ["素材绑定", "动态意图", "全局设定", "起始可见状态", "时间段动作", "单一主运镜", "环境压力与视觉母题", "视觉风格与光色", "声音意图", "结束画面", "连续性锁", "针对性约束"];
+    let previous = -1;
+    for (const field of fields) {
+        const matches = [...prompt.matchAll(new RegExp(`(?:^|\\n)\\s*${field}[：:]`, "gu"))].map((match) => match.index ?? -1).filter((index) => index >= 0);
+        if (matches.length > 1 && field !== "时间段动作") return `字段“${field}”重复`;
+        if (matches[0] !== undefined && matches[0] < previous) return `字段顺序不符合固定合同（“${field}”应位于前序字段之后）`;
+        if (matches[0] !== undefined) previous = matches[0];
+    }
+    return "";
+}
+
 function normalizePublicVideoPromptForValidation(value: string) {
     return value
         .replace(/\\r?\\n/gu, "\n")
-        .replace(/[；;\s]+(?=(?:素材绑定|动态意图|全局设定|起始可见状态|触发|主体动作与反应|时间段动作|起点|动作与触发|可见衔接|终点|单一主运镜|环境压力与视觉母题|视觉风格与光色|声音意图|结束画面|连续性锁|针对性约束)\s*[：:])/gu, "\n")
+        .replace(/[；;\s]+(?=(?:素材绑定|动态意图|全局设定|起始可见状态|时间段动作|起点|动作与触发|可见衔接|终点|单一主运镜|环境压力与视觉母题|视觉风格与光色|声音意图|结束画面|连续性锁|针对性约束)\s*[：:])/gu, "\n")
         .replace(/(^|\n)\s*(?:[-*•]\s*|\d+[.)]\s*)/gu, "$1")
         .replace(/\n[ \t]*/gu, "\n")
         .trim();
