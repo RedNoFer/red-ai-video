@@ -331,10 +331,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
             const created = visualSteps.some((step) => Boolean(step.taskId));
             const selectedTaskCreated = frameSteps.some((step) => input.frameIds.includes(step.frameId || "") && Boolean(step.taskId));
             const failed = visualSteps.find((step) => step.status === "failed" || step.status === "needs_review");
-            if (failed) message.error(failed.error || `${failed.title}启动失败`);
-            else if (!created && confirmed.status === "completed") message.info("当前帧序列已经完整，无需创建新的图片任务");
-            else if (!created) {
-                const errorMessage = "图片供应商任务没有创建，请查看当前帧状态";
+            const markSelectedFramesError = (errorMessage: string) => {
                 const liveFrames =
                     useDramaStore
                         .getState()
@@ -352,6 +349,15 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                     }),
                     storyboardError: errorMessage,
                 });
+            };
+            if (failed) {
+                const errorMessage = failed.error || `${failed.title}启动失败`;
+                markSelectedFramesError(errorMessage);
+                message.error(errorMessage);
+            } else if (!created && confirmed.status === "completed") message.info("当前帧序列已经完整，无需创建新的图片任务");
+            else if (!created) {
+                const errorMessage = "图片供应商任务没有创建，请查看当前帧状态";
+                markSelectedFramesError(errorMessage);
                 message.error(errorMessage);
             } else if (!selectedTaskCreated) message.info(`${input.label}已提交，正在等待前置参考素材任务完成`);
             else message.success(`${input.label}已提交，系统会按帧顺序生成；完成后可手动检验图片`);
