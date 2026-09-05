@@ -186,6 +186,10 @@ describe("Drama generation production workspace", () => {
         expect(source).toContain("一键补齐");
         expect(source).toContain("重新生成全部");
         expect(source).toContain("导演 Agent 生图启动失败");
+        expect(source).toContain('const visualSteps = confirmed.steps.filter((step) => ["asset_anchor", "start_frame", "end_frame", "keyframe"].includes(step.type));');
+        expect(source).toContain("selectedTaskCreated");
+        expect(source).toContain("正在等待前置参考素材任务完成");
+        expect(source).toContain('status: "error" as const');
     });
 
     it("keeps regenerated frame candidates until the user selects the current frame", async () => {

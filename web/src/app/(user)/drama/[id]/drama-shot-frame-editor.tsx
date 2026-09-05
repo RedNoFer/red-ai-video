@@ -327,11 +327,33 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                         : existing;
                 }),
             });
-            const created = frameSteps.some((step) => Boolean(step.taskId));
-            const failed = frameSteps.find((step) => step.status === "failed" || step.status === "needs_review");
+            const visualSteps = confirmed.steps.filter((step) => ["asset_anchor", "start_frame", "end_frame", "keyframe"].includes(step.type));
+            const created = visualSteps.some((step) => Boolean(step.taskId));
+            const selectedTaskCreated = frameSteps.some((step) => input.frameIds.includes(step.frameId || "") && Boolean(step.taskId));
+            const failed = visualSteps.find((step) => step.status === "failed" || step.status === "needs_review");
             if (failed) message.error(failed.error || `${failed.title}启动失败`);
             else if (!created && confirmed.status === "completed") message.info("当前帧序列已经完整，无需创建新的图片任务");
-            else if (!created) message.error("图片供应商任务没有创建，请查看当前帧状态");
+            else if (!created) {
+                const errorMessage = "图片供应商任务没有创建，请查看当前帧状态";
+                const liveFrames =
+                    useDramaStore
+                        .getState()
+                        .projects.find((item) => item.id === project.id)
+                        ?.episodes.find((item) => item.id === episodeId)
+                        ?.shots.find((item) => item.id === shot.id)?.storyboardFrames || storedFrames;
+                updateShot(project.id, episodeId, shot.id, {
+                    storyboardFrames: beats.map((beat) => {
+                        const frame = liveFrames.find((item) => item.id === beat.id) || emptyStoryboardFrame(beat);
+                        return input.frameIds.includes(beat.id)
+                            ? frame.mediaUrl
+                                ? { ...frame, candidateStatus: "error" as const, candidateTaskId: undefined, candidateError: errorMessage }
+                                : { ...frame, status: "error" as const, taskId: undefined, error: errorMessage }
+                            : frame;
+                    }),
+                    storyboardError: errorMessage,
+                });
+                message.error(errorMessage);
+            } else if (!selectedTaskCreated) message.info(`${input.label}已提交，正在等待前置参考素材任务完成`);
             else message.success(`${input.label}已提交，系统会按帧顺序生成；完成后可手动检验图片`);
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : "导演 Agent 生图启动失败";
