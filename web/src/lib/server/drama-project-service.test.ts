@@ -684,9 +684,10 @@ describe("drama project service updates", () => {
         mocks.updateDramaProductionRun.mockImplementation(async (_userId: string, value: unknown) => value);
         mocks.fetchInternalApi.mockResolvedValue({ ok: true, json: async () => ({ task: { id: "image-task-redispatched" } }) });
 
-        await updateDramaProductionRunForUser("user-one", current.id, runId, { action: "confirm", origin: "http://localhost:3010", cookie: "session=test" });
+        const result = await updateDramaProductionRunForUser("user-one", current.id, runId, { action: "confirm", origin: "http://localhost:3010", cookie: "session=test" });
 
         expect(mocks.fetchInternalApi).toHaveBeenCalledWith("http://localhost:3010/api/image-tasks", expect.objectContaining({ method: "POST" }));
+        expect(result.steps[0]).toMatchObject({ taskId: "image-task-redispatched", status: "running" });
     });
 
     it("rebases submission placeholders when an optimistic project save wins the race", async () => {
