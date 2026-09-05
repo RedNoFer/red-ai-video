@@ -54,8 +54,9 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
     const storedFrames = useMemo(() => [...(shot.storyboardFrames || [])].sort((left, right) => left.sequenceIndex - right.sequenceIndex), [shot.storyboardFrames]);
     const frameById = useMemo(() => new Map(storedFrames.map((frame) => [frame.id, frame])), [storedFrames]);
     const generationActive =
-        storedFrames.some((frame) => frame.status === "queued" || frame.status === "running" || frame.candidateStatus === "queued" || frame.candidateStatus === "running") ||
-        [shot.storyboardStatus, shot.storyboardEndStatus].some((status) => status === "queued" || status === "running");
+        storedFrames.some((frame) => (Boolean(frame.taskId) && (frame.status === "queued" || frame.status === "running")) || (Boolean(frame.candidateTaskId) && (frame.candidateStatus === "queued" || frame.candidateStatus === "running"))) ||
+        (Boolean(shot.storyboardTaskId) && ["queued", "running"].includes(shot.storyboardStatus || "")) ||
+        (Boolean(shot.storyboardEndTaskId) && ["queued", "running"].includes(shot.storyboardEndStatus || ""));
     const completedCount = beats.filter((beat) => frameById.get(beat.id)?.status === "success" && frameById.get(beat.id)?.mediaUrl).length;
     const activeFrame = beats.find((beat) => {
         const frame = frameById.get(beat.id);
