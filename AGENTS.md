@@ -24,6 +24,8 @@
 
 ## 后端规范
 
+- VOZEB PRO 正式 SSH 部署目标固定为 `root@76.13.209.117:22`，项目根目录为 `/opt/vozeb-pro`，Docker Compose 项目名为 `vozeb-pro`；发布只允许创建新的 `/opt/vozeb-pro/releases/<full-commit>`，并更新该 Compose 项目的 `app` 与 `generation-worker`。不得把 `198.200.50.8`、`204.77.130.125` 或其他服务器当作本项目正式部署目标，不得把 SSH 密码写入仓库。PostgreSQL 容器、命名数据卷、Nginx 配置和其他 Compose 项目均为部署边界外；切换前必须保留旧 release，切换后验证 `/api/health/live`、`/api/health/ready` 和 Worker 心跳。
+
 - 后端使用 Next.js Route Handler + TypeScript，服务端代码位于 `web/src/app/api/` 与 `web/src/lib/server/`。
 - Route Handler 只处理 HTTP 入参、鉴权、调用服务和响应映射，不堆业务规则或数据库细节。
 - `web/src/lib/server/` 放业务服务、领域校验、任务编排和 provider 适配。
