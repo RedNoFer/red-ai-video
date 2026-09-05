@@ -116,6 +116,16 @@ describe("drama production preflight", () => {
         expect(result.issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "FRAMING_UNCLEAR", severity: "warning" })]));
     });
 
+    it("keeps dialogue capacity as a warning instead of a production blocker", () => {
+        const project = fixture();
+        const shot = project.episodes[0].shots[0];
+        shot.dialogue = "甲".repeat(39);
+        shot.utterances = [{ id: "dialogue-one", order: 1, type: "dialogue", speaker: "Karin", text: shot.dialogue }];
+        shot.duration = 5;
+
+        expect(preflightDramaProduction(project, project.episodes[0]).issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "DIALOGUE_TIMING", severity: "warning" })]));
+    });
+
     it("warns before submit when frame images plus fixed assets exceed the shot budget", () => {
         const project = fixture();
         const shot = project.episodes[0].shots[0];
@@ -123,7 +133,14 @@ describe("drama production preflight", () => {
         shot.storyboardFrameMode = "all_frames";
         shot.sourceAssetIds = Array.from({ length: 4 }, (_, index) => `source-${index + 1}`);
         project.sourceAssets = shot.sourceAssetIds.map((id) => ({ id, type: "image" as const, title: id, serverUrl: `/api/reference-assets/${id}.png` }));
-        shot.framePlan!.frames = Array.from({ length: 5 }, (_, index) => ({ id: `f${index + 1}`, sequenceIndex: index + 1, startSecond: index * 3, endSecond: (index + 1) * 3, actionPrompt: `动作${index + 1}`, imagePrompt: `人物保持第${index + 1}个不同姿态` }));
+        shot.framePlan!.frames = Array.from({ length: 5 }, (_, index) => ({
+            id: `f${index + 1}`,
+            sequenceIndex: index + 1,
+            startSecond: index * 3,
+            endSecond: (index + 1) * 3,
+            actionPrompt: `动作${index + 1}`,
+            imagePrompt: `人物保持第${index + 1}个不同姿态`,
+        }));
 
         expect(preflightDramaProduction(project, project.episodes[0]).issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "REFERENCE_IMAGE_BUDGET", severity: "warning" })]));
     });
@@ -196,9 +213,7 @@ describe("drama production preflight", () => {
             order: 2,
             framePlan: { ...first.framePlan!, start: { source: "previous_accepted_actual_tail" } },
         });
-        project.episodes[0].continuityEdges = [
-            { fromShotId: first.id, toShotId: "shot-two", transition: "continuous", inheritActualEndFrame: true, carryCharacterIds: ["character-one"], carryPropIds: [], carryEnvironment: true, carryAxis: true },
-        ];
+        project.episodes[0].continuityEdges = [{ fromShotId: first.id, toShotId: "shot-two", transition: "continuous", inheritActualEndFrame: true, carryCharacterIds: ["character-one"], carryPropIds: [], carryEnvironment: true, carryAxis: true }];
 
         const result = preflightDramaProduction(project, project.episodes[0], [first.id]);
 

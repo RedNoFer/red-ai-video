@@ -2,7 +2,7 @@ import type { DramaEpisode, DramaProductionPreflight, DramaProductionPreflightIs
 import { hasApprovedAssetReference } from "@/lib/drama-asset-baseline";
 import { continuityStartEvidence } from "@/lib/drama-continuity-policy";
 import { normalizeDramaFrameBeats, validateDramaFrameVisualContent, dramaFrameVisualSubject } from "@/lib/drama-frame-sequence";
-import { dramaDialogueTimingIssue, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
+import { dramaDialogueTimingReminder, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
 import { dramaReferenceImageBudget } from "@/lib/drama-production-plan";
 
 const blocking = (code: string, message: string, extra: Partial<DramaProductionPreflightIssue> = {}): DramaProductionPreflightIssue => ({ code, severity: "blocking", message, ...extra });
@@ -100,8 +100,8 @@ function checkShot(
     if (!light?.palette || !light.colorTemperature || !light.keyLight || !light.fillLight || !light.rimLight || !light.materialResponse || !light.skinToneProtection)
         issues.push(blocking("LIGHTING_PLAN_MISSING", `${label}缺少完整色彩与灯光规划`, { shotId: shot.id }));
     if (!Number.isFinite(shot.duration) || shot.duration <= 0) issues.push(blocking("DURATION", `${label}缺少有效时长`, { shotId: shot.id }));
-    const dialogueTiming = dramaDialogueTimingIssue(shot.duration, shot.utterances as DramaDialogueTimingInput[], shot.dialogue, label);
-    if (dialogueTiming) issues.push(blocking("DIALOGUE_TIMING", dialogueTiming.message, { shotId: shot.id, correction: "按自然分句、说话人转换或动作反应拆镜，确保对白有真实可说时长" }));
+    const dialogueTiming = dramaDialogueTimingReminder(shot.duration, shot.utterances as DramaDialogueTimingInput[], shot.dialogue, label);
+    if (dialogueTiming) issues.push(warning("DIALOGUE_TIMING", dialogueTiming.message, { shotId: shot.id, correction: "对白时长仅作提醒；如需优化，再按自然分句、说话人转换或动作反应拆镜" }));
     if (targetShotDuration && shot.duration !== targetShotDuration)
         issues.push(warning("SHOT_DURATION_MISMATCH", `${label}当前为${shot.duration}秒，生产方案目标为${targetShotDuration}秒`, { shotId: shot.id, correction: `按生产方案重新生成或调整为${targetShotDuration}秒逻辑镜头` }));
     const fixedReferenceCount = new Set([shot.sceneId, ...shot.characterIds, ...shot.propIds, ...shot.clueIds, ...(shot.sourceAssetIds || [])].filter(Boolean)).size;
@@ -110,7 +110,9 @@ function checkShot(
     const referenceCount = fixedReferenceCount + continuityReferenceCount + frameReferenceCount;
     const referenceLimit = dramaReferenceImageBudget(shot.duration);
     if (referenceCount > referenceLimit)
-        issues.push(warning("REFERENCE_IMAGE_BUDGET", `${label}计划引用 ${referenceCount} 张图片，超过 ${shot.duration} 秒视频的 ${referenceLimit} 张上限`, { shotId: shot.id, correction: "在提交预览中取消部分中间帧；固定资产、连续性首帧和结束帧必须保留" }));
+        issues.push(
+            warning("REFERENCE_IMAGE_BUDGET", `${label}计划引用 ${referenceCount} 张图片，超过 ${shot.duration} 秒视频的 ${referenceLimit} 张上限`, { shotId: shot.id, correction: "在提交预览中取消部分中间帧；固定资产、连续性首帧和结束帧必须保留" }),
+        );
     if (!shot.continuity?.shotSize || !shot.continuity?.cameraAngle || !shot.continuity?.composition)
         issues.push(warning("FRAMING_UNCLEAR", `${label}缺少完整景别、机位或构图约束，可能导致主体位置和景别漂移`, { shotId: shot.id, correction: "补充明确景别、机位和构图" }));
     if (!shot.lighting && !shot.entryState?.lighting) issues.push(warning("LIGHTING_UNCLEAR", `${label}缺少明确光照方向，生成结果可能出现人物与背景光照脱节`, { shotId: shot.id, correction: "补充主光方向、色温和主体/背景光照关系" }));
@@ -167,7 +169,9 @@ function checkShot(
                 if (shot.storyboardFrameMode === "all_frames" && shot.framePlan.frames.length < 2)
                     issues.push(blocking("FRAME_COUNT_MIN", `${label}的 all_frames 至少需要 2 个有序关键帧`, { shotId: shot.id, correction: "补充至少一张具有真实可见变化的关键帧" }));
                 if (shot.storyboardFrameMode === "all_frames" && targetFrameCount && shot.framePlan.frames.length !== targetFrameCount)
-                    issues.push(blocking("FRAME_COUNT_MISMATCH", `${label}包含 ${shot.framePlan.frames.length} 个关键帧，但当前生产方案要求 ${targetFrameCount} 个`, { shotId: shot.id, correction: `按当前生产方案重新生成 ${targetFrameCount} 个连续关键帧` }));
+                    issues.push(
+                        blocking("FRAME_COUNT_MISMATCH", `${label}包含 ${shot.framePlan.frames.length} 个关键帧，但当前生产方案要求 ${targetFrameCount} 个`, { shotId: shot.id, correction: `按当前生产方案重新生成 ${targetFrameCount} 个连续关键帧` }),
+                    );
                 shot.framePlan.frames.forEach((frame, index, frames) => {
                     const visualError = validateDramaFrameVisualContent(frame.imagePrompt, frame.actionPrompt);
                     if (visualError) issues.push(blocking("FRAME_VISUAL_CONTENT", `${label}第${index + 1}帧${visualError}`, { shotId: shot.id }));

@@ -102,6 +102,7 @@ describe("creative shortcut skills", () => {
         expect(DRAMA_PACKAGE_ARCHITECTURE_RULES).toContain("字段之间使用换行");
         expect(DRAMA_PACKAGE_ARCHITECTURE_RULES).toContain("seedance-25-director");
         expect(DRAMA_PACKAGE_ARCHITECTURE_RULES).toContain("每秒约 5 个可发音字");
+        expect(DRAMA_PACKAGE_ARCHITECTURE_RULES).toContain("10 个可发音字容差");
         expect(DRAMA_PACKAGE_ARCHITECTURE_RULES).toContain("每个镜头至少落实一个环境压力");
     });
 

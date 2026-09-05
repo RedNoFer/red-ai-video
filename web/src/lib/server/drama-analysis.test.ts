@@ -18,7 +18,7 @@ import {
 } from "./drama-analysis";
 
 describe("drama analysis contracts", () => {
-    it("rejects content analysis that packs more dialogue into a shot than can be spoken", () => {
+    it("reports a content-analysis dialogue capacity reminder", () => {
         const analysis = normalizeDramaContentAnalysis(
             {
                 episode: {},
@@ -44,7 +44,7 @@ describe("drama analysis contracts", () => {
             5,
         );
 
-        expect(validateDramaContentAnalysisTiming(analysis)).toEqual([expect.stringContaining("至少需要")]);
+        expect(validateDramaContentAnalysisTiming(analysis)).toEqual([expect.stringContaining("对白时长仅作提醒")]);
     });
 
     it("keeps material binding and frame planning in the Skill-owned video prompt contract", () => {
@@ -60,25 +60,65 @@ describe("drama analysis contracts", () => {
                 shots: [
                     {
                         shotId: "shot-one",
-                        videoPrompt: "素材绑定：@图片1：顺序帧 1\n动态意图：人物抬头\n全局设定：冷色夜景\n起始可见状态：人物低头\n主体动作与反应：手指收紧\n时间段动作：0-3s 手指收紧；3-6s 人物抬头\n单一主运镜：缓慢推进\n环境压力与视觉母题：风声\n视觉风格与光色：冷蓝\n声音意图：低声耳语\n结束画面：人物抬头看向门外\n连续性锁：身份和轴线不变\n针对性约束：无变形",
+                        videoPrompt:
+                            "素材绑定：@图片1：顺序帧 1\n动态意图：人物抬头\n全局设定：冷色夜景\n起始可见状态：人物低头\n主体动作与反应：手指收紧\n时间段动作：0-3s 手指收紧；3-6s 人物抬头\n单一主运镜：缓慢推进\n环境压力与视觉母题：风声\n视觉风格与光色：冷蓝\n声音意图：低声耳语\n结束画面：人物抬头看向门外\n连续性锁：身份和轴线不变\n针对性约束：无变形",
                         framePlan: {
                             frames: [
                                 { id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 3, startPrompt: "人物低头", actionPrompt: "手指收紧", transitionPrompt: "手指压住剑柄并保持低头", endPrompt: "手指收紧剑柄", imagePrompt: "人物低头，手指收紧剑柄" },
-                                { id: "f2", sequenceIndex: 2, startSecond: 3, endSecond: 6, startPrompt: "手指收紧剑柄", actionPrompt: "人物抬头", transitionPrompt: "视线从剑柄转向门外", endPrompt: "视线越过门框看向门外", imagePrompt: "人物抬头，视线越过门框看向门外" },
+                                {
+                                    id: "f2",
+                                    sequenceIndex: 2,
+                                    startSecond: 3,
+                                    endSecond: 6,
+                                    startPrompt: "手指收紧剑柄",
+                                    actionPrompt: "人物抬头",
+                                    transitionPrompt: "视线从剑柄转向门外",
+                                    endPrompt: "视线越过门框看向门外",
+                                    imagePrompt: "人物抬头，视线越过门框看向门外",
+                                },
                             ],
                         },
                     },
                 ],
             },
             ["shot-one"],
-            [{ id: "shot-one", framePlan: { frames: [{ id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 3 }, { id: "f2", sequenceIndex: 2, startSecond: 3, endSecond: 6 }] } }],
+            [
+                {
+                    id: "shot-one",
+                    framePlan: {
+                        frames: [
+                            { id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 3 },
+                            { id: "f2", sequenceIndex: 2, startSecond: 3, endSecond: 6 },
+                        ],
+                    },
+                },
+            ],
         );
 
-        expect(result.shots[0]).toMatchObject({ shotId: "shot-one", framePlan: { frames: [{ id: "f1", actionPrompt: "手指收紧" }, { id: "f2", actionPrompt: "人物抬头" }] } });
+        expect(result.shots[0]).toMatchObject({
+            shotId: "shot-one",
+            framePlan: {
+                frames: [
+                    { id: "f1", actionPrompt: "手指收紧" },
+                    { id: "f2", actionPrompt: "人物抬头" },
+                ],
+            },
+        });
     });
 
     it("accepts only requested image prompt results", () => {
-        expect(normalizeDramaImagePromptAnalysis({ shots: [{ shotId: "shot-one", imagePrompt: "静态画面" }, { shotId: "unknown", imagePrompt: "忽略" }, { shotId: "shot-one", imagePrompt: "重复" }] }, ["shot-one"])).toEqual({ shots: [{ shotId: "shot-one", imagePrompt: "静态画面" }] });
+        expect(
+            normalizeDramaImagePromptAnalysis(
+                {
+                    shots: [
+                        { shotId: "shot-one", imagePrompt: "静态画面" },
+                        { shotId: "unknown", imagePrompt: "忽略" },
+                        { shotId: "shot-one", imagePrompt: "重复" },
+                    ],
+                },
+                ["shot-one"],
+            ),
+        ).toEqual({ shots: [{ shotId: "shot-one", imagePrompt: "静态画面" }] });
     });
 
     it("keeps content facts separate from visual prompts", () => {
@@ -315,7 +355,14 @@ describe("drama analysis contracts", () => {
     it("restores the source manifest when a visual model omits reference fields", () => {
         const result = normalizeDramaVisualAnalysis(
             {
-                shots: [{ shotId: "shot-one", imagePrompt: "黑湖静态画面", videoPrompt: "固定机位", framePlan: { start: { source: "independent" }, end: { required: true }, frames: [{ id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 2, actionPrompt: "女主低头站定", imagePrompt: "女主低头，双手垂落，门边中景" }] } }],
+                shots: [
+                    {
+                        shotId: "shot-one",
+                        imagePrompt: "黑湖静态画面",
+                        videoPrompt: "固定机位",
+                        framePlan: { start: { source: "independent" }, end: { required: true }, frames: [{ id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 2, actionPrompt: "女主低头站定", imagePrompt: "女主低头，双手垂落，门边中景" }] },
+                    },
+                ],
             },
             ["shot-one"],
             [{ id: "shot-one", framePlan: { referenceManifest: [{ alias: "@图片1", role: "scene_anchor", purpose: "场景基准图", assetId: "scene-one" }] } }],
@@ -329,7 +376,13 @@ describe("drama analysis contracts", () => {
             normalizeDramaVideoPromptAnalysis(
                 {
                     shots: [
-                        { shotId: "shot-one", videoPrompt: "动态意图：用已验收帧完成匹配切\n时间段动作：0-2s 承接；2-4s 匹配切\n单一主运镜：固定机位\n结束画面：匹配切完成\n针对性约束：无变形", framePlan: { frames: [{ id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 2, startPrompt: "人物低头", actionPrompt: "承接", transitionPrompt: "保持低头并接入动作", endPrompt: "人物保持低头", imagePrompt: "人物保持低头" }] } },
+                        {
+                            shotId: "shot-one",
+                            videoPrompt: "动态意图：用已验收帧完成匹配切\n时间段动作：0-2s 承接；2-4s 匹配切\n单一主运镜：固定机位\n结束画面：匹配切完成\n针对性约束：无变形",
+                            framePlan: {
+                                frames: [{ id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 2, startPrompt: "人物低头", actionPrompt: "承接", transitionPrompt: "保持低头并接入动作", endPrompt: "人物保持低头", imagePrompt: "人物保持低头" }],
+                            },
+                        },
                         { shotId: "unknown", videoPrompt: "不应进入" },
                         { shotId: "shot-one", videoPrompt: "重复", framePlan: { frames: [] } },
                     ],
@@ -337,7 +390,13 @@ describe("drama analysis contracts", () => {
                 ["shot-one"],
             ),
         ).toEqual({
-            shots: [{ shotId: "shot-one", videoPrompt: "动态意图：用已验收帧完成匹配切\n时间段动作：0-2s 承接；2-4s 匹配切\n单一主运镜：固定机位\n结束画面：匹配切完成\n针对性约束：无变形", framePlan: { frames: [{ id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 2, startPrompt: "人物低头", actionPrompt: "承接", transitionPrompt: "保持低头并接入动作", endPrompt: "人物保持低头", imagePrompt: "人物保持低头" }] } }],
+            shots: [
+                {
+                    shotId: "shot-one",
+                    videoPrompt: "动态意图：用已验收帧完成匹配切\n时间段动作：0-2s 承接；2-4s 匹配切\n单一主运镜：固定机位\n结束画面：匹配切完成\n针对性约束：无变形",
+                    framePlan: { frames: [{ id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 2, startPrompt: "人物低头", actionPrompt: "承接", transitionPrompt: "保持低头并接入动作", endPrompt: "人物保持低头", imagePrompt: "人物保持低头" }] },
+                },
+            ],
         });
     });
 

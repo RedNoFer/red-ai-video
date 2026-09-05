@@ -11,6 +11,7 @@ import type {
     DramaProductionPackageEpisode,
     DramaProductionPackagePreview,
     DramaProductionPackageV1,
+    DramaProductionBible,
     DramaProject,
     DramaReferenceManifestRole,
     DramaSeriesBible,
@@ -19,7 +20,7 @@ import type {
 } from "@/lib/drama-project-contract";
 import { normalizeDramaProductionPlan } from "@/lib/drama-production-plan";
 import { formatPromptFieldLines, normalizeDramaFrameBeats, upgradeDramaFrameImagePrompt, validateDramaFramePlanVisuals } from "@/lib/drama-frame-sequence";
-import { dramaDialogueTimingIssue, dramaFrameDialogueTimingIssue, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
+import { dramaDialogueTimingReminder, dramaFrameDialogueTimingReminder, dramaUtteranceTimingIssues, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
 import { resolveDramaStyleContract } from "@/lib/drama-style";
 import { resolveDramaShotDuration } from "@/lib/server/drama-shot-config";
 
@@ -33,14 +34,7 @@ type DramaProjectAssetCollection = Pick<DramaProject, "characters" | "scenes" | 
  * enough for the later server-side binding step.
  */
 export function buildDramaAssetReuseContext(project: DramaProjectAssetCollection, episode?: Pick<DramaEpisode, "code" | "shots">) {
-    const usedIds = new Set(
-        (episode?.shots || []).flatMap((shot) => [
-            ...(shot.characterIds || []),
-            ...(shot.propIds || []),
-            ...(shot.sceneId ? [shot.sceneId] : []),
-            ...(shot.clueIds || []),
-        ]),
-    );
+    const usedIds = new Set((episode?.shots || []).flatMap((shot) => [...(shot.characterIds || []), ...(shot.propIds || []), ...(shot.sceneId ? [shot.sceneId] : []), ...(shot.clueIds || [])]));
     return {
         rule: "项目固定资产优先复用；已有资产的身份、轮廓、材质、基准图和稳定编码不得重设计。只有当前章节明确新增且完成资产登记时才可增加新资产。",
         episodeCode: episode?.code || "",
@@ -441,6 +435,7 @@ function normalizeProductionPackage(value: unknown): DramaProductionPackageV1 {
     const normalizedBible = {
         ...bible,
         visualStyle: styleContract.name,
+        ...(normalizeDialogueTimingPolicy(bible.dialogueTiming) ? { dialogueTiming: normalizeDialogueTimingPolicy(bible.dialogueTiming) } : {}),
         ...(styleContract.colorScript ? { colorScript: styleContract.colorScript } : {}),
     };
     validateProductionPackageCompleteness({ ...input, project: { ...project, productionBible: normalizedBible }, assets: normalizedAssets, episodes: synchronizedEpisodes });
@@ -462,6 +457,7 @@ function normalizeProductionPackage(value: unknown): DramaProductionPackageV1 {
                 soundBible: optionalText(bible.soundBible),
                 globalNegativePrompt: optionalText(bible.globalNegativePrompt),
                 subtitleSafeArea: optionalText(bible.subtitleSafeArea),
+                ...(normalizeDialogueTimingPolicy(bible.dialogueTiming) ? { dialogueTiming: normalizeDialogueTimingPolicy(bible.dialogueTiming) } : {}),
                 continuityMode: bible.continuityMode === "balanced" ? "balanced" : "strict",
                 productionPlan: normalizeDramaProductionPlan(bible.productionPlan),
             },
@@ -477,6 +473,7 @@ function validateProductionPackageCompleteness(value: Record<string, unknown>) {
     const project = object(value.project);
     const bible = object(project.productionBible);
     const plan = normalizeDramaProductionPlan(bible.productionPlan);
+    const dialogueTiming = normalizeDialogueTimingPolicy(bible.dialogueTiming);
     if (!plan?.skills.some((skill) => skill.id === "seedance-director")) throw new DramaProductionPackageError("制作包缺少必需的 Seedance 2.0 导演 Skill");
     if (!plan.skills.some((skill) => skill.id === "seedance-25-director")) throw new DramaProductionPackageError("制作包缺少必需的 Seedance 2.5 视频导演 Skill");
     const assets = object(value.assets);
@@ -493,6 +490,10 @@ function validateProductionPackageCompleteness(value: Record<string, unknown>) {
         for (const shot of array(object(episode).shots)) {
             const item = object(shot);
             const label = text(item.code) || text(item.title) || "镜头";
+            if (dialogueTiming?.requireUtteranceTimings) {
+                const timingIssues = dramaUtteranceTimingIssues(Number(item.duration), array(item.utterances) as DramaDialogueTimingInput[], true, label);
+                if (timingIssues.length) throw new DramaProductionPackageError(timingIssues.join("；"));
+            }
             if (!text(item.locationCode) || !locations.has(text(item.locationCode))) throw new DramaProductionPackageError(`${label}缺少有效场景资产引用`);
             for (const code of strings(item.characterCodes)) if (!characters.has(code)) throw new DramaProductionPackageError(`${label}引用了不存在的角色资产 ${code}`);
             for (const code of strings(item.propCodes)) if (!props.has(code)) throw new DramaProductionPackageError(`${label}引用了不存在的道具资产 ${code}`);
@@ -683,7 +684,24 @@ function normalizeProductionArchive(value: unknown): DramaProductionPackageV1["a
         dialogueDirections: array(input.dialogueDirections).flatMap((item) => {
             const direction = object(item);
             const id = text(direction.id);
-            return id ? [{ id, shotCode: text(direction.shotCode), speaker: text(direction.speaker), text: text(direction.text), performance: text(direction.performance), lipSync: Boolean(direction.lipSync) }] : [];
+            return id
+                ? [
+                      {
+                          id,
+                          shotCode: text(direction.shotCode),
+                          speaker: text(direction.speaker),
+                          text: text(direction.text),
+                          performance: text(direction.performance),
+                          lipSync: Boolean(direction.lipSync),
+                          ...(finiteNumber(direction.startSecond) !== undefined ? { startSecond: finiteNumber(direction.startSecond) } : {}),
+                          ...(finiteNumber(direction.endSecond) !== undefined ? { endSecond: finiteNumber(direction.endSecond) } : {}),
+                          ...(finiteNumber(direction.pauseBeforeSeconds) !== undefined ? { pauseBeforeSeconds: finiteNumber(direction.pauseBeforeSeconds) } : {}),
+                          ...(finiteNumber(direction.pauseAfterSeconds) !== undefined ? { pauseAfterSeconds: finiteNumber(direction.pauseAfterSeconds) } : {}),
+                          ...(optionalText(direction.speechRate) ? { speechRate: optionalText(direction.speechRate) } : {}),
+                          ...(finiteNumber(direction.speechRateCharsPerSecond) !== undefined ? { speechRateCharsPerSecond: finiteNumber(direction.speechRateCharsPerSecond) } : {}),
+                      },
+                  ]
+                : [];
         }),
         voiceDirections: array(input.voiceDirections).flatMap((item) => {
             const direction = object(item);
@@ -773,6 +791,12 @@ function normalizePackageShot(value: unknown, index: number): DramaProductionPac
             type,
             speaker: text(utterance.speaker),
             text: text(utterance.text),
+            ...(finiteNumber(utterance.startSecond) !== undefined ? { startSecond: finiteNumber(utterance.startSecond) } : {}),
+            ...(finiteNumber(utterance.endSecond) !== undefined ? { endSecond: finiteNumber(utterance.endSecond) } : {}),
+            ...(finiteNumber(utterance.pauseBeforeSeconds) !== undefined ? { pauseBeforeSeconds: finiteNumber(utterance.pauseBeforeSeconds) } : {}),
+            ...(finiteNumber(utterance.pauseAfterSeconds) !== undefined ? { pauseAfterSeconds: finiteNumber(utterance.pauseAfterSeconds) } : {}),
+            ...(optionalText(utterance.speechRate) ? { speechRate: optionalText(utterance.speechRate) } : {}),
+            ...(finiteNumber(utterance.speechRateCharsPerSecond) !== undefined ? { speechRateCharsPerSecond: finiteNumber(utterance.speechRateCharsPerSecond) } : {}),
         };
     });
     const title = text(shot.title) || `镜头 ${index + 1}`;
@@ -791,8 +815,6 @@ function normalizePackageShot(value: unknown, index: number): DramaProductionPac
     const dialoguePerformance = mergeDialoguePerformance(normalizeDialoguePerformance(shot.dialoguePerformance), utterances);
     const timecode = parseTimecode(shot.timecode);
     const duration = timecode ? Math.max(1, timecode[1] - timecode[0]) : resolveDramaShotDuration(shot.duration, 5);
-    const dialogueTiming = dramaDialogueTimingIssue(duration, utterances as DramaDialogueTimingInput[], text(shot.dialogue), `${text(shot.code) || `镜头 ${index + 1}`}`);
-    if (dialogueTiming) throw new DramaProductionPackageError(dialogueTiming.message);
     let frames;
     try {
         const rawFrames = array(framePlan.frames);
@@ -812,10 +834,6 @@ function normalizePackageShot(value: unknown, index: number): DramaProductionPac
             };
         });
         frames = normalizeDramaFrameBeats(sourceFrames, duration);
-        for (const frame of frames) {
-            const frameTiming = dramaFrameDialogueTimingIssue(frame.startSecond, frame.endSecond, frame.actionPrompt, utterances as DramaDialogueTimingInput[], `${text(shot.code) || `镜头 ${index + 1}`} ${frame.id}`);
-            if (frameTiming) throw new DramaProductionPackageError(frameTiming.message);
-        }
         frames = frames.map((frame) => ({
             ...frame,
             imagePrompt: upgradeDramaFrameImagePrompt(frame.imagePrompt, frame.actionPrompt, {
@@ -1153,6 +1171,12 @@ function collectWarnings(value: DramaProductionPackageV1) {
     for (const episode of value.episodes) {
         for (const shot of episode.shots) {
             for (const code of [...shot.characterCodes, ...shot.propCodes, ...shot.clueCodes, ...(shot.locationCode ? [shot.locationCode] : [])]) if (!assetCodes.has(code)) warnings.push(`${episode.code}/${shot.code} 引用了不存在的资产 ${code}`);
+            const timingReminder = dramaDialogueTimingReminder(shot.duration, shot.utterances as DramaDialogueTimingInput[], shot.dialogue, `${episode.code}/${shot.code}`);
+            if (timingReminder) warnings.push(`对白时长提醒（不阻止导入）：${timingReminder.message}`);
+            for (const frame of shot.framePlan?.frames || []) {
+                const frameReminder = dramaFrameDialogueTimingReminder(frame.startSecond, frame.endSecond, frame.actionPrompt, shot.utterances as DramaDialogueTimingInput[], `${episode.code}/${shot.code} ${frame.id}`);
+                if (frameReminder) warnings.push(`帧段对白时长提醒（不阻止导入）：${frameReminder.message}`);
+            }
         }
     }
     return [...new Set(warnings)];
@@ -1186,12 +1210,26 @@ function text(value: unknown) {
 function optionalText(value: unknown) {
     return text(value) || undefined;
 }
+function finiteNumber(value: unknown) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+}
 function strings(value: unknown) {
     return array(value).map(text).filter(Boolean);
 }
 function positiveNumber(value: unknown) {
     const parsed = Number(value);
     return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+}
+function normalizeDialogueTimingPolicy(value: unknown): DramaProductionBible["dialogueTiming"] | undefined {
+    const input = object(value);
+    if (text(input.version) !== "utterance-timing-v1") return undefined;
+    const charsPerSecond = finiteNumber(input.charsPerSecond);
+    return {
+        version: "utterance-timing-v1",
+        charsPerSecond: charsPerSecond && charsPerSecond > 0 ? charsPerSecond : 5,
+        requireUtteranceTimings: input.requireUtteranceTimings !== false,
+    };
 }
 function normalizeKey(value: string) {
     return value.trim().toLocaleLowerCase();
@@ -1720,7 +1758,10 @@ function mergeShotGroup(group: DramaProductionPackageEpisode["shots"]) {
         narration: joinTexts(group.map((shot) => shot.narration)),
         utterances: group.flatMap((shot) => shot.utterances).map((utterance, index) => ({ ...utterance, order: index + 1 })),
         imagePrompt: first.imagePrompt,
-        videoPrompt: group.map((shot) => shot.videoPrompt.trim()).filter(Boolean).join("\n"),
+        videoPrompt: group
+            .map((shot) => shot.videoPrompt.trim())
+            .filter(Boolean)
+            .join("\n"),
         startFramePrompt: first.startFramePrompt,
         endFramePrompt: last.endFramePrompt,
         negativePrompt: joinTexts(group.map((shot) => shot.negativePrompt)),
@@ -1745,7 +1786,6 @@ function mergeShotGroup(group: DramaProductionPackageEpisode["shots"]) {
         framePlan: { start: first.framePlan.start, end: last.framePlan.end, frames, ...(references.length ? { referenceManifest: references } : {}), ...(first.framePlan.referenceCount ? { referenceCount: first.framePlan.referenceCount } : {}) },
     } as DramaProductionPackageEpisode["shots"][number];
 }
-
 
 function compactMergedFrames(frames: DramaProductionPackageEpisode["shots"][number]["framePlan"]["frames"], duration: number) {
     const unique = frames.filter((frame, index, all) => all.findIndex((item) => item.actionPrompt.trim() === frame.actionPrompt.trim()) === index);

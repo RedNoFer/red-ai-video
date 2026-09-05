@@ -50,10 +50,10 @@ const productionPackage: DramaProductionPackageV1 = {
 };
 
 describe("production package boundary", () => {
-    it("rejects a five-second frame that carries a full speech", () => {
+    it("surfaces a dialogue capacity reminder without blocking package import", () => {
         const source = structuredClone(productionPackage);
         const shot = source.episodes[0].shots[0];
-        const speech = "纳兰小姐你应该知道女方悔婚会让对方难堪可我的父亲是一族之长";
+        const speech = "纳兰小姐你应该知道女方悔婚会让对方难堪可我的父亲是一族之长今日还要承担家族责任";
         shot.duration = 15;
         shot.timecode = "0-15s";
         shot.dialogue = speech;
@@ -63,12 +63,22 @@ describe("production package boundary", () => {
             { ...shot.framePlan.frames[0], id: "SH01-F02", sequenceIndex: 2, startSecond: 5, endSecond: 15, actionPrompt: "萧炎收住视线", imagePrompt: "萧炎抬眼，手掌停在桌案边，视线锁定纳兰" },
         ];
 
-        expect(() => previewDramaProductionPackage(JSON.stringify(source), "package.json")).toThrow(/SH01.*SH01-frame-1.*至少需要.*秒/u);
+        const preview = previewDramaProductionPackage(JSON.stringify(source), "package.json");
+        expect(preview.package.episodes[0].shots).toHaveLength(2);
+        expect(preview.warnings).toEqual(expect.arrayContaining([expect.stringContaining("不阻止导入")]));
     });
 
     it("builds a fixed-asset reuse catalog with stable codes and current-episode usage", () => {
         const current = project();
-        current.characters = [{ id: "character-existing", code: "C07", name: "Karin", description: "锁定角色", references: [{ id: "ref-one", label: "角色基准图", url: "https://cdn.example.com/karin.png", source: "generated", status: "approved", createdAt: "2026-01-01" }] }];
+        current.characters = [
+            {
+                id: "character-existing",
+                code: "C07",
+                name: "Karin",
+                description: "锁定角色",
+                references: [{ id: "ref-one", label: "角色基准图", url: "https://cdn.example.com/karin.png", source: "generated", status: "approved", createdAt: "2026-01-01" }],
+            },
+        ];
         current.scenes = [{ id: "scene-existing", name: "城门", description: "锁定场景" }];
         current.props = [{ id: "prop-existing", name: "断剑", description: "锁定道具" }];
         current.episodes[0] = { ...current.episodes[0], code: "E01", shots: [{ ...shot("SH01", 1, "0-15s", ["C07"], "Karin握住断剑"), characterIds: ["character-existing"], sceneId: "scene-existing", propIds: ["prop-existing"] } as never] };
@@ -584,7 +594,8 @@ describe("production package boundary", () => {
 
     it("rebuilds old static prompts that contain reference duties on package import", () => {
         const legacy = structuredClone(productionPackage);
-        legacy.episodes[0].shots[0].framePlan.frames[0].imagePrompt = "静态关键帧：旧画面；可见状态：手握断剑；可见表演状态：警觉；景别：中景；机位与构图：平视；站位与视线：看向断剑；三层空间：背景古塔；光色与风格：冷光；参考图职责：沿用旧绑定；负面约束：无水印";
+        legacy.episodes[0].shots[0].framePlan.frames[0].imagePrompt =
+            "静态关键帧：旧画面；可见状态：手握断剑；可见表演状态：警觉；景别：中景；机位与构图：平视；站位与视线：看向断剑；三层空间：背景古塔；光色与风格：冷光；参考图职责：沿用旧绑定；负面约束：无水印";
 
         const imported = previewDramaProductionPackage(JSON.stringify(legacy), "package.json").package;
         const prompt = imported.episodes[0].shots[0].framePlan.frames[0].imagePrompt;

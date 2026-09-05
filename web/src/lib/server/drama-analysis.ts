@@ -16,7 +16,7 @@ import type {
     DramaVisualAnalysis,
 } from "@/lib/drama-project-contract";
 import { formatPromptFieldLines, normalizeDramaFrameBeats, validateDramaFramePlanVisuals } from "@/lib/drama-frame-sequence";
-import { dramaDialogueTimingIssue, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
+import { dramaDialogueTimingReminder, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
 import { resolveDramaShotDuration } from "@/lib/server/drama-shot-config";
 import { strictJsonObjectText } from "@/lib/server/structured-model-output";
 
@@ -38,6 +38,7 @@ export function normalizeDramaContentAnalysis(value: unknown, defaultVideoSecond
                     type: utterance.type === "voiceover" ? ("voiceover" as const) : ("dialogue" as const),
                     speaker: text(utterance.speaker),
                     text: utteranceText,
+                    ...optionalUtteranceTiming(utterance),
                 },
             ];
         });
@@ -83,7 +84,7 @@ export function normalizeDramaContentAnalysis(value: unknown, defaultVideoSecond
 
 export function validateDramaContentAnalysisTiming(value: DramaContentAnalysis) {
     return value.shots.flatMap((shot, index) => {
-        const issue = dramaDialogueTimingIssue(shot.duration, shot.utterances as DramaDialogueTimingInput[], shot.dialogue, `镜头 ${String(index + 1).padStart(2, "0")}`);
+        const issue = dramaDialogueTimingReminder(shot.duration, shot.utterances as DramaDialogueTimingInput[], shot.dialogue, `镜头 ${String(index + 1).padStart(2, "0")}`);
         return issue ? [issue.message] : [];
     });
 }
@@ -249,11 +250,7 @@ function normalizeReferenceCount(value: unknown) {
     return { min: Math.min(30, min), max: Math.min(30, max) };
 }
 
-export function normalizeDramaVideoPromptAnalysis(
-    value: unknown,
-    shotIds: string[],
-    sourceShots: ReadonlyArray<{ id: string; framePlan?: unknown }> = [],
-): import("@/lib/drama-project-contract").DramaVideoPromptAnalysis {
+export function normalizeDramaVideoPromptAnalysis(value: unknown, shotIds: string[], sourceShots: ReadonlyArray<{ id: string; framePlan?: unknown }> = []): import("@/lib/drama-project-contract").DramaVideoPromptAnalysis {
     const allowed = new Set(shotIds);
     const seen = new Set<string>();
     const sourcePlans = new Map(sourceShots.map((shot) => [shot.id, object(shot.framePlan)]));
@@ -276,7 +273,8 @@ export function normalizeDramaVideoPromptAnalysis(
             const transitionPrompt = text(frame.transitionPrompt);
             const endPrompt = text(frame.endPrompt);
             const imagePrompt = text(frame.imagePrompt);
-            if (!Number.isInteger(sequenceIndex) || sequenceIndex < 1 || !Number.isFinite(startSecond) || !Number.isFinite(endSecond) || endSecond <= startSecond || !startPrompt || !actionPrompt || !transitionPrompt || !endPrompt || !imagePrompt) return [];
+            if (!Number.isInteger(sequenceIndex) || sequenceIndex < 1 || !Number.isFinite(startSecond) || !Number.isFinite(endSecond) || endSecond <= startSecond || !startPrompt || !actionPrompt || !transitionPrompt || !endPrompt || !imagePrompt)
+                return [];
             return [
                 {
                     id: text(frame.id) || text(source.id) || `frame-${index + 1}`,
@@ -700,6 +698,23 @@ function extractDramaUtterances(value: string): DramaUtterance[] {
     }));
 }
 
+function optionalUtteranceTiming(value: Record<string, unknown>) {
+    const timing = {
+        startSecond: finiteNumber(value.startSecond),
+        endSecond: finiteNumber(value.endSecond),
+        pauseBeforeSeconds: finiteNumber(value.pauseBeforeSeconds),
+        pauseAfterSeconds: finiteNumber(value.pauseAfterSeconds),
+        speechRate: text(value.speechRate) || undefined,
+        speechRateCharsPerSecond: finiteNumber(value.speechRateCharsPerSecond),
+    };
+    return Object.fromEntries(Object.entries(timing).filter(([, item]) => item !== undefined));
+}
+
+function finiteNumber(value: unknown) {
+    const number = Number(value);
+    return Number.isFinite(number) ? number : undefined;
+}
+
 function extractDialogueSpans(value: string): DialogueSpan[] {
     const spans: DialogueSpan[] = [];
     const seen = new Set<string>();
@@ -949,6 +964,12 @@ export const dramaContentTool = {
                                     type: { type: "string", enum: ["dialogue", "voiceover"] },
                                     speaker: { type: "string", description: "原文可判断时填写说话人；无法判断可留空" },
                                     text: { type: "string", description: "逐句保留原话，不得改写、概括或合并遗漏" },
+                                    startSecond: { type: "number", minimum: 0, description: "相对当前镜头的起始说话时间，不含停顿" },
+                                    endSecond: { type: "number", minimum: 0, description: "相对当前镜头的结束说话时间，不含停顿" },
+                                    pauseBeforeSeconds: { type: "number", minimum: 0, description: "本句开口前的可见或可听停顿" },
+                                    pauseAfterSeconds: { type: "number", minimum: 0, description: "本句说完后的停顿或反应空间" },
+                                    speechRate: { type: "string", description: "情绪化语速，如克制偏慢、逼迫偏快" },
+                                    speechRateCharsPerSecond: { type: "number", minimum: 2, maximum: 8, description: "可复核的实际语速，单位为每秒可发音字数" },
                                 },
                             },
                         },

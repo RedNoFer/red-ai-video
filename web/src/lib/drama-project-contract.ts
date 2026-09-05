@@ -333,6 +333,11 @@ export type DramaProductionBible = {
     soundBible?: string;
     globalNegativePrompt?: string;
     subtitleSafeArea?: string;
+    dialogueTiming?: {
+        version: "utterance-timing-v1";
+        charsPerSecond: number;
+        requireUtteranceTimings: boolean;
+    };
     continuityMode: "strict" | "balanced";
     productionPlan?: DramaProductionPlan;
 };
@@ -387,7 +392,20 @@ export type DramaProductionArchive = {
     formatVersion: "vozeb-drama-production-package-v1";
     sections: Array<{ code: string; title: string; content: string }>;
     promptAssets: Array<{ code: string; category: "keyframe" | "storyboard"; title: string; prompt: string; shotCodes: string[] }>;
-    dialogueDirections: Array<{ id: string; shotCode: string; speaker: string; text: string; performance: string; lipSync: boolean }>;
+    dialogueDirections: Array<{
+        id: string;
+        shotCode: string;
+        speaker: string;
+        text: string;
+        performance: string;
+        lipSync: boolean;
+        startSecond?: number;
+        endSecond?: number;
+        pauseBeforeSeconds?: number;
+        pauseAfterSeconds?: number;
+        speechRate?: string;
+        speechRateCharsPerSecond?: number;
+    }>;
     voiceDirections: Array<{ subject: string; direction: string }>;
     silenceDirections: Array<{ shotCode: string; direction: string }>;
     referencePlan: Array<{ priority: number; asset: string; purpose: string; planType: string; shotCodes: string[] }>;
@@ -408,6 +426,13 @@ export type DramaUtterance = {
     speaker: string;
     characterId?: string;
     text: string;
+    /** Local to the containing shot; speech interval excludes pauses. */
+    startSecond?: number;
+    endSecond?: number;
+    pauseBeforeSeconds?: number;
+    pauseAfterSeconds?: number;
+    speechRate?: string;
+    speechRateCharsPerSecond?: number;
 };
 
 export type DramaPerformanceBeat = {
@@ -713,6 +738,7 @@ export type DramaContentAnalysis = {
             sceneName: string;
         }
     >;
+    warnings?: string[];
 };
 
 export type DramaVisualAnalysis = {

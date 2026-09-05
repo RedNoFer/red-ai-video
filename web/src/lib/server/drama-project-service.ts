@@ -1061,24 +1061,13 @@ export async function createDramaProductionRunForUser(userId: string, projectId:
     const requiresAllFrames = productionShots.some((shot) => shot.storyboardFrameMode === "all_frames" && Boolean(shot.framePlan?.frames.length));
     const requestedVideoModel = parameters.videoModel;
     const videoCandidates = resolveLogicalModelCandidates(settings, "video", requestedVideoModel);
-    const requiredKeyframeCount = Math.max(
-        0,
-        ...productionShots
-            .filter((shot) => shot.storyboardFrameMode === "all_frames")
-            .map((shot) => shot.framePlan?.frames.length || 0),
-    );
+    const requiredKeyframeCount = Math.max(0, ...productionShots.filter((shot) => shot.storyboardFrameMode === "all_frames").map((shot) => shot.framePlan?.frames.length || 0));
     const videoCandidate = requiresAllFrames ? videoCandidates.find((candidate) => supportsVideoKeyframeReferences(candidate, requiredKeyframeCount)) : videoCandidates[0];
     if (!videoCandidate) {
-        if (!videoCandidates.length)
-            throw new DramaProjectServiceError(
-                `后台默认视频模型 ${requestedVideoModel || "未配置"} 未启用或没有可用渠道，请先在后台配置可用的视频逻辑模型`,
-                409,
-            );
+        if (!videoCandidates.length) throw new DramaProjectServiceError(`后台默认视频模型 ${requestedVideoModel || "未配置"} 未启用或没有可用渠道，请先在后台配置可用的视频逻辑模型`, 409);
         throw new DramaProjectServiceError(`后台默认视频模型 ${requestedVideoModel} 未声明支持全能帧关键图，请在后台为该模型声明全能帧能力或调整本集帧模式`, 409);
     }
-    const executionPlan = parameters.productionPlan
-        ? { ...parameters.productionPlan, video: { ...parameters.productionPlan.video, model: videoCandidate.logicalModelId, channelId: videoCandidate.channelId } }
-        : undefined;
+    const executionPlan = parameters.productionPlan ? { ...parameters.productionPlan, video: { ...parameters.productionPlan.video, model: videoCandidate.logicalModelId, channelId: videoCandidate.channelId } } : undefined;
     validateDramaReferenceSelections(project, episode, productionShots, referenceSelections);
     const preflight = preflightDramaProduction(project, episode, checkedShotIds.length ? checkedShotIds : undefined);
     if (preflight.status === "blocked") {
@@ -3294,9 +3283,20 @@ function normalizeUtterances(value: unknown): DramaUtterance[] {
                 characterId: cleanText(input.characterId) || undefined,
                 speaker: cleanText(input.speaker),
                 text: cleanText(input.text),
+                ...(optionalFiniteNumber(input.startSecond) !== undefined ? { startSecond: optionalFiniteNumber(input.startSecond) } : {}),
+                ...(optionalFiniteNumber(input.endSecond) !== undefined ? { endSecond: optionalFiniteNumber(input.endSecond) } : {}),
+                ...(optionalFiniteNumber(input.pauseBeforeSeconds) !== undefined ? { pauseBeforeSeconds: optionalFiniteNumber(input.pauseBeforeSeconds) } : {}),
+                ...(optionalFiniteNumber(input.pauseAfterSeconds) !== undefined ? { pauseAfterSeconds: optionalFiniteNumber(input.pauseAfterSeconds) } : {}),
+                ...(optionalText(input.speechRate) ? { speechRate: optionalText(input.speechRate) } : {}),
+                ...(optionalFiniteNumber(input.speechRateCharsPerSecond) !== undefined ? { speechRateCharsPerSecond: optionalFiniteNumber(input.speechRateCharsPerSecond) } : {}),
             } as DramaUtterance;
         })
         .filter((item) => item.text);
+}
+
+function optionalFiniteNumber(value: unknown) {
+    const number = Number(value);
+    return Number.isFinite(number) ? number : undefined;
 }
 
 function ids(value: unknown) {

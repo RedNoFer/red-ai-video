@@ -113,9 +113,7 @@ function DramaProjectEditor({ project }: { project: DramaProject }) {
             !frames.some((frame) => frame.role === "actual_end" && frame.sourceVideoUrl === item.videoUrl && frame.validity !== "superseded" && frame.validity !== "unavailable")
         );
     });
-    const boundaryTargetEvidenceKey = boundaryTarget
-        ? (boundaryTarget.frameEvidence || []).map((frame) => `${frame.role}:${frame.sourceVideoUrl || ""}:${frame.validity}`).join("|")
-        : "";
+    const boundaryTargetEvidenceKey = boundaryTarget ? (boundaryTarget.frameEvidence || []).map((frame) => `${frame.role}:${frame.sourceVideoUrl || ""}:${frame.validity}`).join("|") : "";
     const openEpisodeCanvas = async () => {
         try {
             if (episode.canvasProjectId) {
@@ -176,9 +174,10 @@ function DramaProjectEditor({ project }: { project: DramaProject }) {
             const payload = (await response.json().catch(() => ({}))) as { data?: DramaContentAnalysis; msg?: string };
             if (!response.ok || !payload.data) throw new Error(payload.msg || "AI 剧本解析失败");
             const analysis = payload.data;
+            const timingWarning = analysis.warnings?.length ? `\n\n对白时长提醒：${analysis.warnings.join("；")}。提醒不阻止继续回填。` : "";
             modal.confirm({
                 title: "AI 整理结果待确认",
-                content: `将回填 ${analysis.characters.length} 个角色、${analysis.scenes.length} 个场景、${analysis.props.length} 个道具和 ${analysis.shots.length} 个镜头。取消不会修改当前项目。`,
+                content: `将回填 ${analysis.characters.length} 个角色、${analysis.scenes.length} 个场景、${analysis.props.length} 个道具和 ${analysis.shots.length} 个镜头。取消不会修改当前项目。${timingWarning}`,
                 okText: "确认回填",
                 cancelText: "放弃回填",
                 onOk: async () => {
