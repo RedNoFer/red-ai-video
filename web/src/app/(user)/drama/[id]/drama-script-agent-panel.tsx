@@ -9,7 +9,7 @@ import type { CreativeAsset, CreativeConversation, CreativeMessage } from "@/lib
 import type { DramaProductionPackagePreview, DramaProject, DramaEpisode } from "@/lib/drama-project-contract";
 import { AgentMarkdown } from "@/components/agent/agent-markdown";
 import { createCreativeAgentRun, createCreativeConversation, listCreativeConversationPage, listCreativeMessages, uploadCreativeAsset, watchCreativeAgentRun } from "@/services/api/creative";
-import { CREATIVE_UPLOAD_MAX_BYTES, isCreativeTextFile, isCreativeUploadMimeType } from "@/lib/creative-upload";
+import { CREATIVE_UPLOAD_MAX_BYTES, isCreativeTextFile } from "@/lib/creative-upload";
 import { applyDramaEpisodeProductionPackage, saveDramaProductionPlan } from "@/services/api/drama-projects";
 import { useDramaStore } from "../stores/use-drama-store";
 import { useCreativeAgentOptions } from "@/hooks/use-creative-agent-options";
@@ -96,7 +96,7 @@ export function DramaScriptAgentPanel({ project, episode, open, onOpenChange }: 
     }, [messages.length, messages.at(-1)?.content]);
 
     const addAttachments = (files: File[]) => {
-        const unsupported = files.find((file) => !isCreativeUploadMimeType(file.type) && !isCreativeTextFile(file.name, file.type));
+        const unsupported = files.find((file) => !file.type.startsWith("image/") && !isCreativeTextFile(file.name, file.type));
         if (unsupported) return message.error(`${unsupported.name} 不是支持的图片、TXT 或 Markdown 文件`);
         const oversized = files.find((file) => file.size > CREATIVE_UPLOAD_MAX_BYTES);
         if (oversized) return message.error(`${oversized.name} 超过 20MB`);

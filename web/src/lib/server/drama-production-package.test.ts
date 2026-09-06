@@ -275,6 +275,19 @@ describe("production package boundary", () => {
         expect(() => previewDramaProductionPackage(JSON.stringify(incomplete), "package.json")).toThrow("必须声明入口和出口状态");
     });
 
+    it("rejects non-script durations and fixed counts on Agent frame plans", () => {
+        const invalidDuration = structuredClone(productionPackage);
+        invalidDuration.project.productionBible.productionPlan = { ...defaultDramaProductionPlan("package"), video: { ...defaultDramaProductionPlan("package").video, shotDuration: 20 as never } };
+        expect(() => previewDramaProductionPackage(JSON.stringify(invalidDuration), "package.json")).toThrow("每镜时长只能为 15 秒或 30 秒");
+
+        const invalidFramePolicy = structuredClone(productionPackage);
+        invalidFramePolicy.project.productionBible.productionPlan = {
+            ...defaultDramaProductionPlan("package"),
+            video: { ...defaultDramaProductionPlan("package").video, framePolicy: "agent", frameCount: 5 },
+        };
+        expect(() => previewDramaProductionPackage(JSON.stringify(invalidFramePolicy), "package.json")).toThrow("不能携带固定帧数");
+    });
+
     it("rejects a legacy Markdown snapshot that lacks required frame plans", () => {
         const source = readFileSync(new URL("../../../../output/mahadel-episode-01-production-package.md", import.meta.url), "utf8");
         expect(() => previewDramaProductionPackage(source, "mahadel-episode-01-production-package.md")).toThrow("缺少有效 framePlan");

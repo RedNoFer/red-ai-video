@@ -658,26 +658,9 @@ export async function saveDramaEpisodeSettingsForUser(userId: string, id: string
     const episode = current.episodes.find((item) => item.id === episodeId);
     if (!episode) throw new DramaProjectServiceError("短剧剧集不存在", 404);
     const input = object(value);
-    const productionPlan = normalizeDramaProductionPlan(input.productionPlan, normalizeDramaProductionPlan(current.productionBible?.productionPlan, defaultDramaProductionPlan("new-project")))!;
-    const style = normalizeDramaStyleName(cleanText(input.style) || current.style);
-    const styleContract = resolveDramaStyleContract({ style, productionBible: current.productionBible });
     const nextProject: DramaProject = {
         ...current,
         summary: typeof input.summary === "string" ? cleanText(input.summary) : current.summary,
-        style: styleContract.name,
-        defaultVideoMode: productionPlan.video.mode === "text-to-video" ? "direct" : "storyboard",
-        productionBible: (() => {
-            const { colorScript: _oldColorScript, ...bibleWithoutColorScript } = current.productionBible || {};
-            return {
-                ...bibleWithoutColorScript,
-                language: current.productionBible?.language || "zh-CN",
-                ratio: current.productionBible?.ratio || current.ratio,
-                visualStyle: styleContract.name,
-                ...(styleContract.colorScript ? { colorScript: styleContract.colorScript } : {}),
-                continuityMode: current.productionBible?.continuityMode || "strict",
-                productionPlan,
-            };
-        })(),
         episodes: current.episodes.map((item) => (item.id === episodeId ? { ...item, title: cleanText(input.title) || item.title } : item)),
         updatedAt: nextTimestamp(current.updatedAt),
     };
@@ -1115,6 +1098,13 @@ export function previewDramaProductionPackageForUser(value: unknown) {
     }
 }
 
+export function previewDramaScriptProductionPackageForUser(value: unknown) {
+    const preview = previewDramaProductionPackageForUser(value);
+    const plan = preview.package.project.productionBible?.productionPlan;
+    if (!plan?.lockedAt || !plan.visual.visualStyle.trim() || !plan.visual.artStyle.trim()) throw new DramaProjectServiceError("剧本 Agent 制作包必须包含已锁定且具体的视觉风格和画风", 400);
+    return preview;
+}
+
 export async function applyDramaProductionPackageForUser(userId: string, id: string, value: unknown) {
     const input = object(value);
     const current = await getDramaProjectForUser(userId, id);
@@ -1138,7 +1128,7 @@ export async function applyDramaEpisodeProductionPackageForUser(userId: string, 
     const episodeId = cleanText(episodeIdValue);
     const target = current.episodes.find((episode) => episode.id === episodeId);
     if (!target) throw new DramaProjectServiceError("短剧剧集不存在", 404);
-    const preview = previewDramaProductionPackageForUser(input);
+    const preview = previewDramaScriptProductionPackageForUser(input);
     if (cleanText(input.sourceHash) !== preview.sourceHash) throw new DramaProjectServiceError("制作包内容已变化，请重新预览", 409);
     if (preview.package.episodes.length !== 1) throw new DramaProjectServiceError("剧本 Agent 制作包只能包含当前集", 400);
     const scoped = { ...current, episodes: [target], activeEpisodeId: target.id };

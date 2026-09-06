@@ -5,9 +5,9 @@ export const DEFAULT_DRAMA_SKILL = { id: "seedance-director", name: "Seedance �
 export const DEFAULT_DRAMA_VIDEO_SKILL = { id: "seedance-25-director", name: "Seedance 2.5 导演", version: "2.5" } as const;
 export const DRAMA_REFERENCE_ROLES: DramaReferenceManifestRole[] = ["previous_actual_tail", "character_anchor", "scene_anchor", "prop_anchor", "action_keyframe", "composition_keyframe"];
 export const DRAMA_VIDEO_RESOLUTION_OPTIONS = ["480p", "720p", "1080p"] as const;
-export const DRAMA_SHOT_DURATION_OPTIONS = [15, 20, 30] as const;
+export const DRAMA_SHOT_DURATION_OPTIONS = [15, 30] as const;
 export type DramaShotDuration = (typeof DRAMA_SHOT_DURATION_OPTIONS)[number];
-export const DRAMA_SCRIPT_SHOT_DURATION_OPTIONS = [15, 30] as const;
+export const DRAMA_SCRIPT_SHOT_DURATION_OPTIONS = DRAMA_SHOT_DURATION_OPTIONS;
 export type DramaScriptShotDuration = (typeof DRAMA_SCRIPT_SHOT_DURATION_OPTIONS)[number];
 export const DRAMA_FRAME_COUNT_DEFAULT = 5;
 export const DRAMA_FRAME_COUNT_MAX = 9;
@@ -31,7 +31,6 @@ export function defaultDramaProductionPlan(source: DramaProductionPlan["source"]
             resolution: "720p",
             durationPolicy: "shot",
             shotDuration: 15,
-            frameCount: DRAMA_FRAME_COUNT_DEFAULT,
             framePolicy: "agent",
             count: 1,
             audioMode: "native",
@@ -74,6 +73,7 @@ export function normalizeDramaProductionPlan(value: unknown, fallback?: DramaPro
     const framePolicy = normalizeFramePolicy(videoInput.framePolicy, base.video.framePolicy || (Number(videoInput.frameCount) === 4 ? "fixed-4" : Number(videoInput.frameCount) === 5 ? "fixed-5" : "agent"));
     const visualStyle = text(visualInput.visualStyle);
     const artStyle = text(visualInput.artStyle);
+    const frameCount = framePolicy === "fixed-4" ? 4 : framePolicy === "fixed-5" ? 5 : undefined;
     return {
         version: DRAMA_PRODUCTION_PLAN_VERSION,
         skills: normalizedSkills,
@@ -91,7 +91,7 @@ export function normalizeDramaProductionPlan(value: unknown, fallback?: DramaPro
             durationPolicy: videoInput.durationPolicy === "fixed" ? "fixed" : "shot",
             duration: positive(videoInput.duration) || base.video.duration,
             shotDuration: normalizeShotDuration(requestedShotDuration, base.video.shotDuration || 15),
-            frameCount: boundedInteger(videoInput.frameCount, base.video.frameCount || DRAMA_FRAME_COUNT_DEFAULT, 1, DRAMA_FRAME_COUNT_MAX),
+            ...(frameCount ? { frameCount } : {}),
             framePolicy,
             count: boundedInteger(videoInput.count, base.video.count, 1, 50),
             audioMode: ["native", "voiceover", "mute"].includes(text(videoInput.audioMode)) ? (text(videoInput.audioMode) as DramaProductionPlan["video"]["audioMode"]) : base.video.audioMode,

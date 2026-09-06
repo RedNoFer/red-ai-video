@@ -5,7 +5,8 @@ import { defaultDramaProductionPlan, dramaReferenceImageBudget, normalizeDramaPr
 describe("drama production plan", () => {
     it("defaults new projects to locked-by-confirmation storyboard settings", () => {
         const plan = defaultDramaProductionPlan();
-        expect(plan).toMatchObject({ visual: { visualStyle: "", artStyle: "", source: "agent" }, video: { model: "seedance-2-0-official", mode: "storyboard", resolution: "720p", shotDuration: 15, frameCount: 5, framePolicy: "agent", count: 1, allowExplicitFallback: false } });
+        expect(plan).toMatchObject({ visual: { visualStyle: "", artStyle: "", source: "agent" }, video: { model: "seedance-2-0-official", mode: "storyboard", resolution: "720p", shotDuration: 15, framePolicy: "agent", count: 1, allowExplicitFallback: false } });
+        expect(plan.video.frameCount).toBeUndefined();
         expect(plan.skills.map((skill) => skill.id)).toEqual(["seedance-director", "seedance-25-director"]);
         expect(plan.references).toMatchObject({ strategy: "adaptive", minImages: 3, maxImages: 5 });
         expect(plan.continuity).toMatchObject({ mode: "strict", requireAcceptedActualTail: true });
@@ -22,14 +23,15 @@ describe("drama production plan", () => {
         expect(normalizeDramaProductionPlan({ video: { resolution: "2160p" } })?.video.resolution).toBe("720p");
     });
 
-    it("normalizes 15/20/30 second shots and explicit frame-count requests", () => {
+    it("normalizes 15/30 second shots and ignores fixed frame counts for Agent splitting", () => {
         expect(defaultDramaProductionPlan().video.shotDuration).toBe(15);
         expect(normalizeDramaProductionPlan({ video: { shotDuration: 30 } })?.video.shotDuration).toBe(30);
-        expect(normalizeDramaProductionPlan({ video: { shotDuration: 20, frameCount: 7 } })?.video).toMatchObject({ shotDuration: 20, frameCount: 7 });
+        expect(normalizeDramaProductionPlan({ video: { shotDuration: 20, frameCount: 7 } })?.video).toMatchObject({ shotDuration: 15, framePolicy: "agent" });
+        expect(normalizeDramaProductionPlan({ video: { framePolicy: "fixed-4", frameCount: 4 } })?.video).toMatchObject({ framePolicy: "fixed-4", frameCount: 4 });
         expect(normalizeDramaProductionPlan({ video: { shotDuration: 12 } })?.video.shotDuration).toBe(15);
         expect(resolveDramaShotDurationPreference("请按每个视频片段30s重新拆分")).toBe(30);
         expect(resolveDramaShotDurationPreference("请按每个视频片段15秒重新拆分")).toBe(15);
-        expect(resolveDramaShotDurationPreference("每个镜头20s，分7个帧")).toBe(20);
+        expect(resolveDramaShotDurationPreference("每个镜头20s，分7个帧")).toBe(15);
         expect(resolveDramaFrameCountPreference("每个镜头20s，分7个帧")).toBe(7);
         expect(resolveDramaFrameCountPreference("请分 6 帧")).toBe(6);
         expect(dramaReferenceImageBudget(15)).toBe(9);

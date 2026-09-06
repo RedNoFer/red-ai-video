@@ -1,11 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { App, Button, Input, Select } from "antd";
+import { App, Button, Input } from "antd";
 import { Save } from "lucide-react";
 
-import { DRAMA_STYLE_NAME } from "@/lib/drama-style";
-import { defaultDramaProductionPlan, DRAMA_SHOT_DURATION_OPTIONS, DRAMA_VIDEO_RESOLUTION_OPTIONS, normalizeDramaProductionPlan } from "@/lib/drama-production-plan";
+import { defaultDramaProductionPlan, normalizeDramaProductionPlan } from "@/lib/drama-production-plan";
 import type { DramaProductionPlan } from "@/lib/drama-project-contract";
 import { saveDramaEpisodeSettings } from "@/services/api/drama-projects";
 import type { DramaEpisode, DramaProject } from "../types";
@@ -18,39 +17,33 @@ export function DramaEpisodeSettings({ project, episode, embedded = false }: { p
     const [savedLockAt, setSavedLockAt] = useState<string>();
     const [titleDraft, setTitleDraft] = useState(episode.title);
     const [summaryDraft, setSummaryDraft] = useState(project.summary);
-    const [styleDraft, setStyleDraft] = useState(project.style);
     const paragraphCount = episode.script.trim() ? episode.script.split(/\n+/).filter(Boolean).length : 0;
     const characterCount = new Set(episode.shots.flatMap((shot) => shot.characterIds)).size;
     const duration = episode.shots.reduce((total, shot) => total + (Number.isFinite(shot.duration) ? shot.duration : 0), 0);
     const [planDraft, setPlanDraft] = useState<DramaProductionPlan>(() => normalizeDramaProductionPlan(project.productionBible?.productionPlan, defaultDramaProductionPlan("new-project"))!);
+
     useEffect(() => {
         setPlanDraft(normalizeDramaProductionPlan(project.productionBible?.productionPlan, defaultDramaProductionPlan("new-project"))!);
         setTitleDraft(episode.title);
         setSummaryDraft(project.summary);
-        setStyleDraft(project.style);
         setSavedLockAt(undefined);
     }, [episode.id, episode.title, project.id, project.productionBible?.productionPlan, project.style, project.summary]);
-    const productionPlan = planDraft;
-    const updateProductionPlan = (patch: Partial<DramaProductionPlan["video"]>) => {
-        setSavedLockAt(undefined);
-        setPlanDraft((current) => ({ ...current, video: { ...current.video, ...patch }, source: "manual", lockedAt: undefined }));
-    };
+
     const saveSettings = async () => {
-        const lockedAt = new Date().toISOString();
-        const lockedPlan = { ...productionPlan, lockedAt, source: "manual" as const };
-        const saved = await saveDramaEpisodeSettings(project.id, episode.id, { title: titleDraft, summary: summaryDraft, style: styleDraft, productionPlan: lockedPlan });
+        const saved = await saveDramaEpisodeSettings(project.id, episode.id, { title: titleDraft, summary: summaryDraft });
         const persistedPlan = normalizeDramaProductionPlan(saved.productionBible?.productionPlan);
-        if (!persistedPlan?.lockedAt || persistedPlan.video.resolution !== lockedPlan.video.resolution) throw new Error("本集生产方案保存后未生效，请刷新后重试");
+        if (!persistedPlan) throw new Error("本集设置保存后未生效，请刷新后重试");
         replaceProject(saved);
         setPlanDraft(persistedPlan);
         setSavedLockAt(persistedPlan.lockedAt);
     };
+
     return (
         <aside className={`hide-scrollbar min-h-0 min-w-0 overflow-y-auto bg-card ${embedded ? "max-h-[min(620px,calc(100vh-150px))] p-1" : "border-l border-border p-3"}`} data-drama-episode-settings>
             {!embedded ? (
                 <>
                     <h3 className="text-sm font-semibold">本集设置</h3>
-                    <p className="mt-1 text-xs leading-5 text-muted-foreground">锁定后保存到当前项目</p>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">生产方案仅由剧本 GPT 锁定</p>
                 </>
             ) : null}
             <div className={`${embedded ? "space-y-3" : "mt-4 space-y-4"}`}>
@@ -62,46 +55,22 @@ export function DramaEpisodeSettings({ project, episode, embedded = false }: { p
                     <span className="text-xs font-medium text-foreground">故事简介</span>
                     <Input.TextArea value={summaryDraft} onChange={(event) => setSummaryDraft(event.target.value)} autoSize={{ minRows: 3, maxRows: 6 }} />
                 </label>
-                <label className="block space-y-1.5">
-                    <span className="text-xs font-medium text-foreground">视觉风格</span>
-                    <Input className="!h-8" value={styleDraft} placeholder={`例如：${DRAMA_STYLE_NAME}`} onChange={(event) => setStyleDraft(event.target.value)} />
-                </label>
-                <div className="space-y-1.5">
-                    <span className="text-xs font-medium text-foreground">视频生产模式</span>
-                    <Select
-                        className="w-full"
-                        value={workflowProductionPlanMode(productionPlan.video.mode)}
-                        options={[
-                            { label: "分镜驱动", value: "storyboard" },
-                            { label: "直接生成", value: "text-to-video" },
-                        ]}
-                        onChange={(mode) => updateProductionPlan({ mode })}
-                    />
-                </div>
-                {productionPlan ? (
-                    <div className="space-y-2 border-t border-border pt-3">
-                        <div className="flex items-center justify-between">
-                            <span className="text-xs font-medium text-foreground">生产方案</span>
-                            <span className={`text-[11px] ${savedLockAt || productionPlan.lockedAt ? "text-emerald-600" : "text-amber-600"}`}>{savedLockAt || productionPlan.lockedAt ? "已锁定" : "待锁定"}</span>
-                        </div>
-                        <div className="grid grid-cols-2 gap-2 text-[11px] text-muted-foreground">
-                            <span>生成模式：{workflowProductionPlanMode(productionPlan.video.mode) === "storyboard" ? "分镜驱动" : "直接生成"}</span>
-                            <label className="flex items-center gap-1">
-                                <span>清晰度：</span>
-                                <Select size="small" className="min-w-20" value={productionPlan.video.resolution} options={DRAMA_VIDEO_RESOLUTION_OPTIONS.map((value) => ({ label: value, value }))} onChange={(resolution) => updateProductionPlan({ resolution })} />
-                            </label>
-                            <label className="flex items-center gap-1">
-                                <span>每镜：</span>
-                                <Select size="small" className="min-w-20" value={productionPlan.video.shotDuration || 15} options={DRAMA_SHOT_DURATION_OPTIONS.map((value) => ({ label: `${value}s`, value }))} onChange={(shotDuration) => updateProductionPlan({ shotDuration })} />
-                            </label>
-                            <span>帧数：{productionPlan.video.framePolicy === "fixed-4" ? "固定 4 帧" : productionPlan.video.framePolicy === "fixed-5" ? "固定 5 帧" : "Agent 智能切分"}</span>
-                            <span>连续性：{productionPlan.continuity.mode === "strict" ? "严格" : "平衡"}</span>
-                            <span>视觉风格：{productionPlan.visual.visualStyle || "由 Agent 建议"}</span>
-                            <span>画风：{productionPlan.visual.artStyle || "由 Agent 建议"}</span>
-                        </div>
-                        <p className="text-[11px] leading-5 text-muted-foreground">视觉参数、每镜时长和帧数策略只在剧本 GPT 中锁定；本处仅展示当前方案。</p>
+                <div className="space-y-2 border-t border-border pt-3">
+                    <div className="flex items-center justify-between">
+                        <span className="text-xs font-medium text-foreground">生产方案</span>
+                        <span className={`text-[11px] ${savedLockAt || planDraft.lockedAt ? "text-emerald-600" : "text-amber-600"}`}>{savedLockAt || planDraft.lockedAt ? "已锁定" : "待锁定"}</span>
                     </div>
-                ) : null}
+                    <div className="grid grid-cols-2 gap-2 text-[11px] text-muted-foreground">
+                        <span>生成模式：{planDraft.video.mode === "text-to-video" ? "直接生成" : "分镜驱动"}</span>
+                        <span>清晰度：{planDraft.video.resolution}</span>
+                        <span>每镜：{planDraft.video.shotDuration || 15} 秒</span>
+                        <span>帧数：{planDraft.video.framePolicy === "fixed-4" ? "固定 4 帧" : planDraft.video.framePolicy === "fixed-5" ? "固定 5 帧" : "Agent 智能切分"}</span>
+                        <span>连续性：{planDraft.continuity.mode === "strict" ? "严格" : "平衡"}</span>
+                        <span>视觉风格：{planDraft.visual.visualStyle || "由 Agent 建议"}</span>
+                        <span>画风：{planDraft.visual.artStyle || "由 Agent 建议"}</span>
+                    </div>
+                    <p className="text-[11px] leading-5 text-muted-foreground">视觉参数、每镜时长和帧数策略只在剧本 GPT 中锁定；本处仅展示当前方案。</p>
+                </div>
             </div>
             <div className="mt-4 border-t border-border pt-3" data-drama-episode-overview>
                 <div className="flex items-center justify-between">
@@ -130,7 +99,7 @@ export function DramaEpisodeSettings({ project, episode, embedded = false }: { p
                             .finally(() => setSaving(false));
                     }}
                 >
-                    锁定并保存设置
+                    保存本集信息
                 </Button>
             </div>
         </aside>
@@ -144,8 +113,4 @@ function Stat({ label, value }: { label: string; value: string | number }) {
             <dd className="mt-0.5 font-semibold tabular-nums text-foreground">{value}</dd>
         </div>
     );
-}
-
-function workflowProductionPlanMode(mode: DramaProductionPlan["video"]["mode"]): "storyboard" | "text-to-video" {
-    return mode === "text-to-video" ? "text-to-video" : "storyboard";
 }

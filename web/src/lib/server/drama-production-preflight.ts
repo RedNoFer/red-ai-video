@@ -16,12 +16,14 @@ export function preflightDramaProduction(project: DramaProject, episode: DramaEp
     if (!project.seriesBible) issues.push(blocking("SERIES_BIBLE", "项目缺少已锁定的系列圣经，不能跨集生产"));
     const plan = project.productionBible?.productionPlan;
     const targetShotDuration = plan?.video.shotDuration;
-    const targetFrameCount = plan?.video.frameCount;
+    const targetFrameCount = plan?.video.framePolicy === "fixed-4" ? 4 : plan?.video.framePolicy === "fixed-5" ? 5 : undefined;
     if (plan) {
         // The executable video model is selected by the backend channel binding at task creation.
         // Do not gate production on the stale model label persisted in the editable plan.
         if (plan.references.minImages < 1 || plan.references.maxImages < plan.references.minImages) issues.push(blocking("REFERENCE_PLAN_INVALID", "多帧参考数量范围无效"));
         if (!plan.lockedAt) issues.push(blocking("PRODUCTION_PLAN_UNCONFIRMED", "生产方案尚未锁定，请先在剧本生成前完成方案配置"));
+        if (plan.video.shotDuration !== 15 && plan.video.shotDuration !== 30) issues.push(blocking("SHOT_DURATION_PLAN_INVALID", "生产方案每镜时长只能为 15 秒或 30 秒"));
+        if (plan.video.framePolicy === "agent" && plan.video.frameCount !== undefined) issues.push(blocking("FRAME_POLICY_CONFLICT", "Agent 智能切分不能携带固定帧数"));
     }
     const characters = new Map(project.characters.map((asset) => [asset.id, asset]));
     const scenes = new Map(project.scenes.map((asset) => [asset.id, asset]));

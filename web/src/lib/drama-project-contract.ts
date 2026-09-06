@@ -375,7 +375,7 @@ export type DramaProductionPlan = {
         durationPolicy: "shot" | "fixed";
         duration?: number;
         /** Target duration of each logical shot in the production package. */
-        shotDuration?: 15 | 20 | 30;
+        shotDuration?: 15 | 30;
         /** Default number of storyboard frames for each logical shot. */
         frameCount?: number;
         framePolicy?: "fixed-4" | "fixed-5" | "agent";

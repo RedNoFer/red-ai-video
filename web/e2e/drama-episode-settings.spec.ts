@@ -18,18 +18,17 @@ test("drama episode settings save through a compact request", async ({ page, req
 
     const saveRequest = page.waitForRequest((candidate) => candidate.method() === "PATCH" && candidate.url().endsWith(`/api/drama/projects/${project.id}/episodes/${episode.id}/settings`));
     const saveResponse = page.waitForResponse((candidate) => candidate.request().method() === "PATCH" && candidate.url().endsWith(`/api/drama/projects/${project.id}/episodes/${episode.id}/settings`));
-    await page.getByRole("button", { name: "锁定并保存设置" }).click();
+    await page.getByRole("button", { name: "保存本集信息" }).click();
 
     const [outbound, inbound] = await Promise.all([saveRequest, saveResponse]);
     expect(Buffer.byteLength(outbound.postData() || "")).toBeLessThan(8 * 1024 * 1024);
-    expect(JSON.parse(outbound.postData() || "{}")).toEqual(expect.objectContaining({ title: episode.title, summary: project.summary, style: project.style, productionPlan: expect.any(Object) }));
+    expect(JSON.parse(outbound.postData() || "{}")).toEqual({ title: episode.title, summary: project.summary });
     expect(inbound.status()).toBe(200);
     await expect(page.getByText("本集设置已保存", { exact: true })).toBeVisible();
 });
 
-test("custom visual style survives create, episode settings save, refresh, and API readback", async ({ page, request }) => {
+test("episode settings save does not create a second project style source", async ({ page, request }) => {
     const customStyle = "ARRI Alexa 65自然光真人影视感，冷灰蓝；真实狼毛发与泥水质感；禁止动漫、插画、游戏CG";
-    const updatedStyle = `${customStyle}；低饱和湿地绿色`;
     const created = await request.post("/api/drama/projects", {
         data: { title: `E2E 自定义风格 ${randomUUID().slice(0, 8)}`, summary: "验证自定义视觉风格 round-trip", ratio: "9:16", style: customStyle },
     });
@@ -43,22 +42,20 @@ test("custom visual style survives create, episode settings save, refresh, and A
 
         await page.goto(`/drama/${project.id}`, { waitUntil: "networkidle" });
         await page.getByRole("button", { name: "打开本集设置" }).click();
-        const styleInput = page.getByRole("textbox", { name: "视觉风格" });
-        await expect(styleInput).toHaveValue(customStyle);
-        await styleInput.fill(updatedStyle);
-        await page.getByRole("button", { name: "锁定并保存设置" }).click();
+        await expect(page.getByText("生产方案")).toBeVisible();
+        await page.getByRole("button", { name: "保存本集信息" }).click();
         await expect(page.getByText("本集设置已保存", { exact: true })).toBeVisible();
 
         const readback = await request.get(`/api/drama/projects/${project.id}`);
         expect(readback.ok(), await readback.text()).toBe(true);
         const saved = ((await readback.json()) as { data: { project: DramaProject } }).data.project;
-        expect(saved.style).toBe(updatedStyle);
-        expect(saved.productionBible?.visualStyle).toBe(updatedStyle);
+        expect(saved.style).toBe(customStyle);
+        expect(saved.productionBible?.visualStyle).toBe(customStyle);
         expect(saved.productionBible?.colorScript).toBeUndefined();
 
         await page.reload({ waitUntil: "networkidle" });
         await page.getByRole("button", { name: "打开本集设置" }).click();
-        await expect(page.getByRole("textbox", { name: "视觉风格" })).toHaveValue(updatedStyle);
+        await expect(page.getByText("生产方案")).toBeVisible();
     } finally {
         const deleted = await request.delete(`/api/drama/projects/${project.id}`);
         expect(deleted.ok(), await deleted.text()).toBe(true);

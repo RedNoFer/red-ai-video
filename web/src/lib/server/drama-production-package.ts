@@ -477,11 +477,19 @@ function normalizeProductionPackage(value: unknown): DramaProductionPackageV1 {
 function validateProductionPackageCompleteness(value: Record<string, unknown>) {
     const project = object(value.project);
     const bible = object(project.productionBible);
+    const rawPlan = object(bible.productionPlan);
+    const rawVideo = object(rawPlan.video);
+    const rawShotDuration = rawVideo.shotDuration;
+    const rawFramePolicy = rawVideo.framePolicy;
+    if (rawShotDuration !== undefined && Number(rawShotDuration) !== 15 && Number(rawShotDuration) !== 30) throw new DramaProductionPackageError("制作包每镜时长只能为 15 秒或 30 秒");
+    if (rawFramePolicy !== undefined && !["fixed-4", "fixed-5", "agent"].includes(String(rawFramePolicy))) throw new DramaProductionPackageError("制作包帧数策略无效");
+    if (rawFramePolicy === "agent" && rawVideo.frameCount !== undefined) throw new DramaProductionPackageError("Agent 智能切分方案不能携带固定帧数");
     const plan = normalizeDramaProductionPlan(bible.productionPlan);
     const dialogueTiming = normalizeDialogueTimingPolicy(bible.dialogueTiming);
     if (!plan?.skills.some((skill) => skill.id === "seedance-director")) throw new DramaProductionPackageError("制作包缺少必需的 Seedance 2.0 导演 Skill");
     if (!plan.skills.some((skill) => skill.id === "seedance-25-director")) throw new DramaProductionPackageError("制作包缺少必需的 Seedance 2.5 视频导演 Skill");
     if (plan.lockedAt && (!plan.visual.visualStyle.trim() || !plan.visual.artStyle.trim())) throw new DramaProductionPackageError("已锁定的制作方案必须包含具体的视觉风格和画风");
+    if (plan.video.framePolicy === "agent" && plan.video.frameCount !== undefined) throw new DramaProductionPackageError("Agent 智能切分方案不能携带固定帧数");
     const assets = object(value.assets);
     const assetCodes = (key: string) =>
         new Set(

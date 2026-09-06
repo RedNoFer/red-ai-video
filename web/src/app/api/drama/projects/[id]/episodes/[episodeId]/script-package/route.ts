@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { getCurrentUser } from "@/lib/auth/session";
 import { readJsonBodyResult } from "@/lib/auth/request";
-import { applyDramaEpisodeProductionPackageForUser, DramaProjectServiceError, previewDramaProductionPackageForUser } from "@/lib/server/drama-project-service";
+import { applyDramaEpisodeProductionPackageForUser, DramaProjectServiceError, previewDramaScriptProductionPackageForUser } from "@/lib/server/drama-project-service";
 
 export async function POST(request: Request, context: { params: Promise<{ id: string; episodeId: string }> }) {
     const user = await getCurrentUser(request);
@@ -16,7 +16,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
             const project = await applyDramaEpisodeProductionPackageForUser(user.id, id, episodeId, input);
             return NextResponse.json({ code: 0, data: { project }, msg: "当前集制作包已回填" });
         }
-        const preview = previewDramaProductionPackageForUser(input);
+        const preview = previewDramaScriptProductionPackageForUser(input);
         if (preview.package.episodes.length !== 1) return NextResponse.json({ code: 400, data: null, msg: "剧本 Agent 制作包只能包含当前集" }, { status: 400 });
         return NextResponse.json({ code: 0, data: { preview }, msg: "当前集制作包预览已生成" });
     } catch (error) {

@@ -1761,15 +1761,15 @@ describe("drama project service updates", () => {
 
         expect(saved).toMatchObject({
             summary: "新摘要",
-            style: "黑暗学院",
+            style: current.style,
             episodes: [{ id: "episode-one", title: "新集名" }],
-            productionBible: { visualStyle: "黑暗学院", productionPlan: { lockedAt: productionPlan.lockedAt, video: { resolution: "480p" } } },
         });
+        expect(saved.productionBible).toEqual(current.productionBible);
         expect(saved.productionArchive).toBe(current.productionArchive);
         expect(mocks.updateDramaProject).toHaveBeenCalledWith("user-one", expect.objectContaining({ id: current.id, productionArchive: current.productionArchive }), current.updatedAt);
     });
 
-    it("synchronizes episode settings style and removes a stale default color script", async () => {
+    it("does not let episode settings create a second style or production-plan source", async () => {
         const current = project("2026-07-19T08:00:01.000Z", "项目");
         const customStyle = "ARRI自然光真人影视感，冷灰蓝；禁止动漫与游戏CG";
         current.style = customStyle;
@@ -1778,7 +1778,7 @@ describe("drama project service updates", () => {
         mocks.updateDramaProject.mockImplementation(async (_userId: string, value: DramaProject) => value);
 
         const saved = await saveDramaEpisodeSettingsForUser("user-one", current.id, "episode-one", {
-            style: customStyle,
+            style: "不应写入的第二套风格",
             productionPlan: current.productionBible?.productionPlan || defaultDramaProductionPlan("manual"),
         });
 

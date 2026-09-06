@@ -1473,10 +1473,11 @@ test("creative workspaces remain usable without horizontal overflow in light and
     const createDialog = page.getByRole("dialog", { name: "新建短剧项目" });
     await expect(createDialog).toBeVisible();
     const dialogBox = await createDialog.boundingBox();
-    const ratioLabelBox = await createDialog.getByText("生成尺寸", { exact: true }).boundingBox();
-    const ratioControlBox = await createDialog.locator(".ant-segmented").boundingBox();
     expect(dialogBox?.width || 0).toBeLessThanOrEqual(Math.min(522, (page.viewportSize()?.width || 0) - 22));
-    expect((ratioLabelBox?.y || 0) + (ratioLabelBox?.height || 0)).toBeLessThanOrEqual((ratioControlBox?.y || 0) + 1);
+    await expect(createDialog.getByLabel("项目名称")).toBeVisible();
+    await expect(createDialog.getByText("故事简介", { exact: true })).toHaveCount(0);
+    await expect(createDialog.getByText("视觉风格", { exact: true })).toHaveCount(0);
+    await expect(createDialog.getByText("生成尺寸", { exact: true })).toHaveCount(0);
     await createDialog.getByRole("button", { name: /取\s*消/ }).click();
     const projectEntry = page.locator(`a[href="${dramaRoute}"]`);
     await expect(projectEntry).toHaveAttribute("aria-label", "进入短剧项目：E2E 短剧项目");
