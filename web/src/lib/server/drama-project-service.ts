@@ -1196,7 +1196,6 @@ export async function createDramaProductionRunForUser(userId: string, projectId:
             imageQuality: cleanText(object(value).imageQuality) || settings.generationDefaults.imageQuality,
             shotIds: requestedShotIds,
             frameType: ["start_frame", "end_frame", "all_frames"].includes(cleanText(object(value).frameType)) ? (cleanText(object(value).frameType) as "start_frame" | "end_frame" | "all_frames") : undefined,
-            frameCount: Math.max(1, Math.min(9, Math.floor(Number(object(value).frameCount) || runProject.productionBible?.productionPlan?.video.frameCount || 5))),
             frameIds: ids(object(value).frameIds),
             regenerateAll: object(value).regenerateAll === true,
         });

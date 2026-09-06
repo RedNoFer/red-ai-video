@@ -459,7 +459,15 @@ export function DramaScriptAgentPanel({ project, episode, open, onOpenChange }: 
                                     { label: "5 帧", value: "fixed-5" },
                                     { label: "Agent 智能切分", value: "agent" },
                                 ]}
-                                onChange={(framePolicy: "fixed-4" | "fixed-5" | "agent") => setPlanDraft((current) => ({ ...current, video: { ...current.video, framePolicy, ...(framePolicy === "fixed-4" ? { frameCount: 4 } : framePolicy === "fixed-5" ? { frameCount: 5 } : {}) } }))}
+                                onChange={(framePolicy: "fixed-4" | "fixed-5" | "agent") =>
+                                    setPlanDraft((current) => {
+                                        const video = { ...current.video, framePolicy };
+                                        if (framePolicy === "fixed-4") return { ...current, video: { ...video, frameCount: 4 } };
+                                        if (framePolicy === "fixed-5") return { ...current, video: { ...video, frameCount: 5 } };
+                                        const { frameCount: _frameCount, ...agentVideo } = video;
+                                        return { ...current, video: agentVideo };
+                                    })
+                                }
                             />
                         </label>
                     </div>

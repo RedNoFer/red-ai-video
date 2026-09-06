@@ -147,7 +147,7 @@ export function saveDramaProductionPlan(projectId: string, productionPlan: Drama
     }).then((data) => data.project);
 }
 
-export function saveDramaEpisodeSettings(projectId: string, episodeId: string, input: { title: string; summary: string; style?: string; productionPlan?: DramaProductionPlan }) {
+export function saveDramaEpisodeSettings(projectId: string, episodeId: string, input: { title: string; summary: string }) {
     return request<{ project: DramaProject }>(`/api/drama/projects/${encodeURIComponent(projectId)}/episodes/${encodeURIComponent(episodeId)}/settings`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },

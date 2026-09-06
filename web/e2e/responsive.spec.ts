@@ -1555,16 +1555,7 @@ test("creative workspaces remain usable without horizontal overflow in light and
             const generationLayout = await page.locator("[data-drama-generation-panel]").evaluate((element) => ({ clientWidth: element.clientWidth, scrollWidth: element.scrollWidth }));
             expect(generationLayout.scrollWidth).toBeLessThanOrEqual(generationLayout.clientWidth + 1);
             const visualPlan = page.locator("[data-drama-visual-plan]");
-            await visualPlan.getByRole("button", { name: "生成视觉计划" }).click();
-            const confirmVisualPlan = visualPlan.getByRole("button", { name: /确认执行/ });
-            await expect(confirmVisualPlan).toBeVisible();
-            await confirmVisualPlan.click();
-            await expect(page.getByText("确认执行视觉计划？", { exact: true })).toBeVisible();
-            await page
-                .getByRole("button", { name: /取\s*消/ })
-                .last()
-                .click();
-            await expect(page.getByText("确认执行视觉计划？", { exact: true })).toBeHidden();
+            await expect(visualPlan.getByRole("button", { name: "生成本集缺失分镜帧" })).toBeVisible();
             await expectNoHorizontalOverflow(page, `${dramaRoute} visual plan`);
 
             if ((page.viewportSize()?.width || 0) < 1366) {

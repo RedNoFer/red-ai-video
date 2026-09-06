@@ -13,7 +13,6 @@ type VisualParameters = {
     imageQuality?: string;
     shotIds?: string[];
     frameType?: "start_frame" | "end_frame" | "all_frames";
-    frameCount?: number;
     frameIds?: string[];
     regenerateAll?: boolean;
 };
