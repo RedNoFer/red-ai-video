@@ -15,7 +15,12 @@ describe("drama asset completion", () => {
     });
 
     it("keeps a complete asset untouched", () => {
-        const asset = { id: "scene-one", name: "诊所", description: "主场景", profile: { visualIdentity: "狭长走廊", styling: "旧木与瓷砖", colorPalette: "冷白与暗绿", consistencyRules: "入口始终在左侧" }, primaryReferenceId: "ref-one", references: [{ id: "ref-one", url: "/scene.png", source: "generated" as const, label: "基准", status: "approved" as const, createdAt: "2026-01-01T00:00:00.000Z" }] };
+        const asset = { id: "scene-one", name: "诊所", description: "主场景", profile: { visualIdentity: "狭长走廊", styling: "旧木与瓷砖", colorPalette: "冷白与暗绿", consistencyRules: "入口始终在左侧" }, primaryReferenceId: "ref-one", sceneReferenceBoard: { layout: "3x3" as const, referenceId: "ref-one" }, references: [{ id: "ref-one", url: "/scene.png", source: "generated" as const, label: "基准", status: "approved" as const, createdAt: "2026-01-01T00:00:00.000Z" }] };
         expect(getDramaAssetMissingItems(asset, "scenes")).toEqual([]);
+    });
+
+    it("requires a nine-view board when only a legacy single scene image is approved", () => {
+        const asset = { id: "scene-one", name: "诊所", description: "主场景", profile: { visualIdentity: "狭长走廊", styling: "旧木与瓷砖", colorPalette: "冷白与暗绿", consistencyRules: "入口始终在左侧" }, primaryReferenceId: "ref-one", references: [{ id: "ref-one", url: "/scene.png", source: "generated" as const, label: "旧基准", status: "approved" as const, createdAt: "2026-01-01T00:00:00.000Z" }] };
+        expect(getDramaAssetMissingItems(asset, "scenes")).toContainEqual({ key: "reference", label: "九宫格场景基准板", task: "reference" });
     });
 });

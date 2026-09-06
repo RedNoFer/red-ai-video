@@ -70,7 +70,14 @@ export async function persistDramaGeneratedCandidates(input: CandidatePersistenc
                 ? {
                       ...item,
                       references: [...(item.references || []), ...additions],
-                      ...(promoteFirst && additions[0] ? { primaryReferenceId: additions[0].id, referenceImageUrl: additions[0].url, referenceStorageKey: additions[0].storageKey } : {}),
+                      ...(promoteFirst && additions[0]
+                          ? {
+                                primaryReferenceId: additions[0].id,
+                                referenceImageUrl: additions[0].url,
+                                referenceStorageKey: additions[0].storageKey,
+                                ...(assetKind === "scenes" ? { sceneReferenceBoard: { layout: "3x3" as const, referenceId: additions[0].id } } : {}),
+                            }
+                          : {}),
                   }
                 : item,
         ),

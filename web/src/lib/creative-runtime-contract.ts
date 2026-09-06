@@ -190,7 +190,7 @@ export function normalizeCreativeRunRequest(value: unknown): CreativeRunRequest 
     if (!surface) throw new CreativeRuntimeInputError("创作入口不正确");
     if (!prompt) throw new CreativeRuntimeInputError("创作需求不能为空");
     if (workflow === "drama-script" && (surface !== "drama" || !projectId || !episodeId)) throw new CreativeRuntimeInputError("剧本 Agent 必须绑定短剧项目和当前集");
-    if (workflow === "drama-script" && (assetIds.length || modelIds.length || preferences)) throw new CreativeRuntimeInputError("剧本 Agent 不接受媒体或自选模型偏好");
+    if (workflow === "drama-script" && (modelIds.length || preferences)) throw new CreativeRuntimeInputError("剧本 Agent 不接受自选模型或生成偏好");
     if (skillIds.length > CREATIVE_RUN_SKILL_LIMIT) throw new CreativeRuntimeInputError(`一次最多启用 ${CREATIVE_RUN_SKILL_LIMIT} 个 Skill`);
     if (modelIds.length > CREATIVE_RUN_MODEL_LIMIT) throw new CreativeRuntimeInputError(`一次最多选择 ${CREATIVE_RUN_MODEL_LIMIT} 个模型`);
     if (videoFrameAssetIds(preferences?.video).some((id) => !assetIds.includes(id))) throw new CreativeRuntimeInputError("视频首尾帧必须来自本轮已选择的图片素材");

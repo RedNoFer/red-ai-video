@@ -33,7 +33,7 @@ describe("prompt optimization API client", () => {
                 code: 0,
                 data: {
                     prompt: "主体与资产类型：角色",
-                    fields: { description: "少年", visualIdentity: "黑发", styling: "墨色长袍", colorPalette: "墨黑", consistencyRules: "三视图一致" },
+                    fields: { description: "少年", visualIdentity: "黑发", styling: "墨色长袍", colorPalette: "墨黑", consistencyRules: "四视图一致" },
                 },
                 msg: "OK",
             }),
@@ -41,7 +41,7 @@ describe("prompt optimization API client", () => {
 
         await expect(optimizeDramaAssetPrompt("角色", "原提示词", "asset-request")).resolves.toEqual({
             optimizedPrompt: "主体与资产类型：角色",
-            fields: { description: "少年", visualIdentity: "黑发", styling: "墨色长袍", colorPalette: "墨黑", consistencyRules: "三视图一致" },
+            fields: { description: "少年", visualIdentity: "黑发", styling: "墨色长袍", colorPalette: "墨黑", consistencyRules: "四视图一致" },
         });
     });
 });

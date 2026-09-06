@@ -139,6 +139,30 @@ export async function deleteUserLocalMediaAssets(userId: string, storageKeys: st
     return deleteRegisteredMediaAssets(registrations.filter((item) => item.ownerUserId === userId));
 }
 
+export async function deleteUserOwnedMediaAssetsPhysically(userId: string, storageKeys: string[]) {
+    const registrations = Array.from(new Map((await getLocalMediaRegistrations(storageKeys)).filter((item) => item.ownerUserId === userId).map((item) => [item.storageKey, item])).values());
+    const deletedKeys: string[] = [];
+    let deletedFiles = 0;
+    let deletedBytes = 0;
+    for (const registration of registrations) {
+        if (registration.storageProvider === "object") {
+            if (!(await deleteExternalMediaObject(registration))) continue;
+        } else {
+            const root = registration.scope === "generation" ? GENERATION_MEDIA_ROOT : REFERENCE_MEDIA_ROOT;
+            const filePath = safePath(root, registration.storageKey);
+            if (!filePath) continue;
+            const info = await stat(/*turbopackIgnore: true*/ filePath).catch(() => null);
+            if (!info?.isFile()) continue;
+            await unlink(/*turbopackIgnore: true*/ filePath);
+        }
+        deletedKeys.push(registration.storageKey);
+        deletedFiles += 1;
+        deletedBytes += registration.bytes;
+    }
+    await deleteLocalMediaRegistrations(deletedKeys);
+    return { deletedFiles, deletedBytes, blocked: [] as Array<{ id: string; storageKey: string; referenceCount: number }> };
+}
+
 export async function deleteRegisteredLocalMediaSnapshots(registrations: LocalMediaRegistration[]) {
     return deleteRegisteredMediaAssets(registrations);
 }

@@ -41,7 +41,7 @@ import type {
     DramaVideoMode,
 } from "@/lib/drama-project-contract";
 import { dramaRichContentToPlainText, normalizeDramaScriptRichContent } from "@/lib/drama-script-rich-content";
-import { appendDramaImageReferenceBindings, stripDramaReferenceBindingSections } from "@/lib/drama-prompt-compiler";
+import { appendDramaImageReferenceBindings, dramaAssetPromptFields, hasDramaAssetPromptQuality, stripDramaReferenceBindingSections } from "@/lib/drama-prompt-compiler";
 import { approvedAssetReference } from "@/lib/drama-asset-baseline";
 import { createFrameEvidence, decideActualEndFrame, invalidateFrameEvidence, replaceFrameEvidence, supersedeFrameEvidence } from "@/lib/drama-continuity-policy";
 import { DRAMA_STYLE_NAME, normalizeDramaStyleName, resolveDramaStyleContract } from "@/lib/drama-style";
@@ -57,7 +57,8 @@ import { createCreativeConversation, getCreativeConversation, listCreativeConver
 import { createDramaProject, deleteDramaProject, DramaProjectStoreError, findDramaEpisodeByCanvasProjectId, findDramaProjectBySourceHandoffId, getDramaProject, listDramaProjectSummaries, updateDramaProject } from "@/lib/server/drama-project-store";
 import { createDramaProjectVersion, getDramaProjectVersion, listDramaProjectVersions } from "@/lib/server/drama-project-version-store";
 import { collectLocalMediaStorageKeys } from "@/lib/server/local-media-references";
-import { deleteUserLocalMediaAssets } from "@/lib/server/local-media-storage";
+import { deleteUserLocalMediaAssets, deleteUserOwnedMediaAssetsPhysically } from "@/lib/server/local-media-storage";
+import { localMediaStorageKeyFromValue } from "@/lib/server/local-media-references";
 import { signReferenceAssetInputUrl } from "@/lib/server/reference-asset-access";
 import { fetchSafeOutbound } from "@/lib/server/safe-outbound-fetch";
 import { applyDramaProductionPackage, DramaProductionPackageError, previewDramaProductionPackage } from "@/lib/server/drama-production-package";
@@ -688,6 +689,112 @@ export async function saveDramaEpisodeSettingsForUser(userId: string, id: string
     }
 }
 
+export async function deleteDramaStoryboardFrameForUser(userId: string, id: string, episodeIdValue: string, shotIdValue: string, frameIdValue: string, removeBeat = false) {
+    const current = await getDramaProjectForUser(userId, id);
+    const episodeId = cleanText(episodeIdValue);
+    const shotId = cleanText(shotIdValue);
+    const frameId = cleanText(frameIdValue);
+    const episode = current.episodes.find((item) => item.id === episodeId);
+    if (!episode) throw new DramaProjectServiceError("短剧剧集不存在", 404);
+    const shot = episode.shots.find((item) => item.id === shotId);
+    if (!shot) throw new DramaProjectServiceError("短剧镜头不存在", 404);
+    const now = new Date().toISOString();
+    const sequenceFrame = (shot.storyboardFrames || []).find((item) => item.id === frameId);
+    const beat = shot.framePlan?.frames.find((item) => item.id === frameId);
+    const legacyFrame = frameId === "start" || frameId === "end";
+    if (!sequenceFrame && !beat && !legacyFrame) throw new DramaProjectServiceError("分镜帧不存在", 404);
+    const targetUrls = sequenceFrame
+        ? [sequenceFrame.mediaUrl, ...(sequenceFrame.candidates || []).filter((item) => item.mediaUrl === sequenceFrame.mediaUrl).map((item) => item.mediaUrl)]
+        : frameId === "start"
+          ? [shot.storyboardImageUrl, ...(shot.storyboardImageUrls || [])]
+          : [shot.storyboardEndImageUrl, ...(shot.storyboardEndImageUrls || [])];
+    const storageKeys = Array.from(new Set(targetUrls.flatMap((url) => (url ? [localMediaStorageKeyFromValue(url)] : [])).filter(Boolean)));
+    const nextProject = normalizeProject(
+        {
+            ...current,
+            episodes: current.episodes.map((item) =>
+                item.id !== episodeId
+                    ? item
+                    : {
+                          ...item,
+                          shots: item.shots.map((candidate) => {
+                              if (candidate.id !== shotId) return candidate;
+                              if (sequenceFrame) {
+                                  return {
+                                      ...candidate,
+                                      storyboardFrames: (candidate.storyboardFrames || []).flatMap((frame) => {
+                                          if (removeBeat && frame.id === frameId) return [];
+                                          return [
+                                              frame.id !== frameId
+                                                  ? frame
+                                                  : {
+                                                    ...frame,
+                                                    mediaUrl: undefined,
+                                                    remoteUrl: undefined,
+                                                    width: undefined,
+                                                    height: undefined,
+                                                    status: "stale" as const,
+                                                    taskId: undefined,
+                                                    candidateStatus: undefined,
+                                                    candidateTaskId: undefined,
+                                                    candidateError: undefined,
+                                                    mediaDeletedAt: now,
+                                                    candidates: frame.candidates?.filter((item) => item.mediaUrl !== frame.mediaUrl),
+                                                  },
+                                          ];
+                                      }),
+                                      ...(removeBeat && candidate.framePlan
+                                          ? { framePlan: { ...candidate.framePlan, frames: candidate.framePlan.frames.filter((item) => item.id !== frameId) } }
+                                          : {}),
+                                      frameEvidence: (candidate.frameEvidence || []).filter((evidence) => !(evidence.role === "storyboard_keyframe" && evidence.sequenceIndex === sequenceFrame.sequenceIndex && evidence.mediaUrl === sequenceFrame.mediaUrl)),
+                                  };
+                              }
+                              const isStart = frameId === "start";
+                              return {
+                                  ...candidate,
+                                  ...(isStart
+                                      ? {
+                                            storyboardStatus: "idle" as const,
+                                            storyboardTaskId: undefined,
+                                            storyboardError: undefined,
+                                            storyboardImageUrl: undefined,
+                                            storyboardImageRemoteUrl: undefined,
+                                            storyboardImageUrls: undefined,
+                                            storyboardImageWidth: undefined,
+                                            storyboardImageHeight: undefined,
+                                            storyboardImageDeletedAt: now,
+                                            frameEvidence: (candidate.frameEvidence || []).filter((evidence) => evidence.role !== "storyboard_start"),
+                                        }
+                                      : {
+                                            storyboardEndStatus: "idle" as const,
+                                            storyboardEndTaskId: undefined,
+                                            storyboardEndError: undefined,
+                                            storyboardEndImageUrl: undefined,
+                                            storyboardEndImageRemoteUrl: undefined,
+                                            storyboardEndImageUrls: undefined,
+                                            storyboardEndImageWidth: undefined,
+                                            storyboardEndImageHeight: undefined,
+                                            storyboardEndImageDeletedAt: now,
+                                            frameEvidence: (candidate.frameEvidence || []).filter((evidence) => evidence.role !== "storyboard_end"),
+                                        }),
+                              };
+                          }),
+                      },
+            ),
+            updatedAt: nextTimestamp(current.updatedAt),
+        },
+        current,
+    );
+    try {
+        const project = await updateDramaProject(userId, nextProject, current.updatedAt);
+        const deletion = await deleteUserOwnedMediaAssetsPhysically(userId, storageKeys);
+        return { project, deletion };
+    } catch (error) {
+        if (error instanceof DramaProjectStoreError) throw new DramaProjectServiceError(error.message, error.status);
+        throw error;
+    }
+}
+
 export async function acceptDramaStoryboardFrameForUser(userId: string, id: string, episodeId: string, shotId: string, frameId: string, candidateId?: string) {
     const current = await getDramaProjectForUser(userId, id);
     const episode = current.episodes.find((item) => item.id === cleanText(episodeId));
@@ -918,7 +1025,18 @@ export async function approveDramaAssetReferenceForUser(userId: string, id: stri
     const selected = nextReferences.find((reference) => reference.id === referenceId)!;
     const nextProject = {
         ...current,
-        [kind]: current[kind].map((item) => (item.id === assetId ? { ...item, references: nextReferences, primaryReferenceId: selected.id, referenceImageUrl: selected.url, referenceStorageKey: selected.storageKey } : item)),
+        [kind]: current[kind].map((item) =>
+            item.id === assetId
+                ? {
+                      ...item,
+                      references: nextReferences,
+                      primaryReferenceId: selected.id,
+                      referenceImageUrl: selected.url,
+                      referenceStorageKey: selected.storageKey,
+                      ...(kind === "scenes" ? { sceneReferenceBoard: { layout: "3x3" as const, referenceId: selected.id } } : {}),
+                  }
+                : item,
+        ),
         updatedAt: nextTimestamp(current.updatedAt),
     };
     try {
@@ -936,11 +1054,37 @@ export async function updateDramaAssetForUser(userId: string, id: string, kind: 
     if (!asset) throw new DramaProjectServiceError("项目资产不存在，请刷新后重试", 404);
     const input = object(value);
     const incomingProfile = object(input.profile);
+    const incomingSupplierPrompt = typeof input.supplierPrompt === "string" ? optionalText(input.supplierPrompt) : undefined;
+    const assetKind = kind === "characters" ? "角色" : kind === "scenes" ? "场景" : "道具";
+    const synchronizedPromptFields = incomingSupplierPrompt && hasDramaAssetPromptQuality(incomingSupplierPrompt, assetKind)
+        ? dramaAssetPromptFields(incomingSupplierPrompt, {
+              description: cleanText(input.description) || asset.description,
+              visualIdentity: cleanText(object(input.profile).visualIdentity) || asset.profile?.visualIdentity || "",
+              styling: cleanText(object(input.profile).styling) || asset.profile?.styling || "",
+              colorPalette: cleanText(object(input.profile).colorPalette) || asset.profile?.colorPalette || "",
+              consistencyRules: cleanText(object(input.profile).consistencyRules) || asset.profile?.consistencyRules || "",
+          })
+        : undefined;
     const patch = {
         ...(typeof input.name === "string" ? { name: cleanText(input.name) } : {}),
         ...(typeof input.description === "string" ? { description: cleanText(input.description) } : {}),
-        ...(typeof input.supplierPrompt === "string" ? { supplierPrompt: optionalText(input.supplierPrompt) } : {}),
-        ...(Object.keys(incomingProfile).length ? { profile: { ...asset.profile, ...incomingProfile } } : {}),
+        ...(typeof input.supplierPrompt === "string" ? { supplierPrompt: incomingSupplierPrompt } : {}),
+        ...(Object.keys(incomingProfile).length || synchronizedPromptFields
+            ? {
+                  profile: {
+                      ...asset.profile,
+                      ...incomingProfile,
+                      ...(synchronizedPromptFields
+                          ? {
+                                visualIdentity: synchronizedPromptFields.visualIdentity,
+                                styling: synchronizedPromptFields.styling,
+                                colorPalette: synchronizedPromptFields.colorPalette,
+                                consistencyRules: synchronizedPromptFields.consistencyRules,
+                            }
+                          : {}),
+                  },
+              }
+            : {}),
         ...(kind === "characters" && input.voiceProfile !== undefined ? { voiceProfile: input.voiceProfile } : {}),
         ...(kind === "clues" && typeof input.payoff === "string" ? { payoff: cleanText(input.payoff) } : {}),
     };
@@ -1342,6 +1486,15 @@ function reconcileTerminalDramaVisualFailures(project: DramaProject, run: DramaP
 }
 
 export function applyDramaVisualStepResult(project: DramaProject, episodeId: string, step: DramaProductionRun["steps"][number], results: Array<{ url: string; remoteUrl?: string; width?: number; height?: number }>) {
+    const owningShot = step.shotId ? project.episodes.find((episode) => episode.id === episodeId)?.shots.find((shot) => shot.id === step.shotId) : undefined;
+    if (owningShot && step.taskId) {
+        if (step.type === "start_frame" && owningShot.storyboardImageDeletedAt && owningShot.storyboardTaskId !== step.taskId) return project;
+        if (step.type === "end_frame" && owningShot.storyboardEndImageDeletedAt && owningShot.storyboardEndTaskId !== step.taskId) return project;
+        if (step.type === "keyframe") {
+            const frame = owningShot.storyboardFrames?.find((item) => item.id === step.frameId || item.sequenceIndex === step.sequenceIndex);
+            if (frame?.mediaDeletedAt && frame.taskId !== step.taskId && frame.candidateTaskId !== step.taskId) return project;
+        }
+    }
     const first = results[0];
     if (step.type === "asset_anchor" && step.assetId && step.assetKind) {
         const references = results.map((result, index) => ({
@@ -3102,10 +3255,18 @@ function normalizeNamedAssets(value: unknown, prefix: string, character = false)
                 referenceImageUrl: primaryReference?.url,
                 referenceStorageKey: primaryReference?.storageKey,
                 refinementHistory: normalizeRefinementHistory(input.refinementHistory),
+                ...(prefix === "scene" ? { sceneReferenceBoard: normalizeSceneReferenceBoard(input.sceneReferenceBoard, primaryReferenceId) } : {}),
                 ...(character ? { voiceProfile: normalizeVoiceProfile(input.voiceProfile) } : {}),
             };
         })
         .filter((item) => item.name);
+}
+
+function normalizeSceneReferenceBoard(value: unknown, primaryReferenceId?: string) {
+    const input = object(value);
+    if (!Object.keys(input).length) return undefined;
+    const referenceId = optionalText(input.referenceId) || primaryReferenceId;
+    return { layout: "3x3" as const, ...(referenceId ? { referenceId } : {}) };
 }
 
 function normalizeClues(value: unknown) {

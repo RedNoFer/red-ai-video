@@ -21,6 +21,15 @@ export function dramaAssetReferences(item: DramaNamedAsset): DramaAssetReference
     return ensureUniqueDramaAssetReferenceIds(references);
 }
 
+export function dramaSceneBoardReference(item: DramaNamedAsset, references = dramaAssetReferences(item)) {
+    if (!item.sceneReferenceBoard?.referenceId) return undefined;
+    return references.find((reference) => reference.id === item.sceneReferenceBoard?.referenceId && reference.status === "approved");
+}
+
+export function isDramaSceneBoardReference(asset: DramaNamedAsset, reference: DramaAssetReference) {
+    return asset.sceneReferenceBoard?.referenceId === reference.id || /九宫格/u.test(reference.label) || /九宫格/u.test(reference.compiledPrompt || "");
+}
+
 /** Keep malformed historical snapshots from producing duplicate React keys. */
 export function ensureUniqueDramaAssetReferenceIds(references: DramaAssetReference[]): DramaAssetReference[] {
     const used = new Set<string>();

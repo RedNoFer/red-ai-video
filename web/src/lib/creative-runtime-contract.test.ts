@@ -171,7 +171,7 @@ describe("isCreativeProjectHandoff", () => {
 });
 
 describe("drama script Agent contract", () => {
-    it("requires a project and episode and rejects media controls", () => {
+    it("requires a project and episode and accepts reference assets without media controls", () => {
         expect(() =>
             normalizeCreativeRunRequest({
                 clientRequestId: "request",
@@ -197,7 +197,20 @@ describe("drama script Agent contract", () => {
                 skillIds: [],
                 modelIds: [],
             }),
-        ).toThrow("不接受媒体");
+        ).not.toThrow();
+        expect(() =>
+            normalizeCreativeRunRequest({
+                clientRequestId: "request",
+                surface: "drama",
+                workflow: "drama-script",
+                projectId: "project",
+                episodeId: "episode",
+                prompt: "继续当前集冲突",
+                assetIds: ["asset"],
+                skillIds: [],
+                modelIds: ["model"],
+            }),
+        ).toThrow("自选模型");
         expect(() =>
             normalizeCreativeRunRequest({
                 clientRequestId: "request",

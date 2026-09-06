@@ -108,7 +108,7 @@ test("drama all-frame editor keeps one beat per row across desktop, mobile and d
     await expect(firstFrame.getByAltText("帧 1")).toBeVisible();
     await removeFirstFrame.click();
     await expect(removeDialog).toBeVisible();
-    const removeSave = page.waitForRequest((request) => request.method() === "PATCH" && request.url().includes(`/api/drama/projects/${project.id}`));
+    const removeSave = page.waitForRequest((request) => request.method() === "DELETE" && request.url().includes(`/frames/beat-1`));
     await removeDialog.getByRole("button", { name: "确认删除" }).click();
     await removeSave;
     await expect(firstFrame.getByAltText("帧 1")).toBeHidden();
@@ -117,7 +117,7 @@ test("drama all-frame editor keeps one beat per row across desktop, mobile and d
     expect(afterDelete.episodes[0].shots[0].storyboardFrames?.[0]).toMatchObject({ id: "beat-1", status: "stale" });
     expect(afterDelete.episodes[0].shots[0].storyboardFrames?.[0].mediaUrl).toBeUndefined();
     expect(afterDelete.episodes[0].shots[0].storyboardFrames?.[0].mediaDeletedAt).toBeTruthy();
-    expect(afterDelete.episodes[0].shots[0].frameEvidence?.find((frame) => frame.role === "storyboard_keyframe" && frame.sequenceIndex === 1)?.validity).toBe("superseded");
+    expect(afterDelete.episodes[0].shots[0].frameEvidence?.find((frame) => frame.role === "storyboard_keyframe" && frame.sequenceIndex === 1)).toBeUndefined();
     await assertVerticalRows(sequence);
     await expectNoHorizontalOverflow(page, "1672px light frame sequence");
 

@@ -5,7 +5,7 @@ import { defaultDramaProductionPlan, dramaReferenceImageBudget, normalizeDramaPr
 describe("drama production plan", () => {
     it("defaults new projects to locked-by-confirmation storyboard settings", () => {
         const plan = defaultDramaProductionPlan();
-        expect(plan.video).toMatchObject({ model: "seedance-2-0-official", mode: "storyboard", resolution: "720p", shotDuration: 15, frameCount: 5, count: 1, allowExplicitFallback: false });
+        expect(plan).toMatchObject({ visual: { visualStyle: "", artStyle: "", source: "agent" }, video: { model: "seedance-2-0-official", mode: "storyboard", resolution: "720p", shotDuration: 15, frameCount: 5, framePolicy: "agent", count: 1, allowExplicitFallback: false } });
         expect(plan.skills.map((skill) => skill.id)).toEqual(["seedance-director", "seedance-25-director"]);
         expect(plan.references).toMatchObject({ strategy: "adaptive", minImages: 3, maxImages: 5 });
         expect(plan.continuity).toMatchObject({ mode: "strict", requireAcceptedActualTail: true });
@@ -35,5 +35,13 @@ describe("drama production plan", () => {
         expect(dramaReferenceImageBudget(15)).toBe(9);
         expect(dramaReferenceImageBudget(20)).toBe(9);
         expect(dramaReferenceImageBudget(30)).toBe(9);
+    });
+
+    it("keeps visual parameters and fixed frame policies in the normalized plan", () => {
+        expect(normalizeDramaProductionPlan({ visual: { visualStyle: "冷峻写实", artStyle: "水墨电影感", source: "manual" }, video: { shotDuration: 30, framePolicy: "fixed-4", frameCount: 4 } })).toMatchObject({
+            visual: { visualStyle: "冷峻写实", artStyle: "水墨电影感", source: "manual" },
+            video: { shotDuration: 30, framePolicy: "fixed-4", frameCount: 4 },
+        });
+        expect(normalizeDramaProductionPlan({ video: { framePolicy: "agent" } })?.video.framePolicy).toBe("agent");
     });
 });

@@ -22,7 +22,8 @@ export function getDramaAssetMissingItems(asset: DramaNamedAsset | DramaCharacte
         const voice = (asset as DramaCharacter).voiceProfile;
         if (!voice?.blueprint || !voice.instructions.trim() || !voice.voiceId?.trim()) add("voice", "音色画像与项目音色", "voice");
     }
-    if (kind !== "clues" && !approvedAssetReference(asset)) add("reference", "基准图", "reference");
+    const hasReference = kind === "scenes" ? Boolean(asset.sceneReferenceBoard?.referenceId && approvedAssetReference(asset)) : Boolean(approvedAssetReference(asset));
+    if (kind !== "clues" && !hasReference) add("reference", kind === "scenes" ? "九宫格场景基准板" : "基准图", "reference");
     return missing;
 }
 

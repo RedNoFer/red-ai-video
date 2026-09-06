@@ -1252,6 +1252,7 @@ function agentAssetSnapshot(asset: DramaNamedAsset) {
         profile: asset.profile,
         primaryReferenceId: asset.primaryReferenceId,
         referenceImageUrl: asset.referenceImageUrl,
+        ...(asset.sceneReferenceBoard ? { sceneReferenceBoard: asset.sceneReferenceBoard } : {}),
     };
 }
 

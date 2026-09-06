@@ -16,10 +16,16 @@ export const CREATIVE_UPLOAD_MIME_TYPES = [
     "audio/opus",
     "audio/aac",
     "audio/flac",
+    "text/plain",
+    "text/markdown",
 ] as const;
 
 export const CREATIVE_UPLOAD_ACCEPT = CREATIVE_UPLOAD_MIME_TYPES.join(",");
 
 export function isCreativeUploadMimeType(value: string): value is (typeof CREATIVE_UPLOAD_MIME_TYPES)[number] {
     return CREATIVE_UPLOAD_MIME_TYPES.includes(value.toLowerCase() as (typeof CREATIVE_UPLOAD_MIME_TYPES)[number]);
+}
+
+export function isCreativeTextFile(name: string, mimeType = "") {
+    return /\.(?:txt|md)$/iu.test(name) || ["text/plain", "text/markdown"].includes(mimeType.toLowerCase());
 }

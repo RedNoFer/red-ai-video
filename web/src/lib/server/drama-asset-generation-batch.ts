@@ -226,7 +226,7 @@ async function submitBatchItem(input: { userId: string; projectId: string; batch
                 origin: input.origin,
                 publicOrigin: input.publicOrigin,
                 cookie: authContext,
-                config: item.kind === "characters" ? { ...config, count: "1", size: DRAMA_CHARACTER_TURNAROUND_SIZE } : config,
+                config: item.kind === "characters" ? { ...config, count: "1", size: DRAMA_CHARACTER_TURNAROUND_SIZE } : item.kind === "scenes" ? { ...config, count: "1", size: "1:1" } : config,
                 skipReference: true,
                 skipVoice: true,
             });
@@ -255,7 +255,7 @@ async function submitBatchItem(input: { userId: string; projectId: string; batch
             method: "POST",
             headers: { "Content-Type": "application/json", ...authHeaders, "X-VOZEB-PRO-Client-Request-Id": `${batch.id}:${item.id}:${item.attempt}` },
             body: JSON.stringify({
-                config: item.kind === "characters" ? { ...config, count: "1", size: DRAMA_CHARACTER_TURNAROUND_SIZE } : config,
+                config: item.kind === "characters" ? { ...config, count: "1", size: DRAMA_CHARACTER_TURNAROUND_SIZE } : item.kind === "scenes" ? { ...config, count: "1", size: "1:1" } : config,
                 prompt: compileDramaAssetBatchItemPrompt(project, item),
                 references,
                 source: "drama",

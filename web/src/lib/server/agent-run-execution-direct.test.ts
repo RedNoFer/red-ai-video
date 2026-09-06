@@ -141,8 +141,8 @@ describe("directAgentPlan", () => {
             objective: "生成角色候选图",
             reply: "开始生成",
             decisions: [],
-            foundation: { complexity: "simple", brief: { objective: "生成角色候选图" }, direction: { summary: "白底三视图" } },
-            deliverables: [{ id: "character-sheet", title: "角色候选图", type: "image", model: "image-pro", prompt: "白底角色三视图", count: 4, dependencies: [] }],
+            foundation: { complexity: "simple", brief: { objective: "生成角色候选图" }, direction: { summary: "白底四视图" } },
+            deliverables: [{ id: "character-sheet", title: "角色候选图", type: "image", model: "image-pro", prompt: "白底角色四视图", count: 4, dependencies: [] }],
         };
 
         const [task] = normalizeTasks(plan as never, [DRAMA_ASSET_IMAGE_SKILL] as never, generationSettings() as never, { project: { ratio: "9:16" } }, "生成角色候选图", "drama", []);

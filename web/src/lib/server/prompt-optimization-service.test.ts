@@ -84,7 +84,7 @@ describe("prompt optimization service", () => {
         vi.mocked(requestStructuredText).mockResolvedValue({
             arguments: JSON.stringify({
                 optimizedPrompt: "主体与资产类型：角色；身份/结构锚点：固定五官与黑色短发；可见状态与材质：黑色短发与深色服装；构图与画幅：单人全身，9:16。",
-                fields: { description: "少年角色", visualIdentity: "固定五官与黑色短发", styling: "黑色短发与深色服装", colorPalette: "黑灰", consistencyRules: "三视图保持同一身份与服装结构" },
+                fields: { description: "少年角色", visualIdentity: "固定五官与黑色短发", styling: "黑色短发与深色服装", colorPalette: "黑灰", consistencyRules: "四视图保持同一身份与服装结构" },
             }),
             headers: new Headers(),
             protocol: "chat",
@@ -103,8 +103,8 @@ describe("prompt optimization service", () => {
         const systemMessage = vi.mocked(requestStructuredText).mock.calls[0]?.[0].messages.find((message) => message.role === "system")?.content || "";
         expect(systemMessage).toContain("短剧资产图片导演");
         expect(systemMessage).toContain("纯白色无缝背景");
-        expect(systemMessage).toContain("正面、侧面、背面");
-        expect(systemMessage).toContain("不得添加主立绘、肖像特写、表情组、手部或道具拆解");
+        expect(systemMessage).toContain("身份特写、正面全身立姿、严格左侧面全身立姿、背面全身立姿");
+        expect(systemMessage).toContain("不得添加四分之三视图、主立绘、表情组、手部或道具拆解");
         expect(systemMessage).toContain("主体与资产类型");
         expect(systemMessage).toContain("角色质量契约");
         expect(systemMessage).toContain("男性不女性化");
@@ -114,17 +114,17 @@ describe("prompt optimization service", () => {
         expect(systemMessage).toContain("不得用“高级、绝美、顶级、仙气”等空泛形容词替代具体事实");
         expect(result.optimizedPrompt).toContain("构图与画幅：16:9 横向");
         expect(result.optimizedPrompt).toContain("纯白色无缝背景");
-        expect(result.optimizedPrompt).toContain("正面、严格左侧面、背面");
+        expect(result.optimizedPrompt).toContain("四视图");
         expect(result.optimizedPrompt).not.toContain("单人全身，9:16");
-        expect(result.fields).toMatchObject({ description: "少年角色", visualIdentity: "固定五官与黑色短发", styling: "黑色短发与深色服装", colorPalette: "黑灰", consistencyRules: expect.stringContaining("三视图保持同一身份与服装结构") });
-        expect(result.fields.consistencyRules).toContain("严格左侧面");
+        expect(result.fields).toMatchObject({ description: "少年角色", visualIdentity: "固定五官与黑色短发", styling: "黑色短发与深色服装", colorPalette: "黑灰", consistencyRules: expect.stringContaining("四视图保持同一身份与服装结构") });
+        expect(result.fields.consistencyRules).toContain("身份特写");
     });
 
     it("retains the configured project style when the model returns a shortened asset prompt", async () => {
         vi.mocked(requestStructuredText).mockResolvedValue({
             arguments: JSON.stringify({
                 optimizedPrompt: "主体与资产类型：角色；身份/结构锚点：萧炎；可见状态与材质：黑发与墨青长袍",
-                fields: { description: "萧家少年", visualIdentity: "黑发、清晰眉骨", styling: "墨青长袍", colorPalette: "墨青、暗灰、暖金", consistencyRules: "三视图同一身份" },
+                fields: { description: "萧家少年", visualIdentity: "黑发、清晰眉骨", styling: "墨青长袍", colorPalette: "墨青、暗灰、暖金", consistencyRules: "四视图同一身份" },
             }),
             headers: new Headers(),
             protocol: "chat",

@@ -98,11 +98,11 @@ test("生成候选通过真实图片任务链路完成", async ({ page, request 
             json: {
                 code: 0,
                 data: {
-                    prompt: "主体与资产类型：角色\n身份/结构锚点：固定黑发与黑金学院长袍。\n可见状态与材质：三视图均为完整全身立姿。\n构图与画幅：9:16，纯白色无缝背景，正面、侧面、背面等距水平排列，侧面固定为左侧。\n光色与风格：角色本体保持半写实动漫幻想材质。\n用途：短剧角色基准板。\n负面约束：无主立绘、无肖像特写、无表情组、无文字、无水印。",
+                    prompt: "主体与资产类型：角色\n身份/结构锚点：固定黑发与黑金学院长袍。\n可见状态与材质：身份特写锁定精细五官，后三个全身视图保持服装层次与材质一致。\n构图与画幅：16:9，纯白色无缝背景四视图，身份特写、正面全身、严格左侧面全身、背面全身等距排列。\n光色与风格：角色本体保持半写实动漫幻想材质。\n负面约束：无四分之三视图、无主立绘、无表情组、无文字、无水印。",
                     fields: {
                         description: "一名需要保持身份一致的暗黑学院青年角色",
                         visualIdentity: "固定黑发与黑金学院长袍",
-                        styling: "三视图均为完整全身立姿",
+                        styling: "身份特写锁定精细五官，后三个全身视图完整立姿",
                         colorPalette: "黑金",
                         consistencyRules: "正面、左侧面和背面保持同一身份、服装与比例",
                     },
@@ -130,7 +130,7 @@ test("生成候选通过真实图片任务链路完成", async ({ page, request 
     await expect(supplierPrompt).not.toHaveValue(/资产图片 Skill 规则/);
     await expect(supplierPrompt).toHaveValue(/主体与资产类型：角色/);
     await supplierPrompt.fill(
-        "主体与资产类型：角色\n身份/结构锚点：用户编辑后的黑发青年，黑金学院长袍，固定五官与发型。\n可见状态与材质：正面、严格左侧面、背面均为完整全身立姿，服装层次和材质一致。\n构图与画幅：16:9 横向，纯白色无缝背景，三视图等距水平排列，同一基线、同一头身比。\n光色与风格：半写实动漫幻想材质，均匀低干扰棚拍光。\n负面约束：无额外人物、主立绘、肖像特写、表情组、文字、水印或 logo。",
+        "主体与资产类型：角色\n身份/结构锚点：用户编辑后的黑发青年，黑金学院长袍，固定五官与发型。\n可见状态与材质：身份特写锁定精细五官，正面、严格左侧面、背面均为完整全身立姿，服装层次和材质一致。\n构图与画幅：16:9 横向，纯白色无缝背景四视图等距排列，同一基线、同一头身比。\n光色与风格：半写实动漫幻想材质，均匀低干扰棚拍光。\n负面约束：无额外人物、四分之三视图、主立绘、文字、水印或 logo。",
     );
     await drawer.getByRole("button", { name: "生成候选" }).click();
 
@@ -326,11 +326,10 @@ test("批量完成后将基准图写入项目资产列表", async ({ page, reque
     await page.reload({ waitUntil: "domcontentloaded" });
     await page.getByRole("button", { name: "打开项目资产" }).click();
     await page.getByRole("button", { name: /场景/ }).click();
-    await expect(page.locator('img[alt="批量基准场景基准图"]')).toHaveCount(1);
-    await expect(page.locator('img[alt="批量基准场景基准图"]')).toHaveCSS("object-fit", "contain");
+    await expect(page.locator('[data-drama-scene-reference-board][aria-label="批量基准场景九宫格场景基准板"]')).toHaveCount(1);
     await page.getByRole("button", { name: "编辑场景：批量基准场景" }).click();
     const drawer = page.getByRole("dialog", { name: "编辑场景" });
-    await expect(drawer.locator('img[alt="批量基准场景基准图"]')).toHaveCSS("object-fit", "contain");
+    await expect(drawer.locator('[data-drama-scene-reference-board][aria-label="批量基准场景九宫格场景基准板"]')).toHaveCount(1);
 });
 
 function sub2ApiImageSettingsPatch() {

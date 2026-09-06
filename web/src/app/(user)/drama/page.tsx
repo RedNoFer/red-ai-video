@@ -1,13 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { App, Button, Input, InputNumber, Modal, Segmented } from "antd";
+import { App, Button, Input, Modal } from "antd";
 import { Clapperboard, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useUserStore } from "@/stores/use-user-store";
 import { CompactEmptyState } from "@/components/compact-empty-state";
-import { DRAMA_STYLE_NAME } from "@/lib/drama-style";
-import { normalizeDramaImageSize } from "@/lib/drama-image-size";
 import { cn } from "@/lib/utils";
 
 import { DramaProjectCard } from "./components/drama-project-card";
@@ -28,11 +26,6 @@ export default function DramaPage() {
     const userId = useUserStore((state) => state.user?.id || "");
     const [open, setOpen] = useState(false);
     const [title, setTitle] = useState("");
-    const [summary, setSummary] = useState("");
-    const [style, setStyle] = useState(DRAMA_STYLE_NAME);
-    const [ratio, setRatio] = useState("9:16");
-    const [customWidth, setCustomWidth] = useState(1080);
-    const [customHeight, setCustomHeight] = useState(1920);
     const [creating, setCreating] = useState(false);
     const episodeCount = projects.reduce((total, project) => total + project.episodeCount, 0);
     const pendingCount = projects.reduce((total, project) => total + project.pendingTaskCount, 0);
@@ -43,14 +36,11 @@ export default function DramaPage() {
     }, [hydrate, userId]);
     const create = async () => {
         if (!title.trim()) return message.warning("请输入项目名称");
-        const normalizedSize = normalizeDramaImageSize(ratio);
-        if (!normalizedSize) return message.warning("请输入有效的短剧尺寸");
         setCreating(true);
         try {
-            const id = await createProject({ title: title.trim(), summary: summary.trim(), style: style.trim(), ratio: normalizedSize });
+            const id = await createProject({ title: title.trim() });
             setOpen(false);
             setTitle("");
-            setSummary("");
             router.push(`/drama/${id}`);
         } catch (error) {
             message.error(error instanceof Error ? error.message : "短剧项目创建失败");
@@ -129,61 +119,6 @@ export default function DramaPage() {
                             项目名称
                         </label>
                         <Input id="drama-project-title" className="!h-9" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="例如：月影长安" />
-                    </div>
-                    <div className="grid gap-1.5">
-                        <label htmlFor="drama-project-summary" className="text-sm font-medium leading-5">
-                            故事简介
-                        </label>
-                        <Input.TextArea id="drama-project-summary" value={summary} onChange={(event) => setSummary(event.target.value)} autoSize={{ minRows: 2, maxRows: 3 }} placeholder="一句话说明人物、冲突和目标" />
-                    </div>
-                    <div className="grid gap-1.5">
-                        <label htmlFor="drama-project-style" className="text-sm font-medium leading-5">
-                            视觉风格
-                        </label>
-                        <Input id="drama-project-style" className="!h-9" value={style} onChange={(event) => setStyle(event.target.value)} />
-                    </div>
-                    <div className="grid min-w-0 gap-1.5">
-                        <span className="text-sm font-medium leading-5">生成尺寸</span>
-                        <div className="min-w-0">
-                            <Segmented
-                                block
-                                className="!w-full"
-                                value={ratio.includes("x") ? "custom" : ratio}
-                                options={[
-                                    { label: "9:16", value: "9:16" },
-                                    { label: "16:9", value: "16:9" },
-                                    { label: "自定义", value: "custom" },
-                                ]}
-                                onChange={(value) => setRatio(value === "custom" ? `${customWidth}x${customHeight}` : String(value))}
-                            />
-                        </div>
-                        {ratio.includes("x") ? (
-                            <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2">
-                                <InputNumber
-                                    className="!w-full"
-                                    min={256}
-                                    value={customWidth}
-                                    prefix="W"
-                                    onChange={(value) => {
-                                        const width = Number(value) || 256;
-                                        setCustomWidth(width);
-                                        setRatio(`${width}x${customHeight}`);
-                                    }}
-                                />
-                                <span className="text-muted-foreground">×</span>
-                                <InputNumber
-                                    className="!w-full"
-                                    min={256}
-                                    value={customHeight}
-                                    prefix="H"
-                                    onChange={(value) => {
-                                        const height = Number(value) || 256;
-                                        setCustomHeight(height);
-                                        setRatio(`${customWidth}x${height}`);
-                                    }}
-                                />
-                            </div>
-                        ) : null}
                     </div>
                 </div>
             </Modal>

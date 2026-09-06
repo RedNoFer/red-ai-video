@@ -159,7 +159,7 @@ describe("production package boundary", () => {
         const rifa = preview.package.assets.characters.find((item) => item.code === "C02")!;
 
         expect(karin.profile?.consistencyRules).toContain("自然骨骼与身材比例");
-        expect(karin.profile?.consistencyRules).toContain("正面、严格左侧面、背面");
+        expect(karin.profile?.consistencyRules).toContain("身份特写、正面、严格左侧面、背面");
         expect(karin.profile?.forbiddenChanges).toEqual(expect.arrayContaining(["换脸", "大头娃娃", "塑料皮肤", "手指畸形"]));
         expect(rifa.profile?.visualIdentity).toContain("Rifa的脸型、五官、发型和年龄感");
         expect(rifa.profile?.identityAnchors).toEqual(expect.arrayContaining([expect.stringContaining("Rifa的脸型、五官、发型和年龄感")]));

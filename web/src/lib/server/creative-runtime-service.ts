@@ -1,5 +1,5 @@
 import { creativeConversationSourceForSurface, isCreativeConversationSourceCompatible, normalizeCreativeConversationSource, normalizeCreativeSurface, type CreativeAssetType, type CreativeConversationStatus } from "@/lib/creative-runtime-contract";
-import { CREATIVE_UPLOAD_MAX_BYTES, isCreativeUploadMimeType } from "@/lib/creative-upload";
+import { CREATIVE_UPLOAD_MAX_BYTES, isCreativeTextFile, isCreativeUploadMimeType } from "@/lib/creative-upload";
 import {
     createCreativeConversation,
     getCreativeAsset,
@@ -96,11 +96,36 @@ export async function getAssetForUser(userId: string, id: string) {
 export async function uploadAssetForUser(userId: string, conversationId: string, file: File) {
     const conversation = await getConversationForUser(userId, conversationId);
     if (conversation.status !== "active") throw new CreativeRuntimeServiceError("已归档会话不能上传素材", 409);
-    const type = isCreativeUploadMimeType(file.type) ? creativeAssetType(file.type) : null;
-    if (!type) throw new CreativeRuntimeServiceError("仅支持图片、视频和音频素材", 400);
+    const type = isCreativeUploadMimeType(file.type) || isCreativeTextFile(file.name, file.type) ? creativeAssetType(file.type, file.name) : null;
+    if (!type) throw new CreativeRuntimeServiceError("仅支持图片、视频、音频、TXT 或 Markdown 素材", 400);
     if (!file.size) throw new CreativeRuntimeServiceError("上传文件为空", 400);
     if (file.size > CREATIVE_UPLOAD_MAX_BYTES) throw new CreativeRuntimeServiceError("单个素材不能超过 20MB", 413);
-    const dataUrl = `data:${file.type};base64,${Buffer.from(await file.arrayBuffer()).toString("base64")}`;
+    const bytes = Buffer.from(await file.arrayBuffer());
+    if (type === "text") {
+        let textContent: string;
+        try {
+            textContent = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+        } catch {
+            throw new CreativeRuntimeServiceError("文本文件必须使用 UTF-8 编码", 400);
+        }
+        const [asset] = await registerCreativeAssets([
+            {
+                userId,
+                conversationId,
+                sourceRunId: "upload",
+                sourceTaskId: `text-${Date.now()}`,
+                ordinal: 0,
+                type,
+                title: optionalText(file.name, 160) || "上传文本",
+                mimeType: file.type || (/\.md$/iu.test(file.name) ? "text/markdown" : "text/plain"),
+                bytes: file.size,
+                textContent,
+                metadata: { source: "upload", originalName: file.name, storageClass: "text" },
+            },
+        ]);
+        return asset;
+    }
+    const dataUrl = `data:${file.type};base64,${bytes.toString("base64")}`;
     let stored: Awaited<ReturnType<typeof writePersistentMediaDataUrl>>;
     try {
         stored = await writePersistentMediaDataUrl(dataUrl, type, { ownerUserId: userId, source: "creative-upload", originalName: file.name, conversationId, maxBytes: CREATIVE_UPLOAD_MAX_BYTES });
@@ -173,7 +198,8 @@ function normalizeStatus(value: unknown): CreativeConversationStatus | undefined
     return value === "active" || value === "archived" ? value : undefined;
 }
 
-function creativeAssetType(mimeType: string): Exclude<CreativeAssetType, "text"> | null {
+function creativeAssetType(mimeType: string, fileName = ""): CreativeAssetType | null {
+    if (isCreativeTextFile(fileName, mimeType)) return "text";
     if (mimeType.startsWith("image/")) return "image";
     if (mimeType.startsWith("video/")) return "video";
     if (mimeType.startsWith("audio/")) return "audio";

@@ -13,7 +13,7 @@ import {
     DRAMA_CHARACTER_SUPPLIER_QUALITY_RULES,
     DRAMA_CHARACTER_WARDROBE_MATERIAL_RULES,
 } from "@/lib/drama-character-rules";
-import { DRAMA_CHARACTER_TURNAROUND_SIZE } from "@/lib/drama-prompt-compiler";
+import { DRAMA_CHARACTER_TURNAROUND_LABEL, DRAMA_CHARACTER_TURNAROUND_LAYOUT, DRAMA_CHARACTER_TURNAROUND_SIZE } from "@/lib/drama-prompt-compiler";
 import type { CreativeGenerationMode } from "@/lib/creative-runtime-contract";
 import { DRAMA_CONTINUOUS_FRAME_RULES, SEEDANCE_DIRECTOR_SKILL, SEEDANCE_STATIC_FRAME_PROMPT_LAYOUT, SEEDANCE_STATIC_FRAME_RULES, SEEDANCE_VIDEO_PROMPT_LAYOUT } from "@/lib/server/agent-skills/creative-shortcuts";
 import { inferSeedance25VideoDuration, resolveSeedance25DirectorInstructions } from "@/lib/server/agent-skills/seedance-25";
@@ -86,7 +86,7 @@ function promptOptimizationInstruction(mode: PromptOptimizationMode, prompt = ""
         const kind = prompt.match(/资产类型[】：:]\s*(角色|场景|道具)/u)?.[1] || "角色、场景或道具";
         const layout =
             kind === "角色"
-                ? "角色固定为一张纯白色无缝背景的三视图角色基准板：正面、侧面、背面全身立姿等距水平排列，侧面固定为左侧，同一基线、同一头身比、同一脸部、发型、服装和关键道具。三视图只表示同一个角色；不得添加主立绘、肖像特写、表情组、手部或道具拆解、额外角度、边框、网格、文字或水印。"
+                ? `角色固定为一张纯白色无缝背景的${DRAMA_CHARACTER_TURNAROUND_LABEL}：${DRAMA_CHARACTER_TURNAROUND_LAYOUT}，同一基线、同一头身比、同一脸部、发型、服装和关键道具。四视图只表示同一个角色；不得添加四分之三视图、主立绘、表情组、手部或道具拆解、额外角度、边框、网格、文字或水印。`
                 : "场景或道具固定为一张完整、独立的单主体基准图，不得添加人物、拼版、文字或水印。";
         return `你是 VOZEB PRO 的短剧资产图片提示词编辑器。当前资产类型是“${kind}”。必须调用固定 JSON 工具返回结果，JSON 只能包含 optimizedPrompt 和 fields 两个顶层键；fields 必须完整包含 description、visualIdentity、styling、colorPalette、consistencyRules 五个字符串键，不得缺失、改名或增加键。optimizedPrompt 是可直接提交给图片供应商的中文公开生图提示词，不得包含 JSON、解释、分析、Markdown 标题、内部规则、模型理由、ID 或 URL。\n${DRAMA_ASSET_IMAGE_SKILL.instructions}\n${kind === "角色" ? `角色质量契约：${DRAMA_CHARACTER_PROFILE_CONTRACT}\n角色供应商质量要求：${DRAMA_CHARACTER_SUPPLIER_QUALITY_RULES}\n角色五官建模：${DRAMA_CHARACTER_FACE_MODELING_RULES}\n角色头发建模：${DRAMA_CHARACTER_HAIR_MODELING_RULES}\n角色服装材质：${DRAMA_CHARACTER_WARDROBE_MATERIAL_RULES}\n角色渲染技术：${DRAMA_CHARACTER_RENDER_STYLE}\n角色棚拍光线：${DRAMA_CHARACTER_STUDIO_LIGHT_RULES}\n角色高代价负面项：${DRAMA_CHARACTER_NEGATIVE_RULES}` : ""}\n${layout}\n项目主题风格只能使用原提示词中明确提供的视觉风格，不得自行添加或替换固定题材；保留原提示词中的项目风格、资产身份/结构锚点、固定服装材质、颜色、空间规则、画幅和负面要求，不新增任何剧情事实；fields 同步整理当前资产文案，未被用户要求改变的事实必须保留。角色资产必须把固定脸部、比例、发型、服装和材质事实写入对应字段，不得用“高级、绝美、顶级、仙气”等空泛形容词替代具体事实。optimizedPrompt 按以下顺序逐行组织：主体与资产类型；身份/结构锚点；可见状态与材质；构图与画幅；光色与风格；负面约束。`;
     }
@@ -153,12 +153,25 @@ function enforceDramaAssetPromptContract(sourcePrompt: string, prompt: string, f
         `主体与资产类型：${kind || "角色、场景或道具"}设定图`,
         `身份/结构锚点：${fields.visualIdentity || fields.description || "严格沿用当前资产身份与结构锚点"}`,
         `可见状态与材质：${fields.styling || "按当前资产造型、材质和可见状态呈现"}`,
-        kind === "角色" ? `构图与画幅：${DRAMA_CHARACTER_TURNAROUND_SIZE} 横向，一张纯白色无缝背景三视图角色基准板；正面、严格左侧面、背面全身立姿等距水平排列，同一基线、同一头身比。` : "构图与画幅：按项目画幅，一张完整、独立的单主体基准图。",
+        kind === "角色" ? `构图与画幅：${DRAMA_CHARACTER_TURNAROUND_SIZE} 横向，一张纯白色无缝背景${DRAMA_CHARACTER_TURNAROUND_LABEL}；${DRAMA_CHARACTER_TURNAROUND_LAYOUT}。` : "构图与画幅：按项目画幅，一张完整、独立的单主体基准图。",
         `光色与风格：${kind === "角色" ? [configuredStyle ? `项目视觉风格：${configuredStyle}` : "", DRAMA_CHARACTER_RENDER_STYLE, DRAMA_CHARACTER_STUDIO_LIGHT_RULES, DRAMA_CHARACTER_SUPPLIER_QUALITY_RULES].filter(Boolean).join("；") : "严格沿用当前项目视觉风格与资产固有色彩，不新增环境或剧情元素。"}`,
         kind === "角色" ? `负面约束：${DRAMA_CHARACTER_NEGATIVE_RULES}。` : "负面约束：无额外主体、拼版、多视角、场景文字、边框、文字、水印或 logo。",
     ];
-    const present = new Set(retained.map((line) => line.match(/^([^：:]+)[：:]/u)?.[1] || ""));
-    return [...retained, ...defaults.filter((line) => !present.has(line.match(/^([^：:]+)[：:]/u)?.[1] || ""))].join("\n");
+    const retainedByLabel = new Map(retained.map((line) => {
+        const match = line.match(/^([^：:]+)[：:]\s*([\s\S]*)$/u);
+        return match ? [match[1], match[2].trim()] as const : ["", ""] as const;
+    }).filter(([label]) => label));
+    const canonical = defaults.map((line) => {
+        const match = line.match(/^([^：:]+)[：:]\s*([\s\S]*)$/u);
+        if (!match) return line;
+        const label = match[1];
+        const existing = retainedByLabel.get(label);
+        if (!existing) return line;
+        if (label !== "可见状态与材质" || kind !== "角色") return `${label}：${existing}`;
+        const quality = [DRAMA_CHARACTER_FACE_MODELING_RULES, DRAMA_CHARACTER_HAIR_MODELING_RULES, DRAMA_CHARACTER_WARDROBE_MATERIAL_RULES].filter((rule) => !existing.includes(rule.slice(0, 8))).join("；");
+        return `${label}：${existing}${quality ? `；${quality}` : ""}`;
+    });
+    return canonical.join("\n");
 }
 
 function extractConfiguredStyle(prompt: string) {

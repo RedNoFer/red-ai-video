@@ -10,6 +10,7 @@ import {
     compileDramaFrameSupplierPrompt,
     compileDramaShotExecutionPrompts,
     dramaFrameVisibleState,
+    hasDramaAssetPromptQuality,
     compileDramaShotPrompts,
     deriveDramaShotPromptContract,
     preflightDramaAssetGeneration,
@@ -76,6 +77,51 @@ describe("drama prompt compiler", () => {
             expect(prompt).not.toContain("输出约束：");
             expect(prompt).not.toContain("最终自检：");
         }
+    });
+
+    it("compiles every scene as a nine-view spatial reference board", () => {
+        const project = createProject();
+        const scene = project.scenes[0];
+        const prompt = compileDramaAssetReferencePrompt(project, scene, "场景");
+        const constraints = preflightDramaAssetGeneration(project, scene, "场景");
+
+        expect(prompt).toContain("九宫格");
+        expect(prompt).toContain("西北、北、东北、西、东、西南、南、东南");
+        expect(prompt).toContain("空间轴线在九格中严格一致");
+        expect(prompt).toContain("建筑透视稳定");
+        expect(prompt).not.toContain("负面约束：额外主体、拼版、多视角");
+        expect(constraints.ok).toBe(true);
+        if (constraints.ok) {
+            expect(constraints.constraints.join("\n")).toContain("九宫格场景空间基准板");
+            expect(constraints.constraints.join("\n")).toContain("不得把九格画成九个不同地点");
+        }
+    });
+
+    it("does not let a legacy structured scene prompt bypass the nine-view contract", () => {
+        const project = createProject();
+        const scene = { ...project.scenes[0], supplierPrompt: "主体与资产类型：场景\n身份/结构锚点：旧空间\n可见状态与材质：旧材质\n构图与画幅：9:16 单一场景\n光色与风格：旧风格\n负面约束：无文字" };
+
+        expect(compileDramaAssetReferencePrompt(project, scene, "场景")).toContain("九宫格");
+    });
+
+    it("applies the locked global art style and negative prompt to scene generation", () => {
+        const project = createProject();
+        project.style = DRAMA_STYLE_NAME;
+        project.productionBible = {
+            ...project.productionBible!,
+            visualStyle: DRAMA_STYLE_NAME,
+            globalNegativePrompt: "不要现代灯具、不要塑料感",
+            productionPlan: {
+                ...project.productionBible!.productionPlan!,
+                visual: { visualStyle: "东方写实摄影", artStyle: "克制电影级空间美术，真实木石材质", source: "manual" },
+            },
+        };
+
+        const prompt = compileDramaAssetReferencePrompt(project, project.scenes[0], "场景");
+
+        expect(prompt).toContain("东方写实摄影");
+        expect(prompt).toContain("全局画风规格：克制电影级空间美术，真实木石材质");
+        expect(prompt).toContain("不要现代灯具、不要塑料感");
     });
 
     it("emits the current structured static-frame prompt contract", () => {
@@ -515,7 +561,7 @@ describe("drama prompt compiler", () => {
         expect(state).toBe("黑湖边的Karin与断剑清晰可见");
     });
 
-    it("creates a fixed white-background three-view character reference sheet", () => {
+    it("creates a fixed white-background four-view character reference sheet", () => {
         const prompt = compileDramaAssetReferencePrompt(createProject(), createProject().characters[0], "角色");
 
         expect(prompt).toContain("主体与资产类型：角色");
@@ -527,10 +573,10 @@ describe("drama prompt compiler", () => {
         expect(prompt).toContain("服装按真实裁剪逻辑分层");
         expect(prompt).toContain("角色固有色彩：红黑");
         expect(prompt).toContain("纯白色无缝背景");
-        expect(prompt).toContain("正面、严格左侧面、背面");
-        expect(prompt).toContain("三视图");
+        expect(prompt).toContain("身份特写、正面全身立姿、严格左侧面全身立姿、背面全身立姿");
+        expect(prompt).toContain("四视图");
         expect(prompt).toContain("双腿到鞋靴完整入画");
-        expect(prompt).toContain("同一基线、同一头身比");
+        expect(prompt).toContain("同一基线、同一身份、同一头身比");
         expect(prompt).toContain("五官按设定年龄和性别的真实骨骼塑形");
         expect(prompt).toContain("手指畸形");
         expect(prompt).not.toContain("资产图片 Skill 规则：");
@@ -565,10 +611,27 @@ describe("drama prompt compiler", () => {
 
     it("uses a saved supplier prompt for downstream asset generation", () => {
         const project = createProject();
-        const savedPrompt = "生成已确认的萧炎四视图角色设定图；保留三视图与四视图文字中的用户布局。";
+        const savedPrompt = "主体与资产类型：角色「Karin」\n身份/结构锚点：已确认脸型与发束\n一致性锁定：锁定五官、头身比和服装层次\n可见状态与材质：墨青长袍与旧金腰封；按设定保持自然骨骼比例；五官按设定年龄和性别的真实骨骼塑形；头发按发际线、分区、根部体积和主发束建模；服装按真实裁剪逻辑分层\n构图与画幅：16:9 横向，纯白色无缝背景四视图，身份特写、正面全身、严格左侧面全身、背面全身\n光色与风格：高精度人物细节；角色固有色彩：墨青、旧金\n负面约束：无额外人物、无文字。";
         project.characters[0] = { ...project.characters[0], supplierPrompt: savedPrompt };
 
-        expect(compileDramaAssetReferencePrompt(project, project.characters[0], "角色")).toBe(savedPrompt);
+        expect(compileDramaAssetReferencePrompt(project, project.characters[0], "角色")).toBe(savedPrompt.replace("。\n", "\n"));
+    });
+
+    it("does not let a legacy one-line supplier override bypass the structured asset contract", () => {
+        const project = createProject();
+        project.characters[0] = { ...project.characters[0], supplierPrompt: "生成已确认的角色图，保持原样。" };
+
+        const prompt = compileDramaAssetReferencePrompt(project, project.characters[0], "角色");
+
+        expect(prompt).toContain("主体与资产类型：角色");
+        expect(prompt).toContain("身份/结构锚点：");
+        expect(prompt).toContain("负面约束：");
+        expect(prompt).not.toBe("生成已确认的角色图，保持原样。");
+    });
+
+    it("recognizes only the complete high-quality role prompt contract", () => {
+        expect(hasDramaAssetPromptQuality("主体与资产类型：角色\n身份/结构锚点：脸型\n可见状态与材质：服装\n构图与画幅：三视图\n光色与风格：高精度\n负面约束：无文字", "角色")).toBe(false);
+        expect(hasDramaAssetPromptQuality("主体与资产类型：角色\n身份/结构锚点：脸型\n一致性锁定：锁定五官和头身比\n可见状态与材质：自然骨骼比例，五官按年龄塑形，头发按发际线和主发束建模，服装按真实裁剪逻辑分层\n构图与画幅：16:9纯白色四视图，身份特写、正面全身、严格左侧面全身、背面全身\n光色与风格：高精度人物细节\n负面约束：无额外人物", "角色")).toBe(true);
     });
 
     it("does not let a saved supplier prompt hide a refinement proposal", () => {

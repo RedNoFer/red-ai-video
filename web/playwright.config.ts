@@ -77,6 +77,7 @@ export default defineConfig({
                 VOZEB_PRO_WORKER_TOKEN: "vozeb-pro-e2e-worker-token-separate-32chars",
                 VOZEB_PRO_ALLOW_PRIVATE_UPSTREAMS: "1",
                 VOZEB_PRO_PRIVATE_UPSTREAM_HOSTS: "127.0.0.1",
+                VOZEB_PRO_E2E: "1",
                 ...(databaseUrl ? { DATABASE_URL: databaseUrl } : {}),
                 VOZEB_PRO_PAYPLY_API_KEY: "vozeb-pro-e2e-payply-production-key",
                 VOZEB_PRO_PAYPLY_CHECKOUT_URL: `http://127.0.0.1:${paymentFixturePort}/payply/checkout`,

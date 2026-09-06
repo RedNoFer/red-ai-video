@@ -22,8 +22,10 @@ export type ResolvedDramaStyle = {
     source: "custom" | "default";
     name: string;
     visualDescription: string;
+    artStyle?: string;
     colorScript?: string;
     explicitNegativePrompt?: string;
+    globalNegativePrompt?: string;
 };
 
 export function isLegacyDramaStyle(value: unknown) {
@@ -38,21 +40,26 @@ export function normalizeDramaStyleName(value: unknown) {
     return style || DRAMA_STYLE_NAME;
 }
 
-export function resolveDramaStyleContract(project: { style?: string; productionBible?: { visualStyle?: string; colorScript?: string } }): ResolvedDramaStyle {
+export function resolveDramaStyleContract(project: { style?: string; productionBible?: { visualStyle?: string; colorScript?: string; globalNegativePrompt?: string; productionPlan?: { visual?: { visualStyle?: string; artStyle?: string } } } }): ResolvedDramaStyle {
     const projectStyle = project.style?.trim() || "";
     const bibleStyle = project.productionBible?.visualStyle?.trim() || "";
+    const plannedStyle = project.productionBible?.productionPlan?.visual?.visualStyle?.trim() || "";
+    const artStyle = project.productionBible?.productionPlan?.visual?.artStyle?.trim() || "";
     // A stale built-in value must not mask a user-defined Bible style.
-    const style = [projectStyle, bibleStyle].find((value) => value && !isBuiltInDramaStyle(value)) || projectStyle || bibleStyle;
+    const style = [plannedStyle, projectStyle, bibleStyle].find((value) => value && !isBuiltInDramaStyle(value)) || plannedStyle || projectStyle || bibleStyle;
     const isDefault = !style || isBuiltInDramaStyle(style);
     const configuredColorScript = project.productionBible?.colorScript?.trim();
     const colorScript = isDefault ? configuredColorScript || DRAMA_STYLE_COLOR_SCRIPT : configuredColorScript && !isDefaultDramaColorScript(configuredColorScript) ? configuredColorScript : undefined;
     const explicitNegativePrompt = isDefault ? undefined : style.match(/(?:禁止|不得|避免|不要)[^。；\n]+/u)?.[0];
+    const globalNegativePrompt = [project.productionBible?.globalNegativePrompt?.trim(), explicitNegativePrompt].filter(Boolean).join("；");
     return {
         source: isDefault ? "default" : "custom",
         name: isDefault ? DRAMA_STYLE_NAME : style,
         visualDescription: isDefault ? DRAMA_STYLE_DESCRIPTION : style,
+        ...(artStyle ? { artStyle } : {}),
         ...(colorScript ? { colorScript } : {}),
         ...(explicitNegativePrompt ? { explicitNegativePrompt } : {}),
+        ...(globalNegativePrompt ? { globalNegativePrompt } : {}),
     };
 }
 

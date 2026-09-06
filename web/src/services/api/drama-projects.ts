@@ -169,6 +169,13 @@ export function reviewDramaStoryboardFrame(projectId: string, episodeId: string,
     });
 }
 
+export function deleteDramaStoryboardFrame(projectId: string, episodeId: string, shotId: string, frameId: string, removeBeat = false) {
+    return request<{ project: DramaProject; deletedFiles: number; deletedBytes: number }>(
+        `/api/drama/projects/${encodeURIComponent(projectId)}/episodes/${encodeURIComponent(episodeId)}/shots/${encodeURIComponent(shotId)}/frames/${encodeURIComponent(frameId)}`,
+        { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ removeBeat }) },
+    );
+}
+
 export function deleteDramaProject(id: string) {
     return request<{ deleted: boolean }>(`/api/drama/projects/${encodeURIComponent(id)}`, { method: "DELETE" });
 }

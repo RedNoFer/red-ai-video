@@ -70,7 +70,7 @@ describe("persistDramaGeneratedCandidates", () => {
                 assetKind: "characters",
                 assetId: "character-one",
                 taskId: "task-first",
-                prompt: "角色白底三视图",
+                prompt: "角色白底四视图",
                 results: [{ serverUrl: "/api/generation-log-assets/permanent/first.png", width: 2160, height: 3840 }],
             }),
         ).resolves.toBe(1);
@@ -121,7 +121,7 @@ describe("persistDramaGeneratedCandidates", () => {
                 assetId: "character-one",
                 taskId: "task-batch",
                 referenceId: "batch-reference-item-one",
-                prompt: "角色白底三视图",
+                prompt: "角色白底四视图",
                 results: [{ serverUrl: "/api/generation-log-assets/permanent/batch.png" }],
             }),
         ).resolves.toBe(1);

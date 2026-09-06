@@ -1,4 +1,4 @@
-import type { DramaAssetRefinementProposal, DramaContinuityState, DramaEpisode, DramaFrameBeat, DramaNamedAsset, DramaProject, DramaReferenceManifestItem, DramaShot, DramaShotContinuity } from "@/lib/drama-project-contract";
+import type { DramaAssetPromptFields, DramaAssetRefinementProposal, DramaContinuityState, DramaEpisode, DramaFrameBeat, DramaNamedAsset, DramaProject, DramaReferenceManifestItem, DramaShot, DramaShotContinuity } from "@/lib/drama-project-contract";
 import {
     DRAMA_CHARACTER_FACE_MODELING_RULES,
     DRAMA_CHARACTER_HAIR_MODELING_RULES,
@@ -33,6 +33,56 @@ export type DerivedShotPromptContract = {
 };
 
 export const DRAMA_CHARACTER_TURNAROUND_SIZE = "16:9";
+export const DRAMA_CHARACTER_TURNAROUND_LABEL = "四视图角色基准板";
+export const DRAMA_CHARACTER_TURNAROUND_LAYOUT =
+    "身份特写、正面全身立姿、严格左侧面全身立姿、背面全身立姿四个视图，同一角色等距水平排列；身份特写置于同一基准板内，只用于锁定五官、脸型、发际线和脸部识别，后三个视图必须从头顶到鞋靴完整入画";
+
+/**
+ * Asset prompts are public supplier text, but their six sections are also the
+ * durable contract used by production packages and later regeneration.
+ */
+export const DRAMA_ASSET_PROMPT_LABELS = ["主体与资产类型", "身份/结构锚点", "可见状态与材质", "构图与画幅", "光色与风格", "负面约束"] as const;
+
+export function formatDramaAssetPrompt(value: string) {
+    const prompt = value.trim();
+    if (!prompt) return "";
+    const labels = DRAMA_ASSET_PROMPT_LABELS.join("|");
+    return prompt
+        .replace(new RegExp(`[\\s,，;；。]+(?=(?:${labels})[：:])`, "gu"), "\n")
+        .replace(/[ \t]*\n[ \t]*/gu, "\n")
+        .trim();
+}
+
+export function isStructuredDramaAssetPrompt(value: string | undefined) {
+    const prompt = formatDramaAssetPrompt(value || "");
+    if (!prompt) return false;
+    const lines = prompt.split(/\r?\n/u).map((line) => line.trim()).filter(Boolean);
+    const indexes = DRAMA_ASSET_PROMPT_LABELS.map((label) => lines.findIndex((line) => line.startsWith(`${label}：`) || line.startsWith(`${label}:`)));
+    return indexes.every((index) => index >= 0) && indexes.every((index, position) => position === 0 || index > indexes[position - 1]);
+}
+
+export function hasDramaAssetPromptQuality(value: string | undefined, kind: "角色" | "场景" | "道具") {
+    const prompt = formatDramaAssetPrompt(value || "");
+    if (!isStructuredDramaAssetPrompt(prompt)) return false;
+    const required = kind === "角色" ? ["自然骨骼", "五官", "头发", "服装", "纯白色", "四视图", "身份特写", "严格左侧面", "负面约束"] : ["主体", "材质", "构图", "负面约束"];
+    return required.every((term) => prompt.includes(term));
+}
+
+/** Read the editable six-section prompt back into the durable asset fields. */
+export function dramaAssetPromptFields(value: string, fallback: DramaAssetPromptFields): DramaAssetPromptFields | undefined {
+    const prompt = formatDramaAssetPrompt(value);
+    if (!isStructuredDramaAssetPrompt(prompt)) return undefined;
+    const field = (label: string) => prompt.match(new RegExp(`(?:^|\\n)${label}[：:]\\s*([^\\n]*)`, "u"))?.[1]?.trim() || "";
+    const style = field("光色与风格");
+    const palette = style.match(/(?:角色固有色彩|固定色彩)[：:]([^；。]+)/u)?.[1]?.trim() || "";
+    return {
+        description: fallback.description,
+        visualIdentity: field("身份/结构锚点") || fallback.visualIdentity,
+        styling: field("可见状态与材质") || fallback.styling,
+        colorPalette: palette || fallback.colorPalette,
+        consistencyRules: field("一致性锁定") || fallback.consistencyRules,
+    };
+}
 
 export function deriveDramaShotPromptContract(project: DramaProject, _episode: DramaEpisode, shot: DramaShot): DerivedShotPromptContract {
     const scene = project.scenes.find((item) => item.id === shot.sceneId);
@@ -363,7 +413,10 @@ function lightingLines(shot: DramaShot) {
 
 export function compileDramaAssetReferencePrompt(project: Pick<DramaProject, "title" | "style" | "ratio" | "productionBible">, asset: DramaNamedAsset, kind: "角色" | "场景" | "道具") {
     const savedSupplierPrompt = asset.supplierPrompt?.trim() || "";
-    if (savedSupplierPrompt) return savedSupplierPrompt;
+    // A legacy one-line override must not bypass the fixed asset contract. It
+    // remains stored for editing, while generation falls back to the durable
+    // profile and recompiles the six public sections below.
+    if (hasDramaAssetPromptQuality(savedSupplierPrompt, kind) && (kind !== "场景" || savedSupplierPrompt.includes("九宫格"))) return formatDramaAssetPrompt(savedSupplierPrompt);
     const styleContract = resolveDramaStyleContract(project);
     const profile = asset.profile;
     const description = sanitizeDramaVisualPrompt(asset.description);
@@ -372,39 +425,52 @@ export function compileDramaAssetReferencePrompt(project: Pick<DramaProject, "ti
     const stylingForPrompt = description.length >= styling.length && styling && description.includes(styling) ? "" : styling;
     const colorPalette = sanitizeDramaVisualPrompt(profile?.colorPalette || "");
     const consistency = joinAssetPromptFacts([profile?.consistencyRules, ...(profile?.spatialRules || []), ...(profile?.stateRules || [])]);
-    const forbidden = joinAssetPromptConstraints([...(profile?.forbiddenChanges || []), kind === "角色" ? DRAMA_CHARACTER_NEGATIVE_RULES : "额外主体、拼版、多视角、文字、水印、logo"]);
+    const globalStyle = [styleContract.visualDescription, styleContract.artStyle ? `全局画风规格：${styleContract.artStyle}` : "", styleContract.colorScript ? `全局色彩脚本：${styleContract.colorScript}` : ""].filter(Boolean).join("；");
+    const sceneQuality = kind === "场景" ? "建筑透视稳定，墙体、门窗、地面和桌椅等直线结构不弯折；九格中同一物件的比例、材质、位置和光向不漂移，空间细节清晰可读" : "";
+    const forbidden = joinAssetPromptConstraints([
+        ...(profile?.forbiddenChanges || []).filter((value) => kind !== "场景" || !/(?:拼版|多视角|分格)/u.test(value)),
+        kind === "角色" ? DRAMA_CHARACTER_NEGATIVE_RULES : kind === "场景" ? "人物、不同地点、方向标签、文字、水印、logo" : "额外主体、拼版、多视角、文字、水印、logo",
+        styleContract.globalNegativePrompt || "",
+    ]);
     const layout =
         kind === "角色"
-            ? `${DRAMA_CHARACTER_TURNAROUND_SIZE} 横向，纯白色无缝背景；同一角色的正面、严格左侧面、背面三视图等距水平排列，全身立姿从头顶、完整头部、躯干、双臂、双手、双腿到鞋靴完整入画，同一基线、同一头身比。`
-            : `${project.ratio || "9:16"} 画幅，单一${kind}主体完整入画，无人物拼版。`;
+            ? `${DRAMA_CHARACTER_TURNAROUND_SIZE} 横向，纯白色无缝背景；${DRAMA_CHARACTER_TURNAROUND_LAYOUT}。四个视图同一基线、同一身份、同一头身比，身份特写保持清晰五官，后三个视图全身从头顶、完整头部、躯干、双臂、双手、双腿到鞋靴完整入画。`
+            : kind === "场景"
+              ? "1:1 方形九宫格场景空间基准板；同一个无人物场景固定为 3×3 九格，中心格为主视角，外围八格按西北、北、东北、西、东、西南、南、东南八个方向展示同一空间；入口、出口、门窗、主要陈设、地面材质、光源方向和空间轴线在九格中严格一致。"
+              : `${project.ratio || "9:16"} 画幅，单一${kind}主体完整入画，无人物拼版。`;
     const characterStyle = styleContract.source === "custom" ? `项目视觉风格：${styleContract.visualDescription}` : "";
     const characterLightingStyle = [characterStyle, DRAMA_CHARACTER_RENDER_STYLE, DRAMA_CHARACTER_STUDIO_LIGHT_RULES, DRAMA_CHARACTER_SUPPLIER_QUALITY_RULES, colorPalette ? `角色固有色彩：${colorPalette}` : ""].filter(Boolean).join("；");
     return compact([
         `主体与资产类型：${kind}「${asset.name}」`,
         `身份/结构锚点：${joinAssetPromptFacts([description, visualIdentity]) || "沿用当前资产已确认设定"}`,
         consistency ? `一致性锁定：${consistency}` : "",
-        `可见状态与材质：${stylingForPrompt || "按身份设定中的服装、材质和关键配件呈现"}${kind === "角色" ? `；${DRAMA_CHARACTER_FACE_MODELING_RULES}；${DRAMA_CHARACTER_HAIR_MODELING_RULES}；${DRAMA_CHARACTER_WARDROBE_MATERIAL_RULES}` : ""}`,
+        `可见状态与材质：${stylingForPrompt || "按身份设定中的服装、材质和关键配件呈现"}${kind === "角色" ? `；${DRAMA_CHARACTER_FACE_MODELING_RULES}；${DRAMA_CHARACTER_HAIR_MODELING_RULES}；${DRAMA_CHARACTER_WARDROBE_MATERIAL_RULES}` : sceneQuality ? `；${sceneQuality}` : ""}`,
         `构图与画幅：${layout}`,
-        `光色与风格：${kind === "角色" ? characterLightingStyle : `${styleContract.visualDescription}${colorPalette ? `；固定色彩：${colorPalette}` : ""}`}`,
+        `光色与风格：${kind === "角色" ? `${characterLightingStyle}；${globalStyle}` : `${globalStyle}${colorPalette ? `；固定色彩：${colorPalette}` : ""}`}`,
         `负面约束：${forbidden}`,
     ]).join("\n");
 }
 
-export function compileDramaAssetConstraints(project: Pick<DramaProject, "ratio">, asset: DramaNamedAsset, kind: "角色" | "场景" | "道具") {
-    const forbidden = asset.profile?.forbiddenChanges?.length ? asset.profile.forbiddenChanges : ["未授权的服装、道具、饰品、武器、徽章、文字、水印或品牌"];
+export function compileDramaAssetConstraints(project: Pick<DramaProject, "ratio"> & Partial<Pick<DramaProject, "style" | "productionBible">>, asset: DramaNamedAsset, kind: "角色" | "场景" | "道具") {
+    const styleContract = resolveDramaStyleContract(project);
+    const forbidden = [
+        ...(asset.profile?.forbiddenChanges?.length ? asset.profile.forbiddenChanges : ["未授权的服装、道具、饰品、武器、徽章、文字、水印或品牌"]),
+        ...(kind === "场景" ? ["人物、不同地点、方向标签、文字、水印、logo"] : []),
+        ...(styleContract.globalNegativePrompt ? [styleContract.globalNegativePrompt] : []),
+    ].filter((value) => kind !== "场景" || !/(?:拼版|多视角|分格)/u.test(value));
     return compact([
-        kind === "角色" ? `只输出一张完整、独立的 ${DRAMA_CHARACTER_TURNAROUND_SIZE} 三视图角色基准板，不生成第二张候选图或额外版式。` : `只输出一张完整、独立的 ${project.ratio || "9:16"} 设定图，不要拼版、联系表、多视角或分格模块。`,
+        kind === "角色" ? `只输出一张完整、独立的 ${DRAMA_CHARACTER_TURNAROUND_SIZE} ${DRAMA_CHARACTER_TURNAROUND_LABEL}，不生成第二张候选图或额外版式。` : kind === "场景" ? "只输出一张完整、独立的 1:1 九宫格场景空间基准板；九格属于同一个场景，不生成第二张候选图。" : `只输出一张完整、独立的 ${project.ratio || "9:16"} 设定图，不要拼版、联系表、多视角或分格模块。`,
         kind === "角色"
-            ? "角色基准图必须固定为纯白色无缝背景三视图：正面、侧面、背面三个同一角色的完整全身立姿，侧面固定为左侧，头顶、完整头部、脸部、颈部、躯干、双臂、双手、双腿和鞋靴全部入画；三个视图等高、等距、同一基线，服装、体态、关键识别配件、发型和脸部特征严格一致。只允许这三个视图，不得新增任何人物、角度、主立绘、肖像、表情组、手部特写或道具拆解。"
+            ? `角色基准图必须固定为纯白色无缝背景四视图：${DRAMA_CHARACTER_TURNAROUND_LAYOUT}；身份特写与后三个全身视图严格保持同一脸型、五官、发际线、发型、服装、体态、关键识别配件和固有色。只允许这四个视图，不得新增任何人物、四分之三视图、主立绘、表情组、手部或道具拆解、额外角度、边框、网格、说明文字或水印。`
             : kind === "场景"
-              ? "单一场景主体完整可见，结构轮廓和关键材质清晰，环境、光线与色彩按项目视觉风格呈现。"
+              ? "九宫格每格都展示同一无人物场景的真实空间状态：中心格为主视角，外围八格分别为西北、北、东北、西、东、西南、南、东南方向；保持同一空间拓扑、固定物件位置、门窗入口、材质和光色，不得把九格画成九个不同地点。"
               : "单一道具主体完整可见，结构轮廓和关键材质清晰，置于符合项目视觉风格的环境或展示台中。",
         kind === "角色"
-            ? "负面构图词：额外人物、额外视图、四分之三视图、主立绘、肖像、表情组、手部特写、道具拆解、场景背景、灰色背景、网格、边框、文字、水印、logo、无头、无脸、缺失头部、裁掉头部、裁脸、画面外人头、半身、胸像、躯干特写、身体局部、只画服装。"
+            ? "负面构图词：额外人物、额外视图、四分之三视图、主立绘、表情组、手部特写、道具拆解、场景背景、灰色背景、网格、边框、文字、水印、logo、无头、无脸、缺失头部、裁掉头部、裁脸、画面外人头、后三个全身视图被裁成半身或胸像、身份特写替代全身视图、只画服装。"
             : "",
         "不得添加设定中没有出现的主体、装饰或剧情信息，不添加文字、水印、logo、边框。",
         `严格保留${kind}的身份、轮廓、年龄感、色彩和一致性规则，不得擅自改写。`,
-        kind === "角色" ? "禁止把中文说明、角色关系表、参数表或海报排版画进图片；三视图只作为同一角色的固定基准板，不添加任何文字或其他模块。" : "禁止把中文说明、角色关系表、参数表、海报排版或多张视图画进图片；设定文字只作为生成约束，不是画面内容。",
+        kind === "角色" ? "禁止把中文说明、角色关系表、参数表或海报排版画进图片；四视图只表示同一角色，身份特写只负责五官识别，后三个视图负责全身比例与服装结构，不添加任何文字或其他模块。" : kind === "场景" ? "禁止人物、文字、方向标签、边框、水印、logo、海报排版和不同地点；九宫格只表达同一场景的空间方位，不把说明文字画入图片。" : "禁止把中文说明、角色关系表、参数表、海报排版或多张视图画进图片；设定文字只作为生成约束，不是画面内容。",
         `禁止：${forbidden.join("；")}`,
     ]);
 }

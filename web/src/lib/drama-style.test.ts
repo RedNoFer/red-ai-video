@@ -50,6 +50,19 @@ describe("drama visual style contract", () => {
         expect(resolveDramaColorScript({ style, productionBible: { visualStyle: style, colorScript: "冷灰蓝、湿泥棕" } })).toBe("冷灰蓝、湿泥棕");
     });
 
+    it("uses the locked production-plan art style and global negative prompt", () => {
+        const resolved = resolveDramaStyleContract({
+            style: DRAMA_STYLE_NAME,
+            productionBible: {
+                visualStyle: DRAMA_STYLE_NAME,
+                productionPlan: { visual: { visualStyle: "东方写实摄影", artStyle: "克制的电影级空间美术，真实材质" } },
+                globalNegativePrompt: "不要现代灯具、不要塑料感",
+            },
+        });
+
+        expect(resolved).toMatchObject({ name: "东方写实摄影", artStyle: "克制的电影级空间美术，真实材质", globalNegativePrompt: "不要现代灯具、不要塑料感" });
+    });
+
     it("only strips known legacy layout tokens from prompt text", () => {
         const value = "VS14写实电影感、纯写实摄影、真人影视；中性浅灰背景；多视角设定板";
         const sanitized = sanitizeDramaVisualPrompt(value);

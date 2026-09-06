@@ -33,12 +33,11 @@ export function DramaEpisodeSettings({ project, episode, embedded = false }: { p
     const productionPlan = planDraft;
     const updateProductionPlan = (patch: Partial<DramaProductionPlan["video"]>) => {
         setSavedLockAt(undefined);
-        const nextPlan = { ...productionPlan, video: { ...productionPlan.video, ...patch }, source: "manual" as const, lockedAt: undefined };
-        setPlanDraft(nextPlan);
+        setPlanDraft((current) => ({ ...current, video: { ...current.video, ...patch }, source: "manual", lockedAt: undefined }));
     };
     const saveSettings = async () => {
         const lockedAt = new Date().toISOString();
-        const lockedPlan = { ...planDraft, lockedAt, source: "manual" as const };
+        const lockedPlan = { ...productionPlan, lockedAt, source: "manual" as const };
         const saved = await saveDramaEpisodeSettings(project.id, episode.id, { title: titleDraft, summary: summaryDraft, style: styleDraft, productionPlan: lockedPlan });
         const persistedPlan = normalizeDramaProductionPlan(saved.productionBible?.productionPlan);
         if (!persistedPlan?.lockedAt || persistedPlan.video.resolution !== lockedPlan.video.resolution) throw new Error("本集生产方案保存后未生效，请刷新后重试");
@@ -69,17 +68,15 @@ export function DramaEpisodeSettings({ project, episode, embedded = false }: { p
                 </label>
                 <div className="space-y-1.5">
                     <span className="text-xs font-medium text-foreground">视频生产模式</span>
-                    <div className="min-w-0">
-                        <Select
-                            className="w-full"
-                            value={project.defaultVideoMode === "reference" ? "storyboard" : project.defaultVideoMode}
-                            options={[
-                                { label: "分镜驱动", value: "storyboard" },
-                                { label: "直接生成", value: "direct" },
-                            ]}
-                            onChange={(value) => updateProductionPlan({ mode: workflowPlanMode(value as DramaProject["defaultVideoMode"]) })}
-                        />
-                    </div>
+                    <Select
+                        className="w-full"
+                        value={workflowProductionPlanMode(productionPlan.video.mode)}
+                        options={[
+                            { label: "分镜驱动", value: "storyboard" },
+                            { label: "直接生成", value: "text-to-video" },
+                        ]}
+                        onChange={(mode) => updateProductionPlan({ mode })}
+                    />
                 </div>
                 {productionPlan ? (
                     <div className="space-y-2 border-t border-border pt-3">
@@ -87,49 +84,22 @@ export function DramaEpisodeSettings({ project, episode, embedded = false }: { p
                             <span className="text-xs font-medium text-foreground">生产方案</span>
                             <span className={`text-[11px] ${savedLockAt || productionPlan.lockedAt ? "text-emerald-600" : "text-amber-600"}`}>{savedLockAt || productionPlan.lockedAt ? "已锁定" : "待锁定"}</span>
                         </div>
-                        <Select
-                            className="w-full"
-                            value={workflowProductionPlanMode(productionPlan.video.mode)}
-                            options={[
-                                { label: "分镜驱动", value: "storyboard" },
-                                { label: "直接生成", value: "text-to-video" },
-                            ]}
-                            onChange={(mode) => updateProductionPlan({ mode })}
-                        />
                         <div className="grid grid-cols-2 gap-2 text-[11px] text-muted-foreground">
-                            <span>{workflowProductionPlanMode(productionPlan.video.mode) === "storyboard" ? "输入：分镜帧 + 资产参考图" : "输入：文字提示词"}</span>
+                            <span>生成模式：{workflowProductionPlanMode(productionPlan.video.mode) === "storyboard" ? "分镜驱动" : "直接生成"}</span>
                             <label className="flex items-center gap-1">
                                 <span>清晰度：</span>
-                                <Select
-                                    size="small"
-                                    className="min-w-20"
-                                    value={productionPlan.video.resolution}
-                                    options={DRAMA_VIDEO_RESOLUTION_OPTIONS.map((value) => ({ label: value, value }))}
-                                    onChange={(resolution) => updateProductionPlan({ resolution })}
-                                />
+                                <Select size="small" className="min-w-20" value={productionPlan.video.resolution} options={DRAMA_VIDEO_RESOLUTION_OPTIONS.map((value) => ({ label: value, value }))} onChange={(resolution) => updateProductionPlan({ resolution })} />
                             </label>
                             <label className="flex items-center gap-1">
                                 <span>每镜：</span>
-                                <Select
-                                    size="small"
-                                    className="min-w-20"
-                                    value={productionPlan.video.shotDuration || 15}
-                                    options={DRAMA_SHOT_DURATION_OPTIONS.map((value) => ({ label: `${value}s`, value }))}
-                                    onChange={(shotDuration: 15 | 20 | 30) => updateProductionPlan({ shotDuration })}
-                                />
+                                <Select size="small" className="min-w-20" value={productionPlan.video.shotDuration || 15} options={DRAMA_SHOT_DURATION_OPTIONS.map((value) => ({ label: `${value}s`, value }))} onChange={(shotDuration) => updateProductionPlan({ shotDuration })} />
                             </label>
-                            <label className="flex items-center gap-1">
-                                <span>帧数：</span>
-                                <Select
-                                    size="small"
-                                    className="min-w-20"
-                                    value={productionPlan.video.frameCount || 5}
-                                    options={Array.from({ length: 9 }, (_, index) => ({ label: `${index + 1} 帧`, value: index + 1 }))}
-                                    onChange={(frameCount) => updateProductionPlan({ frameCount })}
-                                />
-                            </label>
+                            <span>帧数：{productionPlan.video.framePolicy === "fixed-4" ? "固定 4 帧" : productionPlan.video.framePolicy === "fixed-5" ? "固定 5 帧" : "Agent 智能切分"}</span>
                             <span>连续性：{productionPlan.continuity.mode === "strict" ? "严格" : "平衡"}</span>
+                            <span>视觉风格：{productionPlan.visual.visualStyle || "由 Agent 建议"}</span>
+                            <span>画风：{productionPlan.visual.artStyle || "由 Agent 建议"}</span>
                         </div>
+                        <p className="text-[11px] leading-5 text-muted-foreground">视觉参数、每镜时长和帧数策略只在剧本 GPT 中锁定；本处仅展示当前方案。</p>
                     </div>
                 ) : null}
             </div>
@@ -174,10 +144,6 @@ function Stat({ label, value }: { label: string; value: string | number }) {
             <dd className="mt-0.5 font-semibold tabular-nums text-foreground">{value}</dd>
         </div>
     );
-}
-
-function workflowPlanMode(mode: DramaProject["defaultVideoMode"]): DramaProductionPlan["video"]["mode"] {
-    return mode === "direct" ? "text-to-video" : "storyboard";
 }
 
 function workflowProductionPlanMode(mode: DramaProductionPlan["video"]["mode"]): "storyboard" | "text-to-video" {

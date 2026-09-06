@@ -5,9 +5,9 @@ import { Check, FolderInput, ImagePlus, MessageCircle, RotateCcw, Send, Sparkles
 import { nanoid } from "nanoid";
 import { useEffect, useRef, useState } from "react";
 
-import { compileDramaAssetReferencePrompt, compileDramaAssetRefinementPrompt, DRAMA_CHARACTER_TURNAROUND_SIZE, preflightDramaAssetGeneration } from "@/lib/drama-prompt-compiler";
+import { compileDramaAssetReferencePrompt, compileDramaAssetRefinementPrompt, dramaAssetPromptFields, DRAMA_CHARACTER_TURNAROUND_SIZE, hasDramaAssetPromptQuality, preflightDramaAssetGeneration } from "@/lib/drama-prompt-compiler";
 import { approvedAssetReference } from "@/lib/drama-asset-baseline";
-import type { DramaAssetProfile, DramaAssetReference, DramaAssetRefinementMessage, DramaAssetRefinementProposal, DramaCharacter, DramaNamedAsset, DramaProject, DramaVoiceProfile } from "@/lib/drama-project-contract";
+import type { DramaAssetProfile, DramaAssetPromptOptimization, DramaAssetReference, DramaAssetRefinementMessage, DramaAssetRefinementProposal, DramaCharacter, DramaNamedAsset, DramaProject, DramaVoiceProfile } from "@/lib/drama-project-contract";
 import { imagePreviewUrl } from "@/lib/media-image-url";
 import { createImageGenerationTask, waitForImageGenerationTask } from "@/services/api/image";
 import { optimizeDramaAssetPrompt } from "@/services/api/prompt-optimization";
@@ -27,7 +27,8 @@ import {
     syncDramaVoicePreview,
 } from "@/services/api/drama-projects";
 import { DRAMA_ASSET_DEFINITIONS, type DramaAssetKind } from "./drama-asset-definitions";
-import { dramaAssetReferences, ensureUniqueDramaAssetReferenceIds, imageResultsToReferences, mergeGeneratedReferenceReviews } from "./drama-asset-reference-utils";
+import { dramaAssetReferences, dramaSceneBoardReference, ensureUniqueDramaAssetReferenceIds, imageResultsToReferences, isDramaSceneBoardReference, mergeGeneratedReferenceReviews } from "./drama-asset-reference-utils";
+import { DramaSceneReferenceBoard } from "./drama-scene-reference-board";
 import { dramaAssetAutoCompletionItems, dramaAssetMissingFields } from "./drama-asset-library-utils";
 import { getDramaAssetMissingItems } from "@/lib/drama-asset-completion";
 import { dramaGenerationSize } from "./drama-shot-generation-utils";
@@ -79,7 +80,8 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
     const asset = liveAsset || project[kind].find((item) => item.id === assetId);
     const character = kind === "characters" ? (asset as DramaCharacter | undefined) : undefined;
     const references = asset ? dramaAssetReferences(asset) : [];
-    const primary = approvedAssetReference(asset);
+    const primary = asset ? approvedAssetReference(asset) : undefined;
+    const sceneBoard = asset && kind === "scenes" ? dramaSceneBoardReference(asset, references) : undefined;
     const draftProfileHasValues = Object.values(draft.profile).some((value) => typeof value === "string" && value.trim());
     const automaticSupplierPrompt =
         asset && kind !== "clues"
@@ -140,21 +142,50 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
         if (kind === "characters" && voiceId && project.characters.some((item) => item.id !== assetId && (item.voiceProfile?.voiceId || "").trim().toLowerCase() === voiceId.trim().toLowerCase())) return message.error("同一项目的角色不能使用相同音色 ID");
         setSaving(true);
         const base = { name, description: draft.description.trim(), profile: draft.profile };
+        const assetFactsChanged = Boolean(
+            asset &&
+                (name !== asset.name ||
+                    draft.description.trim() !== asset.description ||
+                    JSON.stringify(draft.profile) !== JSON.stringify(asset.profile || {})),
+        );
+        const supplierPromptChanged = Boolean(asset && supplierPromptOverride.trim() !== (asset.supplierPrompt || "").trim());
         try {
             if (asset) {
+                let supplierPrompt = kind !== "clues" ? supplierPromptOverride.trim() : "";
+                let synchronizedFields: DramaAssetPromptOptimization["fields"] | undefined;
+                if (supplierPrompt && !assetFactsChanged && !hasDramaAssetPromptQuality(supplierPrompt, kind === "characters" ? "角色" : kind === "scenes" ? "场景" : "道具")) {
+                    const assetKind = kind === "characters" ? "角色" : kind === "scenes" ? "场景" : "道具";
+                    const optimized = await optimizeDramaAssetPrompt(assetKind, supplierPrompt, `drama-asset-save-settings:${project.id}:${asset.id}:${nanoid()}`);
+                    supplierPrompt = optimized.optimizedPrompt;
+                    synchronizedFields = optimized.fields;
+                }
+                const synchronizedProfile = synchronizedFields
+                    ? {
+                          ...draft.profile,
+                          visualIdentity: synchronizedFields.visualIdentity,
+                          styling: synchronizedFields.styling,
+                          colorPalette: synchronizedFields.colorPalette,
+                          consistencyRules: synchronizedFields.consistencyRules,
+                      }
+                    : draft.profile;
                 const patch = {
                     ...base,
-                    ...(kind !== "clues" ? { supplierPrompt: supplierPromptOverride.trim() } : {}),
+                    ...(kind !== "clues" ? { supplierPrompt: assetFactsChanged && !supplierPromptChanged ? "" : supplierPrompt } : {}),
+                    ...(synchronizedFields ? { description: synchronizedFields.description, profile: synchronizedProfile } : {}),
                     ...(kind === "characters" ? { voiceProfile: draft.voiceProfile } : {}),
                     ...(kind === "clues" ? { payoff: draft.payoff.trim() } : {}),
                 };
                 updateAsset(project.id, kind, asset.id, patch);
                 const savedProject = await saveAssetNow(project.id, kind, asset.id, patch);
                 replaceProject(savedProject);
+                if (synchronizedFields) {
+                    setDraft((current) => ({ ...current, description: synchronizedFields!.description, profile: synchronizedProfile }));
+                    setSupplierPromptOverride(supplierPrompt);
+                }
             } else if (kind === "characters") {
                 addCharacter(project.id, { ...base, voiceProfile: draft.voiceProfile, references: [] });
             } else if (kind === "scenes") {
-                addScene(project.id, { ...base, references: [] });
+                addScene(project.id, { ...base, references: [], sceneReferenceBoard: { layout: "3x3" } });
             } else if (kind === "props") {
                 addProp(project.id, { ...base, references: [] });
             } else {
@@ -172,18 +203,48 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
 
     const saveSupplierPrompt = async (nextPrompt = supplierPromptOverride.trim()) => {
         if (!asset || kind === "clues" || saving) return;
-        const prompt = nextPrompt.trim();
+        let prompt = nextPrompt.trim();
         if (!prompt) {
             setSupplierPromptOverride("");
             if (!asset.supplierPrompt?.trim()) return;
         }
         setSaving(true);
         try {
-            updateAsset(project.id, kind, asset.id, { supplierPrompt: prompt }, { markShotsStale: false });
-            const savedProject = await saveAssetNow(project.id, kind, asset.id, { supplierPrompt: prompt });
+            let fields: DramaAssetPromptOptimization["fields"] | undefined;
+            const assetKind = kind === "characters" ? "角色" : kind === "scenes" ? "场景" : "道具";
+            if (prompt && !hasDramaAssetPromptQuality(prompt, assetKind)) {
+                const optimized = await optimizeDramaAssetPrompt(assetKind, prompt, `drama-asset-save:${project.id}:${asset.id}:${nanoid()}`);
+                prompt = optimized.optimizedPrompt;
+                fields = optimized.fields;
+            } else if (prompt) {
+                fields = dramaAssetPromptFields(prompt, {
+                    description: draft.description.trim(),
+                    visualIdentity: draft.profile.visualIdentity,
+                    styling: draft.profile.styling,
+                    colorPalette: draft.profile.colorPalette,
+                    consistencyRules: draft.profile.consistencyRules,
+                });
+            }
+            const profilePatch = fields
+                ? {
+                      visualIdentity: fields.visualIdentity,
+                      styling: fields.styling,
+                      colorPalette: fields.colorPalette,
+                      consistencyRules: fields.consistencyRules,
+                  }
+                : undefined;
+            const patch = {
+                supplierPrompt: prompt,
+                ...(fields ? { description: fields.description, profile: { ...draft.profile, ...profilePatch } } : {}),
+            };
+            updateAsset(project.id, kind, asset.id, patch, { markShotsStale: false });
+            const savedProject = await saveAssetNow(project.id, kind, asset.id, patch);
             replaceProject(savedProject);
             setSupplierPromptOverride(prompt);
-            message.success(prompt ? "供应商提示词已保存，后续生图将优先使用这份提示词" : "已恢复自动提示词");
+            if (fields) {
+                setDraft((current) => ({ ...current, description: fields!.description, profile: { ...current.profile, ...profilePatch } }));
+            }
+            message.success(prompt ? (fields ? "提示词已结构化保存，设定文案已同步" : "供应商提示词已保存，后续生图将优先使用这份提示词") : "已恢复自动提示词");
         } catch (error) {
             message.error(error instanceof Error ? error.message : "供应商提示词保存失败");
         } finally {
@@ -399,6 +460,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                 primaryReferenceId: nextPrimary?.id,
                 referenceImageUrl: nextPrimary?.url,
                 referenceStorageKey: nextPrimary?.storageKey,
+                ...(kind === "scenes" ? { sceneReferenceBoard: { layout: "3x3" as const, referenceId: nextPrimary?.id } } : {}),
             },
             { markShotsStale: asset.primaryReferenceId === referenceId },
         );
@@ -444,7 +506,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
             const prompt = supplierPromptOverride.trim() || (activeProposal ? compileDramaAssetRefinementPrompt(project, asset, assetKind, activeProposal, refinementPrompt) : supplierPrompt);
             const imageModel = config.imageModel || config.imageModels[0] || "";
             if (!imageModel) throw new Error("后台尚未配置可用的图片模型，请先在管理后台配置图片渠道");
-            const imageConfig = { ...config, model: imageModel, imageModel, size: kind === "characters" ? DRAMA_CHARACTER_TURNAROUND_SIZE : dramaGenerationSize(project, prompt), count: "1" };
+            const imageConfig = { ...config, model: imageModel, imageModel, size: kind === "characters" ? DRAMA_CHARACTER_TURNAROUND_SIZE : kind === "scenes" ? "1:1" : dramaGenerationSize(project, prompt), count: "1" };
             const referenceForRefinement = referenceOverride || (activeProposal ? primary : undefined);
             const existingReferenceUrl = referenceForRefinement ? serverMediaUrl(referenceForRefinement.storageKey, referenceForRefinement.url) : "";
             const referenceDataUrl = referenceForRefinement && !existingReferenceUrl ? await imageToDataUrl(referenceForRefinement) : "";
@@ -542,7 +604,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                         style={{ aspectRatio: primary?.width && primary?.height ? `${primary.width} / ${primary.height}` : "4 / 5" }}
                     >
                         {primary?.url ? (
-                            <Image src={imagePreviewUrl(primary.url, 384)} alt={`${draft.name || definition.title}基准图`} rootClassName="!block !size-full" className="!size-full !object-contain" preview={{ src: imagePreviewUrl(primary.url, 1920) }} />
+                            sceneBoard?.url ? <DramaSceneReferenceBoard url={sceneBoard.url} alt={`${draft.name || definition.title}九宫格场景基准板`} /> : <Image src={imagePreviewUrl(primary.url, 384)} alt={`${draft.name || definition.title}${kind === "scenes" ? "单图基准" : "基准图"}`} rootClassName="!block !size-full" className="!size-full !object-contain" preview={{ src: imagePreviewUrl(primary.url, 1920) }} />
                         ) : (
                             <div className="grid gap-2 text-center text-muted-foreground">
                                 <ImagePlus className="mx-auto size-6" />
@@ -804,11 +866,12 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                     <section className="border-t border-border pt-4">
                         <div className="flex flex-wrap items-start justify-between gap-3">
                             <div>
-                                <h3 className="text-sm font-semibold">参考图候选</h3>
-                                <p className="mt-1 text-xs leading-5 text-muted-foreground">候选图不会进入镜头生成，必须明确确认一张主基准图。</p>
+                    <h3 className="text-sm font-semibold">{kind === "scenes" ? "九宫格场景基准板候选" : "参考图候选"}</h3>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">{kind === "scenes" ? "每张候选都是同一场景的九宫格空间基准板；确认后作为后续镜头的场景锚点。" : "候选图不会进入镜头生成，必须明确确认一张主基准图。"}</p>
+                    {kind === "scenes" && primary && !sceneBoard ? <p className="mt-1 text-xs leading-5 text-amber-700 dark:text-amber-300">当前主图是旧版单图，只能作为临时参考；生成并确认九宫格基准板后才会用于完整方位控制。</p> : null}
                                 <div className="mt-2 rounded-lg border border-border bg-muted/25 px-3 py-2 text-xs leading-5 text-muted-foreground">
                                     <span className="font-medium text-foreground">审核标准：</span>
-                                    与本次生成提示词使用同一套身份锚点、角色白底三视图或场景/道具单主体布局、允许项和禁止项；审核建议不会阻止你选择有效候选。
+                                    与本次生成提示词使用同一套身份锚点、角色白底四视图或场景/道具单主体布局、允许项和禁止项；审核建议不会阻止你选择有效候选。
                                 </div>
                                 {asset && kind !== "clues" ? (
                                     <details className="mt-2 rounded-lg border border-border bg-background px-3 py-2 text-xs leading-5">
@@ -872,7 +935,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                                         const isPrimary = reference.id === primary?.id;
                                         return (
                                             <article key={reference.id} className={`min-w-0 overflow-hidden rounded-xl border bg-background ${isPrimary ? "border-foreground ring-2 ring-foreground/10" : "border-border"}`}>
-                                                <Image src={imagePreviewUrl(reference.url, 384)} alt={reference.label} rootClassName="!block !w-full" className="!block !h-auto !w-full" preview={{ src: imagePreviewUrl(reference.url, 1920) }} />
+                                                {kind === "scenes" && asset && isDramaSceneBoardReference(asset, reference) ? <DramaSceneReferenceBoard url={reference.url} alt={reference.label} /> : <Image src={imagePreviewUrl(reference.url, 384)} alt={reference.label} rootClassName="!block !w-full" className="!block !h-auto !w-full" preview={{ src: imagePreviewUrl(reference.url, 1920) }} />}
                                                 {reference.promptVersion || reference.reviewStatus ? (
                                                     <div className="flex min-h-8 items-center justify-between gap-2 border-t border-border px-2 text-[11px] text-muted-foreground">
                                                         <span>{reference.promptVersion ? `提示词 v${reference.promptVersion}` : "普通候选"}</span>

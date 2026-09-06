@@ -1,4 +1,5 @@
 import type { GenerationTaskExecutionPhase } from "@/lib/server/generation-task-scheduler";
+import type { DramaSceneReferenceBoard } from "@/lib/drama-scene-reference-board";
 
 export type DramaTaskStatus = "idle" | "queued" | "running" | "success" | "error" | "cancelled" | "stale" | "needs_review";
 export type DramaReviewStatus = "draft" | "content_review" | "approved" | "visual_ready";
@@ -270,6 +271,7 @@ export type DramaNamedAsset = {
     referenceImageUrl?: string;
     referenceStorageKey?: string;
     refinementHistory?: DramaAssetRefinementMessage[];
+    sceneReferenceBoard?: DramaSceneReferenceBoard;
 };
 
 export type DramaCharacter = DramaNamedAsset & { voiceProfile?: DramaVoiceProfile };
@@ -359,6 +361,11 @@ export type DramaProductionBible = {
 export type DramaProductionPlan = {
     version: "drama-production-plan-v1";
     skills: Array<{ id: string; name: string; version: string }>;
+    visual: {
+        visualStyle: string;
+        artStyle: string;
+        source: "manual" | "agent";
+    };
     video: {
         model: string;
         channelId?: string;
@@ -371,6 +378,7 @@ export type DramaProductionPlan = {
         shotDuration?: 15 | 20 | 30;
         /** Default number of storyboard frames for each logical shot. */
         frameCount?: number;
+        framePolicy?: "fixed-4" | "fixed-5" | "agent";
         count: number;
         audioMode: "native" | "voiceover" | "mute";
         allowExplicitFallback: boolean;
@@ -732,7 +740,7 @@ export type DramaProjectSummaryPage = {
     pageSize: number;
 };
 
-export type CreateDramaProjectInput = Pick<DramaProject, "title" | "summary" | "style" | "ratio"> & {
+export type CreateDramaProjectInput = Pick<DramaProject, "title"> & Partial<Pick<DramaProject, "summary" | "style" | "ratio">> & {
     sourceHandoffId?: string;
     initialScript?: string;
     sourceAssets?: DramaSourceAsset[];
@@ -814,6 +822,7 @@ export type DramaProductionPackageAsset = {
     payoff?: string;
     activeEpisodeCodes?: string[];
     fieldOrigins?: Record<string, DramaFieldOrigin>;
+    sceneReferenceBoard?: DramaSceneReferenceBoard;
 };
 
 export type DramaProductionPackageShot = Omit<DramaShot, "id" | "characterIds" | "propIds" | "clueIds" | "sceneId" | "storySceneId"> & {

@@ -27,6 +27,16 @@ export async function publicImageReferenceRequestUrl(reference: ImageTaskReferen
     }
 
     if (localCandidate) {
+        // The local protocol fixture can consume the app's loopback URL directly.
+        // Keep this test-only escape hatch out of production, where a public,
+        // signed URL must still be verified before paid submission.
+        if (process.env.VOZEB_PRO_E2E === "1") {
+            try {
+                return new URL(new URL(localCandidate).pathname, origin).toString();
+            } catch {
+                throw new Error("本地参考图地址无效，请重新上传参考图");
+            }
+        }
         if (hasUsableProviderReadSignature(localCandidate)) {
             const providerUrl = imagePreviewUrl(localCandidate);
             if (await isReachableProviderImage(providerUrl)) return providerUrl;

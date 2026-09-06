@@ -35,6 +35,7 @@ const mocks = vi.hoisted(() => {
         getDramaProjectVersion: vi.fn(),
         listDramaProjectVersions: vi.fn(),
         deleteUserLocalMediaAssets: vi.fn(),
+        deleteUserOwnedMediaAssetsPhysically: vi.fn(),
         getAuthSettings: vi.fn(),
         resolveLogicalModelCandidates: vi.fn(),
         supportsVideoKeyframeReferences: vi.fn(),
@@ -75,7 +76,7 @@ vi.mock("@/lib/server/drama-project-version-store", () => ({
     listDramaProjectVersions: mocks.listDramaProjectVersions,
 }));
 vi.mock("@/lib/server/generation-task-store", () => ({ getStoredGenerationTask: mocks.getStoredGenerationTask, getStoredGenerationTaskByRequest: mocks.getStoredGenerationTaskByRequest, queryStoredGenerationTasks: mocks.queryStoredGenerationTasks }));
-vi.mock("@/lib/server/local-media-storage", () => ({ deleteUserLocalMediaAssets: mocks.deleteUserLocalMediaAssets }));
+vi.mock("@/lib/server/local-media-storage", () => ({ deleteUserLocalMediaAssets: mocks.deleteUserLocalMediaAssets, deleteUserOwnedMediaAssetsPhysically: mocks.deleteUserOwnedMediaAssetsPhysically }));
 vi.mock("@/lib/server/logical-model-router", () => ({ resolveLogicalModelCandidates: mocks.resolveLogicalModelCandidates, supportsVideoKeyframeReferences: mocks.supportsVideoKeyframeReferences }));
 vi.mock("@/lib/server/drama-production-run-store", () => ({
     createDramaProductionRun: mocks.createDramaProductionRun,
@@ -114,6 +115,7 @@ import {
     restoreDramaProjectVersionForUser,
     updateDramaProductionRunForUser,
     updateDramaProjectForUser,
+    deleteDramaStoryboardFrameForUser,
     updateDramaAssetForUser,
     updateDramaShotPromptForUser,
     updateDramaStoryboardFramePromptForUser,
@@ -146,6 +148,35 @@ describe("drama project service updates", () => {
         mocks.findLatestDramaProductionRun.mockResolvedValue(null);
         mocks.getDramaProductionRun.mockResolvedValue(null);
         mocks.updateDramaProductionRun.mockImplementation(async (_userId: string, run: unknown) => run);
+        mocks.deleteUserOwnedMediaAssetsPhysically.mockResolvedValue({ deletedFiles: 1, deletedBytes: 12, blocked: [] });
+    });
+
+    it("removes a storyboard frame reference and physically deletes its owned media", async () => {
+        const current = project("2026-07-19T08:00:00.000Z", "项目");
+        current.episodes[0].shots = [
+            {
+                id: "shot-one",
+                title: "镜头",
+                characterIds: [],
+                propIds: [],
+                clueIds: [],
+                imagePrompt: "画面",
+                videoPrompt: "动作",
+                cameraMotion: "固定",
+                duration: 5,
+                storyboardFrameMode: "all_frames",
+                framePlan: { start: { source: "independent" }, end: { required: false }, frames: [{ id: "frame-one", sequenceIndex: 1, startSecond: 0, endSecond: 5, actionPrompt: "动作", imagePrompt: "静态关键帧：人物站立画面\n可见状态：人物站立\n可见表演状态：人物保持克制\n景别：中景\n机位与构图：平视，主体居中\n站位与视线：人物站在中央，视线向前\n三层空间：前景、中景和背景保持清晰层次\n光色与风格：自然侧光，电影感\n负面约束：无字幕、无水印、无logo" }] },
+                storyboardFrames: [{ id: "frame-one", sequenceIndex: 1, source: "generated", status: "success", mediaUrl: "/api/generation-log-assets/permanent/frame-one.png" }],
+                frameEvidence: [{ id: "evidence-one", role: "storyboard_keyframe", source: "generated", sequenceIndex: 1, mediaUrl: "/api/generation-log-assets/permanent/frame-one.png", validity: "candidate", contentHash: "hash", createdAt: current.updatedAt }],
+            } as never,
+        ];
+        mocks.getDramaProject.mockResolvedValue(current);
+
+        const result = await deleteDramaStoryboardFrameForUser("user-one", current.id, "episode-one", "shot-one", "frame-one");
+
+        expect(result.project.episodes[0].shots[0].storyboardFrames?.[0]).toMatchObject({ id: "frame-one", mediaUrl: undefined, mediaDeletedAt: expect.any(String), status: "stale" });
+        expect(result.project.episodes[0].shots[0].frameEvidence).toEqual([]);
+        expect(mocks.deleteUserOwnedMediaAssetsPhysically).toHaveBeenCalledWith("user-one", ["permanent/frame-one.png"]);
     });
 
     it("allows eight total image references for a 15-second shot", () => {
@@ -272,6 +303,21 @@ describe("drama project service updates", () => {
         expect(normalized.defaultVideoMode).toBe("storyboard");
         expect(normalized.productionBible?.productionPlan?.video.mode).toBe("storyboard");
         expect(normalized.episodes[0].shots[0].videoMode).toBe("storyboard");
+    });
+
+    it("preserves an explicit nine-view board and anchors it to the approved reference", () => {
+        const current = project("2026-07-19T08:00:00.000Z", "项目");
+        const scene = {
+            id: "scene-one",
+            name: "议事厅",
+            description: "固定空间",
+            references: [{ id: "scene-ref", url: "/scene-board.png", source: "generated", status: "approved", label: "基准", createdAt: "2026-01-01T00:00:00.000Z" }],
+            primaryReferenceId: "scene-ref",
+            sceneReferenceBoard: { layout: "3x3" },
+        };
+        const normalized = normalizeProject({ ...current, scenes: [scene] }, current);
+
+        expect(normalized.scenes[0].sceneReferenceBoard).toEqual({ layout: "3x3", referenceId: "scene-ref" });
     });
 
     it("keeps every generated storyboard result while retaining the first as the main frame", () => {
@@ -2090,6 +2136,16 @@ describe("drama project service updates", () => {
         await expect(createDramaProjectForUser("user-one", { title: "项目" })).rejects.toBe(error);
 
         expect(mocks.updateCreativeConversation).toHaveBeenCalledWith("conversation-new", "user-one", { status: "archived" });
+    });
+
+    it("fills safe defaults when project creation only provides a title", async () => {
+        mocks.createDramaProject.mockImplementation(async (_userId: string, value: DramaProject) => value);
+
+        const created = await createDramaProjectForUser("user-one", { title: "只填名称" });
+
+        expect(created).toMatchObject({ title: "只填名称", summary: "", ratio: "9:16", style: DRAMA_STYLE_NAME, productionBible: { visualStyle: DRAMA_STYLE_NAME, ratio: "9:16" } });
+        expect(created.episodes[0]).toMatchObject({ title: "第 1 集", script: "" });
+        expect(mocks.createDramaProject).toHaveBeenCalledWith("user-one", expect.objectContaining({ summary: "", ratio: "9:16", style: DRAMA_STYLE_NAME }));
     });
 
     it("reuses a handoff project without listing every project snapshot", async () => {

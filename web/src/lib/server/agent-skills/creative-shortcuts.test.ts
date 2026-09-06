@@ -62,8 +62,8 @@ describe("creative shortcut skills", () => {
     });
 
     it("keeps the fixed character-sheet and single-subject asset rules available", () => {
-        expect(DRAMA_ASSET_IMAGE_SKILL.promptRules).toContain("纯白色无缝背景的三视图角色基准板");
-        expect(DRAMA_ASSET_IMAGE_SKILL.promptRules).toContain("场景图只生成一个没有人物的空间");
+        expect(DRAMA_ASSET_IMAGE_SKILL.promptRules).toContain("纯白色无缝背景的四视图角色基准板");
+        expect(DRAMA_ASSET_IMAGE_SKILL.promptRules).toContain("场景图默认生成一张没有人物的 1:1 九宫格空间基准板");
         expect(DRAMA_ASSET_IMAGE_SKILL.refinementRules).toContain("change / preserve / constraints");
     });
 

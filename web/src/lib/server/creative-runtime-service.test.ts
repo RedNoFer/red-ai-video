@@ -66,6 +66,17 @@ describe("创作会话素材上传", () => {
         expect(JSON.stringify(mocks.registerCreativeAssets.mock.calls[0][0])).not.toContain("base64");
     });
 
+    it("stores UTF-8 TXT and Markdown uploads as readable text assets", async () => {
+        const content = "第一章\n纳兰走进大厅。";
+        const textFile = { name: "chapter.md", type: "text/markdown", size: Buffer.byteLength(content), arrayBuffer: async () => new TextEncoder().encode(content).buffer } as File;
+
+        const asset = await uploadAssetForUser("user-one", "conversation-one", textFile);
+
+        expect(mocks.writePersistentMediaDataUrl).not.toHaveBeenCalled();
+        expect(asset).toMatchObject({ id: "asset-one", type: "text", title: "chapter.md", textContent: content, mimeType: "text/markdown" });
+        expect(mocks.registerCreativeAssets).toHaveBeenCalledWith([expect.objectContaining({ type: "text", textContent: content, metadata: { source: "upload", originalName: "chapter.md", storageClass: "text" } })]);
+    });
+
     it("keeps the internal storage key while marking object-backed uploads", async () => {
         mocks.writePersistentMediaDataUrl.mockResolvedValue({ token: "permanent/object.png", storage: "object", bytes: 4, mimeType: "image/png" });
 

@@ -14,6 +14,7 @@ describe("drama production run planning", () => {
             productionPlan: {
                 version: "drama-production-plan-v1",
                 skills: [],
+                visual: { visualStyle: "测试", artStyle: "测试画风", source: "manual" },
                 video: { model: "video-one", mode: "storyboard", ratio: "9:16", resolution: "480p", durationPolicy: "shot", count: 1, audioMode: "native", allowExplicitFallback: false },
                 references: { strategy: "adaptive", minImages: 1, maxImages: 3, roles: [] },
                 continuity: { mode: "strict", requireAcceptedActualTail: true },

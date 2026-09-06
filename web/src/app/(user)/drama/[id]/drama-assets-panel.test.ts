@@ -4,9 +4,17 @@ import { describe, expect, it } from "vitest";
 
 import { imageResultsToReferences } from "./drama-assets-panel";
 import { filterAndSortDramaAssets, type DramaAssetLibraryRow } from "./drama-asset-library-utils";
-import { dramaAssetReferences, mergeGeneratedReferenceReviews } from "./drama-asset-reference-utils";
+import { dramaAssetReferences, dramaSceneBoardReference, isDramaSceneBoardReference, mergeGeneratedReferenceReviews } from "./drama-asset-reference-utils";
 
 describe("drama asset image results", () => {
+    it("uses the approved scene board reference as the spatial anchor", () => {
+        const reference = { id: "scene-board", url: "/scene-board.png", source: "generated" as const, label: "九宫格场景基准板", status: "approved" as const, createdAt: "2026-01-01T00:00:00.000Z" };
+        expect(
+            dramaSceneBoardReference({ id: "scene-one", name: "议事厅", description: "", primaryReferenceId: reference.id, sceneReferenceBoard: { layout: "3x3", referenceId: reference.id }, references: [reference] }),
+        ).toEqual(reference);
+        expect(isDramaSceneBoardReference({ id: "scene-one", name: "议事厅", description: "" }, { ...reference, compiledPrompt: "构图与画幅：1:1 九宫格空间基准板" })).toBe(true);
+    });
+
     it("assigns unique ids when historical references contain duplicates", () => {
         const references = dramaAssetReferences({
             id: "character-one",

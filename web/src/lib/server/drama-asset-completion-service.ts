@@ -103,7 +103,12 @@ export async function completeDramaAsset(input: { userId: string; projectId: str
             method: "POST",
             headers: { "Content-Type": "application/json", cookie: input.cookie, "X-VOZEB-PRO-Client-Request-Id": `${input.requestId}:reference` },
             body: JSON.stringify({
-                config: input.kind === "characters" ? { ...config, count: "1", size: DRAMA_CHARACTER_TURNAROUND_SIZE } : config,
+                config:
+                    input.kind === "characters"
+                        ? { ...config, count: "1", size: DRAMA_CHARACTER_TURNAROUND_SIZE }
+                        : input.kind === "scenes"
+                          ? { ...config, count: "1", size: "1:1" }
+                          : config,
                 prompt: compileDramaAssetReferencePrompt(project, current, input.kind === "characters" ? "角色" : input.kind === "scenes" ? "场景" : "道具"),
                 references: [],
                 source: "drama",

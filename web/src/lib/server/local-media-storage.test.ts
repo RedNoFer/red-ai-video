@@ -70,6 +70,18 @@ describe("local media storage", () => {
         await storage.deleteLocalMediaAssetsByStorageKeys([mediaPath], "reference");
     });
 
+    it("physically deletes an owned frame file after the project removes its reference", async () => {
+        const storage = await import("./local-media-storage");
+        const registry = await import("./local-media-registry");
+        const mediaPath = storage.createDatedMediaPath("permanent", "image", ".png");
+        const file = await write(storage.GENERATION_MEDIA_ROOT, mediaPath, "image");
+        await registry.registerLocalMediaAsset({ storageKey: mediaPath, scope: "generation", storageClass: "permanent", type: "image", ownerUserId: "user-one", source: "drama-render", mimeType: "image/png", bytes: 5, projectId: "drama-one" });
+        await writeFile(resolve(dataDir, "drama-projects.json"), JSON.stringify({ version: 1, projects: [{ userId: "user-one", project: { id: "drama-one", storyboardImageUrl: `/api/generation-log-assets/${mediaPath}` } }] }));
+
+        await expect(storage.deleteUserOwnedMediaAssetsPhysically("user-one", [mediaPath])).resolves.toMatchObject({ deletedFiles: 1, blocked: [] });
+        await expect(access(file)).rejects.toBeTruthy();
+    });
+
     it("does not delete files outside managed roots", async () => {
         const storage = await import("./local-media-storage");
         const outside = resolve(dataDir, "outside.png");

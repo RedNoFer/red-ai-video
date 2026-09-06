@@ -5,13 +5,13 @@ import { Check, ImagePlus, LoaderCircle, Maximize2, Plus, RotateCcw, Save, ScanS
 import { useMemo, useRef, useState } from "react";
 
 import { approvedAssetReference } from "@/lib/drama-asset-baseline";
-import { activeFrameEvidence, continuityStartEvidence, createFrameEvidence, invalidateFrameEvidence, latestFrameEvidence, replaceFrameEvidence, supersedeFrameEvidenceByRole } from "@/lib/drama-continuity-policy";
+import { activeFrameEvidence, continuityStartEvidence, createFrameEvidence, latestFrameEvidence, replaceFrameEvidence } from "@/lib/drama-continuity-policy";
 import { deleteDramaFrameBeat, dramaFrameVisualSubject, formatPromptFieldLines, insertDramaFrameBeat, updateDramaFrameBeat, validateDramaFrameVisualContent } from "@/lib/drama-frame-sequence";
 import { appendDramaImageReferenceBindings, compileDramaFrameSupplierPrompt, resolveDramaFrameScene } from "@/lib/drama-prompt-compiler";
 import { imagePreviewUrl } from "@/lib/media-image-url";
 import { dramaAssetReferences } from "./drama-asset-reference-utils";
 import type { DramaFrameBeat, DramaImageReferenceBinding, DramaProductionStep, DramaProject, DramaStoryboardFrame, DramaStoryboardFrameCandidate } from "@/lib/drama-project-contract";
-import { acceptDramaStoryboardFrame, createDramaProductionRun, reviewDramaStoryboardFrame, updateDramaProductionRun, updateDramaStoryboardFramePrompt } from "@/services/api/drama-projects";
+import { acceptDramaStoryboardFrame, createDramaProductionRun, deleteDramaStoryboardFrame, reviewDramaStoryboardFrame, updateDramaProductionRun, updateDramaStoryboardFramePrompt } from "@/services/api/drama-projects";
 import { optimizeDramaFramePrompt } from "@/services/api/prompt-optimization";
 import { uploadImage } from "@/services/image-storage";
 import { resolveModelRequestConfig, useEffectiveConfig } from "@/stores/use-config-store";
@@ -35,6 +35,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
     const [uploadTarget, setUploadTarget] = useState<{ kind: FrameKind; frameId?: string }>({ kind: "start" });
     const [uploading, setUploading] = useState("");
     const [submitting, setSubmitting] = useState("");
+    const [deletingFrameId, setDeletingFrameId] = useState("");
     const [reviewingFrameId, setReviewingFrameId] = useState("");
     const [promptPreview, setPromptPreview] = useState<PromptPreview | null>(null);
     const [referencePreview, setReferencePreview] = useState<ReferencePreview | null>(null);
@@ -197,38 +198,24 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
         }
     };
 
-    const removeSequenceImage = (beat: DramaFrameBeat) => {
-        const index = beats.findIndex((item) => item.id === beat.id);
-        const staleIds = new Set(beats.slice(index).map((item) => item.id));
-        updateShot(project.id, episodeId, shot.id, {
-            storyboardFrames: storedFrames.map((frame) => {
-                if (frame.id === beat.id) return { ...staleFrame(frame), mediaUrl: undefined, remoteUrl: undefined, width: undefined, height: undefined, source: "generated" as const, mediaDeletedAt: new Date().toISOString() };
-                return staleIds.has(frame.id) ? staleFrame(frame) : frame;
-            }),
-            frameEvidence: (shot.frameEvidence || []).map((frame) =>
-                frame.role === "storyboard_keyframe" && (frame.sequenceIndex || 0) >= beat.sequenceIndex && (frame.validity === "accepted" || frame.validity === "candidate")
-                    ? invalidateFrameEvidence(frame, "superseded", "用户删除了分镜关键帧图片")
-                    : frame,
-            ),
-            ...clearedGeneratedMedia,
-        });
-    };
-
-    const confirmRemoveImage = (label: string, remove: () => void) => {
+    const confirmRemoveImage = (label: string, frameId: string, removeBeat = false) => {
         modal.confirm({
             title: `删除${label}？`,
-            content: "删除后，该图片不会再用于当前镜头；全能帧模式中依赖它的后续帧会标记为待重新生成。原始媒体文件不会被物理删除。",
+            content: "删除后会立即从当前项目移除引用，并物理删除对应的站内媒体文件；全能帧模式中依赖它的后续帧会标记为待重新生成。",
             okText: "确认删除",
             okButtonProps: { danger: true },
             cancelText: "取消",
             onOk: async () => {
-                remove();
                 try {
-                    await persistProjectNow(project.id);
-                    message.success(`${label}已删除`);
+                    setDeletingFrameId(frameId);
+                    const result = await deleteDramaStoryboardFrame(project.id, episodeId, shot.id, frameId, removeBeat);
+                    replaceProject(result.project);
+                    message.success(`${label}已物理删除${result.deletedFiles ? `（${result.deletedFiles} 个文件）` : ""}`);
                 } catch (error) {
                     message.error(error instanceof Error ? error.message : "图片删除保存失败");
                     throw error;
+                } finally {
+                    setDeletingFrameId("");
                 }
             },
         });
@@ -626,7 +613,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                 <div className="mt-3 space-y-2.5" data-drama-frame-sequence>
                     {beats.map((beat, index) => {
                         const frame = frameById.get(beat.id);
-                        const rowBusy = reviewingFrameId === beat.id || submitting === beat.id || frameHasActiveTask(frame);
+                        const rowBusy = deletingFrameId === beat.id || reviewingFrameId === beat.id || submitting === beat.id || frameHasActiveTask(frame);
                         const previous = index ? frameById.get(beats[index - 1].id) : undefined;
                         const canGenerate = index === 0 || Boolean(previous?.mediaUrl && previous.status === "success" && previous.continuityStatus !== "needs_review" && previous.continuityStatus !== "stale");
                         const candidates = visibleFrameCandidates(frame);
@@ -658,10 +645,11 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                                                 size="small"
                                                 danger
                                                 className="!size-7 !min-w-0 !p-0"
-                                                disabled={rowBusy}
+                                                disabled={Boolean(deletingFrameId)}
+                                                loading={deletingFrameId === beat.id}
                                                 aria-label={`移除帧 ${beat.sequenceIndex} 图片`}
                                                 icon={<Trash2 className="size-3.5" />}
-                                                onClick={() => confirmRemoveImage(`帧 ${beat.sequenceIndex} 图片`, () => removeSequenceImage(beat))}
+                                                onClick={() => confirmRemoveImage(`帧 ${beat.sequenceIndex} 图片`, beat.id)}
                                             />
                                         ) : null}
                                     </div>
@@ -740,7 +728,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                                                 icon={<Trash2 className="size-3.5" />}
                                                 disabled={beats.length <= 1 || rowBusy}
                                                 aria-label={`删除帧 ${beat.sequenceIndex}`}
-                                                onClick={() => removeBeat(beat)}
+                                                onClick={() => (frame?.mediaUrl ? confirmRemoveImage(`帧 ${beat.sequenceIndex} 图片`, beat.id, true) : removeBeat(beat))}
                                             />
                                         </div>
                                     </div>
@@ -859,9 +847,9 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                         urls={startFrames.map((frame) => frame.mediaUrl)}
                         dimensions={{ width: shot.storyboardImageWidth, height: shot.storyboardImageHeight }}
                         loading={uploading === "start"}
-                        disabled={Boolean(submitting) || generationActive}
+                        disabled={Boolean(submitting) || generationActive || deletingFrameId === "start"}
                         onUpload={() => chooseFile("start")}
-                        onRemove={() => confirmRemoveImage("起始帧图片", () => removeLegacyFrame("start", project, episodeId, shot, updateShot))}
+                        onRemove={() => confirmRemoveImage("起始帧图片", "start")}
                         onPrompt={() =>
                             openPromptPreview({
                                 title: "起始帧图片提示词",
@@ -878,9 +866,9 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                             urls={endFrames.map((frame) => frame.mediaUrl)}
                             dimensions={{ width: shot.storyboardEndImageWidth, height: shot.storyboardEndImageHeight }}
                             loading={uploading === "end"}
-                            disabled={Boolean(submitting) || generationActive}
+                            disabled={Boolean(submitting) || generationActive || deletingFrameId === "end"}
                             onUpload={() => chooseFile("end")}
-                            onRemove={() => confirmRemoveImage("结束帧图片", () => removeLegacyFrame("end", project, episodeId, shot, updateShot))}
+                            onRemove={() => confirmRemoveImage("结束帧图片", "end")}
                             onPrompt={() =>
                                 openPromptPreview({
                                     title: "结束帧图片提示词",
@@ -1216,31 +1204,6 @@ function replaceSequenceEvidence(frames: DramaShot["frameEvidence"], next: NonNu
         ),
         next,
     ];
-}
-
-function removeLegacyFrame(kind: "start" | "end", project: DramaProject, episodeId: string, shot: DramaShot, updateShot: ReturnType<typeof useDramaStore.getState>["updateShot"]) {
-    updateShot(project.id, episodeId, shot.id, {
-        ...(kind === "start"
-            ? {
-                  frameEvidence: supersedeFrameEvidenceByRole(shot.frameEvidence, "storyboard_start", "用户删除了分镜首帧"),
-                  storyboardStatus: "idle" as const,
-                  storyboardImageUrl: undefined,
-                  storyboardImageRemoteUrl: undefined,
-                  storyboardImageUrls: undefined,
-                  storyboardImageDeletedAt: new Date().toISOString(),
-                  storyboardPrompt: undefined,
-              }
-            : {
-                  frameEvidence: supersedeFrameEvidenceByRole(shot.frameEvidence, "storyboard_end", "用户删除了分镜尾帧"),
-                  storyboardEndStatus: "idle" as const,
-                  storyboardEndImageUrl: undefined,
-                  storyboardEndImageRemoteUrl: undefined,
-                  storyboardEndImageUrls: undefined,
-                  storyboardEndImageDeletedAt: new Date().toISOString(),
-                  storyboardEndPrompt: undefined,
-              }),
-        ...clearedGeneratedMedia,
-    });
 }
 
 function formatSecond(value: number) {

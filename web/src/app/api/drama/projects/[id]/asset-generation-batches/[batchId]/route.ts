@@ -144,7 +144,20 @@ export async function GET(request: Request, context: Context) {
                     project = await updateDramaProjectForUser(user.id, project.id, {
                         ...project,
                         [item.kind]: project[item.kind].map((candidate) =>
-                            candidate.id === asset.id ? { ...candidate, references, ...(promoteToPrimary ? { primaryReferenceId: candidateReferenceId, referenceImageUrl: storedMedia.url, referenceStorageKey: storedMedia.storageKey } : {}) } : candidate,
+                            candidate.id === asset.id
+                                ? {
+                                      ...candidate,
+                                      references,
+                                      ...(promoteToPrimary
+                                          ? {
+                                                primaryReferenceId: candidateReferenceId,
+                                                referenceImageUrl: storedMedia.url,
+                                                referenceStorageKey: storedMedia.storageKey,
+                                                ...(item.kind === "scenes" ? { sceneReferenceBoard: { layout: "3x3" as const, referenceId: candidateReferenceId } } : {}),
+                                            }
+                                          : {}),
+                                  }
+                                : candidate,
                         ),
                     });
                 }

@@ -60,6 +60,7 @@ function catalogAssets(items: DramaNamedAsset[], prefix: string, usedIds: Set<st
         activeEpisodeCodes: asset.activeEpisodeCodes || [],
         references: (asset.references || []).map((reference) => ({ id: reference.id, label: reference.label, status: reference.status, reviewStatus: reference.reviewStatus })),
         primaryReferenceId: asset.primaryReferenceId,
+        ...(asset.sceneReferenceBoard ? { sceneReferenceBoard: asset.sceneReferenceBoard } : {}),
     }));
 }
 
@@ -113,6 +114,7 @@ function mergeProjectAssetCollection(incoming: DramaProductionPackageAsset[], ex
             description: asset.description,
             ...((asset.supplierPrompt || current?.supplierPrompt) ? { supplierPrompt: asset.supplierPrompt || current?.supplierPrompt } : {}),
             ...(asset.profile ? { profile: asset.profile } : current?.profile ? { profile: current.profile } : {}),
+            ...((asset.sceneReferenceBoard || current?.sceneReferenceBoard) ? { sceneReferenceBoard: asset.sceneReferenceBoard || current?.sceneReferenceBoard } : {}),
             ...(activeEpisodeCodes?.length || referenced.has(code) ? { activeEpisodeCodes: [...new Set([...(activeEpisodeCodes || []), ...(referenced.has(code) ? episodeCodes : [])])] } : {}),
         } as DramaProductionPackageAsset;
     });
@@ -479,6 +481,7 @@ function validateProductionPackageCompleteness(value: Record<string, unknown>) {
     const dialogueTiming = normalizeDialogueTimingPolicy(bible.dialogueTiming);
     if (!plan?.skills.some((skill) => skill.id === "seedance-director")) throw new DramaProductionPackageError("制作包缺少必需的 Seedance 2.0 导演 Skill");
     if (!plan.skills.some((skill) => skill.id === "seedance-25-director")) throw new DramaProductionPackageError("制作包缺少必需的 Seedance 2.5 视频导演 Skill");
+    if (plan.lockedAt && (!plan.visual.visualStyle.trim() || !plan.visual.artStyle.trim())) throw new DramaProductionPackageError("已锁定的制作方案必须包含具体的视觉风格和画风");
     const assets = object(value.assets);
     const assetCodes = (key: string) =>
         new Set(
@@ -493,6 +496,10 @@ function validateProductionPackageCompleteness(value: Record<string, unknown>) {
         for (const shot of array(object(episode).shots)) {
             const item = object(shot);
             const label = text(item.code) || text(item.title) || "镜头";
+            const frameCount = array(object(item.framePlan).frames).length;
+            if (frameCount < 1 || frameCount > 9) throw new DramaProductionPackageError(`${label}的逐帧计划必须包含 1-9 个真实动作节点`);
+            if (plan.video.framePolicy === "fixed-4" && frameCount !== 4) throw new DramaProductionPackageError(`${label}的逐帧计划必须为 4 帧`);
+            if (plan.video.framePolicy === "fixed-5" && frameCount !== 5) throw new DramaProductionPackageError(`${label}的逐帧计划必须为 5 帧`);
             if (dialogueTiming?.requireUtteranceTimings) {
                 const timingIssues = dramaUtteranceTimingIssues(Number(item.duration), array(item.utterances) as DramaDialogueTimingInput[], true, label);
                 if (timingIssues.length) throw new DramaProductionPackageError(timingIssues.join("；"));
@@ -1151,10 +1158,11 @@ function normalizePackageAsset(value: unknown, location = false, character = fal
         code: text(asset.code),
         name,
         description,
-        supplierPrompt: optionalText(asset.supplierPrompt),
+        ...(optionalText(asset.supplierPrompt) ? { supplierPrompt: optionalText(asset.supplierPrompt) } : {}),
         payoff: optionalText(asset.payoff),
         activeEpisodeCodes: strings(asset.activeEpisodeCodes),
         profile: character ? normalizeDramaCharacterProfile(baseProfile, description, name) : baseProfile,
+        ...(location ? { sceneReferenceBoard: { layout: "3x3" as const, ...(object(asset.sceneReferenceBoard).referenceId ? { referenceId: text(object(asset.sceneReferenceBoard).referenceId) } : {}) } } : {}),
     };
 }
 
