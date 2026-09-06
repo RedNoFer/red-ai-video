@@ -54,13 +54,11 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
     const storedFrames = useMemo(() => [...(shot.storyboardFrames || [])].sort((left, right) => left.sequenceIndex - right.sequenceIndex), [shot.storyboardFrames]);
     const frameById = useMemo(() => new Map(storedFrames.map((frame) => [frame.id, frame])), [storedFrames]);
     const generationActive =
-        storedFrames.some((frame) => (Boolean(frame.taskId) && (frame.status === "queued" || frame.status === "running")) || (Boolean(frame.candidateTaskId) && (frame.candidateStatus === "queued" || frame.candidateStatus === "running"))) ||
-        (Boolean(shot.storyboardTaskId) && ["queued", "running"].includes(shot.storyboardStatus || "")) ||
-        (Boolean(shot.storyboardEndTaskId) && ["queued", "running"].includes(shot.storyboardEndStatus || ""));
+        storedFrames.some(frameHasActiveTask) || (Boolean(shot.storyboardTaskId) && ["queued", "running"].includes(shot.storyboardStatus || "")) || (Boolean(shot.storyboardEndTaskId) && ["queued", "running"].includes(shot.storyboardEndStatus || ""));
     const completedCount = beats.filter((beat) => frameById.get(beat.id)?.status === "success" && frameById.get(beat.id)?.mediaUrl).length;
     const activeFrame = beats.find((beat) => {
         const frame = frameById.get(beat.id);
-        return ["queued", "running"].includes(frame?.status || "") || ["queued", "running"].includes(frame?.candidateStatus || "");
+        return frameHasActiveTask(frame);
     });
     const generationError =
         storedFrames.find((frame) => frame.status === "error" || frame.continuityStatus === "needs_review")?.error || storedFrames.find((frame) => frame.candidateError)?.candidateError || shot.storyboardError || shot.storyboardEndError;
@@ -597,7 +595,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                 <div className="mt-3 space-y-2.5" data-drama-frame-sequence>
                     {beats.map((beat, index) => {
                         const frame = frameById.get(beat.id);
-                        const rowBusy = reviewingFrameId === beat.id || submitting === beat.id || frame?.status === "queued" || frame?.status === "running" || frame?.candidateStatus === "queued" || frame?.candidateStatus === "running";
+                        const rowBusy = reviewingFrameId === beat.id || submitting === beat.id || frameHasActiveTask(frame);
                         const previous = index ? frameById.get(beats[index - 1].id) : undefined;
                         const canGenerate = index === 0 || Boolean(previous?.mediaUrl && previous.status === "success" && previous.continuityStatus !== "needs_review" && previous.continuityStatus !== "stale");
                         const candidates = visibleFrameCandidates(frame);
@@ -1063,7 +1061,8 @@ function FrameSlot({ title, urls, loading, disabled, onUpload, onRemove, onPromp
 }
 
 function FrameStatusTag({ frame }: { frame?: DramaStoryboardFrame }) {
-    const state = frame?.candidateStatus || (frame?.continuityStatus === "needs_review" ? "needs_review" : frame?.status) || "idle";
+    const hasOrphanedQueue = !frameHasActiveTask(frame) && (frame?.status === "queued" || frame?.candidateStatus === "queued");
+    const state = hasOrphanedQueue ? "error" : frame?.candidateStatus || (frame?.continuityStatus === "needs_review" ? "needs_review" : frame?.status) || "idle";
     const labels: Record<string, string> = {
         idle: "待生成",
         queued: frame?.mediaUrl ? "候选排队中" : "排队中",
@@ -1071,7 +1070,7 @@ function FrameStatusTag({ frame }: { frame?: DramaStoryboardFrame }) {
         success: frame?.continuityStatus === "needs_review" ? "连续性需调整" : frame?.continuityStatus === "pending" ? "待检验" : "已完成",
         stale: "已失效",
         needs_review: "连续性需调整",
-        error: frame?.mediaUrl ? "候选失败" : "失败",
+        error: hasOrphanedQueue ? "待重新提交" : frame?.mediaUrl ? "候选失败" : "失败",
         cancelled: "已取消",
     };
     const colors: Record<string, string> = { queued: "processing", running: "processing", success: "success", stale: "warning", needs_review: "warning", error: "error", cancelled: "default", idle: "default" };
@@ -1084,6 +1083,12 @@ function frameBeats(shot: DramaShot): DramaFrameBeat[] {
 
 function emptyStoryboardFrame(beat: DramaFrameBeat): DramaStoryboardFrame {
     return { id: beat.id, sequenceIndex: beat.sequenceIndex, source: "generated", status: "idle" };
+}
+
+function frameHasActiveTask(frame?: DramaStoryboardFrame) {
+    const hasQueuedState = frame?.status === "queued" || frame?.status === "running";
+    const hasCandidateQueuedState = frame?.candidateStatus === "queued" || frame?.candidateStatus === "running";
+    return (Boolean(frame?.taskId) && hasQueuedState) || (Boolean(frame?.candidateTaskId) && hasCandidateQueuedState);
 }
 
 function staleFrame(frame: DramaStoryboardFrame): DramaStoryboardFrame {
