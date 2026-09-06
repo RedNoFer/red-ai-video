@@ -226,7 +226,7 @@ function DramaAssetCard({ kind, row, onEdit, onComplete, onDelete, completing }:
             <button type="button" className="block w-full text-left" onClick={onEdit} aria-label={`编辑${definition.title}：${asset.name}`}>
                 <div className="grid aspect-[16/10] w-full place-items-center overflow-hidden bg-muted/55">
                     {primary?.url ? (
-                        <Image src={imagePreviewUrl(primary.url, 480)} alt={`${asset.name}基准图`} rootClassName="!block !size-full" className="!size-full !object-cover transition duration-300 group-hover:scale-[1.02]" preview={false} />
+                        <Image src={imagePreviewUrl(primary.url, 480)} alt={`${asset.name}基准图`} rootClassName="!block !size-full" className="!size-full !object-contain transition duration-300" preview={false} />
                     ) : (
                         <div className="grid gap-1.5 text-center text-muted-foreground">
                             <ImagePlus className="mx-auto size-5" aria-hidden />

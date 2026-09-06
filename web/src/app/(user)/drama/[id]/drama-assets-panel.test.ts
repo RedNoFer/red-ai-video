@@ -88,6 +88,8 @@ describe("drama asset image results", () => {
         expect(panel).toContain("data-drama-source-assets");
         expect(panel).toContain("<DramaAssetEditorDrawer");
         expect(panel).toContain("<DramaAssetGenerationBatchPanel");
+        expect(panel).toContain("!object-contain");
+        expect(panel).not.toContain("group-hover:scale-[1.02]");
         expect(panel).toContain("const { message, modal } = App.useApp();");
         expect(panel).toContain("modal.confirm({");
         expect(panel).not.toContain("Modal.confirm({");
@@ -115,8 +117,7 @@ describe("drama asset image results", () => {
         expect(editor).toContain("上传候选");
         expect(editor).toContain("生成候选");
         expect(editor).toContain("提示词优化");
-        expect(editor).toContain("optimizedAssetPrompt");
-        expect(editor).toContain("生成候选将使用");
+        expect(editor).toContain("supplierPromptOverride");
         expect(editor).not.toContain("Voice Design");
         expect(editor).not.toContain("声音设计提示词");
         expect(editor).toContain('mode: "clone"');
@@ -124,9 +125,13 @@ describe("drama asset image results", () => {
         expect(editor).toContain("dataUrl: storedReferenceUrl");
         expect(editor).toContain("const existingReferenceUrl");
         expect(editor).toContain("referenceOverride || (activeProposal ? primary : undefined)");
+        expect(editor).toContain("supplierPromptOverride.trim() ||");
         expect(editor).toContain("data-drama-primary-preview");
+        expect(editor).toContain("!object-contain");
         expect(editor).toContain("aspectRatio: primary?.width && primary?.height");
         expect(editor).toContain("实际供应商提示词");
+        expect(editor).toContain("恢复自动提示词");
+        expect(editor).toContain("data-drama-supplier-prompt");
         expect(editor).toContain("mergeGeneratedReferenceReviews");
         expect(editor).toContain("await loadProject(project.id, true)");
         expect(editor).toContain("await saveProjectNow(project.id)");

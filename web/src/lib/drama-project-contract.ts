@@ -171,6 +171,19 @@ export type DramaAssetProfile = {
     forbiddenChanges?: string[];
 };
 
+export type DramaAssetPromptFields = {
+    description: string;
+    visualIdentity: string;
+    styling: string;
+    colorPalette: string;
+    consistencyRules: string;
+};
+
+export type DramaAssetPromptOptimization = {
+    optimizedPrompt: string;
+    fields: DramaAssetPromptFields;
+};
+
 export type DramaAssetRefinementChange = {
     field: "description" | "visualIdentity" | "styling" | "colorPalette" | "consistencyRules";
     before: string;

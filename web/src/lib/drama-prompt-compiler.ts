@@ -1,7 +1,7 @@
 import type { DramaAssetRefinementProposal, DramaContinuityState, DramaEpisode, DramaFrameBeat, DramaNamedAsset, DramaProject, DramaReferenceManifestItem, DramaShot, DramaShotContinuity } from "@/lib/drama-project-contract";
+import { DRAMA_CHARACTER_NEGATIVE_RULES, DRAMA_CHARACTER_SUPPLIER_QUALITY_RULES } from "@/lib/drama-character-rules";
 import { resolveDramaStyleContract, sanitizeDramaVisualPrompt } from "@/lib/drama-style";
 import { upgradeDramaFrameImagePrompt } from "@/lib/drama-frame-sequence";
-import { DRAMA_ASSET_IMAGE_SKILL } from "@/lib/drama-image-skill";
 
 export type DramaAssetGenerationPreflight = { ok: true; constraints: string[] } | { ok: false; errors: string[]; constraints: string[] };
 
@@ -39,8 +39,24 @@ export function deriveDramaShotPromptContract(project: DramaProject, _episode: D
         references: shot.framePlan?.referenceManifest || [],
         entryState,
         exitState,
-        beats: (shot.framePlan?.frames || []).map(({ id, sequenceIndex, startSecond, endSecond, startPrompt, actionPrompt, transitionPrompt, endPrompt, imagePrompt }) => ({ id, sequenceIndex, startSecond, endSecond, startPrompt, actionPrompt, transitionPrompt, endPrompt, imagePrompt })),
-        camera: { shotSize: continuity?.shotSize || "", cameraAngle: continuity?.cameraAngle || "", composition: continuity?.composition || "", movement: shot.cameraMotion || "", reason: continuity?.actionEnd ? `响应动作变化：${continuity.actionEnd}` : "" },
+        beats: (shot.framePlan?.frames || []).map(({ id, sequenceIndex, startSecond, endSecond, startPrompt, actionPrompt, transitionPrompt, endPrompt, imagePrompt }) => ({
+            id,
+            sequenceIndex,
+            startSecond,
+            endSecond,
+            startPrompt,
+            actionPrompt,
+            transitionPrompt,
+            endPrompt,
+            imagePrompt,
+        })),
+        camera: {
+            shotSize: continuity?.shotSize || "",
+            cameraAngle: continuity?.cameraAngle || "",
+            composition: continuity?.composition || "",
+            movement: shot.cameraMotion || "",
+            reason: continuity?.actionEnd ? `响应动作变化：${continuity.actionEnd}` : "",
+        },
         visual: { environmentPressure, motif: project.seriesBible?.visualMotifs?.find(Boolean) || "", palette, lighting: lightingText, texture: resolveDramaStyleContract(project).visualDescription },
         audio: [shot.sound?.ambience, shot.sound?.soundEffects, shot.sound?.music].filter(Boolean).join("；") || undefined,
         constraints: [shot.negativePrompt, continuity?.continuityNotes].filter(Boolean) as string[],
@@ -140,18 +156,16 @@ export function compileDramaShotPrompts(project: DramaProject, episode: DramaEpi
 }
 
 export function dramaFrameVisibleState(imagePrompt: string, actionPrompt = "") {
-    const candidates = [
-        extractPromptField(imagePrompt, "可见状态"),
-        extractPromptField(imagePrompt, "可见表演状态"),
-        extractPromptField(imagePrompt, "站位与视线"),
-        extractPromptField(imagePrompt, "静态关键帧"),
-        actionPrompt,
-    ].map((value) => value.trim()).filter(Boolean);
+    const candidates = [extractPromptField(imagePrompt, "可见状态"), extractPromptField(imagePrompt, "可见表演状态"), extractPromptField(imagePrompt, "站位与视线"), extractPromptField(imagePrompt, "静态关键帧"), actionPrompt]
+        .map((value) => value.trim())
+        .filter(Boolean);
     return candidates.find((value) => !isGenericTimelineState(value)) || candidates[0] || "";
 }
 
 function isGenericTimelineState(value: string) {
-    return /^(?:动作入口已成立|镜头推进后主体重心、视线或手部位置已经改变|关键动作已经发生|结果状态继续发展|结果状态与转场落点已经成立|主体处于可辨识准备姿态|道具或环境出现可见结果|主体反应或道具关系已经转向|(?:表情|情绪|视线|姿态|动作|身体状态|手部状态)由.+(?:转为|变为|变化为))/u.test(value);
+    return /^(?:动作入口已成立|镜头推进后主体重心、视线或手部位置已经改变|关键动作已经发生|结果状态继续发展|结果状态与转场落点已经成立|主体处于可辨识准备姿态|道具或环境出现可见结果|主体反应或道具关系已经转向|(?:表情|情绪|视线|姿态|动作|身体状态|手部状态)由.+(?:转为|变为|变化为))/u.test(
+        value,
+    );
 }
 
 function extractPromptField(value: string, label: string) {
@@ -256,11 +270,7 @@ export function compileDramaFrameSupplierPrompt(project: DramaProject, episode: 
 }
 
 function isCurrentStaticFramePrompt(value: string) {
-    return (
-        /^静态关键帧[：:]/u.test(value) &&
-        ["可见表演状态", "景别", "机位与构图", "站位与视线", "三层空间", "光色与风格", "负面约束"].every((label) => new RegExp(`${label}[：:]`, "u").test(value)) &&
-        !/参考图职责[：:]/u.test(value)
-    );
+    return /^静态关键帧[：:]/u.test(value) && ["可见表演状态", "景别", "机位与构图", "站位与视线", "三层空间", "光色与风格", "负面约束"].every((label) => new RegExp(`${label}[：:]`, "u").test(value)) && !/参考图职责[：:]/u.test(value);
 }
 
 function scenePhysicalConstraint(scene: DramaNamedAsset | undefined, characterCount: number) {
@@ -321,35 +331,26 @@ function lightingLines(shot: DramaShot) {
 
 export function compileDramaAssetReferencePrompt(project: Pick<DramaProject, "title" | "style" | "ratio" | "productionBible">, asset: DramaNamedAsset, kind: "角色" | "场景" | "道具") {
     const styleContract = resolveDramaStyleContract(project);
-    const constraints = compileDramaAssetConstraints(project, asset, kind);
-    const styleName = styleContract.name;
-    const visualStyle = styleContract.visualDescription;
-    return compact([
-        "这是严格的资产基准图生成任务，不是自由创作或概念发挥。请先核对全部硬约束，再生成一张可直接用于后续镜头的基准图。",
-        `资产图片 Skill 规则：${DRAMA_ASSET_IMAGE_SKILL.promptRules}`,
-        kind === "角色" ? "约束优先级：白底三视图布局 > 身份锚点与固定规则 > 用户明确设定 > 人物本体材质与配色风格；项目环境风格不得进入角色基准板。" : "约束优先级：统一视觉风格 > 身份锚点与固定规则 > 用户明确设定 > 画幅和构图约束；资产历史提示词不得覆盖统一视觉风格。",
-        `${kind}设定图，画幅 ${kind === "角色" ? DRAMA_CHARACTER_TURNAROUND_SIZE : project.ratio}`,
-        `统一风格：${styleName}`,
-        kind === "角色" ? "人物本体风格：项目风格只控制五官、发丝、服装、材质与角色固有配色；纯白背景中禁止出现学院建筑、符文法阵、场景光影或其他环境元素。" : `统一视觉风格（最高级风格约束）：${visualStyle}`,
-        kind === "角色" ? "人物光色：均匀、低干扰的棚拍光，仅用于辨识五官、服装轮廓和材质，不制造环境戏剧光。" : `风格指引：${visualStyle}`,
-        styleContract.colorScript ? `${kind === "角色" ? "角色固有色彩参考" : "全局色彩脚本"}：${styleContract.colorScript}` : "",
-        `名称：${asset.name}`,
-        `基础描述：${asset.description}`,
-        asset.profile?.visualIdentity ? `视觉识别：${sanitizeDramaVisualPrompt(asset.profile.visualIdentity)}` : "",
-        asset.profile?.styling ? `造型与材质：${sanitizeDramaVisualPrompt(asset.profile.styling)}` : "",
-        asset.profile?.colorPalette ? `固定色彩：${sanitizeDramaVisualPrompt(asset.profile.colorPalette)}` : "",
-        asset.profile?.consistencyRules ? `一致性规则：${sanitizeDramaVisualPrompt(asset.profile.consistencyRules)}` : "",
-        asset.profile?.designPrompt ? "资产档案中的历史 designPrompt 不直接发送；生图只使用已结构化的身份、服装、材质、固定道具和一致性字段，不采用其中的旧画风、旧色彩、旧背景、旧构图或设定板布局。" : "",
-        asset.profile?.identityAnchors?.length ? `身份锚点（必须保留）：${asset.profile.identityAnchors.join("；")}` : "",
-        asset.profile?.spatialRules?.length ? `空间/位置约束（必须准确）：${asset.profile.spatialRules.join("；")}` : "",
-        asset.profile?.stateRules?.length ? `状态约束：${asset.profile.stateRules.join("；")}` : "",
+    const profile = asset.profile;
+    const description = sanitizeDramaVisualPrompt(asset.description);
+    const visualIdentity = joinAssetPromptFacts([profile?.visualIdentity, ...(profile?.identityAnchors || [])]);
+    const styling = sanitizeDramaVisualPrompt(profile?.styling || "");
+    const stylingForPrompt = description.length >= styling.length && styling && description.includes(styling) ? "" : styling;
+    const colorPalette = sanitizeDramaVisualPrompt(profile?.colorPalette || "");
+    const consistency = joinAssetPromptFacts([profile?.consistencyRules, ...(profile?.spatialRules || []), ...(profile?.stateRules || [])]);
+    const forbidden = joinAssetPromptConstraints([...(profile?.forbiddenChanges || []), kind === "角色" ? DRAMA_CHARACTER_NEGATIVE_RULES : "额外主体、拼版、多视角、文字、水印、logo"]);
+    const layout =
         kind === "角色"
-            ? "角色构图硬约束（高于项目背景）：纯白色无缝背景上的三视图角色基准板；正面、侧面、背面三个同一角色的全身立姿从头顶到鞋靴完整入画，侧面固定为左侧，等距水平排列、同一基线、同一头身比例，脸部、发型、服装与关键道具在各视图完全一致。"
-            : "",
-        kind === "角色" ? "角色视觉刻画优先级：三视图的完整头部、脸部、发型、服装结构与关键道具一致性 > 五官与材质细节 > 光线；不得用场景氛围、主立绘或肖像特写替代三视图。" : "",
-        ...constraints.map((item) => `输出约束：${item}`),
-        kind === "角色" ? `最终风格锁定：角色基准板保持纯白色无缝背景，角色本体使用「${styleName}」指定的五官、发丝、服装与材质方向；不得回退到历史 designPrompt 的旧版多模块布局。` : `最终风格锁定：${visualStyle}。不得回退到历史 designPrompt 的旧风格或中性灰设定板。`,
-        `最终自检：${kind === "角色" ? "只能出现同一角色的正面、侧面、背面三视图，侧面固定为左侧；每个视图的全身、头部、躯干、双臂、双手、双腿和鞋靴完整入画，且身份锚点完全一致" : "主体结构和关键材质必须完整入画"}，必须能从身份锚点准确识别；若无法同时满足全部约束，宁可保持设定的简洁原貌，也不得自行添加、替换或拼版。`,
+            ? `${DRAMA_CHARACTER_TURNAROUND_SIZE} 横向，纯白色无缝背景；同一角色的正面、严格左侧面、背面三视图等距水平排列，全身立姿从头顶、完整头部、躯干、双臂、双手、双腿到鞋靴完整入画，同一基线、同一头身比。`
+            : `${project.ratio || "9:16"} 画幅，单一${kind}主体完整入画，无人物拼版。`;
+    return compact([
+        `主体与资产类型：${kind}「${asset.name}」`,
+        `身份/结构锚点：${joinAssetPromptFacts([description, visualIdentity]) || "沿用当前资产已确认设定"}`,
+        consistency ? `一致性锁定：${consistency}` : "",
+        `可见状态与材质：${stylingForPrompt || "按身份设定中的服装、材质和关键配件呈现"}`,
+        `构图与画幅：${layout}`,
+        `光色与风格：${kind === "角色" ? `角色本体使用「${styleContract.name}」的人物五官、发丝、服装与材质方向；均匀低干扰棚拍光；${DRAMA_CHARACTER_SUPPLIER_QUALITY_RULES}${colorPalette ? `；角色固有色彩：${colorPalette}` : ""}` : `${styleContract.visualDescription}${colorPalette ? `；固定色彩：${colorPalette}` : ""}`}`,
+        `负面约束：${forbidden}`,
     ]).join("\n");
 }
 
@@ -362,7 +363,9 @@ export function compileDramaAssetConstraints(project: Pick<DramaProject, "ratio"
             : kind === "场景"
               ? "单一场景主体完整可见，结构轮廓和关键材质清晰，环境、光线与色彩按项目视觉风格呈现。"
               : "单一道具主体完整可见，结构轮廓和关键材质清晰，置于符合项目视觉风格的环境或展示台中。",
-        kind === "角色" ? "负面构图词：额外人物、额外视图、四分之三视图、主立绘、肖像、表情组、手部特写、道具拆解、场景背景、灰色背景、网格、边框、文字、水印、logo、无头、无脸、缺失头部、裁掉头部、裁脸、画面外人头、半身、胸像、躯干特写、身体局部、只画服装。" : "",
+        kind === "角色"
+            ? "负面构图词：额外人物、额外视图、四分之三视图、主立绘、肖像、表情组、手部特写、道具拆解、场景背景、灰色背景、网格、边框、文字、水印、logo、无头、无脸、缺失头部、裁掉头部、裁脸、画面外人头、半身、胸像、躯干特写、身体局部、只画服装。"
+            : "",
         "不得添加设定中没有出现的主体、装饰或剧情信息，不添加文字、水印、logo、边框。",
         `严格保留${kind}的身份、轮廓、年龄感、色彩和一致性规则，不得擅自改写。`,
         kind === "角色" ? "禁止把中文说明、角色关系表、参数表或海报排版画进图片；三视图只作为同一角色的固定基准板，不添加任何文字或其他模块。" : "禁止把中文说明、角色关系表、参数表、海报排版或多张视图画进图片；设定文字只作为生成约束，不是画面内容。",
@@ -380,11 +383,37 @@ export function compileDramaAssetRefinementPrompt(project: Pick<DramaProject, "t
     const updatedAsset = { ...asset, description: proposal.updatedDescription || asset.description, profile: proposal.updatedProfile };
     return compact([
         compileDramaAssetReferencePrompt(project, updatedAsset, kind),
-        `本轮调整：${request}`,
-        proposal.preservedRules.length ? `必须保留：${proposal.preservedRules.join("；")}` : "",
-        proposal.negativePrompt ? `负面约束：${proposal.negativePrompt}` : "",
-        kind === "角色" ? "服装必须体现剧情功能、职业经历和社会身份，具有稳定识别配件；禁止通用 NPC、模板化游戏角色和无意义装饰。" : "",
+        request.trim() ? `本轮调整：${request.trim()}` : "",
+        proposal.preservedRules.length ? `一致性锁定：${proposal.preservedRules.join("；")}` : "",
+        proposal.negativePrompt ? `负面约束补充：${proposal.negativePrompt}` : "",
     ]).join("\n");
+}
+
+function joinAssetPromptFacts(values: Array<string | undefined>) {
+    return Array.from(
+        new Set(
+            values
+                .map((value) =>
+                    sanitizeDramaVisualPrompt(value || "")
+                        .replace(/[、，,；;。\s]+$/u, "")
+                        .trim(),
+                )
+                .filter(Boolean),
+        ),
+    ).join("；");
+}
+
+function joinAssetPromptConstraints(values: Array<string | undefined>) {
+    return Array.from(
+        new Set(
+            values.flatMap((value) =>
+                (value || "")
+                    .split(/[、，,；;]+/u)
+                    .map((item) => item.replace(/[。\s]+$/u, "").trim())
+                    .filter(Boolean),
+            ),
+        ),
+    ).join("、");
 }
 
 function assetText(asset: DramaNamedAsset, project: DramaProject) {

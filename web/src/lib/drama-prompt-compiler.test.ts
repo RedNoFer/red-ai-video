@@ -62,15 +62,19 @@ describe("drama prompt compiler", () => {
         expect(prompt).toContain("@图片1：顺序帧 1（开始）；绑定规则：作为开始阶段画面依据");
     });
 
-    it("applies the Markdown-backed asset image Skill to character, scene and prop prompts", () => {
+    it("keeps supplier prompts free of internal Skill instructions", () => {
         const project = createProject();
         const asset = project.characters[0];
 
         for (const kind of ["角色", "场景", "道具"] as const) {
             const prompt = compileDramaAssetReferencePrompt(project, asset, kind);
-            expect(prompt).toContain("资产图片 Skill 规则：");
-            expect(prompt).toContain("角色候选图固定生成一张纯白色无缝背景的三视图角色基准板");
-            expect(prompt).toContain("场景图只生成一个没有人物的空间");
+            expect(prompt).toContain("主体与资产类型：");
+            expect(prompt).toContain("身份/结构锚点：");
+            expect(prompt).toContain("构图与画幅：");
+            expect(prompt).toContain("负面约束：");
+            expect(prompt).not.toContain("资产图片 Skill 规则：");
+            expect(prompt).not.toContain("输出约束：");
+            expect(prompt).not.toContain("最终自检：");
         }
     });
 
@@ -202,7 +206,8 @@ describe("drama prompt compiler", () => {
             endSecond: 5,
             actionPrompt: "人物抬头",
             imagePrompt: "人物抬头",
-            supplierPrompt: "静态关键帧: 用户编辑画面\n可见状态: 人物抬头\n可见表演状态: 眉眼紧绷\n景别: 中景\n机位与构图: 平视，主体居中\n站位与视线: 视线落向门边\n三层空间: 前景为门框，中景承载人物，背景交代空间纵深\n光色与风格: 冷色侧光，半写实动漫幻想风\n负面约束: 无字幕、无水印、无logo、无HUD、无变形",
+            supplierPrompt:
+                "静态关键帧: 用户编辑画面\n可见状态: 人物抬头\n可见表演状态: 眉眼紧绷\n景别: 中景\n机位与构图: 平视，主体居中\n站位与视线: 视线落向门边\n三层空间: 前景为门框，中景承载人物，背景交代空间纵深\n光色与风格: 冷色侧光，半写实动漫幻想风\n负面约束: 无字幕、无水印、无logo、无HUD、无变形",
         });
 
         expect(prompt).toContain("用户编辑画面");
@@ -479,21 +484,45 @@ describe("drama prompt compiler", () => {
     it("creates a fixed white-background three-view character reference sheet", () => {
         const prompt = compileDramaAssetReferencePrompt(createProject(), createProject().characters[0], "角色");
 
-        expect(prompt).toContain("角色设定图");
-        expect(prompt).toContain("画幅 16:9");
-        expect(prompt).toContain(`统一风格：${DRAMA_STYLE_NAME}`);
-        expect(prompt).toContain("项目环境风格不得进入角色基准板");
-        expect(prompt).toContain("固定色彩：红黑");
-        expect(prompt).toContain("不添加文字");
+        expect(prompt).toContain("主体与资产类型：角色");
+        expect(prompt).toContain("构图与画幅：16:9 横向");
+        expect(prompt).toContain(`角色本体使用「${DRAMA_STYLE_NAME}」的人物五官、发丝、服装与材质方向`);
+        expect(prompt).toContain("角色固有色彩：红黑");
         expect(prompt).toContain("纯白色无缝背景");
-        expect(prompt).toContain("正面、侧面、背面");
-        expect(prompt).toContain("三视图角色基准板");
-        expect(prompt).not.toContain("不要拼版、联系表、多视角");
-        expect(prompt).toContain("严格保留角色的身份");
-        expect(prompt).toContain("双腿和鞋靴全部入画");
-        expect(prompt).toContain("同一基线、同一头身比例");
-        expect(prompt).toContain("不得新增任何人物、角度、主立绘、肖像、表情组、手部特写或道具拆解");
-        expect(prompt).toContain("半写实动漫幻想风");
+        expect(prompt).toContain("正面、严格左侧面、背面");
+        expect(prompt).toContain("三视图");
+        expect(prompt).toContain("双腿到鞋靴完整入画");
+        expect(prompt).toContain("同一基线、同一头身比");
+        expect(prompt).toContain("面部比例自然、左右基本对称");
+        expect(prompt).toContain("手指畸形");
+        expect(prompt).not.toContain("资产图片 Skill 规则：");
+    });
+
+    it("applies the fixed role quality contract without inventing a new scene", () => {
+        const project = createProject();
+        project.characters[0] = {
+            ...project.characters[0],
+            name: "萧炎",
+            description: "乌坦城萧家少年，清瘦但肩背挺直，黑发高束，深棕眼，墨青窄袖长袍",
+            profile: {
+                visualIdentity: "清晰眉骨；左眉尾微挑；黑发束带位置固定",
+                styling: "墨青窄袖长袍，黑色腰封，旧金细节",
+                colorPalette: "墨青、煤黑、旧金",
+                consistencyRules: "锁定脸部、发束、肩宽和衣袍层次",
+            },
+        };
+
+        const prompt = compileDramaAssetReferencePrompt(project, project.characters[0], "角色");
+
+        expect(prompt).toContain("清晰眉骨");
+        expect(prompt).toContain("墨青窄袖长袍");
+        expect(prompt).toContain("自然骨骼与身材比例");
+        expect(prompt).toContain("男性不女性化");
+        expect(prompt).toContain("严格左侧面");
+        expect(prompt).toContain("换脸");
+        expect(prompt.match(/额外人物/g)).toHaveLength(1);
+        expect(prompt).not.toContain("学院建筑");
+        expect(prompt).not.toContain("用途：");
     });
 
     it("does not compile structured performance and lighting into Agent prompts", () => {
@@ -575,9 +604,10 @@ describe("drama prompt compiler", () => {
             forbiddenChanges: ["右肩徽记、拼版、多视角"],
         };
         const prompt = compileDramaAssetReferencePrompt(project, project.characters[0], "角色");
-        expect(prompt).toContain("身份锚点（必须保留）：左眼下方有痣");
-        expect(prompt).toContain("空间/位置约束（必须准确）：徽记固定左肩");
-        expect(prompt).toContain("禁止：右肩徽记、拼版、多视角");
+        expect(prompt).toContain("身份/结构锚点：");
+        expect(prompt).toContain("左眼下方有痣");
+        expect(prompt).toContain("徽记固定左肩");
+        expect(prompt).toContain("右肩徽记、拼版、多视角");
         expect(preflightDramaAssetGeneration(project, project.characters[0], "角色").ok).toBe(true);
     });
 
@@ -618,8 +648,8 @@ describe("drama prompt compiler", () => {
 
         const prompt = compileDramaAssetReferencePrompt(project, project.characters[0], "角色");
 
-        expect(prompt).toContain(`角色本体使用「${project.style}」指定的五官、发丝、服装与材质方向`);
-        expect(prompt).toContain("角色固有色彩参考：深蓝灰、旧银、墨绿、少量暖金");
+        expect(prompt).toContain(`角色本体使用「${project.style}」的人物五官、发丝、服装与材质方向`);
+        expect(prompt).toContain("角色固有色彩：红黑");
         expect(prompt).toContain("短发");
         expect(prompt).not.toContain("六模块");
         expect(prompt).not.toContain("中性浅灰背景");
@@ -652,7 +682,7 @@ describe("drama prompt compiler", () => {
         const prompt = compileDramaAssetRefinementPrompt(project, project.characters[0], "角色", proposal, "服装改为黑金学院长袍");
 
         expect(prompt).toContain("黑金学院长袍");
-        expect(prompt).toContain(`角色本体使用「${DRAMA_STYLE_NAME}」指定的五官、发丝、服装与材质方向`);
+        expect(prompt).toContain(`角色本体使用「${DRAMA_STYLE_NAME}」的人物五官、发丝、服装与材质方向`);
         expect(prompt).not.toContain("旧版 VS14");
         expect(prompt).not.toContain("中性浅灰背景");
     });
@@ -683,7 +713,7 @@ describe("drama prompt compiler", () => {
         expect(prompt).not.toContain("VS14");
         expect(prompt).not.toContain("六模块");
         expect(prompt).not.toContain("中性浅灰背景");
-        expect(prompt).toContain(kind === "角色" ? `角色本体使用「${DRAMA_STYLE_NAME}」指定的五官、发丝、服装与材质方向` : `最终风格锁定：${DRAMA_STYLE_DESCRIPTION}`);
+        expect(prompt).toContain(kind === "角色" ? `角色本体使用「${DRAMA_STYLE_NAME}」的人物五官、发丝、服装与材质方向` : DRAMA_STYLE_DESCRIPTION);
     });
 });
 

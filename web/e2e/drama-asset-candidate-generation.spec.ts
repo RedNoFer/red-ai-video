@@ -8,6 +8,55 @@ const REFERENCE_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAA
 
 test.use({ storageState: ".e2e-data/admin-state.json" });
 
+test("编辑角色视觉设定后保存并恢复全部字段", async ({ page, request }) => {
+    const created = await request.post("/api/drama/projects", { data: { title: `E2E 角色设定保存 ${Date.now()}`, ratio: "9:16" } });
+    expect(created.ok(), await created.text()).toBe(true);
+    const project = ((await created.json()) as { data: { project: DramaProject } }).data.project;
+    const characterId = "character-settings-save-e2e";
+
+    try {
+        const saved = await request.patch(`/api/drama/projects/${project.id}`, {
+            data: {
+                ...project,
+                characters: [{ id: characterId, name: "保存测试角色", description: "原始身份", profile: { visualIdentity: "原始外貌", styling: "原始造型", colorPalette: "原始配色", consistencyRules: "原始规则" }, references: [] }],
+            },
+        });
+        expect(saved.ok(), await saved.text()).toBe(true);
+
+        await page.goto(`/drama/${project.id}`, { waitUntil: "domcontentloaded" });
+        await page.getByRole("button", { name: "打开项目资产" }).click();
+        await page.getByRole("button", { name: "编辑角色：保存测试角色" }).click();
+        const drawer = page.getByRole("dialog", { name: "编辑角色" });
+        const fields = {
+            visualIdentity: "清晰眉骨；左眉尾微挑；黑发高束",
+            styling: "墨青长袍；固定黑色腰封；黑色短靴",
+            colorPalette: "墨青、暗灰、暖金",
+            consistencyRules: "锁定脸部、发束、服装层次和左手伤痕",
+        };
+        for (const [label, value] of Object.entries(fields)) await drawer.getByRole("textbox").nth({ visualIdentity: 2, styling: 3, colorPalette: 4, consistencyRules: 5 }[label]).fill(value);
+        await drawer.getByRole("button", { name: "保存设定" }).click();
+        await expect(drawer).toHaveCount(0);
+
+        const readback = await request.get(`/api/drama/projects/${project.id}`);
+        expect(readback.ok(), await readback.text()).toBe(true);
+        const persisted = ((await readback.json()) as { data: { project: DramaProject } }).data.project.characters.find((item) => item.id === characterId);
+        expect(persisted?.profile).toMatchObject({ styling: fields.styling, colorPalette: fields.colorPalette });
+        expect(persisted?.profile?.visualIdentity).toContain(fields.visualIdentity);
+        expect(persisted?.profile?.consistencyRules).toContain(fields.consistencyRules);
+
+        await page.getByRole("button", { name: "打开项目资产" }).click();
+        await page.getByRole("button", { name: "编辑角色：保存测试角色" }).click();
+        const reopened = page.getByRole("dialog", { name: "编辑角色" });
+        await expect(reopened.getByRole("textbox").nth(2)).toHaveValue(expect.stringContaining(fields.visualIdentity));
+        await expect(reopened.getByRole("textbox").nth(3)).toHaveValue(fields.styling);
+        await expect(reopened.getByRole("textbox").nth(4)).toHaveValue(fields.colorPalette);
+        await expect(reopened.getByRole("textbox").nth(5)).toHaveValue(expect.stringContaining(fields.consistencyRules));
+    } finally {
+        const deleted = await request.delete(`/api/drama/projects/${project.id}`);
+        expect(deleted.ok(), await deleted.text()).toBe(true);
+    }
+});
+
 test("生成候选通过真实图片任务链路完成", async ({ page, request }) => {
     await resetProtocolFixture(request);
     const settings = await request.patch("/api/admin/settings", { data: sub2ApiImageSettingsPatch() });
@@ -43,6 +92,13 @@ test("生成候选通过真实图片任务链路完成", async ({ page, request 
                 code: 0,
                 data: {
                     prompt: "主体与资产类型：角色\n身份/结构锚点：固定黑发与黑金学院长袍。\n可见状态与材质：三视图均为完整全身立姿。\n构图与画幅：9:16，纯白色无缝背景，正面、侧面、背面等距水平排列，侧面固定为左侧。\n光色与风格：角色本体保持半写实动漫幻想材质。\n用途：短剧角色基准板。\n负面约束：无主立绘、无肖像特写、无表情组、无文字、无水印。",
+                    fields: {
+                        description: "一名需要保持身份一致的暗黑学院青年角色",
+                        visualIdentity: "固定黑发与黑金学院长袍",
+                        styling: "三视图均为完整全身立姿",
+                        colorPalette: "黑金",
+                        consistencyRules: "正面、左侧面和背面保持同一身份、服装与比例",
+                    },
                 },
                 msg: "OK",
             },
@@ -61,19 +117,28 @@ test("生成候选通过真实图片任务链路完成", async ({ page, request 
     await page.getByRole("button", { name: "编辑角色：真实候选角色" }).click();
     const drawer = page.getByRole("dialog", { name: "编辑角色" });
     await drawer.getByRole("button", { name: "提示词优化" }).click();
-    await expect(drawer.getByText("已优化提示词（生成候选将使用）")).toBeVisible();
+    await drawer.getByText("实际供应商提示词（可编辑）").click();
+    const supplierPrompt = drawer.getByLabel("供应商提示词");
+    await expect(supplierPrompt).toBeEditable();
+    await expect(supplierPrompt).not.toHaveValue(/资产图片 Skill 规则/);
+    await expect(supplierPrompt).toHaveValue(/主体与资产类型：角色/);
+    await supplierPrompt.fill(
+        "主体与资产类型：角色\n身份/结构锚点：用户编辑后的黑发青年，黑金学院长袍，固定五官与发型。\n可见状态与材质：正面、严格左侧面、背面均为完整全身立姿，服装层次和材质一致。\n构图与画幅：16:9 横向，纯白色无缝背景，三视图等距水平排列，同一基线、同一头身比。\n光色与风格：半写实动漫幻想材质，均匀低干扰棚拍光。\n负面约束：无额外人物、主立绘、肖像特写、表情组、文字、水印或 logo。",
+    );
     await drawer.getByRole("button", { name: "生成候选" }).click();
 
     await expect(page.getByText(/已生成 1 张候选图/)).toBeVisible({ timeout: 90_000 });
     expect(pageErrors).not.toContain("Maximum call stack size exceeded");
     await expect(drawer.locator('img[alt="AI 候选图"]')).toHaveCount(1);
-    await drawer.getByRole("button", { name: "确认主基准" }).click();
+    const confirmPrimary = drawer.getByRole("button", { name: "确认主基准" });
+    if (await confirmPrimary.count()) await confirmPrimary.click();
     await expect(drawer.getByRole("button", { name: "已审核基准" })).toBeVisible();
     const primaryPreview = drawer.locator("[data-drama-primary-preview]");
     await expect(primaryPreview).toBeVisible();
     const previewBox = await primaryPreview.boundingBox();
     expect(previewBox?.width).toBeGreaterThan(0);
     expect(previewBox?.height).toBeGreaterThan(0);
+    await expect(primaryPreview.locator('img[alt="真实候选角色基准图"]')).toHaveCSS("object-fit", "contain");
     await expect(primaryPreview.locator('img[alt="真实候选角色基准图"]')).toHaveAttribute("src", /format=webp/);
     await expect(drawer.locator('img[alt="真实候选角色基准图"]')).toHaveCount(1);
     await expect(drawer.getByText("待补基准图")).toHaveCount(0);
@@ -94,9 +159,8 @@ test("生成候选通过真实图片任务链路完成", async ({ page, request 
     const imageRequest = fixture.requests.find((item) => item.method === "POST" && item.path.endsWith("/images/generations"));
     expect(imageRequest).toBeTruthy();
     expect(submittedPrompt).toContain("主体与资产类型：角色");
-    expect(submittedPrompt).toContain("纯白色无缝背景");
-    expect(submittedPrompt).toContain("正面、侧面、背面");
-    expect(submittedPrompt).toContain("侧面固定为左侧");
+    expect(submittedPrompt).toContain("用户编辑后的黑发青年");
+    expect(submittedPrompt).not.toContain("资产图片 Skill 规则");
     expect(submittedSize).toBe("16:9");
 });
 
@@ -256,6 +320,10 @@ test("批量完成后将基准图写入项目资产列表", async ({ page, reque
     await page.getByRole("button", { name: "打开项目资产" }).click();
     await page.getByRole("button", { name: /场景/ }).click();
     await expect(page.locator('img[alt="批量基准场景基准图"]')).toHaveCount(1);
+    await expect(page.locator('img[alt="批量基准场景基准图"]')).toHaveCSS("object-fit", "contain");
+    await page.getByRole("button", { name: "编辑场景：批量基准场景" }).click();
+    const drawer = page.getByRole("dialog", { name: "编辑场景" });
+    await expect(drawer.locator('img[alt="批量基准场景基准图"]')).toHaveCSS("object-fit", "contain");
 });
 
 function sub2ApiImageSettingsPatch() {

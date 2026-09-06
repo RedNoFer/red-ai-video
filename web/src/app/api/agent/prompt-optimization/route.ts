@@ -43,7 +43,7 @@ export async function POST(request: Request) {
             prompt,
             mode,
         });
-        return NextResponse.json({ code: 0, data: { prompt: optimizedPrompt }, msg: "OK" });
+        return NextResponse.json({ code: 0, data: typeof optimizedPrompt === "string" ? { prompt: optimizedPrompt } : { prompt: optimizedPrompt.optimizedPrompt, fields: optimizedPrompt.fields }, msg: "OK" });
     } catch (error) {
         const status = error instanceof PromptOptimizationError ? error.status : 502;
         const message = error instanceof PromptOptimizationError ? error.message : "提示词优化失败，请稍后重试";

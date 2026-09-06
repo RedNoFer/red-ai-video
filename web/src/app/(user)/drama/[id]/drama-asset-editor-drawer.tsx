@@ -1,7 +1,7 @@
 "use client";
 
 import { App, Button, Drawer, Image, Input, InputNumber, Modal, Popconfirm, Popover, Space, Tooltip } from "antd";
-import { Check, FolderInput, ImagePlus, MessageCircle, Send, Sparkles, Trash2, Upload, Volume2 } from "lucide-react";
+import { Check, FolderInput, ImagePlus, MessageCircle, RotateCcw, Send, Sparkles, Trash2, Upload, Volume2 } from "lucide-react";
 import { nanoid } from "nanoid";
 import { useEffect, useRef, useState } from "react";
 
@@ -68,7 +68,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
     const [saving, setSaving] = useState(false);
     const [refinementPrompt, setRefinementPrompt] = useState("");
     const [refinementProposal, setRefinementProposal] = useState<DramaAssetRefinementProposal>();
-    const [optimizedAssetPrompt, setOptimizedAssetPrompt] = useState("");
+    const [supplierPromptOverride, setSupplierPromptOverride] = useState("");
     const [optimizingAssetPrompt, setOptimizingAssetPrompt] = useState(false);
     const [refining, setRefining] = useState(false);
     const [creatingVoice, setCreatingVoice] = useState(false);
@@ -82,8 +82,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
     const draftProfileHasValues = Object.values(draft.profile).some((value) => typeof value === "string" && value.trim());
     const supplierPrompt =
         asset && kind !== "clues"
-            ? references.at(-1)?.compiledPrompt?.trim() ||
-              optimizedAssetPrompt.trim() ||
+            ? supplierPromptOverride.trim() ||
               compileDramaAssetReferencePrompt(
                   project,
                   { ...asset, name: draft.name.trim() || asset.name, description: draft.description.trim() || asset.description, profile: draftProfileHasValues ? draft.profile : asset.profile },
@@ -104,7 +103,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
             editorKeyRef.current = "";
             setRefinementPrompt("");
             setRefinementProposal(undefined);
-            setOptimizedAssetPrompt("");
+            setSupplierPromptOverride("");
             return;
         }
         const editorKey = `${kind}:${assetId || "new"}`;
@@ -116,7 +115,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
         }
         const latestRefinement = asset.refinementHistory?.at(-1)?.proposal;
         setRefinementProposal(latestRefinement);
-        setOptimizedAssetPrompt("");
+        setSupplierPromptOverride("");
         setDraft({
             name: asset.name,
             description: asset.description,
@@ -217,7 +216,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
 
     const requestRefinement = async () => {
         if (!asset || kind === "clues" || !refinementPrompt.trim()) return;
-        setOptimizedAssetPrompt("");
+        setSupplierPromptOverride("");
         setRefining(true);
         try {
             const proposal = await refineDramaAsset(project.id, kind as "characters" | "scenes" | "props", asset.id, refinementPrompt.trim(), `${asset.id}:${Date.now()}`);
@@ -234,7 +233,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
 
     const applyRefinementDraft = () => {
         if (!asset || !refinementProposal) return;
-        setOptimizedAssetPrompt("");
+        setSupplierPromptOverride("");
         setDraft((current) => ({ ...current, profile: refinementProposal.updatedProfile, description: refinementProposal.updatedDescription || current.description }));
         message.success("调整已应用到未保存草稿");
     };
@@ -247,10 +246,21 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
         if (!preflight.ok) return void message.warning(`暂不能优化：${preflight.errors.join("；")}`);
         setOptimizingAssetPrompt(true);
         try {
-            const prompt = compileDramaAssetReferencePrompt(project, promptAsset, assetKind);
+            const prompt = supplierPromptOverride.trim() || compileDramaAssetReferencePrompt(project, promptAsset, assetKind);
             const optimized = await optimizeDramaAssetPrompt(assetKind, prompt, `drama-asset:${project.id}:${asset.id}:${nanoid()}`);
-            setOptimizedAssetPrompt(optimized);
-            message.success("资产生图提示词已优化，生成候选时将优先使用");
+            setDraft((current) => ({
+                ...current,
+                description: optimized.fields.description,
+                profile: {
+                    ...current.profile,
+                    visualIdentity: optimized.fields.visualIdentity,
+                    styling: optimized.fields.styling,
+                    colorPalette: optimized.fields.colorPalette,
+                    consistencyRules: optimized.fields.consistencyRules,
+                },
+            }));
+            setSupplierPromptOverride(optimized.optimizedPrompt);
+            message.success("资产提示词已优化，相关设定文案已同步到未保存草稿");
         } catch (error) {
             message.error(error instanceof Error ? error.message : "资产提示词优化失败");
         } finally {
@@ -309,7 +319,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
             .filter(Boolean)
             .join("；");
         const request = correction ? `请根据审核建议调整：${correction}` : "请修正这张候选图中审核指出的问题，并保留角色身份、五官、年龄和一致性规则。";
-        setOptimizedAssetPrompt("");
+        setSupplierPromptOverride("");
         setRefinementPrompt((current) => (current.trim() ? `${current.trim()}；${request}` : request));
         refinementSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
         message.info("已回填审核建议，你可以继续修改后再生成调整方案");
@@ -405,7 +415,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                 message.warning(`暂不能生成：${preflight.errors.join("；")}`);
                 return;
             }
-            const prompt = optimizedAssetPrompt || (activeProposal ? compileDramaAssetRefinementPrompt(project, asset, assetKind, activeProposal, refinementPrompt) : compileDramaAssetReferencePrompt(project, asset, assetKind));
+            const prompt = supplierPromptOverride.trim() || (activeProposal ? compileDramaAssetRefinementPrompt(project, asset, assetKind, activeProposal, refinementPrompt) : supplierPrompt);
             const imageModel = config.imageModel || config.imageModels[0] || "";
             if (!imageModel) throw new Error("后台尚未配置可用的图片模型，请先在管理后台配置图片渠道");
             const imageConfig = { ...config, model: imageModel, imageModel, size: kind === "characters" ? DRAMA_CHARACTER_TURNAROUND_SIZE : dramaGenerationSize(project, prompt), count: "1" };
@@ -480,7 +490,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
             replaceProject(savedProject);
             message.success(`已生成 ${nextReferences.length} 张候选图${review.status === "passed" ? "，可直接使用" : "，图片已保留，请查看审核建议"}`);
             setRefinementProposal(undefined);
-            setOptimizedAssetPrompt("");
+            setSupplierPromptOverride("");
         } catch (error) {
             message.error(error instanceof Error ? error.message : "候选图生成失败");
         } finally {
@@ -506,7 +516,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                         style={{ aspectRatio: primary?.width && primary?.height ? `${primary.width} / ${primary.height}` : "4 / 5" }}
                     >
                         {primary?.url ? (
-                            <Image src={imagePreviewUrl(primary.url, 384)} alt={`${draft.name || definition.title}基准图`} rootClassName="!block !size-full" className="!size-full !object-cover" preview={{ src: imagePreviewUrl(primary.url, 1920) }} />
+                            <Image src={imagePreviewUrl(primary.url, 384)} alt={`${draft.name || definition.title}基准图`} rootClassName="!block !size-full" className="!size-full !object-contain" preview={{ src: imagePreviewUrl(primary.url, 1920) }} />
                         ) : (
                             <div className="grid gap-2 text-center text-muted-foreground">
                                 <ImagePlus className="mx-auto size-6" />
@@ -521,7 +531,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                         <Input
                             value={draft.name}
                             onChange={(event) => {
-                                setOptimizedAssetPrompt("");
+                                setSupplierPromptOverride("");
                                 setDraft((current) => ({ ...current, name: event.target.value }));
                             }}
                             placeholder={definition.placeholder}
@@ -532,7 +542,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                         <Input.TextArea
                             value={draft.description}
                             onChange={(event) => {
-                                setOptimizedAssetPrompt("");
+                                setSupplierPromptOverride("");
                                 setDraft((current) => ({ ...current, description: event.target.value }));
                             }}
                             autoSize={{ minRows: asset ? 3 : 2, maxRows: 5 }}
@@ -570,7 +580,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                             <Input.TextArea
                                 value={draft.profile[key]}
                                 onChange={(event) => {
-                                    setOptimizedAssetPrompt("");
+                                    setSupplierPromptOverride("");
                                     setDraft((current) => ({ ...current, profile: { ...current.profile, [key]: event.target.value } }));
                                 }}
                                 autoSize={{ minRows: asset ? 2 : 1, maxRows: 4 }}
@@ -728,7 +738,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                             <Input.TextArea
                                 value={refinementPrompt}
                                 onChange={(event) => {
-                                    setOptimizedAssetPrompt("");
+                                    setSupplierPromptOverride("");
                                     setRefinementPrompt(event.target.value);
                                 }}
                                 autoSize={{ minRows: 3, maxRows: 6 }}
@@ -776,10 +786,26 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                                 </div>
                                 {asset && kind !== "clues" ? (
                                     <details className="mt-2 rounded-lg border border-border bg-background px-3 py-2 text-xs leading-5">
-                                        <summary className="cursor-pointer font-medium text-foreground">查看实际供应商提示词</summary>
-                                        <pre className="mt-2 max-h-[min(55vh,520px)] overflow-y-auto whitespace-pre-wrap break-words font-sans text-muted-foreground" data-drama-supplier-prompt>
-                                            {supplierPrompt || "暂无可发送的供应商提示词"}
-                                        </pre>
+                                        <summary className="cursor-pointer font-medium text-foreground">实际供应商提示词（可编辑）</summary>
+                                        <div className="mt-2 grid gap-2">
+                                            <Input.TextArea
+                                                value={supplierPrompt}
+                                                onChange={(event) => {
+                                                    setSupplierPromptOverride(event.target.value);
+                                                }}
+                                                aria-label="供应商提示词"
+                                                autoSize={{ minRows: 7, maxRows: 16 }}
+                                                placeholder="暂无可发送的供应商提示词"
+                                                data-drama-supplier-prompt
+                                            />
+                                            {supplierPromptOverride ? (
+                                                <div className="flex justify-end">
+                                                    <Button size="small" icon={<RotateCcw className="size-3.5" />} onClick={() => setSupplierPromptOverride("")}>
+                                                        恢复自动提示词
+                                                    </Button>
+                                                </div>
+                                            ) : null}
+                                        </div>
                                     </details>
                                 ) : null}
                             </div>
@@ -807,12 +833,6 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                                 </div>
                             ) : null}
                         </div>
-                        {optimizedAssetPrompt ? (
-                            <details className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50/60 px-3 py-2 text-xs leading-5 dark:border-emerald-900/60 dark:bg-emerald-950/20" data-drama-asset-optimized-prompt>
-                                <summary className="cursor-pointer font-medium text-emerald-800 dark:text-emerald-200">已优化提示词（生成候选将使用）</summary>
-                                <pre className="mt-2 max-h-56 overflow-y-auto whitespace-pre-wrap font-sans text-muted-foreground">{optimizedAssetPrompt}</pre>
-                            </details>
-                        ) : null}
                         {!references.length ? <div className="mt-4 rounded-lg border border-dashed border-border bg-muted/25 px-4 py-4 text-center text-sm text-muted-foreground">还没有参考图，可上传已有设定或生成候选图。</div> : null}
                         {references.length ? (
                             <Image.PreviewGroup>
@@ -941,7 +961,7 @@ function DramaSourceImagePicker({ project, onSelect }: { project: DramaProject; 
                                     }}
                                     title={source.title || "项目来源图片"}
                                 >
-                                    <Image src={imagePreviewUrl(url, 192)} alt={source.title || "项目来源图片"} rootClassName="!block !aspect-square !w-full" className="!size-full !object-cover" preview={false} />
+                                    <Image src={imagePreviewUrl(url, 192)} alt={source.title || "项目来源图片"} rootClassName="!block !aspect-square !w-full" className="!size-full !object-contain" preview={false} />
                                     <span className="block truncate px-1.5 py-1 text-[10px]">{source.title || "未命名图片"}</span>
                                 </button>
                             );

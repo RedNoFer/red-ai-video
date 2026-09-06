@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { refreshUserPointsIfSystem } from "@/services/api/points";
-import { optimizePrompt } from "./prompt-optimization";
+import { optimizeDramaAssetPrompt, optimizePrompt } from "./prompt-optimization";
 
 vi.mock("@/services/api/points", () => ({ refreshUserPointsIfSystem: vi.fn(async () => undefined) }));
 vi.mock("@/services/api/session-expiration", () => ({ throwIfClientSessionExpired: vi.fn() }));
@@ -25,5 +25,23 @@ describe("prompt optimization API client", () => {
 
         await expect(optimizePrompt({ requestId: "request-one", prompt: "原文", mode: "agent" })).rejects.toThrow("后台尚未配置可用的默认文本模型");
         expect(refreshUserPointsIfSystem).toHaveBeenCalledWith("system");
+    });
+
+    it("returns structured fields for drama asset optimization", async () => {
+        vi.mocked(fetch).mockResolvedValue(
+            Response.json({
+                code: 0,
+                data: {
+                    prompt: "主体与资产类型：角色",
+                    fields: { description: "少年", visualIdentity: "黑发", styling: "墨色长袍", colorPalette: "墨黑", consistencyRules: "三视图一致" },
+                },
+                msg: "OK",
+            }),
+        );
+
+        await expect(optimizeDramaAssetPrompt("角色", "原提示词", "asset-request")).resolves.toEqual({
+            optimizedPrompt: "主体与资产类型：角色",
+            fields: { description: "少年", visualIdentity: "黑发", styling: "墨色长袍", colorPalette: "墨黑", consistencyRules: "三视图一致" },
+        });
     });
 });

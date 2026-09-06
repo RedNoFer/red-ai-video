@@ -1,10 +1,15 @@
 "use client";
 
 import type { CreativeGenerationMode } from "@/lib/creative-runtime-contract";
+import type { DramaAssetPromptOptimization } from "@/lib/drama-project-contract";
 import { refreshUserPointsIfSystem } from "@/services/api/points";
 import { throwIfClientSessionExpired } from "@/services/api/session-expiration";
 
-export async function optimizePrompt(input: { requestId: string; prompt: string; mode: "agent" | CreativeGenerationMode | "drama-frame" | "drama-asset" }) {
+type PromptOptimizationInput = { requestId: string; prompt: string; mode: "agent" | CreativeGenerationMode | "drama-frame" | "drama-asset" };
+type AssetPromptOptimizationInput = Omit<PromptOptimizationInput, "mode"> & { mode: "drama-asset" };
+type NonAssetPromptOptimizationInput = Omit<PromptOptimizationInput, "mode"> & { mode: "agent" | CreativeGenerationMode | "drama-frame" };
+
+async function optimizePromptResult(input: PromptOptimizationInput) {
     try {
         const response = await fetch("/api/agent/prompt-optimization", {
             method: "POST",
@@ -12,13 +17,24 @@ export async function optimizePrompt(input: { requestId: string; prompt: string;
             body: JSON.stringify(input),
         });
         throwIfClientSessionExpired(response);
-        const payload = (await response.json().catch(() => null)) as { data?: { prompt?: string }; msg?: string } | null;
+        const payload = (await response.json().catch(() => null)) as { data?: { prompt?: string; fields?: DramaAssetPromptOptimization["fields"] }; msg?: string } | null;
         const prompt = payload?.data?.prompt?.trim();
         if (!response.ok || !prompt) throw new Error(payload?.msg || "提示词优化失败");
-        return prompt;
+        return { prompt, fields: payload?.data?.fields };
     } finally {
         void refreshUserPointsIfSystem("system");
     }
+}
+
+export function optimizePrompt(input: AssetPromptOptimizationInput): Promise<DramaAssetPromptOptimization>;
+export function optimizePrompt(input: NonAssetPromptOptimizationInput): Promise<string>;
+export async function optimizePrompt(input: PromptOptimizationInput): Promise<string | DramaAssetPromptOptimization> {
+    const result = await optimizePromptResult(input);
+    if (input.mode === "drama-asset") {
+        if (!result.fields) throw new Error("提示词优化未返回完整资产字段");
+        return { optimizedPrompt: result.prompt, fields: result.fields } satisfies DramaAssetPromptOptimization;
+    }
+    return result.prompt;
 }
 
 export function optimizeDramaFramePrompt(prompt: string, requestId = crypto.randomUUID()) {

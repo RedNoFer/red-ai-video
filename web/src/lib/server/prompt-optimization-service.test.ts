@@ -82,7 +82,10 @@ describe("prompt optimization service", () => {
 
     it("uses the dedicated drama asset skill and forces a white-background three-view character sheet", async () => {
         vi.mocked(requestStructuredText).mockResolvedValue({
-            arguments: JSON.stringify({ optimizedPrompt: "主体与资产类型：角色；身份/结构锚点：固定五官与黑色短发；构图与画幅：单人全身，9:16。" }),
+            arguments: JSON.stringify({
+                optimizedPrompt: "主体与资产类型：角色；身份/结构锚点：固定五官与黑色短发；可见状态与材质：黑色短发与深色服装；构图与画幅：单人全身，9:16。",
+                fields: { description: "少年角色", visualIdentity: "固定五官与黑色短发", styling: "黑色短发与深色服装", colorPalette: "黑灰", consistencyRules: "三视图保持同一身份与服装结构" },
+            }),
             headers: new Headers(),
             protocol: "chat",
             elapsedMs: 10,
@@ -103,10 +106,35 @@ describe("prompt optimization service", () => {
         expect(systemMessage).toContain("正面、侧面、背面");
         expect(systemMessage).toContain("不得添加主立绘、肖像特写、表情组、手部或道具拆解");
         expect(systemMessage).toContain("主体与资产类型");
-        expect(result).toContain("构图与画幅：16:9 横向");
-        expect(result).toContain("纯白色无缝背景");
-        expect(result).toContain("正面、侧面、背面");
-        expect(result).not.toContain("单人全身，9:16");
+        expect(systemMessage).toContain("角色质量契约");
+        expect(systemMessage).toContain("男性不女性化");
+        expect(systemMessage).toContain("不得用“高级、绝美、顶级、仙气”等空泛形容词替代具体事实");
+        expect(result.optimizedPrompt).toContain("构图与画幅：16:9 横向");
+        expect(result.optimizedPrompt).toContain("纯白色无缝背景");
+        expect(result.optimizedPrompt).toContain("正面、严格左侧面、背面");
+        expect(result.optimizedPrompt).not.toContain("单人全身，9:16");
+        expect(result.fields).toMatchObject({ description: "少年角色", visualIdentity: "固定五官与黑色短发", styling: "黑色短发与深色服装", colorPalette: "黑灰", consistencyRules: expect.stringContaining("三视图保持同一身份与服装结构") });
+        expect(result.fields.consistencyRules).toContain("严格左侧面");
+    });
+
+    it("rejects a drama asset response that does not use the complete fixed fields object", async () => {
+        vi.mocked(requestStructuredText).mockResolvedValue({
+            arguments: JSON.stringify({ optimizedPrompt: "主体与资产类型：角色；身份/结构锚点：固定五官" }),
+            headers: new Headers(),
+            protocol: "chat",
+            elapsedMs: 10,
+        });
+
+        await expect(
+            optimizeCreativePrompt({
+                origin: "http://localhost:3000",
+                cookie: "session=1",
+                userId: "user-one",
+                requestId: "asset-invalid-fields",
+                prompt: "【资产类型】角色\n【当前提示词】\n角色设定",
+                mode: "drama-asset",
+            }),
+        ).rejects.toThrow("默认文本模型没有返回有效提示词");
     });
 
     it("optimizes video prompts around visible action beats", async () => {
