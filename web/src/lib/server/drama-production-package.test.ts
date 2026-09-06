@@ -617,6 +617,18 @@ describe("production package boundary", () => {
         expect(prompt).toContain("静态关键帧：梦中惊醒");
     });
 
+    it("rebuilds generic template frame copy on package import", () => {
+        const legacy = structuredClone(productionPackage);
+        legacy.episodes[0].shots[0].framePlan.frames[0].actionPrompt = "人物抬眼并收紧手指";
+        legacy.episodes[0].shots[0].framePlan.frames[0].imagePrompt = "静态关键帧：人物抬眼并收紧手指；可见状态：动作入口已成立；可见表演状态：主体的眉眼、呼吸、手部和道具接触关系清晰可见，情绪通过身体动作呈现；景别：中景；机位与构图：平视；站位与视线：人物在右侧；三层空间：前景门框，中景人物，背景大厅；光色与风格：冷光；负面约束：无水印";
+
+        const imported = previewDramaProductionPackage(JSON.stringify(legacy), "package.json").package;
+        const prompt = imported.episodes[0].shots[0].framePlan.frames[0].imagePrompt;
+        expect(prompt).toContain("眉眼抬起");
+        expect(prompt).not.toContain("动作入口已成立");
+        expect(prompt).not.toContain("主体的眉眼、呼吸、手部和道具接触关系清晰可见");
+    });
+
     it("allows a regenerated package to be identified and applied again", () => {
         const first = applyDramaProductionPackage(project(), productionPackage, "hash-regenerated");
         const second = applyDramaProductionPackage(first, productionPackage, "hash-regenerated");

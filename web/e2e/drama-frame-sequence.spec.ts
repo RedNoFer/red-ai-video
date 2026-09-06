@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 
+import { createFrameEvidence } from "../src/lib/drama-continuity-policy";
 import type { DramaProject } from "../src/lib/drama-project-contract";
 import { expectNoHorizontalOverflow } from "./responsive-helpers";
 
@@ -49,6 +50,9 @@ test("drama all-frame editor keeps one beat per row across desktop, mobile and d
                         videoMode: "storyboard",
                         storyboardFrameMode: "all_frames",
                         framePlan: { start: { source: "independent" }, end: { required: false }, frames },
+                        frameEvidence: frames.slice(0, 2).map((frame) =>
+                            createFrameEvidence({ role: "storyboard_keyframe", sequenceIndex: frame.sequenceIndex, source: "upload", mediaUrl: "/logo.svg", sourceShotId: "shot-frame-sequence", validity: "candidate" }),
+                        ),
                         storyboardFrames: frames.map((frame, index) => ({
                             id: frame.id,
                             sequenceIndex: frame.sequenceIndex,
@@ -94,6 +98,25 @@ test("drama all-frame editor keeps one beat per row across desktop, mobile and d
     await inspectionButton.click();
     await expect(page.getByText("帧 1 检验通过")).toBeVisible();
     expect(inspectionRequested).toBe(true);
+    const removeFirstFrame = firstFrame.getByRole("button", { name: "移除帧 1 图片" });
+    await removeFirstFrame.click();
+    const removeDialog = page.getByRole("dialog", { name: /删除帧 1 图片/ });
+    await expect(removeDialog).toBeVisible();
+    await expect(firstFrame.getByAltText("帧 1")).toBeVisible();
+    await removeDialog.getByRole("button", { name: "取消" }).click();
+    await expect(removeDialog).toBeHidden();
+    await expect(firstFrame.getByAltText("帧 1")).toBeVisible();
+    await removeFirstFrame.click();
+    await expect(removeDialog).toBeVisible();
+    const removeSave = page.waitForRequest((request) => request.method() === "PATCH" && request.url().includes(`/api/drama/projects/${project.id}`));
+    await removeDialog.getByRole("button", { name: "确认删除" }).click();
+    await removeSave;
+    await expect(firstFrame.getByAltText("帧 1")).toBeHidden();
+    await expect(firstFrame.getByRole("button", { name: "上传帧 1" })).toBeVisible();
+    const afterDelete = ((await (await request.get(`/api/drama/projects/${project.id}`)).json()) as { data: { project: DramaProject } }).data.project;
+    expect(afterDelete.episodes[0].shots[0].storyboardFrames?.[0]).toMatchObject({ id: "beat-1", status: "stale" });
+    expect(afterDelete.episodes[0].shots[0].storyboardFrames?.[0].mediaUrl).toBeUndefined();
+    expect(afterDelete.episodes[0].shots[0].frameEvidence?.find((frame) => frame.role === "storyboard_keyframe" && frame.sequenceIndex === 1)?.validity).toBe("superseded");
     await assertVerticalRows(sequence);
     await expectNoHorizontalOverflow(page, "1672px light frame sequence");
 

@@ -7,6 +7,7 @@ import { useDeferredValue, useMemo, useState } from "react";
 import { LabeledControl, SectionTitle } from "@/components/admin/admin-settings-controls";
 import type { LogicalModel, LogicalModelBinding, LogicalModelCapability, LogicalModelCapabilityProfile, SystemDefaultModels, SystemModelChannel } from "@/lib/auth/store";
 import { capabilityLabel, isLogicalModelResolvable, modelRoutingValidationErrors, normalizeDefaultModelsConfig, resolveLogicalModelConfig, synchronizeLogicalModelsWithChannels } from "@/lib/model-routing-config";
+import { resolveBumingSeedanceQuality, resolveBumingSeedanceQualityOptions } from "@/lib/channel-protocol-registry";
 
 type Props = {
     channels: SystemModelChannel[];
@@ -268,6 +269,7 @@ export function AdminLogicalModelManager({ channels, logicalModels, defaultModel
 function BindingEditor({ binding, capability, channels, onChange }: { binding: LogicalModelBinding; capability: LogicalModelCapability; channels: SystemModelChannel[]; onChange: (patch: Partial<LogicalModelBinding>) => void }) {
     const channel = channels.find((item) => item.id === binding.channelId);
     const profile = binding.capabilityProfile || {};
+    const bumingQualityOptions = channel?.advancedConfig?.protocol === "buming-seedance" && capability === "video" ? [...resolveBumingSeedanceQualityOptions(binding.upstreamModel)] : [];
     const effectiveAsync = profile.supportsAsync ?? (capability === "image" || capability === "video");
     const timeoutSeconds = profile.timeoutMs ? Math.round(profile.timeoutMs / 1000) : undefined;
     const defaultTimeoutSeconds = capability === "image" ? 600 : capability === "text" ? 180 : 1800;
@@ -335,6 +337,11 @@ function BindingEditor({ binding, capability, channels, onChange }: { binding: L
                     <LabeledControl label="最大参考图数量">
                         <InputNumber className="w-full" min={0} max={16} precision={0} value={profile.maxReferenceImages} onChange={(value) => updateProfile({ maxReferenceImages: Number(value) || 0 })} />
                     </LabeledControl>
+                    {bumingQualityOptions.length ? (
+                        <LabeledControl label="版本档位">
+                            <Select className="w-full" value={resolveBumingSeedanceQuality(binding.upstreamModel, profile.bumingQuality)} options={bumingQualityOptions} onChange={(value) => updateProfile({ bumingQuality: value })} />
+                        </LabeledControl>
+                    ) : null}
                     <LabeledControl label="最大批量数量">
                         <InputNumber className="w-full" min={1} max={100} precision={0} value={profile.maxBatchSize} onChange={(value) => updateProfile({ maxBatchSize: Number(value) || 1 })} />
                     </LabeledControl>

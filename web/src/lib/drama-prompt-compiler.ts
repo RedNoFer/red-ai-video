@@ -1,5 +1,13 @@
 import type { DramaAssetRefinementProposal, DramaContinuityState, DramaEpisode, DramaFrameBeat, DramaNamedAsset, DramaProject, DramaReferenceManifestItem, DramaShot, DramaShotContinuity } from "@/lib/drama-project-contract";
-import { DRAMA_CHARACTER_NEGATIVE_RULES, DRAMA_CHARACTER_SUPPLIER_QUALITY_RULES } from "@/lib/drama-character-rules";
+import {
+    DRAMA_CHARACTER_FACE_MODELING_RULES,
+    DRAMA_CHARACTER_HAIR_MODELING_RULES,
+    DRAMA_CHARACTER_NEGATIVE_RULES,
+    DRAMA_CHARACTER_RENDER_STYLE,
+    DRAMA_CHARACTER_STUDIO_LIGHT_RULES,
+    DRAMA_CHARACTER_SUPPLIER_QUALITY_RULES,
+    DRAMA_CHARACTER_WARDROBE_MATERIAL_RULES,
+} from "@/lib/drama-character-rules";
 import { resolveDramaStyleContract, sanitizeDramaVisualPrompt } from "@/lib/drama-style";
 import { upgradeDramaFrameImagePrompt } from "@/lib/drama-frame-sequence";
 
@@ -266,11 +274,35 @@ export function compileDramaFrameSupplierPrompt(project: DramaProject, episode: 
         sequenceIndex,
         forceRefresh: frameSceneChanged && !preservesManualPrompt,
     });
-    return sanitizeDramaSupplierText(appendStaticFramePositionConstraint(staticPrompt, scenePhysicalConstraint(scene, characters.length)), project);
+    const withPosition = appendStaticFramePositionConstraint(staticPrompt, scenePhysicalConstraint(scene, characters.length));
+    return sanitizeDramaSupplierText(appendAdjacentFrameDifference(withPosition, shot, beat), project);
+}
+
+function appendAdjacentFrameDifference(prompt: string, shot: DramaShot, beat?: DramaFrameBeat) {
+    if (!beat || beat.sequenceIndex <= 1) return prompt;
+    const previous = shot.framePlan?.frames?.find((frame) => frame.sequenceIndex === beat.sequenceIndex - 1);
+    if (!previous) return prompt;
+    const currentState = visibleFrameState(beat);
+    const previousState = visibleFrameState(previous);
+    if (!currentState || !previousState || currentState === previousState) return prompt;
+    const lines = prompt.split("\n");
+    const stateLine = lines.findIndex((line) => line.startsWith("可见状态："));
+    if (stateLine < 0) return prompt;
+    lines[stateLine] = `${lines[stateLine]}；相较上一帧，当前帧必须已经变为：${currentState}；上一帧仅用于身份、场景、光向和轴线连续，禁止复制上一帧的可见状态（${previousState}）`;
+    return lines.join("\n");
+}
+
+function visibleFrameState(frame: DramaFrameBeat) {
+    return frame.imagePrompt.match(/可见状态[：:]([^\n]+)/u)?.[1]?.trim() || frame.actionPrompt.trim();
 }
 
 function isCurrentStaticFramePrompt(value: string) {
-    return /^静态关键帧[：:]/u.test(value) && ["可见表演状态", "景别", "机位与构图", "站位与视线", "三层空间", "光色与风格", "负面约束"].every((label) => new RegExp(`${label}[：:]`, "u").test(value)) && !/参考图职责[：:]/u.test(value);
+    return (
+        /^静态关键帧[：:]/u.test(value) &&
+        ["可见表演状态", "景别", "机位与构图", "站位与视线", "三层空间", "光色与风格", "负面约束"].every((label) => new RegExp(`${label}[：:]`, "u").test(value)) &&
+        !/参考图职责[：:]/u.test(value) &&
+        !/(?:主体的眉眼、呼吸、手部和道具接触关系清晰可见|眉眼、视线和手部动作与当前节拍一致|情绪通过身体动作呈现|表情保持稳定|冻结为单一静态姿态)/u.test(value)
+    );
 }
 
 function scenePhysicalConstraint(scene: DramaNamedAsset | undefined, characterCount: number) {
@@ -343,13 +375,15 @@ export function compileDramaAssetReferencePrompt(project: Pick<DramaProject, "ti
         kind === "角色"
             ? `${DRAMA_CHARACTER_TURNAROUND_SIZE} 横向，纯白色无缝背景；同一角色的正面、严格左侧面、背面三视图等距水平排列，全身立姿从头顶、完整头部、躯干、双臂、双手、双腿到鞋靴完整入画，同一基线、同一头身比。`
             : `${project.ratio || "9:16"} 画幅，单一${kind}主体完整入画，无人物拼版。`;
+    const characterStyle = styleContract.source === "custom" ? `项目视觉风格：${styleContract.visualDescription}` : "";
+    const characterLightingStyle = [characterStyle, DRAMA_CHARACTER_RENDER_STYLE, DRAMA_CHARACTER_STUDIO_LIGHT_RULES, DRAMA_CHARACTER_SUPPLIER_QUALITY_RULES, colorPalette ? `角色固有色彩：${colorPalette}` : ""].filter(Boolean).join("；");
     return compact([
         `主体与资产类型：${kind}「${asset.name}」`,
         `身份/结构锚点：${joinAssetPromptFacts([description, visualIdentity]) || "沿用当前资产已确认设定"}`,
         consistency ? `一致性锁定：${consistency}` : "",
-        `可见状态与材质：${stylingForPrompt || "按身份设定中的服装、材质和关键配件呈现"}`,
+        `可见状态与材质：${stylingForPrompt || "按身份设定中的服装、材质和关键配件呈现"}${kind === "角色" ? `；${DRAMA_CHARACTER_FACE_MODELING_RULES}；${DRAMA_CHARACTER_HAIR_MODELING_RULES}；${DRAMA_CHARACTER_WARDROBE_MATERIAL_RULES}` : ""}`,
         `构图与画幅：${layout}`,
-        `光色与风格：${kind === "角色" ? `角色本体使用「${styleContract.name}」的人物五官、发丝、服装与材质方向；均匀低干扰棚拍光；${DRAMA_CHARACTER_SUPPLIER_QUALITY_RULES}${colorPalette ? `；角色固有色彩：${colorPalette}` : ""}` : `${styleContract.visualDescription}${colorPalette ? `；固定色彩：${colorPalette}` : ""}`}`,
+        `光色与风格：${kind === "角色" ? characterLightingStyle : `${styleContract.visualDescription}${colorPalette ? `；固定色彩：${colorPalette}` : ""}`}`,
         `负面约束：${forbidden}`,
     ]).join("\n");
 }

@@ -7,7 +7,16 @@ import { resolveTextPlanningModelCandidates } from "@/lib/server/logical-model-r
 import { hasSystemAiCharge, readSystemAiBilling, systemAiBillingHeaders, systemAiIdempotencyKey } from "@/lib/server/system-ai-billing";
 import { rankTextPlanningCandidates, requestStructuredText } from "@/lib/server/text-planning-runtime";
 import { DRAMA_ASSET_IMAGE_SKILL } from "@/lib/drama-image-skill";
-import { DRAMA_CHARACTER_PROFILE_CONTRACT, DRAMA_CHARACTER_SUPPLIER_QUALITY_RULES, normalizeDramaCharacterProfile } from "@/lib/drama-character-rules";
+import {
+    DRAMA_CHARACTER_FACE_MODELING_RULES,
+    DRAMA_CHARACTER_HAIR_MODELING_RULES,
+    DRAMA_CHARACTER_PROFILE_CONTRACT,
+    DRAMA_CHARACTER_RENDER_STYLE,
+    DRAMA_CHARACTER_STUDIO_LIGHT_RULES,
+    DRAMA_CHARACTER_SUPPLIER_QUALITY_RULES,
+    DRAMA_CHARACTER_WARDROBE_MATERIAL_RULES,
+    normalizeDramaCharacterProfile,
+} from "@/lib/drama-character-rules";
 
 export class DramaAssetRefinementError extends Error {
     constructor(
@@ -78,7 +87,7 @@ export async function refineDramaAssetWithModel(input: {
 function refinementInstruction(kind: "characters" | "scenes" | "props") {
     const rules =
         kind === "characters"
-            ? `允许调整肤色、肤质、妆容、发型发色、服装剪裁材质层次配饰、体态和气质。姓名、身份、核心年龄、关键五官、已确认身份锚点、标志色与一致性规则默认不可改变。肤色调整不得擅自改变族裔、脸型或年龄。服装必须体现剧情身份、职业和个人经历，禁止通用 NPC、RPG 套装、模板化盔甲和无意义装饰。角色字段契约：${DRAMA_CHARACTER_PROFILE_CONTRACT}角色供应商质量要求：${DRAMA_CHARACTER_SUPPLIER_QUALITY_RULES}`
+            ? `允许调整肤色、肤质、妆容、发型发色、服装剪裁材质层次配饰、体态和气质。姓名、身份、核心年龄、关键五官、已确认身份锚点、标志色与一致性规则默认不可改变。肤色调整不得擅自改变族裔、脸型或年龄。服装必须体现剧情身份、职业和个人经历，禁止通用 NPC、RPG 套装、模板化盔甲和无意义装饰。角色字段契约：${DRAMA_CHARACTER_PROFILE_CONTRACT}角色供应商质量要求：${DRAMA_CHARACTER_SUPPLIER_QUALITY_RULES}角色五官建模：${DRAMA_CHARACTER_FACE_MODELING_RULES}角色头发建模：${DRAMA_CHARACTER_HAIR_MODELING_RULES}角色服装材质：${DRAMA_CHARACTER_WARDROBE_MATERIAL_RULES}角色渲染技术：${DRAMA_CHARACTER_RENDER_STYLE}角色棚拍光线：${DRAMA_CHARACTER_STUDIO_LIGHT_RULES}`
             : kind === "scenes"
               ? "允许调整材质、陈设、光线、天气和时间；空间结构、入口和主要物件位置默认不可改变。"
               : "允许调整材质、磨损、颜色和细节结构；外形轮廓和关键识别特征默认不可改变。";

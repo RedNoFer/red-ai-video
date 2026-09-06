@@ -1,7 +1,7 @@
 import type { LogicalModel, LogicalModelBinding, LogicalModelCapability, LogicalModelCapabilityProfile, LogicalModelCostBasis, SystemChannelProtocol, SystemDefaultModels, SystemModelChannel } from "@/lib/auth/store";
 import { resolveGlobalAiOpcPreset } from "@/lib/globalaiopc-catalog";
 import { inferModelCapability, isCreativeGenerationModel, normalizeModelId } from "@/lib/model-capability";
-import { channelConnectionReady, channelProtocolDefinition, protocolCatalogCapability, resolveChannelCapabilityConfig, resolveChannelModelConfig } from "@/lib/channel-protocol-registry";
+import { channelConnectionReady, channelProtocolDefinition, protocolCatalogCapability, resolveBumingSeedanceQualityOptions, resolveChannelCapabilityConfig, resolveChannelModelConfig } from "@/lib/channel-protocol-registry";
 
 const CAPABILITY_DEFAULT_KEYS = {
     text: "textModel",
@@ -244,7 +244,9 @@ export function resolveLogicalModelCapabilityProfile(binding: Pick<LogicalModelB
     const advanced = channel?.advancedConfig;
     const globalPreset = resolveGlobalAiOpcPreset(advanced, upstreamModel);
     const modelConfig = resolveChannelModelConfig(advanced, upstreamModel) || advanced?.operationConfigs?.[capability];
+    const bumingQualityOptions = advanced?.protocol === "buming-seedance" && capability === "video" ? resolveBumingSeedanceQualityOptions(upstreamModel) : [];
     return {
+        ...(bumingQualityOptions.length ? { bumingQuality: text(stored.bumingQuality, 40) || "标准" } : {}),
         supportsReferenceImage: booleanValue(stored.supportsReferenceImage, globalPreset?.supportsReferenceImage ?? modelConfig?.supportsReferenceImage ?? advanced?.supportsReferenceImage),
         supportsReferenceVideo: booleanValue(stored.supportsReferenceVideo, globalPreset?.supportsReferenceVideo ?? modelConfig?.supportsReferenceVideo ?? advanced?.supportsReferenceVideo),
         supportsReferenceAudio: booleanValue(stored.supportsReferenceAudio, globalPreset?.supportsReferenceAudio ?? modelConfig?.supportsReferenceAudio ?? advanced?.supportsReferenceAudio),
@@ -352,6 +354,7 @@ function normalizeStoredCapabilityProfile(value: unknown): LogicalModelCapabilit
     if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
     const input = value as Record<string, unknown>;
     const profile: LogicalModelCapabilityProfile = {
+        bumingQuality: text(input.bumingQuality, 40) || undefined,
         supportsReferenceImage: optionalBoolean(input.supportsReferenceImage),
         supportsReferenceVideo: optionalBoolean(input.supportsReferenceVideo),
         supportsReferenceAudio: optionalBoolean(input.supportsReferenceAudio),

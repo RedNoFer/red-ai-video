@@ -29,17 +29,20 @@ describe("drama visual style contract", () => {
         expect(resolveDramaColorScript(project)).toBe("");
     });
 
-    it("uses the non-empty project style before the bible style, including the explicit default", () => {
-        expect(resolveDramaStyleContract({ style: DRAMA_STYLE_NAME, productionBible: { visualStyle: "其他风格" } })).toMatchObject({ source: "default", name: DRAMA_STYLE_NAME });
+    it("uses a custom bible style when the top-level style is the stale built-in default", () => {
+        expect(resolveDramaStyleContract({ style: DRAMA_STYLE_NAME, productionBible: { visualStyle: "其他风格" } })).toMatchObject({ source: "custom", name: "其他风格", visualDescription: "其他风格" });
     });
 
-    it("keeps the explicit default project style ahead of a custom bible value", () => {
-        const style = "自然光真人影视感，冷灰蓝低饱和";
-        expect(resolveDramaStyleContract({ style: DRAMA_STYLE_NAME, productionBible: { visualStyle: style } })).toMatchObject({
-            source: "default",
-            name: DRAMA_STYLE_NAME,
-            visualDescription: DRAMA_STYLE_DESCRIPTION,
+    it("recognizes the legacy dark-academy default as built-in when a project Bible has custom style", () => {
+        expect(resolveDramaStyleContract({ style: "半写实动漫幻想风 · 暗黑学院史诗奇幻", productionBible: { visualStyle: "VS7 东方玄幻修仙 + 3D 国漫电影质感 + PBR 材质" } })).toMatchObject({
+            source: "custom",
+            name: "VS7 东方玄幻修仙 + 3D 国漫电影质感 + PBR 材质",
         });
+    });
+
+    it("keeps the built-in default only when no custom project style is configured", () => {
+        const style = "自然光真人影视感，冷灰蓝低饱和";
+        expect(resolveDramaStyleContract({ style: DRAMA_STYLE_NAME, productionBible: { visualStyle: style } })).toMatchObject({ source: "custom", name: style, visualDescription: style });
     });
 
     it("preserves an explicitly configured non-default color script for custom styles", () => {

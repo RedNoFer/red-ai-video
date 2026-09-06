@@ -1,5 +1,5 @@
 import type { DramaProductionPackageV1 } from "@/lib/drama-project-contract";
-import { formatPromptFieldLines } from "@/lib/drama-frame-sequence";
+import { formatPromptFieldLines, upgradeDramaFrameImagePrompt } from "@/lib/drama-frame-sequence";
 
 export function serializeDramaProductionPackageJson(value: DramaProductionPackageV1) {
     return `${JSON.stringify(withDeterministicVideoSection(value), null, 2)}\n`;
@@ -29,7 +29,18 @@ function withDeterministicVideoSection(value: DramaProductionPackageV1): DramaPr
                     ...shot.framePlan,
                     frames: shot.framePlan.frames.map((frame) => ({
                         ...frame,
-                        imagePrompt: formatPromptFieldLines(frame.imagePrompt, "static"),
+                        imagePrompt: formatPromptFieldLines(needsLegacyFrameRewrite(frame.imagePrompt) ? upgradeDramaFrameImagePrompt(frame.imagePrompt, frame.actionPrompt, {
+                            description: shot.description,
+                            shotSize: shot.continuity?.shotSize || "中景",
+                            cameraAngle: shot.continuity?.cameraAngle || "视线高度平视",
+                            composition: shot.continuity?.composition || "主体位于画面安全区，前景有具体框景",
+                            characterBlocking: shot.continuity?.characterBlocking || "按当前动作关系安排主体站位",
+                            gazeDirection: shot.continuity?.gazeDirection || "视线落向当前叙事目标",
+                            lighting: shot.lighting || "延续本场主光",
+                            colorPalette: shot.colorPalette || "沿用本场色板",
+                            sequenceIndex: frame.sequenceIndex,
+                            frameCount: shot.framePlan.frames.length,
+                        }) : frame.imagePrompt, "static"),
                         ...(frame.supplierPrompt ? { supplierPrompt: formatPromptFieldLines(frame.supplierPrompt, "static") } : {}),
                     })),
                 },
@@ -48,6 +59,10 @@ function withDeterministicVideoSection(value: DramaProductionPackageV1): DramaPr
             })),
         },
     };
+}
+
+function needsLegacyFrameRewrite(prompt: string) {
+    return /(?:入口构图已建立|入口姿态、表情与视线已建立|动作入口已成立|动作节点的可见结果已经成立|动作展开|关键变化|结果状态|主体的眉眼、呼吸、手部和道具接触关系清晰可见|情绪通过身体动作呈现|眉眼、视线和手部动作与当前节拍一致)/u.test(prompt);
 }
 
 const FIXED_CHAPTER_TITLES = [

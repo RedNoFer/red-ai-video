@@ -2,7 +2,17 @@ import { getAuthSettings, refundUserPoints } from "@/lib/auth/store";
 import { CREATE_AGENT_PROMPT_MAX_LENGTH } from "@/lib/create-agent-prompt";
 import { formatPromptFieldLines } from "@/lib/drama-frame-sequence";
 import { DRAMA_ASSET_IMAGE_SKILL } from "@/lib/drama-image-skill";
-import { DRAMA_CHARACTER_DEFAULT_CONSISTENCY, DRAMA_CHARACTER_NEGATIVE_RULES, DRAMA_CHARACTER_PROFILE_CONTRACT, DRAMA_CHARACTER_SUPPLIER_QUALITY_RULES } from "@/lib/drama-character-rules";
+import {
+    DRAMA_CHARACTER_DEFAULT_CONSISTENCY,
+    DRAMA_CHARACTER_FACE_MODELING_RULES,
+    DRAMA_CHARACTER_HAIR_MODELING_RULES,
+    DRAMA_CHARACTER_NEGATIVE_RULES,
+    DRAMA_CHARACTER_PROFILE_CONTRACT,
+    DRAMA_CHARACTER_RENDER_STYLE,
+    DRAMA_CHARACTER_STUDIO_LIGHT_RULES,
+    DRAMA_CHARACTER_SUPPLIER_QUALITY_RULES,
+    DRAMA_CHARACTER_WARDROBE_MATERIAL_RULES,
+} from "@/lib/drama-character-rules";
 import { DRAMA_CHARACTER_TURNAROUND_SIZE } from "@/lib/drama-prompt-compiler";
 import type { CreativeGenerationMode } from "@/lib/creative-runtime-contract";
 import { DRAMA_CONTINUOUS_FRAME_RULES, SEEDANCE_DIRECTOR_SKILL, SEEDANCE_STATIC_FRAME_PROMPT_LAYOUT, SEEDANCE_STATIC_FRAME_RULES, SEEDANCE_VIDEO_PROMPT_LAYOUT } from "@/lib/server/agent-skills/creative-shortcuts";
@@ -78,7 +88,7 @@ function promptOptimizationInstruction(mode: PromptOptimizationMode, prompt = ""
             kind === "角色"
                 ? "角色固定为一张纯白色无缝背景的三视图角色基准板：正面、侧面、背面全身立姿等距水平排列，侧面固定为左侧，同一基线、同一头身比、同一脸部、发型、服装和关键道具。三视图只表示同一个角色；不得添加主立绘、肖像特写、表情组、手部或道具拆解、额外角度、边框、网格、文字或水印。"
                 : "场景或道具固定为一张完整、独立的单主体基准图，不得添加人物、拼版、文字或水印。";
-        return `你是 VOZEB PRO 的短剧资产图片提示词编辑器。当前资产类型是“${kind}”。必须调用固定 JSON 工具返回结果，JSON 只能包含 optimizedPrompt 和 fields 两个顶层键；fields 必须完整包含 description、visualIdentity、styling、colorPalette、consistencyRules 五个字符串键，不得缺失、改名或增加键。optimizedPrompt 是可直接提交给图片供应商的中文公开生图提示词，不得包含 JSON、解释、分析、Markdown 标题、内部规则、模型理由、ID 或 URL。\n${DRAMA_ASSET_IMAGE_SKILL.instructions}\n${kind === "角色" ? `角色质量契约：${DRAMA_CHARACTER_PROFILE_CONTRACT}\n角色供应商质量要求：${DRAMA_CHARACTER_SUPPLIER_QUALITY_RULES}\n角色高代价负面项：${DRAMA_CHARACTER_NEGATIVE_RULES}` : ""}\n${layout}\n保留原提示词中的项目风格、资产身份/结构锚点、固定服装材质、颜色、空间规则、画幅和负面要求，不新增任何剧情事实；fields 同步整理当前资产文案，未被用户要求改变的事实必须保留。角色资产必须把固定脸部、比例、发型、服装和材质事实写入对应字段，不得用“高级、绝美、顶级、仙气”等空泛形容词替代具体事实。optimizedPrompt 按以下顺序逐行组织：主体与资产类型；身份/结构锚点；可见状态与材质；构图与画幅；光色与风格；负面约束。`;
+        return `你是 VOZEB PRO 的短剧资产图片提示词编辑器。当前资产类型是“${kind}”。必须调用固定 JSON 工具返回结果，JSON 只能包含 optimizedPrompt 和 fields 两个顶层键；fields 必须完整包含 description、visualIdentity、styling、colorPalette、consistencyRules 五个字符串键，不得缺失、改名或增加键。optimizedPrompt 是可直接提交给图片供应商的中文公开生图提示词，不得包含 JSON、解释、分析、Markdown 标题、内部规则、模型理由、ID 或 URL。\n${DRAMA_ASSET_IMAGE_SKILL.instructions}\n${kind === "角色" ? `角色质量契约：${DRAMA_CHARACTER_PROFILE_CONTRACT}\n角色供应商质量要求：${DRAMA_CHARACTER_SUPPLIER_QUALITY_RULES}\n角色五官建模：${DRAMA_CHARACTER_FACE_MODELING_RULES}\n角色头发建模：${DRAMA_CHARACTER_HAIR_MODELING_RULES}\n角色服装材质：${DRAMA_CHARACTER_WARDROBE_MATERIAL_RULES}\n角色渲染技术：${DRAMA_CHARACTER_RENDER_STYLE}\n角色棚拍光线：${DRAMA_CHARACTER_STUDIO_LIGHT_RULES}\n角色高代价负面项：${DRAMA_CHARACTER_NEGATIVE_RULES}` : ""}\n${layout}\n项目主题风格只能使用原提示词中明确提供的视觉风格，不得自行添加或替换固定题材；保留原提示词中的项目风格、资产身份/结构锚点、固定服装材质、颜色、空间规则、画幅和负面要求，不新增任何剧情事实；fields 同步整理当前资产文案，未被用户要求改变的事实必须保留。角色资产必须把固定脸部、比例、发型、服装和材质事实写入对应字段，不得用“高级、绝美、顶级、仙气”等空泛形容词替代具体事实。optimizedPrompt 按以下顺序逐行组织：主体与资产类型；身份/结构锚点；可见状态与材质；构图与画幅；光色与风格；负面约束。`;
     }
     if (mode === "image")
         return "你是 VOZEB PRO 图片提示词编辑器。把用户原文整理为可直接提交的中文图片提示词：先锁定主体与身份锚点，再写当前要改变的内容、构图、光色材质、用途和约束。图片编辑必须分别写 change、preserve、constraints；change 只包含一个已定位变量，preserve 明确保留身份、构图、光线、材质和文字等未修改事实，constraints 写清比例、尺寸、参考图用途和不可出现内容。多张参考图按角色、场景、道具或构图分配唯一用途，禁止按标题或文本相似度猜测。保留用户原文的主体、品牌、数量、尺寸、比例、文字和否定要求，不新增剧情事实或供应商字段。只返回优化后的公开提示词，不解释修改过程，不输出内部规划、模型选择理由或思维链。";
@@ -138,16 +148,22 @@ function enforceDramaAssetPromptContract(sourcePrompt: string, prompt: string, f
         .split(/\r?\n/u)
         .map((line) => line.trim())
         .filter((line) => line && !new RegExp(`^(?:${labels.slice(3).join("|")})[：:]`, "u").test(line));
+    const configuredStyle = extractConfiguredStyle(sourcePrompt);
     const defaults = [
         `主体与资产类型：${kind || "角色、场景或道具"}设定图`,
         `身份/结构锚点：${fields.visualIdentity || fields.description || "严格沿用当前资产身份与结构锚点"}`,
         `可见状态与材质：${fields.styling || "按当前资产造型、材质和可见状态呈现"}`,
         kind === "角色" ? `构图与画幅：${DRAMA_CHARACTER_TURNAROUND_SIZE} 横向，一张纯白色无缝背景三视图角色基准板；正面、严格左侧面、背面全身立姿等距水平排列，同一基线、同一头身比。` : "构图与画幅：按项目画幅，一张完整、独立的单主体基准图。",
-        `光色与风格：严格沿用当前项目视觉风格与资产固有色彩，不新增环境或剧情元素。${kind === "角色" ? ` ${DRAMA_CHARACTER_SUPPLIER_QUALITY_RULES}` : ""}`,
+        `光色与风格：${kind === "角色" ? [configuredStyle ? `项目视觉风格：${configuredStyle}` : "", DRAMA_CHARACTER_RENDER_STYLE, DRAMA_CHARACTER_STUDIO_LIGHT_RULES, DRAMA_CHARACTER_SUPPLIER_QUALITY_RULES].filter(Boolean).join("；") : "严格沿用当前项目视觉风格与资产固有色彩，不新增环境或剧情元素。"}`,
         kind === "角色" ? `负面约束：${DRAMA_CHARACTER_NEGATIVE_RULES}。` : "负面约束：无额外主体、拼版、多视角、场景文字、边框、文字、水印或 logo。",
     ];
     const present = new Set(retained.map((line) => line.match(/^([^：:]+)[：:]/u)?.[1] || ""));
     return [...retained, ...defaults.filter((line) => !present.has(line.match(/^([^：:]+)[：:]/u)?.[1] || ""))].join("\n");
+}
+
+function extractConfiguredStyle(prompt: string) {
+    const match = prompt.match(/项目视觉风格：([\s\S]*?)(?:；高精度人物细节与清晰轮廓边缘|；角色固有色彩|$)/u);
+    return match?.[1]?.trim() || "";
 }
 
 async function refundInvalidResponse(userId: string, model: string, headers: Headers) {

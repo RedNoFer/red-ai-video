@@ -78,18 +78,20 @@ export function normalizeDramaFrameBeats(value: readonly DramaFrameBeat[], durat
 export function dramaFrameVisualSubject(imagePrompt: string, actionPrompt = "", fallback = "") {
     const subject = staticFrameSubject(imagePrompt, actionPrompt, fallback);
     const state = imagePrompt.match(/可见状态：([^；。\n]+)/u)?.[1] || "";
-    const performanceState = imagePrompt.match(/可见表演状态：([^；。\n]+)/u)?.[1] || "";
+    const performanceState = imagePrompt.match(/可见表演状态：([^\n]+)/u)?.[1] || "";
     return [subject, isGenericFrameState(state) ? "" : state, performanceState].filter(Boolean).join("｜");
 }
 
 export function validateDramaFrameVisualContent(imagePrompt: string, actionPrompt = "") {
     const subject = staticFrameSubject(imagePrompt, actionPrompt, "");
     const visibleState = imagePrompt.match(/可见状态：([^；。\n]+)/u)?.[1]?.trim() || "";
+    const performanceState = imagePrompt.match(/可见表演状态：([^\n]+)/u)?.[1]?.trim() || "";
     if (/参考图职责[：:]/u.test(imagePrompt)) return "参考图职责属于资产绑定数据，不能写入静态图片提示词正文";
     if (/(?:运镜|焦段|推镜|拉镜|摇镜|跟拍|滑轨|环绕|吊臂|慢推|慢拉|后拉|时间段|时间轴|动作过程|对白|声音|口型)/u.test(imagePrompt)) return "每帧必须描述当前可见画面，且静态图片帧不能包含运镜、时间过程、对白或声音指令";
     if (/(?:景别|镜头)(?:（[^）]*）)?\s*[：:]\s*[^；。\n]*(?:→|->|至)/u.test(imagePrompt)) return "每帧只能使用一个固定景别，不能保留景别切换过程";
     if (/(?:ELS|极远景)/u.test(imagePrompt) && /(?:清晰面部|面部清晰|眉眼|嘴角|下颌|手部|手指|道具|细节)/u.test(imagePrompt)) return "ELS/极远景只能承载远景空间关系，不能与清晰面部、手部或道具细节同时出现";
     if (visibleState && isGenericFrameState(visibleState)) return "每帧必须写出动作节点已经造成的可见状态变化，不能只写通用阶段标签";
+    if (performanceState && isGenericPerformanceState(performanceState)) return "每帧必须写出当前节点的具体表演反应，不能只写眉眼、呼吸和手部关系清晰可见";
     if (!subject || /^(?:主体保持当前设定中的静态状态|无|待补全|待生成)$/u.test(subject) || /^(?:口型同步|无字幕|无水印|禁止|避免|不得|不展示|没有)/u.test(subject) || /^(?:\d+mm|镜头|运镜|沿[^；。]*?(?:推|拉|摇|跟拍)|(?:慢推|慢拉|环绕))/u.test(subject))
         return "每帧必须描述当前可见的主体、姿态、道具或环境状态，不能只有对白、旁白、运镜或约束说明";
     return undefined;
@@ -124,19 +126,24 @@ export function upgradeDramaFrameImagePrompt(
         forceRefresh?: boolean;
     },
 ) {
+    const hadLegacyReferenceDuty = /参考图职责[：:]/u.test(imagePrompt);
+    imagePrompt = stripLegacyStaticReferenceRole(imagePrompt);
     const existingVisibleState = imagePrompt.match(/可见状态[：:]([^；。\n]+)/u)?.[1]?.trim() || "";
+    const existingPerformanceState = imagePrompt.match(/可见表演状态[：:]([^\n]+)/u)?.[1]?.trim() || "";
     if (
         !context.forceRefresh &&
+        !hadLegacyReferenceDuty &&
         /^静态关键帧[：:]/u.test(imagePrompt.trim()) &&
         ["可见表演状态", "景别", "机位与构图", "站位与视线", "三层空间", "光色与风格", "负面约束"].every((label) => new RegExp(`${label}[：:]`, "u").test(imagePrompt)) &&
         !/参考图职责[：:]/u.test(imagePrompt) &&
         !isGenericFrameState(existingVisibleState) &&
+        !isGenericPerformanceState(existingPerformanceState) &&
         !/(?:景别|镜头)(?:（[^）]*）)?\s*[：:]\s*[^；。\n]*(?:→|->|至)/u.test(imagePrompt)
     )
         return formatPromptFieldLines(imagePrompt.trim());
     const subject = staticFrameSubject(imagePrompt, actionPrompt, context.description);
     const visibleState = !isGenericFrameState(existingVisibleState) ? existingVisibleState : "";
-    const performanceState = context.performanceState || inferStaticPerformanceState(subject, actionPrompt, context.sequenceIndex);
+    const performanceState = (!isGenericPerformanceState(context.performanceState || "") ? context.performanceState : "") || (!isGenericPerformanceState(existingPerformanceState) ? existingPerformanceState : "") || inferStaticPerformanceState(subject, actionPrompt, context.sequenceIndex);
     const frameState = visibleState || inferStaticFrameState(subject, actionPrompt, context.sequenceIndex, context.frameCount);
     const resolvedShotSize = staticShotSize(context.shotSize, context.sequenceIndex, `${subject}；${frameState}；${performanceState}`);
     return [
@@ -156,14 +163,22 @@ export function upgradeDramaFrameImagePrompt(
 
 function inferStaticPerformanceState(subject: string, actionPrompt: string, sequenceIndex = 1) {
     const text = `${subject}；${actionPrompt}`;
+    const changes: string[] = [];
+    if (/抬眼|抬头|睁眼|回视/u.test(text)) changes.push("眉眼抬起，下颌从低垂转为绷紧；视线转向当前对手");
+    if (/低头|垂首|低垂/u.test(text)) changes.push("下颌压低，眉眼向下；视线暂不回看对手");
+    if (/收紧|握紧|攥紧|扣住|握住/u.test(text)) changes.push("手指或手掌收紧并对当前道具或桌沿施力");
+    if (/转向|转回|回头|侧身/u.test(text)) changes.push("肩线与身体朝向转向当前叙事目标");
+    if (/挺直|直立|起身|半步/u.test(text)) changes.push("肩背从低垂变为直立，重心落在新的支撑位置");
+    if (/波纹|震动|晃动|颤动|飞溅|裂开|落下/u.test(text)) changes.push("关键道具或环境留下与动作对应的可见结果");
+    if (changes.length) return changes.join("；");
     if (/惊醒|睁眼|呼吸急促/u.test(text)) return "眉眼骤然睁开、下颌绷紧；视线落向断剑或当前触发物；手部继续扣住握柄";
     if (/否认|避开|隐瞒/u.test(text)) return "眉心轻收、嘴角压住；视线先避开对方后短暂回看；手部保持道具接触";
     if (/接住|水囊|推过去/u.test(text)) return "表情紧张略缓；视线跟随水囊；手部从待接变为握稳";
     if (/护符|警觉|注视|探测器|结界/u.test(text)) return "眉心收紧、眼神警觉；视线锁定结界或探测器；手部握紧当前道具";
     if (/解封|封印|力量|收力/u.test(text)) return "下颌收紧后放松；视线正对目标；手部由蓄力转为稳定收力";
     if (/木匣|铜镜|短刃|断口|铁砧|裂纹/u.test(text)) return "表情由疑惑转为戒备；视线锁定关键道具；手部保持明确接触关系";
-    if (sequenceIndex <= 1) return "表情保持入口情绪且眉眼清晰；视线沿叙事目标方向；手部与道具保持入口关系";
-    return "眉眼出现细微反应；视线转向当前叙事目标；手部或道具位置形成可见变化";
+    if (sequenceIndex <= 1) return `${subject || actionPrompt}；眉眼与下颌清晰可见，视线落向当前叙事目标，手部与道具保持可见接触关系`;
+    return `${subject || actionPrompt}；眉眼与视线落在当前叙事目标，手部或道具位置呈现本节点的可见结果`;
 }
 
 function frameProgressionState(index: number, count: number) {
@@ -205,9 +220,13 @@ function cleanStaticConstraint(value: string) {
 }
 
 function isGenericFrameState(value: string) {
-    return /^(?:主体保持进入镜头时的静止姿态|主体的手部或身体姿态已发生可见变化|关键道具或环境出现明确可见变化|主体保持动作完成后的稳定姿态|入口构图已建立|入口姿态、表情与视线已建立|手部与道具关系发生可见变化|表情、视线与道具状态同步变化|动作完成后的稳定尾帧|起始状态|动作展开|关键变化|结果状态)$/u.test(
+    return /^(?:主体保持进入镜头时的静止姿态|主体的手部或身体姿态已发生可见变化|关键道具或环境出现明确可见变化|主体保持动作完成后的稳定姿态|入口构图已建立|入口姿态、表情与视线已建立|动作入口已成立|动作节点的可见结果已经成立|人物姿态与道具位置清晰可见|手部与道具关系发生可见变化|表情、视线与道具状态同步变化|动作完成后的稳定尾帧|起始状态|动作展开|关键变化|结果状态)$/u.test(
         value.trim(),
     );
+}
+
+function isGenericPerformanceState(value: string) {
+    return /(?:主体的眉眼、呼吸、手部和道具接触关系清晰可见|眉眼、视线和手部动作与当前节拍一致|情绪通过身体动作呈现|表情保持入口情绪且眉眼清晰|眉眼出现细微反应；视线转向当前叙事目标|表情保持稳定|冻结为单一静态姿态|情绪保持与上一状态一致|面部眉眼和下颌保持可读的初始反应|视线沿当前镜头动作方向|身体与手部进入)/u.test(value.trim());
 }
 
 function staticFrameSubject(imagePrompt: string, actionPrompt: string, fallback: string) {

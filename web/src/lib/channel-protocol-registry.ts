@@ -50,8 +50,7 @@ const openAiOperations: ChannelProtocolDefinition["operations"] = {
 const openAiAudioDialogueOperation: ProtocolOperation = {
     capability: "audio",
     createPath: "/chat/completions",
-    requestTemplate:
-        '{"model":"{{model}}","messages":[{"role":"user","content":"{{prompt}}"}],"modalities":["text","audio"],"audio":{"voice":"{{voice}}","format":"{{format}}"}}',
+    requestTemplate: '{"model":"{{model}}","messages":[{"role":"user","content":"{{prompt}}"}],"modalities":["text","audio"],"audio":{"voice":"{{voice}}","format":"{{format}}"}}',
     resultField: "choices[0].message.audio / output[0].content[0].audio / audio",
     statusField: "status / state",
     referenceRule: "使用 Chat Completions 或 Responses 音频输出；音频结果必须由服务端下载并落盘后再播放，不回退 /audio/speech。",
@@ -111,12 +110,12 @@ const newApiVideoOperation: ProtocolOperation = {
     createPath: "/v1/videos",
     imageToVideoPath: "/v1/videos",
     queryPath: "/v1/videos/:task_id",
-    requestTemplate:
-        '{"model":"{{model}}","prompt":"{{prompt}}","duration":"{{duration}}","ratio":"{{ratio}}","resolution":"{{resolution}}","referenceImages":"{{images}}","referenceVideos":"{{videos}}","referenceAudios":"{{audios}}"}',
+    requestTemplate: '{"model":"{{model}}","prompt":"{{prompt}}","duration":"{{duration}}","ratio":"{{ratio}}","resolution":"{{resolution}}","referenceImages":"{{images}}","referenceVideos":"{{videos}}","referenceAudios":"{{audios}}"}',
     resultField: "video_url / data.url / url",
     statusField: "status",
     durationRange: "4-15 秒",
-    referenceRule: "时长 4-15 秒，比例仅限 16:9、9:16、1:1，清晰度仅限 720p、480p。参考图片最多 9 张、参考视频最多 3 个、参考音频最多 3 个，视频和音频参考各自总时长不超过 15 秒；所有素材必须是公网可访问的 http/https URL 或站点签名地址。referenceImages 仅声明多参考图数组，不声明按时间顺序的全能帧或显式首尾帧能力；模型列表以供应商文档和后台渠道配置为准。",
+    referenceRule:
+        "时长 4-15 秒，比例仅限 16:9、9:16、1:1，清晰度仅限 720p、480p。参考图片最多 9 张、参考视频最多 3 个、参考音频最多 3 个，视频和音频参考各自总时长不超过 15 秒；所有素材必须是公网可访问的 http/https URL 或站点签名地址。referenceImages 仅声明多参考图数组，不声明按时间顺序的全能帧或显式首尾帧能力；模型列表以供应商文档和后台渠道配置为准。",
     supportsReferenceImage: true,
     supportsReferenceVideo: true,
     supportsReferenceAudio: true,
@@ -146,11 +145,12 @@ const bumingSeedanceVideoOperation: ProtocolOperation = {
     imageToVideoPath: "/v1/videos/generations",
     queryPath: "/v1/tasks/:task_id",
     requestTemplate:
-        '{"model":"{{model}}","prompt":"{{prompt}}","mode":"{{mode}}","duration":"{{duration}}","aspect_ratio":"{{aspect_ratio}}","resolution":"{{resolution}}","quality":"{{quality}}","client_request_id":"{{client_request_id}}","images":"{{images}}","videos":"{{videos}}","audios":"{{audios}}","count":1}',
+        '{"model":"{{model}}","prompt":"{{prompt}}","mode":"{{mode}}","duration":"{{duration}}","aspect_ratio":"{{aspect_ratio}}","resolution":"{{resolution}}","client_request_id":"{{client_request_id}}","images":"{{images}}","videos":"{{videos}}","audios":"{{audios}}","count":1}',
     resultField: "output_url / result_url / result.videos[0].url / result.videos[0].video_url / output.videos[0].url",
     statusField: "state / status",
     durationRange: "4-15 秒",
-    referenceRule: "使用 application/json 扁平请求；参考图、参考视频、参考音频分别写入 images、videos、audios URL 数组。首帧/首尾帧通过 mode=text-to-video、reference、first-frame、first-last 区分，首尾帧模式下 images 数组前两项依次为首帧和尾帧。全能帧使用 mode=reference，连续帧按 images 前序排列并在 prompt 中以 @图片N 标注。媒体必须是上游可访问的 URL 或供应商素材 ID。",
+    referenceRule:
+        "使用 application/json 扁平请求；参考图、参考视频、参考音频分别写入 images、videos、audios URL 数组。首帧/首尾帧通过 mode=text-to-video、reference、first-frame、first-last 区分，首尾帧模式下 images 数组前两项依次为首帧和尾帧。全能帧使用 mode=reference，连续帧按 images 前序排列并在 prompt 中以 @图片N 标注。媒体必须是上游可访问的 URL 或供应商素材 ID。",
     supportsReferenceImage: true,
     supportsReferenceVideo: true,
     supportsReferenceAudio: true,
@@ -161,9 +161,18 @@ export type BumingSeedanceVideoModelContract = {
     maxReferenceImages?: number;
     supportsReferenceVideo: boolean;
     supportsReferenceAudio: boolean;
-    quality?: string;
+    qualityOptions?: ReadonlyArray<{ label: string; value: string }>;
     requestTemplate?: string;
 };
+
+export const BUMING_SEEDANCE_QUALITY_OPTIONS = [
+    { label: "标准", value: "标准" },
+    { label: "Fast", value: "fast" },
+    { label: "Mini", value: "mini" },
+] as const;
+
+const BUMING_SEEDANCE_QUALITY_REQUEST_TEMPLATE =
+    '{"model":"{{model}}","prompt":"{{prompt}}","mode":"{{mode}}","duration":"{{duration}}","aspect_ratio":"{{aspect_ratio}}","resolution":"{{resolution}}","quality":"{{quality}}","client_request_id":"{{client_request_id}}","images":"{{images}}","videos":"{{videos}}","audios":"{{audios}}","count":1}';
 
 const BUMING_SEEDANCE_VIDEO_MODEL_CONTRACTS: Record<string, BumingSeedanceVideoModelContract> = {
     "seedance-2-0-official": {
@@ -171,34 +180,77 @@ const BUMING_SEEDANCE_VIDEO_MODEL_CONTRACTS: Record<string, BumingSeedanceVideoM
         maxReferenceImages: 9,
         supportsReferenceVideo: true,
         supportsReferenceAudio: true,
-        quality: "mini",
+        qualityOptions: BUMING_SEEDANCE_QUALITY_OPTIONS,
+        requestTemplate: BUMING_SEEDANCE_QUALITY_REQUEST_TEMPLATE,
     },
     "seedance-2-0-special": {
         videoReferenceModes: ["reference", "first_frame", "first_last", "all_frames"],
         maxReferenceImages: 9,
         supportsReferenceVideo: true,
         supportsReferenceAudio: true,
-        quality: "标准",
+        qualityOptions: [
+            { label: "官方满血", value: "高清" },
+            { label: "Fast", value: "快速" },
+            { label: "标准", value: "标准" },
+        ],
+        requestTemplate: BUMING_SEEDANCE_QUALITY_REQUEST_TEMPLATE,
+    },
+    "seedance-2-0-promo": {
+        videoReferenceModes: ["reference", "first_frame", "first_last"],
+        supportsReferenceVideo: true,
+        supportsReferenceAudio: true,
+        qualityOptions: BUMING_SEEDANCE_QUALITY_OPTIONS,
+        requestTemplate: BUMING_SEEDANCE_QUALITY_REQUEST_TEMPLATE,
+    },
+    "seedance-2-0-ecom-special": {
+        videoReferenceModes: ["reference", "first_frame", "first_last"],
+        supportsReferenceVideo: true,
+        supportsReferenceAudio: true,
+        qualityOptions: [
+            { label: "标准", value: "标准" },
+            { label: "真人模特", value: "真人模特" },
+            { label: "满血9图", value: "满血9图" },
+        ],
+        requestTemplate: BUMING_SEEDANCE_QUALITY_REQUEST_TEMPLATE,
+    },
+    "seedance-2-0-9tu-special": {
+        videoReferenceModes: ["reference", "first_frame"],
+        supportsReferenceVideo: false,
+        supportsReferenceAudio: false,
+        qualityOptions: [
+            { label: "Fast", value: "Fast" },
+            { label: "标准", value: "标准" },
+        ],
+        requestTemplate: BUMING_SEEDANCE_QUALITY_REQUEST_TEMPLATE,
     },
     "seedance-2-0-manju-special": {
         videoReferenceModes: ["first_frame", "first_last"],
         maxReferenceImages: 2,
         supportsReferenceVideo: false,
         supportsReferenceAudio: false,
-        requestTemplate:
-            '{"model":"{{model}}","prompt":"{{prompt}}","mode":"{{mode}}","duration":"{{duration}}","aspect_ratio":"{{aspect_ratio}}","resolution":"{{resolution}}","client_request_id":"{{client_request_id}}","images":"{{images}}","count":1}',
+        requestTemplate: '{"model":"{{model}}","prompt":"{{prompt}}","mode":"{{mode}}","duration":"{{duration}}","aspect_ratio":"{{aspect_ratio}}","resolution":"{{resolution}}","client_request_id":"{{client_request_id}}","images":"{{images}}","count":1}',
     },
 };
 
 export function resolveBumingSeedanceVideoModelContract(model: string): BumingSeedanceVideoModelContract {
     return (
         BUMING_SEEDANCE_VIDEO_MODEL_CONTRACTS[normalizeModelId(model)] || {
-        videoReferenceModes: ["reference", "first_frame", "first_last"],
-        supportsReferenceVideo: true,
-        supportsReferenceAudio: true,
-        quality: "mini",
-    }
+            videoReferenceModes: ["reference", "first_frame", "first_last"],
+            supportsReferenceVideo: true,
+            supportsReferenceAudio: true,
+        }
     );
+}
+
+export function resolveBumingSeedanceQualityOptions(model: string) {
+    return resolveBumingSeedanceVideoModelContract(model).qualityOptions || [];
+}
+
+export function resolveBumingSeedanceQuality(model: string, configured?: string) {
+    const options = resolveBumingSeedanceQualityOptions(model);
+    const selected = configured?.trim();
+    if (selected && options.some((option) => option.value === selected)) return selected;
+    return options.find((option) => option.value === "标准")?.value || options[0]?.value || "";
 }
 
 const bumingImageOperation: ProtocolOperation = {

@@ -90,7 +90,7 @@ describe("drama director visual plan", () => {
         expect(start.status).toBe("blocked");
         expect(start.prompt).toContain("静态关键帧：");
         expect(start.prompt).toContain("三层空间：");
-        expect(compileDramaVisualStepPrompt(project, project.episodes[0], start)).toContain("上一镜成片实际尾帧是唯一连续性依据");
+        expect(compileDramaVisualStepPrompt(project, project.episodes[0], start)).toContain("上一镜成片实际尾帧是结构连续性依据");
     });
 
     it("compiles the next storyboard prompt from its own entry state instead of the previous prompt text", () => {
@@ -272,7 +272,7 @@ describe("drama director visual plan", () => {
         const prompt = compileDramaVisualStepPrompt(project, project.episodes[0], step);
 
         expect(prompt).toContain("必须呈现当前帧提示词中写明的新可见状态");
-        expect(prompt).toContain("上一帧顺序锚点是唯一连续性依据");
+        expect(prompt).toContain("上一帧顺序锚点是结构连续性依据");
         expect(prompt).toContain("不得直接复制上一帧的静态构图、姿态或动作结果");
         expect(prompt).toContain("不得为了贴合参考图改成近景裁切");
     });

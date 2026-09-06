@@ -1079,7 +1079,7 @@ export const dramaVisualTool = {
                             additionalProperties: false,
                             required: ["start", "end", "frames"],
                             description:
-                                "必须按真实可见动作节点拆分 1-9 个连续帧段；每帧 imagePrompt 只描述该时刻可见的姿态、表情、视线、手部/身体或道具/环境状态，不得复制整镜头提示词后追加通用阶段词。每帧还要把人物放在当前场景可用的座位、长凳、地面、通道、门窗或其他结构关系中，坐姿有明确支撑，人与物接触和多人相对方位真实可行；原文未声明的人物不入画。对白不必写入图片，但对白造成的表情、视线、手部或道具变化必须写入对应帧。",
+                                "必须按真实可见动作节点拆分 1-9 个连续帧段；每帧 imagePrompt 只描述该时刻可见的姿态、表情、视线、手部/身体或道具/环境状态，不得复制整镜头提示词后追加通用阶段词。可见表演状态必须写出当前节点的具体眉眼、视线、呼吸、手部或身体结果，禁止使用“眉眼、呼吸、手部关系清晰可见”“情绪通过身体动作呈现”等通用句绕过关键点。每帧还要把人物放在当前场景可用的座位、长凳、地面、通道、门窗或其他结构关系中，坐姿有明确支撑，人与物接触和多人相对方位真实可行；原文未声明的人物不入画。对白不必写入图片，但对白造成的表情、视线、手部或道具变化必须写入对应帧。",
                             properties: {
                                 start: { type: "object", additionalProperties: false, required: ["source"], properties: { source: { type: "string", enum: ["independent", "previous_accepted_actual_tail"] } } },
                                 end: { type: "object", additionalProperties: false, required: ["required"], properties: { required: { type: "boolean" } } },

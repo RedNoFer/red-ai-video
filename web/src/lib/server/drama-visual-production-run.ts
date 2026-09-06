@@ -188,7 +188,7 @@ export function compileDramaVisualStepPrompt(project: DramaProject, episode: Dra
 function withContinuityReferencePrompt(prompt: string, type: "start_frame" | "keyframe", sequentialFrame = false) {
     const anchor = sequentialFrame ? "上一帧顺序锚点" : "上一镜成片实际尾帧";
     const firstFrameRule = sequentialFrame ? "必须以该上一帧作为当前帧的连续性起点" : "必须以该实际尾帧作为本镜头第一帧";
-    return `${prompt}\n${anchor}是唯一连续性依据：${firstFrameRule}，保持人物、姿态、光线、环境和构图连续；当前镜头维护的分镜起始帧只能作为辅助参考，不得替代或覆盖连续性依据。${type === "keyframe" ? "在保持连续性的基础上，必须呈现当前帧提示词中写明的新可见状态，不得直接复制上一帧的静态构图、姿态或动作结果；按当前帧景别完整呈现主体、关键道具和环境边界，不得为了贴合参考图改成近景裁切。" : ""}`;
+    return `${prompt}\n${anchor}是结构连续性依据：${firstFrameRule}，只保持人物身份、服装材质、场景空间、光向和轴线连续；当前帧提示词中写明的姿态、视线、手部/道具状态和环境结果必须覆盖上一帧的对应状态，上一帧不得作为静态结果复制。当前镜头维护的分镜起始帧只能作为辅助参考，不得替代或覆盖连续性依据。${type === "keyframe" ? "在保持结构连续性的基础上，必须呈现当前帧提示词中写明的新可见状态，不得直接复制上一帧的静态构图、姿态或动作结果；按当前帧景别完整呈现主体、关键道具和环境边界，不得为了贴合参考图改成近景裁切。" : ""}`;
 }
 
 export function compileDramaVisualStartFramePrompt(project: DramaProject, episode: DramaEpisode, shot: DramaEpisode["shots"][number]) {

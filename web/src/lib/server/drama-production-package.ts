@@ -582,7 +582,6 @@ function repairOpeningCut<T extends DramaProductionPackageEpisode>(episode: T, p
 }
 
 function openingCutFrames(code: string, duration: number, actions: Array<string | { action: string; image: string }>) {
-    const stateLabels = ["场景与动作入口已建立", "镜头推进后的姿态与道具位置已改变", "关键动作结果已经发生", "结果状态与转场落点已经成立"];
     const entries = actions;
     const boundaries = entries.map((_, index) => Number(((duration * index) / entries.length).toFixed(3))).concat(duration);
     return entries.map((entry, index) => {
@@ -594,9 +593,19 @@ function openingCutFrames(code: string, duration: number, actions: Array<string 
             startSecond: boundaries[index],
             endSecond: boundaries[index + 1],
             actionPrompt: action,
-            imagePrompt: formatPromptFieldLines(
-                `静态关键帧：${image}；可见状态：${stateLabels[index] || "动作节点的可见结果已经成立"}；可见表演状态：${image}中的眉眼、视线、呼吸与手部/身体关系清晰可见；保持人物身份、服装、道具材质、空间轴线和光向连续；只呈现当前时间点已经发生的静态结果，不表现运动过程。`,
-            ),
+            imagePrompt: upgradeDramaFrameImagePrompt(image, action, {
+                description: image,
+                shotSize: "中景",
+                cameraAngle: "视线高度平视",
+                composition: "主体位于画面安全区，前景有具体框景",
+                characterBlocking: "按当前动作关系安排主体站位",
+                gazeDirection: "视线落向当前叙事目标",
+                lighting: "延续本场主光",
+                colorPalette: "沿用本场色板",
+                sequenceIndex: index + 1,
+                frameCount: entries.length,
+                forceRefresh: true,
+            }),
         };
     });
 }

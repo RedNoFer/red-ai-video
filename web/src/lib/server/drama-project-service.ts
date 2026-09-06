@@ -1717,7 +1717,7 @@ async function dispatchReadyDramaVisualSteps(userId: string, project: DramaProje
                             : continuitySource
                               ? `上一镜「${continuitySource.title}」已人工验收的实际尾帧`
                               : `上一分镜帧 P${String(episode.shots.find((shot) => shot.id === step.shotId)?.order || 0).padStart(2, "0")}-F${String(Math.max(1, (step.sequenceIndex || 1) - 1)).padStart(2, "0")}`;
-                    return createDramaVisualImageReference(`continuity-${index}`, url, origin, step.referenceImageRemoteUrls?.[index], label, "作为当前帧的连续性起点，锁定人物姿态、服装、道具状态、场景空间、构图、光向和轴线；不得重绘成无关画面");
+                    return createDramaVisualImageReference(`continuity-${index}`, url, origin, step.referenceImageRemoteUrls?.[index], label, "仅锁定身份、场景空间、光向和轴线；上一帧的姿态、视线、手部/道具状态与环境结果必须由当前帧提示词明确替换，不得复制上一帧静态结果，也不得重绘成无关画面");
                 })
                 .filter((reference): reference is NonNullable<typeof reference> => Boolean(reference)),
             ...(step.manualReferenceImages || [])

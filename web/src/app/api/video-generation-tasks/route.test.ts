@@ -749,6 +749,7 @@ describe("video generation candidate failover", () => {
             referenceVideos: ["https://cdn.example.com/reference.mp4"],
             referenceAudios: ["https://cdn.example.com/reference.mp3"],
         });
+        expect(body).not.toHaveProperty("quality");
         expect(body).not.toHaveProperty("image");
         expect(body).not.toHaveProperty("images");
         expect(body).not.toHaveProperty("video");
@@ -767,18 +768,21 @@ describe("video generation candidate failover", () => {
         );
 
         expect(response.status).toBe(200);
-        expect(mocks.updateVideoTask).toHaveBeenCalledWith("local-task", expect.objectContaining({
-            upstream: expect.objectContaining({
-                requestSnapshot: expect.objectContaining({
-                    path: "/v1/videos",
-                    body: expect.objectContaining({ referenceImages: ["https://cdn.example.com/frame.png"], referenceVideos: ["https://cdn.example.com/source.m4v"] }),
-                    references: [
-                        { type: "image", role: "reference", url: "https://cdn.example.com/frame.png" },
-                        { type: "video", role: "reference", url: "https://cdn.example.com/source.m4v", durationMs: 8_000 },
-                    ],
+        expect(mocks.updateVideoTask).toHaveBeenCalledWith(
+            "local-task",
+            expect.objectContaining({
+                upstream: expect.objectContaining({
+                    requestSnapshot: expect.objectContaining({
+                        path: "/v1/videos",
+                        body: expect.objectContaining({ referenceImages: ["https://cdn.example.com/frame.png"], referenceVideos: ["https://cdn.example.com/source.m4v"] }),
+                        references: [
+                            { type: "image", role: "reference", url: "https://cdn.example.com/frame.png" },
+                            { type: "video", role: "reference", url: "https://cdn.example.com/source.m4v", durationMs: 8_000 },
+                        ],
+                    }),
                 }),
             }),
-        }));
+        );
     });
 
     it.each([
@@ -1006,6 +1010,7 @@ describe("video generation candidate failover", () => {
             images: ["https://cdn.example.com/reference.png"],
             videos: ["https://cdn.example.com/reference.mp4"],
         });
+        expect(body).not.toHaveProperty("quality");
         expect(body).not.toHaveProperty("first_frame");
         expect(mocks.createVideoTask).toHaveBeenCalledWith(expect.objectContaining({ upstream: expect.objectContaining({ pollPath: "/v1/videos/generations" }) }));
     });
@@ -1036,7 +1041,7 @@ describe("video generation candidate failover", () => {
             duration: 8,
             aspect_ratio: "9:16",
             resolution: "720p",
-            quality: "mini",
+            quality: "标准",
             images: ["https://cdn.example.com/first.png", "https://cdn.example.com/last.png", "https://cdn.example.com/character.png"],
             count: 1,
             prompt: expect.stringContaining("首帧使用@图片1，尾帧使用@图片2"),
@@ -1044,6 +1049,19 @@ describe("video generation candidate failover", () => {
         expect(body).not.toHaveProperty("first_frame");
         expect(body).not.toHaveProperty("last_frame");
         expect(body).not.toHaveProperty("generate_audio");
+    });
+
+    it("uses the configured Buming video tier without affecting generic providers", async () => {
+        const bumingChannel = applyChannelProtocol({ ...channels[0], baseUrl: "", models: ["seedance-2-0-official"], advancedConfig: emptyAdvancedConfig() }, "buming-seedance");
+        const binding = { ...settings.logicalModels[0].bindings[0], channelId: bumingChannel.id, upstreamModel: "seedance-2-0-official", capabilityProfile: { bumingQuality: "fast" } };
+        mocks.getAuthSettings.mockResolvedValue({ ...settings, systemChannels: [bumingChannel], logicalModels: [{ ...settings.logicalModels[0], bindings: [binding] }] });
+        mocks.fetchInternalApi.mockResolvedValue(json({ id: "buming-fast-task", state: "queued" }));
+
+        const response = await POST(request({ model: "video", videoSeconds: "8", size: "16:9", vquality: "720" }));
+        const [, init] = mocks.fetchInternalApi.mock.calls[0] as [string, RequestInit];
+
+        expect(response.status).toBe(200);
+        expect(JSON.parse(String(init.body))).toMatchObject({ quality: "fast" });
     });
 
     it("submits Buming all-frame references as one ordered reference request", async () => {
@@ -1097,11 +1115,7 @@ describe("video generation candidate failover", () => {
         const body = JSON.parse(String(init.body));
 
         expect(response.status).toBe(200);
-        expect(body.images).toEqual([
-            "https://cdn.example.com/tail.png",
-            "https://cdn.example.com/frame-1.png",
-            "https://cdn.example.com/frame-2.png",
-        ]);
+        expect(body.images).toEqual(["https://cdn.example.com/tail.png", "https://cdn.example.com/frame-1.png", "https://cdn.example.com/frame-2.png"]);
         expect(body.prompt).toContain("首帧使用@图片1");
         expect(body.prompt).toContain("连续关键帧按时间顺序使用@图片2至@图片3");
     });
@@ -1418,7 +1432,11 @@ describe("video generation candidate failover", () => {
     });
 });
 
-function request(config: Record<string, unknown> = { model: "video" }, references: Array<{ type: string; url: string; remoteUrl?: string; serverUrl?: string; durationMs?: number; role?: string; keyframeIndex?: number }> = [], context?: Record<string, unknown>) {
+function request(
+    config: Record<string, unknown> = { model: "video" },
+    references: Array<{ type: string; url: string; remoteUrl?: string; serverUrl?: string; durationMs?: number; role?: string; keyframeIndex?: number }> = [],
+    context?: Record<string, unknown>,
+) {
     const clientRequestId = typeof context?.clientRequestId === "string" ? context.clientRequestId : "";
     return new Request("http://localhost/api/video-generation-tasks", {
         method: "POST",

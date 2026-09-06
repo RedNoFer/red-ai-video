@@ -129,6 +129,8 @@ export type LogicalModelFallbackStrategy = "priority" | "cheapest";
 export type LogicalModelCostBasis = "call" | "second";
 
 export type LogicalModelCapabilityProfile = {
+    /** 不鸣 Seedance 视频版本档位；仅 buming-seedance 绑定读取。 */
+    bumingQuality?: string;
     supportsReferenceImage?: boolean;
     supportsReferenceVideo?: boolean;
     supportsReferenceAudio?: boolean;

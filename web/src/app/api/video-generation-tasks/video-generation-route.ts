@@ -34,7 +34,7 @@ import { runGenerationTaskRecoveryBatch } from "@/lib/server/generation-task-rec
 import { scheduleGenerationTask } from "@/lib/server/generation-task-scheduler";
 import { VIDEO_PROVIDER_MEDIA_KEYS, parseVideoProviderJson, readVideoProviderError, readVideoProviderHttpError, readVideoProviderId, readVideoProviderUrl, videoProviderResultUrlError } from "@/lib/server/video-provider-response";
 import { buildSeedanceSpecialRequest } from "@/lib/seedance-special";
-import { NEW_API_VIDEO_RATIOS, NEW_API_VIDEO_RESOLUTIONS, resolveBumingSeedanceVideoModelContract } from "@/lib/channel-protocol-registry";
+import { NEW_API_VIDEO_RATIOS, NEW_API_VIDEO_RESOLUTIONS, resolveBumingSeedanceQuality, resolveBumingSeedanceVideoModelContract } from "@/lib/channel-protocol-registry";
 import { assertVozebRecommendedVideoReferences, buildVozebRecommendedVideoRequest } from "@/lib/vozeb-recommended-video";
 import { assertGeminiVideoReferences, buildGeminiVideoRequest, geminiVideoCreatePath, normalizeGeminiVideoDuration, parseGeminiVideoCreateResponse } from "@/lib/server/gemini-video-provider";
 import { systemAiBillingHeaders } from "@/lib/server/system-ai-billing";
@@ -140,11 +140,15 @@ export async function POST(request: Request) {
                     : {}),
                 videoSeconds: geminiVideo
                     ? normalizeGeminiVideoDuration(requestedParameters.videoSeconds)
-                    : resolveUpstreamVideoDuration(channel.advancedConfig?.protocol === "newapi-video" && !hasProvidedValue(body.config?.videoSeconds) ? 5 : requestedParameters.videoSeconds, channel.advancedConfig?.protocol === "newapi-video" ? 5 : settings.generationDefaults.videoSeconds, {
-                          durationRange: channel.advancedConfig?.durationRange,
-                          minDurationSeconds: channel.capabilityProfile?.minDurationSeconds,
-                          maxDurationSeconds: channel.capabilityProfile?.maxDurationSeconds,
-                      }),
+                    : resolveUpstreamVideoDuration(
+                          channel.advancedConfig?.protocol === "newapi-video" && !hasProvidedValue(body.config?.videoSeconds) ? 5 : requestedParameters.videoSeconds,
+                          channel.advancedConfig?.protocol === "newapi-video" ? 5 : settings.generationDefaults.videoSeconds,
+                          {
+                              durationRange: channel.advancedConfig?.durationRange,
+                              minDurationSeconds: channel.capabilityProfile?.minDurationSeconds,
+                              maxDurationSeconds: channel.capabilityProfile?.maxDurationSeconds,
+                          },
+                      ),
             };
             let candidateReferences = references;
             try {
@@ -307,7 +311,7 @@ export async function createUpstream(
         aspect_ratio: ratio(raw.size),
         size: sizeValue(raw.size),
         resolution: resolution(raw.vquality),
-        quality: bumingSeedance ? bumingContract?.quality || "" : resolution(raw.vquality),
+        quality: bumingSeedance ? resolveBumingSeedanceQuality(channel.model, channel.capabilityProfile?.bumingQuality) : resolution(raw.vquality),
         width: dimensions.width,
         height: dimensions.height,
         generate_audio: generateAudio,

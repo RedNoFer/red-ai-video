@@ -55,6 +55,20 @@ describe("drama production package serialization", () => {
         expect(prompt.split("\n")).toHaveLength(9);
         expect(prompt).not.toContain("参考图职责：");
     });
+
+    it("rebuilds generic historical frame copy during deterministic export", () => {
+        const value = fixture();
+        value.episodes[0].shots[0].framePlan.frames[0] = {
+            ...value.episodes[0].shots[0].framePlan.frames[0],
+            actionPrompt: "角色抬眼并收紧手指",
+            imagePrompt: "静态关键帧：角色抬眼并收紧手指；可见状态：角色抬眼并收紧手指；可见表演状态：主体的眉眼、呼吸、手部和道具接触关系清晰可见，情绪通过身体动作呈现；景别：中景；机位与构图：平视；站位与视线：人物在右侧；三层空间：前景门框，中景人物，背景大厅；光色与风格：冷光；负面约束：无水印",
+        };
+
+        const exported = JSON.parse(serializeDramaProductionPackageJson(value)) as DramaProductionPackageV1;
+        const prompt = exported.episodes[0].shots[0].framePlan.frames[0].imagePrompt;
+        expect(prompt).toContain("眉眼抬起");
+        expect(prompt).not.toContain("主体的眉眼、呼吸、手部和道具接触关系清晰可见");
+    });
 });
 
 function fixture(): DramaProductionPackageV1 {

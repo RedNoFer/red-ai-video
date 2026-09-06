@@ -15,6 +15,8 @@ import {
     normalizeStrictProtocolModelConfig,
     protocolAuthHeaders,
     protocolModelConfig,
+    resolveBumingSeedanceQuality,
+    resolveBumingSeedanceQualityOptions,
     resolveChannelCapabilityConfig,
     resolveChannelModelConfig,
 } from "./channel-protocol-registry";
@@ -159,8 +161,10 @@ describe("channel protocol registry", () => {
         });
         expect(channelProtocolDefinition("buming-seedance").operations.video?.requestTemplate).not.toContain('"first_frame"');
         expect(channelProtocolDefinition("buming-seedance").operations.video?.requestTemplate).not.toContain('"last_frame"');
+        expect(channelProtocolDefinition("buming-seedance").operations.video?.requestTemplate).not.toContain('"quality"');
         expect(protocolModelConfig("buming-seedance", "video", "seedance-2-0-official")).toMatchObject({ supportsKeyframes: true, maxReferenceImages: 9, videoReferenceModes: expect.arrayContaining(["all_frames"]) });
         expect(protocolModelConfig("buming-seedance", "video", "seedance-2-0-manju-special")).toMatchObject({ supportsKeyframes: false, videoReferenceModes: ["first_frame", "first_last"] });
+        expect(protocolModelConfig("buming-seedance", "video", "seedance-2-5")?.requestTemplate).not.toContain('"quality"');
         expect(channelProtocolDefinition("buming-image").operations.image).toMatchObject({
             createPath: "/api/v1/model-runtime/invoke",
             queryPath: "/api/v1/model-runtime/tasks/:task_id",
@@ -175,6 +179,20 @@ describe("channel protocol registry", () => {
             resultField: "response.generateVideoResponse.generatedSamples[0].video.uri",
             statusField: "done",
         });
+    });
+
+    it("uses standard as the Buming tier default while validating model-specific values", () => {
+        expect(resolveBumingSeedanceQuality("seedance-2-0-official")).toBe("标准");
+        expect(resolveBumingSeedanceQuality("seedance-2-0-official", "fast")).toBe("fast");
+        expect(resolveBumingSeedanceQuality("seedance-2-0-official", "unknown")).toBe("标准");
+        expect(resolveBumingSeedanceQuality("seedance-2-0-special", "快速")).toBe("快速");
+        expect(resolveBumingSeedanceQualityOptions("seedance-2-5")).toEqual([]);
+        expect(resolveBumingSeedanceQuality("seedance-2-5")).toBe("");
+        expect(resolveBumingSeedanceQualityOptions("seedance-2-0-special")).toEqual([
+            { label: "官方满血", value: "高清" },
+            { label: "Fast", value: "快速" },
+            { label: "标准", value: "标准" },
+        ]);
     });
 
     it("restores the canonical Sub2API image contract when an old model config has stale paths", () => {

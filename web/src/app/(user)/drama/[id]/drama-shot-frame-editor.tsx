@@ -1282,7 +1282,7 @@ function plannedFrameReferences(project: DramaProject, episodeId: string, shot: 
             references.push({
                 id: "continuity-previous",
                 label: "上一分镜帧 P" + String(shot.order).padStart(2, "0") + "-F" + String(frame - 1).padStart(2, "0"),
-                binding: "作为当前帧连续性起点，保持当前可见状态连续",
+                 binding: "仅锁定身份、场景空间、光向和轴线；当前帧必须替换上一帧的姿态、视线、手部/道具状态和环境结果，不得复制上一帧静态画面",
                 url: previous.mediaUrl,
                 remoteUrl: previous.remoteUrl,
                 width: previous.width,
@@ -1293,7 +1293,7 @@ function plannedFrameReferences(project: DramaProject, episodeId: string, shot: 
         const previous = incoming ? episode.shots.find((item) => item.id === incoming.fromShotId) : undefined;
         const tail = previous ? continuityStartEvidence(previous) : undefined;
         if (tail?.mediaUrl && previous)
-            references.push({ id: "continuity-tail", label: "上一镜「" + previous.title + "」已验收实际尾帧", binding: "作为当前帧唯一动作起点，锁定人物姿态、服装、道具状态、场景空间、构图、光向和轴线", url: tail.mediaUrl, remoteUrl: tail.remoteUrl });
+            references.push({ id: "continuity-tail", label: "上一镜「" + previous.title + "」已验收实际尾帧", binding: "仅锁定身份、场景空间、光向和轴线；当前帧必须替换上一镜尾帧的姿态、视线、手部/道具状态和环境结果，不得复制上一镜静态画面", url: tail.mediaUrl, remoteUrl: tail.remoteUrl });
     }
     const beat = frame === "end" ? undefined : frameBeats(shot).find((item) => item.sequenceIndex === frame);
     const frameScene = beat ? resolveDramaFrameScene(project, shot, beat) : project.scenes.find((item) => item.id === shot.sceneId);

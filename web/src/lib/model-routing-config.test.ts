@@ -10,6 +10,7 @@ import {
     modelRoutingValidationErrors,
     normalizeDefaultModelsConfig,
     normalizeLogicalModelsConfig,
+    resolveLogicalModelCapabilityProfile,
     resolveLogicalModelConfig,
     synchronizeLogicalModelsWithChannels,
 } from "./model-routing-config";
@@ -393,6 +394,30 @@ describe("model routing config", () => {
             weight: 250,
             capabilityProfile: { supportsReferenceImage: true, maxReferenceImages: 4, aspectRatios: ["16:9", "9:16"], maxDurationSeconds: 10, maxBatchSize: 2, timeoutMs: 600000, concurrencyLimit: 3, unitCost: 0, unitCostCurrency: "USD" },
         });
+    });
+
+    it("keeps the Buming video tier binding-specific and defaults it to standard", () => {
+        const buming = applyChannelProtocol({ ...channel("buming", ["seedance-2-0-official"]), advancedConfig: {} as never }, "buming-seedance");
+        const generic = channel("generic", ["seedance-2-0-official"]);
+        const bumingProfile = resolveLogicalModelCapabilityProfile({ capabilityProfile: {} }, "video", buming, "seedance-2-0-official");
+        const genericProfile = resolveLogicalModelCapabilityProfile({ capabilityProfile: { bumingQuality: "fast" } }, "video", generic, "seedance-2-0-official");
+
+        expect(bumingProfile).toMatchObject({ bumingQuality: "标准" });
+        expect(genericProfile).not.toHaveProperty("bumingQuality");
+
+        const normalized = normalizeLogicalModelsConfig(
+            [
+                {
+                    id: "seedance-2-0-official",
+                    name: "Seedance",
+                    capability: "video",
+                    enabled: true,
+                    bindings: [{ id: "buming", channelId: "buming", upstreamModel: "seedance-2-0-official", enabled: true, priority: 1, capabilityProfile: { bumingQuality: "fast" } }],
+                },
+            ],
+            [buming],
+        );
+        expect(normalized[0]?.bindings[0]?.capabilityProfile).toMatchObject({ bumingQuality: "fast" });
     });
 
     it("preserves video fallback routing and cost strategy during channel synchronization", () => {

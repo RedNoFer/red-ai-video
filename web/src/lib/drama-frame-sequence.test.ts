@@ -60,6 +60,29 @@ describe("drama frame sequence", () => {
         expect(validateDramaFrameVisualContent("静态关键帧：角色站在门边；可见状态：入口构图已建立", "建立场景")).toContain("动作节点已经造成的可见状态变化");
     });
 
+    it("rejects generic performance labels that hide the frame's key point", () => {
+        expect(validateDramaFrameVisualContent("静态关键帧：三人站在大厅；可见状态：萧炎低头；可见表演状态：警觉；眉眼、呼吸、手部和道具接触关系清晰可见，情绪通过身体动作呈现")).toContain("当前节点的具体表演反应");
+    });
+
+    it("derives concrete facial, hand and environment changes from a frame action", () => {
+        const prompt = upgradeDramaFrameImagePrompt("静态关键帧：三人站在大厅；可见状态：萧炎抬眼扫过萧战，右手在桌沿收紧，茶水出现细小波纹；可见表演状态：警觉；眉眼、呼吸、手部和道具接触关系清晰可见，情绪通过身体动作呈现", "萧炎抬眼扫过萧战，右手在桌沿收紧，茶水出现细小波纹", {
+            description: "三人站在议事大厅",
+            shotSize: "中景",
+            cameraAngle: "平视",
+            composition: "主体位于画面右侧",
+            characterBlocking: "三人沿大厅轴线站位",
+            gazeDirection: "萧炎看向萧战",
+            lighting: "暖金侧光",
+            colorPalette: "冷灰紫",
+            sequenceIndex: 2,
+        });
+
+        expect(prompt).toContain("眉眼抬起");
+        expect(prompt).toContain("手指或手掌收紧");
+        expect(prompt).toContain("关键道具或环境留下与动作对应的可见结果");
+        expect(prompt).not.toContain("主体的眉眼、呼吸、手部和道具接触关系清晰可见");
+    });
+
     it("keeps image prompts static and strips video-only direction", () => {
         const prompt = upgradeDramaFrameImagePrompt("当前帧可见画面：”镜头沿倒塔垂直慢推至裂口，再匹配切到马车中Karin猛然睁眼、手扣断剑。ELS→ECU；视线高度平视", "耳语：“你又来迟了", {
             description: "黑湖中的倒塔",

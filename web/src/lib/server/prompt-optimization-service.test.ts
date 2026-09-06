@@ -108,6 +108,9 @@ describe("prompt optimization service", () => {
         expect(systemMessage).toContain("主体与资产类型");
         expect(systemMessage).toContain("角色质量契约");
         expect(systemMessage).toContain("男性不女性化");
+        expect(systemMessage).toContain("角色五官建模");
+        expect(systemMessage).toContain("角色头发建模");
+        expect(systemMessage).toContain("项目主题风格只能使用原提示词中明确提供的视觉风格");
         expect(systemMessage).toContain("不得用“高级、绝美、顶级、仙气”等空泛形容词替代具体事实");
         expect(result.optimizedPrompt).toContain("构图与画幅：16:9 横向");
         expect(result.optimizedPrompt).toContain("纯白色无缝背景");
@@ -115,6 +118,30 @@ describe("prompt optimization service", () => {
         expect(result.optimizedPrompt).not.toContain("单人全身，9:16");
         expect(result.fields).toMatchObject({ description: "少年角色", visualIdentity: "固定五官与黑色短发", styling: "黑色短发与深色服装", colorPalette: "黑灰", consistencyRules: expect.stringContaining("三视图保持同一身份与服装结构") });
         expect(result.fields.consistencyRules).toContain("严格左侧面");
+    });
+
+    it("retains the configured project style when the model returns a shortened asset prompt", async () => {
+        vi.mocked(requestStructuredText).mockResolvedValue({
+            arguments: JSON.stringify({
+                optimizedPrompt: "主体与资产类型：角色；身份/结构锚点：萧炎；可见状态与材质：黑发与墨青长袍",
+                fields: { description: "萧家少年", visualIdentity: "黑发、清晰眉骨", styling: "墨青长袍", colorPalette: "墨青、暗灰、暖金", consistencyRules: "三视图同一身份" },
+            }),
+            headers: new Headers(),
+            protocol: "chat",
+            elapsedMs: 10,
+        });
+
+        const result = await optimizeCreativePrompt({
+            origin: "http://localhost:3000",
+            cookie: "session=1",
+            userId: "user-one",
+            requestId: "asset-style-request",
+            prompt: "资产类型：角色\n项目视觉风格：VS7 东方玄幻修仙 + 3D 国漫电影质感 + PBR 材质；只应用其中与角色相关的媒介、造型、材质和光色要求\n当前提示词：萧炎",
+            mode: "drama-asset",
+        });
+
+        expect(result.optimizedPrompt).toContain("VS7 东方玄幻修仙 + 3D 国漫电影质感 + PBR 材质");
+        expect(result.optimizedPrompt).not.toContain("暗黑学院");
     });
 
     it("rejects a drama asset response that does not use the complete fixed fields object", async () => {
