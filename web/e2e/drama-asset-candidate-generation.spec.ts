@@ -35,6 +35,10 @@ test("编辑角色视觉设定后保存并恢复全部字段", async ({ page, re
             consistencyRules: "锁定脸部、发束、服装层次和左手伤痕",
         };
         for (const [label, value] of Object.entries(fields)) await drawer.getByRole("textbox").nth({ visualIdentity: 2, styling: 3, colorPalette: 4, consistencyRules: 5 }[label]).fill(value);
+        await drawer.getByText("实际供应商提示词（可编辑）").click();
+        const supplierPrompt = drawer.getByLabel("供应商提示词");
+        const savedSupplierPrompt = "主体与资产类型：角色「保存测试角色」\n身份/结构锚点：用户手工维护的固定外观。\n负面约束：无额外人物、无文字、无水印。";
+        await supplierPrompt.fill(savedSupplierPrompt);
         await drawer.getByRole("button", { name: "保存设定" }).click();
         await expect(drawer).toHaveCount(0);
 
@@ -44,6 +48,7 @@ test("编辑角色视觉设定后保存并恢复全部字段", async ({ page, re
         expect(persisted?.profile).toMatchObject({ styling: fields.styling, colorPalette: fields.colorPalette });
         expect(persisted?.profile?.visualIdentity).toContain(fields.visualIdentity);
         expect(persisted?.profile?.consistencyRules).toContain(fields.consistencyRules);
+        expect(persisted?.supplierPrompt).toBe(savedSupplierPrompt);
 
         await page.getByRole("button", { name: "编辑角色：保存测试角色" }).click();
         const reopened = page.getByRole("dialog", { name: "编辑角色" });
@@ -51,6 +56,8 @@ test("编辑角色视觉设定后保存并恢复全部字段", async ({ page, re
         await expect(reopened.getByRole("textbox").nth(3)).toHaveValue(fields.styling);
         await expect(reopened.getByRole("textbox").nth(4)).toHaveValue(fields.colorPalette);
         await expect.poll(() => reopened.getByRole("textbox").nth(5).inputValue()).toContain(fields.consistencyRules);
+        await reopened.getByText("实际供应商提示词（可编辑）").click();
+        await expect(reopened.getByLabel("供应商提示词")).toHaveValue(savedSupplierPrompt);
     } finally {
         const deleted = await request.delete(`/api/drama/projects/${project.id}`);
         expect(deleted.ok(), await deleted.text()).toBe(true);
@@ -116,7 +123,7 @@ test("生成候选通过真实图片任务链路完成", async ({ page, request 
     await page.getByRole("button", { name: "打开项目资产" }).click();
     await page.getByRole("button", { name: "编辑角色：真实候选角色" }).click();
     const drawer = page.getByRole("dialog", { name: "编辑角色" });
-    await drawer.getByRole("button", { name: "提示词优化" }).click();
+    await drawer.getByRole("button", { name: "优化并同步设定" }).click();
     await drawer.getByText("实际供应商提示词（可编辑）").click();
     const supplierPrompt = drawer.getByLabel("供应商提示词");
     await expect(supplierPrompt).toBeEditable();

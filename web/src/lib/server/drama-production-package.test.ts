@@ -165,6 +165,48 @@ describe("production package boundary", () => {
         expect(rifa.profile?.identityAnchors).toEqual(expect.arrayContaining([expect.stringContaining("Rifa的脸型、五官、发型和年龄感")]));
     });
 
+    it("round-trips a saved supplier prompt with a package asset", () => {
+        const source = structuredClone(productionPackage);
+        const savedPrompt = "主体与资产类型：角色「Karin」\n构图与画幅：四视图，左侧面部特写、正面、侧面、背面。\n负面约束：无额外人物。";
+        source.assets.characters[0].supplierPrompt = savedPrompt;
+
+        const preview = previewDramaProductionPackage(JSON.stringify(source), "package.json");
+        expect(preview.package.assets.characters[0].supplierPrompt).toBe(savedPrompt);
+
+        const applied = applyDramaProductionPackage(project(), preview.package, "hash-supplier-prompt");
+        expect(applied.characters.find((item) => item.name === "Karin")?.supplierPrompt).toBe(savedPrompt);
+    });
+
+    it("keeps a project asset supplier prompt when merging a package without one", () => {
+        const current = project();
+        current.characters[0] = { ...current.characters[0], supplierPrompt: "项目已确认提示词" };
+
+        const merged = mergeProjectAssetsIntoProductionPackage(productionPackage, current);
+
+        expect(merged.assets.characters.find((item) => item.name === "Karin")?.supplierPrompt).toBe("项目已确认提示词");
+    });
+
+    it("round-trips a saved supplier prompt with a package asset", () => {
+        const source = structuredClone(productionPackage);
+        const savedPrompt = "主体与资产类型：角色「Karin」\n身份/结构锚点：手工确认的脸型、发束和服装。\n负面约束：无额外人物。";
+        source.assets.characters[0].supplierPrompt = savedPrompt;
+
+        const preview = previewDramaProductionPackage(JSON.stringify(source), "package.json");
+        expect(preview.package.assets.characters[0].supplierPrompt).toBe(savedPrompt);
+
+        const applied = applyDramaProductionPackage(project(), preview.package, "hash-supplier-prompt");
+        expect(applied.characters.find((item) => item.name === "Karin")?.supplierPrompt).toBe(savedPrompt);
+    });
+
+    it("keeps a project asset supplier prompt when merging a package without one", () => {
+        const current = project();
+        current.characters[0] = { ...current.characters[0], supplierPrompt: "项目已确认提示词" };
+
+        const merged = mergeProjectAssetsIntoProductionPackage(productionPackage, current);
+
+        expect(merged.assets.characters.find((item) => item.name === "Karin")?.supplierPrompt).toBe("项目已确认提示词");
+    });
+
     it("preserves Agent video prompt text while normalizing static fields", () => {
         const source = structuredClone(productionPackage);
         source.episodes[0].shots[0].imagePrompt = "静态关键帧：Karin握住断剑；可见状态：指节发白，景别：中景；机位与构图：平视";

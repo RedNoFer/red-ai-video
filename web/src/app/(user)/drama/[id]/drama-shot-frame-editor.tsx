@@ -201,9 +201,10 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
         const index = beats.findIndex((item) => item.id === beat.id);
         const staleIds = new Set(beats.slice(index).map((item) => item.id));
         updateShot(project.id, episodeId, shot.id, {
-            storyboardFrames: storedFrames.map((frame) =>
-                frame.id === beat.id ? { ...staleFrame(frame), mediaUrl: undefined, remoteUrl: undefined, width: undefined, height: undefined, source: "generated" as const } : staleIds.has(frame.id) ? staleFrame(frame) : frame,
-            ),
+            storyboardFrames: storedFrames.map((frame) => {
+                if (frame.id === beat.id) return { ...staleFrame(frame), mediaUrl: undefined, remoteUrl: undefined, width: undefined, height: undefined, source: "generated" as const, mediaDeletedAt: new Date().toISOString() };
+                return staleIds.has(frame.id) ? staleFrame(frame) : frame;
+            }),
             frameEvidence: (shot.frameEvidence || []).map((frame) =>
                 frame.role === "storyboard_keyframe" && (frame.sequenceIndex || 0) >= beat.sequenceIndex && (frame.validity === "accepted" || frame.validity === "candidate")
                     ? invalidateFrameEvidence(frame, "superseded", "用户删除了分镜关键帧图片")
@@ -310,8 +311,8 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                     const existing = frameById.get(beat.id) || emptyStoryboardFrame(beat);
                     if (selected.has(beat.id))
                         return existing.mediaUrl
-                            ? { ...existing, candidateStatus: "queued" as const, candidateTaskId: undefined, candidateError: undefined }
-                            : { ...existing, status: "queued" as const, taskId: undefined, error: undefined, inputHash: undefined, continuityStatus: "pending" as const, continuityEvidenceId: undefined };
+                            ? { ...existing, candidateStatus: "queued" as const, candidateTaskId: undefined, candidateError: undefined, mediaDeletedAt: undefined }
+                            : { ...existing, status: "queued" as const, taskId: undefined, error: undefined, inputHash: undefined, continuityStatus: "pending" as const, continuityEvidenceId: undefined, mediaDeletedAt: undefined };
                     return existing;
                 }),
                 storyboardError: undefined,
@@ -1226,6 +1227,7 @@ function removeLegacyFrame(kind: "start" | "end", project: DramaProject, episode
                   storyboardImageUrl: undefined,
                   storyboardImageRemoteUrl: undefined,
                   storyboardImageUrls: undefined,
+                  storyboardImageDeletedAt: new Date().toISOString(),
                   storyboardPrompt: undefined,
               }
             : {
@@ -1234,6 +1236,7 @@ function removeLegacyFrame(kind: "start" | "end", project: DramaProject, episode
                   storyboardEndImageUrl: undefined,
                   storyboardEndImageRemoteUrl: undefined,
                   storyboardEndImageUrls: undefined,
+                  storyboardEndImageDeletedAt: new Date().toISOString(),
                   storyboardEndPrompt: undefined,
               }),
         ...clearedGeneratedMedia,

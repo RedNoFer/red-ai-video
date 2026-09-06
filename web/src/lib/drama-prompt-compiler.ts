@@ -362,6 +362,8 @@ function lightingLines(shot: DramaShot) {
 }
 
 export function compileDramaAssetReferencePrompt(project: Pick<DramaProject, "title" | "style" | "ratio" | "productionBible">, asset: DramaNamedAsset, kind: "角色" | "场景" | "道具") {
+    const savedSupplierPrompt = asset.supplierPrompt?.trim() || "";
+    if (savedSupplierPrompt) return savedSupplierPrompt;
     const styleContract = resolveDramaStyleContract(project);
     const profile = asset.profile;
     const description = sanitizeDramaVisualPrompt(asset.description);
@@ -414,7 +416,7 @@ export function preflightDramaAssetGeneration(project: Pick<DramaProject, "ratio
 }
 
 export function compileDramaAssetRefinementPrompt(project: Pick<DramaProject, "title" | "style" | "ratio" | "productionBible">, asset: DramaNamedAsset, kind: "角色" | "场景" | "道具", proposal: DramaAssetRefinementProposal, request: string) {
-    const updatedAsset = { ...asset, description: proposal.updatedDescription || asset.description, profile: proposal.updatedProfile };
+    const updatedAsset = { ...asset, description: proposal.updatedDescription || asset.description, profile: proposal.updatedProfile, supplierPrompt: undefined };
     return compact([
         compileDramaAssetReferencePrompt(project, updatedAsset, kind),
         request.trim() ? `本轮调整：${request.trim()}` : "",

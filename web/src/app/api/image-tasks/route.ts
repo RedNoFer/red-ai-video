@@ -1,4 +1,4 @@
-import { requestPublicOrigin } from "./image-task-reference-urls";
+import { prepareImageTaskReference, requestPublicOrigin } from "./image-task-reference-urls";
 import { after, NextResponse } from "next/server";
 
 import { readJsonBody } from "@/lib/auth/request";
@@ -178,6 +178,8 @@ export async function POST(request: Request) {
         const config = compatibleConfigs[0];
         const strictDramaRun = resolvedBody.context?.surface === "drama" && Boolean(resolvedBody.context.runId);
         const publicOrigin = requestPublicOrigin(request, resolvedBody.context?.publicOrigin);
+        const preparedReferences = references.map((reference) => prepareImageTaskReference(reference, publicOrigin));
+        const preparedMask = resolvedBody.mask?.dataUrl || resolvedBody.mask?.url || resolvedBody.mask?.remoteUrl || resolvedBody.mask?.serverUrl ? prepareImageTaskReference(resolvedBody.mask, publicOrigin) : undefined;
         const task = await createImageTask({
             ...(resolvedBody.context || {}),
             publicOrigin,
@@ -190,8 +192,8 @@ export async function POST(request: Request) {
             config,
             candidateConfigs: strictDramaRun ? [] : compatibleConfigs.slice(1),
             prompt,
-            references,
-            mask: resolvedBody.mask?.dataUrl || resolvedBody.mask?.url || resolvedBody.mask?.remoteUrl || resolvedBody.mask?.serverUrl ? resolvedBody.mask : undefined,
+            references: preparedReferences,
+            mask: preparedMask,
         });
         await linkStoredGenerationTask("image", task.id, { ...(resolvedBody.context || {}), publicOrigin });
         const cookie = request.headers.get("cookie") || "";

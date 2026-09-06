@@ -261,6 +261,7 @@ export type DramaNamedAsset = {
     code?: string;
     name: string;
     description: string;
+    supplierPrompt?: string;
     fieldOrigins?: Record<string, DramaFieldOrigin>;
     activeEpisodeCodes?: string[];
     profile?: DramaAssetProfile;
@@ -513,6 +514,7 @@ export type DramaStoryboardFrame = {
     candidateStatus?: DramaTaskStatus;
     candidateTaskId?: string;
     candidateError?: string;
+    mediaDeletedAt?: string;
     candidates?: DramaStoryboardFrameCandidate[];
 };
 
@@ -807,6 +809,7 @@ export type DramaProductionPackageAsset = {
     code: string;
     name: string;
     description: string;
+    supplierPrompt?: string;
     profile?: DramaAssetProfile;
     payoff?: string;
     activeEpisodeCodes?: string[];

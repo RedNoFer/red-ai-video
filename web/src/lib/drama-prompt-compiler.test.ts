@@ -563,6 +563,32 @@ describe("drama prompt compiler", () => {
         expect(prompt).not.toContain("用途：");
     });
 
+    it("uses a saved supplier prompt for downstream asset generation", () => {
+        const project = createProject();
+        const savedPrompt = "生成已确认的萧炎四视图角色设定图；保留三视图与四视图文字中的用户布局。";
+        project.characters[0] = { ...project.characters[0], supplierPrompt: savedPrompt };
+
+        expect(compileDramaAssetReferencePrompt(project, project.characters[0], "角色")).toBe(savedPrompt);
+    });
+
+    it("does not let a saved supplier prompt hide a refinement proposal", () => {
+        const project = createProject();
+        const proposal = {
+            reply: "调整完成",
+            changes: [],
+            updatedProfile: { ...project.characters[0].profile!, styling: "新的墨青长袍" },
+            compiledPrompt: "",
+            negativePrompt: "",
+            preservedRules: [],
+        };
+        project.characters[0] = { ...project.characters[0], supplierPrompt: "旧的已保存提示词" };
+
+        const prompt = compileDramaAssetRefinementPrompt(project, project.characters[0], "角色", proposal, "服装改为新的墨青长袍");
+
+        expect(prompt).toContain("新的墨青长袍");
+        expect(prompt).not.toContain("旧的已保存提示词");
+    });
+
     it("does not compile structured performance and lighting into Agent prompts", () => {
         const project = createProject();
         const shot = project.episodes[0].shots[0];

@@ -4,7 +4,7 @@ const mocks = vi.hoisted(() => ({ fetchSafeOutbound: vi.fn() }));
 
 vi.mock("@/lib/server/safe-outbound-fetch", () => ({ fetchSafeOutbound: mocks.fetchSafeOutbound }));
 
-import { publicImageReferenceRequestUrl } from "./image-task-reference-urls";
+import { prepareImageTaskReference, publicImageReferenceRequestUrl } from "./image-task-reference-urls";
 
 describe("image task reference request URLs", () => {
     beforeEach(() => {
@@ -145,5 +145,11 @@ describe("image task reference request URLs", () => {
         expect(parsed.searchParams.get("signature")).toBe("already-signed");
         expect(parsed.searchParams.get("format")).toBe("webp");
         expect(parsed.searchParams.get("width")).toBe("1600");
+    });
+
+    it("pre-signs local references before a task is handed to the worker", () => {
+        const prepared = prepareImageTaskReference({ id: "reference-one", type: "image/png", url: "/api/generation-log-assets/permanent/local.png", serverUrl: "/api/generation-log-assets/permanent/local.png", dataUrl: "" }, "https://vozeb.example");
+        expect(prepared.url).toMatch(/^https:\/\/vozeb\.example\/api\/generation-log-assets\/permanent\/local\.png\?purpose=provider-read/);
+        expect(prepared.serverUrl).toBe("/api/generation-log-assets/permanent/local.png");
     });
 });

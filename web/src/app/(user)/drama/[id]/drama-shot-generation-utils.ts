@@ -18,14 +18,16 @@ export function resolveDramaVisualRunSync(project: DramaProject, episodeId: stri
             let nextShot = shot;
             const start = activeSteps.find((step) => step.type === "start_frame");
             const end = activeSteps.find((step) => step.type === "end_frame");
-            if (start && (shot.storyboardStatus !== "running" || shot.storyboardTaskId !== start.taskId)) nextShot = { ...nextShot, storyboardStatus: "running", storyboardTaskId: start.taskId, storyboardError: undefined };
-            if (end && (shot.storyboardEndStatus !== "running" || shot.storyboardEndTaskId !== end.taskId)) nextShot = { ...nextShot, storyboardEndStatus: "running", storyboardEndTaskId: end.taskId, storyboardEndError: undefined };
+            if (start && !shot.storyboardImageDeletedAt && (shot.storyboardStatus !== "running" || shot.storyboardTaskId !== start.taskId)) nextShot = { ...nextShot, storyboardStatus: "running", storyboardTaskId: start.taskId, storyboardError: undefined };
+            if (end && !shot.storyboardEndImageDeletedAt && (shot.storyboardEndStatus !== "running" || shot.storyboardEndTaskId !== end.taskId)) nextShot = { ...nextShot, storyboardEndStatus: "running", storyboardEndTaskId: end.taskId, storyboardEndError: undefined };
             const keyframes = activeSteps.filter((step) => step.type === "keyframe" && (step.frameId || step.sequenceIndex));
             if (keyframes.length) {
                 const frames = [...(nextShot.storyboardFrames || [])];
+                let framesChanged = false;
                 for (const step of keyframes) {
                     const index = frames.findIndex((frame) => frame.id === step.frameId || frame.sequenceIndex === step.sequenceIndex);
                     const current = frames[index];
+                    if (current?.mediaDeletedAt && current.taskId !== step.taskId && current.candidateTaskId !== step.taskId) continue;
                     if ((current?.mediaUrl ? current.candidateStatus === "running" && current.candidateTaskId === step.taskId : current?.status === "running" && current.taskId === step.taskId)) continue;
                     const frame = current?.mediaUrl
                         ? { ...current, candidateStatus: "running" as const, candidateTaskId: step.taskId, candidateError: undefined }
@@ -37,8 +39,9 @@ export function resolveDramaVisualRunSync(project: DramaProject, episodeId: stri
                           };
                     if (index >= 0) frames[index] = frame;
                     else frames.push(frame);
+                    framesChanged = true;
                 }
-                nextShot = { ...nextShot, storyboardFrameMode: "all_frames", storyboardFrames: frames.sort((left, right) => left.sequenceIndex - right.sequenceIndex) };
+                if (framesChanged) nextShot = { ...nextShot, storyboardFrameMode: "all_frames", storyboardFrames: frames.sort((left, right) => left.sequenceIndex - right.sequenceIndex) };
             }
             if (nextShot !== shot) changed = true;
             return nextShot;
@@ -67,6 +70,7 @@ export function applyDramaVisualRunTerminalStep(shot: DramaShot, step: DramaProd
     if (!step.shotId || step.shotId !== shot.id || !["success", "failed", "cancelled", "needs_review"].includes(step.status)) return shot;
     if (step.type === "start_frame" || step.type === "end_frame") {
         const isEnd = step.type === "end_frame";
+        if (isEnd ? shot.storyboardEndImageDeletedAt && shot.storyboardEndTaskId !== step.taskId : shot.storyboardImageDeletedAt && shot.storyboardTaskId !== step.taskId) return shot;
         const resultUrl = step.outputUrls?.[0];
         const status = step.status === "success" && resultUrl ? ("success" as const) : ("error" as const);
         const role = isEnd ? "storyboard_end" : "storyboard_start";
@@ -132,6 +136,8 @@ export function applyDramaVisualRunTerminalStep(shot: DramaShot, step: DramaProd
     const currentFrames = [...(shot.storyboardFrames || [])];
     const index = currentFrames.findIndex((frame) => frame.id === frameId || frame.sequenceIndex === sequenceIndex);
     const current = index >= 0 ? currentFrames[index] : undefined;
+    if (current?.mediaDeletedAt && current.taskId !== step.taskId && current.candidateTaskId !== step.taskId) return shot;
+    if (shot.framePlan?.frames?.length && !shot.framePlan.frames.some((frame) => frame.id === frameId || frame.sequenceIndex === sequenceIndex)) return shot;
     if (step.status !== "success" || !step.outputUrls?.length) {
         const failedFrame = current?.mediaUrl
             ? { ...current, candidateStatus: "error" as const, candidateTaskId: step.taskId, candidateError: step.error }

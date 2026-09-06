@@ -64,6 +64,26 @@ describe("resolveDramaVisualRunSync", () => {
         ]);
     });
 
+    it("does not restore an explicitly deleted frame from an older active task", () => {
+        const project = {
+            id: "project-one",
+            episodes: [{ id: "episode-one", shots: [{ id: "shot-one", framePlan: { frames: [{ id: "f1", sequenceIndex: 1 }] }, storyboardFrames: [{ id: "f1", sequenceIndex: 1, source: "generated", status: "stale", mediaDeletedAt: "2026-09-06T00:00:00.000Z" }] }] }],
+        } as never;
+        const run = {
+            id: "run-one",
+            projectId: "project-one",
+            episodeId: "episode-one",
+            scope: "visual",
+            status: "running",
+            steps: [{ id: "frame-shot-one-f1", shotId: "shot-one", frameId: "f1", sequenceIndex: 1, type: "keyframe", status: "running", taskId: "task-old", dependsOn: [] }],
+        } as never;
+
+        const decision = resolveDramaVisualRunSync(project, "episode-one", run);
+
+        expect(decision.project).toBe(project);
+        expect(decision.shouldContinue).toBe(true);
+    });
+
     it("does not let a resolved older run overwrite a newly queued frame", () => {
         const project = {
             id: "project-one",
@@ -111,6 +131,17 @@ describe("applyDramaVisualRunTerminalStep", () => {
         const shot = { id: "shot-one", storyboardFrames: [{ id: "f1", sequenceIndex: 1, status: "running", source: "generated" }] } as never;
         const next = applyDramaVisualRunTerminalStep(shot, { shotId: "shot-one", type: "keyframe", frameId: "f1", sequenceIndex: 1, status: "success", taskId: "task-one", outputUrls: ["/frame.png"] } as never);
         expect(next).toMatchObject({ id: "shot-one", storyboardFrames: [{ id: "f1", status: "success", mediaUrl: "/frame.png" }] });
+    });
+
+    it("does not write an older terminal result into an explicitly deleted frame", () => {
+        const shot = {
+            id: "shot-one",
+            framePlan: { frames: [{ id: "f1", sequenceIndex: 1 }] },
+            storyboardFrames: [{ id: "f1", sequenceIndex: 1, status: "stale", source: "generated", mediaDeletedAt: "2026-09-06T00:00:00.000Z" }],
+        } as never;
+        const next = applyDramaVisualRunTerminalStep(shot, { shotId: "shot-one", type: "keyframe", frameId: "f1", sequenceIndex: 1, status: "success", taskId: "task-old", outputUrls: ["/old-result.png"] } as never);
+
+        expect(next).toBe(shot);
     });
 });
 

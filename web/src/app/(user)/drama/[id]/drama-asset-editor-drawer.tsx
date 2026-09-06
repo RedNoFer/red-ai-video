@@ -81,15 +81,15 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
     const references = asset ? dramaAssetReferences(asset) : [];
     const primary = approvedAssetReference(asset);
     const draftProfileHasValues = Object.values(draft.profile).some((value) => typeof value === "string" && value.trim());
-    const supplierPrompt =
+    const automaticSupplierPrompt =
         asset && kind !== "clues"
-            ? supplierPromptOverride.trim() ||
-              compileDramaAssetReferencePrompt(
+            ? compileDramaAssetReferencePrompt(
                   project,
-                  { ...asset, name: draft.name.trim() || asset.name, description: draft.description.trim() || asset.description, profile: draftProfileHasValues ? draft.profile : asset.profile },
+                  { ...asset, name: draft.name.trim() || asset.name, description: draft.description.trim() || asset.description, profile: draftProfileHasValues ? draft.profile : asset.profile, supplierPrompt: undefined },
                   kind === "characters" ? "角色" : kind === "scenes" ? "场景" : "道具",
               )
             : "";
+    const supplierPrompt = supplierPromptOverride.trim() || automaticSupplierPrompt;
     const cloneAvailable = config.channels.some((channel) =>
         Object.values(channel.advancedConfig?.modelConfigs || {}).some(
             (operation) => operation.audioOperation === "voice-clone" && Boolean(operation.cloneSampleField) && /\{\{\s*(?:clone_sample_url|sample_audio_url|sample_url)\s*\}\}/i.test(operation.requestTemplate || ""),
@@ -116,7 +116,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
         }
         const latestRefinement = asset.refinementHistory?.at(-1)?.proposal;
         setRefinementProposal(latestRefinement);
-        setSupplierPromptOverride("");
+        setSupplierPromptOverride(asset.supplierPrompt || "");
         setDraft({
             name: asset.name,
             description: asset.description,
@@ -144,6 +144,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
             if (asset) {
                 const patch = {
                     ...base,
+                    ...(kind !== "clues" ? { supplierPrompt: supplierPromptOverride.trim() } : {}),
                     ...(kind === "characters" ? { voiceProfile: draft.voiceProfile } : {}),
                     ...(kind === "clues" ? { payoff: draft.payoff.trim() } : {}),
                 };
@@ -164,6 +165,27 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
             onClose();
         } catch (error) {
             message.error(error instanceof Error ? error.message : `${definition.title}保存失败`);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const saveSupplierPrompt = async (nextPrompt = supplierPromptOverride.trim()) => {
+        if (!asset || kind === "clues" || saving) return;
+        const prompt = nextPrompt.trim();
+        if (!prompt) {
+            setSupplierPromptOverride("");
+            if (!asset.supplierPrompt?.trim()) return;
+        }
+        setSaving(true);
+        try {
+            updateAsset(project.id, kind, asset.id, { supplierPrompt: prompt }, { markShotsStale: false });
+            const savedProject = await saveAssetNow(project.id, kind, asset.id, { supplierPrompt: prompt });
+            replaceProject(savedProject);
+            setSupplierPromptOverride(prompt);
+            message.success(prompt ? "供应商提示词已保存，后续生图将优先使用这份提示词" : "已恢复自动提示词");
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : "供应商提示词保存失败");
         } finally {
             setSaving(false);
         }
@@ -250,7 +272,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
         if (!preflight.ok) return void message.warning(`暂不能优化：${preflight.errors.join("；")}`);
         setOptimizingAssetPrompt(true);
         try {
-            const prompt = supplierPromptOverride.trim() || compileDramaAssetReferencePrompt(project, promptAsset, assetKind);
+            const prompt = supplierPrompt;
             const optimized = await optimizeDramaAssetPrompt(assetKind, prompt, `drama-asset:${project.id}:${asset.id}:${nanoid()}`);
             setDraft((current) => ({
                 ...current,
@@ -802,9 +824,14 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                                                 placeholder="暂无可发送的供应商提示词"
                                                 data-drama-supplier-prompt
                                             />
+                                            <div className="flex justify-end">
+                                                <Button size="small" type="primary" icon={<Check className="size-3.5" />} loading={saving} disabled={!supplierPromptOverride.trim()} onClick={() => void saveSupplierPrompt()}>
+                                                    保存提示词
+                                                </Button>
+                                            </div>
                                             {supplierPromptOverride ? (
                                                 <div className="flex justify-end">
-                                                    <Button size="small" icon={<RotateCcw className="size-3.5" />} onClick={() => setSupplierPromptOverride("")}>
+                                                    <Button size="small" icon={<RotateCcw className="size-3.5" />} loading={saving} onClick={() => void saveSupplierPrompt("")}>
                                                         恢复自动提示词
                                                     </Button>
                                                 </div>
@@ -822,7 +849,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                                     ) : null}
                                     {kind !== "clues" ? (
                                         <Button icon={<Sparkles className="size-3.5" />} loading={optimizingAssetPrompt} onClick={() => void optimizeAssetPrompt()}>
-                                            提示词优化
+                                            优化并同步设定
                                         </Button>
                                     ) : null}
                                     <DramaSourceImagePicker project={project} onSelect={appendSourceReference} />

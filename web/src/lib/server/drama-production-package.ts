@@ -53,6 +53,7 @@ function catalogAssets(items: DramaNamedAsset[], prefix: string, usedIds: Set<st
         id: asset.id,
         name: asset.name,
         description: asset.description,
+        ...(asset.supplierPrompt ? { supplierPrompt: asset.supplierPrompt } : {}),
         profile: asset.profile,
         fixed: true,
         usedInCurrentEpisode: usedIds.has(asset.id),
@@ -110,6 +111,7 @@ function mergeProjectAssetCollection(incoming: DramaProductionPackageAsset[], ex
             code,
             name: asset.name,
             description: asset.description,
+            ...((asset.supplierPrompt || current?.supplierPrompt) ? { supplierPrompt: asset.supplierPrompt || current?.supplierPrompt } : {}),
             ...(asset.profile ? { profile: asset.profile } : current?.profile ? { profile: current.profile } : {}),
             ...(activeEpisodeCodes?.length || referenced.has(code) ? { activeEpisodeCodes: [...new Set([...(activeEpisodeCodes || []), ...(referenced.has(code) ? episodeCodes : [])])] } : {}),
         } as DramaProductionPackageAsset;
@@ -1149,6 +1151,7 @@ function normalizePackageAsset(value: unknown, location = false, character = fal
         code: text(asset.code),
         name,
         description,
+        supplierPrompt: optionalText(asset.supplierPrompt),
         payoff: optionalText(asset.payoff),
         activeEpisodeCodes: strings(asset.activeEpisodeCodes),
         profile: character ? normalizeDramaCharacterProfile(baseProfile, description, name) : baseProfile,

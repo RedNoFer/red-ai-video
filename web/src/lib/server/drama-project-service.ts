@@ -939,6 +939,7 @@ export async function updateDramaAssetForUser(userId: string, id: string, kind: 
     const patch = {
         ...(typeof input.name === "string" ? { name: cleanText(input.name) } : {}),
         ...(typeof input.description === "string" ? { description: cleanText(input.description) } : {}),
+        ...(typeof input.supplierPrompt === "string" ? { supplierPrompt: optionalText(input.supplierPrompt) } : {}),
         ...(Object.keys(incomingProfile).length ? { profile: { ...asset.profile, ...incomingProfile } } : {}),
         ...(kind === "characters" && input.voiceProfile !== undefined ? { voiceProfile: input.voiceProfile } : {}),
         ...(kind === "clues" && typeof input.payoff === "string" ? { payoff: cleanText(input.payoff) } : {}),
@@ -3042,6 +3043,7 @@ function normalizeStoryboardFrames(value: unknown): DramaShot["storyboardFrames"
                     candidateStatus: taskStatus(input.candidateStatus),
                     candidateTaskId: optionalText(input.candidateTaskId),
                     candidateError: optionalText(input.candidateError),
+                    mediaDeletedAt: optionalText(input.mediaDeletedAt),
                     candidates: normalizeStoryboardFrameCandidates(input.candidates),
                 },
             ];
@@ -3091,6 +3093,7 @@ function normalizeNamedAssets(value: unknown, prefix: string, character = false)
                 code: optionalText(input.code),
                 name: cleanText(input.name),
                 description: cleanText(input.description),
+                supplierPrompt: optionalText(input.supplierPrompt),
                 fieldOrigins: normalizeFieldOrigins(input.fieldOrigins),
                 activeEpisodeCodes: ids(input.activeEpisodeCodes),
                 profile: character ? normalizeDramaCharacterProfile(baseProfile, cleanText(input.description), cleanText(input.name)) : baseProfile,

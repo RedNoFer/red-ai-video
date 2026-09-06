@@ -85,6 +85,13 @@ export function rawReferenceRequestUrlCandidates(reference: ImageTaskReference) 
     return uniqueStrings([reference.remoteUrl, reference.url, reference.serverUrl, reference.dataUrl].map((value) => (value || "").trim()).filter(Boolean));
 }
 
+export function prepareImageTaskReference(reference: ImageTaskReference, publicOrigin: string) {
+    const local = [reference.url, reference.serverUrl, reference.dataUrl].find((value) => /\/api\/(?:reference-assets|generation-log-assets)\//.test(value || ""));
+    if (!local) return reference;
+    const signed = signReferenceAssetInputUrl(local, publicOrigin);
+    return signed && signed !== local ? { ...reference, url: signed } : reference;
+}
+
 export function uniqueStrings(values: string[]) {
     return Array.from(new Set(values));
 }

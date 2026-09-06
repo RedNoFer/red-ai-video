@@ -1998,10 +1998,11 @@ describe("drama project service updates", () => {
             name: "主角",
             description: "更新身份",
             profile: { visualIdentity: "新外貌", styling: "新造型", colorPalette: "新配色", consistencyRules: "新规则" },
+            supplierPrompt: "主体与资产类型：角色「主角」\n负面约束：不要额外人物",
         });
 
         expect(saved.characters).toHaveLength(2);
-        expect(saved.characters[0]).toMatchObject({ description: "更新身份", profile: expect.objectContaining({ styling: "新造型", colorPalette: "新配色" }) });
+        expect(saved.characters[0]).toMatchObject({ description: "更新身份", supplierPrompt: "主体与资产类型：角色「主角」\n负面约束：不要额外人物", profile: expect.objectContaining({ styling: "新造型", colorPalette: "新配色" }) });
         expect(saved.characters[1]).toMatchObject({ id: "character-two", description: "保留" });
         expect(saved.episodes[0].shots).toEqual(expect.arrayContaining([expect.objectContaining({ id: "shot-one", continuityStatus: "stale" }), expect.objectContaining({ id: "shot-two", continuityStatus: "blocked" })]));
         expect(mocks.updateDramaProject).toHaveBeenCalledWith("user-one", expect.objectContaining({ characters: expect.arrayContaining([expect.objectContaining({ id: "character-two", description: "保留" })]) }), current.updatedAt);

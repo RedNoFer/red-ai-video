@@ -116,7 +116,8 @@ describe("drama asset image results", () => {
         expect(editor).toContain("从来源选择");
         expect(editor).toContain("上传候选");
         expect(editor).toContain("生成候选");
-        expect(editor).toContain("提示词优化");
+        expect(editor).toContain("优化并同步设定");
+        expect(editor).toContain("保存提示词");
         expect(editor).toContain("supplierPromptOverride");
         expect(editor).not.toContain("Voice Design");
         expect(editor).not.toContain("声音设计提示词");
