@@ -196,6 +196,14 @@ describe("mutateStoredGenerationTask", () => {
         await expect(getStoredGenerationTaskByRequest<{ id: string }>("video", "user", "request-one", 3)).resolves.toBeNull();
     });
 
+    it("preserves the public origin needed by an asynchronous image retry", async () => {
+        mocks.records = [];
+        const now = Date.now();
+        await createStoredGenerationTask("image", { id: "image-one", userId: "user", status: "pending", publicOrigin: "https://bowlpetdaily.com", createdAt: now, updatedAt: now }, 60_000);
+
+        await expect(getStoredGenerationTask<{ id: string; publicOrigin?: string }>("image", "image-one")).resolves.toMatchObject({ id: "image-one", publicOrigin: "https://bowlpetdaily.com" });
+    });
+
     it("finds only the current user's exact channel task identity", async () => {
         const now = Date.now();
         mocks.records = [

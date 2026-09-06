@@ -177,8 +177,10 @@ export async function POST(request: Request) {
         if (!compatibleConfigs.length) return NextResponse.json({ error: "当前模型能力不满足参考素材或数量参数" }, { status: 400 });
         const config = compatibleConfigs[0];
         const strictDramaRun = resolvedBody.context?.surface === "drama" && Boolean(resolvedBody.context.runId);
+        const publicOrigin = requestPublicOrigin(request, resolvedBody.context?.publicOrigin);
         const task = await createImageTask({
             ...(resolvedBody.context || {}),
+            publicOrigin,
             userId: currentUser.id,
             username: currentUser.username,
             displayName: currentUser.displayName,
@@ -191,10 +193,9 @@ export async function POST(request: Request) {
             references,
             mask: resolvedBody.mask?.dataUrl || resolvedBody.mask?.url || resolvedBody.mask?.remoteUrl || resolvedBody.mask?.serverUrl ? resolvedBody.mask : undefined,
         });
-        await linkStoredGenerationTask("image", task.id, resolvedBody.context || {});
+        await linkStoredGenerationTask("image", task.id, { ...(resolvedBody.context || {}), publicOrigin });
         const cookie = request.headers.get("cookie") || "";
         const origin = resolveInternalOrigin(new URL(request.url).origin);
-        const publicOrigin = requestPublicOrigin(request);
         await scheduleGenerationTask("image", task.id, { executionPhase: "created", channelId: task.config.channelId, provider: task.config.advancedConfig?.protocol || task.config.apiFormat, nextPollAt: Date.now(), lastUpstreamStatus: "created" });
         after(() => runGenerationTaskRecoveryBatch({ origin, publicOrigin, cookie, limit: 1, taskIds: [task.id] }));
 

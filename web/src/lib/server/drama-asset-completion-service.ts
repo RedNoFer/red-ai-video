@@ -9,7 +9,7 @@ import { approvedAssetReference } from "@/lib/drama-asset-baseline";
 import { compileDramaAssetReferencePrompt, DRAMA_CHARACTER_TURNAROUND_SIZE } from "@/lib/drama-prompt-compiler";
 import { createDramaVoiceCreationTask } from "./drama-voice-creation";
 
-export async function completeDramaAsset(input: { userId: string; projectId: string; kind: DramaAssetKind; assetId: string; requestId: string; origin: string; cookie: string; config?: unknown; skipReference?: boolean; skipVoice?: boolean }) {
+export async function completeDramaAsset(input: { userId: string; projectId: string; kind: DramaAssetKind; assetId: string; requestId: string; origin: string; publicOrigin?: string; cookie: string; config?: unknown; skipReference?: boolean; skipVoice?: boolean }) {
     let project = await getDramaProjectForUser(input.userId, input.projectId);
     const asset = project[input.kind].find((item) => item.id === input.assetId);
     if (!asset) throw new Error("项目资产不存在");
@@ -108,7 +108,7 @@ export async function completeDramaAsset(input: { userId: string; projectId: str
                 references: [],
                 source: "drama",
                 title: `${project.title} · ${current.name}智能补全`,
-                context: { surface: "drama", projectId: project.id, clientRequestId: `${input.requestId}:reference` },
+                context: { surface: "drama", projectId: project.id, clientRequestId: `${input.requestId}:reference`, ...(input.publicOrigin ? { publicOrigin: input.publicOrigin } : {}) },
             }),
         });
         const payload = (await response.json().catch(() => ({}))) as { task?: { id?: string }; error?: string };

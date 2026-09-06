@@ -17,6 +17,16 @@ describe("resolvePublicRequestOrigin", () => {
         expect(resolvePublicRequestOrigin(new Request("http://192.168.1.20:3000/api/referrals"))).toBe("https://create.example.com");
     });
 
+    it("uses the current public host when the configured origin is an expired tunnel", () => {
+        vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://old-tunnel.trycloudflare.com");
+
+        expect(resolvePublicRequestOrigin(new Request("https://bowlpetdaily.com/api/image-tasks"))).toBe("https://bowlpetdaily.com");
+    });
+
+    it("accepts a browser origin forwarded through an internal image request", () => {
+        expect(resolvePublicRequestOrigin(new Request("http://127.0.0.1:3010/api/image-tasks"), "https://old-tunnel.trycloudflare.com", "https://bowlpetdaily.com")).toBe("https://bowlpetdaily.com");
+    });
+
     it("uses forwarded host and protocol only behind a trusted proxy", () => {
         vi.stubEnv("NEXT_PUBLIC_SITE_URL", "http://127.0.0.1:3000");
         vi.stubEnv("VOZEB_PRO_TRUSTED_PROXY_HOPS", "1");

@@ -874,6 +874,7 @@ export function withGenerationTaskFileMutation<T>(mutator: (tasks: StoredGenerat
 function normalizeGenerationTaskContext(context: GenerationTaskContext): GenerationTaskContext {
     const attempt = Number(context.attemptNo);
     return {
+        publicOrigin: cleanContextText(context.publicOrigin),
         conversationId: cleanContextText(context.conversationId),
         runId: cleanContextText(context.runId),
         surface: context.surface === "chat" || context.surface === "canvas" || context.surface === "drama" ? context.surface : undefined,
@@ -896,6 +897,7 @@ function normalizeGenerationTaskContext(context: GenerationTaskContext): Generat
 
 function preserveTaskContext(previous: StoredGenerationTaskRecord | undefined, next: GenerationTaskContext): GenerationTaskContext {
     return {
+        publicOrigin: next.publicOrigin || previous?.publicOrigin,
         conversationId: next.conversationId || previous?.conversationId,
         runId: next.runId || previous?.runId,
         surface: next.surface || previous?.surface,
@@ -979,6 +981,7 @@ function mapStoredTaskRecord(row: Record<string, unknown>): StoredGenerationTask
         createdAt: databaseTime(row.created_at),
         updatedAt: databaseTime(row.updated_at),
         expiresAt: databaseTime(row.expires_at),
+        publicOrigin: cleanContextText(String(payload.publicOrigin || "")),
         conversationId: cleanContextText(String(row.conversation_id || "")),
         runId: cleanContextText(String(row.run_id || "")),
         surface: isTaskSurface(row.surface) ? row.surface : undefined,

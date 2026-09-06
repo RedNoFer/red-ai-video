@@ -16,6 +16,7 @@ import { transitionAudioTask } from "@/lib/server/audio-task-store";
 import { getDramaProjectForUser, updateDramaProjectForUser } from "@/lib/server/drama-project-service";
 import { persistDramaGeneratedImageReference } from "@/lib/server/drama-asset-reference-media";
 import { resolveInternalOrigin } from "@/lib/server/internal-origin";
+import { resolvePublicRequestOrigin } from "@/lib/server/public-request-origin";
 import { runGenerationTaskRecoveryBatch } from "@/lib/server/generation-task-recovery-service";
 
 type Context = { params: Promise<{ id: string; batchId: string }> };
@@ -62,8 +63,9 @@ export async function GET(request: Request, context: Context) {
             });
         }
         const origin = resolveInternalOrigin(new URL(request.url).origin);
+        const publicOrigin = resolvePublicRequestOrigin(request);
         const cookie = request.headers.get("cookie") || "";
-        if (batch.status === "queued" || batch.status === "running") after(() => runDramaAssetGenerationBatchInBackground({ userId: user.id, projectId: params.id, batchId: batch.id, origin, cookie, config: batch.executionConfig || {} }));
+        if (batch.status === "queued" || batch.status === "running") after(() => runDramaAssetGenerationBatchInBackground({ userId: user.id, projectId: params.id, batchId: batch.id, origin, publicOrigin, cookie, config: batch.executionConfig || {} }));
         const activeTaskIds = batch.items.filter((item) => item.status === "running" && item.generationTaskId).map((item) => item.generationTaskId!);
         if (activeTaskIds.length) await runGenerationTaskRecoveryBatch({ origin, cookie, limit: activeTaskIds.length, taskIds: activeTaskIds }).catch(() => undefined);
         let project = await getDramaProjectForUser(user.id, params.id);

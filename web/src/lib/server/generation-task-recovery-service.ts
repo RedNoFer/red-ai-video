@@ -438,7 +438,7 @@ async function processImageLease(lease: GenerationTaskLease, workerId: string, o
         return "failed";
     }
     try {
-        const step = task.upstream?.id ? await queryImageTaskUpstreamStep(task, origin, cookie, cookie ? "" : task.userId) : await createImageTaskUpstreamStep(task, origin, publicOrigin, cookie, cookie ? "" : task.userId);
+        const step = task.upstream?.id ? await queryImageTaskUpstreamStep(task, origin, cookie, cookie ? "" : task.userId) : await createImageTaskUpstreamStep(task, origin, task.publicOrigin || publicOrigin, cookie, cookie ? "" : task.userId);
         const now = Date.now();
         if (step.state === "failed") {
             await markImageTaskFailed(task, step.error);

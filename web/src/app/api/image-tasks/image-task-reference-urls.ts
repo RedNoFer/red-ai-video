@@ -103,8 +103,8 @@ export function normalizeReferenceRequestUrl(value: string, origin: string) {
     return url;
 }
 
-export function requestPublicOrigin(request: Request) {
-    return resolvePublicRequestOrigin(request);
+export function requestPublicOrigin(request: Request, preferredValue = "") {
+    return resolvePublicRequestOrigin(request, process.env.NEXT_PUBLIC_SITE_URL || "", preferredValue);
 }
 
 export function normalizePublicOrigin(value: string) {

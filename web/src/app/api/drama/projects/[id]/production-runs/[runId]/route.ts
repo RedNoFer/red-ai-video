@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { resolveInternalOrigin } from "@/lib/server/internal-origin";
+import { resolvePublicRequestOrigin } from "@/lib/server/public-request-origin";
 
 import { getCurrentUser } from "@/lib/auth/session";
 import { readJsonBodyResult } from "@/lib/auth/request";
@@ -14,7 +15,7 @@ export async function PATCH(request: Request, context: Context) {
     if (!parsed.ok) return NextResponse.json({ code: parsed.status, data: null, msg: parsed.message }, { status: parsed.status });
     const params = await context.params;
     try {
-        const body = parsed.data && typeof parsed.data === "object" ? { ...(parsed.data as Record<string, unknown>), origin: resolveInternalOrigin(new URL(request.url).origin), cookie: request.headers.get("cookie") || "" } : parsed.data;
+        const body = parsed.data && typeof parsed.data === "object" ? { ...(parsed.data as Record<string, unknown>), origin: resolveInternalOrigin(new URL(request.url).origin), publicOrigin: resolvePublicRequestOrigin(request), cookie: request.headers.get("cookie") || "" } : parsed.data;
         const run = await updateDramaProductionRunForUser(user.id, params.id, params.runId, body);
         return NextResponse.json({ code: 0, data: { run }, msg: "生产运行已更新" });
     } catch (error) {

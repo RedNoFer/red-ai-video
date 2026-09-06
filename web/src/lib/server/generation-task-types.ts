@@ -4,6 +4,7 @@ export type GenerationTaskType = "text" | "image" | "video" | "audio" | "agent" 
 export type GenerationTaskStatus = "pending" | "running" | "success" | "error" | "paused" | "cancelled";
 
 export type GenerationTaskContext = {
+    publicOrigin?: string;
     conversationId?: string;
     runId?: string;
     surface?: "chat" | "canvas" | "drama";

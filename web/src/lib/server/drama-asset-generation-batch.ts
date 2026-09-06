@@ -166,7 +166,7 @@ export async function reconcileDramaAssetGenerationBatchItem(input: { userId: st
     });
 }
 
-export function runDramaAssetGenerationBatchInBackground(input: { userId: string; projectId: string; batchId: string; config: BatchConfig; origin: string; cookie: string }) {
+export function runDramaAssetGenerationBatchInBackground(input: { userId: string; projectId: string; batchId: string; config: BatchConfig; origin: string; publicOrigin?: string; cookie: string }) {
     if (activeProcessors.has(input.batchId)) return Promise.resolve();
     activeProcessors.add(input.batchId);
     return processDramaAssetGenerationBatch(input)
@@ -182,7 +182,7 @@ export function runDramaAssetGenerationBatchInBackground(input: { userId: string
         .finally(() => activeProcessors.delete(input.batchId));
 }
 
-async function processDramaAssetGenerationBatch(input: { userId: string; projectId: string; batchId: string; config: BatchConfig; origin: string; cookie: string }) {
+async function processDramaAssetGenerationBatch(input: { userId: string; projectId: string; batchId: string; config: BatchConfig; origin: string; publicOrigin?: string; cookie: string }) {
     let batch = await getDramaAssetGenerationBatchForUser(input.userId, input.projectId, input.batchId);
     if (!batch || ["completed", "partial_failed", "failed", "cancelled"].includes(batch.status)) return;
     for (const item of batch.items) {
@@ -208,7 +208,7 @@ async function processDramaAssetGenerationBatch(input: { userId: string; project
     }
 }
 
-async function submitBatchItem(input: { userId: string; projectId: string; batchId: string; config: BatchConfig; origin: string; cookie: string }, batch: DramaAssetGenerationBatch, item: DramaAssetGenerationBatchItem, config: BatchConfig) {
+async function submitBatchItem(input: { userId: string; projectId: string; batchId: string; config: BatchConfig; origin: string; publicOrigin?: string; cookie: string }, batch: DramaAssetGenerationBatch, item: DramaAssetGenerationBatchItem, config: BatchConfig) {
     let project = await getDramaProjectForUser(input.userId, input.projectId);
     let planningStatus = item.planningStatus;
     let voiceStatus = item.voiceStatus;
@@ -224,6 +224,7 @@ async function submitBatchItem(input: { userId: string; projectId: string; batch
                 assetId: item.assetId,
                 requestId: dramaAssetCompletionRequestId(batch.id, item.id, item.attempt),
                 origin: input.origin,
+                publicOrigin: input.publicOrigin,
                 cookie: authContext,
                 config: item.kind === "characters" ? { ...config, count: "1", size: DRAMA_CHARACTER_TURNAROUND_SIZE } : config,
                 skipReference: true,
@@ -259,7 +260,7 @@ async function submitBatchItem(input: { userId: string; projectId: string; batch
                 references,
                 source: "drama",
                 title: `${project.title} · ${item.assetName}批量候选`,
-                context: { surface: "drama", projectId: input.projectId, assetKind: item.kind, assetId: item.assetId, batchId: batch.id, batchItemId: item.id, clientRequestId: `${batch.id}:${item.id}:${item.attempt}` },
+                context: { surface: "drama", projectId: input.projectId, assetKind: item.kind, assetId: item.assetId, batchId: batch.id, batchItemId: item.id, clientRequestId: `${batch.id}:${item.id}:${item.attempt}`, ...(input.publicOrigin ? { publicOrigin: input.publicOrigin } : {}) },
             }),
         });
         const payload = (await response.json().catch(() => ({}))) as { task?: { id?: string }; error?: string };

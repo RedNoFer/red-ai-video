@@ -4,6 +4,7 @@ import { readJsonBodyResult } from "@/lib/auth/request";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getDramaAssetGenerationBatchForUser, DramaAssetGenerationBatchError, runDramaAssetGenerationBatchInBackground, updateDramaAssetGenerationBatchForUser } from "@/lib/server/drama-asset-generation-batch";
 import { resolveInternalOrigin } from "@/lib/server/internal-origin";
+import { resolvePublicRequestOrigin } from "@/lib/server/public-request-origin";
 
 type Context = { params: Promise<{ id: string; batchId: string }> };
 
@@ -16,6 +17,7 @@ export async function POST(request: Request, context: Context) {
         const params = await context.params;
         const batch = await getDramaAssetGenerationBatchForUser(user.id, params.id, params.batchId);
         const origin = resolveInternalOrigin(new URL(request.url).origin);
+        const publicOrigin = resolvePublicRequestOrigin(request);
         const cookie = request.headers.get("cookie") || "";
         const config = parsed.data?.config && typeof parsed.data.config === "object" ? (parsed.data.config as Record<string, unknown>) : batch.executionConfig || {};
         const retryable = batch.items.filter((item) => item.status === "error" && item.outputType !== "character_voice");
@@ -25,7 +27,7 @@ export async function POST(request: Request, context: Context) {
             return { ...item, status: "queued" as const, error: undefined, completedAt: undefined, generationTaskId: undefined, previewTaskId: undefined, planningError: undefined, referenceError: undefined, voiceError: undefined };
         });
         const updated = await updateDramaAssetGenerationBatchForUser(user.id, { ...batch, executionConfig: config, items });
-        if (retryable.length) after(() => runDramaAssetGenerationBatchInBackground({ userId: user.id, projectId: params.id, batchId: batch.id, origin, cookie, config }));
+        if (retryable.length) after(() => runDramaAssetGenerationBatchInBackground({ userId: user.id, projectId: params.id, batchId: batch.id, origin, publicOrigin, cookie, config }));
         return NextResponse.json({ code: 0, data: { batch: updated, retryCount: retryable.length }, msg: retryable.length ? "失败项已重新排队，后台继续处理" : "没有可重试的失败项" });
     } catch (error) {
         const status = error instanceof DramaAssetGenerationBatchError ? error.status : 500;

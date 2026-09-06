@@ -1049,7 +1049,7 @@ export async function createDramaProductionRunForUser(userId: string, projectId:
             }
             runEpisode = runProject.episodes.find((candidate) => candidate.id === episode.id) || episode;
         }
-        const transport = { origin: cleanText(object(value).origin), cookie: cleanText(object(value).cookie) };
+        const transport = { origin: cleanText(object(value).origin), cookie: cleanText(object(value).cookie), publicOrigin: cleanText(object(value).publicOrigin) };
         const settings = await getAuthSettings();
         const requestedModel = cleanText(object(value).imageModel) || settings.defaultModels.imageModel;
         const requestedChannelId = cleanText(object(value).imageChannelId);
@@ -1147,7 +1147,8 @@ export async function createDramaProductionRunForUser(userId: string, projectId:
     const created = await createDramaProductionRun(userId, confirmed);
     const origin = cleanText(object(value).origin);
     const cookie = cleanText(object(value).cookie);
-    const imageRun = await dispatchDramaImageSteps(userId, project, created, origin, cookie);
+    const publicOrigin = cleanText(object(value).publicOrigin);
+    const imageRun = await dispatchDramaImageSteps(userId, project, created, origin, cookie, publicOrigin);
     const refreshedRun = await getDramaProductionRun(userId, project.id, imageRun.id);
     return refreshedRun ? dispatchDramaProductionRun(userId, project.id, refreshedRun, origin, cookie) : imageRun;
 }
@@ -1194,19 +1195,19 @@ export function mergeDramaShotMediaReferences(current: DramaShot, snapshot: Dram
     };
 }
 
-export async function getLatestDramaProductionRunForUser(userId: string, projectId: string, episodeId: string, transport: { origin?: string; cookie?: string; scope?: "visual" | "production" } = {}) {
+export async function getLatestDramaProductionRunForUser(userId: string, projectId: string, episodeId: string, transport: { origin?: string; cookie?: string; publicOrigin?: string; scope?: "visual" | "production" } = {}) {
     const project = await getDramaProjectForUser(userId, projectId);
     const run = await findLatestDramaProductionRun(userId, projectId, cleanText(episodeId), transport.scope || "production");
     if (!run) return run;
     if (!run.scope || run.scope !== "visual") {
         const imageSynced = await syncDramaVisualRun(userId, project, run, transport);
-        const imageDispatched = imageSynced.confirmedAt && ["running", "ready"].includes(imageSynced.status) ? await dispatchDramaImageSteps(userId, project, imageSynced, transport.origin || "", transport.cookie || "") : imageSynced;
+        const imageDispatched = imageSynced.confirmedAt && ["running", "ready"].includes(imageSynced.status) ? await dispatchDramaImageSteps(userId, project, imageSynced, transport.origin || "", transport.cookie || "", transport.publicOrigin || "") : imageSynced;
         const refreshedRun = await getDramaProductionRun(userId, projectId, imageDispatched.id);
         if (!refreshedRun) return imageDispatched;
         return dispatchDramaProductionRun(userId, projectId, refreshedRun, transport.origin || "", transport.cookie || "");
     }
     const synced = await syncDramaVisualRun(userId, project, run, transport);
-    return synced.confirmedAt && ["running", "ready"].includes(synced.status) ? dispatchDramaImageSteps(userId, project, synced, transport.origin || "", transport.cookie || "") : synced;
+    return synced.confirmedAt && ["running", "ready"].includes(synced.status) ? dispatchDramaImageSteps(userId, project, synced, transport.origin || "", transport.cookie || "", transport.publicOrigin || "") : synced;
 }
 
 export async function preflightDramaGenerationForUser(userId: string, projectId: string, value: unknown) {
@@ -1638,7 +1639,7 @@ export async function updateDramaProductionRunForUser(userId: string, projectId:
                 }
             }
         }
-        return dispatchDramaImageSteps(userId, persistedProject, saved, cleanText(object(value).origin), cleanText(object(value).cookie));
+        return dispatchDramaImageSteps(userId, persistedProject, saved, cleanText(object(value).origin), cleanText(object(value).cookie), cleanText(object(value).publicOrigin));
     }
     return saved;
 }
@@ -1680,7 +1681,7 @@ function applyDramaVisualRunSubmission(project: DramaProject, run: DramaProducti
     return changed ? normalizeProject({ ...project, episodes, updatedAt: nextTimestamp(project.updatedAt) }, project) : project;
 }
 
-async function dispatchReadyDramaVisualSteps(userId: string, project: DramaProject, run: DramaProductionRun, origin: string, cookie: string) {
+async function dispatchReadyDramaVisualSteps(userId: string, project: DramaProject, run: DramaProductionRun, origin: string, cookie: string, publicOrigin: string) {
     if (!run.confirmedAt || !origin) return run;
     const assetUrls = new Map<string, { url: string; remoteUrl?: string; width?: number; height?: number; label: string; binding: string }>();
     for (const [assets, category, binding] of [
@@ -1772,7 +1773,7 @@ async function dispatchReadyDramaVisualSteps(userId: string, project: DramaProje
                     references,
                     source: "drama",
                     title: `${project.title} · ${step.title || step.id}`,
-                    context: { runId: run.id, surface: "drama", projectId: project.id, episodeId: run.episodeId, shotId: step.shotId, frameId: step.frameId, inputHash: step.inputHash, clientRequestId: requestId, attemptNo },
+                    context: { runId: run.id, surface: "drama", projectId: project.id, episodeId: run.episodeId, shotId: step.shotId, frameId: step.frameId, inputHash: step.inputHash, clientRequestId: requestId, attemptNo, ...(publicOrigin ? { publicOrigin } : {}) },
                 }),
             });
             const payload = (await response.json().catch(() => ({}))) as { task?: { id?: string }; error?: string; msg?: string };
@@ -1791,10 +1792,10 @@ async function dispatchReadyDramaVisualSteps(userId: string, project: DramaProje
     return finalized;
 }
 
-function dispatchDramaImageSteps(userId: string, project: DramaProject, run: DramaProductionRun, origin: string, cookie: string) {
+function dispatchDramaImageSteps(userId: string, project: DramaProject, run: DramaProductionRun, origin: string, cookie: string, publicOrigin: string) {
     const key = `${userId}:${run.id}`;
     const previous = dramaImageDispatchLocks.get(key);
-    const operation = (previous ? previous.then(async () => (await getDramaProductionRun(userId, run.projectId, run.id)) || run) : Promise.resolve(run)).then((latest) => dispatchReadyDramaVisualSteps(userId, project, latest, origin, cookie));
+    const operation = (previous ? previous.then(async () => (await getDramaProductionRun(userId, run.projectId, run.id)) || run) : Promise.resolve(run)).then((latest) => dispatchReadyDramaVisualSteps(userId, project, latest, origin, cookie, publicOrigin));
     dramaImageDispatchLocks.set(key, operation);
     operation.then(
         () => {
