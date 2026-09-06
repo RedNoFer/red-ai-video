@@ -75,7 +75,9 @@ export function buildDramaVisualProductionRun(project: DramaProject, episode: Dr
                     .digest("hex");
                 const explicitlySelected = !selectedFrameIds.size || selectedFrameIds.has(beat.id);
                 const selectedForRegeneration = selectedFrameIds.size > 0 && selectedFrameIds.has(beat.id);
-                const existingReady = Boolean(existing?.mediaUrl && existing.status === "success" && existing.continuityStatus === "passed" && (existing.source === "upload" || existing.inputHash === inputHash) && !parameters.regenerateAll && !selectedForRegeneration);
+                const existingReady = Boolean(
+                    existing?.mediaUrl && existing.status === "success" && existing.continuityStatus === "passed" && (existing.source === "upload" || existing.inputHash === inputHash) && !parameters.regenerateAll && !selectedForRegeneration,
+                );
                 const previousStepId = previousBeat ? `frame-${shot.id}-${previousBeat.id}` : undefined;
                 const previousStep = previousStepId ? steps.find((step) => step.id === previousStepId) : undefined;
                 const inheritedDependencies = previousStepId && previousStep?.status !== "stale" ? [previousStepId] : [];
@@ -90,7 +92,7 @@ export function buildDramaVisualProductionRun(project: DramaProject, episode: Dr
                     startSecond: beat.startSecond,
                     endSecond: beat.endSecond,
                     title: `${shot.title} · 帧 ${beat.sequenceIndex}`,
-                    prompt: compileDramaFrameBeatPrompt(project, episode, shot, beat),
+                    prompt: previousUrl ? withContinuityReferencePrompt(compileDramaFrameBeatPrompt(project, episode, shot, beat), "keyframe", beat.sequenceIndex > 1) : compileDramaFrameBeatPrompt(project, episode, shot, beat),
                     referenceAssetIds: frameReferences,
                     manualReferenceImages: shot.framePlan?.manualReferenceImages,
                     referenceManifest: scopedReferenceManifest(project, shot, beat),
@@ -180,9 +182,13 @@ export function compileDramaVisualStepPrompt(project: DramaProject, episode: Dra
     if (!shot) return step.prompt || "";
     const beat = step.type === "keyframe" ? shot.framePlan?.frames?.find((frame) => frame.id === step.frameId || frame.sequenceIndex === step.sequenceIndex) : undefined;
     const prompt = step.type === "end_frame" ? compileDramaFrameSupplierPrompt(project, episode, shot, undefined, "end") : beat ? compileDramaFrameBeatPrompt(project, episode, shot, beat) : compileDramaVisualStartFramePrompt(project, episode, shot);
-    return (step.type === "start_frame" || step.type === "keyframe") && step.referenceImageUrls?.length
-        ? `${prompt}\n上一镜成片实际尾帧是唯一开场依据：必须以该实际尾帧作为本镜头第一帧，保持人物、姿态、光线、环境和构图连续；当前镜头维护的分镜起始帧只能作为辅助参考，不得替代或覆盖实际尾帧。`
-        : prompt;
+    return (step.type === "start_frame" || step.type === "keyframe") && step.referenceImageUrls?.length ? withContinuityReferencePrompt(prompt, step.type, (step.sequenceIndex || 1) > 1) : prompt;
+}
+
+function withContinuityReferencePrompt(prompt: string, type: "start_frame" | "keyframe", sequentialFrame = false) {
+    const anchor = sequentialFrame ? "上一帧顺序锚点" : "上一镜成片实际尾帧";
+    const firstFrameRule = sequentialFrame ? "必须以该上一帧作为当前帧的连续性起点" : "必须以该实际尾帧作为本镜头第一帧";
+    return `${prompt}\n${anchor}是唯一连续性依据：${firstFrameRule}，保持人物、姿态、光线、环境和构图连续；当前镜头维护的分镜起始帧只能作为辅助参考，不得替代或覆盖连续性依据。${type === "keyframe" ? "在保持连续性的基础上，必须呈现当前帧提示词中写明的新可见状态，不得直接复制上一帧的静态构图、姿态或动作结果；按当前帧景别完整呈现主体、关键道具和环境边界，不得为了贴合参考图改成近景裁切。" : ""}`;
 }
 
 export function compileDramaVisualStartFramePrompt(project: DramaProject, episode: DramaEpisode, shot: DramaEpisode["shots"][number]) {

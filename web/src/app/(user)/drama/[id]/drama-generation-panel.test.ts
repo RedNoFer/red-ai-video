@@ -162,6 +162,9 @@ describe("Drama generation production workspace", () => {
         expect(frameEditorSource).toContain("object-contain");
         expect(frameEditorSource).not.toContain("object-cover");
         expect(frameEditorSource).not.toContain("group-hover:scale-[1.02]");
+        expect(frameEditorSource).toContain("await persistProjectNow(project.id)");
+        expect(frameEditorSource).toContain("aspectRatio: frameAspectRatio(frame)");
+        expect(frameEditorSource).toContain("aspectRatio: frameAspectRatio(candidate)");
         expect(generationSource).toContain("productionPlan?.video.resolution");
         expect(settingsSource).toContain("DRAMA_VIDEO_RESOLUTION_OPTIONS");
         expect(settingsSource).toContain("清晰度：");

@@ -90,7 +90,7 @@ describe("drama director visual plan", () => {
         expect(start.status).toBe("blocked");
         expect(start.prompt).toContain("静态关键帧：");
         expect(start.prompt).toContain("三层空间：");
-        expect(compileDramaVisualStepPrompt(project, project.episodes[0], start)).toContain("上一镜成片实际尾帧是唯一开场依据");
+        expect(compileDramaVisualStepPrompt(project, project.episodes[0], start)).toContain("上一镜成片实际尾帧是唯一连续性依据");
     });
 
     it("compiles the next storyboard prompt from its own entry state instead of the previous prompt text", () => {
@@ -244,6 +244,37 @@ describe("drama director visual plan", () => {
             steps: run.steps.map((step) => (step.id === first.id ? { ...step, status: "success" as const, outputUrls: ["/api/f1.png"], outputRemoteUrls: ["https://cdn.example/f1.png"] } : step)),
         });
         expect(ready.steps.find((step) => step.frameId === "f2")).toMatchObject({ status: "ready", referenceImageUrls: ["/api/f1.png"], referenceImageRemoteUrls: ["https://cdn.example/f1.png"] });
+    });
+
+    it("requires a later keyframe to show a new visible state while preserving continuity", () => {
+        const project = fixture();
+        const shot = project.episodes[0].shots[0];
+        shot.storyboardFrameMode = "all_frames";
+        shot.framePlan = {
+            start: { source: "independent" },
+            end: { required: false },
+            frames: [
+                { id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 2, actionPrompt: "静止", imagePrompt: "人物站在门边" },
+                { id: "f2", sequenceIndex: 2, startSecond: 2, endSecond: 4, actionPrompt: "抬头并握紧剑柄", imagePrompt: "人物抬头并握紧剑柄" },
+            ],
+        };
+        const step = {
+            id: "frame-shot-one-f2",
+            frameId: "f2",
+            shotId: shot.id,
+            type: "keyframe" as const,
+            sequenceIndex: 2,
+            referenceImageUrls: ["/api/f1.png"],
+            dependsOn: ["frame-shot-one-f1"],
+            status: "ready" as const,
+        };
+
+        const prompt = compileDramaVisualStepPrompt(project, project.episodes[0], step);
+
+        expect(prompt).toContain("必须呈现当前帧提示词中写明的新可见状态");
+        expect(prompt).toContain("上一帧顺序锚点是唯一连续性依据");
+        expect(prompt).toContain("不得直接复制上一帧的静态构图、姿态或动作结果");
+        expect(prompt).toContain("不得为了贴合参考图改成近景裁切");
     });
 
     it("does not unlock an unselected later frame after a single-frame request completes", () => {

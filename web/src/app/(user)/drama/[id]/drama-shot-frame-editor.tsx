@@ -5,7 +5,7 @@ import { Check, ImagePlus, LoaderCircle, Maximize2, Plus, RotateCcw, Save, ScanS
 import { useMemo, useRef, useState } from "react";
 
 import { approvedAssetReference } from "@/lib/drama-asset-baseline";
-import { activeFrameEvidence, continuityStartEvidence, createFrameEvidence, latestFrameEvidence, replaceFrameEvidence, supersedeFrameEvidenceByRole } from "@/lib/drama-continuity-policy";
+import { activeFrameEvidence, continuityStartEvidence, createFrameEvidence, invalidateFrameEvidence, latestFrameEvidence, replaceFrameEvidence, supersedeFrameEvidenceByRole } from "@/lib/drama-continuity-policy";
 import { deleteDramaFrameBeat, dramaFrameVisualSubject, formatPromptFieldLines, insertDramaFrameBeat, updateDramaFrameBeat, validateDramaFrameVisualContent } from "@/lib/drama-frame-sequence";
 import { appendDramaImageReferenceBindings, compileDramaFrameSupplierPrompt, resolveDramaFrameScene } from "@/lib/drama-prompt-compiler";
 import { imagePreviewUrl } from "@/lib/media-image-url";
@@ -26,6 +26,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
     const { message, modal } = App.useApp();
     const updateShot = useDramaStore((state) => state.updateShot);
     const replaceProject = useDramaStore((state) => state.replaceProject);
+    const persistProjectNow = useDramaStore((state) => state.saveProjectNow);
     const config = useEffectiveConfig();
     const imageRequestConfig = resolveModelRequestConfig(config, config.imageModel || config.model);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -203,7 +204,32 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
             storyboardFrames: storedFrames.map((frame) =>
                 frame.id === beat.id ? { ...staleFrame(frame), mediaUrl: undefined, remoteUrl: undefined, width: undefined, height: undefined, source: "generated" as const } : staleIds.has(frame.id) ? staleFrame(frame) : frame,
             ),
+            frameEvidence: (shot.frameEvidence || []).map((frame) =>
+                frame.role === "storyboard_keyframe" && (frame.sequenceIndex || 0) >= beat.sequenceIndex && (frame.validity === "accepted" || frame.validity === "candidate")
+                    ? invalidateFrameEvidence(frame, "superseded", "用户删除了分镜关键帧图片")
+                    : frame,
+            ),
             ...clearedGeneratedMedia,
+        });
+    };
+
+    const confirmRemoveImage = (label: string, remove: () => void) => {
+        modal.confirm({
+            title: `删除${label}？`,
+            content: "删除后，该图片不会再用于当前镜头；全能帧模式中依赖它的后续帧会标记为待重新生成。原始媒体文件不会被物理删除。",
+            okText: "确认删除",
+            okButtonProps: { danger: true },
+            cancelText: "取消",
+            onOk: async () => {
+                remove();
+                try {
+                    await persistProjectNow(project.id);
+                    message.success(`${label}已删除`);
+                } catch (error) {
+                    message.error(error instanceof Error ? error.message : "图片删除保存失败");
+                    throw error;
+                }
+            },
         });
     };
 
@@ -291,6 +317,10 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                 storyboardError: undefined,
                 ...clearedGeneratedMedia,
             });
+            // Commit the local queue markers before the run reads the project again.
+            // Otherwise the debounced autosave can race the run placeholder write and
+            // make the server reject the generation with a stale updatedAt token.
+            await persistProjectNow(project.id);
             const run = await createDramaProductionRun(project.id, episodeId, "visual", undefined, {
                 shotIds: [shot.id],
                 imageModel: imageRequestConfig.model,
@@ -602,7 +632,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                         return (
                             <div key={beat.id} className="grid min-w-0 gap-3 rounded-md border border-border/80 bg-muted/10 p-2.5 sm:grid-cols-[144px_minmax(0,1fr)]" data-drama-frame-row={beat.id}>
                                 <div className="min-w-0">
-                                    <div className="relative aspect-video w-full overflow-hidden rounded border border-border/70 bg-background sm:w-36">
+                                    <div className="relative w-full overflow-hidden rounded border border-border/70 bg-background sm:w-36" style={{ aspectRatio: frameAspectRatio(frame) }}>
                                         {frame?.mediaUrl ? (
                                             <Image className="!size-full !object-contain" src={imagePreviewUrl(frame.mediaUrl, 640)} alt={`帧 ${beat.sequenceIndex}`} preview={{ mask: "查看", src: imagePreviewUrl(frame.mediaUrl, 1920) }} />
                                         ) : (
@@ -630,7 +660,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                                                 disabled={rowBusy}
                                                 aria-label={`移除帧 ${beat.sequenceIndex} 图片`}
                                                 icon={<Trash2 className="size-3.5" />}
-                                                onClick={() => removeSequenceImage(beat)}
+                                                onClick={() => confirmRemoveImage(`帧 ${beat.sequenceIndex} 图片`, () => removeSequenceImage(beat))}
                                             />
                                         ) : null}
                                     </div>
@@ -762,13 +792,15 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                                                     const current = candidate.mediaUrl === frame?.mediaUrl;
                                                     return (
                                                         <div key={candidate.id} className={`w-28 shrink-0 overflow-hidden rounded-md border bg-background ${current ? "border-primary" : "border-border/70"}`}>
-                                                            <Image
-                                                                rootClassName="!block"
-                                                                className="!aspect-video !w-full !object-contain"
-                                                                src={imagePreviewUrl(candidate.mediaUrl, 320)}
-                                                                alt={`帧 ${beat.sequenceIndex} 候选`}
-                                                                preview={{ mask: "查看", src: imagePreviewUrl(candidate.mediaUrl, 1920) }}
-                                                            />
+                                                            <div className="relative w-full overflow-hidden bg-background" style={{ aspectRatio: frameAspectRatio(candidate) }}>
+                                                                <Image
+                                                                    rootClassName="!block !size-full"
+                                                                    className="!size-full !object-contain"
+                                                                    src={imagePreviewUrl(candidate.mediaUrl, 320)}
+                                                                    alt={`帧 ${beat.sequenceIndex} 候选`}
+                                                                    preview={{ mask: "查看", src: imagePreviewUrl(candidate.mediaUrl, 1920) }}
+                                                                />
+                                                            </div>
                                                             <div className="space-y-1 p-1.5 text-[10px]">
                                                                 <div className={current ? "font-medium text-primary" : "text-muted-foreground"}>{current ? "当前帧" : candidate.continuityStatus === "needs_review" ? "待人工验收" : "候选"}</div>
                                                                 {!current ? (
@@ -824,10 +856,11 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                     <FrameSlot
                         title="起始帧"
                         urls={startFrames.map((frame) => frame.mediaUrl)}
+                        dimensions={{ width: shot.storyboardImageWidth, height: shot.storyboardImageHeight }}
                         loading={uploading === "start"}
                         disabled={Boolean(submitting) || generationActive}
                         onUpload={() => chooseFile("start")}
-                        onRemove={() => removeLegacyFrame("start", project, episodeId, shot, updateShot)}
+                        onRemove={() => confirmRemoveImage("起始帧图片", () => removeLegacyFrame("start", project, episodeId, shot, updateShot))}
                         onPrompt={() =>
                             openPromptPreview({
                                 title: "起始帧图片提示词",
@@ -842,10 +875,11 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                         <FrameSlot
                             title="结束帧"
                             urls={endFrames.map((frame) => frame.mediaUrl)}
+                            dimensions={{ width: shot.storyboardEndImageWidth, height: shot.storyboardEndImageHeight }}
                             loading={uploading === "end"}
                             disabled={Boolean(submitting) || generationActive}
                             onUpload={() => chooseFile("end")}
-                            onRemove={() => removeLegacyFrame("end", project, episodeId, shot, updateShot)}
+                            onRemove={() => confirmRemoveImage("结束帧图片", () => removeLegacyFrame("end", project, episodeId, shot, updateShot))}
                             onPrompt={() =>
                                 openPromptPreview({
                                     title: "结束帧图片提示词",
@@ -1032,10 +1066,34 @@ function compactShotSnapshot(shot: DramaShot | undefined) {
     return JSON.parse(JSON.stringify(shot, (_key, value) => (typeof value === "string" && /^(?:data|blob):/i.test(value) ? undefined : value))) as DramaShot;
 }
 
-function FrameSlot({ title, urls, loading, disabled, onUpload, onRemove, onPrompt }: { title: string; urls: string[]; loading: boolean; disabled: boolean; onUpload: () => void; onRemove: () => void; onPrompt: () => void }) {
+function frameAspectRatio(dimensions?: { width?: number; height?: number }) {
+    const width = Number(dimensions?.width);
+    const height = Number(dimensions?.height);
+    return Number.isFinite(width) && width > 0 && Number.isFinite(height) && height > 0 ? `${width} / ${height}` : "16 / 9";
+}
+
+function FrameSlot({
+    title,
+    urls,
+    dimensions,
+    loading,
+    disabled,
+    onUpload,
+    onRemove,
+    onPrompt,
+}: {
+    title: string;
+    urls: string[];
+    dimensions?: { width?: number; height?: number };
+    loading: boolean;
+    disabled: boolean;
+    onUpload: () => void;
+    onRemove: () => void;
+    onPrompt: () => void;
+}) {
     return (
         <div className="flex min-w-0 items-center gap-2.5 rounded-md border border-border/80 bg-muted/15 p-2">
-            <div className="relative aspect-video w-24 shrink-0 overflow-hidden rounded border border-border/70 bg-background">
+            <div className="relative w-24 shrink-0 overflow-hidden rounded border border-border/70 bg-background" style={{ aspectRatio: frameAspectRatio(dimensions) }}>
                 {urls.length ? (
                     <Image className="!size-full !object-contain" src={imagePreviewUrl(urls[0], 640)} alt={title} preview={{ mask: "查看", src: imagePreviewUrl(urls[0], 1920) }} />
                 ) : (
