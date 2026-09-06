@@ -131,6 +131,14 @@ export function saveDramaProject(project: DramaProject) {
     return request<{ project: DramaProject }>(`/api/drama/projects/${encodeURIComponent(project.id)}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(project) }).then((data) => data.project);
 }
 
+export function saveDramaAsset(projectId: string, kind: "characters" | "scenes" | "props" | "clues", assetId: string, patch: unknown) {
+    return request<{ project: DramaProject }>(`/api/drama/projects/${encodeURIComponent(projectId)}/assets/${kind}/${encodeURIComponent(assetId)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+    }).then((data) => data.project);
+}
+
 export function saveDramaProductionPlan(projectId: string, productionPlan: DramaProductionPlan) {
     return request<{ project: DramaProject }>(`/api/drama/projects/${encodeURIComponent(projectId)}`, {
         method: "PATCH",

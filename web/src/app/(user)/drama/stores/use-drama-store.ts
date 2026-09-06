@@ -24,7 +24,7 @@ import { activeFrameEvidence } from "@/lib/drama-continuity-policy";
 import type { DramaSourceEpisodeDraft } from "@/lib/drama-source-splitter";
 import { ensureUniqueDramaAssetReferenceIds } from "../[id]/drama-asset-reference-utils";
 import { dramaShotVideoMode } from "../[id]/drama-shot-generation-utils";
-import { createDramaProject, createDramaProjectVersion, deleteDramaProject, getDramaProject, listDramaProjectSummaries, listDramaProjectVersions, restoreDramaProjectVersion, saveDramaProject } from "@/services/api/drama-projects";
+import { createDramaProject, createDramaProjectVersion, deleteDramaProject, getDramaProject, listDramaProjectSummaries, listDramaProjectVersions, restoreDramaProjectVersion, saveDramaAsset, saveDramaProject } from "@/services/api/drama-projects";
 import { useUserStore } from "@/stores/use-user-store";
 
 type DramaStore = {
@@ -65,6 +65,7 @@ type DramaStore = {
     updateShot: (projectId: string, episodeId: string, shotId: string, patch: Partial<DramaShot>) => void;
     replaceShot: (projectId: string, episodeId: string, shotId: string, shot: DramaShot, updatedAt?: string) => void;
     saveProjectNow: (projectId: string, updater?: (project: DramaProject) => DramaProject) => Promise<DramaProject>;
+    saveAssetNow: (projectId: string, kind: DramaAssetKind, assetId: string, patch: unknown) => Promise<DramaProject>;
     queueShots: (projectId: string, episodeId: string, shotIds: string[]) => void;
     applyContentAnalysis: (projectId: string, episodeId: string, analysis: DramaContentAnalysis) => void;
     applyVisualAnalysis: (projectId: string, episodeId: string, analysis: DramaVisualAnalysis) => void;
@@ -391,6 +392,31 @@ export const useDramaStore = create<DramaStore>((set, get) => ({
         try {
             await operation;
             if (!saved) throw new Error("短剧项目保存失败");
+            return saved;
+        } finally {
+            if (saveQueues.get(key) === operation) saveQueues.delete(key);
+        }
+    },
+    saveAssetNow: async (projectId, kind, assetId, patch) => {
+        const session = requireSession();
+        clearProjectSave(session, projectId);
+        const key = sessionEpoch.key(session, projectId);
+        const previous = saveQueues.get(key);
+        let saved: DramaProject | undefined;
+        const operation = (previous ? previous.catch(() => undefined) : Promise.resolve()).then(async () => {
+            assertCurrent(session);
+            saved = await saveDramaAsset(projectId, kind, assetId, patch);
+            assertCurrent(session);
+            set((state) => ({
+                projects: state.projects.map((item) => (item.id === projectId ? saved! : item)),
+                summaries: upsertSummary(state.summaries, saved!),
+                saveStateByProject: { ...state.saveStateByProject, [projectId]: { status: "saved", savedAt: saved!.updatedAt } },
+            }));
+        });
+        saveQueues.set(key, operation);
+        try {
+            await operation;
+            if (!saved) throw new Error("资产设定保存失败");
             return saved;
         } finally {
             if (saveQueues.get(key) === operation) saveQueues.delete(key);

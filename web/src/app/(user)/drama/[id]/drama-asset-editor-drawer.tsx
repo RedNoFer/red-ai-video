@@ -55,6 +55,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
     const replaceProject = useDramaStore((state) => state.replaceProject);
     const loadProject = useDramaStore((state) => state.loadProject);
     const saveProjectNow = useDramaStore((state) => state.saveProjectNow);
+    const saveAssetNow = useDramaStore((state) => state.saveAssetNow);
     const liveAsset = useDramaStore((state) => state.projects.find((item) => item.id === project.id)?.[kind].find((item) => item.id === assetId));
     const fileInputRef = useRef<HTMLInputElement>(null);
     const voiceSampleInputRef = useRef<HTMLInputElement>(null);
@@ -141,11 +142,14 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
         const base = { name, description: draft.description.trim(), profile: draft.profile };
         try {
             if (asset) {
-                updateAsset(project.id, kind, asset.id, {
+                const patch = {
                     ...base,
                     ...(kind === "characters" ? { voiceProfile: draft.voiceProfile } : {}),
                     ...(kind === "clues" ? { payoff: draft.payoff.trim() } : {}),
-                });
+                };
+                updateAsset(project.id, kind, asset.id, patch);
+                const savedProject = await saveAssetNow(project.id, kind, asset.id, patch);
+                replaceProject(savedProject);
             } else if (kind === "characters") {
                 addCharacter(project.id, { ...base, voiceProfile: draft.voiceProfile, references: [] });
             } else if (kind === "scenes") {
@@ -155,7 +159,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
             } else {
                 addClue(project.id, { ...base, payoff: draft.payoff.trim(), references: [] });
             }
-            await saveProjectNow(project.id);
+            if (!asset) await useDramaStore.getState().saveProjectNow(project.id);
             message.success(asset ? `${definition.title}设定已保存` : `${definition.title}已创建`);
             onClose();
         } catch (error) {

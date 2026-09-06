@@ -23,8 +23,9 @@ test("编辑角色视觉设定后保存并恢复全部字段", async ({ page, re
         });
         expect(saved.ok(), await saved.text()).toBe(true);
 
-        await page.goto(`/drama/${project.id}`, { waitUntil: "domcontentloaded" });
+        await page.goto(`/drama/${project.id}`, { waitUntil: "networkidle" });
         await page.getByRole("button", { name: "打开项目资产" }).click();
+        await expect(page.locator("[data-drama-assets-library]")).toBeVisible();
         await page.getByRole("button", { name: "编辑角色：保存测试角色" }).click();
         const drawer = page.getByRole("dialog", { name: "编辑角色" });
         const fields = {
@@ -44,13 +45,12 @@ test("编辑角色视觉设定后保存并恢复全部字段", async ({ page, re
         expect(persisted?.profile?.visualIdentity).toContain(fields.visualIdentity);
         expect(persisted?.profile?.consistencyRules).toContain(fields.consistencyRules);
 
-        await page.getByRole("button", { name: "打开项目资产" }).click();
         await page.getByRole("button", { name: "编辑角色：保存测试角色" }).click();
         const reopened = page.getByRole("dialog", { name: "编辑角色" });
-        await expect(reopened.getByRole("textbox").nth(2)).toHaveValue(expect.stringContaining(fields.visualIdentity));
+        await expect.poll(() => reopened.getByRole("textbox").nth(2).inputValue()).toContain(fields.visualIdentity);
         await expect(reopened.getByRole("textbox").nth(3)).toHaveValue(fields.styling);
         await expect(reopened.getByRole("textbox").nth(4)).toHaveValue(fields.colorPalette);
-        await expect(reopened.getByRole("textbox").nth(5)).toHaveValue(expect.stringContaining(fields.consistencyRules));
+        await expect.poll(() => reopened.getByRole("textbox").nth(5).inputValue()).toContain(fields.consistencyRules);
     } finally {
         const deleted = await request.delete(`/api/drama/projects/${project.id}`);
         expect(deleted.ok(), await deleted.text()).toBe(true);

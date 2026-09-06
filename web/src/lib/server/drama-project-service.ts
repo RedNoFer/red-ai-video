@@ -928,6 +928,35 @@ export async function approveDramaAssetReferenceForUser(userId: string, id: stri
     }
 }
 
+export async function updateDramaAssetForUser(userId: string, id: string, kind: string, assetId: string, value: unknown) {
+    if (kind !== "characters" && kind !== "scenes" && kind !== "props" && kind !== "clues") throw new DramaProjectServiceError("当前资产类型不支持设定保存", 400);
+    const current = await getDramaProjectForUser(userId, id);
+    const asset = current[kind].find((item) => item.id === assetId);
+    if (!asset) throw new DramaProjectServiceError("项目资产不存在，请刷新后重试", 404);
+    const input = object(value);
+    const incomingProfile = object(input.profile);
+    const patch = {
+        ...(typeof input.name === "string" ? { name: cleanText(input.name) } : {}),
+        ...(typeof input.description === "string" ? { description: cleanText(input.description) } : {}),
+        ...(Object.keys(incomingProfile).length ? { profile: { ...asset.profile, ...incomingProfile } } : {}),
+        ...(kind === "characters" && input.voiceProfile !== undefined ? { voiceProfile: input.voiceProfile } : {}),
+        ...(kind === "clues" && typeof input.payoff === "string" ? { payoff: cleanText(input.payoff) } : {}),
+    };
+    const nextProject = normalizeProject(markDramaAssetChanged({ ...current, [kind]: current[kind].map((item) => (item.id === assetId ? { ...item, ...patch } : item)), updatedAt: nextTimestamp(current.updatedAt) }, kind, assetId), current);
+    try {
+        assertUniqueDramaVoices(nextProject.characters);
+    } catch (error) {
+        if (error instanceof Error) throw new DramaProjectServiceError(error.message, 409);
+        throw error;
+    }
+    try {
+        return await updateDramaProject(userId, nextProject, current.updatedAt);
+    } catch (error) {
+        if (error instanceof DramaProjectStoreError) throw new DramaProjectServiceError(error.message, error.status);
+        throw error;
+    }
+}
+
 export function previewDramaProductionPackageForUser(value: unknown) {
     const input = object(value);
     const source = cleanText(input.source);
@@ -2098,6 +2127,34 @@ export function compileDramaVideoReferencePrompt(prompt: string, references: Arr
 
 function updateDramaShotInProject(project: DramaProject, episodeId: string, shotId: string, patch: Partial<DramaShot>): DramaProject {
     return { ...project, episodes: project.episodes.map((episode) => (episode.id === episodeId ? { ...episode, shots: episode.shots.map((shot) => (shot.id === shotId ? { ...shot, ...patch } : shot)) } : episode)) };
+}
+
+function markDramaAssetChanged(project: DramaProject, kind: string, assetId: string): DramaProject {
+    const episodes = project.episodes.map((episode) => {
+        const direct = new Set(
+            episode.shots
+                .filter((shot) => (kind === "characters" ? shot.characterIds.includes(assetId) : kind === "scenes" ? shot.sceneId === assetId : kind === "props" ? shot.propIds.includes(assetId) : shot.clueIds.includes(assetId)))
+                .map((shot) => shot.id),
+        );
+        let changed = true;
+        while (changed) {
+            changed = false;
+            for (const edge of episode.continuityEdges || []) {
+                if (edge.inheritActualEndFrame && direct.has(edge.fromShotId) && !direct.has(edge.toShotId)) {
+                    direct.add(edge.toShotId);
+                    changed = true;
+                }
+            }
+        }
+        if (!direct.size) return episode;
+        const first = [...direct][0];
+        return {
+            ...episode,
+            shots: episode.shots.map((shot) => (direct.has(shot.id) ? { ...shot, continuityStatus: shot.id === first ? ("stale" as const) : ("blocked" as const), continuityError: `资产“${assetId}”已修改，需要重新审核` } : shot)),
+            visualReview: undefined,
+        };
+    });
+    return { ...project, episodes };
 }
 
 export function compileDramaReferencePrompt(prompt: string, references: Array<{ id: string; label?: string; binding?: string }>) {

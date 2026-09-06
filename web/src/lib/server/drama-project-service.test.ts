@@ -114,6 +114,7 @@ import {
     restoreDramaProjectVersionForUser,
     updateDramaProductionRunForUser,
     updateDramaProjectForUser,
+    updateDramaAssetForUser,
     updateDramaShotPromptForUser,
     updateDramaStoryboardFramePromptForUser,
     validateDramaReferenceSelections,
@@ -1978,6 +1979,32 @@ describe("drama project service updates", () => {
         const saved = await updateDramaProjectForUser("user-one", current.id, input);
 
         expect(saved).toMatchObject({ ratio: "1080x1920", characters: [{ references: [{ width: 1080, height: 1920 }] }] });
+    });
+
+    it("updates one asset from the latest project snapshot without replacing other assets", async () => {
+        const current = project("2026-07-19T08:00:01.000Z", "项目");
+        current.characters = [
+            { id: "character-one", name: "主角", description: "身份", profile: { visualIdentity: "旧外貌", styling: "旧造型", colorPalette: "旧配色", consistencyRules: "旧规则" }, references: [] },
+            { id: "character-two", name: "配角", description: "保留", profile: { visualIdentity: "配角外貌" }, references: [] },
+        ] as never;
+        current.episodes[0].shots = [
+            { id: "shot-one", title: "镜头一", characterIds: ["character-one"], sceneId: undefined, propIds: [], clueIds: [], continuityStatus: "passed" },
+            { id: "shot-two", title: "镜头二", characterIds: [], sceneId: undefined, propIds: [], clueIds: [], continuityStatus: "passed" },
+        ] as never;
+        current.episodes[0].continuityEdges = [{ fromShotId: "shot-one", toShotId: "shot-two", inheritActualEndFrame: true }] as never;
+        mocks.getDramaProject.mockResolvedValue(current);
+
+        const saved = await updateDramaAssetForUser("user-one", current.id, "characters", "character-one", {
+            name: "主角",
+            description: "更新身份",
+            profile: { visualIdentity: "新外貌", styling: "新造型", colorPalette: "新配色", consistencyRules: "新规则" },
+        });
+
+        expect(saved.characters).toHaveLength(2);
+        expect(saved.characters[0]).toMatchObject({ description: "更新身份", profile: expect.objectContaining({ styling: "新造型", colorPalette: "新配色" }) });
+        expect(saved.characters[1]).toMatchObject({ id: "character-two", description: "保留" });
+        expect(saved.episodes[0].shots).toEqual(expect.arrayContaining([expect.objectContaining({ id: "shot-one", continuityStatus: "stale" }), expect.objectContaining({ id: "shot-two", continuityStatus: "blocked" })]));
+        expect(mocks.updateDramaProject).toHaveBeenCalledWith("user-one", expect.objectContaining({ characters: expect.arrayContaining([expect.objectContaining({ id: "character-two", description: "保留" })]) }), current.updatedAt);
     });
 
     it("preserves exact project dimensions without a platform ceiling", async () => {
