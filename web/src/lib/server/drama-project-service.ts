@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { nanoid } from "nanoid";
 import { assertUniqueDramaVoices, normalizeDramaVoiceProfile } from "@/lib/drama-voice";
+import { normalizeDramaCharacterProfile } from "@/lib/drama-character-rules";
 
 import { getAuthSettings } from "@/lib/auth/store";
 import { fetchInternalApi } from "@/lib/server/internal-origin";
@@ -3083,6 +3084,7 @@ function normalizeNamedAssets(value: unknown, prefix: string, character = false)
             const references = normalizeAssetReferences(input.references, id, input.referenceImageUrl, input.referenceStorageKey);
             const primaryReferenceId = references.some((reference) => reference.id === input.primaryReferenceId && reference.status === "approved") ? String(input.primaryReferenceId) : undefined;
             const primaryReference = references.find((reference) => reference.id === primaryReferenceId);
+            const baseProfile = normalizeAssetProfile(input.profile, `${cleanText(input.description)}\n${cleanText(object(input.profile).designPrompt)}`, cleanText(input.name), prefix === "scene");
             return {
                 id,
                 code: optionalText(input.code),
@@ -3090,7 +3092,7 @@ function normalizeNamedAssets(value: unknown, prefix: string, character = false)
                 description: cleanText(input.description),
                 fieldOrigins: normalizeFieldOrigins(input.fieldOrigins),
                 activeEpisodeCodes: ids(input.activeEpisodeCodes),
-                profile: normalizeAssetProfile(input.profile, `${cleanText(input.description)}\n${cleanText(object(input.profile).designPrompt)}`, cleanText(input.name), prefix === "scene"),
+                profile: character ? normalizeDramaCharacterProfile(baseProfile, cleanText(input.description), cleanText(input.name)) : baseProfile,
                 references,
                 primaryReferenceId,
                 referenceImageUrl: primaryReference?.url,

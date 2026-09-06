@@ -19,7 +19,10 @@ export async function normalizeGeneratedImageBytes(bytes: Buffer, mimeType: stri
     assertTargetDimensions(target.width, target.height);
     if (dimensions.width === target.width && dimensions.height === target.height) return { bytes, mimeType: imageMimeType(metadata.format, mimeType), ...dimensions };
 
-    const result = await sharp(bytes, { failOn: "error", limitInputPixels: MAX_INPUT_PIXELS }).rotate().resize(target.width, target.height, { fit: "cover", position: "centre" }).toBuffer({ resolveWithObject: true });
+    const result = await sharp(bytes, { failOn: "error", limitInputPixels: MAX_INPUT_PIXELS })
+        .rotate()
+        .resize(target.width, target.height, { fit: "contain", background: { r: 255, g: 255, b: 255, alpha: 1 } })
+        .toBuffer({ resolveWithObject: true });
     return {
         bytes: result.data,
         mimeType: imageMimeType(result.info.format, mimeType),

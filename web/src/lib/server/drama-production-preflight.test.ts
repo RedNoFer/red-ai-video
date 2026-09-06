@@ -145,7 +145,7 @@ describe("drama production preflight", () => {
         expect(preflightDramaProduction(project, project.episodes[0]).issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "REFERENCE_IMAGE_BUDGET", severity: "warning" })]));
     });
 
-    it("blocks all-frames production until every real frame is accepted", () => {
+    it("does not block all-frames production when real frames are still pending inspection", () => {
         const project = fixture();
         const shot = project.episodes[0].shots[0];
         shot.storyboardFrameMode = "all_frames";
@@ -153,11 +153,12 @@ describe("drama production preflight", () => {
             { id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 7.5, actionPrompt: "抬头", imagePrompt: "人物抬头，手握断剑" },
             { id: "f2", sequenceIndex: 2, startSecond: 7.5, endSecond: 15, actionPrompt: "后退", imagePrompt: "人物后退到门边，视线锁定门缝" },
         ];
-        shot.storyboardFrames = [{ id: "f1", sequenceIndex: 1, mediaUrl: "/f1.png", source: "generated", status: "success", continuityStatus: "passed" }];
+        shot.storyboardFrames = [{ id: "f1", sequenceIndex: 1, mediaUrl: "/f1.png", source: "generated", status: "success", continuityStatus: "pending" }];
 
         const result = preflightDramaProduction(project, project.episodes[0]);
 
-        expect(result.issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "FRAME_ASSET_NOT_ACCEPTED", shotId: shot.id, severity: "blocking" })]));
+        expect(result.issues.some((issue) => issue.code === "FRAME_ASSET_NOT_ACCEPTED")).toBe(false);
+        expect(result.issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "FRAME_ASSET_NOT_READY", shotId: shot.id, severity: "blocking" })]));
     });
 
     it("requires at least two ordered frames for all-frames mode", () => {

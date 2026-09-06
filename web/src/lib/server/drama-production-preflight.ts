@@ -179,8 +179,14 @@ function checkShot(
                         issues.push(blocking("FRAME_VISUAL_DUPLICATE", `${label}第${index + 1}帧与上一帧的可见画面没有变化`, { shotId: shot.id, correction: "补充当前帧新的姿态、道具状态、表情或环境变化" }));
                     if (shot.storyboardFrameMode === "all_frames") {
                         const stored = shot.storyboardFrames?.find((candidate) => candidate.id === frame.id || candidate.sequenceIndex === frame.sequenceIndex);
-                        if (!stored?.mediaUrl?.trim() || stored.status !== "success" || stored.continuityStatus !== "passed")
-                            issues.push(blocking("FRAME_ASSET_NOT_ACCEPTED", `${label}第${index + 1}帧（${frame.id}）尚未生成并验收通过，不能提交有序关键帧视频`, { shotId: shot.id, correction: "先生成当前帧真实图片并完成连续性人工验收" }));
+                        const needsReview = stored?.continuityStatus === "needs_review" || stored?.continuityStatus === "stale";
+                        if (!stored?.mediaUrl?.trim() || stored.status !== "success" || needsReview)
+                            issues.push(
+                                blocking("FRAME_ASSET_NOT_READY", needsReview ? `${label}第${index + 1}帧（${frame.id}）仍需连续性复核，不能提交有序关键帧视频` : `${label}第${index + 1}帧（${frame.id}）尚未生成可用图片，不能提交有序关键帧视频`, {
+                                    shotId: shot.id,
+                                    correction: needsReview ? "完成当前帧连续性复核或重新生成" : "先生成当前帧图片",
+                                }),
+                            );
                     }
                 });
             } catch (error) {

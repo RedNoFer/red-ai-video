@@ -16,5 +16,6 @@ describe("drama media thumbnail", () => {
         expect(markup).toContain(`aria-label="查看${type === "image" ? "图片" : "视频"}：${title}"`);
         expect(markup).toContain(type === "image" ? "<img" : "<video");
         expect(markup).toContain(`/media/${type}`);
+        expect(markup).toContain("object-contain");
     });
 });

@@ -604,7 +604,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                                 <div className="min-w-0">
                                     <div className="relative aspect-video w-full overflow-hidden rounded border border-border/70 bg-background sm:w-36">
                                         {frame?.mediaUrl ? (
-                                            <Image className="!size-full !object-cover" src={imagePreviewUrl(frame.mediaUrl, 640)} alt={`帧 ${beat.sequenceIndex}`} preview={{ mask: "查看", src: imagePreviewUrl(frame.mediaUrl, 1920) }} />
+                                            <Image className="!size-full !object-contain" src={imagePreviewUrl(frame.mediaUrl, 640)} alt={`帧 ${beat.sequenceIndex}`} preview={{ mask: "查看", src: imagePreviewUrl(frame.mediaUrl, 1920) }} />
                                         ) : (
                                             <button
                                                 type="button"
@@ -719,7 +719,13 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                                     </label>
                                     <label className="block text-xs text-muted-foreground">
                                         静态帧提示词
-                                        <Input.TextArea className="mt-1" autoSize={{ minRows: 2, maxRows: 4 }} value={formatPromptFieldLines(beat.imagePrompt, "static")} disabled={rowBusy} onChange={(event) => editBeat(beat, { imagePrompt: event.target.value })} />
+                                        <Input.TextArea
+                                            className="mt-1"
+                                            autoSize={{ minRows: 2, maxRows: 4 }}
+                                            value={formatPromptFieldLines(beat.imagePrompt, "static")}
+                                            disabled={rowBusy}
+                                            onChange={(event) => editBeat(beat, { imagePrompt: event.target.value })}
+                                        />
                                     </label>
                                     {frame?.mediaUrl && frame.continuityStatus === "needs_review" ? (
                                         <div
@@ -758,7 +764,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                                                         <div key={candidate.id} className={`w-28 shrink-0 overflow-hidden rounded-md border bg-background ${current ? "border-primary" : "border-border/70"}`}>
                                                             <Image
                                                                 rootClassName="!block"
-                                                                className="!aspect-video !w-full !object-cover"
+                                                                className="!aspect-video !w-full !object-contain"
                                                                 src={imagePreviewUrl(candidate.mediaUrl, 320)}
                                                                 alt={`帧 ${beat.sequenceIndex} 候选`}
                                                                 preview={{ mask: "查看", src: imagePreviewUrl(candidate.mediaUrl, 1920) }}
@@ -895,7 +901,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                                         aria-label={`查看提示词引用图片 ${index + 1}：${reference.label}`}
                                     >
                                         <div className="relative aspect-video overflow-hidden bg-muted">
-                                            <Image preview={false} rootClassName="!size-full" className="!size-full !object-cover transition group-hover:scale-[1.02]" src={imagePreviewUrl(reference.url, 320)} alt={`图片${index + 1} ${reference.label}`} />
+                                            <Image preview={false} rootClassName="!size-full" className="!size-full !object-contain" src={imagePreviewUrl(reference.url, 320)} alt={`图片${index + 1} ${reference.label}`} />
                                             <span className="absolute left-1 top-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] text-white">@图片{index + 1}</span>
                                             <span className="absolute bottom-1 right-1 grid size-5 place-items-center rounded bg-black/70 text-white" aria-hidden="true">
                                                 <Maximize2 className="size-3" />
@@ -977,7 +983,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                                 aria-pressed={checked}
                             >
                                 <div className="relative aspect-video overflow-hidden bg-muted">
-                                    <Image preview={false} rootClassName="!size-full" className="!size-full !object-cover transition group-hover:scale-[1.02]" src={imagePreviewUrl(reference.url, 480)} alt={reference.label} />
+                                    <Image preview={false} rootClassName="!size-full" className="!size-full !object-contain" src={imagePreviewUrl(reference.url, 480)} alt={reference.label} />
                                     <span className={`absolute right-1.5 top-1.5 grid size-5 place-items-center rounded-full ${checked ? "bg-primary text-primary-foreground" : "bg-black/60 text-white"}`}>
                                         {checked ? <Check className="size-3.5" /> : <span className="size-2.5 rounded-sm border border-white/80" aria-hidden />}
                                     </span>
@@ -1031,7 +1037,7 @@ function FrameSlot({ title, urls, loading, disabled, onUpload, onRemove, onPromp
         <div className="flex min-w-0 items-center gap-2.5 rounded-md border border-border/80 bg-muted/15 p-2">
             <div className="relative aspect-video w-24 shrink-0 overflow-hidden rounded border border-border/70 bg-background">
                 {urls.length ? (
-                    <Image className="!size-full !object-cover" src={imagePreviewUrl(urls[0], 640)} alt={title} preview={{ mask: "查看", src: imagePreviewUrl(urls[0], 1920) }} />
+                    <Image className="!size-full !object-contain" src={imagePreviewUrl(urls[0], 640)} alt={title} preview={{ mask: "查看", src: imagePreviewUrl(urls[0], 1920) }} />
                 ) : (
                     <button
                         type="button"

@@ -243,7 +243,7 @@ export function DramaGenerationPanel({
         try {
             const responses = await Promise.all(requests);
             const failed = responses.find((response) => !response.ok);
-            if (failed) throw new Error((await failed.json().catch(() => ({})) as { error?: string }).error || "取消生成失败");
+            if (failed) throw new Error(((await failed.json().catch(() => ({}))) as { error?: string }).error || "取消生成失败");
             updateShot(project.id, episode.id, shot.id, imageTaskIds.size ? { storyboardStatus: "cancelled", storyboardEndStatus: "cancelled", generationStatus: "cancelled" } : { generationStatus: "cancelled" });
             await loadProject(project.id, true);
             message.success("已取消当前镜头生成");
@@ -410,7 +410,7 @@ export function DramaGenerationPanel({
             cancelText: "返回修改",
             onOk: () => {
                 if (selectionState.invalid) {
-                    message.error("仍有镜头的关键帧未全部生成并验收，或参考图超过供应商上限，请先完成帧验收");
+                    message.error("仍有镜头的关键帧未全部生成，或参考图超过供应商上限，请先完成帧生成");
                     return Promise.reject();
                 }
                 return lockProduction(shotIds, check, selectionState.selections);
@@ -1189,7 +1189,9 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
     const referenceAssets = shotReferenceAssets(project, shot);
     const videoStep = productionRun?.steps.filter((step) => step.shotId === shot.id && step.type === "video").sort((left, right) => (right.clipIndex || 0) - (left.clipIndex || 0))[0];
     const referenceBindings = videoStep?.referenceBindingsSnapshot || [];
-    const sequenceFrames = (shot.storyboardFrames || []).filter((frame) => frame.mediaUrl && frame.status === "success" && frame.continuityStatus === "passed").sort((left, right) => left.sequenceIndex - right.sequenceIndex);
+    const sequenceFrames = (shot.storyboardFrames || [])
+        .filter((frame) => frame.mediaUrl && frame.status === "success" && frame.continuityStatus !== "needs_review" && frame.continuityStatus !== "stale")
+        .sort((left, right) => left.sequenceIndex - right.sequenceIndex);
     const boundaryFrames = [
         ...activeFrameEvidence(shot, "storyboard_start")
             .slice(0, 1)
@@ -1210,7 +1212,13 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
         if (!source || optimizingVideoPrompt || !beginVideoPrompt(project.id, episode.id, shot.id)) return;
         setOptimizingVideoPrompt(true);
         try {
-            const result = await generateDramaVideoPrompt({ project, episode, shot: { ...shot, videoPrompt: source }, referenceMaterials: executionReferences, requestId: `drama-video-optimize:${project.id}:${episode.id}:${shot.id}:${crypto.randomUUID()}` });
+            const result = await generateDramaVideoPrompt({
+                project,
+                episode,
+                shot: { ...shot, videoPrompt: source },
+                referenceMaterials: executionReferences,
+                requestId: `drama-video-optimize:${project.id}:${episode.id}:${shot.id}:${crypto.randomUUID()}`,
+            });
             const optimized = result.shots.find((item) => item.shotId === shot.id);
             if (!optimized?.videoPrompt?.trim() || !optimized.framePlan?.frames?.length) throw new Error("Agent 未返回当前镜头的标准视频提示词和逐帧计划");
             setVideoPromptDraft(optimized.videoPrompt.trim());
@@ -1284,7 +1292,7 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
                                 aria-label={`查看引用资产：${asset.label}`}
                             >
                                 <span className="block overflow-hidden bg-muted" style={{ aspectRatio: asset.width && asset.height ? `${asset.width} / ${asset.height}` : "4 / 3" }}>
-                                    <img className="size-full object-cover transition group-hover:scale-[1.02]" src={imagePreviewUrl(asset.url, 480)} alt={asset.label} />
+                                    <img className="size-full object-contain transition" src={imagePreviewUrl(asset.url, 480)} alt={asset.label} />
                                 </span>
                                 <span className="block truncate px-2 py-1.5 text-[11px] text-muted-foreground">{asset.label}</span>
                             </button>
@@ -1297,7 +1305,7 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
             <div className="mt-1 border-t border-border/70 pt-3" data-drama-shot-sequence-frames>
                 <div className="flex items-center justify-between gap-2">
                     <span className="font-medium text-foreground">顺序帧引用</span>
-                    <span className="text-muted-foreground">{sequenceFrames.length ? `${sequenceFrames.length} 张` : "暂无已验收顺序帧"}</span>
+                    <span className="text-muted-foreground">{sequenceFrames.length ? `${sequenceFrames.length} 张` : "暂无可用顺序帧"}</span>
                 </div>
                 {sequenceFrames.length ? (
                     <div className="mt-2 grid grid-cols-[repeat(auto-fill,minmax(104px,1fr))] gap-2 sm:grid-cols-[repeat(auto-fill,minmax(120px,1fr))]">
@@ -1313,21 +1321,21 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
                                     aria-label={`查看顺序帧 ${frame.sequenceIndex}`}
                                 >
                                     <span className="block overflow-hidden bg-muted" style={{ aspectRatio: frame.width && frame.height ? `${frame.width} / ${frame.height}` : "4 / 3" }}>
-                                        <img className="size-full object-cover transition group-hover:scale-[1.02]" src={imagePreviewUrl(frame.mediaUrl!, 480)} alt={`${shot.title}顺序帧${frame.sequenceIndex}`} />
+                                        <img className="size-full object-contain transition" src={imagePreviewUrl(frame.mediaUrl!, 480)} alt={`${shot.title}顺序帧${frame.sequenceIndex}`} />
                                     </span>
                                     <span className="block px-2 py-1.5 text-[11px] leading-4 text-muted-foreground">
                                         <span className="block font-medium text-foreground">
                                             帧 {frame.sequenceIndex} · {frame.sequenceIndex === 1 ? "开始" : frame.sequenceIndex === sequenceFrames.length ? "结束" : "中间"}
                                             {binding ? ` · ${binding.alias}` : ""}
                                         </span>
-                                        <span className="block truncate">{beat ? `${beat.startSecond}-${beat.endSecond}s` : "已验收关键帧"}</span>
+                                        <span className="block truncate">{beat ? `${beat.startSecond}-${beat.endSecond}s` : "可用关键帧"}</span>
                                     </span>
                                 </button>
                             );
                         })}
                     </div>
                 ) : (
-                    <p className="mt-2 text-muted-foreground">本镜头尚未生成并验收可用于视频的顺序关键帧，固定资产图不能替代顺序帧。</p>
+                    <p className="mt-2 text-muted-foreground">本镜头尚未生成可用于视频的顺序关键帧，固定资产图不能替代顺序帧。</p>
                 )}
                 {shot.storyboardFrameMode === "first_last" ? (
                     <div className="mt-3 border-t border-border/70 pt-3" data-drama-shot-boundary-frames>
@@ -1346,7 +1354,7 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
                                         aria-label={`查看${frame.label}`}
                                     >
                                         <span className="block overflow-hidden bg-muted" style={{ aspectRatio: "4 / 3" }}>
-                                            <img className="size-full object-cover transition group-hover:scale-[1.02]" src={imagePreviewUrl(frame.mediaUrl, 480)} alt={`${shot.title}${frame.label}`} />
+                                            <img className="size-full object-contain transition" src={imagePreviewUrl(frame.mediaUrl, 480)} alt={`${shot.title}${frame.label}`} />
                                         </span>
                                         <span className="block px-2 py-1.5 text-[11px] leading-4 text-muted-foreground">{frame.label}</span>
                                     </button>
@@ -1376,7 +1384,7 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
                             className="mt-2 flex max-w-[180px] flex-col overflow-hidden rounded-md border border-border bg-background text-left"
                             onClick={() => onPreview({ type: "image", url: continuityStartEvidence(continuitySource)!.mediaUrl, title: `${continuitySource.title}实际尾帧` })}
                         >
-                            <img className="aspect-video w-full object-cover" src={imagePreviewUrl(continuityStartEvidence(continuitySource)!.mediaUrl, 480)} alt={`${continuitySource.title}实际尾帧`} />
+                            <img className="aspect-video w-full object-contain" src={imagePreviewUrl(continuityStartEvidence(continuitySource)!.mediaUrl, 480)} alt={`${continuitySource.title}实际尾帧`} />
                             <span className="px-2 py-1.5 text-[11px] text-muted-foreground">已人工验收 · {continuitySource.title}</span>
                         </button>
                     </div>
@@ -1407,7 +1415,7 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
                         </Button>
                     </div>
                 </div>
-                <Input.TextArea className="mt-2" value={videoPromptDraft} onChange={(event) => setVideoPromptDraft(event.target.value)} autoSize={{ minRows: 5, maxRows: 14 }} placeholder="先生成并验收顺序帧，再生成或编辑视频提示词" />
+                <Input.TextArea className="mt-2" value={videoPromptDraft} onChange={(event) => setVideoPromptDraft(event.target.value)} autoSize={{ minRows: 5, maxRows: 14 }} placeholder="先生成顺序帧，再生成或编辑视频提示词" />
             </div>
         </div>
     );
@@ -1423,8 +1431,8 @@ function ProductionPromptPreview({ project, rows, onChange }: { project: DramaPr
         const selected = selections[row.shot.id] || [];
         const frameIds = new Set(row.shot.framePlan?.frames.map((frame) => frame.id) || []);
         const availableFrameCount = row.references.filter((reference) => frameIds.has(reference.id)).length;
-                const allFramesReady = row.shot.storyboardFrameMode !== "all_frames" || (frameIds.size >= 2 && availableFrameCount === frameIds.size);
-                const allFramesSelected = row.shot.storyboardFrameMode !== "all_frames" || (frameIds.size >= 2 && frameIds.size === selected.filter((id) => frameIds.has(id)).length);
+        const allFramesReady = row.shot.storyboardFrameMode !== "all_frames" || (frameIds.size >= 2 && availableFrameCount === frameIds.size);
+        const allFramesSelected = row.shot.storyboardFrameMode !== "all_frames" || (frameIds.size >= 2 && frameIds.size === selected.filter((id) => frameIds.has(id)).length);
         return selected.length > dramaReferenceImageBudget(row.shot.duration) || !allFramesReady || !allFramesSelected;
     });
     useEffect(() => {
@@ -1464,7 +1472,7 @@ function ProductionPromptPreview({ project, rows, onChange }: { project: DramaPr
                                 <div className="flex items-center justify-between gap-2 text-xs">
                                     <span className="font-medium text-foreground">本次实际引用图片</span>
                                     <span className={overLimit || !allFramesReady ? "text-red-600" : "text-muted-foreground"}>
-                                        {overLimit ? `超出 ${selectedReferences.length - limit} 张` : !allFramesReady ? "仍有关键帧未生成并验收" : allFrames ? "全量关键帧，顺序固定" : "顺序与供应商请求一致"}
+                                        {overLimit ? `超出 ${selectedReferences.length - limit} 张` : !allFramesReady ? "仍有关键帧未生成" : allFrames ? "全量关键帧，顺序固定" : "顺序与供应商请求一致"}
                                     </span>
                                 </div>
                                 <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-[repeat(4,minmax(0,1fr))]">
@@ -1474,7 +1482,7 @@ function ProductionPromptPreview({ project, rows, onChange }: { project: DramaPr
                                         return (
                                             <div key={`${reference.id}-${reference.url}`} className={`min-w-0 overflow-hidden rounded-md border bg-background ${checked ? "border-primary" : "border-border opacity-60"}`} data-drama-prompt-reference-item>
                                                 <div className="relative overflow-hidden bg-muted" style={{ aspectRatio: reference.width && reference.height ? `${reference.width} / ${reference.height}` : "4 / 3" }}>
-                                                    <img className="size-full object-cover" src={imagePreviewUrl(reference.url, 480)} alt={reference.alt} />
+                                                    <img className="size-full object-contain" src={imagePreviewUrl(reference.url, 480)} alt={reference.alt} />
                                                     {alias ? <span className="absolute left-1.5 top-1.5 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-white">{alias}</span> : null}
                                                 </div>
                                                 <div className="space-y-1 px-2 py-1.5 text-[11px] leading-4">
@@ -1502,7 +1510,7 @@ function ProductionPromptPreview({ project, rows, onChange }: { project: DramaPr
                     </section>
                 );
             })}
-            <p className="mt-3 text-xs text-muted-foreground">全能帧必须全量按时间顺序引用并完成验收；普通参考图可按需选择。确认后才会创建视频任务并消耗额度。</p>
+            <p className="mt-3 text-xs text-muted-foreground">全能帧必须全量按时间顺序引用；普通参考图可按需选择。确认后才会创建视频任务并消耗额度。</p>
         </div>
     );
 }
@@ -1511,7 +1519,9 @@ function previewVideoReferenceBindings(project: DramaProject, episode: DramaEpis
     const incoming = episode.continuityEdges?.find((edge) => edge.toShotId === shot.id && edge.inheritActualEndFrame);
     const previous = incoming ? episode.shots.find((item) => item.id === incoming.fromShotId) : undefined;
     const tail = previous ? continuityStartEvidence(previous) : undefined;
-    const frames = (shot.storyboardFrames || []).filter((frame) => frame.mediaUrl && frame.status === "success" && frame.continuityStatus === "passed").sort((left, right) => left.sequenceIndex - right.sequenceIndex);
+    const frames = (shot.storyboardFrames || [])
+        .filter((frame) => frame.mediaUrl && frame.status === "success" && frame.continuityStatus !== "needs_review" && frame.continuityStatus !== "stale")
+        .sort((left, right) => left.sequenceIndex - right.sequenceIndex);
     const frameBindings: PromptReferenceBinding[] = [];
     if (tail) frameBindings.push({ id: `tail-${previous?.id || shot.id}`, alias: "@图片1", label: "上一镜实际尾帧", purpose: "作为当前镜头唯一开场画面", url: tail.mediaUrl, alt: "上一镜实际尾帧", required: true });
     if (shot.storyboardFrameMode === "all_frames") {
@@ -1570,9 +1580,7 @@ function resolveShotVideoOptimizationSource(shot: DramaShot) {
 }
 
 function resolveShotVideoReferences(project: DramaProject, episode: DramaEpisode, shot: DramaShot, productionRun: DramaProductionRun | null) {
-    const videoStep = productionRun?.steps
-        .filter((step) => step.shotId === shot.id && step.type === "video")
-        .sort((left, right) => (right.clipIndex || 0) - (left.clipIndex || 0))[0];
+    const videoStep = productionRun?.steps.filter((step) => step.shotId === shot.id && step.type === "video").sort((left, right) => (right.clipIndex || 0) - (left.clipIndex || 0))[0];
     return videoStep?.referenceBindingsSnapshot?.length ? videoStep.referenceBindingsSnapshot : previewVideoReferenceBindings(project, episode, shot);
 }
 

@@ -9,6 +9,7 @@ import {
     getLatestDramaProductionRun,
     listDramaProjectSummaries,
     saveDramaEpisodeSettings,
+    saveDramaAsset,
     saveDramaProductionPlan,
     updateDramaShotImagePrompt,
     updateDramaShotPrompt,
@@ -78,7 +79,9 @@ describe("drama project api", () => {
     });
 
     it("uses a fresh request identity for each video prompt generation", async () => {
-        const fetchMock = vi.fn().mockResolvedValue(Response.json({ code: 0, data: { shots: [{ shotId: "shot-one", videoPrompt: "动作", framePlan: { frames: [{ sequenceIndex: 1, startSecond: 0, endSecond: 3, actionPrompt: "动作", imagePrompt: "画面" }] } }] }, msg: "OK" }));
+        const fetchMock = vi
+            .fn()
+            .mockResolvedValue(Response.json({ code: 0, data: { shots: [{ shotId: "shot-one", videoPrompt: "动作", framePlan: { frames: [{ sequenceIndex: 1, startSecond: 0, endSecond: 3, actionPrompt: "动作", imagePrompt: "画面" }] } }] }, msg: "OK" }));
         vi.stubGlobal("fetch", fetchMock);
         vi.stubGlobal("crypto", { randomUUID: vi.fn().mockReturnValue("prompt-request-one") });
 
@@ -93,7 +96,13 @@ describe("drama project api", () => {
     });
 
     it("sends only structured reference duties to the drama prompt Agent", async () => {
-        const fetchMock = vi.fn().mockResolvedValue(Response.json({ code: 0, data: { shots: [{ shotId: "shot-one", videoPrompt: "素材绑定：@图片1：顺序帧 1", framePlan: { frames: [{ sequenceIndex: 1, startSecond: 0, endSecond: 3, actionPrompt: "动作", imagePrompt: "画面" }] } }] }, msg: "OK" }));
+        const fetchMock = vi.fn().mockResolvedValue(
+            Response.json({
+                code: 0,
+                data: { shots: [{ shotId: "shot-one", videoPrompt: "素材绑定：@图片1：顺序帧 1", framePlan: { frames: [{ sequenceIndex: 1, startSecond: 0, endSecond: 3, actionPrompt: "动作", imagePrompt: "画面" }] } }] },
+                msg: "OK",
+            }),
+        );
         vi.stubGlobal("fetch", fetchMock);
 
         await generateDramaVideoPrompt({
@@ -231,6 +240,17 @@ describe("drama project api", () => {
 
         expect(fetchMock).toHaveBeenCalledWith("/api/drama/projects/project-one/episodes/episode-one/settings", expect.objectContaining({ method: "PATCH" }));
         expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({ title: "第 1 集", summary: "故事摘要", style: "黑暗学院", productionPlan: plan });
+    });
+
+    it("saves an asset through its stable scoped endpoint", async () => {
+        const project = { id: "project-one", updatedAt: "2026-08-31T00:00:00.000Z" } as DramaProject;
+        const patch = { name: "主角", profile: { colorPalette: "墨青、暖金" } };
+        const fetchMock = vi.fn().mockResolvedValue(Response.json({ code: 0, data: { project }, msg: "OK" }));
+        vi.stubGlobal("fetch", fetchMock);
+
+        await expect(saveDramaAsset(project.id, "characters", "character-one", patch)).resolves.toEqual(project);
+        expect(fetchMock).toHaveBeenCalledWith("/api/drama/projects/project-one/assets/characters/character-one", expect.objectContaining({ method: "PATCH" }));
+        expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual(patch);
     });
 
     it("updates an image prompt through the prompt endpoint", async () => {

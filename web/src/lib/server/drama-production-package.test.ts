@@ -153,6 +153,18 @@ describe("production package boundary", () => {
         });
     });
 
+    it("applies the fixed character-quality contract to package-generated role assets", () => {
+        const preview = previewDramaProductionPackage(JSON.stringify(productionPackage), "package.json");
+        const karin = preview.package.assets.characters.find((item) => item.code === "C01")!;
+        const rifa = preview.package.assets.characters.find((item) => item.code === "C02")!;
+
+        expect(karin.profile?.consistencyRules).toContain("自然骨骼与身材比例");
+        expect(karin.profile?.consistencyRules).toContain("正面、严格左侧面、背面");
+        expect(karin.profile?.forbiddenChanges).toEqual(expect.arrayContaining(["换脸", "大头娃娃", "塑料皮肤", "手指畸形"]));
+        expect(rifa.profile?.visualIdentity).toContain("Rifa的脸型、五官、发型和年龄感");
+        expect(rifa.profile?.identityAnchors).toEqual(expect.arrayContaining([expect.stringContaining("Rifa的脸型、五官、发型和年龄感")]));
+    });
+
     it("preserves Agent video prompt text while normalizing static fields", () => {
         const source = structuredClone(productionPackage);
         source.episodes[0].shots[0].imagePrompt = "静态关键帧：Karin握住断剑；可见状态：指节发白，景别：中景；机位与构图：平视";

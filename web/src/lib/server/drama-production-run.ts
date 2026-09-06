@@ -122,12 +122,7 @@ export function buildDramaProductionRun(project: DramaProject, episode: DramaEpi
             const previousShot = incoming ? episodeShot(project, episode, incoming.fromShotId) : undefined;
             const continuityTail = allFrames && index === 0 && previousShot ? continuityStartEvidence(previousShot) : undefined;
             const orderedFrames = continuityTail ? [{ mediaUrl: continuityTail.mediaUrl, remoteUrl: continuityTail.remoteUrl }, ...segmentFrames] : segmentFrames;
-            const dependencies = [
-                ...assetDependencies,
-                ...continuityDependencies,
-                ...frameStepIds,
-                ...(index ? [videoStepIds[index - 1]] : []),
-            ];
+            const dependencies = [...assetDependencies, ...continuityDependencies, ...frameStepIds, ...(index ? [videoStepIds[index - 1]] : [])];
             videoStepIds.push(id);
             steps.push({
                 id,
@@ -287,7 +282,7 @@ function shotReferenceIds(project: DramaProject, shot: DramaEpisode["shots"][num
 }
 
 function validFrame(frame: DramaEpisode["shots"][number]["storyboardFrames"] extends Array<infer T> | undefined ? T | undefined : never) {
-    return Boolean(frame?.mediaUrl && frame.status === "success" && frame.continuityStatus === "passed");
+    return Boolean(frame?.mediaUrl && frame.status === "success" && frame.continuityStatus !== "needs_review" && frame.continuityStatus !== "stale");
 }
 
 function durationSegments(duration: number, maxVideoSeconds?: number) {

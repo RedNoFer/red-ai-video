@@ -3,6 +3,14 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 describe("Drama generation production workspace", () => {
+    it("keeps generated image previews complete instead of cropping them", async () => {
+        const source = await readFile(resolve(process.cwd(), "src/app/(user)/drama/[id]/drama-generation-panel.tsx"), "utf8");
+
+        expect(source).toContain("object-contain");
+        expect(source).not.toContain("object-cover");
+        expect(source).not.toContain("group-hover:scale-[1.02]");
+    });
+
     it("uses readiness, one primary action, grouped tools and an actionable compact empty state", async () => {
         const source = await readFile(resolve(process.cwd(), "src/app/(user)/drama/[id]/drama-generation-panel.tsx"), "utf8");
 
@@ -41,8 +49,8 @@ describe("Drama generation production workspace", () => {
         expect(source).toContain("提示词已优化，请确认后保存");
         expect(source).toContain("提示词优化");
         expect(source).toContain('label: "提示词优化"');
-        expect(source).toContain('sm:flex-row sm:items-start sm:justify-between');
-        expect(source).toContain('shrink-0 flex-wrap items-center justify-end gap-1.5 sm:ml-3');
+        expect(source).toContain("sm:flex-row sm:items-start sm:justify-between");
+        expect(source).toContain("shrink-0 flex-wrap items-center justify-end gap-1.5 sm:ml-3");
         expect(source).toContain("onOptimizePrompt");
         expect(source).toContain("提示词已优化并保存");
         expect(source).not.toContain('label: "Agent 生成提示词"');
@@ -72,7 +80,9 @@ describe("Drama generation production workspace", () => {
         const executionPromptStart = source.indexOf("function ShotExecutionDetails");
         const executionPromptEnd = source.indexOf("function ProductionPromptPreview", executionPromptStart);
         const executionPrompt = source.slice(executionPromptStart, executionPromptEnd);
-        expect(executionPrompt).toContain('updateDramaShotPromptPatch(project.id, episode.id, shot.id, prompt, undefined, { executionVideoPromptOrigin: "manual", ...(optimizedFramePlan ? { framePlan: optimizedFramePlan, framePlanOrigin: "ai" as const } : {}) })');
+        expect(executionPrompt).toContain(
+            'updateDramaShotPromptPatch(project.id, episode.id, shot.id, prompt, undefined, { executionVideoPromptOrigin: "manual", ...(optimizedFramePlan ? { framePlan: optimizedFramePlan, framePlanOrigin: "ai" as const } : {}) })',
+        );
         expect(executionPrompt).toContain("framePlan");
         expect(executionPrompt).toContain("videoPromptDraft.trim() === videoPromptOriginal.trim()");
         expect(executionPrompt).toContain("resolveShotVideoOptimizationSource");
@@ -90,7 +100,7 @@ describe("Drama generation production workspace", () => {
         const cancelBlock = source.slice(cancelStart, source.indexOf("const downloadSubtitles", cancelStart));
         expect(cancelBlock).toContain('JSON.stringify({ action: "cancel" })');
         expect(cancelBlock).not.toContain('JSON.stringify({ status: "cancelled" })');
-        expect(source).toContain("productionRun?.steps.filter((step) => step.shotId === shot.id && step.type === \"video\")");
+        expect(source).toContain('productionRun?.steps.filter((step) => step.shotId === shot.id && step.type === "video")');
         expect(source).toContain("applyDramaVisualRunTerminalStep");
         expect(source).toContain("replaceShot(project.id, episode.id, currentShot.id, nextShot)");
         expect(source).toContain("setVisualRun((current) => (current?.updatedAt === run.updatedAt ? current : run))");
@@ -130,6 +140,18 @@ describe("Drama generation production workspace", () => {
         expect(source).toContain("onClick={() => void checkProduction()}");
     });
 
+    it("uses generated frame images without requiring a continuity inspection before video generation", async () => {
+        const source = await readFile(resolve(process.cwd(), "src/app/(user)/drama/[id]/drama-generation-panel.tsx"), "utf8");
+        const referenceStart = source.indexOf("function previewVideoReferenceBindings");
+        const referenceEnd = source.indexOf("function resolveShotVideoPrompt", referenceStart);
+        const referenceBuilder = source.slice(referenceStart, referenceEnd);
+
+        expect(referenceBuilder).toContain('frame.mediaUrl && frame.status === "success"');
+        expect(referenceBuilder).not.toContain('frame.continuityStatus === "passed"');
+        expect(source).toContain("全能帧必须全量按时间顺序引用；普通参考图可按需选择");
+        expect(source).not.toContain("全能帧必须全量按时间顺序引用并完成验收");
+    });
+
     it("uses the locked episode resolution and does not expose a client video-model selector", async () => {
         const [generationSource, settingsSource, scriptSource, frameEditorSource] = await Promise.all([
             readFile(resolve(process.cwd(), "src/app/(user)/drama/[id]/drama-generation-panel.tsx"), "utf8"),
@@ -137,6 +159,9 @@ describe("Drama generation production workspace", () => {
             readFile(resolve(process.cwd(), "src/app/(user)/drama/[id]/drama-script-agent-panel.tsx"), "utf8"),
             readFile(resolve(process.cwd(), "src/app/(user)/drama/[id]/drama-shot-frame-editor.tsx"), "utf8"),
         ]);
+        expect(frameEditorSource).toContain("object-contain");
+        expect(frameEditorSource).not.toContain("object-cover");
+        expect(frameEditorSource).not.toContain("group-hover:scale-[1.02]");
         expect(generationSource).toContain("productionPlan?.video.resolution");
         expect(settingsSource).toContain("DRAMA_VIDEO_RESOLUTION_OPTIONS");
         expect(settingsSource).toContain("清晰度：");

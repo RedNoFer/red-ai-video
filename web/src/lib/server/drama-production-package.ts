@@ -22,6 +22,7 @@ import { normalizeDramaProductionPlan } from "@/lib/drama-production-plan";
 import { formatPromptFieldLines, normalizeDramaFrameBeats, upgradeDramaFrameImagePrompt, validateDramaFramePlanVisuals } from "@/lib/drama-frame-sequence";
 import { dramaDialogueTimingReminder, dramaFrameDialogueTimingReminder, dramaUtteranceTimingIssues, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
 import { resolveDramaStyleContract } from "@/lib/drama-style";
+import { normalizeDramaCharacterProfile } from "@/lib/drama-character-rules";
 import { resolveDramaShotDuration } from "@/lib/server/drama-shot-config";
 
 export class DramaProductionPackageError extends Error {}
@@ -393,7 +394,7 @@ function normalizeProductionPackage(value: unknown): DramaProductionPackageV1 {
     const normalizedAssets = {
         characters: dedupePackageAssets(
             array(assets.characters)
-                .map((asset) => normalizePackageAsset(asset))
+                .map((asset) => normalizePackageAsset(asset, false, true))
                 .filter(hasCodeAndName),
         ),
         locations: dedupePackageAssets(
@@ -1105,7 +1106,7 @@ function hasContinuityPlan(shot: DramaProductionPackageEpisode["shots"][number])
     );
 }
 
-function normalizePackageAsset(value: unknown, location = false): DramaProductionPackageAsset {
+function normalizePackageAsset(value: unknown, location = false, character = false): DramaProductionPackageAsset {
     const asset = object(value);
     const profile = object(asset.profile);
     const name = text(asset.name);
@@ -1124,23 +1125,24 @@ function normalizePackageAsset(value: unknown, location = false): DramaProductio
             : location
               ? inferLocationConsistencyRules(name, sourceText, spatialRules, styling, colorPalette)
               : `固定${name}的外观、服装、配色和动作状态，不随镜头重设计；${visualIdentity}`;
+    const baseProfile = {
+        visualIdentity,
+        styling,
+        colorPalette,
+        consistencyRules,
+        designPrompt: optionalText(profile.designPrompt) || description || undefined,
+        identityAnchors: strings(profile.identityAnchors).length ? strings(profile.identityAnchors) : [visualIdentity],
+        spatialRules,
+        stateRules: strings(profile.stateRules),
+        forbiddenChanges: strings(profile.forbiddenChanges),
+    };
     return {
         code: text(asset.code),
         name,
         description,
         payoff: optionalText(asset.payoff),
         activeEpisodeCodes: strings(asset.activeEpisodeCodes),
-        profile: {
-            visualIdentity,
-            styling,
-            colorPalette,
-            consistencyRules,
-            designPrompt: optionalText(profile.designPrompt) || description || undefined,
-            identityAnchors: strings(profile.identityAnchors).length ? strings(profile.identityAnchors) : [visualIdentity],
-            spatialRules,
-            stateRules: strings(profile.stateRules),
-            forbiddenChanges: strings(profile.forbiddenChanges),
-        },
+        profile: character ? normalizeDramaCharacterProfile(baseProfile, description, name) : baseProfile,
     };
 }
 

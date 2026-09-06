@@ -186,8 +186,40 @@ describe("drama production run planning", () => {
         const refreshed = refreshDramaVideoStepReferences(project, { ...project.episodes[0], shots: [shot], continuityEdges: [] }, video);
 
         expect(refreshed.referenceImageUrls).toEqual(["/generated-f1.png", "/generated-f2.png"]);
-        expect(refreshed.referenceBindingsSnapshot).toMatchObject([{ alias: "@图片1", frameId: "f1" }, { alias: "@图片2", frameId: "f2" }]);
+        expect(refreshed.referenceBindingsSnapshot).toMatchObject([
+            { alias: "@图片1", frameId: "f1" },
+            { alias: "@图片2", frameId: "f2" },
+        ]);
         expect(refreshed.prompt).toBe("视频");
+    });
+
+    it("allows video steps to use generated frames that are still pending inspection", () => {
+        const project = fixture();
+        const shot = project.episodes[0].shots[0];
+        shot.characterIds = [];
+        shot.storyboardFrameMode = "all_frames";
+        shot.duration = 4;
+        shot.framePlan = {
+            start: { source: "independent" },
+            end: { required: false },
+            frames: [
+                { id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 2, actionPrompt: "抬头", imagePrompt: "人物抬头" },
+                { id: "f2", sequenceIndex: 2, startSecond: 2, endSecond: 4, actionPrompt: "转身", imagePrompt: "人物转身" },
+            ],
+        };
+        shot.storyboardFrames = shot.framePlan.frames.map((frame) => ({
+            id: frame.id,
+            sequenceIndex: frame.sequenceIndex,
+            mediaUrl: `/${frame.id}.png`,
+            source: "generated",
+            status: "success",
+            continuityStatus: "pending",
+        }));
+
+        const run = buildDramaProductionRun(project, { ...project.episodes[0], shots: [shot], continuityEdges: [] }, { imageModel: "image", videoModel: "video", maxReferenceImages: 4 });
+
+        expect(run.steps.filter((step) => step.type === "keyframe")).toEqual(expect.arrayContaining([expect.objectContaining({ status: "success" })]));
+        expect(run.steps.find((step) => step.type === "video")).toMatchObject({ status: "ready", referenceImageUrls: ["/f1.png", "/f2.png"] });
     });
 
     it("blocks before submission when assets leave room for fewer than two frame anchors", () => {
