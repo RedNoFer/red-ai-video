@@ -5,6 +5,7 @@ import { Bot, ChevronDown, LoaderCircle, Send, SlidersHorizontal, Sparkles } fro
 import { useMemo, useState } from "react";
 
 import { syncUserPointsFromHeaders } from "@/services/api/points";
+import { resolveDramaGlobalVisualContract } from "@/lib/drama-style";
 import type { DramaEpisode, DramaProject, DramaReviewCompletion, DramaShot, DramaShotContinuity } from "@/lib/drama-project-contract";
 import { useDramaStore } from "../stores/use-drama-store";
 
@@ -47,6 +48,7 @@ export function DramaShotContinuityEditor({ project, episode, shot }: { project:
                     instruction: [...previousRequests, request].join("\n"),
                     summary: project.summary,
                     style: project.style,
+                    visualContract: resolveDramaGlobalVisualContract(project),
                     episode: { id: episode.id, title: episode.title, script: episode.script, outline: episode.outline },
                     characters: project.characters,
                     scenes: project.scenes,

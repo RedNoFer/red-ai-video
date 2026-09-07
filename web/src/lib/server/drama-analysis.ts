@@ -19,6 +19,7 @@ import { formatPromptFieldLines, normalizeDramaFrameBeats, validateDramaFramePla
 import { dramaDialogueTimingReminder, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
 import { resolveDramaShotDuration } from "@/lib/server/drama-shot-config";
 import { strictJsonObjectText } from "@/lib/server/structured-model-output";
+import { isGenericDramaDetail, validateDramaPerformanceDetail } from "@/lib/drama-prompt-quality";
 
 export function normalizeDramaContentAnalysis(value: unknown, defaultVideoSeconds: number, sourceScript = ""): DramaContentAnalysis {
     const source = object(value);
@@ -121,12 +122,15 @@ export function normalizeDramaVisualAnalysis(value: unknown, shotIds: string[], 
     return { shots };
 }
 
-export function validateDramaVisualAnalysis(value: DramaVisualAnalysis) {
+export function validateDramaVisualAnalysis(value: DramaVisualAnalysis, sourceShots: ReadonlyArray<{ id: string; utterances?: Array<{ type?: string }>; dialogue?: string }> = []) {
     const errors: string[] = [];
     for (const shot of value.shots) {
         const label = shot.shotId;
         const performance = shot.performancePlan;
         const beats = performance?.beats;
+        const source = sourceShots.find((item) => item.id === shot.shotId);
+        const dialogueCount = source?.utterances?.filter((item) => item.type === "dialogue").length || (source?.dialogue?.trim() ? 1 : 0);
+        errors.push(...validateDramaPerformanceDetail(performance, shot.dialoguePerformance, dialogueCount, label));
         if (
             !performance?.emotionalObjective ||
             !performance.emotionalArc ||
@@ -171,6 +175,10 @@ export function validateDramaVisualAnalysis(value: DramaVisualAnalysis) {
         )
             errors.push(`${label}缺少完整的连续性字段`);
         if (!shot.framePlan.frames.length) errors.push(`${label}缺少逐帧计划`);
+        for (const [index, frame] of shot.framePlan.frames.entries()) {
+            for (const [field, text] of [["起点", frame.startPrompt], ["动作", frame.actionPrompt], ["衔接", frame.transitionPrompt], ["终点", frame.endPrompt], ["画面", frame.imagePrompt]] as const)
+                if (isGenericDramaDetail(text)) errors.push(`${label}第${index + 1}帧${field}缺少具体可见结果`);
+        }
     }
     return errors;
 }

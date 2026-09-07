@@ -4,6 +4,7 @@ import { continuityStartEvidence } from "@/lib/drama-continuity-policy";
 import { normalizeDramaFrameBeats, validateDramaFrameVisualContent, dramaFrameVisualSubject } from "@/lib/drama-frame-sequence";
 import { dramaDialogueTimingReminder, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
 import { dramaReferenceImageBudget } from "@/lib/drama-production-plan";
+import { validateDramaPerformanceDetail } from "@/lib/drama-prompt-quality";
 
 const blocking = (code: string, message: string, extra: Partial<DramaProductionPreflightIssue> = {}): DramaProductionPreflightIssue => ({ code, severity: "blocking", message, ...extra });
 const warning = (code: string, message: string, extra: Partial<DramaProductionPreflightIssue> = {}): DramaProductionPreflightIssue => ({ code, severity: "warning", message, ...extra });
@@ -97,6 +98,7 @@ function checkShot(
     if (!performance?.emotionalObjective || !performance.emotionalArc || !performance.speechStyle || !performance.pace || !performance.breath || !beats?.start.facialAction || !beats.middle.facialAction || !beats.end.facialAction)
         issues.push(blocking("PERFORMANCE_PLAN_MISSING", `${label}缺少完整人物表演规划`, { shotId: shot.id }));
     const dialogueCount = shot.utterances.filter((item) => item.type === "dialogue").length || (shot.dialogue.trim() ? 1 : 0);
+    for (const detail of validateDramaPerformanceDetail(shot.performancePlan, shot.dialoguePerformance, dialogueCount, label)) issues.push(blocking("PERFORMANCE_DETAIL", detail, { shotId: shot.id }));
     if (dialogueCount && (!shot.dialoguePerformance?.length || shot.dialoguePerformance.length < dialogueCount)) issues.push(blocking("DIALOGUE_PERFORMANCE_MISSING", `${label}对白缺少逐句语气、节奏和面部反应指导`, { shotId: shot.id }));
     const light = shot.lightingPlan;
     if (!light?.palette || !light.colorTemperature || !light.keyLight || !light.fillLight || !light.rimLight || !light.materialResponse || !light.skinToneProtection)

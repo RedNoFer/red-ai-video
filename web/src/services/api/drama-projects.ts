@@ -17,6 +17,7 @@ import type {
     DramaVisualReview,
     DramaShot,
 } from "@/lib/drama-project-contract";
+import { resolveDramaGlobalVisualContract } from "@/lib/drama-style";
 
 export function listDramaAssetGenerationBatches(projectId: string) {
     return request<{ batches: DramaAssetGenerationBatch[] }>(`/api/drama/projects/${encodeURIComponent(projectId)}/asset-generation-batches`).then((data) => data.batches);
@@ -267,6 +268,7 @@ export function generateDramaVideoPrompt(input: { project: DramaProject; episode
             requestId: input.requestId || crypto.randomUUID(),
             summary: input.project.summary,
             style: input.project.style,
+            visualContract: resolveDramaGlobalVisualContract(input.project),
             episode,
             characters: input.project.characters.filter((item) => characterIds.has(item.id)),
             scenes: input.project.scenes.filter((item) => item.id === shot.sceneId),
@@ -327,6 +329,7 @@ export function generateDramaImagePrompt(input: { project: DramaProject; episode
             requestId: input.requestId || crypto.randomUUID(),
             summary: input.project.summary,
             style: input.project.style,
+            visualContract: resolveDramaGlobalVisualContract(input.project),
             episode,
             characters: input.project.characters.filter((item) => characterIds.has(item.id)),
             scenes: input.project.scenes.filter((item) => item.id === shot.sceneId),

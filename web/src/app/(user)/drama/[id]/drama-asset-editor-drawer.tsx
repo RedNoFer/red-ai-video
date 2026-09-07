@@ -9,6 +9,7 @@ import { compileDramaAssetReferencePrompt, compileDramaAssetRefinementPrompt, dr
 import { approvedAssetReference } from "@/lib/drama-asset-baseline";
 import type { DramaAssetProfile, DramaAssetPromptOptimization, DramaAssetReference, DramaAssetRefinementMessage, DramaAssetRefinementProposal, DramaCharacter, DramaNamedAsset, DramaProject, DramaVoiceProfile } from "@/lib/drama-project-contract";
 import { imagePreviewUrl } from "@/lib/media-image-url";
+import { resolveDramaGlobalVisualContract } from "@/lib/drama-style";
 import { createImageGenerationTask, waitForImageGenerationTask } from "@/services/api/image";
 import { optimizeDramaAssetPrompt } from "@/services/api/prompt-optimization";
 import { imageToDataUrl, uploadImage } from "@/services/image-storage";
@@ -155,7 +156,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                 let synchronizedFields: DramaAssetPromptOptimization["fields"] | undefined;
                 if (supplierPrompt && !assetFactsChanged && !hasDramaAssetPromptQuality(supplierPrompt, kind === "characters" ? "角色" : kind === "scenes" ? "场景" : "道具")) {
                     const assetKind = kind === "characters" ? "角色" : kind === "scenes" ? "场景" : "道具";
-                    const optimized = await optimizeDramaAssetPrompt(assetKind, supplierPrompt, `drama-asset-save-settings:${project.id}:${asset.id}:${nanoid()}`);
+                    const optimized = await optimizeDramaAssetPrompt(assetKind, supplierPrompt, `drama-asset-save-settings:${project.id}:${asset.id}:${nanoid()}`, resolveDramaGlobalVisualContract(project));
                     supplierPrompt = optimized.optimizedPrompt;
                     synchronizedFields = optimized.fields;
                 }
@@ -213,7 +214,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
             let fields: DramaAssetPromptOptimization["fields"] | undefined;
             const assetKind = kind === "characters" ? "角色" : kind === "scenes" ? "场景" : "道具";
             if (prompt && !hasDramaAssetPromptQuality(prompt, assetKind)) {
-                const optimized = await optimizeDramaAssetPrompt(assetKind, prompt, `drama-asset-save:${project.id}:${asset.id}:${nanoid()}`);
+                const optimized = await optimizeDramaAssetPrompt(assetKind, prompt, `drama-asset-save:${project.id}:${asset.id}:${nanoid()}`, resolveDramaGlobalVisualContract(project));
                 prompt = optimized.optimizedPrompt;
                 fields = optimized.fields;
             } else if (prompt) {
@@ -334,7 +335,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
         setOptimizingAssetPrompt(true);
         try {
             const prompt = supplierPrompt;
-            const optimized = await optimizeDramaAssetPrompt(assetKind, prompt, `drama-asset:${project.id}:${asset.id}:${nanoid()}`);
+            const optimized = await optimizeDramaAssetPrompt(assetKind, prompt, `drama-asset:${project.id}:${asset.id}:${nanoid()}`, resolveDramaGlobalVisualContract(project));
             setDraft((current) => ({
                 ...current,
                 description: optimized.fields.description,

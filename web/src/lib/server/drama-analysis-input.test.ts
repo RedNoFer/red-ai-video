@@ -253,12 +253,17 @@ describe("review completion input", () => {
     it("accepts complete performance, lighting and continuity plans", () => {
         const complete = {
             performancePlan: {
-                emotionalObjective: "确认危险",
-                emotionalArc: "疑惑到紧绷",
-                speechStyle: "低声短句",
-                pace: "先慢后急",
-                breath: "浅而急",
-                beats: { start: { facialAction: "眉头收紧" }, middle: { facialAction: "眼神游移" }, end: { facialAction: "下颌绷住" } },
+            emotionalObjective: "确认危险",
+            emotionalArc: "疑惑到紧绷",
+            speechStyle: "低声短句",
+            pace: "先慢后急",
+            breath: "浅而急",
+                restraintLevel: "压住惊慌，只让眼神先泄露警觉",
+                beats: {
+                    start: { emotion: "刚察觉异常", facialAction: "眉头向中间收紧", gaze: "从床沿移向右侧门口", bodyAction: "手掌撑住床沿，肩膀停止后退" },
+                    middle: { emotion: "确认危险", facialAction: "眼神快速扫过门缝", gaze: "短暂看向门外阴影", bodyAction: "右手握紧衣角，呼吸变浅" },
+                    end: { emotion: "强行镇定", facialAction: "下颌绷住，嘴唇压成直线", gaze: "重新盯住右侧声源", bodyAction: "脊背贴住床头并抬起下巴" },
+                },
             },
             lightingPlan: { palette: "冷青", colorTemperature: "4200K", keyLight: "窗侧硬光", fillLight: "弱补光", rimLight: "背后轮廓光", materialResponse: "金属反光偏冷", skinToneProtection: "脸部保留暖色" },
             continuity: { shotSize: "中景", cameraAngle: "平视", composition: "人物居左", characterBlocking: "女主靠床", gazeDirection: "看向右侧", actionStart: "抬头", actionEnd: "停住", screenDirection: "向右", axisRule: "不越轴" },
@@ -272,7 +277,19 @@ describe("review completion input", () => {
 
     it("counts partial field progress without requiring every missing field", () => {
         const partial = {
-            performancePlan: { emotionalObjective: "确认危险", emotionalArc: "紧张递进", speechStyle: "低声", pace: "慢", breath: "浅", beats: { start: { facialAction: "收紧" }, middle: { facialAction: "迟疑" }, end: { facialAction: "绷住" } } },
+            performancePlan: {
+                emotionalObjective: "确认危险",
+                emotionalArc: "从疑惑转为紧张",
+                speechStyle: "压低声音，字尾收住",
+                pace: "先慢后快",
+                breath: "吸气变浅，句间停顿缩短",
+                restraintLevel: "压住惊慌，只让手部和视线泄露警觉",
+                beats: {
+                    start: { emotion: "疑惑", facialAction: "眉头向中间收紧", gaze: "看向门口", bodyAction: "手掌撑住床沿" },
+                    middle: { emotion: "紧张", facialAction: "眼神扫过门缝", gaze: "追向右侧声源", bodyAction: "手指收紧衣角" },
+                    end: { emotion: "警觉", facialAction: "下颌绷住", gaze: "盯住门外阴影", bodyAction: "脊背贴住床头" },
+                },
+            },
             lightingPlan: { palette: "冷青", colorTemperature: "4200K", keyLight: "窗侧硬光", fillLight: "弱补光", rimLight: "背后轮廓光", materialResponse: "金属反光", skinToneProtection: "保留肤色" },
             continuity: { shotSize: "中景", cameraAngle: "平视", composition: "左侧留白", characterBlocking: "靠床", gazeDirection: "向右", actionStart: "抬头", actionEnd: "停住", screenDirection: "向右", axisRule: "不越轴" },
         };

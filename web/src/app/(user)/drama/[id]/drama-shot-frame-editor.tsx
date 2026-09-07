@@ -9,6 +9,7 @@ import { activeFrameEvidence, continuityStartEvidence, createFrameEvidence, late
 import { deleteDramaFrameBeat, dramaFrameVisualSubject, formatPromptFieldLines, insertDramaFrameBeat, updateDramaFrameBeat, validateDramaFrameVisualContent } from "@/lib/drama-frame-sequence";
 import { appendDramaImageReferenceBindings, compileDramaFrameSupplierPrompt, resolveDramaFrameScene } from "@/lib/drama-prompt-compiler";
 import { imagePreviewUrl } from "@/lib/media-image-url";
+import { resolveDramaGlobalVisualContract } from "@/lib/drama-style";
 import { dramaAssetReferences } from "./drama-asset-reference-utils";
 import type { DramaFrameBeat, DramaImageReferenceBinding, DramaProductionStep, DramaProject, DramaStoryboardFrame, DramaStoryboardFrameCandidate } from "@/lib/drama-project-contract";
 import { acceptDramaStoryboardFrame, createDramaProductionRun, deleteDramaStoryboardFrame, reviewDramaStoryboardFrame, updateDramaProductionRun, updateDramaStoryboardFramePrompt } from "@/services/api/drama-projects";
@@ -519,7 +520,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
         if (!current || current.readOnly || !prompt || optimizingPrompt) return;
         setOptimizingPrompt(true);
         try {
-            setPromptDraft(formatPromptFieldLines(appendDramaImageReferenceBindings(await optimizeDramaFramePrompt(prompt), current.references), "static"));
+            setPromptDraft(formatPromptFieldLines(appendDramaImageReferenceBindings(await optimizeDramaFramePrompt(prompt, crypto.randomUUID(), resolveDramaGlobalVisualContract(project)), current.references), "static"));
             message.success("已按 Seedance 2.0 规则生成新的帧提示词，请确认后保存");
         } catch (error) {
             message.error(error instanceof Error ? error.message : "帧提示词优化失败");

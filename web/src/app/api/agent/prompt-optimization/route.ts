@@ -13,7 +13,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 2400;
 
-type PromptOptimizationBody = { requestId?: unknown; prompt?: unknown; mode?: unknown };
+type PromptOptimizationBody = { requestId?: unknown; prompt?: unknown; mode?: unknown; visualContract?: unknown };
 const modes = new Set(["agent", "image", "video", "audio", "drama-frame", "drama-asset"]);
 
 export async function POST(request: Request) {
@@ -42,6 +42,7 @@ export async function POST(request: Request) {
             requestId,
             prompt,
             mode,
+            visualContract: normalizeVisualContract(body.visualContract),
         });
         return NextResponse.json({ code: 0, data: typeof optimizedPrompt === "string" ? { prompt: optimizedPrompt } : { prompt: optimizedPrompt.optimizedPrompt, fields: optimizedPrompt.fields }, msg: "OK" });
     } catch (error) {
@@ -53,4 +54,15 @@ export async function POST(request: Request) {
 
 function text(value: unknown, maxLength: number) {
     return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
+}
+
+function normalizeVisualContract(value: unknown) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+    const input = value as Record<string, unknown>;
+    return {
+        visualStyle: text(input.visualStyle, 800),
+        artStyle: text(input.artStyle, 800),
+        colorScript: text(input.colorScript, 800),
+        globalNegativePrompt: text(input.globalNegativePrompt, 1200),
+    };
 }

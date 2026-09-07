@@ -13,6 +13,7 @@ import { DramaShotDialogueEditor } from "./drama-shot-dialogue-editor";
 import { DramaShotFrameEditor } from "./drama-shot-frame-editor";
 import { dramaShotVideoMode } from "./drama-shot-generation-utils";
 import { formatPromptFieldLines } from "@/lib/drama-frame-sequence";
+import { resolveDramaGlobalVisualContract } from "@/lib/drama-style";
 import { updateDramaShotImagePrompt } from "@/services/api/drama-projects";
 import { optimizeDramaFramePrompt } from "@/services/api/prompt-optimization";
 
@@ -67,7 +68,7 @@ export function DramaStoryboardShotCard({
         try {
             const sourcePrompt = formattedImagePrompt || shot.description;
             setImagePromptOriginal(sourcePrompt);
-            setImagePromptDraft(formatPromptFieldLines(await optimizeDramaFramePrompt(sourcePrompt), "static"));
+            setImagePromptDraft(formatPromptFieldLines(await optimizeDramaFramePrompt(sourcePrompt, crypto.randomUUID(), resolveDramaGlobalVisualContract(project)), "static"));
             setImagePromptModalOpen(true);
         } catch (error) {
             message.error(error instanceof Error ? error.message : "Agent 图片提示词生成失败");

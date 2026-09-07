@@ -1,4 +1,5 @@
 import { resolveDramaShotDuration } from "@/lib/server/drama-shot-config";
+import { isGenericDramaDetail } from "@/lib/drama-prompt-quality";
 
 export type DramaAnalyzeBody = {
     phase?: "content" | "visual" | "review_completion" | "video_prompt" | "image_prompt";
@@ -16,6 +17,7 @@ export type DramaAnalyzeBody = {
     forceShotIds?: unknown;
     instruction?: unknown;
     referenceMaterials?: unknown;
+    visualContract?: unknown;
 };
 
 export function dramaAnalysisText(value: unknown) {
@@ -74,7 +76,7 @@ export function normalizeDramaVisualInput(body: DramaAnalyzeBody) {
     return {
         shotIds: shots.map((shot) => shot.id),
         payload: {
-            project: { summary: dramaAnalysisText(body.summary), style: dramaAnalysisText(body.style) },
+            project: { summary: dramaAnalysisText(body.summary), style: dramaAnalysisText(body.style), visualContract: normalizeVisualContract(body.visualContract) },
             episode: object(body.episode),
             assets: {
                 characters: normalizeVisualAssets(body.characters),
@@ -85,6 +87,16 @@ export function normalizeDramaVisualInput(body: DramaAnalyzeBody) {
             shots,
             referenceMaterials: array(body.referenceMaterials),
         },
+    };
+}
+
+function normalizeVisualContract(value: unknown) {
+    const input = object(value);
+    return {
+        visualStyle: dramaAnalysisText(input.visualStyle),
+        artStyle: dramaAnalysisText(input.artStyle),
+        colorScript: dramaAnalysisText(input.colorScript),
+        globalNegativePrompt: dramaAnalysisText(input.globalNegativePrompt),
     };
 }
 
@@ -212,6 +224,9 @@ export function validateDramaVideoPromptOutput(value: unknown, shotIds: string[]
             const imagePrompt = dramaAnalysisText(frame.imagePrompt);
             if (!frameId || (expected.id && frameId !== dramaAnalysisText(expected.id))) return `镜头 ${shotId} 的第 ${index + 1} 个时间段帧 ID 与输入不一致，请按当前 Skill 原样保留 ${dramaAnalysisText(expected.id) || `frame-${index + 1}`}`;
             if (!Number.isInteger(sequenceIndex) || sequenceIndex !== index + 1 || !Number.isFinite(startSecond) || !Number.isFinite(endSecond) || endSecond <= startSecond || !startPrompt || !actionPrompt || !transitionPrompt || !endPrompt || !imagePrompt) return `镜头 ${shotId} 的第 ${index + 1} 个时间段缺少具体起点、动作、衔接、终点或画面描述`;
+            const genericField = [["起点", startPrompt], ["动作与触发", actionPrompt], ["可见衔接", transitionPrompt], ["终点", endPrompt], ["画面", imagePrompt]] as const;
+            const generic = genericField.find(([, value]) => isGenericDramaDetail(value));
+            if (generic) return `镜头 ${shotId} 的第 ${index + 1} 个时间段${generic[0]}过于笼统，必须写出具体人物、道具或环境结果`;
             if (expectedFrames.length && (Math.abs(startSecond - Number(expected.startSecond)) > 0.01 || Math.abs(endSecond - Number(expected.endSecond)) > 0.01)) return `镜头 ${shotId} 的第 ${index + 1} 个时间段改变了既有时间边界；请按当前 Skill 保留 ${expected.startSecond}-${expected.endSecond}s`;
             const expectedStart = expectedFrames.length ? Number(expected.startSecond) : startSecond;
             const expectedEnd = expectedFrames.length ? Number(expected.endSecond) : endSecond;

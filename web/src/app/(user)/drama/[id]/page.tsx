@@ -6,6 +6,7 @@ import { ArrowRight, GitBranch, History } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 
 import { ensureDramaEpisodeCanvas, getLatestDramaProductionRun } from "@/services/api/drama-projects";
+import { resolveDramaGlobalVisualContract } from "@/lib/drama-style";
 import { syncUserPointsFromHeaders } from "@/services/api/points";
 import { createFrameEvidence, latestFrameEvidence, supersedeFrameEvidence } from "@/lib/drama-continuity-policy";
 import { useEffectiveConfig } from "@/stores/use-config-store";
@@ -169,7 +170,7 @@ function DramaProjectEditor({ project }: { project: DramaProject }) {
         const scriptSnapshot = episode.script.trim();
         setAnalyzing(true);
         try {
-            const response = await fetch("/api/drama/analyze", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phase: "content", script: episode.script, summary: project.summary, style: project.style }) });
+            const response = await fetch("/api/drama/analyze", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phase: "content", script: episode.script, summary: project.summary, style: project.style, visualContract: resolveDramaGlobalVisualContract(project) }) });
             syncUserPointsFromHeaders(response.headers, "system");
             const payload = (await response.json().catch(() => ({}))) as { data?: DramaContentAnalysis; msg?: string };
             if (!response.ok || !payload.data) throw new Error(payload.msg || "AI 剧本解析失败");
@@ -207,7 +208,7 @@ function DramaProjectEditor({ project }: { project: DramaProject }) {
             const response = await fetch("/api/drama/analyze", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ phase: "visual", summary: project.summary, style: project.style, episode, characters: project.characters, scenes: project.scenes, props: project.props, clues: project.clues, shots: episode.shots }),
+                body: JSON.stringify({ phase: "visual", summary: project.summary, style: project.style, visualContract: resolveDramaGlobalVisualContract(project), episode, characters: project.characters, scenes: project.scenes, props: project.props, clues: project.clues, shots: episode.shots }),
             });
             syncUserPointsFromHeaders(response.headers, "system");
             const payload = (await response.json().catch(() => ({}))) as { data?: DramaVisualAnalysis; msg?: string };
@@ -264,6 +265,7 @@ function DramaProjectEditor({ project }: { project: DramaProject }) {
                         completionFields: [field],
                         summary: currentProject.summary,
                         style: currentProject.style,
+                        visualContract: resolveDramaGlobalVisualContract(currentProject),
                         episode: currentEpisode,
                         characters: currentProject.characters,
                         scenes: currentProject.scenes,
@@ -324,6 +326,7 @@ function DramaProjectEditor({ project }: { project: DramaProject }) {
                     completionFields: ["performancePlan", "dialoguePerformance", "lightingPlan", "continuity", "entryState", "exitState"],
                     summary: currentProject.summary,
                     style: currentProject.style,
+                    visualContract: resolveDramaGlobalVisualContract(currentProject),
                     episode: currentEpisode,
                     characters: currentProject.characters,
                     scenes: currentProject.scenes,

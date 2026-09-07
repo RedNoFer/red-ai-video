@@ -110,7 +110,7 @@ describe("prompt optimization service", () => {
         expect(systemMessage).toContain("男性不女性化");
         expect(systemMessage).toContain("角色五官建模");
         expect(systemMessage).toContain("角色头发建模");
-        expect(systemMessage).toContain("项目主题风格只能使用原提示词中明确提供的视觉风格");
+        expect(systemMessage).toContain("项目主题风格只能使用全局视觉合同或原提示词中明确提供的视觉风格");
         expect(systemMessage).toContain("不得用“高级、绝美、顶级、仙气”等空泛形容词替代具体事实");
         expect(result.optimizedPrompt).toContain("构图与画幅：16:9 横向");
         expect(result.optimizedPrompt).toContain("纯白色无缝背景");
