@@ -13,8 +13,8 @@ export async function DELETE(request: Request, context: Context) {
     if (!parsed.ok) return NextResponse.json({ code: parsed.status, data: null, msg: parsed.message }, { status: parsed.status });
     try {
         const { id, episodeId, shotId, frameId } = await context.params;
-        const { project, deletion } = await deleteDramaStoryboardFrameForUser(user.id, id, episodeId, shotId, frameId, parsed.data.removeBeat === true);
-        return NextResponse.json({ code: 0, data: { project, ...deletion }, msg: "分镜图片已物理删除" });
+        const { project, deletion, retainedFiles } = await deleteDramaStoryboardFrameForUser(user.id, id, episodeId, shotId, frameId, parsed.data.removeBeat === true);
+        return NextResponse.json({ code: 0, data: { project, ...deletion, retainedFiles }, msg: retainedFiles ? "分镜图片引用已删除，共享文件仍被其它帧使用" : "分镜图片已物理删除" });
     } catch (error) {
         const status = error instanceof DramaProjectServiceError ? error.status : 500;
         return NextResponse.json({ code: status, data: null, msg: error instanceof Error ? error.message : "分镜图片删除失败" }, { status });

@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest";
 
 import { createFrameEvidence } from "@/lib/drama-continuity-policy";
-import { applyDramaProductionRunStep, applyDramaVisualRunTerminalStep, characterReferenceAudios, dramaShotVideoMode, resolveDramaVisualRunSync, shotReferenceImages, storyboardReferenceImages, videoReferenceImages } from "./drama-shot-generation-utils";
+import { applyDramaProductionRunStep, applyDramaVisualRunTerminalStep, characterReferenceAudios, dramaShotVideoMode, isDramaStoryboardFrameActive, resolveDramaVisualRunSync, shotReferenceImages, storyboardReferenceImages, videoReferenceImages } from "./drama-shot-generation-utils";
+
+describe("isDramaStoryboardFrameActive", () => {
+    it("keeps a queued frame locked before a provider task id is assigned", () => {
+        expect(isDramaStoryboardFrameActive({ id: "f1", sequenceIndex: 1, source: "generated", status: "queued" })).toBe(true);
+        expect(isDramaStoryboardFrameActive({ id: "f1", sequenceIndex: 1, source: "generated", status: "idle" })).toBe(false);
+        expect(isDramaStoryboardFrameActive({ id: "f1", sequenceIndex: 1, source: "generated", status: "success", candidateStatus: "queued" })).toBe(true);
+    });
+});
 
 describe("resolveDramaVisualRunSync", () => {
     it("restores an active frame task when the persisted project still says it is idle", () => {

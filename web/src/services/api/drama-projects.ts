@@ -170,7 +170,7 @@ export function reviewDramaStoryboardFrame(projectId: string, episodeId: string,
 }
 
 export function deleteDramaStoryboardFrame(projectId: string, episodeId: string, shotId: string, frameId: string, removeBeat = false) {
-    return request<{ project: DramaProject; deletedFiles: number; deletedBytes: number }>(
+    return request<{ project: DramaProject; deletedFiles: number; deletedBytes: number; retainedFiles: number }>(
         `/api/drama/projects/${encodeURIComponent(projectId)}/episodes/${encodeURIComponent(episodeId)}/shots/${encodeURIComponent(shotId)}/frames/${encodeURIComponent(frameId)}`,
         { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ removeBeat }) },
     );

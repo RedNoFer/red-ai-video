@@ -212,7 +212,8 @@ describe("Drama generation production workspace", () => {
         expect(source).toContain("data-drama-frame-sequence");
         expect(source).toContain("data-drama-frame-row={beat.id}");
         expect(source).toContain("正在生成帧 ${activeFrame.sequenceIndex}/${beats.length}");
-        expect(source).toContain('frame?.status === "queued" || frame?.status === "running"');
+        expect(source).toContain("isDramaStoryboardFrameActive(frame)");
+        expect(source).toContain("data-drama-generation-overlay");
         expect(source).toContain("一键补齐");
         expect(source).toContain("重新生成全部");
         expect(source).toContain("导演 Agent 生图启动失败");

@@ -46,7 +46,7 @@ import { approvedAssetReference } from "@/lib/drama-asset-baseline";
 import { createFrameEvidence, decideActualEndFrame, invalidateFrameEvidence, replaceFrameEvidence, supersedeFrameEvidence } from "@/lib/drama-continuity-policy";
 import { DRAMA_STYLE_NAME, normalizeDramaStyleName, resolveDramaStyleContract } from "@/lib/drama-style";
 import { normalizeDramaImageSize } from "@/lib/drama-image-size";
-import { formatPromptFieldLines, normalizeDramaFrameBeats, updateDramaFrameBeat, upgradeDramaFrameImagePrompt, validateDramaFrameVisualContent } from "@/lib/drama-frame-sequence";
+import { deleteDramaFrameBeat, formatPromptFieldLines, normalizeDramaFrameBeats, updateDramaFrameBeat, upgradeDramaFrameImagePrompt, validateDramaFrameVisualContent } from "@/lib/drama-frame-sequence";
 import { defaultDramaProductionPlan, dramaReferenceImageBudget, normalizeDramaProductionPlan } from "@/lib/drama-production-plan";
 import { resolveDramaShotDuration } from "@/lib/server/drama-shot-config";
 import { TEXT_MODEL_REQUEST_TIMEOUT_MS } from "@/lib/server/model-request-policy";
@@ -56,9 +56,8 @@ import { CreativeEntityDeletionConflict, deleteDramaConversationAggregate } from
 import { createCreativeConversation, getCreativeConversation, listCreativeConversations, updateCreativeConversation } from "@/lib/server/creative-runtime-store";
 import { createDramaProject, deleteDramaProject, DramaProjectStoreError, findDramaEpisodeByCanvasProjectId, findDramaProjectBySourceHandoffId, getDramaProject, listDramaProjectSummaries, updateDramaProject } from "@/lib/server/drama-project-store";
 import { createDramaProjectVersion, getDramaProjectVersion, listDramaProjectVersions } from "@/lib/server/drama-project-version-store";
-import { collectLocalMediaStorageKeys } from "@/lib/server/local-media-references";
 import { deleteUserLocalMediaAssets, deleteUserOwnedMediaAssetsPhysically } from "@/lib/server/local-media-storage";
-import { localMediaStorageKeyFromValue } from "@/lib/server/local-media-references";
+import { collectLocalMediaStorageKeys, localMediaStorageKeyFromValue } from "@/lib/server/local-media-references";
 import { signReferenceAssetInputUrl } from "@/lib/server/reference-asset-access";
 import { fetchSafeOutbound } from "@/lib/server/safe-outbound-fetch";
 import { applyDramaProductionPackage, DramaProductionPackageError, previewDramaProductionPackage } from "@/lib/server/drama-production-package";
@@ -727,7 +726,7 @@ export async function deleteDramaStoryboardFrameForUser(userId: string, id: stri
                                           ];
                                       }),
                                       ...(removeBeat && candidate.framePlan
-                                          ? { framePlan: { ...candidate.framePlan, frames: candidate.framePlan.frames.filter((item) => item.id !== frameId) } }
+                                          ? { framePlan: { ...candidate.framePlan, frames: deleteDramaFrameBeat(candidate.framePlan.frames, frameId) } }
                                           : {}),
                                       frameEvidence: (candidate.frameEvidence || []).filter((evidence) => !(evidence.role === "storyboard_keyframe" && evidence.sequenceIndex === sequenceFrame.sequenceIndex && evidence.mediaUrl === sequenceFrame.mediaUrl)),
                                   };
@@ -770,8 +769,12 @@ export async function deleteDramaStoryboardFrameForUser(userId: string, id: stri
     );
     try {
         const project = await updateDramaProject(userId, nextProject, current.updatedAt);
-        const deletion = await deleteUserOwnedMediaAssetsPhysically(userId, storageKeys);
-        return { project, deletion };
+        const retainedStorageKeys = new Set(collectLocalMediaStorageKeys(project));
+        const deletion = await deleteUserOwnedMediaAssetsPhysically(
+            userId,
+            storageKeys.filter((storageKey) => !retainedStorageKeys.has(storageKey)),
+        );
+        return { project, deletion, retainedFiles: storageKeys.filter((storageKey) => retainedStorageKeys.has(storageKey)).length };
     } catch (error) {
         if (error instanceof DramaProjectStoreError) throw new DramaProjectServiceError(error.message, error.status);
         throw error;

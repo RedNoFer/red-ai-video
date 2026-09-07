@@ -51,14 +51,14 @@ test("drama all-frame editor keeps one beat per row across desktop, mobile and d
                         storyboardFrameMode: "all_frames",
                         framePlan: { start: { source: "independent" }, end: { required: false }, frames },
                         frameEvidence: frames.slice(0, 2).map((frame) =>
-                            createFrameEvidence({ role: "storyboard_keyframe", sequenceIndex: frame.sequenceIndex, source: "upload", mediaUrl: "/logo.svg", sourceShotId: "shot-frame-sequence", validity: "candidate" }),
+                            createFrameEvidence({ role: "storyboard_keyframe", sequenceIndex: frame.sequenceIndex, source: "upload", mediaUrl: `/logo.svg?frame=${frame.sequenceIndex}`, sourceShotId: "shot-frame-sequence", validity: "candidate" }),
                         ),
                         storyboardFrames: frames.map((frame, index) => ({
                             id: frame.id,
                             sequenceIndex: frame.sequenceIndex,
                             source: index < 2 ? "upload" : "generated",
                             status: index < 2 ? "success" : index === 2 ? "stale" : "idle",
-                            mediaUrl: index < 2 ? "/logo.svg" : undefined,
+                            mediaUrl: index < 2 ? `/logo.svg?frame=${index + 1}` : undefined,
                             continuityStatus: index < 2 ? "passed" : index === 2 ? "stale" : "pending",
                         })),
                         storyboardStatus: "idle",
@@ -117,6 +117,7 @@ test("drama all-frame editor keeps one beat per row across desktop, mobile and d
     expect(afterDelete.episodes[0].shots[0].storyboardFrames?.[0]).toMatchObject({ id: "beat-1", status: "stale" });
     expect(afterDelete.episodes[0].shots[0].storyboardFrames?.[0].mediaUrl).toBeUndefined();
     expect(afterDelete.episodes[0].shots[0].storyboardFrames?.[0].mediaDeletedAt).toBeTruthy();
+    expect(afterDelete.episodes[0].shots[0].storyboardFrames?.[1]).toMatchObject({ id: "beat-2", mediaUrl: "/logo.svg?frame=2", status: "success" });
     expect(afterDelete.episodes[0].shots[0].frameEvidence?.find((frame) => frame.role === "storyboard_keyframe" && frame.sequenceIndex === 1)).toBeUndefined();
     await assertVerticalRows(sequence);
     await expectNoHorizontalOverflow(page, "1672px light frame sequence");

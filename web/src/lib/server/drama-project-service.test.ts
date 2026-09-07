@@ -179,6 +179,72 @@ describe("drama project service updates", () => {
         expect(mocks.deleteUserOwnedMediaAssetsPhysically).toHaveBeenCalledWith("user-one", ["permanent/frame-one.png"]);
     });
 
+    it("keeps a physical file when another frame still references the same media", async () => {
+        const current = project("2026-07-19T08:00:00.000Z", "项目");
+        const sharedUrl = "/api/generation-log-assets/permanent/shared.png";
+        const framePlan = {
+            start: { source: "independent" as const },
+            end: { required: false },
+            frames: [
+                { id: "frame-one", sequenceIndex: 1, startSecond: 0, endSecond: 2, actionPrompt: "动作一", imagePrompt: "静态关键帧：人物站立\n可见状态：人物站立\n可见表演状态：人物克制\n景别：中景\n机位与构图：平视，主体居中\n站位与视线：中央，向前\n三层空间：前中后景\n光色与风格：自然光\n负面约束：无字幕" },
+                { id: "frame-two", sequenceIndex: 2, startSecond: 2, endSecond: 4, actionPrompt: "动作二", imagePrompt: "静态关键帧：人物转身\n可见状态：人物转身\n可见表演状态：人物警觉\n景别：中景\n机位与构图：平视，主体居中\n站位与视线：中央，向侧面\n三层空间：前中后景\n光色与风格：自然光\n负面约束：无字幕" },
+            ],
+        };
+        current.episodes[0].shots = [
+            {
+                id: "shot-one",
+                title: "镜头",
+                characterIds: [],
+                propIds: [],
+                clueIds: [],
+                imagePrompt: "画面",
+                videoPrompt: "动作",
+                cameraMotion: "固定",
+                duration: 4,
+                storyboardFrameMode: "all_frames",
+                framePlan,
+                storyboardFrames: [
+                    { id: "frame-one", sequenceIndex: 1, source: "generated", status: "success", mediaUrl: sharedUrl },
+                    { id: "frame-two", sequenceIndex: 2, source: "generated", status: "success", mediaUrl: sharedUrl },
+                ],
+            } as never,
+        ];
+        mocks.getDramaProject.mockResolvedValue(current);
+
+        const result = await deleteDramaStoryboardFrameForUser("user-one", current.id, "episode-one", "shot-one", "frame-one");
+
+        expect(result.project.episodes[0].shots[0].storyboardFrames).toEqual([expect.objectContaining({ id: "frame-one", mediaUrl: undefined }), expect.objectContaining({ id: "frame-two", mediaUrl: sharedUrl })]);
+        expect(mocks.deleteUserOwnedMediaAssetsPhysically).toHaveBeenCalledWith("user-one", []);
+        expect(result.retainedFiles).toBe(1);
+    });
+
+    it("deletes only the selected frame segment when the row delete action is used", async () => {
+        const current = project("2026-09-07T00:00:00.000Z", "项目");
+        current.episodes[0].shots = [
+            {
+                id: "shot-one",
+                title: "镜头",
+                characterIds: [],
+                propIds: [],
+                clueIds: [],
+                imagePrompt: "画面",
+                videoPrompt: "动作",
+                cameraMotion: "固定",
+                duration: 4,
+                storyboardFrameMode: "all_frames",
+                framePlan: { start: { source: "independent" }, end: { required: false }, frames: [{ id: "frame-one", sequenceIndex: 1, startSecond: 0, endSecond: 2, actionPrompt: "一", imagePrompt: "静态关键帧：人物站立\n可见状态：人物站立\n可见表演状态：人物克制\n景别：中景\n机位与构图：平视，主体居中\n站位与视线：中央，向前\n三层空间：前中后景\n光色与风格：自然光\n负面约束：无字幕" }, { id: "frame-two", sequenceIndex: 2, startSecond: 2, endSecond: 4, actionPrompt: "二", imagePrompt: "静态关键帧：人物转身\n可见状态：人物转身\n可见表演状态：人物警觉\n景别：中景\n机位与构图：平视，主体居中\n站位与视线：中央，向侧面\n三层空间：前中后景\n光色与风格：自然光\n负面约束：无字幕" }] },
+                storyboardFrames: [{ id: "frame-one", sequenceIndex: 1, source: "generated", status: "success", mediaUrl: "/api/generation-log-assets/permanent/one.png" }, { id: "frame-two", sequenceIndex: 2, source: "generated", status: "success", mediaUrl: "/api/generation-log-assets/permanent/two.png" }],
+            } as never,
+        ];
+        mocks.getDramaProject.mockResolvedValue(current);
+
+        const result = await deleteDramaStoryboardFrameForUser("user-one", current.id, "episode-one", "shot-one", "frame-one", true);
+
+        expect(result.project.episodes[0].shots[0].framePlan?.frames).toEqual([expect.objectContaining({ id: "frame-two", sequenceIndex: 1, startSecond: 0, endSecond: 4 })]);
+        expect(result.project.episodes[0].shots[0].storyboardFrames).toEqual([expect.objectContaining({ id: "frame-two", mediaUrl: "/api/generation-log-assets/permanent/two.png" })]);
+        expect(mocks.deleteUserOwnedMediaAssetsPhysically).toHaveBeenCalledWith("user-one", ["permanent/one.png"]);
+    });
+
     it("allows eight total image references for a 15-second shot", () => {
         const shot = {
             id: "shot-one",

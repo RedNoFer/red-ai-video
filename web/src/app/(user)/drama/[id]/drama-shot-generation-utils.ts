@@ -1,5 +1,5 @@
 import type { DramaAssetReference, DramaEpisode, DramaProject, DramaShot } from "../types";
-import type { DramaProductionPlan, DramaProductionRun, DramaStoryboardFrameCandidate } from "@/lib/drama-project-contract";
+import type { DramaProductionPlan, DramaProductionRun, DramaStoryboardFrame, DramaStoryboardFrameCandidate } from "@/lib/drama-project-contract";
 import { approvedAssetReference } from "@/lib/drama-asset-baseline";
 import { createFrameEvidence, continuityStartEvidence, invalidateFrameEvidence, latestFrameEvidence, replaceFrameEvidence, supersedeFrameEvidence } from "@/lib/drama-continuity-policy";
 import type { useEffectiveConfig } from "@/stores/use-config-store";
@@ -7,6 +7,10 @@ import { resolveDramaGenerationSize } from "@/lib/drama-image-size";
 import type { ReferenceImage } from "@/types/image";
 import type { ReferenceAudio } from "@/types/media";
 import type { VideoReferenceRole } from "@/lib/video-reference-contract";
+
+export function isDramaStoryboardFrameActive(frame?: DramaStoryboardFrame) {
+    return Boolean(frame && [frame.status, frame.candidateStatus].some((status) => status === "queued" || status === "running"));
+}
 
 export function resolveDramaVisualRunSync(project: DramaProject, episodeId: string, run: DramaProductionRun) {
     let changed = false;

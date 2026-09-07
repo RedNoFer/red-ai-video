@@ -17,6 +17,7 @@ import { uploadImage } from "@/services/image-storage";
 import { resolveModelRequestConfig, useEffectiveConfig } from "@/stores/use-config-store";
 import { useDramaStore } from "../stores/use-drama-store";
 import type { DramaShot } from "../types";
+import { isDramaStoryboardFrameActive } from "./drama-shot-generation-utils";
 
 type FrameKind = "start" | "end" | "sequence";
 type PromptPreview = { title: string; prompt: string; references: DramaImageReferenceBinding[]; frameId?: string; phase?: "start" | "end"; visibleSubject?: string; readOnly?: boolean };
@@ -56,12 +57,14 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
     const storedFrames = useMemo(() => [...(shot.storyboardFrames || [])].sort((left, right) => left.sequenceIndex - right.sequenceIndex), [shot.storyboardFrames]);
     const frameById = useMemo(() => new Map(storedFrames.map((frame) => [frame.id, frame])), [storedFrames]);
     const generationActive =
-        storedFrames.some(frameHasActiveTask) || (Boolean(shot.storyboardTaskId) && ["queued", "running"].includes(shot.storyboardStatus || "")) || (Boolean(shot.storyboardEndTaskId) && ["queued", "running"].includes(shot.storyboardEndStatus || ""));
+        storedFrames.some(isDramaStoryboardFrameActive) || [shot.storyboardStatus, shot.storyboardEndStatus].some((status) => status === "queued" || status === "running");
     const completedCount = beats.filter((beat) => frameById.get(beat.id)?.status === "success" && frameById.get(beat.id)?.mediaUrl).length;
     const activeFrame = beats.find((beat) => {
         const frame = frameById.get(beat.id);
-        return frameHasActiveTask(frame);
+        return isDramaStoryboardFrameActive(frame);
     });
+    const activeFrameRecord = activeFrame ? frameById.get(activeFrame.id) : undefined;
+    const activeFrameRunning = Boolean(activeFrameRecord && [activeFrameRecord.status, activeFrameRecord.candidateStatus].includes("running"));
     const generationError =
         storedFrames.find((frame) => frame.status === "error" || frame.continuityStatus === "needs_review")?.error || storedFrames.find((frame) => frame.candidateError)?.candidateError || shot.storyboardError || shot.storyboardEndError;
 
@@ -201,7 +204,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
     const confirmRemoveImage = (label: string, frameId: string, removeBeat = false) => {
         modal.confirm({
             title: `删除${label}？`,
-            content: "删除后会立即从当前项目移除引用，并物理删除对应的站内媒体文件；全能帧模式中依赖它的后续帧会标记为待重新生成。",
+            content: removeBeat ? "将删除当前帧段及其图片，并物理删除不再被其它帧引用的站内媒体文件；其它帧不会被删除。" : "将移除当前帧图片，并物理删除不再被其它帧引用的站内媒体文件；当前帧段和其它帧不会被删除。",
             okText: "确认删除",
             okButtonProps: { danger: true },
             cancelText: "取消",
@@ -210,7 +213,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                     setDeletingFrameId(frameId);
                     const result = await deleteDramaStoryboardFrame(project.id, episodeId, shot.id, frameId, removeBeat);
                     replaceProject(result.project);
-                    message.success(`${label}已物理删除${result.deletedFiles ? `（${result.deletedFiles} 个文件）` : ""}`);
+                    message.success(result.retainedFiles ? `${label}已移除，共享文件仍由其它帧保留` : `${label}已物理删除${result.deletedFiles ? `（${result.deletedFiles} 个文件）` : ""}`);
                 } catch (error) {
                     message.error(error instanceof Error ? error.message : "图片删除保存失败");
                     throw error;
@@ -566,8 +569,29 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
         message.success(`已移除引用：${reference.label}`);
     };
 
+    const generationOverlayVisible = Boolean(submitting) || generationActive;
+    const generationOverlayLabel = submitting
+        ? "正在提交生图任务…"
+        : activeFrame
+          ? `${activeFrameRunning ? "正在生成" : "正在排队"}帧 ${activeFrame.sequenceIndex}/${beats.length}…`
+          : "生图任务排队中…";
+
     return (
-        <div className="mt-3.5 border-t border-border/70 pt-3.5">
+        <div className="relative mt-3.5 border-t border-border/70 pt-3.5">
+            {generationOverlayVisible ? (
+                <div
+                    className="absolute inset-0 z-20 flex items-start justify-center rounded-md bg-background/72 p-4 backdrop-blur-[1px]"
+                    role="status"
+                    aria-live="polite"
+                    data-drama-generation-overlay
+                >
+                    <div className="sticky top-3 flex items-center gap-2 rounded-md border border-primary/30 bg-background px-3 py-2 text-sm text-foreground shadow-sm">
+                        <LoaderCircle className="size-4 animate-spin text-primary" aria-hidden="true" />
+                        <span>{generationOverlayLabel}</span>
+                        <span className="text-xs text-muted-foreground">请勿重复点击</span>
+                    </div>
+                </div>
+            ) : null}
             <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">
                     <div className="flex items-baseline gap-2">
@@ -613,7 +637,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                 <div className="mt-3 space-y-2.5" data-drama-frame-sequence>
                     {beats.map((beat, index) => {
                         const frame = frameById.get(beat.id);
-                        const rowBusy = deletingFrameId === beat.id || reviewingFrameId === beat.id || submitting === beat.id || frameHasActiveTask(frame);
+                        const rowBusy = deletingFrameId === beat.id || reviewingFrameId === beat.id || submitting === beat.id || isDramaStoryboardFrameActive(frame);
                         const previous = index ? frameById.get(beats[index - 1].id) : undefined;
                         const canGenerate = index === 0 || Boolean(previous?.mediaUrl && previous.status === "success" && previous.continuityStatus !== "needs_review" && previous.continuityStatus !== "stale");
                         const candidates = visibleFrameCandidates(frame);
@@ -728,7 +752,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                                                 icon={<Trash2 className="size-3.5" />}
                                                 disabled={beats.length <= 1 || rowBusy}
                                                 aria-label={`删除帧 ${beat.sequenceIndex}`}
-                                                onClick={() => (frame?.mediaUrl ? confirmRemoveImage(`帧 ${beat.sequenceIndex} 图片`, beat.id, true) : removeBeat(beat))}
+                                                onClick={() => (frame?.mediaUrl ? confirmRemoveImage(`帧 ${beat.sequenceIndex}`, beat.id, true) : removeBeat(beat))}
                                             />
                                         </div>
                                     </div>
@@ -1114,8 +1138,7 @@ function FrameSlot({
 }
 
 function FrameStatusTag({ frame }: { frame?: DramaStoryboardFrame }) {
-    const hasOrphanedQueue = !frameHasActiveTask(frame) && (frame?.status === "queued" || frame?.candidateStatus === "queued");
-    const state = hasOrphanedQueue ? "error" : frame?.candidateStatus || (frame?.continuityStatus === "needs_review" ? "needs_review" : frame?.status) || "idle";
+    const state = frame?.candidateStatus || (frame?.continuityStatus === "needs_review" ? "needs_review" : frame?.status) || "idle";
     const labels: Record<string, string> = {
         idle: "待生成",
         queued: frame?.mediaUrl ? "候选排队中" : "排队中",
@@ -1123,7 +1146,7 @@ function FrameStatusTag({ frame }: { frame?: DramaStoryboardFrame }) {
         success: frame?.continuityStatus === "needs_review" ? "连续性需调整" : frame?.continuityStatus === "pending" ? "待检验" : "已完成",
         stale: "已失效",
         needs_review: "连续性需调整",
-        error: hasOrphanedQueue ? "待重新提交" : frame?.mediaUrl ? "候选失败" : "失败",
+        error: frame?.mediaUrl ? "候选失败" : "失败",
         cancelled: "已取消",
     };
     const colors: Record<string, string> = { queued: "processing", running: "processing", success: "success", stale: "warning", needs_review: "warning", error: "error", cancelled: "default", idle: "default" };
@@ -1136,12 +1159,6 @@ function frameBeats(shot: DramaShot): DramaFrameBeat[] {
 
 function emptyStoryboardFrame(beat: DramaFrameBeat): DramaStoryboardFrame {
     return { id: beat.id, sequenceIndex: beat.sequenceIndex, source: "generated", status: "idle" };
-}
-
-function frameHasActiveTask(frame?: DramaStoryboardFrame) {
-    const hasQueuedState = frame?.status === "queued" || frame?.status === "running";
-    const hasCandidateQueuedState = frame?.candidateStatus === "queued" || frame?.candidateStatus === "running";
-    return (Boolean(frame?.taskId) && hasQueuedState) || (Boolean(frame?.candidateTaskId) && hasCandidateQueuedState);
 }
 
 function staleFrame(frame: DramaStoryboardFrame): DramaStoryboardFrame {

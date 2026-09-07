@@ -28,6 +28,13 @@ export type ResolvedDramaStyle = {
     globalNegativePrompt?: string;
 };
 
+export type DramaGlobalVisualContract = {
+    visualStyle: string;
+    artStyle: string;
+    colorScript: string;
+    globalNegativePrompt: string;
+};
+
 export function isLegacyDramaStyle(value: unknown) {
     // Imported packages may intentionally use any visual language; legacy
     // markers are sanitized only when embedded in stale prompt text.
@@ -65,6 +72,28 @@ export function resolveDramaStyleContract(project: { style?: string; productionB
 
 export function resolveDramaVisualStyle(project: { style?: string; productionBible?: { visualStyle?: string } }) {
     return resolveDramaStyleContract(project).visualDescription;
+}
+
+export function resolveDramaGlobalVisualContract(project: Parameters<typeof resolveDramaStyleContract>[0]): DramaGlobalVisualContract {
+    const resolved = resolveDramaStyleContract(project);
+    return {
+        visualStyle: resolved.visualDescription,
+        artStyle: resolved.artStyle || "",
+        colorScript: resolved.colorScript || "",
+        globalNegativePrompt: resolved.globalNegativePrompt || "",
+    };
+}
+
+export function formatDramaGlobalVisualContract(contract: Partial<DramaGlobalVisualContract> | undefined) {
+    if (!contract) return "";
+    return [
+        contract.visualStyle ? `全局视觉风格：${contract.visualStyle}` : "",
+        contract.artStyle ? `全局画风规格：${contract.artStyle}` : "",
+        contract.colorScript ? `全局色彩脚本：${contract.colorScript}` : "",
+        contract.globalNegativePrompt ? `全局负面约束：${contract.globalNegativePrompt}` : "",
+    ]
+        .filter(Boolean)
+        .join("\n");
 }
 
 export function resolveDramaColorScript(project: { style?: string; productionBible?: { visualStyle?: string; colorScript?: string } }) {
