@@ -68,7 +68,7 @@ export async function optimizeCreativePrompt(input: PromptOptimizationInput & { 
                 },
                 onInvalidResponse: (headers) => refundInvalidResponse(input.userId, model, headers),
             });
-            const optimizedPrompt = parseOptimizedPrompt(call.arguments, input.mode, input.prompt);
+            const optimizedPrompt = parseOptimizedPrompt(call.arguments, input.mode, input.prompt, input.visualContract);
             if (!optimizedPrompt) {
                 await refundInvalidResponse(input.userId, model, call.headers);
                 throw new PromptOptimizationError("默认文本模型没有返回有效提示词");
@@ -106,7 +106,7 @@ function promptOptimizationInstruction(mode: PromptOptimizationMode, prompt = ""
     return `你是 VOZEB PRO 提示词编辑器。把用户原文改写为清晰、紧凑、可直接发送的中文${target}提示词。保留主体、人名、品牌、数量、尺寸、比例、时长、文字内容、参考素材要求和否定要求；不得改变用户意图，不得虚构事实或添加用户没有要求的复杂设定。只返回优化后的公开提示词，不解释修改过程，不输出内部规划、模型选择理由或思维链。`;
 }
 
-function parseOptimizedPrompt(value: string, mode: PromptOptimizationMode, sourcePrompt = ""): string | DramaAssetPromptOptimization {
+function parseOptimizedPrompt(value: string, mode: PromptOptimizationMode, sourcePrompt = "", visualContract?: DramaGlobalVisualContract): string | DramaAssetPromptOptimization {
     try {
         const payload = JSON.parse(value) as { optimizedPrompt?: unknown; fields?: unknown; [key: string]: unknown };
         if (mode === "drama-asset" && Object.keys(payload).some((key) => key !== "optimizedPrompt" && key !== "fields")) return "";
@@ -115,7 +115,7 @@ function parseOptimizedPrompt(value: string, mode: PromptOptimizationMode, sourc
         if (mode !== "drama-asset") return prompt && prompt.length <= CREATE_AGENT_PROMPT_MAX_LENGTH ? prompt : "";
         const fields = normalizeDramaAssetPromptFields(payload.fields, sourcePrompt);
         if (!fields) return "";
-        const normalized = enforceDramaAssetPromptContract(sourcePrompt, prompt, fields);
+        const normalized = enforceDramaAssetPromptContract(sourcePrompt, prompt, fields, visualContract);
         return normalized && normalized.length <= CREATE_AGENT_PROMPT_MAX_LENGTH ? { optimizedPrompt: normalized, fields } : "";
     } catch {
         return "";
@@ -145,7 +145,7 @@ function extractAssetPromptField(prompt: string, label: string) {
     return match?.[1]?.trim() || "";
 }
 
-function enforceDramaAssetPromptContract(sourcePrompt: string, prompt: string, fields: DramaAssetPromptFields) {
+function enforceDramaAssetPromptContract(sourcePrompt: string, prompt: string, fields: DramaAssetPromptFields, visualContract?: DramaGlobalVisualContract) {
     if (!prompt) return "";
     const kind = sourcePrompt.match(/资产类型[】：:]\s*(角色|场景|道具)/u)?.[1];
     const labels = ["主体与资产类型", "身份/结构锚点", "可见状态与材质", "构图与画幅", "光色与风格", "负面约束"];
@@ -155,13 +155,14 @@ function enforceDramaAssetPromptContract(sourcePrompt: string, prompt: string, f
         .map((line) => line.trim())
         .filter((line) => line && !new RegExp(`^(?:${labels.slice(3).join("|")})[：:]`, "u").test(line));
     const configuredStyle = extractConfiguredStyle(sourcePrompt);
+    const globalVisual = formatDramaGlobalVisualContract(visualContract);
     const defaults = [
         `主体与资产类型：${kind || "角色、场景或道具"}设定图`,
         `身份/结构锚点：${fields.visualIdentity || fields.description || "严格沿用当前资产身份与结构锚点"}`,
         `可见状态与材质：${fields.styling || "按当前资产造型、材质和可见状态呈现"}`,
-        kind === "角色" ? `构图与画幅：${DRAMA_CHARACTER_TURNAROUND_SIZE} 横向，一张纯白色无缝背景${DRAMA_CHARACTER_TURNAROUND_LABEL}；${DRAMA_CHARACTER_TURNAROUND_LAYOUT}。` : "构图与画幅：按项目画幅，一张完整、独立的单主体基准图。",
-        `光色与风格：${kind === "角色" ? [configuredStyle ? `项目视觉风格：${configuredStyle}` : "", DRAMA_CHARACTER_RENDER_STYLE, DRAMA_CHARACTER_STUDIO_LIGHT_RULES, DRAMA_CHARACTER_SUPPLIER_QUALITY_RULES].filter(Boolean).join("；") : "严格沿用当前项目视觉风格与资产固有色彩，不新增环境或剧情元素。"}`,
-        kind === "角色" ? `负面约束：${DRAMA_CHARACTER_NEGATIVE_RULES}。` : "负面约束：无额外主体、拼版、多视角、场景文字、边框、文字、水印或 logo。",
+        kind === "角色" ? `构图与画幅：${DRAMA_CHARACTER_TURNAROUND_SIZE} 横向，一张纯白色无缝背景${DRAMA_CHARACTER_TURNAROUND_LABEL}；${DRAMA_CHARACTER_TURNAROUND_LAYOUT}。` : kind === "场景" ? "构图与画幅：1:1 方形九宫格空间基准板；中心格为主视角，外围八格按八个方位展示同一无人物场景，固定入口、出口、陈设、材质、光向和空间轴线。" : "构图与画幅：按项目画幅，一张完整、独立的单主体基准图。",
+        `光色与风格：${kind === "角色" ? [configuredStyle ? `项目视觉风格：${configuredStyle}` : "", globalVisual, DRAMA_CHARACTER_RENDER_STYLE, DRAMA_CHARACTER_STUDIO_LIGHT_RULES, DRAMA_CHARACTER_SUPPLIER_QUALITY_RULES].filter(Boolean).join("；") : globalVisual || "严格沿用当前项目视觉风格与资产固有色彩，不新增环境或剧情元素。"}`,
+        kind === "角色" ? `负面约束：${DRAMA_CHARACTER_NEGATIVE_RULES}。` : kind === "场景" ? `负面约束：无人物、不同地点、方向标签、文字、水印、logo${visualContract?.globalNegativePrompt ? `；${visualContract.globalNegativePrompt}` : ""}。` : "负面约束：无额外主体、拼版、多视角、场景文字、边框、文字、水印或 logo。",
     ];
     const retainedByLabel = new Map(retained.map((line) => {
         const match = line.match(/^([^：:]+)[：:]\s*([\s\S]*)$/u);

@@ -179,6 +179,8 @@ export function validateDramaVisualAnalysis(value: DramaVisualAnalysis, sourceSh
             for (const [field, text] of [["起点", frame.startPrompt], ["动作", frame.actionPrompt], ["衔接", frame.transitionPrompt], ["终点", frame.endPrompt], ["画面", frame.imagePrompt]] as const)
                 if (isGenericDramaDetail(text)) errors.push(`${label}第${index + 1}帧${field}缺少具体可见结果`);
         }
+        if (shot.dialoguePerformance.length && shot.dialoguePerformance.some((item) => !item.intent || !item.tone || !item.pace || !item.pause || !item.emphasis || !item.facialReactionBefore || !item.facialReactionDuring || !item.facialReactionAfter))
+            errors.push(`${label}对白逐句表演缺少意图、语气、节奏、停顿、重音或说前/说中/说后反应`);
     }
     return errors;
 }
