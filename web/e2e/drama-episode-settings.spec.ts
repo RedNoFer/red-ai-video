@@ -15,6 +15,13 @@ test("drama episode settings save through a compact request", async ({ page, req
     await page.goto(`/drama/${project.id}`, { waitUntil: "networkidle" });
     await page.getByRole("button", { name: "打开本集设置" }).click();
     await expect(page.locator("[data-drama-episode-settings]")).toBeVisible();
+    const settings = page.locator("[data-drama-episode-settings]");
+    await settings.getByTestId("drama-episode-visual-direction").fill("视觉风格：东方写实摄影\n画风：克制电影美术\n色彩：冷灰蓝与暗金\n材质：真实木石与湿润反光");
+    let agentRunCalls = 0;
+    await page.route("**/api/agent/runs", async (route) => {
+        if (route.request().method() === "POST") agentRunCalls += 1;
+        await route.continue();
+    });
 
     const saveRequest = page.waitForRequest((candidate) => candidate.method() === "PATCH" && candidate.url().endsWith(`/api/drama/projects/${project.id}/episodes/${episode.id}/settings`));
     const saveResponse = page.waitForResponse((candidate) => candidate.request().method() === "PATCH" && candidate.url().endsWith(`/api/drama/projects/${project.id}/episodes/${episode.id}/settings`));
@@ -22,9 +29,49 @@ test("drama episode settings save through a compact request", async ({ page, req
 
     const [outbound, inbound] = await Promise.all([saveRequest, saveResponse]);
     expect(Buffer.byteLength(outbound.postData() || "")).toBeLessThan(8 * 1024 * 1024);
-    expect(JSON.parse(outbound.postData() || "{}")).toEqual({ title: episode.title, summary: project.summary });
+    const requestBody = JSON.parse(outbound.postData() || "{}");
+    expect(requestBody).toMatchObject({ title: episode.title, summary: project.summary, productionPlan: { lockedAt: expect.any(String), visual: { visualDirection: expect.stringContaining("东方写实摄影") } } });
+    expect(agentRunCalls).toBe(0);
     expect(inbound.status()).toBe(200);
     await expect(page.getByText("本集设置已保存", { exact: true })).toBeVisible();
+});
+
+test("drama global parameters save without starting an Agent run", async ({ page, request }) => {
+    const created = await request.post("/api/drama/projects", { data: { title: `E2E 全局参数 ${randomUUID().slice(0, 8)}` } });
+    expect(created.ok(), await created.text()).toBe(true);
+    const project = ((await created.json()) as { data: { project: DramaProject } }).data.project;
+
+    let agentRunCalls = 0;
+    await page.route("**/api/agent/runs", async (route) => {
+        if (route.request().method() === "POST") agentRunCalls += 1;
+        await route.continue();
+    });
+
+    try {
+        await page.goto(`/drama/${project.id}`, { waitUntil: "networkidle" });
+        await page.getByRole("button", { name: "剧本 GPT" }).click();
+        const agentPanel = page.locator("[data-drama-script-agent]");
+        await expect(agentPanel).toBeVisible();
+        await agentPanel.getByRole("button", { name: "全局参数设置" }).click();
+
+        const dialog = page.getByRole("dialog", { name: "全局参数设置" });
+        await expect(dialog).toBeVisible();
+        await expect(dialog.getByText("视觉风格", { exact: true })).toHaveCount(0);
+        await expect(dialog.getByText("画风", { exact: true })).toHaveCount(0);
+        const visualDirection = dialog.getByTestId("drama-global-visual-direction");
+        await visualDirection.fill("东方写实摄影与克制电影美术\n冷灰蓝主色，真实木石材质，自然侧逆光\n禁止动漫质感、塑料皮肤和无依据的现代元素");
+
+        const saveRequest = page.waitForRequest((candidate) => candidate.method() === "PATCH" && candidate.url().endsWith(`/api/drama/projects/${project.id}`));
+        await dialog.getByRole("button", { name: "保存全局参数" }).click();
+        const outbound = await saveRequest;
+        expect(outbound.postDataJSON()).toMatchObject({ productionBible: { productionPlan: { visual: { visualDirection: expect.stringContaining("自然侧逆光") } } } });
+        await expect(dialog).toBeHidden();
+        await expect(page.getByText("全局参数设置已保存", { exact: true })).toBeVisible();
+        expect(agentRunCalls).toBe(0);
+    } finally {
+        const deleted = await request.delete(`/api/drama/projects/${project.id}`);
+        expect(deleted.ok(), await deleted.text()).toBe(true);
+    }
 });
 
 test("episode settings save does not create a second project style source", async ({ page, request }) => {

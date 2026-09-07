@@ -151,6 +151,12 @@ describe("applyDramaVisualRunTerminalStep", () => {
 
         expect(next).toBe(shot);
     });
+
+    it("keeps an uncertain terminal result visible as manual review", () => {
+        const shot = { id: "shot-one", storyboardFrames: [{ id: "f1", sequenceIndex: 1, status: "running", source: "generated" }] } as never;
+        const next = applyDramaVisualRunTerminalStep(shot, { shotId: "shot-one", type: "keyframe", frameId: "f1", sequenceIndex: 1, status: "needs_review", taskId: "task-one", error: "提交结果不确定" } as never);
+        expect(next).toMatchObject({ id: "shot-one", storyboardFrames: [{ id: "f1", status: "needs_review", error: "提交结果不确定" }] });
+    });
 });
 
 describe("applyDramaProductionRunStep", () => {

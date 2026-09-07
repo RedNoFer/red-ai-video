@@ -148,7 +148,7 @@ export function saveDramaProductionPlan(projectId: string, productionPlan: Drama
     }).then((data) => data.project);
 }
 
-export function saveDramaEpisodeSettings(projectId: string, episodeId: string, input: { title: string; summary: string }) {
+export function saveDramaEpisodeSettings(projectId: string, episodeId: string, input: { title: string; summary: string; productionPlan?: DramaProductionPlan }) {
     return request<{ project: DramaProject }>(`/api/drama/projects/${encodeURIComponent(projectId)}/episodes/${encodeURIComponent(episodeId)}/settings`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -239,6 +239,16 @@ export function applyDramaEpisodeProductionPackage(project: DramaProject, episod
 
 export function getLatestDramaProductionRun(projectId: string, episodeId: string, scope: "visual" | "production" = "production") {
     return request<{ run: DramaProductionRun | null; preflight: DramaProductionPreflight | null }>(`/api/drama/projects/${encodeURIComponent(projectId)}/production-runs?episodeId=${encodeURIComponent(episodeId)}&scope=${scope}`);
+}
+
+export class DramaApiError extends Error {
+    constructor(
+        message: string,
+        readonly status: number,
+    ) {
+        super(message);
+        this.name = "DramaApiError";
+    }
 }
 
 export function preflightDramaGeneration(projectId: string, episodeId: string, shotIds: string[], requestId: string) {
@@ -499,8 +509,13 @@ export async function exportDramaJianyingDraft(projectId: string, input: { episo
 }
 
 async function request<T>(url: string, init?: RequestInit) {
-    const response = await fetch(url, { cache: "no-store", ...init });
+    let response: Response;
+    try {
+        response = await fetch(url, { cache: "no-store", ...init });
+    } catch (error) {
+        throw error;
+    }
     const payload = (await response.json().catch(() => ({}))) as { data?: T; msg?: string };
-    if (!response.ok || !payload.data) throw new Error(payload.msg || "短剧项目请求失败");
+    if (!response.ok || !payload.data) throw new DramaApiError(payload.msg || "短剧项目请求失败", response.status);
     return payload.data;
 }

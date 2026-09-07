@@ -71,16 +71,18 @@ export function normalizeDramaProductionPlan(value: unknown, fallback?: DramaPro
     const roles = Array.isArray(referenceInput.roles) ? referenceInput.roles.map(text).filter((role): role is DramaReferenceManifestRole => DRAMA_REFERENCE_ROLES.includes(role as DramaReferenceManifestRole)) : base.references.roles;
     const requestedShotDuration = positive(videoInput.shotDuration) || (videoInput.durationPolicy === "fixed" ? positive(videoInput.duration) : undefined);
     const framePolicy = normalizeFramePolicy(videoInput.framePolicy, base.video.framePolicy || (Number(videoInput.frameCount) === 4 ? "fixed-4" : Number(videoInput.frameCount) === 5 ? "fixed-5" : "agent"));
-    const visualStyle = text(visualInput.visualStyle);
-    const artStyle = text(visualInput.artStyle);
+    const visualStyle = typeof visualInput.visualStyle === "string" ? text(visualInput.visualStyle) : base.visual.visualStyle;
+    const artStyle = typeof visualInput.artStyle === "string" ? text(visualInput.artStyle) : base.visual.artStyle;
+    const visualDirection = typeof visualInput.visualDirection === "string" ? text(visualInput.visualDirection) : base.visual.visualDirection;
     const frameCount = framePolicy === "fixed-4" ? 4 : framePolicy === "fixed-5" ? 5 : undefined;
     return {
         version: DRAMA_PRODUCTION_PLAN_VERSION,
         skills: normalizedSkills,
         visual: {
-            visualStyle: visualStyle || base.visual.visualStyle,
-            artStyle: artStyle || base.visual.artStyle,
-            source: visualInput.source === "manual" ? "manual" : base.visual.source,
+            visualStyle,
+            artStyle,
+            ...(visualDirection ? { visualDirection } : {}),
+            source: visualInput.source === "manual" || visualInput.source === "agent" ? visualInput.source : base.visual.source,
         },
         video: {
             model: text(videoInput.model) || base.video.model,
@@ -103,6 +105,19 @@ export function normalizeDramaProductionPlan(value: unknown, fallback?: DramaPro
         lockedAt: text(input.lockedAt) || base.lockedAt,
         source: ["new-project", "package", "manual"].includes(text(input.source)) ? (text(input.source) as DramaProductionPlan["source"]) : base.source,
     };
+}
+
+export function dramaVisualDirection(plan: DramaProductionPlan) {
+    if (plan.visual.visualDirection?.trim()) return plan.visual.visualDirection.trim();
+    if (plan.visual.visualStyle.trim() === plan.visual.artStyle.trim()) return plan.visual.visualStyle.trim();
+    return [plan.visual.visualStyle.trim() ? `视觉风格：${plan.visual.visualStyle.trim()}` : "", plan.visual.artStyle.trim() ? `画风：${plan.visual.artStyle.trim()}` : ""].filter(Boolean).join("\n");
+}
+
+export function applyDramaVisualDirection(plan: DramaProductionPlan, value: string): DramaProductionPlan {
+    const direction = value.trim();
+    const visualStyle = direction.match(/(?:^|\n)视觉风格\s*[：:]\s*([^\n]+)/u)?.[1]?.trim() || direction;
+    const artStyle = direction.match(/(?:^|\n)画风\s*[：:]\s*([^\n]+)/u)?.[1]?.trim() || direction;
+    return { ...plan, visual: { ...plan.visual, visualStyle, artStyle, visualDirection: direction, source: visualStyle && artStyle ? "manual" : "agent" } };
 }
 
 export function resolveDramaShotDurationPreference(prompt: string, fallback: DramaShotDuration = 15): DramaShotDuration {

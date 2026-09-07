@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { defaultDramaProductionPlan, dramaReferenceImageBudget, normalizeDramaProductionPlan, resolveDramaFrameCountPreference, resolveDramaShotDurationPreference } from "@/lib/drama-production-plan";
+import { applyDramaVisualDirection, defaultDramaProductionPlan, dramaReferenceImageBudget, dramaVisualDirection, normalizeDramaProductionPlan, resolveDramaFrameCountPreference, resolveDramaShotDurationPreference } from "@/lib/drama-production-plan";
 
 describe("drama production plan", () => {
     it("defaults new projects to locked-by-confirmation storyboard settings", () => {
@@ -45,5 +45,20 @@ describe("drama production plan", () => {
             video: { shotDuration: 30, framePolicy: "fixed-4", frameCount: 4 },
         });
         expect(normalizeDramaProductionPlan({ video: { framePolicy: "agent" } })?.video.framePolicy).toBe("agent");
+    });
+
+    it("round-trips the editable visual direction without losing its split fields", () => {
+        const plan = applyDramaVisualDirection(defaultDramaProductionPlan("manual"), "视觉风格：东方写实摄影\n画风：克制电影级空间美术，真实材质");
+
+        expect(plan.visual).toMatchObject({ visualStyle: "东方写实摄影", artStyle: "克制电影级空间美术，真实材质", visualDirection: "视觉风格：东方写实摄影\n画风：克制电影级空间美术，真实材质", source: "manual" });
+        expect(dramaVisualDirection(plan)).toBe("视觉风格：东方写实摄影\n画风：克制电影级空间美术，真实材质");
+        expect(normalizeDramaProductionPlan(plan)?.visual.visualDirection).toBe(plan.visual.visualDirection);
+    });
+
+    it("lets an explicit empty visual direction switch back to Agent suggestions", () => {
+        const current = applyDramaVisualDirection(defaultDramaProductionPlan("manual"), "视觉风格：东方写实摄影\n画风：克制电影美术");
+        const cleared = normalizeDramaProductionPlan(applyDramaVisualDirection(current, ""), current);
+
+        expect(cleared?.visual).toEqual({ visualStyle: "", artStyle: "", source: "agent" });
     });
 });

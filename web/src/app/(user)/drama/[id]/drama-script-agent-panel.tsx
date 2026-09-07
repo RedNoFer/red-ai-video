@@ -1,19 +1,19 @@
 "use client";
 
 import { App, Button, Drawer, Input, Modal, Popover, Select, Tooltip } from "antd";
-import { Bot, FileText, History, LoaderCircle, MessageSquarePlus, Paperclip, Send, X } from "lucide-react";
+import { Bot, FileText, History, LoaderCircle, MessageSquarePlus, Package, Paperclip, Send, Settings2, Square, X } from "lucide-react";
 import { nanoid } from "nanoid";
 import { useEffect, useRef, useState } from "react";
 
 import type { CreativeAsset, CreativeConversation, CreativeMessage } from "@/lib/creative-runtime-contract";
 import type { DramaProductionPackagePreview, DramaProject, DramaEpisode } from "@/lib/drama-project-contract";
 import { AgentMarkdown } from "@/components/agent/agent-markdown";
-import { createCreativeAgentRun, createCreativeConversation, listCreativeConversationPage, listCreativeMessages, uploadCreativeAsset, watchCreativeAgentRun } from "@/services/api/creative";
+import { controlCreativeAgentRun, createCreativeAgentRun, createCreativeConversation, listCreativeConversationPage, listCreativeMessages, uploadCreativeAsset, watchCreativeAgentRun } from "@/services/api/creative";
 import { CREATIVE_UPLOAD_MAX_BYTES, isCreativeTextFile } from "@/lib/creative-upload";
 import { applyDramaEpisodeProductionPackage, saveDramaProductionPlan } from "@/services/api/drama-projects";
 import { useDramaStore } from "../stores/use-drama-store";
 import { useCreativeAgentOptions } from "@/hooks/use-creative-agent-options";
-import { defaultDramaProductionPlan, DRAMA_SCRIPT_SHOT_DURATION_OPTIONS, DRAMA_VIDEO_RESOLUTION_OPTIONS, normalizeDramaProductionPlan } from "@/lib/drama-production-plan";
+import { applyDramaVisualDirection, defaultDramaProductionPlan, dramaVisualDirection, DRAMA_SCRIPT_SHOT_DURATION_OPTIONS, DRAMA_VIDEO_RESOLUTION_OPTIONS, normalizeDramaProductionPlan } from "@/lib/drama-production-plan";
 import type { DramaProductionPlan } from "@/lib/drama-project-contract";
 
 type Props = { project: DramaProject; episode: DramaEpisode; open: boolean; onOpenChange: (open: boolean) => void };
@@ -31,9 +31,12 @@ export function DramaScriptAgentPanel({ project, episode, open, onOpenChange }: 
     const [packageData, setPackageData] = useState<{ markdown: string; preview: DramaProductionPackagePreview }>();
     const [applying, setApplying] = useState(false);
     const [planOpen, setPlanOpen] = useState(false);
-    const [pendingPackage, setPendingPackage] = useState(false);
     const [planDraft, setPlanDraft] = useState<DramaProductionPlan>(() => normalizeDramaProductionPlan(project.productionBible?.productionPlan, defaultDramaProductionPlan("new-project"))!);
     const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
+    const [activeRunId, setActiveRunId] = useState<string>();
+    const [activeAssistantMessageId, setActiveAssistantMessageId] = useState<string>();
+    const [stopping, setStopping] = useState(false);
+    const [savingPlan, setSavingPlan] = useState(false);
     const attachmentsRef = useRef<PendingAttachment[]>([]);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const { skills, skillsLoading } = useCreativeAgentOptions("drama", ["video"]);
@@ -142,46 +145,70 @@ export function DramaScriptAgentPanel({ project, episode, open, onOpenChange }: 
                 modelIds: [],
                 snapshot: { episodeId: episode.id, productionPlan: requestedPlan },
             });
-        setMessages((current) => [
-            ...current,
-            { id: result.run.inputMessageId, conversationId: item.id, sequence: current.length + 1, role: "user", status: "completed", content, metadata: {}, createdAt: Date.now(), updatedAt: Date.now() },
-            {
-                id: result.run.assistantMessageId,
-                conversationId: item.id,
-                sequence: current.length + 2,
-                role: "assistant",
-                status: "running",
-                content: "正在结合项目上下文编写本集内容…",
-                metadata: {},
-                runId: result.run.id,
-                createdAt: Date.now(),
-                updatedAt: Date.now(),
-            },
-        ]);
-        streamRef.current?.();
-        streamRef.current = watchCreativeAgentRun(result.run.id, {
-            onProgress: (text) => setMessages((current) => current.map((message) => (message.id === result.run.assistantMessageId ? { ...message, content: text } : message))),
-            onStatus: () => undefined,
-            onTaskCompleted: () => undefined,
-            onProjectHandoff: () => undefined,
-            onConnectionError: (text) => setMessages((current) => current.map((message) => (message.id === result.run.assistantMessageId ? { ...message, content: text, status: "failed" } : message))),
-            onTerminal: async (status, text) => {
-                const loaded = await listCreativeMessages(item.id);
-                setMessages(loaded);
-                const assistant = loaded.find((message) => message.id === result.run.assistantMessageId);
-                const packageValue = assistant?.metadata?.dramaScriptPackage;
-                if (packageValue && typeof packageValue === "object" && typeof (packageValue as { markdown?: unknown }).markdown === "string") setPackageData(packageValue as { markdown: string; preview: DramaProductionPackagePreview });
-                if (status === "failed" && text) message.error(text);
-                setSending(false);
-            },
-        });
+            setActiveRunId(result.run.id);
+            setActiveAssistantMessageId(result.run.assistantMessageId);
+            setMessages((current) => [
+                ...current,
+                { id: result.run.inputMessageId, conversationId: item.id, sequence: current.length + 1, role: "user", status: "completed", content, metadata: {}, createdAt: Date.now(), updatedAt: Date.now() },
+                {
+                    id: result.run.assistantMessageId,
+                    conversationId: item.id,
+                    sequence: current.length + 2,
+                    role: "assistant",
+                    status: "running",
+                    content: "正在结合项目上下文编写本集内容…",
+                    metadata: {},
+                    runId: result.run.id,
+                    createdAt: Date.now(),
+                    updatedAt: Date.now(),
+                },
+            ]);
+            streamRef.current?.();
+            streamRef.current = watchCreativeAgentRun(result.run.id, {
+                onProgress: (text) => setMessages((current) => current.map((message) => (message.id === result.run.assistantMessageId ? { ...message, content: text } : message))),
+                onStatus: () => undefined,
+                onTaskCompleted: () => undefined,
+                onProjectHandoff: () => undefined,
+                onConnectionError: (text) => setMessages((current) => current.map((message) => (message.id === result.run.assistantMessageId ? { ...message, content: text, status: "failed" } : message))),
+                onTerminal: async (status, text) => {
+                    const loaded = await listCreativeMessages(item.id);
+                    setMessages(loaded);
+                    const assistant = loaded.find((message) => message.id === result.run.assistantMessageId);
+                    const packageValue = assistant?.metadata?.dramaScriptPackage;
+                    if (packageValue && typeof packageValue === "object" && typeof (packageValue as { markdown?: unknown }).markdown === "string") setPackageData(packageValue as { markdown: string; preview: DramaProductionPackagePreview });
+                    if (status === "failed" && text) message.error(text);
+                    setSending(false);
+                    setActiveRunId(undefined);
+                    setActiveAssistantMessageId(undefined);
+                },
+            });
         } catch (error) {
             message.error(error instanceof Error ? error.message : "剧本 Agent 请求失败");
             setSending(false);
+            setActiveRunId(undefined);
+            setActiveAssistantMessageId(undefined);
         }
     };
-    const savePlan = async () => {
-        const next = normalizeDramaProductionPlan(planDraft, defaultDramaProductionPlan("new-project"))!;
+    const stopRun = async () => {
+        if (!activeRunId || stopping) return;
+        setStopping(true);
+        try {
+            await controlCreativeAgentRun(activeRunId, "cancel", conversation?.id);
+            streamRef.current?.();
+            streamRef.current = null;
+            setMessages((current) => current.map((item) => (item.id === activeAssistantMessageId ? { ...item, status: "cancelled", content: "已终止本轮对话" } : item)));
+            setSending(false);
+            setActiveRunId(undefined);
+            setActiveAssistantMessageId(undefined);
+            message.info("已终止本轮对话");
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : "终止对话失败");
+        } finally {
+            setStopping(false);
+        }
+    };
+    const persistPlanDraft = async () => {
+        const next = applyDramaVisualDirection(normalizeDramaProductionPlan(planDraft, defaultDramaProductionPlan("new-project"))!, dramaVisualDirection(planDraft));
         const lockedPlan = {
             ...next,
             visual: { ...next.visual, source: next.visual.visualStyle.trim() && next.visual.artStyle.trim() ? ("manual" as const) : ("agent" as const) },
@@ -190,17 +217,40 @@ export function DramaScriptAgentPanel({ project, episode, open, onOpenChange }: 
         };
         const saved = await saveDramaProductionPlan(project.id, lockedPlan);
         replaceProject(saved);
-        setPlanDraft(normalizeDramaProductionPlan(saved.productionBible?.productionPlan, lockedPlan)!);
-        setPlanOpen(false);
-        if (pendingPackage) {
-            setPendingPackage(false);
+        const persistedPlan = normalizeDramaProductionPlan(saved.productionBible?.productionPlan, lockedPlan)!;
+        setPlanDraft(persistedPlan);
+        return persistedPlan;
+    };
+    const savePlan = async () => {
+        if (savingPlan) return;
+        setSavingPlan(true);
+        try {
+            await persistPlanDraft();
+            setPlanOpen(false);
+            message.success("全局参数设置已保存");
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : "全局参数设置保存失败");
+        } finally {
+            setSavingPlan(false);
+        }
+    };
+    const savePlanAndGeneratePackage = async () => {
+        if (savingPlan || sending) return;
+        setSavingPlan(true);
+        try {
+            const lockedPlan = await persistPlanDraft();
+            setPlanOpen(false);
             const packageRequest = prompt.trim();
-            void submit(
+            await submit(
                 packageRequest
-                    ? `${packageRequest}\n\n请基于当前项目、当前集、本次锁定的生产方案和本次对话上下文，生成完整的 vozeb-drama-production-package-v1 Markdown 制作包，只包含当前集，并按本次指定的每镜时长重新分割剧情。`
-                    : "请基于当前项目、当前集、本次锁定的生产方案和本次对话上下文，生成完整的 vozeb-drama-production-package-v1 Markdown 制作包，只包含当前集，并按本次指定的每镜时长重新分割剧情。",
+                    ? `${packageRequest}\n\n请基于当前项目、当前集、本次已保存的全局参数和本次对话上下文，生成完整的 vozeb-drama-production-package-v1 Markdown 制作包，只包含当前集，并按本次指定的每镜时长重新分割剧情。`
+                    : "请基于当前项目、当前集、本次已保存的全局参数和本次对话上下文，生成完整的 vozeb-drama-production-package-v1 Markdown 制作包，只包含当前集，并按本次指定的每镜时长重新分割剧情。",
                 lockedPlan,
             );
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : "全局参数设置保存失败");
+        } finally {
+            setSavingPlan(false);
         }
     };
     const confirmApply = async () => {
@@ -231,7 +281,7 @@ export function DramaScriptAgentPanel({ project, episode, open, onOpenChange }: 
                         content={
                             <div className="grid max-h-60 min-w-52 gap-1 overflow-y-auto">
                                 {conversations.map((item) => (
-                                    <Button key={item.id} type={item.id === conversation?.id ? "primary" : "text"} className="!justify-start !text-left" onClick={() => void loadConversation(item)}>
+                                    <Button key={item.id} type={item.id === conversation?.id ? "primary" : "text"} className="!justify-start !text-left" disabled={sending} onClick={() => void loadConversation(item)}>
                                         {item.title || `${episode.title} 剧本`}
                                     </Button>
                                 ))}
@@ -239,7 +289,7 @@ export function DramaScriptAgentPanel({ project, episode, open, onOpenChange }: 
                         }
                     >
                         <Tooltip title="历史剧本对话">
-                            <Button type="text" shape="circle" icon={<History className="size-4" />} />
+                            <Button type="text" shape="circle" icon={<History className="size-4" />} aria-label="历史剧本对话" />
                         </Tooltip>
                     </Popover>
                     <Tooltip title="新建剧本对话">
@@ -247,6 +297,8 @@ export function DramaScriptAgentPanel({ project, episode, open, onOpenChange }: 
                             type="text"
                             shape="circle"
                             icon={<MessageSquarePlus className="size-4" />}
+                            disabled={sending}
+                            aria-label="新建剧本对话"
                             onClick={async () => {
                                 const item = await createCreativeConversation({ surface: "drama", source: "drama-script", projectId: project.id, episodeId: episode.id, title: `${episode.title} 剧本` });
                                 setConversations((current) => [item, ...current]);
@@ -255,7 +307,7 @@ export function DramaScriptAgentPanel({ project, episode, open, onOpenChange }: 
                         />
                     </Tooltip>
                     <Tooltip title="关闭剧本 GPT">
-                        <Button type="text" shape="circle" icon={<X className="size-4" />} onClick={() => onOpenChange(false)} />
+                        <Button type="text" shape="circle" icon={<X className="size-4" />} aria-label="关闭剧本 GPT" onClick={() => onOpenChange(false)} />
                     </Tooltip>
                 </div>
             </div>
@@ -318,19 +370,18 @@ export function DramaScriptAgentPanel({ project, episode, open, onOpenChange }: 
                         添加附件
                     </Button>
                     <div className="flex justify-end gap-2">
-                    <Button
-                        loading={sending}
-                        disabled={sending}
-                        onClick={() => {
-                            setPendingPackage(true);
-                            setPlanOpen(true);
-                        }}
-                    >
-                        生成制作包
-                    </Button>
-                    <Button type="primary" icon={<Send className="size-3.5" />} loading={sending} disabled={!prompt.trim() && !attachments.length} onClick={() => void submit()}>
-                        发送
-                    </Button>
+                        <Button icon={<Settings2 className="size-3.5" />} disabled={sending} onClick={() => setPlanOpen(true)}>
+                            全局参数设置
+                        </Button>
+                        {sending && activeRunId ? (
+                            <Button danger icon={<Square className="size-3.5" />} loading={stopping} onClick={() => void stopRun()}>
+                                终止对话
+                            </Button>
+                        ) : (
+                            <Button type="primary" icon={<Send className="size-3.5" />} loading={sending} disabled={!prompt.trim() && !attachments.length} onClick={() => void submit()}>
+                                发送
+                            </Button>
+                        )}
                     </div>
                 </div>
             </div>
@@ -355,10 +406,9 @@ export function DramaScriptAgentPanel({ project, episode, open, onOpenChange }: 
                             ))}
                         </div>
                         {packageData.preview.package.project.productionBible?.productionPlan ? (
-                            <div className="grid gap-2 rounded-md border border-border bg-muted/20 px-3 py-2 text-xs sm:grid-cols-3">
-                                <span>视觉风格：{packageData.preview.package.project.productionBible.productionPlan.visual.visualStyle}</span>
-                                <span>画风：{packageData.preview.package.project.productionBible.productionPlan.visual.artStyle}</span>
-                                <span>每镜：{packageData.preview.package.project.productionBible.productionPlan.video.shotDuration || 15} 秒 · {packageData.preview.package.project.productionBible.productionPlan.video.framePolicy === "fixed-4" ? "4 帧" : packageData.preview.package.project.productionBible.productionPlan.video.framePolicy === "fixed-5" ? "5 帧" : "智能切分"}</span>
+                            <div className="grid gap-2 rounded-md border border-border bg-muted/20 px-3 py-2 text-xs sm:grid-cols-[minmax(0,1fr)_auto]">
+                                <span className="whitespace-pre-wrap break-words">视觉方案：{dramaVisualDirection(packageData.preview.package.project.productionBible.productionPlan)}</span>
+                                <span className="whitespace-nowrap">每镜：{packageData.preview.package.project.productionBible.productionPlan.video.shotDuration || 15} 秒 · {packageData.preview.package.project.productionBible.productionPlan.video.framePolicy === "fixed-4" ? "4 帧" : packageData.preview.package.project.productionBible.productionPlan.video.framePolicy === "fixed-5" ? "5 帧" : "智能切分"}</span>
                             </div>
                         ) : null}
                         <pre className="hide-scrollbar max-h-[48vh] overflow-auto whitespace-pre-wrap rounded-md border border-border bg-muted/20 p-3 text-xs leading-5">{packageData.markdown}</pre>
@@ -366,17 +416,15 @@ export function DramaScriptAgentPanel({ project, episode, open, onOpenChange }: 
                 ) : null}
             </Modal>
             <Modal
-                title="锁定本集生产方案"
+                title="全局参数设置"
                 open={planOpen}
-                width={640}
+                width="min(640px, calc(100vw - 24px))"
                 centered
+                styles={{ body: { maxHeight: "calc(100dvh - 132px)", overflowY: "auto" } }}
                 onCancel={() => {
                     setPlanOpen(false);
-                    setPendingPackage(false);
                 }}
-                okText="保存并继续"
-                cancelText="取消"
-                onOk={savePlan}
+                footer={null}
             >
                 <div className="space-y-3">
                     <label className="block space-y-1">
@@ -399,21 +447,17 @@ export function DramaScriptAgentPanel({ project, episode, open, onOpenChange }: 
                         />
                     </label>
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                        <label className="block space-y-1">
-                            <span className="text-xs font-medium">视觉风格</span>
-                            <Input
-                                value={planDraft.visual.visualStyle}
-                                placeholder="留空由 Agent 智能建议"
-                                onChange={(event) => setPlanDraft((current) => ({ ...current, visual: { ...current.visual, visualStyle: event.target.value, source: "manual" } }))}
+                        <label className="block space-y-1 sm:col-span-2">
+                            <span className="text-xs font-medium">视觉方案</span>
+                            <Input.TextArea
+                                value={dramaVisualDirection(planDraft)}
+                                placeholder="请输入统一的视觉风格、画风、色彩、材质、光线和负面约束；也可以留空由 Agent 建议"
+                                className="resize-y"
+                                rows={5}
+                                data-testid="drama-global-visual-direction"
+                                onChange={(event) => setPlanDraft((current) => applyDramaVisualDirection(current, event.target.value))}
                             />
-                        </label>
-                        <label className="block space-y-1">
-                            <span className="text-xs font-medium">画风</span>
-                            <Input
-                                value={planDraft.visual.artStyle}
-                                placeholder="留空由 Agent 智能建议"
-                                onChange={(event) => setPlanDraft((current) => ({ ...current, visual: { ...current.visual, artStyle: event.target.value, source: "manual" } }))}
-                            />
+                            <span className="text-[11px] leading-5 text-muted-foreground">视觉方案会同时作为项目全局风格和制作包的视觉依据。</span>
                         </label>
                     </div>
                     <div className="grid grid-cols-2 gap-3">
@@ -509,6 +553,11 @@ export function DramaScriptAgentPanel({ project, episode, open, onOpenChange }: 
                     <p className="text-xs leading-5 text-muted-foreground">
                         Agent 会按每镜 {planDraft.video.shotDuration || 15} 秒和“{planDraft.video.framePolicy === "fixed-4" ? "4 帧" : planDraft.video.framePolicy === "fixed-5" ? "5 帧" : "智能切分"}”重新切分剧情；相邻碎片镜头会合并为完整逻辑镜头。空白视觉参数由 Agent 补出具体值并写入制作包。连续性固定为严格模式：下一镜只能引用上一镜当前视频版本且已人工验收的实际尾帧。
                     </p>
+                    <div className="flex flex-col justify-end gap-2 border-t border-border pt-3 sm:flex-row">
+                        <Button disabled={savingPlan} onClick={() => setPlanOpen(false)}>取消</Button>
+                        <Button loading={savingPlan} onClick={() => void savePlan()}>保存全局参数</Button>
+                        <Button type="primary" icon={<Package className="size-3.5" />} loading={savingPlan} disabled={sending} onClick={() => void savePlanAndGeneratePackage()}>保存并生成制作包</Button>
+                    </div>
                 </div>
             </Modal>
         </div>

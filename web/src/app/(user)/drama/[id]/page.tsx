@@ -61,6 +61,7 @@ function DramaProjectEditor({ project }: { project: DramaProject }) {
     const { message, modal } = App.useApp();
     const router = useRouter();
     const updateProject = useDramaStore((state) => state.updateProject);
+    const loadProject = useDramaStore((state) => state.loadProject);
     const updateEpisode = useDramaStore((state) => state.updateEpisode);
     const updateShot = useDramaStore((state) => state.updateShot);
     const updateAsset = useDramaStore((state) => state.updateAsset);
@@ -417,16 +418,24 @@ function DramaProjectEditor({ project }: { project: DramaProject }) {
             syncing = true;
             let shouldContinue = false;
             try {
-                const { run } = await getLatestDramaProductionRun(project.id, episode.id, "visual");
-                if (!active || !run) return;
                 const currentProject = useDramaStore.getState().projects.find((item) => item.id === project.id);
+                const currentEpisode = currentProject?.episodes.find((item) => item.id === episode.id);
+                const { run } = await getLatestDramaProductionRun(project.id, episode.id, "visual");
+                if (!active) return;
+                if (!run) {
+                    for (const currentShot of currentEpisode?.shots || []) {
+                        const nextShot = releaseUntrackedVisualQueue(currentShot);
+                        if (nextShot !== currentShot) replaceShot(project.id, episode.id, currentShot.id, nextShot);
+                    }
+                    return;
+                }
                 if (!currentProject) return;
                 const decision = resolveDramaVisualRunSync(currentProject, episode.id, run);
                 shouldContinue = decision.shouldContinue;
                 const nextEpisode = decision.project.episodes.find((item) => item.id === episode.id);
-                const currentEpisode = currentProject.episodes.find((item) => item.id === episode.id);
-                if (currentEpisode && nextEpisode) {
-                    for (const currentShot of currentEpisode.shots) {
+                const syncedEpisode = currentProject.episodes.find((item) => item.id === episode.id);
+                if (syncedEpisode && nextEpisode) {
+                    for (const currentShot of syncedEpisode.shots) {
                         let nextShot = nextEpisode.shots.find((item) => item.id === currentShot.id) || currentShot;
                         for (const step of run.steps.filter((item) => item.shotId === currentShot.id)) nextShot = applyDramaVisualRunTerminalStep(nextShot, step);
                         if (JSON.stringify(nextShot) !== JSON.stringify(currentShot)) replaceShot(project.id, episode.id, currentShot.id, nextShot);
@@ -680,6 +689,20 @@ function DramaProjectEditor({ project }: { project: DramaProject }) {
             </div>
         </main>
     );
+}
+
+function releaseUntrackedVisualQueue(shot: DramaShot) {
+    const error = "未找到本次生图运行记录，请确认后重新提交";
+    let nextShot = shot;
+    if (["queued", "running"].includes(shot.storyboardStatus || "") && !shot.storyboardTaskId) nextShot = { ...nextShot, storyboardStatus: "error", storyboardError: error };
+    if (["queued", "running"].includes(shot.storyboardEndStatus || "") && !shot.storyboardEndTaskId) nextShot = { ...nextShot, storyboardEndStatus: "error", storyboardEndError: error };
+    const frames = (nextShot.storyboardFrames || []).map((frame) => {
+        if (["queued", "running"].includes(frame.status) && !frame.taskId) return { ...frame, status: "error" as const, error };
+        if (["queued", "running"].includes(frame.candidateStatus || "") && !frame.candidateTaskId) return { ...frame, candidateStatus: "error" as const, candidateError: error };
+        return frame;
+    });
+    if (frames.some((frame, index) => frame !== nextShot.storyboardFrames?.[index])) nextShot = { ...nextShot, storyboardFrames: frames };
+    return nextShot;
 }
 
 function DramaScriptGlobalBar({

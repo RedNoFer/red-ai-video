@@ -165,9 +165,25 @@ describe("drama project service updates", () => {
                 cameraMotion: "固定",
                 duration: 5,
                 storyboardFrameMode: "all_frames",
-                framePlan: { start: { source: "independent" }, end: { required: false }, frames: [{ id: "frame-one", sequenceIndex: 1, startSecond: 0, endSecond: 5, actionPrompt: "动作", imagePrompt: "静态关键帧：人物站立画面\n可见状态：人物站立\n可见表演状态：人物保持克制\n景别：中景\n机位与构图：平视，主体居中\n站位与视线：人物站在中央，视线向前\n三层空间：前景、中景和背景保持清晰层次\n光色与风格：自然侧光，电影感\n负面约束：无字幕、无水印、无logo" }] },
+                framePlan: {
+                    start: { source: "independent" },
+                    end: { required: false },
+                    frames: [
+                        {
+                            id: "frame-one",
+                            sequenceIndex: 1,
+                            startSecond: 0,
+                            endSecond: 5,
+                            actionPrompt: "动作",
+                            imagePrompt:
+                                "静态关键帧：人物站立画面\n可见状态：人物站立\n可见表演状态：人物保持克制\n景别：中景\n机位与构图：平视，主体居中\n站位与视线：人物站在中央，视线向前\n三层空间：前景、中景和背景保持清晰层次\n光色与风格：自然侧光，电影感\n负面约束：无字幕、无水印、无logo",
+                        },
+                    ],
+                },
                 storyboardFrames: [{ id: "frame-one", sequenceIndex: 1, source: "generated", status: "success", mediaUrl: "/api/generation-log-assets/permanent/frame-one.png" }],
-                frameEvidence: [{ id: "evidence-one", role: "storyboard_keyframe", source: "generated", sequenceIndex: 1, mediaUrl: "/api/generation-log-assets/permanent/frame-one.png", validity: "candidate", contentHash: "hash", createdAt: current.updatedAt }],
+                frameEvidence: [
+                    { id: "evidence-one", role: "storyboard_keyframe", source: "generated", sequenceIndex: 1, mediaUrl: "/api/generation-log-assets/permanent/frame-one.png", validity: "candidate", contentHash: "hash", createdAt: current.updatedAt },
+                ],
             } as never,
         ];
         mocks.getDramaProject.mockResolvedValue(current);
@@ -186,8 +202,22 @@ describe("drama project service updates", () => {
             start: { source: "independent" as const },
             end: { required: false },
             frames: [
-                { id: "frame-one", sequenceIndex: 1, startSecond: 0, endSecond: 2, actionPrompt: "动作一", imagePrompt: "静态关键帧：人物站立\n可见状态：人物站立\n可见表演状态：人物克制\n景别：中景\n机位与构图：平视，主体居中\n站位与视线：中央，向前\n三层空间：前中后景\n光色与风格：自然光\n负面约束：无字幕" },
-                { id: "frame-two", sequenceIndex: 2, startSecond: 2, endSecond: 4, actionPrompt: "动作二", imagePrompt: "静态关键帧：人物转身\n可见状态：人物转身\n可见表演状态：人物警觉\n景别：中景\n机位与构图：平视，主体居中\n站位与视线：中央，向侧面\n三层空间：前中后景\n光色与风格：自然光\n负面约束：无字幕" },
+                {
+                    id: "frame-one",
+                    sequenceIndex: 1,
+                    startSecond: 0,
+                    endSecond: 2,
+                    actionPrompt: "动作一",
+                    imagePrompt: "静态关键帧：人物站立\n可见状态：人物站立\n可见表演状态：人物克制\n景别：中景\n机位与构图：平视，主体居中\n站位与视线：中央，向前\n三层空间：前中后景\n光色与风格：自然光\n负面约束：无字幕",
+                },
+                {
+                    id: "frame-two",
+                    sequenceIndex: 2,
+                    startSecond: 2,
+                    endSecond: 4,
+                    actionPrompt: "动作二",
+                    imagePrompt: "静态关键帧：人物转身\n可见状态：人物转身\n可见表演状态：人物警觉\n景别：中景\n机位与构图：平视，主体居中\n站位与视线：中央，向侧面\n三层空间：前中后景\n光色与风格：自然光\n负面约束：无字幕",
+                },
             ],
         };
         current.episodes[0].shots = [
@@ -232,8 +262,32 @@ describe("drama project service updates", () => {
                 cameraMotion: "固定",
                 duration: 4,
                 storyboardFrameMode: "all_frames",
-                framePlan: { start: { source: "independent" }, end: { required: false }, frames: [{ id: "frame-one", sequenceIndex: 1, startSecond: 0, endSecond: 2, actionPrompt: "一", imagePrompt: "静态关键帧：人物站立\n可见状态：人物站立\n可见表演状态：人物克制\n景别：中景\n机位与构图：平视，主体居中\n站位与视线：中央，向前\n三层空间：前中后景\n光色与风格：自然光\n负面约束：无字幕" }, { id: "frame-two", sequenceIndex: 2, startSecond: 2, endSecond: 4, actionPrompt: "二", imagePrompt: "静态关键帧：人物转身\n可见状态：人物转身\n可见表演状态：人物警觉\n景别：中景\n机位与构图：平视，主体居中\n站位与视线：中央，向侧面\n三层空间：前中后景\n光色与风格：自然光\n负面约束：无字幕" }] },
-                storyboardFrames: [{ id: "frame-one", sequenceIndex: 1, source: "generated", status: "success", mediaUrl: "/api/generation-log-assets/permanent/one.png" }, { id: "frame-two", sequenceIndex: 2, source: "generated", status: "success", mediaUrl: "/api/generation-log-assets/permanent/two.png" }],
+                framePlan: {
+                    start: { source: "independent" },
+                    end: { required: false },
+                    frames: [
+                        {
+                            id: "frame-one",
+                            sequenceIndex: 1,
+                            startSecond: 0,
+                            endSecond: 2,
+                            actionPrompt: "一",
+                            imagePrompt: "静态关键帧：人物站立\n可见状态：人物站立\n可见表演状态：人物克制\n景别：中景\n机位与构图：平视，主体居中\n站位与视线：中央，向前\n三层空间：前中后景\n光色与风格：自然光\n负面约束：无字幕",
+                        },
+                        {
+                            id: "frame-two",
+                            sequenceIndex: 2,
+                            startSecond: 2,
+                            endSecond: 4,
+                            actionPrompt: "二",
+                            imagePrompt: "静态关键帧：人物转身\n可见状态：人物转身\n可见表演状态：人物警觉\n景别：中景\n机位与构图：平视，主体居中\n站位与视线：中央，向侧面\n三层空间：前中后景\n光色与风格：自然光\n负面约束：无字幕",
+                        },
+                    ],
+                },
+                storyboardFrames: [
+                    { id: "frame-one", sequenceIndex: 1, source: "generated", status: "success", mediaUrl: "/api/generation-log-assets/permanent/one.png" },
+                    { id: "frame-two", sequenceIndex: 2, source: "generated", status: "success", mediaUrl: "/api/generation-log-assets/permanent/two.png" },
+                ],
             } as never,
         ];
         mocks.getDramaProject.mockResolvedValue(current);
@@ -1339,7 +1393,36 @@ describe("drama project service updates", () => {
         });
         expect(mocks.updateDramaProject).toHaveBeenCalledWith(
             "user-one",
-            expect.objectContaining({ episodes: [expect.objectContaining({ shots: [expect.objectContaining({ storyboardFrames: [expect.objectContaining({ id: "f2", status: "error", error: "上游提交结果不确定" })] })] })] }),
+            expect.objectContaining({ episodes: [expect.objectContaining({ shots: [expect.objectContaining({ storyboardFrames: [expect.objectContaining({ id: "f2", status: "needs_review", error: "上游提交结果不确定" })] })] })] }),
+            current.updatedAt,
+        );
+    });
+
+    it("releases queued visual frame placeholders when no visual run was persisted", async () => {
+        const current = project("2026-07-19T08:00:00.000Z", "项目");
+        current.episodes[0].shots = [
+            {
+                id: "shot-one",
+                title: "镜头",
+                characterIds: [],
+                propIds: [],
+                clueIds: [],
+                imagePrompt: "画面",
+                videoPrompt: "动作",
+                cameraMotion: "固定",
+                duration: 6,
+                storyboardFrameMode: "all_frames",
+                storyboardFrames: [{ id: "f1", sequenceIndex: 1, source: "generated", status: "queued" }],
+            },
+        ] as never;
+        mocks.getDramaProject.mockResolvedValue(current);
+        mocks.findLatestDramaProductionRun.mockResolvedValue(null);
+
+        await expect(getLatestDramaProductionRunForUser("user-one", current.id, "episode-one", { scope: "visual" })).resolves.toBeNull();
+
+        expect(mocks.updateDramaProject).toHaveBeenCalledWith(
+            "user-one",
+            expect.objectContaining({ episodes: [expect.objectContaining({ shots: [expect.objectContaining({ storyboardFrames: [expect.objectContaining({ id: "f1", status: "error", error: "未找到本次生图运行记录，请确认后重新提交" })] })] })] }),
             current.updatedAt,
         );
     });
@@ -1830,7 +1913,7 @@ describe("drama project service updates", () => {
             style: current.style,
             episodes: [{ id: "episode-one", title: "新集名" }],
         });
-        expect(saved.productionBible).toEqual(current.productionBible);
+        expect(saved.productionBible).toMatchObject({ productionPlan: { source: "manual", video: { resolution: "480p" } } });
         expect(saved.productionArchive).toBe(current.productionArchive);
         expect(mocks.updateDramaProject).toHaveBeenCalledWith("user-one", expect.objectContaining({ id: current.id, productionArchive: current.productionArchive }), current.updatedAt);
     });

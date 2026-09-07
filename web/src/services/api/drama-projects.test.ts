@@ -232,13 +232,14 @@ describe("drama project api", () => {
 
     it("saves episode settings through the compact settings endpoint", async () => {
         const project = { id: "project-one", updatedAt: "2026-08-31T00:00:00.000Z" } as DramaProject;
+        const plan = { ...defaultDramaProductionPlan("manual"), visual: { ...defaultDramaProductionPlan("manual").visual, visualDirection: "视觉风格：东方写实摄影\n画风：克制电影美术" }, lockedAt: "2026-09-02T12:00:00.000Z" };
         const fetchMock = vi.fn().mockResolvedValue(Response.json({ code: 0, data: { project }, msg: "OK" }));
         vi.stubGlobal("fetch", fetchMock);
 
-        await expect(saveDramaEpisodeSettings(project.id, "episode-one", { title: "第 1 集", summary: "故事摘要" })).resolves.toEqual(project);
+        await expect(saveDramaEpisodeSettings(project.id, "episode-one", { title: "第 1 集", summary: "故事摘要", productionPlan: plan })).resolves.toEqual(project);
 
         expect(fetchMock).toHaveBeenCalledWith("/api/drama/projects/project-one/episodes/episode-one/settings", expect.objectContaining({ method: "PATCH" }));
-        expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({ title: "第 1 集", summary: "故事摘要" });
+        expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({ title: "第 1 集", summary: "故事摘要", productionPlan: plan });
     });
 
     it("saves an asset through its stable scoped endpoint", async () => {

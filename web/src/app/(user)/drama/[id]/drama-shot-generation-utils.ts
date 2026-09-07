@@ -76,7 +76,7 @@ export function applyDramaVisualRunTerminalStep(shot: DramaShot, step: DramaProd
         const isEnd = step.type === "end_frame";
         if (isEnd ? shot.storyboardEndImageDeletedAt && shot.storyboardEndTaskId !== step.taskId : shot.storyboardImageDeletedAt && shot.storyboardTaskId !== step.taskId) return shot;
         const resultUrl = step.outputUrls?.[0];
-        const status = step.status === "success" && resultUrl ? ("success" as const) : ("error" as const);
+        const status = step.status === "success" && resultUrl ? ("success" as const) : step.status === "needs_review" ? ("needs_review" as const) : ("error" as const);
         const role = isEnd ? "storyboard_end" : "storyboard_start";
         const evidence = resultUrl
             ? createFrameEvidence({
@@ -105,7 +105,7 @@ export function applyDramaVisualRunTerminalStep(shot: DramaShot, step: DramaProd
                 ? {
                       storyboardEndStatus: status,
                       storyboardEndTaskId: step.taskId,
-                      storyboardEndError: status === "error" ? step.error : undefined,
+                      storyboardEndError: status === "error" || status === "needs_review" ? step.error : undefined,
                       ...(resultUrl
                           ? {
                                 storyboardEndImageUrl: resultUrl,
@@ -120,7 +120,7 @@ export function applyDramaVisualRunTerminalStep(shot: DramaShot, step: DramaProd
                 : {
                       storyboardStatus: status,
                       storyboardTaskId: step.taskId,
-                      storyboardError: status === "error" ? step.error : undefined,
+                      storyboardError: status === "error" || status === "needs_review" ? step.error : undefined,
                       ...(resultUrl
                           ? {
                                 storyboardImageUrl: resultUrl,
@@ -143,9 +143,10 @@ export function applyDramaVisualRunTerminalStep(shot: DramaShot, step: DramaProd
     if (current?.mediaDeletedAt && current.taskId !== step.taskId && current.candidateTaskId !== step.taskId) return shot;
     if (shot.framePlan?.frames?.length && !shot.framePlan.frames.some((frame) => frame.id === frameId || frame.sequenceIndex === sequenceIndex)) return shot;
     if (step.status !== "success" || !step.outputUrls?.length) {
+        const terminalStatus = step.status === "needs_review" ? ("needs_review" as const) : ("error" as const);
         const failedFrame = current?.mediaUrl
-            ? { ...current, candidateStatus: "error" as const, candidateTaskId: step.taskId, candidateError: step.error }
-            : { ...(current || { id: frameId, sequenceIndex, source: "generated" as const }), status: "error" as const, taskId: step.taskId, error: step.error };
+            ? { ...current, candidateStatus: terminalStatus, candidateTaskId: step.taskId, candidateError: step.error }
+            : { ...(current || { id: frameId, sequenceIndex, source: "generated" as const }), status: terminalStatus, taskId: step.taskId, error: step.error };
         if (index >= 0) currentFrames[index] = failedFrame;
         else currentFrames.push(failedFrame);
         const frameEvidence = (shot.frameEvidence || []).map((frame) =>

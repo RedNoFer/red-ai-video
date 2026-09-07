@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { DRAMA_STYLE_COLOR_SCRIPT, DRAMA_STYLE_DESCRIPTION, DRAMA_STYLE_NAME, resolveDramaColorScript, resolveDramaStyleContract, sanitizeDramaVisualPrompt } from "./drama-style";
+import { DRAMA_STYLE_COLOR_SCRIPT, DRAMA_STYLE_DESCRIPTION, DRAMA_STYLE_NAME, formatDramaGlobalVisualContract, resolveDramaColorScript, resolveDramaGlobalVisualContract, resolveDramaStyleContract, sanitizeDramaVisualPrompt } from "./drama-style";
 
 describe("drama visual style contract", () => {
     it("uses the default style and color script when no style is supplied", () => {
@@ -61,6 +61,10 @@ describe("drama visual style contract", () => {
         });
 
         expect(resolved).toMatchObject({ name: "东方写实摄影", artStyle: "克制的电影级空间美术，真实材质", globalNegativePrompt: "不要现代灯具、不要塑料感" });
+        expect(formatDramaGlobalVisualContract(resolveDramaGlobalVisualContract({
+            style: DRAMA_STYLE_NAME,
+            productionBible: { visualStyle: DRAMA_STYLE_NAME, productionPlan: { visual: { visualStyle: "东方写实摄影", artStyle: "克制的电影级空间美术，真实材质" } }, globalNegativePrompt: "不要现代灯具、不要塑料感" },
+        }))).toContain("全局画风规格：克制的电影级空间美术，真实材质");
     });
 
     it("only strips known legacy layout tokens from prompt text", () => {

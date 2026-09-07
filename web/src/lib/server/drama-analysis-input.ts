@@ -201,6 +201,7 @@ export function validateDramaVideoPromptOutput(value: unknown, shotIds: string[]
         if (/(?:^|\n)\s*(?:触发|主体动作与反应)\s*[：:]/u.test(prompt)) return `镜头 ${shotId} 的公开视频提示词仍使用旧的顶层动作字段；请将触发和主体反应写入每个时间段的“动作与触发”`;
         if (/(?:A线|B线|主线|副线|钩子)/u.test(prompt)) return `镜头 ${shotId} 的公开视频提示词包含内部叙事标签，请按当前 Skill 改写为可见动作、事件或声音`;
         if (/(?:https?:\/\/|data:image\/|\b(?:Skill|prompt-authoring-only|seedance-director|seedance-25-director)\b|\b(?:模式|内部 ID|来源文件|API|供应商字段)\s*[：:])/iu.test(prompt)) return `镜头 ${shotId} 的公开视频提示词包含内部执行信息，请按当前 Skill 重新生成`;
+        if (/(?:\n|^)\s*(?:全局设定|起始可见状态|视觉风格与光色|连续性锁)\s*[：:]\s*(?:无|暂无|保持不变|同上|略)\s*$/mu.test(prompt)) return `镜头 ${shotId} 的公开视频提示词包含空泛全局或连续性占位，请按当前镜头事实重新生成`;
         const referenceError = validateDramaVideoPromptReferenceBindings(prompt, references);
         if (referenceError) return `镜头 ${shotId}：${referenceError}`;
         const expectedFrames = array(sourcePlans.get(shotId)?.frames);

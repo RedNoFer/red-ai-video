@@ -80,6 +80,25 @@ describe("prompt optimization service", () => {
         expect(systemMessage).toContain("只返回优化后的公开提示词");
     });
 
+    it("injects the persisted global visual contract into prompt optimization", async () => {
+        vi.mocked(requestStructuredText).mockResolvedValue({ arguments: JSON.stringify({ optimizedPrompt: "优化后的提示词" }), headers: new Headers(), protocol: "chat", elapsedMs: 10 });
+
+        await optimizeCreativePrompt({
+            origin: "http://localhost:3000",
+            cookie: "session=1",
+            userId: "user-one",
+            requestId: "global-style-request",
+            prompt: "优化场景提示词",
+            mode: "video",
+            visualContract: { visualStyle: "东方写实摄影", artStyle: "克制电影级空间美术", colorScript: "冷灰蓝、旧银", globalNegativePrompt: "不要现代灯具" },
+        });
+
+        const systemMessage = vi.mocked(requestStructuredText).mock.calls[0]?.[0].messages.find((message) => message.role === "system")?.content || "";
+        expect(systemMessage).toContain("全局视觉风格：东方写实摄影");
+        expect(systemMessage).toContain("全局画风规格：克制电影级空间美术");
+        expect(systemMessage).toContain("全局负面约束：不要现代灯具");
+    });
+
     it("uses the dedicated drama asset skill and forces a white-background three-view character sheet", async () => {
         vi.mocked(requestStructuredText).mockResolvedValue({
             arguments: JSON.stringify({

@@ -364,6 +364,7 @@ export type DramaProductionPlan = {
     visual: {
         visualStyle: string;
         artStyle: string;
+        visualDirection?: string;
         source: "manual" | "agent";
     };
     video: {

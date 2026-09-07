@@ -12,7 +12,16 @@ import { imagePreviewUrl } from "@/lib/media-image-url";
 import { resolveDramaGlobalVisualContract } from "@/lib/drama-style";
 import { dramaAssetReferences } from "./drama-asset-reference-utils";
 import type { DramaFrameBeat, DramaImageReferenceBinding, DramaProductionStep, DramaProject, DramaStoryboardFrame, DramaStoryboardFrameCandidate } from "@/lib/drama-project-contract";
-import { acceptDramaStoryboardFrame, createDramaProductionRun, deleteDramaStoryboardFrame, reviewDramaStoryboardFrame, updateDramaProductionRun, updateDramaStoryboardFramePrompt } from "@/services/api/drama-projects";
+import {
+    acceptDramaStoryboardFrame,
+    createDramaProductionRun,
+    deleteDramaStoryboardFrame,
+    DramaApiError,
+    getLatestDramaProductionRun,
+    reviewDramaStoryboardFrame,
+    updateDramaProductionRun,
+    updateDramaStoryboardFramePrompt,
+} from "@/services/api/drama-projects";
 import { optimizeDramaFramePrompt } from "@/services/api/prompt-optimization";
 import { uploadImage } from "@/services/image-storage";
 import { resolveModelRequestConfig, useEffectiveConfig } from "@/stores/use-config-store";
@@ -37,6 +46,8 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
     const [uploadTarget, setUploadTarget] = useState<{ kind: FrameKind; frameId?: string }>({ kind: "start" });
     const [uploading, setUploading] = useState("");
     const [submitting, setSubmitting] = useState("");
+    const [submissionUncertain, setSubmissionUncertain] = useState(false);
+    const [uncertainFrameIds, setUncertainFrameIds] = useState<string[]>([]);
     const [deletingFrameId, setDeletingFrameId] = useState("");
     const [reviewingFrameId, setReviewingFrameId] = useState("");
     const [promptPreview, setPromptPreview] = useState<PromptPreview | null>(null);
@@ -57,8 +68,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
     const beats = useMemo(() => frameBeats(shot), [shot]);
     const storedFrames = useMemo(() => [...(shot.storyboardFrames || [])].sort((left, right) => left.sequenceIndex - right.sequenceIndex), [shot.storyboardFrames]);
     const frameById = useMemo(() => new Map(storedFrames.map((frame) => [frame.id, frame])), [storedFrames]);
-    const generationActive =
-        storedFrames.some(isDramaStoryboardFrameActive) || [shot.storyboardStatus, shot.storyboardEndStatus].some((status) => status === "queued" || status === "running");
+    const generationActive = storedFrames.some(isDramaStoryboardFrameActive) || [shot.storyboardStatus, shot.storyboardEndStatus].some((status) => status === "queued" || status === "running");
     const completedCount = beats.filter((beat) => frameById.get(beat.id)?.status === "success" && frameById.get(beat.id)?.mediaUrl).length;
     const activeFrame = beats.find((beat) => {
         const frame = frameById.get(beat.id);
@@ -288,13 +298,34 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
             return;
         }
         const selected = new Set(input.frameIds);
-        const reviewFrame = storedFrames.find((frame) => frame.continuityStatus === "needs_review" && !selected.has(frame.id));
+        const reviewFrame = storedFrames.find((frame) => (frame.continuityStatus === "needs_review" || frame.status === "needs_review" || frame.candidateStatus === "needs_review") && !selected.has(frame.id));
         if (reviewFrame && !input.regenerateAll) {
             message.warning(`帧 ${reviewFrame.sequenceIndex} 连续性需调整，请先修改提示词、上传替换图或单独重新生成`);
             return;
         }
         submittingRef.current = true;
         setSubmitting(input.frameIds.length === 1 ? input.frameIds[0] : "batch");
+        setSubmissionUncertain(false);
+        setUncertainFrameIds([]);
+        const markSelectedFramesError = (errorMessage: string) => {
+            const liveFrames =
+                useDramaStore
+                    .getState()
+                    .projects.find((item) => item.id === project.id)
+                    ?.episodes.find((item) => item.id === episodeId)
+                    ?.shots.find((item) => item.id === shot.id)?.storyboardFrames || storedFrames;
+            updateShot(project.id, episodeId, shot.id, {
+                storyboardFrames: beats.map((beat) => {
+                    const frame = liveFrames.find((item) => item.id === beat.id) || emptyStoryboardFrame(beat);
+                    return input.frameIds.includes(beat.id)
+                        ? frame.mediaUrl
+                            ? { ...frame, candidateStatus: "error" as const, candidateTaskId: undefined, candidateError: errorMessage }
+                            : { ...frame, status: "error" as const, taskId: undefined, error: errorMessage }
+                        : frame;
+                }),
+                storyboardError: errorMessage,
+            });
+        };
         try {
             updateShot(project.id, episodeId, shot.id, {
                 storyboardFrameMode: "all_frames",
@@ -309,9 +340,8 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                 storyboardError: undefined,
                 ...clearedGeneratedMedia,
             });
-            // Commit the local queue markers before the run reads the project again.
-            // Otherwise the debounced autosave can race the run placeholder write and
-            // make the server reject the generation with a stale updatedAt token.
+            // The server must see the queue markers before it writes the visual run.
+            // This prevents an autosave from racing the run placeholder persistence.
             await persistProjectNow(project.id);
             const run = await createDramaProductionRun(project.id, episodeId, "visual", undefined, {
                 shotIds: [shot.id],
@@ -352,29 +382,10 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
             const created = visualSteps.some((step) => Boolean(step.taskId));
             const selectedTaskCreated = frameSteps.some((step) => input.frameIds.includes(step.frameId || "") && Boolean(step.taskId));
             const failed = visualSteps.find((step) => step.status === "failed" || step.status === "needs_review");
-            const markSelectedFramesError = (errorMessage: string) => {
-                const liveFrames =
-                    useDramaStore
-                        .getState()
-                        .projects.find((item) => item.id === project.id)
-                        ?.episodes.find((item) => item.id === episodeId)
-                        ?.shots.find((item) => item.id === shot.id)?.storyboardFrames || storedFrames;
-                updateShot(project.id, episodeId, shot.id, {
-                    storyboardFrames: beats.map((beat) => {
-                        const frame = liveFrames.find((item) => item.id === beat.id) || emptyStoryboardFrame(beat);
-                        return input.frameIds.includes(beat.id)
-                            ? frame.mediaUrl
-                                ? { ...frame, candidateStatus: "error" as const, candidateTaskId: undefined, candidateError: errorMessage }
-                                : { ...frame, status: "error" as const, taskId: undefined, error: errorMessage }
-                            : frame;
-                    }),
-                    storyboardError: errorMessage,
-                });
-            };
             if (failed) {
                 const errorMessage = failed.error || `${failed.title}启动失败`;
-                markSelectedFramesError(errorMessage);
-                message.error(errorMessage);
+                if (failed.status !== "needs_review") markSelectedFramesError(errorMessage);
+                failed.status === "needs_review" ? message.warning(errorMessage) : message.error(errorMessage);
             } else if (!created && confirmed.status === "completed") message.info("当前帧序列已经完整，无需创建新的图片任务");
             else if (!created) {
                 const errorMessage = "图片供应商任务没有创建，请查看当前帧状态";
@@ -384,6 +395,54 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
             else message.success(`${input.label}已提交，系统会按帧顺序生成；完成后可手动检验图片`);
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : "导演 Agent 生图启动失败";
+            const outcomeUnknown = !(error instanceof DramaApiError) || error.status >= 500;
+            if (outcomeUnknown) {
+                setSubmissionUncertain(true);
+                setUncertainFrameIds(input.frameIds);
+                try {
+                    const recovered = await getLatestDramaProductionRun(project.id, episodeId, "visual");
+                    const recoveredSteps = recovered.run?.steps.filter((step) => step.shotId === shot.id && step.type === "keyframe" && input.frameIds.includes(step.frameId || "")) || [];
+                    if (recoveredSteps.length) {
+                        updateShot(project.id, episodeId, shot.id, {
+                            storyboardFrames: beats.map((beat) => {
+                                const live =
+                                    useDramaStore
+                                        .getState()
+                                        .projects.find((item) => item.id === project.id)
+                                        ?.episodes.find((item) => item.id === episodeId)
+                                        ?.shots.find((item) => item.id === shot.id)
+                                        ?.storyboardFrames?.find((frame) => frame.id === beat.id) ||
+                                    frameById.get(beat.id) ||
+                                    emptyStoryboardFrame(beat);
+                                const step = recoveredSteps.find((item) => item.frameId === beat.id);
+                                if (!step) return live;
+                                return live.mediaUrl
+                                    ? { ...live, candidateStatus: storyboardTaskStatus(step), candidateTaskId: step.taskId, candidateError: step.error }
+                                    : { ...live, status: storyboardTaskStatus(step), taskId: step.taskId, error: step.error };
+                            }),
+                        });
+                        setSubmissionUncertain(false);
+                        setUncertainFrameIds([]);
+                    } else if (!recovered.run) {
+                        updateShot(project.id, episodeId, shot.id, {
+                            storyboardFrames: beats.map((beat) => {
+                                const frame = frameById.get(beat.id) || emptyStoryboardFrame(beat);
+                                if (!input.frameIds.includes(beat.id)) return frame;
+                                return frame.mediaUrl
+                                    ? { ...frame, candidateStatus: "error" as const, candidateTaskId: undefined, candidateError: "服务端未找到本次生图运行记录，请确认后重新提交" }
+                                    : { ...frame, status: "error" as const, taskId: undefined, error: "服务端未找到本次生图运行记录，请确认后重新提交" };
+                            }),
+                            storyboardError: "服务端未找到本次生图运行记录，请确认后重新提交",
+                        });
+                        setSubmissionUncertain(false);
+                        setUncertainFrameIds([]);
+                    }
+                } catch {
+                    // The next page sync or a manual refresh will reconcile the persisted run.
+                }
+                message.warning("生图提交结果暂时未确认，当前镜头已停止重复提交；刷新或切页回来会按服务端任务记录恢复状态");
+                return;
+            }
             const liveFrames =
                 useDramaStore
                     .getState()
@@ -571,26 +630,23 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
     };
 
     const generationOverlayVisible = Boolean(submitting) || generationActive;
-    const generationOverlayLabel = submitting
-        ? "正在提交生图任务…"
-        : activeFrame
-          ? `${activeFrameRunning ? "正在生成" : "正在排队"}帧 ${activeFrame.sequenceIndex}/${beats.length}…`
-          : "生图任务排队中…";
+    const generationOverlayLabel = submitting ? "正在提交生图任务…" : submissionUncertain ? "生图提交结果待核对…" : activeFrame ? `${activeFrameRunning ? "正在生成" : "正在排队"}帧 ${activeFrame.sequenceIndex}/${beats.length}…` : "生图任务排队中…";
 
     return (
         <div className="relative mt-3.5 border-t border-border/70 pt-3.5">
             {generationOverlayVisible ? (
-                <div
-                    className="absolute inset-0 z-20 flex items-start justify-center rounded-md bg-background/72 p-4 backdrop-blur-[1px]"
-                    role="status"
-                    aria-live="polite"
-                    data-drama-generation-overlay
-                >
+                <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex justify-center p-2" role="status" aria-live="polite" data-drama-generation-overlay>
                     <div className="sticky top-3 flex items-center gap-2 rounded-md border border-primary/30 bg-background px-3 py-2 text-sm text-foreground shadow-sm">
                         <LoaderCircle className="size-4 animate-spin text-primary" aria-hidden="true" />
                         <span>{generationOverlayLabel}</span>
-                        <span className="text-xs text-muted-foreground">请勿重复点击</span>
+                        <span className="text-xs text-muted-foreground">当前镜头已锁定，内容仍可查看</span>
                     </div>
+                </div>
+            ) : null}
+            {submissionUncertain ? (
+                <div className="mb-2 flex items-center justify-between gap-2 rounded-md border border-amber-300/70 bg-amber-50/70 px-3 py-2 text-xs text-amber-900 dark:border-amber-700/60 dark:bg-amber-950/25 dark:text-amber-100" role="alert">
+                    <span>本次提交结果待核对；当前镜头内容仍可查看，已暂停当前帧的重复提交。</span>
+                    <span className="shrink-0 text-amber-700 dark:text-amber-300">刷新或切页回来自动恢复</span>
                 </div>
             ) : null}
             <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -638,7 +694,8 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                 <div className="mt-3 space-y-2.5" data-drama-frame-sequence>
                     {beats.map((beat, index) => {
                         const frame = frameById.get(beat.id);
-                        const rowBusy = deletingFrameId === beat.id || reviewingFrameId === beat.id || submitting === beat.id || isDramaStoryboardFrameActive(frame);
+                        const rowBusy = deletingFrameId === beat.id || reviewingFrameId === beat.id || submitting === beat.id || uncertainFrameIds.includes(beat.id) || isDramaStoryboardFrameActive(frame);
+                        const frameNeedsReview = frame?.status === "needs_review" || frame?.candidateStatus === "needs_review";
                         const previous = index ? frameById.get(beats[index - 1].id) : undefined;
                         const canGenerate = index === 0 || Boolean(previous?.mediaUrl && previous.status === "success" && previous.continuityStatus !== "needs_review" && previous.continuityStatus !== "stale");
                         const candidates = visibleFrameCandidates(frame);
@@ -730,8 +787,8 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                                             <Button
                                                 size="small"
                                                 icon={rowBusy ? <LoaderCircle className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
-                                                disabled={Boolean(submitting) || generationActive || !canGenerate}
-                                                title={!canGenerate ? "请先完成并验收上一帧" : undefined}
+                                                disabled={Boolean(submitting) || generationActive || frameNeedsReview || !canGenerate}
+                                                title={frameNeedsReview ? "提交结果待人工核对，请先刷新并核对任务记录" : !canGenerate ? "请先完成并验收上一帧" : undefined}
                                                 onClick={() => void generateSequence({ frameIds: [beat.id], label: `帧 ${beat.sequenceIndex} 任务` })}
                                             >
                                                 生成
@@ -857,6 +914,11 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                                     {frame?.candidateError ? (
                                         <p role="alert" className="text-xs leading-5 text-destructive">
                                             新候选生成失败：{frame.candidateError}
+                                        </p>
+                                    ) : null}
+                                    {frameNeedsReview ? (
+                                        <p role="alert" className="text-xs leading-5 text-amber-700 dark:text-amber-300">
+                                            提交结果待人工核对，已停止重复提交；刷新页面后可继续查看服务端任务状态。
                                         </p>
                                     ) : null}
                                 </div>
@@ -1146,7 +1208,7 @@ function FrameStatusTag({ frame }: { frame?: DramaStoryboardFrame }) {
         running: frame?.mediaUrl ? "候选生成中" : "生成中",
         success: frame?.continuityStatus === "needs_review" ? "连续性需调整" : frame?.continuityStatus === "pending" ? "待检验" : "已完成",
         stale: "已失效",
-        needs_review: "连续性需调整",
+        needs_review: frame?.continuityStatus === "needs_review" ? "连续性需调整" : "待人工核对",
         error: frame?.mediaUrl ? "候选失败" : "失败",
         cancelled: "已取消",
     };
@@ -1266,7 +1328,7 @@ function plannedFrameReferences(project: DramaProject, episodeId: string, shot: 
             references.push({
                 id: "continuity-previous",
                 label: "上一分镜帧 P" + String(shot.order).padStart(2, "0") + "-F" + String(frame - 1).padStart(2, "0"),
-                 binding: "仅锁定身份、场景空间、光向和轴线；当前帧必须替换上一帧的姿态、视线、手部/道具状态和环境结果，不得复制上一帧静态画面",
+                binding: "仅锁定身份、场景空间、光向和轴线；当前帧必须替换上一帧的姿态、视线、手部/道具状态和环境结果，不得复制上一帧静态画面",
                 url: previous.mediaUrl,
                 remoteUrl: previous.remoteUrl,
                 width: previous.width,
@@ -1277,7 +1339,13 @@ function plannedFrameReferences(project: DramaProject, episodeId: string, shot: 
         const previous = incoming ? episode.shots.find((item) => item.id === incoming.fromShotId) : undefined;
         const tail = previous ? continuityStartEvidence(previous) : undefined;
         if (tail?.mediaUrl && previous)
-            references.push({ id: "continuity-tail", label: "上一镜「" + previous.title + "」已验收实际尾帧", binding: "仅锁定身份、场景空间、光向和轴线；当前帧必须替换上一镜尾帧的姿态、视线、手部/道具状态和环境结果，不得复制上一镜静态画面", url: tail.mediaUrl, remoteUrl: tail.remoteUrl });
+            references.push({
+                id: "continuity-tail",
+                label: "上一镜「" + previous.title + "」已验收实际尾帧",
+                binding: "仅锁定身份、场景空间、光向和轴线；当前帧必须替换上一镜尾帧的姿态、视线、手部/道具状态和环境结果，不得复制上一镜静态画面",
+                url: tail.mediaUrl,
+                remoteUrl: tail.remoteUrl,
+            });
     }
     const beat = frame === "end" ? undefined : frameBeats(shot).find((item) => item.sequenceIndex === frame);
     const frameScene = beat ? resolveDramaFrameScene(project, shot, beat) : project.scenes.find((item) => item.id === shot.sceneId);
