@@ -279,6 +279,50 @@ function preserveMissingFrameEvidence(current: DramaProject, next: DramaProject)
     return changed ? { ...next, episodes } : next;
 }
 
+function preserveMissingStoryboardFrames(current: DramaProject, next: DramaProject) {
+    const currentEpisodes = new Map(current.episodes.map((episode) => [episode.id, episode]));
+    let changed = false;
+    const episodes = next.episodes.map((episode) => {
+        const previousEpisode = currentEpisodes.get(episode.id);
+        if (!previousEpisode) return episode;
+        const previousShots = new Map(previousEpisode.shots.map((shot) => [shot.id, shot]));
+        return {
+            ...episode,
+            shots: episode.shots.map((shot) => {
+                const previous = previousShots.get(shot.id);
+                if (!previous?.storyboardFrames?.length) return shot;
+                const frames = [...(shot.storyboardFrames || [])];
+                const declaredFrameKeys = new Set((shot.framePlan?.frames || []).flatMap((frame) => [frame.id, String(frame.sequenceIndex)]));
+                let shotChanged = false;
+                for (const previousFrame of previous.storyboardFrames) {
+                    if (declaredFrameKeys.size && !declaredFrameKeys.has(previousFrame.id) && !declaredFrameKeys.has(String(previousFrame.sequenceIndex))) continue;
+                    const index = frames.findIndex((frame) => frame.id === previousFrame.id || frame.sequenceIndex === previousFrame.sequenceIndex);
+                    if (index < 0) {
+                        frames.push(previousFrame);
+                        shotChanged = true;
+                        continue;
+                    }
+                    const frame = frames[index];
+                    if (frame.mediaDeletedAt || !previousFrame.mediaUrl || frame.mediaUrl) continue;
+                    frames[index] = {
+                        ...frame,
+                        mediaUrl: previousFrame.mediaUrl,
+                        remoteUrl: frame.remoteUrl || previousFrame.remoteUrl,
+                        width: frame.width || previousFrame.width,
+                        height: frame.height || previousFrame.height,
+                        candidates: frame.candidates || previousFrame.candidates,
+                    };
+                    shotChanged = true;
+                }
+                if (!shotChanged) return shot;
+                changed = true;
+                return { ...shot, storyboardFrames: frames.sort((left, right) => left.sequenceIndex - right.sequenceIndex) };
+            }),
+        };
+    });
+    return changed ? { ...next, episodes } : next;
+}
+
 function invalidateChangedDramaFrameEvidence(current: DramaProject, next: DramaProject) {
     const currentEpisodes = new Map(current.episodes.map((episode) => [episode.id, episode]));
     let changed = false;
@@ -641,6 +685,7 @@ export async function updateDramaProjectForUser(userId: string, id: string, valu
         throw error;
     }
     if (incomingUpdatedAt && !lockRequested) project.updatedAt = new Date(incomingUpdatedAt).toISOString();
+    project = preserveMissingStoryboardFrames(current, project);
     project = preserveMissingFrameEvidence(current, project);
     project = invalidateChangedDramaFrameEvidence(current, project);
     try {
@@ -1343,8 +1388,49 @@ export function mergeDramaShotMediaReferences(current: DramaShot, snapshot: Dram
         const recovered = recoverRemote(reference.url, reference.remoteUrl);
         return recovered && recovered !== reference.remoteUrl ? { ...reference, remoteUrl: recovered } : reference;
     });
-    const storyboardFrames = snapshot.storyboardFrames === undefined ? current.storyboardFrames : snapshot.storyboardFrames.map((frame) => ({ ...mergeMediaReference(frame), candidates: frame.candidates?.map(mergeMediaReference) }));
-    const frameEvidence = snapshot.frameEvidence === undefined ? current.frameEvidence : snapshot.frameEvidence.map(mergeMediaReference);
+    const mergeStoryboardFrame = (currentFrame: NonNullable<DramaShot["storyboardFrames"]>[number] | undefined, snapshotFrame: NonNullable<DramaShot["storyboardFrames"]>[number]) => {
+        const mergedCandidates =
+            snapshotFrame.candidates === undefined
+                ? currentFrame?.candidates
+                : [...(currentFrame?.candidates || []), ...snapshotFrame.candidates].filter((candidate, index, all) => all.findIndex((item) => item.id === candidate.id || item.mediaUrl === candidate.mediaUrl) === index);
+        const merged = {
+            ...currentFrame,
+            ...snapshotFrame,
+            ...(snapshotFrame.mediaDeletedAt ? {} : snapshotFrame.mediaUrl === undefined && currentFrame?.mediaUrl ? { mediaUrl: currentFrame.mediaUrl } : {}),
+            ...(snapshotFrame.mediaDeletedAt ? {} : snapshotFrame.remoteUrl === undefined && currentFrame?.remoteUrl ? { remoteUrl: currentFrame.remoteUrl } : {}),
+            ...(snapshotFrame.mediaDeletedAt ? {} : snapshotFrame.width === undefined && currentFrame?.width ? { width: currentFrame.width } : {}),
+            ...(snapshotFrame.mediaDeletedAt ? {} : snapshotFrame.height === undefined && currentFrame?.height ? { height: currentFrame.height } : {}),
+            ...(mergedCandidates?.length ? { candidates: mergedCandidates.map(mergeMediaReference) } : {}),
+        };
+        return mergeMediaReference(merged);
+    };
+    const storyboardFrames =
+        snapshot.storyboardFrames === undefined
+            ? current.storyboardFrames
+            : (() => {
+                  const declaredFrameKeys = new Set((snapshot.framePlan?.frames || []).flatMap((frame) => [frame.id, String(frame.sequenceIndex)]));
+                  const frames = [...(current.storyboardFrames || [])].filter((frame) => !declaredFrameKeys.size || declaredFrameKeys.has(frame.id) || declaredFrameKeys.has(String(frame.sequenceIndex)));
+                  for (const snapshotFrame of snapshot.storyboardFrames || []) {
+                      const index = frames.findIndex((frame) => frame.id === snapshotFrame.id || frame.sequenceIndex === snapshotFrame.sequenceIndex);
+                      const merged = mergeStoryboardFrame(index >= 0 ? frames[index] : undefined, snapshotFrame);
+                      if (index >= 0) frames[index] = merged;
+                      else frames.push(merged);
+                  }
+                  return frames.sort((left, right) => left.sequenceIndex - right.sequenceIndex);
+              })();
+    const frameEvidence =
+        snapshot.frameEvidence === undefined
+            ? current.frameEvidence
+            : (() => {
+                  const evidence = [...(current.frameEvidence || [])];
+                  for (const snapshotFrame of snapshot.frameEvidence || []) {
+                      const index = evidence.findIndex((frame) => frame.id === snapshotFrame.id || (frame.role === snapshotFrame.role && frame.sequenceIndex === snapshotFrame.sequenceIndex && frame.mediaUrl === snapshotFrame.mediaUrl));
+                      const merged = mergeMediaReference(index >= 0 ? { ...evidence[index], ...snapshotFrame } : snapshotFrame);
+                      if (index >= 0) evidence[index] = merged;
+                      else evidence.push(merged);
+                  }
+                  return evidence;
+              })();
     const framePlan =
         snapshot.framePlan === undefined
             ? current.framePlan

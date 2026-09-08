@@ -1717,6 +1717,86 @@ describe("drama project service updates", () => {
         expect(merged.framePlan?.manualReferenceImages?.[0]).toMatchObject({ remoteUrl: "https://cdn.example.com/manual.png" });
     });
 
+    it("does not drop an existing storyboard frame when a visual-run snapshot is partial", () => {
+        const current = project("2026-07-19T08:00:01.000Z", "项目");
+        current.episodes[0].shots = [
+            {
+                id: "shot-one",
+                title: "镜头",
+                characterIds: [],
+                propIds: [],
+                clueIds: [],
+                imagePrompt: "画面",
+                videoPrompt: "动作",
+                cameraMotion: "固定",
+                duration: 6,
+                storyboardFrameMode: "all_frames",
+                storyboardFrames: [
+                    { id: "f1", sequenceIndex: 1, source: "generated", status: "success", mediaUrl: "/api/frame-one.png", continuityStatus: "passed" },
+                    { id: "f2", sequenceIndex: 2, source: "generated", status: "queued" },
+                ],
+            },
+        ] as never;
+        const snapshot = structuredClone(current.episodes[0].shots[0]);
+        snapshot.storyboardFrames = [{ id: "f2", sequenceIndex: 2, source: "generated", status: "running", taskId: "task-two" }];
+
+        const merged = mergeDramaShotMediaReferences(current.episodes[0].shots[0], snapshot);
+
+        expect(merged.storyboardFrames).toEqual([expect.objectContaining({ id: "f1", sequenceIndex: 1, mediaUrl: "/api/frame-one.png", status: "success" }), expect.objectContaining({ id: "f2", sequenceIndex: 2, status: "running", taskId: "task-two" })]);
+    });
+
+    it("keeps an existing frame image when a queued snapshot only changes its status", () => {
+        const current = project("2026-07-19T08:00:01.000Z", "项目");
+        current.episodes[0].shots = [
+            {
+                id: "shot-one",
+                title: "镜头",
+                characterIds: [],
+                propIds: [],
+                clueIds: [],
+                imagePrompt: "画面",
+                videoPrompt: "动作",
+                cameraMotion: "固定",
+                duration: 6,
+                storyboardFrameMode: "all_frames",
+                storyboardFrames: [{ id: "f1", sequenceIndex: 1, source: "generated", status: "success", mediaUrl: "/api/frame-one.png", continuityStatus: "passed" }],
+            },
+        ] as never;
+        const snapshot = structuredClone(current.episodes[0].shots[0]);
+        snapshot.storyboardFrames = [{ id: "f1", sequenceIndex: 1, source: "generated", status: "running", taskId: "task-one" }];
+
+        const merged = mergeDramaShotMediaReferences(current.episodes[0].shots[0], snapshot);
+
+        expect(merged.storyboardFrames?.[0]).toMatchObject({ id: "f1", status: "running", taskId: "task-one", mediaUrl: "/api/frame-one.png" });
+    });
+
+    it("preserves generated storyboard media during a partial project autosave", async () => {
+        const current = project("2026-08-01T08:00:01.000Z", "项目");
+        current.episodes[0].shots = [
+            {
+                id: "shot-one",
+                title: "镜头",
+                characterIds: [],
+                propIds: [],
+                clueIds: [],
+                imagePrompt: "画面",
+                videoPrompt: "动作",
+                cameraMotion: "固定",
+                duration: 6,
+                storyboardFrameMode: "all_frames",
+                storyboardFrames: [{ id: "f1", sequenceIndex: 1, source: "generated", status: "success", mediaUrl: "/api/frame-one.png", continuityStatus: "passed" }],
+            },
+        ] as never;
+        const incoming = structuredClone(current);
+        incoming.updatedAt = "2026-08-01T08:00:02.000Z";
+        incoming.episodes[0].shots[0].storyboardFrames = [{ id: "f2", sequenceIndex: 2, source: "generated", status: "running", taskId: "task-two" }];
+        mocks.getDramaProject.mockResolvedValue(current);
+
+        const saved = await updateDramaProjectForUser("user-one", current.id, incoming);
+
+        expect(saved.episodes[0].shots[0].storyboardFrames).toEqual([expect.objectContaining({ id: "f1", mediaUrl: "/api/frame-one.png", status: "success" }), expect.objectContaining({ id: "f2", status: "running", taskId: "task-two" })]);
+    });
+
     it("accepts only the current video tail and rejects it by blocking downstream evidence", async () => {
         const current = project("2026-07-19T08:00:01.000Z", "项目");
         const tail = createFrameEvidence({ role: "actual_end", source: "video_extraction", mediaUrl: "/api/reference-assets/tail.png", sourceVideoUrl: "/api/reference-assets/shot-one.mp4", validity: "candidate" });
