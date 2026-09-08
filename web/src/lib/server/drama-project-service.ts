@@ -1369,6 +1369,7 @@ export async function getLatestDramaProductionRunForUser(userId: string, project
         if (transport.scope === "visual") await persistReleasedDramaVisualQueue(userId, project, cleanText(episodeId));
         return run;
     }
+    if (transport.scope === "visual" && ["completed", "failed", "cancelled", "needs_review"].includes(run.status)) await persistReleasedDramaVisualQueue(userId, project, cleanText(episodeId));
     if (!run.scope || run.scope !== "visual") {
         const imageSynced = await syncDramaVisualRun(userId, project, run, transport);
         const imageDispatched =

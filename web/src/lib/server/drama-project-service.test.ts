@@ -1427,6 +1427,42 @@ describe("drama project service updates", () => {
         );
     });
 
+    it("releases orphaned visual frame placeholders after the latest run is terminal", async () => {
+        const current = project("2026-07-19T08:00:00.000Z", "项目");
+        current.episodes[0].shots = [
+            {
+                id: "shot-one",
+                title: "镜头",
+                characterIds: [],
+                propIds: [],
+                clueIds: [],
+                imagePrompt: "画面",
+                videoPrompt: "动作",
+                cameraMotion: "固定",
+                duration: 6,
+                storyboardFrameMode: "all_frames",
+                storyboardFrames: [{ id: "f1", sequenceIndex: 1, source: "generated", status: "queued" }],
+            },
+        ] as never;
+        mocks.getDramaProject.mockResolvedValue(current);
+        mocks.findLatestDramaProductionRun.mockResolvedValue({
+            id: "run-completed",
+            projectId: current.id,
+            episodeId: "episode-one",
+            status: "completed",
+            scope: "visual",
+            steps: [],
+        } as never);
+
+        await expect(getLatestDramaProductionRunForUser("user-one", current.id, "episode-one", { scope: "visual" })).resolves.toMatchObject({ id: "run-completed", status: "completed" });
+
+        expect(mocks.updateDramaProject).toHaveBeenCalledWith(
+            "user-one",
+            expect.objectContaining({ episodes: [expect.objectContaining({ shots: [expect.objectContaining({ storyboardFrames: [expect.objectContaining({ id: "f1", status: "error", error: "未找到本次生图运行记录，请确认后重新提交" })] })] })] }),
+            current.updatedAt,
+        );
+    });
+
     it("rebases a fast terminal visual failure when the project changed concurrently", async () => {
         const current = project("2026-07-19T08:00:00.000Z", "项目");
         current.episodes[0].shots = [
