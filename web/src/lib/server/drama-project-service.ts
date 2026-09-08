@@ -3983,7 +3983,7 @@ function stringArrayRecord(value: unknown): Record<string, string[]> {
     return Object.fromEntries(
         Object.entries(object(value)).flatMap(([key, entries]) => {
             const values = ids(entries);
-            return key.trim() && values.length ? [[key.trim(), values]] : [];
+            return key.trim() && Array.isArray(entries) ? [[key.trim(), values]] : [];
         }),
     );
 }
@@ -3998,7 +3998,12 @@ export function validateDramaReferenceSelections(project: DramaProject, episode:
         const fixedAssetIds = Array.from(new Set([shot.sceneId, ...shot.characterIds, ...shot.propIds, ...shot.clueIds, ...(shot.sourceAssetIds || [])].filter((id): id is string => Boolean(id))));
         const frameIds = shot.framePlan?.frames.map((frame) => frame.id) || [];
         const selected = selections[shot.id];
-        if (selected && fixedAssetIds.some((id) => !selected.includes(id))) throw new DramaProjectServiceError(`${shot.title}的固定资产引用不能取消`, 409);
+        if (selected) {
+            const incoming = episode.continuityEdges?.find((edge) => edge.toShotId === shot.id && edge.inheritActualEndFrame);
+            const allowed = new Set([...fixedAssetIds, ...frameIds, ...(incoming ? [`tail-${incoming.fromShotId}`] : [])]);
+            if (selected.some((id) => !allowed.has(id))) throw new DramaProjectServiceError(`${shot.title}包含无效的参考图选择`, 409);
+            if (incoming && !selected.includes(`tail-${incoming.fromShotId}`)) throw new DramaProjectServiceError(`${shot.title}的上一镜实际尾帧不能取消`, 409);
+        }
         const selectedFrameIds = shot.storyboardFrameMode === "all_frames" ? (selected ? frameIds.filter((id) => selected.includes(id)) : frameIds) : [];
         if (shot.storyboardFrameMode === "all_frames" && selectedFrameIds.length < 2) throw new DramaProjectServiceError(`${shot.title}至少需要保留首帧和尾帧两张顺序帧`, 409);
         if (shot.storyboardFrameMode === "all_frames" && selected && selectedFrameIds.length !== frameIds.length) throw new DramaProjectServiceError(`${shot.title}的 all_frames 必须按顺序保留全部关键帧，不能把帧计划裁剪成普通参考图`, 409);

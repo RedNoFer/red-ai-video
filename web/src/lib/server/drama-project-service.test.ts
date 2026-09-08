@@ -316,6 +316,23 @@ describe("drama project service updates", () => {
         expect(() => validateDramaReferenceSelections({} as DramaProject, { continuityEdges: [] } as never, [shot], { "shot-one": ["scene-one", "character-one", "character-two", "prop-one", "f1", "f2", "f3", "f4"] })).not.toThrow();
     });
 
+    it("allows optional fixed asset references to be cancelled before video submission", () => {
+        const shot = {
+            id: "shot-one",
+            title: "镜头一",
+            duration: 15,
+            sceneId: "scene-one",
+            characterIds: ["character-one", "character-two"],
+            propIds: ["prop-one"],
+            clueIds: [],
+            sourceAssetIds: [],
+            storyboardFrameMode: "all_frames",
+            framePlan: { frames: ["f1", "f2", "f3", "f4"].map((id, index) => ({ id, sequenceIndex: index + 1 })) },
+        } as never;
+
+        expect(() => validateDramaReferenceSelections({} as DramaProject, { continuityEdges: [] } as never, [shot], { "shot-one": ["scene-one", "character-one", "character-two", "f1", "f2", "f3", "f4"] })).not.toThrow();
+    });
+
     it("reattaches a video step to the active task created by the same request", () => {
         const step = { id: "video-shot-one", type: "video", status: "failed", error: "当前用户视频任务已达到并发上限" } as never;
         const task = { id: "video-task-one", status: "running", userId: "user-one" } as never;

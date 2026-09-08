@@ -397,9 +397,10 @@ export function DramaGenerationPanel({
         const selectionState = {
             selections: Object.fromEntries(promptRows.map((row) => [row.shot.id, row.references.map((reference) => reference.id)])),
             invalid: promptRows.some((row) => {
+                const selected = row.references.map((reference) => reference.id);
                 const frameIds = new Set(row.shot.framePlan?.frames.map((frame) => frame.id) || []);
                 const availableFrameCount = row.references.filter((reference) => frameIds.has(reference.id)).length;
-                return row.references.length > dramaReferenceImageBudget(row.shot.duration) || (row.shot.storyboardFrameMode === "all_frames" && (frameIds.size < 2 || availableFrameCount !== frameIds.size));
+                return selected.length > dramaReferenceImageBudget(row.shot.duration) || (row.shot.storyboardFrameMode === "all_frames" && (frameIds.size < 2 || availableFrameCount !== frameIds.size));
             }),
         };
         modal.confirm({
@@ -788,7 +789,7 @@ export function DramaGenerationPanel({
                                 onGenerate={() => void startProduction([shot.id])}
                                 onOptimizePrompt={() => optimizeVideoPrompt(shot)}
                                 blocked={readiness.missingBaselineShotIds.includes(shot.id)}
-                                preflightIssues={preflight?.issues.filter((issue) => issue.shotId === shot.id && issue.severity === "blocking") || []}
+                                preflightIssues={preflight?.issues.filter((issue) => issue.shotId === shot.id) || []}
                                 onMaintain={(action) => {
                                     if (action === "assets") onOpenAssets();
                                     else if (action === "storyboard") onStageChange("storyboard");
@@ -1488,7 +1489,7 @@ function ProductionPromptPreview({ project, rows, onChange }: { project: DramaPr
                                                 <div className="space-y-1 px-2 py-1.5 text-[11px] leading-4">
                                                     <Checkbox
                                                         checked={checked}
-                                                        disabled={reference.required || allFrames}
+                                                        disabled={reference.required || (allFrames && frameIds.has(reference.id))}
                                                         onChange={(event) =>
                                                             setSelections((current) => ({
                                                                 ...current,
@@ -1496,7 +1497,7 @@ function ProductionPromptPreview({ project, rows, onChange }: { project: DramaPr
                                                             }))
                                                         }
                                                     >
-                                                        {allFrames ? "全量关键帧" : reference.required ? "必须引用" : "引用此图"}
+                                                        {allFrames && frameIds.has(reference.id) ? "全量关键帧" : reference.required ? "必须引用" : "引用此图"}
                                                     </Checkbox>
                                                     <div className="truncate font-medium text-foreground">{reference.label}</div>
                                                     <div className="break-words text-muted-foreground">{reference.purpose}</div>
@@ -1562,7 +1563,7 @@ function previewVideoReferenceBindings(project: DramaProject, episode: DramaEpis
     );
     orderedAssets.forEach((asset) => {
         const manifestItem = manifest.find((item) => item.assetId === asset.id);
-        frameBindings.push({ ...asset, alias: `@图片${frameBindings.length + 1}`, purpose: manifestItem?.purpose || asset.label, alt: asset.label, required: true });
+        frameBindings.push({ ...asset, alias: `@图片${frameBindings.length + 1}`, purpose: manifestItem?.purpose || asset.label, alt: asset.label, required: false });
     });
     return frameBindings;
 }

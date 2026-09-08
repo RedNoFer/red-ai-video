@@ -28,7 +28,7 @@ export function buildDramaProductionRun(project: DramaProject, episode: DramaEpi
     const productionPlan = configuredPlan ? { ...configuredPlan, video: { ...configuredPlan.video, model: parameters.videoModel } } : undefined;
     const steps: DramaProductionStep[] = [];
     const anchorStepIds = new Map<string, string>();
-    const referencedAssetIds = new Set(episode.shots.flatMap((shot) => shotReferenceIds(project, shot)));
+    const referencedAssetIds = new Set(episode.shots.flatMap((shot) => selectedShotReferenceIds(project, shot, parameters.referenceSelections)));
     for (const assetId of referencedAssetIds) {
         const id = `anchor-${assetId}`;
         anchorStepIds.set(assetId, id);
@@ -48,7 +48,7 @@ export function buildDramaProductionRun(project: DramaProject, episode: DramaEpi
     const qcStepIds = new Map<string, string>();
     for (const shot of [...episode.shots].sort((left, right) => left.order - right.order)) {
         const incoming = episode.continuityEdges?.find((edge) => edge.toShotId === shot.id && edge.inheritActualEndFrame);
-        const assetIds = shotReferenceIds(project, shot);
+        const assetIds = selectedShotReferenceIds(project, shot, parameters.referenceSelections);
         const assetDependencies = assetIds.map((id) => anchorStepIds.get(id)).filter((id): id is string => Boolean(id));
         const previousQc = incoming ? qcStepIds.get(incoming.fromShotId) : undefined;
         const continuityDependencies = previousQc ? [previousQc] : [];
@@ -219,7 +219,7 @@ export function refreshDramaVideoStepReferences(project: DramaProject, episode: 
         prompt: basePrompt,
         referenceImageUrls: orderedFrames.map((frame) => frame.mediaUrl),
         referenceImageRemoteUrls: orderedFrames.map((frame) => frame.remoteUrl),
-        referenceBindingsSnapshot: buildVideoReferenceBindings(project, shot, orderedFrames, shotReferenceIds(project, shot), incoming?.fromShotId),
+        referenceBindingsSnapshot: buildVideoReferenceBindings(project, shot, orderedFrames, step.referenceAssetIds ?? shotReferenceIds(project, shot), incoming?.fromShotId),
     };
 }
 
@@ -279,6 +279,16 @@ function shotReferenceIds(project: DramaProject, shot: DramaEpisode["shots"][num
     });
     const preferred = (shot.framePlan?.referenceManifest || []).flatMap((item) => (item.assetId && available.includes(item.assetId) ? [item.assetId] : []));
     return Array.from(new Set([...preferred, ...available]));
+}
+
+function selectedShotReferenceIds(project: DramaProject, shot: DramaEpisode["shots"][number], selections?: Record<string, string[]>) {
+    const available = shotReferenceIds(project, shot);
+    const selected = selections?.[shot.id];
+    if (!selected) return available;
+    if (!selected.length) return [];
+    const assetIds = new Set(available);
+    const explicitlySelectedAssets = selected.filter((id) => assetIds.has(id));
+    return explicitlySelectedAssets.length ? available.filter((id) => explicitlySelectedAssets.includes(id)) : available;
 }
 
 function validFrame(frame: DramaEpisode["shots"][number]["storyboardFrames"] extends Array<infer T> | undefined ? T | undefined : never) {

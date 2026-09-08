@@ -111,6 +111,39 @@ describe("drama production run planning", () => {
         expect(video?.status).toBe("blocked");
     });
 
+    it("applies deselected optional asset references to the video step", () => {
+        const project = fixture();
+        const shot = project.episodes[0].shots[0];
+        shot.characterIds = [];
+        shot.sourceAssetIds = ["source-one", "source-two"];
+        project.sourceAssets = [
+            { id: "source-one", type: "image", title: "保留素材", serverUrl: "/source-one.png" },
+            { id: "source-two", type: "image", title: "取消素材", serverUrl: "/source-two.png" },
+        ];
+        shot.storyboardFrameMode = "all_frames";
+        shot.duration = 8;
+        shot.framePlan = {
+            start: { source: "independent" },
+            end: { required: true },
+            frames: Array.from({ length: 4 }, (_, index) => ({ id: `f${index + 1}`, sequenceIndex: index + 1, startSecond: index * 2, endSecond: (index + 1) * 2, actionPrompt: `动作${index + 1}`, imagePrompt: `画面${index + 1}` })),
+        };
+        shot.storyboardFrames = shot.framePlan.frames.map((frame) => ({ id: frame.id, sequenceIndex: frame.sequenceIndex, mediaUrl: `/${frame.id}.png`, source: "upload", status: "success", continuityStatus: "passed" }));
+
+        const run = buildDramaProductionRun(
+            project,
+            { ...project.episodes[0], shots: [shot], continuityEdges: [] },
+            {
+                imageModel: "image",
+                videoModel: "video",
+                referenceSelections: { [shot.id]: ["f1", "f2", "f3", "f4", "source-one"] },
+            },
+        );
+        const video = run.steps.find((step) => step.type === "video")!;
+
+        expect(video.referenceAssetIds).toEqual(["source-one"]);
+        expect(video.referenceBindingsSnapshot?.some((binding) => binding.sourceId === "source-two")).toBe(false);
+    });
+
     it("uses the latest marked execution prompt when locking a production run", () => {
         const project = fixture();
         const shot = project.episodes[0].shots[0];

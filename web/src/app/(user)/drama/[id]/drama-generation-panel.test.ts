@@ -152,6 +152,16 @@ describe("Drama generation production workspace", () => {
         expect(source).not.toContain("全能帧必须全量按时间顺序引用并完成验收");
     });
 
+    it("allows optional fixed references to be deselected while keeping frame anchors locked", async () => {
+        const source = await readFile(resolve(process.cwd(), "src/app/(user)/drama/[id]/drama-generation-panel.tsx"), "utf8");
+
+        expect(source).toContain("disabled={reference.required || (allFrames && frameIds.has(reference.id))}");
+        expect(source).toContain('{allFrames && frameIds.has(reference.id) ? "全量关键帧" : reference.required ? "必须引用" : "引用此图"}');
+        expect(source).toContain("required: false });");
+        expect(source).toContain("const selected = row.references.map((reference) => reference.id);");
+        expect(source).toContain("return selected.length > dramaReferenceImageBudget(row.shot.duration)");
+    });
+
     it("uses the locked episode resolution and does not expose a client video-model selector", async () => {
         const [generationSource, settingsSource, scriptSource, frameEditorSource] = await Promise.all([
             readFile(resolve(process.cwd(), "src/app/(user)/drama/[id]/drama-generation-panel.tsx"), "utf8"),
@@ -225,7 +235,7 @@ describe("Drama generation production workspace", () => {
         expect(source).toContain("pointer-events-none absolute inset-x-0 top-0");
         expect(source).toContain("当前镜头已锁定，内容仍可查看");
         expect(source).toContain("刷新或切页回来自动恢复");
-        expect(source).toContain("getLatestDramaProductionRun(project.id, episodeId, \"visual\")");
+        expect(source).toContain('getLatestDramaProductionRun(project.id, episodeId, "visual")');
         expect(source).toContain("服务端未找到本次生图运行记录，请确认后重新提交");
         expect(source).toContain("一键补齐");
         expect(source).toContain("重新生成全部");

@@ -171,6 +171,26 @@ describe("drama production preflight", () => {
         expect(preflightDramaProduction(project, project.episodes[0]).issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "FRAME_COUNT_MIN", severity: "blocking" })]));
     });
 
+    it("keeps static frame content guidance as a warning instead of blocking video", () => {
+        const project = fixture();
+        const shot = project.episodes[0].shots[0];
+        shot.storyboardFrameMode = "all_frames";
+        shot.framePlan = {
+            start: { source: "independent" },
+            end: { required: true },
+            frames: [
+                { id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 7.5, actionPrompt: "镜头沿铁砧慢推", imagePrompt: "85mm沿铁砧慢推" },
+                { id: "f2", sequenceIndex: 2, startSecond: 7.5, endSecond: 15, actionPrompt: "人物转身", imagePrompt: "人物转身" },
+            ],
+        };
+        shot.storyboardFrames = shot.framePlan.frames.map((frame) => ({ id: frame.id, sequenceIndex: frame.sequenceIndex, mediaUrl: `/${frame.id}.png`, source: "upload", status: "success", continuityStatus: "passed" }));
+
+        const result = preflightDramaProduction(project, project.episodes[0]);
+
+        expect(result.issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "FRAME_VISUAL_CONTENT", severity: "warning" })]));
+        expect(result.issues.some((issue) => issue.code === "FRAME_VISUAL_CONTENT" && issue.severity === "blocking")).toBe(false);
+    });
+
     it("warns when adjacent carried states conflict", () => {
         const project = fixture();
         const first = project.episodes[0].shots[0];

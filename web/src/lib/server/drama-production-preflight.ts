@@ -178,7 +178,7 @@ function checkShot(
                     );
                 shot.framePlan.frames.forEach((frame, index, frames) => {
                     const visualError = validateDramaFrameVisualContent(frame.imagePrompt, frame.actionPrompt);
-                    if (visualError) issues.push(blocking("FRAME_VISUAL_CONTENT", `${label}第${index + 1}帧${visualError}`, { shotId: shot.id }));
+                    if (visualError) issues.push(warning("FRAME_VISUAL_CONTENT", `${label}第${index + 1}帧${visualError}`, { shotId: shot.id, correction: "提示词仅供修订参考；如需优化，可回到分镜编辑当前帧" }));
                     if (index > 0 && dramaFrameVisualSubject(frame.imagePrompt, frame.actionPrompt) === dramaFrameVisualSubject(frames[index - 1].imagePrompt, frames[index - 1].actionPrompt))
                         issues.push(blocking("FRAME_VISUAL_DUPLICATE", `${label}第${index + 1}帧与上一帧的可见画面没有变化`, { shotId: shot.id, correction: "补充当前帧新的姿态、道具状态、表情或环境变化" }));
                     if (shot.storyboardFrameMode === "all_frames") {
