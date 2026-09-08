@@ -272,6 +272,8 @@ describe("drama director visual plan", () => {
         const prompt = compileDramaVisualStepPrompt(project, project.episodes[0], step);
 
         expect(prompt).toContain("必须呈现当前帧提示词中写明的新可见状态");
+        expect(prompt).toContain("当前帧变化优先级最高");
+        expect(prompt).toContain("若主体姿态、视线和手部仍与上一帧相同则视为生成失败");
         expect(prompt).toContain("上一帧顺序锚点是结构连续性依据");
         expect(prompt).toContain("不得直接复制上一帧的静态构图、姿态或动作结果");
         expect(prompt).toContain("不得为了贴合参考图改成近景裁切");

@@ -167,6 +167,42 @@ describe("drama prompt compiler", () => {
         expect(prompt).toContain("萧炎低头，右手停在桌沿旁，茶水静止");
         expect(prompt).toContain("萧炎抬眼扫过萧战，右手五指收紧贴住桌沿，茶水表面出现细小波纹");
         expect(prompt).toContain("禁止复制上一帧的可见状态");
+        expect(prompt).toContain("当前帧变化优先级最高");
+        expect(prompt).toContain("明确改变身体朝向、视线、手部/道具接触或重心中的至少一项");
+    });
+
+    it("rebuilds a copied adjacent performance state from the current frame action", () => {
+        const project = createProject();
+        const shot = project.episodes[0].shots[0];
+        const copiedPerformance = "情绪纳兰掌控欲判；面部下巴抬起、嘴角压平；视线锁定萧炎；身体与手部袖口收拢后向前半步";
+        shot.framePlan = {
+            start: { source: "independent" },
+            end: { required: false },
+            frames: [
+                {
+                    id: "frame-two",
+                    sequenceIndex: 2,
+                    startSecond: 0,
+                    endSecond: 3,
+                    actionPrompt: "萧炎抬眼扫过萧战，右手在桌沿收紧",
+                    imagePrompt: `静态关键帧：萧炎抬眼扫过萧战\n可见状态：萧炎抬眼扫过萧战\n可见表演状态：${copiedPerformance}`,
+                },
+                {
+                    id: "frame-three",
+                    sequenceIndex: 3,
+                    startSecond: 3,
+                    endSecond: 6,
+                    actionPrompt: "说到父亲时萧炎转向北侧首位，肩背从低垂变为直立",
+                    imagePrompt: `静态关键帧：说到父亲时萧炎转向北侧首位，肩背从低垂变为直立\n可见状态：说到父亲时萧炎转向北侧首位，肩背从低垂变为直立\n可见表演状态：${copiedPerformance}`,
+                },
+            ],
+        };
+
+        const prompt = compileDramaFrameSupplierPrompt(project, project.episodes[0], shot, shot.framePlan.frames[1]);
+
+        expect(prompt).not.toContain(copiedPerformance);
+        expect(prompt).toContain("肩线与身体朝向转向当前叙事目标");
+        expect(prompt).toContain("肩背从低垂变为直立");
     });
 
     it("rebuilds saved frame prompts that use generic performance wording", () => {

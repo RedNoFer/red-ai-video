@@ -62,11 +62,27 @@ export function resolveDramaVisualRunSync(project: DramaProject, episodeId: stri
         ),
     );
     const trackedTaskIds = new Set(
-        episode?.shots.flatMap((shot) => [shot.storyboardTaskId, shot.storyboardEndTaskId, ...(shot.storyboardFrames || []).flatMap((frame) => [frame.taskId, frame.candidateTaskId])].filter((taskId): taskId is string => Boolean(taskId))) || [],
+        episode?.shots.flatMap((shot) => [
+            ...(["queued", "running"].includes(shot.storyboardStatus || "") && shot.storyboardTaskId ? [shot.storyboardTaskId] : []),
+            ...(["queued", "running"].includes(shot.storyboardEndStatus || "") && shot.storyboardEndTaskId ? [shot.storyboardEndTaskId] : []),
+            ...(shot.storyboardFrames || []).flatMap((frame) => (isDramaStoryboardFrameActive(frame) ? [frame.taskId, frame.candidateTaskId] : [])),
+        ].filter((taskId): taskId is string => Boolean(taskId))) || [],
     );
     const resolvedSteps = run.steps.filter((step) => step.taskId && ["success", "failed", "cancelled", "needs_review"].includes(step.status));
     const shouldReload = Boolean(resolvedSteps.length && (!pending || resolvedSteps.some((step) => trackedTaskIds.has(step.taskId!))));
-    const shouldContinue = !shouldReload && (pending || run.status === "ready" || run.status === "running");
+    const resolvedTaskIds = new Set(resolvedSteps.map((step) => step.taskId!));
+    const pendingAfterResolved = Boolean(
+        episode?.shots.some(
+            (shot) =>
+                ((["queued", "running"].includes(shot.storyboardStatus || "") && !resolvedTaskIds.has(shot.storyboardTaskId || "")) ||
+                    (["queued", "running"].includes(shot.storyboardEndStatus || "") && !resolvedTaskIds.has(shot.storyboardEndTaskId || "")) ||
+                    (shot.storyboardFrames || []).some(
+                        (frame) =>
+                            isDramaStoryboardFrameActive(frame) && !resolvedTaskIds.has(frame.taskId || "") && !resolvedTaskIds.has(frame.candidateTaskId || ""),
+                    )),
+        ),
+    );
+    const shouldContinue = pendingAfterResolved || (!resolvedSteps.length && (run.status === "ready" || run.status === "running"));
     return { project: runtimeProject, shouldContinue, shouldReload };
 }
 

@@ -2,7 +2,7 @@
 
 import { App, Button, Image, Input, InputNumber, Modal, Segmented, Tag } from "antd";
 import { Check, ImagePlus, LoaderCircle, Maximize2, Plus, RotateCcw, Save, ScanSearch, Sparkles, Trash2, Upload } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { approvedAssetReference } from "@/lib/drama-asset-baseline";
 import { activeFrameEvidence, continuityStartEvidence, createFrameEvidence, latestFrameEvidence, replaceFrameEvidence } from "@/lib/drama-continuity-policy";
@@ -67,6 +67,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
     const endFrames = activeFrameEvidence(shot, "storyboard_end");
     const beats = useMemo(() => frameBeats(shot), [shot]);
     const storedFrames = useMemo(() => [...(shot.storyboardFrames || [])].sort((left, right) => left.sequenceIndex - right.sequenceIndex), [shot.storyboardFrames]);
+    const reconciledFramePlan = useMemo(() => reconcileStoredFramePrompts(project, episodeId, shot, beats, storedFrames), [beats, episodeId, project, shot, storedFrames]);
     const frameById = useMemo(() => new Map(storedFrames.map((frame) => [frame.id, frame])), [storedFrames]);
     const generationActive = storedFrames.some(isDramaStoryboardFrameActive) || [shot.storyboardStatus, shot.storyboardEndStatus].some((status) => status === "queued" || status === "running");
     const completedCount = beats.filter((beat) => frameById.get(beat.id)?.status === "success" && frameById.get(beat.id)?.mediaUrl).length;
@@ -78,6 +79,15 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
     const activeFrameRunning = Boolean(activeFrameRecord && [activeFrameRecord.status, activeFrameRecord.candidateStatus].includes("running"));
     const generationError =
         storedFrames.find((frame) => frame.status === "error" || frame.continuityStatus === "needs_review")?.error || storedFrames.find((frame) => frame.candidateError)?.candidateError || shot.storyboardError || shot.storyboardEndError;
+
+    useEffect(() => {
+        if (!reconciledFramePlan) return;
+        updateShot(project.id, episodeId, shot.id, {
+            framePlan: { ...shot.framePlan!, frames: reconciledFramePlan.beats },
+            storyboardFrames: reconciledFramePlan.frames,
+        });
+        void persistProjectNow(project.id);
+    }, [episodeId, persistProjectNow, project.id, reconciledFramePlan, shot.framePlan, shot.id, updateShot]);
 
     const chooseFile = (kind: FrameKind, frameId?: string) => {
         setUploadTarget({ kind, frameId });
@@ -1221,6 +1231,30 @@ function FrameStatusTag({ frame }: { frame?: DramaStoryboardFrame }) {
 
 function frameBeats(shot: DramaShot): DramaFrameBeat[] {
     return shot.framePlan?.frames?.length ? [...shot.framePlan.frames].sort((left, right) => left.sequenceIndex - right.sequenceIndex) : [];
+}
+
+function reconcileStoredFramePrompts(project: DramaProject, episodeId: string, shot: DramaShot, beats: DramaFrameBeat[], frames: DramaStoryboardFrame[]) {
+    if (!shot.framePlan?.frames.length) return undefined;
+    const episode = project.episodes.find((item) => item.id === episodeId);
+    if (!episode) return undefined;
+    let changedFrom = -1;
+    const nextBeats = beats.map((beat, index) => {
+        if (beat.sequenceIndex <= 1) return beat;
+        const previous = beats.find((item) => item.sequenceIndex === beat.sequenceIndex - 1);
+        const currentPerformance = beat.imagePrompt.match(/(?:^|\n)可见表演状态[：:]([^\n]+)/u)?.[1]?.trim();
+        const previousPerformance = previous?.supplierPrompt?.match(/(?:^|\n)可见表演状态[：:]([^\n]+)/u)?.[1]?.trim() || previous?.imagePrompt.match(/(?:^|\n)可见表演状态[：:]([^\n]+)/u)?.[1]?.trim();
+        if (!previous || !currentPerformance || !previousPerformance || currentPerformance !== previousPerformance) return beat;
+        const prompt = formatPromptFieldLines(compileDramaFrameSupplierPrompt(project, episode, shot, beat), "static");
+        if (!prompt || prompt === formatPromptFieldLines(beat.imagePrompt, "static")) return beat;
+        changedFrom = changedFrom < 0 ? index : Math.min(changedFrom, index);
+        return { ...beat, imagePrompt: prompt, supplierPrompt: prompt };
+    });
+    if (changedFrom < 0) return undefined;
+    const staleIds = new Set(nextBeats.slice(changedFrom).map((beat) => beat.id));
+    return {
+        beats: nextBeats,
+        frames: frames.map((frame) => (staleIds.has(frame.id) ? staleFrame(frame) : frame)),
+    };
 }
 
 function findStoryboardFrame(frames: readonly DramaStoryboardFrame[], beat: DramaFrameBeat) {

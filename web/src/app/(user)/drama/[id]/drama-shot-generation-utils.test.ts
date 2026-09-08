@@ -132,6 +132,42 @@ describe("resolveDramaVisualRunSync", () => {
         expect(decision.shouldReload).toBe(true);
         expect(decision.shouldContinue).toBe(false);
     });
+
+    it("keeps polling after an earlier frame completes while a later frame is queued", () => {
+        const project = {
+            id: "project-one",
+            episodes: [
+                {
+                    id: "episode-one",
+                    shots: [
+                        {
+                            id: "shot-one",
+                            storyboardFrames: [
+                                { id: "f1", sequenceIndex: 1, source: "generated", status: "running", taskId: "task-one" },
+                                { id: "f2", sequenceIndex: 2, source: "generated", status: "queued" },
+                            ],
+                        },
+                    ],
+                },
+            ],
+        } as never;
+        const run = {
+            id: "run-one",
+            projectId: "project-one",
+            episodeId: "episode-one",
+            scope: "visual",
+            status: "running",
+            steps: [
+                { id: "frame-shot-one-f1", shotId: "shot-one", frameId: "f1", sequenceIndex: 1, type: "keyframe", status: "success", taskId: "task-one", dependsOn: [], outputUrls: ["/f1.png"] },
+                { id: "frame-shot-one-f2", shotId: "shot-one", frameId: "f2", sequenceIndex: 2, type: "keyframe", status: "blocked", dependsOn: [] },
+            ],
+        } as never;
+
+        const decision = resolveDramaVisualRunSync(project, "episode-one", run);
+
+        expect(decision.shouldReload).toBe(true);
+        expect(decision.shouldContinue).toBe(true);
+    });
 });
 
 describe("applyDramaVisualRunTerminalStep", () => {

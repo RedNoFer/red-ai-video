@@ -121,6 +121,7 @@ export function upgradeDramaFrameImagePrompt(
         lighting: string;
         colorPalette: string;
         performanceState?: string;
+        refreshPerformanceState?: boolean;
         sequenceIndex?: number;
         frameCount?: number;
         forceRefresh?: boolean;
@@ -132,6 +133,7 @@ export function upgradeDramaFrameImagePrompt(
     const existingPerformanceState = imagePrompt.match(/可见表演状态[：:]([^\n]+)/u)?.[1]?.trim() || "";
     if (
         !context.forceRefresh &&
+        !context.refreshPerformanceState &&
         !hadLegacyReferenceDuty &&
         /^静态关键帧[：:]/u.test(imagePrompt.trim()) &&
         ["可见表演状态", "景别", "机位与构图", "站位与视线", "三层空间", "光色与风格", "负面约束"].every((label) => new RegExp(`${label}[：:]`, "u").test(imagePrompt)) &&
@@ -143,7 +145,11 @@ export function upgradeDramaFrameImagePrompt(
         return formatPromptFieldLines(imagePrompt.trim());
     const subject = staticFrameSubject(imagePrompt, actionPrompt, context.description);
     const visibleState = !isGenericFrameState(existingVisibleState) ? existingVisibleState : "";
-    const performanceState = (!isGenericPerformanceState(context.performanceState || "") ? context.performanceState : "") || (!isGenericPerformanceState(existingPerformanceState) ? existingPerformanceState : "") || inferStaticPerformanceState(subject, actionPrompt, context.sequenceIndex);
+    const performanceState = context.refreshPerformanceState
+        ? inferStaticPerformanceState(subject, actionPrompt, context.sequenceIndex)
+        : (!isGenericPerformanceState(context.performanceState || "") ? context.performanceState : "") ||
+          (!isGenericPerformanceState(existingPerformanceState) ? existingPerformanceState : "") ||
+          inferStaticPerformanceState(subject, actionPrompt, context.sequenceIndex);
     const frameState = visibleState || inferStaticFrameState(subject, actionPrompt, context.sequenceIndex, context.frameCount);
     const resolvedShotSize = staticShotSize(context.shotSize, context.sequenceIndex, `${subject}；${frameState}；${performanceState}`);
     return [

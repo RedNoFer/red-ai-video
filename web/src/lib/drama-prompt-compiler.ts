@@ -322,6 +322,7 @@ export function compileDramaFrameSupplierPrompt(project: DramaProject, episode: 
         lighting: shot.lighting || "延续本场主光",
         colorPalette: [shot.colorPalette || "沿用本场色板", `统一风格：${styleContract.visualDescription}`].join("；"),
         sequenceIndex,
+        refreshPerformanceState: Boolean(beat && duplicatedAdjacentPerformanceState(shot, beat, sourceImage)),
         forceRefresh: frameSceneChanged && !preservesManualPrompt,
     });
     const withPosition = appendStaticFramePositionConstraint(staticPrompt, scenePhysicalConstraint(scene, characters.length));
@@ -338,12 +339,22 @@ function appendAdjacentFrameDifference(prompt: string, shot: DramaShot, beat?: D
     const lines = prompt.split("\n");
     const stateLine = lines.findIndex((line) => line.startsWith("可见状态："));
     if (stateLine < 0) return prompt;
-    lines[stateLine] = `${lines[stateLine]}；相较上一帧，当前帧必须已经变为：${currentState}；上一帧仅用于身份、场景、光向和轴线连续，禁止复制上一帧的可见状态（${previousState}）`;
+    lines[stateLine] = `${lines[stateLine]}；相较上一帧，当前帧必须已经变为：${currentState}；当前帧变化优先级最高，必须在画面中明确改变身体朝向、视线、手部/道具接触或重心中的至少一项；上一帧仅用于身份、场景、光向和轴线连续，禁止复制上一帧的可见状态（${previousState}），若主体姿态、视线和手部仍与上一帧相同则视为生成失败`;
     return lines.join("\n");
 }
 
 function visibleFrameState(frame: DramaFrameBeat) {
     return frame.imagePrompt.match(/可见状态[：:]([^\n]+)/u)?.[1]?.trim() || frame.actionPrompt.trim();
+}
+
+function duplicatedAdjacentPerformanceState(shot: DramaShot, beat: DramaFrameBeat, currentPrompt: string) {
+    if (beat.sequenceIndex <= 1) return false;
+    const previous = shot.framePlan?.frames?.find((frame) => frame.sequenceIndex === beat.sequenceIndex - 1);
+    if (!previous) return false;
+    const currentState = currentPrompt.match(/(?:^|\n)可见表演状态[：:]([^\n]+)/u)?.[1]?.trim();
+    const previousPrompt = previous.supplierPrompt || previous.imagePrompt;
+    const previousState = previousPrompt.match(/(?:^|\n)可见表演状态[：:]([^\n]+)/u)?.[1]?.trim();
+    return Boolean(currentState && previousState && currentState === previousState);
 }
 
 function isCurrentStaticFramePrompt(value: string) {
