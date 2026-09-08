@@ -141,8 +141,17 @@ export function recoverRepetitiveDramaFramePrompts(project: DramaProject) {
 }
 
 export function recoverInvalidDramaEpisodes(project: DramaProject) {
-    const episodes = project.episodes.filter((episode) => episode && typeof episode === "object" && Array.isArray(episode.shots));
-    return episodes.length === project.episodes.length ? null : { ...project, episodes, updatedAt: nextTimestamp(project.updatedAt) };
+    let changed = false;
+    const episodes = project.episodes.flatMap((episode) => {
+        if (!episode || typeof episode !== "object" || !Array.isArray(episode.shots)) {
+            changed = true;
+            return [];
+        }
+        const shots = episode.shots.filter((shot): shot is DramaShot => Boolean(shot && typeof shot === "object"));
+        if (shots.length !== episode.shots.length) changed = true;
+        return [{ ...episode, shots }];
+    });
+    return changed ? { ...project, episodes, updatedAt: nextTimestamp(project.updatedAt) } : null;
 }
 
 export function recoverStaleDramaBoundaryFrames(project: DramaProject) {

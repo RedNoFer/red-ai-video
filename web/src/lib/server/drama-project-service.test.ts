@@ -394,6 +394,23 @@ describe("drama project service updates", () => {
         expect(recoverInvalidDramaEpisodes(malformed)?.episodes).toHaveLength(1);
     });
 
+    it("removes invalid historical null shots before recovery reads shot fields", async () => {
+        const current = project("2026-07-19T08:00:00.000Z", "项目");
+        current.episodes[0].shots = [{ id: "shot-one", title: "镜头", characterIds: [], propIds: [], clueIds: [], imagePrompt: "画面", videoPrompt: "动作", cameraMotion: "固定", duration: 5 }] as never;
+        const malformed = {
+            ...current,
+            episodes: [{ ...current.episodes[0], shots: [null, current.episodes[0].shots[0], null] }],
+        } as unknown as DramaProject;
+        mocks.getDramaProject.mockResolvedValue(malformed);
+
+        const recovered = await getDramaProjectForUser("user-one", malformed.id);
+
+        expect(recovered.episodes[0].shots).toHaveLength(1);
+        expect(recovered.episodes[0].shots[0].id).toBe(current.episodes[0].shots[0].id);
+        expect(mocks.updateDramaProject).toHaveBeenCalledWith("user-one", expect.objectContaining({ episodes: [expect.objectContaining({ shots: [expect.objectContaining({ id: current.episodes[0].shots[0].id })] })] }), current.updatedAt);
+        expect(recoverInvalidDramaEpisodes(malformed)?.episodes[0].shots).toHaveLength(1);
+    });
+
     it("normalizes legacy reference modes across the project, production plan, and shots", () => {
         const current = project("2026-07-19T08:00:00.000Z", "项目");
         const legacy = {
