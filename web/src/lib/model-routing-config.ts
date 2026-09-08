@@ -245,20 +245,22 @@ export function resolveLogicalModelCapabilityProfile(binding: Pick<LogicalModelB
     const globalPreset = resolveGlobalAiOpcPreset(advanced, upstreamModel);
     const modelConfig = resolveChannelModelConfig(advanced, upstreamModel) || advanced?.operationConfigs?.[capability];
     const bumingQualityOptions = advanced?.protocol === "buming-seedance" && capability === "video" ? resolveBumingSeedanceQualityOptions(upstreamModel) : [];
+    const strictProtocol = advanced?.protocol ? channelProtocolDefinition(advanced.protocol).strict : false;
+    const protocolDefault = (key: "supportsReferenceImage" | "supportsReferenceVideo" | "supportsReferenceAudio" | "supportsKeyframes") => (strictProtocol && modelConfig && typeof modelConfig[key] === "boolean" ? Boolean(modelConfig[key]) : undefined);
     return {
         ...(bumingQualityOptions.length ? { bumingQuality: text(stored.bumingQuality, 40) || "标准" } : {}),
-        supportsReferenceImage: booleanValue(stored.supportsReferenceImage, globalPreset?.supportsReferenceImage ?? modelConfig?.supportsReferenceImage ?? advanced?.supportsReferenceImage),
-        supportsReferenceVideo: booleanValue(stored.supportsReferenceVideo, globalPreset?.supportsReferenceVideo ?? modelConfig?.supportsReferenceVideo ?? advanced?.supportsReferenceVideo),
-        supportsReferenceAudio: booleanValue(stored.supportsReferenceAudio, globalPreset?.supportsReferenceAudio ?? modelConfig?.supportsReferenceAudio ?? advanced?.supportsReferenceAudio),
-        supportsKeyframes: booleanValue(stored.supportsKeyframes, modelConfig?.supportsKeyframes),
+        supportsReferenceImage: protocolDefault("supportsReferenceImage") ?? booleanValue(stored.supportsReferenceImage, globalPreset?.supportsReferenceImage ?? modelConfig?.supportsReferenceImage ?? advanced?.supportsReferenceImage),
+        supportsReferenceVideo: protocolDefault("supportsReferenceVideo") ?? booleanValue(stored.supportsReferenceVideo, globalPreset?.supportsReferenceVideo ?? modelConfig?.supportsReferenceVideo ?? advanced?.supportsReferenceVideo),
+        supportsReferenceAudio: protocolDefault("supportsReferenceAudio") ?? booleanValue(stored.supportsReferenceAudio, globalPreset?.supportsReferenceAudio ?? modelConfig?.supportsReferenceAudio ?? advanced?.supportsReferenceAudio),
+        supportsKeyframes: protocolDefault("supportsKeyframes") ?? booleanValue(stored.supportsKeyframes, modelConfig?.supportsKeyframes),
         maxReferenceImages: positiveInteger(stored.maxReferenceImages) || positiveInteger(modelConfig?.maxReferenceImages),
         aspectRatios: normalizeAspectRatios(stored.aspectRatios),
         minDurationSeconds: positiveNumber(stored.minDurationSeconds),
         maxDurationSeconds: positiveNumber(stored.maxDurationSeconds),
         maxBatchSize: positiveInteger(stored.maxBatchSize),
         supportsAsync: booleanValue(stored.supportsAsync, capability === "video" || capability === "image"),
-        supportsCancel: booleanValue(stored.supportsCancel),
-        supportsWebhook: booleanValue(stored.supportsWebhook),
+        supportsCancel: strictProtocol ? Boolean(modelConfig?.cancelPath) : booleanValue(stored.supportsCancel),
+        supportsWebhook: strictProtocol ? false : booleanValue(stored.supportsWebhook),
         timeoutMs: timeoutMilliseconds(stored.timeoutMs),
         concurrencyLimit: positiveInteger(stored.concurrencyLimit),
         unitCost: nonNegativeNumber(stored.unitCost),

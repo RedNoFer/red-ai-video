@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { SystemChannelAdvancedConfig, SystemModelChannel } from "@/lib/auth/store";
+import { normalizeSystemChannel } from "@/lib/auth/store-normalizers";
 import {
     applyChannelProtocol,
     applyModelProtocol,
@@ -271,6 +272,23 @@ describe("channel protocol registry", () => {
 
         expect(configured.models).toEqual(["admin-configured-video"]);
         expect(channelProtocolValidationErrors(configured)).toEqual([]);
+    });
+
+    it("does not carry a same-name Buming preset into a New API video channel", () => {
+        const buming = applyChannelProtocol({ ...channel, id: "buming", models: ["seedance-2-0-official"] }, "buming-seedance");
+        const newApi = applyChannelProtocol({ ...channel, id: "newapi", models: ["seedance-2-0-official"] }, "newapi-video");
+        newApi.advancedConfig = {
+            ...newApi.advancedConfig!,
+            modelConfigs: {
+                ...newApi.advancedConfig!.modelConfigs,
+                "seedance-2-0-official": buming.advancedConfig!.modelConfigs!["seedance-2-0-official"],
+            },
+        };
+
+        const normalized = normalizeSystemChannel(newApi);
+
+        expect(normalized.advancedConfig?.modelConfigs?.["seedance-2-0-official"]?.protocol).toBe("newapi-video");
+        expect(channelProtocolValidationErrors(normalized)).toEqual([]);
     });
 
     it("keeps every strict capability executable and every asynchronous video query explicit", () => {

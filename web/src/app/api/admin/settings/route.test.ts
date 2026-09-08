@@ -170,6 +170,36 @@ describe("admin settings model routing", () => {
         );
     });
 
+    it("repairs a stale TokenGo model preset on a same-name New API video model", async () => {
+        const buming = applyChannelProtocol({ id: "buming", name: "不鸣", baseUrl: "https://api.tokengo.love", apiKey: "saved-secret", apiFormat: "openai", models: ["seedance-2-0-official"], enabled: true }, "buming-seedance");
+        const newApi = applyChannelProtocol({ id: "newapi", name: "New API", baseUrl: "https://newapi.megabyai.cc", apiKey: "saved-secret", apiFormat: "openai", models: ["seedance-2-0-official"], enabled: true }, "newapi-video");
+        newApi.advancedConfig = {
+            ...newApi.advancedConfig!,
+            modelConfigs: { ...newApi.advancedConfig!.modelConfigs, "seedance-2-0-official": buming.advancedConfig!.modelConfigs!["seedance-2-0-official"] },
+        };
+
+        const response = await PATCH(
+            request({
+                systemChannels: [newApi],
+                logicalModels: [{ id: "seedance-2-0-official", name: "Seedance", capability: "video", enabled: true, bindings: [{ id: "video", channelId: "newapi", upstreamModel: "seedance-2-0-official", enabled: true, priority: 1 }] }],
+                defaultModels: { textModel: "", imageModel: "", videoModel: "seedance-2-0-official", audioModel: "" },
+            }),
+        );
+
+        expect(response.status).toBe(200);
+        expect(mocks.setAuthSettings).toHaveBeenCalledWith(
+            expect.objectContaining({
+                systemChannels: [
+                    expect.objectContaining({
+                        advancedConfig: expect.objectContaining({
+                            modelConfigs: expect.objectContaining({ "seedance-2-0-official": expect.objectContaining({ protocol: "newapi-video", createPath: "/v1/videos", requestTemplate: expect.stringContaining('"referenceImages":"{{images}}"') }) }),
+                        }),
+                    }),
+                ],
+            }),
+        );
+    });
+
     it("deletes a channel together with stale logical bindings and defaults", async () => {
         const response = await PATCH(request({ systemChannels: [], logicalModels: savedSettings.logicalModels, defaultModels: savedSettings.defaultModels }));
         expect(response.status).toBe(200);

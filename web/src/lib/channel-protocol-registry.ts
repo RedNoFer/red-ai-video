@@ -565,7 +565,8 @@ export function applyModelProtocol(config: SystemChannelModelConfig, protocol: S
 }
 
 export function normalizeStrictProtocolModelConfig(config: SystemChannelModelConfig, fallbackProtocol: SystemChannelProtocol, model?: string): SystemChannelModelConfig {
-    const protocol = config.protocol || fallbackProtocol;
+    const fallbackDefinition = channelProtocolDefinition(fallbackProtocol);
+    const protocol = fallbackDefinition.strict && fallbackDefinition.capabilities.length === 1 ? fallbackProtocol : config.protocol || fallbackProtocol;
     if (!channelProtocolDefinition(protocol).strict) return config;
     return protocolModelConfig(protocol, config.capability, model) || config;
 }
@@ -701,34 +702,34 @@ export function channelProtocolValidationErrors(channel: SystemModelChannel) {
     const advanced = channel.advancedConfig;
     if (!advanced) return [];
     const errors: string[] = [];
-    const definition = channelProtocolDefinition(advanced.protocol);
-    if (definition.strict && advanced.authMode && advanced.authMode !== definition.authMode) errors.push(`${channel.name || "渠道"} 的鉴权方式必须使用 ${definition.label} 协议预设`);
+    const channelDefinition = channelProtocolDefinition(advanced.protocol);
+    if (channelDefinition.strict && advanced.authMode && advanced.authMode !== channelDefinition.authMode) errors.push(`${channel.name || "渠道"} 的鉴权方式必须使用 ${channelDefinition.label} 协议预设`);
     if (advanced.authMode === "custom-header" && !isSafeAuthHeaderName(advanced.authHeader)) errors.push(`${channel.name || "渠道"} 的自定义鉴权请求头名称无效`);
     for (const model of channel.models) {
         const key = normalizeModelId(model);
         const config = advanced.modelConfigs?.[key] || resolveChannelModelConfig(advanced, model);
-        const protocol = config?.protocol || advanced.protocol;
-        const definition = channelProtocolDefinition(protocol);
+        const protocol = channelDefinition.strict && channelDefinition.capabilities.length === 1 ? advanced.protocol : config?.protocol || advanced.protocol;
+        const protocolDefinition = channelProtocolDefinition(protocol);
         if (protocol === "custom") {
             if (!config?.createPath) errors.push(`${model} 的自定义协议缺少创建路径`);
             if (!config?.requestTemplate) errors.push(`${model} 的自定义协议缺少请求模板`);
             if (!config?.resultField && config?.capability !== "audio") errors.push(`${model} 的自定义协议缺少结果字段`);
             continue;
         }
-        if (!definition.strict) continue;
+        if (!protocolDefinition.strict) continue;
         const capability = config?.capability || advanced.modelCapabilities?.[key] || inferModelCapability(model);
         const expected = protocolModelConfig(protocol, capability, model);
         if (!expected) {
-            errors.push(`${definition.label} 不支持 ${capability} 模型 ${model}`);
+            errors.push(`${protocolDefinition.label} 不支持 ${capability} 模型 ${model}`);
             continue;
         }
-        if (definition.builtInModels && !definition.builtInModels.some((item) => normalizeModelId(item.id) === key)) errors.push(`${model} 不在 ${definition.label} 文档模型列表中`);
+        if (protocolDefinition.builtInModels && !protocolDefinition.builtInModels.some((item) => normalizeModelId(item.id) === key)) errors.push(`${model} 不在 ${protocolDefinition.label} 文档模型列表中`);
         if (!config) {
-            errors.push(`${model} 缺少 ${definition.label} 的严格模型配置`);
+            errors.push(`${model} 缺少 ${protocolDefinition.label} 的严格模型配置`);
             continue;
         }
         if (config.protocol !== protocol) errors.push(`${model} 的协议必须为 ${protocol}`);
-        if ((config.apiFormat || definition.apiFormat) !== expected.apiFormat) errors.push(`${model} 的 API 格式必须为 ${expected.apiFormat}`);
+        if ((config.apiFormat || protocolDefinition.apiFormat) !== expected.apiFormat) errors.push(`${model} 的 API 格式必须为 ${expected.apiFormat}`);
         if (protocol === "openai-audio-dialogue") {
             if (config.capability !== "audio") errors.push(`${model} 的 Chat/Responses 音频配置必须声明为音频能力`);
             if (!/^\/(?:chat\/completions|responses)$/.test(config.createPath || "")) errors.push(`${model} 的 Chat/Responses 音频创建路径必须为 /chat/completions 或 /responses`);
@@ -740,15 +741,15 @@ export function channelProtocolValidationErrors(channel: SystemModelChannel) {
         if ((config.editPath || "") !== (expected.editPath || "")) errors.push(`${model} 的图生图路径必须为 ${expected.editPath || "空"}`);
         if ((config.imageToVideoPath || "") !== (expected.imageToVideoPath || "")) errors.push(`${model} 的图生视频路径必须为 ${expected.imageToVideoPath || "空"}`);
         if ((config.queryPath || "") !== (expected.queryPath || "")) errors.push(`${model} 的查询路径必须为 ${expected.queryPath || "空"}`);
-        if ((config.requestTemplate || "") !== (expected.requestTemplate || "")) errors.push(`${model} 的请求参数必须使用 ${definition.label} 协议预设`);
-        if ((config.resultField || "") !== (expected.resultField || "")) errors.push(`${model} 的结果字段必须使用 ${definition.label} 协议预设`);
-        if ((config.statusField || "") !== (expected.statusField || "")) errors.push(`${model} 的状态字段必须使用 ${definition.label} 协议预设`);
-        if ((config.audioOperation || "") !== (expected.audioOperation || "")) errors.push(`${model} 的音频操作必须使用 ${definition.label} 协议预设`);
-        if ((config.voiceIdField || "") !== (expected.voiceIdField || "")) errors.push(`${model} 的 voice_id 字段必须使用 ${definition.label} 协议预设`);
-        if ((config.previewAudioField || "") !== (expected.previewAudioField || "")) errors.push(`${model} 的试听音频字段必须使用 ${definition.label} 协议预设`);
-        if (Boolean(config.supportsReferenceImage) !== Boolean(expected.supportsReferenceImage)) errors.push(`${model} 的参考图片能力必须使用 ${definition.label} 协议预设`);
-        if (Boolean(config.supportsReferenceVideo) !== Boolean(expected.supportsReferenceVideo)) errors.push(`${model} 的参考视频能力必须使用 ${definition.label} 协议预设`);
-        if (Boolean(config.supportsReferenceAudio) !== Boolean(expected.supportsReferenceAudio)) errors.push(`${model} 的参考音频能力必须使用 ${definition.label} 协议预设`);
+        if ((config.requestTemplate || "") !== (expected.requestTemplate || "")) errors.push(`${model} 的请求参数必须使用 ${protocolDefinition.label} 协议预设`);
+        if ((config.resultField || "") !== (expected.resultField || "")) errors.push(`${model} 的结果字段必须使用 ${protocolDefinition.label} 协议预设`);
+        if ((config.statusField || "") !== (expected.statusField || "")) errors.push(`${model} 的状态字段必须使用 ${protocolDefinition.label} 协议预设`);
+        if ((config.audioOperation || "") !== (expected.audioOperation || "")) errors.push(`${model} 的音频操作必须使用 ${protocolDefinition.label} 协议预设`);
+        if ((config.voiceIdField || "") !== (expected.voiceIdField || "")) errors.push(`${model} 的 voice_id 字段必须使用 ${protocolDefinition.label} 协议预设`);
+        if ((config.previewAudioField || "") !== (expected.previewAudioField || "")) errors.push(`${model} 的试听音频字段必须使用 ${protocolDefinition.label} 协议预设`);
+        if (Boolean(config.supportsReferenceImage) !== Boolean(expected.supportsReferenceImage)) errors.push(`${model} 的参考图片能力必须使用 ${protocolDefinition.label} 协议预设`);
+        if (Boolean(config.supportsReferenceVideo) !== Boolean(expected.supportsReferenceVideo)) errors.push(`${model} 的参考视频能力必须使用 ${protocolDefinition.label} 协议预设`);
+        if (Boolean(config.supportsReferenceAudio) !== Boolean(expected.supportsReferenceAudio)) errors.push(`${model} 的参考音频能力必须使用 ${protocolDefinition.label} 协议预设`);
     }
     return errors;
 }

@@ -11,7 +11,25 @@ import { inferModelCapability, normalizeModelId } from "@/lib/model-capability";
 import { materializeLogicalModelPointCosts } from "@/lib/model-point-cost";
 
 type ApiCallFormat = "openai" | "gemini";
-type SystemChannelProtocol = "auto" | "openai" | "openai-audio-dialogue" | "yumeng" | "gemini" | "sub2api" | "newapi" | "newapi-video" | "vozeb-recommended" | "globalaiopc" | "seedance" | "stable-diffusion" | "volcengine-video" | "seedance-special" | "buming-seedance" | "buming-image" | "custom" | "compatible";
+type SystemChannelProtocol =
+    | "auto"
+    | "openai"
+    | "openai-audio-dialogue"
+    | "yumeng"
+    | "gemini"
+    | "sub2api"
+    | "newapi"
+    | "newapi-video"
+    | "vozeb-recommended"
+    | "globalaiopc"
+    | "seedance"
+    | "stable-diffusion"
+    | "volcengine-video"
+    | "seedance-special"
+    | "buming-seedance"
+    | "buming-image"
+    | "custom"
+    | "compatible";
 
 type SystemChannelAdvancedConfig = {
     protocol: SystemChannelProtocol;
@@ -257,17 +275,19 @@ export function applyPublicSystemSettings(config: AiConfig, settings?: PublicSys
             model.bindings.some((binding) => binding.enabled && channels.some((channel) => channel.id === binding.channelId && channel.models.some((upstream) => normalizedModelName(upstream) === normalizedModelName(binding.upstreamModel)))),
     );
     const rawModels = modelOptionsFromChannels(channels);
+    const defaultModels = settings?.defaultModels || {};
     const capabilityModels = resolvePublicCapabilityModels(logicalModels, {
         image: filterModelsByCapability(rawModels, "image"),
         video: filterModelsByCapability(rawModels, "video"),
         text: filterModelsByCapability(rawModels, "text"),
         audio: filterModelsByCapability(rawModels, "audio"),
     });
-    const { image: imageModels, video: videoModels, text: textModels, audio: audioModels } = capabilityModels;
-    const models = flattenPublicCapabilityModels(capabilityModels);
-    const defaultModels = settings?.defaultModels || {};
+    const { image: imageModels, video: configuredVideoModels, text: textModels, audio: audioModels } = capabilityModels;
+    const configuredVideoDefault = resolveLogicalDefaultModel(defaultModels.videoModel, configuredVideoModels, logicalModels);
+    const videoModels = defaultModels.videoModel ? (configuredVideoDefault ? [configuredVideoDefault] : []) : configuredVideoModels;
+    const publicModels = flattenPublicCapabilityModels({ image: imageModels, video: videoModels, text: textModels, audio: audioModels });
     const imageModel = choosePublicModel(config.imageModel, defaultModels.imageModel, imageModels, logicalModels);
-    const videoModel = choosePublicModel(config.videoModel, defaultModels.videoModel, videoModels, logicalModels);
+    const videoModel = defaultModels.videoModel ? configuredVideoDefault || "" : choosePublicModel(config.videoModel, undefined, videoModels, logicalModels);
     const textModel = choosePublicModel(config.textModel, defaultModels.textModel, textModels, logicalModels);
     const audioModel = chooseConfiguredDefaultModel(defaultModels.audioModel, audioModels, logicalModels);
     return {
@@ -279,7 +299,7 @@ export function applyPublicSystemSettings(config: AiConfig, settings?: PublicSys
         baseUrl: channels[0]?.baseUrl || "",
         apiKey: "system",
         apiFormat: "openai",
-        models,
+        models: publicModels,
         imageModels,
         videoModels,
         textModels,
@@ -437,13 +457,18 @@ function resolveLogicalDefaultModel(value: string | undefined, options: string[]
     const requested = modelOptionName(value || "").trim();
     const direct = findEquivalentModelOption(requested, options);
     if (direct) return direct;
-    const logical = logicalModels.find((model) => model.enabled && (normalizedModelName(model.id) === normalizedModelName(requested) || model.bindings.some((binding) => normalizedModelName(binding.upstreamModel) === normalizedModelName(requested))));
+    const logical = logicalModels.find((model) => model.enabled && (modelNamesEquivalent(model.id, requested) || model.bindings.some((binding) => modelNamesEquivalent(binding.upstreamModel, requested))));
     return logical ? findEquivalentModelOption(logical.id, options) : "";
 }
 
 function findEquivalentModelOption(value: string, options: string[]) {
-    const requested = normalizedModelName(value);
-    return requested ? options.find((option) => normalizedModelName(option) === requested) || "" : "";
+    return options.find((option) => modelNamesEquivalent(option, value)) || "";
+}
+
+function modelNamesEquivalent(left: string, right: string) {
+    const normalizedLeft = normalizedModelName(left);
+    const normalizedRight = normalizedModelName(right);
+    return Boolean(normalizedLeft && normalizedRight && (normalizedLeft === normalizedRight || normalizedLeft.endsWith(`/${normalizedRight}`) || normalizedRight.endsWith(`/${normalizedLeft}`)));
 }
 
 function normalizeModelOptionValue(value: string | undefined, channels: ModelChannel[]) {
@@ -465,10 +490,11 @@ export function resolveModelChannel(config: AiConfig, value: string) {
     const logical = findLogicalModel(config, value);
     const decoded = logical ? null : decodeChannelModel(value);
     const model = logical?.id || decoded?.model || value;
-    const bindings = logical?.bindings
-        .filter((item) => item.enabled)
-        .sort((a, b) => a.priority - b.priority)
-        .filter((item) => channels.some((channel) => channel.id === item.channelId)) || [];
+    const bindings =
+        logical?.bindings
+            .filter((item) => item.enabled)
+            .sort((a, b) => a.priority - b.priority)
+            .filter((item) => channels.some((channel) => channel.id === item.channelId)) || [];
     const preferredChannelId = config.channelId?.trim() || decoded?.channelId || "";
     const binding = bindings.find((item) => item.channelId === preferredChannelId) || bindings[0];
     const matched = binding ? channels.find((channel) => channel.id === binding.channelId) : decoded ? channels.find((channel) => channel.id === decoded.channelId) : channels.find((channel) => channel.models.includes(model));
@@ -479,9 +505,7 @@ export function resolveModelRequestConfig(config: AiConfig, value: string) {
     const channel = resolveModelChannel(config, value);
     const logical = findLogicalModel(config, value || config.model);
     const model = logical?.id || modelOptionName(value || config.model);
-    const binding = logical?.bindings
-        .filter((item) => item.enabled && item.channelId === channel.id)
-        .sort((left, right) => left.priority - right.priority)[0];
+    const binding = logical?.bindings.filter((item) => item.enabled && item.channelId === channel.id).sort((left, right) => left.priority - right.priority)[0];
     const upstreamModel = binding?.upstreamModel || modelOptionName(model);
     const advancedConfig = channel.advancedConfig ? resolveChannelModelAdvancedConfig(channel.advancedConfig, upstreamModel) : undefined;
     return {
@@ -497,7 +521,9 @@ export function resolveModelRequestConfig(config: AiConfig, value: string) {
 }
 
 function findLogicalModel(config: AiConfig, value: string) {
-    const requested = String(value || "").trim().toLowerCase();
+    const requested = String(value || "")
+        .trim()
+        .toLowerCase();
     return config.logicalModels.find((item) => item.enabled && item.id.trim().toLowerCase() === requested);
 }
 

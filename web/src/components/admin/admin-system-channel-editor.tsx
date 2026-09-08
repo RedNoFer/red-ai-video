@@ -465,6 +465,7 @@ function ModelRouteConfigEditor({ channel, advanced, onChange }: { channel: Syst
                                 className="w-full"
                                 allowClear
                                 placeholder="沿用渠道"
+                                disabled={definition.strict}
                                 value={config.apiFormat}
                                 options={[
                                     { label: "OpenAI", value: "openai" },
@@ -474,7 +475,7 @@ function ModelRouteConfigEditor({ channel, advanced, onChange }: { channel: Syst
                             />
                         </LabeledControl>
                         <LabeledControl label="协议">
-                            <Select className="w-full" allowClear placeholder="沿用渠道" value={config.protocol} options={protocolOptions} onChange={selectProtocol} />
+                            <Select className="w-full" allowClear disabled={definition.strict} placeholder="沿用渠道" value={config.protocol} options={protocolOptions} onChange={selectProtocol} />
                         </LabeledControl>
                         <LabeledControl label={config.capability === "text" ? "文本生成路径" : config.capability === "image" ? "文生图路径" : config.capability === "video" ? "文生视频路径" : "语音生成路径"}>
                             <Input

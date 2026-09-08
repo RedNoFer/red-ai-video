@@ -420,6 +420,29 @@ describe("model routing config", () => {
         expect(normalized[0]?.bindings[0]?.capabilityProfile).toMatchObject({ bumingQuality: "fast" });
     });
 
+    it("uses each strict provider's declared capability profile instead of a shared logical-model override", () => {
+        const newApi = applyChannelProtocol({ ...channel("newapi", ["seedance-2-0-official"]), advancedConfig: {} as never }, "newapi-video");
+        const buming = applyChannelProtocol({ ...channel("buming", ["seedance-2-0-official"]), advancedConfig: {} as never }, "buming-seedance");
+        const binding = { capabilityProfile: { supportsReferenceImage: false, supportsReferenceVideo: false, supportsReferenceAudio: false, supportsKeyframes: true, supportsCancel: true, supportsWebhook: true } };
+
+        expect(resolveLogicalModelCapabilityProfile(binding, "video", newApi, "seedance-2-0-official")).toMatchObject({
+            supportsReferenceImage: true,
+            supportsReferenceVideo: true,
+            supportsReferenceAudio: true,
+            supportsKeyframes: false,
+            supportsCancel: false,
+            supportsWebhook: false,
+        });
+        expect(resolveLogicalModelCapabilityProfile(binding, "video", buming, "seedance-2-0-official")).toMatchObject({
+            supportsReferenceImage: true,
+            supportsReferenceVideo: true,
+            supportsReferenceAudio: true,
+            supportsKeyframes: true,
+            supportsCancel: false,
+            supportsWebhook: false,
+        });
+    });
+
     it("preserves video fallback routing and cost strategy during channel synchronization", () => {
         const channels = [channel("one", ["wan-video"]), channel("two", ["seedance-video"])];
         const models: LogicalModel[] = [

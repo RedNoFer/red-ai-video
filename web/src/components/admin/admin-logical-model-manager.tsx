@@ -6,8 +6,8 @@ import { useDeferredValue, useMemo, useState } from "react";
 
 import { LabeledControl, SectionTitle } from "@/components/admin/admin-settings-controls";
 import type { LogicalModel, LogicalModelBinding, LogicalModelCapability, LogicalModelCapabilityProfile, SystemDefaultModels, SystemModelChannel } from "@/lib/auth/store";
-import { capabilityLabel, isLogicalModelResolvable, modelRoutingValidationErrors, normalizeDefaultModelsConfig, resolveLogicalModelConfig, synchronizeLogicalModelsWithChannels } from "@/lib/model-routing-config";
-import { resolveBumingSeedanceQuality, resolveBumingSeedanceQualityOptions } from "@/lib/channel-protocol-registry";
+import { capabilityLabel, isLogicalModelResolvable, modelRoutingValidationErrors, normalizeDefaultModelsConfig, resolveLogicalModelCapabilityProfile, resolveLogicalModelConfig, synchronizeLogicalModelsWithChannels } from "@/lib/model-routing-config";
+import { channelProtocolDefinition, resolveBumingSeedanceQuality, resolveBumingSeedanceQualityOptions, resolveChannelModelConfig } from "@/lib/channel-protocol-registry";
 
 type Props = {
     channels: SystemModelChannel[];
@@ -31,6 +31,18 @@ const defaultFields: Array<{ capability: LogicalModelCapability; key: keyof Syst
     { capability: "video", key: "videoModel", label: "默认视频模型" },
     { capability: "audio", key: "audioModel", label: "默认音频模型（短剧 AI 配音）" },
 ];
+
+export function defaultLogicalModelCapabilityProfile(capability: LogicalModelCapability): LogicalModelCapabilityProfile {
+    return {
+        supportsReferenceImage: true,
+        supportsReferenceVideo: true,
+        supportsReferenceAudio: true,
+        ...(capability === "video" ? { supportsKeyframes: true } : {}),
+        supportsAsync: true,
+        supportsCancel: true,
+        supportsWebhook: true,
+    };
+}
 
 export function AdminLogicalModelManager({ channels, logicalModels, defaultModels, onChange, onPersist, saving }: Props) {
     const { message } = App.useApp();
@@ -268,7 +280,11 @@ export function AdminLogicalModelManager({ channels, logicalModels, defaultModel
 
 function BindingEditor({ binding, capability, channels, onChange }: { binding: LogicalModelBinding; capability: LogicalModelCapability; channels: SystemModelChannel[]; onChange: (patch: Partial<LogicalModelBinding>) => void }) {
     const channel = channels.find((item) => item.id === binding.channelId);
-    const profile = binding.capabilityProfile || {};
+    const strictConfig = channel?.advancedConfig && channelProtocolDefinition(channel.advancedConfig.protocol).strict ? resolveChannelModelConfig(channel.advancedConfig, binding.upstreamModel) : undefined;
+    const profile = strictConfig
+        ? resolveLogicalModelCapabilityProfile(binding, capability, channel, binding.upstreamModel) || defaultLogicalModelCapabilityProfile(capability)
+        : { ...defaultLogicalModelCapabilityProfile(capability), ...(binding.capabilityProfile || {}) };
+    const lockedCapability = (field: "supportsReferenceImage" | "supportsReferenceVideo" | "supportsReferenceAudio" | "supportsKeyframes") => typeof strictConfig?.[field] === "boolean";
     const bumingQualityOptions = channel?.advancedConfig?.protocol === "buming-seedance" && capability === "video" ? [...resolveBumingSeedanceQualityOptions(binding.upstreamModel)] : [];
     const effectiveAsync = profile.supportsAsync ?? (capability === "image" || capability === "video");
     const timeoutSeconds = profile.timeoutMs ? Math.round(profile.timeoutMs / 1000) : undefined;
@@ -310,17 +326,17 @@ function BindingEditor({ binding, capability, channels, onChange }: { binding: L
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                     <div className="flex flex-wrap items-center gap-3 text-xs text-stone-600 dark:text-stone-300 sm:col-span-2 lg:col-span-4">
-                        <Checkbox checked={profile.supportsReferenceImage === true} onChange={(event) => updateProfile({ supportsReferenceImage: event.target.checked })}>
+                        <Checkbox disabled={lockedCapability("supportsReferenceImage")} checked={profile.supportsReferenceImage === true} onChange={(event) => updateProfile({ supportsReferenceImage: event.target.checked })}>
                             参考图片
                         </Checkbox>
-                        <Checkbox checked={profile.supportsReferenceVideo === true} onChange={(event) => updateProfile({ supportsReferenceVideo: event.target.checked })}>
+                        <Checkbox disabled={lockedCapability("supportsReferenceVideo")} checked={profile.supportsReferenceVideo === true} onChange={(event) => updateProfile({ supportsReferenceVideo: event.target.checked })}>
                             参考视频
                         </Checkbox>
-                        <Checkbox checked={profile.supportsReferenceAudio === true} onChange={(event) => updateProfile({ supportsReferenceAudio: event.target.checked })}>
+                        <Checkbox disabled={lockedCapability("supportsReferenceAudio")} checked={profile.supportsReferenceAudio === true} onChange={(event) => updateProfile({ supportsReferenceAudio: event.target.checked })}>
                             参考音频
                         </Checkbox>
                         {capability === "video" ? (
-                            <Checkbox checked={profile.supportsKeyframes === true} onChange={(event) => updateProfile({ supportsKeyframes: event.target.checked })}>
+                            <Checkbox disabled={lockedCapability("supportsKeyframes")} checked={profile.supportsKeyframes === true} onChange={(event) => updateProfile({ supportsKeyframes: event.target.checked })}>
                                 全能帧（总参考图最多 9 张）
                             </Checkbox>
                         ) : null}
@@ -544,7 +560,13 @@ export function buildCapabilityVariants(models: LogicalModel[], original: Logica
                 : { fallbackModelIds: undefined, fallbackStrategy: undefined }),
             bindings: draft.bindings.map((binding) => {
                 const storedProfile = existing?.bindings.find((item) => item.id === binding.id)?.capabilityProfile;
-                return { ...binding, capabilityProfile: existing?.id === original.id ? binding.capabilityProfile : storedProfile || binding.capabilityProfile };
+                return {
+                    ...binding,
+                    capabilityProfile: {
+                        ...defaultLogicalModelCapabilityProfile(capability),
+                        ...(existing?.id === original.id ? binding.capabilityProfile : storedProfile || binding.capabilityProfile),
+                    },
+                };
             }),
         });
     });

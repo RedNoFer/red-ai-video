@@ -21,7 +21,17 @@ import { maintenanceWorkerContextHeaders } from "@/lib/server/maintenance-auth";
 import { videoFrameAssetIds, type VideoReferenceRole } from "@/lib/video-reference-contract";
 import { DRAMA_CHARACTER_TURNAROUND_SIZE } from "@/lib/drama-prompt-compiler";
 import type { AgentFunctionCallResult } from "./agent-function-call";
-import { agentSurfaceImageSize, canvasReferenceContext, canvasReferenceSupportsTask, canvasSnapshotNodes, isMediaReferenceType, requestsSelectedTextEdit, resolveAgentTaskRatio, resolveCanvasTaskTargetNodeId, selectedCanvasReferenceNodes } from "./agent-run-task-input";
+import {
+    agentSurfaceImageSize,
+    canvasReferenceContext,
+    canvasReferenceSupportsTask,
+    canvasSnapshotNodes,
+    isMediaReferenceType,
+    requestsSelectedTextEdit,
+    resolveAgentTaskRatio,
+    resolveCanvasTaskTargetNodeId,
+    selectedCanvasReferenceNodes,
+} from "./agent-run-task-input";
 import { hasSystemAiCharge, readSystemAiBilling, systemAiBillingHeaders } from "./system-ai-billing";
 import { acceptsMediaReference, mergeTaskReferences, taskImageUrls, taskReferences, textConstraintInstruction } from "./agent-run-execution-helpers";
 
@@ -236,15 +246,18 @@ export function normalizeTasks(
                 item.type === "video" ? defaults.videoCount || defaults.count : defaults.count,
                 item.type === "image" ? globalDefaults.canvasImageCount : undefined,
             ),
-            ratio: isDramaAssetCandidate && item.type === "image" ? DRAMA_CHARACTER_TURNAROUND_SIZE : resolveAgentTaskRatio({
-                type: item.type,
-                requestedImageSize,
-                configuredImageSize: preferredSize || configuredImageSize,
-                plannedRatio: item.ratio,
-                defaultSize: textDefault(defaults.size),
-                globalSize: ["image", "video"].includes(item.type) ? globalDefaults.imageSize : undefined,
-                reference: target || canvasReferences.find((reference) => reference.type === "image") || (selectedAssets[0]?.type === "image" ? selectedAssets[0] : undefined),
-            }),
+            ratio:
+                isDramaAssetCandidate && item.type === "image"
+                    ? DRAMA_CHARACTER_TURNAROUND_SIZE
+                    : resolveAgentTaskRatio({
+                          type: item.type,
+                          requestedImageSize,
+                          configuredImageSize: preferredSize || configuredImageSize,
+                          plannedRatio: item.ratio,
+                          defaultSize: textDefault(defaults.size),
+                          globalSize: ["image", "video"].includes(item.type) ? globalDefaults.imageSize : undefined,
+                          reference: target || canvasReferences.find((reference) => reference.type === "image") || (selectedAssets[0]?.type === "image" ? selectedAssets[0] : undefined),
+                      }),
             quality:
                 preferredQuality ||
                 item.quality?.trim() ||
@@ -264,8 +277,9 @@ export function normalizeTasks(
 }
 
 export function agentModelOptions(settings: Awaited<ReturnType<typeof getAuthSettings>>) {
+    const defaultVideoModel = settings.defaultModels.videoModel.trim().toLowerCase();
     return settings.logicalModels
-        .filter((model) => model.enabled && resolveLogicalModel(settings, model.capability, model.id))
+        .filter((model) => model.enabled && (model.capability !== "video" ? true : Boolean(defaultVideoModel && model.id.trim().toLowerCase() === defaultVideoModel)) && resolveLogicalModel(settings, model.capability, model.id))
         .map((model) => {
             const resolved = resolveLogicalModel(settings, model.capability, model.id);
             return { id: model.id, name: model.name, capability: model.capability, capabilityProfile: resolved?.capabilityProfile };
@@ -303,6 +317,7 @@ function defaultModel(settings: Awaited<ReturnType<typeof getAuthSettings>>, cap
 }
 
 function resolvePlannedModel(settings: Awaited<ReturnType<typeof getAuthSettings>>, capability: LogicalModelCapability, planned: unknown) {
+    if (capability === "video") return defaultModel(settings, capability) || undefined;
     const model = typeof planned === "string" ? planned.trim() : "";
     if (model && resolveLogicalModel(settings, capability, model)) return model;
     return defaultModel(settings, capability) || undefined;
@@ -511,16 +526,7 @@ export async function requestFunctionCall(
     return readFunctionCallResult(call.arguments, call.headers, call.protocol, call.elapsedMs, call.timings);
 }
 
-export async function requestConversationResponse(
-    origin: string,
-    cookie: string,
-    candidate: TextPlanningCandidate,
-    input: Array<{ role: string; content: string }>,
-    signal: AbortSignal,
-    userId: string,
-    billingModel: string,
-    pointsIdempotencyKey: string,
-) {
+export async function requestConversationResponse(origin: string, cookie: string, candidate: TextPlanningCandidate, input: Array<{ role: string; content: string }>, signal: AbortSignal, userId: string, billingModel: string, pointsIdempotencyKey: string) {
     const requestHeaders = runtimeRequestHeaders(cookie, {
         "Content-Type": "application/json",
         "Idempotency-Key": pointsIdempotencyKey,

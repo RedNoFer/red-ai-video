@@ -64,7 +64,7 @@ describe("applyPublicSystemSettings", () => {
         const config = applyPublicSystemSettings(defaultConfig, explicitLogicalSettings());
 
         expect(config.logicalModels.find((model) => model.id === "stable-diffusion-2.0")?.capability).toBe("video");
-        expect(config.videoModels).toEqual(["stable-diffusion-2.0", "video-v1"]);
+        expect(config.videoModels).toEqual(["video-v1"]);
     });
 
     it("does not expose misleading image-like names on public video models", () => {
@@ -88,6 +88,12 @@ describe("applyPublicSystemSettings", () => {
                 },
             ],
         });
+
+        expect(config.videoModel).toBe("video-v1");
+    });
+
+    it("does not let a persisted client video selection override the administrator default", () => {
+        const config = applyPublicSystemSettings({ ...defaultConfig, videoModel: "stable-diffusion-2.0" }, rawModelSettings());
 
         expect(config.videoModel).toBe("video-v1");
     });
