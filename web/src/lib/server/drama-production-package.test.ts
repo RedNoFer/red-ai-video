@@ -3,8 +3,9 @@ import { readFileSync } from "node:fs";
 
 import type { DramaProductionPackageV1, DramaProject } from "@/lib/drama-project-contract";
 import { DRAMA_STYLE_COLOR_SCRIPT, DRAMA_STYLE_NAME } from "@/lib/drama-style";
-import { defaultDramaProductionPlan } from "@/lib/drama-production-plan";
+import { defaultDramaProductionPlan, dramaVisualDirection } from "@/lib/drama-production-plan";
 import { applyDramaProductionPackage, buildDramaAssetReuseContext, mergeProjectAssetsIntoProductionPackage, previewDramaProductionPackage } from "@/lib/server/drama-production-package";
+import { serializeDramaProductionPackageMarkdown } from "@/lib/drama-production-package-serializer";
 
 const productionPackage: DramaProductionPackageV1 = {
     schemaVersion: 1,
@@ -629,6 +630,57 @@ describe("production package boundary", () => {
         expect(applied.productionBible?.colorScript).toBeUndefined();
     });
 
+    it("round-trips a complete visual contract from a generated package into project settings", () => {
+        const visualStyle = "东方写实摄影";
+        const artStyle = "克制电影美术，真实木石与湿润反光";
+        const visualDirection = `视觉风格：${visualStyle}\n画风：${artStyle}\n色彩：冷灰蓝与暗金\n材质：真实木石与湿润反光\n光线：自然侧逆光\n负面约束：禁止动漫质感、塑料皮肤和无依据的现代元素`;
+        const source = structuredClone(productionPackage);
+        source.project.style = visualStyle;
+        source.project.productionBible.visualStyle = visualStyle;
+        source.project.productionBible.colorScript = "冷灰蓝与暗金";
+        source.project.productionBible.globalNegativePrompt = "禁止动漫质感、塑料皮肤和无依据的现代元素";
+        source.project.productionBible.productionPlan = {
+            ...defaultDramaProductionPlan("package"),
+            lockedAt: "2026-09-08T00:00:00.000Z",
+            visual: { visualStyle, artStyle, visualDirection, source: "agent" },
+        };
+
+        const generated = previewDramaProductionPackage(JSON.stringify(source), "generated-package.json").package;
+        const exported = previewDramaProductionPackage(serializeDramaProductionPackageMarkdown(generated), "generated-package.md").package;
+        const applied = applyDramaProductionPackage(project(), exported, "hash-complete-visual-contract");
+
+        expect(exported.project.productionBible).toMatchObject({ colorScript: "冷灰蓝与暗金", globalNegativePrompt: "禁止动漫质感、塑料皮肤和无依据的现代元素", productionPlan: { visual: { visualStyle, artStyle, visualDirection } } });
+        expect(applied.productionBible).toMatchObject({ visualStyle, colorScript: "冷灰蓝与暗金", globalNegativePrompt: "禁止动漫质感、塑料皮肤和无依据的现代元素", productionPlan: { visual: { visualStyle, artStyle, visualDirection } } });
+        expect(dramaVisualDirection(applied.productionBible!.productionPlan!)).toBe(visualDirection);
+    });
+
+    it("maps legacy visualStyle without fabricating a missing visual contract", () => {
+        const legacyStyle = "旧包保留的国风写实风格";
+        const legacy = structuredClone(productionPackage);
+        legacy.project.style = legacyStyle;
+        legacy.project.productionBible.visualStyle = legacyStyle;
+        legacy.project.productionBible.productionPlan = {
+            ...defaultDramaProductionPlan("package"),
+            visual: { visualStyle: legacyStyle, artStyle: "", source: "agent" },
+        };
+
+        const preview = previewDramaProductionPackage(JSON.stringify(legacy), "legacy-package.json").package;
+        const applied = applyDramaProductionPackage(project(), preview, "hash-legacy-visual-style");
+
+        expect(applied.productionBible?.productionPlan?.visual).toMatchObject({ visualStyle: legacyStyle, artStyle: "" });
+        expect(dramaVisualDirection(applied.productionBible!.productionPlan!)).toBe(`视觉风格：${legacyStyle}`);
+
+        legacy.project.style = "";
+        legacy.project.productionBible.visualStyle = "";
+        legacy.project.productionBible.productionPlan = {
+            ...defaultDramaProductionPlan("package"),
+            visual: { visualStyle: "", artStyle: "", source: "agent" },
+        };
+        const withoutVisualField = applyDramaProductionPackage(project(), previewDramaProductionPackage(JSON.stringify(legacy), "legacy-empty-package.json").package, "hash-legacy-empty-visual-style");
+        expect(withoutVisualField.productionBible?.productionPlan?.visual).toMatchObject({ visualStyle: "", artStyle: "" });
+        expect(dramaVisualDirection(withoutVisualField.productionBible!.productionPlan!)).toBe("");
+    });
+
     it("replaces legacy manual frame plans when importing a newly structured package", () => {
         const first = applyDramaProductionPackage(project(), productionPackage, "hash-legacy-frame");
         const legacyShot = first.episodes[0].shots[0];
@@ -675,7 +727,8 @@ describe("production package boundary", () => {
     it("rebuilds generic template frame copy on package import", () => {
         const legacy = structuredClone(productionPackage);
         legacy.episodes[0].shots[0].framePlan.frames[0].actionPrompt = "人物抬眼并收紧手指";
-        legacy.episodes[0].shots[0].framePlan.frames[0].imagePrompt = "静态关键帧：人物抬眼并收紧手指；可见状态：动作入口已成立；可见表演状态：主体的眉眼、呼吸、手部和道具接触关系清晰可见，情绪通过身体动作呈现；景别：中景；机位与构图：平视；站位与视线：人物在右侧；三层空间：前景门框，中景人物，背景大厅；光色与风格：冷光；负面约束：无水印";
+        legacy.episodes[0].shots[0].framePlan.frames[0].imagePrompt =
+            "静态关键帧：人物抬眼并收紧手指；可见状态：动作入口已成立；可见表演状态：主体的眉眼、呼吸、手部和道具接触关系清晰可见，情绪通过身体动作呈现；景别：中景；机位与构图：平视；站位与视线：人物在右侧；三层空间：前景门框，中景人物，背景大厅；光色与风格：冷光；负面约束：无水印";
 
         const imported = previewDramaProductionPackage(JSON.stringify(legacy), "package.json").package;
         const prompt = imported.episodes[0].shots[0].framePlan.frames[0].imagePrompt;

@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 
 import { expect, test } from "@playwright/test";
 
@@ -103,6 +104,48 @@ test("episode settings save does not create a second project style source", asyn
         await page.reload({ waitUntil: "networkidle" });
         await page.getByRole("button", { name: "打开本集设置" }).click();
         await expect(page.getByText("生产方案")).toBeVisible();
+    } finally {
+        const deleted = await request.delete(`/api/drama/projects/${project.id}`);
+        expect(deleted.ok(), await deleted.text()).toBe(true);
+    }
+});
+
+test("a production package restores its complete visual contract in episode settings", async ({ page, request }) => {
+    const created = await request.post("/api/drama/projects", { data: { title: `E2E 制作包视觉方案 ${randomUUID().slice(0, 8)}` } });
+    expect(created.ok(), await created.text()).toBe(true);
+    const project = ((await created.json()) as { data: { project: DramaProject } }).data.project;
+    const visualStyle = "东方写实摄影";
+    const artStyle = "克制电影美术，真实木石与湿润反光";
+    const visualDirection = `视觉风格：${visualStyle}\n画风：${artStyle}\n色彩：冷灰蓝与暗金\n材质：真实木石与湿润反光\n光线：自然侧逆光\n负面约束：禁止动漫质感、塑料皮肤和无依据的现代元素`;
+    const sourcePackage = JSON.parse(readFileSync(new URL("../../output/mahadel-episode-01-production-package-v2-multiframe.json", import.meta.url), "utf8")) as {
+        project: { style: string; productionBible: { visualStyle: string; colorScript?: string; globalNegativePrompt?: string; productionPlan: Record<string, unknown> } };
+    };
+    sourcePackage.project.style = visualStyle;
+    sourcePackage.project.productionBible.visualStyle = visualStyle;
+    sourcePackage.project.productionBible.colorScript = "冷灰蓝与暗金";
+    sourcePackage.project.productionBible.globalNegativePrompt = "禁止动漫质感、塑料皮肤和无依据的现代元素";
+    sourcePackage.project.productionBible.productionPlan = {
+        ...sourcePackage.project.productionBible.productionPlan,
+        lockedAt: "2026-09-08T00:00:00.000Z",
+        visual: { visualStyle, artStyle, visualDirection, source: "agent" },
+    };
+    const source = JSON.stringify(sourcePackage);
+
+    try {
+        const previewResponse = await request.post(`/api/drama/projects/${project.id}/production-package`, { data: { action: "preview", source, fileName: "e2e-visual-package.json" } });
+        expect(previewResponse.ok(), await previewResponse.text()).toBe(true);
+        const preview = ((await previewResponse.json()) as { data: { preview: { sourceHash: string } } }).data.preview;
+        const applyResponse = await request.post(`/api/drama/projects/${project.id}/production-package`, { data: { action: "apply", source, fileName: "e2e-visual-package.json", sourceHash: preview.sourceHash } });
+        expect(applyResponse.ok(), await applyResponse.text()).toBe(true);
+
+        const readback = await request.get(`/api/drama/projects/${project.id}`);
+        expect(readback.ok(), await readback.text()).toBe(true);
+        const saved = ((await readback.json()) as { data: { project: DramaProject } }).data.project;
+        expect(saved.productionBible).toMatchObject({ visualStyle, colorScript: "冷灰蓝与暗金", globalNegativePrompt: "禁止动漫质感、塑料皮肤和无依据的现代元素", productionPlan: { visual: { visualStyle, artStyle, visualDirection } } });
+
+        await page.goto(`/drama/${project.id}`, { waitUntil: "networkidle" });
+        await page.getByRole("button", { name: "打开本集设置" }).click();
+        await expect(page.locator("[data-drama-episode-settings]").getByTestId("drama-episode-visual-direction")).toHaveValue(visualDirection);
     } finally {
         const deleted = await request.delete(`/api/drama/projects/${project.id}`);
         expect(deleted.ok(), await deleted.text()).toBe(true);

@@ -18,7 +18,7 @@ import type {
     DramaShot,
     DramaStoryScene,
 } from "@/lib/drama-project-contract";
-import { normalizeDramaProductionPlan } from "@/lib/drama-production-plan";
+import { defaultDramaProductionPlan, normalizeDramaProductionPlan } from "@/lib/drama-production-plan";
 import { formatPromptFieldLines, normalizeDramaFrameBeats, upgradeDramaFrameImagePrompt, validateDramaFramePlanVisuals } from "@/lib/drama-frame-sequence";
 import { dramaDialogueTimingReminder, dramaFrameDialogueTimingReminder, dramaUtteranceTimingIssues, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
 import { resolveDramaStyleContract } from "@/lib/drama-style";
@@ -112,9 +112,9 @@ function mergeProjectAssetCollection(incoming: DramaProductionPackageAsset[], ex
             code,
             name: asset.name,
             description: asset.description,
-            ...((asset.supplierPrompt || current?.supplierPrompt) ? { supplierPrompt: asset.supplierPrompt || current?.supplierPrompt } : {}),
+            ...(asset.supplierPrompt || current?.supplierPrompt ? { supplierPrompt: asset.supplierPrompt || current?.supplierPrompt } : {}),
             ...(asset.profile ? { profile: asset.profile } : current?.profile ? { profile: current.profile } : {}),
-            ...((asset.sceneReferenceBoard || current?.sceneReferenceBoard) ? { sceneReferenceBoard: asset.sceneReferenceBoard || current?.sceneReferenceBoard } : {}),
+            ...(asset.sceneReferenceBoard || current?.sceneReferenceBoard ? { sceneReferenceBoard: asset.sceneReferenceBoard || current?.sceneReferenceBoard } : {}),
             ...(activeEpisodeCodes?.length || referenced.has(code) ? { activeEpisodeCodes: [...new Set([...(activeEpisodeCodes || []), ...(referenced.has(code) ? episodeCodes : [])])] } : {}),
         } as DramaProductionPackageAsset;
     });
@@ -433,15 +433,18 @@ function normalizeProductionPackage(value: unknown): DramaProductionPackageV1 {
         };
     });
     const synchronizedEpisodes = normalizedEpisodes.map((episode) => synchronizeContinuityStates(repairOpeningCut(episode, text(project.title))));
+    const productionPlan = normalizePackageProductionPlan(bible);
     const styleContract = resolveDramaStyleContract({
         style: text(project.style),
-        productionBible: { visualStyle: text(bible.visualStyle), colorScript: optionalText(bible.colorScript) },
+        productionBible: { visualStyle: text(bible.visualStyle), colorScript: optionalText(bible.colorScript), productionPlan },
     });
+    const { colorScript: _rawColorScript, ...bibleWithoutColorScript } = bible;
+    const colorScript = optionalText(bible.colorScript);
     const normalizedBible = {
-        ...bible,
+        ...bibleWithoutColorScript,
         visualStyle: styleContract.name,
+        ...(colorScript ? { colorScript } : {}),
         ...(normalizeDialogueTimingPolicy(bible.dialogueTiming) ? { dialogueTiming: normalizeDialogueTimingPolicy(bible.dialogueTiming) } : {}),
-        ...(styleContract.colorScript ? { colorScript: styleContract.colorScript } : {}),
     };
     validateProductionPackageCompleteness({ ...input, project: { ...project, productionBible: normalizedBible }, assets: normalizedAssets, episodes: synchronizedEpisodes });
     validateSplitShotFramePlans(synchronizedEpisodes);
@@ -458,13 +461,13 @@ function normalizeProductionPackage(value: unknown): DramaProductionPackageV1 {
                 ratio: text(bible.ratio) || text(project.ratio) || "9:16",
                 targetDuration: positiveNumber(bible.targetDuration),
                 visualStyle: styleContract.name,
-                ...(styleContract.colorScript ? { colorScript: styleContract.colorScript } : {}),
+                ...(colorScript ? { colorScript } : {}),
                 soundBible: optionalText(bible.soundBible),
                 globalNegativePrompt: optionalText(bible.globalNegativePrompt),
                 subtitleSafeArea: optionalText(bible.subtitleSafeArea),
                 ...(normalizeDialogueTimingPolicy(bible.dialogueTiming) ? { dialogueTiming: normalizeDialogueTimingPolicy(bible.dialogueTiming) } : {}),
                 continuityMode: bible.continuityMode === "balanced" ? "balanced" : "strict",
-                productionPlan: normalizeDramaProductionPlan(bible.productionPlan),
+                productionPlan,
             },
         },
         assets: normalizedAssets,
@@ -472,6 +475,23 @@ function normalizeProductionPackage(value: unknown): DramaProductionPackageV1 {
         seriesBible: normalizeSeriesBible(input.seriesBible),
         archive: normalizeProductionArchive(input.archive),
     };
+}
+
+function normalizePackageProductionPlan(bible: Record<string, unknown>) {
+    const rawPlan = object(bible.productionPlan);
+    const rawVisual = object(rawPlan.visual);
+    const visualStyle = text(rawVisual.visualStyle) || text(bible.visualStyle);
+    const artStyle = text(rawVisual.artStyle);
+    const visualDirection = text(rawVisual.visualDirection);
+    if (!Object.keys(rawPlan).length && !visualStyle && !artStyle && !visualDirection) return undefined;
+    const fallback = defaultDramaProductionPlan("package");
+    fallback.visual = {
+        visualStyle,
+        artStyle,
+        ...(visualDirection ? { visualDirection } : {}),
+        source: "agent",
+    };
+    return normalizeDramaProductionPlan(bible.productionPlan, fallback);
 }
 
 function validateProductionPackageCompleteness(value: Record<string, unknown>) {
@@ -484,7 +504,7 @@ function validateProductionPackageCompleteness(value: Record<string, unknown>) {
     if (rawShotDuration !== undefined && Number(rawShotDuration) !== 15 && Number(rawShotDuration) !== 30) throw new DramaProductionPackageError("制作包每镜时长只能为 15 秒或 30 秒");
     if (rawFramePolicy !== undefined && !["fixed-4", "fixed-5", "agent"].includes(String(rawFramePolicy))) throw new DramaProductionPackageError("制作包帧数策略无效");
     if (rawFramePolicy === "agent" && rawVideo.frameCount !== undefined) throw new DramaProductionPackageError("Agent 智能切分方案不能携带固定帧数");
-    const plan = normalizeDramaProductionPlan(bible.productionPlan);
+    const plan = normalizePackageProductionPlan(bible);
     const dialogueTiming = normalizeDialogueTimingPolicy(bible.dialogueTiming);
     if (!plan?.skills.some((skill) => skill.id === "seedance-director")) throw new DramaProductionPackageError("制作包缺少必需的 Seedance 2.0 导演 Skill");
     if (!plan.skills.some((skill) => skill.id === "seedance-25-director")) throw new DramaProductionPackageError("制作包缺少必需的 Seedance 2.5 视频导演 Skill");
