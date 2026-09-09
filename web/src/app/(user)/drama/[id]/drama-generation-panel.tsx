@@ -368,7 +368,8 @@ export function DramaGenerationPanel({
             if (!optimized?.videoPrompt?.trim() || !optimized.framePlan?.frames?.length) throw new Error("Agent 未返回当前镜头的标准视频提示词和逐帧计划");
             const saved = await updateDramaShotPromptPatch(project.id, episode.id, shot.id, optimized.videoPrompt.trim(), undefined, { executionVideoPromptOrigin: "ai", framePlan: optimized.framePlan, framePlanOrigin: "ai" });
             replaceShot(project.id, episode.id, shot.id, saved.shot, saved.updatedAt);
-            message.success("提示词已优化并保存");
+            if (result.warnings?.length) message.warning(`提示词已优化并保存，但存在对白时长提醒：${result.warnings[0]}`);
+            else message.success("提示词已优化并保存");
         } catch (error) {
             if (error instanceof DramaVideoPromptQualityError && error.candidate?.videoPrompt) {
                 modal.warning({
@@ -1224,7 +1225,8 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
             if (!optimized?.videoPrompt?.trim() || !optimized.framePlan?.frames?.length) throw new Error("Agent 未返回当前镜头的标准视频提示词和逐帧计划");
             setVideoPromptDraft(optimized.videoPrompt.trim());
             setOptimizedFramePlan(optimized.framePlan);
-            message.success("视频提示词已优化，请确认后保存");
+            if (result.warnings?.length) message.warning(`视频提示词已优化，请确认后保存；${result.warnings[0]}`);
+            else message.success("视频提示词已优化，请确认后保存");
         } catch (error) {
             if (error instanceof DramaVideoPromptQualityError && error.candidate?.videoPrompt) {
                 setVideoPromptDraft(error.candidate.videoPrompt);

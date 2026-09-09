@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
     normalizeDramaReviewCompletionInput,
     normalizeDramaVideoPromptInput,
+    dramaVideoPromptTimingWarnings,
     normalizeDramaVisualInput,
     reviewCompletionFilledCount,
     reviewCompletionMissingFields,
@@ -67,6 +68,42 @@ describe("video prompt reference instructions", () => {
             { alias: "@图片1", role: "keyframe", purpose: "顺序帧 1" },
             { alias: "@图片2", role: "scene_anchor", purpose: "场景基准图" },
         ]);
+    });
+
+    it("preserves utterance timing context for video prompt optimization", () => {
+        const result = normalizeDramaVideoPromptInput({
+            phase: "video_prompt",
+            shots: [
+                {
+                    id: "shot-one",
+                    utterances: [
+                        {
+                            id: "line-one",
+                            order: 1,
+                            type: "dialogue",
+                            speaker: "萧炎",
+                            text: "纳兰小姐，你应该知道，在斗气大陆，女方悔婚会让对方有多难堪",
+                            startSecond: 0.6,
+                            endSecond: 6.4,
+                            pauseBeforeSeconds: 0.6,
+                            pauseAfterSeconds: 0.2,
+                            speechRate: "冷笑压怒",
+                            speechRateCharsPerSecond: 6.2,
+                        },
+                    ],
+                    videoPrompt: "动态意图：人物开口",
+                },
+            ],
+        });
+
+        expect(result.payload.shots[0].utterances[0]).toMatchObject({
+            startSecond: 0.6,
+            endSecond: 6.4,
+            pauseBeforeSeconds: 0.6,
+            pauseAfterSeconds: 0.2,
+            speechRate: "冷笑压怒",
+            speechRateCharsPerSecond: 6.2,
+        });
     });
 
     it("validates that the Agent returns every bound image alias", () => {
@@ -205,6 +242,95 @@ describe("video prompt reference instructions", () => {
 
         const legacy = validateDramaVideoPromptOutput({ shots: [{ shotId: "shot-one", videoPrompt: "动态意图：人物抬头\n触发：门外传来声音\n时间段动作：0-3s 起点：人物低头；动作与触发：手指收紧；可见衔接：视线转向门外；终点：人物抬头\n单一主运镜：固定机位\n结束画面：人物抬头", framePlan: { frames: [baseFrame] } }] }, ["shot-one"], source, []);
         expect(legacy).toContain("旧的顶层动作字段");
+    });
+
+    it("returns a warning for a quoted dialogue fragment that cannot fit its frame duration", () => {
+        const dialogue = "纳兰小姐，你应该知道，在斗气大陆，女方悔婚会让对方有多难堪，呵呵，我脸皮厚，倒是没什么";
+        const fullDialogue = `${dialogue}，可我的父亲！他是一族之长，今日若是真答应了你的要求，他日后还如何掌管萧家？还如何在乌坦城立足？`;
+        const error = validateDramaVideoPromptOutput(
+            {
+                shots: [
+                    {
+                        shotId: "shot-one",
+                        videoPrompt: [
+                            "动态意图：萧炎开口",
+                            "全局设定：大厅冷灰暖金",
+                            "起始可见状态：萧炎低头",
+                            `时间段动作：0-3秒 起点：萧炎低头；动作与触发：萧炎开口说“${dialogue}”；可见衔接：萧炎抬眼；终点：萧炎抬眼`,
+                            "单一主运镜：固定机位",
+                            "环境压力与视觉母题：茶水轻颤",
+                            "视觉风格与光色：冷灰暖金",
+                            "声音意图：萧炎低声说话",
+                            "结束画面：萧炎抬眼",
+                            "连续性锁：身份和轴线不变",
+                            "针对性约束：无变形",
+                        ].join("\n"),
+                        framePlan: {
+                            frames: [
+                                {
+                                    id: "f1",
+                                    sequenceIndex: 1,
+                                    startSecond: 0,
+                                    endSecond: 3,
+                                    startPrompt: "萧炎低头",
+                                    actionPrompt: `萧炎开口说“${dialogue}”`,
+                                    transitionPrompt: "萧炎抬眼",
+                                    endPrompt: "萧炎抬眼",
+                                    imagePrompt: "萧炎抬眼，手指收紧",
+                                },
+                            ],
+                        },
+                    },
+                ],
+            },
+            ["shot-one"],
+            [
+                {
+                    id: "shot-one",
+                    utterances: [
+                        {
+                            type: "dialogue",
+                            text: fullDialogue,
+                            startSecond: 0.6,
+                            endSecond: 6.4,
+                            speechRate: "冷笑压怒",
+                            speechRateCharsPerSecond: 6.2,
+                        },
+                    ],
+                    framePlan: { frames: [{ id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 3 }] },
+                },
+            ],
+            [],
+        );
+
+        expect(error).toBe("");
+        const warnings = dramaVideoPromptTimingWarnings(
+            {
+                shots: [
+                    {
+                        shotId: "shot-one",
+                        framePlan: {
+                            frames: [
+                                {
+                                    id: "f1",
+                                    startSecond: 0,
+                                    endSecond: 3,
+                                    actionPrompt: `萧炎开口说“${dialogue}”`,
+                                },
+                            ],
+                        },
+                    },
+                ],
+            },
+            ["shot-one"],
+            [
+                {
+                    id: "shot-one",
+                    utterances: [{ type: "dialogue", text: fullDialogue, speechRateCharsPerSecond: 6.2 }],
+                },
+            ],
+        );
+        expect(warnings[0]).toContain("当前仅 3 秒");
     });
 });
 

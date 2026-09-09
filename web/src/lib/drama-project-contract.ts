@@ -782,6 +782,7 @@ export type DramaVideoPromptAnalysis = {
             frames: Array<Pick<DramaFrameBeat, "id" | "sequenceIndex" | "startSecond" | "endSecond" | "startPrompt" | "actionPrompt" | "transitionPrompt" | "endPrompt" | "imagePrompt">>;
         };
     }>;
+    warnings?: string[];
 };
 
 export type DramaImagePromptAnalysis = {

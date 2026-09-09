@@ -1,5 +1,6 @@
 import { resolveDramaShotDuration } from "@/lib/server/drama-shot-config";
 import { isGenericDramaDetail } from "@/lib/drama-prompt-quality";
+import { dramaFrameDialogueTimingReminder, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
 
 export type DramaAnalyzeBody = {
     phase?: "content" | "visual" | "review_completion" | "video_prompt" | "image_prompt";
@@ -183,7 +184,12 @@ export function validateDramaVideoPromptReferenceBindings(prompt: string, refere
     return "";
 }
 
-export function validateDramaVideoPromptOutput(value: unknown, shotIds: string[], sourceShots: ReadonlyArray<{ id: string; framePlan?: unknown }>, references: unknown) {
+export function validateDramaVideoPromptOutput(
+    value: unknown,
+    shotIds: string[],
+    sourceShots: ReadonlyArray<{ id: string; framePlan?: unknown; utterances?: readonly DramaDialogueTimingInput[] }>,
+    references: unknown,
+) {
     const output = object(value);
     const outputShots = array(output.shots).map(object);
     const sourcePlans = new Map(sourceShots.map((shot) => [shot.id, object(shot.framePlan)]));
@@ -205,6 +211,7 @@ export function validateDramaVideoPromptOutput(value: unknown, shotIds: string[]
         const referenceError = validateDramaVideoPromptReferenceBindings(prompt, references);
         if (referenceError) return `镜头 ${shotId}：${referenceError}`;
         const expectedFrames = array(sourcePlans.get(shotId)?.frames);
+        const sourceShot = sourceShots.find((item) => item.id === shotId);
         const outputFrames = array(object(shot.framePlan).frames).map(object);
         if (!outputFrames.length) return `镜头 ${shotId} 缺少逐帧动作计划；请按当前 Skill 返回 framePlan.frames`;
         if (expectedFrames.length && outputFrames.length !== expectedFrames.length) return `镜头 ${shotId} 的逐帧计划数量不一致：应为 ${expectedFrames.length} 段，实际为 ${outputFrames.length} 段；请按当前 Skill 原样保留时间段`;
@@ -240,6 +247,28 @@ export function validateDramaVideoPromptOutput(value: unknown, shotIds: string[]
         }
     }
     return "";
+}
+
+export function dramaVideoPromptTimingWarnings(
+    value: unknown,
+    shotIds: string[],
+    sourceShots: ReadonlyArray<{ id: string; utterances?: readonly DramaDialogueTimingInput[] }>,
+) {
+    const outputShots = array(object(value).shots).map(object);
+    return shotIds.flatMap((shotId) => {
+        const sourceShot = sourceShots.find((item) => item.id === shotId);
+        if (!sourceShot?.utterances?.length) return [];
+        const outputShot = outputShots.find((item) => dramaAnalysisText(item.shotId) === shotId);
+        return array(object(outputShot?.framePlan).frames).flatMap((item, index) => {
+            const frame = object(item);
+            const startSecond = Number(frame.startSecond);
+            const endSecond = Number(frame.endSecond);
+            const actionPrompt = dramaAnalysisText(frame.actionPrompt);
+            if (!Number.isFinite(startSecond) || !Number.isFinite(endSecond) || !actionPrompt) return [];
+            const issue = dramaFrameDialogueTimingReminder(startSecond, endSecond, actionPrompt, sourceShot.utterances || [], `${shotId} ${dramaAnalysisText(frame.id) || `frame-${index + 1}`}`);
+            return issue ? [`${issue.message}；提示词已保留，可在生产确认时继续生成`] : [];
+        });
+    });
 }
 
 export function previewDramaVideoPromptOutput(value: unknown, shotIds: string[]) {
@@ -459,6 +488,12 @@ function normalizeUtterances(value: unknown) {
         const utterance = object(item);
         const text = dramaAnalysisText(utterance.text);
         if (!text) return [];
+        const startSecond = optionalNumber(utterance.startSecond);
+        const endSecond = optionalNumber(utterance.endSecond);
+        const pauseBeforeSeconds = optionalNumber(utterance.pauseBeforeSeconds);
+        const pauseAfterSeconds = optionalNumber(utterance.pauseAfterSeconds);
+        const speechRateCharsPerSecond = optionalNumber(utterance.speechRateCharsPerSecond);
+        const speechRate = dramaAnalysisText(utterance.speechRate);
         return [
             {
                 id: dramaAnalysisText(utterance.id),
@@ -466,9 +501,20 @@ function normalizeUtterances(value: unknown) {
                 type: utterance.type === "voiceover" ? "voiceover" : "dialogue",
                 speaker: dramaAnalysisText(utterance.speaker),
                 text,
+                ...(startSecond !== undefined ? { startSecond } : {}),
+                ...(endSecond !== undefined ? { endSecond } : {}),
+                ...(pauseBeforeSeconds !== undefined ? { pauseBeforeSeconds } : {}),
+                ...(pauseAfterSeconds !== undefined ? { pauseAfterSeconds } : {}),
+                ...(speechRate ? { speechRate } : {}),
+                ...(speechRateCharsPerSecond !== undefined ? { speechRateCharsPerSecond } : {}),
             },
         ];
     });
+}
+
+function optionalNumber(value: unknown) {
+    const number = Number(value);
+    return Number.isFinite(number) ? number : undefined;
 }
 
 function texts(value: unknown) {

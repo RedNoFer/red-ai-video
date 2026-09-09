@@ -85,12 +85,21 @@ export function dramaFrameDialogueTimingIssue(startSecond: number, endSecond: nu
     return dramaFrameDialogueTimingReminder(startSecond, endSecond, actionPrompt, values, label);
 }
 
-export function dramaFrameDialogueTimingReminder(startSecond: number, endSecond: number, actionPrompt: string, values: readonly DramaDialogueTimingInput[], label = "时间段") {
+export function dramaFrameDialogueTimingReminder(startSecond: number, endSecond: number, actionPrompt: string, values: readonly DramaDialogueTimingInput[] | readonly string[], label = "时间段") {
     const action = actionPrompt.trim();
+    const quotedFragments = Array.from(action.matchAll(/[“「『"']([^”」』"']+)[”」』"']/gu), (match) => match[1].trim()).filter(Boolean);
     const matched = values
-        .map((value) => (typeof value === "string" ? value : value.type === "dialogue" ? value.text || "" : ""))
-        .map((value) => value.trim())
-        .filter((value) => value && action.includes(value));
+        .flatMap((value) => {
+            const text = typeof value === "string" ? value : value.type === "dialogue" ? value.text || "" : "";
+            if (!text) return [];
+            const fragments = quotedFragments.filter((fragment) => text.includes(fragment));
+            if (action.includes(text)) return [typeof value === "string" ? { text: value, type: "dialogue" } : value];
+            return fragments.map((fragment) => (typeof value === "string" ? { text: fragment, type: "dialogue" } : { ...value, text: fragment }));
+        })
+        .filter((value) => {
+            const text = value.text || "";
+            return Boolean(text && action.includes(text));
+        });
     const issue = dramaDialogueTimingReminder(endSecond - startSecond, matched, "", label);
     return issue ? { ...issue, startSecond, endSecond } : undefined;
 }
