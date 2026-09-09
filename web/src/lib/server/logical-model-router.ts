@@ -125,7 +125,7 @@ export function supportsVideoKeyframeReferences(candidate: ResolvedLogicalModel,
     if (candidate.channel.advancedConfig?.protocol === "newapi-video") return false;
     const contract = candidate.channel.advancedConfig?.protocol === "buming-seedance" ? resolveBumingSeedanceVideoModelContract(candidate.upstreamModel) : undefined;
     const supportsKeyframes = contract
-        ? (contract.videoReferenceModes.includes("all_frames") || (!isKnownBumingSeedanceVideoModel(candidate.upstreamModel) && candidate.capabilityProfile?.supportsKeyframes === true)) && candidate.capabilityProfile?.supportsKeyframes !== false
+        ? (contract.videoReferenceModes.includes("all_frames") || (!isKnownBumingSeedanceVideoModel(candidate.upstreamModel) && candidate.capabilityProfile?.supportsKeyframes !== false)) && candidate.capabilityProfile?.supportsKeyframes !== false
         : candidate.capabilityProfile?.supportsKeyframes;
     return Boolean(supportsKeyframes);
 }

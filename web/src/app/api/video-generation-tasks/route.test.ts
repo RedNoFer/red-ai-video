@@ -1095,12 +1095,12 @@ describe("video generation candidate failover", () => {
         expect(body).not.toHaveProperty("params");
     });
 
-    it("submits ordered keyframes for an unknown Buming model when its binding declares support", async () => {
+    it("submits ordered keyframes for an unknown Buming model without a manual capability override", async () => {
         const bumingChannel = applyChannelProtocol({ ...channels[0], baseUrl: "", models: ["seedance-2.0"], advancedConfig: emptyAdvancedConfig() }, "buming-seedance");
         mocks.getAuthSettings.mockResolvedValue({
             ...settings,
             systemChannels: [bumingChannel],
-            logicalModels: [{ ...settings.logicalModels[0], bindings: [{ ...settings.logicalModels[0].bindings[0], channelId: bumingChannel.id, upstreamModel: "seedance-2.0", capabilityProfile: { supportsKeyframes: true } }] }],
+            logicalModels: [{ ...settings.logicalModels[0], bindings: [{ ...settings.logicalModels[0].bindings[0], channelId: bumingChannel.id, upstreamModel: "seedance-2.0" }] }],
         });
         mocks.fetchInternalApi.mockResolvedValue(json({ id: "buming-unknown-keyframe-task", state: "queued" }));
 

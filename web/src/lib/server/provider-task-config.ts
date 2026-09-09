@@ -142,7 +142,7 @@ export function assertVideoReferenceRoles(config: SystemChannelAdvancedConfig | 
         const firstFrame = references.some((reference) => reference.role === "first_frame");
         const lastFrame = references.some((reference) => reference.role === "last_frame");
         const requestedMode = keyframes.length ? "all_frames" : firstFrame ? (lastFrame ? "first_last" : "first_frame") : regularReferences.length ? "reference" : undefined;
-        const supportsAllFrames = contract.videoReferenceModes.includes("all_frames") || (requestedMode === "all_frames" && !isKnownBumingSeedanceVideoModel(model || "") && supportsKeyframes === true);
+        const supportsAllFrames = contract.videoReferenceModes.includes("all_frames") || (requestedMode === "all_frames" && !isKnownBumingSeedanceVideoModel(model || "") && supportsKeyframes !== false);
         if (requestedMode && !(requestedMode === "all_frames" ? supportsAllFrames : contract.videoReferenceModes.includes(requestedMode))) {
             if (requestedMode === "all_frames") throw new Error("当前不鸣视频模型不支持全能帧连续参考");
             throw new Error(`当前不鸣视频模型不支持${requestedMode === "reference" ? "普通参考素材" : requestedMode === "first_last" ? "首尾帧" : "首帧"}`);

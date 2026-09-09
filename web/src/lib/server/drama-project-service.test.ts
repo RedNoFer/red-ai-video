@@ -2105,47 +2105,81 @@ describe("drama project service updates", () => {
         expect(saved.productionBible?.productionPlan).toMatchObject({ lockedAt: lockedPlan.lockedAt, video: { resolution: "480p" } });
     });
 
-    it("uses the backend default video model instead of a project's locked model", async () => {
+    it("uses an unknown Buming default video model for all-frame production instead of blocking the run", async () => {
         const plan = { ...defaultDramaProductionPlan("manual"), lockedAt: "2026-07-19T08:00:00.000Z", video: { ...defaultDramaProductionPlan("manual").video, model: "selected-video" } };
         const current = project("2026-07-19T08:00:01.000Z", "项目");
         current.productionBible = { ...current.productionBible!, productionPlan: plan };
+        current.seriesBible = { version: "series-bible-v1", canonCharacters: [], immutableRules: [], relationshipState: "", worldRules: [], unresolvedThreads: [], visualMotifs: [], soundMotifs: [] };
         current.episodes[0].reviewStatus = "visual_ready";
         current.episodes[0].shots = [
             {
                 id: "shot-one",
+                order: 1,
                 title: "镜头一",
                 description: "人物在场景中完成连续动作",
                 sourceText: "人物在场景中完成连续动作",
+                shotBoundary: "单一镜头",
+                dialogue: "",
+                narration: "",
+                utterances: [],
+                sceneId: "scene-one",
+                characterIds: [],
+                propIds: [],
+                clueIds: [],
+                imagePrompt: "画面",
+                videoPrompt: "动作",
+                negativePrompt: "禁止文字、水印和 Logo",
+                cameraMotion: "固定",
+                duration: 15,
+                performancePlan: {
+                    emotionalObjective: "克制",
+                    emotionalArc: "平稳",
+                    speechStyle: "无对白",
+                    pace: "中速",
+                    breath: "自然",
+                    restraintLevel: "克制",
+                    beats: {
+                        start: { emotion: "平静", facialAction: "保持平静", gaze: "向前", bodyAction: "站立" },
+                        middle: { emotion: "警觉", facialAction: "眉眼收紧", gaze: "向前", bodyAction: "抬头" },
+                        end: { emotion: "坚定", facialAction: "目光稳定", gaze: "向前", bodyAction: "站稳" },
+                    },
+                },
+                lightingPlan: { palette: "冷灰", colorTemperature: "冷色", keyLight: "左侧", fillLight: "正面", rimLight: "背侧", contrast: "中", materialResponse: "自然", skinToneProtection: "自然", inheritFromPrevious: "无", transitionToNext: "平稳" },
+                continuity: { shotSize: "中景", cameraAngle: "平视", composition: "居中", characterBlocking: "中央", gazeDirection: "向前", actionStart: "站立", actionEnd: "站稳", screenDirection: "向前", axisRule: "180度", continuityNotes: "连续" },
+                entryState: { environment: "场景", lighting: "冷光", characters: [], props: [] },
+                exitState: { environment: "场景", lighting: "冷光", characters: [], props: [] },
                 storyboardFrameMode: "all_frames",
+                storyboardFrames: [1, 2, 3, 4].map((sequenceIndex) => ({ id: `f${sequenceIndex}`, sequenceIndex, status: "success", mediaUrl: `/frame-${sequenceIndex}.png` })),
                 framePlan: {
                     start: { source: "independent" },
                     end: { required: true },
                     frames: [1, 2, 3, 4].map((sequenceIndex) => ({
                         id: `f${sequenceIndex}`,
                         sequenceIndex,
-                        startSecond: sequenceIndex - 1,
-                        endSecond: sequenceIndex,
+                        startSecond: (sequenceIndex - 1) * 4,
+                        endSecond: sequenceIndex === 4 ? 15 : sequenceIndex * 4,
                         imagePrompt: `静态画面 ${sequenceIndex}，禁止文字水印`,
                         actionPrompt: `动作状态 ${sequenceIndex}`,
                     })),
                 },
             } as never,
         ];
+        current.scenes = [{ id: "scene-one", name: "场景", references: [{ id: "scene-ref", status: "approved", url: "https://cdn.example.com/scene.png" }], primaryReferenceId: "scene-ref" }] as never;
         mocks.getDramaProject.mockResolvedValue(current);
         mocks.getAuthSettings.mockResolvedValue({
-            defaultModels: { imageModel: "image-default", videoModel: "other-compatible-video", audioModel: "" },
+            defaultModels: { imageModel: "image-default", videoModel: "seedance-2.0", audioModel: "" },
             generationDefaults: { imageQuality: "standard", videoQuality: "720" },
         });
-        mocks.resolveLogicalModelCandidates.mockReturnValue([{ logicalModelId: "other-compatible-video", channelId: "default-video-channel" }]);
-        mocks.supportsVideoKeyframeReferences.mockReturnValue(false);
+        mocks.resolveLogicalModelCandidates.mockReturnValue([{ logicalModelId: "seedance-2.0", channelId: "default-video-channel" }]);
+        mocks.supportsVideoKeyframeReferences.mockReturnValue(true);
 
-        const pending = createDramaProductionRunForUser("user-one", current.id, {
+        const run = await createDramaProductionRunForUser("user-one", current.id, {
             episodeId: current.episodes[0].id,
             preflight: { checkedShotIds: ["shot-one"] },
         });
-        await expect(pending).rejects.toMatchObject({ status: 409, message: "后台默认视频模型 other-compatible-video 未声明支持全能帧关键图，请在后台为该模型声明全能帧能力或调整本集帧模式" });
-        expect(mocks.resolveLogicalModelCandidates).toHaveBeenCalledWith(expect.anything(), "video", "other-compatible-video");
-        expect(mocks.createDramaProductionRun).not.toHaveBeenCalled();
+        expect(run.parameterSnapshot).toMatchObject({ videoModel: "seedance-2.0", videoChannelId: "default-video-channel" });
+        expect(mocks.resolveLogicalModelCandidates).toHaveBeenCalledWith(expect.anything(), "video", "seedance-2.0");
+        expect(mocks.createDramaProductionRun).toHaveBeenCalledOnce();
     });
 
     it("captures the backend default model in a drama run even when the project plan is stale", async () => {

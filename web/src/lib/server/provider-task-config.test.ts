@@ -147,15 +147,14 @@ describe("provider task config", () => {
         expect(() => assertVideoReferenceRoles({ protocol: "newapi-video" } as never, frames)).toThrow("当前视频模型不支持全能帧连续参考");
     });
 
-    it("accepts an unknown Buming model's all-frame references only when explicitly declared", () => {
+    it("accepts an unknown Buming model's all-frame references unless explicitly disabled", () => {
         const frames = [
             { type: "image" as const, url: "https://cdn.example.com/one.png", role: "keyframe" as const, keyframeIndex: 1 },
             { type: "image" as const, url: "https://cdn.example.com/two.png", role: "keyframe" as const, keyframeIndex: 2 },
         ];
 
-        expect(() => assertVideoReferenceRoles({ protocol: "buming-seedance" } as never, frames, undefined, "seedance-2.0", true)).not.toThrow();
+        expect(() => assertVideoReferenceRoles({ protocol: "buming-seedance" } as never, frames, undefined, "seedance-2.0")).not.toThrow();
         expect(() => assertVideoReferenceRoles({ protocol: "buming-seedance" } as never, frames, undefined, "seedance-2.0", false)).toThrow("不支持全能帧");
-        expect(() => assertVideoReferenceRoles({ protocol: "buming-seedance" } as never, frames, undefined, "seedance-2.0")).toThrow("不支持全能帧");
     });
 
     it("honors an explicit keyframe capability profile for Seedance protocol models", () => {

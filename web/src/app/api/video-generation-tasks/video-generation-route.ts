@@ -118,18 +118,12 @@ export async function POST(request: Request) {
             const capabilityProfile = channel.capabilityProfile;
             const bumingContract = channel.advancedConfig?.protocol === "buming-seedance" ? resolveBumingSeedanceVideoModelContract(channel.model) : undefined;
             const supportsKeyframes = bumingContract
-                ? (bumingContract.videoReferenceModes.includes("all_frames") || (!isKnownBumingSeedanceVideoModel(channel.model) && capabilityProfile?.supportsKeyframes === true)) && capabilityProfile?.supportsKeyframes !== false
+                ? (bumingContract.videoReferenceModes.includes("all_frames") || (!isKnownBumingSeedanceVideoModel(channel.model) && capabilityProfile?.supportsKeyframes !== false)) && capabilityProfile?.supportsKeyframes !== false
                 : channel.advancedConfig?.protocol === "newapi-video"
                   ? false
                   : capabilityProfile?.supportsKeyframes;
             if (keyframeCount && !supportsKeyframes) {
-                if (bumingContract && !bumingContract.videoReferenceModes.includes("all_frames")) {
-                    if (!isKnownBumingSeedanceVideoModel(channel.model)) {
-                        const error = new Error("当前模型未声明支持全能帧关键图，请切换支持全能帧的模型");
-                        if (isDramaRun) return NextResponse.json({ error: error.message }, { status: 400 });
-                        capabilityError = error;
-                        continue;
-                    }
+                if (bumingContract && !bumingContract.videoReferenceModes.includes("all_frames") && isKnownBumingSeedanceVideoModel(channel.model)) {
                     const error = new Error("当前不鸣视频模型不支持全能帧连续参考");
                     if (isDramaRun) return NextResponse.json({ error: error.message }, { status: 400 });
                     capabilityError = error;

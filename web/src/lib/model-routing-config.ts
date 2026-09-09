@@ -247,8 +247,8 @@ export function resolveLogicalModelCapabilityProfile(binding: Pick<LogicalModelB
     const bumingQualityOptions = advanced?.protocol === "buming-seedance" && capability === "video" ? resolveBumingSeedanceQualityOptions(upstreamModel) : [];
     const strictProtocol = advanced?.protocol ? channelProtocolDefinition(advanced.protocol).strict : false;
     const protocolDefault = (key: "supportsReferenceImage" | "supportsReferenceVideo" | "supportsReferenceAudio" | "supportsKeyframes") => {
-        // Unknown Buming model IDs have no provider-verified keyframe contract;
-        // an administrator may explicitly opt them in via the binding profile.
+        // Unknown Buming model IDs use the provider's generic multi-reference
+        // endpoint. Keep an explicit binding opt-out authoritative.
         if (key === "supportsKeyframes" && advanced?.protocol === "buming-seedance" && !isKnownBumingSeedanceVideoModel(upstreamModel)) return undefined;
         return strictProtocol && modelConfig && typeof modelConfig[key] === "boolean" ? Boolean(modelConfig[key]) : undefined;
     };
@@ -264,7 +264,10 @@ export function resolveLogicalModelCapabilityProfile(binding: Pick<LogicalModelB
         supportsReferenceImage: providerCapability("supportsReferenceImage", Boolean(globalPreset?.supportsReferenceImage ?? modelConfig?.supportsReferenceImage ?? advanced?.supportsReferenceImage)),
         supportsReferenceVideo: providerCapability("supportsReferenceVideo", Boolean(globalPreset?.supportsReferenceVideo ?? modelConfig?.supportsReferenceVideo ?? advanced?.supportsReferenceVideo)),
         supportsReferenceAudio: providerCapability("supportsReferenceAudio", Boolean(globalPreset?.supportsReferenceAudio ?? modelConfig?.supportsReferenceAudio ?? advanced?.supportsReferenceAudio)),
-        supportsKeyframes: providerCapability("supportsKeyframes", Boolean(modelConfig?.supportsKeyframes)),
+        supportsKeyframes: providerCapability(
+            "supportsKeyframes",
+            advanced?.protocol === "buming-seedance" && !isKnownBumingSeedanceVideoModel(upstreamModel) ? true : Boolean(modelConfig?.supportsKeyframes),
+        ),
         maxReferenceImages: positiveInteger(stored.maxReferenceImages) || positiveInteger(modelConfig?.maxReferenceImages),
         aspectRatios: normalizeAspectRatios(stored.aspectRatios),
         minDurationSeconds: positiveNumber(stored.minDurationSeconds),
