@@ -20,6 +20,7 @@ import { dramaDialogueTimingReminder, type DramaDialogueTimingInput } from "@/li
 import { resolveDramaShotDuration } from "@/lib/server/drama-shot-config";
 import { strictJsonObjectText } from "@/lib/server/structured-model-output";
 import { isGenericDramaDetail, validateDramaPerformanceDetail } from "@/lib/drama-prompt-quality";
+import { DRAMA_PUBLIC_STATIC_FRAME_PROMPT_CONTRACT, DRAMA_PUBLIC_VIDEO_PROMPT_CONTRACT } from "@/lib/drama-public-prompt-contract";
 
 export function normalizeDramaContentAnalysis(value: unknown, defaultVideoSeconds: number, sourceScript = ""): DramaContentAnalysis {
     const source = object(value);
@@ -1144,7 +1145,7 @@ export const dramaVisualTool = {
 
 export const dramaVideoPromptTool = {
     name: "generate_drama_video_prompts",
-    description: "根据已经生成并验收的顺序帧、固定资产和连续性信息，执行当前 Seedance 2.5 导演 Skill，为每个镜头生成符合公开格式的图生视频提示词和逐帧动作计划",
+    description: `根据已经生成并验收的顺序帧、固定资产和连续性信息，执行当前 Seedance 2.5 导演 Skill，为每个镜头生成符合公开格式的图生视频提示词和逐帧动作计划。${DRAMA_PUBLIC_VIDEO_PROMPT_CONTRACT}`,
     parameters: {
         type: "object",
         additionalProperties: false,
@@ -1201,7 +1202,7 @@ export const dramaVideoPromptTool = {
 
 export const dramaImagePromptTool = {
     name: "generate_drama_image_prompts",
-    description: "根据当前镜头事实、固定资产和连续性约束，生成可直接用于 Seedance 2.0 图片参考帧的静态画面提示词；必须按固定字段逐行组织，每个非空字段独立一行",
+    description: `根据当前镜头事实、固定资产和连续性约束，生成可直接用于 Seedance 2.0 图片参考帧的静态画面提示词。${DRAMA_PUBLIC_STATIC_FRAME_PROMPT_CONTRACT}`,
     parameters: {
         type: "object",
         additionalProperties: false,

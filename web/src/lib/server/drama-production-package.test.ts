@@ -230,6 +230,72 @@ describe("production package boundary", () => {
         expect(normalized.archive?.promptAssets[0]?.prompt).toBe("静态关键帧：Karin握剑\n景别：中景");
     });
 
+    it("preserves a complete Agent static-frame contract in strict generation mode", () => {
+        const source = structuredClone(productionPackage);
+        const staticPrompt = [
+            "静态关键帧：Karin站在城门内，手掌压住断剑",
+            "可见状态：指节发白，断剑贴在右手掌心",
+            "可见表演状态：眉心收紧，视线锁定城门缝隙，肩背绷直",
+            "景别：中景",
+            "机位与构图：视线高度平视，主体位于画面右侧，前景有门框",
+            "站位与视线：Karin站在右侧门框内，身体朝向城门，视线落向门外",
+            "三层空间：前景门框，中景Karin与断剑，背景交代双塔石城门纵深",
+            "光色与风格：冷灰侧光，保留石墙与金属材质纹理",
+            "负面约束：无字幕、无水印、无logo、无HUD、无额外主体",
+        ].join("\n");
+        for (const shot of source.episodes[0].shots) {
+            shot.imagePrompt = staticPrompt;
+            shot.videoPrompt = [
+                "动态意图：Karin压住断剑并锁定城门",
+                "时间段动作：0-15s",
+                "起点：Karin站在右侧门框内，手掌压住断剑",
+                "动作与触发：Karin收紧手指，断剑发出金属声",
+                "可见衔接：视线从断剑转向城门缝隙",
+                "终点：Karin视线锁定城门，肩背绷直",
+                "单一主运镜：固定机位",
+                "结束画面：冷灰侧光落在断剑与城门缝隙之间",
+            ].join("\n");
+            shot.framePlan.frames = shot.framePlan.frames.map((frame) => ({
+                ...frame,
+                startPrompt: "Karin站在右侧门框内，手掌压住断剑",
+                actionPrompt: "Karin收紧手指，断剑发出金属声",
+                transitionPrompt: "视线从断剑转向城门缝隙",
+                endPrompt: "Karin视线锁定城门，肩背绷直",
+                imagePrompt: staticPrompt,
+            }));
+        }
+
+        const preview = previewDramaProductionPackage(JSON.stringify(source), "package.json", undefined, { upgradeLegacyFramePrompts: false });
+
+        expect(preview.package.episodes[0].shots[0].imagePrompt).toBe(staticPrompt);
+        expect(preview.package.episodes[0].shots[0].framePlan.frames[0].imagePrompt).toBe(staticPrompt);
+    });
+
+    it("rejects legacy static-frame copy in strict generation mode instead of silently upgrading it", () => {
+        expect(() => previewDramaProductionPackage(JSON.stringify(productionPackage), "package.json", undefined, { upgradeLegacyFramePrompts: false })).toThrow("完整九字段静态帧提示词");
+    });
+
+    it("requires the Agent video prompt to mirror every frame segment in strict generation mode", () => {
+        const source = structuredClone(productionPackage);
+        const staticPrompt = [
+            "静态关键帧：Karin站在城门内，手掌压住断剑",
+            "可见状态：指节发白，断剑贴在右手掌心",
+            "可见表演状态：眉心收紧，视线锁定城门缝隙，肩背绷直",
+            "景别：中景",
+            "机位与构图：视线高度平视，主体位于画面右侧，前景有门框",
+            "站位与视线：Karin站在右侧门框内，身体朝向城门，视线落向门外",
+            "三层空间：前景门框，中景Karin与断剑，背景交代双塔石城门纵深",
+            "光色与风格：冷灰侧光，保留石墙与金属材质纹理",
+            "负面约束：无字幕、无水印、无logo、无HUD、无额外主体",
+        ].join("\n");
+        const frame = source.episodes[0].shots[0].framePlan.frames[0];
+        source.episodes[0].shots[0].imagePrompt = staticPrompt;
+        source.episodes[0].shots[0].framePlan.frames = [{ ...frame, startPrompt: "Karin站在右侧门框内，手掌压住断剑", actionPrompt: "Karin收紧手指，断剑发出金属声", transitionPrompt: "视线从断剑转向城门缝隙", endPrompt: "Karin视线锁定城门，肩背绷直", imagePrompt: staticPrompt }];
+        source.episodes[0].shots[0].videoPrompt = "动态意图：Karin压住断剑\n时间段动作：0-15s\n单一主运镜：固定机位\n结束画面：Karin停住";
+
+        expect(() => previewDramaProductionPackage(JSON.stringify(source), "package.json", undefined, { upgradeLegacyFramePrompts: false })).toThrow("未逐段写出起点、动作与触发、可见衔接和终点");
+    });
+
     it("deduplicates package assets by stable code before preview and apply", () => {
         const source = structuredClone(productionPackage);
         source.assets.characters.push({ code: "C01", name: "Karin", description: "重复记录" });

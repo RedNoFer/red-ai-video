@@ -1,8 +1,10 @@
 import { DRAMA_CONTINUOUS_FRAME_RULES, DRAMA_DIRECTOR_SCENE_RULES, SEEDANCE_STATIC_FRAME_PROMPT_LAYOUT, SEEDANCE_STATIC_FRAME_PROMPT_SCHEME } from "./agent-skills/creative-shortcuts";
 import { DRAMA_DIALOGUE_TIMING_RULES, DRAMA_DIALOGUE_TIMING_TOLERANCE_CHARS } from "@/lib/drama-dialogue-timing";
+import { DRAMA_PUBLIC_SHOT_PROMPT_CONTRACT } from "@/lib/drama-public-prompt-contract";
 
 /** Single source of truth for Agent-generated vozeb-drama-production-package-v1 output. */
 export const DRAMA_PACKAGE_ARCHITECTURE_RULES = `
+${DRAMA_PUBLIC_SHOT_PROMPT_CONTRACT}
 制作包协议：vozeb-drama-production-package-v1。必须输出完整 Markdown，并在正文中提供可解析的规范对象；固定章节只能按以下 13 章出现，不得改名、换序或省略。13 章对所有项目和集数固定；多集总包保留一套一级章节，但每集必须拥有完整自洽的执行数据；单集制作包也必须完整保留 13 章，不能只输出镜头表：
 1. 项目总览（集名、原作章节、类型、冲突、情绪曲线、色彩叙事、视觉风格、主题、结构卡、9:16导演规则）
 2. 原创第一章

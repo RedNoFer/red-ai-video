@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { SEEDANCE_25_DIRECTOR_SKILL } from "./agent-skills/seedance-25";
 import { SEEDANCE_DIRECTOR_SKILL } from "./agent-skills/creative-shortcuts";
-import { directAgentPlan, normalizeTasks, planToOps, readFunctionCallResult, taskResultOps } from "./agent-run-execution";
+import { agentPlanFallbackExample, agentPlanToolForMode, directAgentPlan, normalizeTasks, planToOps, readFunctionCallResult, taskResultOps } from "./agent-run-execution";
 import { agentSurfaceImageSize, normalizeCanvasPlanForSelection, resolveAgentTaskRatio } from "./agent-run-task-input";
 import { DRAMA_ASSET_IMAGE_SKILL } from "@/lib/drama-image-skill";
 
@@ -405,6 +405,30 @@ describe("directAgentPlan", () => {
         expect(task.targetNodeId).toBeUndefined();
     });
 
+});
+
+describe("agentPlanFallbackExample", () => {
+    it("keeps the fallback plan aligned with an explicitly selected video mode", () => {
+        const example = JSON.parse(
+            agentPlanFallbackExample([
+                { id: "planner", name: "规划模型", capability: "text", capabilityProfile: undefined },
+                { id: "video-pro", name: "视频模型", capability: "video", capabilityProfile: undefined },
+            ], "video"),
+        );
+
+        expect(example.deliverables).toEqual([expect.objectContaining({ type: "video", model: "video-pro" })]);
+    });
+});
+
+describe("agentPlanToolForMode", () => {
+    it("constrains deliverables to the explicitly selected media type", () => {
+        const tool = agentPlanToolForMode("video");
+        const properties = (tool.parameters.properties as Record<string, unknown>);
+        const deliverables = properties.deliverables as Record<string, unknown>;
+        const itemProperties = (deliverables.items as Record<string, unknown>).properties as Record<string, unknown>;
+
+        expect((itemProperties.type as { enum: string[] }).enum).toEqual(["video"]);
+    });
 });
 
 function generationSettings() {

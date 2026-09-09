@@ -19,7 +19,7 @@ import type {
     DramaStoryScene,
 } from "@/lib/drama-project-contract";
 import { defaultDramaProductionPlan, normalizeDramaProductionPlan } from "@/lib/drama-production-plan";
-import { formatPromptFieldLines, normalizeDramaFrameBeats, upgradeDramaFrameImagePrompt, validateDramaFramePlanVisuals } from "@/lib/drama-frame-sequence";
+import { formatPromptFieldLines, isCurrentDramaStaticFramePrompt, needsDramaStaticFramePromptUpgrade, normalizeDramaFrameBeats, upgradeDramaFrameImagePrompt, validateDramaFramePlanVisuals } from "@/lib/drama-frame-sequence";
 import { dramaDialogueTimingReminder, dramaFrameDialogueTimingReminder, dramaUtteranceTimingIssues, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
 import { resolveDramaStyleContract } from "@/lib/drama-style";
 import { normalizeDramaCharacterProfile } from "@/lib/drama-character-rules";
@@ -122,7 +122,7 @@ function mergeProjectAssetCollection(incoming: DramaProductionPackageAsset[], ex
     return [...merged, ...incoming.filter((asset) => !existingKeys.has(asset.code) && !existingKeys.has(normalizeKey(asset.name)))];
 }
 
-export function previewDramaProductionPackage(source: string, fileName = "production-package.json", project?: DramaProjectAssetCollection): DramaProductionPackagePreview {
+export function previewDramaProductionPackage(source: string, fileName = "production-package.json", project?: DramaProjectAssetCollection, options: { upgradeLegacyFramePrompts?: boolean } = {}): DramaProductionPackagePreview {
     const trimmed = source.trim();
     if (!trimmed) throw new DramaProductionPackageError("制作包内容不能为空");
     const embedded = trimmed.match(/```(?:json|drama-production-package)[ \t]*\r?\n([\s\S]*?)```/i)?.[1];
@@ -132,7 +132,7 @@ export function previewDramaProductionPackage(source: string, fileName = "produc
     const parsed = format === "markdown" ? parseObject(embedded || "") || parseObject((embedded || "").replace(/\\u0060/gu, "`")) || parseDirectorMarkdown(trimmed) : parseObject(trimmed);
     if (!parsed) throw new DramaProductionPackageError("Markdown 制作包缺少可读取的标准清单或导演执行表");
     const packageWithProjectAssets = project ? mergeProjectAssetsIntoProductionPackage(parsed as DramaProductionPackageV1, project) : parsed;
-    const normalizedPackage = normalizeProductionPackage(packageWithProjectAssets);
+    const normalizedPackage = normalizeProductionPackage(packageWithProjectAssets, options);
     const productionPackage = normalizedPackage;
     return {
         package: productionPackage,
@@ -296,17 +296,7 @@ function shouldPreserveManualFramePlan(framePlan: DramaShot["framePlan"], origin
     if (origin !== "manual" || !framePlan?.frames?.length) return false;
     return framePlan.frames.every((frame) => {
         const prompt = frame.supplierPrompt || frame.imagePrompt;
-        return (
-            prompt.startsWith("静态关键帧：") &&
-            prompt.includes("可见表演状态：") &&
-            prompt.includes("景别：") &&
-            prompt.includes("机位与构图：") &&
-            prompt.includes("站位与视线：") &&
-            prompt.includes("三层空间：") &&
-            prompt.includes("光色与风格：") &&
-            prompt.includes("负面约束：") &&
-            !/参考图职责[：:]/u.test(prompt)
-        );
+        return isCurrentDramaStaticFramePrompt(prompt);
     });
 }
 
@@ -385,14 +375,14 @@ function mergeManualFields<T extends { fieldOrigins?: Record<string, DramaFieldO
     return result as T;
 }
 
-function normalizeProductionPackage(value: unknown): DramaProductionPackageV1 {
+function normalizeProductionPackage(value: unknown, options: { upgradeLegacyFramePrompts?: boolean } = {}): DramaProductionPackageV1 {
     const input = object(value);
     if (Number(input.schemaVersion) !== 1) throw new DramaProductionPackageError("仅支持 schemaVersion 1 的制作包");
     const project = object(input.project);
     const bible = object(project.productionBible);
     const assets = object(input.assets);
     const episodes = array(input.episodes)
-        .map(normalizeEpisodePackage)
+        .map((episode, index) => normalizeEpisodePackage(episode, index, options))
         .filter((episode) => episode.shots.length);
     if (!episodes.length) throw new DramaProductionPackageError("制作包至少需要一个包含镜头的剧集");
     const normalizedAssets = {
@@ -770,10 +760,10 @@ function normalizeProductionArchive(value: unknown): DramaProductionPackageV1["a
     };
 }
 
-function normalizeEpisodePackage(value: unknown, episodeIndex: number): DramaProductionPackageEpisode {
+function normalizeEpisodePackage(value: unknown, episodeIndex: number, options: { upgradeLegacyFramePrompts?: boolean } = {}): DramaProductionPackageEpisode {
     const input = object(value);
     const shots = array(input.shots)
-        .map(normalizePackageShot)
+        .map((shot, index) => normalizePackageShot(shot, index, options))
         .filter((shot) => shot.code);
     const shotCodes = new Set(shots.map((shot) => shot.code));
     return {
@@ -820,7 +810,7 @@ function normalizeEpisodePackage(value: unknown, episodeIndex: number): DramaPro
     };
 }
 
-function normalizePackageShot(value: unknown, index: number): DramaProductionPackageEpisode["shots"][number] {
+function normalizePackageShot(value: unknown, index: number, options: { upgradeLegacyFramePrompts?: boolean } = {}): DramaProductionPackageEpisode["shots"][number] {
     const shot = object(value);
     const framePlan = object(shot.framePlan);
     const frameStart = object(framePlan.start);
@@ -883,7 +873,8 @@ function normalizePackageShot(value: unknown, index: number): DramaProductionPac
         frames = normalizeDramaFrameBeats(sourceFrames, duration);
         frames = frames.map((frame) => ({
             ...frame,
-            imagePrompt: upgradeDramaFrameImagePrompt(frame.imagePrompt, frame.actionPrompt, {
+            imagePrompt: shouldUpgradeImportedFramePrompt(frame.imagePrompt, options)
+                ? upgradeDramaFrameImagePrompt(frame.imagePrompt, frame.actionPrompt, {
                 description,
                 shotSize: text(continuity.shotSize),
                 cameraAngle: text(continuity.cameraAngle),
@@ -895,10 +886,14 @@ function normalizePackageShot(value: unknown, index: number): DramaProductionPac
                 performanceState: performanceStateForFrame(performancePlan, frame.sequenceIndex, frames.length),
                 sequenceIndex: frame.sequenceIndex,
                 frameCount: frames.length,
-            }),
+                  })
+                : frame.imagePrompt.trim(),
         }));
         const visualErrors = rawFrames.length ? validateDramaFramePlanVisuals(frames) : [];
         if (visualErrors.length) throw new DramaProductionPackageError(`镜头 ${text(shot.code) || index + 1} 的逐帧画面无效：${visualErrors.join("；")}`);
+        if (options.upgradeLegacyFramePrompts === false && frames.some((frame) => !isCurrentDramaStaticFramePrompt(frame.imagePrompt)))
+            throw new DramaProductionPackageError(`镜头 ${text(shot.code) || index + 1} 的制作包必须由 Agent 提供完整九字段静态帧提示词`);
+        if (options.upgradeLegacyFramePrompts === false) validateStrictPackageVideoPrompt(text(shot.videoPrompt), frames, text(shot.code) || String(index + 1));
     } catch (error) {
         throw new DramaProductionPackageError(`镜头 ${text(shot.code) || index + 1} 的逐帧计划无效：${error instanceof Error ? error.message : "无法解析"}`);
     }
@@ -912,7 +907,7 @@ function normalizePackageShot(value: unknown, index: number): DramaProductionPac
         dialogue: text(shot.dialogue),
         narration: text(shot.narration),
         utterances,
-        imagePrompt: formatPromptFieldLines(text(shot.imagePrompt), "static"),
+        imagePrompt: normalizeShotStaticPrompt(text(shot.imagePrompt), options, "镜头 imagePrompt"),
         videoPrompt: normalizePackageVideoPrompt(text(shot.videoPrompt)),
         cameraMotion: text(shot.cameraMotion),
         negativePrompt: optionalText(shot.negativePrompt),
@@ -971,6 +966,36 @@ function normalizePackageVideoPrompt(value: string) {
     const prompt = value.trim();
     if (!prompt) throw new DramaProductionPackageError("镜头缺少 Agent 提供的视频提示词");
     return prompt;
+}
+
+function shouldUpgradeImportedFramePrompt(value: string, options: { upgradeLegacyFramePrompts?: boolean }) {
+    return options.upgradeLegacyFramePrompts !== false && needsDramaStaticFramePromptUpgrade(value);
+}
+
+function normalizeShotStaticPrompt(value: string, options: { upgradeLegacyFramePrompts?: boolean }, label: string) {
+    if (options.upgradeLegacyFramePrompts === false && !isCurrentDramaStaticFramePrompt(value)) throw new DramaProductionPackageError(`${label}必须由 Agent 提供完整九字段静态帧提示词`);
+    const prompt = formatPromptFieldLines(value, "static");
+    return prompt;
+}
+
+function validateStrictPackageVideoPrompt(prompt: string, frames: ReadonlyArray<{ startSecond: number; endSecond: number; startPrompt?: string; actionPrompt: string; transitionPrompt?: string; endPrompt?: string }>, label: string) {
+    const requiredFields = ["动态意图", "时间段动作", "单一主运镜", "结束画面"];
+    const missing = requiredFields.filter((field) => !new RegExp(`(?:^|\\n)\\s*${field}[：:]`, "u").test(prompt));
+    if (missing.length) throw new DramaProductionPackageError(`${label}的 Agent videoPrompt 缺少标准字段：${missing.join("、")}`);
+    if (/(?:^|\\n)\\s*(?:触发|主体动作与反应)\\s*[：:]/u.test(prompt)) throw new DramaProductionPackageError(`${label}的 Agent videoPrompt 仍使用旧的顶层动作字段`);
+    if (/(?:https?:\/\/|data:image\/|assetId|内部 ID|参考图职责|prompt-authoring-only|seedance-director|seedance-25-director)/iu.test(prompt)) throw new DramaProductionPackageError(`${label}的 Agent videoPrompt 包含内部执行信息`);
+    const timelineFieldCounts = ["起点", "动作与触发", "可见衔接", "终点"].map((field) => (prompt.match(new RegExp(`(?:^|\\n)\\s*${field}[：:]`, "gu")) || []).length);
+    if (timelineFieldCounts.some((count) => count < frames.length)) throw new DramaProductionPackageError(`${label}的 Agent videoPrompt 未逐段写出起点、动作与触发、可见衔接和终点`);
+    const timeline = frames.flatMap((frame) => {
+        const range = `${escapeRegExp(String(frame.startSecond))}\\s*(?:-|至|到)\\s*${escapeRegExp(String(frame.endSecond))}\\s*(?:s|秒)`;
+        const mirroredValues = [frame.startPrompt, frame.actionPrompt, frame.transitionPrompt, frame.endPrompt];
+        return new RegExp(range, "iu").test(prompt) && mirroredValues.every((value) => value && prompt.includes(value)) ? [] : [`${frame.startSecond}-${frame.endSecond}s`];
+    });
+    if (timeline.length) throw new DramaProductionPackageError(`${label}的 Agent videoPrompt 未逐段镜像 framePlan：${timeline.join("、")}`);
+}
+
+function escapeRegExp(value: string) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function normalizeReferenceManifest(value: unknown) {

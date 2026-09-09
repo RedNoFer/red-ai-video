@@ -1,6 +1,6 @@
 import type { SystemChannelAdvancedConfig } from "@/lib/auth/store";
 import type { LogicalModelCapability } from "@/lib/auth/store";
-import { channelProtocolDefinition, protocolModelConfig, resolveBumingSeedanceVideoModelContract } from "@/lib/channel-protocol-registry";
+import { channelProtocolDefinition, isKnownBumingSeedanceVideoModel, protocolModelConfig, resolveBumingSeedanceVideoModelContract } from "@/lib/channel-protocol-registry";
 import { hasProviderReadSignatureShape, isReferenceAssetUrl } from "@/lib/reference-asset-url";
 import type { VideoGenerationReference, VideoReferenceRole } from "@/lib/video-reference-contract";
 
@@ -132,7 +132,7 @@ export function assertReferenceCapabilities(config: SystemChannelAdvancedConfig 
     if (unsupported) throw new Error(`当前渠道未启用${unsupported.type === "image" ? "参考图" : unsupported.type === "video" ? "参考视频" : "参考音频"}能力`);
 }
 
-export function assertVideoReferenceRoles(config: SystemChannelAdvancedConfig | undefined, references: readonly VideoGenerationReference[], declaredRoles?: readonly VideoReferenceRole[], model?: string) {
+export function assertVideoReferenceRoles(config: SystemChannelAdvancedConfig | undefined, references: readonly VideoGenerationReference[], declaredRoles?: readonly VideoReferenceRole[], model?: string, supportsKeyframes?: boolean) {
     const requestedRoles = Array.from(new Set(references.map((reference) => reference.role).filter((role): role is VideoReferenceRole => Boolean(role) && role !== "reference")));
     const protocol = config?.protocol || "auto";
     if (protocol === "buming-seedance") {
@@ -142,7 +142,8 @@ export function assertVideoReferenceRoles(config: SystemChannelAdvancedConfig | 
         const firstFrame = references.some((reference) => reference.role === "first_frame");
         const lastFrame = references.some((reference) => reference.role === "last_frame");
         const requestedMode = keyframes.length ? "all_frames" : firstFrame ? (lastFrame ? "first_last" : "first_frame") : regularReferences.length ? "reference" : undefined;
-        if (requestedMode && !contract.videoReferenceModes.includes(requestedMode)) {
+        const supportsAllFrames = contract.videoReferenceModes.includes("all_frames") || (requestedMode === "all_frames" && !isKnownBumingSeedanceVideoModel(model || "") && supportsKeyframes === true);
+        if (requestedMode && !(requestedMode === "all_frames" ? supportsAllFrames : contract.videoReferenceModes.includes(requestedMode))) {
             if (requestedMode === "all_frames") throw new Error("当前不鸣视频模型不支持全能帧连续参考");
             throw new Error(`当前不鸣视频模型不支持${requestedMode === "reference" ? "普通参考素材" : requestedMode === "first_last" ? "首尾帧" : "首帧"}`);
         }
@@ -164,6 +165,7 @@ export function assertVideoReferenceRoles(config: SystemChannelAdvancedConfig | 
                         ? templateVideoReferenceRoles(config?.requestTemplate)
                         : ["reference"]),
     );
+    if (supportsKeyframes === true && ["seedance", "volcengine-video", "custom", "compatible", "auto"].includes(protocol)) supported.add("keyframe");
     const unsupported = requestedRoles.find((role) => !supported.has(role));
     if (unsupported) throw new Error(unsupported === "keyframe" ? "当前视频模型不支持全能帧连续参考" : unsupported === "last_frame" ? "当前视频模型不支持尾帧输入" : "当前视频模型不支持显式首帧输入");
 }

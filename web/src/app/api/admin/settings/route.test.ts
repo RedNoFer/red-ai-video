@@ -243,6 +243,37 @@ describe("admin settings model routing", () => {
         );
     });
 
+    it("persists an explicit all-frame capability for an unknown Buming model", async () => {
+        const buming = applyChannelProtocol(
+            { id: "buming", name: "不鸣", baseUrl: "https://api.tokengo.love", apiKey: "saved-secret", apiFormat: "openai", models: ["seedance-2.0"], enabled: true },
+            "buming-seedance",
+        );
+        const logicalModels = [
+            {
+                id: "seedance-2.0",
+                name: "Seedance 2.0",
+                capability: "video" as const,
+                enabled: true,
+                bindings: [{ id: "video", channelId: "buming", upstreamModel: "seedance-2.0", enabled: true, priority: 1, capabilityProfile: { supportsKeyframes: true, maxReferenceImages: 7 } }],
+            },
+        ];
+
+        const response = await PATCH(
+            request({
+                systemChannels: [buming],
+                logicalModels,
+                defaultModels: { textModel: "", imageModel: "", videoModel: "seedance-2.0", audioModel: "" },
+            }),
+        );
+
+        expect(response.status).toBe(200);
+        expect(mocks.setAuthSettings).toHaveBeenCalledWith(
+            expect.objectContaining({
+                logicalModels: expect.arrayContaining([expect.objectContaining({ bindings: [expect.objectContaining({ capabilityProfile: expect.objectContaining({ supportsKeyframes: true, maxReferenceImages: 7 }) })] })]),
+            }),
+        );
+    });
+
     it("deletes a channel together with stale logical bindings and defaults", async () => {
         const response = await PATCH(request({ systemChannels: [], logicalModels: savedSettings.logicalModels, defaultModels: savedSettings.defaultModels }));
         expect(response.status).toBe(200);

@@ -61,7 +61,24 @@ describe("prompt optimization service", () => {
     });
 
     it("evaluates drama frame prompts with the internal Seedance director rules", async () => {
-        vi.mocked(requestStructuredText).mockResolvedValue({ arguments: JSON.stringify({ optimizedPrompt: "静态关键帧：Karin站在无波黑湖边，倒悬古塔与倒影对齐。" }), headers: new Headers(), protocol: "chat", elapsedMs: 10 });
+        vi.mocked(requestStructuredText).mockResolvedValue({
+            arguments: JSON.stringify({
+                optimizedPrompt: [
+                    "静态关键帧：Karin站在无波黑湖边，手掌压住断剑",
+                    "可见状态：指节发白，断剑贴在掌心",
+                    "可见表演状态：眉心收紧，视线锁定断口，肩背绷直",
+                    "景别：中远景",
+                    "机位与构图：视线高度平视，主体位于画面右侧，前景有枯枝",
+                    "站位与视线：Karin站在湖岸右侧，身体朝向断剑，视线落向断口",
+                    "三层空间：前景枯枝，中景Karin与断剑，背景倒悬古塔和无波湖面",
+                    "光色与风格：冷白侧光，保留雪地与金属材质纹理",
+                    "负面约束：无字幕、无水印、无logo、无HUD、无额外主体",
+                ].join("\n"),
+            }),
+            headers: new Headers(),
+            protocol: "chat",
+            elapsedMs: 10,
+        });
 
         await optimizeCreativePrompt({ origin: "http://localhost:3000", cookie: "session=1", userId: "user-one", requestId: "frame-request", prompt: "原始帧提示词", mode: "drama-frame" });
 

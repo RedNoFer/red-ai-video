@@ -5,6 +5,7 @@ import {
     deleteDramaFrameBeat,
     formatPromptFieldLines,
     insertDramaFrameBeat,
+    isCurrentDramaStaticFramePrompt,
     normalizeDramaFrameBeats,
     planDramaVideoSegments,
     updateDramaFrameBeat,
@@ -24,6 +25,23 @@ describe("drama frame sequence", () => {
     it("normalizes known prompt fields onto independent lines", () => {
         expect(formatPromptFieldLines("静态关键帧：角色站立；可见状态：手掌扣住剑柄，景别：中景；机位与构图：平视")).toBe("静态关键帧：角色站立\n可见状态：手掌扣住剑柄\n景别：中景\n机位与构图：平视");
         expect(formatPromptFieldLines("动态意图：角色抬头，单一主运镜：固定机位；结束画面：视线锁定目标", "video")).toBe("动态意图：角色抬头\n单一主运镜：固定机位\n结束画面：视线锁定目标");
+    });
+
+    it("recognizes the complete public static-frame contract without rewriting it", () => {
+        const prompt = [
+            "静态关键帧：Karin站在门边，手掌压住断剑",
+            "可见状态：指节发白，断剑贴在右手掌心",
+            "可见表演状态：眉心收紧，视线锁定门缝，肩背绷直",
+            "景别：中景",
+            "机位与构图：视线高度平视，主体位于画面右侧，前景有门框",
+            "站位与视线：Karin站在右侧门框内，身体朝向门缝，视线落向门外",
+            "三层空间：前景门框，中景Karin与断剑，背景交代大厅纵深",
+            "光色与风格：冷灰侧光，保留木石和金属材质纹理",
+            "负面约束：无字幕、无水印、无logo、无HUD、无额外主体",
+        ].join("\n");
+
+        expect(isCurrentDramaStaticFramePrompt(prompt)).toBe(true);
+        expect(isCurrentDramaStaticFramePrompt(prompt.replace("可见状态：指节发白，断剑贴在右手掌心", "可见状态：动作展开"))).toBe(false);
     });
 
     it("removes legacy reference duties from static prompts", () => {

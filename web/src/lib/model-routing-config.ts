@@ -1,7 +1,7 @@
 import type { LogicalModel, LogicalModelBinding, LogicalModelCapability, LogicalModelCapabilityProfile, LogicalModelCostBasis, SystemChannelProtocol, SystemDefaultModels, SystemModelChannel } from "@/lib/auth/store";
 import { resolveGlobalAiOpcPreset } from "@/lib/globalaiopc-catalog";
 import { inferModelCapability, isCreativeGenerationModel, normalizeModelId } from "@/lib/model-capability";
-import { channelConnectionReady, channelProtocolDefinition, protocolCatalogCapability, resolveBumingSeedanceQualityOptions, resolveChannelCapabilityConfig, resolveChannelModelConfig } from "@/lib/channel-protocol-registry";
+import { channelConnectionReady, channelProtocolDefinition, isKnownBumingSeedanceVideoModel, protocolCatalogCapability, resolveBumingSeedanceQualityOptions, resolveChannelCapabilityConfig, resolveChannelModelConfig } from "@/lib/channel-protocol-registry";
 
 const CAPABILITY_DEFAULT_KEYS = {
     text: "textModel",
@@ -246,7 +246,12 @@ export function resolveLogicalModelCapabilityProfile(binding: Pick<LogicalModelB
     const modelConfig = resolveChannelModelConfig(advanced, upstreamModel) || advanced?.operationConfigs?.[capability];
     const bumingQualityOptions = advanced?.protocol === "buming-seedance" && capability === "video" ? resolveBumingSeedanceQualityOptions(upstreamModel) : [];
     const strictProtocol = advanced?.protocol ? channelProtocolDefinition(advanced.protocol).strict : false;
-    const protocolDefault = (key: "supportsReferenceImage" | "supportsReferenceVideo" | "supportsReferenceAudio" | "supportsKeyframes") => (strictProtocol && modelConfig && typeof modelConfig[key] === "boolean" ? Boolean(modelConfig[key]) : undefined);
+    const protocolDefault = (key: "supportsReferenceImage" | "supportsReferenceVideo" | "supportsReferenceAudio" | "supportsKeyframes") => {
+        // Unknown Buming model IDs have no provider-verified keyframe contract;
+        // an administrator may explicitly opt them in via the binding profile.
+        if (key === "supportsKeyframes" && advanced?.protocol === "buming-seedance" && !isKnownBumingSeedanceVideoModel(upstreamModel)) return undefined;
+        return strictProtocol && modelConfig && typeof modelConfig[key] === "boolean" ? Boolean(modelConfig[key]) : undefined;
+    };
     const providerCapability = (key: "supportsReferenceImage" | "supportsReferenceVideo" | "supportsReferenceAudio" | "supportsKeyframes", fallback: boolean) => {
         const declared = protocolDefault(key);
         if (declared === false) return false;

@@ -1,6 +1,6 @@
 import { getAuthSettings, refundUserPoints, type LogicalModelCapability } from "@/lib/auth/store";
 import { withCreativeFoundation, type CreativeReview } from "@/lib/creative-agent-contract";
-import type { CreativeAsset, CreativeGenerationPreferences, CreativeSurface } from "@/lib/creative-runtime-contract";
+import type { CreativeAsset, CreativeGenerationMode, CreativeGenerationPreferences, CreativeSurface } from "@/lib/creative-runtime-contract";
 import { creativeAssetReferenceAliases } from "@/lib/creative-asset-references";
 import { fetchInternalApi } from "@/lib/server/internal-origin";
 import { resolveLogicalModel } from "@/lib/server/logical-model-router";
@@ -157,6 +157,34 @@ export const agentPlanTool = {
         additionalProperties: false,
     },
 };
+
+export function agentPlanToolForMode(mode?: CreativeGenerationMode) {
+    if (!mode) return agentPlanTool;
+    const parameters = agentPlanTool.parameters as Record<string, unknown>;
+    const properties = parameters.properties as Record<string, unknown>;
+    const deliverables = properties.deliverables as Record<string, unknown>;
+    const itemProperties = (deliverables.items as Record<string, unknown>).properties as Record<string, unknown>;
+    return {
+        ...agentPlanTool,
+        description: `创建仅包含 ${mode} 产物的创作计划`,
+        parameters: {
+            ...parameters,
+            properties: {
+                ...properties,
+                deliverables: {
+                    ...deliverables,
+                    items: {
+                        ...(deliverables.items as Record<string, unknown>),
+                        properties: {
+                            ...itemProperties,
+                            type: { type: "string", enum: [mode] },
+                        },
+                    },
+                },
+            },
+        },
+    };
+}
 
 export function normalizeTasks(
     plan: AgentPlan,
@@ -323,8 +351,9 @@ function resolvePlannedModel(settings: Awaited<ReturnType<typeof getAuthSettings
     return defaultModel(settings, capability) || undefined;
 }
 
-export function agentPlanFallbackExample(models: ReturnType<typeof agentModelOptions>) {
-    const sample = models.find((model) => model.capability === "image") || models[0];
+export function agentPlanFallbackExample(models: ReturnType<typeof agentModelOptions>, mode?: CreativeGenerationMode) {
+    const sample = (mode && models.find((model) => model.capability === mode)) || models.find((model) => model.capability === "image") || models[0];
+    const sampleType = mode || sample?.capability || "image";
     return JSON.stringify({
         intent: "generation",
         objective: "为新品发布制作一套统一视觉",
@@ -359,7 +388,7 @@ export function agentPlanFallbackExample(models: ReturnType<typeof agentModelOpt
             {
                 id: "main-visual",
                 title: "发布会主视觉",
-                type: sample?.capability || "image",
+                type: sampleType,
                 model: sample?.id || "",
                 prompt: "生成完整可执行的主视觉提示词",
                 count: 1,

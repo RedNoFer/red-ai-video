@@ -147,6 +147,28 @@ describe("provider task config", () => {
         expect(() => assertVideoReferenceRoles({ protocol: "newapi-video" } as never, frames)).toThrow("当前视频模型不支持全能帧连续参考");
     });
 
+    it("accepts an unknown Buming model's all-frame references only when explicitly declared", () => {
+        const frames = [
+            { type: "image" as const, url: "https://cdn.example.com/one.png", role: "keyframe" as const, keyframeIndex: 1 },
+            { type: "image" as const, url: "https://cdn.example.com/two.png", role: "keyframe" as const, keyframeIndex: 2 },
+        ];
+
+        expect(() => assertVideoReferenceRoles({ protocol: "buming-seedance" } as never, frames, undefined, "seedance-2.0", true)).not.toThrow();
+        expect(() => assertVideoReferenceRoles({ protocol: "buming-seedance" } as never, frames, undefined, "seedance-2.0", false)).toThrow("不支持全能帧");
+        expect(() => assertVideoReferenceRoles({ protocol: "buming-seedance" } as never, frames, undefined, "seedance-2.0")).toThrow("不支持全能帧");
+    });
+
+    it("honors an explicit keyframe capability profile for Seedance protocol models", () => {
+        const frames = [
+            { type: "image" as const, url: "https://cdn.example.com/one.png", role: "keyframe" as const, keyframeIndex: 1 },
+            { type: "image" as const, url: "https://cdn.example.com/two.png", role: "keyframe" as const, keyframeIndex: 2 },
+        ];
+
+        expect(() => assertVideoReferenceRoles({ protocol: "seedance" } as never, frames, undefined, "seedance-2.0", true)).not.toThrow();
+        expect(() => assertVideoReferenceRoles({ protocol: "seedance" } as never, frames, undefined, "seedance-2.0", false)).toThrow("全能帧连续参考");
+        expect(() => assertVideoReferenceRoles({ protocol: "seedance-special" } as never, frames, undefined, "sd_2.0_special_720p", true)).toThrow("全能帧连续参考");
+    });
+
     it("derives custom template frame roles only from explicit variables or structured references", () => {
         expect(templateVideoReferenceRoles('{"first":"{{first_frame}}","last":"{{last_frame_url}}"}')).toEqual(["reference", "first_frame", "last_frame"]);
         expect(templateVideoReferenceRoles('{"references":"{{references}}"}')).toEqual(["reference", "first_frame", "last_frame", "keyframe"]);

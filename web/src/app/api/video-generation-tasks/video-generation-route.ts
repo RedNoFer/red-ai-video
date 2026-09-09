@@ -34,7 +34,7 @@ import { runGenerationTaskRecoveryBatch } from "@/lib/server/generation-task-rec
 import { scheduleGenerationTask } from "@/lib/server/generation-task-scheduler";
 import { VIDEO_PROVIDER_MEDIA_KEYS, parseVideoProviderJson, readVideoProviderError, readVideoProviderHttpError, readVideoProviderId, readVideoProviderUrl, videoProviderResultUrlError } from "@/lib/server/video-provider-response";
 import { buildSeedanceSpecialRequest } from "@/lib/seedance-special";
-import { NEW_API_VIDEO_RATIOS, NEW_API_VIDEO_RESOLUTIONS, resolveBumingSeedanceQuality, resolveBumingSeedanceVideoModelContract } from "@/lib/channel-protocol-registry";
+import { isKnownBumingSeedanceVideoModel, NEW_API_VIDEO_RATIOS, NEW_API_VIDEO_RESOLUTIONS, resolveBumingSeedanceQuality, resolveBumingSeedanceVideoModelContract } from "@/lib/channel-protocol-registry";
 import { assertVozebRecommendedVideoReferences, buildVozebRecommendedVideoRequest } from "@/lib/vozeb-recommended-video";
 import { assertGeminiVideoReferences, buildGeminiVideoRequest, geminiVideoCreatePath, normalizeGeminiVideoDuration, parseGeminiVideoCreateResponse } from "@/lib/server/gemini-video-provider";
 import { systemAiBillingHeaders } from "@/lib/server/system-ai-billing";
@@ -118,12 +118,18 @@ export async function POST(request: Request) {
             const capabilityProfile = channel.capabilityProfile;
             const bumingContract = channel.advancedConfig?.protocol === "buming-seedance" ? resolveBumingSeedanceVideoModelContract(channel.model) : undefined;
             const supportsKeyframes = bumingContract
-                ? bumingContract.videoReferenceModes.includes("all_frames") && capabilityProfile?.supportsKeyframes !== false
+                ? (bumingContract.videoReferenceModes.includes("all_frames") || (!isKnownBumingSeedanceVideoModel(channel.model) && capabilityProfile?.supportsKeyframes === true)) && capabilityProfile?.supportsKeyframes !== false
                 : channel.advancedConfig?.protocol === "newapi-video"
                   ? false
                   : capabilityProfile?.supportsKeyframes;
             if (keyframeCount && !supportsKeyframes) {
                 if (bumingContract && !bumingContract.videoReferenceModes.includes("all_frames")) {
+                    if (!isKnownBumingSeedanceVideoModel(channel.model)) {
+                        const error = new Error("当前模型未声明支持全能帧关键图，请切换支持全能帧的模型");
+                        if (isDramaRun) return NextResponse.json({ error: error.message }, { status: 400 });
+                        capabilityError = error;
+                        continue;
+                    }
                     const error = new Error("当前不鸣视频模型不支持全能帧连续参考");
                     if (isDramaRun) return NextResponse.json({ error: error.message }, { status: 400 });
                     capabilityError = error;
@@ -158,7 +164,7 @@ export async function POST(request: Request) {
             try {
                 assertCapabilityConstraints(capabilityProfile, {
                     capability: "video",
-                    referenceCount: undefined,
+                    referenceCount: references.filter((reference) => reference.type === "image").length,
                     durationSeconds: parameters.videoSeconds === -1 ? undefined : parameters.videoSeconds,
                     aspectRatio: normalizeVideoAspectRatio(parameters.size),
                 });
@@ -190,7 +196,7 @@ export async function POST(request: Request) {
                               : undefined,
                         candidateReferences,
                     );
-                    if (channel.advancedConfig?.protocol !== "yumeng") assertVideoReferenceRoles(channel.advancedConfig, candidateReferences, globalPreset?.videoReferenceRoles, channel.model);
+                    if (channel.advancedConfig?.protocol !== "yumeng") assertVideoReferenceRoles(channel.advancedConfig, candidateReferences, globalPreset?.videoReferenceRoles, channel.model, capabilityProfile?.supportsKeyframes);
                     if (channel.advancedConfig?.protocol === "vozeb-recommended") assertVozebRecommendedVideoReferences(channel.model, candidateReferences);
                     if (channel.advancedConfig?.protocol === "yumeng") assertYumengVideoReferences(channel.model, candidateReferences);
                     assertReferenceUrls(channel.advancedConfig, candidateReferences, Boolean(globalPreset));

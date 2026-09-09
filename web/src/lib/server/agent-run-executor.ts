@@ -8,7 +8,7 @@ import { agentPlannerSystemPrompt, agentPlanReply, buildAgentPlannerInput, conve
 import { getCreativeAssetsByIds, getCreativeConversationContext, listRecentCreativeMediaAssets } from "@/lib/server/creative-runtime-store";
 import { toSafeGenerationErrorMessage } from "@/lib/server/generation-errors";
 import { parseAgentPlanCall, type AgentFunctionCallResult } from "./agent-function-call";
-import { agentModelOptions, agentPlanFallbackExample, agentPlanTool, canContinue, directAgentPlan, executeTasks, normalizeTasks, planToOps, refundFunctionCall, requestConversationResponse, requestFunctionCall } from "./agent-run-execution";
+import { agentModelOptions, agentPlanFallbackExample, agentPlanToolForMode, canContinue, directAgentPlan, executeTasks, normalizeTasks, planToOps, refundFunctionCall, requestConversationResponse, requestFunctionCall } from "./agent-run-execution";
 import { isExplicitProjectHandoffRequest, normalizeAgentProjectHandoff } from "./agent-run-project-handoff";
 import { normalizeCanvasPlanForSelection } from "./agent-run-task-input";
 import { GenerationSubmissionUncertainError } from "@/lib/server/generation-submission-error";
@@ -24,6 +24,7 @@ import { DRAMA_PACKAGE_ARCHITECTURE_RULES } from "@/lib/server/drama-production-
 import { SEEDANCE_25_DIRECTOR_SKILL, SEEDANCE_STATIC_FRAME_RULES } from "@/lib/server/agent-skills/creative-shortcuts";
 import { resolveSeedance25DirectorInstructions } from "@/lib/server/agent-skills/seedance-25";
 import { formatDramaGlobalVisualContract, resolveDramaGlobalVisualContract } from "@/lib/drama-style";
+import { DRAMA_PUBLIC_VIDEO_PROMPT_CONTRACT } from "@/lib/drama-public-prompt-contract";
 
 const globalAgentExecutors = globalThis as typeof globalThis & { __vozebProAgentRunControllers?: Map<string, AbortController> };
 const controllers = (globalAgentExecutors.__vozebProAgentRunControllers ??= new Map<string, AbortController>());
@@ -103,7 +104,8 @@ export async function executeAgentRun(run: AgentRun, origin: string, cookie: str
         const model = settings.defaultModels.textModel;
         const candidates = resolveLogicalModelCandidates(settings, "text", model);
         if (!model || !candidates.length) throw new Error("后台尚未配置可用的默认文本模型");
-        const fallbackExample = agentPlanFallbackExample(availableModels);
+        const fallbackExample = agentPlanFallbackExample(availableModels, claimed.generationPreferences?.mode);
+        const planningTool = agentPlanToolForMode(claimed.generationPreferences?.mode);
         const plannerContext = buildAgentPlannerInput(claimed, conversationContext!, referencedAssets, referenceSource, skillOptions, availableModels, settings);
         const allowConversationProse = claimed.surface === "chat" && isLikelyConversationPlannerPrompt(claimed.prompt);
         if (!(await updateAgentRunById(run.id, { plannerContext: plannerContext.summary }, { type: "skills.selected", data: { skills: skills.map((skill) => ({ id: skill.id, name: skill.name })) } }, ["running"], executionId))) return;
@@ -126,7 +128,7 @@ export async function executeAgentRun(run: AgentRun, origin: string, cookie: str
                     cookie,
                     candidate,
                     planningInput,
-                    agentPlanTool,
+                    planningTool,
                     "create_agent_plan",
                     controller.signal,
                     run.userId,
@@ -346,8 +348,7 @@ async function executeDramaScriptRun(run: AgentRun, origin: string, cookie: stri
     const candidates = resolveLogicalModelCandidates(settings, "text", model);
     if (!model || !candidates.length) throw new Error("后台尚未配置可用的默认文本模型");
     const assetReuseContext = buildDramaAssetReuseContext(project, current);
-    const videoPromptContract =
-        "视频提示词规则以当前 Skill 为准，并覆盖任何仅保存摘要或仅以 framePlan 为准的旧说明：每镜 videoPrompt 必须由 Agent 直接生成完整公开执行提示词，包含必要字段以及每个真实时间段的时间范围、起点、动作与触发、可见衔接、终点和具体画面状态；framePlan.frames 只是同一内容的结构化镜像。应用代码、制作包序列化和运行时都只能校验、保存和转发，不得从 framePlan 拼接、补写、清理、删改或重写 videoPrompt。有对白时，utterances 必须逐句填写相对当前镜头的 startSecond/endSecond、pauseBeforeSeconds/pauseAfterSeconds、情绪语速 speechRate，并填写可复核的 speechRateCharsPerSecond；逐句时间不得重叠、越界，停顿也不得超出镜头边界。";
+    const videoPromptContract = `${DRAMA_PUBLIC_VIDEO_PROMPT_CONTRACT}\n视频提示词规则以当前 Skill 为准，并覆盖任何仅保存摘要或仅以 framePlan 为准的旧说明：应用代码、制作包序列化和运行时都只能校验、保存和转发，不得从 framePlan 拼接、补写、清理、删改或重写 videoPrompt。有对白时，utterances 必须逐句填写相对当前镜头的 startSecond/endSecond、pauseBeforeSeconds/pauseAfterSeconds、情绪语速 speechRate，并填写可复核的 speechRateCharsPerSecond；逐句时间不得重叠、越界，停顿也不得超出镜头边界。`;
     const framePolicyInstruction =
         requestedFramePolicy === "agent"
             ? "帧数策略为 Agent 智能切分：每个镜头按真实动作节点决定 1-9 个连续帧段，必须在制作包中保留实际帧数，不得套用固定模板。"
@@ -421,7 +422,7 @@ async function executeDramaScriptRun(run: AgentRun, origin: string, cookie: stri
             if (parsed.mode === "package") {
                 const markdown = parsed.markdown?.trim() || "";
                 if (!markdown) throw new Error("剧本 Agent 没有返回制作包正文");
-                let preview = previewDramaProductionPackage(markdown, "剧本 Agent 制作包.md", project);
+                let preview = previewDramaProductionPackage(markdown, "剧本 Agent 制作包.md", project, { upgradeLegacyFramePrompts: false });
                 if (lockedPlan) {
                     const generatedPlan = preview.package.project.productionBible?.productionPlan;
                     const mergedVisual = {
@@ -446,10 +447,10 @@ async function executeDramaScriptRun(run: AgentRun, origin: string, cookie: stri
                             },
                         },
                     };
-                    preview = previewDramaProductionPackage(serializeDramaProductionPackageMarkdown(packageWithPlan), "剧本 Agent 制作包.md", project);
+                    preview = previewDramaProductionPackage(serializeDramaProductionPackageMarkdown(packageWithPlan), "剧本 Agent 制作包.md", project, { upgradeLegacyFramePrompts: false });
                 }
                 const canonicalMarkdown = serializeDramaProductionPackageMarkdown(preview.package);
-                const canonicalPreview = previewDramaProductionPackage(canonicalMarkdown, "剧本 Agent 制作包.md", project);
+                const canonicalPreview = previewDramaProductionPackage(canonicalMarkdown, "剧本 Agent 制作包.md", project, { upgradeLegacyFramePrompts: false });
                 const packagePlan = canonicalPreview.package.project.productionBible?.productionPlan;
                 if (!packagePlan?.visual.visualStyle.trim() || !packagePlan.visual.artStyle.trim()) throw new Error("制作包缺少具体的视觉风格或画风，请重新生成");
                 if (lockedPlan?.video.framePolicy === "fixed-4" || lockedPlan?.video.framePolicy === "fixed-5") {

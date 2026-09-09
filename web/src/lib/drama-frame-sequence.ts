@@ -129,20 +129,10 @@ export function upgradeDramaFrameImagePrompt(
 ) {
     const hadLegacyReferenceDuty = /参考图职责[：:]/u.test(imagePrompt);
     imagePrompt = stripLegacyStaticReferenceRole(imagePrompt);
+    const normalizedImagePrompt = formatPromptFieldLines(imagePrompt.trim());
     const existingVisibleState = imagePrompt.match(/可见状态[：:]([^；。\n]+)/u)?.[1]?.trim() || "";
     const existingPerformanceState = imagePrompt.match(/可见表演状态[：:]([^\n]+)/u)?.[1]?.trim() || "";
-    if (
-        !context.forceRefresh &&
-        !context.refreshPerformanceState &&
-        !hadLegacyReferenceDuty &&
-        /^静态关键帧[：:]/u.test(imagePrompt.trim()) &&
-        ["可见表演状态", "景别", "机位与构图", "站位与视线", "三层空间", "光色与风格", "负面约束"].every((label) => new RegExp(`${label}[：:]`, "u").test(imagePrompt)) &&
-        !/参考图职责[：:]/u.test(imagePrompt) &&
-        !isGenericFrameState(existingVisibleState) &&
-        !isGenericPerformanceState(existingPerformanceState) &&
-        !/(?:景别|镜头)(?:（[^）]*）)?\s*[：:]\s*[^；。\n]*(?:→|->|至)/u.test(imagePrompt)
-    )
-        return formatPromptFieldLines(imagePrompt.trim());
+    if (!context.forceRefresh && !context.refreshPerformanceState && isCurrentDramaStaticFramePrompt(normalizedImagePrompt, { hadLegacyReferenceDuty })) return normalizedImagePrompt;
     const subject = staticFrameSubject(imagePrompt, actionPrompt, context.description);
     const visibleState = !isGenericFrameState(existingVisibleState) ? existingVisibleState : "";
     const performanceState = context.refreshPerformanceState
@@ -165,6 +155,29 @@ export function upgradeDramaFrameImagePrompt(
     ]
         .filter(Boolean)
         .join("\n");
+}
+
+/** A prompt that already satisfies the public nine-field static-frame contract must not be rewritten. */
+export function isCurrentDramaStaticFramePrompt(value: string, options: { hadLegacyReferenceDuty?: boolean } = {}) {
+    const prompt = value.trim();
+    const fieldPositions = STATIC_FRAME_PROMPT_LABELS.map((label) => prompt.search(new RegExp(`(?:^|\\n)${label}[：:]`, "u")));
+    if (
+        options.hadLegacyReferenceDuty ||
+        !/^静态关键帧[：:]/u.test(prompt) ||
+        fieldPositions.some((position) => position < 0) ||
+        fieldPositions.some((position, index) => index > 0 && position <= fieldPositions[index - 1]) ||
+        /参考图职责[：:]/u.test(prompt) ||
+        /(?:运镜|焦段|推镜|拉镜|摇镜|跟拍|滑轨|环绕|吊臂|慢推|慢拉|后拉|时间段|时间轴|动作过程|对白|声音|口型)/u.test(prompt) ||
+        /(?:景别|镜头)(?:（[^）]*）)?\s*[：:]\s*[^；。\n]*(?:→|->|至)/u.test(prompt)
+    )
+        return false;
+    const visibleState = prompt.match(/(?:^|\n)可见状态[：:]([^\n]+)/u)?.[1]?.trim() || "";
+    const performanceState = prompt.match(/(?:^|\n)可见表演状态[：:]([^\n]+)/u)?.[1]?.trim() || "";
+    return Boolean(visibleState && performanceState && !isGenericFrameState(visibleState) && !isGenericPerformanceState(performanceState));
+}
+
+export function needsDramaStaticFramePromptUpgrade(value: string) {
+    return !isCurrentDramaStaticFramePrompt(value);
 }
 
 function inferStaticPerformanceState(subject: string, actionPrompt: string, sequenceIndex = 1) {

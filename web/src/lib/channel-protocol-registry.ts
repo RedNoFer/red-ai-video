@@ -237,6 +237,10 @@ const BUMING_SEEDANCE_VIDEO_MODEL_CONTRACTS: Record<string, BumingSeedanceVideoM
     },
 };
 
+export function isKnownBumingSeedanceVideoModel(model: string) {
+    return Boolean(BUMING_SEEDANCE_VIDEO_MODEL_CONTRACTS[normalizeModelId(model)]);
+}
+
 export function resolveBumingSeedanceVideoModelContract(model: string): BumingSeedanceVideoModelContract {
     return (
         BUMING_SEEDANCE_VIDEO_MODEL_CONTRACTS[normalizeModelId(model)] || {

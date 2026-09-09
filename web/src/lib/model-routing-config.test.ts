@@ -456,6 +456,14 @@ describe("model routing config", () => {
         expect(resolveLogicalModelCapabilityProfile({ capabilityProfile: { supportsKeyframes: false } }, "video", buming, "seedance-2-0-official")).toMatchObject({ supportsKeyframes: false });
     });
 
+    it("lets an unknown Buming model opt into all-frame references only through its saved binding profile", () => {
+        const buming = applyChannelProtocol({ ...channel("buming", ["seedance-2.0"]), advancedConfig: {} as never }, "buming-seedance");
+
+        expect(resolveLogicalModelCapabilityProfile({ capabilityProfile: { supportsKeyframes: true } }, "video", buming, "seedance-2.0")).toMatchObject({ supportsKeyframes: true });
+        expect(resolveLogicalModelCapabilityProfile({ capabilityProfile: {} }, "video", buming, "seedance-2.0")).toMatchObject({ supportsKeyframes: false });
+        expect(resolveLogicalModelCapabilityProfile({ capabilityProfile: { supportsKeyframes: false } }, "video", buming, "seedance-2.0")).toMatchObject({ supportsKeyframes: false });
+    });
+
     it("preserves video fallback routing and cost strategy during channel synchronization", () => {
         const channels = [channel("one", ["wan-video"]), channel("two", ["seedance-video"])];
         const models: LogicalModel[] = [

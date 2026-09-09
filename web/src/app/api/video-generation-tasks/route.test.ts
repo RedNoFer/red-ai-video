@@ -1095,6 +1095,50 @@ describe("video generation candidate failover", () => {
         expect(body).not.toHaveProperty("params");
     });
 
+    it("submits ordered keyframes for an unknown Buming model when its binding declares support", async () => {
+        const bumingChannel = applyChannelProtocol({ ...channels[0], baseUrl: "", models: ["seedance-2.0"], advancedConfig: emptyAdvancedConfig() }, "buming-seedance");
+        mocks.getAuthSettings.mockResolvedValue({
+            ...settings,
+            systemChannels: [bumingChannel],
+            logicalModels: [{ ...settings.logicalModels[0], bindings: [{ ...settings.logicalModels[0].bindings[0], channelId: bumingChannel.id, upstreamModel: "seedance-2.0", capabilityProfile: { supportsKeyframes: true } }] }],
+        });
+        mocks.fetchInternalApi.mockResolvedValue(json({ id: "buming-unknown-keyframe-task", state: "queued" }));
+
+        const response = await POST(
+            request({ model: "video", videoSeconds: "8", size: "9:16", vquality: "720" }, [
+                { type: "image", url: "https://cdn.example.com/frame-1.png", role: "keyframe", keyframeIndex: 1 },
+                { type: "image", url: "https://cdn.example.com/frame-2.png", role: "keyframe", keyframeIndex: 2 },
+            ]),
+        );
+        const [, init] = mocks.fetchInternalApi.mock.calls[0] as [string, RequestInit];
+        const body = JSON.parse(String(init.body));
+
+        expect(response.status).toBe(200);
+        expect(body).toMatchObject({ model: "seedance-2.0", mode: "reference", images: ["https://cdn.example.com/frame-1.png", "https://cdn.example.com/frame-2.png"] });
+        expect(body.prompt).toContain("连续关键帧按时间顺序使用@图片1至@图片2");
+    });
+
+    it("enforces the saved maximum reference image count before Buming submission", async () => {
+        const bumingChannel = applyChannelProtocol({ ...channels[0], baseUrl: "", models: ["seedance-2.0"], advancedConfig: emptyAdvancedConfig() }, "buming-seedance");
+        mocks.getAuthSettings.mockResolvedValue({
+            ...settings,
+            systemChannels: [bumingChannel],
+            logicalModels: [{ ...settings.logicalModels[0], bindings: [{ ...settings.logicalModels[0].bindings[0], channelId: bumingChannel.id, upstreamModel: "seedance-2.0", capabilityProfile: { maxReferenceImages: 2 } }] }],
+        });
+
+        const response = await POST(
+            request({ model: "video", videoSeconds: "8", size: "9:16", vquality: "720" }, [
+                { type: "image", url: "https://cdn.example.com/reference-1.png" },
+                { type: "image", url: "https://cdn.example.com/reference-2.png" },
+                { type: "image", url: "https://cdn.example.com/reference-3.png" },
+            ]),
+        );
+
+        expect(response.status).toBe(400);
+        expect(await response.json()).toMatchObject({ error: "当前模型最多支持 2 张参考图" });
+        expect(mocks.fetchInternalApi).not.toHaveBeenCalled();
+    });
+
     it("keeps an inherited first frame ahead of ordered Buming keyframes", async () => {
         const bumingChannel = applyChannelProtocol({ ...channels[0], baseUrl: "", models: ["seedance-2-0-official"], advancedConfig: emptyAdvancedConfig() }, "buming-seedance");
         mocks.getAuthSettings.mockResolvedValue({

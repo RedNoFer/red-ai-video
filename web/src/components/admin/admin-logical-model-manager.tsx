@@ -7,7 +7,7 @@ import { useDeferredValue, useMemo, useState } from "react";
 import { LabeledControl, SectionTitle } from "@/components/admin/admin-settings-controls";
 import type { LogicalModel, LogicalModelBinding, LogicalModelCapability, LogicalModelCapabilityProfile, SystemDefaultModels, SystemModelChannel } from "@/lib/auth/store";
 import { capabilityLabel, isLogicalModelResolvable, modelRoutingValidationErrors, normalizeDefaultModelsConfig, resolveLogicalModelCapabilityProfile, resolveLogicalModelConfig, synchronizeLogicalModelsWithChannels } from "@/lib/model-routing-config";
-import { channelProtocolDefinition, resolveBumingSeedanceQuality, resolveBumingSeedanceQualityOptions, resolveChannelModelConfig, videoMultiImageFieldName } from "@/lib/channel-protocol-registry";
+import { channelProtocolDefinition, isKnownBumingSeedanceVideoModel, resolveBumingSeedanceQuality, resolveBumingSeedanceQualityOptions, resolveChannelModelConfig, videoMultiImageFieldName } from "@/lib/channel-protocol-registry";
 
 type Props = {
     channels: SystemModelChannel[];
@@ -284,7 +284,8 @@ function BindingEditor({ binding, capability, channels, onChange }: { binding: L
     const profile = strictConfig
         ? resolveLogicalModelCapabilityProfile(binding, capability, channel, binding.upstreamModel) || defaultLogicalModelCapabilityProfile(capability)
         : { ...defaultLogicalModelCapabilityProfile(capability), ...(binding.capabilityProfile || {}) };
-    const lockedCapability = (field: "supportsReferenceImage" | "supportsReferenceVideo" | "supportsReferenceAudio" | "supportsKeyframes") => strictConfig?.[field] === false;
+    const lockedCapability = (field: "supportsReferenceImage" | "supportsReferenceVideo" | "supportsReferenceAudio" | "supportsKeyframes") =>
+        strictConfig?.[field] === false && !(field === "supportsKeyframes" && channel?.advancedConfig?.protocol === "buming-seedance" && !isKnownBumingSeedanceVideoModel(binding.upstreamModel));
     const bumingQualityOptions = channel?.advancedConfig?.protocol === "buming-seedance" && capability === "video" ? [...resolveBumingSeedanceQualityOptions(binding.upstreamModel)] : [];
     const effectiveAsync = profile.supportsAsync ?? (capability === "image" || capability === "video");
     const timeoutSeconds = profile.timeoutMs ? Math.round(profile.timeoutMs / 1000) : undefined;
