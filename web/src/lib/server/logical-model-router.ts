@@ -119,7 +119,7 @@ function sortVideoCandidatesByCost(settings: Pick<AuthSettings, "logicalModels" 
         .map((item) => item.candidate);
 }
 
-/** Only declared capabilities may opt a model into ordered all-frame video generation. */
+/** Resolve whether the selected binding can carry ordered all-frame references. */
 export function supportsVideoKeyframeReferences(candidate: ResolvedLogicalModel, keyframeCount: number) {
     if (candidate.capability !== "video" || keyframeCount < 1) return false;
     if (candidate.channel.advancedConfig?.protocol === "newapi-video") return false;
