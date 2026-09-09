@@ -200,6 +200,49 @@ describe("admin settings model routing", () => {
         );
     });
 
+    it("repairs stale strict channel templates when saving only routing fields", async () => {
+        const buming = applyChannelProtocol(
+            { id: "buming", name: "不鸣", baseUrl: "https://api.tokengo.love", apiKey: "saved-secret", apiFormat: "openai", models: ["seedance-2-0-official"], enabled: true },
+            "buming-seedance",
+        );
+        buming.advancedConfig = {
+            ...buming.advancedConfig!,
+            modelConfigs: {
+                ...buming.advancedConfig!.modelConfigs,
+                "seedance-2-0-official": {
+                    ...buming.advancedConfig!.modelConfigs!["seedance-2-0-official"],
+                    requestTemplate: '{"model":"{{model}}","prompt":"{{prompt}}","first_frame":"{{first_frame}}","last_frame":"{{last_frame}}"}',
+                },
+            },
+        };
+        mocks.getFreshAuthSettings.mockResolvedValue({
+            ...savedSettings,
+            systemChannels: [buming],
+            logicalModels: [{ id: "seedance-2-0-official", name: "Seedance", capability: "video", enabled: true, bindings: [{ id: "video", channelId: "buming", upstreamModel: "seedance-2-0-official", enabled: true, priority: 1 }] }],
+            defaultModels: { textModel: "", imageModel: "", videoModel: "seedance-2-0-official", audioModel: "" },
+        });
+
+        const response = await PATCH(
+            request({
+                logicalModels: [{ id: "seedance-2-0-official", name: "Seedance", capability: "video", enabled: true, bindings: [{ id: "video", channelId: "buming", upstreamModel: "seedance-2-0-official", enabled: true, priority: 1 }] }],
+                defaultModels: { textModel: "", imageModel: "", videoModel: "seedance-2-0-official", audioModel: "" },
+            }),
+        );
+
+        expect(response.status).toBe(200);
+        expect(mocks.setAuthSettings).toHaveBeenCalledWith(
+            expect.objectContaining({
+                systemChannels: [
+                    expect.objectContaining({
+                        advancedConfig: expect.objectContaining({
+                            modelConfigs: expect.objectContaining({ "seedance-2-0-official": expect.objectContaining({ requestTemplate: expect.stringContaining('"mode":"{{mode}}"') }) }),
+                        }),
+                    }),
+                ],
+            }),
+        );
+    });
+
     it("deletes a channel together with stale logical bindings and defaults", async () => {
         const response = await PATCH(request({ systemChannels: [], logicalModels: savedSettings.logicalModels, defaultModels: savedSettings.defaultModels }));
         expect(response.status).toBe(200);
