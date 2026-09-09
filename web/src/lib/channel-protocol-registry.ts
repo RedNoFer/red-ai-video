@@ -105,6 +105,10 @@ const seedanceSpecialOperation: ProtocolOperation = {
 export const NEW_API_VIDEO_RATIOS = ["16:9", "9:16", "1:1"] as const;
 export const NEW_API_VIDEO_RESOLUTIONS = ["720p", "480p"] as const;
 
+export function videoMultiImageFieldName(protocol: SystemChannelProtocol | undefined) {
+    return protocol === "newapi-video" ? "referenceImages" : protocol === "buming-seedance" ? "images" : "images / references";
+}
+
 const newApiVideoOperation: ProtocolOperation = {
     capability: "video",
     createPath: "/v1/videos",
@@ -121,6 +125,7 @@ const newApiVideoOperation: ProtocolOperation = {
     supportsReferenceAudio: true,
     supportsKeyframes: false,
     videoReferenceModes: ["reference"],
+    maxReferenceImages: 9,
 };
 
 const vozebRecommendedVideoOperation: ProtocolOperation = {

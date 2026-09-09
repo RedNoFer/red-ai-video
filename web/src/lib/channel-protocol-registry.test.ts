@@ -20,6 +20,7 @@ import {
     resolveBumingSeedanceQualityOptions,
     resolveChannelCapabilityConfig,
     resolveChannelModelConfig,
+    videoMultiImageFieldName,
 } from "./channel-protocol-registry";
 
 const channel = {
@@ -129,6 +130,7 @@ describe("channel protocol registry", () => {
             supportsReferenceAudio: true,
             supportsKeyframes: false,
             videoReferenceModes: ["reference"],
+            maxReferenceImages: 9,
         });
         expect(channelProtocolDefinition("seedance").operations.video).toMatchObject({ createPath: "/contents/generations/tasks", queryPath: "/contents/generations/tasks/:task_id", resultField: "content.video_url" });
         expect(channelProtocolDefinition("volcengine-video").operations.video).toEqual(channelProtocolDefinition("seedance").operations.video);
@@ -180,6 +182,11 @@ describe("channel protocol registry", () => {
             resultField: "response.generateVideoResponse.generatedSamples[0].video.uri",
             statusField: "done",
         });
+    });
+
+    it("names each provider's ordinary multi-image field without calling it all-frame", () => {
+        expect(videoMultiImageFieldName("newapi-video")).toBe("referenceImages");
+        expect(videoMultiImageFieldName("buming-seedance")).toBe("images");
     });
 
     it("uses standard as the Buming tier default while validating model-specific values", () => {

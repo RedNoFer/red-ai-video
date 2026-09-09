@@ -7,7 +7,7 @@ import { useDeferredValue, useMemo, useState } from "react";
 import { LabeledControl, SectionTitle } from "@/components/admin/admin-settings-controls";
 import type { LogicalModel, LogicalModelBinding, LogicalModelCapability, LogicalModelCapabilityProfile, SystemDefaultModels, SystemModelChannel } from "@/lib/auth/store";
 import { capabilityLabel, isLogicalModelResolvable, modelRoutingValidationErrors, normalizeDefaultModelsConfig, resolveLogicalModelCapabilityProfile, resolveLogicalModelConfig, synchronizeLogicalModelsWithChannels } from "@/lib/model-routing-config";
-import { channelProtocolDefinition, resolveBumingSeedanceQuality, resolveBumingSeedanceQualityOptions, resolveChannelModelConfig } from "@/lib/channel-protocol-registry";
+import { channelProtocolDefinition, resolveBumingSeedanceQuality, resolveBumingSeedanceQualityOptions, resolveChannelModelConfig, videoMultiImageFieldName } from "@/lib/channel-protocol-registry";
 
 type Props = {
     channels: SystemModelChannel[];
@@ -284,7 +284,7 @@ function BindingEditor({ binding, capability, channels, onChange }: { binding: L
     const profile = strictConfig
         ? resolveLogicalModelCapabilityProfile(binding, capability, channel, binding.upstreamModel) || defaultLogicalModelCapabilityProfile(capability)
         : { ...defaultLogicalModelCapabilityProfile(capability), ...(binding.capabilityProfile || {}) };
-    const lockedCapability = (field: "supportsReferenceImage" | "supportsReferenceVideo" | "supportsReferenceAudio" | "supportsKeyframes") => typeof strictConfig?.[field] === "boolean";
+    const lockedCapability = (field: "supportsReferenceImage" | "supportsReferenceVideo" | "supportsReferenceAudio" | "supportsKeyframes") => strictConfig?.[field] === false;
     const bumingQualityOptions = channel?.advancedConfig?.protocol === "buming-seedance" && capability === "video" ? [...resolveBumingSeedanceQualityOptions(binding.upstreamModel)] : [];
     const effectiveAsync = profile.supportsAsync ?? (capability === "image" || capability === "video");
     const timeoutSeconds = profile.timeoutMs ? Math.round(profile.timeoutMs / 1000) : undefined;
@@ -327,7 +327,7 @@ function BindingEditor({ binding, capability, channels, onChange }: { binding: L
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                     <div className="flex flex-wrap items-center gap-3 text-xs text-stone-600 dark:text-stone-300 sm:col-span-2 lg:col-span-4">
                         <Checkbox disabled={lockedCapability("supportsReferenceImage")} checked={profile.supportsReferenceImage === true} onChange={(event) => updateProfile({ supportsReferenceImage: event.target.checked })}>
-                            参考图片
+                            多图参考（{videoMultiImageFieldName(channel?.advancedConfig?.protocol)}）
                         </Checkbox>
                         <Checkbox disabled={lockedCapability("supportsReferenceVideo")} checked={profile.supportsReferenceVideo === true} onChange={(event) => updateProfile({ supportsReferenceVideo: event.target.checked })}>
                             参考视频
@@ -337,16 +337,16 @@ function BindingEditor({ binding, capability, channels, onChange }: { binding: L
                         </Checkbox>
                         {capability === "video" ? (
                             <Checkbox disabled={lockedCapability("supportsKeyframes")} checked={profile.supportsKeyframes === true} onChange={(event) => updateProfile({ supportsKeyframes: event.target.checked })}>
-                                全能帧（总参考图最多 9 张）
+                                全能帧（有序关键帧）
                             </Checkbox>
                         ) : null}
                         <Checkbox checked={effectiveAsync} onChange={(event) => updateProfile({ supportsAsync: event.target.checked })}>
                             异步查询
                         </Checkbox>
-                        <Checkbox checked={profile.supportsCancel === true} onChange={(event) => updateProfile({ supportsCancel: event.target.checked })}>
+                        <Checkbox disabled={Boolean(strictConfig)} checked={profile.supportsCancel === true} onChange={(event) => updateProfile({ supportsCancel: event.target.checked })}>
                             上游取消
                         </Checkbox>
-                        <Checkbox checked={profile.supportsWebhook === true} onChange={(event) => updateProfile({ supportsWebhook: event.target.checked })}>
+                        <Checkbox disabled={Boolean(strictConfig)} checked={profile.supportsWebhook === true} onChange={(event) => updateProfile({ supportsWebhook: event.target.checked })}>
                             Webhook
                         </Checkbox>
                     </div>

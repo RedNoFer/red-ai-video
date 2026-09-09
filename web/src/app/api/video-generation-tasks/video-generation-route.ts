@@ -117,7 +117,11 @@ export async function POST(request: Request) {
             const geminiVideo = isGeminiVideoChannel(channel);
             const capabilityProfile = channel.capabilityProfile;
             const bumingContract = channel.advancedConfig?.protocol === "buming-seedance" ? resolveBumingSeedanceVideoModelContract(channel.model) : undefined;
-            const supportsKeyframes = bumingContract ? bumingContract.videoReferenceModes.includes("all_frames") : channel.advancedConfig?.protocol === "newapi-video" ? false : capabilityProfile?.supportsKeyframes;
+            const supportsKeyframes = bumingContract
+                ? bumingContract.videoReferenceModes.includes("all_frames") && capabilityProfile?.supportsKeyframes !== false
+                : channel.advancedConfig?.protocol === "newapi-video"
+                  ? false
+                  : capabilityProfile?.supportsKeyframes;
             if (keyframeCount && !supportsKeyframes) {
                 if (bumingContract && !bumingContract.videoReferenceModes.includes("all_frames")) {
                     const error = new Error("当前不鸣视频模型不支持全能帧连续参考");
@@ -172,7 +176,18 @@ export async function POST(request: Request) {
                                   supportsReferenceVideo: Boolean(globalPreset.supportsReferenceVideo),
                                   supportsReferenceAudio: Boolean(globalPreset.supportsReferenceAudio),
                               }
-                            : channel.advancedConfig,
+                            : channel.advancedConfig
+                              ? {
+                                    ...channel.advancedConfig,
+                                    ...(capabilityProfile
+                                        ? {
+                                              supportsReferenceImage: capabilityProfile.supportsReferenceImage,
+                                              supportsReferenceVideo: capabilityProfile.supportsReferenceVideo,
+                                              supportsReferenceAudio: capabilityProfile.supportsReferenceAudio,
+                                          }
+                                        : {}),
+                                }
+                              : undefined,
                         candidateReferences,
                     );
                     if (channel.advancedConfig?.protocol !== "yumeng") assertVideoReferenceRoles(channel.advancedConfig, candidateReferences, globalPreset?.videoReferenceRoles, channel.model);

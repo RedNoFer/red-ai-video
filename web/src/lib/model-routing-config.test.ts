@@ -426,21 +426,34 @@ describe("model routing config", () => {
         const binding = { capabilityProfile: { supportsReferenceImage: false, supportsReferenceVideo: false, supportsReferenceAudio: false, supportsKeyframes: true, supportsCancel: true, supportsWebhook: true } };
 
         expect(resolveLogicalModelCapabilityProfile(binding, "video", newApi, "seedance-2-0-official")).toMatchObject({
-            supportsReferenceImage: true,
-            supportsReferenceVideo: true,
-            supportsReferenceAudio: true,
+            supportsReferenceImage: false,
+            supportsReferenceVideo: false,
+            supportsReferenceAudio: false,
             supportsKeyframes: false,
             supportsCancel: false,
             supportsWebhook: false,
         });
         expect(resolveLogicalModelCapabilityProfile(binding, "video", buming, "seedance-2-0-official")).toMatchObject({
-            supportsReferenceImage: true,
-            supportsReferenceVideo: true,
-            supportsReferenceAudio: true,
+            supportsReferenceImage: false,
+            supportsReferenceVideo: false,
+            supportsReferenceAudio: false,
             supportsKeyframes: true,
             supportsCancel: false,
             supportsWebhook: false,
         });
+    });
+
+    it("allows explicit opt-out of provider-supported multi-image and all-frame capabilities", () => {
+        const newApi = applyChannelProtocol({ ...channel("newapi", ["seedance-2-0-fast"]), advancedConfig: {} as never }, "newapi-video");
+        const buming = applyChannelProtocol({ ...channel("buming", ["seedance-2-0-official"]), advancedConfig: {} as never }, "buming-seedance");
+
+        expect(resolveLogicalModelCapabilityProfile({ capabilityProfile: { supportsReferenceImage: false, supportsReferenceVideo: false, supportsReferenceAudio: false } }, "video", newApi, "seedance-2-0-fast")).toMatchObject({
+            supportsReferenceImage: false,
+            supportsReferenceVideo: false,
+            supportsReferenceAudio: false,
+            supportsKeyframes: false,
+        });
+        expect(resolveLogicalModelCapabilityProfile({ capabilityProfile: { supportsKeyframes: false } }, "video", buming, "seedance-2-0-official")).toMatchObject({ supportsKeyframes: false });
     });
 
     it("preserves video fallback routing and cost strategy during channel synchronization", () => {
