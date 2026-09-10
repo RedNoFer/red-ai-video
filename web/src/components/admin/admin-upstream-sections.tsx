@@ -41,6 +41,7 @@ export function AdminChannelsSection({ controller }: { controller: AdminDashboar
                     onFetchModels={fetchModelsForChannel}
                     onFetchAll={fetchAllModels}
                     onPersist={(next, successText) => saveSettings(next, successText)}
+                    onPersistRouting={(next, successText) => saveSettings(next, successText)}
                 />
             </div>
         </Panel>

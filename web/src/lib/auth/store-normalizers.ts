@@ -664,7 +664,11 @@ function normalizeStrictChannelProtocolConfigs(channel: SystemModelChannel): Sys
         advancedConfig: {
             ...advanced,
             ...(advanced.modelConfigs ? { modelConfigs: Object.fromEntries(Object.entries(advanced.modelConfigs).map(([model, config]) => [model, normalizeConfig(config, model)])) } : {}),
-            ...(advanced.operationConfigs ? { operationConfigs: Object.fromEntries(Object.entries(advanced.operationConfigs).map(([capability, config]) => [capability, normalizeConfig(config)])) } : {}),
+            // Capability-level configs may still carry a model-specific strict
+            // contract (for example the quality field of TokenGo's official
+            // Seedance model). Without a model ID, replacing it with the
+            // protocol's generic preset makes a later full-channel save fail.
+            ...(advanced.operationConfigs ? { operationConfigs: advanced.operationConfigs } : {}),
         },
     };
 }
