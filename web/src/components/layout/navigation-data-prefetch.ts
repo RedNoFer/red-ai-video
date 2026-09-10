@@ -9,7 +9,15 @@ import { useUserStore } from "@/stores/use-user-store";
 export function prefetchNavigationToolData(slug: NavigationToolSlug) {
     const userId = useUserStore.getState().user?.id || "";
     if (!userId) return;
-    if (slug === "canvas") void useCanvasStore.getState().hydrate().catch(() => undefined);
-    if (slug === "drama") void useDramaStore.getState().hydrate().catch(() => undefined);
+    if (slug === "canvas")
+        void useCanvasStore
+            .getState()
+            .hydrate()
+            .catch(() => undefined);
+    if (slug === "drama")
+        void useDramaStore
+            .getState()
+            .hydrate()
+            .catch(() => undefined);
     if (slug === "assets") void prefetchAssetPage({ userId }).catch(() => undefined);
 }

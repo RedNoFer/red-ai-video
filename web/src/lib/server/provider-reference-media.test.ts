@@ -15,10 +15,7 @@ describe("provider reference media", () => {
         mocks.fetchSafeOutbound.mockResolvedValue(new Response('{"error":"请先登录"}', { status: 401, headers: { "content-type": "application/json" } }));
 
         await expect(resolveProviderReadableReferenceMedia([{ type: "image", url: "https://app.example.com/api/generation-log-assets/permanent/reference.png" }])).rejects.toThrow("参考素材第 1 个图片公网不可读");
-        expect(mocks.fetchSafeOutbound).toHaveBeenCalledWith(
-            "https://app.example.com/api/generation-log-assets/permanent/reference.png",
-            expect.objectContaining({ method: "HEAD", headers: { accept: "image/*" } }),
-        );
+        expect(mocks.fetchSafeOutbound).toHaveBeenCalledWith("https://app.example.com/api/generation-log-assets/permanent/reference.png", expect.objectContaining({ method: "HEAD", headers: { accept: "image/*" } }));
     });
 
     it("accepts an image URL that returns an image response", async () => {

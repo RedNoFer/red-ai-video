@@ -660,7 +660,8 @@ describe("executeAgentRun backend settings", () => {
         mocks.run = runFixture({ surface: "chat", projectId: undefined, prompt: "你是什么模型？" });
         mocks.getAuthSettings.mockResolvedValue(canvasSettings("image-default", "image-default-channel"));
         mocks.fetchInternalApi.mockImplementation(async (url: string) => {
-            if (url.endsWith("/chat/completions")) return Response.json({ choices: [{ message: { content: "当前使用 gpt-5.5。" } }] }, { headers: { "x-vozeb-pro-points-cost": "1", "x-vozeb-pro-points-record-id": "points-chat", "x-vozeb-pro-upstream-headers-ms": "37" } });
+            if (url.endsWith("/chat/completions"))
+                return Response.json({ choices: [{ message: { content: "当前使用 gpt-5.5。" } }] }, { headers: { "x-vozeb-pro-points-cost": "1", "x-vozeb-pro-points-record-id": "points-chat", "x-vozeb-pro-upstream-headers-ms": "37" } });
             throw new Error(`unexpected request: ${url}`);
         });
 

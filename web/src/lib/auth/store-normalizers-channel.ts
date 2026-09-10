@@ -3,7 +3,26 @@ import { isGlobalAiOpcPreset } from "@/lib/globalaiopc-catalog";
 
 import type { LogicalModelCapability, SystemChannelAdvancedConfig, SystemChannelProtocol } from "./store-types";
 
-const CHANNEL_PROTOCOLS: SystemChannelProtocol[] = ["auto", "openai", "openai-audio-dialogue", "yumeng", "gemini", "sub2api", "newapi", "newapi-video", "vozeb-recommended", "globalaiopc", "seedance", "stable-diffusion", "volcengine-video", "seedance-special", "buming-seedance", "buming-image", "custom", "compatible"];
+const CHANNEL_PROTOCOLS: SystemChannelProtocol[] = [
+    "auto",
+    "openai",
+    "openai-audio-dialogue",
+    "yumeng",
+    "gemini",
+    "sub2api",
+    "newapi",
+    "newapi-video",
+    "vozeb-recommended",
+    "globalaiopc",
+    "seedance",
+    "stable-diffusion",
+    "volcengine-video",
+    "seedance-special",
+    "buming-seedance",
+    "buming-image",
+    "custom",
+    "compatible",
+];
 
 export function normalizeSystemChannelAdvancedConfig(config: Partial<SystemChannelAdvancedConfig> | undefined): SystemChannelAdvancedConfig | undefined {
     if (!config || typeof config !== "object") return undefined;
@@ -110,9 +129,7 @@ function normalizeChannelModelConfigs(value: unknown) {
                             ? {
                                   videoReferenceModes: Array.from(
                                       new Set(
-                                          config.videoReferenceModes.filter(
-                                              (mode): mode is "reference" | "first_frame" | "first_last" | "all_frames" => mode === "reference" || mode === "first_frame" || mode === "first_last" || mode === "all_frames",
-                                          ),
+                                          config.videoReferenceModes.filter((mode): mode is "reference" | "first_frame" | "first_last" | "all_frames" => mode === "reference" || mode === "first_frame" || mode === "first_last" || mode === "all_frames"),
                                       ),
                                   ),
                               }

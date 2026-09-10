@@ -2,7 +2,17 @@ import { describe, expect, it } from "vitest";
 
 import type { SystemModelChannel } from "@/lib/auth/store";
 import { applyChannelProtocol } from "@/lib/channel-protocol-registry";
-import { channelCanEnable, channelEffectiveEnabled, channelProtocolLabel, channelWorkspaceStatus, channelWorkspaceStatusLabel, defaultModelField, removeChannelFromWorkspace, synchronizeChannelModels, updateChannelInWorkspace } from "./admin-channel-workspace-model";
+import {
+    channelCanEnable,
+    channelEffectiveEnabled,
+    channelProtocolLabel,
+    channelWorkspaceStatus,
+    channelWorkspaceStatusLabel,
+    defaultModelField,
+    removeChannelFromWorkspace,
+    synchronizeChannelModels,
+    updateChannelInWorkspace,
+} from "./admin-channel-workspace-model";
 
 const channel = applyChannelProtocol({ id: "sd2", name: "SD2 渠道", baseUrl: "https://api.example.com", apiKey: "secret", apiFormat: "openai", models: ["seedance-pro"], enabled: true } satisfies SystemModelChannel, "seedance");
 

@@ -15,8 +15,7 @@ export async function submitDramaVoicePreview(input: { origin: string; cookie: s
     const profile = input.character.voiceProfile;
     if (!profile?.voiceId) throw new Error("请先完成角色音色维护");
     const resolvedAudio = resolvePreviewTtsCandidate(settings, profile);
-    if (!resolvedAudio)
-        throw new Error("当前没有可用的普通 TTS 音频模型。Voice Design 只创建 voice_id；请在同一供应商渠道同步并启用支持该 voice_id 的 TTS 模型，再将其设为默认音频模型。");
+    if (!resolvedAudio) throw new Error("当前没有可用的普通 TTS 音频模型。Voice Design 只创建 voice_id；请在同一供应商渠道同步并启用支持该 voice_id 的 TTS 模型，再将其设为默认音频模型。");
     const logicalModelId = resolvedAudio.logicalModelId;
     const channelId = resolvedAudio.channelId;
 
@@ -87,7 +86,9 @@ export async function syncDramaVoicePreview(input: { project: DramaProject; char
 
 function resolvePreviewTtsCandidate(settings: Awaited<ReturnType<typeof getAuthSettings>>, profile: NonNullable<DramaCharacter["voiceProfile"]>) {
     const preferredChannelId = profile.previewChannelId || profile.channelId || "";
-    const modelIds = Array.from(new Set([profile.previewLogicalModelId, settings.defaultModels.audioModel, ...settings.logicalModels.filter((model) => model.enabled && model.capability === "audio").map((model) => model.id)].filter((value): value is string => Boolean(value))));
+    const modelIds = Array.from(
+        new Set([profile.previewLogicalModelId, settings.defaultModels.audioModel, ...settings.logicalModels.filter((model) => model.enabled && model.capability === "audio").map((model) => model.id)].filter((value): value is string => Boolean(value))),
+    );
     const candidates = modelIds
         .flatMap((modelId) => resolveAudioLogicalModelCandidates(settings, modelId, preferredChannelId))
         .filter((candidate, index, all) => all.findIndex((item) => `${item.logicalModelId}:${item.channelId}:${item.upstreamModel}` === `${candidate.logicalModelId}:${candidate.channelId}:${candidate.upstreamModel}`) === index)

@@ -218,7 +218,22 @@ export async function updateAgentRunById(
     patch: Partial<
         Pick<
             AgentRun,
-            "status" | "executionId" | "tasks" | "foundation" | "projectHandoff" | "projectHandoffEmitted" | "dramaScriptPackage" | "review" | "reviewed" | "reviewStatus" | "reviewAttempts" | "plannerContext" | "plannerAudit" | "cancellation" | "assetIds" | "timings"
+            | "status"
+            | "executionId"
+            | "tasks"
+            | "foundation"
+            | "projectHandoff"
+            | "projectHandoffEmitted"
+            | "dramaScriptPackage"
+            | "review"
+            | "reviewed"
+            | "reviewStatus"
+            | "reviewAttempts"
+            | "plannerContext"
+            | "plannerAudit"
+            | "cancellation"
+            | "assetIds"
+            | "timings"
         >
     >,
     event?: { type: string; data?: unknown },

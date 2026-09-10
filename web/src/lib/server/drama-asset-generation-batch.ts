@@ -208,7 +208,12 @@ async function processDramaAssetGenerationBatch(input: { userId: string; project
     }
 }
 
-async function submitBatchItem(input: { userId: string; projectId: string; batchId: string; config: BatchConfig; origin: string; publicOrigin?: string; cookie: string }, batch: DramaAssetGenerationBatch, item: DramaAssetGenerationBatchItem, config: BatchConfig) {
+async function submitBatchItem(
+    input: { userId: string; projectId: string; batchId: string; config: BatchConfig; origin: string; publicOrigin?: string; cookie: string },
+    batch: DramaAssetGenerationBatch,
+    item: DramaAssetGenerationBatchItem,
+    config: BatchConfig,
+) {
     let project = await getDramaProjectForUser(input.userId, input.projectId);
     let planningStatus = item.planningStatus;
     let voiceStatus = item.voiceStatus;
@@ -260,7 +265,16 @@ async function submitBatchItem(input: { userId: string; projectId: string; batch
                 references,
                 source: "drama",
                 title: `${project.title} · ${item.assetName}批量候选`,
-                context: { surface: "drama", projectId: input.projectId, assetKind: item.kind, assetId: item.assetId, batchId: batch.id, batchItemId: item.id, clientRequestId: `${batch.id}:${item.id}:${item.attempt}`, ...(input.publicOrigin ? { publicOrigin: input.publicOrigin } : {}) },
+                context: {
+                    surface: "drama",
+                    projectId: input.projectId,
+                    assetKind: item.kind,
+                    assetId: item.assetId,
+                    batchId: batch.id,
+                    batchItemId: item.id,
+                    clientRequestId: `${batch.id}:${item.id}:${item.attempt}`,
+                    ...(input.publicOrigin ? { publicOrigin: input.publicOrigin } : {}),
+                },
             }),
         });
         const payload = (await response.json().catch(() => ({}))) as { task?: { id?: string }; error?: string };

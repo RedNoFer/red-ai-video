@@ -50,7 +50,18 @@ export async function uploadGeneratedCanvasImage(url: string, remoteFallback = "
 }
 
 export function imageMetadata(image: UploadedImage): CanvasNodeMetadata {
-    return { canvasOrigin: "user", content: image.url, storageKey: image.storageKey, remoteUrl: image.remoteUrl, serverUrl: image.serverUrl, status: "success", naturalWidth: image.width, naturalHeight: image.height, bytes: image.bytes, mimeType: image.mimeType };
+    return {
+        canvasOrigin: "user",
+        content: image.url,
+        storageKey: image.storageKey,
+        remoteUrl: image.remoteUrl,
+        serverUrl: image.serverUrl,
+        status: "success",
+        naturalWidth: image.width,
+        naturalHeight: image.height,
+        bytes: image.bytes,
+        mimeType: image.mimeType,
+    };
 }
 
 export function canvasNodeReferenceImage(node: CanvasNodeData): ReferenceImage {

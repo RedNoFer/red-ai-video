@@ -159,7 +159,20 @@ export function DramaStoryboardShotCard({
                         <div className="grid gap-3.5 lg:grid-cols-2">
                             <label className="block space-y-1.5">
                                 <span className="grid gap-0.5 text-sm font-medium sm:flex sm:items-baseline sm:gap-x-2">
-                                    <span className="flex items-center gap-1.5">静态帧提示词 <Button type="text" size="small" className="!h-6 !px-1.5 !text-xs" icon={<Sparkles className="size-3.5" />} loading={imagePromptGenerating} disabled={imagePromptGenerating} onClick={() => void generateImagePrompt()}>提示词优化</Button></span>
+                                    <span className="flex items-center gap-1.5">
+                                        静态帧提示词{" "}
+                                        <Button
+                                            type="text"
+                                            size="small"
+                                            className="!h-6 !px-1.5 !text-xs"
+                                            icon={<Sparkles className="size-3.5" />}
+                                            loading={imagePromptGenerating}
+                                            disabled={imagePromptGenerating}
+                                            onClick={() => void generateImagePrompt()}
+                                        >
+                                            提示词优化
+                                        </Button>
+                                    </span>
                                     <span className="text-xs font-normal text-muted-foreground">主体、场景、景别、构图与光线</span>
                                 </span>
                                 <Input.TextArea

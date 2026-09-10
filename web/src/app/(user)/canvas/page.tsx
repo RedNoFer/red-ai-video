@@ -183,9 +183,7 @@ export default function CanvasPage() {
                         ) : null}
                     </>
                 ) : !ready && !syncError ? (
-                    <section className="flex min-h-24 flex-col items-center justify-center gap-3 border-y border-stone-200 px-4 text-center text-sm text-stone-500 sm:min-h-48 dark:border-stone-800">
-                        正在加载画布...
-                    </section>
+                    <section className="flex min-h-24 flex-col items-center justify-center gap-3 border-y border-stone-200 px-4 text-center text-sm text-stone-500 sm:min-h-48 dark:border-stone-800">正在加载画布...</section>
                 ) : ready ? (
                     <section className="flex min-h-24 flex-col items-center justify-center border-y border-stone-200 px-3 py-5 text-center sm:min-h-56 sm:py-8 dark:border-stone-800">
                         <h2 className="text-lg font-medium sm:text-xl">还没有画布</h2>

@@ -8,10 +8,7 @@ test("管理员保存时会修复旧版 TokenGo Seedance 模板", async ({ page,
     const current = await request.get("/api/admin/settings");
     expect(current.ok(), await current.text()).toBe(true);
     const settings = (await current.json()) as { settings: { systemChannels: Array<Record<string, unknown>> } };
-    const channel = applyChannelProtocol(
-        { id: "e2e-buming-seedance", name: "E2E 不鸣 Seedance", baseUrl: "http://127.0.0.1:4010/v1", apiKey: "fixture-key", apiFormat: "openai", models: ["seedance-2-0-official"], enabled: true },
-        "buming-seedance",
-    );
+    const channel = applyChannelProtocol({ id: "e2e-buming-seedance", name: "E2E 不鸣 Seedance", baseUrl: "http://127.0.0.1:4010/v1", apiKey: "fixture-key", apiFormat: "openai", models: ["seedance-2-0-official"], enabled: true }, "buming-seedance");
     const prepared = await request.patch("/api/admin/settings", { data: { systemChannels: [...settings.settings.systemChannels, channel] } });
     expect(prepared.ok(), await prepared.text()).toBe(true);
 

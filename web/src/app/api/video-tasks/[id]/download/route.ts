@@ -53,12 +53,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         }
     }
     if (localAsset && registration?.ownerUserId === task.userId) {
-        const response = await createLocalMediaResponse(
-            request,
-            localAsset.filePath,
-            localAsset.mimeType,
-            requestQuery.get("download") === "1" ? { "Content-Disposition": `attachment; filename="${safeFileName(task.id)}.mp4"` } : {},
-        );
+        const response = await createLocalMediaResponse(request, localAsset.filePath, localAsset.mimeType, requestQuery.get("download") === "1" ? { "Content-Disposition": `attachment; filename="${safeFileName(task.id)}.mp4"` } : {});
         if (response) return response;
     }
     if (requestQuery.get("download") === "1") {

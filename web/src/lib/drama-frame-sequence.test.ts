@@ -45,7 +45,9 @@ describe("drama frame sequence", () => {
     });
 
     it("removes legacy reference duties from static prompts", () => {
-        const prompt = formatPromptFieldLines("静态关键帧：Karin站在黑湖边；可见状态：四只手扣住断剑；可见表演状态：眉眼清晰；景别：中景；机位与构图：平视；站位与视线：视线落向断剑；三层空间：前景雪地，中景Karin，背景倒悬古塔；光色与风格：冷白无源光；参考图职责：按角色、场景、道具图片执行；负面约束：无水印");
+        const prompt = formatPromptFieldLines(
+            "静态关键帧：Karin站在黑湖边；可见状态：四只手扣住断剑；可见表演状态：眉眼清晰；景别：中景；机位与构图：平视；站位与视线：视线落向断剑；三层空间：前景雪地，中景Karin，背景倒悬古塔；光色与风格：冷白无源光；参考图职责：按角色、场景、道具图片执行；负面约束：无水印",
+        );
 
         expect(prompt.split("\n")).toHaveLength(9);
         expect(prompt).not.toContain("参考图职责：");
@@ -83,17 +85,21 @@ describe("drama frame sequence", () => {
     });
 
     it("derives concrete facial, hand and environment changes from a frame action", () => {
-        const prompt = upgradeDramaFrameImagePrompt("静态关键帧：三人站在大厅；可见状态：萧炎抬眼扫过萧战，右手在桌沿收紧，茶水出现细小波纹；可见表演状态：警觉；眉眼、呼吸、手部和道具接触关系清晰可见，情绪通过身体动作呈现", "萧炎抬眼扫过萧战，右手在桌沿收紧，茶水出现细小波纹", {
-            description: "三人站在议事大厅",
-            shotSize: "中景",
-            cameraAngle: "平视",
-            composition: "主体位于画面右侧",
-            characterBlocking: "三人沿大厅轴线站位",
-            gazeDirection: "萧炎看向萧战",
-            lighting: "暖金侧光",
-            colorPalette: "冷灰紫",
-            sequenceIndex: 2,
-        });
+        const prompt = upgradeDramaFrameImagePrompt(
+            "静态关键帧：三人站在大厅；可见状态：萧炎抬眼扫过萧战，右手在桌沿收紧，茶水出现细小波纹；可见表演状态：警觉；眉眼、呼吸、手部和道具接触关系清晰可见，情绪通过身体动作呈现",
+            "萧炎抬眼扫过萧战，右手在桌沿收紧，茶水出现细小波纹",
+            {
+                description: "三人站在议事大厅",
+                shotSize: "中景",
+                cameraAngle: "平视",
+                composition: "主体位于画面右侧",
+                characterBlocking: "三人沿大厅轴线站位",
+                gazeDirection: "萧炎看向萧战",
+                lighting: "暖金侧光",
+                colorPalette: "冷灰紫",
+                sequenceIndex: 2,
+            },
+        );
 
         expect(prompt).toContain("眉眼抬起");
         expect(prompt).toContain("手指或手掌收紧");

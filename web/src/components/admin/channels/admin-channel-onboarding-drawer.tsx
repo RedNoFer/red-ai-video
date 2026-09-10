@@ -8,7 +8,17 @@ import { AdminChannelProtocolSetup } from "@/components/admin/admin-channel-prot
 import { LabeledControl } from "@/components/admin/admin-settings-controls";
 import { createSystemChannel } from "@/components/admin/admin-dashboard-elements";
 import type { LogicalModelCapability, SystemChannelAuthMode, SystemChannelProtocol, SystemModelChannel } from "@/lib/auth/store";
-import { applyChannelProtocol, channelAllowsManualModels, channelConnectionReady, channelProtocolDefinition, channelProtocolOptions, channelRequiresApiKey, channelSupportsModelCatalog, protocolModelConfig, resolveChannelAuthMode } from "@/lib/channel-protocol-registry";
+import {
+    applyChannelProtocol,
+    channelAllowsManualModels,
+    channelConnectionReady,
+    channelProtocolDefinition,
+    channelProtocolOptions,
+    channelRequiresApiKey,
+    channelSupportsModelCatalog,
+    protocolModelConfig,
+    resolveChannelAuthMode,
+} from "@/lib/channel-protocol-registry";
 import { inferModelCapability, normalizeModelId } from "@/lib/model-capability";
 import { capabilityLabel, channelModelCapability } from "@/lib/model-routing-config";
 
@@ -374,7 +384,11 @@ function ModelStep({ channel, canSkipModelSetup, fetching, onChange, onFetch }: 
                     </span>
                 </div>
             ) : null}
-            {canSkipModelSetup ? <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">暂时没有模型 ID 也可以先继续，渠道会先以草稿保存，后续在详情里补模型即可。</div> : null}
+            {canSkipModelSetup ? (
+                <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
+                    暂时没有模型 ID 也可以先继续，渠道会先以草稿保存，后续在详情里补模型即可。
+                </div>
+            ) : null}
             <LabeledControl label="模型 ID">
                 <Select
                     mode="tags"
@@ -424,7 +438,9 @@ function BindingStep({
     return (
         <div className="space-y-4">
             <ChannelInfoNote title="逻辑模型由渠道目录自动维护" description="同名上游模型会跨渠道合并；没有同名项时会按上游模型名建立独立逻辑模型，创建后可在逻辑模型页设置前端展示昵称。" />
-            {canSkipModelSetup ? <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">当前还没有模型 ID，可以直接保存草稿，后续再回来补模型并启用。</div> : null}
+            {canSkipModelSetup ? (
+                <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">当前还没有模型 ID，可以直接保存草稿，后续再回来补模型并启用。</div>
+            ) : null}
             <div className="divide-y divide-stone-200 border-y border-stone-200 dark:divide-stone-800 dark:border-stone-800">
                 {channel.models.map((upstreamModel) => {
                     const logical = logicalModels.find((model) => model.bindings.some((binding) => normalizedUpstreamModel(binding.upstreamModel) === normalizedUpstreamModel(upstreamModel)));

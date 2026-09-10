@@ -143,12 +143,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
         if (kind === "characters" && voiceId && project.characters.some((item) => item.id !== assetId && (item.voiceProfile?.voiceId || "").trim().toLowerCase() === voiceId.trim().toLowerCase())) return message.error("同一项目的角色不能使用相同音色 ID");
         setSaving(true);
         const base = { name, description: draft.description.trim(), profile: draft.profile };
-        const assetFactsChanged = Boolean(
-            asset &&
-                (name !== asset.name ||
-                    draft.description.trim() !== asset.description ||
-                    JSON.stringify(draft.profile) !== JSON.stringify(asset.profile || {})),
-        );
+        const assetFactsChanged = Boolean(asset && (name !== asset.name || draft.description.trim() !== asset.description || JSON.stringify(draft.profile) !== JSON.stringify(asset.profile || {})));
         const supplierPromptChanged = Boolean(asset && supplierPromptOverride.trim() !== (asset.supplierPrompt || "").trim());
         try {
             if (asset) {
@@ -605,7 +600,17 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                         style={{ aspectRatio: primary?.width && primary?.height ? `${primary.width} / ${primary.height}` : "4 / 5" }}
                     >
                         {primary?.url ? (
-                            sceneBoard?.url ? <DramaSceneReferenceBoard url={sceneBoard.url} alt={`${draft.name || definition.title}九宫格场景基准板`} /> : <Image src={imagePreviewUrl(primary.url, 384)} alt={`${draft.name || definition.title}${kind === "scenes" ? "单图基准" : "基准图"}`} rootClassName="!block !size-full" className="!size-full !object-contain" preview={{ src: imagePreviewUrl(primary.url, 1920) }} />
+                            sceneBoard?.url ? (
+                                <DramaSceneReferenceBoard url={sceneBoard.url} alt={`${draft.name || definition.title}九宫格场景基准板`} />
+                            ) : (
+                                <Image
+                                    src={imagePreviewUrl(primary.url, 384)}
+                                    alt={`${draft.name || definition.title}${kind === "scenes" ? "单图基准" : "基准图"}`}
+                                    rootClassName="!block !size-full"
+                                    className="!size-full !object-contain"
+                                    preview={{ src: imagePreviewUrl(primary.url, 1920) }}
+                                />
+                            )
                         ) : (
                             <div className="grid gap-2 text-center text-muted-foreground">
                                 <ImagePlus className="mx-auto size-6" />
@@ -867,9 +872,9 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                     <section className="border-t border-border pt-4">
                         <div className="flex flex-wrap items-start justify-between gap-3">
                             <div>
-                    <h3 className="text-sm font-semibold">{kind === "scenes" ? "九宫格场景基准板候选" : "参考图候选"}</h3>
-                    <p className="mt-1 text-xs leading-5 text-muted-foreground">{kind === "scenes" ? "每张候选都是同一场景的九宫格空间基准板；确认后作为后续镜头的场景锚点。" : "候选图不会进入镜头生成，必须明确确认一张主基准图。"}</p>
-                    {kind === "scenes" && primary && !sceneBoard ? <p className="mt-1 text-xs leading-5 text-amber-700 dark:text-amber-300">当前主图是旧版单图，只能作为临时参考；生成并确认九宫格基准板后才会用于完整方位控制。</p> : null}
+                                <h3 className="text-sm font-semibold">{kind === "scenes" ? "九宫格场景基准板候选" : "参考图候选"}</h3>
+                                <p className="mt-1 text-xs leading-5 text-muted-foreground">{kind === "scenes" ? "每张候选都是同一场景的九宫格空间基准板；确认后作为后续镜头的场景锚点。" : "候选图不会进入镜头生成，必须明确确认一张主基准图。"}</p>
+                                {kind === "scenes" && primary && !sceneBoard ? <p className="mt-1 text-xs leading-5 text-amber-700 dark:text-amber-300">当前主图是旧版单图，只能作为临时参考；生成并确认九宫格基准板后才会用于完整方位控制。</p> : null}
                                 <div className="mt-2 rounded-lg border border-border bg-muted/25 px-3 py-2 text-xs leading-5 text-muted-foreground">
                                     <span className="font-medium text-foreground">审核标准：</span>
                                     与本次生成提示词使用同一套身份锚点、角色白底四视图或场景/道具单主体布局、允许项和禁止项；审核建议不会阻止你选择有效候选。
@@ -936,7 +941,11 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                                         const isPrimary = reference.id === primary?.id;
                                         return (
                                             <article key={reference.id} className={`min-w-0 overflow-hidden rounded-xl border bg-background ${isPrimary ? "border-foreground ring-2 ring-foreground/10" : "border-border"}`}>
-                                                {kind === "scenes" && asset && isDramaSceneBoardReference(asset, reference) ? <DramaSceneReferenceBoard url={reference.url} alt={reference.label} /> : <Image src={imagePreviewUrl(reference.url, 384)} alt={reference.label} rootClassName="!block !w-full" className="!block !h-auto !w-full" preview={{ src: imagePreviewUrl(reference.url, 1920) }} />}
+                                                {kind === "scenes" && asset && isDramaSceneBoardReference(asset, reference) ? (
+                                                    <DramaSceneReferenceBoard url={reference.url} alt={reference.label} />
+                                                ) : (
+                                                    <Image src={imagePreviewUrl(reference.url, 384)} alt={reference.label} rootClassName="!block !w-full" className="!block !h-auto !w-full" preview={{ src: imagePreviewUrl(reference.url, 1920) }} />
+                                                )}
                                                 {reference.promptVersion || reference.reviewStatus ? (
                                                     <div className="flex min-h-8 items-center justify-between gap-2 border-t border-border px-2 text-[11px] text-muted-foreground">
                                                         <span>{reference.promptVersion ? `提示词 v${reference.promptVersion}` : "普通候选"}</span>

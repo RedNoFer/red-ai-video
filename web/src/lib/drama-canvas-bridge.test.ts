@@ -40,7 +40,15 @@ describe("drama canvas bridge", () => {
             createdAt: "2026-01-01T00:00:00.000Z",
             updatedAt: "2026-01-01T00:00:00.000Z",
             nodes: [
-                { id: "drama-shot-one-text", type: "text" as never, title: "旧镜头", position: { x: 0, y: 0 }, width: 1, height: 1, metadata: { sourceSurface: "drama", dramaProjectId: project.id, dramaEpisodeId: project.episodes[0].id, dramaShotId: "one" } },
+                {
+                    id: "drama-shot-one-text",
+                    type: "text" as never,
+                    title: "旧镜头",
+                    position: { x: 0, y: 0 },
+                    width: 1,
+                    height: 1,
+                    metadata: { sourceSurface: "drama", dramaProjectId: project.id, dramaEpisodeId: project.episodes[0].id, dramaShotId: "one" },
+                },
                 { id: "free-note", type: "text" as never, title: "探索", position: { x: 9, y: 9 }, width: 100, height: 100, metadata: { canvasOrigin: "user" } },
             ],
             connections: [{ id: "free-edge", fromNodeId: "free-note", toNodeId: "free-note" }],
@@ -92,7 +100,22 @@ describe("drama canvas bridge", () => {
 
 function dramaProject(shots: DramaShot[]): DramaProject {
     const episode: DramaEpisode = { id: "episode-one", title: "第 1 集", script: "", outline: "", hook: "", nextPreview: "", sourceRange: "", reviewStatus: "visual_ready", shots };
-    return { id: "drama-one", title: "短剧", summary: "", style: "写实", ratio: "9:16", status: "active", defaultVideoMode: "storyboard", characters: [], scenes: [], props: [], clues: [], episodes: [episode], createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" };
+    return {
+        id: "drama-one",
+        title: "短剧",
+        summary: "",
+        style: "写实",
+        ratio: "9:16",
+        status: "active",
+        defaultVideoMode: "storyboard",
+        characters: [],
+        scenes: [],
+        props: [],
+        clues: [],
+        episodes: [episode],
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+    };
 }
 
 function emptyCanvas(project: DramaProject): CanvasProject {

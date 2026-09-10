@@ -33,7 +33,19 @@ describe("/api/drama/projects/[id]/asset-generation-batches", () => {
     beforeEach(() => {
         vi.clearAllMocks();
         mocks.getCurrentUser.mockResolvedValue({ id: "user-one" });
-        mocks.createBatch.mockResolvedValue({ id: "batch-one", projectId: "project-one", status: "queued", totalCount: 2, completedCount: 0, successCount: 0, failedCount: 0, cancelledCount: 0, items: [], createdAt: "2026-08-20T00:00:00.000Z", updatedAt: "2026-08-20T00:00:00.000Z" });
+        mocks.createBatch.mockResolvedValue({
+            id: "batch-one",
+            projectId: "project-one",
+            status: "queued",
+            totalCount: 2,
+            completedCount: 0,
+            successCount: 0,
+            failedCount: 0,
+            cancelledCount: 0,
+            items: [],
+            createdAt: "2026-08-20T00:00:00.000Z",
+            updatedAt: "2026-08-20T00:00:00.000Z",
+        });
         mocks.listBatches.mockResolvedValue([{ id: "batch-one" }]);
         mocks.after.mockImplementation((callback: () => void) => callback());
     });

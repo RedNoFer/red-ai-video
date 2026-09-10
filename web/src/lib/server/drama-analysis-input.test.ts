@@ -19,9 +19,7 @@ describe("normalizeDramaVisualInput", () => {
             shots: [{ id: "shot-one", dialogue: "纳兰小姐，你应该知道，在斗气大陆，女方悔婚会让对方有多难堪" }],
         });
 
-        expect(result.payload.shots[0]?.utterances).toEqual([
-            expect.objectContaining({ type: "dialogue", text: "纳兰小姐，你应该知道，在斗气大陆，女方悔婚会让对方有多难堪", order: 1 }),
-        ]);
+        expect(result.payload.shots[0]?.utterances).toEqual([expect.objectContaining({ type: "dialogue", text: "纳兰小姐，你应该知道，在斗气大陆，女方悔婚会让对方有多难堪", order: 1 })]);
     });
 
     it("keeps every reviewed shot, asset, utterance, relation and full text", () => {
@@ -72,7 +70,10 @@ describe("video prompt reference instructions", () => {
         const result = normalizeDramaVideoPromptInput({
             phase: "video_prompt",
             shots: [{ id: "shot-one", videoPrompt: "动态意图：人物抬头" }],
-            referenceMaterials: [{ role: "keyframe", purpose: "顺序帧 1" }, { role: "scene_anchor", purpose: "场景基准图" }],
+            referenceMaterials: [
+                { role: "keyframe", purpose: "顺序帧 1" },
+                { role: "scene_anchor", purpose: "场景基准图" },
+            ],
         });
 
         expect(result.payload.referenceMaterials).toEqual([
@@ -119,8 +120,18 @@ describe("video prompt reference instructions", () => {
 
     it("validates that the Agent returns every bound image alias", () => {
         expect(validateDramaVideoPromptReferenceBindings("素材绑定：@图片1：顺序帧 1\n@图片2：角色基准图", [{ role: "keyframe" }, { role: "character_anchor" }])).toBe("");
-        expect(validateDramaVideoPromptReferenceBindings("素材绑定：@图片1（顺序帧 1）\n@图片2 用于角色基准图", [{ alias: "@图片1", role: "keyframe" }, { alias: "@图片2", role: "character_anchor" }])).toBe("");
-        expect(validateDramaVideoPromptReferenceBindings("素材绑定：先绑定顺序帧；参考图 @图片 1（顺序帧 1）、@图片 2 用于角色基准图", [{ alias: "@图片1", role: "keyframe" }, { alias: "@图片2", role: "character_anchor" }])).toBe("");
+        expect(
+            validateDramaVideoPromptReferenceBindings("素材绑定：@图片1（顺序帧 1）\n@图片2 用于角色基准图", [
+                { alias: "@图片1", role: "keyframe" },
+                { alias: "@图片2", role: "character_anchor" },
+            ]),
+        ).toBe("");
+        expect(
+            validateDramaVideoPromptReferenceBindings("素材绑定：先绑定顺序帧；参考图 @图片 1（顺序帧 1）、@图片 2 用于角色基准图", [
+                { alias: "@图片1", role: "keyframe" },
+                { alias: "@图片2", role: "character_anchor" },
+            ]),
+        ).toBe("");
         expect(validateDramaVideoPromptReferenceBindings("动态意图：人物抬头", [{ role: "keyframe" }])).toContain("@图片1");
         expect(validateDramaVideoPromptReferenceBindings("动态意图：@图片1：人物抬头", [{ role: "keyframe" }])).toContain("素材绑定字段");
         expect(validateDramaVideoPromptReferenceBindings("素材绑定：@图片1：顺序帧\n主体动作：@图片1：重复", [{ role: "keyframe" }])).toContain("重复绑定");
@@ -215,7 +226,13 @@ describe("video prompt reference instructions", () => {
         ].join("\n");
         const error = validateDramaVideoPromptOutput(
             {
-                shots: [{ shotId: "shot-one", videoPrompt: prompt, framePlan: { frames: [{ id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 3, startPrompt: "人物低头", actionPrompt: "手指收紧", transitionPrompt: "视线转向门外", endPrompt: "人物抬头", imagePrompt: "人物抬头看向门外" }] } }],
+                shots: [
+                    {
+                        shotId: "shot-one",
+                        videoPrompt: prompt,
+                        framePlan: { frames: [{ id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 3, startPrompt: "人物低头", actionPrompt: "手指收紧", transitionPrompt: "视线转向门外", endPrompt: "人物抬头", imagePrompt: "人物抬头看向门外" }] },
+                    },
+                ],
             },
             ["shot-one"],
             [{ id: "shot-one", framePlan: { frames: [{ id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 3 }] } }],
@@ -228,11 +245,26 @@ describe("video prompt reference instructions", () => {
     it("rejects a concise shot summary when framePlan is present", () => {
         const error = validateDramaVideoPromptOutput(
             {
-                shots: [{
-                    shotId: "shot-one",
-                    videoPrompt: "动态意图：Karin从低头状态抬眼锁定门外\n单一主运镜：固定机位\n结束画面：Karin抬头看向门外\n针对性约束：无水印、无额外肢体",
-                    framePlan: { frames: [{ sequenceIndex: 1, startSecond: 0, endSecond: 3, startPrompt: "Karin低头，双手扣住断剑", actionPrompt: "手指收紧并抬头", transitionPrompt: "视线沿剑柄移向门外", endPrompt: "Karin抬头看向门外", imagePrompt: "Karin抬头看向门外，断剑仍在掌中" }] },
-                }],
+                shots: [
+                    {
+                        shotId: "shot-one",
+                        videoPrompt: "动态意图：Karin从低头状态抬眼锁定门外\n单一主运镜：固定机位\n结束画面：Karin抬头看向门外\n针对性约束：无水印、无额外肢体",
+                        framePlan: {
+                            frames: [
+                                {
+                                    sequenceIndex: 1,
+                                    startSecond: 0,
+                                    endSecond: 3,
+                                    startPrompt: "Karin低头，双手扣住断剑",
+                                    actionPrompt: "手指收紧并抬头",
+                                    transitionPrompt: "视线沿剑柄移向门外",
+                                    endPrompt: "Karin抬头看向门外",
+                                    imagePrompt: "Karin抬头看向门外，断剑仍在掌中",
+                                },
+                            ],
+                        },
+                    },
+                ],
             },
             ["shot-one"],
             [{ id: "shot-one", framePlan: { frames: [{ id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 3 }] } }],
@@ -245,13 +277,52 @@ describe("video prompt reference instructions", () => {
     it("rejects duplicated or out-of-order public fields and internal skill text", () => {
         const baseFrame = { id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 3, startPrompt: "人物低头", actionPrompt: "手指收紧", transitionPrompt: "视线转向门外", endPrompt: "人物抬头", imagePrompt: "人物抬头看向门外" };
         const source = [{ id: "shot-one", framePlan: { frames: [{ id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 3 }] } }];
-        const duplicated = validateDramaVideoPromptOutput({ shots: [{ shotId: "shot-one", videoPrompt: "动态意图：人物抬头\n动态意图：人物抬头\n时间段动作：0-3s 起点：人物低头；动作与触发：手指收紧；可见衔接：视线转向门外；终点：人物抬头\n单一主运镜：固定机位\n结束画面：人物抬头", framePlan: { frames: [baseFrame] } }] }, ["shot-one"], source, []);
+        const duplicated = validateDramaVideoPromptOutput(
+            {
+                shots: [
+                    {
+                        shotId: "shot-one",
+                        videoPrompt: "动态意图：人物抬头\n动态意图：人物抬头\n时间段动作：0-3s 起点：人物低头；动作与触发：手指收紧；可见衔接：视线转向门外；终点：人物抬头\n单一主运镜：固定机位\n结束画面：人物抬头",
+                        framePlan: { frames: [baseFrame] },
+                    },
+                ],
+            },
+            ["shot-one"],
+            source,
+            [],
+        );
         expect(duplicated).toContain("字段“动态意图”重复");
 
-        const internal = validateDramaVideoPromptOutput({ shots: [{ shotId: "shot-one", videoPrompt: "单一主运镜：固定机位\n动态意图：人物抬头\n时间段动作：0-3s 起点：人物低头；动作与触发：手指收紧；可见衔接：视线转向门外；终点：人物抬头\n结束画面：人物抬头\nSkill：内部规则", framePlan: { frames: [baseFrame] } }] }, ["shot-one"], source, []);
+        const internal = validateDramaVideoPromptOutput(
+            {
+                shots: [
+                    {
+                        shotId: "shot-one",
+                        videoPrompt: "单一主运镜：固定机位\n动态意图：人物抬头\n时间段动作：0-3s 起点：人物低头；动作与触发：手指收紧；可见衔接：视线转向门外；终点：人物抬头\n结束画面：人物抬头\nSkill：内部规则",
+                        framePlan: { frames: [baseFrame] },
+                    },
+                ],
+            },
+            ["shot-one"],
+            source,
+            [],
+        );
         expect(internal).toContain("字段顺序");
 
-        const legacy = validateDramaVideoPromptOutput({ shots: [{ shotId: "shot-one", videoPrompt: "动态意图：人物抬头\n触发：门外传来声音\n时间段动作：0-3s 起点：人物低头；动作与触发：手指收紧；可见衔接：视线转向门外；终点：人物抬头\n单一主运镜：固定机位\n结束画面：人物抬头", framePlan: { frames: [baseFrame] } }] }, ["shot-one"], source, []);
+        const legacy = validateDramaVideoPromptOutput(
+            {
+                shots: [
+                    {
+                        shotId: "shot-one",
+                        videoPrompt: "动态意图：人物抬头\n触发：门外传来声音\n时间段动作：0-3s 起点：人物低头；动作与触发：手指收紧；可见衔接：视线转向门外；终点：人物抬头\n单一主运镜：固定机位\n结束画面：人物抬头",
+                        framePlan: { frames: [baseFrame] },
+                    },
+                ],
+            },
+            ["shot-one"],
+            source,
+            [],
+        );
         expect(legacy).toContain("旧的顶层动作字段");
     });
 
@@ -390,11 +461,11 @@ describe("review completion input", () => {
     it("accepts complete performance, lighting and continuity plans", () => {
         const complete = {
             performancePlan: {
-            emotionalObjective: "确认危险",
-            emotionalArc: "疑惑到紧绷",
-            speechStyle: "低声短句",
-            pace: "先慢后急",
-            breath: "浅而急",
+                emotionalObjective: "确认危险",
+                emotionalArc: "疑惑到紧绷",
+                speechStyle: "低声短句",
+                pace: "先慢后急",
+                breath: "浅而急",
                 restraintLevel: "压住惊慌，只让眼神先泄露警觉",
                 beats: {
                     start: { emotion: "刚察觉异常", facialAction: "眉头向中间收紧", gaze: "从床沿移向右侧门口", bodyAction: "手掌撑住床沿，肩膀停止后退" },

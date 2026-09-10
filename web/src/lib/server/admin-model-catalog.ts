@@ -289,7 +289,11 @@ function modelConfigFromMetadata(record: Record<string, unknown> | undefined, ca
         ...optionalMetadataText(record, "requestTemplate", "request_template", 12_000),
         ...optionalMetadataText(record, "resultField", "result_field", 500),
         ...optionalMetadataText(record, "statusField", "status_field", 500),
-        ...(record.audioOperation === "tts" || record.audioOperation === "voice-design" || record.audioOperation === "voice-clone" ? { audioOperation: record.audioOperation } : record.audio_operation === "tts" || record.audio_operation === "voice-design" || record.audio_operation === "voice-clone" ? { audioOperation: record.audio_operation } : {}),
+        ...(record.audioOperation === "tts" || record.audioOperation === "voice-design" || record.audioOperation === "voice-clone"
+            ? { audioOperation: record.audioOperation }
+            : record.audio_operation === "tts" || record.audio_operation === "voice-design" || record.audio_operation === "voice-clone"
+              ? { audioOperation: record.audio_operation }
+              : {}),
         ...optionalMetadataText(record, "voiceIdField", "voice_id_field", 500),
         ...optionalMetadataText(record, "previewAudioField", "preview_audio_field", 500),
         ...optionalMetadataText(record, "cloneSampleField", "clone_sample_field", 500),

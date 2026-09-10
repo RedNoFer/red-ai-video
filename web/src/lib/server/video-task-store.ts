@@ -18,7 +18,19 @@ export type VideoTask = GenerationTaskContext & {
     createdAt: number;
     updatedAt: number;
     config: SystemGenerationChannelConfig;
-    upstream: { id: string; provider: "openai" | "seedance" | "generation"; model: string; pollPath?: string; queryPath?: string; resultUrl?: string; pointsCost?: number; pointsUnits?: number; pointsRecordId?: string; refunded?: boolean; requestSnapshot?: VideoProviderRequestSnapshot };
+    upstream: {
+        id: string;
+        provider: "openai" | "seedance" | "generation";
+        model: string;
+        pollPath?: string;
+        queryPath?: string;
+        resultUrl?: string;
+        pointsCost?: number;
+        pointsUnits?: number;
+        pointsRecordId?: string;
+        refunded?: boolean;
+        requestSnapshot?: VideoProviderRequestSnapshot;
+    };
     requestedDurationSeconds?: number;
     source?: string;
     prompt?: string;
@@ -47,7 +59,9 @@ export function claimVideoTaskPoll(id: string, intervalMs: number) {
 }
 
 export function completeReconciledVideoTask(id: string, result: NonNullable<VideoTask["result"]>, allowCompleted = false) {
-    return mutateStoredGenerationTask<VideoTask>("video", id, GENERATION_TASK_RETENTION_MS, (task) => (canReconcileVideoTask(task) || (allowCompleted && task.status === "success") ? { ...task, status: "success", result, error: undefined, retryable: false } : null));
+    return mutateStoredGenerationTask<VideoTask>("video", id, GENERATION_TASK_RETENTION_MS, (task) =>
+        canReconcileVideoTask(task) || (allowCompleted && task.status === "success") ? { ...task, status: "success", result, error: undefined, retryable: false } : null,
+    );
 }
 
 export function failReconciledVideoTask(id: string, error: string, retryable = false) {

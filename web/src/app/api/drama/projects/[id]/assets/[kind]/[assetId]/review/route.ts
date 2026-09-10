@@ -47,7 +47,14 @@ export async function POST(request: Request, context: Context) {
                     avoid: kind === "characters" ? ["改变身份、脸型、核心年龄或族裔特征", "通用 NPC、RPG 套装、模板化盔甲", "未授权武器、徽章、文字或品牌"] : ["改变关键识别轮廓", "未授权文字或品牌"],
                 },
             },
-            tasks: references.map((reference) => ({ id: reference.id, title: `${asset.name}候选图`, type: "image" as const, prompt, resultSummary: generationStage === "refinement" ? "按建议调整生成的资产候选图" : "首次生成的资产候选图", imageUrls: [reference.url] })),
+            tasks: references.map((reference) => ({
+                id: reference.id,
+                title: `${asset.name}候选图`,
+                type: "image" as const,
+                prompt,
+                resultSummary: generationStage === "refinement" ? "按建议调整生成的资产候选图" : "首次生成的资产候选图",
+                imageUrls: [reference.url],
+            })),
         });
         return NextResponse.json({ code: 0, data: { review }, msg: "候选图审核已完成" });
     } catch (error) {

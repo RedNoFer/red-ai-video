@@ -22,8 +22,10 @@ export function resolveDramaVisualRunSync(project: DramaProject, episodeId: stri
             let nextShot = shot;
             const start = activeSteps.find((step) => step.type === "start_frame");
             const end = activeSteps.find((step) => step.type === "end_frame");
-            if (start && !shot.storyboardImageDeletedAt && (shot.storyboardStatus !== "running" || shot.storyboardTaskId !== start.taskId)) nextShot = { ...nextShot, storyboardStatus: "running", storyboardTaskId: start.taskId, storyboardError: undefined };
-            if (end && !shot.storyboardEndImageDeletedAt && (shot.storyboardEndStatus !== "running" || shot.storyboardEndTaskId !== end.taskId)) nextShot = { ...nextShot, storyboardEndStatus: "running", storyboardEndTaskId: end.taskId, storyboardEndError: undefined };
+            if (start && !shot.storyboardImageDeletedAt && (shot.storyboardStatus !== "running" || shot.storyboardTaskId !== start.taskId))
+                nextShot = { ...nextShot, storyboardStatus: "running", storyboardTaskId: start.taskId, storyboardError: undefined };
+            if (end && !shot.storyboardEndImageDeletedAt && (shot.storyboardEndStatus !== "running" || shot.storyboardEndTaskId !== end.taskId))
+                nextShot = { ...nextShot, storyboardEndStatus: "running", storyboardEndTaskId: end.taskId, storyboardEndError: undefined };
             const keyframes = activeSteps.filter((step) => step.type === "keyframe" && (step.frameId || step.sequenceIndex));
             if (keyframes.length) {
                 const frames = [...(nextShot.storyboardFrames || [])];
@@ -32,7 +34,7 @@ export function resolveDramaVisualRunSync(project: DramaProject, episodeId: stri
                     const index = frames.findIndex((frame) => frame.id === step.frameId || frame.sequenceIndex === step.sequenceIndex);
                     const current = frames[index];
                     if (current?.mediaDeletedAt && current.taskId !== step.taskId && current.candidateTaskId !== step.taskId) continue;
-                    if ((current?.mediaUrl ? current.candidateStatus === "running" && current.candidateTaskId === step.taskId : current?.status === "running" && current.taskId === step.taskId)) continue;
+                    if (current?.mediaUrl ? current.candidateStatus === "running" && current.candidateTaskId === step.taskId : current?.status === "running" && current.taskId === step.taskId) continue;
                     const frame = current?.mediaUrl
                         ? { ...current, candidateStatus: "running" as const, candidateTaskId: step.taskId, candidateError: undefined }
                         : {
@@ -62,11 +64,13 @@ export function resolveDramaVisualRunSync(project: DramaProject, episodeId: stri
         ),
     );
     const trackedTaskIds = new Set(
-        episode?.shots.flatMap((shot) => [
-            ...(["queued", "running"].includes(shot.storyboardStatus || "") && shot.storyboardTaskId ? [shot.storyboardTaskId] : []),
-            ...(["queued", "running"].includes(shot.storyboardEndStatus || "") && shot.storyboardEndTaskId ? [shot.storyboardEndTaskId] : []),
-            ...(shot.storyboardFrames || []).flatMap((frame) => (isDramaStoryboardFrameActive(frame) ? [frame.taskId, frame.candidateTaskId] : [])),
-        ].filter((taskId): taskId is string => Boolean(taskId))) || [],
+        episode?.shots.flatMap((shot) =>
+            [
+                ...(["queued", "running"].includes(shot.storyboardStatus || "") && shot.storyboardTaskId ? [shot.storyboardTaskId] : []),
+                ...(["queued", "running"].includes(shot.storyboardEndStatus || "") && shot.storyboardEndTaskId ? [shot.storyboardEndTaskId] : []),
+                ...(shot.storyboardFrames || []).flatMap((frame) => (isDramaStoryboardFrameActive(frame) ? [frame.taskId, frame.candidateTaskId] : [])),
+            ].filter((taskId): taskId is string => Boolean(taskId)),
+        ) || [],
     );
     const resolvedSteps = run.steps.filter((step) => step.taskId && ["success", "failed", "cancelled", "needs_review"].includes(step.status));
     const shouldReload = Boolean(resolvedSteps.length && (!pending || resolvedSteps.some((step) => trackedTaskIds.has(step.taskId!))));
@@ -74,12 +78,9 @@ export function resolveDramaVisualRunSync(project: DramaProject, episodeId: stri
     const pendingAfterResolved = Boolean(
         episode?.shots.some(
             (shot) =>
-                ((["queued", "running"].includes(shot.storyboardStatus || "") && !resolvedTaskIds.has(shot.storyboardTaskId || "")) ||
-                    (["queued", "running"].includes(shot.storyboardEndStatus || "") && !resolvedTaskIds.has(shot.storyboardEndTaskId || "")) ||
-                    (shot.storyboardFrames || []).some(
-                        (frame) =>
-                            isDramaStoryboardFrameActive(frame) && !resolvedTaskIds.has(frame.taskId || "") && !resolvedTaskIds.has(frame.candidateTaskId || ""),
-                    )),
+                (["queued", "running"].includes(shot.storyboardStatus || "") && !resolvedTaskIds.has(shot.storyboardTaskId || "")) ||
+                (["queued", "running"].includes(shot.storyboardEndStatus || "") && !resolvedTaskIds.has(shot.storyboardEndTaskId || "")) ||
+                (shot.storyboardFrames || []).some((frame) => isDramaStoryboardFrameActive(frame) && !resolvedTaskIds.has(frame.taskId || "") && !resolvedTaskIds.has(frame.candidateTaskId || "")),
         ),
     );
     const shouldContinue = pendingAfterResolved || (!resolvedSteps.length && (run.status === "ready" || run.status === "running"));
@@ -110,9 +111,7 @@ export function applyDramaVisualRunTerminalStep(shot: DramaShot, step: DramaProd
         const frameEvidence = evidence
             ? replaceFrameEvidence(shot.frameEvidence, evidence, isEnd ? "新的分镜尾帧已生成" : "新的分镜首帧已生成")
             : (shot.frameEvidence || []).map((frame) =>
-                  frame.role === role && frame.generationTaskId === step.taskId && (frame.validity === "candidate" || frame.validity === "accepted")
-                      ? invalidateFrameEvidence(frame, "unavailable", step.error || "图片任务失败")
-                      : frame,
+                  frame.role === role && frame.generationTaskId === step.taskId && (frame.validity === "candidate" || frame.validity === "accepted") ? invalidateFrameEvidence(frame, "unavailable", step.error || "图片任务失败") : frame,
               );
         return {
             ...shot,
@@ -216,9 +215,7 @@ export function applyDramaVisualRunTerminalStep(shot: DramaShot, step: DramaProd
         generationPrompt: step.executionPrompt || step.prompt,
         generationReferences: step.referenceImagesSnapshot,
     }));
-    const candidates = [...(current?.candidates || []), ...(currentCandidate ? [currentCandidate] : []), ...generatedCandidates].filter(
-        (candidate, candidateIndex, all) => all.findIndex((item) => item.mediaUrl === candidate.mediaUrl) === candidateIndex,
-    );
+    const candidates = [...(current?.candidates || []), ...(currentCandidate ? [currentCandidate] : []), ...generatedCandidates].filter((candidate, candidateIndex, all) => all.findIndex((item) => item.mediaUrl === candidate.mediaUrl) === candidateIndex);
     const selected = current?.mediaUrl ? current : generatedCandidates[0];
     const nextFrame = {
         id: frameId,
@@ -266,12 +263,14 @@ export function applyDramaProductionRunStep(shot: DramaShot, step: DramaProducti
                 actualFrameVideoUrl: undefined,
                 ...(shot.audioMode === "voiceover" && (shot.subtitle || shot.dialogue).trim() ? { audioStatus: "queued" as const, audioError: undefined } : {}),
             };
-        if (step.status === "failed" || step.status === "needs_review") return { ...shot, generationStatus: step.status === "needs_review" ? ("needs_review" as const) : ("error" as const), generationRunId: runId || shot.generationRunId, generationError: step.error };
+        if (step.status === "failed" || step.status === "needs_review")
+            return { ...shot, generationStatus: step.status === "needs_review" ? ("needs_review" as const) : ("error" as const), generationRunId: runId || shot.generationRunId, generationError: step.error };
         return step.status === "cancelled" ? { ...shot, generationStatus: "cancelled" as const, generationRunId: runId || shot.generationRunId, generationError: step.error } : shot;
     }
     if (step.type !== "video") return shot;
     if (step.status === "running") return { ...shot, generationStatus: "running" as const, generationTaskId: step.taskId, generationRunId: runId || shot.generationRunId, generationError: undefined };
-    if (step.status === "failed" || step.status === "needs_review") return { ...shot, generationStatus: step.status === "needs_review" ? ("needs_review" as const) : ("error" as const), generationRunId: runId || shot.generationRunId, generationTaskId: step.taskId, generationError: step.error };
+    if (step.status === "failed" || step.status === "needs_review")
+        return { ...shot, generationStatus: step.status === "needs_review" ? ("needs_review" as const) : ("error" as const), generationRunId: runId || shot.generationRunId, generationTaskId: step.taskId, generationError: step.error };
     if (step.status === "cancelled") return { ...shot, generationStatus: "cancelled" as const, generationRunId: runId || shot.generationRunId, generationTaskId: step.taskId, generationError: step.error };
     return shot;
 }

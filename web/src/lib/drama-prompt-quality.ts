@@ -33,8 +33,17 @@ export function validateDramaPerformanceDetail(plan: DramaPerformancePlan | unde
         ["克制度", plan.restraintLevel],
     ];
     for (const [name, value] of scalarFields) if (isGenericDramaDetail(value)) errors.push(`${label}${name}过于笼统`);
-    for (const [name, beat] of [["起始", plan.beats.start], ["中段", plan.beats.middle], ["结束", plan.beats.end]] as const) {
-        for (const [field, value] of [["情绪", beat.emotion], ["面部动作", beat.facialAction], ["视线", beat.gaze], ["身体/手部动作", beat.bodyAction]] as const)
+    for (const [name, beat] of [
+        ["起始", plan.beats.start],
+        ["中段", plan.beats.middle],
+        ["结束", plan.beats.end],
+    ] as const) {
+        for (const [field, value] of [
+            ["情绪", beat.emotion],
+            ["面部动作", beat.facialAction],
+            ["视线", beat.gaze],
+            ["身体/手部动作", beat.bodyAction],
+        ] as const)
             if (isGenericDramaDetail(value)) errors.push(`${label}${name}${field}缺少具体可见结果`);
     }
     if (dialogueCount > 0 && (!dialogue || dialogue.length < dialogueCount)) errors.push(`${label}对白缺少逐句表演指导`);

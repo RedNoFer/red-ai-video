@@ -177,7 +177,13 @@ export function validateDramaVisualAnalysis(value: DramaVisualAnalysis, sourceSh
             errors.push(`${label}缺少完整的连续性字段`);
         if (!shot.framePlan.frames.length) errors.push(`${label}缺少逐帧计划`);
         for (const [index, frame] of shot.framePlan.frames.entries()) {
-            for (const [field, text] of [["起点", frame.startPrompt], ["动作", frame.actionPrompt], ["衔接", frame.transitionPrompt], ["终点", frame.endPrompt], ["画面", frame.imagePrompt]] as const)
+            for (const [field, text] of [
+                ["起点", frame.startPrompt],
+                ["动作", frame.actionPrompt],
+                ["衔接", frame.transitionPrompt],
+                ["终点", frame.endPrompt],
+                ["画面", frame.imagePrompt],
+            ] as const)
                 if (isGenericDramaDetail(text)) errors.push(`${label}第${index + 1}帧${field}缺少具体可见结果`);
         }
         if (shot.dialoguePerformance.length && shot.dialoguePerformance.some((item) => !item.intent || !item.tone || !item.pace || !item.pause || !item.emphasis || !item.facialReactionBefore || !item.facialReactionDuring || !item.facialReactionAfter))

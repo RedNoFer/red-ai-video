@@ -208,12 +208,17 @@ function DramaAgentContent({
 
     useEffect(() => {
         if (!selectedShot) return;
-        setPrompt(`请在当前镜头文案基础上做更细致的整改，完成后给出可直接使用的视频提示词。\n\n当前镜头：${selectedShot.title || `镜头 ${selectedShot.order}`}\n当前文案：${selectedShot.videoPrompt || compileDramaShotPrompts(project, episode, selectedShot).videoPrompt}`);
+        setPrompt(
+            `请在当前镜头文案基础上做更细致的整改，完成后给出可直接使用的视频提示词。\n\n当前镜头：${selectedShot.title || `镜头 ${selectedShot.order}`}\n当前文案：${selectedShot.videoPrompt || compileDramaShotPrompts(project, episode, selectedShot).videoPrompt}`,
+        );
     }, [episode, project, selectedShot]);
 
     const applyAgentPromptToShot = (content: string) => {
         if (!selectedShotId || !content.trim()) return;
-        const cleaned = content.replace(/^```(?:\w+)?\s*/i, "").replace(/```\s*$/i, "").trim();
+        const cleaned = content
+            .replace(/^```(?:\w+)?\s*/i, "")
+            .replace(/```\s*$/i, "")
+            .trim();
         updateShot(project.id, episode.id, selectedShotId, { videoPrompt: cleaned });
         message.success("已回填当前镜头文案");
     };
@@ -996,7 +1001,15 @@ function DramaAgentAssets({ assets, project, episode }: { assets: CreativeAsset[
         updateShot(project.id, episode.id, shot.id, {
             frameEvidence,
             ...(frameKind === "start"
-                ? { storyboardStatus: "success" as const, storyboardTaskId: undefined, storyboardError: undefined, storyboardImageUrl: url, storyboardImageRemoteUrl: referenceAsset?.remoteUrl, storyboardImageWidth: referenceAsset?.width, storyboardImageHeight: referenceAsset?.height }
+                ? {
+                      storyboardStatus: "success" as const,
+                      storyboardTaskId: undefined,
+                      storyboardError: undefined,
+                      storyboardImageUrl: url,
+                      storyboardImageRemoteUrl: referenceAsset?.remoteUrl,
+                      storyboardImageWidth: referenceAsset?.width,
+                      storyboardImageHeight: referenceAsset?.height,
+                  }
                 : {
                       storyboardFrameMode: "first_last" as const,
                       storyboardEndStatus: "success" as const,

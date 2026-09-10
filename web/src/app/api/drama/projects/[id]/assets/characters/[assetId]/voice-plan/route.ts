@@ -24,14 +24,17 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
                 origin: resolveInternalOrigin(new URL(request.url).origin),
                 cookie: request.headers.get("cookie") || "",
                 character,
-                occupiedVoiceIds: project.characters.filter((item) => item.id !== assetId).map((item) => item.voiceProfile?.voiceId || "").filter(Boolean),
+                occupiedVoiceIds: project.characters
+                    .filter((item) => item.id !== assetId)
+                    .map((item) => item.voiceProfile?.voiceId || "")
+                    .filter(Boolean),
                 requestId: crypto.randomUUID(),
             });
             planned = { ...planned, ...generated, designPrompt: generated.designPrompt || planned.designPrompt };
         } catch (error) {
             warning = `文本规划不可用，已按角色资料生成默认声音提示词${error instanceof Error && error.message ? `：${error.message}` : ""}`;
         }
-        const voiceProfile = { ...existing, ...planned, creationMode: "design" as const, creationStatus: existing.creationStatus === "success" ? "success" as const : "idle" as const };
+        const voiceProfile = { ...existing, ...planned, creationMode: "design" as const, creationStatus: existing.creationStatus === "success" ? ("success" as const) : ("idle" as const) };
         const nextProject = await updateDramaProjectForUser(user.id, id, { ...project, characters: project.characters.map((item) => (item.id === assetId ? { ...item, voiceProfile } : item)) });
         return NextResponse.json({ code: 0, data: { project: nextProject, voiceProfile: nextProject.characters.find((item) => item.id === assetId)?.voiceProfile, warning }, msg: warning || "声音设计提示词已生成" });
     } catch (error) {

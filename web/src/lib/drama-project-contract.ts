@@ -741,12 +741,13 @@ export type DramaProjectSummaryPage = {
     pageSize: number;
 };
 
-export type CreateDramaProjectInput = Pick<DramaProject, "title"> & Partial<Pick<DramaProject, "summary" | "style" | "ratio">> & {
-    sourceHandoffId?: string;
-    initialScript?: string;
-    sourceAssets?: DramaSourceAsset[];
-    defaultVideoMode?: DramaVideoMode;
-};
+export type CreateDramaProjectInput = Pick<DramaProject, "title"> &
+    Partial<Pick<DramaProject, "summary" | "style" | "ratio">> & {
+        sourceHandoffId?: string;
+        initialScript?: string;
+        sourceAssets?: DramaSourceAsset[];
+        defaultVideoMode?: DramaVideoMode;
+    };
 
 export type DramaContentAnalysis = {
     episode: Pick<DramaEpisode, "outline" | "hook" | "nextPreview" | "sourceRange">;

@@ -42,7 +42,9 @@ function isLoopbackOrigin(origin: string) {
 }
 
 function isPublicOrigin(origin: string) {
-    const hostname = parseUrl(origin)?.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+    const hostname = parseUrl(origin)
+        ?.hostname.toLowerCase()
+        .replace(/^\[|\]$/g, "");
     if (!hostname || isLoopbackOrigin(origin) || hostname.startsWith("fc") || hostname.startsWith("fd") || hostname.startsWith("fe80")) return false;
     const parts = hostname.split(".").map((part) => Number(part));
     if (parts.length === 4 && parts.every((part) => Number.isInteger(part) && part >= 0 && part <= 255)) {

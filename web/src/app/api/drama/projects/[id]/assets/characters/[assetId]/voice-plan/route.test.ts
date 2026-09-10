@@ -44,5 +44,14 @@ function context() {
     return { params: Promise.resolve({ id: "project-one", assetId: "character-one" }) };
 }
 function project() {
-    return { id: "project-one", title: "项目", characters: [{ id: "character-one", name: "Karin", description: "18岁男性", voiceProfile: { voiceId: "", speed: 1, instructions: "" } }], scenes: [], props: [], clues: [], episodes: [], updatedAt: "2026-08-22T00:00:00.000Z" };
+    return {
+        id: "project-one",
+        title: "项目",
+        characters: [{ id: "character-one", name: "Karin", description: "18岁男性", voiceProfile: { voiceId: "", speed: 1, instructions: "" } }],
+        scenes: [],
+        props: [],
+        clues: [],
+        episodes: [],
+        updatedAt: "2026-08-22T00:00:00.000Z",
+    };
 }

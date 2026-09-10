@@ -5,7 +5,10 @@ import { applyDramaVisualDirection, defaultDramaProductionPlan, dramaReferenceIm
 describe("drama production plan", () => {
     it("defaults new projects to locked-by-confirmation storyboard settings", () => {
         const plan = defaultDramaProductionPlan();
-        expect(plan).toMatchObject({ visual: { visualStyle: "", artStyle: "", source: "agent" }, video: { model: "seedance-2-0-official", mode: "storyboard", resolution: "720p", shotDuration: 15, framePolicy: "agent", count: 1, allowExplicitFallback: false } });
+        expect(plan).toMatchObject({
+            visual: { visualStyle: "", artStyle: "", source: "agent" },
+            video: { model: "seedance-2-0-official", mode: "storyboard", resolution: "720p", shotDuration: 15, framePolicy: "agent", count: 1, allowExplicitFallback: false },
+        });
         expect(plan.video.frameCount).toBeUndefined();
         expect(plan.skills.map((skill) => skill.id)).toEqual(["seedance-director", "seedance-25-director"]);
         expect(plan.references).toMatchObject({ strategy: "adaptive", minImages: 3, maxImages: 5 });

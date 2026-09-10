@@ -12,7 +12,10 @@ vi.mock("@/lib/server/security", () => ({ checkRateLimit: mocks.checkRateLimit }
 vi.mock("@/lib/server/drama-project-service", () => ({
     reviewDramaStoryboardFrameForUser: mocks.reviewDramaStoryboardFrameForUser,
     DramaProjectServiceError: class DramaProjectServiceError extends Error {
-        constructor(message: string, readonly status: number) {
+        constructor(
+            message: string,
+            readonly status: number,
+        ) {
             super(message);
         }
     },

@@ -5,7 +5,10 @@ const mocks = vi.hoisted(() => ({ getCurrentUser: vi.fn(), updateDramaStoryboard
 vi.mock("@/lib/auth/session", () => ({ getCurrentUser: mocks.getCurrentUser }));
 vi.mock("@/lib/server/drama-project-service", () => ({
     DramaProjectServiceError: class DramaProjectServiceError extends Error {
-        constructor(message: string, readonly status: number) {
+        constructor(
+            message: string,
+            readonly status: number,
+        ) {
             super(message);
         }
     },
@@ -23,10 +26,9 @@ describe("PATCH /api/drama/projects/[id]/episodes/[episodeId]/shots/[shotId]/fra
 
     it("persists the prompt for the requested stable frame", async () => {
         const body = { supplierPrompt: "静态关键帧：已编辑" };
-        const response = await PATCH(
-            new Request("http://localhost/api/drama/projects/drama-one/episodes/episode-one/shots/shot-one/frames/frame-five/prompt", { method: "PATCH", body: JSON.stringify(body) }),
-            { params: Promise.resolve({ id: "drama-one", episodeId: "episode-one", shotId: "shot-one", frameId: "frame-five" }) },
-        );
+        const response = await PATCH(new Request("http://localhost/api/drama/projects/drama-one/episodes/episode-one/shots/shot-one/frames/frame-five/prompt", { method: "PATCH", body: JSON.stringify(body) }), {
+            params: Promise.resolve({ id: "drama-one", episodeId: "episode-one", shotId: "shot-one", frameId: "frame-five" }),
+        });
 
         expect(response.status).toBe(200);
         expect(mocks.updateDramaStoryboardFramePromptForUser).toHaveBeenCalledWith("user-one", "drama-one", "episode-one", "shot-one", "frame-five", body);
@@ -35,10 +37,9 @@ describe("PATCH /api/drama/projects/[id]/episodes/[episodeId]/shots/[shotId]/fra
 
     it("requires authentication before writing a frame prompt", async () => {
         mocks.getCurrentUser.mockResolvedValue(null);
-        const response = await PATCH(
-            new Request("http://localhost/api/drama/projects/drama-one/episodes/episode-one/shots/shot-one/frames/frame-five/prompt", { method: "PATCH", body: "{}" }),
-            { params: Promise.resolve({ id: "drama-one", episodeId: "episode-one", shotId: "shot-one", frameId: "frame-five" }) },
-        );
+        const response = await PATCH(new Request("http://localhost/api/drama/projects/drama-one/episodes/episode-one/shots/shot-one/frames/frame-five/prompt", { method: "PATCH", body: "{}" }), {
+            params: Promise.resolve({ id: "drama-one", episodeId: "episode-one", shotId: "shot-one", frameId: "frame-five" }),
+        });
 
         expect(response.status).toBe(401);
         expect(mocks.updateDramaStoryboardFramePromptForUser).not.toHaveBeenCalled();

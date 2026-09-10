@@ -20,7 +20,12 @@ export async function GET(request: Request, context: Context) {
         const episodeId = new URL(request.url).searchParams.get("episodeId") || "";
         const scope = new URL(request.url).searchParams.get("scope") === "visual" ? ("visual" as const) : ("production" as const);
         const preflight = scope === "production" ? await getDramaProductionPreflightForUser(user.id, projectId, episodeId) : undefined;
-        const run = await getLatestDramaProductionRunForUser(user.id, projectId, episodeId, { origin: resolveInternalOrigin(new URL(request.url).origin), publicOrigin: resolvePublicRequestOrigin(request), cookie: request.headers.get("cookie") || "", scope });
+        const run = await getLatestDramaProductionRunForUser(user.id, projectId, episodeId, {
+            origin: resolveInternalOrigin(new URL(request.url).origin),
+            publicOrigin: resolvePublicRequestOrigin(request),
+            cookie: request.headers.get("cookie") || "",
+            scope,
+        });
         return NextResponse.json({ code: 0, data: { run, preflight: preflight || null }, msg: "OK" });
     } catch (error) {
         if (error instanceof DramaProjectServiceError) return NextResponse.json({ code: error.status, data: null, msg: error.message }, { status: error.status });
@@ -35,7 +40,10 @@ export async function POST(request: Request, context: Context) {
     const parsed = await readJsonBodyResult<unknown>(request, 256 * 1024);
     if (!parsed.ok) return NextResponse.json({ code: parsed.status, data: null, msg: parsed.message }, { status: parsed.status });
     try {
-        const body = parsed.data && typeof parsed.data === "object" ? { ...(parsed.data as Record<string, unknown>), origin: resolveInternalOrigin(new URL(request.url).origin), publicOrigin: resolvePublicRequestOrigin(request), cookie: request.headers.get("cookie") || "" } : parsed.data;
+        const body =
+            parsed.data && typeof parsed.data === "object"
+                ? { ...(parsed.data as Record<string, unknown>), origin: resolveInternalOrigin(new URL(request.url).origin), publicOrigin: resolvePublicRequestOrigin(request), cookie: request.headers.get("cookie") || "" }
+                : parsed.data;
         const run = await createDramaProductionRunForUser(user.id, (await context.params).id, body);
         return NextResponse.json({ code: 0, data: { run }, msg: "连续性生产计划已锁定" });
     } catch (error) {

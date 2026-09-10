@@ -59,22 +59,20 @@ describe("creative review service", () => {
     });
 
     it("reviews a large private image through a bounded WebP preview", async () => {
-        fetchInternalApi
-            .mockResolvedValueOnce(new Response(new Uint8Array([1, 2, 3]), { status: 200, headers: { "Content-Type": "image/webp", "Content-Length": "3" } }))
-            .mockResolvedValueOnce(
-                new Response(
-                    JSON.stringify({
-                        output: [
-                            {
-                                type: "function_call",
-                                name: "review_creative_outputs",
-                                arguments: JSON.stringify({ mode: "visual", status: "passed", score: 90, summary: "连续性通过", issues: [], retryTaskIds: [] }),
-                            },
-                        ],
-                    }),
-                    { status: 200, headers: { "Content-Type": "application/json" } },
-                ),
-            );
+        fetchInternalApi.mockResolvedValueOnce(new Response(new Uint8Array([1, 2, 3]), { status: 200, headers: { "Content-Type": "image/webp", "Content-Length": "3" } })).mockResolvedValueOnce(
+            new Response(
+                JSON.stringify({
+                    output: [
+                        {
+                            type: "function_call",
+                            name: "review_creative_outputs",
+                            arguments: JSON.stringify({ mode: "visual", status: "passed", score: 90, summary: "连续性通过", issues: [], retryTaskIds: [] }),
+                        },
+                    ],
+                }),
+                { status: 200, headers: { "Content-Type": "application/json" } },
+            ),
+        );
 
         const review = await reviewCreativeOutputs({
             origin: "http://localhost:3000",

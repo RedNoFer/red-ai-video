@@ -1,7 +1,15 @@
 import type { LogicalModel, LogicalModelBinding, LogicalModelCapability, LogicalModelCapabilityProfile, LogicalModelCostBasis, SystemChannelProtocol, SystemDefaultModels, SystemModelChannel } from "@/lib/auth/store";
 import { resolveGlobalAiOpcPreset } from "@/lib/globalaiopc-catalog";
 import { inferModelCapability, isCreativeGenerationModel, normalizeModelId } from "@/lib/model-capability";
-import { channelConnectionReady, channelProtocolDefinition, isKnownBumingSeedanceVideoModel, protocolCatalogCapability, resolveBumingSeedanceQualityOptions, resolveChannelCapabilityConfig, resolveChannelModelConfig } from "@/lib/channel-protocol-registry";
+import {
+    channelConnectionReady,
+    channelProtocolDefinition,
+    isKnownBumingSeedanceVideoModel,
+    protocolCatalogCapability,
+    resolveBumingSeedanceQualityOptions,
+    resolveChannelCapabilityConfig,
+    resolveChannelModelConfig,
+} from "@/lib/channel-protocol-registry";
 
 const CAPABILITY_DEFAULT_KEYS = {
     text: "textModel",
@@ -269,10 +277,7 @@ export function resolveLogicalModelCapabilityProfile(binding: Pick<LogicalModelB
         supportsReferenceImage: providerCapability("supportsReferenceImage", Boolean(globalPreset?.supportsReferenceImage ?? modelConfig?.supportsReferenceImage ?? advanced?.supportsReferenceImage)),
         supportsReferenceVideo: providerCapability("supportsReferenceVideo", Boolean(globalPreset?.supportsReferenceVideo ?? modelConfig?.supportsReferenceVideo ?? advanced?.supportsReferenceVideo)),
         supportsReferenceAudio: providerCapability("supportsReferenceAudio", Boolean(globalPreset?.supportsReferenceAudio ?? modelConfig?.supportsReferenceAudio ?? advanced?.supportsReferenceAudio)),
-        supportsKeyframes: providerCapability(
-            "supportsKeyframes",
-            advanced?.protocol === "buming-seedance" && !isKnownBumingSeedanceVideoModel(upstreamModel) ? true : Boolean(modelConfig?.supportsKeyframes),
-        ),
+        supportsKeyframes: providerCapability("supportsKeyframes", advanced?.protocol === "buming-seedance" && !isKnownBumingSeedanceVideoModel(upstreamModel) ? true : Boolean(modelConfig?.supportsKeyframes)),
         maxReferenceImages: positiveInteger(stored.maxReferenceImages) || positiveInteger(modelConfig?.maxReferenceImages),
         aspectRatios: normalizeAspectRatios(stored.aspectRatios),
         minDurationSeconds: positiveNumber(stored.minDurationSeconds),

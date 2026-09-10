@@ -325,10 +325,7 @@ describe("admin settings model routing", () => {
     });
 
     it("persists an explicit all-frame capability for an unknown Buming model", async () => {
-        const buming = applyChannelProtocol(
-            { id: "buming", name: "不鸣", baseUrl: "https://api.tokengo.love", apiKey: "saved-secret", apiFormat: "openai", models: ["seedance-2.0"], enabled: true },
-            "buming-seedance",
-        );
+        const buming = applyChannelProtocol({ id: "buming", name: "不鸣", baseUrl: "https://api.tokengo.love", apiKey: "saved-secret", apiFormat: "openai", models: ["seedance-2.0"], enabled: true }, "buming-seedance");
         const logicalModels = [
             {
                 id: "seedance-2.0",

@@ -201,7 +201,14 @@ describe("admin model catalog", () => {
     });
 
     it("recognizes explicit audio output capability metadata", () => {
-        expect(parseModelCatalog({ data: [{ id: "vendor-audio", supports_audio_output: true, output_modalities: ["audio"] }, { id: "vendor-text", supports_audio_output: false }] })).toEqual([
+        expect(
+            parseModelCatalog({
+                data: [
+                    { id: "vendor-audio", supports_audio_output: true, output_modalities: ["audio"] },
+                    { id: "vendor-text", supports_audio_output: false },
+                ],
+            }),
+        ).toEqual([
             { id: "vendor-audio", capability: "audio", source: "provider" },
             { id: "vendor-text", capability: "text", source: "provider" },
         ]);

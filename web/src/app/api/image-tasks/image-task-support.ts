@@ -474,7 +474,11 @@ function imageSubmissionResponseDiagnostics(payload: ImageApiResponse) {
         dataType: Array.isArray(data) ? "array" : data === null ? "null" : typeof data,
         ...(Array.isArray(data) ? { dataLength: data.length } : {}),
         ...(firstItem && typeof firstItem === "object" && !Array.isArray(firstItem)
-            ? { firstDataItemKeys: Object.keys(firstItem as Record<string, unknown>).sort().slice(0, 24) }
+            ? {
+                  firstDataItemKeys: Object.keys(firstItem as Record<string, unknown>)
+                      .sort()
+                      .slice(0, 24),
+              }
             : {}),
     };
 }

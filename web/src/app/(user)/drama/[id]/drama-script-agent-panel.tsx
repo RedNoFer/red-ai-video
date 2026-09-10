@@ -344,8 +344,15 @@ export function DramaScriptAgentPanel({ project, episode, open, onOpenChange }: 
                         {attachments.map((attachment) => (
                             <div key={attachment.id} className="group relative flex h-12 w-44 shrink-0 items-center gap-2 rounded-lg border border-border bg-muted/25 px-2">
                                 {attachment.previewUrl ? <img src={attachment.previewUrl} alt={attachment.file.name} className="size-8 rounded object-cover" /> : <FileText className="size-4 shrink-0 text-primary" />}
-                                <span className="min-w-0 flex-1 truncate text-xs" title={attachment.file.name}>{attachment.file.name}</span>
-                                <button type="button" className="grid size-7 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-background hover:text-foreground" onClick={() => removeAttachment(attachment.id)} aria-label={`移除附件 ${attachment.file.name}`}>
+                                <span className="min-w-0 flex-1 truncate text-xs" title={attachment.file.name}>
+                                    {attachment.file.name}
+                                </span>
+                                <button
+                                    type="button"
+                                    className="grid size-7 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-background hover:text-foreground"
+                                    onClick={() => removeAttachment(attachment.id)}
+                                    aria-label={`移除附件 ${attachment.file.name}`}
+                                >
                                     <X className="size-3.5" />
                                 </button>
                             </div>
@@ -408,7 +415,14 @@ export function DramaScriptAgentPanel({ project, episode, open, onOpenChange }: 
                         {packageData.preview.package.project.productionBible?.productionPlan ? (
                             <div className="grid gap-2 rounded-md border border-border bg-muted/20 px-3 py-2 text-xs sm:grid-cols-[minmax(0,1fr)_auto]">
                                 <span className="whitespace-pre-wrap break-words">视觉方案：{dramaVisualDirection(packageData.preview.package.project.productionBible.productionPlan)}</span>
-                                <span className="whitespace-nowrap">每镜：{packageData.preview.package.project.productionBible.productionPlan.video.shotDuration || 15} 秒 · {packageData.preview.package.project.productionBible.productionPlan.video.framePolicy === "fixed-4" ? "4 帧" : packageData.preview.package.project.productionBible.productionPlan.video.framePolicy === "fixed-5" ? "5 帧" : "智能切分"}</span>
+                                <span className="whitespace-nowrap">
+                                    每镜：{packageData.preview.package.project.productionBible.productionPlan.video.shotDuration || 15} 秒 ·{" "}
+                                    {packageData.preview.package.project.productionBible.productionPlan.video.framePolicy === "fixed-4"
+                                        ? "4 帧"
+                                        : packageData.preview.package.project.productionBible.productionPlan.video.framePolicy === "fixed-5"
+                                          ? "5 帧"
+                                          : "智能切分"}
+                                </span>
                             </div>
                         ) : null}
                         <pre className="hide-scrollbar max-h-[48vh] overflow-auto whitespace-pre-wrap rounded-md border border-border bg-muted/20 p-3 text-xs leading-5">{packageData.markdown}</pre>
@@ -484,7 +498,7 @@ export function DramaScriptAgentPanel({ project, episode, open, onOpenChange }: 
                         </label>
                         <label className="block space-y-1">
                             <span className="text-xs font-medium">每镜时长</span>
-                                <Select
+                            <Select
                                 className="w-full"
                                 value={planDraft.video.shotDuration || 15}
                                 options={DRAMA_SCRIPT_SHOT_DURATION_OPTIONS.map((value) => ({ label: `${value} 秒`, value }))}
@@ -495,7 +509,7 @@ export function DramaScriptAgentPanel({ project, episode, open, onOpenChange }: 
                         </label>
                         <label className="block space-y-1">
                             <span className="text-xs font-medium">每镜帧数</span>
-                                <Select
+                            <Select
                                 className="w-full"
                                 value={planDraft.video.framePolicy || "agent"}
                                 options={[
@@ -551,12 +565,19 @@ export function DramaScriptAgentPanel({ project, episode, open, onOpenChange }: 
                         </label>
                     </div>
                     <p className="text-xs leading-5 text-muted-foreground">
-                        Agent 会按每镜 {planDraft.video.shotDuration || 15} 秒和“{planDraft.video.framePolicy === "fixed-4" ? "4 帧" : planDraft.video.framePolicy === "fixed-5" ? "5 帧" : "智能切分"}”重新切分剧情；相邻碎片镜头会合并为完整逻辑镜头。空白视觉参数由 Agent 补出具体值并写入制作包。连续性固定为严格模式：下一镜只能引用上一镜当前视频版本且已人工验收的实际尾帧。
+                        Agent 会按每镜 {planDraft.video.shotDuration || 15} 秒和“{planDraft.video.framePolicy === "fixed-4" ? "4 帧" : planDraft.video.framePolicy === "fixed-5" ? "5 帧" : "智能切分"}
+                        ”重新切分剧情；相邻碎片镜头会合并为完整逻辑镜头。空白视觉参数由 Agent 补出具体值并写入制作包。连续性固定为严格模式：下一镜只能引用上一镜当前视频版本且已人工验收的实际尾帧。
                     </p>
                     <div className="flex flex-col justify-end gap-2 border-t border-border pt-3 sm:flex-row">
-                        <Button disabled={savingPlan} onClick={() => setPlanOpen(false)}>取消</Button>
-                        <Button loading={savingPlan} onClick={() => void savePlan()}>保存全局参数</Button>
-                        <Button type="primary" icon={<Package className="size-3.5" />} loading={savingPlan} disabled={sending} onClick={() => void savePlanAndGeneratePackage()}>保存并生成制作包</Button>
+                        <Button disabled={savingPlan} onClick={() => setPlanOpen(false)}>
+                            取消
+                        </Button>
+                        <Button loading={savingPlan} onClick={() => void savePlan()}>
+                            保存全局参数
+                        </Button>
+                        <Button type="primary" icon={<Package className="size-3.5" />} loading={savingPlan} disabled={sending} onClick={() => void savePlanAndGeneratePackage()}>
+                            保存并生成制作包
+                        </Button>
                     </div>
                 </div>
             </Modal>

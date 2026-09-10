@@ -1,7 +1,6 @@
 export const DRAMA_STYLE_NAME = "用户自定义视觉风格";
 
-export const DRAMA_STYLE_DESCRIPTION =
-    "用户自定义视觉风格；只遵循项目明确配置的媒介、题材、造型、材质、光色和负面要求，不预设时代、场景或固定配色。";
+export const DRAMA_STYLE_DESCRIPTION = "用户自定义视觉风格；只遵循项目明确配置的媒介、题材、造型、材质、光色和负面要求，不预设时代、场景或固定配色。";
 
 export const DRAMA_STYLE_VISUAL = "按项目配置的视觉媒介、造型、材质和光色执行，不预设题材或固定配色";
 
@@ -47,7 +46,10 @@ export function normalizeDramaStyleName(value: unknown) {
     return style || DRAMA_STYLE_NAME;
 }
 
-export function resolveDramaStyleContract(project: { style?: string; productionBible?: { visualStyle?: string; colorScript?: string; globalNegativePrompt?: string; productionPlan?: { visual?: { visualStyle?: string; artStyle?: string } } } }): ResolvedDramaStyle {
+export function resolveDramaStyleContract(project: {
+    style?: string;
+    productionBible?: { visualStyle?: string; colorScript?: string; globalNegativePrompt?: string; productionPlan?: { visual?: { visualStyle?: string; artStyle?: string } } };
+}): ResolvedDramaStyle {
     const projectStyle = project.style?.trim() || "";
     const bibleStyle = project.productionBible?.visualStyle?.trim() || "";
     const plannedStyle = project.productionBible?.productionPlan?.visual?.visualStyle?.trim() || "";

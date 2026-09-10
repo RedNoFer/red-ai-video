@@ -34,8 +34,7 @@ export type DerivedShotPromptContract = {
 
 export const DRAMA_CHARACTER_TURNAROUND_SIZE = "16:9";
 export const DRAMA_CHARACTER_TURNAROUND_LABEL = "四视图角色基准板";
-export const DRAMA_CHARACTER_TURNAROUND_LAYOUT =
-    "身份特写、正面全身立姿、严格左侧面全身立姿、背面全身立姿四个视图，同一角色等距水平排列；身份特写置于同一基准板内，只用于锁定五官、脸型、发际线和脸部识别，后三个视图必须从头顶到鞋靴完整入画";
+export const DRAMA_CHARACTER_TURNAROUND_LAYOUT = "身份特写、正面全身立姿、严格左侧面全身立姿、背面全身立姿四个视图，同一角色等距水平排列；身份特写置于同一基准板内，只用于锁定五官、脸型、发际线和脸部识别，后三个视图必须从头顶到鞋靴完整入画";
 
 /**
  * Asset prompts are public supplier text, but their six sections are also the
@@ -56,7 +55,10 @@ export function formatDramaAssetPrompt(value: string) {
 export function isStructuredDramaAssetPrompt(value: string | undefined) {
     const prompt = formatDramaAssetPrompt(value || "");
     if (!prompt) return false;
-    const lines = prompt.split(/\r?\n/u).map((line) => line.trim()).filter(Boolean);
+    const lines = prompt
+        .split(/\r?\n/u)
+        .map((line) => line.trim())
+        .filter(Boolean);
     const indexes = DRAMA_ASSET_PROMPT_LABELS.map((label) => lines.findIndex((line) => line.startsWith(`${label}：`) || line.startsWith(`${label}:`)));
     return indexes.every((index) => index >= 0) && indexes.every((index, position) => position === 0 || index > indexes[position - 1]);
 }
@@ -339,7 +341,8 @@ function appendAdjacentFrameDifference(prompt: string, shot: DramaShot, beat?: D
     const lines = prompt.split("\n");
     const stateLine = lines.findIndex((line) => line.startsWith("可见状态："));
     if (stateLine < 0) return prompt;
-    lines[stateLine] = `${lines[stateLine]}；相较上一帧，当前帧必须已经变为：${currentState}；当前帧变化优先级最高，必须在画面中明确改变身体朝向、视线、手部/道具接触或重心中的至少一项；上一帧仅用于身份、场景、光向和轴线连续，禁止复制上一帧的可见状态（${previousState}），若主体姿态、视线和手部仍与上一帧相同则视为生成失败`;
+    lines[stateLine] =
+        `${lines[stateLine]}；相较上一帧，当前帧必须已经变为：${currentState}；当前帧变化优先级最高，必须在画面中明确改变身体朝向、视线、手部/道具接触或重心中的至少一项；上一帧仅用于身份、场景、光向和轴线连续，禁止复制上一帧的可见状态（${previousState}），若主体姿态、视线和手部仍与上一帧相同则视为生成失败`;
     return lines.join("\n");
 }
 
@@ -470,7 +473,11 @@ export function compileDramaAssetConstraints(project: Pick<DramaProject, "ratio"
         ...(styleContract.globalNegativePrompt ? [styleContract.globalNegativePrompt] : []),
     ].filter((value) => kind !== "场景" || !/(?:拼版|多视角|分格)/u.test(value));
     return compact([
-        kind === "角色" ? `只输出一张完整、独立的 ${DRAMA_CHARACTER_TURNAROUND_SIZE} ${DRAMA_CHARACTER_TURNAROUND_LABEL}，不生成第二张候选图或额外版式。` : kind === "场景" ? "只输出一张完整、独立的 1:1 九宫格场景空间基准板；九格属于同一个场景，不生成第二张候选图。" : `只输出一张完整、独立的 ${project.ratio || "9:16"} 设定图，不要拼版、联系表、多视角或分格模块。`,
+        kind === "角色"
+            ? `只输出一张完整、独立的 ${DRAMA_CHARACTER_TURNAROUND_SIZE} ${DRAMA_CHARACTER_TURNAROUND_LABEL}，不生成第二张候选图或额外版式。`
+            : kind === "场景"
+              ? "只输出一张完整、独立的 1:1 九宫格场景空间基准板；九格属于同一个场景，不生成第二张候选图。"
+              : `只输出一张完整、独立的 ${project.ratio || "9:16"} 设定图，不要拼版、联系表、多视角或分格模块。`,
         kind === "角色"
             ? `角色基准图必须固定为纯白色无缝背景四视图：${DRAMA_CHARACTER_TURNAROUND_LAYOUT}；身份特写与后三个全身视图严格保持同一脸型、五官、发际线、发型、服装、体态、关键识别配件和固有色。只允许这四个视图，不得新增任何人物、四分之三视图、主立绘、表情组、手部或道具拆解、额外角度、边框、网格、说明文字或水印。`
             : kind === "场景"
@@ -481,7 +488,11 @@ export function compileDramaAssetConstraints(project: Pick<DramaProject, "ratio"
             : "",
         "不得添加设定中没有出现的主体、装饰或剧情信息，不添加文字、水印、logo、边框。",
         `严格保留${kind}的身份、轮廓、年龄感、色彩和一致性规则，不得擅自改写。`,
-        kind === "角色" ? "禁止把中文说明、角色关系表、参数表或海报排版画进图片；四视图只表示同一角色，身份特写只负责五官识别，后三个视图负责全身比例与服装结构，不添加任何文字或其他模块。" : kind === "场景" ? "禁止人物、文字、方向标签、边框、水印、logo、海报排版和不同地点；九宫格只表达同一场景的空间方位，不把说明文字画入图片。" : "禁止把中文说明、角色关系表、参数表、海报排版或多张视图画进图片；设定文字只作为生成约束，不是画面内容。",
+        kind === "角色"
+            ? "禁止把中文说明、角色关系表、参数表或海报排版画进图片；四视图只表示同一角色，身份特写只负责五官识别，后三个视图负责全身比例与服装结构，不添加任何文字或其他模块。"
+            : kind === "场景"
+              ? "禁止人物、文字、方向标签、边框、水印、logo、海报排版和不同地点；九宫格只表达同一场景的空间方位，不把说明文字画入图片。"
+              : "禁止把中文说明、角色关系表、参数表、海报排版或多张视图画进图片；设定文字只作为生成约束，不是画面内容。",
         `禁止：${forbidden.join("；")}`,
     ]);
 }

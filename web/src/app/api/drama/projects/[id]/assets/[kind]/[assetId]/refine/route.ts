@@ -25,9 +25,7 @@ export async function POST(request: Request, context: Context) {
         const asset = project[kind].find((item) => item.id === assetId);
         if (!asset) return NextResponse.json({ code: 404, data: null, msg: "项目资产不存在" }, { status: 404 });
         const primaryRefinement = asset.references?.find((reference) => reference.id === asset.primaryReferenceId && reference.status === "approved")?.refinement;
-        const refinementBase = primaryRefinement
-            ? { ...asset, description: primaryRefinement.updatedDescription || asset.description, profile: primaryRefinement.updatedProfile }
-            : asset;
+        const refinementBase = primaryRefinement ? { ...asset, description: primaryRefinement.updatedDescription || asset.description, profile: primaryRefinement.updatedProfile } : asset;
         const proposal = await refineDramaAssetWithModel({
             origin: resolveInternalOrigin(new URL(request.url).origin),
             cookie: request.headers.get("cookie") || "",

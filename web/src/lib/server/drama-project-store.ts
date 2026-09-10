@@ -91,7 +91,9 @@ export async function findDramaEpisodeByCanvasProjectId(userId: string, canvasPr
         const episode = project?.episodes.find((item) => item.canvasProjectId === canvasProjectId);
         return project && episode ? { project, episode } : null;
     }
-    const record = (await readDatabase()).projects.find((item) => item.userId === userId && item.project.episodes.some((episode) => episode.canvasProjectId === canvasProjectId || `canvas-drama-episode-${item.project.id}-${episode.id}` === canvasProjectId));
+    const record = (await readDatabase()).projects.find(
+        (item) => item.userId === userId && item.project.episodes.some((episode) => episode.canvasProjectId === canvasProjectId || `canvas-drama-episode-${item.project.id}-${episode.id}` === canvasProjectId),
+    );
     const episode = record?.project.episodes.find((item) => item.canvasProjectId === canvasProjectId || `canvas-drama-episode-${record.project.id}-${item.id}` === canvasProjectId);
     return record && episode ? { project: record.project, episode } : null;
 }

@@ -5,7 +5,8 @@ import { chromium, request as playwrightRequest } from "@playwright/test";
 const baseURL = "http://127.0.0.1:3100";
 const installToken = "vozeb-pro-e2e-install-token-32chars";
 const staleTemplate = '{"model":"{{model}}","prompt":"{{prompt}}","first_frame":"{{first_frame}}","last_frame":"{{last_frame}}"}';
-const presetTemplate = '{"model":"{{model}}","prompt":"{{prompt}}","mode":"{{mode}}","duration":"{{duration}}","aspect_ratio":"{{aspect_ratio}}","resolution":"{{resolution}}","quality":"{{quality}}","client_request_id":"{{client_request_id}}","images":"{{images}}","videos":"{{videos}}","audios":"{{audios}}","count":1}';
+const presetTemplate =
+    '{"model":"{{model}}","prompt":"{{prompt}}","mode":"{{mode}}","duration":"{{duration}}","aspect_ratio":"{{aspect_ratio}}","resolution":"{{resolution}}","quality":"{{quality}}","client_request_id":"{{client_request_id}}","images":"{{images}}","videos":"{{videos}}","audios":"{{audios}}","count":1}';
 
 const channel = {
     id: "browser-buming",

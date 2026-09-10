@@ -15,7 +15,10 @@ import { readReferenceAsset } from "@/lib/server/reference-asset-store";
 import { getDramaProjectForUser, updateDramaProjectForUser } from "./drama-project-service";
 
 export class DramaVoiceCreationError extends Error {
-    constructor(message: string, readonly status = 400) {
+    constructor(
+        message: string,
+        readonly status = 400,
+    ) {
         super(message);
     }
 }
@@ -72,7 +75,8 @@ export async function createDramaVoiceCreationTask(input: CreationInput) {
     const fingerprint = hash([mode, prompt, sampleAssetId, resolved.logicalModelId, resolved.channelId, resolved.upstreamModel].join("|"));
     const clientRequestId = `drama-voice-create:${input.project.id}:${input.character.id}:${requestId}`;
     const cached = await getStoredGenerationTaskByRequest<AudioTask>("audio", input.userId, clientRequestId);
-    const task = cached ||
+    const task =
+        cached ||
         (await createAudioTask({
             userId: input.userId,
             projectId: input.project.id,
@@ -164,7 +168,15 @@ export async function syncDramaVoiceCreationTask(userId: string, projectId: stri
     if (!profile.creationTaskId) return { project, voiceProfile: profile, task: undefined };
     const task = await getAudioTask(profile.creationTaskId);
     if (!task || task.userId !== userId) return { project, voiceProfile: { ...profile, creationStatus: "error" as const, creationError: "声纹创建任务不存在" }, task: undefined };
-    const nextProject = task.status === "success" ? (await applyDramaVoiceCreationTask(task)) || project : task.status === "error" ? await updateDramaProjectForUser(userId, project.id, { ...project, characters: project.characters.map((item) => (item.id === character.id ? { ...item, voiceProfile: { ...profile, creationStatus: "error", creationError: task.error || "声纹创建失败" } } : item)) }) : project;
+    const nextProject =
+        task.status === "success"
+            ? (await applyDramaVoiceCreationTask(task)) || project
+            : task.status === "error"
+              ? await updateDramaProjectForUser(userId, project.id, {
+                    ...project,
+                    characters: project.characters.map((item) => (item.id === character.id ? { ...item, voiceProfile: { ...profile, creationStatus: "error", creationError: task.error || "声纹创建失败" } } : item)),
+                })
+              : project;
     return { project: nextProject, voiceProfile: nextProject.characters.find((item) => item.id === character.id)?.voiceProfile || profile, task };
 }
 
@@ -172,7 +184,9 @@ function resolveVoiceCreationCandidate(settings: Awaited<ReturnType<typeof getAu
     const preferred = mode === "clone" ? settings.defaultModels.voiceCloneModel : settings.defaultModels.voiceDesignModel;
     const ids = Array.from(new Set([preferred, ...settings.logicalModels.filter((item) => item.enabled && item.capability === "audio").map((item) => item.id)].filter((value): value is string => Boolean(value))));
     for (const id of ids) {
-        const match = resolveAudioLogicalModelCandidates(settings, id).find((candidate) => resolveChannelCapabilityConfig(candidate.channel.advancedConfig, candidate.upstreamModel, "audio")?.audioOperation === (mode === "clone" ? "voice-clone" : "voice-design"));
+        const match = resolveAudioLogicalModelCandidates(settings, id).find(
+            (candidate) => resolveChannelCapabilityConfig(candidate.channel.advancedConfig, candidate.upstreamModel, "audio")?.audioOperation === (mode === "clone" ? "voice-clone" : "voice-design"),
+        );
         if (match) return match;
     }
     return null;

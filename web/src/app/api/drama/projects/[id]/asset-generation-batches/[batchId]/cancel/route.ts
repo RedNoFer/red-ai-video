@@ -11,15 +11,21 @@ export async function POST(request: Request, context: Context) {
     try {
         const params = await context.params;
         const batch = await getDramaAssetGenerationBatchForUser(user.id, params.id, params.batchId);
-        const items = await Promise.all(batch.items.map(async (item) => {
-            if (item.status === "queued") return { ...item, status: "cancelled" as const, completedAt: new Date().toISOString() };
-            if (item.status === "running" && item.generationTaskId) {
-                const endpoint = item.outputType === "character_voice" ? "audio-tasks" : "image-tasks";
-                const response = await fetch(new URL(`/api/${endpoint}/${encodeURIComponent(item.generationTaskId)}`, request.url), { method: "PATCH", headers: { "Content-Type": "application/json", cookie: request.headers.get("cookie") || "" }, body: JSON.stringify({ status: "cancelled" }) }).catch(() => null);
-                if (response?.ok) return { ...item, status: "cancelled" as const, completedAt: new Date().toISOString() };
-            }
-            return item;
-        }));
+        const items = await Promise.all(
+            batch.items.map(async (item) => {
+                if (item.status === "queued") return { ...item, status: "cancelled" as const, completedAt: new Date().toISOString() };
+                if (item.status === "running" && item.generationTaskId) {
+                    const endpoint = item.outputType === "character_voice" ? "audio-tasks" : "image-tasks";
+                    const response = await fetch(new URL(`/api/${endpoint}/${encodeURIComponent(item.generationTaskId)}`, request.url), {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json", cookie: request.headers.get("cookie") || "" },
+                        body: JSON.stringify({ status: "cancelled" }),
+                    }).catch(() => null);
+                    if (response?.ok) return { ...item, status: "cancelled" as const, completedAt: new Date().toISOString() };
+                }
+                return item;
+            }),
+        );
         const updated = await updateDramaAssetGenerationBatchForUser(user.id, { ...batch, items });
         return NextResponse.json({ code: 0, data: { batch: updated }, msg: "批量任务已取消" });
     } catch (error) {

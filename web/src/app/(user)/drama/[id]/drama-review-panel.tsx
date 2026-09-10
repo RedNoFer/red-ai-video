@@ -13,19 +13,7 @@ import { DramaStageHeader } from "./drama-editor-elements";
 import type { DramaProjectStage } from "./drama-project-sections";
 import { DramaShotDialogueEditor } from "./drama-shot-dialogue-editor";
 
-export function DramaReviewPanel({
-    project,
-    episode,
-    onDesignVisuals,
-    designing,
-    onStageChange,
-}: {
-    project: DramaProject;
-    episode: DramaEpisode;
-    onDesignVisuals: () => void;
-    designing: boolean;
-    onStageChange: (stage: DramaProjectStage) => void;
-}) {
+export function DramaReviewPanel({ project, episode, onDesignVisuals, designing, onStageChange }: { project: DramaProject; episode: DramaEpisode; onDesignVisuals: () => void; designing: boolean; onStageChange: (stage: DramaProjectStage) => void }) {
     const { message } = App.useApp();
     const updateEpisode = useDramaStore((state) => state.updateEpisode);
     const updateShot = useDramaStore((state) => state.updateShot);
@@ -130,7 +118,11 @@ export function DramaReviewPanel({
                     <div className="flex shrink-0 items-center gap-2">
                         {reviewTask ? (
                             <Tag className="!m-0 !rounded-md" color={reviewTask.status === "running" ? "processing" : reviewTask.status === "success" ? "success" : "error"}>
-                                {reviewTask.status === "running" ? `历史批量补全进行中 · 已完成 ${reviewTask.completedCount}/${reviewTask.missingCount} 项` : reviewTask.status === "success" ? `历史批量补全已完成 ${reviewTask.completedCount} 项` : "历史批量补全失败，请在镜头任务逐个补全"}
+                                {reviewTask.status === "running"
+                                    ? `历史批量补全进行中 · 已完成 ${reviewTask.completedCount}/${reviewTask.missingCount} 项`
+                                    : reviewTask.status === "success"
+                                      ? `历史批量补全已完成 ${reviewTask.completedCount} 项`
+                                      : "历史批量补全失败，请在镜头任务逐个补全"}
                             </Tag>
                         ) : null}
                         {tabMissingReviewCount ? <span className="text-xs text-muted-foreground">缺失参数请在镜头任务中逐个智能补全</span> : null}
@@ -365,8 +357,12 @@ export function DramaReviewPanel({
                                 </div>
                                 {candidateTail ? (
                                     <div className="mt-2 flex flex-wrap gap-2">
-                                        <Button size="small" type="primary" onClick={() => void decideTail(shot, "accept")}>验收实际尾帧</Button>
-                                        <Button size="small" danger onClick={() => void decideTail(shot, "reject")}>拒绝实际尾帧</Button>
+                                        <Button size="small" type="primary" onClick={() => void decideTail(shot, "accept")}>
+                                            验收实际尾帧
+                                        </Button>
+                                        <Button size="small" danger onClick={() => void decideTail(shot, "reject")}>
+                                            拒绝实际尾帧
+                                        </Button>
                                     </div>
                                 ) : null}
                                 {shot.continuityError ? <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">状态说明：{shot.continuityError}</p> : null}

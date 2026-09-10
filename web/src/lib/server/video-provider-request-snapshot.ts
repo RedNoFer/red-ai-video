@@ -15,7 +15,15 @@ export function createVideoProviderRequestSnapshot(path: string, prompt: string,
         path,
         prompt,
         promptLength: prompt.length,
-        references: references.map(({ type, role, keyframeIndex, url, remoteUrl, serverUrl, durationMs }) => ({ type, ...(role ? { role } : {}), ...(keyframeIndex ? { keyframeIndex } : {}), url, ...(remoteUrl ? { remoteUrl } : {}), ...(serverUrl ? { serverUrl } : {}), ...(durationMs ? { durationMs } : {}) })),
+        references: references.map(({ type, role, keyframeIndex, url, remoteUrl, serverUrl, durationMs }) => ({
+            type,
+            ...(role ? { role } : {}),
+            ...(keyframeIndex ? { keyframeIndex } : {}),
+            url,
+            ...(remoteUrl ? { remoteUrl } : {}),
+            ...(serverUrl ? { serverUrl } : {}),
+            ...(durationMs ? { durationMs } : {}),
+        })),
         ...(parsed ? { body: parsed, bodyKind: "json" as const } : { bodyKind: "multipart" as const }),
     };
 }

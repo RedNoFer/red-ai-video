@@ -12,7 +12,15 @@ describe("POST drama asset refinement", () => {
     beforeEach(() => {
         vi.clearAllMocks();
         mocks.getCurrentUser.mockResolvedValue({ id: "user-one" });
-        mocks.getProject.mockResolvedValue({ id: "project-one", title: "短剧", style: "暗黑学院史诗奇幻", ratio: "9:16", characters: [{ id: "rifa", name: "Rifa", description: "女主角", profile: { visualIdentity: "深棕肤色", styling: "皮甲", colorPalette: "深色", consistencyRules: "固定五官和年龄" } }], scenes: [], props: [] });
+        mocks.getProject.mockResolvedValue({
+            id: "project-one",
+            title: "短剧",
+            style: "暗黑学院史诗奇幻",
+            ratio: "9:16",
+            characters: [{ id: "rifa", name: "Rifa", description: "女主角", profile: { visualIdentity: "深棕肤色", styling: "皮甲", colorPalette: "深色", consistencyRules: "固定五官和年龄" } }],
+            scenes: [],
+            props: [],
+        });
         mocks.refine.mockResolvedValue({ reply: "已调整", changes: [], updatedProfile: {}, compiledPrompt: "prompt", negativePrompt: "NPC", preservedRules: [] });
     });
 

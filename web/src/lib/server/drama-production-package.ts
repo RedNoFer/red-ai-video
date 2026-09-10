@@ -875,17 +875,17 @@ function normalizePackageShot(value: unknown, index: number, options: { upgradeL
             ...frame,
             imagePrompt: shouldUpgradeImportedFramePrompt(frame.imagePrompt, options)
                 ? upgradeDramaFrameImagePrompt(frame.imagePrompt, frame.actionPrompt, {
-                description,
-                shotSize: text(continuity.shotSize),
-                cameraAngle: text(continuity.cameraAngle),
-                composition: text(continuity.composition),
-                characterBlocking: text(continuity.characterBlocking),
-                gazeDirection: text(continuity.gazeDirection),
-                lighting,
-                colorPalette,
-                performanceState: performanceStateForFrame(performancePlan, frame.sequenceIndex, frames.length),
-                sequenceIndex: frame.sequenceIndex,
-                frameCount: frames.length,
+                      description,
+                      shotSize: text(continuity.shotSize),
+                      cameraAngle: text(continuity.cameraAngle),
+                      composition: text(continuity.composition),
+                      characterBlocking: text(continuity.characterBlocking),
+                      gazeDirection: text(continuity.gazeDirection),
+                      lighting,
+                      colorPalette,
+                      performanceState: performanceStateForFrame(performancePlan, frame.sequenceIndex, frames.length),
+                      sequenceIndex: frame.sequenceIndex,
+                      frameCount: frames.length,
                   })
                 : frame.imagePrompt.trim(),
         }));

@@ -136,7 +136,19 @@ function buildShotNodes(project: DramaProject, episode: DramaEpisode, shot: Dram
     return nodes.filter((node) => node.id !== frameNodeId(shot.id, "storyboardEndImageUrl") || shot.storyboardFrameMode === "first_last" || shot.storyboardEndImageUrl);
 }
 
-function frameNode(project: DramaProject, episode: DramaEpisode, shot: DramaShot, field: "storyboardImageUrl" | "storyboardEndImageUrl", x: number, y: number, label: string, url?: string, width?: number, height?: number, status?: DramaShot["storyboardStatus"]): CanvasNodeData {
+function frameNode(
+    project: DramaProject,
+    episode: DramaEpisode,
+    shot: DramaShot,
+    field: "storyboardImageUrl" | "storyboardEndImageUrl",
+    x: number,
+    y: number,
+    label: string,
+    url?: string,
+    width?: number,
+    height?: number,
+    status?: DramaShot["storyboardStatus"],
+): CanvasNodeData {
     const size = { width: 360, height: 220 };
     return {
         id: frameNodeId(shot.id, field),

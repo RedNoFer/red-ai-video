@@ -49,7 +49,7 @@ export function AdminChannelDetailDrawer({ open, channel, settings, fetching, on
                             />
                         ),
                     },
-                        { key: "models", label: `上游模型 ${channel.models.length}`, children: <ChannelModels channel={channel} onChange={onChange} onFetchModels={onFetchModels} /> },
+                    { key: "models", label: `上游模型 ${channel.models.length}`, children: <ChannelModels channel={channel} onChange={onChange} onFetchModels={onFetchModels} /> },
                 ]}
             />
         </Drawer>
@@ -122,9 +122,7 @@ function ChannelModels({ channel, onChange, onFetchModels }: { channel: SystemMo
                 <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
                         <div className="text-sm font-semibold text-stone-950 dark:text-stone-100">模型 ID</div>
-                        <div className="mt-1 text-xs leading-5 text-stone-500 dark:text-stone-400">
-                            {canSync ? "可先同步模型，也可以手动输入上游真实模型 ID。" : "当前协议没有可同步的模型目录，请直接输入上游真实模型 ID，按 Enter 后保存。"}
-                        </div>
+                        <div className="mt-1 text-xs leading-5 text-stone-500 dark:text-stone-400">{canSync ? "可先同步模型，也可以手动输入上游真实模型 ID。" : "当前协议没有可同步的模型目录，请直接输入上游真实模型 ID，按 Enter 后保存。"}</div>
                     </div>
                     {canSync ? (
                         <Button size="small" onClick={onFetchModels}>

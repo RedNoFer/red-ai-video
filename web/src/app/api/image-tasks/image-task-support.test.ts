@@ -174,7 +174,9 @@ describe("GlobalAiOpc image task paths", () => {
             advancedConfig: { protocol: "sub2api", createPath: "/images/generations" },
         } as never;
 
-        await expect(parseImagePayloadOrPoll(openAiConfig, { created: 1, data: [{ revised_prompt: "ok" }], usage: {} } as never, "http://localhost/api/ai/system/openai-image", "", "http://localhost/api/ai/system/openai-image", true)).rejects.toMatchObject({
+        await expect(
+            parseImagePayloadOrPoll(openAiConfig, { created: 1, data: [{ revised_prompt: "ok" }], usage: {} } as never, "http://localhost/api/ai/system/openai-image", "", "http://localhost/api/ai/system/openai-image", true),
+        ).rejects.toMatchObject({
             diagnostics: { dataType: "array", dataLength: 1, firstDataItemKeys: ["revised_prompt"] },
         } satisfies Partial<GenerationSubmissionUncertainError>);
     });
@@ -187,7 +189,9 @@ describe("GlobalAiOpc image task paths", () => {
             advancedConfig: { protocol: "sub2api", createPath: "/images/generations" },
         } as never;
 
-        await expect(parseImagePayloadOrPoll(openAiConfig, { success: false, message: "No available compatible accounts" } as never, "http://localhost/api/ai/system/openai-image", "", "http://localhost/api/ai/system/openai-image", true)).rejects.toMatchObject({
+        await expect(
+            parseImagePayloadOrPoll(openAiConfig, { success: false, message: "No available compatible accounts" } as never, "http://localhost/api/ai/system/openai-image", "", "http://localhost/api/ai/system/openai-image", true),
+        ).rejects.toMatchObject({
             name: "GenerationSubmissionSafeFailure",
             message: "No available compatible accounts",
         });

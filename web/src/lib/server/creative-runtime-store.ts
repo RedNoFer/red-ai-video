@@ -72,7 +72,10 @@ export async function createCreativeConversation(userId: string, input: { surfac
     return conversation;
 }
 
-export async function listCreativeConversations(userId: string, input: { surface?: CreativeSurface; source?: CreativeConversationSource; projectId?: string; episodeId?: string; status?: CreativeConversation["status"]; limit?: number; offset?: number } = {}) {
+export async function listCreativeConversations(
+    userId: string,
+    input: { surface?: CreativeSurface; source?: CreativeConversationSource; projectId?: string; episodeId?: string; status?: CreativeConversation["status"]; limit?: number; offset?: number } = {},
+) {
     const limit = boundedLimit(input.limit, 50);
     const offset = Math.max(0, Math.floor(Number(input.offset) || 0));
     if (getDatabaseProvider() === "postgres") {
@@ -98,7 +101,12 @@ export async function listCreativeConversations(userId: string, input: { surface
     return db.conversations
         .filter(
             (item) =>
-                item.userId === userId && (!input.surface || item.surface === input.surface) && (!input.source || item.source === input.source) && (!input.projectId || item.projectId === input.projectId) && (!input.episodeId || item.episodeId === input.episodeId) && (!input.status || item.status === input.status),
+                item.userId === userId &&
+                (!input.surface || item.surface === input.surface) &&
+                (!input.source || item.source === input.source) &&
+                (!input.projectId || item.projectId === input.projectId) &&
+                (!input.episodeId || item.episodeId === input.episodeId) &&
+                (!input.status || item.status === input.status),
         )
         .sort((a, b) => b.updatedAt - a.updatedAt)
         .slice(offset, offset + limit);

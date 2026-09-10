@@ -8,9 +8,7 @@ export function AgentPlannerAuditSummary({ task }: { task: AdminGenerationTask }
     if (!audit) return null;
     return (
         <div className="mt-1.5 space-y-1 text-[11px] leading-4 text-zinc-500 dark:text-zinc-400">
-            <div className="truncate">
-                {audit.mode === "conversation" ? "轻量普通问答" : `计划 Schema v${audit.schemaVersion} · ${audit.mode === "direct" ? "用户直选模型" : planningProtocolLabel(audit.protocol)}`}
-            </div>
+            <div className="truncate">{audit.mode === "conversation" ? "轻量普通问答" : `计划 Schema v${audit.schemaVersion} · ${audit.mode === "direct" ? "用户直选模型" : planningProtocolLabel(audit.protocol)}`}</div>
             {audit.timings ? (
                 <div className="truncate">
                     上游响应头 {formatDuration(audit.timings.upstreamHeadersMs)} · 首字节 {formatDuration(audit.timings.firstByteMs)} · 完整响应 {formatDuration(audit.timings.totalMs)}

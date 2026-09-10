@@ -45,7 +45,11 @@ describe("parseChannelExampleConfig", () => {
 
     it("recognizes the MegabyAI New API video host as the dedicated protocol", () => {
         const channel = { id: "one", name: "测试", baseUrl: "", apiKey: "", apiFormat: "openai", models: [], enabled: false } satisfies SystemModelChannel;
-        const result = parseChannelExampleConfig('curl https://newapi.megabyai.cc/v1/videos -d {"model":"alibaba/wan-3.0","prompt":"test","duration":5,"ratio":"16:9","resolution":"720p","referenceImages":["https://cdn.example.com/ref.png"]}', channel, advanced);
+        const result = parseChannelExampleConfig(
+            'curl https://newapi.megabyai.cc/v1/videos -d {"model":"alibaba/wan-3.0","prompt":"test","duration":5,"ratio":"16:9","resolution":"720p","referenceImages":["https://cdn.example.com/ref.png"]}',
+            channel,
+            advanced,
+        );
         expect(result?.patch.advancedConfig?.protocol).toBe("newapi-video");
         expect(result?.patch.advancedConfig).toMatchObject({ imageToVideoPath: "/videos", queryPath: "/videos/:task_id" });
     });

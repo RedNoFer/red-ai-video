@@ -29,18 +29,20 @@ function withDeterministicVideoSection(value: DramaProductionPackageV1): DramaPr
                     ...shot.framePlan,
                     frames: shot.framePlan.frames.map((frame) => ({
                         ...frame,
-                        imagePrompt: needsDramaStaticFramePromptUpgrade(frame.imagePrompt) ? upgradeDramaFrameImagePrompt(frame.imagePrompt, frame.actionPrompt, {
-                            description: shot.description,
-                            shotSize: shot.continuity?.shotSize || "中景",
-                            cameraAngle: shot.continuity?.cameraAngle || "视线高度平视",
-                            composition: shot.continuity?.composition || "主体位于画面安全区，前景有具体框景",
-                            characterBlocking: shot.continuity?.characterBlocking || "按当前动作关系安排主体站位",
-                            gazeDirection: shot.continuity?.gazeDirection || "视线落向当前叙事目标",
-                            lighting: shot.lighting || "延续本场主光",
-                            colorPalette: shot.colorPalette || "沿用本场色板",
-                            sequenceIndex: frame.sequenceIndex,
-                            frameCount: shot.framePlan.frames.length,
-                        }) : frame.imagePrompt.trim(),
+                        imagePrompt: needsDramaStaticFramePromptUpgrade(frame.imagePrompt)
+                            ? upgradeDramaFrameImagePrompt(frame.imagePrompt, frame.actionPrompt, {
+                                  description: shot.description,
+                                  shotSize: shot.continuity?.shotSize || "中景",
+                                  cameraAngle: shot.continuity?.cameraAngle || "视线高度平视",
+                                  composition: shot.continuity?.composition || "主体位于画面安全区，前景有具体框景",
+                                  characterBlocking: shot.continuity?.characterBlocking || "按当前动作关系安排主体站位",
+                                  gazeDirection: shot.continuity?.gazeDirection || "视线落向当前叙事目标",
+                                  lighting: shot.lighting || "延续本场主光",
+                                  colorPalette: shot.colorPalette || "沿用本场色板",
+                                  sequenceIndex: frame.sequenceIndex,
+                                  frameCount: shot.framePlan.frames.length,
+                              })
+                            : frame.imagePrompt.trim(),
                         ...(frame.supplierPrompt ? { supplierPrompt: formatPromptFieldLines(frame.supplierPrompt, "static") } : {}),
                     })),
                 },

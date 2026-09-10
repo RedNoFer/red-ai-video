@@ -172,7 +172,11 @@ export async function queryAudioTaskUpstreamStep(task: AudioTask, origin: string
         if (task.config.voiceOperation && !voiceId) throw new GenerationSubmissionSafeFailure("声纹创建接口未返回 voice_id，未覆盖原有角色声纹");
         const audioField = task.config.advancedConfig?.previewAudioField || task.config.advancedConfig?.resultField;
         const audio = readProviderAudio(data, audioField);
-        const result = audio?.base64 ? audioDataUrl(audio.base64, audio.mimeType || mimeFromFormat(task.config.format || "wav")) : audio?.hex ? audioHexDataUrl(audio.hex, audio.mimeType || mimeFromFormat(task.config.format || "mp3")) : audio?.url || readProviderString(data, audioField, AUDIO_KEYS);
+        const result = audio?.base64
+            ? audioDataUrl(audio.base64, audio.mimeType || mimeFromFormat(task.config.format || "wav"))
+            : audio?.hex
+              ? audioHexDataUrl(audio.hex, audio.mimeType || mimeFromFormat(task.config.format || "mp3"))
+              : audio?.url || readProviderString(data, audioField, AUDIO_KEYS);
         const status = readProviderString(data, task.config.advancedConfig?.statusField, STATUS_KEYS).toLowerCase();
         if (result) return { state: "result_ready", status: status || "completed", resultUrl: result, ...(voiceId ? { voiceId } : {}) };
         if (FAILED.has(status)) return { state: "failed", status, error: readProviderString(data, undefined, ERROR_KEYS) || "音频生成失败" };
@@ -268,7 +272,12 @@ async function completeAudioTask(task: AudioTask, url: string, mimeType: string,
         if (current?.status === "cancelled") await refundAudioTask(current);
         return current;
     }
-    const completed = await transitionAudioTask(current, ["pending", "running"], { status: "success", result: { url, mimeType, ...(assetId ? { assetId } : {}), ...(voiceId ? { voiceId } : {}) }, config: { ...current.config, apiKey: "" }, billing: current.billing });
+    const completed = await transitionAudioTask(current, ["pending", "running"], {
+        status: "success",
+        result: { url, mimeType, ...(assetId ? { assetId } : {}), ...(voiceId ? { voiceId } : {}) },
+        config: { ...current.config, apiKey: "" },
+        billing: current.billing,
+    });
     if (!completed) {
         const latest = await getAudioTask(task.id);
         if (latest?.status === "cancelled") await refundAudioTask(latest);

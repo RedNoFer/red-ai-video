@@ -40,10 +40,15 @@ export async function getDramaProductionRun(userId: string, projectId: string, r
 export async function findLatestDramaProductionRun(userId: string, projectId: string, episodeId: string, scope: "visual" | "production" = "production") {
     if (getDatabaseProvider() === "postgres") {
         await ensurePostgresSchema();
-        const result = await postgresQuery<{ run_json: DramaProductionRun }>("SELECT run_json FROM drama_production_runs WHERE user_id = $1 AND project_id = $2 AND episode_id = $3 AND (($4 = 'visual' AND run_json->>'scope' = 'visual') OR ($4 = 'production' AND COALESCE(run_json->>'scope', '') <> 'visual')) ORDER BY updated_at DESC LIMIT 1", [userId, projectId, episodeId, scope]);
+        const result = await postgresQuery<{ run_json: DramaProductionRun }>(
+            "SELECT run_json FROM drama_production_runs WHERE user_id = $1 AND project_id = $2 AND episode_id = $3 AND (($4 = 'visual' AND run_json->>'scope' = 'visual') OR ($4 = 'production' AND COALESCE(run_json->>'scope', '') <> 'visual')) ORDER BY updated_at DESC LIMIT 1",
+            [userId, projectId, episodeId, scope],
+        );
         return result.rows[0]?.run_json || null;
     }
-    const item = (await readDatabase()).items.filter((run) => run.userId === userId && run.projectId === projectId && run.episodeId === episodeId && (scope === "visual" ? run.scope === "visual" : run.scope !== "visual")).sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0];
+    const item = (await readDatabase()).items
+        .filter((run) => run.userId === userId && run.projectId === projectId && run.episodeId === episodeId && (scope === "visual" ? run.scope === "visual" : run.scope !== "visual"))
+        .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0];
     if (!item) return null;
     const { userId: _userId, ...run } = item;
     return run;

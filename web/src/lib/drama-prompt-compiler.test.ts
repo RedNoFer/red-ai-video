@@ -158,8 +158,22 @@ describe("drama prompt compiler", () => {
             start: { source: "independent" },
             end: { required: false },
             frames: [
-                { id: "frame-one", sequenceIndex: 1, startSecond: 0, endSecond: 3, actionPrompt: "三人静立，萧炎在右侧低头承受压力", imagePrompt: "静态关键帧：三人静立于议事大厅\n可见状态：萧炎低头，右手停在桌沿旁，茶水静止\n可见表演状态：眉眼压低，视线未回看对方" },
-                { id: "frame-two", sequenceIndex: 2, startSecond: 3, endSecond: 6, actionPrompt: "萧炎抬眼扫过萧战，右手在桌沿收紧，茶水出现细小波纹", imagePrompt: "静态关键帧：萧炎抬眼扫过萧战，右手在桌沿收紧，茶水出现细小波纹\n可见状态：萧炎抬眼扫过萧战，右手五指收紧贴住桌沿，茶水表面出现细小波纹\n可见表演状态：视线转向萧战，肩线开始绷紧" },
+                {
+                    id: "frame-one",
+                    sequenceIndex: 1,
+                    startSecond: 0,
+                    endSecond: 3,
+                    actionPrompt: "三人静立，萧炎在右侧低头承受压力",
+                    imagePrompt: "静态关键帧：三人静立于议事大厅\n可见状态：萧炎低头，右手停在桌沿旁，茶水静止\n可见表演状态：眉眼压低，视线未回看对方",
+                },
+                {
+                    id: "frame-two",
+                    sequenceIndex: 2,
+                    startSecond: 3,
+                    endSecond: 6,
+                    actionPrompt: "萧炎抬眼扫过萧战，右手在桌沿收紧，茶水出现细小波纹",
+                    imagePrompt: "静态关键帧：萧炎抬眼扫过萧战，右手在桌沿收紧，茶水出现细小波纹\n可见状态：萧炎抬眼扫过萧战，右手五指收紧贴住桌沿，茶水表面出现细小波纹\n可见表演状态：视线转向萧战，肩线开始绷紧",
+                },
             ],
         };
         const prompt = compileDramaFrameSupplierPrompt(project, project.episodes[0], shot, shot.framePlan.frames[1]);
@@ -215,7 +229,8 @@ describe("drama prompt compiler", () => {
             endSecond: 4,
             actionPrompt: "人物抬眼并收紧手指",
             imagePrompt: "人物抬眼并收紧手指",
-            supplierPrompt: "静态关键帧：人物抬眼并收紧手指\n可见状态：人物抬眼并收紧手指\n可见表演状态：主体的眉眼、呼吸、手部和道具接触关系清晰可见，情绪通过身体动作呈现\n景别：中景\n机位与构图：平视\n站位与视线：人物在右侧\n三层空间：前景门框，中景人物，背景大厅\n光色与风格：冷光\n负面约束：无水印",
+            supplierPrompt:
+                "静态关键帧：人物抬眼并收紧手指\n可见状态：人物抬眼并收紧手指\n可见表演状态：主体的眉眼、呼吸、手部和道具接触关系清晰可见，情绪通过身体动作呈现\n景别：中景\n机位与构图：平视\n站位与视线：人物在右侧\n三层空间：前景门框，中景人物，背景大厅\n光色与风格：冷光\n负面约束：无水印",
         });
         expect(prompt).toContain("眉眼抬起");
         expect(prompt).not.toContain("主体的眉眼、呼吸、手部和道具接触关系清晰可见");
@@ -647,7 +662,8 @@ describe("drama prompt compiler", () => {
 
     it("uses a saved supplier prompt for downstream asset generation", () => {
         const project = createProject();
-        const savedPrompt = "主体与资产类型：角色「Karin」\n身份/结构锚点：已确认脸型与发束\n一致性锁定：锁定五官、头身比和服装层次\n可见状态与材质：墨青长袍与旧金腰封；按设定保持自然骨骼比例；五官按设定年龄和性别的真实骨骼塑形；头发按发际线、分区、根部体积和主发束建模；服装按真实裁剪逻辑分层\n构图与画幅：16:9 横向，纯白色无缝背景四视图，身份特写、正面全身、严格左侧面全身、背面全身\n光色与风格：高精度人物细节；角色固有色彩：墨青、旧金\n负面约束：无额外人物、无文字。";
+        const savedPrompt =
+            "主体与资产类型：角色「Karin」\n身份/结构锚点：已确认脸型与发束\n一致性锁定：锁定五官、头身比和服装层次\n可见状态与材质：墨青长袍与旧金腰封；按设定保持自然骨骼比例；五官按设定年龄和性别的真实骨骼塑形；头发按发际线、分区、根部体积和主发束建模；服装按真实裁剪逻辑分层\n构图与画幅：16:9 横向，纯白色无缝背景四视图，身份特写、正面全身、严格左侧面全身、背面全身\n光色与风格：高精度人物细节；角色固有色彩：墨青、旧金\n负面约束：无额外人物、无文字。";
         project.characters[0] = { ...project.characters[0], supplierPrompt: savedPrompt };
 
         expect(compileDramaAssetReferencePrompt(project, project.characters[0], "角色")).toBe(savedPrompt.replace("。\n", "\n"));
@@ -667,7 +683,12 @@ describe("drama prompt compiler", () => {
 
     it("recognizes only the complete high-quality role prompt contract", () => {
         expect(hasDramaAssetPromptQuality("主体与资产类型：角色\n身份/结构锚点：脸型\n可见状态与材质：服装\n构图与画幅：三视图\n光色与风格：高精度\n负面约束：无文字", "角色")).toBe(false);
-        expect(hasDramaAssetPromptQuality("主体与资产类型：角色\n身份/结构锚点：脸型\n一致性锁定：锁定五官和头身比\n可见状态与材质：自然骨骼比例，五官按年龄塑形，头发按发际线和主发束建模，服装按真实裁剪逻辑分层\n构图与画幅：16:9纯白色四视图，身份特写、正面全身、严格左侧面全身、背面全身\n光色与风格：高精度人物细节\n负面约束：无额外人物", "角色")).toBe(true);
+        expect(
+            hasDramaAssetPromptQuality(
+                "主体与资产类型：角色\n身份/结构锚点：脸型\n一致性锁定：锁定五官和头身比\n可见状态与材质：自然骨骼比例，五官按年龄塑形，头发按发际线和主发束建模，服装按真实裁剪逻辑分层\n构图与画幅：16:9纯白色四视图，身份特写、正面全身、严格左侧面全身、背面全身\n光色与风格：高精度人物细节\n负面约束：无额外人物",
+                "角色",
+            ),
+        ).toBe(true);
     });
 
     it("does not let a saved supplier prompt hide a refinement proposal", () => {

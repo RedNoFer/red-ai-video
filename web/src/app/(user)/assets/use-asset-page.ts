@@ -13,7 +13,10 @@ const assetPageRequests = new Map<string, Promise<LibraryAssetPage>>();
 export function prefetchAssetPage(input: Partial<AssetPageInput> & { userId: string }) {
     const normalized = normalizeAssetPageInput(input);
     if (!normalized.userId) return Promise.resolve();
-    return loadAssetPage(normalized).then(() => undefined, () => undefined);
+    return loadAssetPage(normalized).then(
+        () => undefined,
+        () => undefined,
+    );
 }
 
 export function useAssetPage(input: AssetPageInput) {

@@ -14,7 +14,7 @@ export async function PATCH(request: Request, context: Context) {
         if (!parsed.ok) return NextResponse.json({ code: parsed.status, data: null, msg: parsed.message }, { status: parsed.status });
         const params = await context.params;
         const project = await updateDramaShotPromptForUser(user.id, params.id, params.episodeId, params.shotId, parsed.data);
-        const input = parsed.data && typeof parsed.data === "object" ? parsed.data as Record<string, unknown> : {};
+        const input = parsed.data && typeof parsed.data === "object" ? (parsed.data as Record<string, unknown>) : {};
         if (new URL(request.url).searchParams.get("response") === "shot") {
             const shot = project.episodes.find((episode) => episode.id === params.episodeId)?.shots.find((item) => item.id === params.shotId);
             if (!shot) return NextResponse.json({ code: 404, data: null, msg: "短剧镜头不存在" }, { status: 404 });

@@ -1,7 +1,17 @@
 import { describe, expect, it } from "vitest";
 
 import { createFrameEvidence } from "@/lib/drama-continuity-policy";
-import { applyDramaProductionRunStep, applyDramaVisualRunTerminalStep, characterReferenceAudios, dramaShotVideoMode, isDramaStoryboardFrameActive, resolveDramaVisualRunSync, shotReferenceImages, storyboardReferenceImages, videoReferenceImages } from "./drama-shot-generation-utils";
+import {
+    applyDramaProductionRunStep,
+    applyDramaVisualRunTerminalStep,
+    characterReferenceAudios,
+    dramaShotVideoMode,
+    isDramaStoryboardFrameActive,
+    resolveDramaVisualRunSync,
+    shotReferenceImages,
+    storyboardReferenceImages,
+    videoReferenceImages,
+} from "./drama-shot-generation-utils";
 
 describe("isDramaStoryboardFrameActive", () => {
     it("keeps a queued frame locked before a provider task id is assigned", () => {
@@ -75,7 +85,12 @@ describe("resolveDramaVisualRunSync", () => {
     it("does not restore an explicitly deleted frame from an older active task", () => {
         const project = {
             id: "project-one",
-            episodes: [{ id: "episode-one", shots: [{ id: "shot-one", framePlan: { frames: [{ id: "f1", sequenceIndex: 1 }] }, storyboardFrames: [{ id: "f1", sequenceIndex: 1, source: "generated", status: "stale", mediaDeletedAt: "2026-09-06T00:00:00.000Z" }] }] }],
+            episodes: [
+                {
+                    id: "episode-one",
+                    shots: [{ id: "shot-one", framePlan: { frames: [{ id: "f1", sequenceIndex: 1 }] }, storyboardFrames: [{ id: "f1", sequenceIndex: 1, source: "generated", status: "stale", mediaDeletedAt: "2026-09-06T00:00:00.000Z" }] }],
+                },
+            ],
         } as never;
         const run = {
             id: "run-one",
@@ -226,13 +241,24 @@ describe("storyboardReferenceImages", () => {
             ],
         } as never);
 
-        expect(references.map((item) => [item.url, item.keyframeIndex])).toEqual([["/key-1.png", 1], ["/key-2.png", 2]]);
+        expect(references.map((item) => [item.url, item.keyframeIndex])).toEqual([
+            ["/key-1.png", 1],
+            ["/key-2.png", 2],
+        ]);
     });
 
     it("keeps the previous tail as an ordinary reference in an all-frame request", () => {
         const references = videoReferenceImages(
             { characters: [], scenes: [], props: [], clues: [], sourceAssets: [] } as never,
-            { characters: [], scenes: [], props: [], clues: [], sourceAssets: [], continuityEdges: [{ fromShotId: "previous", toShotId: "shot-all", inheritActualEndFrame: true }], shots: [{ id: "previous", videoUrl: "/previous.mp4", frameEvidence: [createFrameEvidence({ role: "actual_end", source: "video_extraction", mediaUrl: "/old-tail.png", sourceVideoUrl: "/previous.mp4", validity: "accepted" })] }] } as never,
+            {
+                characters: [],
+                scenes: [],
+                props: [],
+                clues: [],
+                sourceAssets: [],
+                continuityEdges: [{ fromShotId: "previous", toShotId: "shot-all", inheritActualEndFrame: true }],
+                shots: [{ id: "previous", videoUrl: "/previous.mp4", frameEvidence: [createFrameEvidence({ role: "actual_end", source: "video_extraction", mediaUrl: "/old-tail.png", sourceVideoUrl: "/previous.mp4", validity: "accepted" })] }],
+            } as never,
             {
                 id: "shot-all",
                 title: "连续动作",
@@ -247,7 +273,13 @@ describe("storyboardReferenceImages", () => {
 
     it("sends storyboard frames and asset anchors together as ordinary references", () => {
         const references = videoReferenceImages(
-            { characters: [{ id: "hero", name: "主角", references: [{ id: "hero-ref", url: "/hero.png", status: "approved", source: "upload", label: "基准", createdAt: new Date(0).toISOString() }], primaryReferenceId: "hero-ref" }], scenes: [], props: [], clues: [], sourceAssets: [] } as never,
+            {
+                characters: [{ id: "hero", name: "主角", references: [{ id: "hero-ref", url: "/hero.png", status: "approved", source: "upload", label: "基准", createdAt: new Date(0).toISOString() }], primaryReferenceId: "hero-ref" }],
+                scenes: [],
+                props: [],
+                clues: [],
+                sourceAssets: [],
+            } as never,
             { continuityEdges: [], shots: [] } as never,
             {
                 id: "shot-storyboard",
@@ -343,11 +375,36 @@ describe("videoReferenceImages", () => {
             {
                 continuityEdges: [{ fromShotId: "shot-one", toShotId: "shot-two", transition: "continuous", inheritActualEndFrame: true, carryCharacterIds: [], carryPropIds: [], carryEnvironment: true, carryAxis: true }],
                 shots: [
-                    { id: "shot-one", title: "上一镜", videoUrl: "/api/reference-assets/one.mp4", frameEvidence: [createFrameEvidence({ role: "actual_end", source: "video_extraction", mediaUrl: "/api/reference-assets/actual-tail.png", sourceVideoUrl: "/api/reference-assets/one.mp4", validity: "accepted" })] },
-                    { id: "shot-two", title: "下一镜", storyboardImageUrl: "/api/reference-assets/storyboard-start.png", storyboardFrameMode: "first_last", storyboardEndImageUrl: "/api/reference-assets/storyboard-end.png", frameEvidence: [createFrameEvidence({ role: "storyboard_start", source: "generated", mediaUrl: "/api/reference-assets/storyboard-start.png", validity: "candidate" }), createFrameEvidence({ role: "storyboard_end", source: "generated", mediaUrl: "/api/reference-assets/storyboard-end.png", validity: "candidate" })] },
+                    {
+                        id: "shot-one",
+                        title: "上一镜",
+                        videoUrl: "/api/reference-assets/one.mp4",
+                        frameEvidence: [createFrameEvidence({ role: "actual_end", source: "video_extraction", mediaUrl: "/api/reference-assets/actual-tail.png", sourceVideoUrl: "/api/reference-assets/one.mp4", validity: "accepted" })],
+                    },
+                    {
+                        id: "shot-two",
+                        title: "下一镜",
+                        storyboardImageUrl: "/api/reference-assets/storyboard-start.png",
+                        storyboardFrameMode: "first_last",
+                        storyboardEndImageUrl: "/api/reference-assets/storyboard-end.png",
+                        frameEvidence: [
+                            createFrameEvidence({ role: "storyboard_start", source: "generated", mediaUrl: "/api/reference-assets/storyboard-start.png", validity: "candidate" }),
+                            createFrameEvidence({ role: "storyboard_end", source: "generated", mediaUrl: "/api/reference-assets/storyboard-end.png", validity: "candidate" }),
+                        ],
+                    },
                 ],
             } as never,
-            { id: "shot-two", title: "下一镜", storyboardImageUrl: "/api/reference-assets/storyboard-start.png", storyboardFrameMode: "first_last", storyboardEndImageUrl: "/api/reference-assets/storyboard-end.png", frameEvidence: [createFrameEvidence({ role: "storyboard_start", source: "generated", mediaUrl: "/api/reference-assets/storyboard-start.png", validity: "candidate" }), createFrameEvidence({ role: "storyboard_end", source: "generated", mediaUrl: "/api/reference-assets/storyboard-end.png", validity: "candidate" })] } as never,
+            {
+                id: "shot-two",
+                title: "下一镜",
+                storyboardImageUrl: "/api/reference-assets/storyboard-start.png",
+                storyboardFrameMode: "first_last",
+                storyboardEndImageUrl: "/api/reference-assets/storyboard-end.png",
+                frameEvidence: [
+                    createFrameEvidence({ role: "storyboard_start", source: "generated", mediaUrl: "/api/reference-assets/storyboard-start.png", validity: "candidate" }),
+                    createFrameEvidence({ role: "storyboard_end", source: "generated", mediaUrl: "/api/reference-assets/storyboard-end.png", validity: "candidate" }),
+                ],
+            } as never,
         );
 
         expect(references.filter((item) => item.videoRole === "first_frame")).toEqual([expect.objectContaining({ id: "continuity-end-shot-one", url: "/api/reference-assets/actual-tail.png" })]);

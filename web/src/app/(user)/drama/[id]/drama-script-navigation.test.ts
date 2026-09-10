@@ -17,6 +17,8 @@ describe("drama script navigation", () => {
 
     it("finds the scene heading before falling back to the shot body", () => {
         expect(findDramaSceneHeadingRange("### 场1｜黑湖记忆｜时间不明｜0-15秒\n正文", { order: 1, title: "黑湖记忆", timeOfDay: "时间不明", timeRange: "0-15秒" })).toEqual({ from: 0, to: 22 });
-        expect(resolveDramaShotAnchor("### 场1｜黑湖记忆｜时间不明｜0-15秒\n正文", { code: "SH01", order: 1, title: "黑湖记忆 1/2", description: "黑湖记忆", sourceText: "" }, { order: 1, title: "黑湖记忆", timeOfDay: "时间不明", timeRange: "0-15秒" }).kind).toBe("shot");
+        expect(
+            resolveDramaShotAnchor("### 场1｜黑湖记忆｜时间不明｜0-15秒\n正文", { code: "SH01", order: 1, title: "黑湖记忆 1/2", description: "黑湖记忆", sourceText: "" }, { order: 1, title: "黑湖记忆", timeOfDay: "时间不明", timeRange: "0-15秒" }).kind,
+        ).toBe("shot");
     });
 });

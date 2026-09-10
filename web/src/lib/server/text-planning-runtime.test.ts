@@ -49,14 +49,23 @@ describe("text planning runtime protocol matrix", () => {
             origin: "http://127.0.0.1:3000",
             cookie: "session=test",
             candidate: candidate("newapi"),
-            messages: [{ role: "system", content: "直接回答" }, { role: "user", content: "你在吗？" }],
+            messages: [
+                { role: "system", content: "直接回答" },
+                { role: "user", content: "你在吗？" },
+            ],
         });
 
         expect(result.content).toBe("在的，需要我帮你做什么？");
         expect(result.timings.upstreamHeadersMs).toBe(42);
         expect(result.timings.firstByteMs).toBeGreaterThanOrEqual(0);
         expect(result.timings.totalMs).toBeGreaterThanOrEqual(result.timings.firstByteMs);
-        expect(requestBody()).toMatchObject({ model: "model-one", messages: [{ role: "system", content: "直接回答" }, { role: "user", content: "你在吗？" }] });
+        expect(requestBody()).toMatchObject({
+            model: "model-one",
+            messages: [
+                { role: "system", content: "直接回答" },
+                { role: "user", content: "你在吗？" },
+            ],
+        });
         expect(JSON.stringify(requestBody())).not.toContain("create_agent_plan");
         expect(JSON.stringify(requestBody())).not.toContain("严格 JSON");
     });

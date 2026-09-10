@@ -13,7 +13,17 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     const params = await context.params;
     if (!["characters", "scenes", "props", "clues"].includes(params.kind)) return NextResponse.json({ code: 400, data: null, msg: "资产类型无效" }, { status: 400 });
     try {
-        const data = await completeDramaAsset({ userId: user.id, projectId: params.id, kind: params.kind as "characters" | "scenes" | "props" | "clues", assetId: params.assetId, requestId: typeof parsed.data?.requestId === "string" && parsed.data.requestId.trim() ? parsed.data.requestId.trim() : crypto.randomUUID(), origin: resolveInternalOrigin(new URL(request.url).origin), publicOrigin: resolvePublicRequestOrigin(request), cookie: request.headers.get("cookie") || "", config: parsed.data?.config });
+        const data = await completeDramaAsset({
+            userId: user.id,
+            projectId: params.id,
+            kind: params.kind as "characters" | "scenes" | "props" | "clues",
+            assetId: params.assetId,
+            requestId: typeof parsed.data?.requestId === "string" && parsed.data.requestId.trim() ? parsed.data.requestId.trim() : crypto.randomUUID(),
+            origin: resolveInternalOrigin(new URL(request.url).origin),
+            publicOrigin: resolvePublicRequestOrigin(request),
+            cookie: request.headers.get("cookie") || "",
+            config: parsed.data?.config,
+        });
         return NextResponse.json({ code: 0, data, msg: "资产智能补全已提交" });
     } catch (error) {
         return NextResponse.json({ code: 500, data: null, msg: error instanceof Error ? error.message : "资产智能补全失败" }, { status: 500 });

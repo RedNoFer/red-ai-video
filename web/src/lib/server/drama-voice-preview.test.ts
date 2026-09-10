@@ -58,8 +58,22 @@ describe("submitDramaVoicePreview", () => {
         });
         mocks.resolveAudioLogicalModelCandidates.mockImplementation((_settings, modelId: string) =>
             modelId === "speech-2.8"
-                ? [{ logicalModelId: "speech-2.8", upstreamModel: "speech-2.8", channelId: "design-channel", channel: { id: "design-channel", advancedConfig: { protocol: "custom", modelConfigs: { "speech-2.8": { capability: "audio", createPath: "/audio/speech", requestTemplate: "{}", audioOperation: "tts" } } } } }]
-                : [{ logicalModelId: "voice-design", upstreamModel: "voice-design", channelId: "design-channel", channel: { id: "design-channel", advancedConfig: { protocol: "custom", modelConfigs: { "voice-design": { capability: "audio", createPath: "/v1/media/generate", requestTemplate: "{}", audioOperation: "voice-design" } } } } }],
+                ? [
+                      {
+                          logicalModelId: "speech-2.8",
+                          upstreamModel: "speech-2.8",
+                          channelId: "design-channel",
+                          channel: { id: "design-channel", advancedConfig: { protocol: "custom", modelConfigs: { "speech-2.8": { capability: "audio", createPath: "/audio/speech", requestTemplate: "{}", audioOperation: "tts" } } } },
+                      },
+                  ]
+                : [
+                      {
+                          logicalModelId: "voice-design",
+                          upstreamModel: "voice-design",
+                          channelId: "design-channel",
+                          channel: { id: "design-channel", advancedConfig: { protocol: "custom", modelConfigs: { "voice-design": { capability: "audio", createPath: "/v1/media/generate", requestTemplate: "{}", audioOperation: "voice-design" } } } },
+                      },
+                  ],
         );
 
         const result = await submitDramaVoicePreview({
@@ -75,10 +89,7 @@ describe("submitDramaVoicePreview", () => {
             } as never,
         });
 
-        expect(fetch).toHaveBeenCalledWith(
-            expect.any(String),
-            expect.objectContaining({ body: expect.stringContaining('"model":"speech-2.8"') }),
-        );
+        expect(fetch).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ body: expect.stringContaining('"model":"speech-2.8"') }));
         expect(result.profile.logicalModelId).toBe("voice-design");
     });
 });

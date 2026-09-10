@@ -81,15 +81,36 @@ export function DramaEpisodeSettings({ project, episode, embedded = false }: { p
                         </label>
                         <label className="block space-y-1">
                             <span className="text-[11px] text-muted-foreground">生成模式</span>
-                            <Select size="small" className="w-full" value={planDraft.video.mode === "text-to-video" ? "text-to-video" : "storyboard"} options={[{ label: "分镜驱动", value: "storyboard" }, { label: "直接生成", value: "text-to-video" }]} onChange={(mode: "storyboard" | "text-to-video") => setPlanDraft((current) => ({ ...current, video: { ...current.video, mode } }))} />
+                            <Select
+                                size="small"
+                                className="w-full"
+                                value={planDraft.video.mode === "text-to-video" ? "text-to-video" : "storyboard"}
+                                options={[
+                                    { label: "分镜驱动", value: "storyboard" },
+                                    { label: "直接生成", value: "text-to-video" },
+                                ]}
+                                onChange={(mode: "storyboard" | "text-to-video") => setPlanDraft((current) => ({ ...current, video: { ...current.video, mode } }))}
+                            />
                         </label>
                         <label className="block space-y-1">
                             <span className="text-[11px] text-muted-foreground">清晰度</span>
-                            <Select size="small" className="w-full" value={planDraft.video.resolution} options={DRAMA_VIDEO_RESOLUTION_OPTIONS.map((value) => ({ label: value, value }))} onChange={(resolution: string) => setPlanDraft((current) => ({ ...current, video: { ...current.video, resolution } }))} />
+                            <Select
+                                size="small"
+                                className="w-full"
+                                value={planDraft.video.resolution}
+                                options={DRAMA_VIDEO_RESOLUTION_OPTIONS.map((value) => ({ label: value, value }))}
+                                onChange={(resolution: string) => setPlanDraft((current) => ({ ...current, video: { ...current.video, resolution } }))}
+                            />
                         </label>
                         <label className="block space-y-1">
                             <span className="text-[11px] text-muted-foreground">每镜时长</span>
-                            <Select size="small" className="w-full" value={planDraft.video.shotDuration || 15} options={DRAMA_SCRIPT_SHOT_DURATION_OPTIONS.map((value) => ({ label: `${value} 秒`, value }))} onChange={(shotDuration: 15 | 30) => setPlanDraft((current) => ({ ...current, video: { ...current.video, shotDuration } }))} />
+                            <Select
+                                size="small"
+                                className="w-full"
+                                value={planDraft.video.shotDuration || 15}
+                                options={DRAMA_SCRIPT_SHOT_DURATION_OPTIONS.map((value) => ({ label: `${value} 秒`, value }))}
+                                onChange={(shotDuration: 15 | 30) => setPlanDraft((current) => ({ ...current, video: { ...current.video, shotDuration } }))}
+                            />
                         </label>
                         <label className="block space-y-1">
                             <span className="text-[11px] text-muted-foreground">每镜帧数</span>
@@ -97,7 +118,11 @@ export function DramaEpisodeSettings({ project, episode, embedded = false }: { p
                                 size="small"
                                 className="w-full"
                                 value={planDraft.video.framePolicy || "agent"}
-                                options={[{ label: "固定 4 帧", value: "fixed-4" }, { label: "固定 5 帧", value: "fixed-5" }, { label: "Agent 智能切分", value: "agent" }]}
+                                options={[
+                                    { label: "固定 4 帧", value: "fixed-4" },
+                                    { label: "固定 5 帧", value: "fixed-5" },
+                                    { label: "Agent 智能切分", value: "agent" },
+                                ]}
                                 onChange={(framePolicy: "fixed-4" | "fixed-5" | "agent") =>
                                     setPlanDraft((current) => {
                                         const video = { ...current.video, framePolicy };

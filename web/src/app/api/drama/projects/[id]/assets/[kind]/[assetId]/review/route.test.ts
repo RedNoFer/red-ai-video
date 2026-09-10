@@ -32,11 +32,13 @@ describe("POST drama asset candidate review", () => {
         });
         const response = await POST(request, { params: Promise.resolve({ id: "project-one", kind: "characters", assetId: "rifa" }) });
         expect(response.status).toBe(200);
-        expect(mocks.review).toHaveBeenCalledWith(expect.objectContaining({
-            userId: "user-one",
-            tasks: [expect.objectContaining({ id: "candidate-one", imageUrls: ["https://example.com/rifa.png"], resultSummary: "首次生成的资产候选图" })],
-            foundation: expect.objectContaining({ brief: expect.objectContaining({ objective: expect.stringContaining("Rifa") }) }),
-        }));
+        expect(mocks.review).toHaveBeenCalledWith(
+            expect.objectContaining({
+                userId: "user-one",
+                tasks: [expect.objectContaining({ id: "candidate-one", imageUrls: ["https://example.com/rifa.png"], resultSummary: "首次生成的资产候选图" })],
+                foundation: expect.objectContaining({ brief: expect.objectContaining({ objective: expect.stringContaining("Rifa") }) }),
+            }),
+        );
     });
 
     it("rejects candidates when the asset is outside the project", async () => {

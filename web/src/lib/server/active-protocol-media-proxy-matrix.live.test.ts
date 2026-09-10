@@ -249,7 +249,13 @@ function protocolOperation(definition: ChannelProtocolDefinition, capability: Lo
         } satisfies SystemChannelModelConfig;
     }
     if (capability === "audio") {
-        return { capability, protocol: definition.id, createPath: "/audio/speech", requestTemplate: '{"model":"{{model}}","input":"{{prompt}}","voice":"{{voice}}","response_format":"{{format}}"}', resultField: "binary" } satisfies SystemChannelModelConfig;
+        return {
+            capability,
+            protocol: definition.id,
+            createPath: "/audio/speech",
+            requestTemplate: '{"model":"{{model}}","input":"{{prompt}}","voice":"{{voice}}","response_format":"{{format}}"}',
+            resultField: "binary",
+        } satisfies SystemChannelModelConfig;
     }
     return {
         capability,

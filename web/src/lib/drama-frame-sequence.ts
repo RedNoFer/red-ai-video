@@ -42,10 +42,7 @@ export function formatPromptFieldLines(value: string, kind: "static" | "video" =
 
 /** Reference roles belong to referenceManifest, never to a static image prompt. */
 export function stripLegacyStaticReferenceRole(value: string) {
-    return value.replace(
-        /(?:^|[,，；;\n])\s*参考图职责[：:][\s\S]*?(?=(?:[,，；;\n]\s*(?:静态关键帧|可见状态|可见表演状态|景别|机位与构图|站位与视线|三层空间|光色与风格|负面约束)[：:]|$))/gu,
-        "",
-    );
+    return value.replace(/(?:^|[,，；;\n])\s*参考图职责[：:][\s\S]*?(?=(?:[,，；;\n]\s*(?:静态关键帧|可见状态|可见表演状态|景别|机位与构图|站位与视线|三层空间|光色与风格|负面约束)[：:]|$))/gu, "");
 }
 
 export function normalizeDramaFrameBeats(value: readonly DramaFrameBeat[], duration: number): DramaFrameBeat[] {
@@ -245,7 +242,9 @@ function isGenericFrameState(value: string) {
 }
 
 function isGenericPerformanceState(value: string) {
-    return /(?:主体的眉眼、呼吸、手部和道具接触关系清晰可见|眉眼、视线和手部动作与当前节拍一致|情绪通过身体动作呈现|表情保持入口情绪且眉眼清晰|眉眼出现细微反应；视线转向当前叙事目标|表情保持稳定|冻结为单一静态姿态|情绪保持与上一状态一致|面部眉眼和下颌保持可读的初始反应|视线沿当前镜头动作方向|身体与手部进入)/u.test(value.trim());
+    return /(?:主体的眉眼、呼吸、手部和道具接触关系清晰可见|眉眼、视线和手部动作与当前节拍一致|情绪通过身体动作呈现|表情保持入口情绪且眉眼清晰|眉眼出现细微反应；视线转向当前叙事目标|表情保持稳定|冻结为单一静态姿态|情绪保持与上一状态一致|面部眉眼和下颌保持可读的初始反应|视线沿当前镜头动作方向|身体与手部进入)/u.test(
+        value.trim(),
+    );
 }
 
 function staticFrameSubject(imagePrompt: string, actionPrompt: string, fallback: string) {

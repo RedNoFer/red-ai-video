@@ -84,7 +84,15 @@ describe("system channel model capabilities", () => {
             protocol: "custom",
             modelConfigs: {
                 "voice-design": { capability: "audio", audioOperation: "voice-design", createPath: "/v1/media/generate", requestTemplate: '{"model":"{{model}}","prompt":"{{design_prompt}}"}', voiceIdField: "voice_id", previewAudioField: "trial_audio" },
-                "voice-clone": { capability: "audio", audioOperation: "voice-clone", createPath: "/v1/media/generate", requestTemplate: '{"model":"{{model}}","audio":"{{clone_sample_url}}"}', cloneSampleField: "audio", voiceIdField: "data.voice_id", previewAudioField: "data.trial_audio" },
+                "voice-clone": {
+                    capability: "audio",
+                    audioOperation: "voice-clone",
+                    createPath: "/v1/media/generate",
+                    requestTemplate: '{"model":"{{model}}","audio":"{{clone_sample_url}}"}',
+                    cloneSampleField: "audio",
+                    voiceIdField: "data.voice_id",
+                    previewAudioField: "data.trial_audio",
+                },
             },
         } as never);
 

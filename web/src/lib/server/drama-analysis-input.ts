@@ -184,12 +184,7 @@ export function validateDramaVideoPromptReferenceBindings(prompt: string, refere
     return "";
 }
 
-export function validateDramaVideoPromptOutput(
-    value: unknown,
-    shotIds: string[],
-    sourceShots: ReadonlyArray<{ id: string; framePlan?: unknown; utterances?: readonly DramaDialogueTimingInput[] }>,
-    references: unknown,
-) {
+export function validateDramaVideoPromptOutput(value: unknown, shotIds: string[], sourceShots: ReadonlyArray<{ id: string; framePlan?: unknown; utterances?: readonly DramaDialogueTimingInput[] }>, references: unknown) {
     const output = object(value);
     const outputShots = array(output.shots).map(object);
     const sourcePlans = new Map(sourceShots.map((shot) => [shot.id, object(shot.framePlan)]));
@@ -206,7 +201,8 @@ export function validateDramaVideoPromptOutput(
         if (orderError) return `镜头 ${shotId} 的公开视频提示词${orderError}；请按当前 Skill 重新生成`;
         if (/(?:^|\n)\s*(?:触发|主体动作与反应)\s*[：:]/u.test(prompt)) return `镜头 ${shotId} 的公开视频提示词仍使用旧的顶层动作字段；请将触发和主体反应写入每个时间段的“动作与触发”`;
         if (/(?:A线|B线|主线|副线|钩子)/u.test(prompt)) return `镜头 ${shotId} 的公开视频提示词包含内部叙事标签，请按当前 Skill 改写为可见动作、事件或声音`;
-        if (/(?:https?:\/\/|data:image\/|\b(?:Skill|prompt-authoring-only|seedance-director|seedance-25-director)\b|\b(?:模式|内部 ID|来源文件|API|供应商字段)\s*[：:])/iu.test(prompt)) return `镜头 ${shotId} 的公开视频提示词包含内部执行信息，请按当前 Skill 重新生成`;
+        if (/(?:https?:\/\/|data:image\/|\b(?:Skill|prompt-authoring-only|seedance-director|seedance-25-director)\b|\b(?:模式|内部 ID|来源文件|API|供应商字段)\s*[：:])/iu.test(prompt))
+            return `镜头 ${shotId} 的公开视频提示词包含内部执行信息，请按当前 Skill 重新生成`;
         if (/(?:\n|^)\s*(?:全局设定|起始可见状态|视觉风格与光色|连续性锁)\s*[：:]\s*(?:无|暂无|保持不变|同上|略)\s*$/mu.test(prompt)) return `镜头 ${shotId} 的公开视频提示词包含空泛全局或连续性占位，请按当前镜头事实重新生成`;
         const referenceError = validateDramaVideoPromptReferenceBindings(prompt, references);
         if (referenceError) return `镜头 ${shotId}：${referenceError}`;
@@ -231,11 +227,30 @@ export function validateDramaVideoPromptOutput(
             const endPrompt = dramaAnalysisText(frame.endPrompt);
             const imagePrompt = dramaAnalysisText(frame.imagePrompt);
             if (!frameId || (expected.id && frameId !== dramaAnalysisText(expected.id))) return `镜头 ${shotId} 的第 ${index + 1} 个时间段帧 ID 与输入不一致，请按当前 Skill 原样保留 ${dramaAnalysisText(expected.id) || `frame-${index + 1}`}`;
-            if (!Number.isInteger(sequenceIndex) || sequenceIndex !== index + 1 || !Number.isFinite(startSecond) || !Number.isFinite(endSecond) || endSecond <= startSecond || !startPrompt || !actionPrompt || !transitionPrompt || !endPrompt || !imagePrompt) return `镜头 ${shotId} 的第 ${index + 1} 个时间段缺少具体起点、动作、衔接、终点或画面描述`;
-            const genericField = [["起点", startPrompt], ["动作与触发", actionPrompt], ["可见衔接", transitionPrompt], ["终点", endPrompt], ["画面", imagePrompt]] as const;
+            if (
+                !Number.isInteger(sequenceIndex) ||
+                sequenceIndex !== index + 1 ||
+                !Number.isFinite(startSecond) ||
+                !Number.isFinite(endSecond) ||
+                endSecond <= startSecond ||
+                !startPrompt ||
+                !actionPrompt ||
+                !transitionPrompt ||
+                !endPrompt ||
+                !imagePrompt
+            )
+                return `镜头 ${shotId} 的第 ${index + 1} 个时间段缺少具体起点、动作、衔接、终点或画面描述`;
+            const genericField = [
+                ["起点", startPrompt],
+                ["动作与触发", actionPrompt],
+                ["可见衔接", transitionPrompt],
+                ["终点", endPrompt],
+                ["画面", imagePrompt],
+            ] as const;
             const generic = genericField.find(([, value]) => isGenericDramaDetail(value));
             if (generic) return `镜头 ${shotId} 的第 ${index + 1} 个时间段${generic[0]}过于笼统，必须写出具体人物、道具或环境结果`;
-            if (expectedFrames.length && (Math.abs(startSecond - Number(expected.startSecond)) > 0.01 || Math.abs(endSecond - Number(expected.endSecond)) > 0.01)) return `镜头 ${shotId} 的第 ${index + 1} 个时间段改变了既有时间边界；请按当前 Skill 保留 ${expected.startSecond}-${expected.endSecond}s`;
+            if (expectedFrames.length && (Math.abs(startSecond - Number(expected.startSecond)) > 0.01 || Math.abs(endSecond - Number(expected.endSecond)) > 0.01))
+                return `镜头 ${shotId} 的第 ${index + 1} 个时间段改变了既有时间边界；请按当前 Skill 保留 ${expected.startSecond}-${expected.endSecond}s`;
             const expectedStart = expectedFrames.length ? Number(expected.startSecond) : startSecond;
             const expectedEnd = expectedFrames.length ? Number(expected.endSecond) : endSecond;
             const rangePattern = `${escapeRegExp(String(expectedStart))}\\s*(?:-|至|到)\\s*${escapeRegExp(String(expectedEnd))}\\s*(?:s|秒)`;
@@ -249,11 +264,7 @@ export function validateDramaVideoPromptOutput(
     return "";
 }
 
-export function dramaVideoPromptTimingWarnings(
-    value: unknown,
-    shotIds: string[],
-    sourceShots: ReadonlyArray<{ id: string; utterances?: readonly DramaDialogueTimingInput[] }>,
-) {
+export function dramaVideoPromptTimingWarnings(value: unknown, shotIds: string[], sourceShots: ReadonlyArray<{ id: string; utterances?: readonly DramaDialogueTimingInput[] }>) {
     const outputShots = array(object(value).shots).map(object);
     return shotIds.flatMap((shotId) => {
         const sourceShot = sourceShots.find((item) => item.id === shotId);
@@ -288,17 +299,19 @@ export function previewDramaVideoPromptOutput(value: unknown, shotIds: string[])
             const startSecond = Number(frame.startSecond);
             const endSecond = Number(frame.endSecond);
             if (!id || !Number.isInteger(sequenceIndex) || !Number.isFinite(startSecond) || !Number.isFinite(endSecond) || endSecond <= startSecond) return [];
-            return [{
-                id,
-                sequenceIndex,
-                startSecond,
-                endSecond,
-                startPrompt: dramaAnalysisText(frame.startPrompt),
-                actionPrompt: dramaAnalysisText(frame.actionPrompt),
-                transitionPrompt: dramaAnalysisText(frame.transitionPrompt),
-                endPrompt: dramaAnalysisText(frame.endPrompt),
-                imagePrompt: dramaAnalysisText(frame.imagePrompt),
-            }];
+            return [
+                {
+                    id,
+                    sequenceIndex,
+                    startSecond,
+                    endSecond,
+                    startPrompt: dramaAnalysisText(frame.startPrompt),
+                    actionPrompt: dramaAnalysisText(frame.actionPrompt),
+                    transitionPrompt: dramaAnalysisText(frame.transitionPrompt),
+                    endPrompt: dramaAnalysisText(frame.endPrompt),
+                    imagePrompt: dramaAnalysisText(frame.imagePrompt),
+                },
+            ];
         });
         return [{ shotId, videoPrompt, ...(frames.length ? { framePlan: { frames } } : {}) }];
     });

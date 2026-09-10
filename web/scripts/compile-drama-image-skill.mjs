@@ -12,7 +12,13 @@ const source = readFileSync(sourcePath, "utf8");
 const normalized = source.replace(/^\uFEFF/, "").trim();
 const end = normalized.indexOf("\n---", 3);
 const frontmatter = end >= 0 ? parse(normalized.slice(3, end).trim()) || {} : {};
-const body = end >= 0 ? normalized.slice(end + "\n---".length).replace(/^\r?\n/, "").trim() : normalized;
+const body =
+    end >= 0
+        ? normalized
+              .slice(end + "\n---".length)
+              .replace(/^\r?\n/, "")
+              .trim()
+        : normalized;
 const sourceContentHash = createHash("sha256").update(source, "utf8").digest("hex");
 const promptRules = extractSection(body, "生成规则");
 const refinementRules = extractSection(body, "调整规则");

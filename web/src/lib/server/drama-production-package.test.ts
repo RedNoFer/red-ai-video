@@ -290,7 +290,9 @@ describe("production package boundary", () => {
         ].join("\n");
         const frame = source.episodes[0].shots[0].framePlan.frames[0];
         source.episodes[0].shots[0].imagePrompt = staticPrompt;
-        source.episodes[0].shots[0].framePlan.frames = [{ ...frame, startPrompt: "Karin站在右侧门框内，手掌压住断剑", actionPrompt: "Karin收紧手指，断剑发出金属声", transitionPrompt: "视线从断剑转向城门缝隙", endPrompt: "Karin视线锁定城门，肩背绷直", imagePrompt: staticPrompt }];
+        source.episodes[0].shots[0].framePlan.frames = [
+            { ...frame, startPrompt: "Karin站在右侧门框内，手掌压住断剑", actionPrompt: "Karin收紧手指，断剑发出金属声", transitionPrompt: "视线从断剑转向城门缝隙", endPrompt: "Karin视线锁定城门，肩背绷直", imagePrompt: staticPrompt },
+        ];
         source.episodes[0].shots[0].videoPrompt = "动态意图：Karin压住断剑\n时间段动作：0-15s\n单一主运镜：固定机位\n结束画面：Karin停住";
 
         expect(() => previewDramaProductionPackage(JSON.stringify(source), "package.json", undefined, { upgradeLegacyFramePrompts: false })).toThrow("未逐段写出起点、动作与触发、可见衔接和终点");

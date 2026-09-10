@@ -50,9 +50,11 @@ test("drama all-frame editor keeps one beat per row across desktop, mobile and d
                         videoMode: "storyboard",
                         storyboardFrameMode: "all_frames",
                         framePlan: { start: { source: "independent" }, end: { required: false }, frames },
-                        frameEvidence: frames.slice(0, 2).map((frame) =>
-                            createFrameEvidence({ role: "storyboard_keyframe", sequenceIndex: frame.sequenceIndex, source: "upload", mediaUrl: `/logo.svg?frame=${frame.sequenceIndex}`, sourceShotId: "shot-frame-sequence", validity: "candidate" }),
-                        ),
+                        frameEvidence: frames
+                            .slice(0, 2)
+                            .map((frame) =>
+                                createFrameEvidence({ role: "storyboard_keyframe", sequenceIndex: frame.sequenceIndex, source: "upload", mediaUrl: `/logo.svg?frame=${frame.sequenceIndex}`, sourceShotId: "shot-frame-sequence", validity: "candidate" }),
+                            ),
                         storyboardFrames: frames.map((frame, index) => ({
                             id: frame.id,
                             sequenceIndex: frame.sequenceIndex,

@@ -277,10 +277,7 @@ describe("directAgentPlan", () => {
             video: { referenceMode: "all_frames", frameAssetIds: ["frame-2", "frame-1"] },
         });
 
-        expect(task.references?.filter((reference) => reference.role === "keyframe")).toEqual([
-            expect.objectContaining({ assetId: "frame-2", keyframeIndex: 1 }),
-            expect.objectContaining({ assetId: "frame-1", keyframeIndex: 2 }),
-        ]);
+        expect(task.references?.filter((reference) => reference.role === "keyframe")).toEqual([expect.objectContaining({ assetId: "frame-2", keyframeIndex: 1 }), expect.objectContaining({ assetId: "frame-1", keyframeIndex: 2 })]);
         expect(() =>
             normalizeTasks(plan as never, [], generationSettings() as never, undefined, "关键帧视频", "chat", [{ ...assets[0], status: "failed" }] as never, undefined, {
                 mode: "video",
@@ -404,16 +401,18 @@ describe("directAgentPlan", () => {
         expect(normalizedPlan.deliverables[0]).not.toHaveProperty("targetNodeId");
         expect(task.targetNodeId).toBeUndefined();
     });
-
 });
 
 describe("agentPlanFallbackExample", () => {
     it("keeps the fallback plan aligned with an explicitly selected video mode", () => {
         const example = JSON.parse(
-            agentPlanFallbackExample([
-                { id: "planner", name: "规划模型", capability: "text", capabilityProfile: undefined },
-                { id: "video-pro", name: "视频模型", capability: "video", capabilityProfile: undefined },
-            ], "video"),
+            agentPlanFallbackExample(
+                [
+                    { id: "planner", name: "规划模型", capability: "text", capabilityProfile: undefined },
+                    { id: "video-pro", name: "视频模型", capability: "video", capabilityProfile: undefined },
+                ],
+                "video",
+            ),
         );
 
         expect(example.deliverables).toEqual([expect.objectContaining({ type: "video", model: "video-pro" })]);
@@ -423,7 +422,7 @@ describe("agentPlanFallbackExample", () => {
 describe("agentPlanToolForMode", () => {
     it("constrains deliverables to the explicitly selected media type", () => {
         const tool = agentPlanToolForMode("video");
-        const properties = (tool.parameters.properties as Record<string, unknown>);
+        const properties = tool.parameters.properties as Record<string, unknown>;
         const deliverables = properties.deliverables as Record<string, unknown>;
         const itemProperties = (deliverables.items as Record<string, unknown>).properties as Record<string, unknown>;
 

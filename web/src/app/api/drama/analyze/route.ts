@@ -124,7 +124,9 @@ export async function POST(request: Request) {
                           const utterances = shot.utterances.filter((utterance) => utterance.type === "dialogue" || utterance.type === "voiceover");
                           const estimate = estimateDramaDialogueSeconds(utterances);
                           if (!estimate.spokenCharacters) return [];
-                          return [`镜头 ${shot.id} 的对白容量预检：约 ${estimate.spokenCharacters} 个可发音字，完整说完至少约 ${estimate.minimumSeconds} 秒。任何短于该时长的单个 frame 段都不得放入整句对白；必须保留原话，并按自然分句/反应节点分配到足够长的连续时间段。`];
+                          return [
+                              `镜头 ${shot.id} 的对白容量预检：约 ${estimate.spokenCharacters} 个可发音字，完整说完至少约 ${estimate.minimumSeconds} 秒。任何短于该时长的单个 frame 段都不得放入整句对白；必须保留原话，并按自然分句/反应节点分配到足够长的连续时间段。`,
+                          ];
                       })
                       .join("\n")
                 : "";
