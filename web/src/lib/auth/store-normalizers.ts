@@ -6,7 +6,8 @@ import { ECOMMERCE_IMAGE_SKILL } from "@/lib/server/agent-skills/ecommerce-image
 import { YANAI_BEAUTY_SKILL } from "@/lib/server/agent-skills/yanai-beauty";
 import { DEFAULT_CREATIVE_SHORTCUT_SKILLS } from "@/lib/server/agent-skills/creative-shortcuts";
 import { deriveLogicalModelsConfig, normalizeDefaultModelsConfig, normalizeLogicalModelsConfig } from "@/lib/model-routing-config";
-import { applyChannelProtocol, channelProtocolDefinition, normalizeStrictProtocolModelConfig } from "@/lib/channel-protocol-registry";
+import { inferModelCapability, normalizeModelId } from "@/lib/model-capability";
+import { applyChannelProtocol, channelProtocolDefinition, normalizeStrictProtocolModelConfig, protocolCatalogCapability, protocolModelConfig } from "@/lib/channel-protocol-registry";
 import { resolveConfiguredModelPointCost } from "@/lib/model-point-cost";
 import { normalizeSystemChannelAdvancedConfig } from "./store-normalizers-channel";
 import {
@@ -659,11 +660,18 @@ function normalizeStrictChannelProtocolConfigs(channel: SystemModelChannel): Sys
     const advanced = channel.advancedConfig;
     if (!advanced || !channelProtocolDefinition(advanced.protocol).strict) return channel;
     const normalizeConfig = (config: NonNullable<typeof advanced.modelConfigs>[string], model?: string) => normalizeStrictProtocolModelConfig(config, advanced.protocol, model);
+    const modelConfigs = Object.fromEntries(Object.entries(advanced.modelConfigs || {}).map(([model, config]) => [model, normalizeConfig(config, model)]));
+    for (const model of channel.models) {
+        const key = normalizeModelId(model);
+        const capability = modelConfigs[key]?.capability || advanced.modelCapabilities?.[key] || protocolCatalogCapability(advanced.protocol) || inferModelCapability(model);
+        const preset = protocolModelConfig(advanced.protocol, capability, model);
+        if (preset) modelConfigs[key] = preset;
+    }
     return {
         ...channel,
         advancedConfig: {
             ...advanced,
-            ...(advanced.modelConfigs ? { modelConfigs: Object.fromEntries(Object.entries(advanced.modelConfigs).map(([model, config]) => [model, normalizeConfig(config, model)])) } : {}),
+            ...(Object.keys(modelConfigs).length ? { modelConfigs } : {}),
             // Capability-level configs may still carry a model-specific strict
             // contract (for example the quality field of TokenGo's official
             // Seedance model). Without a model ID, replacing it with the

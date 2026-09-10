@@ -200,6 +200,33 @@ describe("admin settings model routing", () => {
         expect(savedSettings?.systemChannels?.find((channel: { id?: string }) => channel.id === "buming")?.advancedConfig?.operationConfigs?.video?.requestTemplate).toContain('"quality"');
     });
 
+    it("creates a strict preset for a newly added model before validating a full channel snapshot", async () => {
+        const buming = applyChannelProtocol({ id: "buming", name: "不鸣 TokenGo Seedance 渠道", baseUrl: "https://api.tokengo.love", apiKey: "saved-secret", apiFormat: "openai", models: ["seedance-2-0-official"], enabled: true }, "buming-seedance");
+        buming.models = [...buming.models, "seedance-2-5-special"];
+        delete buming.advancedConfig!.modelConfigs!["seedance-2-5-special"];
+        buming.advancedConfig = {
+            ...buming.advancedConfig!,
+            operationConfigs: {
+                ...buming.advancedConfig!.operationConfigs,
+                video: protocolModelConfig("buming-seedance", "video", "seedance-2-0-official"),
+            },
+        };
+        const response = await PATCH(
+            request({
+                systemChannels: [buming],
+                logicalModels: [
+                    { id: "seedance-2-0-official", name: "Seedance Official", capability: "video" as const, enabled: true, bindings: [{ id: "official", channelId: "buming", upstreamModel: "seedance-2-0-official", enabled: true, priority: 1 }] },
+                    { id: "seedance-2-5-special", name: "Seedance Special", capability: "video" as const, enabled: true, bindings: [{ id: "special", channelId: "buming", upstreamModel: "seedance-2-5-special", enabled: true, priority: 2 }] },
+                ],
+                defaultModels: { textModel: "", imageModel: "", videoModel: "seedance-2-0-official", audioModel: "" },
+            }),
+        );
+
+        expect(response.status).toBe(200);
+        const savedSettings = mocks.setAuthSettings.mock.calls.at(-1)?.[0];
+        expect(savedSettings?.systemChannels?.find((channel: { id?: string }) => channel.id === "buming")?.advancedConfig?.modelConfigs?.["seedance-2-5-special"]).toMatchObject({ protocol: "buming-seedance", capability: "video" });
+    });
+
     it("repairs a stale TokenGo model preset on a same-name New API video model", async () => {
         const buming = applyChannelProtocol({ id: "buming", name: "不鸣", baseUrl: "https://api.tokengo.love", apiKey: "saved-secret", apiFormat: "openai", models: ["seedance-2-0-official"], enabled: true }, "buming-seedance");
         const newApi = applyChannelProtocol({ id: "newapi", name: "New API", baseUrl: "https://newapi.megabyai.cc", apiKey: "saved-secret", apiFormat: "openai", models: ["seedance-2-0-official"], enabled: true }, "newapi-video");
