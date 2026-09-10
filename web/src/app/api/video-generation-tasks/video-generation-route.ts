@@ -120,7 +120,7 @@ export async function POST(request: Request) {
             const supportsKeyframes = bumingContract
                 ? (bumingContract.videoReferenceModes.includes("all_frames") || (!isKnownBumingSeedanceVideoModel(channel.model) && capabilityProfile?.supportsKeyframes !== false)) && capabilityProfile?.supportsKeyframes !== false
                 : channel.advancedConfig?.protocol === "newapi-video"
-                  ? false
+                  ? capabilityProfile?.supportsKeyframes === true
                   : capabilityProfile?.supportsKeyframes;
             if (keyframeCount && !supportsKeyframes) {
                 if (bumingContract && !bumingContract.videoReferenceModes.includes("all_frames") && isKnownBumingSeedanceVideoModel(channel.model)) {

@@ -65,6 +65,7 @@ export type GenerationTaskLogResultInput = {
     logId?: string;
     slotId?: string;
     clientRequestId?: string;
+    conversationId?: string;
     taskId: string;
     userId: string;
     username: string;

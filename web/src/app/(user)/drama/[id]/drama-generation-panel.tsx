@@ -1181,6 +1181,7 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
     const finishVideoPrompt = useDramaStore((state) => state.finishVideoPrompt);
     const [videoPromptDraft, setVideoPromptDraft] = useState("");
     const [videoPromptOriginal, setVideoPromptOriginal] = useState("");
+    const promptSeedRef = useRef({ shotId: "", persistedPrompt: "", seed: "" });
     const [optimizedFramePlan, setOptimizedFramePlan] = useState<DramaVideoPromptAnalysis["shots"][number]["framePlan"]>();
     const [optimizingVideoPrompt, setOptimizingVideoPrompt] = useState(false);
     const [savingVideoPrompt, setSavingVideoPrompt] = useState(false);
@@ -1203,12 +1204,20 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
             .map((frame) => ({ ...frame, label: "本镜尾帧" })),
     ];
     const executionReferences = resolveShotVideoReferences(project, episode, shot, productionRun);
-    const supplierVideoPrompt = shot.executionVideoPrompt?.trim() || shot.videoPrompt?.trim() || videoStep?.executionPrompt?.trim() || "";
+    const persistedVideoPrompt = shot.executionVideoPrompt?.trim() || shot.videoPrompt?.trim() || "";
+    const supplierVideoPrompt = persistedVideoPrompt || videoStep?.executionPrompt?.trim() || "";
     useEffect(() => {
-        setVideoPromptDraft(supplierVideoPrompt);
-        setVideoPromptOriginal(supplierVideoPrompt);
-        setOptimizedFramePlan(undefined);
-    }, [shot.id, supplierVideoPrompt]);
+        const previous = promptSeedRef.current;
+        const newShot = previous.shotId !== shot.id;
+        const persistedChanged = previous.shotId === shot.id && previous.persistedPrompt !== persistedVideoPrompt && Boolean(persistedVideoPrompt) && videoPromptDraft.trim() === videoPromptOriginal.trim();
+        const lateInitialSeed = previous.shotId === shot.id && !previous.seed && Boolean(supplierVideoPrompt) && !videoPromptOriginal.trim();
+        if (newShot || persistedChanged || lateInitialSeed) {
+            setVideoPromptDraft(supplierVideoPrompt);
+            setVideoPromptOriginal(supplierVideoPrompt);
+            setOptimizedFramePlan(undefined);
+        }
+        promptSeedRef.current = { shotId: shot.id, persistedPrompt: persistedVideoPrompt, seed: supplierVideoPrompt };
+    }, [shot.id, persistedVideoPrompt, supplierVideoPrompt, videoPromptDraft, videoPromptOriginal]);
     const optimizeVideoPrompt = async () => {
         const source = videoPromptDraft.trim() !== videoPromptOriginal.trim() ? videoPromptDraft.trim() : resolveShotVideoOptimizationSource(shot);
         if (!source || optimizingVideoPrompt || !beginVideoPrompt(project.id, episode.id, shot.id)) return;
@@ -1418,7 +1427,16 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
                         </Button>
                     </div>
                 </div>
-                <Input.TextArea className="mt-2" value={videoPromptDraft} onChange={(event) => setVideoPromptDraft(event.target.value)} autoSize={{ minRows: 5, maxRows: 14 }} placeholder="先生成顺序帧，再生成或编辑视频提示词" />
+                <Input.TextArea
+                    className="mt-2"
+                    value={videoPromptDraft}
+                    onChange={(event) => {
+                        setVideoPromptDraft(event.target.value);
+                        if (optimizedFramePlan) setOptimizedFramePlan(undefined);
+                    }}
+                    autoSize={{ minRows: 5, maxRows: 14 }}
+                    placeholder="先生成顺序帧，再生成或编辑视频提示词"
+                />
             </div>
         </div>
     );

@@ -270,6 +270,7 @@ export class GenerationLogsRepository {
                     id,
                     kind,
                     source,
+                    conversation_id,
                     COALESCE(NULLIF(btrim(title), ''), CASE WHEN kind = 'video' THEN '视频生成' ELSE '图片生成' END) AS title,
                     created_at
                 FROM generation_logs
@@ -282,6 +283,7 @@ export class GenerationLogsRepository {
                     CONCAT(log.id, '-', asset.sort_order) AS id,
                     asset.type AS kind,
                     COALESCE(NULLIF(btrim(log.title), ''), CASE WHEN asset.type = 'video' THEN '生成视频' ELSE '生成图片' END) AS title,
+                    log.conversation_id,
                     COALESCE(NULLIF(asset.server_url, ''), NULLIF(asset.url, ''), NULLIF(asset.remote_url, '')) AS url,
                     log.created_at,
                     asset.sort_order
@@ -297,6 +299,7 @@ export class GenerationLogsRepository {
                     id,
                     kind,
                     title,
+                    conversation_id,
                     url,
                     created_at,
                     sort_order,
@@ -304,7 +307,7 @@ export class GenerationLogsRepository {
                 FROM asset_candidates
             ),
             recent_rows AS (
-                SELECT id, kind, title, url, created_at, sort_order
+                SELECT id, kind, title, conversation_id, url, created_at, sort_order
                 FROM ranked_assets
                 WHERE duplicate_rank = 1
                 ORDER BY created_at DESC, sort_order ASC
@@ -312,11 +315,11 @@ export class GenerationLogsRepository {
             )
             SELECT
                 COALESCE((
-                    SELECT jsonb_agg(jsonb_build_object('id', id, 'kind', kind, 'source', source, 'title', title, 'createdAt', created_at) ORDER BY created_at DESC)
+                    SELECT jsonb_agg(jsonb_build_object('id', id, 'kind', kind, 'source', source, 'conversationId', conversation_id, 'title', title, 'createdAt', created_at) ORDER BY created_at DESC)
                     FROM running_rows
                 ), '[]'::jsonb) AS running_tasks,
                 COALESCE((
-                    SELECT jsonb_agg(jsonb_build_object('id', id, 'kind', kind, 'title', title, 'url', url, 'createdAt', created_at) ORDER BY created_at DESC, sort_order ASC)
+                    SELECT jsonb_agg(jsonb_build_object('id', id, 'kind', kind, 'title', title, 'conversationId', conversation_id, 'url', url, 'createdAt', created_at) ORDER BY created_at DESC, sort_order ASC)
                     FROM recent_rows
                 ), '[]'::jsonb) AS recent_assets
             `,
@@ -328,7 +331,8 @@ export class GenerationLogsRepository {
                 .flatMap((item): CreateOverviewTask[] => {
                     const id = textValue(item.id);
                     if (!id) return [];
-                    return [{ id, kind: item.kind === "video" ? "video" : "image", source: textValue(item.source), title: textValue(item.title), createdAt: isoValue(item.createdAt) }];
+                    const conversationId = textValue(item.conversationId);
+                    return [{ id, kind: item.kind === "video" ? "video" : "image", source: textValue(item.source), title: textValue(item.title), createdAt: isoValue(item.createdAt), ...(conversationId ? { conversationId } : {}) }];
                 })
                 .slice(0, 4),
             recentAssets: jsonObjects(row.recent_assets)
@@ -336,7 +340,8 @@ export class GenerationLogsRepository {
                     const id = textValue(item.id);
                     const url = textValue(item.url);
                     if (!id || !url || /^(data|blob):/i.test(url)) return [];
-                    return [{ id, kind: item.kind === "video" ? "video" : "image", title: textValue(item.title), url, createdAt: isoValue(item.createdAt) }];
+                    const conversationId = textValue(item.conversationId);
+                    return [{ id, kind: item.kind === "video" ? "video" : "image", title: textValue(item.title), url, createdAt: isoValue(item.createdAt), ...(conversationId ? { conversationId } : {}) }];
                 })
                 .slice(0, CREATE_OVERVIEW_RECENT_ASSET_LIMIT),
         };

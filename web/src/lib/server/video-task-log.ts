@@ -12,6 +12,7 @@ export function writeVideoGenerationLog(task: VideoTask, status: "success" | "fa
         clientRequestId: task.clientRequestId,
         taskId: task.id,
         userId: task.userId,
+        conversationId: task.conversationId,
         username: task.username || "",
         displayName: task.displayName || task.username || "",
         kind: "video",

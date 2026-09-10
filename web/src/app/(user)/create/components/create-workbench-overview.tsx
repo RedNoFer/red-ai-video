@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUpRight, CheckCircle2, FileImage, LoaderCircle, Maximize2, Paperclip, RefreshCw, Sparkles, Video } from "lucide-react";
+import { ArrowUpRight, CheckCircle2, FileImage, History, LoaderCircle, Maximize2, Paperclip, RefreshCw, Sparkles, Video } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
@@ -167,16 +167,17 @@ function RecentAssetCard({ asset, importing, onUse }: { asset: CreateOverviewAss
                 <p className="truncate text-xs font-medium text-[#343b44] dark:text-[#dce1e7]">{asset.title}</p>
                 <div className="mt-1 flex min-w-0 items-center justify-between gap-2">
                     <p className="min-w-0 truncate text-[11px] text-[#9aa2ad] dark:text-[#737d89]">{formatRecentTime(asset.createdAt)}</p>
-                    <button
-                        type="button"
-                        disabled={importing}
-                        className="ml-auto grid size-7 shrink-0 place-items-center rounded-md text-[#596470] transition hover:bg-[#eef1f4] hover:text-[#20242a] disabled:cursor-wait disabled:opacity-60 dark:text-[#aab2bd] dark:hover:bg-[#252a31] dark:hover:text-white"
-                        onClick={onUse}
-                        aria-label="引用到 Agent"
-                        title="引用到 Agent"
-                    >
-                        {importing ? <LoaderCircle className="size-3.5 animate-spin" /> : <Paperclip className="size-3.5" />}
-                    </button>
+                    <div className="ml-auto flex shrink-0 items-center gap-1">
+                        {asset.conversationId ? (
+                            <Link href={createConversationHref(asset.conversationId)} className="inline-flex h-7 items-center gap-1 rounded-md px-1.5 text-[11px] text-[#596470] transition hover:bg-[#eef1f4] hover:text-[#20242a] dark:text-[#aab2bd] dark:hover:bg-[#252a31] dark:hover:text-white" title="查看历史提示词和编辑记录">
+                                <History className="size-3.5" />
+                                <span>历史</span>
+                            </Link>
+                        ) : null}
+                        <button type="button" disabled={importing} className="grid size-7 shrink-0 place-items-center rounded-md text-[#596470] transition hover:bg-[#eef1f4] hover:text-[#20242a] disabled:cursor-wait disabled:opacity-60 dark:text-[#aab2bd] dark:hover:bg-[#252a31] dark:hover:text-white" onClick={onUse} aria-label="引用到 Agent" title="引用到 Agent">
+                            {importing ? <LoaderCircle className="size-3.5 animate-spin" /> : <Paperclip className="size-3.5" />}
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>

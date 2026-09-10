@@ -122,7 +122,6 @@ function sortVideoCandidatesByCost(settings: Pick<AuthSettings, "logicalModels" 
 /** Resolve whether the selected binding can carry ordered all-frame references. */
 export function supportsVideoKeyframeReferences(candidate: ResolvedLogicalModel, keyframeCount: number) {
     if (candidate.capability !== "video" || keyframeCount < 1) return false;
-    if (candidate.channel.advancedConfig?.protocol === "newapi-video") return false;
     const contract = candidate.channel.advancedConfig?.protocol === "buming-seedance" ? resolveBumingSeedanceVideoModelContract(candidate.upstreamModel) : undefined;
     const supportsKeyframes = contract
         ? (contract.videoReferenceModes.includes("all_frames") || (!isKnownBumingSeedanceVideoModel(candidate.upstreamModel) && candidate.capabilityProfile?.supportsKeyframes !== false)) && candidate.capabilityProfile?.supportsKeyframes !== false

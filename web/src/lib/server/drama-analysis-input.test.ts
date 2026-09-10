@@ -13,6 +13,17 @@ import {
 } from "./drama-analysis-input";
 
 describe("normalizeDramaVisualInput", () => {
+    it("derives a timing-checkable utterance when legacy shots only have dialogue text", () => {
+        const result = normalizeDramaVisualInput({
+            phase: "visual",
+            shots: [{ id: "shot-one", dialogue: "纳兰小姐，你应该知道，在斗气大陆，女方悔婚会让对方有多难堪" }],
+        });
+
+        expect(result.payload.shots[0]?.utterances).toEqual([
+            expect.objectContaining({ type: "dialogue", text: "纳兰小姐，你应该知道，在斗气大陆，女方悔婚会让对方有多难堪", order: 1 }),
+        ]);
+    });
+
     it("keeps every reviewed shot, asset, utterance, relation and full text", () => {
         const longDescription = "镜头描述".repeat(2_500);
         const shots = Array.from({ length: 81 }, (_, index) => ({

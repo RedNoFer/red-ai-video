@@ -254,7 +254,12 @@ export function resolveLogicalModelCapabilityProfile(binding: Pick<LogicalModelB
     };
     const providerCapability = (key: "supportsReferenceImage" | "supportsReferenceVideo" | "supportsReferenceAudio" | "supportsKeyframes", fallback: boolean) => {
         const declared = protocolDefault(key);
-        if (declared === false) return false;
+        // New API uses the same `referenceImages` array for ordered keyframes,
+        // but its generic protocol preset cannot know which model IDs support
+        // that mode. An administrator's explicit binding declaration is the
+        // authority for this one capability; the safe default remains false.
+        const allowsExplicitNewApiKeyframes = key === "supportsKeyframes" && advanced?.protocol === "newapi-video" && stored[key] === true;
+        if (declared === false && !allowsExplicitNewApiKeyframes) return false;
         if (stored[key] === false) return false;
         if (stored[key] === true) return true;
         return declared ?? fallback;

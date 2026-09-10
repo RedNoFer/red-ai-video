@@ -420,7 +420,7 @@ describe("model routing config", () => {
         expect(normalized[0]?.bindings[0]?.capabilityProfile).toMatchObject({ bumingQuality: "fast" });
     });
 
-    it("uses each strict provider's declared capability profile instead of a shared logical-model override", () => {
+    it("uses each strict provider's declared capability profile while allowing an explicit New API all-frame declaration", () => {
         const newApi = applyChannelProtocol({ ...channel("newapi", ["seedance-2-0-official"]), advancedConfig: {} as never }, "newapi-video");
         const buming = applyChannelProtocol({ ...channel("buming", ["seedance-2-0-official"]), advancedConfig: {} as never }, "buming-seedance");
         const binding = { capabilityProfile: { supportsReferenceImage: false, supportsReferenceVideo: false, supportsReferenceAudio: false, supportsKeyframes: true, supportsCancel: true, supportsWebhook: true } };
@@ -429,7 +429,7 @@ describe("model routing config", () => {
             supportsReferenceImage: false,
             supportsReferenceVideo: false,
             supportsReferenceAudio: false,
-            supportsKeyframes: false,
+            supportsKeyframes: true,
             supportsCancel: false,
             supportsWebhook: false,
         });

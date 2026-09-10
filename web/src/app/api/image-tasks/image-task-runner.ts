@@ -21,6 +21,7 @@ export async function writeImageGenerationLog(task: ImageTask, status: "success"
         clientRequestId: task.clientRequestId,
         taskId: task.id,
         userId: task.userId,
+        conversationId: task.conversationId,
         username: task.username,
         displayName: task.displayName,
         kind: "image",

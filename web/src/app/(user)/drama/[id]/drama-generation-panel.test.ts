@@ -85,6 +85,9 @@ describe("Drama generation production workspace", () => {
         );
         expect(executionPrompt).toContain("framePlan");
         expect(executionPrompt).toContain("videoPromptDraft.trim() === videoPromptOriginal.trim()");
+        expect(executionPrompt).toContain("persistedVideoPrompt");
+        expect(executionPrompt).toContain("promptSeedRef");
+        expect(executionPrompt).toContain("if (optimizedFramePlan) setOptimizedFramePlan(undefined)");
         expect(executionPrompt).toContain("resolveShotVideoOptimizationSource");
         expect(executionPrompt).toContain("beginVideoPrompt(project.id, episode.id, shot.id)");
         expect(executionPrompt).toContain("finishVideoPrompt(project.id, episode.id, shot.id)");

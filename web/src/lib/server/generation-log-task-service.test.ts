@@ -121,6 +121,29 @@ describe("generation log task service", () => {
         expect(result.log).toMatchObject({ count: 2, successCount: 2, failCount: 0, status: "success" });
     });
 
+    it("keeps the create conversation on a standalone task result", async () => {
+        const result = await service.recordGenerationTaskLogResult({
+            taskId: "standalone-video-task",
+            userId: "user-one",
+            conversationId: "conversation-for-video",
+            username: "user",
+            displayName: "User",
+            kind: "video",
+            source: "video-workbench",
+            status: "success",
+            title: "视频历史",
+            prompt: "用户原文",
+            model: "video-model",
+            summary: "视频生成完成",
+            durationMs: 100,
+            asset: { type: "video", url: assetUrl("standalone") },
+            taskKind: "generation",
+            createdAt: Date.now(),
+        });
+
+        expect(result.log?.conversationId).toBe("conversation-for-video");
+    });
+
     it("round-trips long public and execution prompts through the file store", async () => {
         const publicPrompt = "原".repeat(4000);
         const executionPrompt = "执".repeat(5000);

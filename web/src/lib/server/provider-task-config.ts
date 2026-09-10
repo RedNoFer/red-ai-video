@@ -165,7 +165,7 @@ export function assertVideoReferenceRoles(config: SystemChannelAdvancedConfig | 
                         ? templateVideoReferenceRoles(config?.requestTemplate)
                         : ["reference"]),
     );
-    if (supportsKeyframes === true && ["seedance", "volcengine-video", "custom", "compatible", "auto"].includes(protocol)) supported.add("keyframe");
+    if (supportsKeyframes === true && ["seedance", "volcengine-video", "newapi-video", "custom", "compatible", "auto"].includes(protocol)) supported.add("keyframe");
     const unsupported = requestedRoles.find((role) => !supported.has(role));
     if (unsupported) throw new Error(unsupported === "keyframe" ? "当前视频模型不支持全能帧连续参考" : unsupported === "last_frame" ? "当前视频模型不支持尾帧输入" : "当前视频模型不支持显式首帧输入");
 }

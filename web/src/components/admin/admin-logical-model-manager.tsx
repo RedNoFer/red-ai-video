@@ -285,7 +285,11 @@ function BindingEditor({ binding, capability, channels, onChange }: { binding: L
         ? resolveLogicalModelCapabilityProfile(binding, capability, channel, binding.upstreamModel) || defaultLogicalModelCapabilityProfile(capability)
         : { ...defaultLogicalModelCapabilityProfile(capability), ...(binding.capabilityProfile || {}) };
     const lockedCapability = (field: "supportsReferenceImage" | "supportsReferenceVideo" | "supportsReferenceAudio" | "supportsKeyframes") =>
-        strictConfig?.[field] === false && !(field === "supportsKeyframes" && channel?.advancedConfig?.protocol === "buming-seedance" && !isKnownBumingSeedanceVideoModel(binding.upstreamModel));
+        strictConfig?.[field] === false &&
+        !(
+            field === "supportsKeyframes" &&
+            (channel?.advancedConfig?.protocol === "newapi-video" || (channel?.advancedConfig?.protocol === "buming-seedance" && !isKnownBumingSeedanceVideoModel(binding.upstreamModel)))
+        );
     const bumingQualityOptions = channel?.advancedConfig?.protocol === "buming-seedance" && capability === "video" ? [...resolveBumingSeedanceQualityOptions(binding.upstreamModel)] : [];
     const effectiveAsync = profile.supportsAsync ?? (capability === "image" || capability === "video");
     const timeoutSeconds = profile.timeoutMs ? Math.round(profile.timeoutMs / 1000) : undefined;
@@ -338,7 +342,7 @@ function BindingEditor({ binding, capability, channels, onChange }: { binding: L
                         </Checkbox>
                         {capability === "video" ? (
                             <Checkbox disabled={lockedCapability("supportsKeyframes")} checked={profile.supportsKeyframes === true} onChange={(event) => updateProfile({ supportsKeyframes: event.target.checked })}>
-                                全能帧（有序关键帧）
+                                全能帧（有序关键帧，需供应商确认）
                             </Checkbox>
                         ) : null}
                         <Checkbox checked={effectiveAsync} onChange={(event) => updateProfile({ supportsAsync: event.target.checked })}>
@@ -350,6 +354,7 @@ function BindingEditor({ binding, capability, channels, onChange }: { binding: L
                         <Checkbox disabled={Boolean(strictConfig)} checked={profile.supportsWebhook === true} onChange={(event) => updateProfile({ supportsWebhook: event.target.checked })}>
                             Webhook
                         </Checkbox>
+                        {capability === "video" ? <span className="basis-full text-[11px] text-stone-500 dark:text-stone-400">多图参考是无序的视觉参考素材；全能帧是按时间顺序解释的关键帧，只有供应商确认支持时才勾选。</span> : null}
                     </div>
                     <LabeledControl label="最大参考图数量">
                         <InputNumber className="w-full" min={0} max={16} precision={0} value={profile.maxReferenceImages} onChange={(value) => updateProfile({ maxReferenceImages: Number(value) || 0 })} />

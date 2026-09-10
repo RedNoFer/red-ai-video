@@ -57,7 +57,7 @@ export function normalizeDramaVisualInput(body: DramaAnalyzeBody) {
                 shotBoundary: dramaAnalysisText(shot.shotBoundary),
                 dialogue: dramaAnalysisText(shot.dialogue),
                 narration: dramaAnalysisText(shot.narration),
-                utterances: normalizeUtterances(shot.utterances),
+                utterances: normalizeUtterances(shot.utterances, shot.dialogue),
                 duration: resolveDramaShotDuration(shot.duration, 5),
                 characterIds: texts(shot.characterIds),
                 sceneId: dramaAnalysisText(shot.sceneId),
@@ -483,8 +483,9 @@ function normalizeReferenceAlias(value: string) {
     return match ? `@${match[1]}${match[2]}` : "";
 }
 
-function normalizeUtterances(value: unknown) {
-    return array(value).flatMap((item, index) => {
+function normalizeUtterances(value: unknown, legacyDialogue?: unknown) {
+    const input = array(value);
+    const normalized = input.flatMap((item, index) => {
         const utterance = object(item);
         const text = dramaAnalysisText(utterance.text);
         if (!text) return [];
@@ -510,6 +511,11 @@ function normalizeUtterances(value: unknown) {
             },
         ];
     });
+    if (!normalized.length) {
+        const text = dramaAnalysisText(legacyDialogue);
+        return text ? [{ order: 1, type: "dialogue" as const, speaker: "", text }] : [];
+    }
+    return normalized;
 }
 
 function optionalNumber(value: unknown) {

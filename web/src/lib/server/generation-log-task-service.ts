@@ -211,6 +211,7 @@ function recordStandaloneGenerationTaskLog(input: GenerationTaskLogResultInput) 
         id: `${input.kind}-task:${input.taskId}`,
         taskId: input.taskId,
         userId: input.userId,
+        conversationId: input.conversationId,
         username: input.username,
         displayName: input.displayName,
         kind: input.kind,

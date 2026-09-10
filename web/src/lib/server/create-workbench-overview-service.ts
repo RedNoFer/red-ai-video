@@ -42,6 +42,7 @@ export function buildCreateGenerationOverview(logs: StoredGenerationLog[]): Pick
             source: log.source,
             title: log.title || (log.kind === "video" ? "视频生成" : "图片生成"),
             createdAt: log.createdAt,
+            ...(log.conversationId ? { conversationId: log.conversationId } : {}),
         }));
     const recentAssets: CreateOverviewAsset[] = [];
     const seen = new Set<string>();
@@ -52,7 +53,7 @@ export function buildCreateGenerationOverview(logs: StoredGenerationLog[]): Pick
             const url = stableAssetUrl(asset).trim();
             if (!url || /^(data|blob):/i.test(url) || seen.has(url)) continue;
             seen.add(url);
-            recentAssets.push({ id: `${log.id}-${index}`, kind: asset.type, title: log.title || (asset.type === "video" ? "生成视频" : "生成图片"), url, createdAt: log.createdAt });
+            recentAssets.push({ id: `${log.id}-${index}`, kind: asset.type, title: log.title || (asset.type === "video" ? "生成视频" : "生成图片"), url, createdAt: log.createdAt, ...(log.conversationId ? { conversationId: log.conversationId } : {}) });
             if (recentAssets.length >= CREATE_OVERVIEW_RECENT_ASSET_LIMIT) return { runningTasks, recentAssets };
         }
     }

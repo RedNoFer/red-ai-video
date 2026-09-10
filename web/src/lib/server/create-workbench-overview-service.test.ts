@@ -33,14 +33,21 @@ describe("create workbench overview service", () => {
 
         expect(tasks).toEqual([expect.objectContaining({ id: "run-one", kind: "image", source: "agent", conversationId: "conversation-one", status: "running" })]);
     });
+
+    it("keeps completed generation assets linked to the conversation that produced them", () => {
+        const overview = buildCreateGenerationOverview([generationLog("success-linked", "success", "2026-07-26T12:00:00.000Z", [{ type: "video", url: "/api/media/video.mp4" }], "conversation-one")]);
+
+        expect(overview.recentAssets[0]).toMatchObject({ id: "success-linked-0", conversationId: "conversation-one" });
+    });
 });
 
-function generationLog(id: string, status: StoredGenerationLog["status"], createdAt: string, assets: StoredGenerationLog["assets"]): StoredGenerationLog {
+function generationLog(id: string, status: StoredGenerationLog["status"], createdAt: string, assets: StoredGenerationLog["assets"], conversationId?: string): StoredGenerationLog {
     return {
         id,
         userId: "user-one",
         username: "user",
         displayName: "User",
+        conversationId,
         kind: assets[0]?.type || "image",
         source: "agent",
         status,

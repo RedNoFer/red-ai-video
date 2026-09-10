@@ -1196,7 +1196,7 @@ describe("video generation candidate failover", () => {
         expect(mocks.fetchInternalApi.mock.calls[0]?.[0]).toContain("/api/ai/system/two/");
     });
 
-    it("blocks a New API drama keyframe run even when a binding claims all-frame support", async () => {
+    it("submits a New API drama keyframe run when the binding explicitly declares all-frame support", async () => {
         const newApiChannel = applyChannelProtocol({ ...channels[0], models: ["admin-configured-video"], advancedConfig: emptyAdvancedConfig() }, "newapi-video");
         mocks.getAuthSettings.mockResolvedValue({
             ...settings,
@@ -1204,7 +1204,7 @@ describe("video generation candidate failover", () => {
             logicalModels: [
                 {
                     ...settings.logicalModels[0],
-                    bindings: [{ ...settings.logicalModels[0].bindings[0], channelId: newApiChannel.id, upstreamModel: "admin-configured-video", capabilityProfile: { supportsKeyframes: true, maxReferenceImages: 5 } }],
+                    bindings: [{ ...settings.logicalModels[0].bindings[0], channelId: newApiChannel.id, upstreamModel: "admin-configured-video", capabilityProfile: { supportsKeyframes: true, maxReferenceImages: 9 } }],
                 },
             ],
         });
@@ -1213,9 +1213,21 @@ describe("video generation candidate failover", () => {
 
         const response = await POST(request({ model: "video", videoSeconds: "15", size: "9:16", vquality: "720" }, references, { surface: "drama", runId: "run-nine-images" }));
 
-        expect(response.status).toBe(400);
-        expect(await response.json()).toMatchObject({ error: "当前模型未声明支持全能帧关键图，请切换支持全能帧的模型" });
-        expect(mocks.fetchInternalApi).not.toHaveBeenCalled();
+        expect(response.status).toBe(200);
+        expect(mocks.fetchInternalApi).toHaveBeenCalledTimes(1);
+        const [, init] = mocks.fetchInternalApi.mock.calls[0] as [string, RequestInit];
+        expect(JSON.parse(String(init.body))).toMatchObject({
+            referenceImages: [
+                "https://cdn.example.com/reference-1.png",
+                "https://cdn.example.com/reference-2.png",
+                "https://cdn.example.com/reference-3.png",
+                "https://cdn.example.com/reference-4.png",
+                "https://cdn.example.com/reference-5.png",
+                "https://cdn.example.com/reference-6.png",
+                "https://cdn.example.com/reference-7.png",
+                "https://cdn.example.com/reference-8.png",
+            ],
+        });
     });
 
     it("does not switch a drama all-frame request to another logical model", async () => {
