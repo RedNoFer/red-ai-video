@@ -200,11 +200,8 @@ describe("admin settings model routing", () => {
         );
     });
 
-    it("repairs stale strict channel templates when saving only routing fields", async () => {
-        const buming = applyChannelProtocol(
-            { id: "buming", name: "不鸣", baseUrl: "https://api.tokengo.love", apiKey: "saved-secret", apiFormat: "openai", models: ["seedance-2-0-official"], enabled: true },
-            "buming-seedance",
-        );
+    it("does not rewrite strict channel templates when saving only routing fields", async () => {
+        const buming = applyChannelProtocol({ id: "buming", name: "不鸣", baseUrl: "https://api.tokengo.love", apiKey: "saved-secret", apiFormat: "openai", models: ["seedance-2-0-official"], enabled: true }, "buming-seedance");
         buming.advancedConfig = {
             ...buming.advancedConfig!,
             modelConfigs: {
@@ -230,16 +227,43 @@ describe("admin settings model routing", () => {
         );
 
         expect(response.status).toBe(200);
-        expect(mocks.setAuthSettings).toHaveBeenCalledWith(
-            expect.objectContaining({
-                systemChannels: [
-                    expect.objectContaining({
-                        advancedConfig: expect.objectContaining({
-                            modelConfigs: expect.objectContaining({ "seedance-2-0-official": expect.objectContaining({ requestTemplate: expect.stringContaining('"mode":"{{mode}}"') }) }),
-                        }),
-                    }),
-                ],
+        const savedPatch = mocks.setAuthSettings.mock.calls[0]?.[0];
+        expect(savedPatch).not.toHaveProperty("systemChannels");
+    });
+
+    it("does not let a missing Buming model preset block an unrelated New API routing save", async () => {
+        const buming = applyChannelProtocol({ id: "buming", name: "不鸣", baseUrl: "https://api.tokengo.love", apiKey: "saved-secret", apiFormat: "openai", models: ["seedance-2-0-official"], enabled: true }, "buming-seedance");
+        const newApi = applyChannelProtocol({ id: "newapi", name: "New API 视频（MegabyAI）", baseUrl: "https://newapi.megabyai.cc", apiKey: "saved-secret", apiFormat: "openai", models: ["seedance-2.0"], enabled: true }, "newapi-video");
+        delete buming.advancedConfig!.modelConfigs!["seedance-2-0-official"];
+        const logicalModels = [
+            { id: "seedance-2-0-official", name: "Seedance Official", capability: "video" as const, enabled: true, bindings: [{ id: "buming-video", channelId: "buming", upstreamModel: "seedance-2-0-official", enabled: true, priority: 1 }] },
+            {
+                id: "seedance-2.0",
+                name: "Seedance 2.0",
+                capability: "video" as const,
+                enabled: true,
+                bindings: [{ id: "newapi-video", channelId: "newapi", upstreamModel: "seedance-2.0", enabled: true, priority: 4, weight: 100, capabilityProfile: { maxReferenceImages: 9 } }],
+            },
+        ];
+        mocks.getFreshAuthSettings.mockResolvedValue({
+            ...savedSettings,
+            systemChannels: [buming, newApi],
+            logicalModels,
+            defaultModels: { textModel: "", imageModel: "", videoModel: "seedance-2.0", audioModel: "" },
+        });
+
+        const response = await PATCH(
+            request({
+                logicalModels,
+                defaultModels: { textModel: "", imageModel: "", videoModel: "seedance-2.0", audioModel: "" },
             }),
+        );
+
+        expect(response.status).toBe(200);
+        const savedPatch = mocks.setAuthSettings.mock.calls[0]?.[0];
+        expect(savedPatch).not.toHaveProperty("systemChannels");
+        expect(savedPatch).toEqual(
+            expect.objectContaining({ logicalModels: expect.arrayContaining([expect.objectContaining({ id: "seedance-2.0", bindings: [expect.objectContaining({ channelId: "newapi", upstreamModel: "seedance-2.0", priority: 4 })] })]) }),
         );
     });
 

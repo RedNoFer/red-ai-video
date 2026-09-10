@@ -54,14 +54,13 @@ export async function PATCH(request: Request) {
             if (webhookSecretError) throw new AuthInputError(webhookSecretError);
         }
         if (Array.isArray(body.systemChannels) || Array.isArray(body.logicalModels) || body.defaultModels) {
-            // Routing saves can arrive without `systemChannels` (for example when
-            // only a logical model capability/profile is edited). Normalize the
-            // persisted channel snapshot before strict-protocol validation so
-            // legacy provider templates are repaired consistently at this single
-            // settings boundary instead of making otherwise unrelated saves fail.
-            const channels = (patch.systemChannels || currentSettings.systemChannels).map(normalizeSystemChannel);
-            const protocolErrors = channels.flatMap(channelProtocolValidationErrors);
-            if (protocolErrors.length) throw new AuthInputError(protocolErrors[0]);
+            // A routing-only save must not validate or rewrite unrelated provider
+            // protocol configs. Channel protocol validation belongs to channel saves.
+            const channels = Array.isArray(body.systemChannels) ? patch.systemChannels || [] : currentSettings.systemChannels;
+            if (Array.isArray(body.systemChannels)) {
+                const protocolErrors = channels.flatMap(channelProtocolValidationErrors);
+                if (protocolErrors.length) throw new AuthInputError(protocolErrors[0]);
+            }
             const sourceLogicalModels = Array.isArray(body.logicalModels) ? body.logicalModels : currentSettings.logicalModels;
             const logicalModels = synchronizeLogicalModelsWithChannels(sourceLogicalModels, channels);
             const defaultModels = { ...currentSettings.defaultModels, ...body.defaultModels };
@@ -72,7 +71,7 @@ export async function PATCH(request: Request) {
             const normalizedDefaults = normalizeDefaultModelsConfig(defaultModels, logicalModels, channels);
             const errors = modelRoutingValidationErrors(logicalModels, channels, normalizedDefaults);
             if (errors.length) throw new AuthInputError(errors[0]);
-            patch.systemChannels = channels;
+            if (Array.isArray(body.systemChannels)) patch.systemChannels = channels;
             patch.logicalModels = logicalModels;
             patch.defaultModels = normalizedDefaults;
         }
