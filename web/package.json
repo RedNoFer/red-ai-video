@@ -7,6 +7,8 @@
         "dev": "node --env-file-if-exists=../.env --env-file-if-exists=.env.local scripts/run-app.mjs dev",
         "compile:seedance-25": "node scripts/compile-seedance-25-skill.mjs",
         "compile:drama-image": "node scripts/compile-drama-image-skill.mjs",
+        "compile:drama-video-director": "node scripts/compile-drama-video-director-skill.mjs",
+        "sync:codex-skill": "node scripts/sync-drama-video-director-codex-skill.mjs",
         "compile:skills": "node scripts/compile-all-skills.mjs",
         "predev": "pnpm run compile:skills",
         "build": "node scripts/production-build.mjs",

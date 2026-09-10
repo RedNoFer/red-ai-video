@@ -92,6 +92,8 @@ describe("prompt optimization service", () => {
         expect(systemMessage).toContain("前景必须是具体框景或遮挡物");
         expect(systemMessage).toContain("ELS/极远景只能保留远景空间关系");
         expect(systemMessage).toContain("静态帧不是无动作的氛围图");
+        expect(systemMessage).toContain("静态帧只冻结一个已经发生的瞬间");
+        expect(systemMessage).toContain("光影必须能回答光从哪里来");
         expect(systemMessage).toContain("不预设固定秒数");
         expect(systemMessage).toContain("上一帧/上一镜");
         expect(systemMessage).toContain("只返回优化后的公开提示词");
@@ -210,6 +212,8 @@ describe("prompt optimization service", () => {
         expect(systemMessage).toContain("起始可见状态");
         expect(systemMessage).toContain("每个非空字段必须独立一行");
         expect(systemMessage).toContain("每个时间段都必须让姿态");
+        expect(systemMessage).toContain("每个真实时间段逐块写出起点、动作与触发、可见衔接和终点");
+        expect(systemMessage).toContain("每镜只保留一个主运镜");
         expect(systemMessage).toContain("减少“保持构图、主体稳定、情绪不变”");
         expect(systemMessage).toContain("模式：30 秒精确时间轴");
     });

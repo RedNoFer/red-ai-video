@@ -11,6 +11,11 @@ describe("selectAgentSkills", () => {
         expect(skills.map((skill) => skill.id)).toContain("character-design");
     });
 
+    it("makes the director layer explicitly selectable without auto-enabling it for ordinary chat", () => {
+        expect(selectAgentSkills(DEFAULT_SETTINGS, "chat", ["drama-video-director"]).map((skill) => skill.id)).toEqual(["drama-video-director"]);
+        expect(selectAgentSkills(DEFAULT_SETTINGS, "chat", [])).not.toContainEqual(expect.objectContaining({ id: "drama-video-director" }));
+    });
+
     it("does not allow a planner response to enable an unselected Skill", () => {
         expect(selectAgentSkills(DEFAULT_SETTINGS, "chat", [])).toEqual([]);
     });

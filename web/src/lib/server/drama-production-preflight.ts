@@ -5,6 +5,7 @@ import { normalizeDramaFrameBeats, validateDramaFrameVisualContent, dramaFrameVi
 import { dramaDialogueTimingReminder, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
 import { dramaReferenceImageBudget } from "@/lib/drama-production-plan";
 import { validateDramaPerformanceDetail } from "@/lib/drama-prompt-quality";
+import { auditDramaShotDirectorQuality } from "@/lib/server/agent-skills/drama-video-director";
 
 const blocking = (code: string, message: string, extra: Partial<DramaProductionPreflightIssue> = {}): DramaProductionPreflightIssue => ({ code, severity: "blocking", message, ...extra });
 const warning = (code: string, message: string, extra: Partial<DramaProductionPreflightIssue> = {}): DramaProductionPreflightIssue => ({ code, severity: "warning", message, ...extra });
@@ -120,6 +121,8 @@ function checkShot(
     if (!shot.continuity?.shotSize || !shot.continuity?.cameraAngle || !shot.continuity?.composition)
         issues.push(warning("FRAMING_UNCLEAR", `${label}缺少完整景别、机位或构图约束，可能导致主体位置和景别漂移`, { shotId: shot.id, correction: "补充明确景别、机位和构图" }));
     if (!shot.lighting && !shot.entryState?.lighting) issues.push(warning("LIGHTING_UNCLEAR", `${label}缺少明确光照方向，生成结果可能出现人物与背景光照脱节`, { shotId: shot.id, correction: "补充主光方向、色温和主体/背景光照关系" }));
+    for (const qualityIssue of auditDramaShotDirectorQuality(shot))
+        issues.push(warning(qualityIssue.code, `${label}${qualityIssue.message}`, { shotId: shot.id, correction: qualityIssue.correction }));
     if (!/(文字|字幕|水印|logo|watermark|text)/i.test(`${shot.imagePrompt}\n${shot.videoPrompt}\n${shot.negativePrompt || ""}`))
         issues.push(warning("NEGATIVE_TEXT_MISSING", `${label}未显式禁止文字、水印或 Logo，可能产生不可控画面文字`, { shotId: shot.id, correction: "在负面约束中加入禁止文字、水印和 Logo" }));
     const scene = shot.sceneId ? scenes.get(shot.sceneId) : undefined;

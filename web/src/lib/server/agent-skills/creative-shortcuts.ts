@@ -1,8 +1,17 @@
 import { SEEDANCE_25_DIRECTOR_SKILL } from "./seedance-25";
+import { DRAMA_VIDEO_DIRECTOR_SKILL, resolveDramaDirectorInstructions } from "./drama-video-director";
 import { DRAMA_ASSET_IMAGE_SKILL } from "@/lib/drama-image-skill";
 import { DRAMA_DIALOGUE_TIMING_RULES } from "@/lib/drama-dialogue-timing";
 
 export { SEEDANCE_25_DIRECTOR_SKILL } from "./seedance-25";
+export { DRAMA_VIDEO_DIRECTOR_SKILL, resolveDramaDirectorInstructions } from "./drama-video-director";
+
+/** Shared director layer imported from .agents/skills/drama-video-director. */
+export const DRAMA_VIDEO_DIRECTOR_RULES = DRAMA_VIDEO_DIRECTOR_SKILL.instructions;
+export const DRAMA_PACKAGE_DIRECTOR_RULES = resolveDramaDirectorInstructions("package");
+export const DRAMA_STATIC_FRAME_DIRECTOR_RULES = resolveDramaDirectorInstructions("static-frame");
+export const DRAMA_VIDEO_PROMPT_DIRECTOR_RULES = resolveDramaDirectorInstructions("video");
+export const DRAMA_EXTERNAL_CODEX_DIRECTOR_RULES = resolveDramaDirectorInstructions("external-codex");
 
 export const CHARACTER_DESIGN_SKILL = {
     id: "character-design",

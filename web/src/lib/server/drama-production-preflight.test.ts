@@ -116,6 +116,15 @@ describe("drama production preflight", () => {
         expect(result.issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "FRAMING_UNCLEAR", severity: "warning" })]));
     });
 
+    it("reports director quality gaps as warnings rather than paid-production blockers", () => {
+        const project = fixture();
+        const result = preflightDramaProduction(project, project.episodes[0]);
+
+        expect(result.issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "DIRECTOR_CAMERA", severity: "warning" })]));
+        expect(result.issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "DIRECTOR_DEPTH", severity: "warning" })]));
+        expect(result.issues.some((issue) => issue.code.startsWith("DIRECTOR_") && issue.severity === "blocking")).toBe(false);
+    });
+
     it("keeps dialogue capacity as a warning instead of a production blocker", () => {
         const project = fixture();
         const shot = project.episodes[0].shots[0];

@@ -5,7 +5,7 @@ import type { AgentRun, AgentRunPlannerContextSummary, AgentRunTask } from "@/li
 import type { AgentPlan } from "@/lib/server/agent-run-validation";
 import { resolveAgentPlanningProfile } from "@/lib/server/agent-run-planning-profile";
 import { canvasSnapshotPlannerView, selectedCanvasNodeIds } from "./agent-run-canvas-snapshot";
-import { DRAMA_PLANNING_SKILL, SEEDANCE_25_DIRECTOR_SKILL, SEEDANCE_DIRECTOR_SKILL } from "./agent-skills/creative-shortcuts";
+import { DRAMA_PLANNING_SKILL, DRAMA_VIDEO_DIRECTOR_SKILL, SEEDANCE_25_DIRECTOR_SKILL, SEEDANCE_DIRECTOR_SKILL } from "./agent-skills/creative-shortcuts";
 import { DRAMA_ASSET_IMAGE_SKILL } from "@/lib/drama-image-skill";
 import { inferSeedance25VideoDuration, resolveSeedance25DirectorInstructions } from "./agent-skills/seedance-25";
 
@@ -20,7 +20,9 @@ type AgentSkillSelectionContext = {
 
 export function availableAgentSkills(settings: AuthSettings, surface: CreativeSurface) {
     const workspaces = surface === "canvas" ? new Set(["canvas"]) : surface === "drama" ? new Set(["drama"]) : new Set(["image", "video", "drama"]);
-    return settings.agentSkills.filter((skill) => skill.enabled && (skill.workspaces || ["image"]).some((workspace) => workspaces.has(workspace)));
+    const configured = settings.agentSkills.filter((skill) => skill.enabled && (skill.workspaces || ["image"]).some((workspace) => workspaces.has(workspace)));
+    if (surface !== "canvas" && !configured.some((skill) => skill.id === DRAMA_VIDEO_DIRECTOR_SKILL.id)) configured.push({ ...DRAMA_VIDEO_DIRECTOR_SKILL, keywords: [...DRAMA_VIDEO_DIRECTOR_SKILL.keywords], workspaces: [...DRAMA_VIDEO_DIRECTOR_SKILL.workspaces] });
+    return configured;
 }
 
 export function selectAgentSkills(settings: AuthSettings, surface: CreativeSurface, requestedSkillIds: string[] = [], context?: AgentSkillSelectionContext) {

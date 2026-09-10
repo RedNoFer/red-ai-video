@@ -5,7 +5,12 @@ import { DRAMA_PACKAGE_ARCHITECTURE_RULES } from "../drama-production-package-ru
 import {
     CHARACTER_DESIGN_SKILL,
     DRAMA_CONTINUOUS_FRAME_RULES,
+    DRAMA_EXTERNAL_CODEX_DIRECTOR_RULES,
+    DRAMA_PACKAGE_DIRECTOR_RULES,
     DRAMA_PLANNING_SKILL,
+    DRAMA_STATIC_FRAME_DIRECTOR_RULES,
+    DRAMA_VIDEO_DIRECTOR_SKILL,
+    DRAMA_VIDEO_PROMPT_DIRECTOR_RULES,
     IMAGE_MOTION_SKILL,
     SEEDANCE_DIRECTOR_SKILL,
     SEEDANCE_25_DIRECTOR_SKILL,
@@ -16,6 +21,15 @@ import {
 } from "./creative-shortcuts";
 
 describe("creative shortcut skills", () => {
+    it("loads the shared director layer from the compiled project Skill", () => {
+        expect(DRAMA_VIDEO_DIRECTOR_SKILL.id).toBe("drama-video-director");
+        expect(DRAMA_VIDEO_DIRECTOR_SKILL.sourceContentHash).toMatch(/^[a-f0-9]{64}$/u);
+        expect(DRAMA_PACKAGE_DIRECTOR_RULES).toContain("dramaticFunction");
+        expect(DRAMA_STATIC_FRAME_DIRECTOR_RULES).toContain("不得写运镜过程");
+        expect(DRAMA_VIDEO_PROMPT_DIRECTOR_RULES).toContain("每个真实时间段");
+        expect(DRAMA_EXTERNAL_CODEX_DIRECTOR_RULES).toContain("显式选择本 Skill");
+    });
+
     it("keeps the extracted image workflow rules in character design", () => {
         expect(CHARACTER_DESIGN_SKILL.instructions).toContain("change/preserve/constraints");
         expect(CHARACTER_DESIGN_SKILL.instructions).toContain("所有成功结果都保留为独立候选");

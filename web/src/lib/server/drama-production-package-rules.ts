@@ -1,4 +1,4 @@
-import { DRAMA_CONTINUOUS_FRAME_RULES, DRAMA_DIRECTOR_SCENE_RULES, SEEDANCE_STATIC_FRAME_PROMPT_LAYOUT, SEEDANCE_STATIC_FRAME_PROMPT_SCHEME } from "./agent-skills/creative-shortcuts";
+import { DRAMA_CONTINUOUS_FRAME_RULES, DRAMA_DIRECTOR_SCENE_RULES, DRAMA_PACKAGE_DIRECTOR_RULES, SEEDANCE_STATIC_FRAME_PROMPT_LAYOUT, SEEDANCE_STATIC_FRAME_PROMPT_SCHEME } from "./agent-skills/creative-shortcuts";
 import { DRAMA_DIALOGUE_TIMING_RULES, DRAMA_DIALOGUE_TIMING_TOLERANCE_CHARS } from "@/lib/drama-dialogue-timing";
 import { DRAMA_PUBLIC_SHOT_PROMPT_CONTRACT } from "@/lib/drama-public-prompt-contract";
 
@@ -31,6 +31,7 @@ ${SEEDANCE_STATIC_FRAME_PROMPT_LAYOUT}
 ${SEEDANCE_STATIC_FRAME_PROMPT_SCHEME}
 ${DRAMA_CONTINUOUS_FRAME_RULES}
 ${DRAMA_DIRECTOR_SCENE_RULES}
+${DRAMA_PACKAGE_DIRECTOR_RULES}
 视频提示词真相规则：每镜完整公开 videoPrompt 必须由 Agent 直接生成，并包含每个真实时间段的时间范围、起点、动作与触发、可见衔接、终点和具体画面状态；framePlan.frames 只保存同一内容的结构化镜像。应用代码、制作包序列化和运行时只能校验、保存和转发，不得从 framePlan 拼接、补写、清理、删改或重写 videoPrompt。此规则覆盖本协议中任何“videoPrompt 只保存摘要”或“第 11 章按 framePlan 重建”的旧表述。
 制作包生成必须读取 productionPlan.video.shotDuration（仅允许 15 或 30 秒）作为逻辑镜头目标；同一场景且时间轴连续的 7s/8s 等碎片必须按目标时长合并，不能机械保留碎片；人物资产沿用项目已登记角色及基准图。固定 4/5 帧方案必须保存对应帧数；Agent 智能切分方案不得携带固定帧数，必须按真实动作节点重新决定 1-9 个帧段。
 对白时长必须先于镜头和帧计划核算：${DRAMA_DIALOGUE_TIMING_RULES}对白容量只生成提醒，不作为导入、应用或生产阻断；当镜头内对白超过镜头可说时长且超出 ${DRAMA_DIALOGUE_TIMING_TOLERANCE_CHARS} 个可发音字容差时，建议在自然分句、说话人转换或动作反应处拆成多个镜头，或明确增加镜头时长，但仍允许继续导入。
