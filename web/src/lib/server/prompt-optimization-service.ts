@@ -15,7 +15,15 @@ import {
 } from "@/lib/drama-character-rules";
 import { DRAMA_CHARACTER_TURNAROUND_LABEL, DRAMA_CHARACTER_TURNAROUND_LAYOUT, DRAMA_CHARACTER_TURNAROUND_SIZE } from "@/lib/drama-prompt-compiler";
 import type { CreativeGenerationMode } from "@/lib/creative-runtime-contract";
-import { DRAMA_CONTINUOUS_FRAME_RULES, DRAMA_STATIC_FRAME_DIRECTOR_RULES, DRAMA_VIDEO_PROMPT_DIRECTOR_RULES, SEEDANCE_DIRECTOR_SKILL, SEEDANCE_STATIC_FRAME_PROMPT_LAYOUT, SEEDANCE_STATIC_FRAME_RULES, SEEDANCE_VIDEO_PROMPT_LAYOUT } from "@/lib/server/agent-skills/creative-shortcuts";
+import {
+    DRAMA_CONTINUOUS_FRAME_RULES,
+    DRAMA_STATIC_FRAME_DIRECTOR_RULES,
+    DRAMA_VIDEO_PROMPT_DIRECTOR_RULES,
+    SEEDANCE_DIRECTOR_SKILL,
+    SEEDANCE_STATIC_FRAME_PROMPT_LAYOUT,
+    SEEDANCE_STATIC_FRAME_RULES,
+    SEEDANCE_VIDEO_PROMPT_LAYOUT,
+} from "@/lib/server/agent-skills/creative-shortcuts";
 import { inferSeedance25VideoDuration, resolveSeedance25DirectorInstructions } from "@/lib/server/agent-skills/seedance-25";
 import { toSafeGenerationErrorMessage } from "@/lib/server/generation-errors";
 import { resolveLogicalModelCandidates } from "@/lib/server/logical-model-router";
@@ -162,14 +170,26 @@ function enforceDramaAssetPromptContract(sourcePrompt: string, prompt: string, f
         `主体与资产类型：${kind || "角色、场景或道具"}设定图`,
         `身份/结构锚点：${fields.visualIdentity || fields.description || "严格沿用当前资产身份与结构锚点"}`,
         `可见状态与材质：${fields.styling || "按当前资产造型、材质和可见状态呈现"}`,
-        kind === "角色" ? `构图与画幅：${DRAMA_CHARACTER_TURNAROUND_SIZE} 横向，一张纯白色无缝背景${DRAMA_CHARACTER_TURNAROUND_LABEL}；${DRAMA_CHARACTER_TURNAROUND_LAYOUT}。` : kind === "场景" ? "构图与画幅：1:1 方形九宫格空间基准板；中心格为主视角，外围八格按八个方位展示同一无人物场景，固定入口、出口、陈设、材质、光向和空间轴线。" : "构图与画幅：按项目画幅，一张完整、独立的单主体基准图。",
+        kind === "角色"
+            ? `构图与画幅：${DRAMA_CHARACTER_TURNAROUND_SIZE} 横向，一张纯白色无缝背景${DRAMA_CHARACTER_TURNAROUND_LABEL}；${DRAMA_CHARACTER_TURNAROUND_LAYOUT}。`
+            : kind === "场景"
+              ? "构图与画幅：1:1 方形九宫格空间基准板；中心格为主视角，外围八格按八个方位展示同一无人物场景，固定入口、出口、陈设、材质、光向和空间轴线。"
+              : "构图与画幅：按项目画幅，一张完整、独立的单主体基准图。",
         `光色与风格：${kind === "角色" ? [configuredStyle ? `项目视觉风格：${configuredStyle}` : "", globalVisual, DRAMA_CHARACTER_RENDER_STYLE, DRAMA_CHARACTER_STUDIO_LIGHT_RULES, DRAMA_CHARACTER_SUPPLIER_QUALITY_RULES].filter(Boolean).join("；") : globalVisual || "严格沿用当前项目视觉风格与资产固有色彩，不新增环境或剧情元素。"}`,
-        kind === "角色" ? `负面约束：${DRAMA_CHARACTER_NEGATIVE_RULES}。` : kind === "场景" ? `负面约束：无人物、不同地点、方向标签、文字、水印、logo${visualContract?.globalNegativePrompt ? `；${visualContract.globalNegativePrompt}` : ""}。` : "负面约束：无额外主体、拼版、多视角、场景文字、边框、文字、水印或 logo。",
+        kind === "角色"
+            ? `负面约束：${DRAMA_CHARACTER_NEGATIVE_RULES}。`
+            : kind === "场景"
+              ? `负面约束：无人物、不同地点、方向标签、文字、水印、logo${visualContract?.globalNegativePrompt ? `；${visualContract.globalNegativePrompt}` : ""}。`
+              : "负面约束：无额外主体、拼版、多视角、场景文字、边框、文字、水印或 logo。",
     ];
-    const retainedByLabel = new Map(retained.map((line) => {
-        const match = line.match(/^([^：:]+)[：:]\s*([\s\S]*)$/u);
-        return match ? [match[1], match[2].trim()] as const : ["", ""] as const;
-    }).filter(([label]) => label));
+    const retainedByLabel = new Map(
+        retained
+            .map((line) => {
+                const match = line.match(/^([^：:]+)[：:]\s*([\s\S]*)$/u);
+                return match ? ([match[1], match[2].trim()] as const) : (["", ""] as const);
+            })
+            .filter(([label]) => label),
+    );
     const canonical = defaults.map((line) => {
         const match = line.match(/^([^：:]+)[：:]\s*([\s\S]*)$/u);
         if (!match) return line;

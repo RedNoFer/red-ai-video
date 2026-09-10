@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import prettier from "prettier";
 import { parse } from "yaml";
 
 const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -70,7 +71,13 @@ export function dramaDirectorSourceManifest() {
 }
 `;
 
-writeFileSync(outputPath, output, "utf8");
+const prettierConfig = (await prettier.resolveConfig(outputPath)) ?? {};
+const formattedOutput = await prettier.format(output, {
+    ...prettierConfig,
+    filepath: outputPath,
+    parser: "typescript",
+});
+writeFileSync(outputPath, formattedOutput, "utf8");
 writeFileSync(
     manifestPath,
     `${JSON.stringify(
