@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 
-import type { DramaProductionPackageV1, DramaProject } from "@/lib/drama-project-contract";
+import type { DramaProductionPackageV1, DramaProject, DramaShot } from "@/lib/drama-project-contract";
 import { DRAMA_STYLE_COLOR_SCRIPT, DRAMA_STYLE_NAME } from "@/lib/drama-style";
 import { defaultDramaProductionPlan, dramaVisualDirection } from "@/lib/drama-production-plan";
+import { auditDramaShotDirectorQuality } from "@/lib/server/agent-skills/drama-video-director";
 import { applyDramaProductionPackage, buildDramaAssetReuseContext, mergeProjectAssetsIntoProductionPackage, previewDramaProductionPackage } from "@/lib/server/drama-production-package";
 import { serializeDramaProductionPackageMarkdown } from "@/lib/drama-production-package-serializer";
 
@@ -152,6 +153,15 @@ describe("production package boundary", () => {
             styling: "Rifa的发型、服装、随身物件与材质按描述固定",
             colorPalette: "按制作包描述中的固有色保持跨镜头一致",
         });
+    });
+
+    it("keeps the 30-second package contract complete after import", () => {
+        const source = readFileSync(new URL("../../../../output/three-year-pact-standalone-production-package-30s.json", import.meta.url), "utf8");
+        const preview = previewDramaProductionPackage(source, "three-year-pact-standalone-production-package-30s.json");
+        expect(preview.package.project.productionBible.productionPlan?.references.maxImages).toBe(30);
+        const shots = preview.package.episodes.flatMap((episode) => episode.shots);
+        expect(shots.every((shot) => Boolean(shot.performancePlan?.emotionalObjective.trim()))).toBe(true);
+        expect(shots.flatMap((shot) => auditDramaShotDirectorQuality(shot as unknown as DramaShot).map((issue) => issue.code))).not.toContain("DIRECTOR_MULTI_MOTION");
     });
 
     it("applies the fixed character-quality contract to package-generated role assets", () => {

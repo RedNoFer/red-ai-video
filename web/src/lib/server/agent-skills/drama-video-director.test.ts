@@ -53,4 +53,27 @@ describe("drama video director adapter", () => {
 
         expect(auditDramaShotDirectorQuality(shot)).toEqual([]);
     });
+
+    it("counts distinct camera motion types instead of repeated prompt wording", () => {
+        const shot = {
+            imagePrompt: "前景门框，中景人物，背景是城门纵深，左上窗光照亮人物",
+            videoPrompt: "单一主运镜：中轴缓慢推进\n起始状态：人物站定\n结束画面：人物停住",
+            cameraMotion: "中轴缓慢推进",
+            lens: "50mm",
+            dramaticFunction: "把人物的视线压力推向门外",
+            continuity: {
+                shotSize: "中景",
+                cameraAngle: "平视",
+                composition: "前景门框，中景人物，背景城门",
+                characterBlocking: "人物站在门内侧",
+                gazeDirection: "看向门缝",
+                actionStart: "人物站定",
+                actionEnd: "人物停住",
+            },
+            lightingPlan: { keyLight: "来自左上方的窗光", palette: "冷灰蓝" },
+        } as unknown as DramaShot;
+
+        expect(auditDramaShotDirectorQuality(shot).map((issue) => issue.code)).not.toContain("DIRECTOR_MULTI_MOTION");
+        expect(auditDramaShotDirectorQuality({ ...shot, cameraMotion: "先推镜再横摇" })).toEqual(expect.arrayContaining([expect.objectContaining({ code: "DIRECTOR_MULTI_MOTION" })]));
+    });
 });

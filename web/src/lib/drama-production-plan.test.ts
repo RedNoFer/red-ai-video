@@ -11,14 +11,20 @@ describe("drama production plan", () => {
         });
         expect(plan.video.frameCount).toBeUndefined();
         expect(plan.skills.map((skill) => skill.id)).toEqual(["seedance-director", "seedance-25-director"]);
-        expect(plan.references).toMatchObject({ strategy: "adaptive", minImages: 3, maxImages: 5 });
+        expect(plan.references).toMatchObject({ strategy: "adaptive", minImages: 3, maxImages: 9 });
         expect(plan.continuity).toMatchObject({ mode: "strict", requireAcceptedActualTail: true });
     });
 
     it("normalizes legacy multi-reference plans into storyboard workflow", () => {
         const plan = normalizeDramaProductionPlan({ video: { model: "seedance-2-5", mode: "reference", resolution: "720p", count: 2 }, references: { minImages: 3, maxImages: 5 }, continuity: { requireAcceptedActualTail: true } });
-        expect(plan).toMatchObject({ video: { model: "seedance-2-5", mode: "storyboard", count: 2 }, references: { minImages: 3, maxImages: 5 }, continuity: { requireAcceptedActualTail: true } });
+        expect(plan).toMatchObject({ video: { model: "seedance-2-5", mode: "storyboard", count: 2 }, references: { minImages: 3, maxImages: 9 }, continuity: { requireAcceptedActualTail: true } });
         expect(plan?.skills.map((skill) => skill.id)).toEqual(["seedance-director", "seedance-25-director"]);
+    });
+
+    it("derives the drama reference budget from the target duration", () => {
+        expect(normalizeDramaProductionPlan({ video: { shotDuration: 15 }, references: { maxImages: 5 } })?.references.maxImages).toBe(9);
+        expect(normalizeDramaProductionPlan({ video: { shotDuration: 15 }, references: { minImages: 30, maxImages: 30 } })?.references).toMatchObject({ minImages: 9, maxImages: 9 });
+        expect(normalizeDramaProductionPlan({ video: { shotDuration: 30 }, references: { maxImages: 9 } })?.references.maxImages).toBe(30);
     });
 
     it("normalizes episode resolution to the editable 480p/720p/1080p set", () => {

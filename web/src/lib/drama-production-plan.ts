@@ -37,7 +37,7 @@ export function defaultDramaProductionPlan(source: DramaProductionPlan["source"]
             audioMode: "native",
             allowExplicitFallback: false,
         },
-        references: { strategy: "adaptive", minImages: 3, maxImages: 5, roles: [...DRAMA_REFERENCE_ROLES] },
+        references: { strategy: "adaptive", minImages: 3, maxImages: DRAMA_VIDEO_REFERENCE_IMAGE_LIMIT, roles: [...DRAMA_REFERENCE_ROLES] },
         continuity: { mode: "strict", requireAcceptedActualTail: true },
         source,
     };
@@ -67,10 +67,13 @@ export function normalizeDramaProductionPlan(value: unknown, fallback?: DramaPro
     const requestedMode = text(videoInput.mode);
     const baseMode = base.video.mode === "text-to-video" ? "text-to-video" : "storyboard";
     const mode = requestedMode === "text-to-video" ? "text-to-video" : ["storyboard", "reference", "first-frame", "first-last"].includes(requestedMode) ? "storyboard" : baseMode;
-    const minImages = boundedInteger(referenceInput.minImages, base.references.minImages, 1, 30);
-    const maxImages = Math.max(minImages, boundedInteger(referenceInput.maxImages, base.references.maxImages, minImages, 30));
     const roles = Array.isArray(referenceInput.roles) ? referenceInput.roles.map(text).filter((role): role is DramaReferenceManifestRole => DRAMA_REFERENCE_ROLES.includes(role as DramaReferenceManifestRole)) : base.references.roles;
     const requestedShotDuration = positive(videoInput.shotDuration) || (videoInput.durationPolicy === "fixed" ? positive(videoInput.duration) : undefined);
+    const shotDuration = normalizeShotDuration(requestedShotDuration, base.video.shotDuration || 15);
+    const durationBudget = dramaReferenceImageBudget(shotDuration);
+    const minImages = Math.min(durationBudget, boundedInteger(referenceInput.minImages, base.references.minImages, 1, 30));
+    const configuredMax = boundedInteger(referenceInput.maxImages, base.references.maxImages, minImages, 30);
+    const maxImages = Math.min(durationBudget, Math.max(minImages, durationBudget, configuredMax));
     const framePolicy = normalizeFramePolicy(videoInput.framePolicy, base.video.framePolicy || (Number(videoInput.frameCount) === 4 ? "fixed-4" : Number(videoInput.frameCount) === 5 ? "fixed-5" : "agent"));
     const visualStyle = typeof visualInput.visualStyle === "string" ? text(visualInput.visualStyle) : base.visual.visualStyle;
     const artStyle = typeof visualInput.artStyle === "string" ? text(visualInput.artStyle) : base.visual.artStyle;
@@ -93,7 +96,7 @@ export function normalizeDramaProductionPlan(value: unknown, fallback?: DramaPro
             resolution: normalizeResolution(videoInput.resolution, base.video.resolution),
             durationPolicy: videoInput.durationPolicy === "fixed" ? "fixed" : "shot",
             duration: positive(videoInput.duration) || base.video.duration,
-            shotDuration: normalizeShotDuration(requestedShotDuration, base.video.shotDuration || 15),
+            shotDuration,
             ...(frameCount ? { frameCount } : {}),
             framePolicy,
             count: boundedInteger(videoInput.count, base.video.count, 1, 50),

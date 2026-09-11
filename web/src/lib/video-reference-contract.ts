@@ -17,11 +17,15 @@ export type VideoGenerationReference = {
 export const ALL_FRAMES_MIN = 2;
 export const MAX_VIDEO_IMAGE_REFERENCES = 9;
 
+export type VideoReferenceNormalizationOptions = {
+    maxImageReferences?: number;
+};
+
 export function normalizeVideoReferenceRole(value: unknown): VideoReferenceRole | undefined {
     return typeof value === "string" && videoReferenceRoles.includes(value.trim() as VideoReferenceRole) ? (value.trim() as VideoReferenceRole) : undefined;
 }
 
-export function normalizeVideoGenerationReferences(value: unknown): VideoGenerationReference[] {
+export function normalizeVideoGenerationReferences(value: unknown, options: VideoReferenceNormalizationOptions = {}): VideoGenerationReference[] {
     if (value === undefined || value === null) return [];
     if (!Array.isArray(value)) throw new Error("视频参考素材格式不正确");
     const references: VideoGenerationReference[] = [];
@@ -62,7 +66,8 @@ export function normalizeVideoGenerationReferences(value: unknown): VideoGenerat
         const indexes = keyframes.map((reference) => reference.keyframeIndex).sort((left, right) => (left || 0) - (right || 0));
         if (new Set(indexes).size !== indexes.length || indexes.some((index, position) => index !== position + 1)) throw new Error("全能帧序号必须从 1 连续排列");
     }
-    if (references.filter((reference) => reference.type === "image").length > MAX_VIDEO_IMAGE_REFERENCES) throw new Error(`视频最多支持 ${MAX_VIDEO_IMAGE_REFERENCES} 张参考图`);
+    const maxImageReferences = Number.isInteger(options.maxImageReferences) && Number(options.maxImageReferences) > 0 ? Number(options.maxImageReferences) : MAX_VIDEO_IMAGE_REFERENCES;
+    if (references.filter((reference) => reference.type === "image").length > maxImageReferences) throw new Error(`视频最多支持 ${maxImageReferences} 张参考图`);
     return Array.from(new Map(references.map((reference) => [`${reference.type}:${reference.role}:${reference.keyframeIndex || ""}:${reference.url}`, reference])).values());
 }
 

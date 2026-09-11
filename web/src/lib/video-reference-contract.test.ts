@@ -52,6 +52,12 @@ describe("video reference contract", () => {
         expect(() => normalizeVideoGenerationReferences([frame(1)])).toThrow("全能帧至少需要 2 张图片");
         expect(normalizeVideoGenerationReferences(Array.from({ length: 9 }, (_, index) => frame(index + 1)))).toHaveLength(9);
         expect(() => normalizeVideoGenerationReferences(Array.from({ length: 10 }, (_, index) => frame(index + 1)))).toThrow("视频最多支持 9 张参考图");
+        expect(
+            normalizeVideoGenerationReferences(
+                Array.from({ length: 10 }, (_, index) => frame(index + 1)),
+                { maxImageReferences: 30 },
+            ),
+        ).toHaveLength(10);
         expect(() => normalizeVideoGenerationReferences([frame(1), frame(2, "https://cdn.example.com/1.png")])).toThrow("全能帧图片不能重复");
         expect(() => normalizeVideoGenerationReferences([frame(1), frame(3)])).toThrow("全能帧序号必须从 1 连续排列");
     });

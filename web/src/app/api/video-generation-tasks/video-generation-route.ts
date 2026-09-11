@@ -43,6 +43,7 @@ import { resolvePublicRequestOrigin } from "@/lib/server/public-request-origin";
 import { writeVideoGenerationLog } from "@/lib/server/video-task-log";
 import { buildOpenAiVideoFormData } from "./video-task-openai";
 import { normalizeVideoGenerationReferences, regularVideoReferences, videoFrameReferences, type VideoGenerationReference } from "@/lib/video-reference-contract";
+import { dramaReferenceImageBudget } from "@/lib/drama-production-plan";
 import { assertYumengVideoReferences, buildYumengVideoRequest } from "@/lib/yumeng-model-center";
 import { createVideoProviderRequestSnapshot } from "@/lib/server/video-provider-request-snapshot";
 
@@ -84,9 +85,12 @@ export async function POST(request: Request) {
         const prompt = String(body.prompt || "").trim();
         if (!prompt) return NextResponse.json({ error: "视频任务参数不完整或渠道不支持" }, { status: 400 });
         const publicOrigin = requestPublicOrigin(request);
+        const isDramaRun = body.context?.surface === "drama" && Boolean(body.context.runId);
+        const dramaDuration = Number(body.config?.videoSeconds);
+        const maxDramaImageReferences = isDramaRun && Number.isFinite(dramaDuration) && dramaDuration > 0 ? dramaReferenceImageBudget(dramaDuration) : undefined;
         let references: VideoGenerationReference[];
         try {
-            references = normalizeVideoGenerationReferences(body.references).map((reference) => ({
+            references = normalizeVideoGenerationReferences(body.references, { maxImageReferences: maxDramaImageReferences }).map((reference) => ({
                 ...reference,
                 url: signReferenceAssetInputUrl(reference.url, publicOrigin),
                 ...(reference.serverUrl ? { serverUrl: signReferenceAssetInputUrl(reference.serverUrl, publicOrigin) } : {}),
@@ -95,7 +99,6 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: error instanceof Error ? error.message : "视频参考素材不正确" }, { status: 400 });
         }
         const keyframeCount = references.filter((reference) => reference.role === "keyframe").length;
-        const isDramaRun = body.context?.surface === "drama" && Boolean(body.context.runId);
         // Drama runs use the same backend default as every other video task.
         // For all-frame references, keep the default model's compatible binding
         // and never switch to a different logical model as a hidden fallback.

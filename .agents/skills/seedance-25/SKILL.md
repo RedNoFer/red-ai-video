@@ -48,6 +48,8 @@ sourceCommit: ad0e68ba6ce24fb9ae9c67c9276061cef37663f1
 
 项目运行时路由：15/20 秒默认读取普通视频规则；30 秒默认读取精确时间轴规则；用户明确提出续写、编辑、白模、无缝转场或多宫格分镜时，改读对应专用 reference。静态图片帧不使用本 Skill，继续按项目的 Seedance 2.0 静态帧规则生成。
 
+短剧参考图预算：15 秒及以下镜头最多编排 9 张图片，30 秒镜头最多编排 30 张图片；这是短剧制作包与应用层的时长预算，不是对任意供应商的能力承诺。提交前仍必须服从当前已验证模型/渠道声明的更小参考图上限，不得把 30 秒规则扩散到普通视频工作台。
+
 按需附加 reference：真人表演、对白、情感冲突、体育或访谈读取 [realistic-direction-patterns.md](references/realistic-direction-patterns.md)；多人、对话、餐桌、车内或会议读取 [multi-character-blocking.md](references/multi-character-blocking.md)；用户要求参考结构、复刻镜头或模仿节奏时读取 [example-adaptation.md](references/example-adaptation.md)；出现失败、漂移、变形、模糊或重试时读取 [failure-diagnosis.md](references/failure-diagnosis.md)。这些 reference 只补充当前任务，不改变用户明确的素材、时长、比例或供应商能力。
 
 模式 reference：普通/15/20 秒、30 秒时间轴、长视频、续写、编辑、白模、无缝转场和多宫格分镜读取 [mode-routing.md](references/mode-routing.md)。
@@ -68,6 +70,8 @@ sourceCommit: ad0e68ba6ce24fb9ae9c67c9276061cef37663f1
 10. 结束画面：写最终可见的构图、姿态、道具位置、光色和声音状态。
 11. 连续性锁：只保留身份、数量、服装、道具归属、空间方向、轴线、光向和声音等高代价约束。
 12. 针对性约束：只列本镜头最可能且重做代价高的错误。
+
+表演完整性：制作包输出前必须直接提供 `emotionalObjective`、`emotionalArc` 和 start/middle/end 的情绪、面部动作、视线、身体/手部动作。禁止使用“情绪自然”“逐步变化”“结果成立”“动作展开”等笼统阶段词代替当前镜头事实；情绪必须落到可见人物或道具结果。运镜校验按不同运动类型去重，同一主运镜在多个公开字段重复出现不算多个运镜。
 
 公开执行提示词不得输出 `A线`、`B线`、`主线`、`副线`、`钩子` 等叙事规划标签；如果这些词表达了创作意图，必须转换为当前镜头可见的主体、事件、动作或声音，否则省略。
 

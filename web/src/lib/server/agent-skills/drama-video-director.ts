@@ -11,7 +11,16 @@ export type DramaDirectorQualityIssue = {
 const concreteDepthPattern = /前景|中景|背景|纵深|层次|遮挡|通道|门窗|景深|焦外/u;
 const lightDirectionPattern = /左|右|上|下|侧|窗|门|背|前|来自|方向|逆光|顶光|侧光|轮廓光/u;
 const abstractCinemaPattern = /电影感|氛围感|高级感|震撼|大片感/u;
-const cameraMotionPattern = /推|拉|摇|移|跟|升|降|旋转|环绕|变焦|手持|固定/gu;
+const cameraMotionKinds = [
+    ["push", /推(?:进|近|镜)|慢推/u],
+    ["pull", /拉(?:远|镜)|后拉/u],
+    ["pan", /摇|横向转向/u],
+    ["tilt", /升|降|吊臂/u],
+    ["track", /跟拍|跟随|移动/u],
+    ["orbit", /旋转|环绕/u],
+    ["zoom", /变焦/u],
+    ["handheld", /手持/u],
+] as const;
 
 /**
  * Returns advisory director checks only. Factual asset and continuity checks stay in production preflight.
@@ -30,7 +39,9 @@ export function auditDramaShotDirectorQuality(shot: DramaShot): DramaDirectorQua
         issues.push({ code: "DIRECTOR_RESULT", message: "缺少镜头结束时的可见结果或戏剧职责", correction: "补充镜头唯一职责，以及出口状态中可观察的动作、反应或环境结果" });
     if (abstractCinemaPattern.test(visualText) && !/(光|色|材质|构图|运镜|姿态|视线|呼吸|手部|身体|道具|遮挡|景深|焦段)/u.test(visualText))
         issues.push({ code: "DIRECTOR_CINEMA_SLOP", message: "存在没有执行含义的电影化套话", correction: "将抽象审美词改写为具体的光色、材质、构图、运动或可见表演" });
-    const motionCount = [shot.cameraMotion, continuity?.composition, shot.videoPrompt].filter(Boolean).reduce((count, value) => count + Array.from(String(value).matchAll(cameraMotionPattern)).length, 0);
-    if (motionCount > 3) issues.push({ code: "DIRECTOR_MULTI_MOTION", message: "镜头可能堆叠多个互不相容的运镜动作", correction: "只保留一个有动机的主运镜，并说明它响应的动作或信息变化" });
+    const promptMotion = shot.videoPrompt?.match(/(?:单一主运镜|一个主运镜)\s*[：:]\s*([^\n]+)/u)?.[1] || "";
+    const motionText = [shot.cameraMotion, promptMotion].filter(Boolean).join("\n");
+    const motionKinds = cameraMotionKinds.filter(([, pattern]) => pattern.test(motionText)).map(([kind]) => kind);
+    if (motionKinds.length > 1) issues.push({ code: "DIRECTOR_MULTI_MOTION", message: "镜头可能堆叠多个互不相容的运镜动作", correction: "只保留一个有动机的主运镜，并说明它响应的动作或信息变化" });
     return issues;
 }

@@ -800,10 +800,16 @@ function createShot(definition, order, previousCode) {
     common.colorPalette = definition.colorPalette || "清冷青白、低饱和黛青大厅，局部暖金；血印结果处使用克制血红";
     common.gazeDirection = definition.gazeDirection || "冲突对象与北侧首位之间的受控视线关系";
     common.arc = definition.arc || "从压力建立到当前镜头结果成立；每个可见节点改变姿态、视线、手部或道具状态。";
+    const performanceBeat = (phase, item) => ({
+        emotion: `${phase}阶段，${item.performance}`,
+        facialAction: item.performance,
+        gaze: `视线围绕${common.gazeDirection}保持可见反应`,
+        bodyAction: item.visible,
+    });
     common.beats = definition.beats || {
-        start: { emotion: "压抑", facialAction: "眉眼与下颌状态具体可见", gaze: "看向当前冲突目标", bodyAction: "由地面、桌案或椅面支撑" },
-        middle: { emotion: "压力增加", facialAction: "眉眼、呼吸或嘴角发生可见变化", gaze: "视线沿既定轴线移动", bodyAction: "手部或重心响应触发" },
-        end: { emotion: "结果成立", facialAction: "结果后的表情停住", gaze: "落到下一镜继承的目标", bodyAction: "形成可被下一镜继承的出口姿态" },
+        start: performanceBeat("起始", definition.frames[0]),
+        middle: performanceBeat("中段", definition.frames[Math.floor(definition.frames.length / 2)]),
+        end: performanceBeat("结束", definition.frames.at(-1)),
     };
     const frames = buildFrames(definition, common, shotCode);
     const utterances = timedUtterances(definition.utterances, shotCode);
@@ -1247,7 +1253,7 @@ const project = {
             ],
             visual: { visualStyle: visualDirection, artStyle: "高精度3D半写实国漫电影质感，真实皮肤微纹理、分束发丝、PBR木石锦缎金属和电影级空气透视", visualDirection, source: "manual" },
             video: { model: "seedance-2.5-c1", mode: "storyboard", ratio: "9:16", resolution: "720p", durationPolicy: "shot", shotDuration: 30, framePolicy: "agent", count: 1, audioMode: "native", allowExplicitFallback: false, modelParameters: {} },
-            references: { strategy: "adaptive", minImages: 3, maxImages: 9, roles: ["previous_actual_tail", "character_anchor", "scene_anchor", "prop_anchor", "action_keyframe", "composition_keyframe"] },
+            references: { strategy: "adaptive", minImages: 3, maxImages: 30, roles: ["previous_actual_tail", "character_anchor", "scene_anchor", "prop_anchor", "action_keyframe", "composition_keyframe"] },
             continuity: { mode: "strict", requireAcceptedActualTail: true },
             source: "package",
         },

@@ -24,6 +24,7 @@ import { dramaDialogueTimingReminder, dramaFrameDialogueTimingReminder, dramaUtt
 import { resolveDramaStyleContract } from "@/lib/drama-style";
 import { normalizeDramaCharacterProfile } from "@/lib/drama-character-rules";
 import { resolveDramaShotDuration } from "@/lib/server/drama-shot-config";
+import { isGenericDramaDetail, validateDramaPerformanceDetail } from "@/lib/drama-prompt-quality";
 
 export class DramaProductionPackageError extends Error {}
 
@@ -518,6 +519,8 @@ function validateProductionPackageCompleteness(value: Record<string, unknown>) {
             if (frameCount < 1 || frameCount > 9) throw new DramaProductionPackageError(`${label}的逐帧计划必须包含 1-9 个真实动作节点`);
             if (plan.video.framePolicy === "fixed-4" && frameCount !== 4) throw new DramaProductionPackageError(`${label}的逐帧计划必须为 4 帧`);
             if (plan.video.framePolicy === "fixed-5" && frameCount !== 5) throw new DramaProductionPackageError(`${label}的逐帧计划必须为 5 帧`);
+            const performanceIssues = validateDramaPerformanceDetail(item.performancePlan as DramaShot["performancePlan"], undefined, 0, label);
+            if (performanceIssues.length) throw new DramaProductionPackageError(`${label}的制作包表演规划不完整：${performanceIssues[0]}`);
             if (dialogueTiming?.requireUtteranceTimings) {
                 const timingIssues = dramaUtteranceTimingIssues(Number(item.duration), array(item.utterances) as DramaDialogueTimingInput[], true, label);
                 if (timingIssues.length) throw new DramaProductionPackageError(timingIssues.join("；"));
@@ -884,6 +887,7 @@ function normalizePackageShot(value: unknown, index: number, options: { upgradeL
                       lighting,
                       colorPalette,
                       performanceState: performanceStateForFrame(performancePlan, frame.sequenceIndex, frames.length),
+                      refreshPerformanceState: true,
                       sequenceIndex: frame.sequenceIndex,
                       frameCount: frames.length,
                   })
@@ -1080,15 +1084,26 @@ function normalizeLightingPlan(value: unknown): DramaShot["lightingPlan"] {
 }
 
 function mergePerformancePlan(current: DramaShot["performancePlan"], fallback: NonNullable<DramaShot["performancePlan"]>): NonNullable<DramaShot["performancePlan"]> {
+    const value = (candidate: string | undefined, fallbackValue: string) => (candidate?.trim() && !isGenericDramaDetail(candidate) ? candidate.trim() : fallbackValue);
+    const mergeBeat = (candidate: Partial<NonNullable<DramaShot["performancePlan"]>["beats"]["start"]> | undefined, fallbackBeat: NonNullable<DramaShot["performancePlan"]>["beats"]["start"]) => ({
+        emotion: value(candidate?.emotion, fallbackBeat.emotion),
+        facialAction: value(candidate?.facialAction, fallbackBeat.facialAction),
+        gaze: value(candidate?.gaze, fallbackBeat.gaze),
+        bodyAction: value(candidate?.bodyAction, fallbackBeat.bodyAction),
+    });
     return {
         ...fallback,
-        ...(current || {}),
+        emotionalObjective: value(current?.emotionalObjective, fallback.emotionalObjective),
+        emotionalArc: value(current?.emotionalArc, fallback.emotionalArc),
+        speechStyle: value(current?.speechStyle, fallback.speechStyle),
+        pace: value(current?.pace, fallback.pace),
+        breath: value(current?.breath, fallback.breath),
+        restraintLevel: value(current?.restraintLevel, fallback.restraintLevel),
         beats: {
             ...fallback.beats,
-            ...(current?.beats || {}),
-            start: { ...fallback.beats.start, ...(current?.beats?.start || {}) },
-            middle: { ...fallback.beats.middle, ...(current?.beats?.middle || {}) },
-            end: { ...fallback.beats.end, ...(current?.beats?.end || {}) },
+            start: mergeBeat(current?.beats?.start, fallback.beats.start),
+            middle: mergeBeat(current?.beats?.middle, fallback.beats.middle),
+            end: mergeBeat(current?.beats?.end, fallback.beats.end),
         },
     };
 }
@@ -1115,17 +1130,18 @@ function mergeDialoguePerformance(current: DramaShot["dialoguePerformance"], utt
 
 function defaultPerformancePlan(title: string, description: string, actionEnd: string, hasSpeech: boolean): NonNullable<DramaShot["performancePlan"]> {
     const action = description || title;
+    const focus = title || action;
     return {
-        emotionalObjective: `围绕${action}完成当前镜头的外在行动目标`,
+        emotionalObjective: `在${focus}的冲突中守住当前立场，并把压力传递到镜头出口`,
         emotionalArc: `从进入${action}的克制状态开始，经由动作反应推进，在${actionEnd}前收束`,
         speechStyle: hasSpeech ? "台词贴合当下处境，语气清晰克制，重音落在行动关键信息" : "无对白，以呼吸、视线和动作反应传递情绪",
         pace: "按镜头时长均匀推进，动作变化处短暂停顿，转场前收住",
         breath: "起始自然吸气，动作变化处短暂停顿，结束以呼气完成收束",
         restraintLevel: "中等克制，避免夸张表演",
         beats: {
-            start: { emotion: "保持与上一状态一致", facialAction: "眉眼和下颌保持可读的初始反应", gaze: "沿当前镜头动作方向", bodyAction: `进入${action}` },
-            middle: { emotion: "压力或目标逐步显现", facialAction: "眉眼、嘴角或下颌出现与动作对应的细微变化", gaze: "短暂聚焦关键人物或道具", bodyAction: "完成主要动作并保留反应停顿" },
-            end: { emotion: "在下一镜头切点前完成情绪落点", facialAction: "固定最终表情，避免切点前漂移", gaze: "指向下一动作或转场方向", bodyAction: actionEnd },
+            start: { emotion: `进入${focus}时承受压力但保持动作可控`, facialAction: `眉心收紧、下颌收住，表情回应${focus}`, gaze: `视线落向${focus}涉及的当前对象`, bodyAction: `双脚或座面提供支撑，手部停在${focus}相关的受力点` },
+            middle: { emotion: `随着${focus}推进，压抑转为必须回应的紧张`, facialAction: `眉眼和呼吸随${focus}的触发发生可见变化`, gaze: `视线从当前对象转向${focus}带来的关键目标`, bodyAction: `手部或重心对${focus}的触发作出具体响应，并保留反应停顿` },
+            end: { emotion: `在${actionEnd}成立时把紧张收束为可继承的决定`, facialAction: `眉眼和嘴角停在${actionEnd}对应的结果表情`, gaze: `视线停在${actionEnd}要求的下一动作目标`, bodyAction: actionEnd },
         },
     };
 }

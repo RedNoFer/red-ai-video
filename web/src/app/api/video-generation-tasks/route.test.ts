@@ -1230,6 +1230,17 @@ describe("video generation candidate failover", () => {
         });
     });
 
+    it("allows the drama 30-second reference budget without changing the generic nine-image contract", async () => {
+        mocks.getAuthSettings.mockResolvedValue(publicUrlCompatibleSettings());
+        mocks.fetchInternalApi.mockResolvedValue(json({ id: "drama-thirty-second-task", state: "queued" }));
+        const references = Array.from({ length: 10 }, (_, index) => ({ type: "image", url: `https://cdn.example.com/drama-reference-${index + 1}.png` }));
+
+        const response = await POST(request({ model: "video", videoSeconds: "30" }, references, { surface: "drama", runId: "run-thirty-seconds" }));
+
+        expect(response.status).toBe(200);
+        expect(mocks.fetchInternalApi).toHaveBeenCalledTimes(1);
+    });
+
     it("does not switch a drama all-frame request to another logical model", async () => {
         const bumingChannel = applyChannelProtocol({ ...channels[1], models: ["seedance-2-0-official"], advancedConfig: emptyAdvancedConfig() }, "buming-seedance");
         mocks.getAuthSettings.mockResolvedValue({
