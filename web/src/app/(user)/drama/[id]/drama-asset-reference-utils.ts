@@ -4,20 +4,18 @@ import type { DramaAssetReference, DramaAssetRefinementProposal, DramaNamedAsset
 import type { ImageGenerationResult } from "@/services/api/image";
 
 export function dramaAssetReferences(item: DramaNamedAsset): DramaAssetReference[] {
-    const references = item.references?.length
-        ? item.references
-        : item.referenceImageUrl
-          ? [
-                {
-                    id: `${item.id}-reference-legacy`,
-                    url: item.referenceImageUrl,
-                    storageKey: item.referenceStorageKey,
-                    source: "library" as const,
-                    label: "原参考图",
-                    createdAt: new Date(0).toISOString(),
-                },
-            ]
-          : [];
+    const references = [...(item.references || [])];
+    const legacyUrl = item.referenceImageUrl?.trim();
+    if (legacyUrl && !references.some((reference) => reference.url === legacyUrl)) {
+        references.push({
+            id: `${item.id}-reference-legacy`,
+            url: legacyUrl,
+            storageKey: item.referenceStorageKey,
+            source: "library",
+            label: "原参考图",
+            createdAt: new Date(0).toISOString(),
+        });
+    }
     return ensureUniqueDramaAssetReferenceIds(references);
 }
 

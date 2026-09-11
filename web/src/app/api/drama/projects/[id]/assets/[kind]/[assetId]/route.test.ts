@@ -41,8 +41,23 @@ describe("PATCH /api/drama/projects/[id]/assets/[kind]/[assetId]", () => {
         ]);
         const response = await GET(new Request("http://localhost"), context());
         expect(response.status).toBe(200);
-        expect(mocks.queryStoredGenerationTasks).toHaveBeenCalledWith("image", expect.objectContaining({ userId: "user-one", projectId: "project-one", surface: "drama", assetKind: "characters", assetId: "character-one", limit: 1 }));
+        expect(mocks.queryStoredGenerationTasks).toHaveBeenCalledWith(
+            "image",
+            expect.objectContaining({ userId: "user-one", projectId: "project-one", surface: "drama", assetKind: "characters", assetId: "character-one", statuses: ["pending", "running"], limit: 1 }),
+        );
         await expect(response.json()).resolves.toMatchObject({ data: { task: { id: "task-one", model: "image-model", status: "running" } } });
+    });
+
+    it("does not restore a historical completed task as an active generation", async () => {
+        mocks.queryStoredGenerationTasks.mockImplementation(async (_type: string, options: { statuses?: string[] }) =>
+            options.statuses?.includes("success") ? [{ id: "historical-task", kind: "generation", status: "success", config: { model: "image-model" }, prompt: "历史场景图" }] : [],
+        );
+
+        const response = await GET(new Request("http://localhost"), context());
+
+        expect(response.status).toBe(200);
+        expect(mocks.queryStoredGenerationTasks).toHaveBeenCalledWith("image", expect.objectContaining({ statuses: ["pending", "running"] }));
+        await expect(response.json()).resolves.toMatchObject({ data: { task: null } });
     });
 
     it("requires authentication", async () => {

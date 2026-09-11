@@ -56,6 +56,7 @@ import { CreativeEntityDeletionConflict, deleteDramaConversationAggregate } from
 import { createCreativeConversation, getCreativeConversation, listCreativeConversations, updateCreativeConversation } from "@/lib/server/creative-runtime-store";
 import { createDramaProject, deleteDramaProject, DramaProjectStoreError, findDramaEpisodeByCanvasProjectId, findDramaProjectBySourceHandoffId, getDramaProject, listDramaProjectSummaries, updateDramaProject } from "@/lib/server/drama-project-store";
 import { createDramaProjectVersion, getDramaProjectVersion, listDramaProjectVersions } from "@/lib/server/drama-project-version-store";
+import { persistDramaGeneratedImageReference } from "@/lib/server/drama-asset-reference-media";
 import { deleteUserLocalMediaAssets, deleteUserOwnedMediaAssetsPhysically } from "@/lib/server/local-media-storage";
 import { collectLocalMediaStorageKeys, localMediaStorageKeyFromValue } from "@/lib/server/local-media-references";
 import { signReferenceAssetInputUrl } from "@/lib/server/reference-asset-access";
@@ -70,6 +71,7 @@ import { createDramaProductionRun, findLatestDramaProductionRun, getDramaProduct
 import { createCanvasProjectForUser, getCanvasProjectForUser, updateCanvasProjectForUser } from "@/lib/server/canvas-project-service";
 import { resolveLogicalModelCandidates, supportsVideoKeyframeReferences } from "@/lib/server/logical-model-router";
 import { getVideoTask } from "@/lib/server/video-task-store";
+import type { ImageTask } from "@/lib/server/image-task-store";
 
 const MAX_PROJECT_BYTES = 2 * 1024 * 1024;
 const REVIEW_COMPLETION_STALE_MS = TEXT_MODEL_REQUEST_TIMEOUT_MS * 4;
@@ -497,7 +499,6 @@ async function recoverStaleGeneratedAssetReferences(userId: string, project: Dra
             }
         }
     }
-    if (!taskIds.size && !remoteUrls.size && !localUrls.size) return null;
     await Promise.all(
         [...taskIds].map(async (taskId) => {
             const task = await getStoredGenerationTask<{
@@ -529,30 +530,65 @@ async function recoverStaleGeneratedAssetReferences(userId: string, project: Dra
             }
         }
     }
-    if (!replacements.size) return null;
+    const generatedReferences = new Map<string, DramaAssetReference[]>();
+    const completedTasks = await queryStoredGenerationTasks<ImageTask>("image", { userId, projectId: project.id, surface: "drama", statuses: ["success"], limit: 100 });
+    for (const task of completedTasks) {
+        if (task.batchId || task.batchItemId || !task.assetKind || !task.assetId || !assets.some(([kind, items]) => kind === task.assetKind && items.some((item) => item.id === task.assetId))) continue;
+        const asset = assets.find(([kind, items]) => kind === task.assetKind && items.some((item) => item.id === task.assetId))?.[1].find((item) => item.id === task.assetId);
+        if (!asset || !task.result) continue;
+        const results = task.result.results?.length ? task.result.results : [task.result];
+        const existing = asset.references || [];
+        const promptVersion = existing.reduce((max, reference) => Math.max(max, reference.promptVersion || 0), 0);
+        for (const [index, result] of results.entries()) {
+            const stored = await persistDramaGeneratedImageReference(result, {
+                ownerUserId: userId,
+                projectId: project.id,
+                taskId: task.id,
+                originalName: `${asset.name}.png`,
+            });
+            if (!stored) continue;
+            const referenceId = `reference-${task.id}-${index}`;
+            if (existing.some((reference) => reference.id === referenceId || reference.url === stored.url || (stored.remoteUrl && reference.remoteUrl === stored.remoteUrl))) continue;
+            const key = `${task.assetKind}:${task.assetId}`;
+            const additions = generatedReferences.get(key) || [];
+            if (additions.some((reference) => reference.url === stored.url || (stored.remoteUrl && reference.remoteUrl === stored.remoteUrl))) continue;
+            additions.push({
+                id: referenceId,
+                url: stored.url,
+                remoteUrl: stored.remoteUrl,
+                storageKey: stored.storageKey,
+                source: "generated",
+                label: results.length > 1 ? `AI 候选图 ${index + 1}` : "AI 候选图",
+                width: result.width,
+                height: result.height,
+                createdAt: new Date(task.createdAt).toISOString(),
+                status: "candidate",
+                reviewStatus: "pending",
+                generationTaskId: task.id,
+                generationStage: task.generationStage || "initial",
+                compiledPrompt: task.prompt,
+                promptVersion: promptVersion + additions.length + 1,
+            });
+            generatedReferences.set(key, additions);
+        }
+    }
+    if (!replacements.size && !generatedReferences.size) return null;
     let changed = false;
+    const recoverAsset = <T extends DramaNamedAsset>(kind: string, item: T) => {
+        const recovered = recoverAssetReference(item, replacements, () => {
+            changed = true;
+        });
+        const additions = generatedReferences.get(`${kind}:${item.id}`);
+        if (!additions?.length) return recovered;
+        changed = true;
+        return { ...recovered, references: [...(recovered.references || []), ...additions] };
+    };
     const next = {
         ...project,
-        characters: project.characters.map((item) =>
-            recoverAssetReference(item, replacements, () => {
-                changed = true;
-            }),
-        ),
-        scenes: project.scenes.map((item) =>
-            recoverAssetReference(item, replacements, () => {
-                changed = true;
-            }),
-        ),
-        props: project.props.map((item) =>
-            recoverAssetReference(item, replacements, () => {
-                changed = true;
-            }),
-        ),
-        clues: project.clues.map((item) =>
-            recoverAssetReference(item, replacements, () => {
-                changed = true;
-            }),
-        ),
+        characters: project.characters.map((item) => recoverAsset("characters", item)),
+        scenes: project.scenes.map((item) => recoverAsset("scenes", item)),
+        props: project.props.map((item) => recoverAsset("props", item)),
+        clues: project.clues.map((item) => recoverAsset("clues", item)),
     };
     return changed ? { ...next, updatedAt: nextTimestamp(project.updatedAt) } : null;
 }
@@ -3610,7 +3646,7 @@ function normalizeAssetReferences(value: unknown, assetId: string, legacyUrl: un
         ];
     });
     const url = stableUrl(legacyUrl);
-    if (!references.length && url)
+    if (url && !references.some((reference) => reference.url === url))
         references.push({ id: `${assetId}-reference-legacy`, url, storageKey: optionalText(legacyStorageKey), source: "library", status: "candidate", label: "原参考图", width: undefined, height: undefined, createdAt: new Date(0).toISOString() });
     return references;
 }

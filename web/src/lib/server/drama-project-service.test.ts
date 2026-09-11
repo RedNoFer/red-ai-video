@@ -1923,6 +1923,47 @@ describe("drama project service updates", () => {
         expect(mocks.updateDramaProject).toHaveBeenCalledWith("user-one", expect.objectContaining({ characters: [expect.objectContaining({ referenceImageUrl: "/api/generation-log-assets/permanent/karin.png" })] }), current.updatedAt);
     });
 
+    it("restores successful asset-scoped image tasks that never reached the project references", async () => {
+        const current = project("2026-07-19T08:00:02.000Z", "项目");
+        current.scenes = [
+            {
+                id: "scene-one",
+                name: "议事厅",
+                description: "场景",
+                references: [{ id: "existing-reference", url: "/api/generation-log-assets/permanent/existing.png", source: "generated", label: "已审核基准图", status: "approved", createdAt: current.updatedAt }],
+                primaryReferenceId: "existing-reference",
+                sceneReferenceBoard: { layout: "panorama", referenceId: "existing-reference" },
+            },
+        ];
+        mocks.getDramaProject.mockResolvedValue(current);
+        mocks.queryStoredGenerationTasks.mockResolvedValue([
+            {
+                id: "historical-image-task",
+                userId: "user-one",
+                projectId: current.id,
+                assetKind: "scenes",
+                assetId: "scene-one",
+                status: "success",
+                createdAt: Date.parse("2026-07-19T08:00:01.000Z"),
+                prompt: "议事厅全景",
+                generationStage: "initial",
+                result: { dataUrl: "/api/generation-log-assets/permanent/recovered.png", serverUrl: "/api/generation-log-assets/permanent/recovered.png", width: 1536, height: 1024 },
+            },
+        ]);
+
+        const recovered = await getDramaProjectForUser("user-one", current.id);
+
+        expect(recovered.scenes[0].references).toEqual(
+            expect.arrayContaining([expect.objectContaining({ id: "reference-historical-image-task-0", url: "/api/generation-log-assets/permanent/recovered.png", generationTaskId: "historical-image-task", status: "candidate" })]),
+        );
+        expect(mocks.queryStoredGenerationTasks).toHaveBeenCalledWith("image", expect.objectContaining({ userId: "user-one", projectId: current.id, surface: "drama", statuses: ["success"], limit: 100 }));
+        expect(mocks.updateDramaProject).toHaveBeenCalledWith(
+            "user-one",
+            expect.objectContaining({ scenes: [expect.objectContaining({ references: expect.arrayContaining([expect.objectContaining({ id: "reference-historical-image-task-0" })]) })] }),
+            current.updatedAt,
+        );
+    });
+
     it("repairs legacy generated asset URLs by matching the retained task result", async () => {
         const current = project("2026-07-19T08:00:02.000Z", "项目");
         current.characters = [
