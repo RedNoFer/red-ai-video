@@ -172,6 +172,12 @@ export type DramaAssetProfile = {
     forbiddenChanges?: string[];
 };
 
+export type DramaBackgroundNpcPolicy = {
+    mode: "auto" | "required" | "forbidden";
+    guidance?: string;
+    continuity?: string;
+};
+
 export type DramaAssetPromptFields = {
     description: string;
     visualIdentity: string;
@@ -272,6 +278,7 @@ export type DramaNamedAsset = {
     referenceStorageKey?: string;
     refinementHistory?: DramaAssetRefinementMessage[];
     sceneReferenceBoard?: DramaSceneReferenceBoard;
+    backgroundNpcPolicy?: DramaBackgroundNpcPolicy;
 };
 
 export type DramaCharacter = DramaNamedAsset & { voiceProfile?: DramaVoiceProfile };
@@ -395,6 +402,10 @@ export type DramaProductionPlan = {
         mode: "strict" | "balanced";
         requireAcceptedActualTail: boolean;
     };
+    /** Agent-selected frame count range for each logical shot. */
+    frameCountRange?: { min: number; max: number };
+    /** Long-lived project-specific director instructions. */
+    customDirectorRules?: string;
     lockedAt?: string;
     source: "new-project" | "package" | "manual";
 };
@@ -826,6 +837,7 @@ export type DramaProductionPackageAsset = {
     activeEpisodeCodes?: string[];
     fieldOrigins?: Record<string, DramaFieldOrigin>;
     sceneReferenceBoard?: DramaSceneReferenceBoard;
+    backgroundNpcPolicy?: DramaBackgroundNpcPolicy;
 };
 
 export type DramaProductionPackageShot = Omit<DramaShot, "id" | "characterIds" | "propIds" | "clueIds" | "sceneId" | "storySceneId"> & {

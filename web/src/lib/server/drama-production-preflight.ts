@@ -19,6 +19,7 @@ export function preflightDramaProduction(project: DramaProject, episode: DramaEp
     const plan = project.productionBible?.productionPlan;
     const targetShotDuration = plan?.video.shotDuration;
     const targetFrameCount = plan?.video.framePolicy === "fixed-4" ? 4 : plan?.video.framePolicy === "fixed-5" ? 5 : undefined;
+    const targetFrameRange = plan?.video.framePolicy === "agent" ? plan.frameCountRange || { min: 2, max: 9 } : undefined;
     if (plan) {
         // The executable video model is selected by the backend channel binding at task creation.
         // Do not gate production on the stale model label persisted in the editable plan.
@@ -34,7 +35,7 @@ export function preflightDramaProduction(project: DramaProject, episode: DramaEp
     const shotById = new Map(episode.shots.map((shot) => [shot.id, shot]));
     const edgeByTo = new Map((episode.continuityEdges || []).map((edge) => [edge.toShotId, edge]));
 
-    for (const shot of episode.shots) if (selected.has(shot.id)) checkShot(shot, episode.code || episode.id, project, characters, scenes, props, clues, edgeByTo, shotById, issues, targetShotDuration, targetFrameCount);
+    for (const shot of episode.shots) if (selected.has(shot.id)) checkShot(shot, episode.code || episode.id, project, characters, scenes, props, clues, edgeByTo, shotById, issues, targetShotDuration, targetFrameCount, targetFrameRange);
     for (const edge of episode.continuityEdges || []) {
         if (!selected.has(edge.toShotId)) continue;
         const from = shotById.get(edge.fromShotId);
@@ -91,6 +92,7 @@ function checkShot(
     issues: DramaProductionPreflightIssue[],
     targetShotDuration?: 15 | 20 | 30,
     targetFrameCount?: number,
+    targetFrameRange?: { min: number; max: number },
 ) {
     const label = shot.code || shot.title;
     if (!shot.imagePrompt.trim() || !shot.videoPrompt.trim()) issues.push(blocking("PROMPT_MISSING", `${label}缺少图像或视频Prompt`, { shotId: shot.id }));
@@ -172,15 +174,22 @@ function checkShot(
         if (shot.storyboardFrameMode === "all_frames" || shot.fieldOrigins?.framePlan === "package") {
             try {
                 normalizeDramaFrameBeats(shot.framePlan.frames, shot.duration);
-                if (shot.storyboardFrameMode === "all_frames" && shot.framePlan.frames.length < 2)
+                if (shot.storyboardFrameMode === "all_frames" && targetFrameRange && (shot.framePlan.frames.length < targetFrameRange.min || shot.framePlan.frames.length > targetFrameRange.max))
+                    issues.push(
+                        blocking("FRAME_COUNT_RANGE", `${label}包含 ${shot.framePlan.frames.length} 个关键帧，但 Agent 自适应范围为 ${targetFrameRange.min}-${targetFrameRange.max} 帧`, {
+                            shotId: shot.id,
+                            correction: `按真实动作节点调整为 ${targetFrameRange.min}-${targetFrameRange.max} 帧`,
+                        }),
+                    );
+                else if (shot.storyboardFrameMode === "all_frames" && shot.framePlan.frames.length < 2)
                     issues.push(blocking("FRAME_COUNT_MIN", `${label}的 all_frames 至少需要 2 个有序关键帧`, { shotId: shot.id, correction: "补充至少一张具有真实可见变化的关键帧" }));
                 if (shot.storyboardFrameMode === "all_frames" && targetFrameCount && shot.framePlan.frames.length !== targetFrameCount)
                     issues.push(
                         blocking("FRAME_COUNT_MISMATCH", `${label}包含 ${shot.framePlan.frames.length} 个关键帧，但当前生产方案要求 ${targetFrameCount} 个`, { shotId: shot.id, correction: `按当前生产方案重新生成 ${targetFrameCount} 个连续关键帧` }),
                     );
                 const visualPlanErrors = validateDramaFramePlanVisuals(shot.framePlan.frames);
-                for (const visualPlanError of visualPlanErrors.filter((error) => /所有帧使用相同景别、机位与构图/u.test(error)))
-                    issues.push(blocking("FRAME_CAMERA_DUPLICATE", `${label}${visualPlanError}`, { shotId: shot.id, correction: "按真实动作节点调整相邻帧的景别、机位或构图" }));
+                for (const visualPlanError of visualPlanErrors.filter((error) => /声明了镜头\/机位切换/u.test(error)))
+                    issues.push(warning("FRAME_CAMERA_CHANGE_MISSING", `${label}${visualPlanError}`, { shotId: shot.id, correction: "为该信息揭示或动作触发补充对应的新景别、机位或构图关键帧" }));
                 shot.framePlan.frames.forEach((frame, index, frames) => {
                     const visualError = validateDramaFrameVisualContent(frame.imagePrompt, frame.actionPrompt);
                     if (visualError) issues.push(warning("FRAME_VISUAL_CONTENT", `${label}第${index + 1}帧${visualError}`, { shotId: shot.id, correction: "提示词仅供修订参考；如需优化，可回到分镜编辑当前帧" }));

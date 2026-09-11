@@ -206,6 +206,11 @@ test("drama frame prompt lets users maintain asset references before optimizatio
         optimizationPrompt = body.prompt || "";
         await route.fulfill({ json: { code: 0, data: { prompt: "优化后的帧提示词" }, msg: "OK" } });
     });
+    await page.route(/\/api\/drama\/projects\/[^/]+\/episodes\/[^/]+\/shots\/manual-shot\/frames\/manual-frame\/prompt\/optimize$/, async (route) => {
+        const body = (await route.request().postDataJSON()) as { prompt?: string };
+        optimizationPrompt = body.prompt || "";
+        await route.fulfill({ json: { code: 0, data: { prompt: "优化后的帧提示词" }, msg: "OK" } });
+    });
 
     await page.goto(`/drama/${project.id}`, { waitUntil: "domcontentloaded" });
     await page.getByRole("button", { name: "切换到分镜" }).click();
@@ -248,19 +253,20 @@ test("drama frame prompt lets users maintain asset references before optimizatio
         "光色与风格：冷色侧光，半写实动漫幻想风",
         "负面约束：无字幕、无水印、无logo、无HUD、无额外主体、无额外肢体、无变形",
     ].join("\n");
-    await promptDialog.getByRole("textbox").fill(editedPrompt);
+    const promptEditor = promptDialog.locator("textarea").last();
+    await promptEditor.fill(editedPrompt);
     const saveRequest = page.waitForRequest((request) => request.method() === "PATCH" && request.url().includes(`/frames/manual-frame/prompt`));
     await promptDialog.getByRole("button", { name: "保存提示词" }).click();
     await saveRequest;
     await expect(promptDialog).toBeHidden();
 
     await sequence.getByRole("button", { name: "查看完整提示词" }).click();
-    await expect(page.getByRole("dialog", { name: "帧 1 图片提示词" }).getByRole("textbox")).toHaveValue(/用户保存后的雨巷画面/);
+    await expect(page.getByRole("dialog", { name: "帧 1 图片提示词" }).locator("textarea").last()).toHaveValue(/用户保存后的雨巷画面/);
     const persisted = ((await (await request.get(`/api/drama/projects/${project.id}`)).json()) as { data: { project: DramaProject } }).data.project;
     expect(persisted.episodes[0].shots[0].framePlan?.frames[0].supplierPrompt).toContain("用户保存后的雨巷画面");
 
     await promptDialog.getByRole("button", { name: "提示词优化" }).click();
-    await expect(promptDialog.getByRole("textbox")).toHaveValue(/优化后的帧提示词/);
+    await expect(promptDialog.locator("textarea").last()).toHaveValue(/优化后的帧提示词/);
     expect(optimizationPrompt).toContain("未自动涉及角色");
     expect(optimizationPrompt).not.toContain("Agent 多引用角色");
     expect(optimizationPrompt).toContain("实际参考图绑定");

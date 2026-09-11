@@ -4,6 +4,7 @@ import { nanoid } from "nanoid";
 
 import type {
     DramaContinuityEdge,
+    DramaBackgroundNpcPolicy,
     DramaEpisode,
     DramaFieldOrigin,
     DramaNamedAsset,
@@ -19,7 +20,16 @@ import type {
     DramaStoryScene,
 } from "@/lib/drama-project-contract";
 import { defaultDramaProductionPlan, normalizeDramaProductionPlan } from "@/lib/drama-production-plan";
-import { dramaFrameVisualSignature, formatPromptFieldLines, isCurrentDramaStaticFramePrompt, needsDramaStaticFramePromptUpgrade, normalizeDramaFrameBeats, upgradeDramaFrameImagePrompt, validateDramaFramePlanVisuals } from "@/lib/drama-frame-sequence";
+import {
+    dramaFrameVisualSignature,
+    dramaStaticFramePositiveText,
+    formatPromptFieldLines,
+    isCurrentDramaStaticFramePrompt,
+    needsDramaStaticFramePromptUpgrade,
+    normalizeDramaFrameBeats,
+    upgradeDramaFrameImagePrompt,
+    validateDramaFramePlanVisuals,
+} from "@/lib/drama-frame-sequence";
 import { dramaDialogueTimingReminder, dramaFrameDialogueTimingReminder, dramaUtteranceTimingIssues, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
 import { resolveDramaStyleContract } from "@/lib/drama-style";
 import { normalizeDramaCharacterProfile } from "@/lib/drama-character-rules";
@@ -62,6 +72,7 @@ function catalogAssets(items: DramaNamedAsset[], prefix: string, usedIds: Set<st
         references: (asset.references || []).map((reference) => ({ id: reference.id, label: reference.label, status: reference.status, reviewStatus: reference.reviewStatus })),
         primaryReferenceId: asset.primaryReferenceId,
         ...(asset.sceneReferenceBoard ? { sceneReferenceBoard: asset.sceneReferenceBoard } : {}),
+        ...(asset.backgroundNpcPolicy ? { backgroundNpcPolicy: asset.backgroundNpcPolicy } : {}),
     }));
 }
 
@@ -116,6 +127,7 @@ function mergeProjectAssetCollection(incoming: DramaProductionPackageAsset[], ex
             ...(asset.supplierPrompt || current?.supplierPrompt ? { supplierPrompt: asset.supplierPrompt || current?.supplierPrompt } : {}),
             ...(asset.profile ? { profile: asset.profile } : current?.profile ? { profile: current.profile } : {}),
             ...(asset.sceneReferenceBoard || current?.sceneReferenceBoard ? { sceneReferenceBoard: asset.sceneReferenceBoard || current?.sceneReferenceBoard } : {}),
+            ...(asset.backgroundNpcPolicy || current?.backgroundNpcPolicy ? { backgroundNpcPolicy: asset.backgroundNpcPolicy || current?.backgroundNpcPolicy } : {}),
             ...(activeEpisodeCodes?.length || referenced.has(code) ? { activeEpisodeCodes: [...new Set([...(activeEpisodeCodes || []), ...(referenced.has(code) ? episodeCodes : [])])] } : {}),
         } as DramaProductionPackageAsset;
     });
@@ -365,6 +377,7 @@ function mergePackageAsset(current: DramaProductionPackageAsset, incoming: Drama
         description: incoming.description || current.description,
         ...(current.profile || incoming.profile ? { profile: { ...current.profile, ...incoming.profile } as NonNullable<DramaProductionPackageAsset["profile"]> } : {}),
         ...(incoming.activeEpisodeCodes?.length || current.activeEpisodeCodes?.length ? { activeEpisodeCodes: incoming.activeEpisodeCodes?.length ? incoming.activeEpisodeCodes : current.activeEpisodeCodes } : {}),
+        ...(incoming.backgroundNpcPolicy || current.backgroundNpcPolicy ? { backgroundNpcPolicy: incoming.backgroundNpcPolicy || current.backgroundNpcPolicy } : {}),
     } as DramaProductionPackageAsset;
 }
 
@@ -382,8 +395,16 @@ function normalizeProductionPackage(value: unknown, options: { upgradeLegacyFram
     const project = object(input.project);
     const bible = object(project.productionBible);
     const assets = object(input.assets);
+    const backgroundNpcPolicyByLocationCode = new Map(
+        array(assets.locations).flatMap((asset) => {
+            const item = object(asset);
+            const code = text(item.code);
+            const policy = normalizeBackgroundNpcPolicy(item.backgroundNpcPolicy);
+            return code && policy ? [[code, policy] as const] : [];
+        }),
+    );
     const episodes = array(input.episodes)
-        .map((episode, index) => normalizeEpisodePackage(episode, index, options))
+        .map((episode, index) => normalizeEpisodePackage(episode, index, { ...options, backgroundNpcPolicyByLocationCode }))
         .filter((episode) => episode.shots.length);
     if (!episodes.length) throw new DramaProductionPackageError("制作包至少需要一个包含镜头的剧集");
     const normalizedAssets = {
@@ -520,7 +541,9 @@ function validateProductionPackageCompleteness(value: Record<string, unknown>) {
             const item = object(shot);
             const label = text(item.code) || text(item.title) || "镜头";
             const frameCount = array(object(item.framePlan).frames).length;
-            if (frameCount < 1 || frameCount > 9) throw new DramaProductionPackageError(`${label}的逐帧计划必须包含 1-9 个真实动作节点`);
+            const minFrameCount = plan.video.framePolicy === "agent" ? plan.frameCountRange?.min || 2 : 1;
+            if (frameCount < minFrameCount || frameCount > (plan.video.framePolicy === "agent" ? plan.frameCountRange?.max || 9 : 9))
+                throw new DramaProductionPackageError(`${label}的逐帧计划必须包含 ${minFrameCount}-${plan.video.framePolicy === "agent" ? plan.frameCountRange?.max || 9 : 9} 个真实动作节点`);
             if (plan.video.framePolicy === "fixed-4" && frameCount !== 4) throw new DramaProductionPackageError(`${label}的逐帧计划必须为 4 帧`);
             if (plan.video.framePolicy === "fixed-5" && frameCount !== 5) throw new DramaProductionPackageError(`${label}的逐帧计划必须为 5 帧`);
             const performanceIssues = validateDramaPerformanceDetail(item.performancePlan as DramaShot["performancePlan"], undefined, 0, label);
@@ -532,7 +555,7 @@ function validateProductionPackageCompleteness(value: Record<string, unknown>) {
             if (!text(item.locationCode) || !locations.has(text(item.locationCode))) throw new DramaProductionPackageError(`${label}缺少有效场景资产引用`);
             for (const code of strings(item.characterCodes)) if (!characters.has(code)) throw new DramaProductionPackageError(`${label}引用了不存在的角色资产 ${code}`);
             for (const code of strings(item.propCodes)) if (!props.has(code)) throw new DramaProductionPackageError(`${label}引用了不存在的道具资产 ${code}`);
-            if (/(?:运镜|焦段|推近|拉远|摇镜|跟拍|滑轨|环绕|吊臂|慢推|慢拉|后拉|时间段|时间轴|动作过程|对白|声音|口型)/u.test(text(item.imagePrompt)))
+            if (/(?:运镜|焦段|推近|拉远|摇镜|跟拍|滑轨|环绕|吊臂|慢推|慢拉|后拉|时间段|时间轴|动作过程|对白|声音|口型)/u.test(dramaStaticFramePositiveText(text(item.imagePrompt))))
                 throw new DramaProductionPackageError(`${label}的 imagePrompt 必须是单一静态画面，不能包含运镜、时间过程、对白或声音`);
             if (/(?:本内部镜头只执行|内部 ID|assetId|参考图清单|URL)/u.test(text(item.videoPrompt))) throw new DramaProductionPackageError(`${label}的 videoPrompt 不能包含内部说明、资产 ID、URL 或参考图清单`);
             const manifest = array(object(item.framePlan).referenceManifest);
@@ -767,7 +790,7 @@ function normalizeProductionArchive(value: unknown): DramaProductionPackageV1["a
     };
 }
 
-function normalizeEpisodePackage(value: unknown, episodeIndex: number, options: { upgradeLegacyFramePrompts?: boolean } = {}): DramaProductionPackageEpisode {
+function normalizeEpisodePackage(value: unknown, episodeIndex: number, options: { upgradeLegacyFramePrompts?: boolean; backgroundNpcPolicyByLocationCode?: Map<string, DramaBackgroundNpcPolicy> } = {}): DramaProductionPackageEpisode {
     const input = object(value);
     const shots = array(input.shots)
         .map((shot, index) => normalizePackageShot(shot, index, options))
@@ -817,7 +840,7 @@ function normalizeEpisodePackage(value: unknown, episodeIndex: number, options: 
     };
 }
 
-function normalizePackageShot(value: unknown, index: number, options: { upgradeLegacyFramePrompts?: boolean } = {}): DramaProductionPackageEpisode["shots"][number] {
+function normalizePackageShot(value: unknown, index: number, options: { upgradeLegacyFramePrompts?: boolean; backgroundNpcPolicyByLocationCode?: Map<string, DramaBackgroundNpcPolicy> } = {}): DramaProductionPackageEpisode["shots"][number] {
     const shot = object(value);
     const framePlan = object(shot.framePlan);
     const frameStart = object(framePlan.start);
@@ -895,6 +918,7 @@ function normalizePackageShot(value: unknown, index: number, options: { upgradeL
                       refreshPerformanceState: true,
                       sequenceIndex: frame.sequenceIndex,
                       frameCount: frames.length,
+                      backgroundNpcPolicy: options.backgroundNpcPolicyByLocationCode?.get(text(shot.locationCode)),
                   })
                 : frame.imagePrompt.trim(),
         }));
@@ -920,6 +944,7 @@ function normalizePackageShot(value: unknown, index: number, options: { upgradeL
                         forceRefresh: true,
                         sequenceIndex: frame.sequenceIndex,
                         frameCount: allFrames.length,
+                        backgroundNpcPolicy: options.backgroundNpcPolicyByLocationCode?.get(text(shot.locationCode)),
                     }),
                 };
             });
@@ -1272,7 +1297,17 @@ function normalizePackageAsset(value: unknown, location = false, character = fal
                   },
               }
             : {}),
+        ...(location && normalizeBackgroundNpcPolicy(asset.backgroundNpcPolicy) ? { backgroundNpcPolicy: normalizeBackgroundNpcPolicy(asset.backgroundNpcPolicy) } : {}),
     };
+}
+
+function normalizeBackgroundNpcPolicy(value: unknown): DramaBackgroundNpcPolicy | undefined {
+    const policy = object(value);
+    if (!Object.keys(policy).length) return undefined;
+    const mode: DramaBackgroundNpcPolicy["mode"] = policy.mode === "required" || policy.mode === "forbidden" ? policy.mode : "auto";
+    const guidance = optionalText(policy.guidance);
+    const continuity = optionalText(policy.continuity);
+    return { mode, ...(guidance ? { guidance } : {}), ...(continuity ? { continuity } : {}) };
 }
 
 function isLegacySceneReferenceBoard(value: unknown) {
@@ -1928,7 +1963,10 @@ function mergeShotGroup(group: DramaProductionPackageEpisode["shots"]) {
 }
 
 function compactMergedFrames(frames: DramaProductionPackageEpisode["shots"][number]["framePlan"]["frames"], duration: number) {
-    const unique = frames.filter((frame, index, all) => all.findIndex((item) => item.actionPrompt.trim() === frame.actionPrompt.trim()) === index);
+    const unique = frames.filter(
+        (frame, index, all) =>
+            all.findIndex((item) => item.actionPrompt.trim() === frame.actionPrompt.trim() && item.imagePrompt.trim() === frame.imagePrompt.trim() && (item.transitionPrompt || "").trim() === (frame.transitionPrompt || "").trim()) === index,
+    );
     if (unique.length === frames.length) return frames;
     const selected = unique.length <= 9 ? unique : Array.from({ length: 9 }, (_, index) => unique[Math.floor((index * unique.length) / 9)]);
     const partitions = integerPartitions(duration, selected.length);

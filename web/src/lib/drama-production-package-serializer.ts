@@ -19,34 +19,38 @@ function withDeterministicVideoSection(value: DramaProductionPackageV1): DramaPr
         ...value,
         episodes: value.episodes.map((episode) => ({
             ...episode,
-            shots: episode.shots.map((shot) => ({
-                ...shot,
-                imagePrompt: formatPromptFieldLines(shot.imagePrompt, "static"),
-                ...(shot.startFramePrompt ? { startFramePrompt: formatPromptFieldLines(shot.startFramePrompt, "static") } : {}),
-                ...(shot.endFramePrompt ? { endFramePrompt: formatPromptFieldLines(shot.endFramePrompt, "static") } : {}),
-                videoPrompt: shot.videoPrompt.trim(),
-                framePlan: {
-                    ...shot.framePlan,
-                    frames: shot.framePlan.frames.map((frame) => ({
-                        ...frame,
-                        imagePrompt: needsDramaStaticFramePromptUpgrade(frame.imagePrompt)
-                            ? upgradeDramaFrameImagePrompt(frame.imagePrompt, frame.actionPrompt, {
-                                  description: shot.description,
-                                  shotSize: shot.continuity?.shotSize || "中景",
-                                  cameraAngle: shot.continuity?.cameraAngle || "视线高度平视",
-                                  composition: shot.continuity?.composition || "主体位于画面安全区，前景有具体框景",
-                                  characterBlocking: shot.continuity?.characterBlocking || "按当前动作关系安排主体站位",
-                                  gazeDirection: shot.continuity?.gazeDirection || "视线落向当前叙事目标",
-                                  lighting: shot.lighting || "延续本场主光",
-                                  colorPalette: shot.colorPalette || "沿用本场色板",
-                                  sequenceIndex: frame.sequenceIndex,
-                                  frameCount: shot.framePlan.frames.length,
-                              })
-                            : frame.imagePrompt.trim(),
-                        ...(frame.supplierPrompt ? { supplierPrompt: formatPromptFieldLines(frame.supplierPrompt, "static") } : {}),
-                    })),
-                },
-            })),
+            shots: episode.shots.map((shot) => {
+                const location = value.assets.locations.find((asset) => asset.code === shot.locationCode);
+                return {
+                    ...shot,
+                    imagePrompt: formatPromptFieldLines(shot.imagePrompt, "static"),
+                    ...(shot.startFramePrompt ? { startFramePrompt: formatPromptFieldLines(shot.startFramePrompt, "static") } : {}),
+                    ...(shot.endFramePrompt ? { endFramePrompt: formatPromptFieldLines(shot.endFramePrompt, "static") } : {}),
+                    videoPrompt: shot.videoPrompt.trim(),
+                    framePlan: {
+                        ...shot.framePlan,
+                        frames: shot.framePlan.frames.map((frame) => ({
+                            ...frame,
+                            imagePrompt: needsDramaStaticFramePromptUpgrade(frame.imagePrompt)
+                                ? upgradeDramaFrameImagePrompt(frame.imagePrompt, frame.actionPrompt, {
+                                      description: shot.description,
+                                      shotSize: shot.continuity?.shotSize || "中景",
+                                      cameraAngle: shot.continuity?.cameraAngle || "视线高度平视",
+                                      composition: shot.continuity?.composition || "主体位于画面安全区，前景有具体框景",
+                                      characterBlocking: shot.continuity?.characterBlocking || "按当前动作关系安排主体站位",
+                                      gazeDirection: shot.continuity?.gazeDirection || "视线落向当前叙事目标",
+                                      lighting: shot.lighting || "延续本场主光",
+                                      colorPalette: shot.colorPalette || "沿用本场色板",
+                                      sequenceIndex: frame.sequenceIndex,
+                                      frameCount: shot.framePlan.frames.length,
+                                      backgroundNpcPolicy: location?.backgroundNpcPolicy,
+                                  })
+                                : frame.imagePrompt.trim(),
+                            ...(frame.supplierPrompt ? { supplierPrompt: formatPromptFieldLines(frame.supplierPrompt, "static") } : {}),
+                        })),
+                    },
+                };
+            }),
         })),
     };
     if (!canonical.archive?.sections.some((section) => section.title.includes("分段视频 Prompt"))) return canonical;

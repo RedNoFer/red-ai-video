@@ -1129,7 +1129,7 @@ export const dramaVisualTool = {
                             additionalProperties: false,
                             required: ["start", "end", "frames"],
                             description:
-                                "必须按真实可见动作节点拆分 1-9 个连续帧段；每帧 imagePrompt 只描述该时刻可见的姿态、表情、视线、手部/身体或道具/环境状态，不得复制整镜头提示词后追加通用阶段词。可见表演状态必须写出当前节点的具体眉眼、视线、呼吸、手部或身体结果，禁止使用“眉眼、呼吸、手部关系清晰可见”“情绪通过身体动作呈现”等通用句绕过关键点。每帧还要把人物放在当前场景可用的座位、长凳、地面、通道、门窗或其他结构关系中，坐姿有明确支撑，人与物接触和多人相对方位真实可行；原文未声明的人物不入画。对白不必写入图片，但对白造成的表情、视线、手部或道具变化必须写入对应帧。",
+                                "Agent 模式必须先列动作、表情/视线、道具、对手或 NPC 反应、空间揭示和摄影切换事件，再按真实可见动作节点自适应拆分 2-9 个连续帧段；固定 4/5 帧仅在项目主动选择时执行。每帧 imagePrompt 只描述该时刻可见的姿态、表情、视线、手部/身体或道具/环境状态，不得复制整镜头提示词后追加通用阶段词。可见表演状态必须写出当前节点的具体眉眼、视线、呼吸、手部或身体结果，禁止使用“眉眼、呼吸、手部关系清晰可见”“情绪通过身体动作呈现”等通用句绕过关键点。每帧还要把人物放在当前场景可用的座位、长凳、地面、通道、门窗或其他结构关系中，坐姿有明确支撑，人与物接触和多人相对方位真实可行；读取场景 backgroundNpcPolicy，auto 按场景实际需要判断，required 必须写合理数量、分布密度和群体行为结果，forbidden 不得出现 NPC；NPC 只作为背景群像，不加入 characterCodes 或角色锚点；原文未声明且不被场景 NPC 策略要求的人物不入画。发生视线转移、人物反应、空间揭示、道具状态变化或机位/景别/构图切换时必须生成对应新帧。对白不必写入图片，但对白造成的表情、视线、手部或道具变化必须写入对应帧。",
                             properties: {
                                 start: { type: "object", additionalProperties: false, required: ["source"], properties: { source: { type: "string", enum: ["independent", "previous_accepted_actual_tail"] } } },
                                 end: { type: "object", additionalProperties: false, required: ["required"], properties: { required: { type: "boolean" } } },

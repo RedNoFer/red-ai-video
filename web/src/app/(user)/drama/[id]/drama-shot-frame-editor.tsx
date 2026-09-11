@@ -1,7 +1,7 @@
 "use client";
 
 import { App, Button, Image, Input, InputNumber, Modal, Segmented, Tag } from "antd";
-import { Check, ImagePlus, LoaderCircle, Maximize2, Plus, RotateCcw, Save, ScanSearch, Sparkles, Trash2, Upload } from "lucide-react";
+import { Check, Copy, ImagePlus, LoaderCircle, Maximize2, Plus, RotateCcw, Save, ScanSearch, Sparkles, Trash2, Upload } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { approvedAssetReference, approvedScenePanoramaReference } from "@/lib/drama-asset-baseline";
@@ -22,8 +22,9 @@ import {
     updateDramaProductionRun,
     updateDramaStoryboardFramePrompt,
 } from "@/services/api/drama-projects";
-import { optimizeDramaFramePrompt } from "@/services/api/prompt-optimization";
+import { getDramaFrameExternalBrief, optimizeDramaFramePrompt, optimizeDramaProjectFramePrompt } from "@/services/api/prompt-optimization";
 import { uploadImage } from "@/services/image-storage";
+import { useCopyText } from "@/hooks/use-copy-text";
 import { resolveModelRequestConfig, useEffectiveConfig } from "@/stores/use-config-store";
 import { useDramaStore } from "../stores/use-drama-store";
 import type { DramaShot } from "../types";
@@ -35,6 +36,7 @@ type ReferencePreview = { reference: DramaImageReferenceBinding; index: number }
 
 export function DramaShotFrameEditor({ project, episodeId, shot }: { project: DramaProject; episodeId: string; shot: DramaShot }) {
     const { message, modal } = App.useApp();
+    const copyText = useCopyText();
     const updateShot = useDramaStore((state) => state.updateShot);
     const replaceProject = useDramaStore((state) => state.replaceProject);
     const persistProjectNow = useDramaStore((state) => state.saveProjectNow);
@@ -56,6 +58,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
     const [promptOriginal, setPromptOriginal] = useState("");
     const [optimizingPrompt, setOptimizingPrompt] = useState(false);
     const [savingPrompt, setSavingPrompt] = useState(false);
+    const [promptCorrectionDirection, setPromptCorrectionDirection] = useState("");
     const [assetPickerOpen, setAssetPickerOpen] = useState(false);
     const [manualReferenceDraft, setManualReferenceDraft] = useState<DramaImageReferenceBinding[]>([]);
     const frameMode = shot.storyboardFrameMode || "single";
@@ -543,6 +546,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
         setPromptPreview({ ...input, prompt });
         setPromptDraft(formatPromptFieldLines(prompt, "static"));
         setPromptOriginal(formatPromptFieldLines(prompt, "static"));
+        setPromptCorrectionDirection("");
     };
 
     const savePromptPreview = async () => {
@@ -552,8 +556,17 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
         if (current.frameId) {
             const visualError = validateDramaFrameVisualContent(prompt);
             if (visualError) {
-                message.error(visualError);
-                return;
+                const confirmed = await new Promise<boolean>((resolve) => {
+                    modal.confirm({
+                        title: "提示词存在质量风险，仍然保存？",
+                        content: `${visualError}。保存后会同步更新当前帧的显示提示词和实际执行提示词。`,
+                        okText: "仍然保存",
+                        cancelText: "返回修改",
+                        onOk: () => resolve(true),
+                        onCancel: () => resolve(false),
+                    });
+                });
+                if (!confirmed) return;
             }
             try {
                 savingPromptRef.current = true;
@@ -586,12 +599,26 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
         if (!current || current.readOnly || !prompt || optimizingPrompt) return;
         setOptimizingPrompt(true);
         try {
-            setPromptDraft(formatPromptFieldLines(appendDramaImageReferenceBindings(await optimizeDramaFramePrompt(prompt, crypto.randomUUID(), resolveDramaGlobalVisualContract(project)), current.references), "static"));
-            message.success("已按 Seedance 2.0 规则生成新的帧提示词，请确认后保存");
+            const optimized = current.frameId
+                ? await optimizeDramaProjectFramePrompt({ projectId: project.id, episodeId, shotId: shot.id, frameId: current.frameId, prompt, correctionDirection: promptCorrectionDirection })
+                : await optimizeDramaFramePrompt(prompt, crypto.randomUUID(), resolveDramaGlobalVisualContract(project));
+            setPromptDraft(formatPromptFieldLines(appendDramaImageReferenceBindings(optimized, current.references), "static"));
+            message.success(current.frameId ? "已结合项目、镜头和相邻帧事实生成新提示词，请确认后保存" : "已按 Seedance 2.0 规则生成新的帧提示词，请确认后保存");
         } catch (error) {
             message.error(error instanceof Error ? error.message : "帧提示词优化失败");
         } finally {
             setOptimizingPrompt(false);
+        }
+    };
+
+    const copyExternalWorkOrder = async () => {
+        const current = promptPreview;
+        if (!current?.frameId || !promptDraft.trim()) return;
+        try {
+            const brief = await getDramaFrameExternalBrief({ projectId: project.id, episodeId, shotId: shot.id, frameId: current.frameId, prompt: promptDraft, correctionDirection: promptCorrectionDirection });
+            copyText(brief, "外部 Agent 工作单已复制");
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : "外部 Agent 工作单复制失败");
         }
     };
 
@@ -666,7 +693,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                 <div className="min-w-0">
                     <div className="flex items-baseline gap-2">
                         <div className="shrink-0 text-sm font-semibold">分镜帧</div>
-                        <p className="truncate text-xs leading-5 text-muted-foreground">默认 4 帧；每帧对应一个连续动作时间段，最多 9 帧</p>
+                        <p className="truncate text-xs leading-5 text-muted-foreground">Agent 自适应 2–9 帧；每帧对应一个真实动作事件时间段</p>
                     </div>
                     {frameMode === "all_frames" ? (
                         <p className="mt-0.5 text-xs text-muted-foreground" aria-live="polite">
@@ -1061,7 +1088,28 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                             </Button>
                         </div>
                     ) : null}
-                    <Input.TextArea value={promptDraft} readOnly={promptPreview?.readOnly} onChange={(event) => setPromptDraft(event.target.value)} autoSize={{ minRows: 8, maxRows: 18 }} className="text-xs leading-5" />
+                    {!promptPreview?.readOnly && promptPreview?.frameId ? (
+                        <div className="mb-2 rounded border border-border/70 bg-muted/10 p-2.5">
+                            <div className="mb-1 text-xs font-medium text-foreground">本次整改方向（可选）</div>
+                            <Input.TextArea
+                                value={promptCorrectionDirection}
+                                onChange={(event) => setPromptCorrectionDirection(event.target.value)}
+                                placeholder="例如：增加场外旁听 NPC，改成反打近景，并明确人物眉眼、手部受力和茶盏水面变化"
+                                autoSize={{ minRows: 2, maxRows: 4 }}
+                                aria-label="本次整改方向"
+                                className="text-xs leading-5"
+                            />
+                            <p className="mt-1 text-[11px] leading-5 text-muted-foreground">只影响本次“提示词优化”，不会覆盖项目长期导演规则。</p>
+                        </div>
+                    ) : null}
+                    <Input.TextArea
+                        value={promptDraft}
+                        readOnly={promptPreview?.readOnly}
+                        onChange={(event) => setPromptDraft(event.target.value)}
+                        autoSize={{ minRows: 8, maxRows: 18 }}
+                        aria-label={promptPreview?.title || "帧图片提示词"}
+                        className="text-xs leading-5"
+                    />
                 </div>
                 <div className="mt-3 flex flex-wrap justify-end gap-2">
                     <Button onClick={() => setPromptPreview(null)}>{promptPreview?.readOnly ? "关闭" : "取消"}</Button>
@@ -1073,6 +1121,11 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                             <Button icon={<Sparkles className="size-3.5" />} loading={optimizingPrompt} disabled={!promptDraft.trim()} onClick={() => void optimizePromptPreview()}>
                                 提示词优化
                             </Button>
+                            {promptPreview?.frameId ? (
+                                <Button icon={<Copy className="size-3.5" />} loading={false} disabled={!promptDraft.trim()} onClick={() => void copyExternalWorkOrder()}>
+                                    复制外部 Agent 工作单
+                                </Button>
+                            ) : null}
                             <Button type="primary" icon={<Save className="size-3.5" />} loading={savingPrompt} disabled={!promptDraft.trim() || optimizingPrompt || savingPrompt} onClick={() => void savePromptPreview()}>
                                 保存提示词
                             </Button>

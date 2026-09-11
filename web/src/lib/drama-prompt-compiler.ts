@@ -1,4 +1,16 @@
-import type { DramaAssetPromptFields, DramaAssetRefinementProposal, DramaContinuityState, DramaEpisode, DramaFrameBeat, DramaNamedAsset, DramaProject, DramaReferenceManifestItem, DramaShot, DramaShotContinuity } from "@/lib/drama-project-contract";
+import type {
+    DramaAssetPromptFields,
+    DramaAssetRefinementProposal,
+    DramaBackgroundNpcPolicy,
+    DramaContinuityState,
+    DramaEpisode,
+    DramaFrameBeat,
+    DramaNamedAsset,
+    DramaProject,
+    DramaReferenceManifestItem,
+    DramaShot,
+    DramaShotContinuity,
+} from "@/lib/drama-project-contract";
 import {
     DRAMA_CHARACTER_FACE_MODELING_RULES,
     DRAMA_CHARACTER_HAIR_MODELING_RULES,
@@ -332,6 +344,7 @@ export function compileDramaFrameSupplierPrompt(project: DramaProject, episode: 
         characterCount: characters.length,
         sequenceIndex,
         frameCount: shot.framePlan?.frames.length,
+        backgroundNpcPolicy: scene?.backgroundNpcPolicy,
         refreshPerformanceState: Boolean(beat && (duplicatedAdjacentPerformanceState(shot, beat, sourceImage) || duplicatedAdjacentFrameVisualState(shot, beat, sourceImage))),
         forceRefresh: frameSceneChanged && !preservesManualPrompt,
     });
@@ -391,10 +404,19 @@ function scenePhysicalConstraint(scene: DramaNamedAsset | undefined, characterCo
     const sceneText = `${scene.name} ${scene.description} ${scene.profile?.visualIdentity || ""} ${scene.profile?.consistencyRules || ""} ${scene.profile?.spatialRules?.join(" ") || ""}`;
     const explicitLayout = scene.profile?.spatialRules?.filter(Boolean).join("；");
     const layout = explicitLayout ? `资产固定布局：${explicitLayout}；` : "";
-    const relationships = characterCount > 1 ? "多名出镜人物以同一镜头/场景参照系写清左右或前后、朝向、视线和接触关系，未声明人物不得入画" : "人物相对可见门窗、通道、座位或关键道具的位置、朝向、视线和接触关系必须明确，未声明人物不得入画";
+    const relationships = characterCount > 1 ? "多名出镜人物以同一镜头/场景参照系写清左右或前后、朝向、视线和接触关系" : "人物相对可见门窗、通道、座位或关键道具的位置、朝向、视线和接触关系必须明确";
+    const npcRule = formatBackgroundNpcRule(scene.backgroundNpcPolicy);
     if (/(?:马车|车厢|车内)/u.test(sceneText))
-        return `车厢真实调度：${layout}坐姿必须落在左右长凳或明确座位；中央过道保持通行，惊醒角色不得蹲坐、跪坐或悬空；按车厢前进方向说明左右邻座人物或空位；若原文和资产未指定座位侧，必须选择与动作和机位相容的左侧或右侧座位，并将另一侧明确为已声明同伴或空位；若其他字段写出“坐在车厢中央”等冲突位置，以本调度约束为准并修正；${relationships}`;
-    return `场景真实调度：${layout}人物姿势必须有可见且合理的支撑面或接触物，动作路径不得穿过场景结构；${relationships}`;
+        return `车厢真实调度：${layout}坐姿必须落在左右长凳或明确座位；中央过道保持通行，惊醒角色不得蹲坐、跪坐或悬空；按车厢前进方向说明左右邻座人物或空位；若原文和资产未指定座位侧，必须选择与动作和机位相容的左侧或右侧座位，并将另一侧明确为已声明同伴或空位；若其他字段写出“坐在车厢中央”等冲突位置，以本调度约束为准并修正；${relationships}；${npcRule}`;
+    return `场景真实调度：${layout}人物姿势必须有可见且合理的支撑面或接触物，动作路径不得穿过场景结构；${relationships}；${npcRule}`;
+}
+
+function formatBackgroundNpcRule(policy?: DramaBackgroundNpcPolicy) {
+    const mode = policy?.mode || "auto";
+    if (mode === "forbidden") return "场景策略禁止背景 NPC，画面不得出现未声明人物";
+    if (mode === "required")
+        return `场景策略要求背景 NPC：按本镜头的空间容量、景别和剧情功能安排合理数量的无名旁观者或工作人员，明确数量范围、位置密度和可见行为结果；NPC 只作为背景群像，不加入 characterCodes、角色锚点或独立角色资产${policy?.guidance ? `；补充要求：${policy.guidance}` : ""}${policy?.continuity ? `；连续性：${policy.continuity}` : ""}`;
+    return `场景策略为自动判断：只有公共场面、空间规模、剧情压力或群体反应确实需要时才加入无名背景 NPC，并在本帧明确数量范围、位置密度和可见行为；否则保持无人；NPC 不加入 characterCodes、角色锚点或独立角色资产${policy?.guidance ? `；补充要求：${policy.guidance}` : ""}${policy?.continuity ? `；连续性：${policy.continuity}` : ""}`;
 }
 
 function appendStaticFramePositionConstraint(prompt: string, constraint: string) {

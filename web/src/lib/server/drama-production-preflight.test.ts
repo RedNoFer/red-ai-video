@@ -219,8 +219,7 @@ describe("drama production preflight", () => {
             },
         ];
 
-        const issue = preflightDramaProduction(project, project.episodes[0]).issues.find((item) => item.code === "FRAME_CAMERA_DUPLICATE");
-        expect(issue).toMatchObject({ severity: "blocking", shotId: shot.id });
+        expect(preflightDramaProduction(project, project.episodes[0]).issues).not.toEqual(expect.arrayContaining([expect.objectContaining({ code: "FRAME_CAMERA_DUPLICATE", shotId: shot.id })]));
     });
 
     it("blocks a legacy scene board before paid production", () => {

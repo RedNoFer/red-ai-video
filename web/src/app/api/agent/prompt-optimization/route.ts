@@ -13,7 +13,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 2400;
 
-type PromptOptimizationBody = { requestId?: unknown; prompt?: unknown; mode?: unknown; visualContract?: unknown };
+type PromptOptimizationBody = { requestId?: unknown; prompt?: unknown; mode?: unknown; visualContract?: unknown; dramaFrameContext?: unknown; correctionDirection?: unknown };
 const modes = new Set(["agent", "image", "video", "audio", "drama-frame", "drama-asset"]);
 
 export async function POST(request: Request) {
@@ -43,6 +43,8 @@ export async function POST(request: Request) {
             prompt,
             mode,
             visualContract: normalizeVisualContract(body.visualContract),
+            dramaFrameContext: text(body.dramaFrameContext, 24000),
+            correctionDirection: text(body.correctionDirection, 4000),
         });
         return NextResponse.json({ code: 0, data: typeof optimizedPrompt === "string" ? { prompt: optimizedPrompt } : { prompt: optimizedPrompt.optimizedPrompt, fields: optimizedPrompt.fields }, msg: "OK" });
     } catch (error) {

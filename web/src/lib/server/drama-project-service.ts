@@ -10,6 +10,7 @@ import type { CanvasProject } from "@/lib/canvas-project-contract";
 import { applyDramaCanvasMediaField, buildDramaEpisodeCanvasTitle, dramaEpisodeCanvasHandoffId, mergeDramaEpisodeCanvasProject, type DramaCanvasMediaField } from "@/lib/drama-canvas-bridge";
 import type {
     CreateDramaProjectInput,
+    DramaBackgroundNpcPolicy,
     DramaAssetProfile,
     DramaAssetReference,
     DramaAssetRefinementChange,
@@ -46,7 +47,7 @@ import { approvedAssetReference, approvedScenePanoramaReference } from "@/lib/dr
 import { createFrameEvidence, decideActualEndFrame, invalidateFrameEvidence, replaceFrameEvidence, supersedeFrameEvidence } from "@/lib/drama-continuity-policy";
 import { DRAMA_STYLE_NAME, normalizeDramaStyleName, resolveDramaStyleContract } from "@/lib/drama-style";
 import { normalizeDramaImageSize } from "@/lib/drama-image-size";
-import { deleteDramaFrameBeat, formatPromptFieldLines, normalizeDramaFrameBeats, updateDramaFrameBeat, upgradeDramaFrameImagePrompt, validateDramaFrameVisualContent } from "@/lib/drama-frame-sequence";
+import { deleteDramaFrameBeat, formatPromptFieldLines, normalizeDramaFrameBeats, updateDramaFrameBeat, upgradeDramaFrameImagePrompt } from "@/lib/drama-frame-sequence";
 import { defaultDramaProductionPlan, dramaReferenceImageBudget, normalizeDramaProductionPlan } from "@/lib/drama-production-plan";
 import { resolveDramaShotDuration } from "@/lib/server/drama-shot-config";
 import { TEXT_MODEL_REQUEST_TIMEOUT_MS } from "@/lib/server/model-request-policy";
@@ -2776,8 +2777,6 @@ export async function updateDramaStoryboardFramePromptForUser(userId: string, pr
     const frameId = cleanText(frameIdValue);
     const prompt = formatPromptFieldLines(cleanText(object(value).supplierPrompt), "static");
     if (!prompt) throw new DramaProjectServiceError("提示词不能为空", 400);
-    const visualError = validateDramaFrameVisualContent(prompt);
-    if (visualError) throw new DramaProjectServiceError(visualError, 400);
     let shotMatched = false;
     let frameMatched = false;
     const nextProject = {
@@ -2795,7 +2794,7 @@ export async function updateDramaStoryboardFramePromptForUser(userId: string, pr
                           const frame = shot.framePlan.frames.find((item) => item.id === frameId);
                           if (!frame) return shot;
                           frameMatched = true;
-                          const next = updateDramaFrameBeat(shot.framePlan.frames, shot.storyboardFrames || [], frame.id, { supplierPrompt: prompt });
+                          const next = updateDramaFrameBeat(shot.framePlan.frames, shot.storyboardFrames || [], frame.id, { imagePrompt: prompt, supplierPrompt: prompt });
                           return {
                               ...shot,
                               storyboardFrameMode: "all_frames" as const,
@@ -3482,10 +3481,20 @@ function normalizeNamedAssets(value: unknown, prefix: string, character = false)
                 referenceStorageKey: primaryReference?.storageKey,
                 refinementHistory: normalizeRefinementHistory(input.refinementHistory),
                 ...(prefix === "scene" ? { sceneReferenceBoard: normalizeSceneReferenceBoard(input.sceneReferenceBoard, primaryReferenceId, isLegacySceneAsset(input)) } : {}),
+                ...(prefix === "scene" ? { backgroundNpcPolicy: normalizeBackgroundNpcPolicy(input.backgroundNpcPolicy) } : {}),
                 ...(character ? { voiceProfile: normalizeVoiceProfile(input.voiceProfile) } : {}),
             };
         })
         .filter((item) => item.name);
+}
+
+function normalizeBackgroundNpcPolicy(value: unknown): DramaBackgroundNpcPolicy | undefined {
+    const input = object(value);
+    if (!Object.keys(input).length) return undefined;
+    const mode: DramaBackgroundNpcPolicy["mode"] = input.mode === "required" || input.mode === "forbidden" ? input.mode : "auto";
+    const guidance = optionalText(input.guidance);
+    const continuity = optionalText(input.continuity);
+    return { mode, ...(guidance ? { guidance } : {}), ...(continuity ? { continuity } : {}) };
 }
 
 function normalizeSceneReferenceBoard(value: unknown, primaryReferenceId?: string, legacy = false) {
@@ -4037,7 +4046,10 @@ function stringArrayRecord(value: unknown): Record<string, string[]> {
 
 function sameDramaVideoPlanExceptModel(left: DramaProductionPlan, right: DramaProductionPlan) {
     const stripModel = ({ model: _model, channelId: _channelId, ...video }: DramaProductionPlan["video"]) => video;
-    return JSON.stringify(stripModel(left.video)) === JSON.stringify(stripModel(right.video));
+    return (
+        JSON.stringify({ video: stripModel(left.video), frameCountRange: left.frameCountRange, customDirectorRules: left.customDirectorRules }) ===
+        JSON.stringify({ video: stripModel(right.video), frameCountRange: right.frameCountRange, customDirectorRules: right.customDirectorRules })
+    );
 }
 
 export function validateDramaReferenceSelections(project: DramaProject, episode: DramaEpisode, shots: DramaShot[], selections: Record<string, string[]>) {

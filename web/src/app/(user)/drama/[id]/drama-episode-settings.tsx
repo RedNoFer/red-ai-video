@@ -135,7 +135,21 @@ export function DramaEpisodeSettings({ project, episode, embedded = false }: { p
                             />
                         </label>
                     </div>
-                    <p className="text-[11px] leading-5 text-muted-foreground">保存后会刷新锁定时间。生成制作包时，剧本 GPT 使用这里最新的方案；留空的视觉字段由 Agent 补充。</p>
+                    <label className="block space-y-1">
+                        <span className="text-[11px] text-muted-foreground">导演定制规则</span>
+                        <Input.TextArea
+                            size="small"
+                            value={planDraft.customDirectorRules || ""}
+                            placeholder="例如：公共场景增加合理旁听 NPC；关键帧体现人物反应和机位变化。"
+                            autoSize={{ minRows: 3, maxRows: 7 }}
+                            data-testid="drama-director-rules"
+                            onChange={(event) => setPlanDraft((current) => ({ ...current, customDirectorRules: event.target.value }))}
+                        />
+                        <span className="text-[11px] leading-5 text-muted-foreground">本次用户补充优先于项目规则；项目规则会同步影响制作包、图片帧和视频提示词 Agent。</span>
+                    </label>
+                    <p className="text-[11px] leading-5 text-muted-foreground">
+                        保存后会刷新锁定时间。生成制作包时，剧本 GPT 使用这里最新的方案；Agent 模式按真实事件在 {planDraft.frameCountRange?.min || 2}-{planDraft.frameCountRange?.max || 9} 帧内自适应；固定 4/5 帧仅在主动选择时生效。
+                    </p>
                 </div>
             </div>
             <div className="mt-4 border-t border-border pt-3" data-drama-episode-overview>

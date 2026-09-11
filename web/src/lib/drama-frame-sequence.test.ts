@@ -59,6 +59,27 @@ describe("drama frame sequence", () => {
         expect(validateDramaFrameVisualContent("85mm沿铁砧慢推", "镜头沿铁砧慢推")).toContain("每帧必须描述");
     });
 
+    it("allows camera and dialogue prohibitions inside the negative field", () => {
+        const prompt = [
+            "静态关键帧：人物站在门边，手掌压住门闩",
+            "可见状态：门闩已经落下，门缝露出冷光",
+            "可见表演状态：眉心收紧，嘴角压住，视线锁定门缝，肩背绷直",
+            "景别：中景",
+            "机位与构图：视线高度平视，主体位于右侧，前景有门框",
+            "站位与视线：人物站在门边，身体朝向门缝，视线落向门外",
+            "三层空间：前景门框，中景人物，背景交代大厅通道",
+            "光色与风格：冷灰侧光，木石材质纹理清晰",
+            "负面约束：无运镜过程、无对白、无声音指令、无水印",
+        ].join("\n");
+
+        expect(validateDramaFrameVisualContent(prompt, "人物压住门闩")).toBeUndefined();
+        expect(isCurrentDramaStaticFramePrompt(prompt)).toBe(true);
+    });
+
+    it("still flags camera language in positive static fields", () => {
+        expect(validateDramaFrameVisualContent("静态关键帧：人物站在门边并沿大厅缓慢推进\n负面约束：无运镜过程", "人物站立")).toContain("不能包含运镜");
+    });
+
     it("rejects reference duties embedded in static frame content", () => {
         expect(validateDramaFrameVisualContent("静态关键帧：Karin站立；参考图职责：角色图、场景图；负面约束：无水印", "站立")).toContain("参考图职责属于资产绑定数据");
     });

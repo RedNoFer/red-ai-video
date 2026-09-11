@@ -1,13 +1,24 @@
 "use client";
 
-import { App, Button, Drawer, Image, Input, InputNumber, Modal, Popconfirm, Popover, Space, Tooltip } from "antd";
+import { App, Button, Drawer, Image, Input, InputNumber, Modal, Popconfirm, Popover, Select, Space, Tooltip } from "antd";
 import { Check, FolderInput, ImagePlus, MessageCircle, RotateCcw, Send, Sparkles, Trash2, Upload, Volume2 } from "lucide-react";
 import { nanoid } from "nanoid";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { compileDramaAssetReferencePrompt, compileDramaAssetRefinementPrompt, dramaAssetPromptFields, DRAMA_CHARACTER_TURNAROUND_SIZE, hasDramaAssetPromptQuality, preflightDramaAssetGeneration } from "@/lib/drama-prompt-compiler";
 import { approvedAssetReference } from "@/lib/drama-asset-baseline";
-import type { DramaAssetProfile, DramaAssetPromptOptimization, DramaAssetReference, DramaAssetRefinementMessage, DramaAssetRefinementProposal, DramaCharacter, DramaNamedAsset, DramaProject, DramaVoiceProfile } from "@/lib/drama-project-contract";
+import type {
+    DramaAssetProfile,
+    DramaAssetPromptOptimization,
+    DramaAssetReference,
+    DramaAssetRefinementMessage,
+    DramaAssetRefinementProposal,
+    DramaBackgroundNpcPolicy,
+    DramaCharacter,
+    DramaNamedAsset,
+    DramaProject,
+    DramaVoiceProfile,
+} from "@/lib/drama-project-contract";
 import { imagePreviewUrl } from "@/lib/media-image-url";
 import { resolveDramaGlobalVisualContract } from "@/lib/drama-style";
 import { createImageGenerationTask, waitForImageGenerationTask, type ImageGenerationTask } from "@/services/api/image";
@@ -41,11 +52,12 @@ type AssetDraft = {
     payoff: string;
     profile: DramaAssetProfile;
     voiceProfile: DramaVoiceProfile;
+    backgroundNpcPolicy?: DramaBackgroundNpcPolicy;
 };
 
 const emptyProfile = (): DramaAssetProfile => ({ visualIdentity: "", styling: "", colorPalette: "", consistencyRules: "" });
 const emptyVoiceProfile = (): DramaVoiceProfile => ({ voiceId: "", speed: 1, instructions: "", previewStatus: "idle", creationMode: "clone", creationStatus: "idle" });
-const emptyDraft = (): AssetDraft => ({ name: "", description: "", payoff: "", profile: emptyProfile(), voiceProfile: emptyVoiceProfile() });
+const emptyDraft = (): AssetDraft => ({ name: "", description: "", payoff: "", profile: emptyProfile(), voiceProfile: emptyVoiceProfile(), backgroundNpcPolicy: { mode: "auto" } });
 
 export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }: { project: DramaProject; kind: DramaAssetKind; assetId?: string; open: boolean; onClose: () => void }) {
     const { message, modal } = App.useApp();
@@ -131,6 +143,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
             description: asset.description,
             payoff: kind === "clues" && "payoff" in asset && typeof asset.payoff === "string" ? asset.payoff : "",
             profile: asset.profile || emptyProfile(),
+            backgroundNpcPolicy: kind === "scenes" ? asset.backgroundNpcPolicy || { mode: "auto" } : undefined,
             voiceProfile: character
                 ? {
                       ...(character.voiceProfile || emptyVoiceProfile()),
@@ -148,8 +161,14 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
         const voiceId = draft.voiceProfile.voiceId;
         if (kind === "characters" && voiceId && project.characters.some((item) => item.id !== assetId && (item.voiceProfile?.voiceId || "").trim().toLowerCase() === voiceId.trim().toLowerCase())) return message.error("同一项目的角色不能使用相同音色 ID");
         setSaving(true);
-        const base = { name, description: draft.description.trim(), profile: draft.profile };
-        const assetFactsChanged = Boolean(asset && (name !== asset.name || draft.description.trim() !== asset.description || JSON.stringify(draft.profile) !== JSON.stringify(asset.profile || {})));
+        const base = { name, description: draft.description.trim(), profile: draft.profile, ...(kind === "scenes" ? { backgroundNpcPolicy: draft.backgroundNpcPolicy || { mode: "auto" as const } } : {}) };
+        const assetFactsChanged = Boolean(
+            asset &&
+            (name !== asset.name ||
+                draft.description.trim() !== asset.description ||
+                JSON.stringify(draft.profile) !== JSON.stringify(asset.profile || {}) ||
+                JSON.stringify(draft.backgroundNpcPolicy || {}) !== JSON.stringify(asset.backgroundNpcPolicy || {})),
+        );
         const supplierPromptChanged = Boolean(asset && supplierPromptOverride.trim() !== (asset.supplierPrompt || "").trim());
         try {
             if (asset) {
@@ -753,6 +772,35 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                             <span className="font-medium">线索回收位置</span>
                             <Input value={draft.payoff} onChange={(event) => setDraft((current) => ({ ...current, payoff: event.target.value }))} placeholder="何时揭示、反转或回收" />
                         </label>
+                    ) : null}
+                    {kind === "scenes" ? (
+                        <div className="grid gap-1.5 text-sm">
+                            <span className="font-medium">背景 NPC 策略</span>
+                            <Select
+                                value={draft.backgroundNpcPolicy?.mode || "auto"}
+                                options={[
+                                    { label: "智能判断（auto）", value: "auto" },
+                                    { label: "必须出现（required）", value: "required" },
+                                    { label: "禁止出现（forbidden）", value: "forbidden" },
+                                ]}
+                                onChange={(mode: DramaBackgroundNpcPolicy["mode"]) => setDraft((current) => ({ ...current, backgroundNpcPolicy: { ...(current.backgroundNpcPolicy || {}), mode } }))}
+                            />
+                            <Input.TextArea
+                                value={draft.backgroundNpcPolicy?.guidance || ""}
+                                autoSize={{ minRows: 2, maxRows: 4 }}
+                                placeholder="可选：数量范围、分布、群体行为或何时不需要 NPC"
+                                aria-label="背景 NPC 生成指导"
+                                onChange={(event) => setDraft((current) => ({ ...current, backgroundNpcPolicy: { ...(current.backgroundNpcPolicy || { mode: "auto" }), guidance: event.target.value } }))}
+                            />
+                            <Input.TextArea
+                                value={draft.backgroundNpcPolicy?.continuity || ""}
+                                autoSize={{ minRows: 2, maxRows: 4 }}
+                                placeholder="可选：跨帧/跨镜保持的 NPC 位置、密度或行为"
+                                aria-label="背景 NPC 连续性"
+                                onChange={(event) => setDraft((current) => ({ ...current, backgroundNpcPolicy: { ...(current.backgroundNpcPolicy || { mode: "auto" }), continuity: event.target.value } }))}
+                            />
+                            <span className="text-xs text-muted-foreground">场景全景基准图仍保持无人；NPC 只进入镜头关键帧和视频画面，不会进入主角色资产。</span>
+                        </div>
                     ) : null}
                 </div>
             </section>

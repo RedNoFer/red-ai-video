@@ -9,8 +9,9 @@ export const DRAMA_SHOT_DURATION_OPTIONS = [15, 30] as const;
 export type DramaShotDuration = (typeof DRAMA_SHOT_DURATION_OPTIONS)[number];
 export const DRAMA_SCRIPT_SHOT_DURATION_OPTIONS = DRAMA_SHOT_DURATION_OPTIONS;
 export type DramaScriptShotDuration = (typeof DRAMA_SCRIPT_SHOT_DURATION_OPTIONS)[number];
-export const DRAMA_FRAME_COUNT_DEFAULT = 5;
+export const DRAMA_FRAME_COUNT_DEFAULT = 2;
 export const DRAMA_FRAME_COUNT_MAX = 9;
+export const DRAMA_FRAME_COUNT_RANGE_DEFAULT = { min: 2, max: DRAMA_FRAME_COUNT_MAX } as const;
 export const DRAMA_FRAME_POLICY_OPTIONS = ["fixed-4", "fixed-5", "agent"] as const;
 export type DramaFramePolicy = (typeof DRAMA_FRAME_POLICY_OPTIONS)[number];
 export const DRAMA_VIDEO_REFERENCE_IMAGE_LIMIT = 9;
@@ -39,6 +40,7 @@ export function defaultDramaProductionPlan(source: DramaProductionPlan["source"]
         },
         references: { strategy: "adaptive", minImages: 3, maxImages: DRAMA_VIDEO_REFERENCE_IMAGE_LIMIT, roles: [...DRAMA_REFERENCE_ROLES] },
         continuity: { mode: "strict", requireAcceptedActualTail: true },
+        frameCountRange: { ...DRAMA_FRAME_COUNT_RANGE_DEFAULT },
         source,
     };
 }
@@ -75,10 +77,12 @@ export function normalizeDramaProductionPlan(value: unknown, fallback?: DramaPro
     const configuredMax = boundedInteger(referenceInput.maxImages, base.references.maxImages, minImages, 30);
     const maxImages = Math.min(durationBudget, Math.max(minImages, durationBudget, configuredMax));
     const framePolicy = normalizeFramePolicy(videoInput.framePolicy, base.video.framePolicy || (Number(videoInput.frameCount) === 4 ? "fixed-4" : Number(videoInput.frameCount) === 5 ? "fixed-5" : "agent"));
+    const frameCountRange = normalizeFrameCountRange(input.frameCountRange ?? videoInput.frameCountRange, base.frameCountRange);
     const visualStyle = typeof visualInput.visualStyle === "string" ? text(visualInput.visualStyle) : base.visual.visualStyle;
     const artStyle = typeof visualInput.artStyle === "string" ? text(visualInput.artStyle) : base.visual.artStyle;
     const visualDirection = typeof visualInput.visualDirection === "string" ? text(visualInput.visualDirection) : base.visual.visualDirection;
     const frameCount = framePolicy === "fixed-4" ? 4 : framePolicy === "fixed-5" ? 5 : undefined;
+    const customDirectorRules = typeof input.customDirectorRules === "string" ? text(input.customDirectorRules) : text(base.customDirectorRules);
     return {
         version: DRAMA_PRODUCTION_PLAN_VERSION,
         skills: normalizedSkills,
@@ -106,9 +110,18 @@ export function normalizeDramaProductionPlan(value: unknown, fallback?: DramaPro
         },
         references: { strategy: "adaptive", minImages, maxImages, roles: roles.length ? roles : base.references.roles },
         continuity: { mode: continuityInput.mode === "balanced" ? "balanced" : "strict", requireAcceptedActualTail: continuityInput.requireAcceptedActualTail !== false },
+        frameCountRange,
+        ...(customDirectorRules ? { customDirectorRules } : {}),
         lockedAt: text(input.lockedAt) || base.lockedAt,
         source: ["new-project", "package", "manual"].includes(text(input.source)) ? (text(input.source) as DramaProductionPlan["source"]) : base.source,
     };
+}
+
+function normalizeFrameCountRange(value: unknown, fallback: { min: number; max: number } = DRAMA_FRAME_COUNT_RANGE_DEFAULT) {
+    const input = object(value);
+    const min = boundedInteger(input.min, fallback?.min || DRAMA_FRAME_COUNT_RANGE_DEFAULT.min, 2, DRAMA_FRAME_COUNT_MAX);
+    const max = boundedInteger(input.max, fallback?.max || DRAMA_FRAME_COUNT_RANGE_DEFAULT.max, min, DRAMA_FRAME_COUNT_MAX);
+    return { min: Math.min(min, max), max: Math.max(min, max) };
 }
 
 export function dramaVisualDirection(plan: DramaProductionPlan) {
@@ -131,8 +144,8 @@ export function resolveDramaShotDurationPreference(prompt: string, fallback: Dra
 }
 
 export function resolveDramaFrameCountPreference(prompt: string, fallback = DRAMA_FRAME_COUNT_DEFAULT): number {
-    const values = Array.from(prompt.matchAll(/(?:分\s*)?(\d+)\s*(?:个)?\s*帧/giu), (match) => Number(match[1])).filter((value) => Number.isInteger(value) && value >= 1 && value <= DRAMA_FRAME_COUNT_MAX);
-    return values.length ? values.at(-1)! : Math.max(1, Math.min(DRAMA_FRAME_COUNT_MAX, Math.floor(fallback)));
+    const values = Array.from(prompt.matchAll(/(?:分\s*)?(\d+)\s*(?:个)?\s*帧/giu), (match) => Number(match[1])).filter((value) => Number.isInteger(value) && value >= DRAMA_FRAME_COUNT_RANGE_DEFAULT.min && value <= DRAMA_FRAME_COUNT_MAX);
+    return values.length ? values.at(-1)! : Math.max(DRAMA_FRAME_COUNT_RANGE_DEFAULT.min, Math.min(DRAMA_FRAME_COUNT_MAX, Math.floor(fallback)));
 }
 
 function object(value: unknown): Record<string, unknown> {

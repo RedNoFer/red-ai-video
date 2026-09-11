@@ -35,7 +35,7 @@ import { DRAMA_PUBLIC_STATIC_FRAME_PROMPT_CONTRACT, DRAMA_PUBLIC_VIDEO_PROMPT_CO
 
 type PromptOptimizationMode = "agent" | CreativeGenerationMode | "drama-frame" | "drama-asset";
 type NonAssetPromptOptimizationMode = Exclude<PromptOptimizationMode, "drama-asset">;
-type PromptOptimizationInput = { origin: string; cookie: string; userId: string; requestId: string; prompt: string; visualContract?: DramaGlobalVisualContract };
+type PromptOptimizationInput = { origin: string; cookie: string; userId: string; requestId: string; prompt: string; visualContract?: DramaGlobalVisualContract; dramaFrameContext?: string; correctionDirection?: string };
 
 export class PromptOptimizationError extends Error {
     constructor(
@@ -65,7 +65,7 @@ export async function optimizeCreativePrompt(input: PromptOptimizationInput & { 
                 cookie: input.cookie,
                 candidate,
                 messages: [
-                    { role: "system", content: promptOptimizationInstruction(input.mode, input.prompt, input.visualContract) },
+                    { role: "system", content: promptOptimizationInstruction(input.mode, input.prompt, input.visualContract, input.dramaFrameContext, input.correctionDirection) },
                     { role: "user", content: input.prompt },
                 ],
                 tool: input.mode === "drama-asset" ? dramaAssetPromptOptimizationTool : promptOptimizationTool,
@@ -90,11 +90,11 @@ export async function optimizeCreativePrompt(input: PromptOptimizationInput & { 
     throw new PromptOptimizationError(toSafeGenerationErrorMessage(latestError, "提示词优化失败，请稍后重试"));
 }
 
-function promptOptimizationInstruction(mode: PromptOptimizationMode, prompt = "", visualContract?: DramaGlobalVisualContract) {
+function promptOptimizationInstruction(mode: PromptOptimizationMode, prompt = "", visualContract?: DramaGlobalVisualContract, dramaFrameContext = "", correctionDirection = "") {
     const globalVisualContract = formatDramaGlobalVisualContract(visualContract);
     const globalVisualRule = globalVisualContract ? `\n本项目全局视觉合同（必须保留，不得自行替换）：\n${globalVisualContract}\n` : "";
     if (mode === "drama-frame")
-        return `你是 VOZEB PRO 的 Seedance 2.0 静态图片帧提示词导演。必须先按 Seedance 导演 Skill 的资产绑定原则和静态关键帧规则在内部检查原提示词，再输出一条全新的、可直接提交给图片供应商的中文静态画面提示词。${DRAMA_PUBLIC_STATIC_FRAME_PROMPT_CONTRACT}\nSeedance 导演 Skill（固定版本 ${SEEDANCE_DIRECTOR_SKILL.sourceVersion}）：${SEEDANCE_DIRECTOR_SKILL.instructions}\n${DRAMA_STATIC_FRAME_DIRECTOR_RULES}\n${SEEDANCE_STATIC_FRAME_RULES}\n${SEEDANCE_STATIC_FRAME_PROMPT_LAYOUT}\n${DRAMA_CONTINUOUS_FRAME_RULES}\n改写时必须严格按“静态关键帧 → 可见状态 → 可见表演状态 → 景别 → 机位与构图 → 站位与视线 → 三层空间 → 光色与风格 → 负面约束”逐行输出；静态画面必须冻结一个已经发生的动作结果，不能只写远景氛围或“保持静止”；如果原文同时出现 ELS/极远景 与清晰面部、手部或道具细节，必须改成能承载这些细节的中远景或全身中景；前景必须是具体框景或遮挡物，不能留空。保留原提示词中的剧情事实、人物身份、固定资产造型、数量、画幅和连续性入口；参考图用途由外部 referenceManifest 和服务端绑定负责，不新增“参考图职责”正文段，也不伪造 @图片 编号。发现景别冲突、抽象状态、未定义肢体、重复约束或把运镜/时间段混入静态帧的问题时，必须在不新增剧情事实的前提下修正。不要输出内部 ID、URL、JSON、Markdown 标题、评估说明或解释文字。禁止运镜、动作过程、对白转述、声音指令、字幕、水印、logo、现代元素、未被用户明确要求的额外主体或额外肢体、手部畸形和脸部变形。只返回优化后的公开提示词。`;
+        return `你是 VOZEB PRO 的 Seedance 2.0 静态图片帧提示词导演。必须先按 Seedance 导演 Skill 的资产绑定原则和静态关键帧规则在内部检查原提示词，再输出一条全新的、可直接提交给图片供应商的中文静态画面提示词。${DRAMA_PUBLIC_STATIC_FRAME_PROMPT_CONTRACT}\nSeedance 导演 Skill（固定版本 ${SEEDANCE_DIRECTOR_SKILL.sourceVersion}）：${SEEDANCE_DIRECTOR_SKILL.instructions}\n${DRAMA_STATIC_FRAME_DIRECTOR_RULES}\n${SEEDANCE_STATIC_FRAME_RULES}\n${SEEDANCE_STATIC_FRAME_PROMPT_LAYOUT}\n${DRAMA_CONTINUOUS_FRAME_RULES}\n${dramaFrameContext ? `服务端读取的当前项目事实（必须保留，不能把其中的内部数据写进公开提示词）：\n${dramaFrameContext}\n` : ""}${correctionDirection ? `本次用户整改方向（只影响本次输出，不能覆盖项目长期规则）：\n${correctionDirection}\n` : ""}改写时必须严格按“静态关键帧 → 可见状态 → 可见表演状态 → 景别 → 机位与构图 → 站位与视线 → 三层空间 → 光色与风格 → 负面约束”逐行输出；静态画面必须冻结一个已经发生的动作结果，不能只写远景氛围或“保持静止”；如果原文同时出现 ELS/极远景 与清晰面部、手部或道具细节，必须改成能承载这些细节的中远景或全身中景；前景必须是具体框景或遮挡物，不能留空。保留服务端项目事实、原提示词中的剧情事实、人物身份、固定资产造型、数量、画幅和连续性入口；参考图用途由外部 referenceManifest 和服务端绑定负责，不新增“参考图职责”正文段，也不伪造 @图片 编号。发现景别冲突、抽象状态、未定义肢体、重复约束或把运镜/时间段混入静态帧的问题时，必须在不新增剧情事实的前提下修正。不要输出内部 ID、URL、JSON、Markdown 标题、评估说明或解释文字。禁止运镜、动作过程、对白转述、声音指令、字幕、水印、logo、现代元素、未被用户明确要求的额外主体或额外肢体、手部畸形和脸部变形；场景策略要求的无名背景 NPC 不属于额外主角，但必须服从 NPC 数量、位置和行为规则。只返回优化后的公开提示词。`;
     if (mode === "drama-asset") {
         const kind = prompt.match(/资产类型[】：:]\s*(角色|场景|道具)/u)?.[1] || "角色、场景或道具";
         const layout =

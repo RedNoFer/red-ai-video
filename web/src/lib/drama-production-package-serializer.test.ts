@@ -127,7 +127,10 @@ function fixture(): DramaProductionPackageV1 {
                         framePlan: {
                             start: { source: "independent" },
                             end: { required: true },
-                            frames: [{ id: "frame-one", sequenceIndex: 1, startSecond: 0, endSecond: 6, actionPrompt: "角色站立", imagePrompt: "9:16站立" }],
+                            frames: [
+                                { id: "frame-one", sequenceIndex: 1, startSecond: 0, endSecond: 3, actionPrompt: "角色进入站立", imagePrompt: "9:16角色进入站立" },
+                                { id: "frame-two", sequenceIndex: 2, startSecond: 3, endSecond: 6, actionPrompt: "角色抬眼站立", imagePrompt: "9:16角色抬眼站立" },
+                            ],
                             referenceManifest: [
                                 { alias: "@图片1", role: "character_anchor", purpose: "角色基准", assetId: "C01" },
                                 { alias: "@图片2", role: "scene_anchor", purpose: "场景基准", assetId: "S01" },

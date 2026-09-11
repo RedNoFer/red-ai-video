@@ -8,6 +8,7 @@ describe("drama production plan", () => {
         expect(plan).toMatchObject({
             visual: { visualStyle: "", artStyle: "", source: "agent" },
             video: { model: "seedance-2-0-official", mode: "storyboard", resolution: "720p", shotDuration: 15, framePolicy: "agent", count: 1, allowExplicitFallback: false },
+            frameCountRange: { min: 2, max: 9 },
         });
         expect(plan.video.frameCount).toBeUndefined();
         expect(plan.skills.map((skill) => skill.id)).toEqual(["seedance-director", "seedance-25-director"]);
@@ -55,6 +56,13 @@ describe("drama production plan", () => {
             video: { shotDuration: 30, framePolicy: "fixed-4", frameCount: 4 },
         });
         expect(normalizeDramaProductionPlan({ video: { framePolicy: "agent" } })?.video.framePolicy).toBe("agent");
+    });
+
+    it("persists project director rules and clamps the adaptive range", () => {
+        const plan = normalizeDramaProductionPlan({ frameCountRange: { min: 1, max: 99 }, customDirectorRules: "公共场景增加旁听 NPC", video: { framePolicy: "agent" } });
+
+        expect(plan).toMatchObject({ frameCountRange: { min: 2, max: 9 }, customDirectorRules: "公共场景增加旁听 NPC", video: { framePolicy: "agent" } });
+        expect(resolveDramaFrameCountPreference("每个镜头1帧")).toBe(2);
     });
 
     it("round-trips the editable visual direction without losing its split fields", () => {

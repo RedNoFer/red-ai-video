@@ -287,21 +287,26 @@ describe("production package boundary", () => {
             shot.imagePrompt = staticPrompt;
             shot.videoPrompt = [
                 "动态意图：Karin压住断剑并锁定城门",
-                "时间段动作：0-15s",
+                "时间段动作：0-7.5s",
                 "起点：Karin站在右侧门框内，手掌压住断剑",
                 "动作与触发：Karin收紧手指，断剑发出金属声",
                 "可见衔接：视线从断剑转向城门缝隙",
+                "终点：Karin指节压紧断剑",
+                "时间段动作：7.5-15s",
+                "起点：Karin指节压紧断剑",
+                "动作与触发：Karin抬眼锁定城门缝隙，肩背绷直",
+                "可见衔接：断剑的金属声消退，视线已经落到城门缝隙",
                 "终点：Karin视线锁定城门，肩背绷直",
                 "单一主运镜：固定机位",
                 "结束画面：冷灰侧光落在断剑与城门缝隙之间",
             ].join("\n");
-            shot.framePlan.frames = shot.framePlan.frames.map((frame) => ({
+            shot.framePlan.frames = shot.framePlan.frames.map((frame, index) => ({
                 ...frame,
                 startPrompt: "Karin站在右侧门框内，手掌压住断剑",
-                actionPrompt: "Karin收紧手指，断剑发出金属声",
-                transitionPrompt: "视线从断剑转向城门缝隙",
-                endPrompt: "Karin视线锁定城门，肩背绷直",
-                imagePrompt: staticPrompt,
+                actionPrompt: index ? "Karin抬眼锁定城门缝隙，肩背绷直" : "Karin收紧手指，断剑发出金属声",
+                transitionPrompt: index ? "断剑的金属声消退，视线已经落到城门缝隙" : "视线从断剑转向城门缝隙",
+                endPrompt: index ? "Karin视线锁定城门，肩背绷直" : "Karin指节压紧断剑",
+                imagePrompt: index ? staticPrompt.replace("指节发白，断剑贴在右手掌心", "视线锁定城门缝隙，断剑仍贴在右手掌心").replace("眉心收紧，视线锁定城门缝隙，肩背绷直", "眉心抬起，视线锁定城门缝隙，肩背从前倾转为直立") : staticPrompt,
             }));
         }
 
@@ -331,7 +336,28 @@ describe("production package boundary", () => {
         const frame = source.episodes[0].shots[0].framePlan.frames[0];
         source.episodes[0].shots[0].imagePrompt = staticPrompt;
         source.episodes[0].shots[0].framePlan.frames = [
-            { ...frame, startPrompt: "Karin站在右侧门框内，手掌压住断剑", actionPrompt: "Karin收紧手指，断剑发出金属声", transitionPrompt: "视线从断剑转向城门缝隙", endPrompt: "Karin视线锁定城门，肩背绷直", imagePrompt: staticPrompt },
+            {
+                ...frame,
+                startSecond: 0,
+                endSecond: 7.5,
+                startPrompt: "Karin站在右侧门框内，手掌压住断剑",
+                actionPrompt: "Karin收紧手指，断剑发出金属声",
+                transitionPrompt: "视线从断剑转向城门缝隙",
+                endPrompt: "Karin指节压紧断剑",
+                imagePrompt: staticPrompt,
+            },
+            {
+                ...frame,
+                id: "SH01-F02",
+                sequenceIndex: 2,
+                startSecond: 7.5,
+                endSecond: 15,
+                startPrompt: "Karin指节压紧断剑",
+                actionPrompt: "Karin抬眼锁定城门缝隙，肩背绷直",
+                transitionPrompt: "断剑的金属声消退，视线已经落到城门缝隙",
+                endPrompt: "Karin视线锁定城门，肩背绷直",
+                imagePrompt: staticPrompt.replace("指节发白，断剑贴在右手掌心", "视线锁定城门缝隙，断剑仍贴在右手掌心").replace("眉心收紧，视线锁定城门缝隙，肩背绷直", "眉心抬起，视线锁定城门缝隙，肩背从前倾转为直立"),
+            },
         ];
         source.episodes[0].shots[0].videoPrompt = "动态意图：Karin压住断剑\n时间段动作：0-15s\n单一主运镜：固定机位\n结束画面：Karin停住";
 
@@ -419,7 +445,10 @@ describe("production package boundary", () => {
         const source = structuredClone(productionPackage);
         source.episodes[0].shots[0].duration = 2;
         source.episodes[0].shots[0].timecode = "0-2s";
-        source.episodes[0].shots[0].framePlan.frames = [{ ...source.episodes[0].shots[0].framePlan.frames[0], startSecond: 0, endSecond: 2 }];
+        source.episodes[0].shots[0].framePlan.frames = [
+            { ...source.episodes[0].shots[0].framePlan.frames[0], startSecond: 0, endSecond: 1 },
+            { ...source.episodes[0].shots[0].framePlan.frames[1], startSecond: 1, endSecond: 2 },
+        ];
         const preview = previewDramaProductionPackage(JSON.stringify(source), "package.json");
         const shots = preview.package.episodes[0].shots;
         expect(shots.every((shot) => Number.isInteger(shot.duration))).toBe(true);
@@ -447,8 +476,8 @@ describe("production package boundary", () => {
         first.framePlan.referenceManifest = first.framePlan.referenceManifest?.map((item) => (item.role === "scene_anchor" ? { ...item, assetId: "S02" } : item));
         second.framePlan.referenceManifest = second.framePlan.referenceManifest?.map((item) => (item.role === "scene_anchor" ? { ...item, assetId: "S02" } : item));
         second.framePlan.referenceManifest = [...(second.framePlan.referenceManifest || []).filter((item) => item.role !== "scene_anchor"), { alias: "@场景2", role: "scene_anchor", purpose: "马车场景基准", assetId: "S02" }];
-        first.framePlan.frames = first.framePlan.frames.map((frame) => ({ ...frame, startSecond: 0, endSecond: 8 }));
-        second.framePlan.frames = second.framePlan.frames.map((frame) => ({ ...frame, startSecond: 0, endSecond: 7 }));
+        first.framePlan.frames = first.framePlan.frames.map((frame, index) => ({ ...frame, startSecond: index ? 4 : 0, endSecond: index ? 8 : 4 }));
+        second.framePlan.frames = second.framePlan.frames.map((frame, index) => ({ ...frame, startSecond: index ? 3.5 : 0, endSecond: index ? 7 : 3.5 }));
         source.episodes[0].storyScenes[0].shotCodes = ["SH01", "SH02"];
         const preview = previewDramaProductionPackage(JSON.stringify(source), "package.json");
         expect(preview.package.episodes[0].shots).toHaveLength(2);
@@ -478,8 +507,8 @@ describe("production package boundary", () => {
         first.locationCode = "S01";
         second.locationCode = "S02";
         second.framePlan.referenceManifest = second.framePlan.referenceManifest?.map((item) => (item.role === "scene_anchor" ? { ...item, assetId: "S02" } : item));
-        first.framePlan.frames = first.framePlan.frames.map((frame) => ({ ...frame, startSecond: 0, endSecond: 8 }));
-        second.framePlan.frames = second.framePlan.frames.map((frame) => ({ ...frame, startSecond: 0, endSecond: 7 }));
+        first.framePlan.frames = first.framePlan.frames.map((frame, index) => ({ ...frame, startSecond: index ? 4 : 0, endSecond: index ? 8 : 4 }));
+        second.framePlan.frames = second.framePlan.frames.map((frame, index) => ({ ...frame, startSecond: index ? 3.5 : 0, endSecond: index ? 7 : 3.5 }));
         source.episodes[0].storyScenes[0].shotCodes = ["SH01", "SH02"];
 
         const preview = previewDramaProductionPackage(JSON.stringify(source), "package.json");
@@ -994,7 +1023,10 @@ function shot(code: string, order: number, timecode: string, characterCodes: str
         framePlan: {
             start: { source: order === 1 ? "independent" : "previous_accepted_actual_tail" },
             end: { required: true },
-            frames: [{ id: `${code}-frame-1`, sequenceIndex: 1, startSecond: 0, endSecond: 15, actionPrompt: videoPrompt, imagePrompt: `${videoPrompt}画面` }],
+            frames: [
+                { id: `${code}-frame-1`, sequenceIndex: 1, startSecond: 0, endSecond: 7.5, actionPrompt: `${videoPrompt}进入`, imagePrompt: `${videoPrompt}进入画面` },
+                { id: `${code}-frame-2`, sequenceIndex: 2, startSecond: 7.5, endSecond: 15, actionPrompt: `${videoPrompt}结果`, imagePrompt: `${videoPrompt}结果画面` },
+            ],
             referenceManifest: [
                 ...characterCodes.map((assetId) => ({ alias: `@${assetId}`, role: "character_anchor" as const, purpose: "角色基准图", assetId })),
                 { alias: "@场景", role: "scene_anchor" as const, purpose: "场景基准图", assetId: "S01" },

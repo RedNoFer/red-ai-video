@@ -478,6 +478,21 @@ describe("drama project service updates", () => {
         expect(normalized.scenes[0].sceneReferenceBoard).toEqual({ layout: "legacy-3x3", referenceId: "scene-ref" });
     });
 
+    it("round-trips the scene background NPC policy without adding NPC assets", () => {
+        const current = project("2026-07-19T08:00:00.000Z", "项目");
+        const normalized = normalizeProject(
+            {
+                ...current,
+                characters: [],
+                scenes: [{ id: "scene-one", name: "议事厅", description: "固定空间", backgroundNpcPolicy: { mode: "required", guidance: "前后景安排旁听者", continuity: "跨帧保持两侧密度" } }],
+            },
+            current,
+        );
+
+        expect(normalized.scenes[0].backgroundNpcPolicy).toEqual({ mode: "required", guidance: "前后景安排旁听者", continuity: "跨帧保持两侧密度" });
+        expect(normalized.characters).toEqual([]);
+    });
+
     it("keeps every generated storyboard result while retaining the first as the main frame", () => {
         const current = project("2026-07-19T08:00:00.000Z", "项目");
         current.episodes[0].shots = [{ id: "shot-one", title: "镜头", storyboardStatus: "running", characterIds: [], propIds: [], clueIds: [], imagePrompt: "画面", videoPrompt: "动作", cameraMotion: "固定", duration: 5 } as never];
@@ -685,6 +700,7 @@ describe("drama project service updates", () => {
         const saved = await updateDramaStoryboardFramePromptForUser("user-one", current.id, "episode-one", "shot-one", "f2", { supplierPrompt });
         const shot = saved.episodes[0].shots[0];
 
+        expect(shot.framePlan?.frames[1].imagePrompt).toContain("用户编辑后的画面");
         expect(shot.framePlan?.frames[1].supplierPrompt).toContain("用户编辑后的画面");
         expect(shot.storyboardFrames).toEqual([expect.objectContaining({ id: "f1", status: "success", mediaUrl: "/api/f1.png" }), expect.objectContaining({ id: "f2", status: "stale", mediaUrl: "/api/f2.png", continuityStatus: "stale" })]);
         expect(mocks.updateDramaProject.mock.calls.at(-1)?.[0]).toBe("user-one");
