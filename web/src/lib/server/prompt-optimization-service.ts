@@ -101,9 +101,9 @@ function promptOptimizationInstruction(mode: PromptOptimizationMode, prompt = ""
             kind === "角色"
                 ? `角色固定为一张纯白色无缝背景的${DRAMA_CHARACTER_TURNAROUND_LABEL}：${DRAMA_CHARACTER_TURNAROUND_LAYOUT}，同一基线、同一头身比、同一脸部、发型、服装和关键道具。四视图只表示同一个角色；不得添加四分之三视图、主立绘、表情组、手部或道具拆解、额外角度、边框、网格、文字或水印。`
                 : kind === "场景"
-                  ? "场景固定为一张完整、独立的 1:1 九宫格空间基准板：中心格为主视角，外围八格按西北、北、东北、西、东、西南、南、东南展示同一无人物场景；入口、出口、门窗、固定陈设、材质、光向和轴线必须跨九格一致，不得把九格画成九个地点。"
+                  ? "场景固定为一张高清、完整、独立的当前项目画幅单视角全景建立图：无人物、无文字，入口、出口、门窗、固定陈设、通道、支撑面、材质、光向和轴线必须清晰可读；不得生成九宫格、分格或360°贴图。"
                   : "道具固定为一张完整、独立的单主体基准图，不得添加人物、拼版、文字或水印。";
-        return `你是 VOZEB PRO 的短剧资产图片提示词编辑器。当前资产类型是“${kind}”。必须调用固定 JSON 工具返回结果，JSON 只能包含 optimizedPrompt 和 fields 两个顶层键；fields 必须完整包含 description、visualIdentity、styling、colorPalette、consistencyRules 五个字符串键，不得缺失、改名或增加键。optimizedPrompt 是可直接提交给图片供应商的中文公开生图提示词，不得包含 JSON、解释、分析、Markdown 标题、内部规则、模型理由、ID 或 URL。${globalVisualRule}\n${DRAMA_ASSET_IMAGE_SKILL.instructions}\n${kind === "角色" ? `角色质量契约：${DRAMA_CHARACTER_PROFILE_CONTRACT}\n角色供应商质量要求：${DRAMA_CHARACTER_SUPPLIER_QUALITY_RULES}\n角色五官建模：${DRAMA_CHARACTER_FACE_MODELING_RULES}\n角色头发建模：${DRAMA_CHARACTER_HAIR_MODELING_RULES}\n角色服装材质：${DRAMA_CHARACTER_WARDROBE_MATERIAL_RULES}\n角色渲染技术：${DRAMA_CHARACTER_RENDER_STYLE}\n角色棚拍光线：${DRAMA_CHARACTER_STUDIO_LIGHT_RULES}\n角色高代价负面项：${DRAMA_CHARACTER_NEGATIVE_RULES}` : ""}\n${layout}\n项目主题风格只能使用全局视觉合同或原提示词中明确提供的视觉风格，不得自行添加或替换固定题材；保留原提示词中的项目风格、资产身份/结构锚点、固定服装材质、颜色、空间规则、画幅和负面要求，不新增任何剧情事实；fields 同步整理当前资产文案，未被用户要求改变的事实必须保留。角色资产必须把固定脸部、比例、发型、服装和材质事实写入对应字段，不得用“高级、绝美、顶级、仙气”等空泛形容词替代具体事实。场景资产必须具体写出九格方向、空间拓扑、透视、固定物件和材质细节。optimizedPrompt 按以下顺序逐行组织：主体与资产类型；身份/结构锚点；可见状态与材质；构图与画幅；光色与风格；负面约束。`;
+        return `你是 VOZEB PRO 的短剧资产图片提示词编辑器。当前资产类型是“${kind}”。必须调用固定 JSON 工具返回结果，JSON 只能包含 optimizedPrompt 和 fields 两个顶层键；fields 必须完整包含 description、visualIdentity、styling、colorPalette、consistencyRules 五个字符串键，不得缺失、改名或增加键。optimizedPrompt 是可直接提交给图片供应商的中文公开生图提示词，不得包含 JSON、解释、分析、Markdown 标题、内部规则、模型理由、ID 或 URL。${globalVisualRule}\n${DRAMA_ASSET_IMAGE_SKILL.instructions}\n${kind === "角色" ? `角色质量契约：${DRAMA_CHARACTER_PROFILE_CONTRACT}\n角色供应商质量要求：${DRAMA_CHARACTER_SUPPLIER_QUALITY_RULES}\n角色五官建模：${DRAMA_CHARACTER_FACE_MODELING_RULES}\n角色头发建模：${DRAMA_CHARACTER_HAIR_MODELING_RULES}\n角色服装材质：${DRAMA_CHARACTER_WARDROBE_MATERIAL_RULES}\n角色渲染技术：${DRAMA_CHARACTER_RENDER_STYLE}\n角色棚拍光线：${DRAMA_CHARACTER_STUDIO_LIGHT_RULES}\n角色高代价负面项：${DRAMA_CHARACTER_NEGATIVE_RULES}` : ""}\n${layout}\n${kind === "场景" ? "场景硬规则：只生成一张高清、无人物、无文字的当前项目画幅单视角全景建立图；完整呈现入口、出口、门窗、固定陈设、通道、支撑面、材质、光向和空间轴线；禁止九宫格、分格、方向标签和360°贴图。" : ""}\n项目主题风格只能使用全局视觉合同或原提示词中明确提供的视觉风格，不得自行添加或替换固定题材；保留原提示词中的项目风格、资产身份/结构锚点、固定服装材质、颜色、空间规则、画幅和负面要求，不新增任何剧情事实；fields 同步整理当前资产文案，未被用户要求改变的事实必须保留。角色资产必须把固定脸部、比例、发型、服装和材质事实写入对应字段，不得用“高级、绝美、顶级、仙气”等空泛形容词替代具体事实。场景资产必须具体写出单张全景图中的空间拓扑、透视、入口出口、固定物件、通道、支撑面和材质细节。optimizedPrompt 按以下顺序逐行组织：主体与资产类型；身份/结构锚点；可见状态与材质；构图与画幅；光色与风格；负面约束。`;
     }
     if (mode === "image")
         return `你是 VOZEB PRO 图片提示词编辑器。把用户原文整理为可直接提交的中文图片提示词：先锁定主体与身份锚点，再写当前要改变的内容、构图、光色材质、用途和约束。图片编辑必须分别写 change、preserve、constraints；change 只包含一个已定位变量，preserve 明确保留身份、构图、光线、材质和文字等未修改事实，constraints 写清比例、尺寸、参考图用途和不可出现内容。${globalVisualRule}多张参考图按角色、场景、道具或构图分配唯一用途，禁止按标题或文本相似度猜测。保留用户原文的主体、品牌、数量、尺寸、比例、文字和否定要求，不新增剧情事实或供应商字段。只返回优化后的公开提示词，不解释修改过程，不输出内部规划、模型选择理由或思维链。`;
@@ -173,7 +173,7 @@ function enforceDramaAssetPromptContract(sourcePrompt: string, prompt: string, f
         kind === "角色"
             ? `构图与画幅：${DRAMA_CHARACTER_TURNAROUND_SIZE} 横向，一张纯白色无缝背景${DRAMA_CHARACTER_TURNAROUND_LABEL}；${DRAMA_CHARACTER_TURNAROUND_LAYOUT}。`
             : kind === "场景"
-              ? "构图与画幅：1:1 方形九宫格空间基准板；中心格为主视角，外围八格按八个方位展示同一无人物场景，固定入口、出口、陈设、材质、光向和空间轴线。"
+              ? "构图与画幅：当前项目画幅的一张高清完整单视角场景全景建立图；入口、出口、门窗、陈设、通道、支撑面、材质、光向和空间轴线清晰可读，不生成九宫格或分格。"
               : "构图与画幅：按项目画幅，一张完整、独立的单主体基准图。",
         `光色与风格：${kind === "角色" ? [configuredStyle ? `项目视觉风格：${configuredStyle}` : "", globalVisual, DRAMA_CHARACTER_RENDER_STYLE, DRAMA_CHARACTER_STUDIO_LIGHT_RULES, DRAMA_CHARACTER_SUPPLIER_QUALITY_RULES].filter(Boolean).join("；") : globalVisual || "严格沿用当前项目视觉风格与资产固有色彩，不新增环境或剧情元素。"}`,
         kind === "角色"

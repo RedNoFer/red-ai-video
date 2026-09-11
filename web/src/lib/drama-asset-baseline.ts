@@ -10,6 +10,15 @@ export function hasApprovedAssetReference(asset?: DramaNamedAsset): boolean {
     return Boolean(approvedAssetReference(asset));
 }
 
+export function approvedScenePanoramaReference(asset?: DramaNamedAsset): DramaAssetReference | undefined {
+    if (asset?.sceneReferenceBoard?.layout !== "panorama") return undefined;
+    return approvedAssetReference(asset);
+}
+
+export function hasApprovedScenePanoramaReference(asset?: DramaNamedAsset): boolean {
+    return Boolean(approvedScenePanoramaReference(asset));
+}
+
 export function assetReferenceStatus(reference?: DramaAssetReference): "candidate" | "approved" | "rejected" | "missing" {
     return reference?.status || "candidate";
 }

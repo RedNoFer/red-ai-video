@@ -511,6 +511,10 @@ function validateProductionPackageCompleteness(value: Record<string, unknown>) {
     const characters = assetCodes("characters");
     const locations = assetCodes("locations");
     const props = assetCodes("props");
+    for (const location of array(assets.locations)) {
+        const item = object(location);
+        if (isLegacySceneReferenceBoard(item)) throw new DramaProductionPackageError(`场景 ${text(item.code) || text(item.name) || "未命名"} 是旧九宫格资产，需要重新生成并审核高清场景全景图`);
+    }
     for (const episode of array(value.episodes)) {
         for (const shot of array(object(episode).shots)) {
             const item = object(shot);
@@ -1260,8 +1264,24 @@ function normalizePackageAsset(value: unknown, location = false, character = fal
         payoff: optionalText(asset.payoff),
         activeEpisodeCodes: strings(asset.activeEpisodeCodes),
         profile: character ? normalizeDramaCharacterProfile(baseProfile, description, name) : baseProfile,
-        ...(location ? { sceneReferenceBoard: { layout: "3x3" as const, ...(object(asset.sceneReferenceBoard).referenceId ? { referenceId: text(object(asset.sceneReferenceBoard).referenceId) } : {}) } } : {}),
+        ...(location
+            ? {
+                  sceneReferenceBoard: {
+                      layout: isLegacySceneReferenceBoard(asset) ? ("legacy-3x3" as const) : ("panorama" as const),
+                      ...(object(asset.sceneReferenceBoard).referenceId ? { referenceId: text(object(asset.sceneReferenceBoard).referenceId) } : {}),
+                  },
+              }
+            : {}),
     };
+}
+
+function isLegacySceneReferenceBoard(value: unknown) {
+    const asset = object(value);
+    const boardLayout = text(object(asset.sceneReferenceBoard).layout);
+    if (["3x3", "legacy-3x3"].includes(boardLayout)) return true;
+    const profile = object(asset.profile);
+    const source = [asset.description, asset.supplierPrompt, profile.visualIdentity, profile.designPrompt, profile.consistencyRules].map(text).filter(Boolean).join("\n");
+    return /九宫格|九格|3\s*[x×*]\s*3|三列[\s\S]*三行|3列[\s\S]*3行/u.test(source);
 }
 
 function isGenericConsistencyRule(value: string) {

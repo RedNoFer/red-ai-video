@@ -1,7 +1,7 @@
 import type { DramaEpisode, DramaProductionPreflight, DramaProductionPreflightIssue, DramaProject, DramaShot } from "@/lib/drama-project-contract";
-import { hasApprovedAssetReference } from "@/lib/drama-asset-baseline";
+import { hasApprovedAssetReference, hasApprovedScenePanoramaReference } from "@/lib/drama-asset-baseline";
 import { continuityStartEvidence } from "@/lib/drama-continuity-policy";
-import { normalizeDramaFrameBeats, validateDramaFrameVisualContent, dramaFrameVisualSubject } from "@/lib/drama-frame-sequence";
+import { normalizeDramaFrameBeats, validateDramaFramePlanVisuals, validateDramaFrameVisualContent, dramaFrameVisualSubject } from "@/lib/drama-frame-sequence";
 import { dramaDialogueTimingReminder, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
 import { dramaReferenceImageBudget } from "@/lib/drama-production-plan";
 import { validateDramaPerformanceDetail } from "@/lib/drama-prompt-quality";
@@ -126,7 +126,8 @@ function checkShot(
         issues.push(warning("NEGATIVE_TEXT_MISSING", `${label}未显式禁止文字、水印或 Logo，可能产生不可控画面文字`, { shotId: shot.id, correction: "在负面约束中加入禁止文字、水印和 Logo" }));
     const scene = shot.sceneId ? scenes.get(shot.sceneId) : undefined;
     if (!scene) issues.push(blocking("LOCATION_REFERENCE", `${label}缺少有效地点资产引用`, { shotId: shot.id }));
-    else if (!hasApprovedAssetReference(scene)) issues.push(blocking("LOCATION_ANCHOR", `${label}的场景“${scene.name}”缺少已审核基准图`, { shotId: shot.id, assetId: scene.id }));
+    else if (!hasApprovedScenePanoramaReference(scene))
+        issues.push(blocking("LOCATION_ANCHOR", `${label}的场景“${scene.name}”需要重新生成并审核高清场景全景图`, { shotId: shot.id, assetId: scene.id, correction: "将旧九宫格或旧单图替换为当前项目画幅的一张高清无人物全景图" }));
     if (!shot.entryState || !shot.exitState) issues.push(blocking("STATE_MISSING", `${label}缺少完整入口/出口状态`, { shotId: shot.id }));
     else {
         if (!shot.entryState.environment || !shot.entryState.lighting || !shot.exitState.environment || !shot.exitState.lighting) issues.push(blocking("STATE_INCOMPLETE", `${label}入口/出口必须包含环境和灯光状态`, { shotId: shot.id }));
@@ -177,6 +178,9 @@ function checkShot(
                     issues.push(
                         blocking("FRAME_COUNT_MISMATCH", `${label}包含 ${shot.framePlan.frames.length} 个关键帧，但当前生产方案要求 ${targetFrameCount} 个`, { shotId: shot.id, correction: `按当前生产方案重新生成 ${targetFrameCount} 个连续关键帧` }),
                     );
+                const visualPlanErrors = validateDramaFramePlanVisuals(shot.framePlan.frames);
+                for (const visualPlanError of visualPlanErrors.filter((error) => /所有帧使用相同景别、机位与构图/u.test(error)))
+                    issues.push(blocking("FRAME_CAMERA_DUPLICATE", `${label}${visualPlanError}`, { shotId: shot.id, correction: "按真实动作节点调整相邻帧的景别、机位或构图" }));
                 shot.framePlan.frames.forEach((frame, index, frames) => {
                     const visualError = validateDramaFrameVisualContent(frame.imagePrompt, frame.actionPrompt);
                     if (visualError) issues.push(warning("FRAME_VISUAL_CONTENT", `${label}第${index + 1}帧${visualError}`, { shotId: shot.id, correction: "提示词仅供修订参考；如需优化，可回到分镜编辑当前帧" }));

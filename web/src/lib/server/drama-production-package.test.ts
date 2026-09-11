@@ -51,6 +51,36 @@ const productionPackage: DramaProductionPackageV1 = {
     ],
 };
 
+function modernizeLegacySceneFixture(value: DramaProductionPackageV1) {
+    const next = structuredClone(value);
+    next.assets.locations = next.assets.locations.map((location) => {
+        const replaceLegacyText = (value: string | undefined) => value?.replaceAll("九宫格", "高清单视角全景图").replaceAll("九格", "固定空间结构").replaceAll("3列×3行纵向高清单视角全景图", "当前项目画幅的完整单视角全景建立图") || value;
+        const profile = location.profile ? { ...location.profile } : undefined;
+        if (profile) {
+            profile.visualIdentity = replaceLegacyText(profile.visualIdentity) || profile.visualIdentity;
+            profile.designPrompt = replaceLegacyText(profile.designPrompt);
+        }
+        return {
+            ...location,
+            description: replaceLegacyText(location.description) || "高清单视角全景场景",
+            ...(profile ? { profile } : {}),
+            sceneReferenceBoard: { layout: "panorama" as const },
+        };
+    });
+    return next;
+}
+
+function readMahadelJsonFixture() {
+    return modernizeLegacySceneFixture(JSON.parse(readFileSync(new URL("../../../../output/mahadel-episode-01-production-package-v2-multiframe.json", import.meta.url), "utf8")) as DramaProductionPackageV1);
+}
+
+function readMahadelMarkdownFixture() {
+    const source = readFileSync(new URL("../../../../output/mahadel-episode-01-production-package-v2-multiframe.md", import.meta.url), "utf8");
+    const match = source.match(/```drama-production-package\n([\s\S]*?)\n```/u);
+    if (!match) throw new Error("Mahadel fixture is missing its canonical package block");
+    return source.replace(match[1], JSON.stringify(modernizeLegacySceneFixture(JSON.parse(match[1]) as DramaProductionPackageV1), null, 2));
+}
+
 describe("production package boundary", () => {
     it("surfaces a dialogue capacity reminder without blocking package import", () => {
         const source = structuredClone(productionPackage);
@@ -367,6 +397,13 @@ describe("production package boundary", () => {
         expect(() => previewDramaProductionPackage(JSON.stringify(invalidFramePolicy), "package.json")).toThrow("不能携带固定帧数");
     });
 
+    it("rejects legacy nine-grid scene assets until a panorama is regenerated", () => {
+        const legacy = structuredClone(productionPackage);
+        legacy.assets.locations[0].sceneReferenceBoard = { layout: "legacy-3x3", referenceId: "legacy-scene" };
+
+        expect(() => previewDramaProductionPackage(JSON.stringify(legacy), "package.json")).toThrow("需要重新生成并审核高清场景全景图");
+    });
+
     it("rejects a legacy Markdown snapshot that lacks required frame plans", () => {
         const source = readFileSync(new URL("../../../../output/mahadel-episode-01-production-package.md", import.meta.url), "utf8");
         expect(() => previewDramaProductionPackage(source, "mahadel-episode-01-production-package.md")).toThrow("缺少有效 framePlan");
@@ -451,7 +488,7 @@ describe("production package boundary", () => {
     });
 
     it("recognizes the generated multiframe Markdown package", () => {
-        const source = readFileSync(new URL("../../../../output/mahadel-episode-01-production-package-v2-multiframe.md", import.meta.url), "utf8");
+        const source = readMahadelMarkdownFixture();
         const preview = previewDramaProductionPackage(source, "mahadel-episode-01-production-package-v2-multiframe.md");
         expect(preview.package.schemaVersion).toBe(1);
         expect(preview.package.project.productionBible.productionPlan?.video.mode).toBe("storyboard");
@@ -466,8 +503,13 @@ describe("production package boundary", () => {
         expect(preview.package.episodes[0].shots[0].framePlan?.frames.at(-1)?.imagePrompt).toContain("完全惊醒");
     });
 
+    it("rejects legacy scene wording even when the package omitted an explicit layout", () => {
+        const source = readFileSync(new URL("../../../../output/mahadel-episode-01-production-package-v2-multiframe.json", import.meta.url), "utf8");
+        expect(() => previewDramaProductionPackage(source, "mahadel-episode-01-production-package-v2-multiframe.json")).toThrow("需要重新生成并审核高清场景全景图");
+    });
+
     it("keeps the generated package prompts split into static frames and motion intent", () => {
-        const source = JSON.parse(readFileSync(new URL("../../../../output/mahadel-episode-01-production-package-v2-multiframe.json", import.meta.url), "utf8")) as DramaProductionPackageV1;
+        const source = readMahadelJsonFixture();
         const movement = /运镜|焦段|推近|拉远|摇镜|跟拍|滑轨|环绕|吊臂|慢推|慢拉|后拉/u;
         const nonVisual = /\b\d+(?:\.\d+)?s\b|时间段|时间轴|动作过程|对白|声音|口型/u;
         for (const shot of source.episodes[0].shots) {
@@ -486,7 +528,7 @@ describe("production package boundary", () => {
     });
 
     it("binds each generated shot to its declared scene, characters, props, and visible performance state", () => {
-        const source = readFileSync(new URL("../../../../output/mahadel-episode-01-production-package-v2-multiframe.md", import.meta.url), "utf8");
+        const source = readMahadelMarkdownFixture();
         const normalized = previewDramaProductionPackage(source, "mahadel-episode-01-production-package-v2-multiframe.md").package;
         for (const shot of normalized.episodes[0].shots) {
             const manifest = shot.framePlan.referenceManifest || [];
@@ -498,7 +540,7 @@ describe("production package boundary", () => {
     });
 
     it("keeps every split Mahadel frame executable for its own segment", () => {
-        const source = readFileSync(new URL("../../../../output/mahadel-episode-01-production-package-v2-multiframe.md", import.meta.url), "utf8");
+        const source = readMahadelMarkdownFixture();
         const shots = previewDramaProductionPackage(source, "mahadel-episode-01-production-package-v2-multiframe.md").package.episodes[0].shots.slice(0, 5);
         const plans = shots.map((shot) => JSON.stringify(shot.framePlan.frames.map((frame) => [frame.actionPrompt, frame.imagePrompt])));
 
@@ -506,8 +548,8 @@ describe("production package boundary", () => {
     });
 
     it("gives every generated Mahadel frame a distinct dynamic image state", () => {
-        const source = readFileSync(new URL("../../../../output/mahadel-episode-01-production-package-v2-multiframe.json", import.meta.url), "utf8");
-        const shots = previewDramaProductionPackage(source, "mahadel-episode-01-production-package-v2-multiframe.json").package.episodes[0].shots;
+        const source = readMahadelJsonFixture();
+        const shots = previewDramaProductionPackage(JSON.stringify(source), "mahadel-episode-01-production-package-v2-multiframe.json").package.episodes[0].shots;
 
         for (const shot of shots) {
             const prompts = shot.framePlan.frames.map((frame) => frame.imagePrompt);
@@ -583,7 +625,7 @@ describe("production package boundary", () => {
     });
 
     it("derives concrete profile fields when a package omits optional character profile values", () => {
-        const source = readFileSync(new URL("../../../../output/mahadel-episode-01-production-package-v2-multiframe.md", import.meta.url), "utf8");
+        const source = readMahadelMarkdownFixture();
         const preview = previewDramaProductionPackage(source, "mahadel-episode-01-production-package-v2-multiframe.md");
         const inspector = preview.package.assets.characters.find((item) => item.code === "C05");
         expect(inspector?.profile).toMatchObject({

@@ -1,6 +1,6 @@
 import type { DramaAssetReference, DramaEpisode, DramaProject, DramaShot } from "../types";
 import type { DramaProductionPlan, DramaProductionRun, DramaStoryboardFrame, DramaStoryboardFrameCandidate } from "@/lib/drama-project-contract";
-import { approvedAssetReference } from "@/lib/drama-asset-baseline";
+import { approvedAssetReference, approvedScenePanoramaReference } from "@/lib/drama-asset-baseline";
 import { createFrameEvidence, continuityStartEvidence, invalidateFrameEvidence, latestFrameEvidence, replaceFrameEvidence, supersedeFrameEvidence } from "@/lib/drama-continuity-policy";
 import type { useEffectiveConfig } from "@/stores/use-config-store";
 import { resolveDramaGenerationSize } from "@/lib/drama-image-size";
@@ -345,7 +345,7 @@ export function storyboardReferenceImages(shot: DramaShot) {
                 ...referenceImage(`storyboard-keyframe-${shot.id}-${frame.sequenceIndex}`, `${shot.title}-关键帧${frame.sequenceIndex}.png`, frame.mediaUrl!, "image/png", frame.width, frame.height, "keyframe", frame.remoteUrl),
                 keyframeIndex: frame.sequenceIndex,
             }));
-        return keyframes.slice(0, 5).map((frame, index) => ({ ...frame, keyframeIndex: index + 1 }));
+        return keyframes.map((frame, index) => ({ ...frame, keyframeIndex: index + 1 }));
     }
     return [
         latestFrameEvidence(shot, "storyboard_start", ["candidate", "accepted"])
@@ -421,7 +421,7 @@ function audioMimeType(url: string) {
 }
 
 function primaryAssetReference(item: DramaProject["characters"][number]): Pick<DramaAssetReference, "url" | "remoteUrl" | "width" | "height"> | undefined {
-    return approvedAssetReference(item);
+    return item.sceneReferenceBoard ? approvedScenePanoramaReference(item) : approvedAssetReference(item);
 }
 
 export function referenceImage(id: string, name: string, url: string, type = "image/png", width?: number, height?: number, videoRole?: VideoReferenceRole, remoteUrl?: string): ReferenceImage {

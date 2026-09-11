@@ -79,21 +79,22 @@ describe("drama prompt compiler", () => {
         }
     });
 
-    it("compiles every scene as a nine-view spatial reference board", () => {
+    it("compiles every scene as a high-definition panorama", () => {
         const project = createProject();
         const scene = project.scenes[0];
         const prompt = compileDramaAssetReferencePrompt(project, scene, "场景");
         const constraints = preflightDramaAssetGeneration(project, scene, "场景");
 
-        expect(prompt).toContain("九宫格");
-        expect(prompt).toContain("西北、北、东北、西、东、西南、南、东南");
-        expect(prompt).toContain("空间轴线在九格中严格一致");
+        expect(prompt).toContain("高清");
+        expect(prompt).toContain("单视角场景全景建立图");
+        expect(prompt).toContain("9:16");
+        expect(prompt).toContain("不生成九宫格、分格或360°贴图");
         expect(prompt).toContain("建筑透视稳定");
         expect(prompt).not.toContain("负面约束：额外主体、拼版、多视角");
         expect(constraints.ok).toBe(true);
         if (constraints.ok) {
-            expect(constraints.constraints.join("\n")).toContain("九宫格场景空间基准板");
-            expect(constraints.constraints.join("\n")).toContain("不得把九格画成九个不同地点");
+            expect(constraints.constraints.join("\n")).toContain("高清单视角场景全景建立图");
+            expect(constraints.constraints.join("\n")).toContain("不生成九宫格");
         }
     });
 
@@ -177,10 +178,10 @@ describe("drama prompt compiler", () => {
             ],
         };
         const prompt = compileDramaFrameSupplierPrompt(project, project.episodes[0], shot, shot.framePlan.frames[1]);
-        expect(prompt).toContain("相较上一帧");
+        expect(prompt).toContain("相较本镜上一动作节点");
         expect(prompt).toContain("萧炎低头，右手停在桌沿旁，茶水静止");
         expect(prompt).toContain("萧炎抬眼扫过萧战，右手五指收紧贴住桌沿，茶水表面出现细小波纹");
-        expect(prompt).toContain("禁止复制上一帧的可见状态");
+        expect(prompt).toContain("禁止复制上一节点的可见状态");
         expect(prompt).toContain("当前帧变化优先级最高");
         expect(prompt).toContain("明确改变身体朝向、视线、手部/道具接触或重心中的至少一项");
     });

@@ -350,7 +350,7 @@ function appendAdjacentFrameDifference(prompt: string, shot: DramaShot, beat?: D
     const stateLine = lines.findIndex((line) => line.startsWith("可见状态："));
     if (stateLine < 0) return prompt;
     lines[stateLine] =
-        `${lines[stateLine]}；相较上一帧，当前帧必须已经变为：${currentState}；当前帧变化优先级最高，必须在画面中明确改变身体朝向、视线、手部/道具接触或重心中的至少一项；上一帧仅用于身份、场景、光向和轴线连续，禁止复制上一帧的可见状态（${previousState}），若主体姿态、视线和手部仍与上一帧相同则视为生成失败`;
+        `${lines[stateLine]}；相较本镜上一动作节点，当前帧必须已经变为：${currentState}；当前帧变化优先级最高，必须在画面中明确改变身体朝向、视线、手部/道具接触或重心中的至少一项；本帧独立使用固定资产锚点生成，不引用同镜上一帧图片，禁止复制上一节点的可见状态（${previousState}），若主体姿态、视线和手部仍与上一节点相同则视为生成失败`;
     return lines.join("\n");
 }
 
@@ -447,7 +447,7 @@ export function compileDramaAssetReferencePrompt(project: Pick<DramaProject, "ti
     // A legacy one-line override must not bypass the fixed asset contract. It
     // remains stored for editing, while generation falls back to the durable
     // profile and recompiles the six public sections below.
-    if (hasDramaAssetPromptQuality(savedSupplierPrompt, kind) && (kind !== "场景" || savedSupplierPrompt.includes("九宫格"))) return formatDramaAssetPrompt(savedSupplierPrompt);
+    if (hasDramaAssetPromptQuality(savedSupplierPrompt, kind) && (kind !== "场景" || (savedSupplierPrompt.includes("全景") && savedSupplierPrompt.includes("高清")))) return formatDramaAssetPrompt(savedSupplierPrompt);
     const styleContract = resolveDramaStyleContract(project);
     const profile = asset.profile;
     const description = kind === "道具" ? sanitizeDramaPropFacts(asset.description) : sanitizeDramaVisualPrompt(asset.description);
@@ -461,7 +461,7 @@ export function compileDramaAssetReferencePrompt(project: Pick<DramaProject, "ti
             : [profile?.consistencyRules, ...(profile?.spatialRules || []), ...(profile?.stateRules || [])],
     );
     const globalStyle = [styleContract.visualDescription, styleContract.artStyle ? `全局画风规格：${styleContract.artStyle}` : "", styleContract.colorScript ? `全局色彩脚本：${styleContract.colorScript}` : ""].filter(Boolean).join("；");
-    const sceneQuality = kind === "场景" ? "建筑透视稳定，墙体、门窗、地面和桌椅等直线结构不弯折；九格中同一物件的比例、材质、位置和光向不漂移，空间细节清晰可读" : "";
+    const sceneQuality = kind === "场景" ? "高清完整单视角全景建立图；建筑透视稳定，墙体、门窗、地面和桌椅等直线结构不弯折；入口、出口、主要陈设、材质、光向和轴线清晰可读，背景细节不使用模糊虚化遮蔽" : "";
     const forbidden = joinAssetPromptConstraints([
         ...(profile?.forbiddenChanges || []).filter((value) => kind !== "场景" || !/(?:拼版|多视角|分格)/u.test(value)),
         kind === "角色" ? DRAMA_CHARACTER_NEGATIVE_RULES : kind === "场景" ? "人物、不同地点、方向标签、文字、水印、logo" : "人物、手部、持有人、人物动作、书写过程、额外主体、拼版、多视角、文字、水印、logo",
@@ -471,7 +471,7 @@ export function compileDramaAssetReferencePrompt(project: Pick<DramaProject, "ti
         kind === "角色"
             ? `${DRAMA_CHARACTER_TURNAROUND_SIZE} 横向，纯白色无缝背景；${DRAMA_CHARACTER_TURNAROUND_LAYOUT}。四个视图同一基线、同一身份、同一头身比，身份特写保持清晰五官，后三个视图全身从头顶、完整头部、躯干、双臂、双手、双腿到鞋靴完整入画。`
             : kind === "场景"
-              ? "1:1 方形九宫格场景空间基准板；同一个无人物场景固定为 3×3 九格，中心格为主视角，外围八格按西北、北、东北、西、东、西南、南、东南八个方向展示同一空间；入口、出口、门窗、主要陈设、地面材质、光源方向和空间轴线在九格中严格一致。"
+              ? `${project.ratio || "9:16"} 画幅，一张高清、完整、无人物、无文字的单视角场景全景建立图；完整呈现入口、出口、门窗、主要陈设、地面材质、光源方向、空间轴线、通道和人物动作所需的支撑面，不生成九宫格、分格或360°贴图。`
               : `${project.ratio || "9:16"} 画幅，单一道具主体完整入画，静置在中性展示台或符合项目风格的桌面上；只展示道具本体与关键材质细节，不出现人物、手部、持有人或人物动作。`;
     const characterStyle = styleContract.source === "custom" ? `项目视觉风格：${styleContract.visualDescription}` : "";
     const characterLightingStyle = [characterStyle, DRAMA_CHARACTER_RENDER_STYLE, DRAMA_CHARACTER_STUDIO_LIGHT_RULES, DRAMA_CHARACTER_SUPPLIER_QUALITY_RULES, colorPalette ? `角色固有色彩：${colorPalette}` : ""].filter(Boolean).join("；");
@@ -497,12 +497,12 @@ export function compileDramaAssetConstraints(project: Pick<DramaProject, "ratio"
         kind === "角色"
             ? `只输出一张完整、独立的 ${DRAMA_CHARACTER_TURNAROUND_SIZE} ${DRAMA_CHARACTER_TURNAROUND_LABEL}，不生成第二张候选图或额外版式。`
             : kind === "场景"
-              ? "只输出一张完整、独立的 1:1 九宫格场景空间基准板；九格属于同一个场景，不生成第二张候选图。"
+              ? `只输出一张完整、独立的 ${project.ratio || "9:16"} 高清单视角场景全景建立图；不生成九宫格、分格、第二地点或第二张候选图。`
               : `只输出一张完整、独立的 ${project.ratio || "9:16"} 设定图，不要拼版、联系表、多视角或分格模块。`,
         kind === "角色"
             ? `角色基准图必须固定为纯白色无缝背景四视图：${DRAMA_CHARACTER_TURNAROUND_LAYOUT}；身份特写与后三个全身视图严格保持同一脸型、五官、发际线、发型、服装、体态、关键识别配件和固有色。只允许这四个视图，不得新增任何人物、四分之三视图、主立绘、表情组、手部或道具拆解、额外角度、边框、网格、说明文字或水印。`
             : kind === "场景"
-              ? "九宫格每格都展示同一无人物场景的真实空间状态：中心格为主视角，外围八格分别为西北、北、东北、西、东、西南、南、东南方向；保持同一空间拓扑、固定物件位置、门窗入口、材质和光色，不得把九格画成九个不同地点。"
+              ? "单张全景图展示同一无人物场景的完整空间状态：保持入口、出口、门窗、固定物件位置、材质、光色、空间拓扑和180度轴线清晰一致，所有背景结构与人物可用支撑面都必须可辨。"
               : "单一道具主体完整可见，结构轮廓和关键材质清晰，静置于符合项目视觉风格的环境或展示台中；只展示道具本体，不出现人物、手部、持有人或人物动作。",
         kind === "角色"
             ? "负面构图词：额外人物、额外视图、四分之三视图、主立绘、表情组、手部特写、道具拆解、场景背景、灰色背景、网格、边框、文字、水印、logo、无头、无脸、缺失头部、裁掉头部、裁脸、画面外人头、后三个全身视图被裁成半身或胸像、身份特写替代全身视图、只画服装。"
@@ -512,7 +512,7 @@ export function compileDramaAssetConstraints(project: Pick<DramaProject, "ratio"
         kind === "角色"
             ? "禁止把中文说明、角色关系表、参数表或海报排版画进图片；四视图只表示同一角色，身份特写只负责五官识别，后三个视图负责全身比例与服装结构，不添加任何文字或其他模块。"
             : kind === "场景"
-              ? "禁止人物、文字、方向标签、边框、水印、logo、海报排版和不同地点；九宫格只表达同一场景的空间方位，不把说明文字画入图片。"
+              ? "禁止人物、文字、方向标签、九宫格、分格、边框、水印、logo、海报排版、不同地点和360°贴图；只输出当前项目画幅内的一张完整单视角场景全景图。"
               : "禁止把中文说明、角色关系表、参数表、海报排版或多张视图画进图片；设定文字只作为生成约束，不是画面内容；禁止人物、手部、持有人、书写、持握和动作过程。",
         `禁止：${forbidden.join("；")}`,
     ]);

@@ -32,6 +32,18 @@ describe("drama production run planning", () => {
         expect(run.steps.find((step) => step.shotId === "shot-three" && step.type === "start_frame")?.referenceShotId).toBeUndefined();
     });
 
+    it("keeps first-last frames independent within the same shot", () => {
+        const project = fixture();
+        project.characters = [];
+        project.episodes[0].shots[0].characterIds = [];
+        const run = buildDramaProductionRun(project, project.episodes[0], { imageModel: "image", videoModel: "video" });
+        const end = run.steps.find((step) => step.shotId === "shot-one" && step.type === "end_frame");
+
+        expect(end?.dependsOn).not.toContain("start-shot-one");
+        expect(end?.dependsOn).toEqual([]);
+        expect(end?.status).toBe("ready");
+    });
+
     it("marks the changed shot and its dependency chain stale without invalidating a scene change", () => {
         const project = fixture();
         const run = buildDramaProductionRun(project, project.episodes[0], { imageModel: "image", videoModel: "video" });

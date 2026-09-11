@@ -5,7 +5,7 @@ import { compileDramaAssetReferencePrompt, DRAMA_CHARACTER_TURNAROUND_SIZE } fro
 import { getDramaAssetMissingItems } from "@/lib/drama-asset-completion";
 import { createDramaAssetGenerationBatch, getDramaAssetGenerationBatch, listActiveDramaAssetGenerationBatches, listDramaAssetGenerationBatches, mutateDramaAssetGenerationBatch } from "@/lib/server/drama-asset-generation-batch-store";
 import { getDramaProjectForUser } from "@/lib/server/drama-project-service";
-import { approvedAssetReference } from "@/lib/drama-asset-baseline";
+import { approvedAssetReference, approvedScenePanoramaReference } from "@/lib/drama-asset-baseline";
 import { completeDramaAsset } from "@/lib/server/drama-asset-completion-service";
 import { fetchInternalApi } from "@/lib/server/internal-origin";
 import { runGenerationTaskRecoveryBatch } from "@/lib/server/generation-task-recovery-service";
@@ -231,7 +231,7 @@ async function submitBatchItem(
                 origin: input.origin,
                 publicOrigin: input.publicOrigin,
                 cookie: authContext,
-                config: item.kind === "characters" ? { ...config, count: "1", size: DRAMA_CHARACTER_TURNAROUND_SIZE } : item.kind === "scenes" ? { ...config, count: "1", size: "1:1" } : config,
+                config: item.kind === "characters" ? { ...config, count: "1", size: DRAMA_CHARACTER_TURNAROUND_SIZE } : item.kind === "scenes" ? { ...config, count: "1", size: project.ratio, quality: "high" } : config,
                 skipReference: true,
                 skipVoice: true,
             });
@@ -250,7 +250,7 @@ async function submitBatchItem(
     }
 
     const asset = project[item.kind].find((candidate) => candidate.id === item.assetId);
-    const primary = asset ? approvedAssetReference(asset) : undefined;
+    const primary = asset ? (item.kind === "scenes" ? approvedScenePanoramaReference(asset) : approvedAssetReference(asset)) : undefined;
     const common = { ...item, planningStatus, voiceStatus, planningError, voiceError };
     if (config.completeMissingOnly === true && primary) return withDramaAssetBatchTerminalStatus(common, "success", { referenceStatus: "primary" as const });
     const references = primary?.url ? [{ id: primary.id, name: primary.label, type: "image/png", dataUrl: primary.url, url: primary.url }] : [];
@@ -260,7 +260,7 @@ async function submitBatchItem(
             method: "POST",
             headers: { "Content-Type": "application/json", ...authHeaders, "X-VOZEB-PRO-Client-Request-Id": `${batch.id}:${item.id}:${item.attempt}` },
             body: JSON.stringify({
-                config: item.kind === "characters" ? { ...config, count: "1", size: DRAMA_CHARACTER_TURNAROUND_SIZE } : item.kind === "scenes" ? { ...config, count: "1", size: "1:1" } : config,
+                config: item.kind === "characters" ? { ...config, count: "1", size: DRAMA_CHARACTER_TURNAROUND_SIZE } : item.kind === "scenes" ? { ...config, count: "1", size: project.ratio, quality: "high" } : config,
                 prompt: compileDramaAssetBatchItemPrompt(project, item),
                 references,
                 source: "drama",

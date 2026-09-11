@@ -196,6 +196,40 @@ describe("drama production preflight", () => {
         expect(preflightDramaProduction(project, project.episodes[0]).issues.some((issue) => issue.code === "REFERENCE_IMAGE_BUDGET")).toBe(false);
     });
 
+    it("blocks a multi-frame shot whose camera plan never changes", () => {
+        const project = fixture();
+        const shot = project.episodes[0].shots[0];
+        shot.storyboardFrameMode = "all_frames";
+        shot.framePlan!.frames = [
+            {
+                id: "f1",
+                sequenceIndex: 1,
+                startSecond: 0,
+                endSecond: 7.5,
+                actionPrompt: "人物抬头并松开肩膀",
+                imagePrompt: "静态关键帧：人物站在门前，手掌离开门闩\n可见状态：门闩已被松开\n可见表演状态：眉心收紧，视线锁定门缝\n景别：中景\n机位与构图：平视正面，人物居中",
+            },
+            {
+                id: "f2",
+                sequenceIndex: 2,
+                startSecond: 7.5,
+                endSecond: 15,
+                actionPrompt: "人物后退半步并回头",
+                imagePrompt: "静态关键帧：人物站在门前，身体后退半步\n可见状态：脚跟离开门槛，门缝露出冷光\n可见表演状态：嘴角压住，视线回望身后\n景别：中景\n机位与构图：平视正面，人物居中",
+            },
+        ];
+
+        const issue = preflightDramaProduction(project, project.episodes[0]).issues.find((item) => item.code === "FRAME_CAMERA_DUPLICATE");
+        expect(issue).toMatchObject({ severity: "blocking", shotId: shot.id });
+    });
+
+    it("blocks a legacy scene board before paid production", () => {
+        const project = fixture();
+        project.scenes[0].sceneReferenceBoard = { layout: "legacy-3x3", referenceId: "scene-ref" };
+
+        expect(preflightDramaProduction(project, project.episodes[0]).issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "LOCATION_ANCHOR", severity: "blocking", assetId: "scene-one" })]));
+    });
+
     it("does not block all-frames production when real frames are still pending inspection", () => {
         const project = fixture();
         const shot = project.episodes[0].shots[0];
@@ -355,7 +389,7 @@ function fixture(): DramaProject {
         defaultVideoMode: "storyboard",
         activeEpisodeId: episode.id,
         characters: [{ id: "character-one", code: "C01", name: "Karin", description: "", activeEpisodeCodes: ["E01"] }],
-        scenes: [{ id: "scene-one", code: "S01", name: "城门", description: "" }],
+        scenes: [{ id: "scene-one", code: "S01", name: "城门", description: "", sceneReferenceBoard: { layout: "panorama", referenceId: "scene-ref" } }],
         props: [{ id: "prop-one", code: "P01", name: "断剑", description: "", profile: { visualIdentity: "断剑", styling: "", colorPalette: "", consistencyRules: "", identityAnchors: ["不对称护手"] } }],
         clues: [],
         episodes: [episode],

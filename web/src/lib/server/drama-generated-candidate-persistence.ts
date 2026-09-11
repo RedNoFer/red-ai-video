@@ -75,7 +75,7 @@ export async function persistDramaGeneratedCandidates(input: CandidatePersistenc
                                 primaryReferenceId: additions[0].id,
                                 referenceImageUrl: additions[0].url,
                                 referenceStorageKey: additions[0].storageKey,
-                                ...(assetKind === "scenes" ? { sceneReferenceBoard: { layout: "3x3" as const, referenceId: additions[0].id } } : {}),
+                                ...(assetKind === "scenes" ? { sceneReferenceBoard: { layout: "panorama" as const, referenceId: additions[0].id } } : {}),
                             }
                           : {}),
                   }

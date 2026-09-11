@@ -187,7 +187,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
             } else if (kind === "characters") {
                 addCharacter(project.id, { ...base, voiceProfile: draft.voiceProfile, references: [] });
             } else if (kind === "scenes") {
-                addScene(project.id, { ...base, references: [], sceneReferenceBoard: { layout: "3x3" } });
+                addScene(project.id, { ...base, references: [], sceneReferenceBoard: { layout: "panorama" } });
             } else if (kind === "props") {
                 addProp(project.id, { ...base, references: [] });
             } else {
@@ -462,7 +462,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                 primaryReferenceId: nextPrimary?.id,
                 referenceImageUrl: nextPrimary?.url,
                 referenceStorageKey: nextPrimary?.storageKey,
-                ...(kind === "scenes" ? { sceneReferenceBoard: { layout: "3x3" as const, referenceId: nextPrimary?.id } } : {}),
+                ...(kind === "scenes" ? { sceneReferenceBoard: { layout: "panorama" as const, referenceId: nextPrimary?.id } } : {}),
             },
             { markShotsStale: asset.primaryReferenceId === referenceId },
         );
@@ -602,7 +602,8 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                         ...config,
                         model: imageModel,
                         imageModel,
-                        size: kind === "characters" ? DRAMA_CHARACTER_TURNAROUND_SIZE : kind === "scenes" ? "1:1" : dramaGenerationSize(currentProject, prompt),
+                        size: kind === "characters" ? DRAMA_CHARACTER_TURNAROUND_SIZE : kind === "scenes" ? currentProject.ratio : dramaGenerationSize(currentProject, prompt),
+                        ...(kind === "scenes" ? { quality: "high" } : {}),
                         count: "1",
                     };
                     await persistGeneratedReference(task, imageConfig, prompt, task.generationStage || "initial", undefined, assetSupplierPrompt);
@@ -634,7 +635,14 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
             const prompt = activeProposal ? compileDramaAssetRefinementPrompt(project, asset, assetKind, activeProposal, refinementPrompt) : supplierPromptOverride.trim() || supplierPrompt;
             const imageModel = config.imageModel || config.imageModels[0] || "";
             if (!imageModel) throw new Error("后台尚未配置可用的图片模型，请先在管理后台配置图片渠道");
-            const imageConfig = { ...config, model: imageModel, imageModel, size: kind === "characters" ? DRAMA_CHARACTER_TURNAROUND_SIZE : kind === "scenes" ? "1:1" : dramaGenerationSize(project, prompt), count: "1" };
+            const imageConfig = {
+                ...config,
+                model: imageModel,
+                imageModel,
+                size: kind === "characters" ? DRAMA_CHARACTER_TURNAROUND_SIZE : kind === "scenes" ? project.ratio : dramaGenerationSize(project, prompt),
+                ...(kind === "scenes" ? { quality: "high" } : {}),
+                count: "1",
+            };
             const referenceForRefinement = referenceOverride || (activeProposal ? primary : undefined);
             const existingReferenceUrl = referenceForRefinement ? serverMediaUrl(referenceForRefinement.storageKey, referenceForRefinement.url) : "";
             const referenceDataUrl = referenceForRefinement && !existingReferenceUrl ? await imageToDataUrl(referenceForRefinement) : "";
@@ -698,7 +706,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                     >
                         {primary?.url ? (
                             sceneBoard?.url ? (
-                                <DramaSceneReferenceBoard url={sceneBoard.url} alt={`${draft.name || definition.title}九宫格场景基准板`} />
+                                <DramaSceneReferenceBoard url={sceneBoard.url} alt={`${draft.name || definition.title}高清场景全景图`} />
                             ) : (
                                 <Image
                                     src={imagePreviewUrl(primary.url, 384)}
@@ -969,9 +977,13 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                     <section className="border-t border-border pt-4">
                         <div className="flex flex-wrap items-start justify-between gap-3">
                             <div>
-                                <h3 className="text-sm font-semibold">{kind === "scenes" ? "九宫格场景基准板候选" : "参考图候选"}</h3>
-                                <p className="mt-1 text-xs leading-5 text-muted-foreground">{kind === "scenes" ? "每张候选都是同一场景的九宫格空间基准板；确认后作为后续镜头的场景锚点。" : "候选图不会进入镜头生成，必须明确确认一张主基准图。"}</p>
-                                {kind === "scenes" && primary && !sceneBoard ? <p className="mt-1 text-xs leading-5 text-amber-700 dark:text-amber-300">当前主图是旧版单图，只能作为临时参考；生成并确认九宫格基准板后才会用于完整方位控制。</p> : null}
+                                <h3 className="text-sm font-semibold">{kind === "scenes" ? "高清场景全景图候选" : "参考图候选"}</h3>
+                                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                                    {kind === "scenes" ? "每张候选都是当前项目画幅的一张高清、无人物、无文字单视角场景全景建立图；确认后作为后续镜头的场景锚点。" : "候选图不会进入镜头生成，必须明确确认一张主基准图。"}
+                                </p>
+                                {kind === "scenes" && asset?.sceneReferenceBoard?.layout === "legacy-3x3" ? (
+                                    <p className="mt-1 text-xs leading-5 text-amber-700 dark:text-amber-300">当前主图是旧版九宫格空间基准图，不能用于生产；请生成并确认一张当前项目画幅的高清场景全景图。</p>
+                                ) : null}
                                 <div className="mt-2 rounded-lg border border-border bg-muted/25 px-3 py-2 text-xs leading-5 text-muted-foreground">
                                     <span className="font-medium text-foreground">审核标准：</span>
                                     与本次生成提示词使用同一套身份锚点、角色白底四视图或场景/道具单主体布局、允许项和禁止项；审核建议不会阻止你选择有效候选。

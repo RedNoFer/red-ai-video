@@ -30,6 +30,10 @@ export function isDramaSceneBoardReference(asset: DramaNamedAsset, reference: Dr
     return asset.sceneReferenceBoard?.referenceId === reference.id || /九宫格/u.test(reference.label) || /九宫格/u.test(reference.compiledPrompt || "");
 }
 
+export function isLegacyDramaSceneReference(asset: DramaNamedAsset) {
+    return asset.sceneReferenceBoard?.layout === "legacy-3x3";
+}
+
 /** Keep malformed historical snapshots from producing duplicate React keys. */
 export function ensureUniqueDramaAssetReferenceIds(references: DramaAssetReference[]): DramaAssetReference[] {
     const used = new Set<string>();

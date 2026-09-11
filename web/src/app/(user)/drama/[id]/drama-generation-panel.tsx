@@ -22,7 +22,7 @@ import {
 import { resolveModelRequestConfig, useEffectiveConfig } from "@/stores/use-config-store";
 import { appendDramaImageReferenceBindings, compileDramaShotExecutionPrompts } from "@/lib/drama-prompt-compiler";
 import { formatPromptFieldLines } from "@/lib/drama-frame-sequence";
-import { approvedAssetReference } from "@/lib/drama-asset-baseline";
+import { approvedAssetReference, approvedScenePanoramaReference } from "@/lib/drama-asset-baseline";
 import { dramaReferenceImageBudget } from "@/lib/drama-production-plan";
 import { activeFrameEvidence, continuityStartEvidence } from "@/lib/drama-continuity-policy";
 import { dramaVideoPromptRunKey, hasActiveDramaVideoPromptRun, useDramaStore } from "../stores/use-drama-store";
@@ -1620,7 +1620,7 @@ function shotReferenceAssets(project: DramaProject, shot: DramaShot): ShotRefere
         ...(project.clues || []).filter((item) => shot.clueIds.includes(item.id)).map((asset) => ({ id: asset.id, label: `线索 · ${asset.name}`, asset })),
     ];
     const fixedReferences = fixedAssets.flatMap(({ id, label, asset }) => {
-        const reference = approvedAssetReference(asset);
+        const reference = asset.id === shot.sceneId ? approvedScenePanoramaReference(asset) : approvedAssetReference(asset);
         return reference?.url ? [{ id, label, url: reference.url, width: reference.width, height: reference.height }] : [];
     });
     const sourceReferences = (project.sourceAssets || []).flatMap((asset) => {

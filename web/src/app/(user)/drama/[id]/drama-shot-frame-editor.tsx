@@ -4,7 +4,7 @@ import { App, Button, Image, Input, InputNumber, Modal, Segmented, Tag } from "a
 import { Check, ImagePlus, LoaderCircle, Maximize2, Plus, RotateCcw, Save, ScanSearch, Sparkles, Trash2, Upload } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { approvedAssetReference } from "@/lib/drama-asset-baseline";
+import { approvedAssetReference, approvedScenePanoramaReference } from "@/lib/drama-asset-baseline";
 import { activeFrameEvidence, continuityStartEvidence, createFrameEvidence, latestFrameEvidence, replaceFrameEvidence } from "@/lib/drama-continuity-policy";
 import { deleteDramaFrameBeat, dramaFrameVisualSubject, formatPromptFieldLines, insertDramaFrameBeat, updateDramaFrameBeat, validateDramaFrameVisualContent } from "@/lib/drama-frame-sequence";
 import { appendDramaImageReferenceBindings, compileDramaFrameSupplierPrompt, resolveDramaFrameScene } from "@/lib/drama-prompt-compiler";
@@ -250,7 +250,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
         if (!frame?.mediaUrl) return;
         modal.confirm({
             title: `确认验收帧 ${beat.sequenceIndex}？`,
-            content: "确认后会使用当前图片并解锁下一帧，不会重新生成图片。请先点击左侧图片查看大图，确认人物、场景和动作连续性可以接受。",
+            content: "确认后会使用当前图片作为本帧结果，不会重新生成图片。同一镜头的其它帧独立生成，不会因为验收本帧而等待或复制本帧。请先点击左侧图片查看大图，确认人物、场景和动作状态可以接受。",
             okText: "确认使用当前图",
             cancelText: "取消",
             onOk: async () => {
@@ -709,8 +709,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                         const frame = frameById.get(beat.id);
                         const rowBusy = deletingFrameId === beat.id || reviewingFrameId === beat.id || submitting === beat.id || uncertainFrameIds.includes(beat.id) || isDramaStoryboardFrameActive(frame);
                         const frameNeedsReview = frame?.status === "needs_review" || frame?.candidateStatus === "needs_review";
-                        const previous = index ? frameById.get(beats[index - 1].id) : undefined;
-                        const canGenerate = index === 0 || Boolean(previous?.mediaUrl && previous.status === "success" && previous.continuityStatus !== "needs_review" && previous.continuityStatus !== "stale");
+                        const canGenerate = true;
                         const candidates = visibleFrameCandidates(frame);
                         return (
                             <div key={beat.id} className="grid min-w-0 gap-3 rounded-md border border-border/80 bg-muted/10 p-2.5 sm:grid-cols-[144px_minmax(0,1fr)]" data-drama-frame-row={beat.id}>
@@ -776,7 +775,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                                                 openPromptPreview({
                                                     title: "帧 " + beat.sequenceIndex + " 图片提示词",
                                                     prompt: plannedFramePrompt(project, episodeId, shot, beat),
-                                                    references: plannedFrameReferences(project, episodeId, shot, beat.sequenceIndex, storedFrames),
+                                                    references: plannedFrameReferences(project, episodeId, shot, beat.sequenceIndex),
                                                     frameId: beat.id,
                                                     visibleSubject: dramaFrameVisualSubject(beat.imagePrompt, beat.actionPrompt, shot.description),
                                                     readOnly: false,
@@ -801,7 +800,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                                                 size="small"
                                                 icon={rowBusy ? <LoaderCircle className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
                                                 disabled={Boolean(submitting) || generationActive || frameNeedsReview || !canGenerate}
-                                                title={frameNeedsReview ? "提交结果待人工核对，请先刷新并核对任务记录" : !canGenerate ? "请先完成并验收上一帧" : undefined}
+                                                title={frameNeedsReview ? "提交结果待人工核对，请先刷新并核对任务记录" : undefined}
                                                 onClick={() => void generateSequence({ frameIds: [beat.id], label: `帧 ${beat.sequenceIndex} 任务` })}
                                             >
                                                 生成
@@ -954,7 +953,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                             openPromptPreview({
                                 title: "起始帧图片提示词",
                                 prompt: plannedLegacyPrompt(project, episodeId, shot, "start"),
-                                references: startPromptEvidence?.generationReferences || plannedFrameReferences(project, episodeId, shot, 1, storedFrames),
+                                references: startPromptEvidence?.generationReferences || plannedFrameReferences(project, episodeId, shot, 1),
                                 phase: "start",
                                 readOnly: false,
                             })
@@ -973,7 +972,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                                 openPromptPreview({
                                     title: "结束帧图片提示词",
                                     prompt: plannedLegacyPrompt(project, episodeId, shot, "end"),
-                                    references: endPromptEvidence?.generationReferences || plannedFrameReferences(project, episodeId, shot, "end", storedFrames),
+                                    references: endPromptEvidence?.generationReferences || plannedFrameReferences(project, episodeId, shot, "end"),
                                     phase: "end",
                                     readOnly: false,
                                 })
@@ -1347,35 +1346,11 @@ function latestPromptEvidence(shot: DramaShot, role: "storyboard_start" | "story
     return [...(shot.frameEvidence || [])].reverse().find((frame) => frame.role === role && frame.generationPrompt);
 }
 
-function plannedFrameReferences(project: DramaProject, episodeId: string, shot: DramaShot, frame: number | "end", frames: DramaStoryboardFrame[]): DramaImageReferenceBinding[] {
+function plannedFrameReferences(project: DramaProject, episodeId: string, shot: DramaShot, frame: number | "end"): DramaImageReferenceBinding[] {
     const episode = project.episodes.find((item) => item.id === episodeId);
     if (!episode) return [];
     const references: DramaImageReferenceBinding[] = [];
-    if (frame === "end") {
-        const start = frames.find((item) => item.sequenceIndex === 1 && item.mediaUrl && item.status === "success");
-        if (start?.mediaUrl)
-            references.push({
-                id: "continuity-start",
-                label: "本镜头已生成起始帧",
-                binding: "作为结束帧连续性起点，保持人物姿态、服装、道具状态、场景空间、构图、光向和轴线",
-                url: start.mediaUrl,
-                remoteUrl: start.remoteUrl,
-                width: start.width,
-                height: start.height,
-            });
-    } else if (frame > 1) {
-        const previous = frames.find((item) => item.sequenceIndex === frame - 1 && item.mediaUrl && item.status === "success");
-        if (previous?.mediaUrl)
-            references.push({
-                id: "continuity-previous",
-                label: "上一分镜帧 P" + String(shot.order).padStart(2, "0") + "-F" + String(frame - 1).padStart(2, "0"),
-                binding: "仅锁定身份、场景空间、光向和轴线；当前帧必须替换上一帧的姿态、视线、手部/道具状态和环境结果，不得复制上一帧静态画面",
-                url: previous.mediaUrl,
-                remoteUrl: previous.remoteUrl,
-                width: previous.width,
-                height: previous.height,
-            });
-    } else {
+    if (frame === 1) {
         const incoming = episode.continuityEdges?.find((edge) => edge.toShotId === shot.id && edge.inheritActualEndFrame);
         const previous = incoming ? episode.shots.find((item) => item.id === incoming.fromShotId) : undefined;
         const tail = previous ? continuityStartEvidence(previous) : undefined;
@@ -1403,7 +1378,7 @@ function plannedFrameReferences(project: DramaProject, episodeId: string, shot: 
         const clue = project.clues.find((item) => item.id === id);
         const source = project.sourceAssets?.find((item) => item.id === id && item.type === "image");
         const asset = character || scene || prop || clue;
-        const reference = asset ? approvedAssetReference(asset) : undefined;
+        const reference = asset ? (scene ? approvedScenePanoramaReference(asset) : approvedAssetReference(asset)) : undefined;
         const url = reference?.url || source?.serverUrl || source?.remoteUrl;
         if (!url) continue;
         const category = character ? "角色" : scene ? "场景" : prop ? "道具" : clue ? "线索" : "来源素材";

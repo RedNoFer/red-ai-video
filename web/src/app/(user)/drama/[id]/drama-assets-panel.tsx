@@ -14,7 +14,7 @@ import { DRAMA_ASSET_DEFINITIONS, type DramaAssetKind } from "./drama-asset-defi
 import { DramaAssetEditorDrawer } from "./drama-asset-editor-drawer";
 import { DramaAssetGenerationBatchPanel } from "./drama-asset-generation-batch-panel";
 import { downloadDramaAssetBundle } from "./drama-asset-export";
-import { dramaAssetReferences, dramaSceneBoardReference } from "./drama-asset-reference-utils";
+import { dramaAssetReferences, dramaSceneBoardReference, isLegacyDramaSceneReference } from "./drama-asset-reference-utils";
 import { DramaSceneReferenceBoard } from "./drama-scene-reference-board";
 import { completeDramaAsset, createDramaAssetGenerationBatch } from "@/services/api/drama-projects";
 import { useEffectiveConfig } from "@/stores/use-config-store";
@@ -229,7 +229,7 @@ function DramaAssetCard({ kind, row, onEdit, onComplete, onDelete, completing }:
                 <div className="grid aspect-[16/10] w-full place-items-center overflow-hidden bg-muted/55">
                     {primary?.url ? (
                         sceneBoard?.url ? (
-                            <DramaSceneReferenceBoard url={sceneBoard.url} alt={`${asset.name}九宫格场景基准板`} />
+                            <DramaSceneReferenceBoard url={sceneBoard.url} alt={`${asset.name}高清场景全景图`} />
                         ) : (
                             <Image
                                 src={imagePreviewUrl(primary.url, 480)}
@@ -251,7 +251,9 @@ function DramaAssetCard({ kind, row, onEdit, onComplete, onDelete, completing }:
                         <h3 className="min-w-0 flex-1 truncate text-sm font-semibold" title={asset.name}>
                             {asset.name}
                         </h3>
-                        {!primary || (kind === "scenes" && !sceneBoard) ? <span className="shrink-0 text-[10px] font-medium text-amber-600 dark:text-amber-300">{candidateCount ? "待审核" : kind === "scenes" ? "待九宫格" : "缺基准"}</span> : null}
+                        {!primary || (kind === "scenes" && (!sceneBoard || isLegacyDramaSceneReference(asset))) ? (
+                            <span className="shrink-0 text-[10px] font-medium text-amber-600 dark:text-amber-300">{candidateCount ? "待审核" : kind === "scenes" ? "需重生全景" : "缺基准"}</span>
+                        ) : null}
                     </div>
                     <p className="mt-1 truncate text-xs leading-4 text-muted-foreground" title={asset.description || undefined}>
                         {asset.description || `未填写${definition.label}用途`}

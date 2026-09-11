@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 import { nanoid } from "nanoid";
 
-import { approvedAssetReference, hasApprovedAssetReference } from "@/lib/drama-asset-baseline";
+import { approvedAssetReference, approvedScenePanoramaReference, hasApprovedAssetReference, hasApprovedScenePanoramaReference } from "@/lib/drama-asset-baseline";
 import { continuityStartEvidence, latestFrameEvidence } from "@/lib/drama-continuity-policy";
 import { planDramaVideoSegments } from "@/lib/drama-frame-sequence";
 import { dramaReferenceImageBudget } from "@/lib/drama-production-plan";
@@ -71,7 +71,7 @@ export function buildDramaProductionRun(project: DramaProject, episode: DramaEpi
                     sequenceIndex: beat.sequenceIndex,
                     startSecond: beat.startSecond,
                     endSecond: beat.endSecond,
-                    dependsOn: beatIndex === 0 ? [...assetDependencies, ...continuityDependencies] : [`frame-${shot.id}-${allBeats[beatIndex - 1].id}`],
+                    dependsOn: [...assetDependencies, ...(beatIndex === 0 ? continuityDependencies : [])],
                     status: validFrame(stored) ? "success" : "blocked",
                     outputUrls: validFrame(stored) ? [stored!.mediaUrl!] : undefined,
                     outputRemoteUrls: validFrame(stored) && stored!.remoteUrl ? [stored!.remoteUrl] : undefined,
@@ -105,7 +105,15 @@ export function buildDramaProductionRun(project: DramaProject, episode: DramaEpi
                 if (shot.storyboardFrameMode === "first_last") {
                     const endId = `end-${shot.id}`;
                     frameStepIds.push(endId);
-                    steps.push({ id: endId, shotId: shot.id, type: "end_frame", dependsOn: [startId], status: end ? "success" : "blocked", outputUrls: end ? [end.mediaUrl] : undefined, outputRemoteUrls: end?.remoteUrl ? [end.remoteUrl] : undefined });
+                    steps.push({
+                        id: endId,
+                        shotId: shot.id,
+                        type: "end_frame",
+                        dependsOn: [...assetDependencies],
+                        status: end ? "success" : assetDependencies.length ? "blocked" : "ready",
+                        outputUrls: end ? [end.mediaUrl] : undefined,
+                        outputRemoteUrls: end?.remoteUrl ? [end.remoteUrl] : undefined,
+                    });
                 }
             }
             videoSegments = durationSegments(shot.duration, parameters.maxVideoSeconds);
@@ -260,14 +268,25 @@ function buildVideoReferenceBindings(
     for (const assetId of assetIds) {
         const asset = [...project.characters, ...project.scenes, ...project.props, ...project.clues].find((item) => item.id === assetId);
         const source = project.sourceAssets?.find((item) => item.id === assetId && item.type === "image");
-        const reference = asset ? (hasApprovedAssetReference(asset) ? assetReference(asset) : undefined) : source?.serverUrl || source?.remoteUrl ? { url: source.serverUrl || source.remoteUrl!, remoteUrl: source.remoteUrl } : undefined;
+        const isScene = assetId === shot.sceneId;
+        const reference = asset
+            ? isScene
+                ? hasApprovedScenePanoramaReference(asset)
+                    ? assetReference(asset, true)
+                    : undefined
+                : hasApprovedAssetReference(asset)
+                  ? assetReference(asset)
+                  : undefined
+            : source?.serverUrl || source?.remoteUrl
+              ? { url: source.serverUrl || source.remoteUrl!, remoteUrl: source.remoteUrl }
+              : undefined;
         if (reference?.url) assetBindings.push({ alias: `@图片${bindings.length + assetBindings.length + 1}`, role: roleFor(assetId), purpose: purposeFor(assetId), sourceId: assetId, url: reference.url, remoteUrl: reference.remoteUrl });
     }
     return [...bindings, ...assetBindings];
 }
 
-function assetReference(asset: NonNullable<DramaProject["characters"]>[number]) {
-    const reference = approvedAssetReference(asset);
+function assetReference(asset: NonNullable<DramaProject["characters"]>[number], scene = false) {
+    const reference = scene ? approvedScenePanoramaReference(asset) : approvedAssetReference(asset);
     return reference ? { url: reference.url, remoteUrl: reference.remoteUrl } : undefined;
 }
 

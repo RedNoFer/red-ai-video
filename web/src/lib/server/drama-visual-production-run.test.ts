@@ -13,7 +13,7 @@ describe("drama director visual plan", () => {
             { id: "asset-character-one", status: "ready", dependsOn: [] },
             { id: "asset-scene-one", status: "success", dependsOn: [] },
             { id: "start-shot-one", status: "blocked", dependsOn: ["asset-scene-one", "asset-character-one"] },
-            { id: "end-shot-one", status: "blocked", dependsOn: ["start-shot-one"] },
+            { id: "end-shot-one", status: "blocked", dependsOn: ["asset-scene-one", "asset-character-one"] },
         ]);
     });
 
@@ -160,7 +160,8 @@ describe("drama director visual plan", () => {
             { id: "frame-shot-one-f1", type: "keyframe", status: "blocked" },
             { id: "frame-shot-one-f2", type: "keyframe", status: "blocked" },
         ]);
-        expect(frames[1].dependsOn).toEqual(["frame-shot-one-f1"]);
+        expect(frames[1].dependsOn).toEqual(["asset-scene-one", "asset-character-one"]);
+        expect(frames[1].referenceImageUrls).toBeUndefined();
         expect(frames[0].prompt).not.toMatch(/P01-F01|0-2s/u);
         expect(frames[0].prompt).toContain("静态关键帧：");
         expect(frames[1].prompt).toContain("静态关键帧：两人在雨夜相遇");
@@ -223,7 +224,7 @@ describe("drama director visual plan", () => {
         expect(frame.dependsOn).toContain("asset-scene-carriage");
     });
 
-    it("injects the previous generated frame when unlocking the next beat", () => {
+    it("keeps later beats independent when unlocking the next beat", () => {
         const project = fixture();
         project.characters[0].references = [{ id: "approved", url: "/api/character.png", source: "generated", status: "approved", label: "角色", createdAt: new Date(0).toISOString() }];
         project.characters[0].primaryReferenceId = "approved";
@@ -243,7 +244,7 @@ describe("drama director visual plan", () => {
             confirmedAt: new Date().toISOString(),
             steps: run.steps.map((step) => (step.id === first.id ? { ...step, status: "success" as const, outputUrls: ["/api/f1.png"], outputRemoteUrls: ["https://cdn.example/f1.png"] } : step)),
         });
-        expect(ready.steps.find((step) => step.frameId === "f2")).toMatchObject({ status: "ready", referenceImageUrls: ["/api/f1.png"], referenceImageRemoteUrls: ["https://cdn.example/f1.png"] });
+        expect(ready.steps.find((step) => step.frameId === "f2")).toMatchObject({ status: "ready", referenceImageUrls: undefined, referenceImageRemoteUrls: undefined });
     });
 
     it("requires a later keyframe to show a new visible state while preserving continuity", () => {
@@ -273,10 +274,10 @@ describe("drama director visual plan", () => {
 
         expect(prompt).toContain("必须呈现当前帧提示词中写明的新可见状态");
         expect(prompt).toContain("当前帧变化优先级最高");
-        expect(prompt).toContain("若主体姿态、视线和手部仍与上一帧相同则视为生成失败");
-        expect(prompt).toContain("上一帧顺序锚点是结构连续性依据");
-        expect(prompt).toContain("不得直接复制上一帧的静态构图、姿态或动作结果");
-        expect(prompt).toContain("不得为了贴合参考图改成近景裁切");
+        expect(prompt).toContain("本帧独立使用固定资产锚点生成，不引用同镜上一帧图片");
+        expect(prompt).not.toContain("上一帧顺序锚点是结构连续性依据");
+        expect(prompt).not.toContain("不得直接复制上一帧的静态构图、姿态或动作结果");
+        expect(prompt).not.toContain("不得为了贴合参考图改成近景裁切");
     });
 
     it("does not unlock an unselected later frame after a single-frame request completes", () => {
@@ -325,7 +326,7 @@ describe("drama director visual plan", () => {
         expect(unlocked.steps.find((step) => step.frameId === "f2")?.status).toBe("ready");
     });
 
-    it("uses the generated start frame as the end-frame continuity reference", () => {
+    it("generates the end frame independently from the start frame", () => {
         const project = fixture();
         project.characters[0].references = [{ id: "approved", url: "/api/character.png", source: "generated", status: "approved", label: "角色", createdAt: new Date(0).toISOString() }];
         project.characters[0].primaryReferenceId = "approved";
@@ -334,7 +335,9 @@ describe("drama director visual plan", () => {
         const run = buildDramaVisualProductionRun(project, project.episodes[0], { imageModel: "image-pro", frameType: "end_frame" });
         const ready = unlockDramaVisualSteps({ ...run, confirmedAt: new Date().toISOString() });
 
-        expect(ready.steps.find((step) => step.type === "end_frame")).toMatchObject({ status: "ready", referenceImageUrls: ["/api/start.png"] });
+        const end = ready.steps.find((step) => step.type === "end_frame");
+        expect(end?.status).toBe("ready");
+        expect(end?.referenceImageUrls).toBeUndefined();
     });
 
     it("regenerates an explicitly selected valid frame without submitting later frames", () => {
@@ -472,6 +475,7 @@ function fixture(): DramaProject {
                 description: "夜晚",
                 references: [{ id: "rain", url: "/api/reference-assets/rain.png", source: "library", status: "approved", label: "基准", createdAt: "2026-01-01T00:00:00.000Z" }],
                 primaryReferenceId: "rain",
+                sceneReferenceBoard: { layout: "panorama", referenceId: "rain" },
             },
         ],
         props: [],

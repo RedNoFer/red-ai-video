@@ -153,7 +153,7 @@ export async function GET(request: Request, context: Context) {
                                                 primaryReferenceId: candidateReferenceId,
                                                 referenceImageUrl: storedMedia.url,
                                                 referenceStorageKey: storedMedia.storageKey,
-                                                ...(item.kind === "scenes" ? { sceneReferenceBoard: { layout: "3x3" as const, referenceId: candidateReferenceId } } : {}),
+                                                ...(item.kind === "scenes" ? { sceneReferenceBoard: { layout: "panorama" as const, referenceId: candidateReferenceId } } : {}),
                                             }
                                           : {}),
                                   }

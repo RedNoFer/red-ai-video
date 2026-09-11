@@ -119,8 +119,8 @@ describe("drama frame sequence", () => {
 
         expect(upgradeDramaFrameImagePrompt(prompt, "建立三人关系", { ...context, sequenceIndex: 1 })).toContain("关系建立构图");
         expect(upgradeDramaFrameImagePrompt(prompt, "抬眼看向纳兰", { ...context, sequenceIndex: 2 })).toContain("对话反应构图");
-        expect(upgradeDramaFrameImagePrompt(prompt, "按住茶盏", { ...context, sequenceIndex: 3 })).toContain("动作细节构图");
-        expect(upgradeDramaFrameImagePrompt(prompt, "停在新的终点", { ...context, sequenceIndex: 4 })).toContain("结果构图");
+        expect(upgradeDramaFrameImagePrompt(prompt, "按住茶盏", { ...context, sequenceIndex: 3 })).toContain("观察构图");
+        expect(upgradeDramaFrameImagePrompt(prompt, "停在新的终点", { ...context, sequenceIndex: 4 })).toContain("反应构图");
     });
 
     it("rejects generic performance labels that hide the frame's key point", () => {

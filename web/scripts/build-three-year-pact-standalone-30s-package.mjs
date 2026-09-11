@@ -602,6 +602,7 @@ function asset(code, name, description, styling, consistencyRules) {
         code,
         name,
         description,
+        ...(code.startsWith("S") ? { sceneReferenceBoard: { layout: "panorama" } } : {}),
         profile: {
             visualIdentity: description,
             styling,
@@ -667,12 +668,21 @@ function round(value) {
 }
 
 function buildStaticPrompt(item, shotData, sequenceIndex, frameCount) {
+    const cameraPlans = [
+        ["中远景", "平视", "主体、关键道具与背景结构同框，前景由长桌边缘形成具体框景"],
+        ["中景", "侧前方平视", "主体位于画面右侧，前景保留门框或桌沿，视线指向冲突对象"],
+        ["中景", "略高机位", "从桌面上方观察人物左右关系，桌面受力与视线落点同框"],
+        ["中近景", "过肩平视", "前景保留对手肩线，主体面部、手部与道具接触结果清晰"],
+        ["中近景", "斜侧方平视", "主体肩线转向目标，动作结果与背景通道形成纵深"],
+        ["中远景", "低机位", "主体重心和道具结果清晰，北侧首位与南门纵深仍可辨"],
+    ];
+    const [shotSize, cameraAngle, composition] = cameraPlans[(sequenceIndex - 1) % cameraPlans.length];
     return [
         `静态关键帧：${item.visible}`,
         `可见状态：${item.visible}`,
         `可见表演状态：${item.performance}`,
-        `景别：${shotData.shotSize}`,
-        `机位与构图：${shotData.cameraAngle}；${shotData.composition}`,
+        `景别：${shotSize}`,
+        `机位与构图：${cameraAngle}；${composition}`,
         `站位与视线：${shotData.characterBlocking}；当前视线落在${shotData.gazeDirection}；身体由青砖地面、桌案或椅面提供真实支撑。`,
         `三层空间：前景为长桌边缘、纸张或门框形成的实际遮挡；中景承载人物与道具的接触关系；背景保留北侧首位、黛青墙面和南门纵深。`,
         `光色与风格：${shotData.lighting}；${shotData.colorPalette}；${visualDirection}；本帧为第${sequenceIndex}/${frameCount}个可见状态节点。`,
@@ -686,15 +696,14 @@ function buildFrames(definition, shotData, shotCode) {
     return definition.frames.map((item, index) => {
         const startSecond = round(index * step);
         const endSecond = round((index + 1) * step);
-        const previousVisible = index === 0 ? "本镜头起始状态" : definition.frames[index - 1].visible;
         return {
             id: `${shotCode}-F${String(index + 1).padStart(2, "0")}`,
             sequenceIndex: index + 1,
             startSecond,
             endSecond,
-            startPrompt: `${previousVisible}；从该已成立状态进入本节点。`,
+            startPrompt: index === 0 ? "本镜入口状态已在镜头开始前成立。" : "本镜上一动作节点的可见结果已成立，进入当前动作节点。",
             actionPrompt: item.visible,
-            transitionPrompt: index === 0 ? "起点状态在镜头开始前已经成立。" : `承接上一帧已经成立的可见结果：${previousVisible}`,
+            transitionPrompt: index === 0 ? "起点状态在镜头开始前已经成立。" : "承接本镜既定动作状态的可见结果；当前帧独立使用固定资产锚点生成，不引用同镜上一帧图片。",
             endPrompt: item.visible,
             imagePrompt: buildStaticPrompt(item, shotData, index + 1, frameCount),
         };
@@ -770,7 +779,7 @@ function entity(assetId, position, gaze, pose, expression, action) {
     return { assetId, position, gaze, pose, expression, action };
 }
 
-function createShot(definition, order, previousCode) {
+function createShot(definition, order, previousCode, previousStorySceneCode) {
     const timeStart = order * 30;
     const shotCode = `SH${String(order + 1).padStart(2, "0")}`;
     const common = {
@@ -783,17 +792,18 @@ function createShot(definition, order, previousCode) {
         actionEnd: definition.frames.at(-1).visible,
         screenDirection: "左/西与右/东关系固定，萧炎向南门移动时保持由大厅内向南的屏幕方向",
         axisRule: "纳兰嫣然左/西、萧炎右/东、萧战北侧首位；所有反打保持180度轴线，不从南门反向切入",
-        continuityNotes: "继承角色身份、服装层次、道具材质、南门主光和大厅空间拓扑；下一镜只使用本镜当前视频版本经人工验收的实际尾帧作为连续性图片依据。",
+        continuityNotes: "继承角色身份、服装层次、道具材质、南门主光和大厅空间拓扑；只有跨故事段的下一镜第一帧，才使用本镜当前视频版本经人工验收的实际尾帧作为连续性图片依据。",
     };
     const referenceManifest = [];
-    if (previousCode) referenceManifest.push({ alias: "@图片1", role: "previous_actual_tail", purpose: "上一镜当前视频版本经人工验收的实际尾帧，仅用于锁定本镜入口状态", shotId: previousCode });
+    const inheritPreviousTail = Boolean(previousCode && previousStorySceneCode && previousStorySceneCode !== definition.storySceneCode);
+    if (inheritPreviousTail) referenceManifest.push({ alias: "@图片1", role: "previous_actual_tail", purpose: "上一镜当前视频版本经人工验收的实际尾帧，仅用于锁定本镜入口状态", shotId: previousCode });
     let aliasIndex = referenceManifest.length + 1;
     for (const code of definition.characterCodes) {
         referenceManifest.push({ alias: `@图片${aliasIndex++}`, role: "character_anchor", purpose: `锁定${assetName(code)}的身份、脸部、服装和当前状态`, assetId: code });
     }
     referenceManifest.push({ alias: `@图片${aliasIndex++}`, role: "scene_anchor", purpose: "锁定萧家议事大厅的首位、桌案、南门光向、通道和180度轴线", assetId: "S01" });
     for (const code of definition.propCodes) referenceManifest.push({ alias: `@图片${aliasIndex++}`, role: "prop_anchor", purpose: `锁定${assetName(code)}的形状、材质和持有人关系`, assetId: code });
-    const referenceCount = { min: referenceManifest.length, max: Math.min(9, referenceManifest.length) };
+    const referenceCount = { min: referenceManifest.length, max: 30 };
     common.globalSetting = "萧家议事大厅；中央长桌与北侧首位固定，南门白日暖光进入室内，角色身份、服装、道具材质和180度轴线不漂移；画面采用东方玄幻半写实3D国漫电影质感。";
     common.environmentMotif = definition.environmentMotif || "门外风声与室内短混响形成压力；桌面、衣袖、茶水、宣纸或血印承担可见节拍。";
     common.lighting = definition.lighting || "南门暖金侧逆光沿角色肩线与发丝进入，室内清冷青白反射保留面部和手部细节";
@@ -814,7 +824,7 @@ function createShot(definition, order, previousCode) {
     const frames = buildFrames(definition, common, shotCode);
     const utterances = timedUtterances(definition.utterances, shotCode);
     const framePlan = {
-        start: { source: previousCode ? "previous_accepted_actual_tail" : "independent" },
+        start: { source: inheritPreviousTail ? "previous_accepted_actual_tail" : "independent" },
         end: { required: true },
         frames,
         referenceManifest,
@@ -869,7 +879,7 @@ function createShot(definition, order, previousCode) {
         lens: definition.lens,
         lighting: common.lighting,
         colorPalette: common.colorPalette,
-        transitionIn: order === 0 ? "独立建立" : previousCode && definition.storySceneCode !== "SC04" ? "连续动作" : "承接上一镜出口状态",
+        transitionIn: order === 0 ? "独立建立" : inheritPreviousTail ? "承接上一镜出口状态" : "同镜头组内独立建立当前动作节点",
         transitionOut: definition.transitionOut,
         performanceNotes: definition.narration,
         sound: {
@@ -1109,12 +1119,12 @@ function buildArchive(episode, sourceText) {
         section(
             "SEC12",
             "十二、资产映射与执行顺序",
-            `资产映射：C01-C03 为角色一致性资产；S01 为唯一场景锚点；P01-P04 为本章实际出镜道具。每个镜头的 referenceManifest 只绑定本镜声明的角色、场景、道具；SH02 起使用上一镜当前视频版本经人工验收的实际尾帧作为唯一连续性图片依据。\n\n生成顺序：\n1. 生成并人工确认 C01-C03 角色固定资产。\n2. 生成并人工确认 S01 萧家议事大厅空间锚点，锁定南门光向和180度轴线。\n3. 生成并人工确认 P01-P04 道具基准图，尤其是宣纸、血印、短剑和茶盏受力关系。\n4. 依次生成 SH01-SH13 的逐帧图片；每镜先验收本帧可见状态，再生成30秒视频。\n5. 每镜视频完成后提取实际首尾帧；只有人工验收当前视频版本实际尾帧，才解锁下一镜。\n6. 最后进行对白口型、动作因果、材质连续性、光色一致性和最终音画 QC。\n\n镜头范围：${allShotCodes.join("、")}。`,
+            `资产映射：C01-C03 为角色一致性资产；S01 为唯一高清单张场景全景锚点；P01-P04 为本章实际出镜道具。每个镜头的 referenceManifest 只绑定本镜声明的角色、场景、道具；同镜头各帧独立生成，只有跨故事段镜头的第一帧使用上一镜当前视频版本经人工验收的实际尾帧。\n\n生成顺序：\n1. 生成并人工确认 C01-C03 角色固定资产。\n2. 生成并人工确认 S01 当前项目画幅的高清单视角场景全景图，锁定南门光向和180度轴线。\n3. 生成并人工确认 P01-P04 道具基准图，尤其是宣纸、血印、短剑和茶盏受力关系。\n4. 依次独立生成 SH01-SH13 的逐帧图片；相邻帧改变景别、机位或构图，并先验收本帧可见状态，再生成30秒视频。\n5. 只有跨故事段时，上一镜视频完成并经人工验收实际尾帧后，才解锁下一镜第一帧；同故事段不等待上一帧图片。\n6. 最后进行对白口型、动作因果、材质连续性、光色一致性和最终音画 QC。\n\n镜头范围：${allShotCodes.join("、")}。`,
         ),
         section(
             "SEC13",
             "十三、QC 报告",
-            `结构 QC：13 章固定章节齐全，格式为 vozeb-drama-production-package-v1；本包为全新独立包，不引用旧制作包的规范对象、资产 ID 或镜头数据。\n导演 QC：每镜具备唯一戏剧职责、真实空间支撑、受控180度轴线、单一主运镜、具体光源方向、前景/中景/背景纵深和可见出口状态。\n对白 QC：所有对白逐句记录 startSecond/endSecond、前后停顿、情绪语速和可复核字速；对白按约5字/秒核算，超过镜头容量时生成前置提醒，不用快嘴硬塞。\n帧 QC：每镜 ${shots.map((shot) => `${shot.code}=${shot.framePlan.frames.length}帧`).join("，")}；每帧从0秒无空白、无重叠覆盖30秒，并用九段静态帧骨架写出不同的可见姿态、视线、手部、道具或环境结果。\n连续性 QC：SH01独立起始；SH02-SH12均声明 previous_accepted_actual_tail；实际生产前必须完成上一镜视频版本尾帧人工验收。\n风险提醒：附件只提供小说片段，角色基准图、场景基准图和声音资产尚未生成；正式供应商生产前需完成资产确认、上游模型能力确认和最终口型/音画验收。`,
+            `结构 QC：13 章固定章节齐全，格式为 vozeb-drama-production-package-v1；本包为全新独立包，不引用旧制作包的规范对象、资产 ID 或镜头数据。\n导演 QC：每镜具备唯一戏剧职责、真实空间支撑、受控180度轴线、单一主运镜、具体光源方向、前景/中景/背景纵深和可见出口状态。\n对白 QC：所有对白逐句记录 startSecond/endSecond、前后停顿、情绪语速和可复核字速；对白按约5字/秒核算，超过镜头容量时生成前置提醒，不用快嘴硬塞。\n帧 QC：每镜 ${shots.map((shot) => `${shot.code}=${shot.framePlan.frames.length}帧`).join("，")}；每帧从0秒无空白、无重叠覆盖30秒，并用九段静态帧骨架写出不同的可见姿态、视线、手部、道具或环境结果和摄影视角。\n连续性 QC：同镜头帧只使用固定资产锚点；仅 SC01→SC02、SC02→SC03、SC03→SC04 的跨故事段入口声明 previous_accepted_actual_tail，并须在实际生产前完成上一镜视频版本尾帧人工验收。\n风险提醒：附件只提供小说片段，角色基准图、高清场景全景图和声音资产尚未生成；正式供应商生产前需完成资产确认、上游模型能力确认和最终口型/音画验收。`,
         ),
     ];
     return {
@@ -1177,11 +1187,13 @@ function validate(value) {
         if (!shot.imagePrompt.includes("静态关键帧：") || !shot.imagePrompt.includes("负面约束：")) throw new Error(`${shot.code} 静态帧骨架不完整`);
         if (/主体的眉眼|动作展开|关键变化|结果状态|入口构图已建立/u.test(shot.imagePrompt)) throw new Error(`${shot.code} 包含模板化帧文案`);
         if (/(?:运镜|时间段|对白|声音|口型)/u.test(shot.imagePrompt)) throw new Error(`${shot.code} imagePrompt 混入视频字段`);
+        const cameraSignatures = shot.framePlan.frames.map((frameItem) => `${frameItem.imagePrompt.match(/景别：([^\n]+)/u)?.[1] || ""}|${frameItem.imagePrompt.match(/机位与构图：([^\n]+)/u)?.[1] || ""}`);
+        if (cameraSignatures.length > 1 && cameraSignatures.every(Boolean) && new Set(cameraSignatures).size === 1) throw new Error(`${shot.code} 多帧镜头不能所有帧使用相同景别、机位与构图`);
         if (!shot.videoPrompt.includes("起点：") || !shot.videoPrompt.includes("动作与触发：") || !shot.videoPrompt.includes("可见衔接：") || !shot.videoPrompt.includes("终点：")) throw new Error(`${shot.code} videoPrompt 时间段字段不完整`);
     }
 }
 
-const shots = shotDefinitions.map((definition, index) => createShot(definition, index, index ? `SH${String(index).padStart(2, "0")}` : undefined));
+const shots = shotDefinitions.map((definition, index) => createShot(definition, index, index ? `SH${String(index).padStart(2, "0")}` : undefined, index ? shotDefinitions[index - 1].storySceneCode : undefined));
 updateStateDetails(shots);
 for (const shot of shots) {
     const frames = shot.framePlan.frames;
@@ -1219,12 +1231,12 @@ const episode = {
         fromShotCode: shots[index].code,
         toShotCode: shot.code,
         transition: shot.storySceneCode === shots[index].storySceneCode ? "continuous" : "match_cut",
-        inheritActualEndFrame: true,
+        inheritActualEndFrame: shot.storySceneCode !== shots[index].storySceneCode,
         carryCharacterIds: shot.characterCodes,
         carryPropIds: shot.propCodes,
         carryEnvironment: true,
         carryAxis: true,
-        notes: "下一镜只使用上一镜当前视频版本经人工验收的实际尾帧，不复制上一镜姿态或手部结果。",
+        notes: shot.storySceneCode !== shots[index].storySceneCode ? "跨故事段时，下一镜第一帧使用上一镜当前视频版本经人工验收的实际尾帧；同故事段内关键帧独立生成。" : "同故事段内不引用上一帧图片，各帧仅使用固定资产锚点。",
     })),
 };
 

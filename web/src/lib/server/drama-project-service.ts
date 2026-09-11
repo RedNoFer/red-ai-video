@@ -42,7 +42,7 @@ import type {
 } from "@/lib/drama-project-contract";
 import { dramaRichContentToPlainText, normalizeDramaScriptRichContent } from "@/lib/drama-script-rich-content";
 import { appendDramaImageReferenceBindings, dramaAssetPromptFields, hasDramaAssetPromptQuality, stripDramaReferenceBindingSections } from "@/lib/drama-prompt-compiler";
-import { approvedAssetReference } from "@/lib/drama-asset-baseline";
+import { approvedAssetReference, approvedScenePanoramaReference } from "@/lib/drama-asset-baseline";
 import { createFrameEvidence, decideActualEndFrame, invalidateFrameEvidence, replaceFrameEvidence, supersedeFrameEvidence } from "@/lib/drama-continuity-policy";
 import { DRAMA_STYLE_NAME, normalizeDramaStyleName, resolveDramaStyleContract } from "@/lib/drama-style";
 import { normalizeDramaImageSize } from "@/lib/drama-image-size";
@@ -1093,7 +1093,7 @@ export async function approveDramaAssetReferenceForUser(userId: string, id: stri
                       primaryReferenceId: selected.id,
                       referenceImageUrl: selected.url,
                       referenceStorageKey: selected.storageKey,
-                      ...(kind === "scenes" ? { sceneReferenceBoard: { layout: "3x3" as const, referenceId: selected.id } } : {}),
+                      ...(kind === "scenes" ? { sceneReferenceBoard: { layout: "panorama" as const, referenceId: selected.id } } : {}),
                   }
                 : item,
         ),
@@ -2014,7 +2014,7 @@ async function dispatchReadyDramaVisualSteps(userId: string, project: DramaProje
         [project.clues, "线索固定资产", "锁定该线索的外观、材质、位置和可识别细节"],
     ] as const) {
         for (const asset of assets) {
-            const reference = approvedAssetReference(asset);
+            const reference = category === "场景固定资产" ? approvedScenePanoramaReference(asset) : approvedAssetReference(asset);
             if (reference?.url) assetUrls.set(asset.id, { url: reference.url, remoteUrl: reference.remoteUrl, width: reference.width, height: reference.height, label: `${category}「${asset.name}」`, binding });
         }
     }
@@ -2039,14 +2039,14 @@ async function dispatchReadyDramaVisualSteps(userId: string, project: DramaProje
                             ? `本镜头「${episode.shots.find((shot) => shot.id === step.shotId)?.title || "当前镜头"}」已生成起始帧`
                             : continuitySource
                               ? `上一镜「${continuitySource.title}」已人工验收的实际尾帧`
-                              : `上一分镜帧 P${String(episode.shots.find((shot) => shot.id === step.shotId)?.order || 0).padStart(2, "0")}-F${String(Math.max(1, (step.sequenceIndex || 1) - 1)).padStart(2, "0")}`;
+                              : "本镜头连续性参考图";
                     return createDramaVisualImageReference(
                         `continuity-${index}`,
                         url,
                         origin,
                         step.referenceImageRemoteUrls?.[index],
                         label,
-                        "仅锁定身份、场景空间、光向和轴线；上一帧的姿态、视线、手部/道具状态与环境结果必须由当前帧提示词明确替换，不得复制上一帧静态结果，也不得重绘成无关画面",
+                        continuitySource ? "仅锁定上一镜已验收实际尾帧的入口连续性" : "仅按当前任务明确声明的固定参考使用，当前帧独立呈现自己的可见状态",
                     );
                 })
                 .filter((reference): reference is NonNullable<typeof reference> => Boolean(reference)),
@@ -2084,6 +2084,7 @@ async function dispatchReadyDramaVisualSteps(userId: string, project: DramaProje
         const attemptNo = step.attemptNo || 1;
         const requestId = `drama:${run.id}:${step.id}:attempt-${attemptNo}`;
         const executionPrompt = compileDramaReferencePrompt(prompt, references);
+        const imageQuality = step.type === "asset_anchor" && step.assetKind === "scenes" ? "high" : ["start_frame", "end_frame", "keyframe"].includes(step.type) ? "high" : run.parameterSnapshot.imageQuality;
         const referenceImagesSnapshot: DramaImageReferenceBinding[] = references.map((reference) => ({
             id: reference.id,
             label: reference.label || "参考图",
@@ -2098,7 +2099,7 @@ async function dispatchReadyDramaVisualSteps(userId: string, project: DramaProje
                 headers: { "Content-Type": "application/json", cookie, "X-VOZEB-PRO-Client-Request-Id": requestId, "X-VOZEB-PRO-Attempt-No": String(attemptNo) },
                 body: JSON.stringify({
                     kind: references.length ? "edit" : "generation",
-                    config: { model: run.parameterSnapshot.imageModel, channelId: run.parameterSnapshot.imageChannelId, quality: run.parameterSnapshot.imageQuality, size: run.parameterSnapshot.ratio, count: "1" },
+                    config: { model: run.parameterSnapshot.imageModel, channelId: run.parameterSnapshot.imageChannelId, quality: imageQuality, size: run.parameterSnapshot.ratio, count: "1" },
                     prompt: executionPrompt,
                     references,
                     source: "drama",
@@ -3444,18 +3445,28 @@ function normalizeNamedAssets(value: unknown, prefix: string, character = false)
                 referenceImageUrl: primaryReference?.url,
                 referenceStorageKey: primaryReference?.storageKey,
                 refinementHistory: normalizeRefinementHistory(input.refinementHistory),
-                ...(prefix === "scene" ? { sceneReferenceBoard: normalizeSceneReferenceBoard(input.sceneReferenceBoard, primaryReferenceId) } : {}),
+                ...(prefix === "scene" ? { sceneReferenceBoard: normalizeSceneReferenceBoard(input.sceneReferenceBoard, primaryReferenceId, isLegacySceneAsset(input)) } : {}),
                 ...(character ? { voiceProfile: normalizeVoiceProfile(input.voiceProfile) } : {}),
             };
         })
         .filter((item) => item.name);
 }
 
-function normalizeSceneReferenceBoard(value: unknown, primaryReferenceId?: string) {
+function normalizeSceneReferenceBoard(value: unknown, primaryReferenceId?: string, legacy = false) {
     const input = object(value);
-    if (!Object.keys(input).length) return undefined;
+    if (!Object.keys(input).length && !legacy) return undefined;
     const referenceId = optionalText(input.referenceId) || primaryReferenceId;
-    return { layout: "3x3" as const, ...(referenceId ? { referenceId } : {}) };
+    const layout = !legacy && input.layout === "panorama" ? ("panorama" as const) : ("legacy-3x3" as const);
+    return { layout, ...(referenceId ? { referenceId } : {}) };
+}
+
+function isLegacySceneAsset(value: unknown) {
+    const asset = object(value);
+    const boardLayout = cleanText(object(asset.sceneReferenceBoard).layout);
+    if (["3x3", "legacy-3x3"].includes(boardLayout)) return true;
+    const profile = object(asset.profile);
+    const source = [asset.description, asset.supplierPrompt, profile.visualIdentity, profile.designPrompt, profile.consistencyRules].map(cleanText).filter(Boolean).join("\n");
+    return /九宫格|九格|3\s*[x×*]\s*3|三列[\s\S]*三行|3列[\s\S]*3行/u.test(source);
 }
 
 function normalizeClues(value: unknown) {

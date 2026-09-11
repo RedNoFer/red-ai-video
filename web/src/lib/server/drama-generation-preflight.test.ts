@@ -145,7 +145,7 @@ function fixture(): DramaProject {
         defaultVideoMode: "storyboard",
         activeEpisodeId: episode.id,
         characters: [{ id: "character-one", name: "Karin", description: "" }],
-        scenes: [{ id: "scene-one", name: "城门", description: "" }],
+        scenes: [{ id: "scene-one", name: "城门", description: "", sceneReferenceBoard: { layout: "panorama" } }],
         props: [{ id: "prop-one", name: "断剑", description: "", profile: { visualIdentity: "", styling: "", colorPalette: "", consistencyRules: "", identityAnchors: ["剑"] } }],
         clues: [],
         episodes: [episode],

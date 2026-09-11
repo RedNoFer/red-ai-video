@@ -93,6 +93,14 @@ export function dramaFrameVisualSignature(imagePrompt: string) {
         .join("|");
 }
 
+export function dramaFrameCameraSignature(imagePrompt: string) {
+    return ["景别", "机位与构图"]
+        .map((label) => imagePrompt.match(new RegExp(`${label}[：:]([^\\n]+)`, "u"))?.[1] || "")
+        .map(normalizeFrameStateForComparison)
+        .filter(Boolean)
+        .join("|");
+}
+
 export function validateDramaFrameVisualContent(imagePrompt: string, actionPrompt = "") {
     const subject = staticFrameSubject(imagePrompt, actionPrompt, "");
     const visibleState = imagePrompt.match(/可见状态：([^；。\n]+)/u)?.[1]?.trim() || "";
@@ -118,6 +126,8 @@ export function validateDramaFramePlanVisuals(frames: readonly DramaFrameBeat[])
         if (index > 0 && subjects[index] && subjects[index] === subjects[index - 1]) errors.push(`第 ${index + 1} 帧与上一帧的可见画面没有变化，请补充本帧状态变化`);
         else if (index > 0 && signatures[index] && signatures[index] === signatures[index - 1]) errors.push(`第 ${index + 1} 帧与上一帧的语义状态重复，请补充姿态、视线、手部/道具或环境结果变化`);
     });
+    const cameraSignatures = frames.map((frame) => dramaFrameCameraSignature(frame.imagePrompt));
+    if (frames.length > 1 && cameraSignatures.every(Boolean) && new Set(cameraSignatures).size === 1) errors.push("多帧镜头不能所有帧使用相同景别、机位与构图，请按动作节点改变摄影视角");
     return errors;
 }
 
@@ -282,11 +292,15 @@ function normalizeFrameStateForComparison(value: string) {
 function staticFrameCameraCue(sequenceIndex = 1, frameCount = 1, characterCount = 1, actionPrompt = "") {
     if (!frameCount || frameCount <= 1) return "";
     const index = Math.max(0, Math.min(frameCount - 1, sequenceIndex - 1));
-    if (index === 0) return "关系建立构图：中远景平视，主体、关键道具与背景结构同框";
-    if (index === frameCount - 1) return "结果构图：中近景平视，主体面部与手部/道具结果清晰，背景结构仍可辨";
-    if (characterCount > 1 && /看向|对视|转向|回应|打量|扫过/u.test(actionPrompt)) return "对话反应构图：侧前方过肩中景，前景保留对手肩线，主体视线目标清晰";
-    if (/(?:手|指|茶|盏|剑|刀|道具|桌沿|握|按|放下|拿起|落下)/u.test(actionPrompt)) return "动作细节构图：侧前方中近景，面部视线与手部/道具接触结果同框";
-    return "动作推进构图：沿轴线侧前方中景，主体朝向、支撑关系与背景通道清晰";
+    const plans = [
+        "关系建立构图：中远景平视，主体、关键道具与背景结构同框",
+        characterCount > 1 && /看向|对视|转向|回应|打量|扫过/u.test(actionPrompt) ? "对话反应构图：侧前方过肩中景，前景保留对手肩线，主体视线目标清晰" : "动作推进构图：侧前方中景，前景保留门框或桌沿，主体朝向与背景通道清晰",
+        "观察构图：略高机位中景，主体与对手的左右关系、桌面受力和视线落点同框",
+        /(?:手|指|茶|盏|剑|刀|道具|桌沿|握|按|放下|拿起|落下)/u.test(actionPrompt) ? "动作细节构图：侧前方中近景，面部视线与手部/道具接触结果同框" : "反应构图：斜侧方中近景，肩线转向目标，具体前景遮挡保留空间纵深",
+        "结果构图：低机位中近景，主体重心与道具结果清晰，背景结构仍可辨",
+        "收束构图：高位中远景，主体、通道和出口方向形成完整空间关系",
+    ];
+    return plans[index % plans.length];
 }
 
 function appendStaticFrameCameraCue(prompt: string, cue: string) {

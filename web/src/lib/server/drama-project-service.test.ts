@@ -442,7 +442,7 @@ describe("drama project service updates", () => {
         expect(normalized.episodes[0].shots[0].videoMode).toBe("storyboard");
     });
 
-    it("preserves an explicit nine-view board and anchors it to the approved reference", () => {
+    it("marks an explicit nine-view board as legacy and anchors it to the approved reference", () => {
         const current = project("2026-07-19T08:00:00.000Z", "项目");
         const scene = {
             id: "scene-one",
@@ -450,11 +450,32 @@ describe("drama project service updates", () => {
             description: "固定空间",
             references: [{ id: "scene-ref", url: "/scene-board.png", source: "generated", status: "approved", label: "基准", createdAt: "2026-01-01T00:00:00.000Z" }],
             primaryReferenceId: "scene-ref",
-            sceneReferenceBoard: { layout: "3x3" },
+            sceneReferenceBoard: { layout: "legacy-3x3" },
         };
         const normalized = normalizeProject({ ...current, scenes: [scene] }, current);
 
-        expect(normalized.scenes[0].sceneReferenceBoard).toEqual({ layout: "3x3", referenceId: "scene-ref" });
+        expect(normalized.scenes[0].sceneReferenceBoard).toEqual({ layout: "legacy-3x3", referenceId: "scene-ref" });
+    });
+
+    it("marks legacy nine-grid wording as legacy even when the board field is absent", () => {
+        const current = project("2026-07-19T08:00:00.000Z", "项目");
+        const normalized = normalizeProject(
+            {
+                ...current,
+                scenes: [
+                    {
+                        id: "scene-one",
+                        name: "议事厅",
+                        description: "场景九宫格空间锁定参考板，3列×3行",
+                        references: [{ id: "scene-ref", url: "/scene-board.png", source: "generated", status: "approved", label: "基准", createdAt: "2026-01-01T00:00:00.000Z" }],
+                        primaryReferenceId: "scene-ref",
+                    },
+                ],
+            },
+            current,
+        );
+
+        expect(normalized.scenes[0].sceneReferenceBoard).toEqual({ layout: "legacy-3x3", referenceId: "scene-ref" });
     });
 
     it("keeps every generated storyboard result while retaining the first as the main frame", () => {
@@ -1252,13 +1273,15 @@ describe("drama project service updates", () => {
 
         const run = await createDramaProductionRunForUser("user-one", current.id, { episodeId: "episode-one", scope: "visual", shotIds: ["shot-one"], frameType: "all_frames", frameIds: ["f2"], shotSnapshot: snapshot });
 
-        expect(run.steps.find((step) => step.frameId === "f2")).toMatchObject({ referenceImageUrls: ["/api/generation-log-assets/f1.png"], referenceImageRemoteUrls: ["https://cdn.example.com/f1.png"] });
+        expect(run.steps.find((step) => step.frameId === "f2")).toMatchObject({ referenceImageUrls: undefined, referenceImageRemoteUrls: undefined });
     });
 
     it("submits the declared scene reference for a storyboard frame", async () => {
         const current = project("2026-07-19T08:00:00.000Z", "项目");
         const reference = { id: "carriage-ref", url: "https://cdn.example.com/carriage.png", source: "generated" as const, status: "approved" as const, label: "马车基准图", createdAt: new Date(0).toISOString() };
-        current.scenes = [{ id: "scene-carriage", name: "前往阿佐雷斯的马车", description: "封闭木马车，左右长凳与右侧车窗", references: [reference], primaryReferenceId: reference.id }];
+        current.scenes = [
+            { id: "scene-carriage", name: "前往阿佐雷斯的马车", description: "封闭木马车，左右长凳与右侧车窗", references: [reference], primaryReferenceId: reference.id, sceneReferenceBoard: { layout: "panorama", referenceId: reference.id } },
+        ];
         current.episodes[0].shots = [
             {
                 id: "shot-one",
@@ -2158,13 +2181,15 @@ describe("drama project service updates", () => {
                         sequenceIndex,
                         startSecond: (sequenceIndex - 1) * 4,
                         endSecond: sequenceIndex === 4 ? 15 : sequenceIndex * 4,
-                        imagePrompt: `静态画面 ${sequenceIndex}，禁止文字水印`,
+                        imagePrompt: `静态关键帧：动作状态 ${sequenceIndex}\n可见状态：主体完成第${sequenceIndex}个可见结果\n可见表演状态：眉眼和手部呈现第${sequenceIndex}个反应\n景别：${sequenceIndex % 2 ? "中远景" : "中近景"}\n机位与构图：${sequenceIndex === 1 ? "平视关系构图" : sequenceIndex === 2 ? "侧前方动作构图" : sequenceIndex === 3 ? "略高观察构图" : "低机位结果构图"}\n站位与视线：主体位于场景中央，视线朝向当前目标\n三层空间：前景有门框，中景承载主体，背景保留场景结构\n光色与风格：冷暖对照，背景细节清晰\n负面约束：无文字、无水印、无 Logo`,
                         actionPrompt: `动作状态 ${sequenceIndex}`,
                     })),
                 },
             } as never,
         ];
-        current.scenes = [{ id: "scene-one", name: "场景", references: [{ id: "scene-ref", status: "approved", url: "https://cdn.example.com/scene.png" }], primaryReferenceId: "scene-ref" }] as never;
+        current.scenes = [
+            { id: "scene-one", name: "场景", references: [{ id: "scene-ref", status: "approved", url: "https://cdn.example.com/scene.png" }], primaryReferenceId: "scene-ref", sceneReferenceBoard: { layout: "panorama", referenceId: "scene-ref" } },
+        ] as never;
         mocks.getDramaProject.mockResolvedValue(current);
         mocks.getAuthSettings.mockResolvedValue({
             defaultModels: { imageModel: "image-default", videoModel: "seedance-2.0", audioModel: "" },

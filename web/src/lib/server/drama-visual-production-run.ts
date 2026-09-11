@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { nanoid } from "nanoid";
 
 import { compileDramaAssetReferencePrompt, compileDramaFrameSupplierPrompt, resolveDramaFrameScene } from "@/lib/drama-prompt-compiler";
-import { approvedAssetReference } from "@/lib/drama-asset-baseline";
+import { approvedAssetReference, approvedScenePanoramaReference } from "@/lib/drama-asset-baseline";
 import { continuityStartEvidence, latestFrameEvidence } from "@/lib/drama-continuity-policy";
 import type { DramaEpisode, DramaNamedAsset, DramaProductionRun, DramaProductionStep, DramaProject } from "@/lib/drama-project-contract";
 
@@ -19,7 +19,7 @@ type VisualParameters = {
 
 type AssetKind = "characters" | "scenes" | "props";
 // Reference-scene resolution changed: existing visual runs must not reuse stale snapshots.
-const VISUAL_DISPATCH_REVISION = "reference-edit-kind-v3";
+const VISUAL_DISPATCH_REVISION = "independent-frame-anchors-v4";
 
 export function buildDramaVisualProductionRun(project: DramaProject, episode: DramaEpisode, parameters: VisualParameters): DramaProductionRun {
     const steps: DramaProductionStep[] = [];
@@ -30,7 +30,7 @@ export function buildDramaVisualProductionRun(project: DramaProject, episode: Dr
     for (const { asset, kind, label } of usedAssets) {
         const id = `asset-${asset.id}`;
         assetSteps.set(asset.id, id);
-        const approved = approvedAssetReference(asset);
+        const approved = kind === "scenes" ? approvedScenePanoramaReference(asset) : approvedAssetReference(asset);
         steps.push({
             id,
             type: "asset_anchor",
@@ -65,23 +65,17 @@ export function buildDramaVisualProductionRun(project: DramaProject, episode: Dr
             for (const [index, beat] of beats.entries()) {
                 const frameReferences = orderedVisualReferenceIds(project, shot, beat);
                 const frameDependencies = frameReferences.map((id) => assetSteps.get(id)).filter((id): id is string => Boolean(id));
-                const previousBeat = beats[index - 1];
-                const previousStored = previousBeat ? shot.storyboardFrames?.find((frame) => frame.id === previousBeat.id || frame.sequenceIndex === previousBeat.sequenceIndex) : undefined;
                 const existing = shot.storyboardFrames?.find((frame) => frame.id === beat.id || frame.sequenceIndex === beat.sequenceIndex);
-                const previousUrl = index ? previousStored?.mediaUrl : actualTail?.mediaUrl;
+                const continuityReference = index === 0 ? actualTail : undefined;
                 const inputHash = createHash("sha256")
-                    .update(JSON.stringify({ beat, previousUrl, referenceUrls: frameReferences }))
+                    .update(JSON.stringify({ beat, continuityReference: continuityReference?.mediaUrl, referenceUrls: frameReferences }))
                     .digest("hex");
                 const explicitlySelected = !selectedFrameIds.size || selectedFrameIds.has(beat.id);
                 const selectedForRegeneration = selectedFrameIds.size > 0 && selectedFrameIds.has(beat.id);
                 const existingReady = Boolean(
                     existing?.mediaUrl && existing.status === "success" && existing.continuityStatus === "passed" && (existing.source === "upload" || existing.inputHash === inputHash) && !parameters.regenerateAll && !selectedForRegeneration,
                 );
-                const previousStepId = previousBeat ? `frame-${shot.id}-${previousBeat.id}` : undefined;
-                const previousStep = previousStepId ? steps.find((step) => step.id === previousStepId) : undefined;
-                const inheritedDependencies = previousStepId && previousStep?.status !== "stale" ? [previousStepId] : [];
-                const previousAssetDependencies = new Set(previousStep?.dependsOn || []);
-                const stepDependencies = Array.from(new Set([...inheritedDependencies, ...frameDependencies.filter((dependency) => !previousAssetDependencies.has(dependency))]));
+                const stepDependencies = frameDependencies;
                 steps.push({
                     id: `frame-${shot.id}-${beat.id}`,
                     frameId: beat.id,
@@ -91,15 +85,15 @@ export function buildDramaVisualProductionRun(project: DramaProject, episode: Dr
                     startSecond: beat.startSecond,
                     endSecond: beat.endSecond,
                     title: `${shot.title} · 帧 ${beat.sequenceIndex}`,
-                    prompt: previousUrl ? withContinuityReferencePrompt(compileDramaFrameBeatPrompt(project, episode, shot, beat), "keyframe", beat.sequenceIndex > 1) : compileDramaFrameBeatPrompt(project, episode, shot, beat),
+                    prompt: continuityReference ? withContinuityReferencePrompt(compileDramaFrameBeatPrompt(project, episode, shot, beat), "keyframe") : compileDramaFrameBeatPrompt(project, episode, shot, beat),
                     referenceAssetIds: frameReferences,
                     manualReferenceImages: shot.framePlan?.manualReferenceImages,
                     referenceManifest: scopedReferenceManifest(project, shot, beat),
                     dependsOn: stepDependencies,
-                    status: existingReady ? "success" : !explicitlySelected ? "stale" : stepDependencies.length || !actualTailReady ? "blocked" : "ready",
+                    status: existingReady ? "success" : !explicitlySelected ? "stale" : stepDependencies.length || (index === 0 && !actualTailReady) ? "blocked" : "ready",
                     referenceShotId: index === 0 && requiresAcceptedTail ? incoming?.fromShotId : undefined,
-                    referenceImageUrls: previousUrl ? [previousUrl] : undefined,
-                    referenceImageRemoteUrls: index ? (previousStored?.remoteUrl ? [previousStored.remoteUrl] : undefined) : actualTail?.remoteUrl ? [actualTail.remoteUrl] : undefined,
+                    referenceImageUrls: continuityReference?.mediaUrl ? [continuityReference.mediaUrl] : undefined,
+                    referenceImageRemoteUrls: continuityReference?.remoteUrl ? [continuityReference.remoteUrl] : undefined,
                     inputHash,
                     outputUrls: existingReady && existing?.mediaUrl ? [existing.mediaUrl] : undefined,
                     outputRemoteUrls: existingReady && existing?.remoteUrl ? [existing.remoteUrl] : undefined,
@@ -130,8 +124,8 @@ export function buildDramaVisualProductionRun(project: DramaProject, episode: Dr
                 prompt: compileDramaFrameSupplierPrompt(project, episode, shot, undefined, "end"),
                 referenceAssetIds: references,
                 manualReferenceImages: shot.framePlan?.manualReferenceImages,
-                dependsOn: [startId],
-                status: endFrame ? "success" : "blocked",
+                dependsOn: dependencies,
+                status: endFrame ? "success" : dependencies.length ? "blocked" : "ready",
                 outputUrls: endFrame ? [endFrame.mediaUrl] : undefined,
             });
         }
@@ -181,13 +175,11 @@ export function compileDramaVisualStepPrompt(project: DramaProject, episode: Dra
     if (!shot) return step.prompt || "";
     const beat = step.type === "keyframe" ? shot.framePlan?.frames?.find((frame) => frame.id === step.frameId || frame.sequenceIndex === step.sequenceIndex) : undefined;
     const prompt = step.type === "end_frame" ? compileDramaFrameSupplierPrompt(project, episode, shot, undefined, "end") : beat ? compileDramaFrameBeatPrompt(project, episode, shot, beat) : compileDramaVisualStartFramePrompt(project, episode, shot);
-    return (step.type === "start_frame" || step.type === "keyframe") && step.referenceImageUrls?.length ? withContinuityReferencePrompt(prompt, step.type, (step.sequenceIndex || 1) > 1) : prompt;
+    return (step.type === "start_frame" || step.type === "keyframe") && step.referenceImageUrls?.length ? withContinuityReferencePrompt(prompt, step.type) : prompt;
 }
 
-function withContinuityReferencePrompt(prompt: string, type: "start_frame" | "keyframe", sequentialFrame = false) {
-    const anchor = sequentialFrame ? "上一帧顺序锚点" : "上一镜成片实际尾帧";
-    const firstFrameRule = sequentialFrame ? "必须以该上一帧作为当前帧的连续性起点" : "必须以该实际尾帧作为本镜头第一帧";
-    return `${prompt}\n${anchor}是结构连续性依据：${firstFrameRule}，只保持人物身份、服装材质、场景空间、光向和轴线连续；当前帧变化优先级最高，必须以当前帧提示词写明的姿态、视线、手部/道具状态和环境结果覆盖上一帧对应状态，至少改变身体朝向、视线、手部/道具接触或重心中的一项；上一帧不得作为静态结果复制，若主体姿态、视线和手部仍与上一帧相同则视为生成失败。当前镜头维护的分镜起始帧只能作为辅助参考，不得替代或覆盖连续性依据。${type === "keyframe" ? "在保持结构连续性的基础上，必须呈现当前帧提示词中写明的新可见状态，不得直接复制上一帧的静态构图、姿态或动作结果；按当前帧景别完整呈现主体、关键道具和环境边界，不得为了贴合参考图改成近景裁切。" : ""}`;
+function withContinuityReferencePrompt(prompt: string, type: "start_frame" | "keyframe") {
+    return `${prompt}\n上一镜成片实际尾帧是结构连续性依据：仅本镜头第一帧使用该已验收实际尾帧建立入口，保持人物身份、服装材质、场景空间、光向和轴线连续；当前帧提示词中的姿态、视线、手部/道具状态和环境结果优先，不得复制参考图的静态构图。${type === "keyframe" ? "本镜头后续关键帧均独立使用固定资产锚点生成，不引用同镜上一帧图片；必须呈现当前帧提示词中写明的新可见状态。" : ""}`;
 }
 
 export function compileDramaVisualStartFramePrompt(project: DramaProject, episode: DramaEpisode, shot: DramaEpisode["shots"][number]) {
@@ -196,16 +188,9 @@ export function compileDramaVisualStartFramePrompt(project: DramaProject, episod
 
 export function unlockDramaVisualSteps(run: DramaProductionRun) {
     const statuses = new Map(run.steps.map((step) => [step.id, step.status]));
-    const byId = new Map(run.steps.map((step) => [step.id, step]));
     const steps = run.steps.map((step) => {
         if (step.status !== "blocked" || !step.dependsOn.every((id) => statuses.get(id) === "success")) return step;
-        const previousFrame =
-            step.type === "keyframe" ? step.dependsOn.map((id) => byId.get(id)).find((item) => item?.type === "keyframe") : step.type === "end_frame" ? step.dependsOn.map((id) => byId.get(id)).find((item) => item?.type === "start_frame") : undefined;
-        return {
-            ...step,
-            status: "ready" as const,
-            ...(previousFrame?.outputUrls?.[0] ? { referenceImageUrls: [previousFrame.outputUrls[0]], referenceImageRemoteUrls: previousFrame.outputRemoteUrls?.[0] ? [previousFrame.outputRemoteUrls[0]] : undefined } : {}),
-        };
+        return { ...step, status: "ready" as const };
     });
     const visual = steps.filter((step) => ["asset_anchor", "start_frame", "end_frame", "keyframe"].includes(step.type));
     const active = visual.some((step) => ["ready", "running", "blocked"].includes(step.status));
@@ -279,7 +264,9 @@ function visualPlanBlockers(project: DramaProject, episode: DramaEpisode, shots:
     if (!shots.length) blockers.push("当前范围还没有可生成的镜头");
     for (const shot of shots) {
         if (!shot.imagePrompt.trim() && !shot.startFramePrompt?.trim()) blockers.push(`${shot.title}缺少画面提示词`);
-        if (shot.sceneId && !project.scenes.some((asset) => asset.id === shot.sceneId)) blockers.push(`${shot.title}引用了不存在的场景`);
+        const scene = shot.sceneId ? project.scenes.find((asset) => asset.id === shot.sceneId) : undefined;
+        if (shot.sceneId && !scene) blockers.push(`${shot.title}引用了不存在的场景`);
+        else if (scene && !approvedScenePanoramaReference(scene)) blockers.push(`${shot.title}需要重新生成并审核高清场景全景图`);
         if (shot.characterIds.some((id) => !project.characters.some((asset) => asset.id === id))) blockers.push(`${shot.title}引用了不存在的角色`);
         if (shot.propIds.some((id) => !project.props.some((asset) => asset.id === id))) blockers.push(`${shot.title}引用了不存在的道具`);
         if (shot.storyboardFrameMode === "all_frames" && targetFrameCount && shot.framePlan?.frames.length !== targetFrameCount) blockers.push(`${shot.title}当前有 ${shot.framePlan?.frames.length || 0} 个关键帧，生产方案要求 ${targetFrameCount} 个`);

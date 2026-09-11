@@ -1,5 +1,5 @@
 import type { DramaCharacter, DramaNamedAsset } from "./drama-project-contract";
-import { approvedAssetReference } from "./drama-asset-baseline";
+import { approvedAssetReference, hasApprovedScenePanoramaReference } from "./drama-asset-baseline";
 
 export type DramaAssetCompletionKind = "characters" | "scenes" | "props" | "clues";
 export type DramaAssetMissingItem = {
@@ -22,8 +22,8 @@ export function getDramaAssetMissingItems(asset: DramaNamedAsset | DramaCharacte
         const voice = (asset as DramaCharacter).voiceProfile;
         if (!voice?.blueprint || !voice.instructions.trim() || !voice.voiceId?.trim()) add("voice", "音色画像与项目音色", "voice");
     }
-    const hasReference = kind === "scenes" ? Boolean(asset.sceneReferenceBoard?.referenceId && approvedAssetReference(asset)) : Boolean(approvedAssetReference(asset));
-    if (kind !== "clues" && !hasReference) add("reference", kind === "scenes" ? "九宫格场景基准板" : "基准图", "reference");
+    const hasReference = kind === "scenes" ? hasApprovedScenePanoramaReference(asset) : Boolean(approvedAssetReference(asset));
+    if (kind !== "clues" && !hasReference) add("reference", kind === "scenes" ? "高清场景全景图" : "基准图", "reference");
     return missing;
 }
 
