@@ -3,9 +3,28 @@ import { readFileSync } from "node:fs";
 
 import { expect, test } from "@playwright/test";
 
-import type { DramaProject } from "../src/lib/drama-project-contract";
+import type { DramaProductionPackageV1, DramaProject } from "../src/lib/drama-project-contract";
 
 test.use({ storageState: ".e2e-data/admin-state.json" });
+
+function modernizeLegacySceneFixture(value: DramaProductionPackageV1) {
+    const next = structuredClone(value);
+    next.assets.locations = next.assets.locations.map((location) => {
+        const replaceLegacyText = (text: string | undefined) => text?.replaceAll("九宫格", "高清单视角全景图").replaceAll("九格", "固定空间结构").replaceAll("3列×3行纵向高清单视角全景图", "当前项目画幅的完整单视角全景建立图") || text;
+        const profile = location.profile ? { ...location.profile } : undefined;
+        if (profile) {
+            profile.visualIdentity = replaceLegacyText(profile.visualIdentity) || profile.visualIdentity;
+            profile.designPrompt = replaceLegacyText(profile.designPrompt);
+        }
+        return {
+            ...location,
+            description: replaceLegacyText(location.description) || "高清单视角全景场景",
+            ...(profile ? { profile } : {}),
+            sceneReferenceBoard: { layout: "panorama" as const },
+        };
+    });
+    return next;
+}
 
 test("drama episode settings save through a compact request", async ({ page, request }) => {
     const created = await request.post("/api/drama/projects", { data: { title: `E2E 本集设置 ${randomUUID().slice(0, 8)}`, summary: "验证紧凑保存请求", ratio: "9:16" } });
@@ -117,9 +136,7 @@ test("a production package restores its complete visual contract in episode sett
     const visualStyle = "东方写实摄影";
     const artStyle = "克制电影美术，真实木石与湿润反光";
     const visualDirection = `视觉风格：${visualStyle}\n画风：${artStyle}\n色彩：冷灰蓝与暗金\n材质：真实木石与湿润反光\n光线：自然侧逆光\n负面约束：禁止动漫质感、塑料皮肤和无依据的现代元素`;
-    const sourcePackage = JSON.parse(readFileSync(new URL("../../output/mahadel-episode-01-production-package-v2-multiframe.json", import.meta.url), "utf8")) as {
-        project: { style: string; productionBible: { visualStyle: string; colorScript?: string; globalNegativePrompt?: string; productionPlan: Record<string, unknown> } };
-    };
+    const sourcePackage = modernizeLegacySceneFixture(JSON.parse(readFileSync(new URL("../../output/mahadel-episode-01-production-package-v2-multiframe.json", import.meta.url), "utf8")) as DramaProductionPackageV1);
     sourcePackage.project.style = visualStyle;
     sourcePackage.project.productionBible.visualStyle = visualStyle;
     sourcePackage.project.productionBible.colorScript = "冷灰蓝与暗金";

@@ -225,12 +225,12 @@ function DramaAssetCard({ kind, row, onEdit, onComplete, onDelete, completing }:
 
     return (
         <article className="group relative min-w-0 overflow-hidden rounded-md border border-border bg-card transition hover:border-foreground/25 hover:shadow-[0_6px_18px_rgba(15,23,42,.07)]">
-            <button type="button" className="block w-full text-left" onClick={onEdit} aria-label={`编辑${definition.title}：${asset.name}`}>
-                <div className="grid aspect-[16/10] w-full place-items-center overflow-hidden bg-muted/55">
-                    {primary?.url ? (
-                        sceneBoard?.url ? (
-                            <DramaSceneReferenceBoard url={sceneBoard.url} alt={`${asset.name}高清场景全景图`} />
-                        ) : (
+            <div className="grid aspect-[16/10] w-full place-items-center overflow-hidden bg-muted/55">
+                {primary?.url ? (
+                    sceneBoard?.url ? (
+                        <DramaSceneReferenceBoard url={sceneBoard.url} alt={`${asset.name}高清场景全景图`} />
+                    ) : (
+                        <button type="button" className="size-full" onClick={onEdit} aria-label={`编辑${definition.title}：${asset.name}`}>
                             <Image
                                 src={imagePreviewUrl(primary.url, 480)}
                                 alt={`${asset.name}${kind === "scenes" ? "单图基准" : "基准图"}`}
@@ -238,14 +238,18 @@ function DramaAssetCard({ kind, row, onEdit, onComplete, onDelete, completing }:
                                 className="!size-full !object-contain transition duration-300"
                                 preview={false}
                             />
-                        )
-                    ) : (
-                        <div className="grid gap-1.5 text-center text-muted-foreground">
+                        </button>
+                    )
+                ) : (
+                    <button type="button" className="grid size-full place-items-center" onClick={onEdit} aria-label={`编辑${definition.title}：${asset.name}`}>
+                        <span className="grid gap-1.5 text-center text-muted-foreground">
                             <ImagePlus className="mx-auto size-5" aria-hidden />
                             <span className="text-[11px]">待补基准图</span>
-                        </div>
-                    )}
-                </div>
+                        </span>
+                    </button>
+                )}
+            </div>
+            <button type="button" className="block w-full text-left" onClick={onEdit} aria-label={`编辑${definition.title}：${asset.name}`}>
                 <div className="min-w-0 px-2.5 py-2">
                     <div className="flex min-w-0 items-center gap-2 pr-7">
                         <h3 className="min-w-0 flex-1 truncate text-sm font-semibold" title={asset.name}>

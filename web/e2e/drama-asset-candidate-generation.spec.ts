@@ -326,10 +326,11 @@ test("批量完成后将基准图写入项目资产列表", async ({ page, reque
     await page.reload({ waitUntil: "domcontentloaded" });
     await page.getByRole("button", { name: "打开项目资产" }).click();
     await page.getByRole("button", { name: /场景/ }).click();
-    await expect(page.locator('[data-drama-scene-reference-board][aria-label="批量基准场景九宫格场景基准板"]')).toHaveCount(1);
+    const sceneCard = page.locator("article").filter({ hasText: "批量基准场景" });
+    await expect(sceneCard.locator("[data-drama-scene-reference-board]")).toHaveCount(1);
     await page.getByRole("button", { name: "编辑场景：批量基准场景" }).click();
     const drawer = page.getByRole("dialog", { name: "编辑场景" });
-    await expect(drawer.locator('[data-drama-scene-reference-board][aria-label="批量基准场景九宫格场景基准板"]')).toHaveCount(1);
+    await expect(drawer.locator("[data-drama-primary-preview] [data-drama-scene-reference-board]")).toHaveCount(1);
 });
 
 function sub2ApiImageSettingsPatch() {
