@@ -26,7 +26,7 @@ test("编辑角色视觉设定后保存并恢复全部字段", async ({ page, re
         await page.goto(`/drama/${project.id}`, { waitUntil: "networkidle" });
         await page.getByRole("button", { name: "打开项目资产" }).click();
         await expect(page.locator("[data-drama-assets-library]")).toBeVisible();
-        await page.getByRole("button", { name: "编辑角色：保存测试角色" }).click();
+        await page.locator("[data-drama-assets-library] article").filter({ hasText: "保存测试角色" }).getByRole("button", { name: "编辑角色：保存测试角色" }).last().click();
         const drawer = page.getByRole("dialog", { name: "编辑角色" });
         const fields = {
             visualIdentity: "清晰眉骨；左眉尾微挑；黑发高束",
@@ -50,7 +50,7 @@ test("编辑角色视觉设定后保存并恢复全部字段", async ({ page, re
         expect(persisted?.profile?.consistencyRules).toContain(fields.consistencyRules);
         expect(persisted?.supplierPrompt).toBe(savedSupplierPrompt);
 
-        await page.getByRole("button", { name: "编辑角色：保存测试角色" }).click();
+        await page.locator("[data-drama-assets-library] article").filter({ hasText: "保存测试角色" }).getByRole("button", { name: "编辑角色：保存测试角色" }).last().click();
         const reopened = page.getByRole("dialog", { name: "编辑角色" });
         await expect.poll(() => reopened.getByRole("textbox").nth(2).inputValue()).toContain(fields.visualIdentity);
         await expect(reopened.getByRole("textbox").nth(3)).toHaveValue(fields.styling);
@@ -90,8 +90,8 @@ test("生成候选通过真实图片任务链路完成", async ({ page, request 
     expect(saved.ok(), await saved.text()).toBe(true);
 
     const pageErrors: string[] = [];
-    let submittedPrompt = "";
-    let submittedSize = "";
+    const submittedPrompts: string[] = [];
+    const submittedSizes: string[] = [];
     page.on("pageerror", (error) => pageErrors.push(error.message));
     await page.route(/\/api\/agent\/prompt-optimization$/, (route) =>
         route.fulfill({
@@ -114,14 +114,14 @@ test("生成候选通过真实图片任务链路完成", async ({ page, request 
     await page.route(/\/api\/image-tasks$/, async (route) => {
         if (route.request().method() === "POST") {
             const body = route.request().postDataJSON() as { prompt?: unknown; config?: { size?: unknown } };
-            submittedPrompt = typeof body.prompt === "string" ? body.prompt : "";
-            submittedSize = typeof body.config?.size === "string" ? body.config.size : "";
+            submittedPrompts.push(typeof body.prompt === "string" ? body.prompt : "");
+            submittedSizes.push(typeof body.config?.size === "string" ? body.config.size : "");
         }
         await route.fallback();
     });
     await page.goto(`/drama/${project.id}`, { waitUntil: "domcontentloaded" });
     await page.getByRole("button", { name: "打开项目资产" }).click();
-    await page.getByRole("button", { name: "编辑角色：真实候选角色" }).click();
+    await page.locator("[data-drama-assets-library] article").filter({ hasText: "真实候选角色" }).getByRole("button", { name: "编辑角色：真实候选角色" }).last().click();
     const drawer = page.getByRole("dialog", { name: "编辑角色" });
     await drawer.getByRole("button", { name: "优化并同步设定" }).click();
     await drawer.getByText("实际供应商提示词（可编辑）").click();
@@ -151,10 +151,31 @@ test("生成候选通过真实图片任务链路完成", async ({ page, request 
     await expect(drawer.getByText("待补基准图")).toHaveCount(0);
     await drawer.getByRole("button", { name: "保存设定" }).click();
     await expect(drawer).toHaveCount(0);
-    await page.getByRole("button", { name: "编辑角色：真实候选角色" }).click();
+    await page.locator("[data-drama-assets-library] article").filter({ hasText: "真实候选角色" }).getByRole("button", { name: "编辑角色：真实候选角色" }).last().click();
     const reopenedDrawer = page.getByRole("dialog", { name: "编辑角色" });
     await expect(reopenedDrawer.locator('img[alt="真实候选角色基准图"]')).toHaveCount(1);
     await expect(reopenedDrawer.getByText("待补基准图")).toHaveCount(0);
+
+    await reopenedDrawer.getByRole("button", { name: "生成候选" }).click();
+    await expect(page.getByText(/已生成 1 张候选图/)).toBeVisible({ timeout: 90_000 });
+    await expect(reopenedDrawer.locator('img[alt="AI 候选图"]')).toHaveCount(1);
+    await expect
+        .poll(
+            async () => {
+                const response = await request.get(`/api/drama/projects/${project.id}`);
+                expect(response.ok(), await response.text()).toBe(true);
+                const current = ((await response.json()) as { data: { project: DramaProject } }).data.project;
+                return current.characters.find((item) => item.id === characterId)?.references?.length || 0;
+            },
+            { timeout: 90_000 },
+        )
+        .toBe(2);
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.getByRole("button", { name: "打开项目资产" }).click();
+    await page.locator("[data-drama-assets-library] article").filter({ hasText: "真实候选角色" }).getByRole("button", { name: "编辑角色：真实候选角色" }).last().click();
+    const refreshedDrawer = page.getByRole("dialog", { name: "编辑角色" });
+    await expect(refreshedDrawer.locator('img[alt="真实候选角色基准图"]')).toHaveCount(1);
+    await expect(refreshedDrawer.locator('img[alt="AI 候选图"]')).toHaveCount(2);
 
     const reloaded = await request.get(`/api/drama/projects/${project.id}`);
     expect(reloaded.ok(), await reloaded.text()).toBe(true);
@@ -165,10 +186,10 @@ test("生成候选通过真实图片任务链路完成", async ({ page, request 
     const fixture = await protocolFixtureState(request);
     const imageRequest = fixture.requests.find((item) => item.method === "POST" && item.path.endsWith("/images/generations"));
     expect(imageRequest).toBeTruthy();
-    expect(submittedPrompt).toContain("主体与资产类型：角色");
-    expect(submittedPrompt).toContain("用户编辑后的黑发青年");
-    expect(submittedPrompt).not.toContain("资产图片 Skill 规则");
-    expect(submittedSize).toBe("16:9");
+    expect(submittedPrompts[0]).toContain("主体与资产类型：角色");
+    expect(submittedPrompts[0]).toContain("用户编辑后的黑发青年");
+    expect(submittedPrompts[0]).not.toContain("资产图片 Skill 规则");
+    expect(submittedSizes[0]).toBe("16:9");
 });
 
 test("生成调整候选通过历史方案链路完成", async ({ page, request }) => {
@@ -245,7 +266,7 @@ test("生成调整候选通过历史方案链路完成", async ({ page, request 
     page.on("pageerror", (error) => pageErrors.push(error.message));
     await page.goto(`/drama/${project.id}`, { waitUntil: "domcontentloaded" });
     await page.getByRole("button", { name: "打开项目资产" }).click();
-    await page.getByRole("button", { name: "编辑角色：历史方案角色" }).click();
+    await page.locator("[data-drama-assets-library] article").filter({ hasText: "历史方案角色" }).getByRole("button", { name: "编辑角色：历史方案角色" }).last().click();
     const drawer = page.getByRole("dialog", { name: "编辑角色" });
     await drawer.getByRole("button", { name: "生成调整候选" }).click();
 

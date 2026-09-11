@@ -286,9 +286,45 @@ async function completeImageResult(task: ImageTask, result: ImageTaskRunResult, 
         ? loggedAssets.map((asset) => ({ dataUrl: asset.serverUrl || asset.url, remoteUrl: asset.remoteUrl, serverUrl: asset.serverUrl, width: asset.width, height: asset.height, bytes: asset.bytes, mimeType: asset.mimeType }))
         : safeResults;
     const finalResult = finalResults[0];
-    const completed = await transitionImageTask(current, ["pending", "running"], {
+    const resultPayload = { ...finalResult, results: finalResults };
+    const attempts = finishGenerationAttempt(current.attempts || [], current.attemptNo || current.attempts?.at(-1)?.attemptNo || 1, {
+        status: "succeeded",
+        pointsCost: result.pointsCost ?? current.billing?.pointsCost,
+        pointsRecordId: result.pointsRecordId || current.billing?.pointsRecordId,
+    });
+    const persisting =
+        (await updateImageTask(task.id, { result: resultPayload, candidateConfigs: [], attempts, attemptNo: attempts.at(-1)?.attemptNo })) ||
+        ({ ...current, result: resultPayload, candidateConfigs: [], attempts, attemptNo: attempts.at(-1)?.attemptNo } as ImageTask);
+    const assets = (persisting.result?.results?.length ? persisting.result.results : persisting.result ? [persisting.result] : []).flatMap((item) => {
+        const url = item.serverUrl || item.remoteUrl || stableMediaUrl(item.dataUrl);
+        return url ? [{ type: "image" as const, url, mimeType: item.mimeType, width: item.width, height: item.height, bytes: item.bytes }] : [];
+    });
+    if (assets.length)
+        await registerGenerationTaskAssetsForUser(persisting.userId, {
+            ...persisting,
+            taskId: persisting.id,
+            title: persisting.title || persisting.prompt.slice(0, 80),
+            assets,
+        }).catch((error) => console.error("Creative image asset registration failed", error));
+    const dramaAssetTarget = resolveDramaAssetTarget(persisting);
+    if (persisting.surface === "drama" && persisting.projectId && dramaAssetTarget)
+        await persistDramaGeneratedCandidates({
+            ownerUserId: persisting.userId,
+            projectId: persisting.projectId,
+            ...dramaAssetTarget,
+            taskId: persisting.id,
+            referenceId: persisting.batchItemId ? `batch-reference-${persisting.batchItemId}` : undefined,
+            prompt: persisting.prompt,
+            generationStage: persisting.generationStage,
+            results: finalResults,
+        });
+    if (persisting.surface === "drama" && persisting.projectId && persisting.batchId && persisting.batchItemId)
+        await reconcileDramaBatchItem({ userId: persisting.userId, projectId: persisting.projectId, batchId: persisting.batchId, batchItemId: persisting.batchItemId, taskId: persisting.id, status: "success" }).catch((error) =>
+            console.error("Drama batch item reconciliation failed", error),
+        );
+    const completed = await transitionImageTask(persisting, ["pending", "running"], {
         status: "success",
-        result: { ...finalResult, results: finalResults },
+        result: resultPayload,
         pointsRemaining: result.pointsRemaining,
         retryable: false,
     });
@@ -297,40 +333,7 @@ async function completeImageResult(task: ImageTask, result: ImageTaskRunResult, 
         if (latest?.status === "cancelled") await refundImageTask(latest);
         return latest;
     }
-    const attempts = finishGenerationAttempt(completed.attempts || [], completed.attemptNo || completed.attempts?.at(-1)?.attemptNo || 1, {
-        status: "succeeded",
-        pointsCost: result.pointsCost ?? completed.billing?.pointsCost,
-        pointsRecordId: result.pointsRecordId || completed.billing?.pointsRecordId,
-    });
-    const finalized = (await updateImageTask(task.id, { result: { ...finalResult, results: finalResults }, config: { ...completed.config, apiKey: "system" }, candidateConfigs: [], attempts, attemptNo: attempts.at(-1)?.attemptNo })) || completed;
-    const assets = (finalized.result?.results?.length ? finalized.result.results : finalized.result ? [finalized.result] : []).flatMap((item) => {
-        const url = item.serverUrl || item.remoteUrl || stableMediaUrl(item.dataUrl);
-        return url ? [{ type: "image" as const, url, mimeType: item.mimeType, width: item.width, height: item.height, bytes: item.bytes }] : [];
-    });
-    if (assets.length)
-        await registerGenerationTaskAssetsForUser(finalized.userId, {
-            ...finalized,
-            taskId: finalized.id,
-            title: finalized.title || finalized.prompt.slice(0, 80),
-            assets,
-        }).catch((error) => console.error("Creative image asset registration failed", error));
-    const dramaAssetTarget = resolveDramaAssetTarget(finalized);
-    if (finalized.surface === "drama" && finalized.projectId && dramaAssetTarget)
-        await persistDramaGeneratedCandidates({
-            ownerUserId: finalized.userId,
-            projectId: finalized.projectId,
-            ...dramaAssetTarget,
-            taskId: finalized.id,
-            referenceId: finalized.batchItemId ? `batch-reference-${finalized.batchItemId}` : undefined,
-            prompt: finalized.prompt,
-            generationStage: finalized.generationStage,
-            results: finalResults,
-        }).catch((error) => console.error("Drama candidate reference persistence failed", error));
-    if (finalized.surface === "drama" && finalized.projectId && finalized.batchId && finalized.batchItemId)
-        await reconcileDramaBatchItem({ userId: finalized.userId, projectId: finalized.projectId, batchId: finalized.batchId, batchItemId: finalized.batchItemId, taskId: finalized.id, status: "success" }).catch((error) =>
-            console.error("Drama batch item reconciliation failed", error),
-        );
-    return finalized;
+    return (await updateImageTask(task.id, { config: { ...completed.config, apiKey: "system" } })) || completed;
 }
 
 function resolveDramaAssetTarget(task: ImageTask) {

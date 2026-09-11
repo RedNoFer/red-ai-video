@@ -258,6 +258,27 @@ describe("image task runtime submission safety", () => {
         );
     });
 
+    it("keeps a drama task non-terminal until its candidate reference is persisted", async () => {
+        state = { ...imageTask(), status: "running", surface: "drama", projectId: "project-one", assetKind: "scenes", assetId: "scene-one" };
+        state.config = { ...state.config, advancedConfig: { ...emptyAdvancedConfig(), protocol: "openai" } };
+        state.candidateConfigs = [];
+        mocks.runOpenAi.mockResolvedValueOnce({ dataUrl: "https://provider.example/scene.png", remoteUrl: "https://provider.example/scene.png" });
+        mocks.directResult.mockImplementation((url?: string) => (url ? { dataUrl: url, remoteUrl: url } : null));
+        mocks.writeLog.mockResolvedValueOnce({ assets: [{ type: "image", url: "/api/generation-log-assets/scene.png", serverUrl: "/api/generation-log-assets/scene.png" }] });
+        let statusWhilePersisting: ImageTask["status"] | undefined;
+        mocks.persistCandidates.mockImplementationOnce(async () => {
+            statusWhilePersisting = state.status;
+            return 1;
+        });
+
+        const step = await createImageTaskUpstreamStep(state, "http://internal", "https://public.example");
+        if (step.state !== "result_ready") throw new Error("image result was not ready");
+        await persistImageTaskResult(state, "http://internal", step.resultUrl);
+
+        expect(statusWhilePersisting).toBe("running");
+        expect(state.status).toBe("success");
+    });
+
     it("propagates batch asset context and reconciles the batch after image persistence", async () => {
         state = { ...imageTask(), surface: "drama", projectId: "project-one", assetKind: "characters", assetId: "rifa", batchId: "batch-one", batchItemId: "item-one" };
         state.config = { ...state.config, advancedConfig: { ...emptyAdvancedConfig(), protocol: "openai" } };
