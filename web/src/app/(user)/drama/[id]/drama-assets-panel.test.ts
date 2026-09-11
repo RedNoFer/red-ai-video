@@ -7,6 +7,26 @@ import { filterAndSortDramaAssets, type DramaAssetLibraryRow } from "./drama-ass
 import { dramaAssetReferences, dramaSceneBoardReference, isDramaSceneBoardReference, mergeGeneratedReferenceReviews } from "./drama-asset-reference-utils";
 
 describe("drama asset image results", () => {
+    it("keeps a usable legacy reference when a historical snapshot already has candidates", () => {
+        const references = dramaAssetReferences({
+            id: "scene-one",
+            name: "议事厅",
+            description: "",
+            referenceImageUrl: "/api/reference-assets/legacy/scene.png",
+            references: [
+                {
+                    id: "candidate-one",
+                    url: "/api/reference-assets/generated/candidate.png",
+                    source: "generated",
+                    label: "AI 候选图",
+                    createdAt: "2026-09-01T00:00:00.000Z",
+                },
+            ],
+        });
+
+        expect(references.map((reference) => reference.url)).toEqual(["/api/reference-assets/generated/candidate.png", "/api/reference-assets/legacy/scene.png"]);
+    });
+
     it("uses the approved scene board reference as the spatial anchor", () => {
         const reference = { id: "scene-board", url: "/scene-board.png", source: "generated" as const, label: "九宫格场景基准板", status: "approved" as const, createdAt: "2026-01-01T00:00:00.000Z" };
         expect(dramaSceneBoardReference({ id: "scene-one", name: "议事厅", description: "", primaryReferenceId: reference.id, sceneReferenceBoard: { layout: "legacy-3x3", referenceId: reference.id }, references: [reference] })).toEqual(reference);

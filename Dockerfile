@@ -8,6 +8,7 @@ ARG NEXT_BUILD_CPUS
 ARG PNPM_VERSION=11.9.0
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV CI=1
+ENV NODE_ENV=production
 ENV NODE_OPTIONS=${BUILD_NODE_OPTIONS}
 ENV NEXT_BUILD_CPUS=${NEXT_BUILD_CPUS}
 ENV PNPM_HOME=/pnpm
@@ -41,7 +42,7 @@ ENV VOZEB_PRO_INTERNAL_ORIGIN=http://127.0.0.1:3000
 ENV NODE_OPTIONS=--max-old-space-size=384
 ENV UV_THREADPOOL_SIZE=2
 
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates ffmpeg fonts-noto-cjk postgresql-client && rm -rf /var/lib/apt/lists/*
+RUN sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.list.d/debian.sources && apt-get update && apt-get install -y --no-install-recommends ca-certificates ffmpeg fonts-noto-cjk postgresql-client && rm -rf /var/lib/apt/lists/*
 RUN mkdir -p /app/web/scripts
 
 COPY VERSION /app/VERSION

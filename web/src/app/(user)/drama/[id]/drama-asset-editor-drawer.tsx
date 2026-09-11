@@ -567,7 +567,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
         if (generationHydrationKeyRef.current === hydrationKey) return;
         generationHydrationKeyRef.current = hydrationKey;
         let disposed = false;
-        setGenerating(true);
+        setGenerating(false);
         void getDramaAssetGenerationStatus(project.id, kind, asset.id)
             .then(async (task) => {
                 if (disposed) return;

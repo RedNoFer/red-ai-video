@@ -22,7 +22,7 @@ export async function GET(request: Request, context: Context) {
             surface: "drama",
             assetKind: kind,
             assetId,
-            statuses: ["pending", "running", "success", "error", "cancelled"],
+            statuses: ["pending", "running"],
             limit: 1,
         });
         const task = tasks[0];
