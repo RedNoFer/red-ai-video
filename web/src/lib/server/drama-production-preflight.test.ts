@@ -47,6 +47,29 @@ describe("drama production preflight", () => {
         expect(codes).toEqual(expect.arrayContaining(["PROMPT_CHARACTER_REFERENCE", "PROMPT_PROP_REFERENCE"]));
     });
 
+    it("does not report a currently referenced character as inactive", () => {
+        const project = fixture();
+        project.characters.push({ id: "character-two", code: "C02", name: "Rifa", description: "", activeEpisodeCodes: [] });
+        const shot = project.episodes[0].shots[0];
+        shot.characterIds = [...shot.characterIds, "character-two"];
+        shot.videoPrompt += "，Rifa看向门外";
+
+        const issues = preflightDramaProduction(project, project.episodes[0]).issues;
+
+        expect(issues.some((issue) => issue.code === "INACTIVE_CHARACTER" && issue.assetId === "character-two")).toBe(false);
+    });
+
+    it("keeps prompt completeness guidance as warnings", () => {
+        const project = fixture();
+        const shot = project.episodes[0].shots[0];
+        shot.performancePlan = undefined;
+        shot.lightingPlan = undefined;
+
+        const issues = preflightDramaProduction(project, project.episodes[0]).issues;
+
+        expect(issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "PERFORMANCE_PLAN_MISSING", severity: "warning" }), expect.objectContaining({ code: "LIGHTING_PLAN_MISSING", severity: "warning" })]));
+    });
+
     it("blocks a reference manifest whose scene or declared assets do not match the shot", () => {
         const project = fixture();
         project.episodes[0].shots[0].framePlan!.referenceManifest = [
@@ -152,6 +175,25 @@ describe("drama production preflight", () => {
         }));
 
         expect(preflightDramaProduction(project, project.episodes[0]).issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "REFERENCE_IMAGE_BUDGET", severity: "warning" })]));
+    });
+
+    it("allows up to thirty references for a thirty second shot", () => {
+        const project = fixture();
+        const shot = project.episodes[0].shots[0];
+        shot.duration = 30;
+        shot.storyboardFrameMode = "all_frames";
+        shot.sourceAssetIds = Array.from({ length: 4 }, (_, index) => `source-${index + 1}`);
+        project.sourceAssets = shot.sourceAssetIds.map((id) => ({ id, type: "image" as const, title: id, serverUrl: `/api/reference-assets/${id}.png` }));
+        shot.framePlan!.frames = Array.from({ length: 5 }, (_, index) => ({
+            id: `f${index + 1}`,
+            sequenceIndex: index + 1,
+            startSecond: index * 6,
+            endSecond: (index + 1) * 6,
+            actionPrompt: `动作${index + 1}`,
+            imagePrompt: `人物保持第${index + 1}个不同姿态`,
+        }));
+
+        expect(preflightDramaProduction(project, project.episodes[0]).issues.some((issue) => issue.code === "REFERENCE_IMAGE_BUDGET")).toBe(false);
     });
 
     it("does not block all-frames production when real frames are still pending inspection", () => {

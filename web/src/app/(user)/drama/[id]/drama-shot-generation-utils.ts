@@ -12,6 +12,10 @@ export function isDramaStoryboardFrameActive(frame?: DramaStoryboardFrame) {
     return Boolean(frame && [frame.status, frame.candidateStatus].some((status) => status === "queued" || status === "running"));
 }
 
+export function hasActiveDramaVisualQueue(episode?: Pick<DramaEpisode, "shots">) {
+    return Boolean(episode?.shots.some((shot) => [shot.storyboardStatus, shot.storyboardEndStatus].some((status) => status === "queued" || status === "running") || (shot.storyboardFrames || []).some(isDramaStoryboardFrameActive)));
+}
+
 export function resolveDramaVisualRunSync(project: DramaProject, episodeId: string, run: DramaProductionRun) {
     let changed = false;
     const episodes = project.episodes.map((episode) => {

@@ -39,7 +39,8 @@ describe("drama production plan", () => {
         expect(resolveDramaFrameCountPreference("请分 6 帧")).toBe(6);
         expect(dramaReferenceImageBudget(15)).toBe(9);
         expect(dramaReferenceImageBudget(20)).toBe(9);
-        expect(dramaReferenceImageBudget(30)).toBe(9);
+        expect(dramaReferenceImageBudget(29)).toBe(9);
+        expect(dramaReferenceImageBudget(30)).toBe(30);
     });
 
     it("keeps visual parameters and fixed frame policies in the normalized plan", () => {

@@ -913,6 +913,33 @@ describe("drama prompt compiler", () => {
         expect(prompt).not.toContain("中性浅灰背景");
         expect(prompt).toContain(kind === "角色" ? "高精度人物细节" : DRAMA_STYLE_DESCRIPTION);
     });
+
+    it("recompiles a prop prompt without character action narrative", () => {
+        const project = createProject();
+        const prop = {
+            id: "prop-brush",
+            name: "毛笔与砚台",
+            description: "原文事实：萧炎在桌前奋笔疾书；导演建议：普通毛笔、墨砚和吸墨宣纸，均有可触摸的木石与纤维质感",
+            supplierPrompt: [
+                "主体与资产类型：道具「毛笔与砚台」",
+                "身份/结构锚点：原文事实：萧炎在桌前奋笔疾书；导演建议：普通毛笔、墨砚和宣纸",
+                "可见状态与材质：普通毛笔、墨砚和宣纸置于桌面",
+                "构图与画幅：9:16画幅，单一道具主体完整入画，无人物拼版",
+                "光色与风格：东方写实",
+                "负面约束：额外主体、文字、水印",
+            ].join("\n"),
+            profile: { visualIdentity: "毛笔、砚台和宣纸", styling: "木石与纤维质感", colorPalette: "墨黑、暖褐", consistencyRules: "固定结构" },
+        };
+
+        const prompt = compileDramaAssetReferencePrompt(project, prop, "道具");
+
+        expect(hasDramaAssetPromptQuality(prop.supplierPrompt, "道具")).toBe(false);
+        expect(hasDramaAssetPromptQuality(prompt, "道具")).toBe(true);
+        expect(prompt).toContain("只展示道具本体");
+        expect(prompt).toContain("人物、手部、持有人");
+        expect(prompt).not.toContain("萧炎");
+        expect(prompt).not.toContain("奋笔疾书");
+    });
 });
 
 function createProject(): DramaProject {

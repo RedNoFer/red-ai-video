@@ -6,6 +6,7 @@ import {
     applyDramaVisualRunTerminalStep,
     characterReferenceAudios,
     dramaShotVideoMode,
+    hasActiveDramaVisualQueue,
     isDramaStoryboardFrameActive,
     resolveDramaVisualRunSync,
     shotReferenceImages,
@@ -18,6 +19,13 @@ describe("isDramaStoryboardFrameActive", () => {
         expect(isDramaStoryboardFrameActive({ id: "f1", sequenceIndex: 1, source: "generated", status: "queued" })).toBe(true);
         expect(isDramaStoryboardFrameActive({ id: "f1", sequenceIndex: 1, source: "generated", status: "idle" })).toBe(false);
         expect(isDramaStoryboardFrameActive({ id: "f1", sequenceIndex: 1, source: "generated", status: "success", candidateStatus: "queued" })).toBe(true);
+    });
+});
+
+describe("hasActiveDramaVisualQueue", () => {
+    it("keeps the visual sync loop alive while a local frame is still queued", () => {
+        expect(hasActiveDramaVisualQueue({ shots: [{ id: "shot-one", storyboardFrames: [{ id: "f1", sequenceIndex: 1, source: "generated", status: "queued" }] }] } as never)).toBe(true);
+        expect(hasActiveDramaVisualQueue({ shots: [{ id: "shot-one", storyboardFrames: [{ id: "f1", sequenceIndex: 1, source: "generated", status: "success" }] }] } as never)).toBe(false);
     });
 });
 

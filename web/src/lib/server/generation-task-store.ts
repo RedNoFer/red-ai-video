@@ -144,11 +144,16 @@ export async function listStoredGenerationTasks<T>(type: GenerationTaskType, use
     return queryStoredGenerationTasks<T>(type, { userId, limit });
 }
 
-export async function queryStoredGenerationTasks<T>(type: GenerationTaskType, options: { userId: string; conversationId?: string; projectId?: string; surface?: string; statuses?: string[]; limit?: number }): Promise<T[]> {
+export async function queryStoredGenerationTasks<T>(
+    type: GenerationTaskType,
+    options: { userId: string; conversationId?: string; projectId?: string; surface?: string; assetKind?: "characters" | "scenes" | "props"; assetId?: string; statuses?: string[]; limit?: number },
+): Promise<T[]> {
     const userId = options.userId.trim();
     const conversationId = cleanContextText(options.conversationId);
     const projectId = cleanContextText(options.projectId);
     const surface = cleanContextText(options.surface);
+    const assetKind = cleanContextText(options.assetKind);
+    const assetId = cleanContextText(options.assetId);
     const statuses = [...new Set((options.statuses || []).map(normalizeGenerationTaskStatus))];
     const limit = Math.max(1, Math.min(100, Math.floor(Number(options.limit) || 20)));
     if (getDatabaseProvider() === "postgres") {
@@ -163,6 +168,8 @@ export async function queryStoredGenerationTasks<T>(type: GenerationTaskType, op
         addFilter("conversation_id", conversationId);
         addFilter("project_id", projectId);
         addFilter("surface", surface);
+        addFilter("payload->>'assetKind'", assetKind);
+        addFilter("payload->>'assetId'", assetId);
         if (statuses.length) {
             values.push(statuses);
             filters.push(`status = ANY($${values.length}::text[])`);
@@ -181,6 +188,8 @@ export async function queryStoredGenerationTasks<T>(type: GenerationTaskType, op
                 (!conversationId || task.conversationId === conversationId) &&
                 (!projectId || task.projectId === projectId) &&
                 (!surface || task.surface === surface) &&
+                (!assetKind || task.assetKind === assetKind) &&
+                (!assetId || task.assetId === assetId) &&
                 (!statuses.length || statuses.includes(task.status)),
         )
         .sort((a, b) => b.updatedAt - a.updatedAt || b.id.localeCompare(a.id))

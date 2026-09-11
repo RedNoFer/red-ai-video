@@ -66,6 +66,16 @@ describe("video prompt reference instructions", () => {
         expect(JSON.stringify(result.payload)).not.toContain("/private/frame.png");
     });
 
+    it("normalizes preflight findings as prompt-only optimization context", () => {
+        const result = normalizeDramaVideoPromptInput({
+            phase: "video_prompt",
+            shots: [{ id: "shot-one", videoPrompt: "动态意图：人物抬头" }],
+            optimizationIssues: [{ code: "PERFORMANCE_PLAN_MISSING", severity: "warning", message: "缺少人物表演规划", correction: "补充可见表演" }, { message: "无代码的输入应丢弃" }],
+        });
+
+        expect(result.payload.optimizationIssues).toEqual([{ code: "PERFORMANCE_PLAN_MISSING", severity: "warning", message: "缺少人物表演规划", correction: "补充可见表演" }]);
+    });
+
     it("assigns deterministic aliases when older callers omit them", () => {
         const result = normalizeDramaVideoPromptInput({
             phase: "video_prompt",

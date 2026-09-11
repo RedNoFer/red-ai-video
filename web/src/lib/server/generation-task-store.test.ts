@@ -244,6 +244,19 @@ describe("mutateStoredGenerationTask", () => {
         vi.mocked(getDatabaseProvider).mockReturnValue("file");
     });
 
+    it("pushes asset identity filters into PostgreSQL before limiting", async () => {
+        vi.mocked(getDatabaseProvider).mockReturnValue("postgres");
+        vi.mocked(postgresQuery).mockResolvedValueOnce({ rows: [], command: "SELECT", rowCount: 0, oid: 0, fields: [] });
+
+        await queryStoredGenerationTasks("image", { userId: "user", projectId: "project-one", surface: "drama", assetKind: "props", assetId: "prop-one", limit: 1 });
+
+        const [statement, params] = vi.mocked(postgresQuery).mock.calls[0] || [];
+        expect(String(statement)).toContain("payload->>'assetKind' = $5");
+        expect(String(statement)).toContain("payload->>'assetId' = $6");
+        expect(params).toEqual(["user", "image", "project-one", "drama", "props", "prop-one", 1]);
+        vi.mocked(getDatabaseProvider).mockReturnValue("file");
+    });
+
     it("pushes normalized Agent status filters into PostgreSQL before limiting", async () => {
         vi.mocked(getDatabaseProvider).mockReturnValue("postgres");
         vi.mocked(postgresQuery).mockResolvedValueOnce({ rows: [], command: "SELECT", rowCount: 0, oid: 0, fields: [] });

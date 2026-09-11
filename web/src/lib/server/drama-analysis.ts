@@ -591,7 +591,7 @@ function normalizeAssets(value: unknown, kind: "character" | "scene" | "prop" = 
             ? [
                   {
                       name,
-                      description: text(record.description),
+                      description: kind === "prop" ? normalizePropAssetText(record.description) : text(record.description),
                       profile: normalizeProfile(record.profile, record, kind),
                   },
               ]
@@ -618,13 +618,25 @@ function normalizeClues(value: unknown) {
 
 function normalizeProfile(value: unknown, fallback: Record<string, unknown>, kind: "character" | "scene" | "prop" = "prop"): DramaAssetProfile {
     const profile = object(value);
-    const styling = text(profile.styling) || text(fallback.styling);
+    const normalize = (value: unknown) => (kind === "prop" ? normalizePropAssetText(value) : text(value));
+    const styling = normalize(profile.styling) || normalize(fallback.styling);
     return {
-        visualIdentity: text(profile.visualIdentity) || text(fallback.visualIdentity),
+        visualIdentity: normalize(profile.visualIdentity) || normalize(fallback.visualIdentity),
         styling: kind === "scene" && isCharacterStyling(styling) ? "" : styling,
-        colorPalette: text(profile.colorPalette) || text(fallback.colorPalette),
-        consistencyRules: text(profile.consistencyRules) || text(fallback.consistencyRules),
+        colorPalette: normalize(profile.colorPalette) || normalize(fallback.colorPalette),
+        consistencyRules: normalize(profile.consistencyRules) || normalize(fallback.consistencyRules),
     };
+}
+
+function normalizePropAssetText(value: unknown) {
+    return Array.from(
+        new Set(
+            text(value)
+                .split(/[；;。\n]+/u)
+                .map((item) => item.replace(/^(?:原文事实|导演建议|道具建议|剧情事实|镜头事实)[：:]\s*/u, "").trim())
+                .filter((item) => item && !/(?:时间段动作|动作与触发|可见表演|表演状态|人物动作|奋笔|落笔|握笔|持握|拿起|挥动|走向|跑向|坐下|站起|转身|抬头|低头|看向|对着)/u.test(item)),
+        ),
+    ).join("；");
 }
 
 function isCharacterStyling(value: string) {
@@ -932,6 +944,23 @@ const namedAssetSchema = {
     },
 };
 
+const propAssetSchema = {
+    ...namedAssetSchema,
+    properties: {
+        ...namedAssetSchema.properties,
+        description: { type: "string", description: "只写道具本体的剧情用途、结构、材质与可见特征；禁止写人物站位、持有人动作、书写或表演过程、镜头时序和导演建议" },
+        profile: {
+            ...namedAssetSchema.properties.profile,
+            properties: {
+                ...namedAssetSchema.properties.profile.properties,
+                visualIdentity: { type: "string", description: "只写道具本体的形状、结构、材质和识别锚点，不写人物或动作" },
+                styling: { type: "string", description: "只写道具本体的展示状态与材质细节，默认静置展示，不写人物动作" },
+                consistencyRules: { type: "string", description: "只写道具外观、比例、材质和关键部件的固定规则" },
+            },
+        },
+    },
+};
+
 export const dramaContentTool = {
     name: "analyze_drama_content",
     description: "只提取可审核的剧本内容结构，不生成任何图片或视频提示词",
@@ -948,7 +977,7 @@ export const dramaContentTool = {
             },
             characters: { type: "array", items: namedAssetSchema },
             scenes: { type: "array", items: namedAssetSchema },
-            props: { type: "array", items: namedAssetSchema },
+            props: { type: "array", items: propAssetSchema },
             clues: {
                 type: "array",
                 items: {

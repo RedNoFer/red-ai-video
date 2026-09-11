@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ getCurrentUser: vi.fn(), updateDramaAssetForUser: vi.fn() }));
+const mocks = vi.hoisted(() => ({ getCurrentUser: vi.fn(), getDramaProjectForUser: vi.fn(), queryStoredGenerationTasks: vi.fn(), updateDramaAssetForUser: vi.fn() }));
 
 vi.mock("@/lib/auth/session", () => ({ getCurrentUser: mocks.getCurrentUser }));
 vi.mock("@/lib/server/drama-project-service", () => ({
@@ -12,16 +12,37 @@ vi.mock("@/lib/server/drama-project-service", () => ({
             super(message);
         }
     },
+    getDramaProjectForUser: mocks.getDramaProjectForUser,
     updateDramaAssetForUser: mocks.updateDramaAssetForUser,
 }));
+vi.mock("@/lib/server/generation-task-store", () => ({ queryStoredGenerationTasks: mocks.queryStoredGenerationTasks }));
 
-import { PATCH } from "./route";
+import { GET, PATCH } from "./route";
 
 describe("PATCH /api/drama/projects/[id]/assets/[kind]/[assetId]", () => {
     beforeEach(() => {
         vi.clearAllMocks();
         mocks.getCurrentUser.mockResolvedValue({ id: "user-one" });
+        mocks.getDramaProjectForUser.mockResolvedValue({ characters: [{ id: "character-one" }], scenes: [], props: [] });
+        mocks.queryStoredGenerationTasks.mockResolvedValue([]);
         mocks.updateDramaAssetForUser.mockResolvedValue({ id: "project-one", updatedAt: "2026-09-06T00:00:00.000Z" });
+    });
+
+    it("returns the latest asset-scoped image task for refresh recovery", async () => {
+        mocks.queryStoredGenerationTasks.mockResolvedValue([
+            {
+                id: "task-one",
+                kind: "generation",
+                status: "running",
+                config: { model: "image-model" },
+                prompt: "道具本体静置展示",
+                generationStage: "initial",
+            },
+        ]);
+        const response = await GET(new Request("http://localhost"), context());
+        expect(response.status).toBe(200);
+        expect(mocks.queryStoredGenerationTasks).toHaveBeenCalledWith("image", expect.objectContaining({ userId: "user-one", projectId: "project-one", surface: "drama", assetKind: "characters", assetId: "character-one", limit: 1 }));
+        await expect(response.json()).resolves.toMatchObject({ data: { task: { id: "task-one", model: "image-model", status: "running" } } });
     });
 
     it("requires authentication", async () => {

@@ -117,6 +117,27 @@ describe("drama project api", () => {
         expect(JSON.stringify(body)).not.toContain("/private/frame.png");
     });
 
+    it("sends current preflight findings to prompt optimization", async () => {
+        const fetchMock = vi.fn().mockResolvedValue(
+            Response.json({
+                code: 0,
+                data: { shots: [{ shotId: "shot-one", videoPrompt: "素材绑定：@图片1：顺序帧 1", framePlan: { frames: [{ sequenceIndex: 1, startSecond: 0, endSecond: 3, actionPrompt: "动作", imagePrompt: "画面" }] } }] },
+                msg: "OK",
+            }),
+        );
+        vi.stubGlobal("fetch", fetchMock);
+
+        await generateDramaVideoPrompt({
+            project: { id: "project-one", summary: "", style: "", characters: [], scenes: [], props: [], clues: [] } as never,
+            episode: { id: "episode-one" } as never,
+            shot: { id: "shot-one" } as never,
+            referenceMaterials: [],
+            optimizationIssues: [{ code: "PERFORMANCE_PLAN_MISSING", severity: "warning", message: "缺少人物表演规划", correction: "补充可见表演" }],
+        });
+
+        expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)).optimizationIssues).toEqual([{ code: "PERFORMANCE_PLAN_MISSING", severity: "warning", message: "缺少人物表演规划", correction: "补充可见表演" }]);
+    });
+
     it("exposes a rejected Agent candidate so the editor can show the generated prompt", async () => {
         vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ code: 422, data: { candidate: { shotId: "shot-one", videoPrompt: "Agent 候选提示词" } }, msg: "缺少标准字段" }, { status: 422 })));
 

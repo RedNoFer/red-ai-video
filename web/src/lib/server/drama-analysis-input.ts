@@ -18,6 +18,7 @@ export type DramaAnalyzeBody = {
     forceShotIds?: unknown;
     instruction?: unknown;
     referenceMaterials?: unknown;
+    optimizationIssues?: unknown;
     visualContract?: unknown;
 };
 
@@ -121,9 +122,22 @@ export function normalizeDramaVideoPromptInput(body: DramaAnalyzeBody) {
                 return { ...compactShot, framePlan: compactVideoFramePlan(framePlan), videoPrompt: sourcePrompts.get(shot.id) || "" };
             }),
             instruction: dramaAnalysisText(body.instruction),
+            optimizationIssues: normalizeOptimizationIssues(body.optimizationIssues),
             referenceMaterials: normalizeReferenceMaterials(body.referenceMaterials),
         },
     };
+}
+
+function normalizeOptimizationIssues(value: unknown) {
+    return array(value).flatMap((item) => {
+        const issue = object(item);
+        const code = dramaAnalysisText(issue.code);
+        const message = dramaAnalysisText(issue.message);
+        if (!code || !message) return [];
+        const severity = issue.severity === "blocking" ? "blocking" : "warning";
+        const correction = dramaAnalysisText(issue.correction);
+        return [{ code, severity, message, ...(correction ? { correction } : {}) }];
+    });
 }
 
 function compactVideoFramePlan(value: unknown) {

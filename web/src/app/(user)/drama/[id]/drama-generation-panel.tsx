@@ -358,12 +358,19 @@ export function DramaGenerationPanel({
         }
     };
 
-    const optimizeVideoPrompt = async (shot: DramaShot) => {
+    const optimizeVideoPrompt = async (shot: DramaShot, optimizationIssues: DramaProductionPreflight["issues"] = []) => {
         const references = resolveShotVideoReferences(project, episode, shot, productionRun);
         const source = resolveShotVideoPrompt(project, episode, shot, productionRun);
         if (!source) return message.warning("当前镜头没有可优化的视频提示词");
         try {
-            const result = await generateDramaVideoPrompt({ project, episode, shot: { ...shot, videoPrompt: source }, referenceMaterials: references, requestId: `drama-video-optimize:${project.id}:${episode.id}:${shot.id}:${crypto.randomUUID()}` });
+            const result = await generateDramaVideoPrompt({
+                project,
+                episode,
+                shot: { ...shot, videoPrompt: source },
+                referenceMaterials: references,
+                optimizationIssues,
+                requestId: `drama-video-optimize:${project.id}:${episode.id}:${shot.id}:${crypto.randomUUID()}`,
+            });
             const optimized = result.shots.find((item) => item.shotId === shot.id);
             if (!optimized?.videoPrompt?.trim() || !optimized.framePlan?.frames?.length) throw new Error("Agent 未返回当前镜头的标准视频提示词和逐帧计划");
             const saved = await updateDramaShotPromptPatch(project.id, episode.id, shot.id, optimized.videoPrompt.trim(), undefined, { executionVideoPromptOrigin: "ai", framePlan: optimized.framePlan, framePlanOrigin: "ai" });
@@ -788,7 +795,7 @@ export function DramaGenerationPanel({
                                 onOpenCanvas={() => void openEpisodeCanvas()}
                                 onCompleteReview={() => completeShotReviewAndRefresh(shot.id)}
                                 onGenerate={() => void startProduction([shot.id])}
-                                onOptimizePrompt={() => optimizeVideoPrompt(shot)}
+                                onOptimizePrompt={() => optimizeVideoPrompt(shot, preflight?.issues.filter((issue) => issue.shotId === shot.id) || [])}
                                 blocked={readiness.missingBaselineShotIds.includes(shot.id)}
                                 preflightIssues={preflight?.issues.filter((issue) => issue.shotId === shot.id) || []}
                                 onMaintain={(action) => {

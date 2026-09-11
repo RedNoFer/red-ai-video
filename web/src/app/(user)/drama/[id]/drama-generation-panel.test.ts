@@ -43,7 +43,9 @@ describe("Drama generation production workspace", () => {
         expect(source).toContain("展开详情");
         expect(source).toContain("用户/剧本原始提示词（仅记录）");
         expect(source).toContain("视频执行提示词（当前标准）");
-        expect(source).toContain("generateDramaVideoPrompt({ project, episode");
+        expect(source).toContain("generateDramaVideoPrompt({");
+        expect(source).toContain("project,");
+        expect(source).toContain("episode,");
         expect(source).toContain("referenceMaterials");
         expect(source).toContain("framePlan");
         expect(source).toContain("提示词已优化，请确认后保存");

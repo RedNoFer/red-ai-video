@@ -3,14 +3,14 @@
 import { App, Button, Drawer, Image, Input, InputNumber, Modal, Popconfirm, Popover, Space, Tooltip } from "antd";
 import { Check, FolderInput, ImagePlus, MessageCircle, RotateCcw, Send, Sparkles, Trash2, Upload, Volume2 } from "lucide-react";
 import { nanoid } from "nanoid";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { compileDramaAssetReferencePrompt, compileDramaAssetRefinementPrompt, dramaAssetPromptFields, DRAMA_CHARACTER_TURNAROUND_SIZE, hasDramaAssetPromptQuality, preflightDramaAssetGeneration } from "@/lib/drama-prompt-compiler";
 import { approvedAssetReference } from "@/lib/drama-asset-baseline";
 import type { DramaAssetProfile, DramaAssetPromptOptimization, DramaAssetReference, DramaAssetRefinementMessage, DramaAssetRefinementProposal, DramaCharacter, DramaNamedAsset, DramaProject, DramaVoiceProfile } from "@/lib/drama-project-contract";
 import { imagePreviewUrl } from "@/lib/media-image-url";
 import { resolveDramaGlobalVisualContract } from "@/lib/drama-style";
-import { createImageGenerationTask, waitForImageGenerationTask } from "@/services/api/image";
+import { createImageGenerationTask, waitForImageGenerationTask, type ImageGenerationTask } from "@/services/api/image";
 import { optimizeDramaAssetPrompt } from "@/services/api/prompt-optimization";
 import { imageToDataUrl, uploadImage } from "@/services/image-storage";
 import { serverMediaUrl, uploadServerMedia } from "@/services/server-media-storage";
@@ -22,6 +22,7 @@ import {
     createDramaAssetGenerationBatch,
     createDramaVoiceProfile,
     refineDramaAsset,
+    getDramaAssetGenerationStatus,
     retryDramaVoicePreview,
     reviewDramaAssetCandidates,
     syncDramaVoiceCreation,
@@ -65,6 +66,8 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
     const voicePreviewAudioRef = useRef<HTMLAudioElement>(null);
     const voiceCreationRequestIdRef = useRef("");
     const editorKeyRef = useRef("");
+    const generationHydrationKeyRef = useRef("");
+    const handledGenerationTaskIdsRef = useRef(new Set<string>());
     const [draft, setDraft] = useState<AssetDraft>(emptyDraft);
     const [uploading, setUploading] = useState(false);
     const [generating, setGenerating] = useState(false);
@@ -79,6 +82,8 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
     const [syncingVoicePreview, setSyncingVoicePreview] = useState(false);
     const definition = DRAMA_ASSET_DEFINITIONS[kind];
     const asset = liveAsset || project[kind].find((item) => item.id === assetId);
+    const projectRef = useRef(project);
+    projectRef.current = project;
     const character = kind === "characters" ? (asset as DramaCharacter | undefined) : undefined;
     const references = asset ? dramaAssetReferences(asset) : [];
     const primary = asset ? approvedAssetReference(asset) : undefined;
@@ -105,6 +110,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
     useEffect(() => {
         if (!open) {
             editorKeyRef.current = "";
+            generationHydrationKeyRef.current = "";
             setRefinementPrompt("");
             setRefinementProposal(undefined);
             setSupplierPromptOverride("");
@@ -119,7 +125,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
         }
         const latestRefinement = asset.refinementHistory?.at(-1)?.proposal;
         setRefinementProposal(latestRefinement);
-        setSupplierPromptOverride(asset.supplierPrompt || "");
+        setSupplierPromptOverride(kind === "props" ? compileDramaAssetReferencePrompt(project, { ...asset, supplierPrompt: undefined }, "道具") : asset.supplierPrompt || "");
         setDraft({
             name: asset.name,
             description: asset.description,
@@ -488,8 +494,134 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
         }
     };
 
+    const persistGeneratedReference = useCallback(
+        async (
+            task: ImageGenerationTask & { generationStage?: "initial" | "refinement" },
+            imageConfig: typeof config,
+            prompt: string,
+            generationStage: "initial" | "refinement",
+            activeProposal?: DramaAssetRefinementProposal,
+            assetSupplierPrompt?: string,
+        ) => {
+            const project = projectRef.current;
+            const projectId = project.id;
+            const assetId = asset?.id;
+            const currentAsset =
+                useDramaStore
+                    .getState()
+                    .projects.find((item) => item.id === projectId)
+                    ?.[kind].find((item) => item.id === assetId) || asset;
+            if (!currentAsset || !assetId) return;
+            const currentReferences = dramaAssetReferences(currentAsset);
+            const nextReferences = imageResultsToReferences(await waitForImageGenerationTask(imageConfig, task), {
+                promptVersion: (currentReferences.reduce((max, item) => Math.max(max, item.promptVersion || 0), 0) || 0) + 1,
+                compiledPrompt: prompt,
+                generationStage,
+                ...(activeProposal ? { promptChanges: activeProposal.changes, refinement: activeProposal } : {}),
+                generationTaskId: task.id,
+                logicalModelId: task.model,
+                reviewStatus: "reviewing",
+            });
+            if (!nextReferences.length) throw new Error("生成结果没有可持久化地址");
+            const review = await reviewDramaAssetCandidates(projectId, kind as "characters" | "scenes" | "props", assetId, prompt, nextReferences).catch(() => ({
+                mode: "unavailable" as const,
+                status: "unavailable" as const,
+                summary: "自动审核暂时不可用，候选图已保留，请人工确认后再设为主基准。",
+                issues: [],
+                retryTaskIds: [],
+            }));
+            const reviewedReferences = nextReferences.map((reference) => ({
+                ...reference,
+                reviewStatus: review.status === "passed" ? ("passed" as const) : review.status === "needs_revision" ? ("needs_revision" as const) : ("unavailable" as const),
+                reviewSummary: review.summary,
+                reviewIssues: review.issues.filter((issue) => !issue.taskId || issue.taskId === reference.id).map(({ category, severity, message: issueMessage, correction }) => ({ category, severity, message: issueMessage, correction })),
+            }));
+            const latestProject = await loadProject(project.id, true);
+            const latestAsset = latestProject[kind].find((item) => item.id === assetId);
+            const latestReferences = latestAsset ? dramaAssetReferences(latestAsset) : [];
+            const mergedReferences = mergeGeneratedReferenceReviews(latestReferences, reviewedReferences);
+            const propSupplierPrompt = kind === "props" ? assetSupplierPrompt?.trim() || (generationStage === "initial" ? prompt : compileDramaAssetReferencePrompt(project, { ...currentAsset, supplierPrompt: undefined }, "道具")) : undefined;
+            replaceProject(latestProject);
+            updateAsset(
+                projectId,
+                kind,
+                assetId,
+                {
+                    references: mergedReferences,
+                    ...(propSupplierPrompt ? { supplierPrompt: propSupplierPrompt } : {}),
+                },
+                { markShotsStale: false },
+            );
+            const savedProject = await saveProjectNow(project.id);
+            replaceProject(savedProject);
+            message.success(`已生成 ${nextReferences.length} 张候选图${review.status === "passed" ? "，可直接使用" : "，图片已保留，请查看审核建议"}`);
+            setRefinementProposal(undefined);
+            setSupplierPromptOverride("");
+        },
+        [asset?.id, kind, loadProject, message, replaceProject, saveProjectNow, updateAsset],
+    );
+
+    useEffect(() => {
+        if (!open || !asset || kind === "clues") return;
+        const hydrationKey = `${project.id}:${kind}:${asset.id}`;
+        if (generationHydrationKeyRef.current === hydrationKey) return;
+        generationHydrationKeyRef.current = hydrationKey;
+        let disposed = false;
+        setGenerating(true);
+        void getDramaAssetGenerationStatus(project.id, kind, asset.id)
+            .then(async (task) => {
+                if (disposed) return;
+                if (!task || !["pending", "running", "success"].includes(task.status)) {
+                    setGenerating(false);
+                    return;
+                }
+                const currentAsset = useDramaStore
+                    .getState()
+                    .projects.find((item) => item.id === project.id)
+                    ?.[kind].find((item) => item.id === asset.id);
+                if (currentAsset && dramaAssetReferences(currentAsset).some((reference) => reference.generationTaskId === task.id)) {
+                    setGenerating(false);
+                    return;
+                }
+                if (handledGenerationTaskIdsRef.current.has(task.id)) return;
+                handledGenerationTaskIdsRef.current.add(task.id);
+                setGenerating(true);
+                try {
+                    const assetKind = kind === "characters" ? "角色" : kind === "scenes" ? "场景" : "道具";
+                    const currentProject = projectRef.current;
+                    const currentAsset =
+                        useDramaStore
+                            .getState()
+                            .projects.find((item) => item.id === currentProject.id)
+                            ?.[kind].find((item) => item.id === asset.id) || asset;
+                    const prompt = task.prompt.trim() || compileDramaAssetReferencePrompt(currentProject, currentAsset, assetKind);
+                    const assetSupplierPrompt = kind === "props" ? compileDramaAssetReferencePrompt(currentProject, { ...currentAsset, supplierPrompt: task.prompt }, "道具") : undefined;
+                    const imageModel = config.imageModel || config.imageModels[0] || task.model;
+                    if (!imageModel) throw new Error("后台尚未配置可用的图片模型，请先在管理后台配置图片渠道");
+                    const imageConfig = {
+                        ...config,
+                        model: imageModel,
+                        imageModel,
+                        size: kind === "characters" ? DRAMA_CHARACTER_TURNAROUND_SIZE : kind === "scenes" ? "1:1" : dramaGenerationSize(currentProject, prompt),
+                        count: "1",
+                    };
+                    await persistGeneratedReference(task, imageConfig, prompt, task.generationStage || "initial", undefined, assetSupplierPrompt);
+                } catch (error) {
+                    if (!disposed) message.error(error instanceof Error ? error.message : "候选图生成失败");
+                } finally {
+                    if (!disposed) setGenerating(false);
+                }
+            })
+            .catch(() => {
+                if (!disposed) setGenerating(false);
+            });
+        return () => {
+            disposed = true;
+        };
+    }, [asset?.id, config.imageModel, config.imageModels[0], kind, message, open, persistGeneratedReference, project.id]);
+
     const generateReference = async (proposalOverride?: DramaAssetRefinementProposal, referenceOverride?: DramaAssetReference) => {
-        if (!asset || kind === "clues") return;
+        if (!asset || kind === "clues" || generating) return;
         setGenerating(true);
         try {
             const activeProposal = proposalOverride || refinementProposal;
@@ -499,7 +631,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                 message.warning(`暂不能生成：${preflight.errors.join("；")}`);
                 return;
             }
-            const prompt = supplierPromptOverride.trim() || (activeProposal ? compileDramaAssetRefinementPrompt(project, asset, assetKind, activeProposal, refinementPrompt) : supplierPrompt);
+            const prompt = activeProposal ? compileDramaAssetRefinementPrompt(project, asset, assetKind, activeProposal, refinementPrompt) : supplierPromptOverride.trim() || supplierPrompt;
             const imageModel = config.imageModel || config.imageModels[0] || "";
             if (!imageModel) throw new Error("后台尚未配置可用的图片模型，请先在管理后台配置图片渠道");
             const imageConfig = { ...config, model: imageModel, imageModel, size: kind === "characters" ? DRAMA_CHARACTER_TURNAROUND_SIZE : kind === "scenes" ? "1:1" : dramaGenerationSize(project, prompt), count: "1" };
@@ -538,43 +670,8 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                 generationStage: activeProposal ? "refinement" : "initial",
                 clientRequestId: `drama-reference:${project.id}:${asset.id}:${nanoid()}`,
             });
-            const nextReferences = imageResultsToReferences(await waitForImageGenerationTask(imageConfig, task), {
-                promptVersion: (references.reduce((max, item) => Math.max(max, item.promptVersion || 0), 0) || 0) + 1,
-                compiledPrompt: prompt,
-                generationStage: activeProposal ? "refinement" : "initial",
-                ...(activeProposal ? { promptChanges: activeProposal.changes, refinement: activeProposal } : {}),
-                generationTaskId: task.id,
-                logicalModelId: task.model,
-                reviewStatus: "reviewing",
-            });
-            if (!nextReferences.length) throw new Error("生成结果没有可持久化地址");
-            const review = await reviewDramaAssetCandidates(project.id, kind as "characters" | "scenes" | "props", asset.id, prompt, nextReferences).catch(() => ({
-                mode: "unavailable" as const,
-                status: "unavailable" as const,
-                summary: "自动审核暂时不可用，候选图已保留，请人工确认后再设为主基准。",
-                issues: [],
-                retryTaskIds: [],
-            }));
-            const reviewedReferences = nextReferences.map((reference) => ({
-                ...reference,
-                reviewStatus: review.status === "passed" ? ("passed" as const) : review.status === "needs_revision" ? ("needs_revision" as const) : ("unavailable" as const),
-                reviewSummary: review.summary,
-                reviewIssues: review.issues.filter((issue) => !issue.taskId || issue.taskId === reference.id).map(({ category, severity, message: issueMessage, correction }) => ({ category, severity, message: issueMessage, correction })),
-            }));
-            // The worker persists the finished media before the poll resolves. Reload
-            // that authoritative project snapshot before merging review metadata so a
-            // stale drawer snapshot cannot overwrite a just-created candidate.
-            const latestProject = await loadProject(project.id, true);
-            const latestAsset = latestProject[kind].find((item) => item.id === asset.id);
-            const latestReferences = latestAsset ? dramaAssetReferences(latestAsset) : [];
-            const mergedReferences = mergeGeneratedReferenceReviews(latestReferences, reviewedReferences);
-            replaceProject(latestProject);
-            updateAsset(project.id, kind, asset.id, { references: mergedReferences }, { markShotsStale: false });
-            const savedProject = await saveProjectNow(project.id);
-            replaceProject(savedProject);
-            message.success(`已生成 ${nextReferences.length} 张候选图${review.status === "passed" ? "，可直接使用" : "，图片已保留，请查看审核建议"}`);
-            setRefinementProposal(undefined);
-            setSupplierPromptOverride("");
+            handledGenerationTaskIdsRef.current.add(task.id);
+            await persistGeneratedReference(task, imageConfig, prompt, activeProposal ? "refinement" : "initial", activeProposal);
         } catch (error) {
             message.error(error instanceof Error ? error.message : "候选图生成失败");
         } finally {
@@ -861,7 +958,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                                         <Button size="small" onClick={applyRefinementDraft}>
                                             仅应用到设定
                                         </Button>
-                                        <Button size="small" type="primary" icon={<Sparkles className="size-3.5" />} loading={generating} onClick={() => void generateReference()}>
+                                        <Button size="small" type="primary" icon={<Sparkles className="size-3.5" />} loading={generating} disabled={generating} onClick={() => void generateReference()}>
                                             生成调整候选
                                         </Button>
                                     </div>
@@ -926,7 +1023,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                                         上传候选
                                     </Button>
                                     {kind !== "clues" ? (
-                                        <Button icon={<Sparkles className="size-3.5" />} loading={generating} onClick={() => void generateReference()}>
+                                        <Button icon={<Sparkles className="size-3.5" />} loading={generating} disabled={generating} onClick={() => void generateReference()}>
                                             生成候选
                                         </Button>
                                     ) : null}

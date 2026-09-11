@@ -145,6 +145,14 @@ export async function POST(request: Request) {
                     : []
                 : [];
         const videoReferenceInstruction = videoReferenceEntries.length ? `本次参考素材绑定清单（必须逐字使用，不能猜测、改名或省略）：${videoReferenceEntries.join("；")}。公开视频的第一段必须写“素材绑定：”，并逐项列出上述 alias 及其唯一职责。` : "";
+        const videoOptimizationIssueEntries = phase === "video_prompt" ? videoPromptInput!.payload.optimizationIssues.map((issue) => `${issue.code}：${issue.message}${issue.correction ? `；建议：${issue.correction}` : ""}`) : [];
+        const videoOptimizationInstruction = videoOptimizationIssueEntries.length
+            ? `本次是对当前镜头提示词的定向优化。请参考以下前置检查结果：${videoOptimizationIssueEntries.join("；")}。其中 warning 是可在提示词中修正的质量建议；blocking 若涉及真实资产、帧图片或连续性状态，不能靠改写提示词伪造通过。任何情况下不得改变已确认的人物、场景、道具、时长、帧数或事实；如果检查与镜头事实冲突，以镜头事实和已绑定资产为准。`
+            : "";
+        const videoPerformanceInstruction =
+            phase === "video_prompt"
+                ? "如果输入包含 performancePlan 或 dialoguePerformance，必须把其中可执行的眉眼、视线、呼吸、身体/手部动作、语气、停顿和反应转译为公开视频提示词的外在可见动作，并写入对应时间段及 framePlan；不要只保留结构化字段，也不要在公开提示词中输出字段名。"
+                : "";
         const completionFieldInstruction = phase === "review_completion" ? `本次请求字段必须逐项真实补全，禁止只返回 shotId 空壳。${dramaReviewCompletionFieldInstructions(reviewCompletionInput!.fields)}` : "";
         const messages = [
             {
@@ -153,7 +161,7 @@ export async function POST(request: Request) {
                     phase === "visual"
                         ? `你是影视视觉导演和表演导演。输入内容已经由用户审核，必须严格保留每个 shotId、镜头数量、顺序、人物、场景、对白、旁白、原文和时长。为每个镜头补充图片提示词、视频提示词、起始/结束帧提示词、镜头运动、连续性、结构化人物表演计划、逐句对白表演、色彩灯光计划和 framePlan。生成前先根据场景资产完成现实可行的调度：场景有哪些座椅、长凳、地面、通道、门窗、车辆舱位或遮挡；每名实际出镜者在同一参照系下位于哪里、朝向哪里、看向谁或什么、身体如何被支撑、和其他出镜者怎样相对。坐姿必须落在可见的合理支撑面；多人必须写清左右/前后和视线关系；没有原文或资产依据的人物不得新增。表演必须写成可执行的外在行为：情绪目标、情绪起中止递进、眉眼嘴角下颌、视线、呼吸、身体反应、语气、停顿、重音和节奏；禁止只写“表情自然”“情绪丰富”等抽象词。对白和旁白可以不进入静态图片文字，但对白引发的表情、视线、手部/身体姿态、道具或环境变化必须进入对应 framePlan.frames 的 imagePrompt。每帧 imagePrompt 必须是独立可执行的静态画面，写明本帧可见状态并与上一帧有真实可见差异；禁止复制整镜头提示词后追加“起始状态/动作展开/关键变化/结果状态”等通用词。framePlan 必须提供 1-9 个按真实动作节点连续覆盖镜头时长的帧段。灯光必须明确色板、色温、主光、补光、轮廓光、反差、材质反射、肤色保护和跨镜继承/过渡。连续性必须明确景别、机位、构图、人物站位、视线、动作起止、屏幕运动方向和轴线规则。镜头之间要保持人物服装、道具、空间、表演状态和光色关系连续。不得新增输入中没有的剧情事实。必须调用 design_drama_visuals。不要使用 Markdown。${globalVisualRule}${schemaInstruction}`
                         : phase === "video_prompt"
-                          ? `你是图生视频执行提示词导演。${DRAMA_PUBLIC_VIDEO_PROMPT_CONTRACT}仅根据输入的镜头事实、已验收帧、连续性状态和脱敏 referenceMaterials 执行当前 Seedance 2.5 导演 Skill，直接生成完整公开 videoPrompt；videoPrompt 本身必须包含每个真实时间段的时间范围、起点、动作与触发、可见衔接和终点，framePlan.frames 只作为同一内容的结构化镜像。不得生成图片提示词、改变镜头事实、输出 URL、内部 ID、JSON、Markdown 标题或解释文字。必须调用 generate_drama_video_prompts。${DRAMA_DIALOGUE_TIMING_RULES}优化时必须逐句读取输入 shots.utterances 的 startSecond/endSecond、pauseBeforeSeconds/pauseAfterSeconds、speechRate 和 speechRateCharsPerSecond；对白不能被压进短于其可说时长的时间段，若当前时间段容纳不下，应保留动作节点并把对白放入足够长的连续时间段，不能通过异常加速解决。以下是服务端对白容量预检，必须逐条执行：\n${dialogueCapacityInstruction}${globalVisualRule}${videoReferenceInstruction}${schemaInstruction}`
+                          ? `你是图生视频执行提示词导演。${DRAMA_PUBLIC_VIDEO_PROMPT_CONTRACT}仅根据输入的镜头事实、已验收帧、连续性状态和脱敏 referenceMaterials 执行当前 Seedance 2.5 导演 Skill，直接生成完整公开 videoPrompt；videoPrompt 本身必须包含每个真实时间段的时间范围、起点、动作与触发、可见衔接和终点，framePlan.frames 只作为同一内容的结构化镜像。不得生成图片提示词、改变镜头事实、输出 URL、内部 ID、JSON、Markdown 标题或解释文字。必须调用 generate_drama_video_prompts。${DRAMA_DIALOGUE_TIMING_RULES}优化时必须逐句读取输入 shots.utterances 的 startSecond/endSecond、pauseBeforeSeconds/pauseAfterSeconds、speechRate 和 speechRateCharsPerSecond；对白不能被压进短于其可说时长的时间段，若当前时间段容纳不下，应保留动作节点并把对白放入足够长的连续时间段，不能通过异常加速解决。以下是服务端对白容量预检，必须逐条执行：\n${dialogueCapacityInstruction}${videoPerformanceInstruction}${videoOptimizationInstruction}${globalVisualRule}${videoReferenceInstruction}${schemaInstruction}`
                           : phase === "image_prompt"
                             ? `你是 Seedance 2.0 静态生图提示词导演。${DRAMA_PUBLIC_STATIC_FRAME_PROMPT_CONTRACT}只优化当前镜头的图片提示词，不改变剧情事实、人物身份、资产造型或镜头数量。${globalVisualRule}${SEEDANCE_STATIC_FRAME_RULES}${SEEDANCE_STATIC_FRAME_PROMPT_LAYOUT}输出一条可直接提交给图片供应商的静态画面提示词，主体和可见状态前置，明确场景空间、景别、机位、构图、光线色彩、材质细节、风格与针对性负面约束；参考图职责由 referenceManifest 和服务端绑定单独承载；禁止运镜、时间段、动作过程、对白转述、内部 ID、URL、JSON、Markdown 标题或解释文字。必须使用固定资产的身份、空间和道具约束，并保持与连续性入口状态一致。${schemaInstruction}`
                             : phase === "review_completion"

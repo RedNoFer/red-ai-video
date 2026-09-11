@@ -5,6 +5,7 @@ import type {
     DramaEpisode,
     DramaProductionPackagePreview,
     DramaProductionPreflight,
+    DramaProductionPreflightIssue,
     DramaProductionPlan,
     DramaProductionRun,
     DramaProject,
@@ -18,6 +19,15 @@ import type {
     DramaShot,
 } from "@/lib/drama-project-contract";
 import { resolveDramaGlobalVisualContract } from "@/lib/drama-style";
+
+export type DramaAssetGenerationStatus = {
+    id: string;
+    kind: "generation" | "edit";
+    model: string;
+    status: "pending" | "running" | "success" | "error" | "cancelled";
+    prompt: string;
+    generationStage?: "initial" | "refinement";
+};
 
 export function listDramaAssetGenerationBatches(projectId: string) {
     return request<{ batches: DramaAssetGenerationBatch[] }>(`/api/drama/projects/${encodeURIComponent(projectId)}/asset-generation-batches`).then((data) => data.batches);
@@ -58,6 +68,10 @@ export function completeDramaAsset(projectId: string, kind: "characters" | "scen
         `/api/drama/projects/${encodeURIComponent(projectId)}/assets/${kind}/${encodeURIComponent(assetId)}/complete`,
         { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ requestId, config }) },
     );
+}
+
+export function getDramaAssetGenerationStatus(projectId: string, kind: "characters" | "scenes" | "props", assetId: string) {
+    return request<{ task: DramaAssetGenerationStatus | null }>(`/api/drama/projects/${encodeURIComponent(projectId)}/assets/${kind}/${encodeURIComponent(assetId)}`).then((data) => data.task);
 }
 
 export function planDramaVoice(projectId: string, assetId: string) {
@@ -259,7 +273,7 @@ export function preflightDramaGeneration(projectId: string, episodeId: string, s
     }).then((data) => data.preflight);
 }
 
-export function generateDramaVideoPrompt(input: { project: DramaProject; episode: DramaEpisode; shot: DramaShot; referenceMaterials: unknown[]; requestId?: string }) {
+export function generateDramaVideoPrompt(input: { project: DramaProject; episode: DramaEpisode; shot: DramaShot; referenceMaterials: unknown[]; optimizationIssues?: DramaProductionPreflightIssue[]; requestId?: string }) {
     const shot = input.shot;
     const episode: Partial<DramaEpisode> = {
         id: input.episode.id,
@@ -285,6 +299,7 @@ export function generateDramaVideoPrompt(input: { project: DramaProject; episode
             props: input.project.props.filter((item) => propIds.has(item.id)),
             clues: input.project.clues.filter((item) => clueIds.has(item.id)),
             shots: [shot],
+            optimizationIssues: input.optimizationIssues || [],
             referenceMaterials: input.referenceMaterials.map((reference) => {
                 const item = reference && typeof reference === "object" ? (reference as Record<string, unknown>) : {};
                 return {

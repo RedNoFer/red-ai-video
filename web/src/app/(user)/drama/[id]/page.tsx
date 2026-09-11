@@ -23,7 +23,7 @@ import { DramaReviewPanel, missingReviewFieldsForShot } from "./drama-review-pan
 import { DramaStoryboardShotCard } from "./drama-storyboard-shot-card";
 import { markDramaCanvasSynced } from "../../canvas/[id]/canvas-drama-navigation";
 import { DramaVersionModal } from "./drama-project-modals";
-import { applyDramaVisualRunTerminalStep, dramaShotVideoMode, resolveDramaVisualRunSync } from "./drama-shot-generation-utils";
+import { applyDramaVisualRunTerminalStep, dramaShotVideoMode, hasActiveDramaVisualQueue, resolveDramaVisualRunSync } from "./drama-shot-generation-utils";
 import { DramaEpisodeSidebar, DramaScriptPanel, DramaWorkspaceHeader, type DramaProjectStage } from "./drama-project-sections";
 
 export default function DramaProjectPage() {
@@ -442,6 +442,7 @@ function DramaProjectEditor({ project }: { project: DramaProject }) {
                         const nextShot = releaseUntrackedVisualQueue(currentShot);
                         if (nextShot !== currentShot) replaceShot(project.id, episode.id, currentShot.id, nextShot);
                     }
+                    shouldContinue = hasActiveDramaVisualQueue(currentEpisode);
                     return;
                 }
                 if (!currentProject) return;
@@ -461,6 +462,9 @@ function DramaProjectEditor({ project }: { project: DramaProject }) {
                 // A later sync pass will surface the persisted task state.
             } finally {
                 syncing = false;
+                const latestProject = useDramaStore.getState().projects.find((item) => item.id === project.id);
+                const latestEpisode = latestProject?.episodes.find((item) => item.id === episode.id);
+                shouldContinue = shouldContinue || hasActiveDramaVisualQueue(latestEpisode);
                 if (active && shouldContinue) timer = window.setTimeout(() => void syncVisualRun(), 2500);
             }
         };

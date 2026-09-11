@@ -14,9 +14,10 @@ export const DRAMA_FRAME_COUNT_MAX = 9;
 export const DRAMA_FRAME_POLICY_OPTIONS = ["fixed-4", "fixed-5", "agent"] as const;
 export type DramaFramePolicy = (typeof DRAMA_FRAME_POLICY_OPTIONS)[number];
 export const DRAMA_VIDEO_REFERENCE_IMAGE_LIMIT = 9;
+export const DRAMA_VIDEO_REFERENCE_IMAGE_LIMIT_30S = 30;
 
-export function dramaReferenceImageBudget(_: DramaShotDuration | number): number {
-    return DRAMA_VIDEO_REFERENCE_IMAGE_LIMIT;
+export function dramaReferenceImageBudget(duration: DramaShotDuration | number): number {
+    return duration >= 30 ? DRAMA_VIDEO_REFERENCE_IMAGE_LIMIT_30S : DRAMA_VIDEO_REFERENCE_IMAGE_LIMIT;
 }
 
 export function defaultDramaProductionPlan(source: DramaProductionPlan["source"] = "new-project"): DramaProductionPlan {

@@ -10,7 +10,7 @@ import { auditDramaShotDirectorQuality } from "@/lib/server/agent-skills/drama-v
 const blocking = (code: string, message: string, extra: Partial<DramaProductionPreflightIssue> = {}): DramaProductionPreflightIssue => ({ code, severity: "blocking", message, ...extra });
 const warning = (code: string, message: string, extra: Partial<DramaProductionPreflightIssue> = {}): DramaProductionPreflightIssue => ({ code, severity: "warning", message, ...extra });
 
-/** Director gate: no paid generation may start until the executable package is internally consistent. */
+/** Hard executable checks stay blocking; prompt-quality findings remain actionable warnings. */
 export function preflightDramaProduction(project: DramaProject, episode: DramaEpisode, shotIds?: string[]): DramaProductionPreflight {
     const issues: DramaProductionPreflightIssue[] = [];
     const selected = new Set(shotIds?.length ? shotIds : episode.shots.map((shot) => shot.id));
@@ -97,13 +97,13 @@ function checkShot(
     const performance = shot.performancePlan;
     const beats = performance?.beats;
     if (!performance?.emotionalObjective || !performance.emotionalArc || !performance.speechStyle || !performance.pace || !performance.breath || !beats?.start.facialAction || !beats.middle.facialAction || !beats.end.facialAction)
-        issues.push(blocking("PERFORMANCE_PLAN_MISSING", `${label}缺少完整人物表演规划`, { shotId: shot.id }));
+        issues.push(warning("PERFORMANCE_PLAN_MISSING", `${label}缺少完整人物表演规划`, { shotId: shot.id }));
     const dialogueCount = shot.utterances.filter((item) => item.type === "dialogue").length || (shot.dialogue.trim() ? 1 : 0);
-    for (const detail of validateDramaPerformanceDetail(shot.performancePlan, shot.dialoguePerformance, dialogueCount, label)) issues.push(blocking("PERFORMANCE_DETAIL", detail, { shotId: shot.id }));
-    if (dialogueCount && (!shot.dialoguePerformance?.length || shot.dialoguePerformance.length < dialogueCount)) issues.push(blocking("DIALOGUE_PERFORMANCE_MISSING", `${label}对白缺少逐句语气、节奏和面部反应指导`, { shotId: shot.id }));
+    for (const detail of validateDramaPerformanceDetail(shot.performancePlan, shot.dialoguePerformance, dialogueCount, label)) issues.push(warning("PERFORMANCE_DETAIL", detail, { shotId: shot.id }));
+    if (dialogueCount && (!shot.dialoguePerformance?.length || shot.dialoguePerformance.length < dialogueCount)) issues.push(warning("DIALOGUE_PERFORMANCE_MISSING", `${label}对白缺少逐句语气、节奏和面部反应指导`, { shotId: shot.id }));
     const light = shot.lightingPlan;
     if (!light?.palette || !light.colorTemperature || !light.keyLight || !light.fillLight || !light.rimLight || !light.materialResponse || !light.skinToneProtection)
-        issues.push(blocking("LIGHTING_PLAN_MISSING", `${label}缺少完整色彩与灯光规划`, { shotId: shot.id }));
+        issues.push(warning("LIGHTING_PLAN_MISSING", `${label}缺少完整色彩与灯光规划`, { shotId: shot.id }));
     if (!Number.isFinite(shot.duration) || shot.duration <= 0) issues.push(blocking("DURATION", `${label}缺少有效时长`, { shotId: shot.id }));
     const dialogueTiming = dramaDialogueTimingReminder(shot.duration, shot.utterances as DramaDialogueTimingInput[], shot.dialogue, label);
     if (dialogueTiming) issues.push(warning("DIALOGUE_TIMING", dialogueTiming.message, { shotId: shot.id, correction: "对白时长仅作提醒；如需优化，再按自然分句、说话人转换或动作反应拆镜" }));
@@ -152,12 +152,11 @@ function checkShot(
     }
     const prompt = `${shot.imagePrompt}\n${shot.videoPrompt}`;
     const referencePrompt = stripNegativeReferenceClauses(prompt);
-    const inactiveCharacters = project.characters.filter((asset) => asset.activeEpisodeCodes && !asset.activeEpisodeCodes.includes(episodeCode) && referencePrompt.includes(asset.name));
-    for (const asset of inactiveCharacters) issues.push(blocking("INACTIVE_CHARACTER", `${label}Prompt中出现未出镜角色“${asset.name}”`, { shotId: shot.id, assetId: asset.id }));
+    const inactiveCharacters = project.characters.filter((asset) => asset.activeEpisodeCodes && !asset.activeEpisodeCodes.includes(episodeCode) && referencePrompt.includes(asset.name) && !shot.characterIds.includes(asset.id));
+    for (const asset of inactiveCharacters) issues.push(warning("INACTIVE_CHARACTER", `${label}Prompt中出现未出镜角色“${asset.name}”`, { shotId: shot.id, assetId: asset.id }));
     for (const asset of project.characters)
-        if (referencePrompt.includes(asset.name) && !shot.characterIds.includes(asset.id)) issues.push(blocking("PROMPT_CHARACTER_REFERENCE", `${label}Prompt出现角色“${asset.name}”，但镜头未引用该角色`, { shotId: shot.id, assetId: asset.id }));
-    for (const asset of project.props)
-        if (prompt.includes(asset.name) && !shot.propIds.includes(asset.id)) issues.push(blocking("PROMPT_PROP_REFERENCE", `${label}Prompt出现道具“${asset.name}”，但镜头未引用该道具`, { shotId: shot.id, assetId: asset.id }));
+        if (referencePrompt.includes(asset.name) && !shot.characterIds.includes(asset.id)) issues.push(warning("PROMPT_CHARACTER_REFERENCE", `${label}Prompt出现角色“${asset.name}”，但镜头未引用该角色`, { shotId: shot.id, assetId: asset.id }));
+    for (const asset of project.props) if (prompt.includes(asset.name) && !shot.propIds.includes(asset.id)) issues.push(warning("PROMPT_PROP_REFERENCE", `${label}Prompt出现道具“${asset.name}”，但镜头未引用该道具`, { shotId: shot.id, assetId: asset.id }));
     const incoming = edgeByTo.get(shot.id);
     const requiresAcceptedTail = shot.framePlan?.start.source === "previous_accepted_actual_tail" || incoming?.inheritActualEndFrame;
     if (requiresAcceptedTail) {
@@ -182,7 +181,7 @@ function checkShot(
                     const visualError = validateDramaFrameVisualContent(frame.imagePrompt, frame.actionPrompt);
                     if (visualError) issues.push(warning("FRAME_VISUAL_CONTENT", `${label}第${index + 1}帧${visualError}`, { shotId: shot.id, correction: "提示词仅供修订参考；如需优化，可回到分镜编辑当前帧" }));
                     if (index > 0 && dramaFrameVisualSubject(frame.imagePrompt, frame.actionPrompt) === dramaFrameVisualSubject(frames[index - 1].imagePrompt, frames[index - 1].actionPrompt))
-                        issues.push(blocking("FRAME_VISUAL_DUPLICATE", `${label}第${index + 1}帧与上一帧的可见画面没有变化`, { shotId: shot.id, correction: "补充当前帧新的姿态、道具状态、表情或环境变化" }));
+                        issues.push(warning("FRAME_VISUAL_DUPLICATE", `${label}第${index + 1}帧与上一帧的可见画面没有变化`, { shotId: shot.id, correction: "补充当前帧新的姿态、道具状态、表情或环境变化" }));
                     if (shot.storyboardFrameMode === "all_frames") {
                         const stored = shot.storyboardFrames?.find((candidate) => candidate.id === frame.id || candidate.sequenceIndex === frame.sequenceIndex);
                         const needsReview = stored?.continuityStatus === "needs_review" || stored?.continuityStatus === "stale";

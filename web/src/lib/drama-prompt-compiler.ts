@@ -67,7 +67,13 @@ export function hasDramaAssetPromptQuality(value: string | undefined, kind: "角
     const prompt = formatDramaAssetPrompt(value || "");
     if (!isStructuredDramaAssetPrompt(prompt)) return false;
     const required = kind === "角色" ? ["自然骨骼", "五官", "头发", "服装", "纯白色", "四视图", "身份特写", "严格左侧面", "负面约束"] : ["主体", "材质", "构图", "负面约束"];
-    return required.every((term) => prompt.includes(term));
+    if (!required.every((term) => prompt.includes(term))) return false;
+    if (kind !== "道具") return true;
+    const visibleLines = prompt
+        .split(/\r?\n/u)
+        .map((line) => line.trim())
+        .filter((line) => line && !line.startsWith("负面约束：") && !line.startsWith("负面约束:"));
+    return visibleLines.every((line) => !hasDramaPropNarrative(line)) && /(?:单一道具主体|只展示道具|道具本体)/u.test(prompt) && /(?:静置|展示)/u.test(prompt);
 }
 
 /** Read the editable six-section prompt back into the durable asset fields. */
@@ -433,17 +439,21 @@ export function compileDramaAssetReferencePrompt(project: Pick<DramaProject, "ti
     if (hasDramaAssetPromptQuality(savedSupplierPrompt, kind) && (kind !== "场景" || savedSupplierPrompt.includes("九宫格"))) return formatDramaAssetPrompt(savedSupplierPrompt);
     const styleContract = resolveDramaStyleContract(project);
     const profile = asset.profile;
-    const description = sanitizeDramaVisualPrompt(asset.description);
-    const visualIdentity = joinAssetPromptFacts([profile?.visualIdentity, ...(profile?.identityAnchors || [])]);
-    const styling = sanitizeDramaVisualPrompt(profile?.styling || "");
+    const description = kind === "道具" ? sanitizeDramaPropFacts(asset.description) : sanitizeDramaVisualPrompt(asset.description);
+    const visualIdentity = joinAssetPromptFacts(kind === "道具" ? [sanitizeDramaPropFacts(profile?.visualIdentity), ...(profile?.identityAnchors || []).map(sanitizeDramaPropFacts)] : [profile?.visualIdentity, ...(profile?.identityAnchors || [])]);
+    const styling = kind === "道具" ? sanitizeDramaPropFacts(profile?.styling) : sanitizeDramaVisualPrompt(profile?.styling || "");
     const stylingForPrompt = description.length >= styling.length && styling && description.includes(styling) ? "" : styling;
-    const colorPalette = sanitizeDramaVisualPrompt(profile?.colorPalette || "");
-    const consistency = joinAssetPromptFacts([profile?.consistencyRules, ...(profile?.spatialRules || []), ...(profile?.stateRules || [])]);
+    const colorPalette = kind === "道具" ? sanitizeDramaPropFacts(profile?.colorPalette) : sanitizeDramaVisualPrompt(profile?.colorPalette || "");
+    const consistency = joinAssetPromptFacts(
+        kind === "道具"
+            ? [sanitizeDramaPropFacts(profile?.consistencyRules), ...(profile?.spatialRules || []).map(sanitizeDramaPropFacts), ...(profile?.stateRules || []).map(sanitizeDramaPropFacts)]
+            : [profile?.consistencyRules, ...(profile?.spatialRules || []), ...(profile?.stateRules || [])],
+    );
     const globalStyle = [styleContract.visualDescription, styleContract.artStyle ? `全局画风规格：${styleContract.artStyle}` : "", styleContract.colorScript ? `全局色彩脚本：${styleContract.colorScript}` : ""].filter(Boolean).join("；");
     const sceneQuality = kind === "场景" ? "建筑透视稳定，墙体、门窗、地面和桌椅等直线结构不弯折；九格中同一物件的比例、材质、位置和光向不漂移，空间细节清晰可读" : "";
     const forbidden = joinAssetPromptConstraints([
         ...(profile?.forbiddenChanges || []).filter((value) => kind !== "场景" || !/(?:拼版|多视角|分格)/u.test(value)),
-        kind === "角色" ? DRAMA_CHARACTER_NEGATIVE_RULES : kind === "场景" ? "人物、不同地点、方向标签、文字、水印、logo" : "额外主体、拼版、多视角、文字、水印、logo",
+        kind === "角色" ? DRAMA_CHARACTER_NEGATIVE_RULES : kind === "场景" ? "人物、不同地点、方向标签、文字、水印、logo" : "人物、手部、持有人、人物动作、书写过程、额外主体、拼版、多视角、文字、水印、logo",
         styleContract.globalNegativePrompt || "",
     ]);
     const layout =
@@ -451,14 +461,14 @@ export function compileDramaAssetReferencePrompt(project: Pick<DramaProject, "ti
             ? `${DRAMA_CHARACTER_TURNAROUND_SIZE} 横向，纯白色无缝背景；${DRAMA_CHARACTER_TURNAROUND_LAYOUT}。四个视图同一基线、同一身份、同一头身比，身份特写保持清晰五官，后三个视图全身从头顶、完整头部、躯干、双臂、双手、双腿到鞋靴完整入画。`
             : kind === "场景"
               ? "1:1 方形九宫格场景空间基准板；同一个无人物场景固定为 3×3 九格，中心格为主视角，外围八格按西北、北、东北、西、东、西南、南、东南八个方向展示同一空间；入口、出口、门窗、主要陈设、地面材质、光源方向和空间轴线在九格中严格一致。"
-              : `${project.ratio || "9:16"} 画幅，单一${kind}主体完整入画，无人物拼版。`;
+              : `${project.ratio || "9:16"} 画幅，单一道具主体完整入画，静置在中性展示台或符合项目风格的桌面上；只展示道具本体与关键材质细节，不出现人物、手部、持有人或人物动作。`;
     const characterStyle = styleContract.source === "custom" ? `项目视觉风格：${styleContract.visualDescription}` : "";
     const characterLightingStyle = [characterStyle, DRAMA_CHARACTER_RENDER_STYLE, DRAMA_CHARACTER_STUDIO_LIGHT_RULES, DRAMA_CHARACTER_SUPPLIER_QUALITY_RULES, colorPalette ? `角色固有色彩：${colorPalette}` : ""].filter(Boolean).join("；");
     return compact([
         `主体与资产类型：${kind}「${asset.name}」`,
         `身份/结构锚点：${joinAssetPromptFacts([description, visualIdentity]) || "沿用当前资产已确认设定"}`,
         consistency ? `一致性锁定：${consistency}` : "",
-        `可见状态与材质：${stylingForPrompt || "按身份设定中的服装、材质和关键配件呈现"}${kind === "角色" ? `；${DRAMA_CHARACTER_FACE_MODELING_RULES}；${DRAMA_CHARACTER_HAIR_MODELING_RULES}；${DRAMA_CHARACTER_WARDROBE_MATERIAL_RULES}` : sceneQuality ? `；${sceneQuality}` : ""}`,
+        `可见状态与材质：${stylingForPrompt || (kind === "道具" ? "道具本体静置展示，结构轮廓与关键材质细节清晰可见" : "按身份设定中的服装、材质和关键配件呈现")}${kind === "角色" ? `；${DRAMA_CHARACTER_FACE_MODELING_RULES}；${DRAMA_CHARACTER_HAIR_MODELING_RULES}；${DRAMA_CHARACTER_WARDROBE_MATERIAL_RULES}` : sceneQuality ? `；${sceneQuality}` : ""}`,
         `构图与画幅：${layout}`,
         `光色与风格：${kind === "角色" ? `${characterLightingStyle}；${globalStyle}` : `${globalStyle}${colorPalette ? `；固定色彩：${colorPalette}` : ""}`}`,
         `负面约束：${forbidden}`,
@@ -482,7 +492,7 @@ export function compileDramaAssetConstraints(project: Pick<DramaProject, "ratio"
             ? `角色基准图必须固定为纯白色无缝背景四视图：${DRAMA_CHARACTER_TURNAROUND_LAYOUT}；身份特写与后三个全身视图严格保持同一脸型、五官、发际线、发型、服装、体态、关键识别配件和固有色。只允许这四个视图，不得新增任何人物、四分之三视图、主立绘、表情组、手部或道具拆解、额外角度、边框、网格、说明文字或水印。`
             : kind === "场景"
               ? "九宫格每格都展示同一无人物场景的真实空间状态：中心格为主视角，外围八格分别为西北、北、东北、西、东、西南、南、东南方向；保持同一空间拓扑、固定物件位置、门窗入口、材质和光色，不得把九格画成九个不同地点。"
-              : "单一道具主体完整可见，结构轮廓和关键材质清晰，置于符合项目视觉风格的环境或展示台中。",
+              : "单一道具主体完整可见，结构轮廓和关键材质清晰，静置于符合项目视觉风格的环境或展示台中；只展示道具本体，不出现人物、手部、持有人或人物动作。",
         kind === "角色"
             ? "负面构图词：额外人物、额外视图、四分之三视图、主立绘、表情组、手部特写、道具拆解、场景背景、灰色背景、网格、边框、文字、水印、logo、无头、无脸、缺失头部、裁掉头部、裁脸、画面外人头、后三个全身视图被裁成半身或胸像、身份特写替代全身视图、只画服装。"
             : "",
@@ -492,7 +502,7 @@ export function compileDramaAssetConstraints(project: Pick<DramaProject, "ratio"
             ? "禁止把中文说明、角色关系表、参数表或海报排版画进图片；四视图只表示同一角色，身份特写只负责五官识别，后三个视图负责全身比例与服装结构，不添加任何文字或其他模块。"
             : kind === "场景"
               ? "禁止人物、文字、方向标签、边框、水印、logo、海报排版和不同地点；九宫格只表达同一场景的空间方位，不把说明文字画入图片。"
-              : "禁止把中文说明、角色关系表、参数表、海报排版或多张视图画进图片；设定文字只作为生成约束，不是画面内容。",
+              : "禁止把中文说明、角色关系表、参数表、海报排版或多张视图画进图片；设定文字只作为生成约束，不是画面内容；禁止人物、手部、持有人、书写、持握和动作过程。",
         `禁止：${forbidden.join("；")}`,
     ]);
 }
@@ -525,6 +535,21 @@ function joinAssetPromptFacts(values: Array<string | undefined>) {
                 .filter(Boolean),
         ),
     ).join("；");
+}
+
+function sanitizeDramaPropFacts(value?: string) {
+    return Array.from(
+        new Set(
+            sanitizeDramaVisualPrompt(value || "")
+                .split(/[；;。\n]+/u)
+                .map((item) => item.replace(/^(?:原文事实|导演建议|道具建议|剧情事实|镜头事实)[：:]\s*/u, "").trim())
+                .filter((item) => item && !hasDramaPropNarrative(item)),
+        ),
+    ).join("；");
+}
+
+function hasDramaPropNarrative(value: string) {
+    return /(?:原文事实|导演建议|剧情事实|镜头事实|时间段动作|动作与触发|可见表演|表演状态|奋笔|落笔|握笔|持握|拿起|挥动|走向|跑向|坐下|站起|转身|抬头|低头|看向|对着)/u.test(value);
 }
 
 function joinAssetPromptConstraints(values: Array<string | undefined>) {
