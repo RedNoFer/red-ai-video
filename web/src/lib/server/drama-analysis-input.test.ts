@@ -252,6 +252,75 @@ describe("video prompt reference instructions", () => {
         expect(error).toBe("");
     });
 
+    it("rejects semantically repeated visual states even when the wording is not identical", () => {
+        const prompt = [
+            "动态意图：萧炎抬眼",
+            "全局设定：冷灰暖金大厅",
+            "起始可见状态：萧炎低头按住桌沿",
+            "时间段动作：0-3s 起点：萧炎低头按住桌沿；动作与触发：萧炎抬眼看向纳兰；可见衔接：视线从桌沿转向纳兰；终点：萧炎抬眼看向纳兰",
+            "时间段动作：3-6s 起点：萧炎低头按住桌沿；动作与触发：萧炎已经抬眼看向纳兰；可见衔接：视线从桌沿转向纳兰并停住；终点：萧炎抬眼看向纳兰并停住",
+            "单一主运镜：缓慢推进",
+            "环境压力与视觉母题：茶水轻颤",
+            "视觉风格与光色：冷灰暖金，背景门窗与长桌纹理清晰",
+            "声音意图：萧炎低声说话",
+            "结束画面：萧炎抬眼看向纳兰",
+            "连续性锁：身份和轴线不变",
+            "针对性约束：无变形",
+        ].join("\n");
+        const imagePrompt = (subject: string, state: string, performance: string) => `静态关键帧：${subject}\n可见状态：${state}\n可见表演状态：${performance}`;
+        const error = validateDramaVideoPromptOutput(
+            {
+                shots: [
+                    {
+                        shotId: "shot-one",
+                        videoPrompt: prompt,
+                        framePlan: {
+                            frames: [
+                                {
+                                    id: "f1",
+                                    sequenceIndex: 1,
+                                    startSecond: 0,
+                                    endSecond: 3,
+                                    startPrompt: "萧炎低头按住桌沿",
+                                    actionPrompt: "萧炎抬眼看向纳兰",
+                                    transitionPrompt: "视线从桌沿转向纳兰",
+                                    endPrompt: "萧炎抬眼看向纳兰",
+                                    imagePrompt: imagePrompt("萧炎坐在长桌右侧", "右手按住桌沿，茶盏水面出现细小波纹", "眉心收紧，视线看向纳兰，肩背前倾"),
+                                },
+                                {
+                                    id: "f2",
+                                    sequenceIndex: 2,
+                                    startSecond: 3,
+                                    endSecond: 6,
+                                    startPrompt: "萧炎低头按住桌沿",
+                                    actionPrompt: "萧炎已经抬眼看向纳兰",
+                                    transitionPrompt: "视线从桌沿转向纳兰并停住",
+                                    endPrompt: "萧炎抬眼看向纳兰并停住",
+                                    imagePrompt: imagePrompt("萧炎坐于长桌右侧", "右手已经按住桌沿，茶盏水面已出现细小波纹", "眉心收紧，视线注视纳兰，肩背前倾"),
+                                },
+                            ],
+                        },
+                    },
+                ],
+            },
+            ["shot-one"],
+            [
+                {
+                    id: "shot-one",
+                    framePlan: {
+                        frames: [
+                            { id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 3 },
+                            { id: "f2", sequenceIndex: 2, startSecond: 3, endSecond: 6 },
+                        ],
+                    },
+                },
+            ],
+            [],
+        );
+
+        expect(error).toContain("画面语义与其他阶段重复");
+    });
+
     it("rejects a concise shot summary when framePlan is present", () => {
         const error = validateDramaVideoPromptOutput(
             {

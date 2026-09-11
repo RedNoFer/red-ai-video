@@ -15,6 +15,7 @@ const GENERIC_DETAIL_PATTERNS = [
     /^说完保留短暂反应，衔接下一动作$/u,
     /^推动当前镜头行动并回应对手或环境$/u,
 ];
+const CONCRETE_CAMERA_PATTERN = /固定机位|推(?:进|近|镜)|拉(?:远|镜)|摇镜|横移|跟拍|滑轨|环绕|吊臂|升降|手持|变焦|俯拍|仰拍|平视|低机位|高机位|中景|近景|特写|远景/u;
 
 export function isGenericDramaDetail(value: unknown) {
     const text = typeof value === "string" ? value.trim() : "";
@@ -65,4 +66,8 @@ export function validateDramaPerformanceDetail(plan: DramaPerformancePlan | unde
 
 export function validateDramaFrameDetail(value: unknown, label: string) {
     return isGenericDramaDetail(value) ? `${label}缺少具体可见动作或状态` : "";
+}
+
+export function hasConcreteDramaCameraDirection(value: unknown) {
+    return typeof value === "string" && CONCRETE_CAMERA_PATTERN.test(value.trim());
 }

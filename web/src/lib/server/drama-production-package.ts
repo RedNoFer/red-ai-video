@@ -19,12 +19,12 @@ import type {
     DramaStoryScene,
 } from "@/lib/drama-project-contract";
 import { defaultDramaProductionPlan, normalizeDramaProductionPlan } from "@/lib/drama-production-plan";
-import { formatPromptFieldLines, isCurrentDramaStaticFramePrompt, needsDramaStaticFramePromptUpgrade, normalizeDramaFrameBeats, upgradeDramaFrameImagePrompt, validateDramaFramePlanVisuals } from "@/lib/drama-frame-sequence";
+import { dramaFrameVisualSignature, formatPromptFieldLines, isCurrentDramaStaticFramePrompt, needsDramaStaticFramePromptUpgrade, normalizeDramaFrameBeats, upgradeDramaFrameImagePrompt, validateDramaFramePlanVisuals } from "@/lib/drama-frame-sequence";
 import { dramaDialogueTimingReminder, dramaFrameDialogueTimingReminder, dramaUtteranceTimingIssues, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
 import { resolveDramaStyleContract } from "@/lib/drama-style";
 import { normalizeDramaCharacterProfile } from "@/lib/drama-character-rules";
 import { resolveDramaShotDuration } from "@/lib/server/drama-shot-config";
-import { isGenericDramaDetail, validateDramaPerformanceDetail } from "@/lib/drama-prompt-quality";
+import { hasConcreteDramaCameraDirection, isGenericDramaDetail, validateDramaPerformanceDetail } from "@/lib/drama-prompt-quality";
 
 export class DramaProductionPackageError extends Error {}
 
@@ -886,6 +886,7 @@ function normalizePackageShot(value: unknown, index: number, options: { upgradeL
                       gazeDirection: text(continuity.gazeDirection),
                       lighting,
                       colorPalette,
+                      characterCount: characterCodes.length,
                       performanceState: performanceStateForFrame(performancePlan, frame.sequenceIndex, frames.length),
                       refreshPerformanceState: true,
                       sequenceIndex: frame.sequenceIndex,
@@ -893,6 +894,32 @@ function normalizePackageShot(value: unknown, index: number, options: { upgradeL
                   })
                 : frame.imagePrompt.trim(),
         }));
+        if (options.upgradeLegacyFramePrompts !== false) {
+            frames = frames.map((frame, frameIndex, allFrames) => {
+                const previous = allFrames[frameIndex - 1];
+                const repeatedState = frameIndex > 0 && dramaFrameVisualSignature(frame.imagePrompt) && dramaFrameVisualSignature(frame.imagePrompt) === dramaFrameVisualSignature(previous?.imagePrompt || "");
+                if (!repeatedState && allFrames.length <= 1) return frame;
+                return {
+                    ...frame,
+                    imagePrompt: upgradeDramaFrameImagePrompt(frame.imagePrompt, frame.actionPrompt, {
+                        description,
+                        shotSize: text(continuity.shotSize),
+                        cameraAngle: text(continuity.cameraAngle),
+                        composition: text(continuity.composition),
+                        characterBlocking: text(continuity.characterBlocking),
+                        gazeDirection: text(continuity.gazeDirection),
+                        lighting,
+                        colorPalette,
+                        characterCount: characterCodes.length,
+                        performanceState: performanceStateForFrame(performancePlan, frame.sequenceIndex, allFrames.length),
+                        refreshPerformanceState: true,
+                        forceRefresh: true,
+                        sequenceIndex: frame.sequenceIndex,
+                        frameCount: allFrames.length,
+                    }),
+                };
+            });
+        }
         const visualErrors = rawFrames.length ? validateDramaFramePlanVisuals(frames) : [];
         if (visualErrors.length) throw new DramaProductionPackageError(`镜头 ${text(shot.code) || index + 1} 的逐帧画面无效：${visualErrors.join("；")}`);
         if (options.upgradeLegacyFramePrompts === false && frames.some((frame) => !isCurrentDramaStaticFramePrompt(frame.imagePrompt)))
@@ -988,6 +1015,8 @@ function validateStrictPackageVideoPrompt(prompt: string, frames: ReadonlyArray<
     if (missing.length) throw new DramaProductionPackageError(`${label}的 Agent videoPrompt 缺少标准字段：${missing.join("、")}`);
     if (/(?:^|\\n)\\s*(?:触发|主体动作与反应)\\s*[：:]/u.test(prompt)) throw new DramaProductionPackageError(`${label}的 Agent videoPrompt 仍使用旧的顶层动作字段`);
     if (/(?:https?:\/\/|data:image\/|assetId|内部 ID|参考图职责|prompt-authoring-only|seedance-director|seedance-25-director)/iu.test(prompt)) throw new DramaProductionPackageError(`${label}的 Agent videoPrompt 包含内部执行信息`);
+    const cameraMotion = prompt.match(/(?:^|\n)\s*单一主运镜[：:]([^\n]+)/u)?.[1]?.trim() || "";
+    if (!hasConcreteDramaCameraDirection(cameraMotion)) throw new DramaProductionPackageError(`${label}的 Agent videoPrompt 缺少具体主运镜或机位语言`);
     const timelineFieldCounts = ["起点", "动作与触发", "可见衔接", "终点"].map((field) => (prompt.match(new RegExp(`(?:^|\\n)\\s*${field}[：:]`, "gu")) || []).length);
     if (timelineFieldCounts.some((count) => count < frames.length)) throw new DramaProductionPackageError(`${label}的 Agent videoPrompt 未逐段写出起点、动作与触发、可见衔接和终点`);
     const timeline = frames.flatMap((frame) => {

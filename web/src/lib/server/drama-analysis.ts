@@ -1048,7 +1048,11 @@ export const dramaVisualTool = {
                     properties: {
                         shotId: { type: "string" },
                         imagePrompt: { type: "string" },
-                        videoPrompt: { type: "string" },
+                        videoPrompt: {
+                            type: "string",
+                            description:
+                                "必须是完整的公开视频提示词，不得只写一句镜头摘要；至少包含动态意图、全局设定、起始可见状态、逐段时间动作、单一主运镜、环境压力与视觉母题、视觉风格与光色、声音意图、结束画面、连续性锁和针对性约束。每个真实帧段的起点、动作与触发、可见衔接、终点必须在此字段中直接写出。",
+                        },
                         cameraMotion: { type: "string" },
                         startFramePrompt: { type: "string" },
                         endFramePrompt: { type: "string" },
@@ -1136,13 +1140,16 @@ export const dramaVisualTool = {
                                     items: {
                                         type: "object",
                                         additionalProperties: false,
-                                        required: ["id", "sequenceIndex", "startSecond", "endSecond", "actionPrompt", "imagePrompt"],
+                                        required: ["id", "sequenceIndex", "startSecond", "endSecond", "startPrompt", "actionPrompt", "transitionPrompt", "endPrompt", "imagePrompt"],
                                         properties: {
                                             id: { type: "string" },
                                             sequenceIndex: { type: "integer", minimum: 1 },
                                             startSecond: { type: "number", minimum: 0 },
                                             endSecond: { type: "number", exclusiveMinimum: 0 },
-                                            actionPrompt: { type: "string" },
+                                            startPrompt: { type: "string", description: "本时间段开始时已经可见的具体姿态、视线、手部/道具或环境状态" },
+                                            actionPrompt: { type: "string", description: "由触发引起的可见人物动作、表情反应、受力和道具结果" },
+                                            transitionPrompt: { type: "string", description: "从起点到终点的可见衔接，必须承接上一帧终点" },
+                                            endPrompt: { type: "string", description: "本时间段结束时已经成立的具体姿态、视线、手部/道具或环境状态" },
                                             imagePrompt: { type: "string" },
                                         },
                                     },

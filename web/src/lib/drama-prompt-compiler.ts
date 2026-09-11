@@ -9,7 +9,7 @@ import {
     DRAMA_CHARACTER_WARDROBE_MATERIAL_RULES,
 } from "@/lib/drama-character-rules";
 import { resolveDramaStyleContract, sanitizeDramaVisualPrompt } from "@/lib/drama-style";
-import { upgradeDramaFrameImagePrompt } from "@/lib/drama-frame-sequence";
+import { dramaFrameVisualSignature, upgradeDramaFrameImagePrompt } from "@/lib/drama-frame-sequence";
 
 export type DramaAssetGenerationPreflight = { ok: true; constraints: string[] } | { ok: false; errors: string[]; constraints: string[] };
 
@@ -329,8 +329,10 @@ export function compileDramaFrameSupplierPrompt(project: DramaProject, episode: 
         gazeDirection: shot.continuity?.gazeDirection || "视线落向当前叙事目标",
         lighting: shot.lighting || "延续本场主光",
         colorPalette: [shot.colorPalette || "沿用本场色板", `统一风格：${styleContract.visualDescription}`].join("；"),
+        characterCount: characters.length,
         sequenceIndex,
-        refreshPerformanceState: Boolean(beat && duplicatedAdjacentPerformanceState(shot, beat, sourceImage)),
+        frameCount: shot.framePlan?.frames.length,
+        refreshPerformanceState: Boolean(beat && (duplicatedAdjacentPerformanceState(shot, beat, sourceImage) || duplicatedAdjacentFrameVisualState(shot, beat, sourceImage))),
         forceRefresh: frameSceneChanged && !preservesManualPrompt,
     });
     const withPosition = appendStaticFramePositionConstraint(staticPrompt, scenePhysicalConstraint(scene, characters.length));
@@ -364,6 +366,15 @@ function duplicatedAdjacentPerformanceState(shot: DramaShot, beat: DramaFrameBea
     const previousPrompt = previous.supplierPrompt || previous.imagePrompt;
     const previousState = previousPrompt.match(/(?:^|\n)可见表演状态[：:]([^\n]+)/u)?.[1]?.trim();
     return Boolean(currentState && previousState && currentState === previousState);
+}
+
+function duplicatedAdjacentFrameVisualState(shot: DramaShot, beat: DramaFrameBeat, currentPrompt: string) {
+    if (beat.sequenceIndex <= 1) return false;
+    const previous = shot.framePlan?.frames?.find((frame) => frame.sequenceIndex === beat.sequenceIndex - 1);
+    if (!previous) return false;
+    const currentSignature = dramaFrameVisualSignature(currentPrompt);
+    const previousSignature = dramaFrameVisualSignature(previous.supplierPrompt || previous.imagePrompt);
+    return Boolean(currentSignature && previousSignature && currentSignature === previousSignature);
 }
 
 function isCurrentStaticFramePrompt(value: string) {

@@ -76,8 +76,51 @@ describe("drama frame sequence", () => {
         ).toEqual(["第 2 帧与上一帧的可见画面没有变化，请补充本帧状态变化"]);
     });
 
+    it("rejects adjacent frames whose visible states only differ by filler wording", () => {
+        const first = ["静态关键帧：萧炎坐在长桌右侧", "可见状态：右手按住桌沿，茶盏水面出现细小波纹", "可见表演状态：眉心收紧，视线看向纳兰，肩背前倾"].join("\n");
+        const second = ["静态关键帧：萧炎坐于长桌右侧", "可见状态：右手已经按住桌沿，茶盏水面已出现细小波纹", "可见表演状态：眉心收紧，视线注视纳兰，肩背前倾"].join("\n");
+
+        expect(
+            validateDramaFramePlanVisuals([
+                { ...beats[0], imagePrompt: first },
+                { ...beats[1], imagePrompt: second },
+            ]),
+        ).toEqual(["第 2 帧与上一帧的语义状态重复，请补充姿态、视线、手部/道具或环境结果变化"]);
+    });
+
     it("rejects generic phase labels as the only visible frame state", () => {
         expect(validateDramaFrameVisualContent("静态关键帧：角色站在门边；可见状态：入口构图已建立", "建立场景")).toContain("动作节点已经造成的可见状态变化");
+    });
+
+    it("adds a distinct photographic role to each multi-frame image prompt", () => {
+        const prompt = [
+            "静态关键帧：萧炎坐在长桌右侧",
+            "可见状态：右手按住桌沿，茶盏水面出现细小波纹",
+            "可见表演状态：眉心收紧，视线看向纳兰，肩背前倾",
+            "景别：中景",
+            "机位与构图：视线高度平视，主体位于画面安全区",
+            "站位与视线：萧炎坐在长桌右侧，视线落向纳兰",
+            "三层空间：前景门框，中景人物，背景议事大厅",
+            "光色与风格：冷灰暖金，背景结构清晰",
+            "负面约束：无字幕、无水印",
+        ].join("\n");
+        const context = {
+            description: "萧炎在议事大厅与纳兰对峙",
+            shotSize: "中景",
+            cameraAngle: "视线高度平视",
+            composition: "主体位于画面安全区",
+            characterBlocking: "萧炎坐在长桌右侧，纳兰站在左侧",
+            gazeDirection: "视线落向纳兰",
+            lighting: "南侧暖光与室内冷反射",
+            colorPalette: "冷灰暖金",
+            characterCount: 3,
+            frameCount: 4,
+        };
+
+        expect(upgradeDramaFrameImagePrompt(prompt, "建立三人关系", { ...context, sequenceIndex: 1 })).toContain("关系建立构图");
+        expect(upgradeDramaFrameImagePrompt(prompt, "抬眼看向纳兰", { ...context, sequenceIndex: 2 })).toContain("对话反应构图");
+        expect(upgradeDramaFrameImagePrompt(prompt, "按住茶盏", { ...context, sequenceIndex: 3 })).toContain("动作细节构图");
+        expect(upgradeDramaFrameImagePrompt(prompt, "停在新的终点", { ...context, sequenceIndex: 4 })).toContain("结果构图");
     });
 
     it("rejects generic performance labels that hide the frame's key point", () => {

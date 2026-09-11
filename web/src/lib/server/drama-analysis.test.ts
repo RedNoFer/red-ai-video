@@ -53,6 +53,7 @@ describe("drama analysis contracts", () => {
         expect(dramaVideoPromptTool.parameters.properties.shots.items.properties.videoPrompt.description).toContain("由 Skill 生成素材绑定");
         expect(dramaVideoPromptTool.parameters.properties.shots.items.properties.videoPrompt.description).not.toContain("按固定字段逐行输出");
         expect(dramaVisualTool.parameters.properties.shots.items.properties.framePlan.description).toContain("禁止使用“眉眼、呼吸、手部关系清晰可见”");
+        expect(dramaVisualTool.parameters.properties.shots.items.properties.framePlan.properties.frames.items.required).toEqual(expect.arrayContaining(["startPrompt", "actionPrompt", "transitionPrompt", "endPrompt", "imagePrompt"]));
         expect(dramaVideoPromptTool.parameters.properties.shots.items.required).toEqual(expect.arrayContaining(["shotId", "videoPrompt", "framePlan"]));
     });
 

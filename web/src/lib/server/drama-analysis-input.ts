@@ -1,5 +1,6 @@
 import { resolveDramaShotDuration } from "@/lib/server/drama-shot-config";
-import { isGenericDramaDetail } from "@/lib/drama-prompt-quality";
+import { dramaFrameVisualSignature } from "@/lib/drama-frame-sequence";
+import { hasConcreteDramaCameraDirection, isGenericDramaDetail } from "@/lib/drama-prompt-quality";
 import { dramaFrameDialogueTimingReminder, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
 
 export type DramaAnalyzeBody = {
@@ -226,9 +227,12 @@ export function validateDramaVideoPromptOutput(value: unknown, shotIds: string[]
         if (!outputFrames.length) return `镜头 ${shotId} 缺少逐帧动作计划；请按当前 Skill 返回 framePlan.frames`;
         if (expectedFrames.length && outputFrames.length !== expectedFrames.length) return `镜头 ${shotId} 的逐帧计划数量不一致：应为 ${expectedFrames.length} 段，实际为 ${outputFrames.length} 段；请按当前 Skill 原样保留时间段`;
         const timelineFrameCount = expectedFrames.length || outputFrames.length;
+        const cameraMotion = prompt.match(/(?:^|\n)\s*单一主运镜[：:]([^\n]+)/u)?.[1]?.trim() || "";
+        if (!hasConcreteDramaCameraDirection(cameraMotion)) return `镜头 ${shotId} 的公开视频提示词缺少具体主运镜或机位语言，请写明固定机位、推近、跟拍等一个有动机的摄影选择`;
         const timelineFieldCounts = Object.fromEntries(["起点", "动作与触发", "可见衔接", "终点"].map((field) => [field, (prompt.match(new RegExp(`(?:^|\\n)\\s*${field}[：:]`, "gu")) || []).length]));
         if (Object.values(timelineFieldCounts).some((count) => count < timelineFrameCount)) return `镜头 ${shotId} 的“时间段动作”没有逐段写出起点、动作与触发、可见衔接和终点，请按当前 Skill 重新生成`;
         const seenStates = new Set<string>();
+        const seenVisualStates = new Set<string>();
         for (const [index, frame] of outputFrames.entries()) {
             const expected = object(expectedFrames[index]);
             const frameId = dramaAnalysisText(frame.id);
@@ -271,8 +275,11 @@ export function validateDramaVideoPromptOutput(value: unknown, shotIds: string[]
             if (!new RegExp(rangePattern, "iu").test(prompt)) return `镜头 ${shotId} 的第 ${index + 1} 个时间段未在公开视频提示词中写出 ${expectedStart}-${expectedEnd}s，请按当前 Skill 逐段输出`;
             const stateKey = `${startPrompt}\n${actionPrompt}\n${transitionPrompt}\n${endPrompt}\n${imagePrompt}`;
             if (seenStates.has(stateKey)) return `镜头 ${shotId} 的第 ${index + 1} 个时间段与其他阶段重复，请返回具体可见变化`;
+            const visualSignature = dramaFrameVisualSignature(imagePrompt);
+            if (visualSignature && seenVisualStates.has(visualSignature)) return `镜头 ${shotId} 的第 ${index + 1} 个时间段画面语义与其他阶段重复，请补充姿态、视线、手部/道具或环境结果变化`;
             if (!promptContainsFact(prompt, actionPrompt) || !promptContainsFact(prompt, endPrompt)) return `镜头 ${shotId} 的第 ${index + 1} 个时间段动作或结束状态没有在 videoPrompt 中逐字镜像，请按当前 Skill 重新生成`;
             seenStates.add(stateKey);
+            if (visualSignature) seenVisualStates.add(visualSignature);
         }
     }
     return "";
