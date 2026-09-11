@@ -1015,6 +1015,22 @@ describe("video generation candidate failover", () => {
         expect(mocks.createVideoTask).toHaveBeenCalledWith(expect.objectContaining({ upstream: expect.objectContaining({ pollPath: "/v1/videos/generations" }) }));
     });
 
+    it("keeps a 30-second drama request for Buming Seedance 2.5 despite a stale 15-second binding cap", async () => {
+        const bumingChannel = applyChannelProtocol({ ...channels[0], baseUrl: "", models: ["seedance-2-5-special"], advancedConfig: emptyAdvancedConfig() }, "buming-seedance");
+        mocks.getAuthSettings.mockResolvedValue({
+            ...settings,
+            systemChannels: [bumingChannel],
+            logicalModels: [{ ...settings.logicalModels[0], bindings: [{ ...settings.logicalModels[0].bindings[0], channelId: bumingChannel.id, upstreamModel: "seedance-2-5-special", capabilityProfile: { maxDurationSeconds: 15 } }] }],
+        });
+        mocks.fetchInternalApi.mockResolvedValue(json({ id: "buming-30-second-task", state: "queued" }));
+
+        const response = await POST(request({ model: "video", videoSeconds: 30, size: "9:16", vquality: "720" }, [], { surface: "drama", runId: "drama-30-second" }));
+        const [, init] = mocks.fetchInternalApi.mock.calls[0] as [string, RequestInit];
+
+        expect(response.status).toBe(200);
+        expect(JSON.parse(String(init.body))).toMatchObject({ model: "seedance-2-5-special", duration: 30 });
+    });
+
     it("uses Buming Seedance documented mode values and image ordering for first-last", async () => {
         const bumingChannel = applyChannelProtocol({ ...channels[0], baseUrl: "", models: ["seedance-2-0-official"], advancedConfig: emptyAdvancedConfig() }, "buming-seedance");
         mocks.getAuthSettings.mockResolvedValue({

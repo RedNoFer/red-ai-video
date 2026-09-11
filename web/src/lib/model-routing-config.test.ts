@@ -420,6 +420,12 @@ describe("model routing config", () => {
         expect(normalized[0]?.bindings[0]?.capabilityProfile).toMatchObject({ bumingQuality: "fast" });
     });
 
+    it("uses the exact Buming Seedance 2.5 provider duration over a stale 15-second binding cap", () => {
+        const buming = applyChannelProtocol({ ...channel("buming", ["seedance-2-5-special"]), advancedConfig: {} as never }, "buming-seedance");
+
+        expect(resolveLogicalModelCapabilityProfile({ capabilityProfile: { maxDurationSeconds: 15 } }, "video", buming, "seedance-2-5-special")).toMatchObject({ maxDurationSeconds: 30 });
+    });
+
     it("uses each strict provider's declared capability profile while allowing an explicit New API all-frame declaration", () => {
         const newApi = applyChannelProtocol({ ...channel("newapi", ["seedance-2-0-official"]), advancedConfig: {} as never }, "newapi-video");
         const buming = applyChannelProtocol({ ...channel("buming", ["seedance-2-0-official"]), advancedConfig: {} as never }, "buming-seedance");

@@ -165,7 +165,8 @@ describe("channel protocol registry", () => {
         expect(channelProtocolDefinition("buming-seedance").operations.video?.requestTemplate).not.toContain('"first_frame"');
         expect(channelProtocolDefinition("buming-seedance").operations.video?.requestTemplate).not.toContain('"last_frame"');
         expect(channelProtocolDefinition("buming-seedance").operations.video?.requestTemplate).not.toContain('"quality"');
-        expect(protocolModelConfig("buming-seedance", "video", "seedance-2-0-official")).toMatchObject({ supportsKeyframes: true, maxReferenceImages: 9, videoReferenceModes: expect.arrayContaining(["all_frames"]) });
+        expect(protocolModelConfig("buming-seedance", "video", "seedance-2-0-official")).toMatchObject({ durationRange: "4-15 秒", supportsKeyframes: true, maxReferenceImages: 9, videoReferenceModes: expect.arrayContaining(["all_frames"]) });
+        expect(protocolModelConfig("buming-seedance", "video", "seedance-2-5-special")).toMatchObject({ durationRange: "4-30 秒", maxReferenceImages: 30, supportsKeyframes: true });
         expect(protocolModelConfig("buming-seedance", "video", "seedance-2-0-manju-special")).toMatchObject({ supportsKeyframes: false, videoReferenceModes: ["first_frame", "first_last"] });
         expect(protocolModelConfig("buming-seedance", "video", "seedance-2-5")?.requestTemplate).not.toContain('"quality"');
         expect(channelProtocolDefinition("buming-image").operations.image).toMatchObject({

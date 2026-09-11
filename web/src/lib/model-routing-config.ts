@@ -281,7 +281,7 @@ export function resolveLogicalModelCapabilityProfile(binding: Pick<LogicalModelB
         maxReferenceImages: positiveInteger(stored.maxReferenceImages) || positiveInteger(modelConfig?.maxReferenceImages),
         aspectRatios: normalizeAspectRatios(stored.aspectRatios),
         minDurationSeconds: positiveNumber(stored.minDurationSeconds),
-        maxDurationSeconds: positiveNumber(stored.maxDurationSeconds),
+        maxDurationSeconds: advanced?.protocol === "buming-seedance" ? durationRangeMaximum(modelConfig?.durationRange) || positiveNumber(stored.maxDurationSeconds) : positiveNumber(stored.maxDurationSeconds),
         maxBatchSize: positiveInteger(stored.maxBatchSize),
         supportsAsync: booleanValue(stored.supportsAsync, capability === "video" || capability === "image"),
         supportsCancel: strictProtocol ? Boolean(modelConfig?.cancelPath) : booleanValue(stored.supportsCancel),
@@ -292,6 +292,13 @@ export function resolveLogicalModelCapabilityProfile(binding: Pick<LogicalModelB
         unitCostCurrency: text(stored.unitCostCurrency, 12) || undefined,
         unitCostBasis: normalizeCostBasis(stored.unitCostBasis),
     };
+}
+
+function durationRangeMaximum(value: unknown) {
+    const match = typeof value === "string" ? value.match(/(\d{1,4})\s*(?:-|~|～|—|至|到)\s*(\d{1,4})/) : undefined;
+    if (!match) return undefined;
+    const maximum = Math.max(Number(match[1]), Number(match[2]));
+    return Number.isInteger(maximum) && maximum > 0 ? maximum : undefined;
 }
 
 function channelSupportsModel(channel: Pick<SystemModelChannel, "models">, model: string) {

@@ -164,6 +164,7 @@ const bumingSeedanceVideoOperation: ProtocolOperation = {
 export type BumingSeedanceVideoModelContract = {
     videoReferenceModes: Array<"reference" | "first_frame" | "first_last" | "all_frames">;
     maxReferenceImages?: number;
+    durationRange?: string;
     supportsReferenceVideo: boolean;
     supportsReferenceAudio: boolean;
     qualityOptions?: ReadonlyArray<{ label: string; value: string }>;
@@ -183,6 +184,7 @@ const BUMING_SEEDANCE_VIDEO_MODEL_CONTRACTS: Record<string, BumingSeedanceVideoM
     "seedance-2-0-official": {
         videoReferenceModes: ["reference", "first_frame", "first_last", "all_frames"],
         maxReferenceImages: 9,
+        durationRange: "4-15 秒",
         supportsReferenceVideo: true,
         supportsReferenceAudio: true,
         qualityOptions: BUMING_SEEDANCE_QUALITY_OPTIONS,
@@ -191,6 +193,7 @@ const BUMING_SEEDANCE_VIDEO_MODEL_CONTRACTS: Record<string, BumingSeedanceVideoM
     "seedance-2-0-special": {
         videoReferenceModes: ["reference", "first_frame", "first_last", "all_frames"],
         maxReferenceImages: 9,
+        durationRange: "4-15 秒",
         supportsReferenceVideo: true,
         supportsReferenceAudio: true,
         qualityOptions: [
@@ -202,6 +205,7 @@ const BUMING_SEEDANCE_VIDEO_MODEL_CONTRACTS: Record<string, BumingSeedanceVideoM
     },
     "seedance-2-0-promo": {
         videoReferenceModes: ["reference", "first_frame", "first_last"],
+        durationRange: "4-15 秒",
         supportsReferenceVideo: true,
         supportsReferenceAudio: true,
         qualityOptions: BUMING_SEEDANCE_QUALITY_OPTIONS,
@@ -209,6 +213,7 @@ const BUMING_SEEDANCE_VIDEO_MODEL_CONTRACTS: Record<string, BumingSeedanceVideoM
     },
     "seedance-2-0-ecom-special": {
         videoReferenceModes: ["reference", "first_frame", "first_last"],
+        durationRange: "4-15 秒",
         supportsReferenceVideo: true,
         supportsReferenceAudio: true,
         qualityOptions: [
@@ -220,6 +225,7 @@ const BUMING_SEEDANCE_VIDEO_MODEL_CONTRACTS: Record<string, BumingSeedanceVideoM
     },
     "seedance-2-0-9tu-special": {
         videoReferenceModes: ["reference", "first_frame"],
+        durationRange: "4-15 秒",
         supportsReferenceVideo: false,
         supportsReferenceAudio: false,
         qualityOptions: [
@@ -231,9 +237,19 @@ const BUMING_SEEDANCE_VIDEO_MODEL_CONTRACTS: Record<string, BumingSeedanceVideoM
     "seedance-2-0-manju-special": {
         videoReferenceModes: ["first_frame", "first_last"],
         maxReferenceImages: 2,
+        durationRange: "4-15 秒",
         supportsReferenceVideo: false,
         supportsReferenceAudio: false,
         requestTemplate: '{"model":"{{model}}","prompt":"{{prompt}}","mode":"{{mode}}","duration":"{{duration}}","aspect_ratio":"{{aspect_ratio}}","resolution":"{{resolution}}","client_request_id":"{{client_request_id}}","images":"{{images}}","count":1}',
+    },
+    "seedance-2-5-special": {
+        videoReferenceModes: ["reference", "first_frame", "first_last", "all_frames"],
+        maxReferenceImages: 30,
+        durationRange: "4-30 秒",
+        supportsReferenceVideo: true,
+        supportsReferenceAudio: true,
+        qualityOptions: BUMING_SEEDANCE_QUALITY_OPTIONS,
+        requestTemplate: BUMING_SEEDANCE_QUALITY_REQUEST_TEMPLATE,
     },
 };
 
@@ -560,6 +576,7 @@ export function protocolModelConfig(protocol: SystemChannelProtocol, capability:
             supportsKeyframes: contract.videoReferenceModes.includes("all_frames"),
             videoReferenceModes: contract.videoReferenceModes,
             ...(contract.maxReferenceImages ? { maxReferenceImages: contract.maxReferenceImages } : {}),
+            ...(contract.durationRange ? { durationRange: contract.durationRange } : {}),
             capability,
             source: "manual",
             protocol,
@@ -587,6 +604,10 @@ export function resolveChannelModelConfig(config: SystemChannelAdvancedConfig | 
     const legacyVoiceDesign = resolveLegacyVoiceDesignConfig(config, model, modelConfig);
     if (legacyVoiceDesign) return legacyVoiceDesign;
     const configuredCapability = modelConfig?.capability || config.modelCapabilities?.[key] || inferModelCapability(model);
+    if (config.protocol === "buming-seedance" && configuredCapability === "video") {
+        const providerPreset = protocolModelConfig(config.protocol, "video", model);
+        if (providerPreset) return providerPreset;
+    }
     if (config.protocol === "sub2api" && configuredCapability === "image") {
         const strictPreset = protocolModelConfig(config.protocol, "image", model);
         if (strictPreset) return strictPreset;
