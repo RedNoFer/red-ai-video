@@ -20,16 +20,7 @@ import type {
     DramaStoryScene,
 } from "@/lib/drama-project-contract";
 import { defaultDramaProductionPlan, normalizeDramaProductionPlan } from "@/lib/drama-production-plan";
-import {
-    dramaFrameVisualSignature,
-    dramaStaticFramePositiveText,
-    formatPromptFieldLines,
-    isCurrentDramaStaticFramePrompt,
-    needsDramaStaticFramePromptUpgrade,
-    normalizeDramaFrameBeats,
-    upgradeDramaFrameImagePrompt,
-    validateDramaFramePlanVisuals,
-} from "@/lib/drama-frame-sequence";
+import { dramaStaticFramePositiveText, formatPromptFieldLines, normalizeDramaFrameBeats, validateDramaFrameVisualContent, validateDramaFramePlanVisuals, warnDramaFramePlanVisuals } from "@/lib/drama-frame-sequence";
 import { dramaDialogueTimingReminder, dramaFrameDialogueTimingReminder, dramaUtteranceTimingIssues, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
 import { resolveDramaStyleContract } from "@/lib/drama-style";
 import { normalizeDramaCharacterProfile } from "@/lib/drama-character-rules";
@@ -135,7 +126,7 @@ function mergeProjectAssetCollection(incoming: DramaProductionPackageAsset[], ex
     return [...merged, ...incoming.filter((asset) => !existingKeys.has(asset.code) && !existingKeys.has(normalizeKey(asset.name)))];
 }
 
-export function previewDramaProductionPackage(source: string, fileName = "production-package.json", project?: DramaProjectAssetCollection, options: { upgradeLegacyFramePrompts?: boolean } = {}): DramaProductionPackagePreview {
+export function previewDramaProductionPackage(source: string, fileName = "production-package.json", project?: DramaProjectAssetCollection, options: { validateVideoPrompt?: boolean } = {}): DramaProductionPackagePreview {
     const trimmed = source.trim();
     if (!trimmed) throw new DramaProductionPackageError("制作包内容不能为空");
     const embedded = trimmed.match(/```(?:json|drama-production-package)[ \t]*\r?\n([\s\S]*?)```/i)?.[1];
@@ -269,7 +260,7 @@ function mergeEpisode(
         const packageShot = incoming.shots.find((item) => item.code === shot.code);
         return {
             ...shot,
-            framePlan: shouldPreserveManualFramePlan(shot.framePlan, shot.fieldOrigins?.framePlan) ? shot.framePlan : remapFramePlan(packageShot?.framePlan, characterIds, locationIds, propIds, clueIds, shotIds),
+            framePlan: shouldPreserveManualFramePlan(shot.framePlan, shot.fieldOrigins?.framePlan) ? stripFrameSupplierPrompt(shot.framePlan) : remapFramePlan(packageShot?.framePlan, characterIds, locationIds, propIds, clueIds, shotIds),
             storySceneId: packageShot?.storySceneCode ? storySceneIds.get(packageShot.storySceneCode) : undefined,
         };
     });
@@ -306,11 +297,18 @@ function mergeEpisode(
 }
 
 function shouldPreserveManualFramePlan(framePlan: DramaShot["framePlan"], origin: DramaFieldOrigin | undefined) {
-    if (origin !== "manual" || !framePlan?.frames?.length) return false;
-    return framePlan.frames.every((frame) => {
-        const prompt = frame.supplierPrompt || frame.imagePrompt;
-        return isCurrentDramaStaticFramePrompt(prompt);
-    });
+    return origin === "manual" && Boolean(framePlan?.frames?.length);
+}
+
+function stripFrameSupplierPrompt(framePlan: DramaShot["framePlan"]): DramaShot["framePlan"] {
+    if (!framePlan) return undefined;
+    return {
+        ...framePlan,
+        frames: framePlan.frames.map((frame) => {
+            const { supplierPrompt: _supplierPrompt, ...cleanFrame } = frame as typeof frame & { supplierPrompt?: unknown };
+            return cleanFrame;
+        }),
+    };
 }
 
 function remapFramePlan(framePlan: DramaShot["framePlan"], characterIds: Map<string, string>, locationIds: Map<string, string>, propIds: Map<string, string>, clueIds: Map<string, string>, shotIds: Map<string, string>): DramaShot["framePlan"] {
@@ -389,7 +387,7 @@ function mergeManualFields<T extends { fieldOrigins?: Record<string, DramaFieldO
     return result as T;
 }
 
-function normalizeProductionPackage(value: unknown, options: { upgradeLegacyFramePrompts?: boolean } = {}): DramaProductionPackageV1 {
+function normalizeProductionPackage(value: unknown, options: { validateVideoPrompt?: boolean } = {}): DramaProductionPackageV1 {
     const input = object(value);
     if (Number(input.schemaVersion) !== 1) throw new DramaProductionPackageError("仅支持 schemaVersion 1 的制作包");
     const project = object(input.project);
@@ -444,7 +442,7 @@ function normalizeProductionPackage(value: unknown, options: { upgradeLegacyFram
             })),
         };
     });
-    const synchronizedEpisodes = normalizedEpisodes.map((episode) => synchronizeContinuityStates(repairOpeningCut(episode, text(project.title))));
+    const synchronizedEpisodes = normalizedEpisodes.map(synchronizeContinuityStates);
     const productionPlan = normalizePackageProductionPlan(bible);
     const styleContract = resolveDramaStyleContract({
         style: text(project.style),
@@ -565,106 +563,6 @@ function validateProductionPackageCompleteness(value: Record<string, unknown>) {
             for (const code of strings(item.propCodes)) if (!has("prop_anchor", code)) throw new DramaProductionPackageError(`${label}的 referenceManifest 缺少道具 ${code} 锚点`);
         }
     }
-}
-
-function repairOpeningCut<T extends DramaProductionPackageEpisode>(episode: T, projectTitle: string): T {
-    const first = episode.shots[0];
-    const second = episode.shots[1];
-    const legacyOpening = first?.continuity?.actionStart === "黑湖、倒塔、四手与裂剑" && second?.continuity?.actionStart === "黑湖、倒塔、四手与裂剑";
-    if (
-        !/Mahadel|四界之心/u.test(projectTitle) ||
-        !first ||
-        !second ||
-        first.code !== "SH001" ||
-        second.code !== "SH002" ||
-        first.title !== "黑湖记忆 1/2" ||
-        second.title !== "黑湖记忆 2/2" ||
-        !/黑湖/.test(first.description) ||
-        !/马车/.test(second.description || second.sourceText) ||
-        !legacyOpening
-    )
-        return episode;
-    const firstActionEnd = "Karin掌心的完整剑刃裂开，手指仍扣住断口";
-    const secondActionStart = firstActionEnd;
-    const nextShots = episode.shots.map((shot, index) => {
-        if (index === 0) {
-            return {
-                ...shot,
-                duration: first.duration,
-                timecode: first.timecode,
-                description: "黑湖、倒塔、四手与裂剑；剑刃在 Karin 掌心裂开",
-                sourceText: shot.sourceText.split(/Karin猛然睁眼/u)[0].trim(),
-                videoPrompt:
-                    "黑湖记忆中，倒悬高塔压在黑色湖面上，四只手在雪地中央扣紧；Karin握住完整剑刃，断口从掌心向外裂开。镜头沿倒塔轴线缓慢推进，冷风掠过无波湖面，裂剑发出细碎金属声，停在断口与仍未松开的手指上。结束画面：断裂剑刃的冷银断口占据画面中心。",
-                continuity: { ...shot.continuity, actionStart: "黑湖、倒塔、四手与完整剑刃", actionEnd: firstActionEnd, continuityNotes: "断口匹配切" },
-                framePlan: {
-                    ...shot.framePlan,
-                    start: { source: "independent" },
-                    frames: openingCutFrames("SH001", first.duration, [
-                        { action: "镜头由黑湖远景缓慢推进至雪地；Karin低头，完整剑刃贴在掌心，四只手刚刚扣住", image: "黑湖无波，倒悬古塔与Karin模糊倒影对齐；雪地中央四只手刚刚扣住，Karin低头看向掌心的完整剑刃" },
-                        { action: "镜头继续推进到四只手与剑；Karin抬头看向倒悬古塔，双手收紧，剑身出现第一道裂纹", image: "雪地中央四只手彼此扣紧；Karin抬头看向倒悬古塔，双手收紧，完整剑刃出现第一道银色裂纹" },
-                        { action: "剑刃从掌心断口向外裂开，冷银碎屑飞出；Karin眉眼骤然睁大，四只手仍未松开", image: "剑刃已经从掌心断口向外裂开，冷银碎屑停在断口周围；Karin眉眼骤然睁大、下颌绷紧，四只手仍扣住断剑" },
-                        { action: "镜头骤停在冷银断口，Karin手指扣住碎裂剑刃；断口冷光匹配切入马车", image: "冷银断口占据前景中心，Karin手指扣住碎裂剑刃，视线锁定断口；断口冷光形成下一镜马车窗光的匹配切入口" },
-                    ]),
-                },
-            };
-        }
-        if (index === 1) {
-            return {
-                ...shot,
-                duration: second.duration,
-                timecode: second.timecode,
-                locationCode: "S06",
-                description: "马车中的 Karin 从裂剑匹配切中惊醒，手扣住断剑，呼吸急促",
-                sourceText: "裂开的剑刃断口与 Karin 扣紧的手指匹配切到马车内；Karin 猛然睁眼，手扣住断剑，呼吸急促。",
-                videoPrompt: "从上一镜裂开的冷银断口匹配切到马车内同一只扣紧的手。Karin猛然睁眼，肩膀先绷紧再吸气，手掌继续压住断剑；车轮震动和急促呼吸成为声音锚点。镜头只做一次短促推近，结束画面停在他睁开的灰绿色眼睛与断剑握柄之间。",
-                startFramePrompt: "上一镜已验收实际尾帧中的裂剑断口与扣紧手指作为唯一首帧依据；匹配切进入马车内，保持手指、断口方向和冷光连续。",
-                endFramePrompt: "Karin在马车中睁眼并扣住断剑，呼吸急促，肩膀绷紧。",
-                continuity: { ...shot.continuity, actionStart: secondActionStart, actionEnd: "Karin在马车中睁眼并扣住断剑，呼吸急促", continuityNotes: "继承上一镜断口，匹配切入马车" },
-                framePlan: {
-                    ...shot.framePlan,
-                    start: { source: "previous_accepted_actual_tail" },
-                    frames: openingCutFrames("SH002", second.duration, [
-                        { action: "冷银断口匹配切入马车内同一只扣紧的手；车厢开始震动，Karin仍闭眼", image: "马车内同一只手压住断剑，指节发白，Karin闭眼伏在座位上；冷银断口方向与上一镜一致" },
-                        { action: "车轮震动传入车厢；Karin肩膀骤然绷紧，手掌继续压住断剑", image: "马车内Karin肩膀绷紧，手掌压住断剑，指节发白；车窗冷光在剑柄上形成短促反光" },
-                        { action: "Karin猛然睁开灰绿色眼睛，视线落向断剑，呼吸急促；手指收紧握柄", image: "Karin灰绿色眼睛已经睁开，视线落向断剑，嘴唇微张急促吸气；手指收紧握住断剑" },
-                        { action: "镜头短促推近眼睛与剑柄之间；Karin完全惊醒，视线锁定握柄，肩膀保持绷紧", image: "Karin完全惊醒，灰绿色眼睛锁定断剑握柄，肩膀绷紧，手掌稳定扣住断剑；车厢冷光与暗影关系已经落定" },
-                    ]),
-                },
-            };
-        }
-        return shot;
-    });
-    return { ...episode, shots: nextShots };
-}
-
-function openingCutFrames(code: string, duration: number, actions: Array<string | { action: string; image: string }>) {
-    const entries = actions;
-    const boundaries = entries.map((_, index) => Number(((duration * index) / entries.length).toFixed(3))).concat(duration);
-    return entries.map((entry, index) => {
-        const action = typeof entry === "string" ? entry : entry.action;
-        const image = typeof entry === "string" ? entry : entry.image;
-        return {
-            id: `${code}-F${String(index + 1).padStart(2, "0")}`,
-            sequenceIndex: index + 1,
-            startSecond: boundaries[index],
-            endSecond: boundaries[index + 1],
-            actionPrompt: action,
-            imagePrompt: upgradeDramaFrameImagePrompt(image, action, {
-                description: image,
-                shotSize: "中景",
-                cameraAngle: "视线高度平视",
-                composition: "主体位于画面安全区，前景有具体框景",
-                characterBlocking: "按当前动作关系安排主体站位",
-                gazeDirection: "视线落向当前叙事目标",
-                lighting: "延续本场主光",
-                colorPalette: "沿用本场色板",
-                sequenceIndex: index + 1,
-                frameCount: entries.length,
-                forceRefresh: true,
-            }),
-        };
-    });
 }
 
 /**
@@ -790,7 +688,7 @@ function normalizeProductionArchive(value: unknown): DramaProductionPackageV1["a
     };
 }
 
-function normalizeEpisodePackage(value: unknown, episodeIndex: number, options: { upgradeLegacyFramePrompts?: boolean; backgroundNpcPolicyByLocationCode?: Map<string, DramaBackgroundNpcPolicy> } = {}): DramaProductionPackageEpisode {
+function normalizeEpisodePackage(value: unknown, episodeIndex: number, options: { validateVideoPrompt?: boolean; backgroundNpcPolicyByLocationCode?: Map<string, DramaBackgroundNpcPolicy> } = {}): DramaProductionPackageEpisode {
     const input = object(value);
     const shots = array(input.shots)
         .map((shot, index) => normalizePackageShot(shot, index, options))
@@ -840,7 +738,7 @@ function normalizeEpisodePackage(value: unknown, episodeIndex: number, options: 
     };
 }
 
-function normalizePackageShot(value: unknown, index: number, options: { upgradeLegacyFramePrompts?: boolean; backgroundNpcPolicyByLocationCode?: Map<string, DramaBackgroundNpcPolicy> } = {}): DramaProductionPackageEpisode["shots"][number] {
+function normalizePackageShot(value: unknown, index: number, options: { validateVideoPrompt?: boolean; backgroundNpcPolicyByLocationCode?: Map<string, DramaBackgroundNpcPolicy> } = {}): DramaProductionPackageEpisode["shots"][number] {
     const shot = object(value);
     const framePlan = object(shot.framePlan);
     const frameStart = object(framePlan.start);
@@ -901,59 +799,10 @@ function normalizePackageShot(value: unknown, index: number, options: { upgradeL
             };
         });
         frames = normalizeDramaFrameBeats(sourceFrames, duration);
-        frames = frames.map((frame) => ({
-            ...frame,
-            imagePrompt: shouldUpgradeImportedFramePrompt(frame.imagePrompt, options)
-                ? upgradeDramaFrameImagePrompt(frame.imagePrompt, frame.actionPrompt, {
-                      description,
-                      shotSize: text(continuity.shotSize),
-                      cameraAngle: text(continuity.cameraAngle),
-                      composition: text(continuity.composition),
-                      characterBlocking: text(continuity.characterBlocking),
-                      gazeDirection: text(continuity.gazeDirection),
-                      lighting,
-                      colorPalette,
-                      characterCount: characterCodes.length,
-                      performanceState: performanceStateForFrame(performancePlan, frame.sequenceIndex, frames.length),
-                      refreshPerformanceState: true,
-                      sequenceIndex: frame.sequenceIndex,
-                      frameCount: frames.length,
-                      backgroundNpcPolicy: options.backgroundNpcPolicyByLocationCode?.get(text(shot.locationCode)),
-                  })
-                : frame.imagePrompt.trim(),
-        }));
-        if (options.upgradeLegacyFramePrompts !== false) {
-            frames = frames.map((frame, frameIndex, allFrames) => {
-                const previous = allFrames[frameIndex - 1];
-                const repeatedState = frameIndex > 0 && dramaFrameVisualSignature(frame.imagePrompt) && dramaFrameVisualSignature(frame.imagePrompt) === dramaFrameVisualSignature(previous?.imagePrompt || "");
-                if (!repeatedState && allFrames.length <= 1) return frame;
-                return {
-                    ...frame,
-                    imagePrompt: upgradeDramaFrameImagePrompt(frame.imagePrompt, frame.actionPrompt, {
-                        description,
-                        shotSize: text(continuity.shotSize),
-                        cameraAngle: text(continuity.cameraAngle),
-                        composition: text(continuity.composition),
-                        characterBlocking: text(continuity.characterBlocking),
-                        gazeDirection: text(continuity.gazeDirection),
-                        lighting,
-                        colorPalette,
-                        characterCount: characterCodes.length,
-                        performanceState: performanceStateForFrame(performancePlan, frame.sequenceIndex, allFrames.length),
-                        refreshPerformanceState: true,
-                        forceRefresh: true,
-                        sequenceIndex: frame.sequenceIndex,
-                        frameCount: allFrames.length,
-                        backgroundNpcPolicy: options.backgroundNpcPolicyByLocationCode?.get(text(shot.locationCode)),
-                    }),
-                };
-            });
-        }
+        frames = frames.map((frame) => ({ ...frame, imagePrompt: formatPromptFieldLines(frame.imagePrompt, "static") }));
         const visualErrors = rawFrames.length ? validateDramaFramePlanVisuals(frames) : [];
         if (visualErrors.length) throw new DramaProductionPackageError(`镜头 ${text(shot.code) || index + 1} 的逐帧画面无效：${visualErrors.join("；")}`);
-        if (options.upgradeLegacyFramePrompts === false && frames.some((frame) => !isCurrentDramaStaticFramePrompt(frame.imagePrompt)))
-            throw new DramaProductionPackageError(`镜头 ${text(shot.code) || index + 1} 的制作包必须由 Agent 提供完整九字段静态帧提示词`);
-        if (options.upgradeLegacyFramePrompts === false) validateStrictPackageVideoPrompt(text(shot.videoPrompt), frames, text(shot.code) || String(index + 1));
+        if (options.validateVideoPrompt) validateStrictPackageVideoPrompt(text(shot.videoPrompt), frames, text(shot.code) || String(index + 1));
     } catch (error) {
         throw new DramaProductionPackageError(`镜头 ${text(shot.code) || index + 1} 的逐帧计划无效：${error instanceof Error ? error.message : "无法解析"}`);
     }
@@ -967,8 +816,10 @@ function normalizePackageShot(value: unknown, index: number, options: { upgradeL
         dialogue: text(shot.dialogue),
         narration: text(shot.narration),
         utterances,
-        imagePrompt: normalizeShotStaticPrompt(text(shot.imagePrompt), options, "镜头 imagePrompt"),
+        imagePrompt: normalizeShotStaticPrompt(text(shot.imagePrompt), "镜头 imagePrompt"),
         videoPrompt: normalizePackageVideoPrompt(text(shot.videoPrompt)),
+        ...(optionalText(shot.startFramePrompt) ? { startFramePrompt: normalizeShotStaticPrompt(text(shot.startFramePrompt), "镜头 startFramePrompt") } : {}),
+        ...(optionalText(shot.endFramePrompt) ? { endFramePrompt: normalizeShotStaticPrompt(text(shot.endFramePrompt), "镜头 endFramePrompt") } : {}),
         cameraMotion: text(shot.cameraMotion),
         negativePrompt: optionalText(shot.negativePrompt),
         continuity: {
@@ -1017,24 +868,16 @@ function normalizePackageShot(value: unknown, index: number, options: { upgradeL
     };
 }
 
-function performanceStateForFrame(plan: DramaShot["performancePlan"], sequenceIndex: number, frameCount: number) {
-    const beat = sequenceIndex <= 1 ? plan?.beats.start : sequenceIndex >= frameCount ? plan?.beats.end : plan?.beats.middle;
-    return beat ? `情绪${beat.emotion}；面部${beat.facialAction}；视线${beat.gaze}；身体与手部${beat.bodyAction}` : "";
-}
-
 function normalizePackageVideoPrompt(value: string) {
     const prompt = value.trim();
     if (!prompt) throw new DramaProductionPackageError("镜头缺少 Agent 提供的视频提示词");
     return prompt;
 }
 
-function shouldUpgradeImportedFramePrompt(value: string, options: { upgradeLegacyFramePrompts?: boolean }) {
-    return options.upgradeLegacyFramePrompts !== false && needsDramaStaticFramePromptUpgrade(value);
-}
-
-function normalizeShotStaticPrompt(value: string, options: { upgradeLegacyFramePrompts?: boolean }, label: string) {
-    if (options.upgradeLegacyFramePrompts === false && !isCurrentDramaStaticFramePrompt(value)) throw new DramaProductionPackageError(`${label}必须由 Agent 提供完整九字段静态帧提示词`);
+function normalizeShotStaticPrompt(value: string, label: string) {
     const prompt = formatPromptFieldLines(value, "static");
+    const error = validateDramaFrameVisualContent(prompt);
+    if (error) throw new DramaProductionPackageError(`${label}无效：${error}`);
     return prompt;
 }
 
@@ -1351,6 +1194,16 @@ function collectWarnings(value: DramaProductionPackageV1) {
             for (const frame of shot.framePlan?.frames || []) {
                 const frameReminder = dramaFrameDialogueTimingReminder(frame.startSecond, frame.endSecond, frame.actionPrompt, shot.utterances as DramaDialogueTimingInput[], `${episode.code}/${shot.code} ${frame.id}`);
                 if (frameReminder) warnings.push(`帧段对白时长提醒（不阻止导入）：${frameReminder.message}`);
+            }
+            for (const frameWarning of warnDramaFramePlanVisuals(shot.framePlan?.frames || [])) warnings.push(`${episode.code}/${shot.code}：${frameWarning}`);
+            const staticFields = ["画面主体", "可见状态", "构图与空间", "光色与风格", "针对性约束"];
+            for (const frame of shot.framePlan?.frames || []) {
+                const usesStructuredStaticFields = staticFields.some((field) => new RegExp(`(?:^|\\n)${field}[：:]`, "u").test(frame.imagePrompt));
+                if (usesStructuredStaticFields) {
+                    const missing = staticFields.filter((field) => !new RegExp(`(?:^|\\n)${field}[：:]`, "u").test(frame.imagePrompt));
+                    if (missing.length) warnings.push(`${episode.code}/${shot.code} ${frame.id}：静态帧省略可选语义段 ${missing.join("、")}，请按画面事实确认`);
+                }
+                if (frame.imagePrompt.length > 1600) warnings.push(`${episode.code}/${shot.code} ${frame.id}：静态帧提示词较长，建议压缩重复设定`);
             }
         }
     }

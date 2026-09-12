@@ -112,31 +112,12 @@ describe("drama production preflight", () => {
         expect(codes).not.toContain("REFERENCE_MANIFEST_COUNT");
     });
 
-    it("returns confirmation status for soft framing risks instead of blocking production", () => {
+    it("blocks static frame content without required visible facts", () => {
         const project = fixture();
-        const reference = { id: "ref-one", url: "/api/media/ref.png", source: "generated" as const, status: "approved" as const, label: "已审核", createdAt: new Date(0).toISOString() };
-        project.seriesBible = { version: "series-bible-v1", canonCharacters: [], immutableRules: [], relationshipState: "", worldRules: [], unresolvedThreads: [], visualMotifs: [], soundMotifs: [] };
-        project.characters[0].references = [reference];
-        project.characters[0].primaryReferenceId = reference.id;
-        project.scenes[0].references = [reference];
-        project.scenes[0].primaryReferenceId = reference.id;
-        project.props[0].references = [reference];
-        project.props[0].primaryReferenceId = reference.id;
-        project.episodes[0].shots[0].duration = 6;
-        const state = {
-            characters: [{ assetId: "character-one", position: "左侧", gaze: "向右", pose: "站立", action: "静止" }],
-            props: [{ assetId: "prop-one", state: "入鞘", holderId: "character-one" }],
-            environment: "城门",
-            lighting: "冷光",
-            axis: "180度",
-            screenDirection: "左到右",
-        };
-        project.episodes[0].shots[0].entryState = state;
-        project.episodes[0].shots[0].exitState = state;
-        project.episodes[0].shots[0].continuityStatus = "passed";
+        project.episodes[0].shots[0].storyboardFrameMode = "all_frames";
+        project.episodes[0].shots[0].framePlan!.frames[0].imagePrompt = "静态关键帧：待补全";
         const result = preflightDramaProduction(project, project.episodes[0]);
-        expect(result.status).toBe("needs_confirmation");
-        expect(result.issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "FRAMING_UNCLEAR", severity: "warning" })]));
+        expect(result.issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "FRAME_VISUAL_CONTENT", severity: "blocking" })]));
     });
 
     it("reports director quality gaps as warnings rather than paid-production blockers", () => {
@@ -255,7 +236,7 @@ describe("drama production preflight", () => {
         expect(preflightDramaProduction(project, project.episodes[0]).issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "FRAME_COUNT_MIN", severity: "blocking" })]));
     });
 
-    it("keeps static frame content guidance as a warning instead of blocking video", () => {
+    it("blocks video instructions mixed into static frame content", () => {
         const project = fixture();
         const shot = project.episodes[0].shots[0];
         shot.storyboardFrameMode = "all_frames";
@@ -271,8 +252,7 @@ describe("drama production preflight", () => {
 
         const result = preflightDramaProduction(project, project.episodes[0]);
 
-        expect(result.issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "FRAME_VISUAL_CONTENT", severity: "warning" })]));
-        expect(result.issues.some((issue) => issue.code === "FRAME_VISUAL_CONTENT" && issue.severity === "blocking")).toBe(false);
+        expect(result.issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "FRAME_VISUAL_CONTENT", severity: "blocking" })]));
     });
 
     it("warns when adjacent carried states conflict", () => {

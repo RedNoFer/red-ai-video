@@ -1,13 +1,11 @@
 import { nanoid } from "nanoid";
 
-import type { DramaBackgroundNpcPolicy } from "./drama-project-contract";
-
 import type { DramaFrameBeat, DramaStoryboardFrame } from "./drama-project-contract";
 
 export const MAX_FRAME_BEATS = 9;
 const TIME_EPSILON = 0.001;
-const STATIC_FRAME_PROMPT_LABELS = ["静态关键帧", "可见状态", "可见表演状态", "景别", "机位与构图", "站位与视线", "三层空间", "光色与风格", "负面约束"] as const;
-const POSITIVE_STATIC_FRAME_PROMPT_LABELS = STATIC_FRAME_PROMPT_LABELS.filter((label) => label !== "负面约束");
+const STATIC_FRAME_PROMPT_LABELS = ["画面主体", "静态关键帧", "可见状态", "可见表演状态", "构图与空间", "景别", "机位与构图", "站位与视线", "三层空间", "光色与风格", "针对性约束", "负面约束"] as const;
+const POSITIVE_STATIC_FRAME_PROMPT_LABELS = STATIC_FRAME_PROMPT_LABELS.filter((label) => label !== "针对性约束" && label !== "负面约束");
 const VIDEO_PROMPT_LABELS = [
     "素材绑定",
     "动态意图",
@@ -31,21 +29,15 @@ const VIDEO_PROMPT_LABELS = [
     "参考图职责",
 ] as const;
 
-/** Normalize known prompt fields to one line per field without rewriting field content. */
+/** Normalize existing field boundaries only; static prompt content is never reconstructed or stripped. */
 export function formatPromptFieldLines(value: string, kind: "static" | "video" = "static") {
     const labels = kind === "video" ? VIDEO_PROMPT_LABELS : STATIC_FRAME_PROMPT_LABELS;
     const pattern = labels.join("|");
-    const normalized = kind === "static" ? stripLegacyStaticReferenceRole(value) : value;
-    return normalized
+    return value
         .trim()
         .replace(new RegExp(`[\\s,，;；。]+(?=(?:${pattern})[：:])`, "gu"), "\n")
         .replace(/[ \t]*\n[ \t]*/gu, "\n")
         .trim();
-}
-
-/** Reference roles belong to referenceManifest, never to a static image prompt. */
-export function stripLegacyStaticReferenceRole(value: string) {
-    return value.replace(/(?:^|[,，；;\n])\s*参考图职责[：:][\s\S]*?(?=(?:[,，；;\n]\s*(?:静态关键帧|可见状态|可见表演状态|景别|机位与构图|站位与视线|三层空间|光色与风格|负面约束)[：:]|$))/gu, "");
 }
 
 /** Return only positive static-frame fields; negative constraints may contain words that are forbidden in the image itself. */
@@ -69,7 +61,6 @@ export function normalizeDramaFrameBeats(value: readonly DramaFrameBeat[], durat
         ...(frame.transitionPrompt?.trim() ? { transitionPrompt: frame.transitionPrompt.trim() } : {}),
         ...(frame.endPrompt?.trim() ? { endPrompt: frame.endPrompt.trim() } : {}),
         imagePrompt: frame.imagePrompt.trim(),
-        ...(frame.supplierPrompt?.trim() ? { supplierPrompt: frame.supplierPrompt.trim() } : {}),
     }));
     if (frames.some((frame) => !frame.actionPrompt || !frame.imagePrompt)) throw new Error("每帧必须填写动作提示词和画面提示词");
     if (Math.abs(frames[0].startSecond) > TIME_EPSILON || Math.abs(frames.at(-1)!.endSecond - duration) > TIME_EPSILON) throw new Error("逐帧时间段必须完整覆盖镜头时长");
@@ -84,7 +75,7 @@ export function normalizeDramaFrameBeats(value: readonly DramaFrameBeat[], durat
 /** Returns the visible subject that must change from frame to frame. */
 export function dramaFrameVisualSubject(imagePrompt: string, actionPrompt = "", fallback = "") {
     const subject = staticFrameSubject(imagePrompt, actionPrompt, fallback);
-    const state = imagePrompt.match(/可见状态：([^；。\n]+)/u)?.[1] || "";
+    const state = imagePrompt.match(/(?:画面主体|静态关键帧|可见状态)：([^；。\n]+)/u)?.[1] || "";
     const performanceState = imagePrompt.match(/可见表演状态：([^\n]+)/u)?.[1] || "";
     return [subject, isGenericFrameState(state) ? "" : state, isGenericPerformanceState(performanceState) ? "" : performanceState].filter(Boolean).join("｜");
 }
@@ -112,176 +103,59 @@ export function dramaFrameCameraSignature(imagePrompt: string) {
 }
 
 export function validateDramaFrameVisualContent(imagePrompt: string, actionPrompt = "") {
-    const subject = staticFrameSubject(imagePrompt, actionPrompt, "");
-    const visibleState = imagePrompt.match(/可见状态：([^；。\n]+)/u)?.[1]?.trim() || "";
-    const performanceState = imagePrompt.match(/可见表演状态：([^\n]+)/u)?.[1]?.trim() || "";
+    void actionPrompt;
+    const normalized = formatPromptFieldLines(imagePrompt);
+    const subject = staticFrameSubject(normalized, "", "");
+    const visibleState = ["可见状态", "可见表演状态"].map((label) => staticFrameField(normalized, label)).find(Boolean) || "";
     const positivePrompt = dramaStaticFramePositiveText(imagePrompt);
-    if (/参考图职责[：:]/u.test(imagePrompt)) return "参考图职责属于资产绑定数据，不能写入静态图片提示词正文";
-    if (/(?:运镜|焦段|推镜|拉镜|摇镜|跟拍|滑轨|环绕|吊臂|慢推|慢拉|后拉|时间段|时间轴|动作过程|对白|声音|口型)/u.test(positivePrompt)) return "每帧必须描述当前可见画面，且静态图片帧不能包含运镜、时间过程、对白或声音指令";
-    if (/(?:景别|镜头)(?:（[^）]*）)?\s*[：:]\s*[^；。\n]*(?:→|->|至)/u.test(positivePrompt)) return "每帧只能使用一个固定景别，不能保留景别切换过程";
-    if (/(?:ELS|极远景)/u.test(positivePrompt) && /(?:清晰面部|面部清晰|眉眼|嘴角|下颌|手部|手指|道具|细节)/u.test(positivePrompt)) return "ELS/极远景只能承载远景空间关系，不能与清晰面部、手部或道具细节同时出现";
-    if (visibleState && isGenericFrameState(visibleState)) return "每帧必须写出动作节点已经造成的可见状态变化，不能只写通用阶段标签";
-    if (performanceState && isGenericPerformanceState(performanceState)) return "每帧必须写出当前节点的具体表演反应，不能只写眉眼、呼吸和手部关系清晰可见";
-    if (!subject || /^(?:主体保持当前设定中的静态状态|无|待补全|待生成)$/u.test(subject) || /^(?:口型同步|无字幕|无水印|禁止|避免|不得|不展示|没有)/u.test(subject) || /^(?:\d+mm|镜头|运镜|沿[^；。]*?(?:推|拉|摇|跟拍)|(?:慢推|慢拉|环绕))/u.test(subject))
-        return "每帧必须描述当前可见的主体、姿态、道具或环境状态，不能只有对白、旁白、运镜或约束说明";
+    if (!normalized) return "静态图片提示词不能为空";
+    if (/(?:https?:\/\/|data:image\/|assetId|内部\s*ID|内部编号|Skill|referenceManifest|参考绑定|实际参考图绑定|参考图职责|\{[\s\S]*\}|\[[\s\S]*\])/iu.test(imagePrompt)) return "静态图片提示词不能包含内部 ID、URL、JSON、Skill 名称或参考绑定信息";
+    if (/(?:运镜|推镜|拉镜|摇镜|跟拍|滑轨|环绕|吊臂|慢推|慢拉|后拉|时间段|时间轴|动作过程|对白|旁白|声音|音效|音乐|口型)/u.test(positivePrompt)) return "静态图片提示词不能包含运镜过程、时间轴、对白或声音指令";
+    if (!subject || /^(?:无|待补全|待生成)$/u.test(subject) || /^(?:口型同步|无字幕|无水印|禁止|避免|不得|不展示|没有)/u.test(subject)) return "每帧必须描述当前可见主体";
+    if ((!visibleState && !hasVisibleStaticState(positivePrompt)) || (visibleState && isGenericFrameState(visibleState))) return "每帧必须描述当前冻结的可见状态";
+    if (!hasVisibleSpatialResult(positivePrompt)) return "每帧至少需要一项可验收的空间关系、视线、姿态、道具或环境结果";
     return undefined;
 }
 
 export function validateDramaFramePlanVisuals(frames: readonly DramaFrameBeat[]) {
     const errors: string[] = [];
-    const subjects = frames.map((frame) => dramaFrameVisualSubject(frame.imagePrompt, frame.actionPrompt));
-    const signatures = frames.map((frame) => dramaFrameVisualSignature(frame.imagePrompt));
     frames.forEach((frame, index) => {
         const error = validateDramaFrameVisualContent(frame.imagePrompt, frame.actionPrompt);
         if (error) errors.push(`第 ${index + 1} 帧：${error}`);
-        if (index > 0 && subjects[index] && subjects[index] === subjects[index - 1]) errors.push(`第 ${index + 1} 帧与上一帧的可见画面没有变化，请补充本帧状态变化`);
-        else if (index > 0 && signatures[index] && signatures[index] === signatures[index - 1]) errors.push(`第 ${index + 1} 帧与上一帧的语义状态重复，请补充姿态、视线、手部/道具或环境结果变化`);
     });
-    const cameraSignatures = frames.map((frame) => dramaFrameCameraSignature(frame.imagePrompt));
-    if (
-        frames.length > 1 &&
-        cameraSignatures.every(Boolean) &&
-        new Set(cameraSignatures).size === 1 &&
-        frames.slice(1).some((frame) => /(?:镜头切换|切换机位|切到|反打|换景别|空间揭示|转为近景|转为远景)/u.test(`${frame.actionPrompt}；${frame.transitionPrompt || ""}`))
-    )
-        errors.push("本镜头声明了镜头/机位切换，但对应关键帧仍使用相同景别、机位与构图");
     return errors;
 }
 
-export function upgradeDramaFrameImagePrompt(
-    imagePrompt: string,
-    actionPrompt: string,
-    context: {
-        description: string;
-        shotSize: string;
-        cameraAngle: string;
-        composition: string;
-        characterBlocking: string;
-        gazeDirection: string;
-        lighting: string;
-        colorPalette: string;
-        characterCount?: number;
-        performanceState?: string;
-        refreshPerformanceState?: boolean;
-        sequenceIndex?: number;
-        frameCount?: number;
-        forceRefresh?: boolean;
-        backgroundNpcPolicy?: DramaBackgroundNpcPolicy;
-    },
-) {
-    const hadLegacyReferenceDuty = /参考图职责[：:]/u.test(imagePrompt);
-    imagePrompt = stripLegacyStaticReferenceRole(imagePrompt);
-    const normalizedImagePrompt = formatPromptFieldLines(imagePrompt.trim());
-    const frameCameraCue = staticFrameCameraCue(context.sequenceIndex, context.frameCount, context.characterCount, actionPrompt);
-    const existingVisibleState = imagePrompt.match(/可见状态[：:]([^；。\n]+)/u)?.[1]?.trim() || "";
-    const existingPerformanceState = imagePrompt.match(/可见表演状态[：:]([^\n]+)/u)?.[1]?.trim() || "";
-    if (!context.forceRefresh && !context.refreshPerformanceState && isCurrentDramaStaticFramePrompt(normalizedImagePrompt, { hadLegacyReferenceDuty })) return appendStaticFrameCameraCue(normalizedImagePrompt, frameCameraCue);
-    const subject = staticFrameSubject(imagePrompt, actionPrompt, context.description);
-    const visibleState = !isGenericFrameState(existingVisibleState) ? existingVisibleState : "";
-    const performanceState = context.refreshPerformanceState
-        ? inferStaticPerformanceState(subject, actionPrompt, context.sequenceIndex)
-        : (!isGenericPerformanceState(context.performanceState || "") ? context.performanceState : "") ||
-          (!isGenericPerformanceState(existingPerformanceState) ? existingPerformanceState : "") ||
-          inferStaticPerformanceState(subject, actionPrompt, context.sequenceIndex);
-    const frameState = visibleState || inferStaticFrameState(subject, actionPrompt, context.sequenceIndex, context.frameCount);
-    const resolvedShotSize = staticShotSize(context.shotSize, context.sequenceIndex, `${subject}；${frameState}；${performanceState}`);
-    return [
-        `静态关键帧：${subject}`,
-        `可见状态：${frameState}`,
-        `可见表演状态：${performanceState}`,
-        context.shotSize ? `景别：${resolvedShotSize}` : "",
-        context.cameraAngle || context.composition ? `机位与构图：${[context.cameraAngle, context.composition, frameCameraCue].map(cleanStaticConstraint).filter(Boolean).join("；")}；前景有具体框景或遮挡物` : "",
-        context.characterBlocking || context.gazeDirection ? `站位与视线：${[context.characterBlocking, context.gazeDirection].map(cleanStaticConstraint).filter(Boolean).join("；")}` : "",
-        "三层空间：前景必须是具体框景或遮挡物；中景承载主体与当前状态；背景交代门窗、墙面、通道或陈设等真实环境关系与纵深，背景结构保持清晰可辨，不使用大光圈人像虚化遮蔽空间。",
-        context.lighting || context.colorPalette ? `光色与风格：${[context.lighting, staticPalette(context.colorPalette, context.sequenceIndex)].map(cleanStaticConstraint).filter(Boolean).join("；")}；保留自然材质纹理与背景细节` : "",
-        `负面约束：无字幕、无水印、无logo、无HUD、无现代元素、${context.backgroundNpcPolicy?.mode === "required" ? "无额外主角、无额外肢体、无变形；允许且仅允许场景策略要求的无名背景 NPC" : "无额外主体、无额外肢体、无变形"}`,
-    ]
-        .filter(Boolean)
-        .join("\n");
+/** Similar adjacent frames are a quality warning, not a hard import error. */
+export function warnDramaFramePlanVisuals(frames: readonly DramaFrameBeat[]) {
+    const warnings: string[] = [];
+    frames.forEach((frame, index) => {
+        if (index === 0) return;
+        const currentSubject = dramaFrameVisualSubject(frame.imagePrompt);
+        const previousSubject = dramaFrameVisualSubject(frames[index - 1].imagePrompt);
+        const currentSignature = dramaFrameVisualSignature(frame.imagePrompt);
+        const previousSignature = dramaFrameVisualSignature(frames[index - 1].imagePrompt);
+        if (currentSubject && currentSubject === previousSubject) warnings.push(`第 ${index + 1} 帧与上一帧的可见主体/状态接近`);
+        else if (currentSignature && currentSignature === previousSignature) warnings.push(`第 ${index + 1} 帧与上一帧的语义状态接近`);
+    });
+    return warnings;
 }
 
-/** A prompt that already satisfies the public nine-field static-frame contract must not be rewritten. */
-export function isCurrentDramaStaticFramePrompt(value: string, options: { hadLegacyReferenceDuty?: boolean } = {}) {
-    const prompt = value.trim();
-    const fieldPositions = STATIC_FRAME_PROMPT_LABELS.map((label) => prompt.search(new RegExp(`(?:^|\\n)${label}[：:]`, "u")));
-    const positivePrompt = dramaStaticFramePositiveText(prompt);
-    if (
-        options.hadLegacyReferenceDuty ||
-        !/^静态关键帧[：:]/u.test(prompt) ||
-        fieldPositions.some((position) => position < 0) ||
-        fieldPositions.some((position, index) => index > 0 && position <= fieldPositions[index - 1]) ||
-        /参考图职责[：:]/u.test(prompt) ||
-        /(?:运镜|焦段|推镜|拉镜|摇镜|跟拍|滑轨|环绕|吊臂|慢推|慢拉|后拉|时间段|时间轴|动作过程|对白|声音|口型)/u.test(positivePrompt) ||
-        /(?:景别|镜头)(?:（[^）]*）)?\s*[：:]\s*[^；。\n]*(?:→|->|至)/u.test(positivePrompt)
-    )
-        return false;
-    const visibleState = prompt.match(/(?:^|\n)可见状态[：:]([^\n]+)/u)?.[1]?.trim() || "";
-    const performanceState = prompt.match(/(?:^|\n)可见表演状态[：:]([^\n]+)/u)?.[1]?.trim() || "";
-    return Boolean(visibleState && performanceState && !isGenericFrameState(visibleState) && !isGenericPerformanceState(performanceState));
+/** Existing static prompt text is only normalized; it is never upgraded or rebuilt. */
+export function isCurrentDramaStaticFramePrompt(value: string) {
+    return !validateDramaFrameVisualContent(value);
 }
 
-export function needsDramaStaticFramePromptUpgrade(value: string) {
-    return !isCurrentDramaStaticFramePrompt(value);
+function staticFrameSubject(imagePrompt: string, actionPrompt: string, fallback: string) {
+    const normalized = formatPromptFieldLines(imagePrompt);
+    const labeledSubject = staticFrameField(normalized, "画面主体") || staticFrameField(normalized, "静态关键帧");
+    if (labeledSubject) return labeledSubject.trim();
+    const firstVisibleLine = normalized
+        .split("\n")
+        .map((line) => line.trim())
+        .find((line) => line && !/^(?:可见状态|可见表演状态|构图与空间|景别|机位与构图|站位与视线|三层空间|光色与风格|针对性约束|负面约束)[：:]/u.test(line));
+    return firstVisibleLine || actionPrompt.trim() || fallback.trim();
 }
-
-function inferStaticPerformanceState(subject: string, actionPrompt: string, sequenceIndex = 1) {
-    const text = `${subject}；${actionPrompt}`;
-    const changes: string[] = [];
-    if (/抬眼|抬头|睁眼|回视/u.test(text)) changes.push("眉眼抬起，下颌从低垂转为绷紧；视线转向当前对手");
-    if (/低头|垂首|低垂/u.test(text)) changes.push("下颌压低，眉眼向下；视线暂不回看对手");
-    if (/收紧|握紧|攥紧|扣住|握住/u.test(text)) changes.push("手指或手掌收紧并对当前道具或桌沿施力");
-    if (/转向|转回|回头|侧身/u.test(text)) changes.push("肩线与身体朝向转向当前叙事目标");
-    if (/挺直|直立|起身|半步/u.test(text)) changes.push("肩背从低垂变为直立，重心落在新的支撑位置");
-    if (/波纹|震动|晃动|颤动|飞溅|裂开|落下/u.test(text)) changes.push("关键道具或环境留下与动作对应的可见结果");
-    if (changes.length) return changes.join("；");
-    if (/惊醒|睁眼|呼吸急促/u.test(text)) return "眉眼骤然睁开、下颌绷紧；视线落向断剑或当前触发物；手部继续扣住握柄";
-    if (/否认|避开|隐瞒/u.test(text)) return "眉心轻收、嘴角压住；视线先避开对方后短暂回看；手部保持道具接触";
-    if (/接住|水囊|推过去/u.test(text)) return "表情紧张略缓；视线跟随水囊；手部从待接变为握稳";
-    if (/护符|警觉|注视|探测器|结界/u.test(text)) return "眉心收紧、眼神警觉；视线锁定结界或探测器；手部握紧当前道具";
-    if (/解封|封印|力量|收力/u.test(text)) return "下颌收紧后放松；视线正对目标；手部由蓄力转为稳定收力";
-    if (/木匣|铜镜|短刃|断口|铁砧|裂纹/u.test(text)) return "表情由疑惑转为戒备；视线锁定关键道具；手部保持明确接触关系";
-    if (sequenceIndex <= 1) return `${subject || actionPrompt}；眉眼与下颌清晰可见，视线落向当前叙事目标，手部与道具保持可见接触关系`;
-    return `${subject || actionPrompt}；眉眼与视线落在当前叙事目标，手部或道具位置呈现本节点的可见结果`;
-}
-
-function frameProgressionState(index: number, count: number) {
-    if (count <= 1) return "主体、手部或身体与目标道具已经落在本镜头可辨识的终点状态";
-    if (index === 0) return "主体处于动作起点的准备姿态，手部或身体与当前目标形成明确受力关系";
-    if (index === count - 1) return "主体姿态、视线与道具位置落在动作完成后的稳定终点";
-    if (index === count - 2) return "主体重心或手部位置相对入口明显改变，道具或环境已经留下动作结果";
-    return "主体重心或手部位置相对入口发生可辨识变化，视线已经转向当前叙事目标";
-}
-
-function inferStaticFrameState(subject: string, actionPrompt: string, sequenceIndex = 1, frameCount = 4) {
-    const state = frameProgressionState(Math.max(0, sequenceIndex - 1), Math.max(1, frameCount || 4));
-    return `${state}；${subject || actionPrompt}`;
-}
-
-export function staticShotSize(value: string, sequenceIndex = 1, visibleContent = "") {
-    const parts = value
-        .split(/\s*(?:→|->|至)\s*/u)
-        .map((part) => part.trim())
-        .filter(Boolean);
-    const selected = parts[Math.min(Math.max(sequenceIndex - 1, 0), parts.length - 1)] || value;
-    if (/(?:ELS|极远景)/u.test(selected) && /(?:面部|眉眼|眼睛|下颌|嘴角|手部|手指|道具|剑刃|断剑|细节)/u.test(visibleContent)) return "中远景";
-    return selected;
-}
-
-function staticPalette(value: string, sequenceIndex = 1) {
-    const parts = value
-        .split(/\s*(?:→|->|至)\s*/u)
-        .map((part) => part.trim())
-        .filter(Boolean);
-    return parts[Math.min(Math.max(sequenceIndex - 1, 0), parts.length - 1)] || value;
-}
-
-function cleanStaticConstraint(value: string) {
-    return value
-        .replace(/[“”"][^“”"]{0,160}[”"]?/gu, "")
-        .replace(/(?:耳语|对白|旁白|口型同步|询问|回答|问)[:：][^；。]*/u, "")
-        .trim();
-}
-
 function isGenericFrameState(value: string) {
     return /^(?:主体保持进入镜头时的静止姿态|主体的手部或身体姿态已发生可见变化|关键道具或环境出现明确可见变化|主体保持动作完成后的稳定姿态|入口构图已建立|入口姿态、表情与视线已建立|动作入口已成立|动作节点的可见结果已经成立|人物姿态与道具位置清晰可见|手部与道具关系发生可见变化|表情、视线与道具状态同步变化|动作完成后的稳定尾帧|起始状态|动作展开|关键变化|结果状态)$/u.test(
         value.trim(),
@@ -308,68 +182,12 @@ function normalizeFrameStateForComparison(value: string) {
         .trim();
 }
 
-function staticFrameCameraCue(sequenceIndex = 1, frameCount = 1, characterCount = 1, actionPrompt = "") {
-    if (!frameCount || frameCount <= 1) return "";
-    const index = Math.max(0, Math.min(frameCount - 1, sequenceIndex - 1));
-    const plans = [
-        "关系建立构图：中远景平视，主体、关键道具与背景结构同框",
-        characterCount > 1 && /看向|对视|转向|回应|打量|扫过/u.test(actionPrompt) ? "对话反应构图：侧前方过肩中景，前景保留对手肩线，主体视线目标清晰" : "动作推进构图：侧前方中景，前景保留门框或桌沿，主体朝向与背景通道清晰",
-        "观察构图：略高机位中景，主体与对手的左右关系、桌面受力和视线落点同框",
-        /(?:手|指|茶|盏|剑|刀|道具|桌沿|握|按|放下|拿起|落下)/u.test(actionPrompt) ? "动作细节构图：侧前方中近景，面部视线与手部/道具接触结果同框" : "反应构图：斜侧方中近景，肩线转向目标，具体前景遮挡保留空间纵深",
-        "结果构图：低机位中近景，主体重心与道具结果清晰，背景结构仍可辨",
-        "收束构图：高位中远景，主体、通道和出口方向形成完整空间关系",
-    ];
-    return plans[index % plans.length];
+function hasVisibleStaticState(value: string) {
+    return /(?:静立|站立|坐在|低头|抬头|睁眼|闭眼|呼吸|肩膀|脚步|看向|对视|视线|姿态|下颌|眉眼|手部|手指|握住|扣住|按住|放在|停在|位于|面向|朝向|保持|茶盏|道具|波纹|阴影|反光|打开|闭合|破损|裂纹|血印|屏息)/u.test(value);
 }
 
-function appendStaticFrameCameraCue(prompt: string, cue: string) {
-    if (!cue || prompt.includes(cue)) return prompt;
-    const lines = prompt.split("\n");
-    const cameraLine = lines.findIndex((line) => line.startsWith("机位与构图："));
-    if (cameraLine < 0) return prompt;
-    lines[cameraLine] = `${lines[cameraLine]}；${cue}`;
-    return lines.join("\n");
-}
-
-function staticFrameSubject(imagePrompt: string, actionPrompt: string, fallback: string) {
-    const markerSources = [imagePrompt, actionPrompt].map((value) => value.match(/(?:本帧|当前)(?:时段动作锚点|帧可见画面)：([\s\S]*)/u)?.[1] || "").filter(Boolean);
-    const candidates = [...markerSources, imagePrompt, actionPrompt]
-        .map((value) =>
-            value
-                .replace(/^(?:本帧|当前)(?:时段动作锚点|帧可见画面)：/u, "")
-                .replace(/^静态关键帧：/u, "")
-                .replace(/^本帧可见画面：/u, "")
-                .replace(/^生成\d+秒[^。]*。?/u, "")
-                .replace(/^本内部镜头只执行：/u, "")
-                .replace(/[；\n](?:可见状态|可见表演状态|景别|机位与构图|站位与视线|三层空间|光色与风格|参考图职责|负面约束)：[\s\S]*$/u, "")
-                .replace(/^无字幕、无水印、无logo[^。]*。?/u, "")
-                .replace(/^深蓝黑、雪白、极少冷银。?/u, "")
-                .replace(/^.*?(?:匹配切到|切到|切至|转到)/u, "")
-                .replace(/(?:耳语|对白|旁白|台词|口型同步|询问|回答|问)[:：][\s\S]*$/u, "")
-                .replace(/(?:镜头运动|运镜|推镜|拉镜|摇镜|跟拍|拍摄)[:：]?[\s\S]*$/u, "")
-                .replace(/^(?:镜头)?沿[^；。\n]*(?:推|拉|摇|跟拍|环绕)[^；。\n]*[；。]?/u, "")
-                .replace(/^(?:无对白|无台词|无字幕|无水印)[；。]?/u, "")
-                .replace(/(?:保持(?:角色|人物|身份|服装|道具|场景|空间|结构|连续)|严格以|冻结当前时间点|不包含运动|不表现运动过程|主体、道具与环境保留可辨识材质纹理|可见表演状态)[^；。]*[；。]?/gu, "")
-                .replace(/^”/u, "")
-                .replace(/[“”"][^“”"]{0,160}[”"]?/gu, "")
-                .trim(),
-        )
-        .flatMap((value) => value.split(/[。；]/u))
-        .map((value) => value.trim())
-        .filter((value) => value.length > 3)
-        .filter((value) => !/^(?:耳语|对白|旁白|口型同步|无对白|无字幕|不要|禁止)/u.test(value))
-        .filter(
-            (value) => !/(?:镜头|运镜|推镜|拉镜|摇镜|跟拍|匹配切|固定双人|景别|口型同步|开口|说话|回答|询问|质疑|否认|沿动作轴线|视线高度|拍摄|动作过渡|连续反应|当前动作|动作展开|关键变化|结果状态|缩短距离|冲刺|奔跑|靠近|走向|逐渐|继续)/u.test(value),
-        );
-    const safeFallback = cleanStaticConstraint(fallback)
-        .replace(/[；。]+$/u, "")
-        .trim();
-    const safeImage = cleanStaticConstraint(imagePrompt)
-        .replace(/^静态关键帧：/u, "")
-        .replace(/[；。]+$/u, "")
-        .trim();
-    const usableImage = safeImage.length > 3 && !/^(?:无|待补全|待生成)$/u.test(safeImage) && !/(?:镜头|运镜|推镜|拉镜|摇镜|跟拍|拍摄|焦段|\d+mm|缩短距离|靠近|冲刺|奔跑|逐渐|继续|向前靠近)/u.test(safeImage);
-    return candidates[0] || (usableImage ? safeImage : safeFallback) || "主体保持当前设定中的静态状态";
+function hasVisibleSpatialResult(value: string) {
+    return /(?:前景|中景|背景|左侧|右侧|东侧|西侧|北侧|南门|桌面|桌沿|门窗|通道|座位|长桌|靠墙|柱|同框|站在|坐在|位于|朝向|面向|视线|看向|对视|接触|支撑|握住|按住|停在|放在|道具|环境|马车|车厢|湖边|门边|室内|户外|前方|后方|中央|同一侧)/u.test(value);
 }
 
 export function insertDramaFrameBeat(frames: readonly DramaFrameBeat[], frameId: string): DramaFrameBeat[] {
@@ -393,19 +211,13 @@ export function deleteDramaFrameBeat(frames: readonly DramaFrameBeat[], frameId:
     return reindex(next);
 }
 
-export function updateDramaFrameBeat(frames: readonly DramaFrameBeat[], generated: readonly DramaStoryboardFrame[], frameId: string, patch: Partial<Pick<DramaFrameBeat, "endSecond" | "actionPrompt" | "imagePrompt" | "supplierPrompt">>) {
+export function updateDramaFrameBeat(frames: readonly DramaFrameBeat[], generated: readonly DramaStoryboardFrame[], frameId: string, patch: Partial<Pick<DramaFrameBeat, "endSecond" | "actionPrompt" | "imagePrompt">>) {
     const index = frames.findIndex((frame) => frame.id === frameId);
     if (index < 0) throw new Error("待更新帧不存在");
     const beats = frames.map((frame) => ({ ...frame }));
-    const synchronizedPatch =
-        patch.imagePrompt !== undefined && patch.supplierPrompt === undefined
-            ? { ...patch, supplierPrompt: patch.imagePrompt }
-            : patch.supplierPrompt !== undefined && patch.imagePrompt === undefined
-              ? { ...patch, imagePrompt: patch.supplierPrompt }
-              : patch;
-    beats[index] = { ...beats[index], ...synchronizedPatch };
+    beats[index] = { ...beats[index], ...patch };
     if (patch.endSecond !== undefined && index + 1 < beats.length) beats[index + 1].startSecond = patch.endSecond;
-    const invalidFrom = patch.imagePrompt !== undefined || patch.supplierPrompt !== undefined || patch.endSecond !== undefined ? index : index + 1;
+    const invalidFrom = patch.imagePrompt !== undefined || patch.endSecond !== undefined ? index : index + 1;
     const staleIds = new Set(beats.slice(invalidFrom).map((frame) => frame.id));
     return {
         beats: reindex(beats),

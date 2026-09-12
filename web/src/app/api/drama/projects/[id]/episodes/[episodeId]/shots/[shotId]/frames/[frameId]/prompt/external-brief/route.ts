@@ -3,7 +3,6 @@ import { NextResponse } from "next/server";
 import { readJsonBodyResult } from "@/lib/auth/request";
 import { getCurrentUser } from "@/lib/auth/session";
 import { CREATE_AGENT_PROMPT_MAX_LENGTH } from "@/lib/create-agent-prompt";
-import { DRAMA_PUBLIC_STATIC_FRAME_PROMPT_CONTRACT } from "@/lib/drama-public-prompt-contract";
 import { getDramaProjectForUser, DramaProjectServiceError } from "@/lib/server/drama-project-service";
 import { buildDramaFramePromptContext, formatDramaFramePromptContext } from "@/lib/server/drama-frame-prompt-context";
 import { resolveDramaDirectorInstructions, DRAMA_VIDEO_DIRECTOR_SKILL } from "@/lib/server/agent-skills/drama-video-director";
@@ -31,14 +30,12 @@ export async function POST(request: Request, context: Context) {
             "用途：根据下方项目事实，只生成当前图片帧的公开提示词；完成后可直接复制回项目帧编辑器保存。",
             "",
             "统一导演规则：",
-            resolveDramaDirectorInstructions("external-codex"),
-            "",
-            DRAMA_PUBLIC_STATIC_FRAME_PROMPT_CONTRACT.trim(),
+            resolveDramaDirectorInstructions("static-frame"),
             "",
             contextFacts,
             correctionDirection ? `\n本次用户整改方向（仅影响本次输出，不覆盖项目长期规则）：\n${correctionDirection}` : "",
             "",
-            "最终只输出九行公开提示词，字段顺序固定为：静态关键帧、可见状态、可见表演状态、景别、机位与构图、站位与视线、三层空间、光色与风格、负面约束。不要输出 ID、URL、供应商参数、规则说明、JSON、Markdown 或评估文字。",
+            "最终只输出当前帧公开提示词。不要输出 ID、URL、供应商参数、规则说明、JSON、Markdown 或评估文字。",
         ].join("\n");
         return NextResponse.json({ code: 0, data: { brief, sourceVersion: DRAMA_VIDEO_DIRECTOR_SKILL.sourceVersion, sourceContentHash: DRAMA_VIDEO_DIRECTOR_SKILL.sourceContentHash }, msg: "OK" });
     } catch (error) {

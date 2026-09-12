@@ -85,7 +85,7 @@ export function buildDramaVisualProductionRun(project: DramaProject, episode: Dr
                     startSecond: beat.startSecond,
                     endSecond: beat.endSecond,
                     title: `${shot.title} · 帧 ${beat.sequenceIndex}`,
-                    prompt: continuityReference ? withContinuityReferencePrompt(compileDramaFrameBeatPrompt(project, episode, shot, beat), "keyframe") : compileDramaFrameBeatPrompt(project, episode, shot, beat),
+                    prompt: compileDramaFrameBeatPrompt(project, episode, shot, beat),
                     referenceAssetIds: frameReferences,
                     manualReferenceImages: shot.framePlan?.manualReferenceImages,
                     referenceManifest: scopedReferenceManifest(project, shot, beat),
@@ -175,11 +175,7 @@ export function compileDramaVisualStepPrompt(project: DramaProject, episode: Dra
     if (!shot) return step.prompt || "";
     const beat = step.type === "keyframe" ? shot.framePlan?.frames?.find((frame) => frame.id === step.frameId || frame.sequenceIndex === step.sequenceIndex) : undefined;
     const prompt = step.type === "end_frame" ? compileDramaFrameSupplierPrompt(project, episode, shot, undefined, "end") : beat ? compileDramaFrameBeatPrompt(project, episode, shot, beat) : compileDramaVisualStartFramePrompt(project, episode, shot);
-    return (step.type === "start_frame" || step.type === "keyframe") && step.referenceImageUrls?.length ? withContinuityReferencePrompt(prompt, step.type) : prompt;
-}
-
-function withContinuityReferencePrompt(prompt: string, type: "start_frame" | "keyframe") {
-    return `${prompt}\n上一镜成片实际尾帧是结构连续性依据：仅本镜头第一帧使用该已验收实际尾帧建立入口，保持人物身份、服装材质、场景空间、光向和轴线连续；当前帧提示词中的姿态、视线、手部/道具状态和环境结果优先，不得复制参考图的静态构图。${type === "keyframe" ? "本镜头后续关键帧均独立使用固定资产锚点生成，不引用同镜上一帧图片；必须呈现当前帧提示词中写明的新可见状态。" : ""}`;
+    return prompt;
 }
 
 export function compileDramaVisualStartFramePrompt(project: DramaProject, episode: DramaEpisode, shot: DramaEpisode["shots"][number]) {

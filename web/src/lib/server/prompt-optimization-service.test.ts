@@ -60,7 +60,7 @@ describe("prompt optimization service", () => {
         expect(systemMessage).toContain("只包含一个已定位变量");
     });
 
-    it("evaluates drama frame prompts with the internal Seedance director rules", async () => {
+    it("evaluates drama frame prompts with one shared static contract", async () => {
         vi.mocked(requestStructuredText).mockResolvedValue({
             arguments: JSON.stringify({
                 optimizedPrompt: [
@@ -83,19 +83,12 @@ describe("prompt optimization service", () => {
         await optimizeCreativePrompt({ origin: "http://localhost:3000", cookie: "session=1", userId: "user-one", requestId: "frame-request", prompt: "原始帧提示词", mode: "drama-frame" });
 
         const systemMessage = vi.mocked(requestStructuredText).mock.calls[0]?.[0].messages.find((message) => message.role === "system")?.content || "";
-        expect(systemMessage).toContain("Seedance 2.0 静态图片帧提示词导演");
-        expect(systemMessage).toContain("Seedance 导演 Skill（固定版本");
-        expect(systemMessage).toContain("静态关键帧写法模板");
-        expect(systemMessage).toContain("静态帧提示词公开布局");
-        expect(systemMessage).toContain("每个非空字段必须独立成行");
-        expect(systemMessage).toContain("不得用逗号或分号压成一段");
-        expect(systemMessage).toContain("前景必须是具体框景或遮挡物");
-        expect(systemMessage).toContain("ELS/极远景只能保留远景空间关系");
-        expect(systemMessage).toContain("静态帧不是无动作的氛围图");
+        expect(systemMessage).toContain("唯一静态画面事实源");
+        expect(systemMessage).toContain("不补写缺失段落");
+        expect((systemMessage.match(/静态帧使用现有/gu) || []).length).toBe(1);
+        expect(systemMessage).not.toContain("静态关键帧写法模板");
+        expect(systemMessage).not.toContain("静态帧提示词公开布局");
         expect(systemMessage).toContain("静态帧只冻结一个已经发生的瞬间");
-        expect(systemMessage).toContain("光影必须能回答光从哪里来");
-        expect(systemMessage).toContain("不预设固定秒数");
-        expect(systemMessage).toContain("上一帧/上一镜");
         expect(systemMessage).toContain("只返回优化后的公开提示词");
     });
 

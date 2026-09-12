@@ -10,13 +10,12 @@ describe("drama production package serialization", () => {
         const value = previewDramaProductionPackage(JSON.stringify(fixture()), "package.json").package;
         const jsonPackage = previewDramaProductionPackage(serializeDramaProductionPackageJson(value), "package.json").package;
         expect(jsonPackage).toMatchObject({ schemaVersion: value.schemaVersion, project: value.project, assets: value.assets });
-        expect(jsonPackage.episodes[0].shots[0].framePlan.frames[0].imagePrompt).toContain("机位与构图：");
+        expect(jsonPackage.episodes[0].shots[0].framePlan.frames[0].imagePrompt).toContain("构图与空间：");
         const markdownPackage = previewDramaProductionPackage(serializeDramaProductionPackageMarkdown(value), "package.md").package;
         expect(markdownPackage).toMatchObject({ schemaVersion: value.schemaVersion, project: value.project, assets: value.assets });
         const markdownPrompt = markdownPackage.episodes[0].shots[0].framePlan.frames[0].imagePrompt;
-        expect(markdownPrompt).toContain("静态关键帧：");
-        expect(markdownPrompt).toContain("机位与构图：");
-        expect(markdownPrompt).not.toContain("参考图职责：");
+        expect(markdownPrompt).toContain("画面主体：");
+        expect(markdownPrompt).toContain("构图与空间：");
     });
 
     it("exports the Agent video prompt without rebuilding it from the frame timeline", () => {
@@ -45,7 +44,7 @@ describe("drama production package serialization", () => {
         expect(markdown).toContain("动态意图：角色抬头；单一主运镜：固定机位；结束画面：视线锁定断剑");
     });
 
-    it("cleans legacy static reference duties during deterministic export", () => {
+    it("preserves existing static text during deterministic export", () => {
         const value = fixture();
         value.episodes[0].shots[0].framePlan.frames[0].imagePrompt =
             "静态关键帧：Karin站立；可见状态：手握断剑；可见表演状态：警觉；景别：中景；机位与构图：平视；站位与视线：看向断剑；三层空间：前景雪地，中景人物，背景古塔；光色与风格：冷光；参考图职责：沿用旧绑定；负面约束：无水印";
@@ -53,11 +52,10 @@ describe("drama production package serialization", () => {
         const json = JSON.parse(serializeDramaProductionPackageJson(value)) as DramaProductionPackageV1;
         const prompt = json.episodes[0].shots[0].framePlan.frames[0].imagePrompt;
 
-        expect(prompt.split("\n")).toHaveLength(9);
-        expect(prompt).not.toContain("参考图职责：");
+        expect(prompt).toContain("参考图职责：沿用旧绑定");
     });
 
-    it("rebuilds generic historical frame copy during deterministic export", () => {
+    it("does not rebuild generic historical frame copy during deterministic export", () => {
         const value = fixture();
         value.episodes[0].shots[0].framePlan.frames[0] = {
             ...value.episodes[0].shots[0].framePlan.frames[0],
@@ -68,8 +66,7 @@ describe("drama production package serialization", () => {
 
         const exported = JSON.parse(serializeDramaProductionPackageJson(value)) as DramaProductionPackageV1;
         const prompt = exported.episodes[0].shots[0].framePlan.frames[0].imagePrompt;
-        expect(prompt).toContain("眉眼抬起");
-        expect(prompt).not.toContain("主体的眉眼、呼吸、手部和道具接触关系清晰可见");
+        expect(prompt).toContain("主体的眉眼、呼吸、手部和道具接触关系清晰可见");
     });
 });
 
@@ -119,7 +116,7 @@ function fixture(): DramaProductionPackageV1 {
                         dialogue: "",
                         narration: "",
                         utterances: [],
-                        imagePrompt: "9:16站立",
+                        imagePrompt: "画面主体：角色\n可见状态：站立姿态已冻结\n构图与空间：角色位于场景中央，地面支撑面清晰",
                         videoPrompt: "角色站立",
                         cameraMotion: "固定",
                         entryState: { characters: [], props: [] },
@@ -128,8 +125,8 @@ function fixture(): DramaProductionPackageV1 {
                             start: { source: "independent" },
                             end: { required: true },
                             frames: [
-                                { id: "frame-one", sequenceIndex: 1, startSecond: 0, endSecond: 3, actionPrompt: "角色进入站立", imagePrompt: "9:16角色进入站立" },
-                                { id: "frame-two", sequenceIndex: 2, startSecond: 3, endSecond: 6, actionPrompt: "角色抬眼站立", imagePrompt: "9:16角色抬眼站立" },
+                                { id: "frame-one", sequenceIndex: 1, startSecond: 0, endSecond: 3, actionPrompt: "角色进入站立", imagePrompt: "画面主体：角色\n可见状态：站立姿态已冻结\n构图与空间：角色位于场景中央，地面支撑面清晰" },
+                                { id: "frame-two", sequenceIndex: 2, startSecond: 3, endSecond: 6, actionPrompt: "角色抬眼站立", imagePrompt: "画面主体：角色\n可见状态：抬眼站立姿态已冻结\n构图与空间：角色位于场景中央，地面支撑面清晰" },
                             ],
                             referenceManifest: [
                                 { alias: "@图片1", role: "character_anchor", purpose: "角色基准", assetId: "C01" },

@@ -9,7 +9,7 @@ describe("drama video director adapter", () => {
         const videoRules = resolveDramaDirectorInstructions("video");
 
         expect(staticRules).toContain("静态帧只冻结一个已经发生的瞬间");
-        expect(staticRules).toContain("不得写运镜过程");
+        expect(staticRules).toContain("运镜过程");
         expect(videoRules).toContain("每个真实时间段逐块写出起点、动作与触发、可见衔接和终点");
         expect(videoRules).not.toContain("只冻结一个已经发生的瞬间");
     });

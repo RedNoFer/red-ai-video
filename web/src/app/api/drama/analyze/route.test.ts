@@ -10,9 +10,12 @@ describe("drama analyze Skill routing", () => {
         expect(instruction).not.toContain("本次视觉任务强制执行 Seedance 2.0 导演 Skill");
     });
 
-    it("keeps the static Seedance 2.0 contract for visual and image phases", () => {
+    it("routes visual and image phases through one shared static-frame rule", () => {
         const instruction = buildDramaAnalyzeSchemaInstruction("image_prompt", { type: "object" });
+        const visualInstruction = buildDramaAnalyzeSchemaInstruction("visual", { type: "object" });
 
-        expect(instruction).toContain("本次视觉任务强制执行 Seedance 2.0 导演 Skill");
+        expect(instruction).toContain("本次静态图片帧任务只执行一次静态帧规则");
+        expect(visualInstruction).toContain("本次视觉任务只执行一次静态帧规则");
+        expect((visualInstruction.match(/静态帧使用现有/gu) || []).length).toBe(1);
     });
 });

@@ -194,6 +194,12 @@ describe("production package boundary", () => {
         expect(shots.flatMap((shot) => auditDramaShotDirectorQuality(shot as unknown as DramaShot).map((issue) => issue.code))).not.toContain("DIRECTOR_MULTI_MOTION");
     });
 
+    it("preserves explicit top-level start and end frame prompts during package import", () => {
+        const preview = previewDramaProductionPackage(JSON.stringify(productionPackage), "package.json");
+        expect(preview.package.episodes[0].shots[0].startFramePrompt).toContain("起始姿态已冻结");
+        expect(preview.package.episodes[0].shots[0].endFramePrompt).toContain("终点姿态已冻结");
+    });
+
     it("applies the fixed character-quality contract to package-generated role assets", () => {
         const preview = previewDramaProductionPackage(JSON.stringify(productionPackage), "package.json");
         const karin = preview.package.assets.characters.find((item) => item.code === "C01")!;
@@ -310,14 +316,16 @@ describe("production package boundary", () => {
             }));
         }
 
-        const preview = previewDramaProductionPackage(JSON.stringify(source), "package.json", undefined, { upgradeLegacyFramePrompts: false });
+        const preview = previewDramaProductionPackage(JSON.stringify(source), "package.json", undefined, { validateVideoPrompt: true });
 
         expect(preview.package.episodes[0].shots[0].imagePrompt).toBe(staticPrompt);
         expect(preview.package.episodes[0].shots[0].framePlan.frames[0].imagePrompt).toBe(staticPrompt);
     });
 
-    it("rejects legacy static-frame copy in strict generation mode instead of silently upgrading it", () => {
-        expect(() => previewDramaProductionPackage(JSON.stringify(productionPackage), "package.json", undefined, { upgradeLegacyFramePrompts: false })).toThrow("完整九字段静态帧提示词");
+    it("rejects a static prompt without a frozen visible state instead of silently upgrading it", () => {
+        const source = structuredClone(productionPackage);
+        source.episodes[0].shots[0].framePlan.frames[0].imagePrompt = "画面主体：Karin";
+        expect(() => previewDramaProductionPackage(JSON.stringify(source), "package.json", undefined, { validateVideoPrompt: true })).toThrow("当前冻结的可见状态");
     });
 
     it("requires the Agent video prompt to mirror every frame segment in strict generation mode", () => {
@@ -361,7 +369,7 @@ describe("production package boundary", () => {
         ];
         source.episodes[0].shots[0].videoPrompt = "动态意图：Karin压住断剑\n时间段动作：0-15s\n单一主运镜：固定机位\n结束画面：Karin停住";
 
-        expect(() => previewDramaProductionPackage(JSON.stringify(source), "package.json", undefined, { upgradeLegacyFramePrompts: false })).toThrow("未逐段写出起点、动作与触发、可见衔接和终点");
+        expect(() => previewDramaProductionPackage(JSON.stringify(source), "package.json", undefined, { validateVideoPrompt: true })).toThrow("未逐段写出起点、动作与触发、可见衔接和终点");
     });
 
     it("deduplicates package assets by stable code before preview and apply", () => {
@@ -639,7 +647,7 @@ describe("production package boundary", () => {
         expect(shot.videoPrompt).toBe("生成15秒9:16竖屏电影级视频。角色抬手后停住");
     });
 
-    it("upgrades repetitive frame image prompts into independent visual states", () => {
+    it("preserves repetitive frame image prompts and leaves similarity as a warning", () => {
         const source = structuredClone(productionPackage);
         const shot = source.episodes[0].shots[0];
         shot.framePlan.frames = [
@@ -647,9 +655,9 @@ describe("production package boundary", () => {
             { id: "f2", sequenceIndex: 2, startSecond: 7.5, endSecond: 15, actionPrompt: "Karin抬眼看向倒悬高塔", imagePrompt: "黑湖、倒塔，9:16安全构图。当前时段动作锚点：Karin抬眼看向倒悬高塔。保持角色身份、服装、道具、场景结构与上一帧连续。" },
         ];
         const frames = previewDramaProductionPackage(JSON.stringify(source), "package.json").package.episodes[0].shots[0].framePlan.frames;
-        expect(frames[0].imagePrompt).toContain("静态关键帧：Karin低头站在黑湖边");
-        expect(frames[1].imagePrompt).toContain("静态关键帧：Karin抬眼看向倒悬高塔");
-        expect(frames[0].imagePrompt).not.toContain("当前时段动作锚点");
+        expect(frames[0].imagePrompt).toContain("当前时段动作锚点：Karin低头站在黑湖边");
+        expect(frames[1].imagePrompt).toContain("当前时段动作锚点：Karin抬眼看向倒悬高塔");
+        expect(frames[0].imagePrompt).not.toContain("静态关键帧：Karin低头站在黑湖边");
         expect(frames[0].imagePrompt).not.toBe(frames[1].imagePrompt);
     });
 
@@ -830,7 +838,7 @@ describe("production package boundary", () => {
         expect(dramaVisualDirection(withoutVisualField.productionBible!.productionPlan!)).toBe("");
     });
 
-    it("replaces legacy manual frame plans when importing a newly structured package", () => {
+    it("does not persist a frame supplierPrompt or use it as a static source", () => {
         const first = applyDramaProductionPackage(project(), productionPackage, "hash-legacy-frame");
         const legacyShot = first.episodes[0].shots[0];
         const legacy: DramaProject = {
@@ -853,36 +861,27 @@ describe("production package boundary", () => {
             ],
         };
         const imported = applyDramaProductionPackage(legacy, productionPackage, "hash-new-frame");
-        const prompt = imported.episodes[0].shots[0].framePlan!.frames[0].imagePrompt;
-        expect(prompt).toContain("静态关键帧：");
-        expect(prompt).toContain("机位与构图：");
-        expect(prompt).toContain("光色与风格：");
-        expect(prompt).not.toContain("旧版长提示词");
+        const frame = imported.episodes[0].shots[0].framePlan!.frames[0];
+        expect(frame.imagePrompt).toBe(productionPackage.episodes[0].shots[0].framePlan.frames[0].imagePrompt);
+        expect("supplierPrompt" in frame).toBe(false);
     });
 
-    it("rebuilds old static prompts that contain reference duties on package import", () => {
+    it("rejects static prompts that contain reference duties on package import", () => {
         const legacy = structuredClone(productionPackage);
         legacy.episodes[0].shots[0].framePlan.frames[0].imagePrompt =
             "静态关键帧：旧画面；可见状态：手握断剑；可见表演状态：警觉；景别：中景；机位与构图：平视；站位与视线：看向断剑；三层空间：背景古塔；光色与风格：冷光；参考图职责：沿用旧绑定；负面约束：无水印";
 
-        const imported = previewDramaProductionPackage(JSON.stringify(legacy), "package.json").package;
-        const prompt = imported.episodes[0].shots[0].framePlan.frames[0].imagePrompt;
-
-        expect(prompt.split("\n")).toHaveLength(9);
-        expect(prompt).not.toContain("参考图职责：");
-        expect(prompt).toContain("静态关键帧：梦中惊醒");
+        expect(() => previewDramaProductionPackage(JSON.stringify(legacy), "package.json")).toThrow("参考绑定信息");
     });
 
-    it("rebuilds generic template frame copy on package import", () => {
+    it("preserves generic template text on package import when required facts are present", () => {
         const legacy = structuredClone(productionPackage);
         legacy.episodes[0].shots[0].framePlan.frames[0].actionPrompt = "人物抬眼并收紧手指";
-        legacy.episodes[0].shots[0].framePlan.frames[0].imagePrompt =
-            "静态关键帧：人物抬眼并收紧手指；可见状态：动作入口已成立；可见表演状态：主体的眉眼、呼吸、手部和道具接触关系清晰可见，情绪通过身体动作呈现；景别：中景；机位与构图：平视；站位与视线：人物在右侧；三层空间：前景门框，中景人物，背景大厅；光色与风格：冷光；负面约束：无水印";
+        legacy.episodes[0].shots[0].framePlan.frames[0].imagePrompt = "画面主体：人物；可见状态：抬眼并收紧手指，姿态和手部结果清晰；构图与空间：人物位于右侧，前景门框，背景大厅；光色与风格：冷光；针对性约束：保留当前道具结果；负面约束：无水印";
 
         const imported = previewDramaProductionPackage(JSON.stringify(legacy), "package.json").package;
         const prompt = imported.episodes[0].shots[0].framePlan.frames[0].imagePrompt;
-        expect(prompt).toContain("眉眼抬起");
-        expect(prompt).not.toContain("动作入口已成立");
+        expect(prompt).toContain("抬眼并收紧手指");
         expect(prompt).not.toContain("主体的眉眼、呼吸、手部和道具接触关系清晰可见");
     });
 
@@ -998,11 +997,11 @@ function shot(code: string, order: number, timecode: string, characterCodes: str
         dialogue: "",
         narration: "",
         utterances: [],
-        imagePrompt: `${videoPrompt}画面`,
+        imagePrompt: `画面主体：${videoPrompt}\n可见状态：${videoPrompt}后的冻结姿态与道具状态\n构图与空间：主体位于画面中央，场景结构和支撑面清晰可见`,
         videoPrompt,
         cameraMotion: "缓慢推进",
-        startFramePrompt: "起始",
-        endFramePrompt: "结束",
+        startFramePrompt: `画面主体：${videoPrompt}\n可见状态：${videoPrompt}的起始姿态已冻结\n构图与空间：主体位于画面中央，场景结构清晰`,
+        endFramePrompt: `画面主体：${videoPrompt}\n可见状态：${videoPrompt}的终点姿态已冻结\n构图与空间：主体位于画面中央，场景结构清晰`,
         negativePrompt: "无水印",
         continuity: { shotSize: "中景", cameraAngle: "平视", composition: "竖幅", characterBlocking: "居中", gazeDirection: "向左", actionStart: "静止", actionEnd: "抬手", screenDirection: "向右", axisRule: "不越轴", continuityNotes: "保持服装" },
         duration: 15,
@@ -1024,8 +1023,15 @@ function shot(code: string, order: number, timecode: string, characterCodes: str
             start: { source: order === 1 ? "independent" : "previous_accepted_actual_tail" },
             end: { required: true },
             frames: [
-                { id: `${code}-frame-1`, sequenceIndex: 1, startSecond: 0, endSecond: 7.5, actionPrompt: `${videoPrompt}进入`, imagePrompt: `${videoPrompt}进入画面` },
-                { id: `${code}-frame-2`, sequenceIndex: 2, startSecond: 7.5, endSecond: 15, actionPrompt: `${videoPrompt}结果`, imagePrompt: `${videoPrompt}结果画面` },
+                { id: `${code}-frame-1`, sequenceIndex: 1, startSecond: 0, endSecond: 7.5, actionPrompt: `${videoPrompt}进入`, imagePrompt: `画面主体：${videoPrompt}\n可见状态：${videoPrompt}进入前的冻结姿态\n构图与空间：主体位于画面中央，场景结构清晰` },
+                {
+                    id: `${code}-frame-2`,
+                    sequenceIndex: 2,
+                    startSecond: 7.5,
+                    endSecond: 15,
+                    actionPrompt: `${videoPrompt}结果`,
+                    imagePrompt: `画面主体：${videoPrompt}\n可见状态：${videoPrompt}完成后的冻结姿态\n构图与空间：主体位于画面中央，场景结构清晰`,
+                },
             ],
             referenceManifest: [
                 ...characterCodes.map((assetId) => ({ alias: `@${assetId}`, role: "character_anchor" as const, purpose: "角色基准图", assetId })),

@@ -47,7 +47,7 @@ export function formatDramaFramePromptContext(context: DramaFramePromptContext) 
         previousFrame ? `上一帧事实（只能作为连续性参照，不得复制静态画面）：\n${formatFrame(previousFrame)}` : "上一帧事实：无，本帧是镜头入口",
         nextFrame ? `下一帧事实（只能作为连续性参照，不得提前写入本帧）：\n${formatFrame(nextFrame)}` : "下一帧事实：无，本帧是镜头终点",
         formatReferenceRoles(shot),
-        "输出约束：只返回公开静态图片提示词，严格九行骨架；参考图职责留在绑定数据，不写进提示词正文；不新增项目事实。",
+        "输出约束：只返回公开静态图片提示词；可按画面主体、可见状态、构图与空间、光色与风格、针对性约束组织，缺少事实的段落省略；至少写主体、冻结状态和一项可验收空间/视线/姿态/道具/环境结果。参考图职责留在绑定数据，不写进提示词正文；不新增项目事实。",
     ];
     return publicText(lines.filter(Boolean).join("\n\n"), collectPrivateIds(project, episode, shot, frame));
 }

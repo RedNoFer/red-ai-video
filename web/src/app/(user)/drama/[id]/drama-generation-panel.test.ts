@@ -206,7 +206,7 @@ describe("Drama generation production workspace", () => {
         expect(frameEditorSource).not.toContain("本次绑定图片");
         expect(frameEditorSource).toContain("保存提示词");
         expect(frameEditorSource).toContain("generationReferences");
-        expect(frameEditorSource).toContain("supplierPrompt");
+        expect(frameEditorSource).not.toContain("supplierPrompt");
         expect(frameEditorSource).toContain("appendDramaImageReferenceBindings");
         expect(frameEditorSource).toContain("resolveDramaFrameScene");
         expect(frameEditorSource).toContain("references: plannedFrameReferences(project, episodeId, shot, beat.sequenceIndex)");

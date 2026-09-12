@@ -125,7 +125,7 @@ describe("drama prompt compiler", () => {
         expect(prompt).toContain("不要现代灯具、不要塑料感");
     });
 
-    it("emits the current structured static-frame prompt contract", () => {
+    it("returns the current frame imagePrompt as the only static prompt source", () => {
         const project = createProject();
         const shot = project.episodes[0].shots[0];
         const prompt = compileDramaFrameSupplierPrompt(project, project.episodes[0], shot, {
@@ -137,19 +137,10 @@ describe("drama prompt compiler", () => {
             imagePrompt: "女主在门边抬头，血迹进入前景",
         });
 
-        expect(prompt).toContain("静态关键帧：女主在门边抬头，血迹进入前景");
-        expect(prompt).toContain("可见表演状态：");
-        expect(prompt).toContain("景别：中景");
-        expect(prompt).toContain("机位与构图：");
-        expect(prompt).toContain("站位与视线：");
-        expect(prompt).toContain("三层空间：");
-        expect(prompt).toContain("光色与风格：");
+        expect(prompt).toBe("女主在门边抬头，血迹进入前景");
+        expect(prompt).not.toContain("可见表演状态：");
+        expect(prompt).not.toContain("景别：中景");
         expect(prompt).not.toContain("参考图职责：");
-        expect(prompt).toContain("负面约束：");
-        expect(prompt).not.toMatch(/(?:主体|场景|画面|当前状态|镜头|一致性)：/u);
-        expect(prompt).not.toContain("章节文案");
-        expect(prompt).not.toContain("统一表现媒介");
-        expect(prompt.length).toBeLessThan(1200);
     });
 
     it("locks the visible delta between adjacent keyframes", () => {
@@ -178,12 +169,9 @@ describe("drama prompt compiler", () => {
             ],
         };
         const prompt = compileDramaFrameSupplierPrompt(project, project.episodes[0], shot, shot.framePlan.frames[1]);
-        expect(prompt).toContain("相较本镜上一动作节点");
-        expect(prompt).toContain("萧炎低头，右手停在桌沿旁，茶水静止");
+        expect(prompt).toBe(shot.framePlan.frames[1].imagePrompt);
+        expect(prompt).not.toContain("萧炎低头，右手停在桌沿旁，茶水静止");
         expect(prompt).toContain("萧炎抬眼扫过萧战，右手五指收紧贴住桌沿，茶水表面出现细小波纹");
-        expect(prompt).toContain("禁止复制上一节点的可见状态");
-        expect(prompt).toContain("当前帧变化优先级最高");
-        expect(prompt).toContain("明确改变身体朝向、视线、手部/道具接触或重心中的至少一项");
     });
 
     it("rebuilds a copied adjacent performance state from the current frame action", () => {
@@ -215,8 +203,8 @@ describe("drama prompt compiler", () => {
 
         const prompt = compileDramaFrameSupplierPrompt(project, project.episodes[0], shot, shot.framePlan.frames[1]);
 
-        expect(prompt).not.toContain(copiedPerformance);
-        expect(prompt).toContain("肩线与身体朝向转向当前叙事目标");
+        expect(prompt).toContain(copiedPerformance);
+        expect(prompt).not.toContain("肩线与身体朝向转向当前叙事目标");
         expect(prompt).toContain("肩背从低垂变为直立");
     });
 
@@ -230,11 +218,8 @@ describe("drama prompt compiler", () => {
             endSecond: 4,
             actionPrompt: "人物抬眼并收紧手指",
             imagePrompt: "人物抬眼并收紧手指",
-            supplierPrompt:
-                "静态关键帧：人物抬眼并收紧手指\n可见状态：人物抬眼并收紧手指\n可见表演状态：主体的眉眼、呼吸、手部和道具接触关系清晰可见，情绪通过身体动作呈现\n景别：中景\n机位与构图：平视\n站位与视线：人物在右侧\n三层空间：前景门框，中景人物，背景大厅\n光色与风格：冷光\n负面约束：无水印",
         });
-        expect(prompt).toContain("眉眼抬起");
-        expect(prompt).not.toContain("主体的眉眼、呼吸、手部和道具接触关系清晰可见");
+        expect(prompt).toBe("人物抬眼并收紧手指");
     });
 
     it("uses one static shot size when continuity stores a camera transition", () => {
@@ -250,7 +235,7 @@ describe("drama prompt compiler", () => {
             imagePrompt: "黑湖无波，倒悬古塔与倒影对齐；主体保持静止",
         });
 
-        expect(prompt).toContain("景别：中远景");
+        expect(prompt).toBe("黑湖无波，倒悬古塔与倒影对齐；主体保持静止");
         expect(prompt).not.toContain("ELS→ECU");
     });
 
@@ -287,17 +272,10 @@ describe("drama prompt compiler", () => {
             endSecond: 15,
             actionPrompt: "Karin在马车中完全惊醒，手扣住断剑",
             imagePrompt: "静态关键帧：马车内Karin完全惊醒，手扣住断剑",
-            supplierPrompt: "静态关键帧：黑湖外景Karin特写；可见状态：稳定；可见表演状态：清晰；景别：特写；机位与构图：平视；站位与视线：居中；三层空间：背景；光色与风格：冷光；参考图职责：场景；负面约束：无水印",
         });
 
-        expect(prompt).toContain("左右长凳");
-        expect(prompt).toContain("车厢");
-        expect(prompt).toContain("中央过道保持通行");
-        expect(prompt).toContain("坐姿必须落在左右长凳或明确座位");
-        expect(prompt).toContain("若原文和资产未指定座位侧，必须选择与动作和机位相容的左侧或右侧座位");
-        expect(prompt).toContain("景别：中景");
+        expect(prompt).toBe("静态关键帧：马车内Karin完全惊醒，手扣住断剑");
         expect(prompt).not.toContain("无风黑湖");
-        expect(prompt).not.toContain("景别：特写");
     });
 
     it("preserves a manually saved structured prompt for a frame-scene change", () => {
@@ -320,12 +298,10 @@ describe("drama prompt compiler", () => {
             endSecond: 15,
             actionPrompt: "Karin在马车中完全惊醒，手扣住断剑",
             imagePrompt: "静态关键帧：Karin完全惊醒，手扣住断剑",
-            supplierPrompt:
-                "静态关键帧：马车内Karin完全惊醒，右侧车窗映入冷光\n可见状态：Karin手扣断剑，肩膀绷紧\n可见表演状态：眉眼骤然睁开，视线锁定断剑\n景别：中景\n机位与构图：平视，左右长凳与右侧竖向车窗清晰可见\n站位与视线：Karin坐在车厢中央，视线落向断剑\n三层空间：前景为车厢门框，中景承载Karin与断剑，背景交代车厢纵深\n光色与风格：冷色雪白侧光，半写实动漫幻想风\n负面约束：无字幕、无水印、无logo、无HUD、无现代元素、无额外主体、无额外肢体、无变形。",
         });
 
-        expect(prompt).toContain("右侧车窗映入冷光");
-        expect(prompt).toContain("Karin手扣断剑，肩膀绷紧");
+        expect(prompt).toBe("静态关键帧：Karin完全惊醒，手扣住断剑");
+        expect(prompt).not.toContain("右侧车窗映入冷光");
     });
 
     it("preserves a manually saved prompt when fields use ASCII colons", () => {
@@ -337,9 +313,7 @@ describe("drama prompt compiler", () => {
             startSecond: 0,
             endSecond: 5,
             actionPrompt: "人物抬头",
-            imagePrompt: "人物抬头",
-            supplierPrompt:
-                "静态关键帧: 用户编辑画面\n可见状态: 人物抬头\n可见表演状态: 眉眼紧绷\n景别: 中景\n机位与构图: 平视，主体居中\n站位与视线: 视线落向门边\n三层空间: 前景为门框，中景承载人物，背景交代空间纵深\n光色与风格: 冷色侧光，半写实动漫幻想风\n负面约束: 无字幕、无水印、无logo、无HUD、无变形",
+            imagePrompt: "静态关键帧: 用户编辑画面\n可见状态: 人物抬头\n构图与空间: 视线落向门边",
         });
 
         expect(prompt).toContain("用户编辑画面");
@@ -363,12 +337,9 @@ describe("drama prompt compiler", () => {
             endSecond: 15,
             actionPrompt: "结果状态落定",
             imagePrompt: "静态关键帧：Karin完全惊醒，手扣住断剑",
-            supplierPrompt: "马车内Karin完全惊醒，车厢空间清晰可见",
         });
 
-        expect(prompt).toContain("左右长凳");
-        expect(prompt).toContain("中央过道保持通行");
-        expect(prompt).toContain("若原文和资产未指定座位侧，必须选择与动作和机位相容的左侧或右侧座位");
+        expect(prompt).toBe("静态关键帧：Karin完全惊醒，手扣住断剑");
         expect(prompt).not.toContain("无风黑湖");
     });
 
@@ -382,12 +353,10 @@ describe("drama prompt compiler", () => {
             endSecond: 2,
             actionPrompt: "女主握住断剑",
             imagePrompt: "女主握住断剑",
-            supplierPrompt: "静态关键帧：旧画面；可见状态：手握断剑；可见表演状态：紧张；景别：中景；机位与构图：平视；站位与视线：居中；三层空间：背景；光色与风格：冷光；参考图职责：沿用旧图；负面约束：无水印",
         });
 
+        expect(prompt).toBe("女主握住断剑");
         expect(prompt).not.toContain("参考图职责：");
-        expect(prompt).toContain("静态关键帧：女主握住断剑");
-        expect(prompt.split("\n")).toHaveLength(9);
     });
 
     it("includes structured prop identity in supplier-facing frame prompts", () => {
@@ -411,7 +380,7 @@ describe("drama prompt compiler", () => {
 
         const prompt = compileDramaFrameSupplierPrompt(project, project.episodes[0], shot, undefined, "keyframe");
 
-        expect(prompt).toContain("静态关键帧：冷色天台");
+        expect(prompt).toBe("冷色天台");
         expect(prompt).not.toContain("参考图职责：");
 
         const savedPrompt = compileDramaFrameSupplierPrompt(project, project.episodes[0], shot, {
@@ -421,9 +390,8 @@ describe("drama prompt compiler", () => {
             endSecond: 2,
             actionPrompt: "握紧短剑",
             imagePrompt: "握紧短剑",
-            supplierPrompt: "只按这段手工画面生成",
         });
-        expect(savedPrompt).toContain("静态关键帧：握紧短剑");
+        expect(savedPrompt).toBe("握紧短剑");
         expect(savedPrompt).not.toContain("只按这段手工画面生成");
         expect(savedPrompt).not.toContain("道具锚点：");
     });
@@ -452,13 +420,13 @@ describe("drama prompt compiler", () => {
             imagePrompt: "Karin、断剑、无波黑湖与倒悬古塔同框",
         });
 
-        expect(prompt).toContain("静态关键帧：Karin、断剑、无波黑湖与倒悬古塔同框");
+        expect(prompt).toBe("Karin、断剑、无波黑湖与倒悬古塔同框");
         expect(prompt).not.toContain("参考图职责：");
         expect(prompt).not.toContain("角色锚点：");
         expect(prompt).not.toContain("场景锚点：");
     });
 
-    it("passes Agent video prompts through without deriving timeline text", () => {
+    it("passes shot static fields through without deriving timeline text", () => {
         const project = createProject();
         project.episodes[0].shots[0].framePlan = {
             start: { source: "independent" },
@@ -470,11 +438,9 @@ describe("drama prompt compiler", () => {
         };
         const prompts = compileDramaShotPrompts(project, project.episodes[0], project.episodes[0].shots[0]);
 
-        expect(prompts.imagePrompt).toContain(`统一风格：${DRAMA_STYLE_NAME}`);
-        expect(prompts.imagePrompt).toContain("女主：红色外套");
-        expect(prompts.imagePrompt).toContain("轴线 保持同侧");
-        expect(prompts.startFramePrompt).toContain("动作起始");
-        expect(prompts.endFramePrompt).toContain("动作结束");
+        expect(prompts.imagePrompt).toBe("冷色天台");
+        expect(prompts.startFramePrompt).toBe("冷色天台");
+        expect(prompts.endFramePrompt).toBe("冷色天台");
         expect(prompts.videoPrompt).toBe("她抬头看向门口");
     });
 
@@ -807,17 +773,15 @@ describe("drama prompt compiler", () => {
         expect(preflightDramaAssetGeneration(project, project.characters[0], "角色").ok).toBe(true);
     });
 
-    it("preserves long execution prompts instead of truncating the final constraints", () => {
+    it("keeps shot static prompts bounded to the saved source field", () => {
         const project = createProject();
         project.characters[0].description = `${"角色细节".repeat(2500)}最终识别标记`;
 
         const prompts = compileDramaShotPrompts(project, project.episodes[0], project.episodes[0].shots[0]);
         const assetPrompt = compileDramaAssetReferencePrompt(project, project.characters[0], "角色");
 
-        expect(prompts.imagePrompt.length).toBeGreaterThan(8000);
-        expect(prompts.imagePrompt).toContain("最终识别标记");
+        expect(prompts.imagePrompt).toBe("冷色天台");
         expect(prompts.videoPrompt).not.toContain("最终识别标记");
-        expect(prompts.videoPrompt.length).toBeLessThan(prompts.imagePrompt.length);
         expect(assetPrompt.length).toBeGreaterThan(8000);
         expect(assetPrompt).toContain("最终识别标记");
     });
@@ -840,17 +804,16 @@ describe("drama prompt compiler", () => {
         expect(prompt).not.toContain("中性浅灰背景");
     });
 
-    it("uses a custom project visual style in generated prompts", () => {
+    it("does not inject the project visual style into the saved shot static prompt", () => {
         const project = createProject();
         project.style = "现实悬疑电影感，冷蓝灰低饱和，手持摄影";
         project.productionBible = { ...project.productionBible!, visualStyle: project.style, colorScript: "冷蓝灰、低饱和" };
 
         const prompt = compileDramaShotExecutionPrompts(project, project.episodes[0], project.episodes[0].shots[0]);
 
-        expect(prompt.imagePrompt).toContain(project.style);
+        expect(prompt.imagePrompt).toBe("冷色天台");
         expect(prompt.videoPrompt).toBe(project.episodes[0].shots[0].videoPrompt);
-        expect(prompt.imagePrompt).not.toContain("暗黑学院魔法环境");
-        expect(prompt.imagePrompt).not.toContain("暮色金紫主调");
+        expect(prompt.imagePrompt).not.toContain(project.style);
     });
 
     it("uses the configured VS7 style for character assets without a hardcoded theme", () => {
@@ -886,7 +849,7 @@ describe("drama prompt compiler", () => {
         expect(prompt).not.toContain("中性浅灰背景");
     });
 
-    it("does not let legacy cached shot prompts bypass the current project style", () => {
+    it("does not let legacy execution image prompts override the current static source", () => {
         const project = createProject();
         project.style = "冷色悬疑电影感，低饱和手持摄影";
         project.episodes[0].shots[0].executionImagePrompt = "旧版 VS14 分镜图，中性浅灰背景，多视角设定板";
@@ -894,10 +857,8 @@ describe("drama prompt compiler", () => {
 
         const prompts = compileDramaShotExecutionPrompts(project, project.episodes[0], project.episodes[0].shots[0]);
 
-        expect(prompts.imagePrompt).toContain(`最终视觉锁定：${project.style}`);
+        expect(prompts.imagePrompt).toBe("冷色天台");
         expect(prompts.videoPrompt).toBe("旧版 VS14 视频，保持中性灰背景");
-        expect(prompts.imagePrompt).not.toContain("VS14");
-        expect(prompts.imagePrompt).not.toContain("中性浅灰背景");
         expect(prompts.videoPrompt).toContain("VS14");
         expect(prompts.videoPrompt).not.toContain("统一视觉风格（最高级风格约束）");
     });

@@ -571,8 +571,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
             try {
                 savingPromptRef.current = true;
                 setSavingPrompt(true);
-                const supplierPrompt = prompt;
-                replaceProject(await updateDramaStoryboardFramePrompt(project.id, episodeId, shot.id, current.frameId, supplierPrompt));
+                replaceProject(await updateDramaStoryboardFramePrompt(project.id, episodeId, shot.id, current.frameId, prompt));
                 message.success("图片提示词已保存，当前帧已标记为待重新生成");
             } catch (error) {
                 message.error(error instanceof Error ? error.message : "图片提示词保存失败");
@@ -1294,12 +1293,12 @@ function reconcileStoredFramePrompts(project: DramaProject, episodeId: string, s
         if (beat.sequenceIndex <= 1) return beat;
         const previous = beats.find((item) => item.sequenceIndex === beat.sequenceIndex - 1);
         const currentPerformance = beat.imagePrompt.match(/(?:^|\n)可见表演状态[：:]([^\n]+)/u)?.[1]?.trim();
-        const previousPerformance = previous?.supplierPrompt?.match(/(?:^|\n)可见表演状态[：:]([^\n]+)/u)?.[1]?.trim() || previous?.imagePrompt.match(/(?:^|\n)可见表演状态[：:]([^\n]+)/u)?.[1]?.trim();
+        const previousPerformance = previous?.imagePrompt.match(/(?:^|\n)可见表演状态[：:]([^\n]+)/u)?.[1]?.trim();
         if (!previous || !currentPerformance || !previousPerformance || currentPerformance !== previousPerformance) return beat;
         const prompt = formatPromptFieldLines(compileDramaFrameSupplierPrompt(project, episode, shot, beat), "static");
         if (!prompt || prompt === formatPromptFieldLines(beat.imagePrompt, "static")) return beat;
         changedFrom = changedFrom < 0 ? index : Math.min(changedFrom, index);
-        return { ...beat, imagePrompt: prompt, supplierPrompt: prompt };
+        return { ...beat, imagePrompt: prompt };
     });
     if (changedFrom < 0) return undefined;
     const staleIds = new Set(nextBeats.slice(changedFrom).map((beat) => beat.id));

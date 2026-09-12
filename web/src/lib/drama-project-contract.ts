@@ -54,7 +54,6 @@ export type DramaFrameBeat = {
     transitionPrompt?: string;
     endPrompt?: string;
     imagePrompt: string;
-    supplierPrompt?: string;
 };
 
 export type DramaImageReferenceBinding = {

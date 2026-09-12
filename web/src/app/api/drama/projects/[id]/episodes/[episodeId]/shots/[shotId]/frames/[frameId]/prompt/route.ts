@@ -9,7 +9,7 @@ type Context = { params: Promise<{ id: string; episodeId: string; shotId: string
 export async function PATCH(request: Request, context: Context) {
     const user = await getCurrentUser(request);
     if (!user) return NextResponse.json({ code: 401, data: null, msg: "请先登录" }, { status: 401 });
-    const parsed = await readJsonBodyResult<{ supplierPrompt?: string }>(request);
+    const parsed = await readJsonBodyResult<{ prompt?: string }>(request);
     if (!parsed.ok) return NextResponse.json({ code: parsed.status, data: null, msg: parsed.message }, { status: parsed.status });
     try {
         const { id, episodeId, shotId, frameId } = await context.params;

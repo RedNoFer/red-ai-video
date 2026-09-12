@@ -47,7 +47,7 @@ import { approvedAssetReference, approvedScenePanoramaReference } from "@/lib/dr
 import { createFrameEvidence, decideActualEndFrame, invalidateFrameEvidence, replaceFrameEvidence, supersedeFrameEvidence } from "@/lib/drama-continuity-policy";
 import { DRAMA_STYLE_NAME, normalizeDramaStyleName, resolveDramaStyleContract } from "@/lib/drama-style";
 import { normalizeDramaImageSize } from "@/lib/drama-image-size";
-import { deleteDramaFrameBeat, formatPromptFieldLines, normalizeDramaFrameBeats, updateDramaFrameBeat, upgradeDramaFrameImagePrompt } from "@/lib/drama-frame-sequence";
+import { deleteDramaFrameBeat, formatPromptFieldLines, normalizeDramaFrameBeats, updateDramaFrameBeat } from "@/lib/drama-frame-sequence";
 import { defaultDramaProductionPlan, dramaReferenceImageBudget, normalizeDramaProductionPlan } from "@/lib/drama-production-plan";
 import { resolveDramaShotDuration } from "@/lib/server/drama-shot-config";
 import { TEXT_MODEL_REQUEST_TIMEOUT_MS } from "@/lib/server/model-request-policy";
@@ -101,9 +101,8 @@ export async function getDramaProjectForUser(userId: string, id: string) {
     const frameEvidenceRecovered = recoverLegacyStoryboardFrameEvidence(boundaryRecovered || styleRecovered || episodesRecovered || project);
     const reviewRecovered = recoverStaleReviewCompletionTask(frameEvidenceRecovered || boundaryRecovered || styleRecovered || episodesRecovered || project);
     const profileRecovered = recoverGenericDramaAssetProfiles(reviewRecovered || frameEvidenceRecovered || boundaryRecovered || styleRecovered || episodesRecovered || project);
-    const framePromptRecovered = recoverRepetitiveDramaFramePrompts(profileRecovered || reviewRecovered || frameEvidenceRecovered || boundaryRecovered || styleRecovered || episodesRecovered || project);
-    const assetRecovered = await recoverStaleGeneratedAssetReferences(userId, framePromptRecovered || profileRecovered || reviewRecovered || frameEvidenceRecovered || boundaryRecovered || styleRecovered || episodesRecovered || project);
-    const recovered = assetRecovered || framePromptRecovered || profileRecovered || reviewRecovered || frameEvidenceRecovered || boundaryRecovered || styleRecovered || episodesRecovered;
+    const assetRecovered = await recoverStaleGeneratedAssetReferences(userId, profileRecovered || reviewRecovered || frameEvidenceRecovered || boundaryRecovered || styleRecovered || episodesRecovered || project);
+    const recovered = assetRecovered || profileRecovered || reviewRecovered || frameEvidenceRecovered || boundaryRecovered || styleRecovered || episodesRecovered;
     if (!recovered) return project;
     try {
         return await updateDramaProject(userId, recovered, project.updatedAt);
@@ -111,36 +110,6 @@ export async function getDramaProjectForUser(userId: string, id: string) {
         if (error instanceof DramaProjectStoreError && error.status === 409) return (await getDramaProject(cleanText(id), userId)) || recovered;
         throw error;
     }
-}
-
-export function recoverRepetitiveDramaFramePrompts(project: DramaProject) {
-    let changed = false;
-    const episodes = project.episodes.map((episode) => ({
-        ...episode,
-        shots: episode.shots.map((shot) => {
-            if (!shot.framePlan?.frames?.length) return shot;
-            let shotChanged = false;
-            const frames = shot.framePlan.frames.map((frame) => {
-                const imagePrompt = upgradeDramaFrameImagePrompt(frame.imagePrompt, frame.actionPrompt, {
-                    description: shot.description || shot.sourceText,
-                    shotSize: shot.continuity?.shotSize || "",
-                    cameraAngle: shot.continuity?.cameraAngle || "",
-                    composition: shot.continuity?.composition || "",
-                    characterBlocking: shot.continuity?.characterBlocking || "",
-                    gazeDirection: shot.continuity?.gazeDirection || "",
-                    lighting: shot.lighting || "",
-                    colorPalette: shot.colorPalette || "",
-                    sequenceIndex: frame.sequenceIndex,
-                });
-                if (imagePrompt === frame.imagePrompt) return frame;
-                changed = true;
-                shotChanged = true;
-                return { ...frame, imagePrompt };
-            });
-            return shotChanged ? { ...shot, framePlan: { ...shot.framePlan, frames } } : shot;
-        }),
-    }));
-    return changed ? { ...project, episodes, updatedAt: nextTimestamp(project.updatedAt) } : null;
 }
 
 export function recoverInvalidDramaEpisodes(project: DramaProject) {
@@ -2775,7 +2744,7 @@ export async function updateDramaStoryboardFramePromptForUser(userId: string, pr
     const episodeId = cleanText(episodeIdValue);
     const shotId = cleanText(shotIdValue);
     const frameId = cleanText(frameIdValue);
-    const prompt = formatPromptFieldLines(cleanText(object(value).supplierPrompt), "static");
+    const prompt = formatPromptFieldLines(cleanText(object(value).prompt), "static");
     if (!prompt) throw new DramaProjectServiceError("提示词不能为空", 400);
     let shotMatched = false;
     let frameMatched = false;
@@ -2794,7 +2763,7 @@ export async function updateDramaStoryboardFramePromptForUser(userId: string, pr
                           const frame = shot.framePlan.frames.find((item) => item.id === frameId);
                           if (!frame) return shot;
                           frameMatched = true;
-                          const next = updateDramaFrameBeat(shot.framePlan.frames, shot.storyboardFrames || [], frame.id, { imagePrompt: prompt, supplierPrompt: prompt });
+                          const next = updateDramaFrameBeat(shot.framePlan.frames, shot.storyboardFrames || [], frame.id, { imagePrompt: prompt });
                           return {
                               ...shot,
                               storyboardFrameMode: "all_frames" as const,
@@ -3309,25 +3278,11 @@ function normalizeShotFramePlan(value: unknown, duration: number): DramaShotFram
                     actionPrompt: cleanText(frame.actionPrompt),
                     transitionPrompt: cleanText(frame.transitionPrompt),
                     endPrompt: cleanText(frame.endPrompt),
-                    imagePrompt: cleanText(frame.imagePrompt),
-                    supplierPrompt: formatOptionalPromptField(frame.supplierPrompt, "static"),
+                    imagePrompt: formatPromptFieldLines(cleanText(frame.imagePrompt), "static"),
                 };
             }),
             duration,
-        ).map((frame) => ({
-            ...frame,
-            imagePrompt: upgradeDramaFrameImagePrompt(frame.imagePrompt, frame.actionPrompt, {
-                description: cleanText(input.description) || cleanText(input.sourceText),
-                shotSize: cleanText(object(input.continuity).shotSize),
-                cameraAngle: cleanText(object(input.continuity).cameraAngle),
-                composition: cleanText(object(input.continuity).composition),
-                characterBlocking: cleanText(object(input.continuity).characterBlocking),
-                gazeDirection: cleanText(object(input.continuity).gazeDirection),
-                lighting: cleanText(input.lighting),
-                colorPalette: cleanText(input.colorPalette),
-                sequenceIndex: frame.sequenceIndex,
-            }),
-        })),
+        ),
         ...(manifest.length ? { referenceManifest: manifest } : {}),
         ...(hasManualReferenceImages ? { manualReferenceImages } : {}),
         ...(Object.keys(object(input.referenceCount)).length ? { referenceCount: { min: Math.max(1, Math.floor(Number(object(input.referenceCount).min) || 1)), max: Math.max(1, Math.floor(Number(object(input.referenceCount).max) || 1)) } } : {}),

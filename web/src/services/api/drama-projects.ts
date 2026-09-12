@@ -488,11 +488,11 @@ export function updateDramaShotImagePrompt(projectId: string, episodeId: string,
     }).then((data) => data.project);
 }
 
-export function updateDramaStoryboardFramePrompt(projectId: string, episodeId: string, shotId: string, frameId: string, supplierPrompt: string) {
+export function updateDramaStoryboardFramePrompt(projectId: string, episodeId: string, shotId: string, frameId: string, prompt: string) {
     return request<{ project: DramaProject }>(`/api/drama/projects/${encodeURIComponent(projectId)}/episodes/${encodeURIComponent(episodeId)}/shots/${encodeURIComponent(shotId)}/frames/${encodeURIComponent(frameId)}/prompt`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ supplierPrompt }),
+        body: JSON.stringify({ prompt }),
     }).then((data) => data.project);
 }
 

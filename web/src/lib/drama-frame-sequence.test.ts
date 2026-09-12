@@ -9,7 +9,7 @@ import {
     normalizeDramaFrameBeats,
     planDramaVideoSegments,
     updateDramaFrameBeat,
-    upgradeDramaFrameImagePrompt,
+    warnDramaFramePlanVisuals,
     validateDramaFramePlanVisuals,
     validateDramaFrameVisualContent,
 } from "./drama-frame-sequence";
@@ -44,19 +44,18 @@ describe("drama frame sequence", () => {
         expect(isCurrentDramaStaticFramePrompt(prompt.replace("可见状态：指节发白，断剑贴在右手掌心", "可见状态：动作展开"))).toBe(false);
     });
 
-    it("removes legacy reference duties from static prompts", () => {
+    it("preserves reference-role text instead of rewriting static prompts", () => {
         const prompt = formatPromptFieldLines(
             "静态关键帧：Karin站在黑湖边；可见状态：四只手扣住断剑；可见表演状态：眉眼清晰；景别：中景；机位与构图：平视；站位与视线：视线落向断剑；三层空间：前景雪地，中景Karin，背景倒悬古塔；光色与风格：冷白无源光；参考图职责：按角色、场景、道具图片执行；负面约束：无水印",
         );
 
-        expect(prompt.split("\n")).toHaveLength(9);
-        expect(prompt).not.toContain("参考图职责：");
+        expect(prompt).toContain("参考图职责：按角色、场景、道具图片执行");
         expect(prompt).toContain("负面约束：无水印");
     });
 
     it("rejects dialogue-only or camera-only frame content", () => {
         expect(validateDramaFrameVisualContent('耳语："你又来迟了"', '耳语："你又来迟了"')).toContain("每帧必须描述");
-        expect(validateDramaFrameVisualContent("85mm沿铁砧慢推", "镜头沿铁砧慢推")).toContain("每帧必须描述");
+        expect(validateDramaFrameVisualContent("85mm沿铁砧慢推", "镜头沿铁砧慢推")).toContain("不能包含运镜");
     });
 
     it("allows camera and dialogue prohibitions inside the negative field", () => {
@@ -81,185 +80,46 @@ describe("drama frame sequence", () => {
     });
 
     it("rejects reference duties embedded in static frame content", () => {
-        expect(validateDramaFrameVisualContent("静态关键帧：Karin站立；参考图职责：角色图、场景图；负面约束：无水印", "站立")).toContain("参考图职责属于资产绑定数据");
+        expect(validateDramaFrameVisualContent("静态关键帧：Karin站立；参考图职责：角色图、场景图；负面约束：无水印", "站立")).toContain("参考绑定信息");
     });
 
-    it("rejects ELS prompts that also demand readable facial or hand detail", () => {
-        expect(validateDramaFrameVisualContent("ELS，面部清晰可读，手部细节明显", "ELS静帧")).toContain("ELS/极远景");
-    });
-
-    it("rejects adjacent frames without a visible state change", () => {
+    it("warns about adjacent frames without a visible state change", () => {
         expect(
-            validateDramaFramePlanVisuals([
+            warnDramaFramePlanVisuals([
                 { ...beats[0], imagePrompt: "角色站在门边" },
                 { ...beats[1], imagePrompt: "角色站在门边" },
             ]),
-        ).toEqual(["第 2 帧与上一帧的可见画面没有变化，请补充本帧状态变化"]);
+        ).toEqual(["第 2 帧与上一帧的可见主体/状态接近"]);
     });
 
-    it("rejects adjacent frames whose visible states only differ by filler wording", () => {
+    it("warns when adjacent visible states only differ by filler wording", () => {
         const first = ["静态关键帧：萧炎坐在长桌右侧", "可见状态：右手按住桌沿，茶盏水面出现细小波纹", "可见表演状态：眉心收紧，视线看向纳兰，肩背前倾"].join("\n");
         const second = ["静态关键帧：萧炎坐于长桌右侧", "可见状态：右手已经按住桌沿，茶盏水面已出现细小波纹", "可见表演状态：眉心收紧，视线注视纳兰，肩背前倾"].join("\n");
 
         expect(
-            validateDramaFramePlanVisuals([
+            warnDramaFramePlanVisuals([
                 { ...beats[0], imagePrompt: first },
                 { ...beats[1], imagePrompt: second },
             ]),
-        ).toEqual(["第 2 帧与上一帧的语义状态重复，请补充姿态、视线、手部/道具或环境结果变化"]);
+        ).toEqual(["第 2 帧与上一帧的语义状态接近"]);
     });
 
     it("rejects generic phase labels as the only visible frame state", () => {
-        expect(validateDramaFrameVisualContent("静态关键帧：角色站在门边；可见状态：入口构图已建立", "建立场景")).toContain("动作节点已经造成的可见状态变化");
+        expect(validateDramaFrameVisualContent("静态关键帧：角色站在门边；可见状态：入口构图已建立", "建立场景")).toContain("冻结的可见状态");
     });
 
-    it("adds a distinct photographic role to each multi-frame image prompt", () => {
-        const prompt = [
-            "静态关键帧：萧炎坐在长桌右侧",
-            "可见状态：右手按住桌沿，茶盏水面出现细小波纹",
-            "可见表演状态：眉心收紧，视线看向纳兰，肩背前倾",
-            "景别：中景",
-            "机位与构图：视线高度平视，主体位于画面安全区",
-            "站位与视线：萧炎坐在长桌右侧，视线落向纳兰",
-            "三层空间：前景门框，中景人物，背景议事大厅",
-            "光色与风格：冷灰暖金，背景结构清晰",
-            "负面约束：无字幕、无水印",
-        ].join("\n");
-        const context = {
-            description: "萧炎在议事大厅与纳兰对峙",
-            shotSize: "中景",
-            cameraAngle: "视线高度平视",
-            composition: "主体位于画面安全区",
-            characterBlocking: "萧炎坐在长桌右侧，纳兰站在左侧",
-            gazeDirection: "视线落向纳兰",
-            lighting: "南侧暖光与室内冷反射",
-            colorPalette: "冷灰暖金",
-            characterCount: 3,
-            frameCount: 4,
-        };
-
-        expect(upgradeDramaFrameImagePrompt(prompt, "建立三人关系", { ...context, sequenceIndex: 1 })).toContain("关系建立构图");
-        expect(upgradeDramaFrameImagePrompt(prompt, "抬眼看向纳兰", { ...context, sequenceIndex: 2 })).toContain("对话反应构图");
-        expect(upgradeDramaFrameImagePrompt(prompt, "按住茶盏", { ...context, sequenceIndex: 3 })).toContain("观察构图");
-        expect(upgradeDramaFrameImagePrompt(prompt, "停在新的终点", { ...context, sequenceIndex: 4 })).toContain("反应构图");
+    it("does not add camera cues or copy action text into a static prompt", () => {
+        const prompt = "画面主体：萧炎位于长桌东侧\n可见状态：低头看向桌面，茶盏停在手边\n构图与空间：中景平视，纳兰嫣然位于画面左侧，萧战坐在北侧首位";
+        expect(formatPromptFieldLines(prompt)).toBe(prompt);
+        expect(formatPromptFieldLines(prompt)).not.toContain("关系建立构图");
+        expect(formatPromptFieldLines(prompt)).not.toContain("中远景");
+        expect(formatPromptFieldLines(prompt)).not.toContain("抬头");
     });
 
-    it("rejects generic performance labels that hide the frame's key point", () => {
-        expect(validateDramaFrameVisualContent("静态关键帧：三人站在大厅；可见状态：萧炎低头；可见表演状态：警觉；眉眼、呼吸、手部和道具接触关系清晰可见，情绪通过身体动作呈现")).toContain("当前节点的具体表演反应");
-    });
-
-    it("derives concrete facial, hand and environment changes from a frame action", () => {
-        const prompt = upgradeDramaFrameImagePrompt(
-            "静态关键帧：三人站在大厅；可见状态：萧炎抬眼扫过萧战，右手在桌沿收紧，茶水出现细小波纹；可见表演状态：警觉；眉眼、呼吸、手部和道具接触关系清晰可见，情绪通过身体动作呈现",
-            "萧炎抬眼扫过萧战，右手在桌沿收紧，茶水出现细小波纹",
-            {
-                description: "三人站在议事大厅",
-                shotSize: "中景",
-                cameraAngle: "平视",
-                composition: "主体位于画面右侧",
-                characterBlocking: "三人沿大厅轴线站位",
-                gazeDirection: "萧炎看向萧战",
-                lighting: "暖金侧光",
-                colorPalette: "冷灰紫",
-                sequenceIndex: 2,
-            },
-        );
-
-        expect(prompt).toContain("眉眼抬起");
-        expect(prompt).toContain("手指或手掌收紧");
-        expect(prompt).toContain("关键道具或环境留下与动作对应的可见结果");
-        expect(prompt).not.toContain("主体的眉眼、呼吸、手部和道具接触关系清晰可见");
-    });
-
-    it("keeps image prompts static and strips video-only direction", () => {
-        const prompt = upgradeDramaFrameImagePrompt("当前帧可见画面：”镜头沿倒塔垂直慢推至裂口，再匹配切到马车中Karin猛然睁眼、手扣断剑。ELS→ECU；视线高度平视", "耳语：“你又来迟了", {
-            description: "黑湖中的倒塔",
-            shotSize: "ELS→ECU",
-            cameraAngle: "平视",
-            composition: "人物位于画面中央",
-            characterBlocking: "Karin坐在马车内",
-            gazeDirection: "视线落在断剑",
-            lighting: "冷光",
-            colorPalette: "深蓝黑",
-            sequenceIndex: 2,
-        });
-
-        expect(prompt).toContain("静态关键帧：马车中Karin猛然睁眼、手扣断剑");
-        expect(prompt).toContain("景别：ECU");
-        expect(prompt).toContain("机位与构图：平视");
-        expect(prompt).not.toContain("镜头");
-        expect(prompt).not.toContain("ELS→ECU");
-        expect(prompt).not.toContain("耳语");
-        expect(prompt).not.toContain("当前帧可见画面");
-    });
-
-    it("does not preserve a dynamic shot transition hidden in an otherwise static prompt", () => {
-        const prompt = upgradeDramaFrameImagePrompt("静态关键帧：黑湖无波，倒悬古塔与倒影对齐；可见表演状态：表情保持稳定；景别（本帧固定）：ELS→ECU；冻结为单一静态姿态", "黑湖无波，倒悬古塔与倒影对齐", {
-            description: "黑湖记忆",
-            shotSize: "ELS→ECU",
-            cameraAngle: "平视",
-            composition: "主体位于9:16安全区",
-            characterBlocking: "Karin站在湖边",
-            gazeDirection: "视线朝向倒悬古塔",
-            lighting: "无源冷光",
-            colorPalette: "深蓝黑与雪白",
-            sequenceIndex: 1,
-        });
-
-        expect(prompt).toContain("景别：中远景");
-        expect(prompt).not.toContain("ELS→ECU");
-    });
-
-    it("falls back to the shot description when legacy text is dialogue or camera-only", () => {
-        const prompt = upgradeDramaFrameImagePrompt('当前帧可见画面：耳语："你又来迟了"；85mm沿铁砧慢推', '耳语："你又来迟了"', {
-            description: "黑暗铁匠铺中的木匣与铁砧",
-            shotSize: "特写",
-            cameraAngle: "平视",
-            composition: "铁砧居中",
-            characterBlocking: "主体位于中景",
-            gazeDirection: "视线落在木匣",
-            lighting: "炉火侧光",
-            colorPalette: "暗琥珀",
-        });
-
-        expect(prompt).toContain("静态关键帧：黑暗铁匠铺中的木匣与铁砧");
-        expect(prompt).not.toContain("耳语");
-        expect(prompt).not.toContain("慢推");
-        expect(prompt).not.toContain("“");
-        expect(prompt).not.toContain("”");
-    });
-
-    it("normalizes the newer 本帧可见画面 prefix into a static keyframe subject", () => {
-        const prompt = upgradeDramaFrameImagePrompt("本帧可见画面：黑湖无波，倒悬古塔与倒影对齐", "黑湖无波，倒悬古塔与倒影对齐", {
-            description: "黑湖记忆",
-            shotSize: "ELS",
-            cameraAngle: "平视",
-            composition: "主体位于9:16安全区",
-            characterBlocking: "Karin站在湖边",
-            gazeDirection: "视线朝向倒悬古塔",
-            lighting: "无源冷光",
-            colorPalette: "深蓝黑与雪白",
-        });
-
-        expect(prompt).toContain("静态关键帧：黑湖无波，倒悬古塔与倒影对齐");
-        expect(prompt).not.toContain("本帧可见画面");
-    });
-
-    it("normalizes a plain frame description instead of sending an action process", () => {
-        const prompt = upgradeDramaFrameImagePrompt("两人缩短距离", "两人向前靠近", {
-            description: "雨夜车站，两人隔着站台对视",
-            shotSize: "中景",
-            cameraAngle: "平视",
-            composition: "主体位于画面中央",
-            characterBlocking: "两人分置画面左右",
-            gazeDirection: "彼此对视",
-            lighting: "雨夜冷光",
-            colorPalette: "雾蓝灰",
-        });
-
-        expect(prompt).toContain("静态关键帧：雨夜车站，两人隔着站台对视");
-        expect(prompt).not.toContain("缩短距离");
-        expect(prompt).not.toContain("向前靠近");
+    it("accepts a compact static prompt with only the required visible facts", () => {
+        const prompt = "画面主体：萧炎、纳兰嫣然、萧战\n可见状态：萧炎低头看向桌面，茶盏停在手边\n构图与空间：萧炎在画面右侧，纳兰在左侧，萧战位于北侧首位";
+        expect(validateDramaFrameVisualContent(prompt, "萧炎抬眼")).toBeUndefined();
+        expect(isCurrentDramaStaticFramePrompt(prompt)).toBe(true);
     });
 
     it("preserves decimal frame boundaries inside an integer-second shot", () => {

@@ -289,6 +289,6 @@ describe("drama project api", () => {
 
         await expect(updateDramaStoryboardFramePrompt("project-one", "episode-one", "shot-one", "frame-five", "静态关键帧：已编辑")).resolves.toEqual(project);
         expect(fetchMock).toHaveBeenCalledWith("/api/drama/projects/project-one/episodes/episode-one/shots/shot-one/frames/frame-five/prompt", expect.objectContaining({ method: "PATCH" }));
-        expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({ supplierPrompt: "静态关键帧：已编辑" });
+        expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({ prompt: "静态关键帧：已编辑" });
     });
 });

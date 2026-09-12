@@ -20,7 +20,7 @@ import { dramaDialogueTimingReminder, type DramaDialogueTimingInput } from "@/li
 import { resolveDramaShotDuration } from "@/lib/server/drama-shot-config";
 import { strictJsonObjectText } from "@/lib/server/structured-model-output";
 import { isGenericDramaDetail, validateDramaPerformanceDetail } from "@/lib/drama-prompt-quality";
-import { DRAMA_PUBLIC_STATIC_FRAME_PROMPT_CONTRACT, DRAMA_PUBLIC_VIDEO_PROMPT_CONTRACT } from "@/lib/drama-public-prompt-contract";
+import { DRAMA_PUBLIC_VIDEO_PROMPT_CONTRACT } from "@/lib/drama-public-prompt-contract";
 
 export function normalizeDramaContentAnalysis(value: unknown, defaultVideoSeconds: number, sourceScript = ""): DramaContentAnalysis {
     const source = object(value);
@@ -1129,7 +1129,7 @@ export const dramaVisualTool = {
                             additionalProperties: false,
                             required: ["start", "end", "frames"],
                             description:
-                                "Agent 模式必须先列动作、表情/视线、道具、对手或 NPC 反应、空间揭示和摄影切换事件，再按真实可见动作节点自适应拆分 2-9 个连续帧段；固定 4/5 帧仅在项目主动选择时执行。每帧 imagePrompt 只描述该时刻可见的姿态、表情、视线、手部/身体或道具/环境状态，不得复制整镜头提示词后追加通用阶段词。可见表演状态必须写出当前节点的具体眉眼、视线、呼吸、手部或身体结果，禁止使用“眉眼、呼吸、手部关系清晰可见”“情绪通过身体动作呈现”等通用句绕过关键点。每帧还要把人物放在当前场景可用的座位、长凳、地面、通道、门窗或其他结构关系中，坐姿有明确支撑，人与物接触和多人相对方位真实可行；读取场景 backgroundNpcPolicy，auto 按场景实际需要判断，required 必须写合理数量、分布密度和群体行为结果，forbidden 不得出现 NPC；NPC 只作为背景群像，不加入 characterCodes 或角色锚点；原文未声明且不被场景 NPC 策略要求的人物不入画。发生视线转移、人物反应、空间揭示、道具状态变化或机位/景别/构图切换时必须生成对应新帧。对白不必写入图片，但对白造成的表情、视线、手部或道具变化必须写入对应帧。",
+                                "Agent 模式先按真实动作节点自适应拆分 2-9 个连续帧段；固定 4/5 帧仅在项目主动选择时执行。framePlan 服务视频时间段，imagePrompt 仅填写当前冻结画面正文并遵守本次静态帧 Skill，不从整镜头或 actionPrompt 复制静态内容。",
                             properties: {
                                 start: { type: "object", additionalProperties: false, required: ["source"], properties: { source: { type: "string", enum: ["independent", "previous_accepted_actual_tail"] } } },
                                 end: { type: "object", additionalProperties: false, required: ["required"], properties: { required: { type: "boolean" } } },
@@ -1244,7 +1244,7 @@ export const dramaVideoPromptTool = {
 
 export const dramaImagePromptTool = {
     name: "generate_drama_image_prompts",
-    description: `根据当前镜头事实、固定资产和连续性约束，生成可直接用于 Seedance 2.0 图片参考帧的静态画面提示词。${DRAMA_PUBLIC_STATIC_FRAME_PROMPT_CONTRACT}`,
+    description: "根据当前镜头事实生成一条单张冻结画面的静态提示词；具体静态帧规则只执行本次已注入的 drama-video-director Skill。",
     parameters: {
         type: "object",
         additionalProperties: false,
@@ -1260,8 +1260,7 @@ export const dramaImagePromptTool = {
                         shotId: { type: "string" },
                         imagePrompt: {
                             type: "string",
-                            description:
-                                "只写可执行的单一静态画面提示词；按静态关键帧、可见状态、可见表演状态、景别、机位与构图、站位与视线、三层空间、光色与风格、负面约束组织，每个非空字段独立一行，字段之间不得用逗号或分号压成一段；站位与视线必须在同一参照系下具体说明人物相对场景可用座位、长凳、通道、门窗、道具和其他实际出镜人物的位置、朝向、视线、支撑和接触关系，不能把人摆在不合场景常理的位置，也不得添加未声明人物；参考图用途由 framePlan.referenceManifest 和服务端实际绑定提供，不在图片正文新增参考图职责段；不得写运镜、焦段、时间段、动作过程、对白、声音、内部 ID、URL 或解释",
+                            description: "只写当前冻结画面正文；遵守本次已注入的静态帧 Skill，不写视频过程、内部执行信息或参考绑定。",
                         },
                     },
                 },

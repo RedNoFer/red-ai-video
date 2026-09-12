@@ -25,7 +25,7 @@ describe("PATCH /api/drama/projects/[id]/episodes/[episodeId]/shots/[shotId]/fra
     });
 
     it("persists the prompt for the requested stable frame", async () => {
-        const body = { supplierPrompt: "静态关键帧：已编辑" };
+        const body = { prompt: "静态关键帧：已编辑" };
         const response = await PATCH(new Request("http://localhost/api/drama/projects/drama-one/episodes/episode-one/shots/shot-one/frames/frame-five/prompt", { method: "PATCH", body: JSON.stringify(body) }), {
             params: Promise.resolve({ id: "drama-one", episodeId: "episode-one", shotId: "shot-one", frameId: "frame-five" }),
         });

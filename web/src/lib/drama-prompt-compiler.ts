@@ -1,16 +1,4 @@
-import type {
-    DramaAssetPromptFields,
-    DramaAssetRefinementProposal,
-    DramaBackgroundNpcPolicy,
-    DramaContinuityState,
-    DramaEpisode,
-    DramaFrameBeat,
-    DramaNamedAsset,
-    DramaProject,
-    DramaReferenceManifestItem,
-    DramaShot,
-    DramaShotContinuity,
-} from "@/lib/drama-project-contract";
+import type { DramaAssetPromptFields, DramaAssetRefinementProposal, DramaContinuityState, DramaEpisode, DramaFrameBeat, DramaNamedAsset, DramaProject, DramaReferenceManifestItem, DramaShot } from "@/lib/drama-project-contract";
 import {
     DRAMA_CHARACTER_FACE_MODELING_RULES,
     DRAMA_CHARACTER_HAIR_MODELING_RULES,
@@ -21,7 +9,7 @@ import {
     DRAMA_CHARACTER_WARDROBE_MATERIAL_RULES,
 } from "@/lib/drama-character-rules";
 import { resolveDramaStyleContract, sanitizeDramaVisualPrompt } from "@/lib/drama-style";
-import { dramaFrameVisualSignature, upgradeDramaFrameImagePrompt } from "@/lib/drama-frame-sequence";
+import { formatPromptFieldLines } from "@/lib/drama-frame-sequence";
 
 export type DramaAssetGenerationPreflight = { ok: true; constraints: string[] } | { ok: false; errors: string[]; constraints: string[] };
 
@@ -175,60 +163,16 @@ export function appendDramaImageReferenceBindings(prompt: string, references: Ar
 }
 
 export function compileDramaShotPrompts(project: DramaProject, episode: DramaEpisode, shot: DramaShot): CompiledDramaPrompts {
-    const styleContract = resolveDramaStyleContract(project);
-    const derived = deriveDramaShotPromptContract(project, episode, shot);
-    const scene = project.scenes.find((item) => item.id === shot.sceneId);
-    const characters = project.characters.filter((item) => shot.characterIds.includes(item.id));
-    const props = project.props.filter((item) => shot.propIds.includes(item.id));
-    const clues = project.clues.filter((item) => shot.clueIds.includes(item.id));
-    const physicalConstraint = scenePhysicalConstraint(scene, characters.length);
-    const continuity = continuityLines(shot.continuity);
-    const imagePlan = sanitizeDramaSupplierText(sanitizeDramaVisualPrompt(shot.executionImagePrompt || shot.imagePrompt), project);
-    const startPlan = sanitizeDramaSupplierText(sanitizeDramaVisualPrompt(shot.startFramePrompt || imagePlan), project);
-    const endPlan = sanitizeDramaSupplierText(sanitizeDramaVisualPrompt(shot.endFramePrompt || shot.executionVideoPrompt || shot.videoPrompt || imagePlan), project);
-    const entryState = stateLines(derived.entryState, project);
-    const exitState = stateLines(derived.exitState, project);
-    const inheritedTail = shot.framePlan?.start.source === "previous_accepted_actual_tail";
-    const referenceManifest = derived.references;
-    const styleName = styleContract.name;
-    const visualStyle = styleContract.visualDescription;
-    const finalStyleLock = `最终视觉锁定：${visualStyle}；镜头中已有视觉方案若与统一风格冲突，必须以本风格为准。`;
-    const shared = compact([
-        `项目：${project.title} / ${episode.title}`,
-        `统一风格：${styleName}`,
-        `统一视觉风格（最高级风格约束）：${visualStyle}`,
-        `画幅：${project.ratio}`,
-        scene ? `场景设定：${assetText(scene, project)}` : "",
-        characters.length ? `角色设定：${characters.map((item) => assetText(item, project)).join("；")}` : "",
-        props.length ? `道具设定：${props.map((item) => assetText(item, project)).join("；")}` : "",
-        clues.length ? `叙事线索：${clues.map((item) => `${assetText(item, project)}；回收：${sanitizeDramaSupplierText(item.payoff, project)}`).join("；")}` : "",
-        physicalConstraint ? `场景现实性与调度：${physicalConstraint}` : "",
-        continuity.length ? `连续性约束：${continuity.join("；")}` : "",
-        entryState.length ? `入口状态：${entryState.join("；")}` : "",
-        exitState.length ? `出口状态：${exitState.join("；")}` : "",
-        `首帧引用策略：${inheritedTail ? "仅引用上一镜当前视频版本、已人工验收的实际尾帧作为 first_frame" : "独立镜头，按本镜入口状态生成"}`,
-        inheritedTail ? "不得引用历史分镜首帧、旧任务结果、已删除、已拒绝或已失效的帧图；不得把上一镜的起始动作复制为本镜入口状态。" : "不得继承未在本镜入口状态中明确声明的上一镜动作、站位或道具状态。",
-        referenceManifest.length
-            ? `参考图职责计划：${referenceManifest.map((item) => `${manifestTarget(item, project)}=${item.role}${item.purpose ? `（${item.purpose}）` : ""}`).join("；")}。最终图片编号必须以本次请求末尾的“实际参考图绑定”为准，不得沿用计划别名猜测顺序。`
-            : "",
-        shot.negativePrompt ? `避免：${shot.negativePrompt}` : "",
-        styleContract.colorScript ? `全局色彩脚本：${styleContract.colorScript}` : "",
-    ]);
-    const imagePrompt = compact([
-        ...shared,
-        `镜头事实：${sanitizeDramaSupplierText(shot.description || shot.sourceText, project)}`,
-        imagePlan ? `视觉方案：${imagePlan}` : "",
-        shot.startFramePrompt ? `起始画面：${startPlan}` : "",
-        "保持角色身份、服装、道具形态、场景空间关系与相邻镜头一致，不添加未在设定中出现的主体或文字。",
-        finalStyleLock,
-    ]).join("\n");
-    const startFramePrompt = compact([...shared, `起始动作状态：${shot.entryState ? entryState.join("；") : shot.continuity?.actionStart || shot.description}`, startPlan, finalStyleLock]).join("\n");
-    const endFramePrompt = compact([...shared, `结束动作状态：${shot.exitState ? exitState.join("；") : shot.continuity?.actionEnd || shot.description}`, endPlan, finalStyleLock]).join("\n");
+    void project;
+    void episode;
+    const imagePrompt = formatPromptFieldLines(shot.imagePrompt || "", "static");
+    const startFramePrompt = formatPromptFieldLines(shot.startFramePrompt || shot.imagePrompt || "", "static");
+    const endFramePrompt = formatPromptFieldLines(shot.endFramePrompt || shot.imagePrompt || "", "static");
     const videoPrompt = shot.executionVideoPrompt?.trim() || shot.videoPrompt?.trim() || "";
     return {
-        imagePrompt: sanitizeDramaSupplierText(imagePrompt, project),
-        startFramePrompt: sanitizeDramaSupplierText(startFramePrompt, project),
-        endFramePrompt: sanitizeDramaSupplierText(endFramePrompt, project),
+        imagePrompt,
+        startFramePrompt,
+        endFramePrompt,
         videoPrompt,
     };
 }
@@ -247,7 +191,7 @@ function isGenericTimelineState(value: string) {
 }
 
 function extractPromptField(value: string, label: string) {
-    const labels = ["静态关键帧", "可见状态", "可见表演状态", "景别", "机位与构图", "站位与视线", "三层空间", "光色与风格", "负面约束"];
+    const labels = ["画面主体", "静态关键帧", "可见状态", "可见表演状态", "构图与空间", "景别", "机位与构图", "站位与视线", "三层空间", "光色与风格", "针对性约束", "负面约束"];
     const nextLabels = labels.filter((item) => item !== label).join("|");
     const match = value.match(new RegExp(`(?:^|[\\n；])\\s*${label}[：:]\\s*([\\s\\S]*?)(?=(?:[\\n；]\\s*(?:${nextLabels})[：:]|$))`, "u"));
     return match?.[1]?.trim().replace(/[；。]+$/u, "") || "";
@@ -297,8 +241,7 @@ export function resolveDramaFrameScene(project: DramaProject, shot: DramaShot, b
             .sort((left, right) => right.score - left.score);
     const scored = scoreScenes(frameText);
     if (scored[0]?.score) return scored[0].scene;
-    const savedScored = beat.supplierPrompt ? scoreScenes(beat.supplierPrompt.toLocaleLowerCase()) : [];
-    return savedScored[0]?.score ? savedScored[0].scene : sceneReferences.find((scene) => scene.id === shot.sceneId) || fallback;
+    return sceneReferences.find((scene) => scene.id === shot.sceneId) || fallback;
 }
 
 function sceneMatchTerms(value: string) {
@@ -309,123 +252,10 @@ function sceneMatchTerms(value: string) {
 }
 
 export function compileDramaFrameSupplierPrompt(project: DramaProject, episode: DramaEpisode, shot: DramaShot, beat?: DramaFrameBeat, phase: "start" | "end" | "keyframe" = "keyframe") {
-    const styleContract = resolveDramaStyleContract(project);
-    const scene = resolveDramaFrameScene(project, shot, beat);
-    const frameSceneChanged = Boolean(beat && scene && scene.id !== shot.sceneId);
-    const characters = project.characters.filter((item) => shot.characterIds.includes(item.id)).map((item) => assetText(item, project));
-    const props = project.props.filter((item) => shot.propIds.includes(item.id)).map((item) => assetText(item, project));
-    const clues = project.clues.filter((item) => shot.clueIds.includes(item.id)).map((item) => item.name);
-    const saved = phase === "start" ? (shot.fieldOrigins?.startFramePrompt === "manual" ? shot.startFramePrompt : undefined) : phase === "end" ? (shot.fieldOrigins?.endFramePrompt === "manual" ? shot.endFramePrompt : undefined) : beat?.supplierPrompt;
-    const image = beat?.imagePrompt || shot.imagePrompt;
-    const action = beat?.actionPrompt || (phase === "start" ? shot.continuity?.actionStart || shot.description : phase === "end" ? shot.continuity?.actionEnd || shot.description : shot.description);
-    const sequenceIndex = beat?.sequenceIndex || (phase === "end" ? Number.MAX_SAFE_INTEGER : 1);
-    // Only preserve a manually saved prompt when it already follows the current
-    // static-frame contract. Legacy prompts are rebuilt from the canonical beat
-    // image prompt so old asset-anchor text cannot leak back into the preview.
-    const savedPrompt = saved?.trim();
-    const preservesManualPrompt = Boolean(savedPrompt && isCurrentStaticFramePrompt(savedPrompt));
-    const sourceImage = preservesManualPrompt ? savedPrompt! : image;
-    const sceneText = scene ? assetText(scene, project) : "";
-    const frameSceneComposition =
-        frameSceneChanged && scene
-            ? /(?:马车|车厢|车内)/u.test(`${scene.name} ${scene.description} ${scene.profile?.visualIdentity || ""}`)
-                ? `当前帧场景：${sceneText}；用中景完整建立车厢空间，人物不得超过画面主体的45%，左右长凳、右侧竖向车窗和车厢纵深必须同时清晰可辨，禁止人物特写或肖像构图`
-                : `当前帧场景：${sceneText}；用中景完整建立场景空间，主体与环境关系必须同时清晰可辨，禁止人物特写遮挡场景`
-            : "";
-    const staticPrompt = upgradeDramaFrameImagePrompt(sourceImage, action, {
-        description: [frameSceneChanged ? image : shot.description, characters.length ? characters.join("；") : "", sceneText, props.length ? props.join("；") : "", clues.length ? `线索：${clues.join("、")}` : ""].filter(Boolean).join("；") || image,
-        shotSize: frameSceneChanged ? "中景" : shot.continuity?.shotSize || "中景",
-        cameraAngle: shot.continuity?.cameraAngle || "视线高度平视",
-        composition: [shot.continuity?.composition, frameSceneComposition].filter(Boolean).join("；") || "主体位于9:16安全区，前景有具体框景",
-        characterBlocking: frameSceneChanged && scene ? `人物位于${scene.name}内部，以中景与场景同框并保持空间纵深` : shot.continuity?.characterBlocking || "按当前动作关系安排主体站位",
-        gazeDirection: shot.continuity?.gazeDirection || "视线落向当前叙事目标",
-        lighting: shot.lighting || "延续本场主光",
-        colorPalette: [shot.colorPalette || "沿用本场色板", `统一风格：${styleContract.visualDescription}`].join("；"),
-        characterCount: characters.length,
-        sequenceIndex,
-        frameCount: shot.framePlan?.frames.length,
-        backgroundNpcPolicy: scene?.backgroundNpcPolicy,
-        refreshPerformanceState: Boolean(beat && (duplicatedAdjacentPerformanceState(shot, beat, sourceImage) || duplicatedAdjacentFrameVisualState(shot, beat, sourceImage))),
-        forceRefresh: frameSceneChanged && !preservesManualPrompt,
-    });
-    const withPosition = appendStaticFramePositionConstraint(staticPrompt, scenePhysicalConstraint(scene, characters.length));
-    return sanitizeDramaSupplierText(appendAdjacentFrameDifference(withPosition, shot, beat), project);
-}
-
-function appendAdjacentFrameDifference(prompt: string, shot: DramaShot, beat?: DramaFrameBeat) {
-    if (!beat || beat.sequenceIndex <= 1) return prompt;
-    const previous = shot.framePlan?.frames?.find((frame) => frame.sequenceIndex === beat.sequenceIndex - 1);
-    if (!previous) return prompt;
-    const currentState = visibleFrameState(beat);
-    const previousState = visibleFrameState(previous);
-    if (!currentState || !previousState || currentState === previousState) return prompt;
-    const lines = prompt.split("\n");
-    const stateLine = lines.findIndex((line) => line.startsWith("可见状态："));
-    if (stateLine < 0) return prompt;
-    lines[stateLine] =
-        `${lines[stateLine]}；相较本镜上一动作节点，当前帧必须已经变为：${currentState}；当前帧变化优先级最高，必须在画面中明确改变身体朝向、视线、手部/道具接触或重心中的至少一项；本帧独立使用固定资产锚点生成，不引用同镜上一帧图片，禁止复制上一节点的可见状态（${previousState}），若主体姿态、视线和手部仍与上一节点相同则视为生成失败`;
-    return lines.join("\n");
-}
-
-function visibleFrameState(frame: DramaFrameBeat) {
-    return frame.imagePrompt.match(/可见状态[：:]([^\n]+)/u)?.[1]?.trim() || frame.actionPrompt.trim();
-}
-
-function duplicatedAdjacentPerformanceState(shot: DramaShot, beat: DramaFrameBeat, currentPrompt: string) {
-    if (beat.sequenceIndex <= 1) return false;
-    const previous = shot.framePlan?.frames?.find((frame) => frame.sequenceIndex === beat.sequenceIndex - 1);
-    if (!previous) return false;
-    const currentState = currentPrompt.match(/(?:^|\n)可见表演状态[：:]([^\n]+)/u)?.[1]?.trim();
-    const previousPrompt = previous.supplierPrompt || previous.imagePrompt;
-    const previousState = previousPrompt.match(/(?:^|\n)可见表演状态[：:]([^\n]+)/u)?.[1]?.trim();
-    return Boolean(currentState && previousState && currentState === previousState);
-}
-
-function duplicatedAdjacentFrameVisualState(shot: DramaShot, beat: DramaFrameBeat, currentPrompt: string) {
-    if (beat.sequenceIndex <= 1) return false;
-    const previous = shot.framePlan?.frames?.find((frame) => frame.sequenceIndex === beat.sequenceIndex - 1);
-    if (!previous) return false;
-    const currentSignature = dramaFrameVisualSignature(currentPrompt);
-    const previousSignature = dramaFrameVisualSignature(previous.supplierPrompt || previous.imagePrompt);
-    return Boolean(currentSignature && previousSignature && currentSignature === previousSignature);
-}
-
-function isCurrentStaticFramePrompt(value: string) {
-    return (
-        /^静态关键帧[：:]/u.test(value) &&
-        ["可见表演状态", "景别", "机位与构图", "站位与视线", "三层空间", "光色与风格", "负面约束"].every((label) => new RegExp(`${label}[：:]`, "u").test(value)) &&
-        !/参考图职责[：:]/u.test(value) &&
-        !/(?:主体的眉眼、呼吸、手部和道具接触关系清晰可见|眉眼、视线和手部动作与当前节拍一致|情绪通过身体动作呈现|表情保持稳定|冻结为单一静态姿态)/u.test(value)
-    );
-}
-
-function scenePhysicalConstraint(scene: DramaNamedAsset | undefined, characterCount: number) {
-    if (!scene) return "";
-    const sceneText = `${scene.name} ${scene.description} ${scene.profile?.visualIdentity || ""} ${scene.profile?.consistencyRules || ""} ${scene.profile?.spatialRules?.join(" ") || ""}`;
-    const explicitLayout = scene.profile?.spatialRules?.filter(Boolean).join("；");
-    const layout = explicitLayout ? `资产固定布局：${explicitLayout}；` : "";
-    const relationships = characterCount > 1 ? "多名出镜人物以同一镜头/场景参照系写清左右或前后、朝向、视线和接触关系" : "人物相对可见门窗、通道、座位或关键道具的位置、朝向、视线和接触关系必须明确";
-    const npcRule = formatBackgroundNpcRule(scene.backgroundNpcPolicy);
-    if (/(?:马车|车厢|车内)/u.test(sceneText))
-        return `车厢真实调度：${layout}坐姿必须落在左右长凳或明确座位；中央过道保持通行，惊醒角色不得蹲坐、跪坐或悬空；按车厢前进方向说明左右邻座人物或空位；若原文和资产未指定座位侧，必须选择与动作和机位相容的左侧或右侧座位，并将另一侧明确为已声明同伴或空位；若其他字段写出“坐在车厢中央”等冲突位置，以本调度约束为准并修正；${relationships}；${npcRule}`;
-    return `场景真实调度：${layout}人物姿势必须有可见且合理的支撑面或接触物，动作路径不得穿过场景结构；${relationships}；${npcRule}`;
-}
-
-function formatBackgroundNpcRule(policy?: DramaBackgroundNpcPolicy) {
-    const mode = policy?.mode || "auto";
-    if (mode === "forbidden") return "场景策略禁止背景 NPC，画面不得出现未声明人物";
-    if (mode === "required")
-        return `场景策略要求背景 NPC：按本镜头的空间容量、景别和剧情功能安排合理数量的无名旁观者或工作人员，明确数量范围、位置密度和可见行为结果；NPC 只作为背景群像，不加入 characterCodes、角色锚点或独立角色资产${policy?.guidance ? `；补充要求：${policy.guidance}` : ""}${policy?.continuity ? `；连续性：${policy.continuity}` : ""}`;
-    return `场景策略为自动判断：只有公共场面、空间规模、剧情压力或群体反应确实需要时才加入无名背景 NPC，并在本帧明确数量范围、位置密度和可见行为；否则保持无人；NPC 不加入 characterCodes、角色锚点或独立角色资产${policy?.guidance ? `；补充要求：${policy.guidance}` : ""}${policy?.continuity ? `；连续性：${policy.continuity}` : ""}`;
-}
-
-function appendStaticFramePositionConstraint(prompt: string, constraint: string) {
-    if (!constraint) return prompt;
-    const lines = prompt.split("\n");
-    const index = lines.findIndex((line) => line.startsWith("站位与视线："));
-    if (index < 0 || lines[index].includes(constraint)) return prompt;
-    lines[index] = `${lines[index]}；${constraint}`;
-    return lines.join("\n");
+    void project;
+    void episode;
+    const source = phase === "start" ? shot.startFramePrompt || shot.imagePrompt : phase === "end" ? shot.endFramePrompt || shot.imagePrompt : beat?.imagePrompt || shot.imagePrompt;
+    return formatPromptFieldLines(source || "", "static");
 }
 
 export function compileDramaDialogueAudioInstructions(shot: DramaShot) {
@@ -598,50 +428,6 @@ function joinAssetPromptConstraints(values: Array<string | undefined>) {
     ).join("、");
 }
 
-function assetText(asset: DramaNamedAsset, project: DramaProject) {
-    return sanitizeDramaSupplierText(
-        compact([
-            `${asset.name}：${asset.description}`,
-            asset.profile?.visualIdentity,
-            asset.profile?.styling,
-            asset.profile?.colorPalette ? `色彩 ${asset.profile.colorPalette}` : "",
-            asset.profile?.consistencyRules ? `固定规则 ${asset.profile.consistencyRules}` : "",
-            asset.profile?.spatialRules?.length ? `空间布局 ${asset.profile.spatialRules.join("；")}` : "",
-        ]).join("，"),
-        project,
-    );
-}
-
-function continuityLines(value?: DramaShotContinuity) {
-    if (!value) return [];
-    return compact([
-        value.shotSize ? `景别 ${value.shotSize}` : "",
-        value.cameraAngle ? `机位 ${value.cameraAngle}` : "",
-        value.composition ? `构图 ${value.composition}` : "",
-        value.characterBlocking ? `站位 ${value.characterBlocking}` : "",
-        value.gazeDirection ? `视线 ${value.gazeDirection}` : "",
-        value.screenDirection ? `运动方向 ${value.screenDirection}` : "",
-        value.axisRule ? `轴线 ${value.axisRule}` : "",
-        value.continuityNotes,
-    ]);
-}
-
-function stateLines(value: DramaShot["entryState"], project: DramaProject) {
-    if (!value) return [];
-    const nameFor = (id: string) => [...project.characters, ...project.scenes, ...project.props, ...project.clues].find((asset) => asset.id === id)?.name || "当前对象";
-    return compact([
-        value.environment ? `环境 ${value.environment}` : "",
-        value.lighting ? `灯光 ${value.lighting}` : "",
-        value.axis ? `轴线 ${value.axis}` : "",
-        value.screenDirection ? `屏幕方向 ${value.screenDirection}` : "",
-        ...value.characters.map(
-            (entity) =>
-                `角色 ${nameFor(entity.assetId)}：位置${entity.position}，视线${entity.gaze}，姿态${entity.pose}，动作${sanitizeDramaSupplierText(entity.action || "保持当前状态", project)}${entity.wardrobe ? `，服装${entity.wardrobe}` : ""}${entity.expression ? `，表情${entity.expression}` : ""}`,
-        ),
-        ...value.props.map((entity) => `道具 ${nameFor(entity.assetId)}：${sanitizeDramaSupplierText(entity.state || "保持当前状态", project)}，由${entity.holderId ? nameFor(entity.holderId) : "环境"}持有`),
-    ]);
-}
-
 export function sanitizeDramaSupplierText(value: string, project: DramaProject) {
     let result = value;
     for (const asset of [...project.characters, ...project.scenes, ...project.props, ...project.clues]) {
@@ -651,12 +437,6 @@ export function sanitizeDramaSupplierText(value: string, project: DramaProject) 
         if (shot.id && shot.id !== shot.title) result = result.split(shot.id).join(shot.title);
     }
     return result.replace(/\b(?:character|prop|scene|shot|frame|source|asset|continuity|storyboard|video|drama)-[A-Za-z0-9_-]{6,}\b/gi, "当前对象").replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/gi, "当前对象");
-}
-
-function manifestTarget(item: DramaReferenceManifestItem, project: DramaProject) {
-    const asset = [...project.characters, ...project.scenes, ...project.props, ...project.clues].find((candidate) => candidate.id === item.assetId);
-    const shot = project.episodes.flatMap((episode) => episode.shots).find((candidate) => candidate.id === item.shotId);
-    return asset ? `固定资产「${asset.name}」` : shot ? `镜头「${shot.title}」` : item.role === "previous_actual_tail" ? "上一镜已验收实际尾帧" : "未解析参考对象";
 }
 
 function compact(values: Array<string | undefined>) {

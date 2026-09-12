@@ -694,17 +694,17 @@ describe("drama project service updates", () => {
             } as never,
         ];
         mocks.getDramaProject.mockResolvedValue(current);
-        const supplierPrompt =
+        const prompt =
             "静态关键帧：用户编辑后的画面\n可见状态：人物握住断剑\n可见表演状态：眉眼紧绷\n景别：中景\n机位与构图：平视，主体位于画面中央\n站位与视线：人物站在门边，视线落向断剑\n三层空间：前景为门框，中景承载人物，背景交代房间纵深\n光色与风格：冷色侧光，半写实动漫幻想风\n负面约束：无字幕、无水印、无logo、无HUD、无变形";
 
-        const saved = await updateDramaStoryboardFramePromptForUser("user-one", current.id, "episode-one", "shot-one", "f2", { supplierPrompt });
+        const saved = await updateDramaStoryboardFramePromptForUser("user-one", current.id, "episode-one", "shot-one", "f2", { prompt });
         const shot = saved.episodes[0].shots[0];
 
         expect(shot.framePlan?.frames[1].imagePrompt).toContain("用户编辑后的画面");
-        expect(shot.framePlan?.frames[1].supplierPrompt).toContain("用户编辑后的画面");
+        expect("supplierPrompt" in shot.framePlan!.frames[1]).toBe(false);
         expect(shot.storyboardFrames).toEqual([expect.objectContaining({ id: "f1", status: "success", mediaUrl: "/api/f1.png" }), expect.objectContaining({ id: "f2", status: "stale", mediaUrl: "/api/f2.png", continuityStatus: "stale" })]);
         expect(mocks.updateDramaProject.mock.calls.at(-1)?.[0]).toBe("user-one");
-        expect((mocks.updateDramaProject.mock.calls.at(-1)?.[1] as DramaProject).episodes[0].shots[0].framePlan?.frames[1].supplierPrompt).toContain("用户编辑后的画面");
+        expect("supplierPrompt" in (mocks.updateDramaProject.mock.calls.at(-1)?.[1] as DramaProject).episodes[0].shots[0].framePlan!.frames[1]).toBe(false);
     });
 
     it("persists a manually edited video prompt without rewriting the whole project", async () => {

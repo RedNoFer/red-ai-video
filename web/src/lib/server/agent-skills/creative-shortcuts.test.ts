@@ -14,9 +14,6 @@ import {
     IMAGE_MOTION_SKILL,
     SEEDANCE_DIRECTOR_SKILL,
     SEEDANCE_25_DIRECTOR_SKILL,
-    SEEDANCE_STATIC_FRAME_PROMPT_LAYOUT,
-    SEEDANCE_STATIC_FRAME_PROMPT_SCHEME,
-    SEEDANCE_STATIC_FRAME_RULES,
     SEEDANCE_VIDEO_PROMPT_LAYOUT,
 } from "./creative-shortcuts";
 
@@ -25,7 +22,7 @@ describe("creative shortcut skills", () => {
         expect(DRAMA_VIDEO_DIRECTOR_SKILL.id).toBe("drama-video-director");
         expect(DRAMA_VIDEO_DIRECTOR_SKILL.sourceContentHash).toMatch(/^[a-f0-9]{64}$/u);
         expect(DRAMA_PACKAGE_DIRECTOR_RULES).toContain("dramaticFunction");
-        expect(DRAMA_STATIC_FRAME_DIRECTOR_RULES).toContain("不得写运镜过程");
+        expect(DRAMA_STATIC_FRAME_DIRECTOR_RULES).toContain("运镜过程");
         expect(DRAMA_VIDEO_PROMPT_DIRECTOR_RULES).toContain("每个真实时间段");
         expect(DRAMA_EXTERNAL_CODEX_DIRECTOR_RULES).toContain("显式选择本 Skill");
     });
@@ -48,13 +45,10 @@ describe("creative shortcut skills", () => {
         expect(DRAMA_PLANNING_SKILL.instructions).toContain("每个镜头至少承担情绪变化、推进动作或增加压力中的一项");
     });
 
-    it("requires visible action changes across continuous frames", () => {
-        expect(DRAMA_CONTINUOUS_FRAME_RULES).toContain("静态帧不是无动作的氛围图");
-        expect(DRAMA_CONTINUOUS_FRAME_RULES).toContain("不预设固定秒数");
-        expect(DRAMA_CONTINUOUS_FRAME_RULES).toContain("不得用“构图不变、主体稳定、情绪保持不变”");
-        expect(DRAMA_CONTINUOUS_FRAME_RULES).toContain("谁在何处、以什么姿势、借助什么结构、对谁或什么做什么");
-        expect(DRAMA_CONTINUOUS_FRAME_RULES).toContain("中央过道保持通行");
-        expect(DRAMA_CONTINUOUS_FRAME_RULES).toContain("不得虚构未在原文或资产中出现的人物");
+    it("keeps timeline ownership separate from static-frame content", () => {
+        expect(DRAMA_CONTINUOUS_FRAME_RULES).toContain("按真实动作、反应");
+        expect(DRAMA_CONTINUOUS_FRAME_RULES).toContain("imagePrompt 只描述对应冻结画面");
+        expect(DRAMA_CONTINUOUS_FRAME_RULES).not.toContain("静态帧不是无动作的氛围图");
     });
 
     it("keeps Seedance reference roles and continuity boundaries", () => {
@@ -81,20 +75,10 @@ describe("creative shortcut skills", () => {
         expect(DRAMA_ASSET_IMAGE_SKILL.refinementRules).toContain("change / preserve / constraints");
     });
 
-    it("keeps the shared static frame scheme in the Seedance rules", () => {
-        expect(SEEDANCE_STATIC_FRAME_RULES).toContain("静态关键帧写法模板");
-        expect(SEEDANCE_STATIC_FRAME_RULES).toContain("前景必须是具体框景或遮挡物");
-        expect(SEEDANCE_STATIC_FRAME_RULES).toContain("ELS/极远景只能保留远景空间关系");
-        expect(SEEDANCE_STATIC_FRAME_RULES).toContain("人物姿势必须有可见且合理的支撑/接触结构");
-        expect(SEEDANCE_STATIC_FRAME_RULES).toContain("封闭马车、船舱、车内、餐桌、病床");
-        expect(SEEDANCE_STATIC_FRAME_RULES).toContain("必须按场景前进方向选择左侧或右侧的明确座位");
-        expect(SEEDANCE_STATIC_FRAME_PROMPT_SCHEME).toContain("9. 负面约束：");
-        expect(SEEDANCE_STATIC_FRAME_PROMPT_SCHEME).not.toContain("参考图职责：");
-        expect(SEEDANCE_STATIC_FRAME_PROMPT_LAYOUT).toContain("每个非空字段必须独立成行");
-        expect(SEEDANCE_STATIC_FRAME_PROMPT_LAYOUT).toContain("相对座位/长凳/床沿/通道/门窗/道具的位置");
-        expect(SEEDANCE_STATIC_FRAME_PROMPT_LAYOUT).toContain("未声明人物不入画");
-        expect(SEEDANCE_STATIC_FRAME_PROMPT_LAYOUT).not.toContain("参考图职责：");
-        expect(SEEDANCE_STATIC_FRAME_PROMPT_LAYOUT).toContain("不得用逗号或分号压成一段");
+    it("keeps one optional static-frame contract", () => {
+        expect(DRAMA_STATIC_FRAME_DIRECTOR_RULES).toContain("五类短段");
+        expect(DRAMA_STATIC_FRAME_DIRECTOR_RULES).toContain("不强制九段");
+        expect(DRAMA_STATIC_FRAME_DIRECTOR_RULES).not.toContain("参考图职责：");
     });
 
     it("keeps the shared video prompt layout", () => {
@@ -108,21 +92,15 @@ describe("creative shortcut skills", () => {
         expect(SEEDANCE_VIDEO_PROMPT_LAYOUT).toContain("每个非空字段必须独立一行");
     });
 
-    it("keeps the same static frame scheme in production package generation", () => {
-        expect(DRAMA_PACKAGE_ARCHITECTURE_RULES).toContain("静态关键帧写法模板");
-        expect(DRAMA_PACKAGE_ARCHITECTURE_RULES).toContain("前景必须是具体框景或遮挡物");
-        expect(DRAMA_PACKAGE_ARCHITECTURE_RULES).toContain("ELS/极远景只能保留远景空间关系");
-        expect(DRAMA_PACKAGE_ARCHITECTURE_RULES).toContain("制作包内所有提示词模块都必须按字段逐行书写");
-        expect(DRAMA_PACKAGE_ARCHITECTURE_RULES).toContain("字段之间使用换行");
-        expect(DRAMA_PACKAGE_ARCHITECTURE_RULES).toContain("seedance-25-director");
-        expect(DRAMA_PACKAGE_ARCHITECTURE_RULES).toContain("每秒约 5 个可发音字");
-        expect(DRAMA_PACKAGE_ARCHITECTURE_RULES).toContain("10 个可发音字容差");
-        expect(DRAMA_PACKAGE_ARCHITECTURE_RULES).toContain("每个镜头至少落实一个环境压力");
+    it("keeps the production package on the same static source", () => {
+        expect(DRAMA_PACKAGE_ARCHITECTURE_RULES).toContain("imagePrompt 是唯一静态画面事实源");
+        expect(DRAMA_PACKAGE_ARCHITECTURE_RULES).toContain("遵循上方静态帧 Skill");
+        expect(DRAMA_PACKAGE_ARCHITECTURE_RULES).toContain("referenceManifest");
+        expect(DRAMA_PACKAGE_ARCHITECTURE_RULES).not.toContain("静态关键帧写法模板");
     });
 
     it("keeps named non-appearing characters in the package and out of shot bindings", () => {
-        expect(DRAMA_PACKAGE_ARCHITECTURE_RULES).toContain("角色资产表必须保留所有已登记角色");
-        expect(DRAMA_PACKAGE_ARCHITECTURE_RULES).toContain("不得进入本集参考图请求");
-        expect(DRAMA_PACKAGE_ARCHITECTURE_RULES).toContain("不得只写含义不清的“无可辨识的角色名”");
+        expect(DRAMA_PACKAGE_ARCHITECTURE_RULES).toContain("背景 NPC");
+        expect(DRAMA_PACKAGE_ARCHITECTURE_RULES).toContain("不进入 characterCodes");
     });
 });
