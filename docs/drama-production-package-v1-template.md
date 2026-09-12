@@ -2,7 +2,7 @@
 
 > 制作包格式：`vozeb-drama-production-package-v1`
 >
-> 模板版本：由 `pnpm compile:skills` 自动生成；规范来源：`drama-video-director@1.2.0`（Skill hash：`297a9f8c19121c15befa87fdbd5718ba68f00e0503aeb7953c4aa25589784433`，制作包规范 hash：`8736241dea9f0a0b56660dc757e603d37cd4ef0d0be6ba0bb0d4fab340ffc4cd`，服务端制作包规则 hash：`01f1c89acfc04c2394f7be53e63fe18568a31790b643610082e52c115bae1ae5`）。
+> 模板版本：由 `pnpm compile:skills` 自动生成；规范来源：`drama-video-director@{{DRAMA_VIDEO_DIRECTOR_VERSION}}`（Skill hash：`{{DRAMA_VIDEO_DIRECTOR_HASH}}`，制作包规范 hash：`{{DRAMA_PACKAGE_SPEC_HASH}}`，服务端制作包规则 hash：`{{DRAMA_PACKAGE_RULES_HASH}}`）。
 >
 > 使用约定：本模板是当前 v1 制作包的填写入口。完整制作包必须同时提供可导入的规范对象 JSON；JSON 是导入事实源，下面的章节是面向人工阅读的确定性展示。不要把历史制作包、旧 generationPrompt 或旧分镜正文当作新包模板。
 >
@@ -100,11 +100,7 @@ imagePrompt
 
 ### 静态图片帧规则
 
-静态帧使用现有 `imagePrompt` 字符串作为唯一静态画面事实源，不强制九段，也不新增 `staticFrame` 等字段。可按事实选择以下五类短段，缺少事实的段落直接省略：
-
-`画面主体`、`可见状态`、`构图与空间`、`光色与风格`、`针对性约束`
-
-每帧至少表达当前主体、当前冻结的可见状态，以及一项可验收的空间关系、视线、姿态、道具或环境结果。可见表演并入“可见状态”。静态帧只冻结一个已经发生的瞬间；不得写视频动作过程、时间段、运镜过程、对白、声音或内部执行信息。`actionPrompt` 只描述动作过程，不复制进 `imagePrompt`。不要从镜头描述、资产档案、NPC 策略或相邻帧补写静态正文；服务端只做轻量格式化和硬错误校验，发现缺少可选段、重复状态、景别细节不匹配、NPC 可能拥挤或构图/光线不完整时给出警告并保留原文。参考图职责只由 `referenceManifest` 和服务端执行层绑定承载，不写入 `imagePrompt`。同一镜头内每帧独立使用固定资产锚点；只有跨镜头连续性边明确要求时，第一帧才使用上一镜已人工验收的实际尾帧 `previous_accepted_actual_tail`。
+{{DRAMA_VIDEO_DIRECTOR_STATIC_FRAME_RULES}}
 
 ## 五、角色一致性资产
 
