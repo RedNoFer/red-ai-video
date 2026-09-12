@@ -5,7 +5,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { CREATE_AGENT_PROMPT_MAX_LENGTH } from "@/lib/create-agent-prompt";
 import { resolveDramaGlobalVisualContract } from "@/lib/drama-style";
 import { getDramaProjectForUser, DramaProjectServiceError } from "@/lib/server/drama-project-service";
-import { buildDramaFramePromptContext, formatDramaFramePromptContext } from "@/lib/server/drama-frame-prompt-context";
+import { buildDramaFramePromptContext } from "@/lib/server/drama-frame-prompt-context";
 import { resolveInternalOrigin } from "@/lib/server/internal-origin";
 import { optimizeCreativePrompt, PromptOptimizationError } from "@/lib/server/prompt-optimization-service";
 import { checkGenerationRateLimit, rateLimitHeaders } from "@/lib/server/security";
@@ -29,7 +29,7 @@ export async function POST(request: Request, context: Context) {
     try {
         const { id, episodeId, shotId, frameId } = await context.params;
         const project = await getDramaProjectForUser(user.id, id);
-        const frameContext = buildDramaFramePromptContext(project, episodeId, shotId, frameId, prompt);
+        buildDramaFramePromptContext(project, episodeId, shotId, frameId, prompt);
         const optimizedPrompt = await optimizeCreativePrompt({
             origin: resolveInternalOrigin(new URL(request.url).origin),
             cookie: request.headers.get("cookie") || "",
@@ -38,7 +38,6 @@ export async function POST(request: Request, context: Context) {
             prompt,
             mode: "drama-frame",
             visualContract: resolveDramaGlobalVisualContract(project),
-            dramaFrameContext: formatDramaFramePromptContext(frameContext),
             correctionDirection: text(parsed.data.correctionDirection, 4000),
         });
         return NextResponse.json({ code: 0, data: { prompt: optimizedPrompt }, msg: "OK" });

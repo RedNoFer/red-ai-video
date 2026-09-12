@@ -21,7 +21,8 @@ import { buildDramaAssetReuseContext, previewDramaProductionPackage } from "@/li
 import { serializeDramaProductionPackageMarkdown } from "@/lib/drama-production-package-serializer";
 import { defaultDramaProductionPlan, normalizeDramaProductionPlan, resolveDramaShotDurationPreference } from "@/lib/drama-production-plan";
 import { DRAMA_PACKAGE_ARCHITECTURE_RULES } from "@/lib/server/drama-production-package-rules";
-import { DRAMA_STATIC_FRAME_DIRECTOR_RULES, SEEDANCE_25_DIRECTOR_SKILL } from "@/lib/server/agent-skills/creative-shortcuts";
+import { DRAMA_PACKAGE_DIRECTOR_RULES, DRAMA_STATIC_FRAME_DIRECTOR_RULES, SEEDANCE_25_DIRECTOR_SKILL } from "@/lib/server/agent-skills/creative-shortcuts";
+import type { DramaEpisode, DramaNamedAsset, DramaProject } from "@/lib/drama-project-contract";
 import { resolveSeedance25DirectorInstructions } from "@/lib/server/agent-skills/seedance-25";
 import { formatDramaGlobalVisualContract, resolveDramaGlobalVisualContract } from "@/lib/drama-style";
 import { DRAMA_PUBLIC_VIDEO_PROMPT_CONTRACT } from "@/lib/drama-public-prompt-contract";
@@ -289,12 +290,7 @@ async function executeDramaScriptRun(run: AgentRun, origin: string, cookie: stri
     const projectId = run.projectId?.trim();
     const episodeId = run.episodeId?.trim();
     if (!projectId || !episodeId) throw new Error("剧本 Agent 缺少项目或集数上下文");
-    const [settings, project, conversationContext, uploadedAssets] = await Promise.all([
-        getAuthSettings(),
-        getDramaProject(projectId, run.userId),
-        getCreativeConversationContext(run.conversationId, run.userId, run.id),
-        getCreativeAssetsByIds(run.referencedAssetIds || [], run.userId),
-    ]);
+    const [settings, project, uploadedAssets] = await Promise.all([getAuthSettings(), getDramaProject(projectId, run.userId), getCreativeAssetsByIds(run.referencedAssetIds || [], run.userId)]);
     if (!project) throw new Error("短剧项目不存在");
     const index = project.episodes.findIndex((episode) => episode.id === episodeId);
     if (index < 0) throw new Error("当前集不存在或已被删除");
@@ -324,13 +320,16 @@ async function executeDramaScriptRun(run: AgentRun, origin: string, cookie: stri
         type: asset.type,
         title: asset.title,
         ...(asset.textContent ? { textContent: asset.textContent } : {}),
-        ...(asset.serverUrl || asset.remoteUrl ? { url: asset.serverUrl || asset.remoteUrl } : {}),
         ...(asset.mimeType ? { mimeType: asset.mimeType } : {}),
     }));
     const skillInstructions = selectedSkills
-        .map((skill) => `${skill.name}@${skill.id}：${skill.id === SEEDANCE_25_DIRECTOR_SKILL.id ? resolveSeedance25DirectorInstructions({ prompt: run.prompt, durationSeconds: requestedShotDuration }).instructions : skill.instructions}`)
+        .map(
+            (skill) =>
+                `${skill.name}@${skill.id}：${skill.id === "drama-video-director" ? DRAMA_PACKAGE_DIRECTOR_RULES : skill.id === SEEDANCE_25_DIRECTOR_SKILL.id ? resolveSeedance25DirectorInstructions({ prompt: run.prompt, durationSeconds: requestedShotDuration }).instructions : skill.instructions}`,
+        )
         .join("\n");
     const skillRule = `本次短剧制作包将由以下 prompt-authoring-only Skill 作为后台质量层审查；Skill 只能返回补充、冲突、缺失和单变量修复建议，由 Agent 写入固定公开合同，不能产生第二套提示词或覆盖项目事实：\n${skillInstructions}`;
+    const authoringRules = composeDramaAuthoringRules(skillRule, DRAMA_STATIC_FRAME_DIRECTOR_RULES, DRAMA_PACKAGE_ARCHITECTURE_RULES);
     const customDirectorRules = normalizedSnapshotPlan?.customDirectorRules?.trim() || "";
     if (isOutsideDramaScriptScope(run.prompt)) {
         const reply = `当前窗口只处理${current.title}的新剧本内容。请继续提供本集剧情、人物、冲突或制作包要求。`;
@@ -362,34 +361,8 @@ async function executeDramaScriptRun(run: AgentRun, origin: string, cookie: stri
     const attachmentInstruction = uploadedMaterials.length
         ? "本轮用户附件已经整理在输入的 uploadedMaterials 中：textContent 是可直接阅读的 TXT/Markdown 章节内容，图片 URL 仅作为参考素材地址；必须优先读取并按附件 alias 引用，不得把内部路径或隐藏执行信息写入公开制作包。"
         : "本轮没有附件。";
-    const instruction = `你是 VOZEB PRO 短剧项目的专属集数编剧 GPT。你只能讨论当前集剧本：剧情、人物、冲突、场景、对白、节奏、结尾钩子和制作包内容。任何普通闲聊、知识问答、图片/视频/音频生成、其他项目事务或修改其他集的请求，都必须只回复：\"当前窗口只处理第 ${current.title} 的新剧本内容。请继续提供本集剧情、人物、冲突或制作包要求。\"。所有内容必须依据项目与会话上下文，不得凭空添加与上下文冲突的设定；缺少必要信息时先提问。${selectedSkills.length ? `本次用户显式选择的 Skill（仅可使用这些，版本必须保留）：${selectedSkills.map((skill) => `${skill.name}@${skill.id}`).join("、")}。` : "本次未选择普通 Skill，不得自行添加 Skill。"} 用户没有明确要求生成制作包时，只返回自然中文剧本协作回复，不输出内部规则、模型选择、规划过程或 Markdown 制作包。用户明确要求生成制作包时，必须返回一个 JSON 对象：{\"mode\":\"package\",\"reply\":\"简短完成说明\",\"markdown\":\"符合 vozeb-drama-production-package-v1 的完整 Markdown\"}。制作包只包含当前集和项目级资产，严格遵循 docs/drama-production-package-v1.md 的 13 个章节、编码和固定表头；角色资产表必须保留所有已登记角色，角色名不得因为与 reference、ref 等英文缩写相似而改名、删除或当作占位符；已登记但本集或本镜不出镜的角色要明确记录“不出镜、不得进入本集参考图请求”，但 characterCodes 和 referenceManifest 只能包含当前镜头实际出镜或实际需要约束的角色。供应商 videoPrompt 表达不出镜角色时，必须同时使用角色名的不出镜约束和可观察画面限制，不得只写含义不清的“无可辨识的角色名”。每个镜头都必须同时提供 performancePlan、逐句 dialoguePerformance（无对白时为空数组）、lightingPlan、完整 continuity、entryState 和 exitState、framePlan.referenceManifest 与 framePlan.frames。每镜 videoPrompt 必须由 Agent 直接生成完整公开执行提示词，包含每个真实时间段的时间范围、起点、动作与触发、可见衔接、终点和具体画面状态；framePlan.frames 只是同一内容的结构化镜像，不能替代 videoPrompt 正文。禁止复制项目长档案、制作说明、URL 或内部执行信息，禁止从 framePlan 拼接、补写或重写 videoPrompt。${lockedPlan ? `本次逻辑镜头目标时长为 ${requestedShotDuration} 秒，${shotFrameInstruction}。必须按这个目标重新切分剧情；不要把一个逻辑镜头机械拆成 7s+8s 等碎片，也不要复制原有拆分。相邻的同一镜头片段应合并为一个完整 ${requestedShotDuration} 秒镜头。必须严格执行并保留以下锁定生产方案，不得换模型、换模式或修改参数：${JSON.stringify(lockedPlan)}` : "如果没有锁定方案，必须先提示用户完成生产方案配置。"} 当前项目固定资产优先复用：只能使用下方资产目录中的稳定 code/id/name 绑定角色、场景、道具和线索；已有资产的身份、轮廓、材质、基准图和固定字段不得重设计。只有当前章节明确新增且在制作包中登记的新资产才可增加。制作包资产表必须保留目录中的全部已有资产，即使本集不出镜也要标注“不出镜、不得进入本集参考图请求”；镜头的 characterCodes、locationCode、propCodes、clueCodes 和 framePlan.referenceManifest 只列本镜实际出镜或实际需要约束的资产。${assetReuseContext.rule} ${framePolicyInstruction}；每个真实动作事件都必须决定是否需要新的关键帧，发生视线转移、人物反应、空间揭示、道具状态变化、机位/景别/构图切换时必须有对应新帧；不发生可见状态或摄影状态变化时不得机械增加帧。每镜 referenceManifest 按图片1、图片2…连续编号，智能规划与实际模型能力匹配、数量明确且每张只有一个用途的参考图；${shotFrameInstruction}，不能因为提示词中的句子、色彩、负面词或制作说明多就增加帧数；每段包含稳定 id、sequenceIndex、startSecond、endSecond、actionPrompt 和 imagePrompt，从 0 秒无断层覆盖镜头时长。静态帧 imagePrompt 直接遵循上方唯一静态帧适配器，禁止从其他字段补写或复制静态正文。图片编辑语义统一使用 change / preserve / constraints，且 change 每次只改一个已定位变量。相邻帧必须体现可见状态变化，并保留上一帧的连续性锚点；第十一章只读取当前 Agent 已生成的 videoPrompt 与其 framePlan 镜像，不得另行重建、拼接或保存过期时长。连续镜头只能把上一镜当前视频版本、已人工验收的实际尾帧作为首要连续性依据。任何收费或上游生产前先给出准确的任务、参考和参数预览，等待用户明确确认后再执行。所有这些字段都必须写成基于当前镜头事实、前后镜头和项目资产的具体可执行内容，禁止写“待补全”或空对象作为占位；无对白时只允许 dialoguePerformance 为空数组。连续性必须明确景别、机位、构图、站位、动作起止、屏幕方向和轴线规则，入口/出口状态必须能被下一镜继承。不能只输出画面或视频 Prompt，也不能覆盖其他集。`;
-    const input = {
-        request: run.prompt,
-        project: {
-            id: project.id,
-            title: project.title,
-            summary: project.summary,
-            style: project.style,
-            ratio: project.ratio,
-            seriesBible: project.seriesBible,
-            productionBible: project.productionBible,
-            productionArchive: project.productionArchive,
-            characters: assetReuseContext.characters,
-            scenes: assetReuseContext.locations,
-            props: assetReuseContext.props,
-            clues: assetReuseContext.clues,
-        },
-        fixedAssetReuseContext: assetReuseContext,
-        currentEpisode: current,
-        adjacentEpisodes: adjacent,
-        conversation: conversationContext,
-        selectedSkills: selectedSkills.map((skill) => ({ id: skill.id, name: skill.name })),
-        skillInstructions,
-        lockedProductionPlan: lockedPlan,
-        globalVisualContract,
-        uploadedMaterials,
-        requestedShotDuration,
-    };
+    const instruction = `你是 VOZEB PRO 短剧项目的专属集数编剧 GPT。你只能讨论当前集剧本：剧情、人物、冲突、场景、对白、节奏、结尾钩子和制作包内容。任何普通闲聊、知识问答、图片/视频/音频生成、其他项目事务或修改其他集的请求，都必须只回复：\"当前窗口只处理第 ${current.title} 的新剧本内容。请继续提供本集剧情、人物、冲突或制作包要求。\"。所有内容必须依据当前用户请求、当前项目正式事实和本轮附件，不得凭空添加与上下文冲突的设定；缺少必要信息时先提问。历史会话、旧制作包、productionArchive 和历史 generationPrompt 不属于当前制作事实，禁止读取或复述。${selectedSkills.length ? `本次用户显式选择的 Skill（仅可使用这些，版本必须保留）：${selectedSkills.map((skill) => `${skill.name}@${skill.id}`).join("、")}。` : "本次未选择普通 Skill，不得自行添加 Skill。"} 用户没有明确要求生成制作包时，只返回自然中文剧本协作回复，不输出内部规则、模型选择、规划过程或 Markdown 制作包。用户明确要求生成制作包时，必须返回一个 JSON 对象：{\"mode\":\"package\",\"reply\":\"简短完成说明\",\"markdown\":\"符合 vozeb-drama-production-package-v1 的完整 Markdown\"}。制作包只包含当前集和项目级资产，严格遵循 docs/drama-production-package-v1.md 的 13 个章节、编码和固定表头；角色资产表必须保留所有已登记角色，角色名不得因为与 reference、ref 等英文缩写相似而改名、删除或当作占位符；已登记但本集或本镜不出镜的角色要明确记录“不出镜、不得进入本集参考图请求”，但 characterCodes 和 referenceManifest 只能包含当前镜头实际出镜或实际需要约束的角色。供应商 videoPrompt 表达不出镜角色时，必须同时使用角色名的不出镜约束和可观察画面限制，不得只写含义不清的“无可辨识的角色名”。每个镜头都必须同时提供 performancePlan、逐句 dialoguePerformance（无对白时为空数组）、lightingPlan、完整 continuity、entryState 和 exitState、framePlan.referenceManifest 与 framePlan.frames。每镜 videoPrompt 必须由 Agent 直接生成完整公开执行提示词，包含每个真实时间段的时间范围、起点、动作与触发、可见衔接、终点和具体画面状态；framePlan.frames 只是同一内容的结构化镜像，不能替代 videoPrompt 正文。禁止复制项目长档案、制作说明、URL 或内部执行信息，禁止从 framePlan 拼接、补写或重写 videoPrompt。${lockedPlan ? `本次逻辑镜头目标时长为 ${requestedShotDuration} 秒，${shotFrameInstruction}。必须按这个目标重新切分剧情；不要把一个逻辑镜头机械拆成 7s+8s 等碎片，也不要复制原有拆分。相邻的同一镜头片段应合并为一个完整 ${requestedShotDuration} 秒镜头。必须严格执行并保留以下锁定生产方案，不得换模型、换模式或修改参数：${JSON.stringify(lockedPlan)}` : "如果没有锁定方案，必须先提示用户完成生产方案配置。"} 当前项目固定资产优先复用：只能使用下方资产目录中的稳定 code/id/name 绑定角色、场景、道具和线索；已有资产的身份、轮廓、材质、基准图和固定字段不得重设计。只有当前章节明确新增且在制作包中登记的新资产才可增加。制作包资产表必须保留目录中的全部已有资产，即使本集不出镜也要标注“不出镜、不得进入本集参考图请求”；镜头的 characterCodes、locationCode、propCodes、clueCodes 和 framePlan.referenceManifest 只列本镜实际出镜或实际需要约束的资产。${assetReuseContext.rule} ${framePolicyInstruction}；每个真实动作事件都必须决定是否需要新的关键帧，发生视线转移、人物反应、空间揭示、道具状态变化、机位/景别/构图切换时必须有对应新帧；不发生可见状态或摄影状态变化时不得机械增加帧。每镜 referenceManifest 按图片1、图片2…连续编号，智能规划与实际模型能力匹配、数量明确且每张只有一个用途的参考图；${shotFrameInstruction}，不能因为提示词中的句子、色彩、负面词或制作说明多就增加帧数；每段包含稳定 id、sequenceIndex、startSecond、endSecond、actionPrompt 和 imagePrompt，从 0 秒无断层覆盖镜头时长。静态帧 imagePrompt 直接遵循上方唯一静态帧适配器，禁止从其他字段补写或复制静态正文。图片编辑语义统一使用 change / preserve / constraints，且 change 每次只改一个已定位变量。相邻帧必须体现可见状态变化，并保留上一帧的连续性锚点；第十一章只读取当前 Agent 已生成的 videoPrompt 与其 framePlan 镜像，不得另行重建、拼接或保存过期时长。连续镜头只能把上一镜当前视频版本、已人工验收的实际尾帧作为首要连续性依据。任何收费或上游生产前先给出准确的任务、参考和参数预览，等待用户明确确认后再执行。所有这些字段都必须写成基于当前镜头事实、前后镜头和项目资产的具体可执行内容，禁止写“待补全”或空对象作为占位；无对白时只允许 dialoguePerformance 为空数组。连续性必须明确景别、机位、构图、站位、动作起止、屏幕方向和轴线规则，入口/出口状态必须能被下一镜继承。不能只输出画面或视频 Prompt，也不能覆盖其他集。`;
+    const input = buildDramaPackageAuthoringInput({ runPrompt: run.prompt, project, current, assetReuseContext, adjacentEpisodes: adjacent, selectedSkills, skillInstructions, lockedPlan, globalVisualContract, uploadedMaterials, requestedShotDuration });
     const effectiveInstruction = instruction
         .replace(/本次逻辑镜头目标时长为 \d+ 秒，默认拆为 (?:undefined|\d+) 个连续帧。/u, `本次逻辑镜头目标时长为 ${requestedShotDuration} 秒，${shotFrameInstruction}。`)
         .replace(
@@ -411,7 +384,7 @@ async function executeDramaScriptRun(run: AgentRun, origin: string, cookie: stri
                 [
                     {
                         role: "system",
-                        content: `${skillRule}\n\n${DRAMA_STATIC_FRAME_DIRECTOR_RULES}\n\n${DRAMA_PACKAGE_ARCHITECTURE_RULES}\n\n${effectiveInstruction}\n${framePolicyInstruction}\n${visualInstruction}\n${customDirectorRules ? `项目长期导演定制规则（仅次于本轮用户补充，必须同时用于 NPC、帧数、表演、镜头切换和视频提示词）：\n${customDirectorRules}` : "项目未配置长期导演定制规则，按当前项目事实和共享 Skill 执行。"}\n${globalVisualInstruction ? `本项目全局视觉合同（最高优先级，所有角色、场景、关键帧和视频提示词必须一致）：\n${globalVisualInstruction}` : ""}\n${attachmentInstruction}\n${videoPromptContract}`,
+                        content: `${authoringRules}\n\n${effectiveInstruction}\n${visualInstruction}\n${customDirectorRules ? `项目长期导演定制规则（仅次于本轮用户补充，必须同时用于 NPC、帧数、表演、镜头切换和视频提示词）：\n${customDirectorRules}` : "项目未配置长期导演定制规则，按当前项目事实和共享 Skill 执行。"}\n${globalVisualInstruction ? `本项目全局视觉合同（最高优先级，所有角色、场景、关键帧和视频提示词必须一致）：\n${globalVisualInstruction}` : ""}\n${attachmentInstruction}\n${videoPromptContract}`,
                     },
                     { role: "user", content: JSON.stringify(input) },
                 ],
@@ -500,4 +473,113 @@ export function isOutsideDramaScriptScope(prompt: string) {
     return /(?:生成|制作|画|绘制|编辑|修改).{0,8}(?:图片|图像|海报|视频|动画|音频|配音|歌曲)|(?:天气|新闻|股票|基金|汇率|编程|代码|部署|服务器|数学题|翻译|写邮件|写简历|产品文案|广告文案)|^(?:你好|您好|在吗|谢谢|你是谁|能做什么)[！!。.？?]*$/u.test(
         value,
     );
+}
+
+export function buildDramaPackageAuthoringInput(input: {
+    runPrompt: string;
+    project: DramaProject;
+    current: DramaEpisode;
+    assetReuseContext: ReturnType<typeof buildDramaAssetReuseContext>;
+    adjacentEpisodes: Array<Record<string, unknown>>;
+    selectedSkills: Array<{ id: string; name: string }>;
+    skillInstructions: string;
+    lockedPlan: unknown;
+    globalVisualContract: unknown;
+    uploadedMaterials: unknown[];
+    requestedShotDuration: number;
+}) {
+    const currentEpisodeFacts = {
+        id: input.current.id,
+        ...(input.current.code ? { code: input.current.code } : {}),
+        title: input.current.title,
+        script: input.current.script,
+        ...(input.current.scriptRichContent ? { scriptRichContent: input.current.scriptRichContent } : {}),
+        outline: input.current.outline,
+        hook: input.current.hook,
+        nextPreview: input.current.nextPreview,
+        sourceRange: input.current.sourceRange,
+        ...(input.current.storyScenes?.length
+            ? {
+                  storyScenes: input.current.storyScenes.map(({ code, title, timeOfDay, timeRange, summary }) => ({
+                      ...(code ? { code } : {}),
+                      title,
+                      ...(timeOfDay ? { timeOfDay } : {}),
+                      ...(timeRange ? { timeRange } : {}),
+                      summary,
+                  })),
+              }
+            : {}),
+        ...(input.current.continuityEdges?.length
+            ? {
+                  continuityEdges: input.current.continuityEdges.map(({ fromShotId, toShotId, transition, inheritActualEndFrame, carryCharacterIds, carryPropIds, carryEnvironment, carryAxis, notes }) => ({
+                      fromShotId,
+                      toShotId,
+                      transition,
+                      inheritActualEndFrame,
+                      carryCharacterIds,
+                      carryPropIds,
+                      carryEnvironment,
+                      carryAxis,
+                      ...(notes ? { notes } : {}),
+                  })),
+              }
+            : {}),
+    };
+    const assetCatalog = {
+        characters: authoringAssetCatalog(input.assetReuseContext.characters),
+        scenes: authoringAssetCatalog(input.assetReuseContext.locations),
+        props: authoringAssetCatalog(input.assetReuseContext.props),
+        clues: authoringAssetCatalog(input.assetReuseContext.clues),
+    };
+    return {
+        request: input.runPrompt,
+        project: {
+            title: input.project.title,
+            summary: input.project.summary,
+            style: input.project.style,
+            ratio: input.project.ratio,
+            seriesBible: input.project.seriesBible,
+            ...assetCatalog,
+        },
+        fixedAssetReuseContext: {
+            rule: input.assetReuseContext.rule,
+            episodeCode: input.assetReuseContext.episodeCode,
+        },
+        currentEpisode: currentEpisodeFacts,
+        adjacentEpisodes: input.adjacentEpisodes.map((episode) => {
+            const { id, title, outline, hook, nextPreview, script } = episode;
+            return { id, title, outline, hook, nextPreview, script };
+        }),
+        selectedSkills: input.selectedSkills.map(({ id, name }) => ({ id, name })),
+        skillInstructions: input.skillInstructions,
+        lockedProductionPlan: input.lockedPlan,
+        globalVisualContract: input.globalVisualContract,
+        uploadedMaterials: input.uploadedMaterials,
+        requestedShotDuration: input.requestedShotDuration,
+    };
+}
+
+type DramaAuthoringAsset = Pick<DramaNamedAsset, "code" | "name" | "description" | "activeEpisodeCodes" | "profile" | "backgroundNpcPolicy">;
+
+function authoringAssetCatalog(items: readonly DramaAuthoringAsset[]) {
+    return items.map((asset) => {
+        const profile = asset.profile ? authoringAssetProfile(asset.profile) : undefined;
+        return {
+            ...(asset.code ? { code: asset.code } : {}),
+            name: asset.name,
+            description: asset.description,
+            ...(asset.activeEpisodeCodes?.length ? { activeEpisodeCodes: asset.activeEpisodeCodes } : {}),
+            ...(profile && Object.keys(profile).length ? { profile } : {}),
+            ...(asset.backgroundNpcPolicy ? { backgroundNpcPolicy: asset.backgroundNpcPolicy } : {}),
+        };
+    });
+}
+
+function authoringAssetProfile(profile: NonNullable<DramaNamedAsset["profile"]>) {
+    const { designPrompt: _designPrompt, ...facts } = profile;
+    return facts;
+}
+
+function composeDramaAuthoringRules(...rules: string[]) {
+    return [...new Set(rules.map((rule) => rule.trim()).filter(Boolean))].join("\n\n");
 }

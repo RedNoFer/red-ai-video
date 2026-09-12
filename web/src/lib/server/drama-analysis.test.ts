@@ -333,6 +333,28 @@ describe("drama analysis contracts", () => {
         });
     });
 
+    it("keeps the static image prompt as the end frame fallback", () => {
+        const result = normalizeDramaVisualAnalysis(
+            {
+                shots: [
+                    {
+                        shotId: "shot-one",
+                        imagePrompt: "人物站在门边，视线向门外",
+                        videoPrompt: "时间段动作：人物抬头并向门外迈步",
+                        framePlan: {
+                            start: { source: "independent" },
+                            end: { required: true },
+                            frames: [{ id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 2, actionPrompt: "人物站定", imagePrompt: "人物站在门边，视线向门外" }],
+                        },
+                    },
+                ],
+            },
+            ["shot-one"],
+        );
+
+        expect(result.shots[0].endFramePrompt).toBe("人物站在门边，视线向门外");
+    });
+
     it("keeps reference manifest when normalizing visual frame plans", () => {
         const result = normalizeDramaVisualAnalysis(
             {

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CreativeConversationContext } from "@/lib/creative-runtime-contract";
+import type { DramaEpisode, DramaProject } from "@/lib/drama-project-contract";
 import { AGENT_PLAN_SCHEMA_VERSION } from "./agent-run-audit";
 import type { AgentRun, AgentRunTask } from "./agent-run-store";
 import { canvasPlan, canvasSettings, conversationPlan, creativeImageAsset, disabledSettings, imageTask, plannerFailoverSettings, planningRun, runFixture, runWithTasks, settings } from "./agent-run-executor.test-fixtures";
@@ -45,7 +46,7 @@ vi.mock("@/lib/server/agent-run-store", async (importOriginal) => {
     };
 });
 
-import { executeAgentRun } from "./agent-run-executor";
+import { buildDramaPackageAuthoringInput, executeAgentRun } from "./agent-run-executor";
 import { processAgentRunReview, taskResultOps } from "./agent-run-execution";
 import { resetTextPlanningRuntime } from "./text-planning-runtime";
 
@@ -97,6 +98,81 @@ describe("executeAgentRun backend settings", () => {
             if (url.includes("/api/image-tasks/")) return Response.json({ task: { status: "success", result: { url: "https://cdn.example.com/output.png" } } });
             throw new Error(`unexpected request: ${url}`);
         });
+    });
+
+    it("builds drama package input without conversation history, archives, or old prompt fields", () => {
+        const project = {
+            id: "project-one",
+            title: "当前项目",
+            summary: "当前项目摘要",
+            style: "半写实",
+            ratio: "9:16",
+            seriesBible: { premise: "当前系列事实" },
+            productionBible: { productionPlan: { video: { shotDuration: 30 } } },
+            productionArchive: { sections: [{ title: "旧制作包", content: "旧 imagePrompt：中远景" }] },
+        } as unknown as DramaProject;
+        const current = {
+            id: "episode-one",
+            title: "第一集",
+            script: "当前剧本",
+            outline: "当前大纲",
+            hook: "当前钩子",
+            nextPreview: "下一集预告",
+            sourceRange: "第一章",
+            shots: [{ id: "shot-one", imagePrompt: "旧静态提示词：中远景" }],
+            visualReview: { summary: "旧视觉审计不应进入创作输入", issues: [] },
+            renderTask: { id: "old-render-task", status: "success" },
+        } as unknown as DramaEpisode;
+        const assetReuseContext = {
+            rule: "固定资产优先复用",
+            episodeCode: "E01",
+            characters: [
+                {
+                    id: "character-one",
+                    code: "C01",
+                    name: "角色一",
+                    description: "当前角色",
+                    supplierPrompt: "旧角色供应商提示词",
+                    profile: { visualIdentity: "当前身份", styling: "当前造型", colorPalette: "当前配色", consistencyRules: "当前锁定", designPrompt: "旧资产生成提示词" },
+                    refinementHistory: [{ id: "history-old", request: "旧修改" }],
+                    references: [{ id: "ref-one", url: "https://example.com/old.png" }],
+                    primaryReferenceId: "ref-one",
+                },
+            ],
+            locations: [],
+            props: [],
+            clues: [],
+        } as never;
+        const input = buildDramaPackageAuthoringInput({
+            runPrompt: "用本轮文章生成新的制作包",
+            project,
+            current,
+            assetReuseContext,
+            adjacentEpisodes: [{ id: "episode-two", title: "下一集", outline: "下一集大纲", hook: "下一集钩子", nextPreview: "下一集预告", script: "下一集剧本", imagePrompt: "旧相邻帧", generationPrompt: "旧生成提示词" }],
+            selectedSkills: [{ id: "drama-video-director", name: "短剧视频导演" }],
+            skillInstructions: "当前 Skill 指令",
+            lockedPlan: { video: { shotDuration: 30 } },
+            globalVisualContract: { style: "当前视觉合同" },
+            uploadedMaterials: [{ alias: "@附件1", textContent: "本轮文章内容" }],
+            requestedShotDuration: 30,
+        });
+        const serialized = JSON.stringify(input);
+
+        expect(input).not.toHaveProperty("conversationContext");
+        expect(input.project).not.toHaveProperty("productionArchive");
+        expect(input.project).not.toHaveProperty("productionBible");
+        expect(input.currentEpisode).not.toHaveProperty("shots");
+        expect(input.currentEpisode).not.toHaveProperty("visualReview");
+        expect(input.currentEpisode).not.toHaveProperty("renderTask");
+        expect(serialized).not.toContain("旧 imagePrompt");
+        expect(serialized).not.toContain("旧静态提示词");
+        expect(serialized).not.toContain("旧角色供应商提示词");
+        expect(serialized).not.toContain("旧资产生成提示词");
+        expect(serialized).not.toContain("history-old");
+        expect(serialized).not.toContain("example.com/old.png");
+        expect(serialized).not.toContain("旧生成提示词");
+        expect(serialized).toContain("本轮文章内容");
+        expect(serialized.match(/"name":"角色一"/gu)).toHaveLength(1);
     });
 
     it("preserves generated media dimensions in canvas output ops", () => {

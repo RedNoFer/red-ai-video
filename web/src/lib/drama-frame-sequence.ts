@@ -75,9 +75,10 @@ export function normalizeDramaFrameBeats(value: readonly DramaFrameBeat[], durat
 /** Returns the visible subject that must change from frame to frame. */
 export function dramaFrameVisualSubject(imagePrompt: string, actionPrompt = "", fallback = "") {
     const subject = staticFrameSubject(imagePrompt, actionPrompt, fallback);
-    const state = imagePrompt.match(/(?:画面主体|静态关键帧|可见状态)：([^；。\n]+)/u)?.[1] || "";
+    const state = imagePrompt.match(/(?:^|\n)可见状态[：:]([^；。\n]+)/u)?.[1] || "";
     const performanceState = imagePrompt.match(/可见表演状态：([^\n]+)/u)?.[1] || "";
-    return [subject, isGenericFrameState(state) ? "" : state, isGenericPerformanceState(performanceState) ? "" : performanceState].filter(Boolean).join("｜");
+    const values = [subject, isGenericFrameState(state) ? "" : state, isGenericPerformanceState(performanceState) ? "" : performanceState].map((value, index) => (index === 0 ? value.trim() : removeRepeatedSubject(value, subject))).filter(Boolean);
+    return values.filter((value, index) => values.findIndex((candidate) => normalizeFrameStateForComparison(candidate) === normalizeFrameStateForComparison(value)) === index).join("｜");
 }
 
 /**
@@ -115,6 +116,30 @@ export function validateDramaFrameVisualContent(imagePrompt: string, actionPromp
     if ((!visibleState && !hasVisibleStaticState(positivePrompt)) || (visibleState && isGenericFrameState(visibleState))) return "每帧必须描述当前冻结的可见状态";
     if (!hasVisibleSpatialResult(positivePrompt)) return "每帧至少需要一项可验收的空间关系、视线、姿态、道具或环境结果";
     return undefined;
+}
+
+/** Quality warnings never rewrite the prompt and never block ordinary editing. */
+export function warnDramaFrameVisualContent(imagePrompt: string) {
+    const prompt = formatPromptFieldLines(imagePrompt);
+    if (!prompt) return [];
+    const warnings: string[] = [];
+    const fields = [
+        ["画面主体", staticFrameField(prompt, "画面主体") || staticFrameField(prompt, "静态关键帧")],
+        ["可见状态", staticFrameField(prompt, "可见状态")],
+        ["可见表演状态", staticFrameField(prompt, "可见表演状态")],
+        ["构图与空间", staticFrameField(prompt, "构图与空间")],
+        ["光色与风格", staticFrameField(prompt, "光色与风格")],
+        ["针对性约束", staticFrameField(prompt, "针对性约束") || staticFrameField(prompt, "负面约束")],
+    ] as const;
+    const normalized = fields.map(([label, value]) => [label, value, normalizeFrameStateForComparison(value)] as const).filter(([, , value]) => value);
+    const subject = normalized.find(([label]) => label === "画面主体");
+    const repeated = normalized.filter(([label, , value]) => label !== "画面主体" && (value === subject?.[2] || (Boolean(subject?.[2]) && subject![2].length >= 8 && value.startsWith(subject![2]))));
+    if (repeated.length) warnings.push("静态提示词的画面主体与其他语义段重复");
+    const duplicateValues = normalized.filter(([, , value], index, values) => values.findIndex((candidate) => candidate[2] === value) !== index);
+    if (duplicateValues.length && !repeated.length) warnings.push("静态提示词在多个语义段重复了相同内容");
+    if (/(?:静态关键帧|可见表演状态|景别|机位与构图|站位与视线|三层空间|负面约束)[：:]/u.test(prompt)) warnings.push("提示词包含旧版静态字段，建议确认是否需要保留");
+    if (/(?:需要移动|沿[^，。；\n]{1,20}移动|目光往返|后退半步|动作节点|触发)/u.test(dramaStaticFramePositiveText(prompt))) warnings.push("静态提示词疑似混入动作过程，应只保留冻结后的可见结果");
+    return [...new Set(warnings)];
 }
 
 export function validateDramaFramePlanVisuals(frames: readonly DramaFrameBeat[]) {
@@ -156,6 +181,15 @@ function staticFrameSubject(imagePrompt: string, actionPrompt: string, fallback:
         .find((line) => line && !/^(?:可见状态|可见表演状态|构图与空间|景别|机位与构图|站位与视线|三层空间|光色与风格|针对性约束|负面约束)[：:]/u.test(line));
     return firstVisibleLine || actionPrompt.trim() || fallback.trim();
 }
+
+function removeRepeatedSubject(value: string, subject: string) {
+    const trimmed = value.trim();
+    const subjectText = subject.trim();
+    if (!trimmed || !subjectText) return trimmed;
+    if (normalizeFrameStateForComparison(trimmed) === normalizeFrameStateForComparison(subjectText)) return "";
+    const prefix = new RegExp(`^${escapeRegExp(subjectText)}[。；;，,、：:\\s]?`, "u");
+    return trimmed.replace(prefix, "").trim();
+}
 function isGenericFrameState(value: string) {
     return /^(?:主体保持进入镜头时的静止姿态|主体的手部或身体姿态已发生可见变化|关键道具或环境出现明确可见变化|主体保持动作完成后的稳定姿态|入口构图已建立|入口姿态、表情与视线已建立|动作入口已成立|动作节点的可见结果已经成立|人物姿态与道具位置清晰可见|手部与道具关系发生可见变化|表情、视线与道具状态同步变化|动作完成后的稳定尾帧|起始状态|动作展开|关键变化|结果状态)$/u.test(
         value.trim(),
@@ -180,6 +214,10 @@ function normalizeFrameStateForComparison(value: string) {
         .replace(/放松|松开/gu, "松")
         .replace(/[^\p{Script=Han}A-Za-z0-9]+/gu, "")
         .trim();
+}
+
+function escapeRegExp(value: string) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function hasVisibleStaticState(value: string) {

@@ -10,6 +10,7 @@ import {
     planDramaVideoSegments,
     updateDramaFrameBeat,
     warnDramaFramePlanVisuals,
+    warnDramaFrameVisualContent,
     validateDramaFramePlanVisuals,
     validateDramaFrameVisualContent,
 } from "./drama-frame-sequence";
@@ -120,6 +121,16 @@ describe("drama frame sequence", () => {
         const prompt = "画面主体：萧炎、纳兰嫣然、萧战\n可见状态：萧炎低头看向桌面，茶盏停在手边\n构图与空间：萧炎在画面右侧，纳兰在左侧，萧战位于北侧首位";
         expect(validateDramaFrameVisualContent(prompt, "萧炎抬眼")).toBeUndefined();
         expect(isCurrentDramaStaticFramePrompt(prompt)).toBe(true);
+    });
+
+    it("warns when a visible-state field repeats the complete subject sentence", () => {
+        const prompt = [
+            "画面主体：三人静立在萧家议事大厅，萧炎位于画面右侧，纳兰嫣然位于画面左侧，萧战坐在北侧首位",
+            "可见状态：三人静立在萧家议事大厅，萧炎位于画面右侧，纳兰嫣然位于画面左侧，萧战坐在北侧首位；萧炎低头看向桌面，茶盏停在手边",
+            "构图与空间：萧炎在右侧，纳兰嫣然在左侧，长桌形成前景遮挡",
+        ].join("\n");
+
+        expect(warnDramaFrameVisualContent(prompt)).toContain("静态提示词的画面主体与其他语义段重复");
     });
 
     it("preserves decimal frame boundaries inside an integer-second shot", () => {

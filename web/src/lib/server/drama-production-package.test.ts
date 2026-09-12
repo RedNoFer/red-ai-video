@@ -443,6 +443,12 @@ describe("production package boundary", () => {
         expect(() => previewDramaProductionPackage(source, "mahadel-episode-01-production-package.md")).toThrow("缺少有效 framePlan");
     });
 
+    it("does not reconstruct a package from legacy Markdown shot tables", () => {
+        const source = ["# 旧制作包", "", "## 四、镜头执行表", "| 镜头 | 时间码 | 画面 |", "| --- | --- | --- |", "| SH01 | 0-15s | 旧静态提示词 |"].join("\\n");
+
+        expect(() => previewDramaProductionPackage(source, "legacy.md")).toThrow("不会从旧镜头表重建制作包");
+    });
+
     it("rejects a package that omits explicit frame beats", () => {
         const source = structuredClone(productionPackage);
         source.episodes[0].shots[0].framePlan = { start: { source: "independent" }, end: { required: true }, frames: [] };

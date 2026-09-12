@@ -178,7 +178,8 @@ export function compileDramaShotPrompts(project: DramaProject, episode: DramaEpi
 }
 
 export function dramaFrameVisibleState(imagePrompt: string, actionPrompt = "") {
-    const candidates = [extractPromptField(imagePrompt, "可见状态"), extractPromptField(imagePrompt, "可见表演状态"), extractPromptField(imagePrompt, "站位与视线"), extractPromptField(imagePrompt, "静态关键帧"), actionPrompt]
+    void actionPrompt;
+    const candidates = [extractPromptField(imagePrompt, "可见状态"), extractPromptField(imagePrompt, "可见表演状态"), extractPromptField(imagePrompt, "站位与视线"), extractPromptField(imagePrompt, "静态关键帧")]
         .map((value) => value.trim())
         .filter(Boolean);
     return candidates.find((value) => !isGenericTimelineState(value)) || candidates[0] || "";

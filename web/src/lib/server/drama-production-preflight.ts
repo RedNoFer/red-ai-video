@@ -1,7 +1,7 @@
 import type { DramaEpisode, DramaProductionPreflight, DramaProductionPreflightIssue, DramaProject, DramaShot } from "@/lib/drama-project-contract";
 import { hasApprovedAssetReference, hasApprovedScenePanoramaReference } from "@/lib/drama-asset-baseline";
 import { continuityStartEvidence } from "@/lib/drama-continuity-policy";
-import { normalizeDramaFrameBeats, validateDramaFramePlanVisuals, validateDramaFrameVisualContent, dramaFrameVisualSubject } from "@/lib/drama-frame-sequence";
+import { dramaFrameVisualSubject, normalizeDramaFrameBeats, validateDramaFramePlanVisuals, validateDramaFrameVisualContent, warnDramaFrameVisualContent } from "@/lib/drama-frame-sequence";
 import { dramaDialogueTimingReminder, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
 import { dramaReferenceImageBudget } from "@/lib/drama-production-plan";
 import { validateDramaPerformanceDetail } from "@/lib/drama-prompt-quality";
@@ -193,6 +193,8 @@ function checkShot(
                 shot.framePlan.frames.forEach((frame, index, frames) => {
                     const visualError = validateDramaFrameVisualContent(frame.imagePrompt, frame.actionPrompt);
                     if (visualError) issues.push(blocking("FRAME_VISUAL_CONTENT", `${label}第${index + 1}帧${visualError}`, { shotId: shot.id, correction: "回到分镜编辑补充当前帧的主体、冻结状态或一项可验收空间结果" }));
+                    for (const visualWarning of warnDramaFrameVisualContent(frame.imagePrompt))
+                        issues.push(warning("FRAME_VISUAL_QUALITY", `${label}第${index + 1}帧${visualWarning}`, { shotId: shot.id, correction: "确认保留原文，或只修改当前帧中已定位的重复/过程性描述" }));
                     if (index > 0 && dramaFrameVisualSubject(frame.imagePrompt) === dramaFrameVisualSubject(frames[index - 1].imagePrompt))
                         issues.push(warning("FRAME_VISUAL_DUPLICATE", `${label}第${index + 1}帧与上一帧的可见画面没有变化`, { shotId: shot.id, correction: "补充当前帧新的姿态、道具状态、表情或环境变化" }));
                     if (shot.storyboardFrameMode === "all_frames") {

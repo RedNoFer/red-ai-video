@@ -4,16 +4,26 @@ import type { DramaProject } from "@/lib/drama-project-contract";
 import { buildDramaFramePromptContext, formatDramaFramePromptContext } from "@/lib/server/drama-frame-prompt-context";
 
 describe("drama frame prompt context", () => {
-    it("shares project rules, NPC policy and neighboring frame facts without private execution data", () => {
+    it("passes only the current frame locator and prompt-edit contract", () => {
         const project = fixture();
         const context = formatDramaFramePromptContext(buildDramaFramePromptContext(project, "episode-one", "shot-one", "frame-two", "当前图片提示词"));
 
-        expect(context).toContain("项目导演定制规则：\n公共场景增加旁听 NPC");
-        expect(context).toContain("NPC 策略：必须按当前镜头实际空间容量");
-        expect(context).toContain("上一帧事实");
-        expect(context).toContain("下一帧事实");
+        expect(context).toContain("当前 imagePrompt：\n当前图片提示词");
+        expect(context).toContain("缺少的段落省略");
+        expect(context).not.toContain("公共场景增加旁听 NPC");
+        expect(context).not.toContain("NPC 策略");
+        expect(context).not.toContain("上一帧事实");
+        expect(context).not.toContain("下一帧事实");
+        expect(context).not.toContain("萧炎抬眼");
         expect(context).not.toContain("project-private-identifier");
         expect(context).not.toContain("https://private.example");
+    });
+
+    it("can omit the current prompt when it is already the user message", () => {
+        const context = formatDramaFramePromptContext(buildDramaFramePromptContext(fixture(), "episode-one", "shot-one", "frame-two", "当前图片提示词"), { includePrompt: false });
+
+        expect(context).toContain("当前 imagePrompt 已在用户消息中提供");
+        expect(context).not.toContain("当前图片提示词");
     });
 });
 

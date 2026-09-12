@@ -168,11 +168,11 @@ export function buildDramaVisualProductionRun(project: DramaProject, episode: Dr
 export function compileDramaVisualStepPrompt(project: DramaProject, episode: DramaEpisode, step: DramaProductionStep) {
     if (step.type === "asset_anchor" && step.assetId && step.assetKind) {
         const asset = project[step.assetKind].find((candidate) => candidate.id === step.assetId);
-        return asset ? compileDramaAssetReferencePrompt(project, asset, step.assetKind === "characters" ? "角色" : step.assetKind === "scenes" ? "场景" : "道具") : step.prompt || "";
+        return asset ? compileDramaAssetReferencePrompt(project, asset, step.assetKind === "characters" ? "角色" : step.assetKind === "scenes" ? "场景" : "道具") : "";
     }
-    if (!step.shotId) return step.prompt || "";
+    if (!step.shotId) return "";
     const shot = episode.shots.find((candidate) => candidate.id === step.shotId);
-    if (!shot) return step.prompt || "";
+    if (!shot) return "";
     const beat = step.type === "keyframe" ? shot.framePlan?.frames?.find((frame) => frame.id === step.frameId || frame.sequenceIndex === step.sequenceIndex) : undefined;
     const prompt = step.type === "end_frame" ? compileDramaFrameSupplierPrompt(project, episode, shot, undefined, "end") : beat ? compileDramaFrameBeatPrompt(project, episode, shot, beat) : compileDramaVisualStartFramePrompt(project, episode, shot);
     return prompt;

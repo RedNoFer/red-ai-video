@@ -6,8 +6,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { approvedAssetReference, approvedScenePanoramaReference } from "@/lib/drama-asset-baseline";
 import { activeFrameEvidence, continuityStartEvidence, createFrameEvidence, latestFrameEvidence, replaceFrameEvidence } from "@/lib/drama-continuity-policy";
-import { deleteDramaFrameBeat, dramaFrameVisualSubject, formatPromptFieldLines, insertDramaFrameBeat, updateDramaFrameBeat, validateDramaFrameVisualContent } from "@/lib/drama-frame-sequence";
-import { appendDramaImageReferenceBindings, compileDramaFrameSupplierPrompt, resolveDramaFrameScene } from "@/lib/drama-prompt-compiler";
+import { deleteDramaFrameBeat, dramaFrameVisualSubject, formatPromptFieldLines, insertDramaFrameBeat, updateDramaFrameBeat, validateDramaFrameVisualContent, warnDramaFrameVisualContent } from "@/lib/drama-frame-sequence";
+import { compileDramaFrameSupplierPrompt, resolveDramaFrameScene } from "@/lib/drama-prompt-compiler";
 import { imagePreviewUrl } from "@/lib/media-image-url";
 import { resolveDramaGlobalVisualContract } from "@/lib/drama-style";
 import { dramaAssetReferences } from "./drama-asset-reference-utils";
@@ -70,7 +70,6 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
     const endFrames = activeFrameEvidence(shot, "storyboard_end");
     const beats = useMemo(() => frameBeats(shot), [shot]);
     const storedFrames = useMemo(() => [...(shot.storyboardFrames || [])].sort((left, right) => left.sequenceIndex - right.sequenceIndex), [shot.storyboardFrames]);
-    const reconciledFramePlan = useMemo(() => reconcileStoredFramePrompts(project, episodeId, shot, beats, storedFrames), [beats, episodeId, project, shot, storedFrames]);
     const frameById = useMemo(() => new Map(storedFrames.map((frame) => [frame.id, frame])), [storedFrames]);
     const generationActive = storedFrames.some(isDramaStoryboardFrameActive) || [shot.storyboardStatus, shot.storyboardEndStatus].some((status) => status === "queued" || status === "running");
     const completedCount = beats.filter((beat) => frameById.get(beat.id)?.status === "success" && frameById.get(beat.id)?.mediaUrl).length;
@@ -82,15 +81,6 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
     const activeFrameRunning = Boolean(activeFrameRecord && [activeFrameRecord.status, activeFrameRecord.candidateStatus].includes("running"));
     const generationError =
         storedFrames.find((frame) => frame.status === "error" || frame.continuityStatus === "needs_review")?.error || storedFrames.find((frame) => frame.candidateError)?.candidateError || shot.storyboardError || shot.storyboardEndError;
-
-    useEffect(() => {
-        if (!reconciledFramePlan) return;
-        updateShot(project.id, episodeId, shot.id, {
-            framePlan: { ...shot.framePlan!, frames: reconciledFramePlan.beats },
-            storyboardFrames: reconciledFramePlan.frames,
-        });
-        void persistProjectNow(project.id);
-    }, [episodeId, persistProjectNow, project.id, reconciledFramePlan, shot.framePlan, shot.id, updateShot]);
 
     const chooseFile = (kind: FrameKind, frameId?: string) => {
         setUploadTarget({ kind, frameId });
@@ -542,10 +532,10 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
     };
 
     const openPromptPreview = (input: PromptPreview) => {
-        const prompt = appendDramaImageReferenceBindings(formatPromptFieldLines(input.prompt, "static"), input.references);
+        const prompt = input.readOnly ? input.prompt.trim() : formatPromptFieldLines(input.prompt, "static");
         setPromptPreview({ ...input, prompt });
-        setPromptDraft(formatPromptFieldLines(prompt, "static"));
-        setPromptOriginal(formatPromptFieldLines(prompt, "static"));
+        setPromptDraft(prompt);
+        setPromptOriginal(prompt);
         setPromptCorrectionDirection("");
     };
 
@@ -555,11 +545,12 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
         if (!current || current.readOnly || !prompt || savingPromptRef.current) return;
         if (current.frameId) {
             const visualError = validateDramaFrameVisualContent(prompt);
-            if (visualError) {
+            const visualWarnings = warnDramaFrameVisualContent(prompt);
+            if (visualError || visualWarnings.length) {
                 const confirmed = await new Promise<boolean>((resolve) => {
                     modal.confirm({
                         title: "提示词存在质量风险，仍然保存？",
-                        content: `${visualError}。保存后会同步更新当前帧的显示提示词和实际执行提示词。`,
+                        content: [visualError, ...visualWarnings].filter(Boolean).join("；") + "。保存后只会更新当前帧的 imagePrompt 原文，不会写入参考图绑定或其他提示词字段。",
                         okText: "仍然保存",
                         cancelText: "返回修改",
                         onOk: () => resolve(true),
@@ -601,8 +592,8 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
             const optimized = current.frameId
                 ? await optimizeDramaProjectFramePrompt({ projectId: project.id, episodeId, shotId: shot.id, frameId: current.frameId, prompt, correctionDirection: promptCorrectionDirection })
                 : await optimizeDramaFramePrompt(prompt, crypto.randomUUID(), resolveDramaGlobalVisualContract(project));
-            setPromptDraft(formatPromptFieldLines(appendDramaImageReferenceBindings(optimized, current.references), "static"));
-            message.success(current.frameId ? "已结合项目、镜头和相邻帧事实生成新提示词，请确认后保存" : "已按 Seedance 2.0 规则生成新的帧提示词，请确认后保存");
+            setPromptDraft(formatPromptFieldLines(optimized, "static"));
+            message.success(current.frameId ? "已按当前 imagePrompt 生成去重建议，请确认后保存" : "已按静态帧规则生成新的帧提示词，请确认后保存");
         } catch (error) {
             message.error(error instanceof Error ? error.message : "帧提示词优化失败");
         } finally {
@@ -637,10 +628,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
         if (current) {
             const continuity = current.references.filter((reference) => reference.id.startsWith("continuity-"));
             const nextReferences = [...continuity, ...nextManual].filter((reference, index, all) => all.findIndex((item) => item.url === reference.url) === index);
-            const nextPrompt = appendDramaImageReferenceBindings(promptDraft, nextReferences);
             setPromptPreview({ ...current, references: nextReferences });
-            setPromptDraft(nextPrompt);
-            setPromptOriginal((original) => appendDramaImageReferenceBindings(original, nextReferences));
         }
         setAssetPickerOpen(false);
         message.success(nextManual.length ? `已手动引用 ${nextManual.length} 张资产图` : "已清空手动引用资产图");
@@ -657,8 +645,6 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
         });
         setManualReferenceDraft(nextManual);
         setPromptPreview({ ...current, references: nextReferences });
-        setPromptDraft((draft) => appendDramaImageReferenceBindings(draft, nextReferences));
-        setPromptOriginal((original) => appendDramaImageReferenceBindings(original, nextReferences));
         message.success(`已移除引用：${reference.label}`);
     };
 
@@ -1282,30 +1268,6 @@ function FrameStatusTag({ frame }: { frame?: DramaStoryboardFrame }) {
 
 function frameBeats(shot: DramaShot): DramaFrameBeat[] {
     return shot.framePlan?.frames?.length ? [...shot.framePlan.frames].sort((left, right) => left.sequenceIndex - right.sequenceIndex) : [];
-}
-
-function reconcileStoredFramePrompts(project: DramaProject, episodeId: string, shot: DramaShot, beats: DramaFrameBeat[], frames: DramaStoryboardFrame[]) {
-    if (!shot.framePlan?.frames.length) return undefined;
-    const episode = project.episodes.find((item) => item.id === episodeId);
-    if (!episode) return undefined;
-    let changedFrom = -1;
-    const nextBeats = beats.map((beat, index) => {
-        if (beat.sequenceIndex <= 1) return beat;
-        const previous = beats.find((item) => item.sequenceIndex === beat.sequenceIndex - 1);
-        const currentPerformance = beat.imagePrompt.match(/(?:^|\n)可见表演状态[：:]([^\n]+)/u)?.[1]?.trim();
-        const previousPerformance = previous?.imagePrompt.match(/(?:^|\n)可见表演状态[：:]([^\n]+)/u)?.[1]?.trim();
-        if (!previous || !currentPerformance || !previousPerformance || currentPerformance !== previousPerformance) return beat;
-        const prompt = formatPromptFieldLines(compileDramaFrameSupplierPrompt(project, episode, shot, beat), "static");
-        if (!prompt || prompt === formatPromptFieldLines(beat.imagePrompt, "static")) return beat;
-        changedFrom = changedFrom < 0 ? index : Math.min(changedFrom, index);
-        return { ...beat, imagePrompt: prompt };
-    });
-    if (changedFrom < 0) return undefined;
-    const staleIds = new Set(nextBeats.slice(changedFrom).map((beat) => beat.id));
-    return {
-        beats: nextBeats,
-        frames: frames.map((frame) => (staleIds.has(frame.id) ? staleFrame(frame) : frame)),
-    };
 }
 
 function findStoryboardFrame(frames: readonly DramaStoryboardFrame[], beat: DramaFrameBeat) {

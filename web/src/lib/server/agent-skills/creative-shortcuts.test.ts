@@ -47,7 +47,8 @@ describe("creative shortcut skills", () => {
 
     it("keeps timeline ownership separate from static-frame content", () => {
         expect(DRAMA_CONTINUOUS_FRAME_RULES).toContain("按真实动作、反应");
-        expect(DRAMA_CONTINUOUS_FRAME_RULES).toContain("imagePrompt 只描述对应冻结画面");
+        expect(DRAMA_CONTINUOUS_FRAME_RULES).toContain("不规定静态图片正文格式");
+        expect(DRAMA_CONTINUOUS_FRAME_RULES).not.toContain("画面主体");
         expect(DRAMA_CONTINUOUS_FRAME_RULES).not.toContain("静态帧不是无动作的氛围图");
     });
 

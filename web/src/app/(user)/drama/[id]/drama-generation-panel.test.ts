@@ -207,7 +207,8 @@ describe("Drama generation production workspace", () => {
         expect(frameEditorSource).toContain("保存提示词");
         expect(frameEditorSource).toContain("generationReferences");
         expect(frameEditorSource).not.toContain("supplierPrompt");
-        expect(frameEditorSource).toContain("appendDramaImageReferenceBindings");
+        expect(frameEditorSource).not.toContain("appendDramaImageReferenceBindings");
+        expect(frameEditorSource).toContain("compileDramaFrameSupplierPrompt");
         expect(frameEditorSource).toContain("resolveDramaFrameScene");
         expect(frameEditorSource).toContain("references: plannedFrameReferences(project, episodeId, shot, beat.sequenceIndex)");
         expect(frameEditorSource).toContain("已绑定 ${promptPreview?.references.length || 0} 张图片");

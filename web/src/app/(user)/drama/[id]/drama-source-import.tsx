@@ -196,7 +196,7 @@ export function DramaSourceImport({ project, onImported }: { project: DramaProje
                         value={packageDraft}
                         onChange={(event) => setPackageDraft(event.target.value)}
                         autoSize={{ minRows: 10, maxRows: 18 }}
-                        placeholder="粘贴制作包文本，支持标准 JSON 或包含导演执行表的 Markdown"
+                        placeholder="粘贴制作包文本，支持标准 JSON 或嵌入标准 JSON 的 Markdown"
                         aria-label="粘贴制作包文本"
                     />
                     <p className="text-xs leading-5 text-muted-foreground">识别后先展示项目参数、资产、剧情场次、导演镜头和警告，不会直接覆盖当前项目。</p>

@@ -2034,7 +2034,7 @@ async function dispatchReadyDramaVisualSteps(userId: string, project: DramaProje
     if (!episode) return run;
     for (const candidate of current.steps) {
         const step = current.steps.find((item) => item.id === candidate.id)!;
-        const prompt = step.prompt || compileDramaVisualStepPrompt(project, episode, step);
+        const prompt = compileDramaVisualStepPrompt(project, episode, step);
         if (step.status !== "ready" || step.taskId || !prompt || !["start_frame", "end_frame", "keyframe", "asset_anchor"].includes(step.type)) continue;
         const continuitySource = step.referenceShotId ? episode.shots.find((shot) => shot.id === step.referenceShotId) : undefined;
         const references = [

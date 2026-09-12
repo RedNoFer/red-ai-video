@@ -1193,7 +1193,7 @@ describe("drama project service updates", () => {
         );
     });
 
-    it("submits the prompt captured in the visual run instead of rebuilding from a stale project", async () => {
+    it("recompiles the current imagePrompt instead of submitting a stale visual-run snapshot", async () => {
         const current = project("2026-07-19T08:00:00.000Z", "项目");
         current.episodes[0].shots = [
             {
@@ -1202,12 +1202,17 @@ describe("drama project service updates", () => {
                 characterIds: [],
                 propIds: [],
                 clueIds: [],
-                imagePrompt: "旧提示词",
+                imagePrompt: "当前镜头静态画面",
                 videoPrompt: "动作",
                 cameraMotion: "固定",
                 duration: 6,
                 storyboardFrameMode: "all_frames",
                 storyboardFrames: [],
+                framePlan: {
+                    start: { source: "independent" },
+                    end: { required: false },
+                    frames: [{ id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 6, actionPrompt: "当前动作", imagePrompt: "当前帧 imagePrompt" }],
+                },
             },
         ] as never;
         const runId = "run-frame-snapshot";
@@ -1232,8 +1237,8 @@ describe("drama project service updates", () => {
         await getLatestDramaProductionRunForUser("user-one", current.id, "episode-one", { scope: "visual", origin: "http://localhost:3010", cookie: "session=test" });
 
         const body = JSON.parse(String(mocks.fetchInternalApi.mock.calls[0]?.[1]?.body));
-        expect(body.prompt).toContain("快照提示词");
-        expect(body.prompt).not.toContain("旧提示词");
+        expect(body.prompt).toContain("当前帧 imagePrompt");
+        expect(body.prompt).not.toContain("快照提示词");
         expect(body.context).toMatchObject({ runId, frameId: "f1" });
     });
 

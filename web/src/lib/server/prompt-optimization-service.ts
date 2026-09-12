@@ -27,7 +27,7 @@ import { DRAMA_PUBLIC_VIDEO_PROMPT_CONTRACT } from "@/lib/drama-public-prompt-co
 
 type PromptOptimizationMode = "agent" | CreativeGenerationMode | "drama-frame" | "drama-asset";
 type NonAssetPromptOptimizationMode = Exclude<PromptOptimizationMode, "drama-asset">;
-type PromptOptimizationInput = { origin: string; cookie: string; userId: string; requestId: string; prompt: string; visualContract?: DramaGlobalVisualContract; dramaFrameContext?: string; correctionDirection?: string };
+type PromptOptimizationInput = { origin: string; cookie: string; userId: string; requestId: string; prompt: string; visualContract?: DramaGlobalVisualContract; correctionDirection?: string };
 
 export class PromptOptimizationError extends Error {
     constructor(
@@ -57,7 +57,7 @@ export async function optimizeCreativePrompt(input: PromptOptimizationInput & { 
                 cookie: input.cookie,
                 candidate,
                 messages: [
-                    { role: "system", content: promptOptimizationInstruction(input.mode, input.prompt, input.visualContract, input.dramaFrameContext, input.correctionDirection) },
+                    { role: "system", content: promptOptimizationInstruction(input.mode, input.prompt, input.visualContract, input.correctionDirection) },
                     { role: "user", content: input.prompt },
                 ],
                 tool: input.mode === "drama-asset" ? dramaAssetPromptOptimizationTool : promptOptimizationTool,
@@ -82,11 +82,11 @@ export async function optimizeCreativePrompt(input: PromptOptimizationInput & { 
     throw new PromptOptimizationError(toSafeGenerationErrorMessage(latestError, "提示词优化失败，请稍后重试"));
 }
 
-function promptOptimizationInstruction(mode: PromptOptimizationMode, prompt = "", visualContract?: DramaGlobalVisualContract, dramaFrameContext = "", correctionDirection = "") {
+function promptOptimizationInstruction(mode: PromptOptimizationMode, prompt = "", visualContract?: DramaGlobalVisualContract, correctionDirection = "") {
     const globalVisualContract = formatDramaGlobalVisualContract(visualContract);
     const globalVisualRule = globalVisualContract ? `\n本项目全局视觉合同（必须保留，不得自行替换）：\n${globalVisualContract}\n` : "";
     if (mode === "drama-frame")
-        return `你是 VOZEB PRO 的静态图片帧提示词编辑器。${globalVisualRule}\n${DRAMA_STATIC_FRAME_DIRECTOR_RULES}\n${dramaFrameContext ? `服务端读取的当前项目事实（只用于核对，不能把内部数据写进公开提示词）：\n${dramaFrameContext}\n` : ""}${correctionDirection ? `本次用户整改方向：\n${correctionDirection}\n` : ""}保留原提示词中的事实，只做编辑器式去重：删除重复、内部执行信息、未来动作、对白/声音和明确冲突，不补写缺失段落，不从 actionPrompt、镜头描述、资产档案或相邻帧推导新画面事实。只返回优化后的公开提示词，不输出解释、Markdown、JSON、ID、URL 或参考绑定。`;
+        return `你是 VOZEB PRO 的静态图片帧提示词编辑器。${DRAMA_STATIC_FRAME_DIRECTOR_RULES}\n当前用户消息中的 imagePrompt 是唯一静态画面事实源；服务端上下文、项目历史、旧制作包、actionPrompt、镜头描述、资产档案和相邻帧都不是补写来源。${correctionDirection ? `本次用户整改方向：\n${correctionDirection}\n` : ""}只做编辑器式去重：删除重复、内部执行信息、未来动作、对白/声音和明确冲突，不补写缺失段落，不把五类可选语义扩写成固定模板。只返回优化后的公开提示词，不输出解释、Markdown、JSON、ID、URL 或参考绑定。`;
     if (mode === "drama-asset") {
         const kind = prompt.match(/资产类型[】：:]\s*(角色|场景|道具)/u)?.[1] || "角色、场景或道具";
         const layout =
