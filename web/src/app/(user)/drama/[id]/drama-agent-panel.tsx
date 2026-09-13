@@ -16,7 +16,7 @@ import { AgentMediaPreview } from "@/components/agent/agent-media-preview";
 import { clipboardImageFiles } from "@/lib/clipboard-image-files";
 import type { CreativeAsset, CreativeConversation, CreativeMessage } from "@/lib/creative-runtime-contract";
 import { CREATIVE_UPLOAD_MAX_BYTES, isCreativeUploadMimeType } from "@/lib/creative-upload";
-import type { DramaAssetReference, DramaEpisode, DramaNamedAsset, DramaProject } from "@/lib/drama-project-contract";
+import type { DramaAssetReference, DramaEpisode, DramaNamedAsset, DramaProject, DramaShot } from "@/lib/drama-project-contract";
 import { imageReferenceLabel } from "@/lib/image-reference-prompt";
 import { useCreativeAgentOptions } from "@/hooks/use-creative-agent-options";
 import {
@@ -1260,12 +1260,38 @@ function emptyAssetProfile() {
 function agentAssetSnapshot(asset: DramaNamedAsset) {
     return {
         id: asset.id,
+        ...(asset.code ? { code: asset.code } : {}),
         name: asset.name,
         description: asset.description,
         profile: asset.profile,
-        primaryReferenceId: asset.primaryReferenceId,
-        referenceImageUrl: asset.referenceImageUrl,
-        ...(asset.sceneReferenceBoard ? { sceneReferenceBoard: asset.sceneReferenceBoard } : {}),
+    };
+}
+
+function agentShotSnapshot(shot: DramaShot) {
+    return {
+        id: shot.id,
+        ...(shot.code ? { code: shot.code } : {}),
+        order: shot.order,
+        title: shot.title,
+        description: shot.description,
+        sourceText: shot.sourceText,
+        shotBoundary: shot.shotBoundary,
+        dialogue: shot.dialogue,
+        narration: shot.narration,
+        utterances: shot.utterances,
+        ...(shot.performancePlan ? { performancePlan: shot.performancePlan } : {}),
+        ...(shot.dialoguePerformance ? { dialoguePerformance: shot.dialoguePerformance } : {}),
+        ...(shot.lightingPlan ? { lightingPlan: shot.lightingPlan } : {}),
+        ...(shot.continuity ? { continuity: shot.continuity } : {}),
+        ...(shot.entryState ? { entryState: shot.entryState } : {}),
+        ...(shot.exitState ? { exitState: shot.exitState } : {}),
+        duration: shot.duration,
+        characterIds: shot.characterIds,
+        propIds: shot.propIds,
+        clueIds: shot.clueIds,
+        ...(shot.sceneId ? { sceneId: shot.sceneId } : {}),
+        ...(shot.videoMode ? { videoMode: shot.videoMode } : {}),
+        ...(shot.storyboardFrameMode ? { storyboardFrameMode: shot.storyboardFrameMode } : {}),
     };
 }
 
@@ -1292,57 +1318,12 @@ function dramaSnapshot(project: DramaProject, episode: DramaEpisode, stage: Dram
         },
         selectedShotId,
         currentTurnReferences: projectReferences.map(({ id, kind, title, alias }) => ({ id, kind, title, alias: `@${alias}` })),
-        sourceAssets: project.sourceAssets?.map((asset) => ({
-            id: asset.id,
-            type: asset.type,
-            title: asset.title,
-            textContent: asset.textContent,
-            serverUrl: asset.serverUrl,
-            remoteUrl: asset.remoteUrl,
-        })),
-        characters: project.characters.map((asset) => ({ ...agentAssetSnapshot(asset), voiceProfile: asset.voiceProfile })),
+        sourceAssets: project.sourceAssets?.map((asset) => ({ id: asset.id, type: asset.type, title: asset.title })),
+        characters: project.characters.map(agentAssetSnapshot),
         scenes: project.scenes.map(agentAssetSnapshot),
         props: project.props.map(agentAssetSnapshot),
         clues: project.clues.map((asset) => ({ ...agentAssetSnapshot(asset), payoff: asset.payoff })),
-        shots: episode.shots.map((shot) => ({
-            id: shot.id,
-            order: shot.order,
-            title: shot.title,
-            description: shot.description,
-            sourceText: shot.sourceText,
-            shotBoundary: shot.shotBoundary,
-            dialogue: shot.dialogue,
-            narration: shot.narration,
-            utterances: shot.utterances,
-            imagePrompt: shot.imagePrompt,
-            videoPrompt: shot.videoPrompt,
-            cameraMotion: shot.cameraMotion,
-            negativePrompt: shot.negativePrompt,
-            continuity: shot.continuity,
-            entryState: shot.entryState,
-            exitState: shot.exitState,
-            framePlan: shot.framePlan,
-            frameEvidence: shot.frameEvidence,
-            duration: shot.duration,
-            characterIds: shot.characterIds,
-            sceneId: shot.sceneId,
-            propIds: shot.propIds,
-            clueIds: shot.clueIds,
-            videoMode: shot.videoMode,
-            storyboardFrameMode: shot.storyboardFrameMode,
-            storyboardStatus: shot.storyboardStatus,
-            storyboardError: shot.storyboardError,
-            storyboardEndStatus: shot.storyboardEndStatus,
-            storyboardEndError: shot.storyboardEndError,
-            generationStatus: shot.generationStatus,
-            generationError: shot.generationError,
-            videoUrl: shot.videoUrl,
-            subtitle: shot.subtitle,
-            audioMode: shot.audioMode,
-            audioStatus: shot.audioStatus,
-            audioError: shot.audioError,
-            audioUrl: shot.audioUrl,
-        })),
+        shots: episode.shots.map(agentShotSnapshot),
     };
 }
 

@@ -89,6 +89,14 @@ describe("Drama project Agent references", () => {
         expect(quickActions).toContain("Dropdown");
         expect(quickActions).not.toContain("overflow-x-auto");
         expect(snapshotSource).not.toContain(".slice(");
+        expect(snapshotSource).not.toContain("imagePrompt");
+        expect(snapshotSource).not.toContain("videoPrompt");
+        expect(snapshotSource).not.toContain("framePlan");
+        expect(snapshotSource).not.toContain("frameEvidence");
+        expect(snapshotSource).not.toContain("referenceImageUrl");
+        expect(snapshotSource).not.toContain("textContent");
+        expect(snapshotSource).not.toContain("serverUrl");
+        expect(snapshotSource).not.toContain("remoteUrl");
     });
 
     it("keeps the project mention picker compact", async () => {
