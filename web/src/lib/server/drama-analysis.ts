@@ -1129,13 +1129,13 @@ export const dramaVisualTool = {
                             additionalProperties: false,
                             required: ["start", "end", "frames"],
                             description:
-                                "Agent 模式先按真实动作节点自适应拆分 2-9 个连续帧段；固定 4/5 帧仅在项目主动选择时执行。framePlan 服务视频时间段，imagePrompt 仅填写当前冻结画面正文并遵守本次静态帧 Skill，不从整镜头或 actionPrompt 复制静态内容。",
+                                "framePlan.frames 只按当前已注入的连续动作帧 Skill 组织真实动作节点；固定帧数仅在项目主动选择后执行。framePlan 服务视频时间段，imagePrompt 仅填写当前冻结画面正文并遵守本次静态帧 Skill，不从整镜头或 actionPrompt 复制静态内容。",
                             properties: {
                                 start: { type: "object", additionalProperties: false, required: ["source"], properties: { source: { type: "string", enum: ["independent", "previous_accepted_actual_tail"] } } },
                                 end: { type: "object", additionalProperties: false, required: ["required"], properties: { required: { type: "boolean" } } },
                                 frames: {
                                     type: "array",
-                                    minItems: 1,
+                                    minItems: 2,
                                     maxItems: 9,
                                     items: {
                                         type: "object",

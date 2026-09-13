@@ -20,7 +20,16 @@ import type {
     DramaStoryScene,
 } from "@/lib/drama-project-contract";
 import { defaultDramaProductionPlan, normalizeDramaProductionPlan } from "@/lib/drama-production-plan";
-import { dramaStaticFramePositiveText, formatPromptFieldLines, normalizeDramaFrameBeats, validateDramaFrameVisualContent, validateDramaFramePlanVisuals, warnDramaFramePlanVisuals, warnDramaFrameVisualContent } from "@/lib/drama-frame-sequence";
+import {
+    dramaStaticFramePositiveText,
+    formatPromptFieldLines,
+    normalizeDramaFrameBeats,
+    validateDramaFrameVisualContent,
+    validateDramaFramePlanVisuals,
+    warnDramaFrameCountUniformity,
+    warnDramaFramePlanVisuals,
+    warnDramaFrameVisualContent,
+} from "@/lib/drama-frame-sequence";
 import { dramaDialogueTimingReminder, dramaFrameDialogueTimingReminder, dramaUtteranceTimingIssues, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
 import { resolveDramaStyleContract } from "@/lib/drama-style";
 import { normalizeDramaCharacterProfile } from "@/lib/drama-character-rules";
@@ -1208,6 +1217,9 @@ function collectWarnings(value: DramaProductionPackageV1) {
             }
         }
     }
+    const plan = value.project.productionBible?.productionPlan;
+    const frameCounts = value.episodes.flatMap((episode) => episode.shots.map((shot) => shot.framePlan?.frames.length || 0));
+    for (const frameWarning of warnDramaFrameCountUniformity(frameCounts, plan?.video.framePolicy)) warnings.push(`全包帧数检查：${frameWarning}`);
     return [...new Set(warnings)];
 }
 

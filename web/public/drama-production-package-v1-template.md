@@ -2,7 +2,7 @@
 
 > 制作包格式：`vozeb-drama-production-package-v1`
 >
-> 模板版本：由 `pnpm compile:skills` 自动生成；规范来源：`drama-video-director@1.2.0`（Skill hash：`297a9f8c19121c15befa87fdbd5718ba68f00e0503aeb7953c4aa25589784433`，制作包规范 hash：`8736241dea9f0a0b56660dc757e603d37cd4ef0d0be6ba0bb0d4fab340ffc4cd`，服务端制作包规则 hash：`01f1c89acfc04c2394f7be53e63fe18568a31790b643610082e52c115bae1ae5`）。
+> 模板版本：由 `pnpm compile:skills` 自动生成；规范来源：`drama-video-director@1.2.0`（Skill hash：`1c5f83e763b485b4b7b7806ef8702e27b78cf8f1999306312a7d58f9cdee1fc9`，制作包规范 hash：`9e713881ef4af5a180d4626079fe3451a456e88a19a38bbdcd5f16f2e3f26b6d`，服务端制作包规则 hash：`8d960659176fb0abd3099096e5e95e6aa5c5d25ba589fcabb93a3fe4e4ca6206`）。
 >
 > 使用约定：本模板是当前 v1 制作包的填写入口。完整制作包必须同时提供可导入的规范对象 JSON；JSON 是导入事实源，下面的章节是面向人工阅读的确定性展示。不要把历史制作包、旧 generationPrompt 或旧分镜正文当作新包模板。
 >
@@ -96,7 +96,7 @@ imagePrompt
 
 其中 `startPrompt`、`actionPrompt`、`transitionPrompt`、`endPrompt` 服务视频时间段；`imagePrompt` 只服务当前冻结的静态画面。每帧从 0 秒连续覆盖当前镜头时长，不能有空白或重叠。
 
-`framePlan.start.source` 只能是 `independent` 或 `previous_accepted_actual_tail`；`framePlan.end.required` 必须是布尔值。`framePlan.referenceManifest` 是参考图职责和顺序的唯一事实源，必须与当前镜头声明的角色、场景、道具和线索绑定；每张参考图只承担一个用途，不把 URL、内部 ID 或绑定信息写入图片正文。`framePolicy` 为 `agent` 时按真实动作节点自适应提供 2–9 帧；选择 `fixed-4` 或 `fixed-5` 时分别提供 4 或 5 帧。
+`framePlan.start.source` 只能是 `independent` 或 `previous_accepted_actual_tail`；`framePlan.end.required` 必须是布尔值。`framePlan.referenceManifest` 是参考图职责和顺序的唯一事实源，必须与当前镜头声明的角色、场景、道具和线索绑定；每张参考图只承担一个用途，不把 URL、内部 ID 或绑定信息写入图片正文。`framePolicy` 为 `agent` 时先识别真实镜头事件，再按不可合并的冻结可见状态自适应提供 2–9 帧；不能按时长、提示词长度、角色数量或参考图数量统一分配。固定策略只在用户明确选择后执行。
 
 ### 静态图片帧规则
 

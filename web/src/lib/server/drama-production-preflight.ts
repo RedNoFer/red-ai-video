@@ -1,7 +1,7 @@
 import type { DramaEpisode, DramaProductionPreflight, DramaProductionPreflightIssue, DramaProject, DramaShot } from "@/lib/drama-project-contract";
 import { hasApprovedAssetReference, hasApprovedScenePanoramaReference } from "@/lib/drama-asset-baseline";
 import { continuityStartEvidence } from "@/lib/drama-continuity-policy";
-import { dramaFrameVisualSubject, normalizeDramaFrameBeats, validateDramaFramePlanVisuals, validateDramaFrameVisualContent, warnDramaFrameVisualContent } from "@/lib/drama-frame-sequence";
+import { dramaFrameVisualSubject, normalizeDramaFrameBeats, validateDramaFramePlanVisuals, validateDramaFrameVisualContent, warnDramaFrameCountUniformity, warnDramaFrameVisualContent } from "@/lib/drama-frame-sequence";
 import { dramaDialogueTimingReminder, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
 import { dramaReferenceImageBudget } from "@/lib/drama-production-plan";
 import { validateDramaPerformanceDetail } from "@/lib/drama-prompt-quality";
@@ -36,6 +36,11 @@ export function preflightDramaProduction(project: DramaProject, episode: DramaEp
     const edgeByTo = new Map((episode.continuityEdges || []).map((edge) => [edge.toShotId, edge]));
 
     for (const shot of episode.shots) if (selected.has(shot.id)) checkShot(shot, episode.code || episode.id, project, characters, scenes, props, clues, edgeByTo, shotById, issues, targetShotDuration, targetFrameCount, targetFrameRange);
+    for (const frameWarning of warnDramaFrameCountUniformity(
+        episode.shots.filter((shot) => selected.has(shot.id)).map((shot) => shot.framePlan?.frames.length || 0),
+        plan?.video.framePolicy,
+    ))
+        issues.push(warning("FRAME_COUNT_PATTERN", `${episode.code || episode.id}${frameWarning}`, { correction: "按每个镜头的可见事件节点重新确认帧数；该提醒不会自动改写帧计划" }));
     for (const edge of episode.continuityEdges || []) {
         if (!selected.has(edge.toShotId)) continue;
         const from = shotById.get(edge.fromShotId);

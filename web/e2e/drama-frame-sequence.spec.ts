@@ -257,19 +257,23 @@ test("drama frame prompt lets users maintain asset references before optimizatio
     await promptEditor.fill(editedPrompt);
     const saveRequest = page.waitForRequest((request) => request.method() === "PATCH" && request.url().includes(`/frames/manual-frame/prompt`));
     await promptDialog.getByRole("button", { name: "保存提示词" }).click();
+    await page.getByRole("button", { name: "仍然保存" }).click();
     await saveRequest;
     await expect(promptDialog).toBeHidden();
 
     await sequence.getByRole("button", { name: "查看完整提示词" }).click();
     await expect(page.getByRole("dialog", { name: "帧 1 图片提示词" }).locator("textarea").last()).toHaveValue(/用户保存后的雨巷画面/);
     const persisted = ((await (await request.get(`/api/drama/projects/${project.id}`)).json()) as { data: { project: DramaProject } }).data.project;
-    expect(persisted.episodes[0].shots[0].framePlan?.frames[0].supplierPrompt).toContain("用户保存后的雨巷画面");
+    const persistedFrame = persisted.episodes[0].shots[0].framePlan?.frames[0];
+    expect(persistedFrame?.imagePrompt).toContain("用户保存后的雨巷画面");
+    expect("supplierPrompt" in (persistedFrame || {})).toBe(false);
 
     await promptDialog.getByRole("button", { name: "提示词优化" }).click();
     await expect(promptDialog.locator("textarea").last()).toHaveValue(/优化后的帧提示词/);
-    expect(optimizationPrompt).toContain("未自动涉及角色");
+    expect(optimizationPrompt).toContain("用户保存后的雨巷画面");
+    expect(optimizationPrompt).not.toContain("未自动涉及角色");
     expect(optimizationPrompt).not.toContain("Agent 多引用角色");
-    expect(optimizationPrompt).toContain("实际参考图绑定");
+    expect(optimizationPrompt).not.toContain("实际参考图绑定");
 });
 
 async function assertVerticalRows(sequence: import("@playwright/test").Locator) {

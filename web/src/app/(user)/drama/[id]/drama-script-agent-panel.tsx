@@ -394,7 +394,7 @@ export function DramaScriptAgentPanel({ project, episode, open, onOpenChange }: 
             </div>
             <Modal title="当前集制作包预览" open={Boolean(packageData)} width={720} centered onCancel={() => setPackageData(undefined)} confirmLoading={applying} okText="导入当前集" cancelText="取消" onOk={() => void confirmApply()}>
                 {packageData ? (
-                    <div className="space-y-3">
+                    <div className="max-h-[calc(100dvh-220px)] space-y-3 overflow-y-auto pr-1">
                         <div className="grid grid-cols-2 gap-px overflow-hidden rounded-md border border-border bg-border sm:grid-cols-4">
                             {[
                                 ["剧集", packageData.preview.summary.episodes],
@@ -423,6 +423,16 @@ export function DramaScriptAgentPanel({ project, episode, open, onOpenChange }: 
                                           ? "5 帧"
                                           : "智能切分"}
                                 </span>
+                            </div>
+                        ) : null}
+                        {packageData.preview.warnings.length ? (
+                            <div className="rounded-md border border-amber-300/70 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-700/70 dark:bg-amber-950/30 dark:text-amber-200" data-testid="drama-package-warnings">
+                                <div className="font-medium">质量提醒（确认后仍保留 Agent 原文，不会自动改写）</div>
+                                <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                                    {packageData.preview.warnings.map((warning) => (
+                                        <li key={warning}>{warning}</li>
+                                    ))}
+                                </ul>
                             </div>
                         ) : null}
                         <pre className="hide-scrollbar max-h-[48vh] overflow-auto whitespace-pre-wrap rounded-md border border-border bg-muted/20 p-3 text-xs leading-5">{packageData.markdown}</pre>

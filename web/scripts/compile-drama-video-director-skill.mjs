@@ -27,6 +27,7 @@ const sections = {
     common: extractSection(body, "共同前置审计"),
     cinematography: extractSection(body, "摄影与画面"),
     performance: extractSection(body, "表演与节奏"),
+    frameAllocation: extractSection(body, "自适应关键帧与镜头事件"),
     staticFrame: extractSection(body, "静态帧适配器"),
     video: extractSection(body, "视频适配器"),
     package: extractSection(body, "制作包适配器"),
@@ -56,9 +57,9 @@ export type DramaDirectorSurface = "package" | "static-frame" | "video" | "exter
 export const DRAMA_VIDEO_DIRECTOR_SKILL = ${JSON.stringify(skill, null, 4)} as const;
 
 const SURFACE_SECTIONS: Record<DramaDirectorSurface, string[]> = {
-    package: ["common", "cinematography", "performance", "package", "gates"],
+    package: ["common", "cinematography", "performance", "frameAllocation", "package", "gates"],
     "static-frame": ["staticFrame"],
-    video: ["common", "cinematography", "performance", "video", "gates"],
+    video: ["common", "cinematography", "performance", "frameAllocation", "video", "gates"],
     "external-codex": ["common", "cinematography", "performance", "package", "staticFrame", "video", "gates", "externalCodex"],
 };
 

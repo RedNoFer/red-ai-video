@@ -9,6 +9,7 @@ import {
     normalizeDramaFrameBeats,
     planDramaVideoSegments,
     updateDramaFrameBeat,
+    warnDramaFrameCountUniformity,
     warnDramaFramePlanVisuals,
     warnDramaFrameVisualContent,
     validateDramaFramePlanVisuals,
@@ -103,6 +104,12 @@ describe("drama frame sequence", () => {
                 { ...beats[1], imagePrompt: second },
             ]),
         ).toEqual(["第 2 帧与上一帧的语义状态接近"]);
+    });
+
+    it("warns when Agent mode mechanically uses one frame count across a package", () => {
+        expect(warnDramaFrameCountUniformity([4, 4, 4], "agent")).toEqual(["Agent 自适应模式下 3 个镜头全部使用 4 帧，疑似机械套用统一帧数；请按各镜头的可见事件节点复核"]);
+        expect(warnDramaFrameCountUniformity([2, 4, 6], "agent")).toEqual([]);
+        expect(warnDramaFrameCountUniformity([4, 4, 4], "fixed-4")).toEqual([]);
     });
 
     it("rejects generic phase labels as the only visible frame state", () => {

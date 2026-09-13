@@ -194,6 +194,24 @@ describe("production package boundary", () => {
         expect(shots.flatMap((shot) => auditDramaShotDirectorQuality(shot as unknown as DramaShot).map((issue) => issue.code))).not.toContain("DIRECTOR_MULTI_MOTION");
     });
 
+    it("warns about a mechanically uniform Agent frame count without changing frames", () => {
+        const source = structuredClone(productionPackage);
+        for (const shot of source.episodes[0].shots) {
+            const first = shot.framePlan.frames[0];
+            const second = shot.framePlan.frames[1];
+            shot.framePlan.frames = [
+                { ...first, startSecond: 0, endSecond: 5, imagePrompt: `${first.imagePrompt}；萧炎手指停在桌沿` },
+                { ...second, id: `${shot.code}-frame-2b`, sequenceIndex: 2, startSecond: 5, endSecond: 10, imagePrompt: `${second.imagePrompt}；萧炎视线移向对手` },
+                { ...second, id: `${shot.code}-frame-3`, sequenceIndex: 3, startSecond: 10, endSecond: 15, imagePrompt: `${second.imagePrompt}；萧炎肩背恢复稳定` },
+            ];
+        }
+
+        const preview = previewDramaProductionPackage(JSON.stringify(source), "package.json");
+
+        expect(preview.package.episodes[0].shots.every((shot) => shot.framePlan.frames.length === 3)).toBe(true);
+        expect(preview.warnings).toEqual(expect.arrayContaining([expect.stringContaining("全部使用 3 帧")]));
+    });
+
     it("preserves explicit top-level start and end frame prompts during package import", () => {
         const preview = previewDramaProductionPackage(JSON.stringify(productionPackage), "package.json");
         expect(preview.package.episodes[0].shots[0].startFramePrompt).toContain("起始姿态已冻结");

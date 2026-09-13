@@ -46,7 +46,7 @@ vi.mock("@/lib/server/agent-run-store", async (importOriginal) => {
     };
 });
 
-import { buildDramaPackageAuthoringInput, executeAgentRun } from "./agent-run-executor";
+import { buildDramaPackageAuthoringInput, buildDramaPackageSkillInstructions, executeAgentRun } from "./agent-run-executor";
 import { processAgentRunReview, taskResultOps } from "./agent-run-execution";
 import { resetTextPlanningRuntime } from "./text-planning-runtime";
 
@@ -173,6 +173,21 @@ describe("executeAgentRun backend settings", () => {
         expect(serialized).not.toContain("旧生成提示词");
         expect(serialized).toContain("本轮文章内容");
         expect(serialized.match(/"name":"角色一"/gu)).toHaveLength(1);
+    });
+
+    it("always injects the canonical package frame rule once", () => {
+        const instructions = buildDramaPackageSkillInstructions(
+            [
+                { id: "drama-video-director", name: "旧配置导演", instructions: "旧规则不应重复注入" },
+                { id: "seedance-director", name: "Seedance 导演", instructions: "连续性规则" },
+            ],
+            "生成制作包",
+            30,
+        );
+
+        expect(instructions.match(/Agent 模式没有默认帧数/gu)).toHaveLength(1);
+        expect(instructions).toContain("不能按镜头时长、提示词长度、角色数量");
+        expect(instructions).not.toContain("旧规则不应重复注入");
     });
 
     it("preserves generated media dimensions in canvas output ops", () => {

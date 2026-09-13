@@ -58,6 +58,11 @@ describe("drama production plan", () => {
         expect(normalizeDramaProductionPlan({ video: { framePolicy: "agent" } })?.video.framePolicy).toBe("agent");
     });
 
+    it("does not infer a fixed frame policy from a legacy frameCount alone", () => {
+        expect(normalizeDramaProductionPlan({ video: { frameCount: 4 } })?.video).toMatchObject({ framePolicy: "agent" });
+        expect(normalizeDramaProductionPlan({ video: { frameCount: 4 } })?.video.frameCount).toBeUndefined();
+    });
+
     it("persists project director rules and clamps the adaptive range", () => {
         const plan = normalizeDramaProductionPlan({ frameCountRange: { min: 1, max: 99 }, customDirectorRules: "公共场景增加旁听 NPC", video: { framePolicy: "agent" } });
 

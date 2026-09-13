@@ -54,6 +54,7 @@ describe("drama analysis contracts", () => {
         expect(dramaVideoPromptTool.parameters.properties.shots.items.properties.videoPrompt.description).not.toContain("按固定字段逐行输出");
         expect(dramaVisualTool.parameters.properties.shots.items.properties.framePlan.description).toContain("imagePrompt 仅填写当前冻结画面正文");
         expect(dramaVisualTool.parameters.properties.shots.items.properties.framePlan.description).not.toContain("眉眼、呼吸、手部关系清晰可见");
+        expect(dramaVisualTool.parameters.properties.shots.items.properties.framePlan.properties.frames.minItems).toBe(2);
         expect(dramaVisualTool.parameters.properties.shots.items.properties.framePlan.properties.frames.items.required).toEqual(expect.arrayContaining(["startPrompt", "actionPrompt", "transitionPrompt", "endPrompt", "imagePrompt"]));
         expect(dramaVideoPromptTool.parameters.properties.shots.items.required).toEqual(expect.arrayContaining(["shotId", "videoPrompt", "framePlan"]));
     });

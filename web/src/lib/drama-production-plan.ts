@@ -76,7 +76,7 @@ export function normalizeDramaProductionPlan(value: unknown, fallback?: DramaPro
     const minImages = Math.min(durationBudget, boundedInteger(referenceInput.minImages, base.references.minImages, 1, 30));
     const configuredMax = boundedInteger(referenceInput.maxImages, base.references.maxImages, minImages, 30);
     const maxImages = Math.min(durationBudget, Math.max(minImages, durationBudget, configuredMax));
-    const framePolicy = normalizeFramePolicy(videoInput.framePolicy, base.video.framePolicy || (Number(videoInput.frameCount) === 4 ? "fixed-4" : Number(videoInput.frameCount) === 5 ? "fixed-5" : "agent"));
+    const framePolicy = normalizeFramePolicy(videoInput.framePolicy, base.video.framePolicy || "agent");
     const frameCountRange = normalizeFrameCountRange(input.frameCountRange ?? videoInput.frameCountRange, base.frameCountRange);
     const visualStyle = typeof visualInput.visualStyle === "string" ? text(visualInput.visualStyle) : base.visual.visualStyle;
     const artStyle = typeof visualInput.artStyle === "string" ? text(visualInput.artStyle) : base.visual.artStyle;

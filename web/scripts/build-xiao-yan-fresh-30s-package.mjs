@@ -47,6 +47,11 @@ function validatePackage(pkg) {
             }
         }
     }
+    const frameCounts = episodes.flatMap((episode) => (Array.isArray(episode.shots) ? episode.shots : []).map((shot) => (Array.isArray(shot.framePlan?.frames) ? shot.framePlan.frames.length : 0)));
+    const framePolicy = pkg.project?.productionBible?.productionPlan?.video?.framePolicy;
+    const validFrameCounts = frameCounts.filter((count) => Number.isInteger(count) && count >= 2 && count <= 9);
+    if (framePolicy === "agent" && validFrameCounts.length >= 2 && new Set(validFrameCounts).size === 1)
+        warnings.push(`全包帧数检查：Agent 自适应模式下 ${validFrameCounts.length} 个镜头全部使用 ${validFrameCounts[0]} 帧，疑似机械套用统一帧数；请按各镜头的可见事件节点复核`);
     return [...new Set(warnings)];
 }
 

@@ -166,6 +166,14 @@ export function warnDramaFramePlanVisuals(frames: readonly DramaFrameBeat[]) {
     return warnings;
 }
 
+/** Agent frame counts are adaptive; a uniform package-wide count is a quality warning, not a rewrite. */
+export function warnDramaFrameCountUniformity(frameCounts: readonly number[], framePolicy?: "fixed-4" | "fixed-5" | "agent") {
+    if (framePolicy !== "agent") return [];
+    const counts = frameCounts.filter((count) => Number.isInteger(count) && count >= 2 && count <= MAX_FRAME_BEATS);
+    if (counts.length < 2 || new Set(counts).size !== 1) return [];
+    return [`Agent 自适应模式下 ${counts.length} 个镜头全部使用 ${counts[0]} 帧，疑似机械套用统一帧数；请按各镜头的可见事件节点复核`];
+}
+
 /** Existing static prompt text is only normalized; it is never upgraded or rebuilt. */
 export function isCurrentDramaStaticFramePrompt(value: string) {
     return !validateDramaFrameVisualContent(value);

@@ -15,4 +15,11 @@ describe("fresh drama package exporter", () => {
         expect(script).not.toContain("SHxx");
         expect(script).not.toContain("2.txt");
     });
+
+    it("reports a uniform Agent frame count without rewriting the package", () => {
+        expect(script).toContain("全包帧数检查：Agent 自适应模式下");
+        expect(script).toContain('framePolicy === "agent"');
+        expect(script).toContain("new Set(validFrameCounts).size === 1");
+        expect(script).toContain('source: "agent-output-only"');
+    });
 });

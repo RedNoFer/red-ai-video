@@ -47,7 +47,6 @@ describe("creative shortcut skills", () => {
 
     it("keeps timeline ownership separate from static-frame content", () => {
         expect(DRAMA_CONTINUOUS_FRAME_RULES).toContain("按真实动作、反应");
-        expect(DRAMA_CONTINUOUS_FRAME_RULES).toContain("不规定静态图片正文格式");
         expect(DRAMA_CONTINUOUS_FRAME_RULES).not.toContain("画面主体");
         expect(DRAMA_CONTINUOUS_FRAME_RULES).not.toContain("静态帧不是无动作的氛围图");
     });
@@ -80,6 +79,12 @@ describe("creative shortcut skills", () => {
         expect(DRAMA_STATIC_FRAME_DIRECTOR_RULES).toContain("五类短段");
         expect(DRAMA_STATIC_FRAME_DIRECTOR_RULES).toContain("不强制九段");
         expect(DRAMA_STATIC_FRAME_DIRECTOR_RULES).not.toContain("参考图职责：");
+    });
+
+    it("injects adaptive frame allocation once through the canonical director layer", () => {
+        expect(DRAMA_PACKAGE_DIRECTOR_RULES.match(/没有默认帧数/gu)).toHaveLength(1);
+        expect(DRAMA_PLANNING_SKILL.instructions).not.toContain("没有默认帧数");
+        expect(DRAMA_CONTINUOUS_FRAME_RULES).toContain("不能按镜头时长、提示词长度、角色数量");
     });
 
     it("keeps the shared video prompt layout", () => {
