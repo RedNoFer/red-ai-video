@@ -2,7 +2,7 @@
 
 > 制作包格式：`vozeb-drama-production-package-v1`
 >
-> 模板版本：由 `pnpm compile:skills` 自动生成；规范来源：`drama-video-director@1.2.0`（Skill hash：`1c5f83e763b485b4b7b7806ef8702e27b78cf8f1999306312a7d58f9cdee1fc9`，制作包规范 hash：`9e713881ef4af5a180d4626079fe3451a456e88a19a38bbdcd5f16f2e3f26b6d`，服务端制作包规则 hash：`8d960659176fb0abd3099096e5e95e6aa5c5d25ba589fcabb93a3fe4e4ca6206`）。
+> 模板版本：由 `pnpm compile:skills` 自动生成；规范来源：`drama-video-director@1.2.0`（Skill hash：`2bb6fb6da8027cd2a8af2fa386064b15201ff47eb57a773a856089b3f5646dbd`，制作包规范 hash：`9e713881ef4af5a180d4626079fe3451a456e88a19a38bbdcd5f16f2e3f26b6d`，服务端制作包规则 hash：`ee49d4efddbb9c08e9db487a609dc26c4e330f7b234242625d228963a1c7960e`）。
 >
 > 使用约定：本模板是当前 v1 制作包的填写入口。完整制作包必须同时提供可导入的规范对象 JSON；JSON 是导入事实源，下面的章节是面向人工阅读的确定性展示。不要把历史制作包、旧 generationPrompt 或旧分镜正文当作新包模板。
 >

@@ -1,6 +1,6 @@
 import { resolveDramaShotDuration } from "@/lib/server/drama-shot-config";
 import { dramaFrameVisualSignature } from "@/lib/drama-frame-sequence";
-import { hasConcreteDramaCameraDirection, isGenericDramaDetail } from "@/lib/drama-prompt-quality";
+import { hasConcreteDramaCameraDirection, isGenericDramaDetail, validateDramaVideoSegmentDetail } from "@/lib/drama-prompt-quality";
 import { dramaFrameDialogueTimingReminder, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
 
 export type DramaAnalyzeBody = {
@@ -267,6 +267,8 @@ export function validateDramaVideoPromptOutput(value: unknown, shotIds: string[]
             ] as const;
             const generic = genericField.find(([, value]) => isGenericDramaDetail(value));
             if (generic) return `镜头 ${shotId} 的第 ${index + 1} 个时间段${generic[0]}过于笼统，必须写出具体人物、道具或环境结果`;
+            const detailErrors = validateDramaVideoSegmentDetail(actionPrompt, transitionPrompt, endPrompt, `镜头 ${shotId} 第 ${index + 1} 个时间段`);
+            if (detailErrors.length) return detailErrors.join("；");
             if (expectedFrames.length && (Math.abs(startSecond - Number(expected.startSecond)) > 0.01 || Math.abs(endSecond - Number(expected.endSecond)) > 0.01))
                 return `镜头 ${shotId} 的第 ${index + 1} 个时间段改变了既有时间边界；请按当前 Skill 保留 ${expected.startSecond}-${expected.endSecond}s`;
             const expectedStart = expectedFrames.length ? Number(expected.startSecond) : startSecond;

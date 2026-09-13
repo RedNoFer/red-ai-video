@@ -15,7 +15,9 @@ const GENERIC_DETAIL_PATTERNS = [
     /^说完保留短暂反应，衔接下一动作$/u,
     /^推动当前镜头行动并回应对手或环境$/u,
 ];
+const WEAK_VIDEO_DETAIL_PATTERNS = [/^保持本镜可见反应$/u, /^保持可读的具体反应$/u, /(?:眉眼|表情|呼吸).*(?:随|根据).*(?:变化|推进|触发).*(?:可见变化)/u, /^(?:准备回应|承受(?:压力)?|情绪(?:逐步)?加剧|保持状态|自然反应)$/u];
 const CONCRETE_CAMERA_PATTERN = /固定机位|推(?:进|近|镜)|拉(?:远|镜)|摇镜|横移|跟拍|滑轨|环绕|吊臂|升降|手持|变焦|俯拍|仰拍|平视|低机位|高机位|中景|近景|特写|远景/u;
+const OBSERVABLE_DRAMA_DETAIL_PATTERN = /眉|眼|目光|视线|嘴角|下颌|呼吸|肩|背|身体|重心|手|指|掌|站|坐|抬|低|转|握|松|触|茶盏|文书|纸|桌|案|地面|水面|光线|影子|门|墙|尘|衣袍|NPC|旁听者|旁观者|人群|族人|执事|开口|说|重音|停顿|语速|语气/u;
 
 export function isGenericDramaDetail(value: unknown) {
     const text = typeof value === "string" ? value.trim() : "";
@@ -66,6 +68,17 @@ export function validateDramaPerformanceDetail(plan: DramaPerformancePlan | unde
 
 export function validateDramaFrameDetail(value: unknown, label: string) {
     return isGenericDramaDetail(value) ? `${label}缺少具体可见动作或状态` : "";
+}
+
+export function validateDramaVideoSegmentDetail(actionPrompt: unknown, transitionPrompt: unknown, endPrompt: unknown, label: string, options: { requiresBackgroundNpc?: boolean } = {}) {
+    const action = typeof actionPrompt === "string" ? actionPrompt.trim() : "";
+    const transition = typeof transitionPrompt === "string" ? transitionPrompt.trim() : "";
+    const end = typeof endPrompt === "string" ? endPrompt.trim() : "";
+    const errors: string[] = [];
+    if (isGenericDramaDetail(action) || WEAK_VIDEO_DETAIL_PATTERNS.some((pattern) => pattern.test(action)) || !OBSERVABLE_DRAMA_DETAIL_PATTERN.test(action)) errors.push(`${label}动作与触发缺少具体可见的表情、视线、呼吸、身体、手部、道具或环境变化`);
+    if (isGenericDramaDetail(end) || WEAK_VIDEO_DETAIL_PATTERNS.some((pattern) => pattern.test(end)) || !OBSERVABLE_DRAMA_DETAIL_PATTERN.test(`${end}${transition}`)) errors.push(`${label}终点缺少具体可验收的人物、道具或环境结果`);
+    if (options.requiresBackgroundNpc && !/(?:NPC|旁听者|旁观者|人群|族人|执事)/u.test(`${action}${transition}${end}`)) errors.push(`${label}要求背景 NPC，但每个时间段没有写出旁听群像的可见反应`);
+    return errors;
 }
 
 export function hasConcreteDramaCameraDirection(value: unknown) {

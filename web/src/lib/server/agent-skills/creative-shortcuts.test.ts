@@ -4,7 +4,6 @@ import { DRAMA_ASSET_IMAGE_SKILL } from "@/lib/drama-image-skill";
 import { DRAMA_PACKAGE_ARCHITECTURE_RULES } from "../drama-production-package-rules";
 import {
     CHARACTER_DESIGN_SKILL,
-    DRAMA_CONTINUOUS_FRAME_RULES,
     DRAMA_EXTERNAL_CODEX_DIRECTOR_RULES,
     DRAMA_PACKAGE_DIRECTOR_RULES,
     DRAMA_PLANNING_SKILL,
@@ -45,12 +44,6 @@ describe("creative shortcut skills", () => {
         expect(DRAMA_PLANNING_SKILL.instructions).toContain("每个镜头至少承担情绪变化、推进动作或增加压力中的一项");
     });
 
-    it("keeps timeline ownership separate from static-frame content", () => {
-        expect(DRAMA_CONTINUOUS_FRAME_RULES).toContain("按真实动作、反应");
-        expect(DRAMA_CONTINUOUS_FRAME_RULES).not.toContain("画面主体");
-        expect(DRAMA_CONTINUOUS_FRAME_RULES).not.toContain("静态帧不是无动作的氛围图");
-    });
-
     it("keeps Seedance reference roles and continuity boundaries", () => {
         expect(SEEDANCE_DIRECTOR_SKILL.instructions).toContain("每张参考图的唯一用途");
         expect(SEEDANCE_DIRECTOR_SKILL.instructions).toContain("已人工验收的实际尾帧");
@@ -84,7 +77,6 @@ describe("creative shortcut skills", () => {
     it("injects adaptive frame allocation once through the canonical director layer", () => {
         expect(DRAMA_PACKAGE_DIRECTOR_RULES.match(/没有默认帧数/gu)).toHaveLength(1);
         expect(DRAMA_PLANNING_SKILL.instructions).not.toContain("没有默认帧数");
-        expect(DRAMA_CONTINUOUS_FRAME_RULES).toContain("不能按镜头时长、提示词长度、角色数量");
     });
 
     it("keeps the shared video prompt layout", () => {
@@ -99,10 +91,10 @@ describe("creative shortcut skills", () => {
     });
 
     it("keeps the production package on the same static source", () => {
-        expect(DRAMA_PACKAGE_ARCHITECTURE_RULES).toContain("imagePrompt 是唯一静态画面事实源");
-        expect(DRAMA_PACKAGE_ARCHITECTURE_RULES).toContain("遵循上方静态帧 Skill");
+        expect(DRAMA_PACKAGE_ARCHITECTURE_RULES).toContain("imagePrompt");
         expect(DRAMA_PACKAGE_ARCHITECTURE_RULES).toContain("referenceManifest");
         expect(DRAMA_PACKAGE_ARCHITECTURE_RULES).not.toContain("静态关键帧写法模板");
+        expect(DRAMA_PACKAGE_ARCHITECTURE_RULES).not.toContain("五类");
     });
 
     it("keeps named non-appearing characters in the package and out of shot bindings", () => {

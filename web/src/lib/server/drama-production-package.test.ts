@@ -313,7 +313,7 @@ describe("production package boundary", () => {
                 "动态意图：Karin压住断剑并锁定城门",
                 "时间段动作：0-7.5s",
                 "起点：Karin站在右侧门框内，手掌压住断剑",
-                "动作与触发：Karin收紧手指，断剑发出金属声",
+                "动作与触发：Karin眉心收紧并压住手指，断剑发出金属声",
                 "可见衔接：视线从断剑转向城门缝隙",
                 "终点：Karin指节压紧断剑",
                 "时间段动作：7.5-15s",
@@ -327,7 +327,7 @@ describe("production package boundary", () => {
             shot.framePlan.frames = shot.framePlan.frames.map((frame, index) => ({
                 ...frame,
                 startPrompt: "Karin站在右侧门框内，手掌压住断剑",
-                actionPrompt: index ? "Karin抬眼锁定城门缝隙，肩背绷直" : "Karin收紧手指，断剑发出金属声",
+                actionPrompt: index ? "Karin抬眼锁定城门缝隙，肩背绷直" : "Karin眉心收紧并压住手指，断剑发出金属声",
                 transitionPrompt: index ? "断剑的金属声消退，视线已经落到城门缝隙" : "视线从断剑转向城门缝隙",
                 endPrompt: index ? "Karin视线锁定城门，肩背绷直" : "Karin指节压紧断剑",
                 imagePrompt: index ? staticPrompt.replace("指节发白，断剑贴在右手掌心", "视线锁定城门缝隙，断剑仍贴在右手掌心").replace("眉心收紧，视线锁定城门缝隙，肩背绷直", "眉心抬起，视线锁定城门缝隙，肩背从前倾转为直立") : staticPrompt,
@@ -344,6 +344,12 @@ describe("production package boundary", () => {
         const source = structuredClone(productionPackage);
         source.episodes[0].shots[0].framePlan.frames[0].imagePrompt = "画面主体：Karin";
         expect(() => previewDramaProductionPackage(JSON.stringify(source), "package.json", undefined, { validateVideoPrompt: true })).toThrow("当前冻结的可见状态");
+    });
+
+    it("rejects missing structured character state in strict Agent package validation", () => {
+        const source = structuredClone(productionPackage);
+        source.episodes[0].shots[0].entryState = { characters: [{ assetId: "C01" }], props: [], environment: "马车内", lighting: "冷白窗光" };
+        expect(() => previewDramaProductionPackage(JSON.stringify(source), "package.json", undefined, { validateVideoPrompt: true })).toThrow("position、gaze、pose 和 action");
     });
 
     it("requires the Agent video prompt to mirror every frame segment in strict generation mode", () => {
@@ -367,7 +373,7 @@ describe("production package boundary", () => {
                 startSecond: 0,
                 endSecond: 7.5,
                 startPrompt: "Karin站在右侧门框内，手掌压住断剑",
-                actionPrompt: "Karin收紧手指，断剑发出金属声",
+                actionPrompt: "Karin眉心收紧并压住手指，断剑发出金属声",
                 transitionPrompt: "视线从断剑转向城门缝隙",
                 endPrompt: "Karin指节压紧断剑",
                 imagePrompt: staticPrompt,
@@ -1041,8 +1047,18 @@ function shot(code: string, order: number, timecode: string, characterCodes: str
         colorPalette: "冷灰",
         transitionOut: "动作切",
         sound: { ambience: "车轮声" },
-        entryState: { characters: [], props: [] },
-        exitState: { characters: [], props: [] },
+        entryState: {
+            characters: characterCodes.map((assetId) => ({ assetId, position: "画面中央", gaze: "看向前方", pose: "站稳", action: "保持当前动作" })),
+            props: [{ assetId: "P01", state: "停在手边", holderId: characterCodes[0] || "environment" }],
+            environment: "马车内",
+            lighting: "冷白窗光",
+        },
+        exitState: {
+            characters: characterCodes.map((assetId) => ({ assetId, position: "画面中央", gaze: "看向前方", pose: "站稳", action: "动作结果成立" })),
+            props: [{ assetId: "P01", state: "仍停在手边", holderId: characterCodes[0] || "environment" }],
+            environment: "马车内",
+            lighting: "冷白窗光",
+        },
         framePlan: {
             start: { source: order === 1 ? "independent" : "previous_accepted_actual_tail" },
             end: { required: true },

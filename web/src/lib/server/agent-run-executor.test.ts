@@ -150,7 +150,6 @@ describe("executeAgentRun backend settings", () => {
             assetReuseContext,
             adjacentEpisodes: [{ id: "episode-two", title: "下一集", outline: "下一集大纲", hook: "下一集钩子", nextPreview: "下一集预告", script: "下一集剧本", imagePrompt: "旧相邻帧", generationPrompt: "旧生成提示词" }],
             selectedSkills: [{ id: "drama-video-director", name: "短剧视频导演" }],
-            skillInstructions: "当前 Skill 指令",
             lockedPlan: { video: { shotDuration: 30 } },
             globalVisualContract: { style: "当前视觉合同" },
             uploadedMaterials: [{ alias: "@附件1", textContent: "本轮文章内容" }],
@@ -188,6 +187,8 @@ describe("executeAgentRun backend settings", () => {
         expect(instructions.match(/Agent 模式没有默认帧数/gu)).toHaveLength(1);
         expect(instructions).toContain("不能按镜头时长、提示词长度、角色数量");
         expect(instructions).not.toContain("旧规则不应重复注入");
+        expect(instructions).not.toContain("连续性规则");
+        expect(instructions.match(/当前短剧制作包唯一导演 Skill/gu)).toHaveLength(1);
     });
 
     it("preserves generated media dimensions in canvas output ops", () => {

@@ -39,12 +39,10 @@ import {
     dramaVideoPromptTimingWarnings,
     type DramaAnalyzeBody,
 } from "@/lib/server/drama-analysis-input";
-import { DRAMA_CONTINUOUS_FRAME_RULES, DRAMA_PLANNING_SKILL } from "@/lib/server/agent-skills/creative-shortcuts";
-import { DRAMA_DIALOGUE_TIMING_RULES, DRAMA_DIALOGUE_TIMING_TOLERANCE_CHARS, estimateDramaDialogueSeconds } from "@/lib/drama-dialogue-timing";
-import { resolveSeedance25DirectorInstructions } from "@/lib/server/agent-skills/seedance-25";
+import { DRAMA_PACKAGE_DIRECTOR_RULES, DRAMA_PLANNING_SKILL, DRAMA_STATIC_FRAME_DIRECTOR_RULES, DRAMA_VIDEO_PROMPT_DIRECTOR_RULES } from "@/lib/server/agent-skills/creative-shortcuts";
+import { DRAMA_DIALOGUE_TIMING_RULES, DRAMA_DIALOGUE_TIMING_TOLERANCE_CHARS } from "@/lib/drama-dialogue-timing";
+import { resolveSeedance25VideoPromptReferences } from "@/lib/server/agent-skills/seedance-25";
 import { buildDramaAnalyzeSchemaInstruction } from "@/lib/server/drama-analyze-prompt";
-import { formatDramaGlobalVisualContract } from "@/lib/drama-style";
-import { DRAMA_PUBLIC_VIDEO_PROMPT_CONTRACT } from "@/lib/drama-public-prompt-contract";
 
 export const runtime = "nodejs";
 
@@ -105,49 +103,18 @@ export async function POST(request: Request) {
                       : { script, summary: dramaAnalysisText(body.summary) };
         const requestId = dramaAnalysisText(body.requestId);
         const videoPromptDuration = videoPromptInput?.payload.shots.reduce((maximum, shot) => Math.max(maximum, shot.duration), 0);
-        const videoPromptSource =
-            phase === "video_prompt"
-                ? (Array.isArray(body.shots) ? body.shots : [])
-                      .map((value: unknown) => {
-                          const shot = value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
-                          return [shot.videoPrompt, shot.executionVideoPrompt, shot.description].map(dramaAnalysisText).filter(Boolean).join("\n");
-                      })
-                      .filter(Boolean)
-                      .join("\n")
-                : "";
-        const seedance25VideoInstructions =
-            phase === "video_prompt" ? resolveSeedance25DirectorInstructions({ prompt: [dramaAnalysisText(body.instruction), videoPromptSource].filter(Boolean).join("\n"), durationSeconds: videoPromptDuration }).instructions : "";
-        const dialogueCapacityInstruction =
-            phase === "video_prompt"
-                ? videoPromptInput!.payload.shots
-                      .flatMap((shot) => {
-                          const utterances = shot.utterances.filter((utterance) => utterance.type === "dialogue" || utterance.type === "voiceover");
-                          const estimate = estimateDramaDialogueSeconds(utterances);
-                          if (!estimate.spokenCharacters) return [];
-                          return [
-                              `镜头 ${shot.id} 的对白容量预检：约 ${estimate.spokenCharacters} 个可发音字，完整说完至少约 ${estimate.minimumSeconds} 秒。任何短于该时长的单个 frame 段都不得放入整句对白；必须保留原话，并按自然分句/反应节点分配到足够长的连续时间段。`,
-                          ];
-                      })
-                      .join("\n")
-                : "";
-        const schemaInstruction = buildDramaAnalyzeSchemaInstruction(phase, tool.parameters, seedance25VideoInstructions);
-        const globalVisualContract = phase === "content" ? "" : formatDramaGlobalVisualContract((visualInput?.payload.project as { visualContract?: Record<string, string> } | undefined)?.visualContract);
-        const globalVisualRule = globalVisualContract ? `\n必须严格遵循当前项目全局视觉合同，不得自选或替换：\n${globalVisualContract}\n` : "";
-        const videoReferenceEntries =
-            phase === "video_prompt"
-                ? Array.isArray(videoPromptInput?.payload.referenceMaterials)
-                    ? videoPromptInput.payload.referenceMaterials.flatMap((value) => {
-                          const reference = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
-                          if (typeof reference.alias !== "string" || !reference.alias.trim()) return [];
-                          const purpose = typeof reference.purpose === "string" ? reference.purpose.trim() : "";
-                          return [`${reference.alias.trim()}${purpose ? `：${purpose}` : ""}`];
-                      })
-                    : []
-                : [];
-        const videoReferenceInstruction = videoReferenceEntries.length ? `本次参考素材绑定清单（必须逐字使用，不能猜测、改名或省略）：${videoReferenceEntries.join("；")}。公开视频的第一段必须写“素材绑定：”，并逐项列出上述 alias 及其唯一职责。` : "";
-        const videoOptimizationIssueEntries = phase === "video_prompt" ? videoPromptInput!.payload.optimizationIssues.map((issue) => `${issue.code}：${issue.message}${issue.correction ? `；建议：${issue.correction}` : ""}`) : [];
-        const videoOptimizationInstruction = videoOptimizationIssueEntries.length
-            ? `本次是对当前镜头提示词的定向优化。请参考以下前置检查结果：${videoOptimizationIssueEntries.join("；")}。其中 warning 是可在提示词中修正的质量建议；blocking 若涉及真实资产、帧图片或连续性状态，不能靠改写提示词伪造通过。任何情况下不得改变已确认的人物、场景、道具、时长、帧数或事实；如果检查与镜头事实冲突，以镜头事实和已绑定资产为准。`
+        const seedance25VideoInstructions = phase === "video_prompt" ? resolveSeedance25VideoPromptReferences({ prompt: dramaAnalysisText(body.instruction), durationSeconds: videoPromptDuration }).instructions : "";
+        const hasTimedDialogue = phase === "video_prompt" && videoPromptInput!.payload.shots.some((shot) => shot.utterances.some((utterance) => utterance.type === "dialogue" || utterance.type === "voiceover"));
+        const dialogueCapacityInstruction = hasTimedDialogue ? "输入 shots.utterances 已提供对白原文、时间边界、停顿和语速；必须以这些当前事实核算每个时间段的可说时长，不要把整句对白压入过短帧段。" : "";
+        const schemaInstruction = buildDramaAnalyzeSchemaInstruction(phase, tool.parameters);
+        const inputProject = (input as { project?: { visualContract?: Record<string, string> } }).project;
+        const hasGlobalVisualContract = Object.values(inputProject?.visualContract || {}).some((value) => Boolean(value?.trim()));
+        const globalVisualInstruction = hasGlobalVisualContract ? "\n必须严格遵循输入 project.visualContract，不得自选、替换或重复抄写该合同。\n" : "";
+        const hasVideoReferences = phase === "video_prompt" && Array.isArray(videoPromptInput?.payload.referenceMaterials) && videoPromptInput.payload.referenceMaterials.length > 0;
+        const videoReferenceInstruction = hasVideoReferences ? "输入 referenceMaterials 已提供本次参考素材的 alias、职责和顺序；公开视频首段必须写出素材绑定，并逐项使用这些 alias，不得猜测、改名或省略。" : "";
+        const hasVideoOptimizationIssues = phase === "video_prompt" && videoPromptInput!.payload.optimizationIssues.length > 0;
+        const videoOptimizationInstruction = hasVideoOptimizationIssues
+            ? "输入 optimizationIssues 是当前镜头的前置检查结果；warning 可以在提示词中修正，blocking 若涉及真实资产、帧图片或连续性状态不能靠改写提示词伪造通过。任何情况下不得改变已确认的人物、场景、道具、时长、帧数或事实。"
             : "";
         const videoPerformanceInstruction =
             phase === "video_prompt"
@@ -159,13 +126,13 @@ export async function POST(request: Request) {
                 role: "system",
                 content:
                     phase === "visual"
-                        ? `你是影视视觉导演和表演导演。输入内容已经由用户审核，必须严格保留每个 shotId、镜头数量、顺序、人物、场景、对白、旁白、原文和时长。为每个镜头补充图片提示词、视频提示词、起始/结束帧提示词、镜头运动、连续性、结构化人物表演计划、逐句对白表演、色彩灯光计划和 framePlan。生成前先根据场景资产完成现实可行的调度：场景有哪些座椅、长凳、地面、通道、门窗、车辆舱位或遮挡；每名实际出镜者在同一参照系下位于哪里、朝向哪里、看向谁或什么、身体如何被支撑、和其他出镜者怎样相对。坐姿必须落在可见的合理支撑面；多人必须写清左右/前后和视线关系；场景 backgroundNpcPolicy 为 auto 时按场景实际需要判断 NPC，required 时写合理数量、分布密度和群体行为结果，forbidden 时不得出现 NPC；NPC 只作为背景群像，不进入 characterCodes 或角色锚点；没有原文、资产或 NPC 策略依据的人物不得新增。表演必须写成可执行的外在行为：情绪目标、情绪起中止递进、眉眼嘴角下颌、视线、呼吸、身体反应、语气、停顿、重音和节奏；禁止只写“表情自然”“情绪丰富”等抽象词。${DRAMA_CONTINUOUS_FRAME_RULES}灯光必须明确色板、色温、主光、补光、轮廓光、反差、材质反射、肤色保护和跨镜继承/过渡。连续性必须明确景别、机位、构图、人物站位、视线、动作起止、屏幕运动方向和轴线规则。镜头之间要保持人物服装、道具、空间、表演状态和光色关系连续。不得新增输入中没有的剧情事实。必须调用 design_drama_visuals。不要使用 Markdown。${globalVisualRule}${schemaInstruction}`
+                        ? `你是影视视觉导演和表演导演。输入内容已经由用户审核，必须严格保留每个 shotId、镜头数量、顺序、人物、场景、对白、旁白、原文和时长。当前制作包只执行一次 canonical drama-video-director Skill；它负责静态画面、视频正文、帧分配、表演、调度、灯光和连续性，输出必须直接写入对应字段，不得让应用层二次拼接。必须调用 design_drama_visuals。不要使用 Markdown。\n${DRAMA_PACKAGE_DIRECTOR_RULES}${globalVisualInstruction}${schemaInstruction}`
                         : phase === "video_prompt"
-                          ? `你是图生视频执行提示词导演。${DRAMA_PUBLIC_VIDEO_PROMPT_CONTRACT}仅根据输入的镜头事实、已验收帧、连续性状态和脱敏 referenceMaterials 执行当前 Seedance 2.5 导演 Skill，直接生成完整公开 videoPrompt；videoPrompt 本身必须包含每个真实时间段的时间范围、起点、动作与触发、可见衔接和终点，framePlan.frames 只作为同一内容的结构化镜像。不得生成图片提示词、改变镜头事实、输出 URL、内部 ID、JSON、Markdown 标题或解释文字。必须调用 generate_drama_video_prompts。${DRAMA_DIALOGUE_TIMING_RULES}优化时必须逐句读取输入 shots.utterances 的 startSecond/endSecond、pauseBeforeSeconds/pauseAfterSeconds、speechRate 和 speechRateCharsPerSecond；对白不能被压进短于其可说时长的时间段，若当前时间段容纳不下，应保留动作节点并把对白放入足够长的连续时间段，不能通过异常加速解决。以下是服务端对白容量预检，必须逐条执行：\n${dialogueCapacityInstruction}${videoPerformanceInstruction}${videoOptimizationInstruction}${globalVisualRule}${videoReferenceInstruction}${schemaInstruction}`
+                          ? `你是图生视频执行提示词导演。本次只执行一次 canonical drama-video-director Skill：\n${DRAMA_VIDEO_PROMPT_DIRECTOR_RULES}${seedance25VideoInstructions ? `\n本次时长与供应商路由补充（只用于当前执行，不输出模式名）：\n${seedance25VideoInstructions}` : ""}仅根据输入的镜头事实、已验收帧、连续性状态和脱敏 referenceMaterials 直接生成完整公开视频提示词；不得生成图片提示词、改变镜头事实、输出 URL、内部 ID、JSON、Markdown 标题或解释文字。必须调用 generate_drama_video_prompts。${DRAMA_DIALOGUE_TIMING_RULES}优化时必须逐句读取输入 shots.utterances 的 startSecond/endSecond、pauseBeforeSeconds/pauseAfterSeconds、speechRate 和 speechRateCharsPerSecond；对白不能被压进短于其可说时长的时间段，若当前时间段容纳不下，应保留动作节点并把对白放入足够长的连续时间段，不能通过异常加速解决。以下是服务端对白容量预检，必须逐条执行：\n${dialogueCapacityInstruction}${videoPerformanceInstruction}${videoOptimizationInstruction}${globalVisualInstruction}${videoReferenceInstruction}${schemaInstruction}`
                           : phase === "image_prompt"
-                            ? `你是静态图片帧提示词编辑器。只优化当前镜头的图片提示词，不改变剧情事实、人物身份、资产造型或镜头数量。${globalVisualRule}保留原文事实，删除重复和内部执行信息，不从 actionPrompt、镜头描述、资产档案或连续性规则补写静态画面。只返回公开提示词，不输出解释、ID、URL、JSON 或参考绑定。${schemaInstruction}`
+                            ? `你是静态图片帧提示词编辑器。本次只执行一次 canonical 静态帧 Skill：\n${DRAMA_STATIC_FRAME_DIRECTOR_RULES}\n只优化当前镜头的图片提示词，不改变剧情事实、人物身份、资产造型或镜头数量。${globalVisualInstruction}保留原文事实，删除重复和内部执行信息，不从 actionPrompt、镜头描述、资产档案或连续性规则补写静态画面。只返回公开提示词，不输出解释、ID、URL、JSON 或参考绑定。${schemaInstruction}`
                             : phase === "review_completion"
-                              ? `你是影视制作审核编辑。只根据输入镜头和剧本中明确存在的事实，补充或按用户要求优化审核字段。可以只返回确实能够判断的字段，不要为了凑齐字段编造内容；必须保留每个返回项的 shotId，并且本次请求的字段必须全部返回，禁止只返回 shotId 或空对象。补充表演目标、情绪递进、语气节奏、呼吸、色彩灯光、连续性、转场、实际首帧和实际尾帧等制作审核信息时，内容必须具体、可执行，并与原文和相邻镜头一致。若输入包含 instruction，必须优先响应其中的修改方向，但不得违反项目事实、固定资产和相邻镜头约束。不得生成 imagePrompt、videoPrompt 或无依据的剧情事实。必须调用 complete_drama_review。不要使用 Markdown。${globalVisualRule}${completionFieldInstruction}${schemaInstruction}`
+                              ? `你是影视制作审核编辑。只根据输入镜头和剧本中明确存在的事实，补充或按用户要求优化审核字段。可以只返回确实能够判断的字段，不要为了凑齐字段编造内容；必须保留每个返回项的 shotId，并且本次请求的字段必须全部返回，禁止只返回 shotId 或空对象。补充表演目标、情绪递进、语气节奏、呼吸、色彩灯光、连续性、转场、实际首帧和实际尾帧等制作审核信息时，内容必须具体、可执行，并与原文和相邻镜头一致。若输入包含 instruction，必须优先响应其中的修改方向，但不得违反项目事实、固定资产和相邻镜头约束。不得生成 imagePrompt、videoPrompt 或无依据的剧情事实。必须调用 complete_drama_review。不要使用 Markdown。${globalVisualInstruction}${completionFieldInstruction}${schemaInstruction}`
                               : `你是影视剧本编辑。只提取剧本明确存在的内容事实和镜头边界，不生成 imagePrompt、videoPrompt、镜头运动或画面风格，不添加无依据的主要情节。当前阶段强制执行短剧策划 Skill：${DRAMA_PLANNING_SKILL.instructions}\n${DRAMA_DIALOGUE_TIMING_RULES}必须先按对白容量和动作节点拆分镜头，再输出结构；若一段对白超出当前镜头可说时长且超过 ${DRAMA_DIALOGUE_TIMING_TOLERANCE_CHARS} 个可发音字容差，建议在自然分句、说话人转换或动作反应处拆成多个镜头，但只做提醒，不得阻止内容结果返回或后续导入。必须逐句保留所有角色直接说出的原话和原文明示的旁白，utterances 按原文顺序列出每一句，禁止把多句台词压缩成“某人说明/表示/询问”的剧情摘要；说话人转换、明确动作反应或场景变化都应成为可审核的镜头边界，sourceText 必须保留对应连续原文。资产字段必须按类型填写：characters 只写人物身份、外貌、发型、服装与人物固定特征；scenes 只写空间结构、陈设、建筑、地面/墙面/水体等环境材质、天气和环境色，并尽量提取可执行的空间拓扑（入口、出口、座位/长凳、床沿、桌面、通道、门窗、隔断、前进方向、可见支撑面及固定左右关系），让后续镜头能判断人物在哪里坐、站、躺、行走和与谁相邻，禁止在场景的 styling/visualIdentity/description 中写人物发型、服装或随身物件；props 只写道具自身形态、材质和用途。缺少事实时留空，不要用其他资产类型的模板补齐。必须调用 analyze_drama_content。不要使用 Markdown。${schemaInstruction}`,
             },
             { role: "user", content: JSON.stringify(input) },

@@ -179,7 +179,13 @@ export function compileDramaShotPrompts(project: DramaProject, episode: DramaEpi
 
 export function dramaFrameVisibleState(imagePrompt: string, actionPrompt = "") {
     void actionPrompt;
-    const candidates = [extractPromptField(imagePrompt, "可见状态"), extractPromptField(imagePrompt, "可见表演状态"), extractPromptField(imagePrompt, "站位与视线"), extractPromptField(imagePrompt, "静态关键帧")]
+    const candidates = [
+        extractPromptField(imagePrompt, "可见状态"),
+        extractPromptField(imagePrompt, "可见表演状态"),
+        extractPromptField(imagePrompt, "构图与空间"),
+        extractPromptField(imagePrompt, "站位与视线"),
+        extractPromptField(imagePrompt, "静态关键帧"),
+    ]
         .map((value) => value.trim())
         .filter(Boolean);
     return candidates.find((value) => !isGenericTimelineState(value)) || candidates[0] || "";
@@ -192,7 +198,7 @@ function isGenericTimelineState(value: string) {
 }
 
 function extractPromptField(value: string, label: string) {
-    const labels = ["画面主体", "静态关键帧", "可见状态", "可见表演状态", "构图与空间", "景别", "机位与构图", "站位与视线", "三层空间", "光色与风格", "针对性约束", "负面约束"];
+    const labels = ["画面主体", "可见状态", "构图与空间", "光色与风格", "针对性约束", "静态关键帧", "可见表演状态", "景别", "机位与构图", "站位与视线", "三层空间", "负面约束"];
     const nextLabels = labels.filter((item) => item !== label).join("|");
     const match = value.match(new RegExp(`(?:^|[\\n；])\\s*${label}[：:]\\s*([\\s\\S]*?)(?=(?:[\\n；]\\s*(?:${nextLabels})[：:]|$))`, "u"));
     return match?.[1]?.trim().replace(/[；。]+$/u, "") || "";

@@ -34,7 +34,7 @@ import { dramaDialogueTimingReminder, dramaFrameDialogueTimingReminder, dramaUtt
 import { resolveDramaStyleContract } from "@/lib/drama-style";
 import { normalizeDramaCharacterProfile } from "@/lib/drama-character-rules";
 import { resolveDramaShotDuration } from "@/lib/server/drama-shot-config";
-import { hasConcreteDramaCameraDirection, isGenericDramaDetail, validateDramaPerformanceDetail } from "@/lib/drama-prompt-quality";
+import { hasConcreteDramaCameraDirection, isGenericDramaDetail, validateDramaPerformanceDetail, validateDramaVideoSegmentDetail } from "@/lib/drama-prompt-quality";
 
 export class DramaProductionPackageError extends Error {}
 
@@ -788,6 +788,9 @@ function normalizePackageShot(value: unknown, index: number, options: { validate
     const characterCodes = strings(shot.characterCodes);
     const propCodes = strings(shot.propCodes);
     const clueCodes = strings(shot.clueCodes);
+    const locationCode = optionalText(shot.locationCode);
+    if (options.validateVideoPrompt) validatePackageStateRequirements(shot.entryState, "入口", characterCodes, propCodes, text(shot.code) || String(index + 1));
+    if (options.validateVideoPrompt) validatePackageStateRequirements(shot.exitState, "出口", characterCodes, propCodes, text(shot.code) || String(index + 1));
     const performanceFallback = defaultPerformancePlan(title, description, actionEnd, utterances.length > 0);
     const lightingFallback = defaultLightingPlan(lighting, colorPalette);
     const performancePlan = mergePerformancePlan(normalizePerformancePlan(shot.performancePlan), performanceFallback);
@@ -817,7 +820,10 @@ function normalizePackageShot(value: unknown, index: number, options: { validate
         frames = frames.map((frame) => ({ ...frame, imagePrompt: formatPromptFieldLines(frame.imagePrompt, "static") }));
         const visualErrors = rawFrames.length ? validateDramaFramePlanVisuals(frames) : [];
         if (visualErrors.length) throw new DramaProductionPackageError(`镜头 ${text(shot.code) || index + 1} 的逐帧画面无效：${visualErrors.join("；")}`);
-        if (options.validateVideoPrompt) validateStrictPackageVideoPrompt(text(shot.videoPrompt), frames, text(shot.code) || String(index + 1));
+        if (options.validateVideoPrompt) {
+            const npcPolicy = locationCode ? options.backgroundNpcPolicyByLocationCode?.get(locationCode) : undefined;
+            validateStrictPackageVideoPrompt(text(shot.videoPrompt), frames, text(shot.code) || String(index + 1), { requiresBackgroundNpc: npcPolicy?.mode === "required" });
+        }
     } catch (error) {
         throw new DramaProductionPackageError(`镜头 ${text(shot.code) || index + 1} 的逐帧计划无效：${error instanceof Error ? error.message : "无法解析"}`);
     }
@@ -853,7 +859,7 @@ function normalizePackageShot(value: unknown, index: number, options: { validate
         characterCodes,
         propCodes,
         clueCodes,
-        locationCode: optionalText(shot.locationCode),
+        locationCode,
         storySceneCode: optionalText(shot.storySceneCode),
         timecode: timecode ? `${timecode[0]}-${timecode[1]}s` : optionalText(shot.timecode),
         dramaticFunction: optionalText(shot.dramaticFunction),
@@ -896,7 +902,12 @@ function normalizeShotStaticPrompt(value: string, label: string) {
     return prompt;
 }
 
-function validateStrictPackageVideoPrompt(prompt: string, frames: ReadonlyArray<{ startSecond: number; endSecond: number; startPrompt?: string; actionPrompt: string; transitionPrompt?: string; endPrompt?: string }>, label: string) {
+function validateStrictPackageVideoPrompt(
+    prompt: string,
+    frames: ReadonlyArray<{ startSecond: number; endSecond: number; startPrompt?: string; actionPrompt: string; transitionPrompt?: string; endPrompt?: string }>,
+    label: string,
+    options: { requiresBackgroundNpc?: boolean } = {},
+) {
     const requiredFields = ["动态意图", "时间段动作", "单一主运镜", "结束画面"];
     const missing = requiredFields.filter((field) => !new RegExp(`(?:^|\\n)\\s*${field}[：:]`, "u").test(prompt));
     if (missing.length) throw new DramaProductionPackageError(`${label}的 Agent videoPrompt 缺少标准字段：${missing.join("、")}`);
@@ -912,6 +923,10 @@ function validateStrictPackageVideoPrompt(prompt: string, frames: ReadonlyArray<
         return new RegExp(range, "iu").test(prompt) && mirroredValues.every((value) => value && prompt.includes(value)) ? [] : [`${frame.startSecond}-${frame.endSecond}s`];
     });
     if (timeline.length) throw new DramaProductionPackageError(`${label}的 Agent videoPrompt 未逐段镜像 framePlan：${timeline.join("、")}`);
+    for (const [index, frame] of frames.entries()) {
+        const detailErrors = validateDramaVideoSegmentDetail(frame.actionPrompt, frame.transitionPrompt, frame.endPrompt, `${label}第 ${index + 1} 个时间段`, options);
+        if (detailErrors.length) throw new DramaProductionPackageError(detailErrors.join("；"));
+    }
 }
 
 function escapeRegExp(value: string) {
@@ -1029,11 +1044,19 @@ function mergeLightingPlan(current: DramaShot["lightingPlan"], fallback: NonNull
 }
 
 function mergeState(current: DramaShot["entryState"], fallback: NonNullable<DramaShot["entryState"]>): NonNullable<DramaShot["entryState"]> {
+    const mergeEntities = (items: NonNullable<DramaShot["entryState"]>["characters"] | undefined, fallbackItems: NonNullable<DramaShot["entryState"]>["characters"]) => {
+        const fallbackByAssetId = new Map(fallbackItems.map((item) => [item.assetId, item]));
+        return (items?.length ? items : fallbackItems).map((item) => ({ ...(fallbackByAssetId.get(item.assetId) || {}), ...item }));
+    };
+    const mergeProps = (items: NonNullable<DramaShot["entryState"]>["props"] | undefined, fallbackItems: NonNullable<DramaShot["entryState"]>["props"]) => {
+        const fallbackByAssetId = new Map(fallbackItems.map((item) => [item.assetId, item]));
+        return (items?.length ? items : fallbackItems).map((item) => ({ ...(fallbackByAssetId.get(item.assetId) || {}), ...item }));
+    };
     return {
         ...fallback,
         ...(current || {}),
-        characters: current?.characters?.length ? current.characters : fallback.characters,
-        props: current?.props?.length ? current.props : fallback.props,
+        characters: mergeEntities(current?.characters, fallback.characters),
+        props: mergeProps(current?.props, fallback.props),
     };
 }
 
@@ -1056,7 +1079,12 @@ function defaultPerformancePlan(title: string, description: string, actionEnd: s
         restraintLevel: "中等克制，避免夸张表演",
         beats: {
             start: { emotion: `进入${focus}时承受压力但保持动作可控`, facialAction: `眉心收紧、下颌收住，表情回应${focus}`, gaze: `视线落向${focus}涉及的当前对象`, bodyAction: `双脚或座面提供支撑，手部停在${focus}相关的受力点` },
-            middle: { emotion: `随着${focus}推进，压抑转为必须回应的紧张`, facialAction: `眉眼和呼吸随${focus}的触发发生可见变化`, gaze: `视线从当前对象转向${focus}带来的关键目标`, bodyAction: `手部或重心对${focus}的触发作出具体响应，并保留反应停顿` },
+            middle: {
+                emotion: `随着${focus}推进，压抑转为必须回应的紧张`,
+                facialAction: `${focus}触发时眉心收紧、嘴角压住，呼吸在开口前停半拍`,
+                gaze: `视线从当前对象转向${focus}带来的关键目标并停住`,
+                bodyAction: `手指压紧受力点，肩背向前收，动作后保留半拍停顿`,
+            },
             end: { emotion: `在${actionEnd}成立时把紧张收束为可继承的决定`, facialAction: `眉眼和嘴角停在${actionEnd}对应的结果表情`, gaze: `视线停在${actionEnd}要求的下一动作目标`, bodyAction: actionEnd },
         },
     };
@@ -1067,14 +1095,14 @@ function defaultDialoguePerformance(utterances: Array<{ id: string; text: string
         .filter((utterance) => utterance.type === "dialogue")
         .map((utterance) => ({
             utteranceId: utterance.id,
-            intent: "推动当前镜头行动并回应对手或环境",
-            tone: "贴合当前情绪，清晰自然",
-            pace: "按语义分句，中速完成",
-            pause: "关键信息前短停，句末自然收束",
-            emphasis: utterance.text,
-            facialReactionBefore: "先以视线和眉眼确认对方或关键道具",
-            facialReactionDuring: "说话时保持与行动一致的面部反应",
-            facialReactionAfter: "说完保留短暂反应，衔接下一动作",
+            intent: `用“${utterance.text.slice(0, 24)}”推进当前冲突并改变对方的可见反应`,
+            tone: "开口前压低下颌，语气清晰克制，关键字加重",
+            pace: "按语义分句中速说出，重音前略放慢",
+            pause: "关键称谓前停半拍，句末留出反应空间",
+            emphasis: `重读“${utterance.text.slice(-12)}”的核心信息`,
+            facialReactionBefore: "先抬眼确认对手，眉心收紧后开口",
+            facialReactionDuring: "说到重音时嘴角压住，视线保持在对手或关键道具",
+            facialReactionAfter: "说完闭口短停，呼气后保留对对手的盯视",
         }));
 }
 
@@ -1311,6 +1339,23 @@ function normalizeState(value: unknown) {
         : undefined;
 }
 
+function validatePackageStateRequirements(value: unknown, boundary: string, characterCodes: string[], propCodes: string[], label: string) {
+    const state = object(value);
+    if (!optionalText(state.environment) || !optionalText(state.lighting)) throw new DramaProductionPackageError(`${label}的${boundary}状态必须包含环境和灯光状态`);
+    const entities = (key: "characters" | "props") => array(state[key]).map(object);
+    const characters = entities("characters");
+    for (const code of characterCodes) {
+        const entity = characters.find((item) => text(item.assetId) === code);
+        if (!entity || !optionalText(entity.position) || !optionalText(entity.gaze) || !optionalText(entity.pose) || !optionalText(entity.action))
+            throw new DramaProductionPackageError(`${label}的${boundary}角色状态必须为 ${code} 写明 position、gaze、pose 和 action`);
+    }
+    const props = entities("props");
+    for (const code of propCodes) {
+        const entity = props.find((item) => text(item.assetId) === code);
+        if (!entity || !optionalText(entity.state) || !optionalText(entity.holderId)) throw new DramaProductionPackageError(`${label}的${boundary}道具状态必须为 ${code} 写明 state 和 holderId`);
+    }
+}
+
 function optionalRecord<T extends Record<string, unknown>>(value: T) {
     return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined && item !== ""));
 }
@@ -1340,196 +1385,6 @@ function directorState(characterCodes: string[], propCodes: string[], environmen
         axis: "保持180度人物关系轴线",
         screenDirection: "角色移动方向沿场景既定动线",
     };
-}
-
-/**
- * Reassembles explicit Agent-created shot fragments into the selected logical
- * shot duration. Only fragments carrying the same `title N/M` group are
- * eligible, so intentional cuts and scene changes remain untouched.
- */
-export function mergeDramaProductionPackageShotDurations(value: DramaProductionPackageV1, targetDuration: 15 | 20 | 30): DramaProductionPackageV1 {
-    return { ...value, episodes: value.episodes.map((episode) => mergeTargetDurationShots(episode, targetDuration)) };
-}
-
-function mergeTargetDurationShots(episode: DramaProductionPackageEpisode, targetDuration: 15 | 20 | 30): DramaProductionPackageEpisode {
-    const groups: DramaProductionPackageEpisode["shots"][] = [];
-    let changed = false;
-    for (let index = 0; index < episode.shots.length;) {
-        const group = explicitDurationGroup(episode.shots, index, targetDuration);
-        if (group.length > 1) {
-            groups.push(group);
-            index += group.length;
-            changed = true;
-        } else {
-            groups.push([episode.shots[index]]);
-            index += 1;
-        }
-    }
-    if (!changed) return episode;
-
-    const merged = groups.map((group) => (group.length === 1 ? group[0] : mergeShotGroup(group)));
-    const codeMap = new Map<string, string>();
-    merged.forEach((shot, index) => {
-        const code = `SH${String(index + 1).padStart(3, "0")}`;
-        const sourceCodes = groups[index].map((item) => item.code);
-        sourceCodes.forEach((sourceCode) => codeMap.set(sourceCode, code));
-    });
-    const shots = merged.map((shot, index) => {
-        const code = `SH${String(index + 1).padStart(3, "0")}`;
-        return {
-            ...shot,
-            code,
-            order: index + 1,
-            framePlan: {
-                ...shot.framePlan,
-                frames: shot.framePlan.frames.map((frame, frameIndex) => ({ ...frame, id: `${code}-F${String(frameIndex + 1).padStart(2, "0")}`, sequenceIndex: frameIndex + 1 })),
-                referenceManifest: shot.framePlan.referenceManifest?.map((item) => ({ ...item, shotId: item.shotId ? codeMap.get(item.shotId) || item.shotId : item.shotId })),
-            },
-        };
-    });
-    const storyScenes = episode.storyScenes.map((scene) => ({ ...scene, shotCodes: dedupeStrings(scene.shotCodes.map((code) => codeMap.get(code) || code)) }));
-    const continuityEdges = dedupeContinuityEdges(
-        episode.continuityEdges.flatMap((edge) => {
-            const fromShotCode = codeMap.get(edge.fromShotCode) || edge.fromShotCode;
-            const toShotCode = codeMap.get(edge.toShotCode) || edge.toShotCode;
-            return fromShotCode === toShotCode ? [] : [{ ...edge, fromShotCode, toShotCode }];
-        }),
-    );
-    return { ...episode, shots, storyScenes, continuityEdges };
-}
-
-function explicitDurationGroup(shots: DramaProductionPackageEpisode["shots"], startIndex: number, targetDuration: 15 | 20 | 30) {
-    const first = splitShotTitle(shots[startIndex]?.title || "");
-    if (!first || first.part !== 1 || first.total < 2) return [];
-    const group = shots.slice(startIndex, startIndex + first.total);
-    if (
-        group.length !== first.total ||
-        group.some((shot, index) => {
-            const parsed = splitShotTitle(shot.title);
-            return parsed?.base !== first.base || parsed.part !== index + 1 || parsed.total !== first.total || shot.storySceneCode !== group[0].storySceneCode || shot.locationCode !== group[0].locationCode;
-        })
-    )
-        return [];
-    const total = group.reduce((sum, shot) => sum + shot.duration, 0);
-    if (total !== targetDuration) return [];
-    const firstTime = parseTimecode(group[0].timecode);
-    let previousEnd = firstTime?.[1] ?? firstTime?.[0] ?? 0;
-    for (let index = 1; index < group.length; index += 1) {
-        const current = parseTimecode(group[index].timecode);
-        if (!current || Math.abs(current[0] - previousEnd) > 0.01) return [];
-        previousEnd = current[1];
-    }
-    return group;
-}
-
-function mergeShotGroup(group: DramaProductionPackageEpisode["shots"]) {
-    const first = group[0];
-    const last = group.at(-1)!;
-    const firstTitle = splitShotTitle(first.title)?.base || first.title;
-    const offsets = group.reduce<number[]>((values, shot, index) => [...values, (values[index - 1] || 0) + (index ? group[index - 1].duration : 0)], []);
-    const mergedFrames = group.flatMap((shot, index) => shot.framePlan.frames.map((frame) => ({ ...frame, startSecond: Number((frame.startSecond + offsets[index]).toFixed(3)), endSecond: Number((frame.endSecond + offsets[index]).toFixed(3)) })));
-    const frames = compactMergedFrames(
-        mergedFrames,
-        group.reduce((sum, shot) => sum + shot.duration, 0),
-    );
-    const references = dedupeReferenceManifest(group.flatMap((shot, index) => (shot.framePlan.referenceManifest || []).filter((item) => index === 0 || item.role !== "previous_actual_tail")));
-    const firstTime = parseTimecode(first.timecode);
-    const lastTime = parseTimecode(last.timecode);
-    const startSecond = firstTime?.[0] ?? 0;
-    const endSecond = lastTime?.[1] ?? startSecond + group.reduce((sum, shot) => sum + shot.duration, 0);
-    return {
-        ...first,
-        title: firstTitle,
-        description: joinTexts(group.map((shot) => shot.description)),
-        sourceText: joinTexts(group.map((shot) => shot.sourceText)),
-        shotBoundary: joinTexts(group.map((shot) => shot.shotBoundary)),
-        dialogue: joinTexts(group.map((shot) => shot.dialogue)),
-        narration: joinTexts(group.map((shot) => shot.narration)),
-        utterances: group.flatMap((shot) => shot.utterances).map((utterance, index) => ({ ...utterance, order: index + 1 })),
-        imagePrompt: first.imagePrompt,
-        videoPrompt: group
-            .map((shot) => shot.videoPrompt.trim())
-            .filter(Boolean)
-            .join("\n"),
-        startFramePrompt: first.startFramePrompt,
-        endFramePrompt: last.endFramePrompt,
-        negativePrompt: joinTexts(group.map((shot) => shot.negativePrompt)),
-        continuity: {
-            ...first.continuity,
-            actionStart: first.continuity?.actionStart || first.description,
-            actionEnd: last.continuity?.actionEnd || last.description,
-            continuityNotes: joinTexts([first.continuity?.continuityNotes, last.continuity?.continuityNotes]),
-        },
-        duration: group.reduce((sum, shot) => sum + shot.duration, 0),
-        characterCodes: dedupeStrings(group.flatMap((shot) => shot.characterCodes)),
-        propCodes: dedupeStrings(group.flatMap((shot) => shot.propCodes)),
-        clueCodes: dedupeStrings(group.flatMap((shot) => shot.clueCodes)),
-        timecode: `${trimSecond(startSecond)}-${trimSecond(endSecond)}s`,
-        dramaticFunction: joinTexts(group.map((shot) => shot.dramaticFunction)),
-        performanceNotes: joinTexts(group.map((shot) => shot.performanceNotes)),
-        transitionIn: first.transitionIn,
-        transitionOut: last.transitionOut,
-        sound: mergeSounds(group.map((shot) => shot.sound)),
-        entryState: first.entryState,
-        exitState: last.exitState,
-        framePlan: { start: first.framePlan.start, end: last.framePlan.end, frames, ...(references.length ? { referenceManifest: references } : {}), ...(first.framePlan.referenceCount ? { referenceCount: first.framePlan.referenceCount } : {}) },
-    } as DramaProductionPackageEpisode["shots"][number];
-}
-
-function compactMergedFrames(frames: DramaProductionPackageEpisode["shots"][number]["framePlan"]["frames"], duration: number) {
-    const unique = frames.filter(
-        (frame, index, all) =>
-            all.findIndex((item) => item.actionPrompt.trim() === frame.actionPrompt.trim() && item.imagePrompt.trim() === frame.imagePrompt.trim() && (item.transitionPrompt || "").trim() === (frame.transitionPrompt || "").trim()) === index,
-    );
-    if (unique.length === frames.length) return frames;
-    const selected = unique.length <= 9 ? unique : Array.from({ length: 9 }, (_, index) => unique[Math.floor((index * unique.length) / 9)]);
-    const partitions = integerPartitions(duration, selected.length);
-    let cursor = 0;
-    return selected.map((frame, index) => ({
-        ...frame,
-        startSecond: cursor,
-        endSecond: (cursor += partitions[index]),
-    }));
-}
-
-function dedupeReferenceManifest(items: NonNullable<DramaProductionPackageEpisode["shots"][number]["framePlan"]["referenceManifest"]>) {
-    const seen = new Set<string>();
-    return items
-        .filter((item) => {
-            const key = `${item.role}|${item.assetId || ""}|${item.shotId || ""}|${item.frameEvidenceId || ""}|${item.purpose || ""}`;
-            if (seen.has(key)) return false;
-            seen.add(key);
-            return true;
-        })
-        .map((item, index) => ({ ...item, alias: `@图片${index + 1}` }));
-}
-
-function mergeSounds(values: Array<DramaProductionPackageEpisode["shots"][number]["sound"]>) {
-    const entries = values.filter(Boolean);
-    if (!entries.length) return undefined;
-    return {
-        ambience: joinTexts(entries.map((sound) => sound?.ambience)),
-        soundEffects: joinTexts(entries.map((sound) => sound?.soundEffects)),
-        music: joinTexts(entries.map((sound) => sound?.music)),
-    };
-}
-
-function joinTexts(values: Array<string | undefined>) {
-    return [...new Set(values.map((value) => value?.trim()).filter(Boolean))].join("；");
-}
-
-function dedupeStrings(values: string[]) {
-    return [...new Set(values.filter(Boolean))];
-}
-
-function dedupeContinuityEdges(edges: DramaProductionPackageEpisode["continuityEdges"]) {
-    const seen = new Set<string>();
-    return edges.filter((edge) => {
-        const key = `${edge.fromShotCode}|${edge.toShotCode}`;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-    });
 }
 
 function validateSplitShotFramePlans(episodes: DramaProductionPackageEpisode[]) {
@@ -1571,13 +1426,4 @@ function inheritCarriedStates<T extends DramaProductionPackageEpisode["shots"][n
             },
         } as T;
     });
-}
-function trimSecond(value: number) {
-    return String(Math.round(value));
-}
-function integerPartitions(total: number, count: number) {
-    const safeTotal = Math.max(count, Math.round(total));
-    const base = Math.floor(safeTotal / count);
-    const remainder = safeTotal - base * count;
-    return Array.from({ length: count }, (_, index) => base + (index < remainder ? 1 : 0));
 }

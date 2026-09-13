@@ -15,15 +15,14 @@ import {
 } from "@/lib/drama-character-rules";
 import { DRAMA_CHARACTER_TURNAROUND_LABEL, DRAMA_CHARACTER_TURNAROUND_LAYOUT, DRAMA_CHARACTER_TURNAROUND_SIZE } from "@/lib/drama-prompt-compiler";
 import type { CreativeGenerationMode } from "@/lib/creative-runtime-contract";
-import { DRAMA_STATIC_FRAME_DIRECTOR_RULES, DRAMA_VIDEO_PROMPT_DIRECTOR_RULES, SEEDANCE_VIDEO_PROMPT_LAYOUT } from "@/lib/server/agent-skills/creative-shortcuts";
-import { inferSeedance25VideoDuration, resolveSeedance25DirectorInstructions } from "@/lib/server/agent-skills/seedance-25";
+import { DRAMA_STATIC_FRAME_DIRECTOR_RULES, SEEDANCE_VIDEO_PROMPT_LAYOUT } from "@/lib/server/agent-skills/creative-shortcuts";
+import { inferSeedance25VideoDuration, resolveSeedance25VideoPromptReferences } from "@/lib/server/agent-skills/seedance-25";
 import { toSafeGenerationErrorMessage } from "@/lib/server/generation-errors";
 import { resolveLogicalModelCandidates } from "@/lib/server/logical-model-router";
 import { hasSystemAiCharge, readSystemAiBilling, systemAiBillingHeaders, systemAiIdempotencyKey } from "@/lib/server/system-ai-billing";
 import { rankTextPlanningCandidates, requestStructuredText } from "@/lib/server/text-planning-runtime";
 import type { DramaAssetPromptOptimization, DramaAssetPromptFields } from "@/lib/drama-project-contract";
 import { formatDramaGlobalVisualContract, type DramaGlobalVisualContract } from "@/lib/drama-style";
-import { DRAMA_PUBLIC_VIDEO_PROMPT_CONTRACT } from "@/lib/drama-public-prompt-contract";
 
 type PromptOptimizationMode = "agent" | CreativeGenerationMode | "drama-frame" | "drama-asset";
 type NonAssetPromptOptimizationMode = Exclude<PromptOptimizationMode, "drama-asset">;
@@ -100,8 +99,8 @@ function promptOptimizationInstruction(mode: PromptOptimizationMode, prompt = ""
     if (mode === "image")
         return `你是 VOZEB PRO 图片提示词编辑器。把用户原文整理为可直接提交的中文图片提示词：先锁定主体与身份锚点，再写当前要改变的内容、构图、光色材质、用途和约束。图片编辑必须分别写 change、preserve、constraints；change 只包含一个已定位变量，preserve 明确保留身份、构图、光线、材质和文字等未修改事实，constraints 写清比例、尺寸、参考图用途和不可出现内容。${globalVisualRule}多张参考图按角色、场景、道具或构图分配唯一用途，禁止按标题或文本相似度猜测。保留用户原文的主体、品牌、数量、尺寸、比例、文字和否定要求，不新增剧情事实或供应商字段。只返回优化后的公开提示词，不解释修改过程，不输出内部规划、模型选择理由或思维链。`;
     if (mode === "video") {
-        const seedance25 = resolveSeedance25DirectorInstructions({ prompt, durationSeconds: inferSeedance25VideoDuration(prompt) });
-        return `你是 VOZEB PRO 视频提示词编辑器。把用户原文改写为可直接发送的中文视频提示词。${DRAMA_PUBLIC_VIDEO_PROMPT_CONTRACT}${globalVisualRule}公开字段固定按动态意图、全局设定、起始可见状态、时间段动作、单一主运镜、环境压力与视觉母题、视觉风格与光色、声音意图、结束画面、连续性锁、针对性约束排列；不另设顶层触发或主体动作与反应字段，动作与触发只写在每个真实时间段内部。你必须在同一条公开 videoPrompt 中直接写出完整可执行内容，包括素材绑定（有素材时）以及每个真实时间段的“起点、动作与触发、可见衔接、终点”和具体时间范围；framePlan 只能作为同一内容的结构化镜像。每段时间连续且上一段终点必须成为下一段起点；不要按每一秒机械切碎。${DRAMA_VIDEO_PROMPT_DIRECTOR_RULES}\n${SEEDANCE_VIDEO_PROMPT_LAYOUT}\n${seedance25.instructions}每个时间段都必须让姿态、表情/视线、手部/道具或环境产生可验证变化；减少“保持构图、主体稳定、情绪不变”等静态约束，只保留身份、空间、道具和轴线等必要连续性。不得输出 A线、B线、主线、副线、钩子等叙事规划标签，必须改写为对应的可见动作、状态或触发。保留用户的主体、人名、品牌、比例、时长、参考素材和否定要求，不新增剧情事实；只返回优化后的公开提示词，不解释修改过程，不输出内部规划、模型选择理由或思维链。`;
+        const seedance25 = resolveSeedance25VideoPromptReferences({ prompt, durationSeconds: inferSeedance25VideoDuration(prompt) });
+        return `你是 VOZEB PRO 视频提示词编辑器。把用户原文改写为可直接发送的中文视频提示词。${SEEDANCE_VIDEO_PROMPT_LAYOUT}${seedance25.instructions ? `\n本次时长与供应商路由补充（只用于当前编辑，不输出模式名）：${seedance25.instructions}` : ""}${globalVisualRule}每个时间段都必须让姿态、表情/视线、呼吸、手部/道具或环境产生可验证变化；不得用“保持状态、情绪加剧、自然反应”等空泛词替代可见结果。不得输出 A线、B线、主线、副线、钩子等叙事规划标签，必须改写为对应的可见动作、状态或触发。保留用户的主体、人名、品牌、比例、时长、参考素材和否定要求，不新增剧情事实；只返回优化后的公开提示词，不解释修改过程，不输出内部规划、模型选择理由或思维链。`;
     }
     const target = mode === "audio" ? "音频" : "创作";
     return `你是 VOZEB PRO 提示词编辑器。把用户原文改写为清晰、紧凑、可直接发送的中文${target}提示词。保留主体、人名、品牌、数量、尺寸、比例、时长、文字内容、参考素材要求和否定要求；不得改变用户意图，不得虚构事实或添加用户没有要求的复杂设定。只返回优化后的公开提示词，不解释修改过程，不输出内部规划、模型选择理由或思维链。`;

@@ -4,8 +4,11 @@ import type { DramaFrameBeat, DramaStoryboardFrame } from "./drama-project-contr
 
 export const MAX_FRAME_BEATS = 9;
 const TIME_EPSILON = 0.001;
-const STATIC_FRAME_PROMPT_LABELS = ["画面主体", "静态关键帧", "可见状态", "可见表演状态", "构图与空间", "景别", "机位与构图", "站位与视线", "三层空间", "光色与风格", "针对性约束", "负面约束"] as const;
-const POSITIVE_STATIC_FRAME_PROMPT_LABELS = STATIC_FRAME_PROMPT_LABELS.filter((label) => label !== "针对性约束" && label !== "负面约束");
+const STATIC_FRAME_PROMPT_LABELS = ["画面主体", "可见状态", "构图与空间", "光色与风格", "针对性约束"] as const;
+// Legacy labels are recognized only so existing text keeps its line boundaries; they are never injected into new prompts.
+const LEGACY_STATIC_FRAME_PROMPT_LABELS = ["静态关键帧", "可见表演状态", "景别", "机位与构图", "站位与视线", "三层空间", "负面约束"] as const;
+const STATIC_FRAME_FIELD_LABELS = [...STATIC_FRAME_PROMPT_LABELS, ...LEGACY_STATIC_FRAME_PROMPT_LABELS];
+const POSITIVE_STATIC_FRAME_PROMPT_LABELS = STATIC_FRAME_FIELD_LABELS.filter((label) => label !== "针对性约束" && label !== "负面约束");
 const VIDEO_PROMPT_LABELS = [
     "素材绑定",
     "动态意图",
@@ -31,7 +34,7 @@ const VIDEO_PROMPT_LABELS = [
 
 /** Normalize existing field boundaries only; static prompt content is never reconstructed or stripped. */
 export function formatPromptFieldLines(value: string, kind: "static" | "video" = "static") {
-    const labels = kind === "video" ? VIDEO_PROMPT_LABELS : STATIC_FRAME_PROMPT_LABELS;
+    const labels = kind === "video" ? VIDEO_PROMPT_LABELS : STATIC_FRAME_FIELD_LABELS;
     const pattern = labels.join("|");
     return value
         .trim()
@@ -74,9 +77,10 @@ export function normalizeDramaFrameBeats(value: readonly DramaFrameBeat[], durat
 
 /** Returns the visible subject that must change from frame to frame. */
 export function dramaFrameVisualSubject(imagePrompt: string, actionPrompt = "", fallback = "") {
-    const subject = staticFrameSubject(imagePrompt, actionPrompt, fallback);
-    const state = imagePrompt.match(/(?:^|\n)可见状态[：:]([^；。\n]+)/u)?.[1] || "";
-    const performanceState = imagePrompt.match(/可见表演状态：([^\n]+)/u)?.[1] || "";
+    const normalizedPrompt = formatPromptFieldLines(imagePrompt);
+    const subject = staticFrameSubject(normalizedPrompt, actionPrompt, fallback);
+    const state = staticFrameField(normalizedPrompt, "可见状态");
+    const performanceState = staticFrameField(normalizedPrompt, "可见表演状态");
     const values = [subject, isGenericFrameState(state) ? "" : state, isGenericPerformanceState(performanceState) ? "" : performanceState].map((value, index) => (index === 0 ? value.trim() : removeRepeatedSubject(value, subject))).filter(Boolean);
     return values.filter((value, index) => values.findIndex((candidate) => normalizeFrameStateForComparison(candidate) === normalizeFrameStateForComparison(value)) === index).join("｜");
 }
@@ -88,7 +92,7 @@ export function dramaFrameVisualSubject(imagePrompt: string, actionPrompt = "", 
  * wording variants, so it does not impose a similarity score on provider art.
  */
 export function dramaFrameVisualSignature(imagePrompt: string) {
-    return ["可见状态", "可见表演状态", "景别", "机位与构图"]
+    return ["可见状态", "可见表演状态", "构图与空间", "景别", "机位与构图"]
         .map((label) => imagePrompt.match(new RegExp(`${label}[：:]([^\\n]+)`, "u"))?.[1] || "")
         .map(normalizeFrameStateForComparison)
         .filter(Boolean)
@@ -311,7 +315,7 @@ function reindex(frames: readonly DramaFrameBeat[]) {
 }
 
 function staticFrameField(prompt: string, label: string) {
-    const labels = STATIC_FRAME_PROMPT_LABELS.join("|");
+    const labels = STATIC_FRAME_FIELD_LABELS.join("|");
     return prompt.match(new RegExp(`(?:^|\\n)${label}[：:]([\\s\\S]*?)(?=\\n(?:${labels})[：:]|$)`, "u"))?.[1]?.trim() || "";
 }
 

@@ -20,7 +20,6 @@ import { dramaDialogueTimingReminder, type DramaDialogueTimingInput } from "@/li
 import { resolveDramaShotDuration } from "@/lib/server/drama-shot-config";
 import { strictJsonObjectText } from "@/lib/server/structured-model-output";
 import { isGenericDramaDetail, validateDramaPerformanceDetail } from "@/lib/drama-prompt-quality";
-import { DRAMA_PUBLIC_VIDEO_PROMPT_CONTRACT } from "@/lib/drama-public-prompt-contract";
 
 export function normalizeDramaContentAnalysis(value: unknown, defaultVideoSeconds: number, sourceScript = ""): DramaContentAnalysis {
     const source = object(value);
@@ -1050,8 +1049,7 @@ export const dramaVisualTool = {
                         imagePrompt: { type: "string" },
                         videoPrompt: {
                             type: "string",
-                            description:
-                                "必须是完整的公开视频提示词，不得只写一句镜头摘要；至少包含动态意图、全局设定、起始可见状态、逐段时间动作、单一主运镜、环境压力与视觉母题、视觉风格与光色、声音意图、结束画面、连续性锁和针对性约束。每个真实帧段的起点、动作与触发、可见衔接、终点必须在此字段中直接写出。",
+                            description: "必须由当前唯一导演 Skill 直接写出完整公开视频提示词；每个真实帧段都要写出时间范围、起点、动作与触发、可见衔接和终点，包含具体人物、道具或环境的可见结果。",
                         },
                         cameraMotion: { type: "string" },
                         startFramePrompt: { type: "string" },
@@ -1187,7 +1185,7 @@ export const dramaVisualTool = {
 
 export const dramaVideoPromptTool = {
     name: "generate_drama_video_prompts",
-    description: `根据已经生成并验收的顺序帧、固定资产和连续性信息，执行当前 Seedance 2.5 导演 Skill，为每个镜头生成符合公开格式的图生视频提示词和逐帧动作计划。${DRAMA_PUBLIC_VIDEO_PROMPT_CONTRACT}`,
+    description: "根据已生成并验收的顺序帧、固定资产和连续性信息，执行当前唯一 drama-video-director Skill，为每个镜头直接生成完整公开 videoPrompt 和逐帧动作计划。",
     parameters: {
         type: "object",
         additionalProperties: false,
@@ -1203,8 +1201,7 @@ export const dramaVideoPromptTool = {
                         shotId: { type: "string" },
                         videoPrompt: {
                             type: "string",
-                            description:
-                                "只返回执行当前 Seedance 2.5 导演 Skill 后的完整公开视频提示词字符串；公开字段固定按素材绑定（有参考图时）、动态意图、全局设定、起始可见状态、时间段动作、单一主运镜、环境压力与视觉母题、视觉风格与光色、声音意图、结束画面、连续性锁、针对性约束逐行输出；不另设顶层触发或主体动作与反应字段，动作与触发只写在每个时间段内部。输入 referenceMaterials 已提供每项的 alias、role、purpose 和顺序，素材绑定必须逐字使用这些 alias，不得自行猜编号；videoPrompt 本身必须逐段写出每个真实时间范围以及起点、动作与触发、可见衔接和终点，具体画面状态必须与 framePlan.frames 一致。framePlan.frames 是同一公开提示词的结构化镜像，不得用它替代 videoPrompt 正文。有 referenceMaterials 时由 Skill 生成素材绑定和对应职责；不得输出模式、内部 ID、URL、JSON 或解释",
+                            description: "由当前唯一导演 Skill 直接生成完整公开 videoPrompt；时间段动作必须逐段镜像 framePlan 的真实时间范围、起点、动作与触发、可见衔接和终点，写出具体人物、道具或环境结果，不输出内部信息。",
                         },
                         framePlan: {
                             type: "object",
@@ -1352,8 +1349,11 @@ export const dramaReviewCompletionTool = {
                                 continuityNotes: { type: "string" },
                             },
                         },
-                        entryState: { type: "object", description: "镜头开始时的可观察状态：每位角色相对座位/长凳/床沿/地面/通道/门窗/道具及其他角色的位置、姿态、支撑或接触、视线和表情/动作，关键道具状态，环境、光色和轴线。" },
-                        exitState: { type: "object", description: "镜头结束时的可观察状态：每位角色相对座位/长凳/床沿/地面/通道/门窗/道具及其他角色的位置、姿态、支撑或接触、视线和表情/动作，关键道具状态，环境、光色和轴线，供下一镜继承。" },
+                        entryState: { type: "object", description: "镜头开始时的可观察状态：characters 每项必须写 assetId、position、gaze、pose、action，必要时补 wardrobe/expression；props 每项必须写 assetId、state、holderId；另写环境、光色和轴线。" },
+                        exitState: {
+                            type: "object",
+                            description: "镜头结束时的可观察状态：characters 每项必须写 assetId、position、gaze、pose、action，必要时补 wardrobe/expression；props 每项必须写 assetId、state、holderId；另写环境、光色和轴线，供下一镜继承。",
+                        },
                         continuityEdge: { type: "object" },
                     },
                 },

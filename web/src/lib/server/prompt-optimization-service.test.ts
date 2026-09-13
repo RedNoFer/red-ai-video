@@ -205,9 +205,9 @@ describe("prompt optimization service", () => {
         expect(systemMessage).toContain("起始可见状态");
         expect(systemMessage).toContain("每个非空字段必须独立一行");
         expect(systemMessage).toContain("每个时间段都必须让姿态");
-        expect(systemMessage).toContain("每个真实时间段逐块写出起点、动作与触发、可见衔接和终点");
-        expect(systemMessage).toContain("每镜只保留一个主运镜");
-        expect(systemMessage).toContain("减少“保持构图、主体稳定、情绪不变”");
+        expect(systemMessage).toContain("每段独立成块，依次写“起点、动作与触发、可见衔接、终点”");
+        expect(systemMessage).toContain("每镜只保留一个有动机的景别/机位/运镜");
+        expect(systemMessage).toContain("不得用“保持状态、情绪加剧、自然反应”等空泛词替代可见结果");
         expect(systemMessage).toContain("模式：30 秒精确时间轴");
     });
 

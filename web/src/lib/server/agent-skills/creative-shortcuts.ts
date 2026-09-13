@@ -7,7 +7,6 @@ export { SEEDANCE_25_DIRECTOR_SKILL } from "./seedance-25";
 export { DRAMA_VIDEO_DIRECTOR_SKILL, resolveDramaDirectorInstructions } from "./drama-video-director";
 
 /** Shared director layer imported from .agents/skills/drama-video-director. */
-export const DRAMA_VIDEO_DIRECTOR_RULES = DRAMA_VIDEO_DIRECTOR_SKILL.instructions;
 export const DRAMA_PACKAGE_DIRECTOR_RULES = resolveDramaDirectorInstructions("package");
 export const DRAMA_STATIC_FRAME_DIRECTOR_RULES = resolveDramaDirectorInstructions("static-frame");
 export const DRAMA_VIDEO_PROMPT_DIRECTOR_RULES = resolveDramaDirectorInstructions("video");
@@ -41,8 +40,6 @@ export const IMAGE_MOTION_SKILL = {
     keywords: ["图片动效", "图生视频", "图片转视频", "动效", "动画", "镜头推进", "首帧"],
     instructions: `以图生视频工作流执行。必须使用用户提供的参考图作为主体和首帧，并先说明每张参考图只控制身份、场景、构图或道具中的哪一项。公开视频 Prompt 按“动态意图、全局设定、起始可见状态、时间段动作、单一主运镜、环境压力与视觉母题、视觉风格与光色、声音意图、结束画面、连续性锁、针对性约束”组织；不另设顶层触发或主体动作字段，动作与触发、准备/受力/结果/恢复和次级反应都写在对应时间段内。只规划一个主要变化，保持人物、商品、场景、构图、色彩和文字位置稳定。动作前先核对场景中的座位、支撑面、通道、门窗和遮挡；人物位置、姿势、手脚接触、人与物距离及多人左右/前后关系必须符合现实，未声明人物不得入画。时长、比例和清晰度遵循用户与服务端配置，不在 Skill 中猜测供应商字段。避免新增人物、改变主体身份、重绘商品 Logo、过度运动、闪烁、瞬移、变形和无叙事理由的场景切换。失败重试只修改一个已定位变量，并保留已经通过验收的参考图与状态。`,
 } as const;
-
-export const DRAMA_CONTINUOUS_FRAME_RULES = DRAMA_VIDEO_DIRECTOR_SKILL.sections.frameAllocation;
 
 export const DRAMA_DIRECTOR_SCENE_RULES = `导演拆镜前置审计：每个场景先明确此刻人物欲望、阻力、空间几何、受控视线和剪辑节奏；每个镜头至少承担情绪变化、推进动作或增加压力中的一项。每个镜头至少落实一个环境压力、一个身体微动作和一个声音/视觉母题，不能只写“电影感”“紧张”或漂亮空镜。先按语速与动作节点核算时长，再完成对白容量、停顿和动作反应的可说时长核算，决定镜头边界、时间段和帧数；必须明确镜头结束时的可见结果，并在重大冲击前保留必要停顿。`;
 

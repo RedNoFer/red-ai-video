@@ -14,6 +14,7 @@ import {
     warnDramaFrameVisualContent,
     validateDramaFramePlanVisuals,
     validateDramaFrameVisualContent,
+    dramaFrameVisualSubject,
 } from "./drama-frame-sequence";
 
 const beats: DramaFrameBeat[] = [
@@ -44,6 +45,10 @@ describe("drama frame sequence", () => {
 
         expect(isCurrentDramaStaticFramePrompt(prompt)).toBe(true);
         expect(isCurrentDramaStaticFramePrompt(prompt.replace("可见状态：指节发白，断剑贴在右手掌心", "可见状态：动作展开"))).toBe(false);
+    });
+
+    it("does not repeat the subject when the visible state starts with the subject", () => {
+        expect(dramaFrameVisualSubject("画面主体：萧炎与纳兰嫣然\n可见状态：萧炎与纳兰嫣然站在长桌两侧；萧炎低头，纳兰看向他\n构图与空间：大厅长桌形成前景框景")).toBe("萧炎与纳兰嫣然｜站在长桌两侧；萧炎低头，纳兰看向他");
     });
 
     it("preserves reference-role text instead of rewriting static prompts", () => {

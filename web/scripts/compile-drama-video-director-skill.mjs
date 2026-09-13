@@ -57,7 +57,7 @@ export type DramaDirectorSurface = "package" | "static-frame" | "video" | "exter
 export const DRAMA_VIDEO_DIRECTOR_SKILL = ${JSON.stringify(skill, null, 4)} as const;
 
 const SURFACE_SECTIONS: Record<DramaDirectorSurface, string[]> = {
-    package: ["common", "cinematography", "performance", "frameAllocation", "package", "gates"],
+    package: ["common", "cinematography", "performance", "frameAllocation", "staticFrame", "video", "package", "gates"],
     "static-frame": ["staticFrame"],
     video: ["common", "cinematography", "performance", "frameAllocation", "video", "gates"],
     "external-codex": ["common", "cinematography", "performance", "package", "staticFrame", "video", "gates", "externalCodex"],
