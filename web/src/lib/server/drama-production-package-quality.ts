@@ -34,6 +34,7 @@ export function validateDramaAuthoringQuality(input: DramaAuthoringQualityInput)
 
     checkLiteraryCompleteness(checks, input.package, sourceText, input.targetNarrativeChapter);
     checkDialogueCoverage(checks, input.package, sourceText);
+    checkDialoguePerformanceQuality(checks, input.package);
     checkPlotFacts(checks, input.package, sourceText);
     checkActionDensity(checks, input.package);
     checkActionDifference(checks, input.package);
@@ -95,6 +96,58 @@ function checkDialogueCoverage(checks: DramaQualityGateCheck[], value: DramaProd
         ? `TXT 显式对白 ${lines.length} 句；文学正文缺失 ${missingLiterary.length} 句；台词/镜头序列缺失 ${missingSequence.length} 句；说话人/时间缺失 ${missingMetadata.length} 句`
         : "TXT 未提取到带引号的显式对白，按无对白素材处理";
     add(checks, "DIALOGUE_COVERAGE", complete, "对白覆盖率", evidence, ["story-source", "currentEpisode.script", "episodes[].shots[].utterances"], "逐句补回 TXT 原对白，并绑定说话人、镜头、时间和表演信息；不得静默遗漏或无授权改写。");
+}
+
+function checkDialoguePerformanceQuality(checks: DramaQualityGateCheck[], value: DramaProductionPackageV1) {
+    const failures: string[] = [];
+    for (const episode of value.episodes) {
+        for (const shot of episode.shots) {
+            const utterances = shot.utterances.filter((utterance) => utterance.type === "dialogue" && utterance.startSecond !== undefined && utterance.endSecond !== undefined);
+            if (!utterances.length) continue;
+            const frames = shot.framePlan?.frames || [];
+            const segmentPerformances = frames.map((frame) => {
+                const segmentText = [frame.actionPrompt, frame.transitionPrompt || "", frame.endPrompt || ""].join("\n");
+                const spoken = utterances.filter((utterance) => Number(utterance.startSecond) < frame.endSecond && Number(utterance.endSecond) > frame.startSecond);
+                return { frame, segmentText, spoken };
+            });
+            const performanceBlocks: string[] = [];
+            for (const { frame, segmentText, spoken } of segmentPerformances) {
+                const label = `${shot.code || shot.title}/${frame.id}`;
+                const performanceMatch = segmentText.match(/对白表演\s*[：:]([^\n]+)/u);
+                if (!performanceMatch) {
+                    if (!spoken.length && frame.startSecond >= Math.max(...utterances.map((utterance) => Number(utterance.endSecond)))) {
+                        const hasSilenceResult = /对白结束|对白后|反应停顿|静默|沉默/u.test(segmentText) && /视线|目光|呼吸|肩|身体|手|指|嘴角|下颌|僵|停住|低头|抬眼/u.test(segmentText);
+                        if (!hasSilenceResult) failures.push(`${label}对白结束后缺少具体静默/反应结果`);
+                    } else failures.push(`${label}缺少对白表演：说话人、语气、停顿、重音、说后反应`);
+                    continue;
+                }
+                const block = performanceMatch[1].trim();
+                performanceBlocks.push(block);
+                const missing = ["说话人", "语气", "停顿", "重音", "说后反应"].filter((field) => !new RegExp(`${field}\\s*[：:]\\s*[^；;\\n]+`, "u").test(block));
+                if (missing.length) failures.push(`${label}对白表演缺少${missing.join("、")}`);
+                if (/随本段|当前冲突信息|接住下一状态|动作触发前后留出|按台词表执行|自然反应|保持状态|情绪加剧|准备回应/u.test(block)) failures.push(`${label}对白表演仍是模板化描述`);
+                const after = block.match(/说后反应\s*[：:]\s*([^；;\n]+)/u)?.[1] || "";
+                if (!after || !/视线|目光|呼吸|肩|身体|手|指|嘴角|下颌|僵|停住|低头|抬眼|前倾|收紧|松开|转向/u.test(after)) failures.push(`${label}说后反应没有落到具体可见结果`);
+                if (spoken.length && !spoken.some((utterance) => block.includes(utterance.speaker))) failures.push(`${label}对白表演没有绑定当前说话人`);
+            }
+            for (let index = 1; index < performanceBlocks.length; index += 1) {
+                if (normalizeQualityText(performanceBlocks[index]) === normalizeQualityText(performanceBlocks[index - 1])) failures.push(`${shot.code || shot.title}相邻对白表演重复，必须随当前台词和动作节点变化`);
+            }
+        }
+    }
+    add(
+        checks,
+        "DIALOGUE_PERFORMANCE",
+        !failures.length,
+        "对白表演质量",
+        failures.length ? failures.slice(0, 8).join("；") : "每个对白时间段均绑定当前说话人，并写出具体语气、停顿、重音和说后可见反应",
+        ["episodes[].shots[].videoPrompt", "episodes[].shots[].framePlan.frames[]", "episodes[].shots[].utterances"],
+        "按当前台词和时间段重写具体表演；对白结束段改为明确的呼吸、视线、身体或道具静默结果，禁止复制模板句。",
+    );
+}
+
+function normalizeQualityText(value: string) {
+    return value.replace(/[，。；：、,.!?！？\s]+/gu, "").trim();
 }
 
 function checkPlotFacts(checks: DramaQualityGateCheck[], value: DramaProductionPackageV1, sourceText: string) {

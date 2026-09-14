@@ -33,6 +33,7 @@ contract:
   hardGateCodes:
     - LITERARY_SCRIPT_COMPLETENESS
     - DIALOGUE_COVERAGE
+    - DIALOGUE_PERFORMANCE
     - PLOT_FACT_COVERAGE
     - ACTION_DENSITY
     - ACTION_DIFFERENCE
@@ -58,7 +59,7 @@ contract:
 
 ## Agent 运行时规则
 
-- 制作包只能由 `executeDramaScriptRun` 组织；Agent 先返回 `mode=package` 的完整 authoring draft，服务端通过全部质量门禁后，才从规范对象确定性序列化 JSON/Markdown。
+- 制作包只能由 `executeDramaScriptRun` 组织；Agent 必须在返回 `mode=package` 草案前完成一次内部导演自检，逐镜补齐具体的表演、对白、动作、NPC、运镜、镜头事件和实际场景细节。草案若未通过门禁，执行器必须把具体失败项作为当前 authoring revision feedback 回传同一生成渠道，要求返回完整修订草案；未通过的中间草案不得展示给用户、写入当前集或进入导入流程。只有通过门禁的草案才从规范对象确定性序列化 JSON/Markdown。
 - `package-template` 只规定 13 个一级章节、字段顺序和字段职责；`story-source` 只规定当前目标小说章节的剧情事实；`reference` 只规定素材职责。三类 authoring source 必须保留 alias、role、顺序和内容哈希。
 - 目标小说章节使用 `targetNarrativeChapter` 单独记录；它是剧情素材范围，不得与制作包一级章节编号混用。当前集必须提供完整文学剧本、场次、镜头和可执行结果，不能只返回摘要或镜头概述。
 - 镜头规范对象必须分别填写 `dramaticFunction`、`performancePlan`、`lightingPlan`、`continuity`、`entryState`、`exitState`、`videoPrompt` 和 `framePlan`；`framePlan.start.source`、`framePlan.end.required`、`framePlan.referenceManifest`、每个帧段的 `imagePrompt` 及其时间/动作/静态状态必须可校验。
@@ -67,7 +68,7 @@ contract:
 - `SEC01`—`SEC13` 只允许出现在 `archive.sections`；任何章节对象混入 `episodes[].shots` 都是伪镜头。兼容导入可以忽略并给出二次确认警告，Agent 严格生成和正式剧本导入必须阻断。
 - 场景的 `backgroundNpcPolicy` 只描述无名背景群像；背景 NPC 不进入 characterCodes。required 场景的数量、前中后景分布和可见反应必须落到受影响的关键帧或视频时间段。
 - `videoPrompt` 和 `framePlan` 都由 Agent 直接生成；应用层不得从模板、旧包、历史提示词、动作字段或帧计划重建、补写、删改公开视频正文。未经声明的内部切镜、未绑定道具或未声明角色不得出现。
-- Agent authoring draft 的硬门禁代码来自版本化契约；至少包括文学剧本完整性、对白覆盖率、剧情事实覆盖率、动作密度/差异、情绪递进、NPC 反应变化、运镜动机、镜头事件、时间轴、素材绑定、连续性和 provenance。任一 blocker 都不得标记完成或写入正式制作包。
+- Agent authoring draft 的硬门禁代码来自版本化契约；至少包括文学剧本完整性、对白覆盖率、对白表演质量、剧情事实覆盖率、动作密度/差异、情绪递进、NPC 反应变化、运镜动机、镜头事件、时间轴、素材绑定、连续性和 provenance。任一 blocker 都必须先进入 authoring revision，不得把失败草案标记完成或写入正式制作包。
 
 ## 固定章节顺序
 
@@ -99,7 +100,7 @@ contract:
 
 - 项目、资产、场次、镜头、声音与连续性进入可执行生产数据。
 - 每个镜头的完整公开 `videoPrompt` 必须由 Agent 直接生成：除动态意图、主运镜、环境/声音母题和结束状态外，还必须直接写出每个真实时间段的时间范围、起点、动作与触发、可见衔接和终点。`framePlan.frames` 只保存同一内容的结构化镜像，运行时和第十一章不得从它拼接或改写 `videoPrompt`。
-- Agent authoring draft 进入最终序列化前必须通过严格质量门禁：相邻时间段有真实动作差异，起始/中段/结束形成情绪递进，required NPC 反应随主事件发生变化，主运镜有具体可见动机，内部切镜具备完整“镜头事件”并与 framePlan 边界一致。手工或历史包导入仍按兼容门禁处理，但不得伪装成 Agent 正式生成结果。
+- Agent authoring draft 进入最终序列化前必须通过严格质量门禁：相邻时间段有真实动作差异，起始/中段/结束形成情绪递进，required NPC 反应随主事件发生变化，主运镜有具体可见动机，内部切镜具备完整“镜头事件”并与 framePlan 边界一致；有对白的每个时间段必须绑定当前说话人、具体语气/停顿/重音/说后反应，相邻段不得复制同一表演块，对白结束段必须写具体静默或反应结果。门禁用于生成阶段的内部返工，不得让用户先收到半成品再在导入时失败；手工或历史包导入仍按兼容门禁处理，但不得伪装成 Agent 正式生成结果。
 - 公开视频 Prompt 的公开字段固定按“素材绑定（有素材时）→ 动态意图 → 全局设定 → 起始可见状态 → 时间段动作 → 单一主运镜 → 环境压力与视觉母题 → 视觉风格与光色 → 声音意图 → 结束画面 → 连续性锁 → 针对性约束”排列；不再使用顶层“触发”或“主体动作与反应”，准备、触发、接触/受力、结果、恢复和主体反应统一写入每个时间段内部的“动作与触发”。
 - `单一主运镜` 必须先声明“镜头模式：连续镜头”或“镜头模式：内部切镜（N次）”。多帧或多个时间段不自动等于切镜；连续镜头只允许一个连续主运镜，内部切镜必须在对应“可见衔接”中写出带时间、类型、触发事件、新机位、信息目的和承接的“镜头事件”，且时间必须落在 framePlan 段起点。机位/景别、固定/运动方式、方向或起止关系及唯一可见目的仍需写清；“中轴推进”“电影感”等单独短语不算可执行机位。`素材绑定`、`propCodes` 与正文道具事实必须一致：没有绑定的道具不能写入环境母题、动作、结果或结尾。
 - 镜头级 `imagePrompt`、`startFramePrompt` 和 `endFramePrompt` 只描述单一静态画面，包含主体身份、当前可见姿态/表情/视线、道具或环境状态、景别、构图、光线与必要约束；不得写运镜、焦段、时间段、动作过程、对白或声音。生成前必须先由场景资产推演可用座位、长凳、地面、通道、门窗、隔断与遮挡；人物的姿态必须有合理支撑，人与物接触、动作路径及多人关系必须符合该空间，不能为突出人物把其摆在不合场景常理的位置，也不得新增原文或资产未声明的人物。图片编辑请求统一使用 `change / preserve / constraints`，其中 `change` 每次只允许一个已定位变量。

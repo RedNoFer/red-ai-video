@@ -6,7 +6,7 @@ import { validateDramaAuthoringQuality } from "@/lib/server/drama-production-pac
 
 const source = (textContent: string): DramaAuthoringSourceSnapshot => ({ alias: "@TXT", role: "story-source", type: "text", title: "3.txt", contentHash: "a".repeat(64), textContent });
 
-function packageValue(input: { script?: string; videoPrompt?: string; actions?: string[]; npcPolicy?: boolean; sourceRange?: string } = {}) {
+function packageValue(input: { script?: string; videoPrompt?: string; actions?: string[]; npcPolicy?: boolean; sourceRange?: string; dialogue?: boolean } = {}) {
     const actions = input.actions || ["萧炎抬眼，右手指节压住桌沿", "萧炎肩背直起，视线从萧战回到纳兰"];
     const frames = actions.map((action, index) => ({
         id: `F${index + 1}`,
@@ -25,7 +25,9 @@ function packageValue(input: { script?: string; videoPrompt?: string; actions?: 
         cameraMotion: "中景平视固定机位，沿中央长桌轴线缓慢推进，为了让观众看见萧炎从承受到质问的重心变化",
         videoPrompt: input.videoPrompt || "镜头模式：连续镜头\n单一主运镜：中景平视固定机位沿中央长桌轴线缓慢推进，为了让观众看见萧炎抬眼质问纳兰。\n时间段动作：0-15秒，起点萧炎低头；动作与触发萧炎抬眼并压住桌沿；可见衔接指节受力；终点萧炎抬眼。15-30秒，起点承接；动作与触发肩背直起并回看纳兰；可见衔接萧战前倾；终点萧炎直视纳兰。",
         dialogue: "",
-        utterances: [],
+        utterances: input.dialogue
+            ? [{ id: "u1", order: 1, type: "dialogue" as const, speaker: "萧炎", text: "纳兰小姐，你来了。", startSecond: 1, endSecond: 8 }]
+            : [],
         performancePlan: {
             emotionalObjective: "把私人难堪转成家族颜面质问",
             emotionalArc: "低头承受→抬眼施压→直视逼问",
@@ -66,6 +68,20 @@ describe("drama authoring quality gates", () => {
     it("blocks missing TXT dialogue from both literary and timed dialogue coverage", () => {
         const report = validateDramaAuthoringQuality({ package: packageValue({ script: "场景：议事大厅。萧炎说：“纳兰小姐，你来了。”他抬眼看向对方。萧战按住茶盏。", }), sources: [source("第3章。\n“纳兰小姐，你来了。”\n“我不会退让。”")], targetNarrativeChapter: 3 });
         expect(blockers(report, "DIALOGUE_COVERAGE")).not.toHaveLength(0);
+    });
+
+    it("does not expose a package until dialogue performance is concrete and segment-specific", () => {
+        const prompt = "镜头模式：连续镜头\n单一主运镜：中景平视沿长桌缓慢推进，为了让观众看见萧炎抬眼质问纳兰。";
+        const report = validateDramaAuthoringQuality({
+            package: packageValue({
+                dialogue: true,
+                videoPrompt: prompt,
+            }),
+            sources: [source("第3章。场景在议事大厅。萧炎抬眼。\n“纳兰小姐，你来了。”")],
+            targetNarrativeChapter: 3,
+        });
+        expect(report.status).toBe("blocked");
+        expect(blockers(report, "DIALOGUE_PERFORMANCE")).not.toHaveLength(0);
     });
 
     it("blocks a package that omits an explicit plot fact", () => {
