@@ -17,13 +17,10 @@ type ModelRequestPolicyConfig = {
 };
 
 export function resolveModelRequestTimeoutMs(config: ModelRequestPolicyConfig | undefined, capability: LogicalModelCapability) {
-    if (capability === "text") return TEXT_MODEL_REQUEST_TIMEOUT_MS;
     const configured = Math.floor(Number(config?.capabilityProfile?.timeoutMs));
-    if (!Number.isFinite(configured) || configured <= 0) {
-        if (capability === "image" && config?.advancedConfig?.protocol === "sub2api" && !config.advancedConfig.queryPath?.trim()) return MAX_REQUEST_TIMEOUT_MS;
-        return DEFAULT_MODEL_REQUEST_TIMEOUT_MS[capability];
-    }
-    return Math.max(MIN_REQUEST_TIMEOUT_MS, Math.min(MAX_REQUEST_TIMEOUT_MS, configured));
+    if (Number.isFinite(configured) && configured > 0) return Math.max(MIN_REQUEST_TIMEOUT_MS, Math.min(MAX_REQUEST_TIMEOUT_MS, configured));
+    if (capability === "image" && config?.advancedConfig?.protocol === "sub2api" && !config.advancedConfig.queryPath?.trim()) return MAX_REQUEST_TIMEOUT_MS;
+    return DEFAULT_MODEL_REQUEST_TIMEOUT_MS[capability];
 }
 
 export function resolveModelPollingAttempts(config: ModelRequestPolicyConfig | undefined, capability: LogicalModelCapability, intervalMs: number, minimumAttempts: number) {

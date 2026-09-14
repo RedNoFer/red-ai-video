@@ -175,6 +175,7 @@ export type DramaBackgroundNpcPolicy = {
     mode: "auto" | "required" | "forbidden";
     guidance?: string;
     continuity?: string;
+    countRange?: { min: number; max: number };
 };
 
 export type DramaAssetPromptFields = {
@@ -862,6 +863,80 @@ export type DramaProductionPackageEpisode = {
     continuityEdges: Array<Omit<DramaContinuityEdge, "fromShotId" | "toShotId"> & { fromShotCode: string; toShotCode: string }>;
 };
 
+export type DramaProductionPackageAuthoringMaterial = {
+    alias: string;
+    role: "package-template" | "story-source" | "reference";
+    type: "text" | "image" | "video" | "audio";
+    title: string;
+    contentHash: string;
+};
+
+export type DramaAuthoringProvider = "project-gpt" | "codex-work-order";
+export type DramaAuthoringDraft = { mode: "package"; reply: string; markdown: string };
+
+export type DramaQualityGateCheck = {
+    code: string;
+    severity: "blocker" | "warning";
+    scope: string;
+    evidence: string;
+    sourceRefs: string[];
+    fixHint: string;
+};
+
+export type DramaQualityGateReport = {
+    status: "passed" | "blocked";
+    checks: DramaQualityGateCheck[];
+};
+
+export type DramaProductionPackageContract = {
+    id: "vozeb-drama-production-package-v1";
+    version: "1.0.0";
+    contentHash: string;
+};
+
+export type DramaAuthoringSourceSnapshot = DramaProductionPackageAuthoringMaterial & {
+    textContent?: string;
+    mimeType?: string;
+};
+
+export type DramaAuthoringWorkOrder = {
+    id: string;
+    runId: string;
+    projectId: string;
+    episodeId: string;
+    provider: "codex-work-order";
+    status: "ready" | "submitted" | "accepted" | "rejected";
+    createdAt: string;
+    targetNarrativeChapter: number | string;
+    request: string;
+    authoringInput: Record<string, unknown>;
+    sources: DramaAuthoringSourceSnapshot[];
+    contract: DramaProductionPackageContract;
+    protocol: {
+        packageSpecHash: string;
+        templateSourceHash: string;
+        packageRulesHash: string;
+        rules: string;
+    };
+    directorSkill: { id: string; version: string; contentHash: string };
+    seedanceSkill: { id: string; version: string; contentHash: string };
+    draftContract: { mode: "package"; reply: "string"; markdown: "string" };
+    strictGateCodes: string[];
+};
+
+export type DramaProductionPackageAuthoring = {
+    source: "executeDramaScriptRun";
+    provider?: DramaAuthoringProvider;
+    runId?: string;
+    targetNarrativeChapter?: number | string;
+    generatedAt: string;
+    contract?: DramaProductionPackageContract;
+    directorSkill: { id: string; version: string; contentHash: string };
+    seedanceSkill: { id: string; version: string; contentHash: string };
+    materials: DramaProductionPackageAuthoringMaterial[];
+    qualityGateReport?: DramaQualityGateReport;
+};
+
 export type DramaProductionPackageV1 = {
     schemaVersion: 1;
     project: {
@@ -880,6 +955,7 @@ export type DramaProductionPackageV1 = {
     episodes: DramaProductionPackageEpisode[];
     archive?: DramaProductionArchive;
     seriesBible?: DramaSeriesBible;
+    authoring?: DramaProductionPackageAuthoring;
 };
 
 export type DramaProductionPackagePreview = {
@@ -887,6 +963,7 @@ export type DramaProductionPackagePreview = {
     sourceHash: string;
     format: "json" | "markdown";
     warnings: string[];
+    importWarnings?: string[];
     summary: {
         episodes: number;
         storyScenes: number;

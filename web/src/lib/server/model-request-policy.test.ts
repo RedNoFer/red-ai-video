@@ -14,9 +14,11 @@ describe("model request policy", () => {
         expect(resolveModelRequestTimeoutMs({ advancedConfig: { protocol: "sub2api", queryPath: "" }, capabilityProfile: { timeoutMs: 12 * 60_000 } }, "image")).toBe(12 * 60_000);
     });
 
-    it("keeps every text model attempt at three minutes", () => {
-        expect(resolveModelRequestTimeoutMs({ capabilityProfile: { timeoutMs: 15_000 } }, "text")).toBe(3 * 60_000);
-        expect(resolveModelRequestTimeoutMs({ capabilityProfile: { timeoutMs: 8 * 60_000 } }, "text")).toBe(3 * 60_000);
+    it("honors a configured text binding timeout", () => {
+        expect(resolveModelRequestTimeoutMs({ capabilityProfile: { timeoutMs: 15_000 } }, "text")).toBe(15_000);
+        expect(resolveModelRequestTimeoutMs({ capabilityProfile: { timeoutMs: 8 * 60_000 } }, "text")).toBe(8 * 60_000);
+        expect(resolveModelRequestTimeoutMs({ capabilityProfile: { timeoutMs: 100 } }, "text")).toBe(5_000);
+        expect(resolveModelRequestTimeoutMs({ capabilityProfile: { timeoutMs: 60 * 60_000 } }, "text")).toBe(30 * 60_000);
     });
 
     it("applies and bounds a binding timeout", () => {

@@ -15,7 +15,7 @@ const IMPORT_PAGE_SIZE = 20;
 const PRODUCTION_PACKAGE_TEMPLATE_URL = "/drama-production-package-v1-template.md";
 
 export function DramaSourceImport({ project, onImported }: { project: DramaProject; onImported: () => void }) {
-    const { message } = App.useApp();
+    const { message, modal } = App.useApp();
     const importEpisodes = useDramaStore((state) => state.importEpisodes);
     const createVersion = useDramaStore((state) => state.createVersion);
     const replaceProject = useDramaStore((state) => state.replaceProject);
@@ -129,8 +129,20 @@ export function DramaSourceImport({ project, onImported }: { project: DramaProje
         setPackagePreview(undefined);
     };
 
-    const confirmPackage = async () => {
+    const confirmPackage = async (warningsConfirmed = false) => {
         if (!packagePreview || applyingPackageRef.current) return;
+        const importWarnings = packagePreview.importWarnings || [];
+        if (importWarnings.length && !warningsConfirmed) {
+            modal.confirm({
+                title: "制作包存在识别警告",
+                content: `部分镜头缺少可选的生产字段，系统会保留可识别内容并允许继续导入。导入后请在分镜阶段补齐 ${importWarnings.length} 项提示。是否仍要导入？`,
+                okText: "仍然导入",
+                cancelText: "返回检查",
+                centered: true,
+                onOk: () => confirmPackage(true),
+            });
+            return;
+        }
         applyingPackageRef.current = true;
         setImporting(true);
         try {
@@ -275,7 +287,7 @@ export function DramaSourceImport({ project, onImported }: { project: DramaProje
                 destroyOnHidden
                 closable={!importing}
                 mask={{ closable: !importing }}
-                okText="确认应用制作包"
+                okText={packagePreview?.importWarnings?.length ? "继续导入（有警告）" : "确认应用制作包"}
                 cancelText="取消"
                 okButtonProps={{ loading: importing }}
                 cancelButtonProps={{ disabled: importing }}
@@ -335,6 +347,20 @@ export function DramaSourceImport({ project, onImported }: { project: DramaProje
                                 </div>
                                 <ul className="mt-1.5 space-y-1">
                                     {packagePreview.warnings.map((warning) => (
+                                        <li key={warning}>{warning}</li>
+                                    ))}
+                                </ul>
+                            </div>
+                        ) : null}
+                        {packagePreview.importWarnings?.length ? (
+                            <div className="rounded-md border border-orange-300/80 bg-orange-50/80 p-3 text-xs text-orange-950 dark:border-orange-700/70 dark:bg-orange-950/25 dark:text-orange-100" data-drama-production-package-import-warnings>
+                                <div className="flex items-center gap-1.5 font-medium">
+                                    <TriangleAlert className="size-3.5" />
+                                    识别提示：允许继续导入
+                                </div>
+                                <p className="mt-1.5 leading-5">以下问题不会阻止本次导入，但对应镜头在分镜生成前需要补齐：</p>
+                                <ul className="mt-1.5 space-y-1">
+                                    {packagePreview.importWarnings.map((warning) => (
                                         <li key={warning}>{warning}</li>
                                     ))}
                                 </ul>

@@ -8,6 +8,7 @@ import {
     type CreativeProjectHandoff,
     type CreativeRunRequest,
 } from "@/lib/creative-runtime-contract";
+import type { DramaAuthoringDraft, DramaAuthoringWorkOrder, DramaQualityGateReport } from "@/lib/drama-project-contract";
 import { refreshUserPointsIfSystem } from "@/services/api/points";
 import { ClientSessionExpiredError, stopIfClientSessionExpired, throwIfClientSessionExpired } from "@/services/api/session-expiration";
 
@@ -19,6 +20,7 @@ export type CreativeAgentRun = {
     status: "planning" | "running" | "paused" | "completed" | "failed" | "cancelled";
     surface?: CreativeRunRequest["surface"];
     projectId?: string;
+    episodeId?: string;
     prompt?: string;
     referencedAssetIds?: string[];
     selectedSkillIds?: string[];
@@ -46,6 +48,9 @@ export type CreativeAgentRun = {
         error?: string;
     }>;
     cancellation?: { pendingCount: number };
+    dramaAuthoring?: DramaAuthoringWorkOrder;
+    dramaQualityGateReport?: DramaQualityGateReport;
+    dramaFailureKind?: "timeout" | "quality" | "error";
 };
 
 type ApiResponse<T> = { code: number; data: T; msg: string };
@@ -103,6 +108,22 @@ export function controlCreativeAgentRun(runId: string, action: "cancel" | "pause
 
 export function getCreativeAgentRun(runId: string) {
     return request<{ run: CreativeAgentRun }>(`/api/agent/runs/${encodeURIComponent(runId)}`).then((data) => data.run);
+}
+
+export function createDramaAuthoringWorkOrder(runId: string) {
+    return request<{ run: CreativeAgentRun; workOrder: DramaAuthoringWorkOrder }>(`/api/agent/runs/${encodeURIComponent(runId)}/external-authoring`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "create-work-order" }),
+    });
+}
+
+export function submitDramaAuthoringDraft(runId: string, workOrderId: string, draft: DramaAuthoringDraft, manifest: { contract: DramaAuthoringWorkOrder["contract"]; directorSkill: DramaAuthoringWorkOrder["directorSkill"]; seedanceSkill: DramaAuthoringWorkOrder["seedanceSkill"]; sources: Array<{ alias: string; role: string; contentHash: string }> }) {
+    return request<{ run: CreativeAgentRun; workOrder: DramaAuthoringWorkOrder }>(`/api/agent/runs/${encodeURIComponent(runId)}/external-authoring`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "submit", workOrderId, draft, manifest }),
+    });
 }
 
 export function listCreativeAgentRuns(surface: CreativeRunRequest["surface"] = "chat", input: { activeOnly?: boolean; limit?: number; projectId?: string; conversationId?: string } = {}) {

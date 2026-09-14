@@ -484,12 +484,12 @@ describe("drama project service updates", () => {
             {
                 ...current,
                 characters: [],
-                scenes: [{ id: "scene-one", name: "议事厅", description: "固定空间", backgroundNpcPolicy: { mode: "required", guidance: "前后景安排旁听者", continuity: "跨帧保持两侧密度" } }],
+                scenes: [{ id: "scene-one", name: "议事厅", description: "固定空间", backgroundNpcPolicy: { mode: "required", countRange: { min: 5, max: 8 }, guidance: "前后景安排旁听者", continuity: "跨帧保持两侧密度" } }],
             },
             current,
         );
 
-        expect(normalized.scenes[0].backgroundNpcPolicy).toEqual({ mode: "required", guidance: "前后景安排旁听者", continuity: "跨帧保持两侧密度" });
+        expect(normalized.scenes[0].backgroundNpcPolicy).toEqual({ mode: "required", countRange: { min: 5, max: 8 }, guidance: "前后景安排旁听者", continuity: "跨帧保持两侧密度" });
         expect(normalized.characters).toEqual([]);
     });
 

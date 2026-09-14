@@ -51,7 +51,7 @@ import { deleteDramaFrameBeat, formatPromptFieldLines, normalizeDramaFrameBeats,
 import { defaultDramaProductionPlan, dramaReferenceImageBudget, normalizeDramaProductionPlan } from "@/lib/drama-production-plan";
 import { resolveDramaShotDuration } from "@/lib/server/drama-shot-config";
 import { TEXT_MODEL_REQUEST_TIMEOUT_MS } from "@/lib/server/model-request-policy";
-import { listAgentRuns } from "@/lib/server/agent-run-store";
+import { getAgentRun, listAgentRuns } from "@/lib/server/agent-run-store";
 import { reviewCreativeOutputs } from "@/lib/server/creative-review-service";
 import { CreativeEntityDeletionConflict, deleteDramaConversationAggregate } from "@/lib/server/creative-entity-deletion-store";
 import { createCreativeConversation, getCreativeConversation, listCreativeConversations, updateCreativeConversation } from "@/lib/server/creative-runtime-store";
@@ -62,7 +62,7 @@ import { deleteUserLocalMediaAssets, deleteUserOwnedMediaAssetsPhysically } from
 import { collectLocalMediaStorageKeys, localMediaStorageKeyFromValue } from "@/lib/server/local-media-references";
 import { signReferenceAssetInputUrl } from "@/lib/server/reference-asset-access";
 import { fetchSafeOutbound } from "@/lib/server/safe-outbound-fetch";
-import { applyDramaProductionPackage, DramaProductionPackageError, previewDramaProductionPackage } from "@/lib/server/drama-production-package";
+import { applyDramaProductionPackage, DramaProductionPackageError, previewDramaProductionPackage, type DramaProductionPackageNormalizationOptions } from "@/lib/server/drama-production-package";
 import { buildDramaProductionRun, refreshDramaVideoStepReferences, unlockDramaProductionSteps } from "@/lib/server/drama-production-run";
 import { composeDramaVideoSegments } from "@/lib/server/drama-video-sequence";
 import { buildDramaVisualProductionRun, compileDramaFrameBeatPrompt, compileDramaVisualStepPrompt, unlockDramaVisualSteps } from "@/lib/server/drama-visual-production-run";
@@ -1170,12 +1170,12 @@ export async function updateDramaAssetForUser(userId: string, id: string, kind: 
     }
 }
 
-export function previewDramaProductionPackageForUser(value: unknown) {
+export function previewDramaProductionPackageForUser(value: unknown, options: DramaProductionPackageNormalizationOptions = {}) {
     const input = object(value);
     const source = cleanText(input.source);
     const fileName = cleanText(input.fileName) || "production-package.md";
     try {
-        return previewDramaProductionPackage(source, fileName);
+        return previewDramaProductionPackage(source, fileName, undefined, { allowImportWarnings: true, ...options });
     } catch (error) {
         if (error instanceof DramaProductionPackageError) throw new DramaProjectServiceError(error.message, 400);
         throw error;
@@ -1183,7 +1183,7 @@ export function previewDramaProductionPackageForUser(value: unknown) {
 }
 
 export function previewDramaScriptProductionPackageForUser(value: unknown) {
-    const preview = previewDramaProductionPackageForUser(value);
+    const preview = previewDramaProductionPackageForUser(value, { allowImportWarnings: false, validateVideoPrompt: true, requireCameraPlan: true, requireContentQuality: true, requireAgentAuthoring: true, requireAuthoringQuality: true });
     const plan = preview.package.project.productionBible?.productionPlan;
     if (!plan?.lockedAt || !plan.visual.visualStyle.trim() || !plan.visual.artStyle.trim()) throw new DramaProjectServiceError("剧本 Agent 制作包必须包含已锁定且具体的视觉风格和画风", 400);
     return preview;
@@ -1194,7 +1194,7 @@ export async function applyDramaProductionPackageForUser(userId: string, id: str
     const current = await getDramaProjectForUser(userId, id);
     const preview = previewDramaProductionPackageForUser(input);
     if (cleanText(input.sourceHash) !== preview.sourceHash) throw new DramaProjectServiceError("制作包内容已变化，请重新预览", 409);
-    const project = applyDramaProductionPackage(current, preview.package, preview.sourceHash, cleanText(input.source), cleanText(input.fileName) || "production-package.md");
+    const project = applyDramaProductionPackage(current, preview.package, preview.sourceHash, cleanText(input.source), cleanText(input.fileName) || "production-package.md", { allowImportWarnings: true });
     project.updatedAt = nextTimestamp(current.updatedAt);
     await createDramaProjectVersion(userId, current.id, "完整制作包导入前", current);
     try {
@@ -1213,7 +1213,14 @@ export async function applyDramaEpisodeProductionPackageForUser(userId: string, 
     const target = current.episodes.find((episode) => episode.id === episodeId);
     if (!target) throw new DramaProjectServiceError("短剧剧集不存在", 404);
     const preview = previewDramaScriptProductionPackageForUser(input);
+    const authoringRunId = preview.package.authoring?.runId;
+    if (!authoringRunId) throw new DramaProjectServiceError("制作包缺少可核验的 executeDramaScriptRun 运行凭据", 400);
+    const authoringRun = await getAgentRun(authoringRunId);
+    if (!authoringRun || authoringRun.userId !== userId || authoringRun.status !== "completed" || authoringRun.projectId !== id || authoringRun.episodeId !== episodeId || !authoringRun.dramaScriptPackage)
+        throw new DramaProjectServiceError("制作包不是当前项目 GPT/Codex 统一流水线生成的已完成结果，禁止回填", 409);
     if (cleanText(input.sourceHash) !== preview.sourceHash) throw new DramaProjectServiceError("制作包内容已变化，请重新预览", 409);
+    if (createHash("sha256").update(cleanText(input.source), "utf8").digest("hex") !== createHash("sha256").update(authoringRun.dramaScriptPackage.markdown, "utf8").digest("hex"))
+        throw new DramaProjectServiceError("制作包内容与执行结果不一致，请重新加载最新 Agent 结果", 409);
     if (preview.package.episodes.length !== 1) throw new DramaProjectServiceError("剧本 Agent 制作包只能包含当前集", 400);
     const scoped = { ...current, episodes: [target], activeEpisodeId: target.id };
     const applied = applyDramaProductionPackage(scoped, preview.package, preview.sourceHash, cleanText(input.source), cleanText(input.fileName) || "剧本 Agent 制作包.md");
@@ -3449,7 +3456,11 @@ function normalizeBackgroundNpcPolicy(value: unknown): DramaBackgroundNpcPolicy 
     const mode: DramaBackgroundNpcPolicy["mode"] = input.mode === "required" || input.mode === "forbidden" ? input.mode : "auto";
     const guidance = optionalText(input.guidance);
     const continuity = optionalText(input.continuity);
-    return { mode, ...(guidance ? { guidance } : {}), ...(continuity ? { continuity } : {}) };
+    const range = object(input.countRange);
+    const min = Number.isInteger(Number(range.min)) ? Math.max(0, Number(range.min)) : undefined;
+    const max = Number.isInteger(Number(range.max)) ? Math.max(min ?? 0, Number(range.max)) : undefined;
+    const countRange = min !== undefined && max !== undefined ? { min, max } : undefined;
+    return { mode, ...(guidance ? { guidance } : {}), ...(continuity ? { continuity } : {}), ...(countRange ? { countRange } : {}) };
 }
 
 function normalizeSceneReferenceBoard(value: unknown, primaryReferenceId?: string, legacy = false) {

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { getAuthSettings } from "@/lib/auth/store";
 import { nanoid } from "nanoid";
 import type { CreativeConversationContext } from "@/lib/creative-runtime-contract";
@@ -17,14 +18,16 @@ import { filterAgentPlannerModels, isLikelyConversationPlannerPrompt } from "@/l
 import { buildAgentRunPlannerAudit } from "@/lib/server/agent-run-audit";
 import { orderCreativeAssetsByIds } from "@/lib/creative-asset-references";
 import { getDramaProject } from "@/lib/server/drama-project-store";
-import { buildDramaAssetReuseContext, previewDramaProductionPackage } from "@/lib/server/drama-production-package";
+import { attachDramaProductionPackageAuthoring, buildDramaAssetReuseContext, previewDramaProductionPackage } from "@/lib/server/drama-production-package";
 import { serializeDramaProductionPackageMarkdown } from "@/lib/drama-production-package-serializer";
 import { defaultDramaProductionPlan, normalizeDramaProductionPlan, resolveDramaShotDurationPreference } from "@/lib/drama-production-plan";
 import { DRAMA_PACKAGE_ARCHITECTURE_RULES } from "@/lib/server/drama-production-package-rules";
+import { DRAMA_PACKAGE_CONTRACT } from "@/lib/server/drama-production-package-contract";
 import { DRAMA_PACKAGE_DIRECTOR_RULES, DRAMA_VIDEO_DIRECTOR_SKILL, SEEDANCE_25_DIRECTOR_SKILL } from "@/lib/server/agent-skills/creative-shortcuts";
-import type { DramaEpisode, DramaNamedAsset, DramaProject } from "@/lib/drama-project-contract";
+import type { DramaAuthoringDraft, DramaAuthoringProvider, DramaAuthoringSourceSnapshot, DramaEpisode, DramaNamedAsset, DramaProject } from "@/lib/drama-project-contract";
 import { resolveSeedance25VideoPromptReferences } from "@/lib/server/agent-skills/seedance-25";
 import { resolveDramaGlobalVisualContract } from "@/lib/drama-style";
+import { DramaAuthoringQualityGateError, validateDramaAuthoringQuality } from "@/lib/server/drama-production-package-quality";
 
 const globalAgentExecutors = globalThis as typeof globalThis & { __vozebProAgentRunControllers?: Map<string, AbortController> };
 const controllers = (globalAgentExecutors.__vozebProAgentRunControllers ??= new Map<string, AbortController>());
@@ -216,7 +219,7 @@ export async function executeAgentRun(run: AgentRun, origin: string, cookie: str
         if (latest && !["paused", "cancelled"].includes(latest.status))
             await updateAgentRunById(
                 run.id,
-                { status: "failed", executionId: undefined, timings: { ...(latest.timings || { requestAcceptedAt: latest.createdAt }), runCompletedAt: Date.now() } },
+                { status: "failed", executionId: undefined, ...(run.workflow === "drama-script" ? { dramaFailureKind: failure instanceof DramaAuthoringQualityGateError ? ("quality" as const) : isTimeoutLike(failure) ? ("timeout" as const) : ("error" as const) } : {}), ...(failure instanceof DramaAuthoringQualityGateError ? { dramaQualityGateReport: failure.report } : {}), timings: { ...(latest.timings || { requestAcceptedAt: latest.createdAt }), runCompletedAt: Date.now() } },
                 { type: "run.failed", data: { message: toSafeGenerationErrorMessage(failure, "Agent 执行失败") } },
                 ["planning", "running"],
                 executionId,
@@ -297,18 +300,24 @@ export function buildDramaPackageSkillInstructions(selectedSkills: ReadonlyArray
         }
         return [`用户本轮显式选择的补充 Skill ${skill.name}@${skill.id}：${skill.instructions}`];
     });
-    return [`当前短剧制作包唯一导演 Skill：${DRAMA_VIDEO_DIRECTOR_SKILL.name}@${DRAMA_VIDEO_DIRECTOR_SKILL.id}（${DRAMA_VIDEO_DIRECTOR_SKILL.sourceVersion}）\n${DRAMA_PACKAGE_DIRECTOR_RULES}`, ...supplementalSkills].join("\n");
+    return [
+        `当前短剧制作包唯一导演 Skill：${DRAMA_VIDEO_DIRECTOR_SKILL.name}@${DRAMA_VIDEO_DIRECTOR_SKILL.id}（${DRAMA_VIDEO_DIRECTOR_SKILL.sourceVersion}；内容哈希 ${DRAMA_VIDEO_DIRECTOR_SKILL.sourceContentHash}）\n${DRAMA_PACKAGE_DIRECTOR_RULES}`,
+        `当前 Seedance 2.5 适配 Skill：${SEEDANCE_25_DIRECTOR_SKILL.name}@${SEEDANCE_25_DIRECTOR_SKILL.id}（${SEEDANCE_25_DIRECTOR_SKILL.sourceVersion}；内容哈希 ${SEEDANCE_25_DIRECTOR_SKILL.sourceContentHash}）。本次只注入与当前时长/模式相关的适配规则，不创建第二套制作包字段或覆盖项目导演规则。`,
+        ...supplementalSkills,
+    ].join("\n");
 }
 
-async function executeDramaScriptRun(run: AgentRun, origin: string, cookie: string, signal: AbortSignal) {
+export async function executeDramaScriptRun(run: AgentRun, origin: string, cookie: string, signal: AbortSignal, options: { provider?: DramaAuthoringProvider; draft?: DramaAuthoringDraft } = {}) {
     const projectId = run.projectId?.trim();
     const episodeId = run.episodeId?.trim();
     if (!projectId || !episodeId) throw new Error("剧本 Agent 缺少项目或集数上下文");
-    const [settings, project, uploadedAssets] = await Promise.all([getAuthSettings(), getDramaProject(projectId, run.userId), getCreativeAssetsByIds(run.referencedAssetIds || [], run.userId)]);
+    const [settings, project, loadedAssets] = await Promise.all([getAuthSettings(), getDramaProject(projectId, run.userId), getCreativeAssetsByIds(run.referencedAssetIds || [], run.userId)]);
+    const uploadedAssets = orderCreativeAssetsByIds(loadedAssets, run.referencedAssetIds || []);
     if (!project) throw new Error("短剧项目不存在");
     const index = project.episodes.findIndex((episode) => episode.id === episodeId);
     if (index < 0) throw new Error("当前集不存在或已被删除");
     const current = project.episodes[index];
+    const targetNarrativeChapter = resolveDramaTargetNarrativeChapter(run.prompt, current.sourceRange);
     const selectedSkills = selectAgentSkills(settings, "drama", run.selectedSkillIds || [], run);
     const snapshotPlan = run.snapshot && typeof run.snapshot === "object" && !Array.isArray(run.snapshot) ? (run.snapshot as { productionPlan?: unknown }).productionPlan : undefined;
     const normalizedSnapshotPlan = snapshotPlan ? normalizeDramaProductionPlan(snapshotPlan, defaultDramaProductionPlan("manual")) : undefined;
@@ -329,13 +338,18 @@ async function executeDramaScriptRun(run: AgentRun, origin: string, cookie: stri
                         })(),
               }
             : undefined;
-    const uploadedMaterials = uploadedAssets.map((asset, index) => ({
-        alias: `@附件${index + 1}`,
-        type: asset.type,
-        title: asset.title,
-        ...(asset.textContent ? { textContent: asset.textContent } : {}),
-        ...(asset.mimeType ? { mimeType: asset.mimeType } : {}),
-    }));
+    const uploadedMaterials = uploadedAssets.map((asset, index) => {
+        const base = {
+            alias: `@附件${index + 1}`,
+            type: asset.type,
+            title: asset.title,
+            ...(asset.textContent ? { textContent: asset.textContent } : {}),
+            ...(asset.mimeType ? { mimeType: asset.mimeType } : {}),
+        };
+        return { ...base, role: classifyDramaAuthoringMaterial(base), contentHash: hashDramaAuthoringMaterial(base) };
+    });
+    const authoringRoles = new Set(uploadedMaterials.filter((material) => material.type === "text").map((material) => material.role));
+    if (!authoringRoles.has("package-template") || !authoringRoles.has("story-source")) throw new Error("短剧制作包正式生成必须同时提供文本模板和 TXT/小说素材");
     const skillInstructions = buildDramaPackageSkillInstructions(selectedSkills, run.prompt, requestedShotDuration);
     const authoringRules = composeDramaAuthoringRules(skillInstructions, DRAMA_PACKAGE_ARCHITECTURE_RULES);
     if (isOutsideDramaScriptScope(run.prompt)) {
@@ -354,7 +368,7 @@ async function executeDramaScriptRun(run: AgentRun, origin: string, cookie: stri
         .map((episode) => ({ id: episode.id, title: episode.title, outline: episode.outline, hook: episode.hook, nextPreview: episode.nextPreview, script: episode.script.slice(0, 6000) }));
     const model = settings.defaultModels.textModel;
     const candidates = resolveLogicalModelCandidates(settings, "text", model);
-    if (!model || !candidates.length) throw new Error("后台尚未配置可用的默认文本模型");
+    if (!options.draft && (!model || !candidates.length)) throw new Error("后台尚未配置可用的默认文本模型");
     const assetReuseContext = buildDramaAssetReuseContext(project, current);
     const framePolicyInstruction =
         requestedFramePolicy === "agent"
@@ -363,19 +377,103 @@ async function executeDramaScriptRun(run: AgentRun, origin: string, cookie: stri
     const visualInstruction = "视觉参数必须写入制作包并服从当前输入中的锁定方案与全局视觉合同；不得用历史提示词或旧制作包补齐。";
     const globalVisualContract = resolveDramaGlobalVisualContract(project);
     const attachmentInstruction = uploadedMaterials.length
-        ? "本轮用户附件已经整理在输入的 uploadedMaterials 中：textContent 是可直接阅读的 TXT/Markdown 章节内容，图片 URL 仅作为参考素材地址；必须优先读取并按附件 alias 引用，不得把内部路径或隐藏执行信息写入公开制作包。"
+        ? "本轮用户附件已经作为正式 authoringSources 传入，并保留原顺序、alias、role、title、contentHash 和可读 textContent。role=package-template 的模板只拥有格式、字段和章节结构权威，不提供剧情事实；role=story-source 的 TXT/小说只提供当前剧情事实，不改变制作包格式；role=reference 只提供参考素材职责。必须在写作前读取模板和 TXT，不能只读取其中一个；不得把内部路径、contentHash、隐藏执行信息或模板示例事实写入公开制作包。"
         : "本轮没有附件。";
-    const instruction = `你是 VOZEB PRO 短剧项目的专属集数编剧 GPT。只处理当前集和用户本轮请求；超出范围时只回复“当前窗口只处理第 ${current.title} 的新剧本内容。请继续提供本集剧情、人物、冲突或制作包要求。”。只依据当前用户请求、当前项目正式事实、本轮附件和锁定生产方案，缺少必要事实时先提问。历史会话、旧制作包、productionArchive、历史 generationPrompt 和旧运行记录不是创作输入，禁止读取、复述或套用。
+    const instruction = `你是 VOZEB PRO 短剧项目的专属集数编剧 GPT。只处理当前集和用户本轮请求；超出范围时只回复“当前窗口只处理第 ${current.title} 的新剧本内容。请继续提供本集剧情、人物、冲突或制作包要求。”。只依据当前用户请求、当前项目正式事实、本轮 authoringSources、锁定生产方案和唯一导演 Skill，缺少必要事实时先提问。历史会话、旧制作包、productionArchive、历史 generationPrompt 和旧运行记录不是创作输入，禁止读取、复述或套用。
 
-未明确要求制作包时只返回自然中文剧本协作回复；明确要求时只返回 {"mode":"package","reply":"简短完成说明","markdown":"符合 vozeb-drama-production-package-v1 的完整 Markdown"}。制作包必须包含当前集、项目级正式资产、13 个章节和现有镜头字段；不要在其他字段重复规则，也不要把一个字段的正文复制到另一个字段。字段语义和质量门禁只以当前唯一导演 Skill 与制作包协议为准。
+目标小说章节：${String(targetNarrativeChapter)}。这里的“小说第 ${String(targetNarrativeChapter)} 章”是剧情素材范围；“制作包第 3 节｜第一集文学剧本”只是固定模板章节，二者绝不能混淆。未明确要求制作包时只返回自然中文剧本协作回复；明确要求时只返回 {"mode":"package","reply":"简短完成说明","markdown":"符合 vozeb-drama-production-package-v1 的完整 Markdown"}。markdown 是 Agent authoring draft，不是最终持久化文件：必须生成完整文学剧本，不得输出摘要、梗概、镜头摘要或模板示例；必须保留 TXT 的每条显式对白和关键剧情事实，并为每个镜头直接写出公开 videoPrompt 与 framePlan。服务端会校验 draft，再由规范化后的唯一对象确定性导出最终制作包，禁止依赖脚本读取模板或用固定文案冒充生成。制作包必须包含当前集、项目级正式资产、13 个章节和现有镜头字段；不要在其他字段重复规则，也不要把一个字段的正文复制到另一个字段。字段语义和质量门禁只以当前唯一导演 Skill 与制作包协议为准。
 
 framePlan.frames 只能保留现有字段；静态正文和视频正文必须由 Agent 直接写出，并保持真实时间边界和节点对应；应用层只校验、保存和转发，不从 actionPrompt、镜头描述、资产、NPC 或历史记录重组正文。固定资产只用稳定 code/id/name，referenceManifest 只表达实际参考图绑定，内部执行信息不得进入公开正文。${lockedPlan ? `本次目标镜头时长为 ${requestedShotDuration} 秒；按完整剧情节拍重切，不机械复制旧拆分。锁定方案及其中的 customDirectorRules 只读取用户输入中的这一份，不从任何其他字段补充。` : "没有锁定生产方案时先提示用户完成配置。"} ${framePolicyInstruction} 任何收费或上游生产前先给出任务、参考和参数预览并等待明确确认。`;
-    const input = buildDramaPackageAuthoringInput({ runPrompt: run.prompt, project, current, assetReuseContext, adjacentEpisodes: adjacent, selectedSkills, lockedPlan, globalVisualContract, uploadedMaterials, requestedShotDuration });
+    const input = buildDramaPackageAuthoringInput({ runPrompt: run.prompt, project, current, assetReuseContext, adjacentEpisodes: adjacent, selectedSkills, lockedPlan, globalVisualContract, uploadedMaterials, requestedShotDuration, targetNarrativeChapter });
     const tool = {
         name: "drama_script_response",
         description: "返回受限剧本协作回复或完整制作包",
         parameters: { type: "object", properties: { mode: { type: "string", enum: ["reply", "package"] }, reply: { type: "string" }, markdown: { type: "string" } }, required: ["mode", "reply"], additionalProperties: false },
     };
+    const authoringSources = uploadedMaterials as DramaAuthoringSourceSnapshot[];
+    const persistDraft = async (draft: DramaAuthoringDraft, provider: DramaAuthoringProvider) => {
+        const markdown = draft.markdown.trim();
+        if (!markdown) throw new Error("剧本 Agent 没有返回制作包正文");
+        let preview = previewDramaProductionPackage(markdown, "剧本 Agent 制作包.md", project, { validateVideoPrompt: true, requireCameraPlan: true, requireContentQuality: true });
+        if (lockedPlan) {
+            const generatedPlan = preview.package.project.productionBible?.productionPlan;
+            const mergedVisual = {
+                ...lockedPlan.visual,
+                visualStyle: lockedPlan.visual.visualStyle || generatedPlan?.visual.visualStyle || "",
+                artStyle: lockedPlan.visual.artStyle || generatedPlan?.visual.artStyle || "",
+                ...(lockedPlan.visual.visualDirection || generatedPlan?.visual.visualDirection ? { visualDirection: lockedPlan.visual.visualDirection || generatedPlan?.visual.visualDirection } : {}),
+                source: lockedPlan.visual.visualStyle && lockedPlan.visual.artStyle ? ("manual" as const) : ("agent" as const),
+            };
+            const generatedBible = preview.package.project.productionBible;
+            const persistedBible = project.productionBible;
+            const packageWithPlan = {
+                ...preview.package,
+                project: {
+                    ...preview.package.project,
+                    productionBible: {
+                        ...generatedBible,
+                        ...(mergedVisual.visualStyle || generatedBible.visualStyle?.trim() ? { visualStyle: mergedVisual.visualStyle || generatedBible.visualStyle?.trim() } : {}),
+                        ...(generatedBible.colorScript?.trim() || persistedBible?.colorScript?.trim() ? { colorScript: generatedBible.colorScript?.trim() || persistedBible?.colorScript?.trim() } : {}),
+                        ...(generatedBible.globalNegativePrompt?.trim() || persistedBible?.globalNegativePrompt?.trim() ? { globalNegativePrompt: generatedBible.globalNegativePrompt?.trim() || persistedBible?.globalNegativePrompt?.trim() } : {}),
+                        productionPlan: { ...lockedPlan, visual: mergedVisual },
+                    },
+                },
+            };
+            preview = previewDramaProductionPackage(serializeDramaProductionPackageMarkdown(packageWithPlan), "剧本 Agent 制作包.md", project, { validateVideoPrompt: true, requireCameraPlan: true, requireContentQuality: true });
+        }
+        const initialReport = validateDramaAuthoringQuality({ package: preview.package, sources: authoringSources, targetNarrativeChapter });
+        if (initialReport.status === "blocked") throw new DramaAuthoringQualityGateError(formatDramaQualityGateFailure(initialReport), initialReport);
+        const provenance = {
+            source: "executeDramaScriptRun" as const,
+            provider,
+            runId: run.id,
+            targetNarrativeChapter,
+            generatedAt: new Date().toISOString(),
+            contract: DRAMA_PACKAGE_CONTRACT,
+            directorSkill: { id: DRAMA_VIDEO_DIRECTOR_SKILL.id, version: DRAMA_VIDEO_DIRECTOR_SKILL.sourceVersion, contentHash: DRAMA_VIDEO_DIRECTOR_SKILL.sourceContentHash },
+            seedanceSkill: { id: SEEDANCE_25_DIRECTOR_SKILL.id, version: SEEDANCE_25_DIRECTOR_SKILL.sourceVersion, contentHash: SEEDANCE_25_DIRECTOR_SKILL.sourceContentHash },
+            materials: uploadedMaterials.map(({ alias, role, type, title, contentHash }) => ({ alias, role, type, title, contentHash })),
+        };
+        const withInitialProvenance = attachDramaProductionPackageAuthoring(preview.package, { ...provenance, qualityGateReport: initialReport });
+        const finalReport = validateDramaAuthoringQuality({ package: withInitialProvenance, sources: authoringSources, targetNarrativeChapter });
+        if (finalReport.status === "blocked") throw new DramaAuthoringQualityGateError(formatDramaQualityGateFailure(finalReport), finalReport);
+        const authoredPackage = attachDramaProductionPackageAuthoring(withInitialProvenance, { ...provenance, qualityGateReport: finalReport });
+        const canonicalMarkdown = serializeDramaProductionPackageMarkdown(authoredPackage);
+        const canonicalPreview = previewDramaProductionPackage(canonicalMarkdown, "剧本 Agent 制作包.md", project, {
+            validateVideoPrompt: true,
+            requireCameraPlan: true,
+            requireContentQuality: true,
+            requireAgentAuthoring: true,
+            requireAuthoringQuality: true,
+            authoringSources,
+            targetNarrativeChapter,
+        });
+        const packagePlan = canonicalPreview.package.project.productionBible?.productionPlan;
+        if (!packagePlan?.visual.visualStyle.trim() || !packagePlan.visual.artStyle.trim()) throw new Error("制作包缺少具体的视觉风格或画风，请重新生成");
+        if (lockedPlan?.video.framePolicy === "fixed-4" || lockedPlan?.video.framePolicy === "fixed-5") {
+            const expectedFrameCount = lockedPlan.video.framePolicy === "fixed-4" ? 4 : 5;
+            const invalidShot = canonicalPreview.package.episodes.flatMap((episode) => episode.shots).find((shot) => (shot.framePlan?.frames.length || 0) !== expectedFrameCount);
+            if (invalidShot) throw new Error(`制作包镜头帧数不符合已锁定的 ${expectedFrameCount} 帧方案，请重新生成`);
+        }
+        await updateAgentRunById(
+            run.id,
+            {
+                status: "completed",
+                tasks: [],
+                reviewed: true,
+                dramaScriptPackage: { markdown: canonicalMarkdown, preview: canonicalPreview },
+                executionId: undefined,
+                timings: { ...(run.timings || { requestAcceptedAt: run.createdAt }), runCompletedAt: Date.now() },
+            },
+            { type: "run.completed", data: { reply: draft.reply.trim() || "制作包已生成，请确认预览后回填当前集。", dramaScriptPackage: { markdown: canonicalMarkdown, preview: canonicalPreview } } },
+            ["running"],
+            run.executionId,
+        );
+    };
+    if (options.draft) {
+        await persistDraft(options.draft, options.provider || "codex-work-order");
+        return;
+    }
     let latestError: unknown;
     for (const candidate of rankTextPlanningCandidates(candidates.map((item) => ({ ...item, channelId: item.channel.id })))) {
         try {
@@ -384,10 +482,7 @@ framePlan.frames 只能保留现有字段；静态正文和视频正文必须由
                 cookie,
                 candidate,
                 [
-                    {
-                        role: "system",
-                        content: `${authoringRules}\n\n${instruction}\n${visualInstruction}\n${attachmentInstruction}`,
-                    },
+                    { role: "system", content: `${authoringRules}\n\n${instruction}\n${visualInstruction}\n${attachmentInstruction}` },
                     { role: "user", content: JSON.stringify(input) },
                 ],
                 tool,
@@ -399,60 +494,8 @@ framePlan.frames 只能保留现有字段；静态正文和视频正文必须由
                 systemAiIdempotencyKey("drama-script", run.userId, run.id, candidate.channel.id, candidate.upstreamModel),
             );
             const parsed = JSON.parse(call.arguments) as { mode?: string; reply?: string; markdown?: string };
-            if (parsed.mode === "package") {
-                const markdown = parsed.markdown?.trim() || "";
-                if (!markdown) throw new Error("剧本 Agent 没有返回制作包正文");
-                let preview = previewDramaProductionPackage(markdown, "剧本 Agent 制作包.md", project, { validateVideoPrompt: true });
-                if (lockedPlan) {
-                    const generatedPlan = preview.package.project.productionBible?.productionPlan;
-                    const mergedVisual = {
-                        ...lockedPlan.visual,
-                        visualStyle: lockedPlan.visual.visualStyle || generatedPlan?.visual.visualStyle || "",
-                        artStyle: lockedPlan.visual.artStyle || generatedPlan?.visual.artStyle || "",
-                        ...(lockedPlan.visual.visualDirection || generatedPlan?.visual.visualDirection ? { visualDirection: lockedPlan.visual.visualDirection || generatedPlan?.visual.visualDirection } : {}),
-                        source: lockedPlan.visual.visualStyle && lockedPlan.visual.artStyle ? ("manual" as const) : ("agent" as const),
-                    };
-                    const generatedBible = preview.package.project.productionBible;
-                    const persistedBible = project.productionBible;
-                    const packageWithPlan = {
-                        ...preview.package,
-                        project: {
-                            ...preview.package.project,
-                            productionBible: {
-                                ...generatedBible,
-                                ...(mergedVisual.visualStyle || generatedBible.visualStyle?.trim() ? { visualStyle: mergedVisual.visualStyle || generatedBible.visualStyle?.trim() } : {}),
-                                ...(generatedBible.colorScript?.trim() || persistedBible?.colorScript?.trim() ? { colorScript: generatedBible.colorScript?.trim() || persistedBible?.colorScript?.trim() } : {}),
-                                ...(generatedBible.globalNegativePrompt?.trim() || persistedBible?.globalNegativePrompt?.trim() ? { globalNegativePrompt: generatedBible.globalNegativePrompt?.trim() || persistedBible?.globalNegativePrompt?.trim() } : {}),
-                                productionPlan: { ...lockedPlan, visual: mergedVisual },
-                            },
-                        },
-                    };
-                    preview = previewDramaProductionPackage(serializeDramaProductionPackageMarkdown(packageWithPlan), "剧本 Agent 制作包.md", project, { validateVideoPrompt: true });
-                }
-                const canonicalMarkdown = serializeDramaProductionPackageMarkdown(preview.package);
-                const canonicalPreview = previewDramaProductionPackage(canonicalMarkdown, "剧本 Agent 制作包.md", project, { validateVideoPrompt: true });
-                const packagePlan = canonicalPreview.package.project.productionBible?.productionPlan;
-                if (!packagePlan?.visual.visualStyle.trim() || !packagePlan.visual.artStyle.trim()) throw new Error("制作包缺少具体的视觉风格或画风，请重新生成");
-                if (lockedPlan?.video.framePolicy === "fixed-4" || lockedPlan?.video.framePolicy === "fixed-5") {
-                    const expectedFrameCount = lockedPlan.video.framePolicy === "fixed-4" ? 4 : 5;
-                    const invalidShot = canonicalPreview.package.episodes.flatMap((episode) => episode.shots).find((shot) => (shot.framePlan?.frames.length || 0) !== expectedFrameCount);
-                    if (invalidShot) throw new Error(`制作包镜头帧数不符合已锁定的 ${expectedFrameCount} 帧方案，请重新生成`);
-                }
-                await updateAgentRunById(
-                    run.id,
-                    {
-                        status: "completed",
-                        tasks: [],
-                        reviewed: true,
-                        dramaScriptPackage: { markdown: canonicalMarkdown, preview: canonicalPreview },
-                        executionId: undefined,
-                        timings: { ...(run.timings || { requestAcceptedAt: run.createdAt }), runCompletedAt: Date.now() },
-                    },
-                    { type: "run.completed", data: { reply: parsed.reply?.trim() || "制作包已生成，请确认预览后回填当前集。", dramaScriptPackage: { markdown: canonicalMarkdown, preview: canonicalPreview } } },
-                    ["running"],
-                    run.executionId,
-                );
-            } else {
+            if (parsed.mode === "package") await persistDraft({ mode: "package", reply: parsed.reply?.trim() || "", markdown: parsed.markdown?.trim() || "" }, "project-gpt");
+            else
                 await updateAgentRunById(
                     run.id,
                     { status: "completed", tasks: [], reviewed: true, executionId: undefined, timings: { ...(run.timings || { requestAcceptedAt: run.createdAt }), runCompletedAt: Date.now() } },
@@ -460,13 +503,21 @@ framePlan.frames 只能保留现有字段；静态正文和视频正文必须由
                     ["running"],
                     run.executionId,
                 );
-            }
             return;
         } catch (error) {
             latestError = error;
         }
     }
     throw latestError instanceof Error ? latestError : new Error("剧本 Agent 执行失败");
+}
+
+function formatDramaQualityGateFailure(report: { checks: Array<{ code: string; severity: string; evidence: string }> }) {
+    const blockers = report.checks.filter((check) => check.severity === "blocker").slice(0, 5).map((check) => `${check.code}: ${check.evidence}`).join("；");
+    return `制作包质量门禁未通过，禁止导入${blockers ? `：${blockers}` : ""}`;
+}
+
+function isTimeoutLike(error: unknown) {
+    return error instanceof Error && (error.name === "TimeoutError" || /timeout|timed out|响应超时|请求超时/iu.test(error.message));
 }
 
 export function isOutsideDramaScriptScope(prompt: string) {
@@ -488,6 +539,7 @@ export function buildDramaPackageAuthoringInput(input: {
     globalVisualContract: unknown;
     uploadedMaterials: unknown[];
     requestedShotDuration: number;
+    targetNarrativeChapter?: number | string;
 }) {
     const currentEpisodeFacts = {
         id: input.current.id,
@@ -554,9 +606,41 @@ export function buildDramaPackageAuthoringInput(input: {
         selectedSkills: input.selectedSkills.map(({ id, name }) => ({ id, name })),
         lockedProductionPlan: input.lockedPlan,
         globalVisualContract: input.globalVisualContract,
-        uploadedMaterials: input.uploadedMaterials,
+        authoringSources: input.uploadedMaterials,
         requestedShotDuration: input.requestedShotDuration,
+        targetNarrativeChapter: input.targetNarrativeChapter ?? "当前集素材",
     };
+}
+
+export function resolveDramaTargetNarrativeChapter(prompt: string, sourceRange?: string): number | string {
+    const value = `${prompt}\n${sourceRange || ""}`;
+    const arabic = value.match(/(?:小说|原文|目标|章节|第)\s*(\d+)\s*章/u)?.[1];
+    if (arabic) return Number(arabic);
+    const chinese = value.match(/第\s*([一二三四五六七八九十百千]+)\s*章/u)?.[1];
+    if (chinese) return chineseNumeral(chinese);
+    return sourceRange?.trim() || "当前集素材";
+}
+
+function chineseNumeral(value: string) {
+    const digits: Record<string, number> = { 零: 0, 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
+    if (value === "十") return 10;
+    if (value.startsWith("十")) return 10 + (digits[value.slice(1)] || 0);
+    if (value.endsWith("十")) return (digits[value.slice(0, -1)] || 1) * 10;
+    if (value.includes("十")) return (digits[value.split("十")[0]] || 0) * 10 + (digits[value.split("十")[1]] || 0);
+    return digits[value] || value;
+}
+
+export function classifyDramaAuthoringMaterial(value: { title?: unknown; type?: unknown; textContent?: unknown }): "package-template" | "story-source" | "reference" {
+    const title = String(value.title || "").trim();
+    const content = typeof value.textContent === "string" ? value.textContent : "";
+    if (/(?:模板|模版|template|production[-_ ]?package|制作包)/iu.test(title) || /vozeb-drama-production-package-v1|规范对象|镜头执行表/u.test(content)) return "package-template";
+    if (/(?:\.txt$|小说|章节|原文|故事|剧本)/iu.test(title)) return "story-source";
+    return "reference";
+}
+
+function hashDramaAuthoringMaterial(value: { title?: unknown; type?: unknown; textContent?: unknown }) {
+    const text = typeof value.textContent === "string" ? value.textContent : `${String(value.type || "")}:${String(value.title || "")}`;
+    return createHash("sha256").update(text, "utf8").digest("hex");
 }
 
 type DramaAuthoringAsset = Pick<DramaNamedAsset, "code" | "name" | "description" | "activeEpisodeCodes" | "profile" | "backgroundNpcPolicy">;

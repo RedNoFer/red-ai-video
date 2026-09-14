@@ -1201,7 +1201,8 @@ export const dramaVideoPromptTool = {
                         shotId: { type: "string" },
                         videoPrompt: {
                             type: "string",
-                            description: "由当前唯一导演 Skill 直接生成完整公开 videoPrompt；时间段动作必须逐段镜像 framePlan 的真实时间范围、起点、动作与触发、可见衔接和终点，写出具体人物、道具或环境结果，不输出内部信息。",
+                            description:
+                                "由当前唯一导演 Skill 直接生成完整公开 videoPrompt；必须在单一主运镜中明确声明连续镜头或内部切镜次数。时间段动作必须逐段镜像 framePlan 的真实时间范围、起点、动作与触发、可见衔接和终点，写出具体人物、道具或环境结果；内部切镜还必须在可见衔接中写出带时间、类型、触发事件、新机位、信息目的和承接的镜头事件，不输出内部信息。",
                         },
                         framePlan: {
                             type: "object",

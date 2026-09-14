@@ -1,9 +1,9 @@
-import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import prettier from "prettier";
 import { parse } from "yaml";
+import { hashSkillContent } from "./skill-content-hash.mjs";
 
 const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const repoRoot = path.resolve(webRoot, "..");
@@ -22,7 +22,7 @@ const body =
               .replace(/^\r?\n/, "")
               .trim()
         : normalized;
-const sourceContentHash = createHash("sha256").update(source, "utf8").digest("hex");
+const sourceContentHash = hashSkillContent(skillRoot);
 const sections = {
     common: extractSection(body, "共同前置审计"),
     cinematography: extractSection(body, "摄影与画面"),

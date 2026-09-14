@@ -6,9 +6,9 @@ import { nanoid } from "nanoid";
 import { useEffect, useRef, useState } from "react";
 
 import type { CreativeAsset, CreativeConversation, CreativeMessage } from "@/lib/creative-runtime-contract";
-import type { DramaProductionPackagePreview, DramaProject, DramaEpisode } from "@/lib/drama-project-contract";
+import type { DramaAuthoringWorkOrder, DramaProductionPackagePreview, DramaProject, DramaEpisode } from "@/lib/drama-project-contract";
 import { AgentMarkdown } from "@/components/agent/agent-markdown";
-import { controlCreativeAgentRun, createCreativeAgentRun, createCreativeConversation, listCreativeConversationPage, listCreativeMessages, uploadCreativeAsset, watchCreativeAgentRun } from "@/services/api/creative";
+import { controlCreativeAgentRun, createCreativeAgentRun, createCreativeConversation, createDramaAuthoringWorkOrder, getCreativeAgentRun, listCreativeConversationPage, listCreativeMessages, submitDramaAuthoringDraft, uploadCreativeAsset, watchCreativeAgentRun } from "@/services/api/creative";
 import { CREATIVE_UPLOAD_MAX_BYTES, isCreativeTextFile } from "@/lib/creative-upload";
 import { applyDramaEpisodeProductionPackage, saveDramaProductionPlan } from "@/services/api/drama-projects";
 import { useDramaStore } from "../stores/use-drama-store";
@@ -37,6 +37,11 @@ export function DramaScriptAgentPanel({ project, episode, open, onOpenChange }: 
     const [activeAssistantMessageId, setActiveAssistantMessageId] = useState<string>();
     const [stopping, setStopping] = useState(false);
     const [savingPlan, setSavingPlan] = useState(false);
+    const [failedRunId, setFailedRunId] = useState<string>();
+    const [workOrder, setWorkOrder] = useState<DramaAuthoringWorkOrder>();
+    const [workOrderOpen, setWorkOrderOpen] = useState(false);
+    const [externalDraft, setExternalDraft] = useState("");
+    const [submittingExternalDraft, setSubmittingExternalDraft] = useState(false);
     const attachmentsRef = useRef<PendingAttachment[]>([]);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const { skills, skillsLoading } = useCreativeAgentOptions("drama", ["video"]);
@@ -146,6 +151,8 @@ export function DramaScriptAgentPanel({ project, episode, open, onOpenChange }: 
                 snapshot: { episodeId: episode.id, productionPlan: requestedPlan },
             });
             setActiveRunId(result.run.id);
+            setFailedRunId(undefined);
+            setWorkOrder(undefined);
             setActiveAssistantMessageId(result.run.assistantMessageId);
             setMessages((current) => [
                 ...current,
@@ -177,6 +184,10 @@ export function DramaScriptAgentPanel({ project, episode, open, onOpenChange }: 
                     const packageValue = assistant?.metadata?.dramaScriptPackage;
                     if (packageValue && typeof packageValue === "object" && typeof (packageValue as { markdown?: unknown }).markdown === "string") setPackageData(packageValue as { markdown: string; preview: DramaProductionPackagePreview });
                     if (status === "failed" && text) message.error(text);
+                    if (status === "failed") {
+                        const failed = await getCreativeAgentRun(result.run.id).catch(() => undefined);
+                        if (failed?.dramaFailureKind === "timeout") setFailedRunId(result.run.id);
+                    }
                     setSending(false);
                     setActiveRunId(undefined);
                     setActiveAssistantMessageId(undefined);
@@ -187,6 +198,50 @@ export function DramaScriptAgentPanel({ project, episode, open, onOpenChange }: 
             setSending(false);
             setActiveRunId(undefined);
             setActiveAssistantMessageId(undefined);
+        }
+    };
+    const createExternalWorkOrder = async () => {
+        if (!failedRunId) return;
+        try {
+            const result = await createDramaAuthoringWorkOrder(failedRunId);
+            setWorkOrder(result.workOrder);
+            setWorkOrderOpen(true);
+            message.success("已生成 Codex 工作单；请将工作单内容交给外部 Codex，完成后粘贴 draft JSON 回传");
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : "Codex 工作单生成失败");
+        }
+    };
+    const submitExternalDraft = async () => {
+        if (!workOrder || submittingExternalDraft) return;
+        let draft: { mode: "package"; reply: string; markdown: string };
+        try {
+            const parsed = JSON.parse(externalDraft) as { mode?: string; reply?: string; markdown?: string };
+            if (parsed.mode !== "package" || !parsed.markdown?.trim()) throw new Error("请粘贴 mode=package 且包含 markdown 的 draft JSON");
+            draft = { mode: "package", reply: parsed.reply?.trim() || "Codex authoring draft 已提交。", markdown: parsed.markdown.trim() };
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : "draft JSON 格式无效");
+            return;
+        }
+        setSubmittingExternalDraft(true);
+        try {
+            const result = await submitDramaAuthoringDraft(workOrder.runId, workOrder.id, draft, {
+                contract: workOrder.contract,
+                directorSkill: workOrder.directorSkill,
+                seedanceSkill: workOrder.seedanceSkill,
+                sources: workOrder.sources.map(({ alias, role, contentHash }) => ({ alias, role, contentHash })),
+            });
+            const loaded = conversation ? await listCreativeMessages(conversation.id) : [];
+            const assistant = loaded.find((item) => item.id === result.run.assistantMessageId);
+            const packageValue = assistant?.metadata?.dramaScriptPackage;
+            if (packageValue && typeof packageValue === "object" && typeof (packageValue as { markdown?: unknown }).markdown === "string") setPackageData(packageValue as { markdown: string; preview: DramaProductionPackagePreview });
+            setMessages(loaded);
+            setWorkOrderOpen(false);
+            setFailedRunId(undefined);
+            message.success("Codex 草案已通过统一门禁，请在预览中确认导入");
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : "Codex 草案提交失败");
+        } finally {
+            setSubmittingExternalDraft(false);
         }
     };
     const stopRun = async () => {
@@ -243,8 +298,8 @@ export function DramaScriptAgentPanel({ project, episode, open, onOpenChange }: 
             const packageRequest = prompt.trim();
             await submit(
                 packageRequest
-                    ? `${packageRequest}\n\n请基于当前项目、当前集、本次已保存的全局参数和本次对话上下文，生成完整的 vozeb-drama-production-package-v1 Markdown 制作包，只包含当前集，并按本次指定的每镜时长重新分割剧情。`
-                    : "请基于当前项目、当前集、本次已保存的全局参数和本次对话上下文，生成完整的 vozeb-drama-production-package-v1 Markdown 制作包，只包含当前集，并按本次指定的每镜时长重新分割剧情。",
+                    ? `${packageRequest}\n\n请基于当前项目、当前集、本次已保存的全局参数和本轮已上传的模板/TXT authoring source，生成完整的 vozeb-drama-production-package-v1 Markdown 制作包，只包含当前集，并按本次指定的每镜时长重新分割剧情。`
+                    : "请基于当前项目、当前集、本次已保存的全局参数和本轮已上传的模板/TXT authoring source，生成完整的 vozeb-drama-production-package-v1 Markdown 制作包，只包含当前集，并按本次指定的每镜时长重新分割剧情。",
                 lockedPlan,
             );
         } catch (error) {
@@ -391,6 +446,12 @@ export function DramaScriptAgentPanel({ project, episode, open, onOpenChange }: 
                         )}
                     </div>
                 </div>
+                {failedRunId ? (
+                    <div className="mt-2 flex items-center justify-between gap-2 rounded-md border border-amber-300/70 bg-amber-50 px-2 py-1.5 text-xs text-amber-900 dark:border-amber-700/70 dark:bg-amber-950/30 dark:text-amber-200">
+                        <span>项目 GPT 已超时，外部 Codex 只能在确认后接续 authoring。</span>
+                        <Button size="small" onClick={() => void createExternalWorkOrder()}>生成 Codex 工作单</Button>
+                    </div>
+                ) : null}
             </div>
             <Modal title="当前集制作包预览" open={Boolean(packageData)} width={720} centered onCancel={() => setPackageData(undefined)} confirmLoading={applying} okText="导入当前集" cancelText="取消" onOk={() => void confirmApply()}>
                 {packageData ? (
@@ -436,6 +497,15 @@ export function DramaScriptAgentPanel({ project, episode, open, onOpenChange }: 
                             </div>
                         ) : null}
                         <pre className="hide-scrollbar max-h-[48vh] overflow-auto whitespace-pre-wrap rounded-md border border-border bg-muted/20 p-3 text-xs leading-5">{packageData.markdown}</pre>
+                    </div>
+                ) : null}
+            </Modal>
+            <Modal title="Codex authoring 工作单" open={workOrderOpen} width={760} centered confirmLoading={submittingExternalDraft} okText="提交 draft 并校验" cancelText="关闭" onCancel={() => setWorkOrderOpen(false)} onOk={() => void submitExternalDraft()}>
+                {workOrder ? (
+                    <div className="space-y-3">
+                        <p className="text-xs leading-5 text-muted-foreground">复制下面的工作单给外部 Codex。Codex 只能返回 <code>{`{"mode":"package","reply":"…","markdown":"…"}`}</code>，不能直接导入项目。完成后将返回内容粘贴到下方。</p>
+                        <pre className="max-h-[34vh] overflow-auto whitespace-pre-wrap rounded-md border border-border bg-muted/20 p-3 text-xs leading-5">{JSON.stringify(workOrder, null, 2)}</pre>
+                        <Input.TextArea value={externalDraft} onChange={(event) => setExternalDraft(event.target.value)} autoSize={{ minRows: 8, maxRows: 16 }} placeholder='粘贴 Codex 返回的 {"mode":"package", "reply":"…", "markdown":"…"}' />
                     </div>
                 ) : null}
             </Modal>

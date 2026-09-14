@@ -6,7 +6,7 @@ import { DRAMA_DIALOGUE_TIMING_RULES } from "@/lib/drama-dialogue-timing";
 export { SEEDANCE_25_DIRECTOR_SKILL } from "./seedance-25";
 export { DRAMA_VIDEO_DIRECTOR_SKILL, resolveDramaDirectorInstructions } from "./drama-video-director";
 
-/** Shared director layer imported from .agents/skills/drama-video-director. */
+/** Canonical project director layer compiled from .agents/skills/drama-video-director. */
 export const DRAMA_PACKAGE_DIRECTOR_RULES = resolveDramaDirectorInstructions("package");
 export const DRAMA_STATIC_FRAME_DIRECTOR_RULES = resolveDramaDirectorInstructions("static-frame");
 export const DRAMA_VIDEO_PROMPT_DIRECTOR_RULES = resolveDramaDirectorInstructions("video");
@@ -50,7 +50,7 @@ export const SEEDANCE_VIDEO_PROMPT_LAYOUT = `
 全局设定：只写本镜头需要持续的环境、材质和主体不变量；同时交代行动实际依赖的空间结构、通道和支撑面，不要把完整资产档案复制进来。
 起始可见状态：只写首帧已经可见的主体、道具、空间和动作状态；明确人物相对座位、门窗、通道或其他出镜人物的位置、朝向与接触关系。若有上一镜实际尾帧，只继承该真实边界状态。
 时间段动作：按 framePlan 的真实动作节点连续分段；每段独立成块，依次写“起点、动作与触发、可见衔接、终点”，其中“动作与触发”同时承载准备、接触/受力、结果、恢复和可观察表演反应。时间范围连续、不重叠；每段都要保留合理的身体支撑、手脚接触、人与物距离和多人相对方位，不能为追求戏剧性让人物以不可能的姿势或位置完成动作。只在动作节点需要时增加帧，不按每一秒机械切碎；每段的终点必须成为下一段的起点。
-单一主运镜：每镜只保留一个有动机的景别/机位/运镜，并说明它响应的动作或信息变化。公共场景读取场景 NPC 策略：auto 按场景类型、空间容量、景别和剧情功能判断，required 必须安排合理数量范围、前中后景分布、密度和群体行为结果，forbidden 不得出现 NPC；NPC 仅是不具名背景群像，不加入主角色、锚点或独立资产，场景全景基准图保持无人。
+单一主运镜：先声明镜头模式：连续镜头或镜头模式：内部切镜（N次）。关键帧和时间段只是状态锚点，不自动代表切镜。连续镜头每镜只保留一个有动机的景别/机位/运镜，并说明它响应的动作或信息变化；内部切镜时，每个切点必须在对应可见衔接中写出镜头事件：时间、类型、触发事件、新机位、信息目的、承接，且切点必须落在 framePlan 段起点。公共场景读取场景 NPC 策略：auto 按场景类型、空间容量、景别和剧情功能判断，required 必须安排合理数量范围、前中后景分布、密度和群体行为结果，forbidden 不得出现 NPC；NPC 仅是不具名背景群像，不加入主角色、锚点或独立资产，场景全景基准图保持无人。
 环境压力与视觉母题：至少写一个具体环境压力，以及一个声音或视觉锚点；不要用“电影感、震撼、氛围感”等空泛词代替。
 视觉风格与光色：写可执行的色板、主光方向、材质反应和风格质感，不用空泛的“高级感”。
 声音意图：对白写说话人、语言、语气和短句；另写环境声、动作音、音乐或静音、字幕策略。
@@ -100,4 +100,9 @@ export const SEEDANCE_DIRECTOR_SKILL = {
     instructions: `这是 prompt-authoring-only 的字段级质量层，不生成第二套提示词，也不把本规则原文附加到供应商请求。按 Seedance 2.0 多模态短剧工作流执行。把长故事视为有入口、出口和连续性边界的镜头序列，而不是互不相关的提示词；先锁定镜头职责、时长、入口状态、出口状态、屏幕方向、轴线和每张参考图的唯一用途。每个镜头先从场景资产推演实际可用的座位、长凳、地面、通道、门窗、隔断和遮挡，再给每个实际出镜角色确定同一参照系下的位置、朝向、视线、支撑/接触对象与相对关系；坐姿必须落在可见座位或其他合理支撑面，封闭车厢内惊醒的人应坐在明确一侧长凳或座位而不是中央过道。多人必须写明彼此左右/前后和视线关系；没有原文或资产依据的人物不得补入画面。项目资产表中的角色名是正式业务事实，不得因为与 reference、ref 等英文缩写相似而改名、删除或当作内部占位符；已登记但本集/本镜不出镜的角色仍须保留在资产档案，并明确不得进入本集参考图请求。当前镜头只把实际出镜角色写入 characterCodes 和 referenceManifest；供应商提示词表达不出镜角色时，同时写角色名的不出镜约束和可观察画面限制，不得只写含义不清的“无可辨识的角色名”。参考图按角色、场景、道具、构图、首帧、尾帧或关键帧分工，@图片/@视频/@音频只表达用途，实际编号、顺序和 URL 由服务端绑定，提示词不得重复伪造参考清单。公开视频 Prompt 固定按动态意图、全局设定、起始可见状态、时间段动作、单一主运镜、环境压力与视觉母题、视觉风格与光色、声音意图、结束画面、连续性锁和针对性约束组织；不另设顶层触发或主体动作字段，动作与触发、准备/受力/结果/恢复和次级反应都写在对应时间段内。人物情绪必须转成每个时间段可观察的眉眼、嘴角、下颌、视线、呼吸、手部或身体变化，禁止只写“电影感”“表情自然”“情绪丰富”等抽象词。只有上一镜当前视频版本且已人工验收的实际尾帧可以承担下一镜 first_frame；不得复制组内首镜起始状态，也不得引用旧分镜、旧任务或失效素材。用户明确的尺寸、比例、质量、时长和参考模式优先，不能擅自改选；每次返修只改变一个已定位变量，并保留已验收状态与引用。`,
 } as const;
 
-export const DEFAULT_CREATIVE_SHORTCUT_SKILLS = [CHARACTER_DESIGN_SKILL, IMAGE_MOTION_SKILL, DRAMA_PLANNING_SKILL, SEEDANCE_DIRECTOR_SKILL, SEEDANCE_25_DIRECTOR_SKILL, DRAMA_ASSET_IMAGE_SKILL] as const;
+/**
+ * seedance-director remains only as a legacy production-plan identifier.
+ * It is not an active prompt source; all drama authoring uses the canonical
+ * project director plus the Seedance 2.5 adapter when a video is generated.
+ */
+export const DEFAULT_CREATIVE_SHORTCUT_SKILLS = [CHARACTER_DESIGN_SKILL, IMAGE_MOTION_SKILL, DRAMA_PLANNING_SKILL, DRAMA_VIDEO_DIRECTOR_SKILL, SEEDANCE_DIRECTOR_SKILL, SEEDANCE_25_DIRECTOR_SKILL, DRAMA_ASSET_IMAGE_SKILL] as const;

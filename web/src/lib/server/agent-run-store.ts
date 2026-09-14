@@ -10,6 +10,7 @@ import { agentRequirementAcknowledgement } from "@/lib/agent-requirement-acknowl
 import { agentTaskCompletionMessage } from "./agent-run-messages";
 import type { AgentRunPlannerAudit } from "./agent-run-audit";
 import { normalizeAgentRunCanvasSnapshot, selectedCanvasNodeIds } from "./agent-run-canvas-snapshot";
+import type { DramaAuthoringWorkOrder, DramaQualityGateReport } from "@/lib/drama-project-contract";
 
 export type AgentRunStatus = "planning" | "running" | "paused" | "completed" | "failed" | "cancelled";
 export type AgentRunReviewStatus = "review_pending" | "reviewing" | "review_completed" | "review_unavailable";
@@ -86,6 +87,9 @@ export type AgentRun = {
     foundation?: CreativeFoundation;
     projectHandoff?: CreativeProjectHandoffPlan;
     dramaScriptPackage?: { markdown: string; preview: unknown };
+    dramaAuthoring?: DramaAuthoringWorkOrder;
+    dramaQualityGateReport?: DramaQualityGateReport;
+    dramaFailureKind?: "timeout" | "quality" | "error";
     projectHandoffEmitted?: boolean;
     review?: CreativeReview;
     reviewed: boolean;
@@ -225,6 +229,9 @@ export async function updateAgentRunById(
             | "projectHandoff"
             | "projectHandoffEmitted"
             | "dramaScriptPackage"
+            | "dramaAuthoring"
+            | "dramaQualityGateReport"
+            | "dramaFailureKind"
             | "review"
             | "reviewed"
             | "reviewStatus"
@@ -341,6 +348,7 @@ function assistantUpdate(run: AgentRun, event?: { type: string; data?: unknown }
                 taskIds: Array.from(new Set(run.tasks.flatMap((task) => task.taskIds || (task.taskId ? [task.taskId] : [])))),
                 projectHandoff: data.projectHandoff,
                 dramaScriptPackage: data.dramaScriptPackage || run.dramaScriptPackage,
+                dramaAuthoring: run.dramaAuthoring,
             },
         };
     }

@@ -105,6 +105,7 @@
 - 交给短剧视频提示词 Agent 的脱敏 `referenceMaterials` 必须保留本次请求的稳定 `alias`、`role`、`purpose` 和顺序；只能移除媒体 URL、内部 ID 等执行数据。服务端引用校验必须依据这些 alias，兼容冒号、括号和空格等正常分隔符，但不能要求 Agent 猜测已被后端删除的编号。
 - 短剧视频提示词优化的服务端质量门禁必须区分“镜头级摘要字段”和“按事实提供的可选字段”：只要求 Skill 合同规定的最小核心字段，`全局设定`、`起始可见状态`、`触发`、`主体动作与反应`、`环境压力与视觉母题`、`视觉风格与光色`、`声音意图`、`连续性锁` 等没有事实时不得因缺失而拒绝；逐帧 `framePlan` 仍必须有真实动作和可见画面状态。
 - 短剧制作包 Agent 的 authoring input 只能包含本轮请求、当前附件、正式资产、当前集事实、相邻剧情摘要、锁定方案、当前显式 Skill 和全局视觉合同；禁止传入 `conversationContext`、`productionArchive`、历史 `generationPrompt`、旧镜头提示词或历史运行记录。canonical Skill 在每个入口只注入一次；锁定方案、全局视觉合同和项目定制规则不得同时作为 system 文本与 authoring JSON 重复注入。
+- 短剧制作包正式生成只能由 `executeDramaScriptRun` 调用项目 GPT 完成；禁止新增或保留从 TXT/模板读取后用固定脚本拼出剧情、分镜或视频 Prompt 的制作包生成器。用户模板和 TXT 必须作为带有 `role`、顺序和内容哈希的正式 authoring source 传入；Agent draft 必须经过动作差异、情绪递进、required NPC 反应变化、运镜动机和镜头事件严格门禁，再由规范对象确定性序列化为最终制作包，并记录导演 Skill 版本与内容哈希。内部 GPT 与 Codex 导演审阅统一读取项目 `.agents/skills` 的编译产物及同一版本/内容哈希。
 - 短剧页面的异步任务轮询只能更新对应的局部控件或 `shotId`/`frameId` 状态；禁止用 `loadProject(..., true)`、整项目 `replaceProject` 或路由刷新覆盖整个工作区。轮询 effect 不得依赖整个 `episode.shots` 对象，避免单个镜头状态变化重建全部计时器、滚动位置和编辑状态。
 - 短剧确认生成弹窗、生产前预览、生产运行分段和供应商请求必须读取当前镜头已标记为 `ai` 或 `manual` 的 `executionVideoPrompt`；不得因为其中包含 `时间段动作` 或 `Pxx-Fxx` 就回退到旧的 `shot.videoPrompt`。只有未标记来源的历史执行字段才允许走遗留编译回退，并且必须用回归测试锁定。
 - 短剧分镜帧已有图片但自动连续性复盘未通过时，必须在错误说明旁显示高对比、可直接操作的人工验收入口，并明确区分“确认使用当前图并继续”和“重新生成候选”；禁止只把验收做成状态标签旁的弱文字链接。人工验收前必须说明会解锁下一帧且不会重新生图；验收必须基于服务端最新项目原子持久化，成功提示只能在服务端返回后显示，刷新和旧运行同步不得把人工验收结果回退为待调整。
@@ -186,6 +187,8 @@
 
 ## 项目注意事项
 
+- 短剧导演 Skill 的唯一源码是项目 .agents/skills/drama-video-director/SKILL.md，Seedance 2.5 适配 Skill 的唯一源码是项目 .agents/skills/seedance-25/SKILL.md 及其 references/；web/src/lib/server/agent-skills/ 下的 generated.ts 只能由 compile:skills 生成，~/.codex/skills/ 只能由 sync:codex-skills 同步。不得把 ~/.codex 旧副本、通用 visual-video-director、ai-video-skill-pack 或历史 seedance-director 规则当作短剧制作包的第二套导演事实源；seedance-director 仅保留为旧 productionPlan 的兼容标识，实际 authoring 必须使用 canonical drama-video-director 加当前 Seedance 2.5 适配层。
+- 短剧视频 Prompt 的 单一主运镜 必须显式声明 镜头模式：连续镜头 或 镜头模式：内部切镜（N次）。多帧、多个时间段或 all_frames 只代表可验收状态锚点，不自动代表切镜；内部切镜必须在对应 可见衔接 写出带时间、类型、触发事件、新机位、信息目的和承接关系的 镜头事件，且时间必须落在 framePlan 段起点边界。Agent 生成和制作包运行前均需执行同一摄影契约校验。
 - 本机源码或 Standalone 启动必须从环境变量读取唯一、显式的 PostgreSQL Host/Port，不得扫描运行中的容器猜测数据库；同一个 PostgreSQL 数据卷严禁同时挂载到多个运行中的数据库容器。Standalone 运行目录必须与 Next.js 构建目录隔离，禁止从后续构建会覆盖的 `.next/standalone` 长期运行；启动回归必须同时验证数据库 ready、页面静态资源 200 且 MIME 正确，以及构建目录变化不会破坏运行中的页面。
 - 本机普通开发必须使用 `PORT=3010 pnpm --dir web run start:hot`（Next.js `dev` + HMR）。用户说“启动项目”“重启项目”或“重新构建并启动当前代码”时，默认都解释为启动当前源码的 3010 热部署服务，不得仅因这些表述执行生产构建或启动旧 Standalone；只有用户明确要求生产等价验收、发布构建或 `start:standalone` 时才使用 Standalone。`start:hot` 必须清除 E2E 注入的 `VOZEB_PRO_DATABASE_PROVIDER` 和 `VOZEB_PRO_DATA_DIR`，避免登录到测试文件库；E2E 只通过 Playwright 自己的启动环境使用文件库。源码、路由、服务和样式改动默认不得通过重建 `.next` 或重启进程生效；只有环境变量/密钥、依赖或原生模块、Next.js/启动器配置、数据库/容器初始化、开发进程崩溃或 HMR 明确失效时才允许重启，并须说明原因。
 - 管理后台站点配置中的非空社交或联系地址必须在 HTTP 边界校验：可识别的简写应规范化为标准 URL，无法识别时返回明确 4xx，禁止 normalizer 静默改为空字符串后仍返回保存成功。相关改动必须覆盖后台填写保存、刷新回读、公开 Session 与首页入口的完整 round-trip，并断言无效输入没有写入持久层。

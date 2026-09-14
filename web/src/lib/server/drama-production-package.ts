@@ -9,11 +9,15 @@ import type {
     DramaFieldOrigin,
     DramaNamedAsset,
     DramaProductionPackageAsset,
+    DramaProductionPackageAuthoring,
+    DramaProductionPackageAuthoringMaterial,
     DramaProductionPackageEpisode,
     DramaProductionPackagePreview,
     DramaProductionPackageV1,
     DramaProductionBible,
     DramaProject,
+    DramaAuthoringSourceSnapshot,
+    DramaQualityGateReport,
     DramaReferenceManifestRole,
     DramaSeriesBible,
     DramaShot,
@@ -34,11 +38,27 @@ import { dramaDialogueTimingReminder, dramaFrameDialogueTimingReminder, dramaUtt
 import { resolveDramaStyleContract } from "@/lib/drama-style";
 import { normalizeDramaCharacterProfile } from "@/lib/drama-character-rules";
 import { resolveDramaShotDuration } from "@/lib/server/drama-shot-config";
-import { hasConcreteDramaCameraDirection, isGenericDramaDetail, validateDramaPerformanceDetail, validateDramaVideoSegmentDetail } from "@/lib/drama-prompt-quality";
+import { hasConcreteDramaCameraDirection, isGenericDramaDetail, validateDramaCameraPlan, validateDramaPerformanceDetail, validateDramaVideoAuthoringQuality, validateDramaVideoSegmentDetail } from "@/lib/drama-prompt-quality";
+import { DRAMA_VIDEO_DIRECTOR_SKILL } from "@/lib/server/agent-skills/drama-video-director";
+import { SEEDANCE_25_DIRECTOR_SKILL } from "@/lib/server/agent-skills/seedance-25";
+import { DRAMA_PACKAGE_CONTRACT, DRAMA_PACKAGE_CONTRACT_ID, DRAMA_PACKAGE_CONTRACT_VERSION, DRAMA_PACKAGE_GATE_CODES } from "@/lib/server/drama-production-package-contract";
+import { validateDramaAuthoringQuality } from "@/lib/server/drama-production-package-quality";
 
 export class DramaProductionPackageError extends Error {}
 
 type DramaProjectAssetCollection = Pick<DramaProject, "characters" | "scenes" | "props" | "clues">;
+
+export type DramaProductionPackageNormalizationOptions = {
+    validateVideoPrompt?: boolean;
+    requireCameraPlan?: boolean;
+    requireContentQuality?: boolean;
+    requireAgentAuthoring?: boolean;
+    requireAuthoringQuality?: boolean;
+    allowImportWarnings?: boolean;
+    importWarnings?: string[];
+    authoringSources?: import("@/lib/drama-project-contract").DramaAuthoringSourceSnapshot[];
+    targetNarrativeChapter?: number | string;
+};
 
 /**
  * Builds the stable, non-media asset catalog that a chapter package must reuse.
@@ -135,7 +155,7 @@ function mergeProjectAssetCollection(incoming: DramaProductionPackageAsset[], ex
     return [...merged, ...incoming.filter((asset) => !existingKeys.has(asset.code) && !existingKeys.has(normalizeKey(asset.name)))];
 }
 
-export function previewDramaProductionPackage(source: string, fileName = "production-package.json", project?: DramaProjectAssetCollection, options: { validateVideoPrompt?: boolean } = {}): DramaProductionPackagePreview {
+export function previewDramaProductionPackage(source: string, fileName = "production-package.json", project?: DramaProjectAssetCollection, options: DramaProductionPackageNormalizationOptions = {}): DramaProductionPackagePreview {
     const trimmed = source.trim();
     if (!trimmed) throw new DramaProductionPackageError("制作包内容不能为空");
     const embedded = trimmed.match(/```(?:json|drama-production-package)[ \t]*\r?\n([\s\S]*?)```/i)?.[1];
@@ -145,13 +165,16 @@ export function previewDramaProductionPackage(source: string, fileName = "produc
     const parsed = format === "markdown" ? parseObject(embedded || "") || parseObject((embedded || "").replace(/\\u0060/gu, "`")) : parseObject(trimmed);
     if (!parsed) throw new DramaProductionPackageError("Markdown 制作包必须嵌入标准清单 JSON；不会从旧镜头表重建制作包");
     const packageWithProjectAssets = project ? mergeProjectAssetsIntoProductionPackage(parsed as DramaProductionPackageV1, project) : parsed;
-    const normalizedPackage = normalizeProductionPackage(packageWithProjectAssets, options);
+    const importWarnings: string[] = [];
+    const normalizedPackage = normalizeProductionPackage(packageWithProjectAssets, { ...options, importWarnings });
     const productionPackage = normalizedPackage;
+    const allWarnings = [...new Set([...importWarnings, ...collectWarnings(productionPackage)])];
     return {
         package: productionPackage,
         sourceHash: createHash("sha256").update(source).digest("hex"),
         format,
-        warnings: collectWarnings(productionPackage),
+        warnings: allWarnings,
+        importWarnings,
         summary: {
             episodes: productionPackage.episodes.length,
             storyScenes: productionPackage.episodes.reduce((total, episode) => total + episode.storyScenes.length, 0),
@@ -168,8 +191,8 @@ export function previewDramaProductionPackage(source: string, fileName = "produc
     };
 }
 
-export function applyDramaProductionPackage(project: DramaProject, source: DramaProductionPackageV1, sourceHash: string, rawSource?: string, fileName = "package.json"): DramaProject {
-    const productionPackage = normalizeProductionPackage(source);
+export function applyDramaProductionPackage(project: DramaProject, source: DramaProductionPackageV1, sourceHash: string, rawSource?: string, fileName = "package.json", options: DramaProductionPackageNormalizationOptions = {}): DramaProject {
+    const productionPackage = normalizeProductionPackage(source, options);
     const characters = mergeAssets(project.characters, productionPackage.assets.characters, "character");
     const locations = mergeAssets(project.scenes, productionPackage.assets.locations, "location");
     const props = mergeAssets(project.props, productionPackage.assets.props, "prop");
@@ -215,6 +238,12 @@ export function applyDramaProductionPackage(project: DramaProject, source: Drama
         episodes,
         sourceAssets,
     };
+}
+
+export function attachDramaProductionPackageAuthoring<T extends DramaProductionPackageV1>(value: T, authoring: DramaProductionPackageAuthoring): T {
+    const normalized = normalizePackageAuthoring(authoring);
+    if (!normalized) throw new DramaProductionPackageError("制作包缺少有效的 Agent authoring provenance");
+    return { ...value, authoring: normalized };
 }
 
 function mergeEpisode(
@@ -402,7 +431,7 @@ function mergeManualFields<T extends { fieldOrigins?: Record<string, DramaFieldO
     return result as T;
 }
 
-function normalizeProductionPackage(value: unknown, options: { validateVideoPrompt?: boolean } = {}): DramaProductionPackageV1 {
+function normalizeProductionPackage(value: unknown, options: DramaProductionPackageNormalizationOptions = {}): DramaProductionPackageV1 {
     const input = object(value);
     if (Number(input.schemaVersion) !== 1) throw new DramaProductionPackageError("仅支持 schemaVersion 1 的制作包");
     const project = object(input.project);
@@ -458,6 +487,9 @@ function normalizeProductionPackage(value: unknown, options: { validateVideoProm
         };
     });
     const synchronizedEpisodes = normalizedEpisodes.map(synchronizeContinuityStates);
+    // Validate the caller's raw plan before normalization can apply defaults or
+    // coerce an invalid value into a seemingly valid runtime plan.
+    validateRawProductionPlan(bible);
     const productionPlan = normalizePackageProductionPlan(bible);
     const styleContract = resolveDramaStyleContract({
         style: text(project.style),
@@ -471,9 +503,8 @@ function normalizeProductionPackage(value: unknown, options: { validateVideoProm
         ...(colorScript ? { colorScript } : {}),
         ...(normalizeDialogueTimingPolicy(bible.dialogueTiming) ? { dialogueTiming: normalizeDialogueTimingPolicy(bible.dialogueTiming) } : {}),
     };
-    validateProductionPackageCompleteness({ ...input, project: { ...project, productionBible: normalizedBible }, assets: normalizedAssets, episodes: synchronizedEpisodes });
-    validateSplitShotFramePlans(synchronizedEpisodes);
-    return {
+    const authoring = normalizePackageAuthoring(input.authoring);
+    const result: DramaProductionPackageV1 = {
         schemaVersion: 1,
         project: {
             title: text(project.title) || "未命名短剧",
@@ -499,7 +530,115 @@ function normalizeProductionPackage(value: unknown, options: { validateVideoProm
         episodes: synchronizedEpisodes,
         seriesBible: normalizeSeriesBible(input.seriesBible),
         archive: normalizeProductionArchive(input.archive),
+        ...(authoring ? { authoring } : {}),
     };
+    if (options.requireAuthoringQuality) validateStrictAuthoringQuality(result, authoring, options);
+    validateProductionPackageCompleteness(result, options);
+    validateSplitShotFramePlans(synchronizedEpisodes, options.allowImportWarnings);
+    return result;
+}
+
+function validateStrictAuthoringQuality(value: DramaProductionPackageV1, authoring: DramaProductionPackageAuthoring | undefined, options: DramaProductionPackageNormalizationOptions) {
+    if (!authoring?.qualityGateReport) throw new DramaProductionPackageError("制作包缺少严格质量门禁报告，禁止导入");
+    if (authoring.provider !== "project-gpt" && authoring.provider !== "codex-work-order") throw new DramaProductionPackageError("制作包缺少有效的 authoring provider，禁止导入");
+    if (!authoring.runId) throw new DramaProductionPackageError("制作包缺少 authoring 运行凭据，禁止导入");
+    if (!authoring.contract || authoring.contract.id !== DRAMA_PACKAGE_CONTRACT_ID || authoring.contract.version !== DRAMA_PACKAGE_CONTRACT_VERSION || authoring.contract.contentHash !== DRAMA_PACKAGE_CONTRACT.contentHash)
+        throw new DramaProductionPackageError("制作包缺少当前契约版本/内容哈希，禁止导入");
+    const requiredRoles = new Set(authoring.materials.filter((material) => material.type === "text").map((material) => material.role));
+    if (!requiredRoles.has("package-template") || !requiredRoles.has("story-source")) throw new DramaProductionPackageError("制作包 authoring provenance 必须同时记录文本模板和 TXT/小说素材");
+    if (options.authoringSources && !sameAuthoringMaterialManifest(authoring.materials, options.authoringSources)) throw new DramaProductionPackageError("制作包 authoring 素材 alias、role、顺序或内容哈希与本次输入不一致");
+    const missingGateCodes = DRAMA_PACKAGE_GATE_CODES.filter((code) => !authoring.qualityGateReport!.checks.some((check) => check.code === code));
+    if (missingGateCodes.length) throw new DramaProductionPackageError(`制作包质量门禁报告缺少检查项：${missingGateCodes.join("、")}`);
+    const report = validateDramaAuthoringQuality({ package: value, sources: options.authoringSources || [], targetNarrativeChapter: options.targetNarrativeChapter ?? authoring.targetNarrativeChapter });
+    if (report.status === "blocked") throw new DramaProductionPackageError(formatDramaQualityGateFailure(report));
+    if (authoring.qualityGateReport.status !== "passed") throw new DramaProductionPackageError("制作包 authoring 质量门禁报告不是 passed，禁止导入");
+}
+
+function sameAuthoringMaterialManifest(actual: DramaProductionPackageAuthoringMaterial[], expected: DramaAuthoringSourceSnapshot[]) {
+    return actual.length === expected.length && actual.every((material, index) => {
+        const source = expected[index];
+        return Boolean(source) && material.alias === source.alias && material.role === source.role && material.type === source.type && material.title === source.title && material.contentHash === source.contentHash;
+    });
+}
+
+function normalizePackageAuthoring(value: unknown): DramaProductionPackageAuthoring | undefined {
+    const input = object(value);
+    if (!Object.keys(input).length) return undefined;
+    const directorSkill = normalizePackageSkillProvenance(input.directorSkill, "directorSkill");
+    const seedanceSkill = normalizePackageSkillProvenance(input.seedanceSkill, "seedanceSkill");
+    const rawMaterials = array(input.materials);
+    const materials = rawMaterials.flatMap((item) => {
+        const material = object(item);
+        const role = text(material.role);
+        const type = text(material.type);
+        const alias = text(material.alias);
+        const title = text(material.title);
+        const contentHash = text(material.contentHash);
+        if (!alias || !title || !contentHash || !/^[a-f0-9]{64}$/u.test(contentHash) || !["package-template", "story-source", "reference"].includes(role) || !["text", "image", "video", "audio"].includes(type)) return [];
+        return [{ alias, role: role as DramaProductionPackageAuthoringMaterial["role"], type: type as DramaProductionPackageAuthoringMaterial["type"], title, contentHash }];
+    });
+    const source = text(input.source);
+    const provider = text(input.provider);
+    const runId = text(input.runId);
+    const generatedAt = text(input.generatedAt);
+    if (source !== "executeDramaScriptRun" || !generatedAt || !directorSkill || !seedanceSkill) throw new DramaProductionPackageError("制作包 authoring provenance 无效，必须记录 executeDramaScriptRun、导演 Skill 和视频 Skill");
+    if (materials.length !== rawMaterials.length || new Set(materials.map((material) => material.alias)).size !== materials.length) throw new DramaProductionPackageError("制作包 authoring provenance 的素材记录无效或 alias 重复");
+    const targetNarrativeChapter = typeof input.targetNarrativeChapter === "number" || typeof input.targetNarrativeChapter === "string" ? input.targetNarrativeChapter : undefined;
+    const contractInput = object(input.contract);
+    const contract = contractInput.id || contractInput.version || contractInput.contentHash ? normalizePackageContract(contractInput) : undefined;
+    const qualityGateReport = normalizeQualityGateReport(input.qualityGateReport);
+    return {
+        source,
+        ...(provider === "project-gpt" || provider === "codex-work-order" ? { provider } : {}),
+        ...(runId ? { runId } : {}),
+        ...(targetNarrativeChapter !== undefined ? { targetNarrativeChapter } : {}),
+        generatedAt,
+        ...(contract ? { contract } : {}),
+        directorSkill,
+        seedanceSkill,
+        materials,
+        ...(qualityGateReport ? { qualityGateReport } : {}),
+    };
+}
+
+function normalizePackageSkillProvenance(value: unknown, label: string) {
+    const input = object(value);
+    const id = text(input.id);
+    const version = text(input.version);
+    const contentHash = text(input.contentHash);
+    if (!id || !version || !/^[a-f0-9]{64}$/u.test(contentHash)) throw new DramaProductionPackageError(`制作包 authoring provenance 缺少有效的 ${label} 版本或内容哈希`);
+    return { id, version, contentHash };
+}
+
+function normalizePackageContract(value: Record<string, unknown>) {
+    const id = text(value.id);
+    const version = text(value.version);
+    const contentHash = text(value.contentHash);
+    if (id !== DRAMA_PACKAGE_CONTRACT_ID || version !== DRAMA_PACKAGE_CONTRACT_VERSION || contentHash !== DRAMA_PACKAGE_CONTRACT.contentHash)
+        throw new DramaProductionPackageError("制作包使用了过期或不一致的契约版本/内容哈希");
+    return { id: DRAMA_PACKAGE_CONTRACT_ID, version: DRAMA_PACKAGE_CONTRACT_VERSION, contentHash } as const;
+}
+
+function normalizeQualityGateReport(value: unknown): DramaQualityGateReport | undefined {
+    const input = object(value);
+    if (!Object.keys(input).length) return undefined;
+    const status = input.status === "passed" ? "passed" : input.status === "blocked" ? "blocked" : "";
+    if (!status || !Array.isArray(input.checks)) throw new DramaProductionPackageError("制作包质量门禁报告格式无效");
+    const checks = input.checks.flatMap((item) => {
+        const check = object(item);
+        const code = text(check.code);
+        const severity = check.severity === "blocker" || check.severity === "warning" ? check.severity : "";
+        if (!code || !severity) return [];
+        return [{ code, severity: severity as "blocker" | "warning", scope: text(check.scope), evidence: text(check.evidence), sourceRefs: strings(check.sourceRefs), fixHint: text(check.fixHint) }];
+    });
+    if (checks.length !== input.checks.length) throw new DramaProductionPackageError("制作包质量门禁报告包含无效检查项");
+    if ((status === "blocked") !== checks.some((check) => check.severity === "blocker")) throw new DramaProductionPackageError("制作包质量门禁报告状态与检查项不一致");
+    return { status: status as "passed" | "blocked", checks };
+}
+
+function formatDramaQualityGateFailure(report: DramaQualityGateReport) {
+    const blockers = report.checks.filter((check) => check.severity === "blocker").slice(0, 5).map((check) => `${check.code}: ${check.evidence}`).join("；");
+    return `制作包质量门禁未通过，禁止导入${blockers ? `：${blockers}` : ""}`;
 }
 
 function normalizePackageProductionPlan(bible: Record<string, unknown>) {
@@ -519,18 +658,22 @@ function normalizePackageProductionPlan(bible: Record<string, unknown>) {
     return normalizeDramaProductionPlan(bible.productionPlan, fallback);
 }
 
-function validateProductionPackageCompleteness(value: Record<string, unknown>) {
+function validateProductionPackageCompleteness(value: Record<string, unknown>, options: DramaProductionPackageNormalizationOptions = {}) {
     const project = object(value.project);
     const bible = object(project.productionBible);
-    const rawPlan = object(bible.productionPlan);
-    const rawVideo = object(rawPlan.video);
-    const rawShotDuration = rawVideo.shotDuration;
-    const rawFramePolicy = rawVideo.framePolicy;
-    if (rawShotDuration !== undefined && Number(rawShotDuration) !== 15 && Number(rawShotDuration) !== 30) throw new DramaProductionPackageError("制作包每镜时长只能为 15 秒或 30 秒");
-    if (rawFramePolicy !== undefined && !["fixed-4", "fixed-5", "agent"].includes(String(rawFramePolicy))) throw new DramaProductionPackageError("制作包帧数策略无效");
-    if (rawFramePolicy === "agent" && rawVideo.frameCount !== undefined) throw new DramaProductionPackageError("Agent 智能切分方案不能携带固定帧数");
+    validateRawProductionPlan(bible);
     const plan = normalizePackageProductionPlan(bible);
     const dialogueTiming = normalizeDialogueTimingPolicy(bible.dialogueTiming);
+    if (options.requireAgentAuthoring) {
+        const authoring = object(value.authoring);
+        if (authoring.source !== "executeDramaScriptRun") throw new DramaProductionPackageError("Agent 制作包缺少 authoring provenance，必须由 executeDramaScriptRun 生成");
+        const directorSkill = object(authoring.directorSkill);
+        const seedanceSkill = object(authoring.seedanceSkill);
+        if (directorSkill.id !== DRAMA_VIDEO_DIRECTOR_SKILL.id || directorSkill.version !== DRAMA_VIDEO_DIRECTOR_SKILL.sourceVersion || directorSkill.contentHash !== DRAMA_VIDEO_DIRECTOR_SKILL.sourceContentHash)
+            throw new DramaProductionPackageError("Agent 制作包使用了过期或不一致的导演 Skill 版本/内容哈希");
+        if (seedanceSkill.id !== SEEDANCE_25_DIRECTOR_SKILL.id || seedanceSkill.version !== SEEDANCE_25_DIRECTOR_SKILL.sourceVersion || seedanceSkill.contentHash !== SEEDANCE_25_DIRECTOR_SKILL.sourceContentHash)
+            throw new DramaProductionPackageError("Agent 制作包使用了过期或不一致的 Seedance 2.5 Skill 版本/内容哈希");
+    }
     if (!plan?.skills.some((skill) => skill.id === "seedance-director")) throw new DramaProductionPackageError("制作包缺少必需的 Seedance 2.0 导演 Skill");
     if (!plan.skills.some((skill) => skill.id === "seedance-25-director")) throw new DramaProductionPackageError("制作包缺少必需的 Seedance 2.5 视频导演 Skill");
     if (plan.lockedAt && (!plan.visual.visualStyle.trim() || !plan.visual.artStyle.trim())) throw new DramaProductionPackageError("已锁定的制作方案必须包含具体的视觉风格和画风");
@@ -555,29 +698,78 @@ function validateProductionPackageCompleteness(value: Record<string, unknown>) {
             const label = text(item.code) || text(item.title) || "镜头";
             const frameCount = array(object(item.framePlan).frames).length;
             const minFrameCount = plan.video.framePolicy === "agent" ? plan.frameCountRange?.min || 2 : 1;
-            if (frameCount < minFrameCount || frameCount > (plan.video.framePolicy === "agent" ? plan.frameCountRange?.max || 9 : 9))
-                throw new DramaProductionPackageError(`${label}的逐帧计划必须包含 ${minFrameCount}-${plan.video.framePolicy === "agent" ? plan.frameCountRange?.max || 9 : 9} 个真实动作节点`);
-            if (plan.video.framePolicy === "fixed-4" && frameCount !== 4) throw new DramaProductionPackageError(`${label}的逐帧计划必须为 4 帧`);
-            if (plan.video.framePolicy === "fixed-5" && frameCount !== 5) throw new DramaProductionPackageError(`${label}的逐帧计划必须为 5 帧`);
+            if (frameCount < minFrameCount || frameCount > (plan.video.framePolicy === "agent" ? plan.frameCountRange?.max || 9 : 9)) {
+                const message = `${label}的逐帧计划必须包含 ${minFrameCount}-${plan.video.framePolicy === "agent" ? plan.frameCountRange?.max || 9 : 9} 个真实动作节点`;
+                if (!options.allowImportWarnings) throw new DramaProductionPackageError(message);
+                options.importWarnings?.push(`${message}；已允许导入，后续生成前需要补齐逐帧动作节点`);
+            }
+            if (plan.video.framePolicy === "fixed-4" && frameCount !== 4) {
+                const message = `${label}的逐帧计划必须为 4 帧`;
+                if (!options.allowImportWarnings) throw new DramaProductionPackageError(message);
+                options.importWarnings?.push(`${message}；已允许导入，后续生成前需要补齐固定帧数`);
+            }
+            if (plan.video.framePolicy === "fixed-5" && frameCount !== 5) {
+                const message = `${label}的逐帧计划必须为 5 帧`;
+                if (!options.allowImportWarnings) throw new DramaProductionPackageError(message);
+                options.importWarnings?.push(`${message}；已允许导入，后续生成前需要补齐固定帧数`);
+            }
             const performanceIssues = validateDramaPerformanceDetail(item.performancePlan as DramaShot["performancePlan"], undefined, 0, label);
-            if (performanceIssues.length) throw new DramaProductionPackageError(`${label}的制作包表演规划不完整：${performanceIssues[0]}`);
+            if (performanceIssues.length) {
+                const message = `${label}的制作包表演规划不完整：${performanceIssues[0]}`;
+                if (!options.allowImportWarnings) throw new DramaProductionPackageError(message);
+                options.importWarnings?.push(`${message}；已允许导入，后续生成前需要补齐表演规划`);
+            }
             if (dialogueTiming?.requireUtteranceTimings) {
                 const timingIssues = dramaUtteranceTimingIssues(Number(item.duration), array(item.utterances) as DramaDialogueTimingInput[], true, label);
-                if (timingIssues.length) throw new DramaProductionPackageError(timingIssues.join("；"));
+                if (timingIssues.length) {
+                    const message = timingIssues.join("；");
+                    if (!options.allowImportWarnings) throw new DramaProductionPackageError(message);
+                    options.importWarnings?.push(`${message}；已允许导入，后续生成前需要调整对白时间`);
+                }
             }
             if (!text(item.locationCode) || !locations.has(text(item.locationCode))) throw new DramaProductionPackageError(`${label}缺少有效场景资产引用`);
             for (const code of strings(item.characterCodes)) if (!characters.has(code)) throw new DramaProductionPackageError(`${label}引用了不存在的角色资产 ${code}`);
             for (const code of strings(item.propCodes)) if (!props.has(code)) throw new DramaProductionPackageError(`${label}引用了不存在的道具资产 ${code}`);
+            if (options.validateVideoPrompt) {
+                const bindingIssues = validatePromptAssetBindings(text(item.videoPrompt), strings(item.characterCodes), strings(item.propCodes), text(item.locationCode), array(assets.characters), array(assets.props), array(assets.locations), label);
+                if (bindingIssues.length) throw new DramaProductionPackageError(bindingIssues.join("；"));
+            }
             if (/(?:运镜|焦段|推近|拉远|摇镜|跟拍|滑轨|环绕|吊臂|慢推|慢拉|后拉|时间段|时间轴|动作过程|对白|声音|口型)/u.test(dramaStaticFramePositiveText(text(item.imagePrompt))))
                 throw new DramaProductionPackageError(`${label}的 imagePrompt 必须是单一静态画面，不能包含运镜、时间过程、对白或声音`);
             if (/(?:本内部镜头只执行|内部 ID|assetId|参考图清单|URL)/u.test(text(item.videoPrompt))) throw new DramaProductionPackageError(`${label}的 videoPrompt 不能包含内部说明、资产 ID、URL 或参考图清单`);
             const manifest = array(object(item.framePlan).referenceManifest);
             const has = (role: string, code: string) => manifest.some((entry) => object(entry).role === role && text(object(entry).assetId) === code);
-            if (!has("scene_anchor", text(item.locationCode))) throw new DramaProductionPackageError(`${label}的 referenceManifest 缺少当前场景锚点`);
-            for (const code of strings(item.characterCodes)) if (!has("character_anchor", code)) throw new DramaProductionPackageError(`${label}的 referenceManifest 缺少角色 ${code} 锚点`);
-            for (const code of strings(item.propCodes)) if (!has("prop_anchor", code)) throw new DramaProductionPackageError(`${label}的 referenceManifest 缺少道具 ${code} 锚点`);
+            if (!has("scene_anchor", text(item.locationCode))) {
+                const message = `${label}的 referenceManifest 缺少当前场景锚点`;
+                if (!options.allowImportWarnings) throw new DramaProductionPackageError(message);
+                options.importWarnings?.push(`${message}；已允许导入，后续生成前需要补充场景参考绑定`);
+            }
+            for (const code of strings(item.characterCodes)) {
+                if (!has("character_anchor", code)) {
+                    const message = `${label}的 referenceManifest 缺少角色 ${code} 锚点`;
+                    if (!options.allowImportWarnings) throw new DramaProductionPackageError(message);
+                    options.importWarnings?.push(`${message}；已允许导入，后续生成前需要补充角色参考绑定`);
+                }
+            }
+            for (const code of strings(item.propCodes)) {
+                if (!has("prop_anchor", code)) {
+                    const message = `${label}的 referenceManifest 缺少道具 ${code} 锚点`;
+                    if (!options.allowImportWarnings) throw new DramaProductionPackageError(message);
+                    options.importWarnings?.push(`${message}；已允许导入，后续生成前需要补充道具参考绑定`);
+                }
+            }
         }
     }
+}
+
+function validateRawProductionPlan(bible: Record<string, unknown>) {
+    const rawPlan = object(bible.productionPlan);
+    const rawVideo = object(rawPlan.video);
+    const rawShotDuration = rawVideo.shotDuration;
+    const rawFramePolicy = rawVideo.framePolicy;
+    if (rawShotDuration !== undefined && Number(rawShotDuration) !== 15 && Number(rawShotDuration) !== 30) throw new DramaProductionPackageError("制作包每镜时长只能为 15 秒或 30 秒");
+    if (rawFramePolicy !== undefined && !["fixed-4", "fixed-5", "agent"].includes(String(rawFramePolicy))) throw new DramaProductionPackageError("制作包帧数策略无效");
+    if (rawFramePolicy === "agent" && rawVideo.frameCount !== undefined) throw new DramaProductionPackageError("Agent 智能切分方案不能携带固定帧数");
 }
 
 /**
@@ -703,7 +895,7 @@ function normalizeProductionArchive(value: unknown): DramaProductionPackageV1["a
     };
 }
 
-function normalizeEpisodePackage(value: unknown, episodeIndex: number, options: { validateVideoPrompt?: boolean; backgroundNpcPolicyByLocationCode?: Map<string, DramaBackgroundNpcPolicy> } = {}): DramaProductionPackageEpisode {
+function normalizeEpisodePackage(value: unknown, episodeIndex: number, options: DramaProductionPackageNormalizationOptions & { backgroundNpcPolicyByLocationCode?: Map<string, DramaBackgroundNpcPolicy> } = {}): DramaProductionPackageEpisode {
     const input = object(value);
     const shots = array(input.shots)
         .map((shot, index) => normalizePackageShot(shot, index, options))
@@ -753,14 +945,21 @@ function normalizeEpisodePackage(value: unknown, episodeIndex: number, options: 
     };
 }
 
-function normalizePackageShot(value: unknown, index: number, options: { validateVideoPrompt?: boolean; backgroundNpcPolicyByLocationCode?: Map<string, DramaBackgroundNpcPolicy> } = {}): DramaProductionPackageEpisode["shots"][number] {
+function normalizePackageShot(value: unknown, index: number, options: DramaProductionPackageNormalizationOptions & { backgroundNpcPolicyByLocationCode?: Map<string, DramaBackgroundNpcPolicy> } = {}): DramaProductionPackageEpisode["shots"][number] {
     const shot = object(value);
     const framePlan = object(shot.framePlan);
     const frameStart = object(framePlan.start);
     const frameEnd = object(framePlan.end);
-    if (!Object.keys(framePlan).length || (frameStart.source !== "independent" && frameStart.source !== "previous_accepted_actual_tail") || typeof frameEnd.required !== "boolean")
-        throw new DramaProductionPackageError(`镜头 ${text(shot.code) || index + 1} 缺少有效 framePlan；必须声明首帧来源和尾帧要求`);
-    if (!Object.keys(object(shot.entryState)).length || !Object.keys(object(shot.exitState)).length) throw new DramaProductionPackageError(`镜头 ${text(shot.code) || index + 1} 必须声明入口和出口状态`);
+    const label = text(shot.code) || String(index + 1);
+    const hasValidFramePlan = Boolean(Object.keys(framePlan).length && (frameStart.source === "independent" || frameStart.source === "previous_accepted_actual_tail") && typeof frameEnd.required === "boolean");
+    if (!hasValidFramePlan) {
+        if (!options.allowImportWarnings) throw new DramaProductionPackageError(`镜头 ${label} 缺少有效 framePlan；必须声明首帧来源和尾帧要求`);
+        options.importWarnings?.push(`镜头 ${label} 缺少有效 framePlan；已允许导入，后续生成前需要补充首帧来源、尾帧要求和逐帧计划`);
+    }
+    if (!Object.keys(object(shot.entryState)).length || !Object.keys(object(shot.exitState)).length) {
+        if (!options.allowImportWarnings) throw new DramaProductionPackageError(`镜头 ${label} 必须声明入口和出口状态`);
+        options.importWarnings?.push(`镜头 ${label} 缺少入口或出口状态；已允许导入，后续生成前需要补充连续性状态`);
+    }
     const continuity = object(shot.continuity);
     const utterances: DramaShot["utterances"] = array(shot.utterances).map((value, utteranceIndex) => {
         const utterance = object(value);
@@ -798,7 +997,7 @@ function normalizePackageShot(value: unknown, index: number, options: { validate
     const dialoguePerformance = mergeDialoguePerformance(normalizeDialoguePerformance(shot.dialoguePerformance), utterances);
     const timecode = parseTimecode(shot.timecode);
     const duration = timecode ? Math.max(1, timecode[1] - timecode[0]) : resolveDramaShotDuration(shot.duration, 5);
-    let frames;
+    let frames: ReturnType<typeof normalizeDramaFrameBeats> = [];
     try {
         const rawFrames = array(framePlan.frames);
         if (!rawFrames.length) throw new DramaProductionPackageError("缺少逐帧计划，必须由制作包明确提供每帧动作与静态画面状态");
@@ -822,10 +1021,20 @@ function normalizePackageShot(value: unknown, index: number, options: { validate
         if (visualErrors.length) throw new DramaProductionPackageError(`镜头 ${text(shot.code) || index + 1} 的逐帧画面无效：${visualErrors.join("；")}`);
         if (options.validateVideoPrompt) {
             const npcPolicy = locationCode ? options.backgroundNpcPolicyByLocationCode?.get(locationCode) : undefined;
-            validateStrictPackageVideoPrompt(text(shot.videoPrompt), frames, text(shot.code) || String(index + 1), { requiresBackgroundNpc: npcPolicy?.mode === "required" });
+            const npcDeclaredInFramePlan = frames.some((frame) => /NPC群像|旁听者|旁观者|人群/u.test(`${frame.actionPrompt}\n${frame.transitionPrompt}\n${frame.endPrompt}`));
+            validateStrictPackageVideoPrompt(text(shot.videoPrompt), frames, text(shot.code) || String(index + 1), {
+                requiresBackgroundNpc: npcPolicy?.mode === "required" || (options.requireContentQuality === true && npcDeclaredInFramePlan),
+                backgroundNpcCountRange: npcPolicy?.countRange,
+                requiresDialoguePerformance: utterances.some((item) => item.type === "dialogue"),
+                requireCameraPlan: options.requireCameraPlan,
+                requireContentQuality: options.requireContentQuality,
+                performancePlan,
+            });
         }
     } catch (error) {
-        throw new DramaProductionPackageError(`镜头 ${text(shot.code) || index + 1} 的逐帧计划无效：${error instanceof Error ? error.message : "无法解析"}`);
+        const message = `镜头 ${label} 的逐帧计划无效：${error instanceof Error ? error.message : "无法解析"}`;
+        if (!options.allowImportWarnings) throw new DramaProductionPackageError(message);
+        options.importWarnings?.push(`${message}；已允许导入，当前镜头保留为空帧计划，需在分镜阶段补齐`);
     }
     return {
         code: text(shot.code),
@@ -876,8 +1085,8 @@ function normalizePackageShot(value: unknown, index: number, options: { validate
         entryState: mergeState(normalizeState(shot.entryState), directorState(characterCodes, propCodes, title, lighting, actionStart)),
         exitState: mergeState(normalizeState(shot.exitState), directorState(characterCodes, propCodes, title, lighting, actionEnd)),
         framePlan: {
-            start: { source: frameStart.source },
-            end: { required: frameEnd.required },
+            start: { source: hasValidFramePlan ? (frameStart.source as "independent" | "previous_accepted_actual_tail") : "independent" },
+            end: { required: hasValidFramePlan ? Boolean(frameEnd.required) : true },
             frames,
             ...(normalizeReferenceManifest(framePlan.referenceManifest).length ? { referenceManifest: normalizeReferenceManifest(framePlan.referenceManifest) } : {}),
             ...(object(framePlan.referenceCount).min || object(framePlan.referenceCount).max ? { referenceCount: normalizeReferenceCount(framePlan.referenceCount) } : {}),
@@ -906,8 +1115,19 @@ function validateStrictPackageVideoPrompt(
     prompt: string,
     frames: ReadonlyArray<{ startSecond: number; endSecond: number; startPrompt?: string; actionPrompt: string; transitionPrompt?: string; endPrompt?: string }>,
     label: string,
-    options: { requiresBackgroundNpc?: boolean } = {},
+    options: {
+        requiresBackgroundNpc?: boolean;
+        backgroundNpcCountRange?: { min: number; max: number };
+        requiresDialoguePerformance?: boolean;
+        requireCameraPlan?: boolean;
+        requireContentQuality?: boolean;
+        performancePlan?: DramaShot["performancePlan"];
+    } = {},
 ) {
+    if (options.requireCameraPlan) {
+        const cameraError = validateDramaCameraPlan(prompt, frames);
+        if (cameraError) throw new DramaProductionPackageError(label + "的 Agent videoPrompt 摄影契约无效：" + cameraError);
+    }
     const requiredFields = ["动态意图", "时间段动作", "单一主运镜", "结束画面"];
     const missing = requiredFields.filter((field) => !new RegExp(`(?:^|\\n)\\s*${field}[：:]`, "u").test(prompt));
     if (missing.length) throw new DramaProductionPackageError(`${label}的 Agent videoPrompt 缺少标准字段：${missing.join("、")}`);
@@ -924,9 +1144,54 @@ function validateStrictPackageVideoPrompt(
     });
     if (timeline.length) throw new DramaProductionPackageError(`${label}的 Agent videoPrompt 未逐段镜像 framePlan：${timeline.join("、")}`);
     for (const [index, frame] of frames.entries()) {
+        if (index > 0 && frame.startPrompt !== frames[index - 1].endPrompt) throw new DramaProductionPackageError(`${label}第 ${index + 1} 个时间段的起点必须原样承接上一段终点`);
         const detailErrors = validateDramaVideoSegmentDetail(frame.actionPrompt, frame.transitionPrompt, frame.endPrompt, `${label}第 ${index + 1} 个时间段`, options);
         if (detailErrors.length) throw new DramaProductionPackageError(detailErrors.join("；"));
     }
+    if (options.requireContentQuality) {
+        const qualityErrors = validateDramaVideoAuthoringQuality(prompt, frames, options.performancePlan, label, { requiresBackgroundNpc: options.requiresBackgroundNpc });
+        if (qualityErrors.length) throw new DramaProductionPackageError(qualityErrors.join("；"));
+    }
+}
+
+function validatePromptAssetBindings(prompt: string, characterCodes: string[], propCodes: string[], locationCode: string, rawCharacters: unknown[], rawProps: unknown[], rawLocations: unknown[], label: string) {
+    const errors: string[] = [];
+    const bindingLine = prompt.match(/(?:^|\n)\s*素材绑定\s*[：:]([^\n]+)/u)?.[1] || "";
+    if (!bindingLine && (characterCodes.length || propCodes.length || locationCode)) errors.push(`${label}的 videoPrompt 缺少素材绑定，不能确认本镜资产职责`);
+    const characters = rawCharacters.map(object);
+    const props = rawProps.map(object);
+    const locations = rawLocations.map(object);
+    const location = locations.find((item) => text(item.code) === locationCode);
+    const locationTerms = semanticAssetTerms(location);
+    for (const characterCode of characterCodes) {
+        const character = characters.find((item) => text(item.code) === characterCode);
+        if (character && ![...semanticAssetTerms(character)].some((term) => bindingLine.includes(term))) errors.push(`${label}的素材绑定未明确写出角色 ${text(character.name) || characterCode}`);
+    }
+    if (location && ![...semanticAssetTerms(location)].some((term) => bindingLine.includes(term))) errors.push(`${label}的素材绑定未明确写出场景 ${text(location.name) || locationCode}`);
+    const declared = new Set(propCodes);
+    for (const propCode of propCodes) {
+        const prop = props.find((item) => text(item.code) === propCode);
+        if (prop && ![...semanticAssetTerms(prop)].some((term) => bindingLine.includes(term))) errors.push(`${label}的素材绑定未明确写出道具 ${text(prop.name) || propCode}`);
+    }
+    const shotSpecificPrompt = prompt.split(/(?:^|\n)\s*针对性约束\s*[：:]/u)[0];
+    for (const prop of props) {
+        const code = text(prop.code);
+        if (!code || declared.has(code)) continue;
+        const undeclaredTerm = [...semanticAssetTerms(prop)].find((term) => !locationTerms.has(term) && shotSpecificPrompt.includes(term));
+        if (undeclaredTerm) errors.push(`${label}的视频 Prompt 提到了未绑定道具 ${text(prop.name) || code}（${undeclaredTerm}），请补入 propCodes 和 referenceManifest，或删除该道具事实`);
+    }
+    return errors;
+}
+
+function semanticAssetTerms(asset: Record<string, unknown> | undefined) {
+    if (!asset) return new Set<string>();
+    const source = text(asset.name);
+    const terms = new Set<string>();
+    for (const chunk of source.match(/[\p{Script=Han}A-Za-z0-9]{2,}/gu) || []) {
+        terms.add(chunk);
+        if (/^[\p{Script=Han}]+$/u.test(chunk)) for (let size = 2; size <= Math.min(4, chunk.length); size += 1) for (let start = 0; start + size <= chunk.length; start += 1) terms.add(chunk.slice(start, start + size));
+    }
+    return terms;
 }
 
 function escapeRegExp(value: string) {
@@ -1193,7 +1458,11 @@ function normalizeBackgroundNpcPolicy(value: unknown): DramaBackgroundNpcPolicy 
     const mode: DramaBackgroundNpcPolicy["mode"] = policy.mode === "required" || policy.mode === "forbidden" ? policy.mode : "auto";
     const guidance = optionalText(policy.guidance);
     const continuity = optionalText(policy.continuity);
-    return { mode, ...(guidance ? { guidance } : {}), ...(continuity ? { continuity } : {}) };
+    const range = object(policy.countRange);
+    const min = Number.isInteger(Number(range.min)) ? Math.max(0, Number(range.min)) : undefined;
+    const max = Number.isInteger(Number(range.max)) ? Math.max(min ?? 0, Number(range.max)) : undefined;
+    const countRange = min !== undefined && max !== undefined ? { min, max } : undefined;
+    return { mode, ...(guidance ? { guidance } : {}), ...(continuity ? { continuity } : {}), ...(countRange ? { countRange } : {}) };
 }
 
 function isLegacySceneReferenceBoard(value: unknown) {
@@ -1387,7 +1656,7 @@ function directorState(characterCodes: string[], propCodes: string[], environmen
     };
 }
 
-function validateSplitShotFramePlans(episodes: DramaProductionPackageEpisode[]) {
+function validateSplitShotFramePlans(episodes: DramaProductionPackageEpisode[], allowImportWarnings = false) {
     for (const episode of episodes) {
         for (let index = 0; index < episode.shots.length; index += 1) {
             const parsed = splitShotTitle(episode.shots[index].title);
@@ -1395,7 +1664,7 @@ function validateSplitShotFramePlans(episodes: DramaProductionPackageEpisode[]) 
             const group = episode.shots.slice(index, index + parsed.total);
             if (group.length !== parsed.total || group.some((shot, part) => !sameSplitShotTitle(shot.title, parsed.base, part + 1, parsed.total))) continue;
             const plans = group.map((shot) => JSON.stringify(shot.framePlan.frames.map((frame) => [frame.actionPrompt, frame.imagePrompt])));
-            if (new Set(plans).size !== plans.length) throw new DramaProductionPackageError(`${parsed.base}的拆分镜头复用了整套逐帧计划，请分别提供每段的独立动作与静态状态`);
+            if (new Set(plans).size !== plans.length && !allowImportWarnings) throw new DramaProductionPackageError(`${parsed.base}的拆分镜头复用了整套逐帧计划，请分别提供每段的独立动作与静态状态`);
             index += parsed.total - 1;
         }
     }

@@ -46,7 +46,7 @@ vi.mock("@/lib/server/agent-run-store", async (importOriginal) => {
     };
 });
 
-import { buildDramaPackageAuthoringInput, buildDramaPackageSkillInstructions, executeAgentRun } from "./agent-run-executor";
+import { buildDramaPackageAuthoringInput, buildDramaPackageSkillInstructions, classifyDramaAuthoringMaterial, executeAgentRun } from "./agent-run-executor";
 import { processAgentRunReview, taskResultOps } from "./agent-run-execution";
 import { resetTextPlanningRuntime } from "./text-planning-runtime";
 
@@ -189,6 +189,28 @@ describe("executeAgentRun backend settings", () => {
         expect(instructions).not.toContain("旧规则不应重复注入");
         expect(instructions).not.toContain("连续性规则");
         expect(instructions.match(/当前短剧制作包唯一导演 Skill/gu)).toHaveLength(1);
+    });
+
+    it("passes the template and TXT as classified formal authoring sources", () => {
+        expect(classifyDramaAuthoringMaterial({ title: "drama-production-package-v1-template.md", textContent: "章节和规范对象" })).toBe("package-template");
+        expect(classifyDramaAuthoringMaterial({ title: "第01章.txt", textContent: "小说正文" })).toBe("story-source");
+        const input = buildDramaPackageAuthoringInput({
+            runPrompt: "生成制作包",
+            project: { id: "project-one", title: "项目", summary: "", style: "", ratio: "9:16", episodes: [] } as never,
+            current: { id: "episode-one", title: "第一集", script: "", outline: "", hook: "", nextPreview: "", sourceRange: "" } as never,
+            assetReuseContext: { rule: "", episodeCode: "E01", characters: [], locations: [], props: [], clues: [] } as never,
+            adjacentEpisodes: [],
+            selectedSkills: [],
+            lockedPlan: undefined,
+            globalVisualContract: {},
+            uploadedMaterials: [
+                { alias: "@附件1", role: "package-template", type: "text", title: "制作包模板", contentHash: "a".repeat(64), textContent: "规范对象" },
+                { alias: "@附件2", role: "story-source", type: "text", title: "第01章.txt", contentHash: "b".repeat(64), textContent: "小说正文" },
+            ],
+            requestedShotDuration: 30,
+        });
+
+        expect(input.authoringSources).toEqual(expect.arrayContaining([expect.objectContaining({ alias: "@附件1", role: "package-template" }), expect.objectContaining({ alias: "@附件2", role: "story-source" })]));
     });
 
     it("preserves generated media dimensions in canvas output ops", () => {

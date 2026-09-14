@@ -170,7 +170,7 @@ export async function POST(request: Request) {
                               }
                             : data;
                     if (phase === "video_prompt") {
-                        const qualityError = validateDramaVideoPromptOutput(parsed, videoPromptInput!.shotIds, videoPromptInput!.payload.shots, videoPromptInput!.payload.referenceMaterials);
+                        const qualityError = validateDramaVideoPromptOutput(parsed, videoPromptInput!.shotIds, videoPromptInput!.payload.shots, videoPromptInput!.payload.referenceMaterials, { requireCameraPlan: true });
                         if (qualityError) throw new DramaVideoPromptQualityError(qualityError);
                     }
                     const videoPromptTimingWarnings = phase === "video_prompt" ? dramaVideoPromptTimingWarnings(parsed, videoPromptInput!.shotIds, videoPromptInput!.payload.shots) : [];

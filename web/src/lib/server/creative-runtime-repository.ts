@@ -4,6 +4,7 @@ import { creativeConversationSourceForSurface, normalizeCreativeConversationSour
 import { readJsonDataFile, withJsonDataFileLock, writeJsonDataFile } from "@/lib/server/data-adapter";
 import { ensurePostgresSchema, withPostgresTransaction, type QueryExecutor } from "@/lib/server/database";
 import type { StoredGenerationTaskRecord } from "@/lib/server/generation-task-store";
+import type { DramaAuthoringWorkOrder, DramaQualityGateReport } from "@/lib/drama-project-contract";
 
 export type RuntimeFileDatabase = {
     version: 1;
@@ -29,6 +30,9 @@ export type AgentRunBase = {
     createdAt: number;
     updatedAt: number;
     dramaScriptPackage?: { markdown: string; preview: unknown };
+    dramaAuthoring?: DramaAuthoringWorkOrder;
+    dramaQualityGateReport?: DramaQualityGateReport;
+    dramaFailureKind?: "timeout" | "quality" | "error";
 };
 
 function conversationSourceForRun(run: AgentRunBase) {

@@ -9,6 +9,8 @@
         "compile:drama-image": "node scripts/compile-drama-image-skill.mjs",
         "compile:drama-video-director": "node scripts/compile-drama-video-director-skill.mjs",
         "sync:codex-skill": "node scripts/sync-drama-video-director-codex-skill.mjs",
+        "sync:codex-skills": "node scripts/sync-drama-video-director-codex-skill.mjs",
+        "check:codex-skills": "node scripts/sync-drama-video-director-codex-skill.mjs --check",
         "compile:skills": "node scripts/compile-all-skills.mjs",
         "predev": "pnpm run compile:skills",
         "build": "node scripts/production-build.mjs",

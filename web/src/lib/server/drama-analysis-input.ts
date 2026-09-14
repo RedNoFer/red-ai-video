@@ -1,6 +1,6 @@
 import { resolveDramaShotDuration } from "@/lib/server/drama-shot-config";
 import { dramaFrameVisualSignature } from "@/lib/drama-frame-sequence";
-import { hasConcreteDramaCameraDirection, isGenericDramaDetail, validateDramaVideoSegmentDetail } from "@/lib/drama-prompt-quality";
+import { hasConcreteDramaCameraDirection, isGenericDramaDetail, validateDramaCameraPlan, validateDramaVideoSegmentDetail } from "@/lib/drama-prompt-quality";
 import { dramaFrameDialogueTimingReminder, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
 
 export type DramaAnalyzeBody = {
@@ -199,7 +199,13 @@ export function validateDramaVideoPromptReferenceBindings(prompt: string, refere
     return "";
 }
 
-export function validateDramaVideoPromptOutput(value: unknown, shotIds: string[], sourceShots: ReadonlyArray<{ id: string; framePlan?: unknown; utterances?: readonly DramaDialogueTimingInput[] }>, references: unknown) {
+export function validateDramaVideoPromptOutput(
+    value: unknown,
+    shotIds: string[],
+    sourceShots: ReadonlyArray<{ id: string; framePlan?: unknown; utterances?: readonly DramaDialogueTimingInput[] }>,
+    references: unknown,
+    options: { requireCameraPlan?: boolean } = {},
+) {
     const output = object(value);
     const outputShots = array(output.shots).map(object);
     const sourcePlans = new Map(sourceShots.map((shot) => [shot.id, object(shot.framePlan)]));
@@ -226,6 +232,10 @@ export function validateDramaVideoPromptOutput(value: unknown, shotIds: string[]
         const outputFrames = array(object(shot.framePlan).frames).map(object);
         if (!outputFrames.length) return `镜头 ${shotId} 缺少逐帧动作计划；请按当前 Skill 返回 framePlan.frames`;
         if (expectedFrames.length && outputFrames.length !== expectedFrames.length) return `镜头 ${shotId} 的逐帧计划数量不一致：应为 ${expectedFrames.length} 段，实际为 ${outputFrames.length} 段；请按当前 Skill 原样保留时间段`;
+        if (options.requireCameraPlan) {
+            const cameraError = validateDramaCameraPlan(prompt, (expectedFrames.length ? expectedFrames : outputFrames) as Array<{ startSecond: number; endSecond: number }>);
+            if (cameraError) return "镜头 " + shotId + " 的摄影契约无效：" + cameraError + "；请按当前 Skill 重新生成";
+        }
         const timelineFrameCount = expectedFrames.length || outputFrames.length;
         const cameraMotion = prompt.match(/(?:^|\n)\s*单一主运镜[：:]([^\n]+)/u)?.[1]?.trim() || "";
         if (!hasConcreteDramaCameraDirection(cameraMotion)) return `镜头 ${shotId} 的公开视频提示词缺少具体主运镜或机位语言，请写明固定机位、推近、跟拍等一个有动机的摄影选择`;

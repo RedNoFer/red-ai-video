@@ -4,8 +4,9 @@ import { readFileSync } from "node:fs";
 import type { DramaProductionPackageV1, DramaProject, DramaShot } from "@/lib/drama-project-contract";
 import { DRAMA_STYLE_COLOR_SCRIPT, DRAMA_STYLE_NAME } from "@/lib/drama-style";
 import { defaultDramaProductionPlan, dramaVisualDirection } from "@/lib/drama-production-plan";
-import { auditDramaShotDirectorQuality } from "@/lib/server/agent-skills/drama-video-director";
-import { applyDramaProductionPackage, buildDramaAssetReuseContext, mergeProjectAssetsIntoProductionPackage, previewDramaProductionPackage } from "@/lib/server/drama-production-package";
+import { auditDramaShotDirectorQuality, DRAMA_VIDEO_DIRECTOR_SKILL } from "@/lib/server/agent-skills/drama-video-director";
+import { SEEDANCE_25_DIRECTOR_SKILL } from "@/lib/server/agent-skills/seedance-25";
+import { applyDramaProductionPackage, attachDramaProductionPackageAuthoring, buildDramaAssetReuseContext, mergeProjectAssetsIntoProductionPackage, previewDramaProductionPackage } from "@/lib/server/drama-production-package";
 import { serializeDramaProductionPackageMarkdown } from "@/lib/drama-production-package-serializer";
 
 const productionPackage: DramaProductionPackageV1 = {
@@ -82,6 +83,26 @@ function readMahadelMarkdownFixture() {
 }
 
 describe("production package boundary", () => {
+    it("records and requires Agent authoring provenance for the formal generation path", () => {
+        const authored = attachDramaProductionPackageAuthoring(productionPackage, {
+            source: "executeDramaScriptRun",
+            generatedAt: "2026-09-14T00:00:00.000Z",
+            directorSkill: { id: DRAMA_VIDEO_DIRECTOR_SKILL.id, version: DRAMA_VIDEO_DIRECTOR_SKILL.sourceVersion, contentHash: DRAMA_VIDEO_DIRECTOR_SKILL.sourceContentHash },
+            seedanceSkill: { id: SEEDANCE_25_DIRECTOR_SKILL.id, version: SEEDANCE_25_DIRECTOR_SKILL.sourceVersion, contentHash: SEEDANCE_25_DIRECTOR_SKILL.sourceContentHash },
+            materials: [{ alias: "@模板", role: "package-template", type: "text", title: "制作包模板", contentHash: "c".repeat(64) }],
+        });
+        const preview = previewDramaProductionPackage(JSON.stringify(authored), "agent-package.json", undefined, { requireAgentAuthoring: true });
+        const exported = previewDramaProductionPackage(serializeDramaProductionPackageMarkdown(preview.package), "agent-package.md", undefined, { requireAgentAuthoring: true });
+
+        expect(preview.package.authoring).toMatchObject({ source: "executeDramaScriptRun", directorSkill: { id: DRAMA_VIDEO_DIRECTOR_SKILL.id, version: DRAMA_VIDEO_DIRECTOR_SKILL.sourceVersion }, seedanceSkill: { id: SEEDANCE_25_DIRECTOR_SKILL.id } });
+        expect(preview.package.authoring?.materials[0]).toMatchObject({ alias: "@模板", role: "package-template" });
+        expect(exported.package.authoring).toEqual(preview.package.authoring);
+        expect(() => previewDramaProductionPackage(JSON.stringify(productionPackage), "agent-package.json", undefined, { requireAgentAuthoring: true })).toThrow("executeDramaScriptRun");
+        const stale = structuredClone(authored);
+        stale.authoring!.directorSkill = { ...stale.authoring!.directorSkill, contentHash: "0".repeat(64) };
+        expect(() => previewDramaProductionPackage(JSON.stringify(stale), "agent-package.json", undefined, { requireAgentAuthoring: true })).toThrow("导演 Skill 版本/内容哈希");
+    });
+
     it("surfaces a dialogue capacity reminder without blocking package import", () => {
         const source = structuredClone(productionPackage);
         const shot = source.episodes[0].shots[0];
@@ -310,6 +331,7 @@ describe("production package boundary", () => {
         for (const shot of source.episodes[0].shots) {
             shot.imagePrompt = staticPrompt;
             shot.videoPrompt = [
+                "素材绑定：Karin、Rifa的角色形象、阿佐雷斯城门的空间基准，以及断剑的形制和材质",
                 "动态意图：Karin压住断剑并锁定城门",
                 "时间段动作：0-7.5s",
                 "起点：Karin站在右侧门框内，手掌压住断剑",
@@ -326,7 +348,7 @@ describe("production package boundary", () => {
             ].join("\n");
             shot.framePlan.frames = shot.framePlan.frames.map((frame, index) => ({
                 ...frame,
-                startPrompt: "Karin站在右侧门框内，手掌压住断剑",
+                startPrompt: index === 0 ? "Karin站在右侧门框内，手掌压住断剑" : "Karin指节压紧断剑",
                 actionPrompt: index ? "Karin抬眼锁定城门缝隙，肩背绷直" : "Karin眉心收紧并压住手指，断剑发出金属声",
                 transitionPrompt: index ? "断剑的金属声消退，视线已经落到城门缝隙" : "视线从断剑转向城门缝隙",
                 endPrompt: index ? "Karin视线锁定城门，肩背绷直" : "Karin指节压紧断剑",
@@ -477,6 +499,20 @@ describe("production package boundary", () => {
         const source = structuredClone(productionPackage);
         source.episodes[0].shots[0].framePlan = { start: { source: "independent" }, end: { required: true }, frames: [] };
         expect(() => previewDramaProductionPackage(JSON.stringify(source), "package.json")).toThrow("缺少逐帧计划");
+    });
+
+    it("allows generic package import to continue with a second-confirmation warning when framePlan is missing", () => {
+        const source = structuredClone(productionPackage);
+        const target = source.episodes[0].shots[0] as { framePlan?: unknown };
+        delete target.framePlan;
+
+        const preview = previewDramaProductionPackage(JSON.stringify(source), "package.json", undefined, { allowImportWarnings: true });
+
+        expect(preview.package.episodes[0].shots[0].framePlan).toMatchObject({ start: { source: "independent" }, end: { required: true }, frames: [] });
+        expect(preview.importWarnings).toEqual(expect.arrayContaining([expect.stringContaining("SH01"), expect.stringContaining("已允许导入")]));
+        const applied = applyDramaProductionPackage(project(), preview.package, preview.sourceHash, JSON.stringify(source), "package.json", { allowImportWarnings: true });
+        expect(applied.episodes[0]?.shots[0].framePlan?.frames).toEqual([]);
+        expect(() => previewDramaProductionPackage(JSON.stringify(source), "package.json")).toThrow("缺少有效 framePlan");
     });
 
     it("keeps split shot durations and timecodes integer and continuous", () => {

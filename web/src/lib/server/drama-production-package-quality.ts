@@ -1,0 +1,258 @@
+import type {
+    DramaAuthoringSourceSnapshot,
+    DramaProductionPackageV1,
+    DramaQualityGateCheck,
+    DramaQualityGateReport,
+} from "@/lib/drama-project-contract";
+import { DRAMA_PACKAGE_GATE_CODES, DRAMA_PACKAGE_SECTIONS } from "@/lib/server/drama-production-package-contract";
+
+export type DramaAuthoringQualityInput = {
+    package: DramaProductionPackageV1;
+    sources: readonly DramaAuthoringSourceSnapshot[];
+    targetNarrativeChapter?: number | string;
+};
+
+export class DramaAuthoringQualityGateError extends Error {
+    constructor(message: string, readonly report: DramaQualityGateReport) {
+        super(message);
+        this.name = "DramaAuthoringQualityGateError";
+    }
+}
+
+const genericActionPattern = /^(?:自然反应|情绪加剧|准备回应|保持状态|承受压力|电影感推进|动作展开|关键变化|结果状态|动作节点已经成立|保持一致)$/u;
+const observableActionPattern = /抬|低|看|望|移|转|起身|前倾|后退|按|压|握|松|收|推|拉|停|吸气|呼吸|屏息|皱|眯|睁|闭|抬手|放下|落下|走|跪|拍|碰|拿|放|递|撕|捏|拔|挥|闪|震|响|开门|关门|离开|进入|凝视|回看/u;
+const observableResultPattern = /停在|落在|变为|变得|露出|显出|抬起|垂下|松开|收紧|移向|转向|对准|接住|落下|留下|响起|静止|形成|暴露|显现|被看见|无人插话|沉默|低头|抬眼|受力|改变/u;
+const actionFactPattern = /因为|由于|于是|随后|最终|决定|提出|答应|拒绝|要求|悔婚|退婚|离开|进入|走进|看见|发现|说|喊|跪|拔|抬|转身|交给|拿起|放下|撞|倒|死|活|承认|质问|回应/u;
+const cinematicPlaceholderPattern = /^(?:入口构图已建立|动作展开|关键变化|结果状态|动作节点已经成立|主体的眉眼、呼吸、手部和道具接触关系清晰可见|情绪通过身体动作呈现)$/u;
+
+export function validateDramaAuthoringQuality(input: DramaAuthoringQualityInput): DramaQualityGateReport {
+    const checks: DramaQualityGateCheck[] = [];
+    const sourceText = input.sources
+        .filter((source) => source.role === "story-source" && source.type === "text")
+        .map((source) => source.textContent || "")
+        .join("\n");
+
+    checkLiteraryCompleteness(checks, input.package, sourceText, input.targetNarrativeChapter);
+    checkDialogueCoverage(checks, input.package, sourceText);
+    checkPlotFacts(checks, input.package, sourceText);
+    checkActionDensity(checks, input.package);
+    checkActionDifference(checks, input.package);
+    checkEmotionProgression(checks, input.package);
+    checkNpcReactionChange(checks, input.package);
+    checkCameraMotivation(checks, input.package);
+    checkCameraEvents(checks, input.package);
+    checkSimpleStructuralChecks(checks, input.package);
+
+    return {
+        status: checks.some((check) => check.severity === "blocker") ? "blocked" : "passed",
+        checks,
+    };
+}
+
+function checkLiteraryCompleteness(checks: DramaQualityGateCheck[], value: DramaProductionPackageV1, sourceText: string, targetNarrativeChapter?: number | string) {
+    const episode = value.episodes[0];
+    const script = episode?.script.trim() || "";
+    const sourceHeading = targetNarrativeChapter === undefined ? "" : `第${String(targetNarrativeChapter).replace(/^第|章$/gu, "")}章`;
+    const sourceDeclaresChapter = sourceHeading ? new RegExp(`第\\s*${escapeRegExp(String(targetNarrativeChapter).replace(/^第|章$/gu, ""))}\\s*章`, "u").test(sourceText) : false;
+    const packageDeclaresChapter = sourceHeading ? new RegExp(`第\\s*${escapeRegExp(String(targetNarrativeChapter).replace(/^第|章$/gu, ""))}\\s*章`, "u").test(`${episode?.sourceRange || ""}\n${script}`) : true;
+    const paragraphCount = script.split(/\n{2,}|(?<=[。！？])\s*/u).map((part) => part.trim()).filter(Boolean).length;
+    const hasScene = /(?:场景|场\s*[一二三四五六七八九十0-9]+|内景|外景|日|夜|时间码|镜号)/u.test(script) || Boolean(episode?.storyScenes.length);
+    const hasBehavior = observableActionPattern.test(script);
+    const hasConflict = /冲突|质问|拒绝|答应|威胁|难堪|秘密|目标|阻力|决定|回应|离开|留下|转折/u.test(`${script}\n${episode?.outline || ""}`);
+    const hasResult = Boolean(episode?.hook?.trim() || episode?.nextPreview?.trim() || episode?.shots.some((shot) => shot.exitState || shot.continuity?.actionEnd?.trim()));
+    const summaryOnly = /^(?:听着|随后|最终|本集|故事|剧情|画面|镜头|角色).{0,180}(?:发生|展开|冲突|离开|回到|结束)[。！？.]?$/u.test(script) && paragraphCount <= 2;
+    const complete = script.length >= 240 && paragraphCount >= 3 && hasScene && hasBehavior && hasConflict && hasResult && !summaryOnly;
+    const evidence = `文学正文 ${script.length} 字，${paragraphCount} 个叙事段；场次=${hasScene ? "有" : "无"}，行为=${hasBehavior ? "有" : "无"}，冲突=${hasConflict ? "有" : "无"}，结果=${hasResult ? "有" : "无"}`;
+    add(checks, "LITERARY_SCRIPT_COMPLETENESS", complete, "当前集文学剧本", evidence, ["currentEpisode.script", "currentEpisode.storyScenes"], "补写完整场次、人物行为、冲突推进、对白和可见结果；禁止只提交摘要或镜头概述。");
+    const sectionTitles = value.archive?.sections.map((section) => section.title) || [];
+    const hasFixedChapterStructure = sectionTitles.length === DRAMA_PACKAGE_SECTIONS.length && DRAMA_PACKAGE_SECTIONS.every((title, index) => sectionTitles[index]?.includes(title));
+    add(checks, "LITERARY_SCRIPT_COMPLETENESS", hasFixedChapterStructure, "制作包固定章节", hasFixedChapterStructure ? "已包含并按顺序提供 13 个固定一级章节" : `固定一级章节应为 ${DRAMA_PACKAGE_SECTIONS.length} 个且顺序一致，当前为 ${sectionTitles.length} 个`, ["archive.sections", "drama-production-package-v1"], "按唯一制作包契约补齐 13 个固定一级章节；“小说第 3 章”只表示剧情素材范围，不替代制作包第 3 节。");
+    if (sourceDeclaresChapter && !packageDeclaresChapter)
+        add(checks, "LITERARY_SCRIPT_COMPLETENESS", false, "目标小说章节", `TXT 明确声明${sourceHeading}，但制作包正文没有对应目标章节标识`, ["story-source", "currentEpisode.sourceRange"], "保留 targetNarrativeChapter 对应的小说章节事实；制作包第 3 节“第一集文学剧本”只是结构章节，不得替代小说章节。");
+    else
+        add(checks, "LITERARY_SCRIPT_COMPLETENESS", true, "目标小说章节", `targetNarrativeChapter=${String(targetNarrativeChapter ?? "未声明")}；制作包一级章节编号与小说章节独立`, ["targetNarrativeChapter"], "");
+}
+
+function checkDialogueCoverage(checks: DramaQualityGateCheck[], value: DramaProductionPackageV1, sourceText: string) {
+    const lines = extractDialogueLines(sourceText);
+    const episode = value.episodes[0];
+    const literaryText = episode?.script || "";
+    const sequenceText = [
+        ...(episode?.shots || []).flatMap((shot) => [shot.dialogue || "", ...(shot.utterances || []).map((utterance) => utterance.text), shot.videoPrompt || ""]),
+        ...(value.archive?.dialogueDirections || []).map((direction) => direction.text),
+    ].join("\n");
+    const missingLiterary = lines.filter((line) => !containsNormalized(literaryText, line));
+    const missingSequence = lines.filter((line) => !containsNormalized(sequenceText, line));
+    const utterances = episode?.shots.flatMap((shot) => shot.utterances || []) || [];
+    const directions = value.archive?.dialogueDirections || [];
+    const missingMetadata = lines.filter((line) => {
+        const utterance = utterances.find((item) => containsNormalized(item.text, line));
+        const direction = directions.find((item) => containsNormalized(item.text, line));
+        return !((utterance && utterance.speaker && utterance.startSecond !== undefined && utterance.endSecond !== undefined && utterance.endSecond > utterance.startSecond) || (direction && direction.speaker && direction.startSecond !== undefined && direction.endSecond !== undefined));
+    });
+    const complete = !missingLiterary.length && !missingSequence.length && !missingMetadata.length;
+    const evidence = lines.length
+        ? `TXT 显式对白 ${lines.length} 句；文学正文缺失 ${missingLiterary.length} 句；台词/镜头序列缺失 ${missingSequence.length} 句；说话人/时间缺失 ${missingMetadata.length} 句`
+        : "TXT 未提取到带引号的显式对白，按无对白素材处理";
+    add(checks, "DIALOGUE_COVERAGE", complete, "对白覆盖率", evidence, ["story-source", "currentEpisode.script", "episodes[].shots[].utterances"], "逐句补回 TXT 原对白，并绑定说话人、镜头、时间和表演信息；不得静默遗漏或无授权改写。");
+}
+
+function checkPlotFacts(checks: DramaQualityGateCheck[], value: DramaProductionPackageV1, sourceText: string) {
+    const facts = extractPlotFacts(sourceText);
+    const missing = facts.filter((fact) => {
+        const tokens = Array.from(new Set(factTokens(fact).filter((token) => token.length > 1)));
+        const hits = tokens.filter((token) => valueTextIncludes(value, token)).length;
+        return hits < Math.min(tokens.length, tokens.length >= 4 ? 2 : 1);
+    });
+    const covered = facts.length - missing.length;
+    const complete = !facts.length || !missing.length;
+    add(checks, "PLOT_FACT_COVERAGE", complete, "剧情事实覆盖率", facts.length ? `TXT 关键事实 ${facts.length} 条；已覆盖 ${covered} 条；缺失 ${missing.length} 条` : "TXT 未提取到可判定的关键事实", ["story-source", "currentEpisode", "episodes"], "将 TXT 中的角色、场景、道具、关系、冲突原因、关键事件、因果结果和关键动作落到文学正文或对应制作包字段。");
+    for (const fact of missing.slice(0, 3)) add(checks, "PLOT_FACT_COVERAGE", false, "剧情事实覆盖率", `未找到事实锚点：${fact.slice(0, 80)}`, ["story-source"], "保留该事实的可识别名称或动作结果，避免只用泛化摘要替代。");
+}
+
+function checkActionDensity(checks: DramaQualityGateCheck[], value: DramaProductionPackageV1) {
+    const missing: string[] = [];
+    for (const episode of value.episodes) {
+        for (const shot of episode.shots) {
+            const frames = shot.framePlan?.frames || [];
+            for (const frame of frames) {
+                const action = frame.actionPrompt.trim();
+                const result = `${frame.endPrompt || ""}\n${frame.transitionPrompt || ""}\n${frame.imagePrompt}`.trim();
+                if (!action || genericActionPattern.test(action) || !observableActionPattern.test(action) || !result || !observableResultPattern.test(result) || cinematicPlaceholderPattern.test(result)) missing.push(`${shot.code}/${frame.id}`);
+            }
+        }
+    }
+    add(checks, "ACTION_DENSITY", !missing.length, "逐时间段动作密度", missing.length ? `${missing.length} 个时间段缺少“触发→可见变化→结果”闭环：${missing.slice(0, 5).join(", ")}` : "每个真实时间段都有可观察动作和结果状态", ["episodes[].shots[].framePlan.frames[]"], "每段写清动作触发、人物可见变化，以及对手/NPC/道具/环境的结果；抽象词不能代替动作。");
+}
+
+function checkActionDifference(checks: DramaQualityGateCheck[], value: DramaProductionPackageV1) {
+    const repeated: string[] = [];
+    for (const episode of value.episodes) {
+        for (const shot of episode.shots) {
+            const frames = shot.framePlan?.frames || [];
+            const signatures = frames.map((frame) => actionSignature(frame.actionPrompt));
+            if (signatures.length > 1 && new Set(signatures).size < 2) repeated.push(shot.code);
+        }
+    }
+    add(checks, "ACTION_DIFFERENCE", !repeated.length, "相邻动作差异", repeated.length ? `镜头 ${repeated.join(", ")} 的全部时间段重复同一动作块` : "相邻时间段存在可辨识的动作、视线、姿态、手部、道具或环境差异", ["framePlan.frames[].actionPrompt"], "按真实事件重新拆分相邻段，至少改变一个可验收的动作结果，不能只替换同义词。");
+}
+
+function checkEmotionProgression(checks: DramaQualityGateCheck[], value: DramaProductionPackageV1) {
+    const failed: string[] = [];
+    for (const shot of value.episodes.flatMap((episode) => episode.shots)) {
+        const beats = shot.performancePlan?.beats;
+        if (!beats) {
+            failed.push(shot.code);
+            continue;
+        }
+        const values = [beats.start, beats.middle, beats.end].map((beat) => [beat.emotion, beat.facialAction, beat.gaze, beat.bodyAction].join("|"));
+        if (values.some((value) => value.length < 8) || new Set(values).size < 3 || values.some((value) => /自然|到位|逐步变化|结果成立|保持状态|情绪加剧/u.test(value))) failed.push(shot.code);
+    }
+    add(checks, "EMOTION_PROGRESSION", !failed.length, "表演情绪递进", failed.length ? `镜头 ${failed.join(", ")} 的 start/middle/end 不能证明三阶段可见递进` : "每镜表演计划具备不同的起始、中段和结束可见状态", ["episodes[].shots[].performancePlan"], "将情绪拆成眉眼、视线、呼吸、嘴角、重心、手部或身体的三阶段变化，不要只更换情绪形容词。");
+}
+
+function checkNpcReactionChange(checks: DramaQualityGateCheck[], value: DramaProductionPackageV1) {
+    const failed: string[] = [];
+    for (const episode of value.episodes) {
+        for (const shot of episode.shots) {
+            const required = value.assets.locations.find((location) => location.code === shot.locationCode)?.backgroundNpcPolicy?.mode === "required";
+            const prompts = [shot.videoPrompt || "", ...(shot.framePlan?.frames || []).map((frame) => `${frame.actionPrompt}\n${frame.transitionPrompt || ""}\n${frame.endPrompt || ""}`)];
+            const reactions = prompts.flatMap((prompt) => [...prompt.matchAll(/反应\s*[：:]\s*([^；;\n。]+)/gu)].map((match) => match[1].trim())).filter(Boolean);
+            if ((required || reactions.length) && new Set(reactions).size < 2) failed.push(shot.code);
+        }
+    }
+    add(checks, "NPC_REACTION_CHANGE", !failed.length, "NPC 群像反应变化", failed.length ? `镜头 ${failed.join(", ")} 的 NPC 反应没有形成至少两种可见结果` : "required NPC 或已声明 NPC 的群像反应存在变化，或当前没有 NPC 事实", ["backgroundNpcPolicy", "videoPrompt", "framePlan.frames"], "按事件改变群像的收声、视线、姿态、分布或密度；不要在每段重复“旁听、屏息、保持关注”。");
+}
+
+function checkCameraMotivation(checks: DramaQualityGateCheck[], value: DramaProductionPackageV1) {
+    const failed: string[] = [];
+    for (const shot of value.episodes.flatMap((episode) => episode.shots)) {
+        const text = `${shot.cameraMotion || ""}\n${shot.videoPrompt || ""}`;
+        const hasCamera = /机位|景别|角度|焦段|固定|推|拉|摇|移|跟拍|环绕|镜头/u.test(text);
+        const hasConcretePurpose = /为了|服务于|让观众看见|揭示|强调|承接|跟随|锁定|暴露|突出|把[^。；\n]{0,20}(?:看见|传给|压到|推向)/u.test(text);
+        const genericPurpose = /服务于当前(?:信息|动作)变化|电影感推进|中轴缓慢推进/u.test(text) && !hasConcretePurpose;
+        if (!hasCamera || !hasConcretePurpose || genericPurpose) failed.push(shot.code);
+    }
+    add(checks, "CAMERA_MOTIVATION", !failed.length, "运镜动机", failed.length ? `镜头 ${failed.join(", ")} 缺少具体机位路径或可见信息目的` : "每镜摄影路径与当前可见动作/信息变化绑定", ["cameraMotion", "videoPrompt"], "写明景别/角度、固定或运动路径、方向及其服务的具体可见变化，不要只写“电影感推进”。");
+}
+
+function checkCameraEvents(checks: DramaQualityGateCheck[], value: DramaProductionPackageV1) {
+    const failed: string[] = [];
+    for (const shot of value.episodes.flatMap((episode) => episode.shots)) {
+        const prompt = shot.videoPrompt || "";
+        const hasCut = /(?:\bCut\s+to\b|\bCamera\s+cut\s+to\b|镜头事件\s*[：:])/iu.test(prompt);
+        const internal = /镜头模式\s*[：:]\s*内部切镜/u.test(prompt);
+        if (hasCut && !internal) failed.push(`${shot.code}:未声明内部切镜`);
+        if (internal) {
+            const events = [...prompt.matchAll(/镜头事件\s*[：:]\s*([^\n]+)/gu)].map((match) => match[1]);
+            if (!events.length || events.some((event) => !/(?:时间|秒).{0,12}(?:类型|硬切|匹配切|插入|甩镜).{0,40}(?:触发事件).{0,80}(?:新机位).{0,80}(?:信息目的).{0,80}(?:承接)/u.test(event))) failed.push(`${shot.code}:镜头事件字段不完整`);
+            const starts = new Set((shot.framePlan?.frames || []).map((frame) => Number(frame.startSecond).toFixed(3)));
+            for (const event of events) {
+                const match = event.match(/(?:时间|发生时间)\s*[：:]?\s*(\d+(?:\.\d+)?)\s*秒/u);
+                if (match && !starts.has(Number(match[1]).toFixed(3))) failed.push(`${shot.code}:切点未对齐帧边界`);
+            }
+        }
+    }
+    add(checks, "CAMERA_EVENT", !failed.length, "镜头事件", failed.length ? failed.join("；") : "未声明切镜的镜头没有出现隐式 Cut；声明内部切镜时字段和边界完整", ["videoPrompt", "framePlan.frames[].startSecond"], "出现 Cut to 时先声明“镜头模式：内部切镜”，并在可见衔接写时间、类型、触发事件、新机位、信息目的和承接；切点必须对齐帧段起点。");
+}
+
+function checkSimpleStructuralChecks(checks: DramaQualityGateCheck[], value: DramaProductionPackageV1) {
+    const timelineValid = value.episodes.every((episode) => episode.shots.every((shot) => {
+        const frames = shot.framePlan?.frames || [];
+        return frames.length > 0 && frames[0].startSecond === 0 && frames.at(-1)?.endSecond === shot.duration && frames.every((frame, index) => frame.endSecond > frame.startSecond && (index === 0 || frame.startSecond === frames[index - 1].endSecond));
+    }));
+    add(checks, "TIMELINE", timelineValid, "时间轴", timelineValid ? "所有镜头从 0 秒连续覆盖，无空洞和重叠" : "至少一个镜头的帧段没有从 0 秒连续覆盖", ["framePlan.frames[].startSecond", "framePlan.frames[].endSecond"], "修正帧段的起止时间，使其从 0 秒连续覆盖镜头时长。");
+    add(checks, "ASSET_BINDING", value.episodes.every((episode) => episode.shots.every((shot) => Boolean(shot.locationCode))), "素材绑定", "每个镜头都有场景资产编码；角色/道具绑定由结构化规范继续校验", ["locationCode", "characterCodes", "propCodes"], "只引用当前正式资产的稳定 code，并让正文道具与镜头绑定一致。");
+    add(checks, "CONTINUITY", value.episodes.every((episode) => episode.shots.every((shot) => Boolean(shot.entryState && shot.exitState && shot.continuity))), "连续性", "每个镜头都提供入口、出口和连续性事实", ["entryState", "exitState", "continuity"], "补充可继承的入口/出口状态、轴线、站位、视线和动作起止。");
+    if (value.authoring)
+        add(checks, "PROVENANCE", Boolean(value.authoring.source === "executeDramaScriptRun" && value.authoring.contract?.contentHash && value.authoring.directorSkill.contentHash && value.authoring.seedanceSkill.contentHash), "来源凭据", "已记录 executeDramaScriptRun、契约和两个 Skill 哈希", ["authoring"], "只允许通过 executeDramaScriptRun 完成最终编排，并记录契约、导演 Skill、Seedance Skill 和来源素材哈希。");
+}
+
+function add(checks: DramaQualityGateCheck[], code: string, passed: boolean, scope: string, evidence: string, sourceRefs: string[], fixHint: string) {
+    checks.push({ code, severity: passed ? "warning" : "blocker", scope, evidence: passed ? `通过：${evidence}` : evidence, sourceRefs, fixHint });
+}
+
+function extractDialogueLines(source: string) {
+    return [...source.matchAll(/[“「『]([^”」』\n]{1,240})[”」』]/gu)].map((match) => match[1].trim()).filter(Boolean);
+}
+
+function extractPlotFacts(source: string) {
+    return source
+        .split(/(?<=[。！？；\n])/u)
+        .map((part) => part.replace(/^[\s\d.#一二三四五六七八九十、.)]+/u, "").trim())
+        .filter((part) => part.length >= 8 && actionFactPattern.test(part) && !/模板|字段|规范|制作包|镜头|Prompt|Skill|哈希/u.test(part))
+        .filter((part, index, all) => all.indexOf(part) === index)
+        .slice(0, 80);
+}
+
+function factTokens(value: string) {
+    return value.match(/[\p{Script=Han}]{2,8}/gu) || [];
+}
+
+function valueTextIncludes(value: DramaProductionPackageV1, token: string) {
+    return packageSearchText(value).includes(token);
+}
+
+function packageSearchText(value: DramaProductionPackageV1) {
+    return JSON.stringify(value);
+}
+
+function containsNormalized(text: string, value: string) {
+    return normalizeSearchText(text).includes(normalizeSearchText(value));
+}
+
+function normalizeSearchText(value: string) {
+    return value.replace(/[\s\u3000]+/gu, "").trim();
+}
+
+function actionSignature(value: string) {
+    return normalizeSearchText(value).replace(/[，。；：、,.!?！？]/gu, "").slice(0, 72);
+}
+
+function escapeRegExp(value: string) {
+    return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+}
+
+export function dramaAuthoringQualityGateCodes() {
+    return [...DRAMA_PACKAGE_GATE_CODES];
+}

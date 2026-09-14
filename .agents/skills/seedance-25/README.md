@@ -11,6 +11,8 @@
 
 许可：MIT
 
+同步边界：本目录及 references/ 是项目固定适配层的唯一源码；运行时只读取编译模块；`~/.codex/skills/seedance-25-director` 只是本地 Codex 对话镜像。修改后执行 `pnpm --dir web run compile:skills && pnpm --dir web run sync:codex-skills`，再用 `pnpm --dir web run check:codex-skills` 检查是否漂移。它只负责 Seedance 2.5 的平台提示词适配，不与项目导演 Skill 形成第二套剧情或摄影事实源。
+
 项目适配原则：
 
 - 外部 Skill 只提供导演方法和提示词结构；项目自己的模型目录、协议、尺寸、素材、

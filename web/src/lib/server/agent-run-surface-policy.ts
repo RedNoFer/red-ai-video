@@ -5,7 +5,7 @@ import type { AgentRun, AgentRunPlannerContextSummary, AgentRunTask } from "@/li
 import type { AgentPlan } from "@/lib/server/agent-run-validation";
 import { resolveAgentPlanningProfile } from "@/lib/server/agent-run-planning-profile";
 import { canvasSnapshotPlannerView, selectedCanvasNodeIds } from "./agent-run-canvas-snapshot";
-import { DRAMA_PLANNING_SKILL, DRAMA_VIDEO_DIRECTOR_SKILL, SEEDANCE_25_DIRECTOR_SKILL, SEEDANCE_DIRECTOR_SKILL } from "./agent-skills/creative-shortcuts";
+import { DRAMA_PLANNING_SKILL, DRAMA_VIDEO_DIRECTOR_SKILL, SEEDANCE_25_DIRECTOR_SKILL } from "./agent-skills/creative-shortcuts";
 import { DRAMA_ASSET_IMAGE_SKILL } from "@/lib/drama-image-skill";
 import { inferSeedance25VideoDuration, resolveSeedance25DirectorInstructions } from "./agent-skills/seedance-25";
 
@@ -20,7 +20,14 @@ type AgentSkillSelectionContext = {
 
 export function availableAgentSkills(settings: AuthSettings, surface: CreativeSurface) {
     const workspaces = surface === "canvas" ? new Set(["canvas"]) : surface === "drama" ? new Set(["drama"]) : new Set(["image", "video", "drama"]);
-    const configured = settings.agentSkills.filter((skill) => skill.enabled && (skill.workspaces || ["image"]).some((workspace) => workspaces.has(workspace)));
+    const configured = settings.agentSkills
+        .filter((skill) => skill.id !== "seedance-director")
+        .filter((skill) => skill.enabled && (skill.workspaces || ["image"]).some((workspace) => workspaces.has(workspace)))
+        .map((skill) => {
+            if (skill.id === DRAMA_VIDEO_DIRECTOR_SKILL.id) return { ...DRAMA_VIDEO_DIRECTOR_SKILL, enabled: skill.enabled, keywords: [...DRAMA_VIDEO_DIRECTOR_SKILL.keywords], workspaces: [...DRAMA_VIDEO_DIRECTOR_SKILL.workspaces] };
+            if (skill.id === SEEDANCE_25_DIRECTOR_SKILL.id) return { ...SEEDANCE_25_DIRECTOR_SKILL, enabled: skill.enabled, keywords: [...SEEDANCE_25_DIRECTOR_SKILL.keywords], workspaces: [...SEEDANCE_25_DIRECTOR_SKILL.workspaces] };
+            return skill;
+        });
     if (surface !== "canvas" && !configured.some((skill) => skill.id === DRAMA_VIDEO_DIRECTOR_SKILL.id))
         configured.push({ ...DRAMA_VIDEO_DIRECTOR_SKILL, keywords: [...DRAMA_VIDEO_DIRECTOR_SKILL.keywords], workspaces: [...DRAMA_VIDEO_DIRECTOR_SKILL.workspaces] });
     return configured;
@@ -28,7 +35,8 @@ export function availableAgentSkills(settings: AuthSettings, surface: CreativeSu
 
 export function selectAgentSkills(settings: AuthSettings, surface: CreativeSurface, requestedSkillIds: string[] = [], context?: AgentSkillSelectionContext) {
     const available = new Map(availableAgentSkills(settings, surface).map((skill) => [skill.id, skill]));
-    if (surface === "drama" && !available.has(SEEDANCE_DIRECTOR_SKILL.id)) available.set(SEEDANCE_DIRECTOR_SKILL.id, { ...SEEDANCE_DIRECTOR_SKILL, keywords: [...SEEDANCE_DIRECTOR_SKILL.keywords], workspaces: [...SEEDANCE_DIRECTOR_SKILL.workspaces] });
+    if (surface === "drama" && !available.has(DRAMA_VIDEO_DIRECTOR_SKILL.id))
+        available.set(DRAMA_VIDEO_DIRECTOR_SKILL.id, { ...DRAMA_VIDEO_DIRECTOR_SKILL, keywords: [...DRAMA_VIDEO_DIRECTOR_SKILL.keywords], workspaces: [...DRAMA_VIDEO_DIRECTOR_SKILL.workspaces] });
     if (surface === "drama" && context?.workflow === "drama-script" && !available.has(DRAMA_PLANNING_SKILL.id))
         available.set(DRAMA_PLANNING_SKILL.id, { ...DRAMA_PLANNING_SKILL, keywords: [...DRAMA_PLANNING_SKILL.keywords], workspaces: [...DRAMA_PLANNING_SKILL.workspaces] });
     const videoDefault = surface !== "canvas" && isVideoAgentRequest(settings, context);
@@ -39,10 +47,10 @@ export function selectAgentSkills(settings: AuthSettings, surface: CreativeSurfa
     if (dramaAssetDefault && !available.has(DRAMA_ASSET_IMAGE_SKILL.id)) available.set(DRAMA_ASSET_IMAGE_SKILL.id, { ...DRAMA_ASSET_IMAGE_SKILL, keywords: [...DRAMA_ASSET_IMAGE_SKILL.keywords], workspaces: [...DRAMA_ASSET_IMAGE_SKILL.workspaces] });
     const compatibleRequestedSkillIds = dramaAssetDefault ? requestedSkillIds.filter((id) => id.trim() !== "character-design") : requestedSkillIds;
     const ids = [
-        ...(surface === "drama" ? ["seedance-director"] : []),
+        ...(surface === "drama" ? [DRAMA_VIDEO_DIRECTOR_SKILL.id] : []),
         ...(context?.workflow === "drama-script" ? [DRAMA_PLANNING_SKILL.id] : []),
         ...(videoDefault ? [SEEDANCE_25_DIRECTOR_SKILL.id] : []),
-        ...compatibleRequestedSkillIds,
+        ...compatibleRequestedSkillIds.map((id) => (id.trim() === "seedance-director" ? DRAMA_VIDEO_DIRECTOR_SKILL.id : id)),
         ...(dramaAssetDefault ? [DRAMA_ASSET_IMAGE_SKILL.id] : []),
     ];
     return Array.from(new Set(ids.map((id) => id.trim()).filter(Boolean))).flatMap((id) => (available.has(id) ? [available.get(id)!] : []));
@@ -92,7 +100,7 @@ export function agentPlannerSystemPrompt(surface: CreativeSurface, fallbackExamp
             : "当前入口不得填写 projectHandoff。";
     const skillSelectionRule =
         surface === "drama"
-            ? "短剧入口即使 requestedSkillIds 为空也必须执行 seedance-director；用户选择的其他兼容技能可以叠加，不能替换该默认技能。"
+            ? "短剧入口即使 requestedSkillIds 为空也必须执行 canonical drama-video-director；seedance-director 只是历史 productionPlan 标识，不能作为第二套提示词规则参与生成；用户选择的其他兼容技能可以叠加，不能替换该默认导演层。"
             : "视频创作需求（generationPreferences.mode=video，或自然语言明确要求视频/短片/动画/动效/镜头）即使 requestedSkillIds 为空也必须执行 seedance-25-director；用户选择的其他兼容技能可以叠加。非视频请求仍只使用用户显式选择的 Skill，requestedSkillIds 为空时不得自动选择普通 Skill。";
     const dialogueProtocol =
         "所有生成型对话都遵循统一创作协议：先锁定目标、受众、用途和参考素材，再给一个明确推荐方向。图片 Prompt 按主体/身份锚点、当前变化、构图、光色材质、用途和约束组织；编辑必须分别写 change、preserve、constraints，且一次只改一个变量。视频 Prompt 按“动态意图 → 全局设定 → 起始可见状态 → 按真实时间段写起点、动作与触发、可见衔接、终点 → 单一主运镜 → 环境压力与视觉母题 → 视觉风格与光色 → 声音意图 → 结束画面 → 连续性锁 → 针对性约束”组织；不另设顶层触发或主体动作摘要，每镜只保留一个主要变化，抽象情绪必须翻译成可观察的表情、视线、呼吸、手部或身体动作。多资产只能使用稳定 assetId 绑定，@引用只表达用途，不能按标题或文本相似度猜测；内部规划规则、供应商字段和执行提示词不得进入公开消息。视频 Skill 只作为字段级质量层参与：补充动作因果、空间调度、摄影、表演、声音和连续性建议，并写回固定提示词合同；不得生成第二套提示词、覆盖用户事实、改动素材顺序或把 Skill 原文附加到供应商请求。质量优先级固定为用户本轮事实、项目资产和已验收媒体、供应商协议、Skill 建议、默认风格。";

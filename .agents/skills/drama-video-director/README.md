@@ -5,3 +5,5 @@
 运行时不会直接读取本目录。`web/scripts/compile-drama-video-director-skill.mjs` 会在开发、测试、类型检查和生产构建前将它编译为 TypeScript 模块；业务代码只读取生成模块。
 
 这套 Skill 不提交供应商请求，不改变 13 章制作包协议，不替代 Seedance 的供应商能力与项目连续性策略。
+
+同步边界：本目录是唯一源码；运行时生成模块是唯一服务端执行来源；`~/.codex/skills/drama-video-director` 是给本地 Codex 对话使用的镜像。修改后执行 `pnpm --dir web run compile:skills && pnpm --dir web run sync:codex-skills`，再用 `pnpm --dir web run check:codex-skills` 检查是否漂移。通用 video/router Skill 不参与短剧制作包的导演规则合并。

@@ -10,6 +10,7 @@ export function publicAgentRun(run: AgentRun) {
         assistantMessageId: run.assistantMessageId,
         surface: run.surface,
         projectId: run.projectId,
+        episodeId: run.episodeId,
         status: run.status,
         prompt: run.publicPrompt || run.prompt,
         referencedAssetIds: run.referencedAssetIds || [],
@@ -20,6 +21,9 @@ export function publicAgentRun(run: AgentRun) {
         tasks: (run.tasks || []).map(publicAgentRunTask),
         cancellation: run.cancellation ? { pendingCount: run.cancellation.pendingChildTaskIds.length } : undefined,
         timings: run.timings,
+        dramaAuthoring: run.dramaAuthoring,
+        dramaQualityGateReport: run.dramaQualityGateReport,
+        dramaFailureKind: run.dramaFailureKind,
         createdAt: run.createdAt,
         updatedAt: run.updatedAt,
     };

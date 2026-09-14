@@ -18,6 +18,9 @@ describe("drama source import workspace", () => {
         expect(source).toContain('anchor.download = "drama-production-package-v1-template.md"');
         expect(source).toContain("下载制作包模板");
         expect(source).toContain("footer={(_, { OkBtn, CancelBtn }) =>");
+        expect(source).toContain("制作包存在识别警告");
+        expect(source).toContain("继续导入（有警告）");
+        expect(source).toContain("data-drama-production-package-import-warnings");
         expect(template).toContain("vozeb-drama-production-package-v1");
         expect(template).toContain("## 十三、QC 报告");
         expect(template).toContain("imagePrompt");

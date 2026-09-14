@@ -43,7 +43,7 @@ class AgentChildTaskDeferredError extends Error {}
 
 // Director skills shape the planner's public prompt contract. Their internal
 // rules must never be appended verbatim to a paid provider request.
-const PROMPT_AUTHORING_ONLY_SKILL_IDS = new Set(["seedance-director", "seedance-25-director"]);
+const PROMPT_AUTHORING_ONLY_SKILL_IDS = new Set(["drama-video-director", "seedance-director", "seedance-25-director"]);
 
 export async function canContinue(id: string, executionId: string) {
     const run = await getAgentRun(id);

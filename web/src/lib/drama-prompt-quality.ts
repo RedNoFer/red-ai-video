@@ -18,6 +18,13 @@ const GENERIC_DETAIL_PATTERNS = [
 const WEAK_VIDEO_DETAIL_PATTERNS = [/^保持本镜可见反应$/u, /^保持可读的具体反应$/u, /(?:眉眼|表情|呼吸).*(?:随|根据).*(?:变化|推进|触发).*(?:可见变化)/u, /^(?:准备回应|承受(?:压力)?|情绪(?:逐步)?加剧|保持状态|自然反应)$/u];
 const CONCRETE_CAMERA_PATTERN = /固定机位|推(?:进|近|镜)|拉(?:远|镜)|摇镜|横移|跟拍|滑轨|环绕|吊臂|升降|手持|变焦|俯拍|仰拍|平视|低机位|高机位|中景|近景|特写|远景/u;
 const OBSERVABLE_DRAMA_DETAIL_PATTERN = /眉|眼|目光|视线|嘴角|下颌|呼吸|肩|背|身体|重心|手|指|掌|站|坐|抬|低|转|握|松|触|茶盏|文书|纸|桌|案|地面|水面|光线|影子|门|墙|尘|衣袍|NPC|旁听者|旁观者|人群|族人|执事|开口|说|重音|停顿|语速|语气/u;
+const NPC_SEGMENT_PATTERN = /NPC群像\s*[：:]\s*(\d+)\s*名\s*[；;]\s*分布\s*[：:]\s*前景\s*(\d+)\s*名\s*[、,，]\s*中景\s*(\d+)\s*名\s*[、,，]\s*后景\s*(\d+)\s*名\s*[；;]\s*密度\s*[：:]\s*([^；;\n]+)\s*[；;]\s*反应\s*[：:]\s*([^\n]+)/u;
+const OBSERVABLE_NPC_REACTION_PATTERN = /抬眼|抬头|低头|收声|屏息|静默|看向|望向|交换眼神|后退|退开|分列|让出|肩背|僵住|停住|避开|回望|垂下|侧身/u;
+const DIALOGUE_SEGMENT_MARKER = /对白表演\s*[：:]/u;
+const CAMERA_CUT_EVENT_PATTERN = /镜头事件\s*[：:]/u;
+const ACTIVE_CAMERA_CUT_PATTERN = /硬切|镜头切换|Camera\s+cut\s+to|Cut\s+to/iu;
+
+export type DramaCameraPlanFrame = Pick<{ startSecond: number; endSecond: number }, "startSecond" | "endSecond">;
 
 export function isGenericDramaDetail(value: unknown) {
     const text = typeof value === "string" ? value.trim() : "";
@@ -70,17 +77,135 @@ export function validateDramaFrameDetail(value: unknown, label: string) {
     return isGenericDramaDetail(value) ? `${label}缺少具体可见动作或状态` : "";
 }
 
-export function validateDramaVideoSegmentDetail(actionPrompt: unknown, transitionPrompt: unknown, endPrompt: unknown, label: string, options: { requiresBackgroundNpc?: boolean } = {}) {
+export function validateDramaVideoSegmentDetail(
+    actionPrompt: unknown,
+    transitionPrompt: unknown,
+    endPrompt: unknown,
+    label: string,
+    options: { requiresBackgroundNpc?: boolean; backgroundNpcCountRange?: { min: number; max: number }; requiresDialoguePerformance?: boolean } = {},
+) {
     const action = typeof actionPrompt === "string" ? actionPrompt.trim() : "";
     const transition = typeof transitionPrompt === "string" ? transitionPrompt.trim() : "";
     const end = typeof endPrompt === "string" ? endPrompt.trim() : "";
     const errors: string[] = [];
     if (isGenericDramaDetail(action) || WEAK_VIDEO_DETAIL_PATTERNS.some((pattern) => pattern.test(action)) || !OBSERVABLE_DRAMA_DETAIL_PATTERN.test(action)) errors.push(`${label}动作与触发缺少具体可见的表情、视线、呼吸、身体、手部、道具或环境变化`);
     if (isGenericDramaDetail(end) || WEAK_VIDEO_DETAIL_PATTERNS.some((pattern) => pattern.test(end)) || !OBSERVABLE_DRAMA_DETAIL_PATTERN.test(`${end}${transition}`)) errors.push(`${label}终点缺少具体可验收的人物、道具或环境结果`);
-    if (options.requiresBackgroundNpc && !/(?:NPC|旁听者|旁观者|人群|族人|执事)/u.test(`${action}${transition}${end}`)) errors.push(`${label}要求背景 NPC，但每个时间段没有写出旁听群像的可见反应`);
+    if (options.requiresBackgroundNpc) errors.push(...validateDramaNpcSegmentDetail(`${action}\n${transition}\n${end}`, label, options.backgroundNpcCountRange));
+    if (options.requiresDialoguePerformance) errors.push(...validateDramaDialogueSegmentDetail(`${action}\n${transition}\n${end}`, label));
     return errors;
+}
+
+export function validateDramaNpcSegmentDetail(value: unknown, label: string, countRange?: { min: number; max: number }) {
+    const text = typeof value === "string" ? value : "";
+    const match = text.match(NPC_SEGMENT_PATTERN);
+    if (!match) return [`${label}要求背景 NPC，但必须按“NPC群像：人数；分布：前景/中景/后景；密度；反应”写出机器可验收的群像结果`];
+    const count = Number(match[1]);
+    const distribution = [Number(match[2]), Number(match[3]), Number(match[4])];
+    const errors: string[] = [];
+    if (distribution.some((value) => !Number.isInteger(value) || value < 0) || distribution.reduce((sum, value) => sum + value, 0) !== count) errors.push(`${label}背景 NPC 的人数与前中后景分布不一致`);
+    if (countRange && (count < countRange.min || count > countRange.max)) errors.push(`${label}背景 NPC 人数 ${count} 不在场景允许范围 ${countRange.min}-${countRange.max} 内`);
+    if (!match[5].trim() || !OBSERVABLE_NPC_REACTION_PATTERN.test(match[6])) errors.push(`${label}背景 NPC 缺少具体密度或可见反应`);
+    return errors;
+}
+
+export function validateDramaDialogueSegmentDetail(value: unknown, label: string) {
+    const text = typeof value === "string" ? value : "";
+    if (!DIALOGUE_SEGMENT_MARKER.test(text)) return [`${label}含对白但缺少“对白表演”段落`];
+    const missing = ["语气", "停顿", "重音", "说后反应"].filter((field) => !new RegExp(`${field}\s*[：:]`, "u").test(text));
+    return missing.length ? [`${label}对白表演缺少${missing.join("、")}`] : [];
 }
 
 export function hasConcreteDramaCameraDirection(value: unknown) {
     return typeof value === "string" && CONCRETE_CAMERA_PATTERN.test(value.trim());
+}
+
+export function validateDramaCameraPlan(prompt: string, frames: ReadonlyArray<DramaCameraPlanFrame>) {
+    const cameraLine = prompt.match(/(?:^|\n)\s*单一主运镜\s*[：:]([^\n]+)/u)?.[1]?.trim() || "";
+    const modeMatch = cameraLine.match(/镜头模式\s*[=:：]\s*(连续镜头|内部切镜)(?:\s*[（(]\s*(\d+)\s*次\s*[）)])?/u);
+    if (!modeMatch) return "缺少镜头模式声明，必须明确写“连续镜头”或“内部切镜（N次）”";
+
+    const lines = prompt.split(/\r?\n/u);
+    const eventLines = lines.filter((line) => CAMERA_CUT_EVENT_PATTERN.test(line));
+    const activeCutLines = lines.filter((line) => ACTIVE_CAMERA_CUT_PATTERN.test(line) && !/(?:无|不得|禁止|不发生|不含)\s*(?:内部)?(?:硬切|镜头切换|Cut\s+to|Camera\s+cut)/iu.test(line));
+    if (modeMatch[1] === "连续镜头") {
+        if (eventLines.length || activeCutLines.length) return "已声明连续镜头，却又写入内部切镜事件";
+        return "";
+    }
+
+    const declaredCount = Number(modeMatch[2]);
+    if (!Number.isInteger(declaredCount) || declaredCount < 1) return "内部切镜必须声明正整数切镜次数";
+    if (eventLines.length !== declaredCount) return "内部切镜声明为 " + declaredCount + " 次，但实际只有 " + eventLines.length + " 条镜头事件";
+    if (activeCutLines.length > eventLines.length) return "存在未按镜头事件格式声明的切镜，请补齐时间、触发事件、新机位、信息目的和承接";
+
+    const frameBoundaries = new Set(frames.slice(1).map((frame) => Number(frame.startSecond).toFixed(2)));
+    for (const [index, line] of eventLines.entries()) {
+        const timeMatch = line.match(/镜头事件\s*[：:]\s*(\d+(?:\.\d+)?)\s*(?:秒|s)(?=$|[^0-9A-Za-z])/iu);
+        if (!timeMatch) return "第 " + (index + 1) + " 条镜头事件缺少明确发生时间";
+        const time = Number(timeMatch[1]);
+        if (!frameBoundaries.has(time.toFixed(2))) return "镜头事件 " + time + " 秒不在 framePlan 的段起点边界上，不能在段内任意切镜";
+        const missing = (
+            [
+                ["触发事件", /触发事件\s*[：:][^；;\n]+/u],
+                ["新机位", /新机位\s*[：:][^；;\n]+/u],
+                ["信息目的", /(?:信息目的|目的)\s*[：:][^；;\n]+/u],
+                ["承接", /承接\s*[：:][^；;\n]+/u],
+            ] as const
+        )
+            .filter(([, pattern]) => !pattern.test(line))
+            .map(([name]) => name);
+        if (missing.length) return "镜头事件 " + time + " 秒缺少" + missing.join("、");
+    }
+    return "";
+}
+
+type DramaVideoAuthoringFrame = {
+    startSecond: number;
+    endSecond: number;
+    actionPrompt: string;
+    transitionPrompt?: string;
+    endPrompt?: string;
+};
+
+/**
+ * Strict authoring checks for Agent-produced packages. These checks intentionally
+ * reject mechanically repeated performance blocks while leaving imported/manual
+ * packages on the compatibility path.
+ */
+export function validateDramaVideoAuthoringQuality(prompt: string, frames: ReadonlyArray<DramaVideoAuthoringFrame>, performancePlan: DramaPerformancePlan | undefined, label = "镜头", options: { requiresBackgroundNpc?: boolean } = {}) {
+    const errors: string[] = [];
+    const cameraLine = prompt.match(/(?:^|\n)\s*单一主运镜\s*[：:]([^\n]+)/u)?.[1]?.trim() || "";
+    const purpose = cameraLine.match(/(?:服务于|响应|为了|用于|让观众看见|强调)\s*([^；;\n]+)/u)?.[1]?.trim() || "";
+    if (!purpose || !OBSERVABLE_DRAMA_DETAIL_PATTERN.test(purpose) || /当前(?:信息|动作|变化)|动作变化|情绪变化|剧情推进|氛围|节奏/u.test(purpose)) {
+        errors.push(`${label}的主运镜缺少具体动机，必须说明它响应的可见动作、信息、表情、视线、道具或环境变化`);
+    }
+
+    const actionSignatures = frames.map((frame) => normalizeAuthoringSignature(frame.actionPrompt));
+    for (let index = 1; index < actionSignatures.length; index += 1) {
+        if (actionSignatures[index] && actionSignatures[index] === actionSignatures[index - 1]) errors.push(`${label}第 ${index + 1} 个时间段与上一段动作完全重复，必须产生新的可见动作或结果`);
+    }
+    if (frames.length > 1 && new Set(actionSignatures.filter(Boolean)).size < 2) errors.push(`${label}缺少可辨识的动作差异，不能把同一动作块复制到所有时间段`);
+
+    if (performancePlan) {
+        const beats = [performancePlan.beats.start, performancePlan.beats.middle, performancePlan.beats.end].map((beat) => normalizeAuthoringSignature([beat.emotion, beat.facialAction, beat.gaze, beat.bodyAction].join("；")));
+        if (new Set(beats).size < 3) errors.push(`${label}缺少起始→中段→结束的情绪递进，三个表演阶段必须有不同的可见表情、视线、呼吸、身体或手部结果`);
+    }
+
+    if (options.requiresBackgroundNpc) {
+        const reactions = frames.map((frame) => extractNpcReaction(`${frame.actionPrompt}\n${frame.transitionPrompt || ""}\n${frame.endPrompt || ""}`));
+        if (reactions.some((reaction) => !reaction)) errors.push(`${label}背景 NPC 反应缺失，必须在每个受事件影响的时间段写出具体群像反应`);
+        if (new Set(reactions.filter(Boolean)).size < Math.min(2, frames.length)) errors.push(`${label}背景 NPC 反应没有变化，至少要有一次由主事件触发的可见群体反应变化`);
+    }
+    return errors;
+}
+
+function normalizeAuthoringSignature(value: string | undefined) {
+    return (value || "")
+        .replace(NPC_SEGMENT_PATTERN, "")
+        .replace(/对白表演\s*[：:][^\n]*/gu, "")
+        .replace(/[，。；：、,.;:!?！？\s]+/gu, "")
+        .trim();
+}
+
+function extractNpcReaction(value: string) {
+    return value.match(NPC_SEGMENT_PATTERN)?.[6]?.trim() || "";
 }

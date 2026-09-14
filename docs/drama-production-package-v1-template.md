@@ -2,9 +2,11 @@
 
 > 制作包格式：`vozeb-drama-production-package-v1`
 >
-> 模板版本：由 `pnpm compile:skills` 自动生成；规范来源：`drama-video-director@{{DRAMA_VIDEO_DIRECTOR_VERSION}}`（Skill hash：`{{DRAMA_VIDEO_DIRECTOR_HASH}}`，制作包规范 hash：`{{DRAMA_PACKAGE_SPEC_HASH}}`，服务端制作包规则 hash：`{{DRAMA_PACKAGE_RULES_HASH}}`）。
+> 模板版本：由 `pnpm compile:skills` 自动生成；唯一制作包契约：`vozeb-drama-production-package-v1@{{DRAMA_PACKAGE_CONTRACT_VERSION}}`（契约 hash：`{{DRAMA_PACKAGE_CONTRACT_HASH}}`，规范源 hash：`{{DRAMA_PACKAGE_SPEC_HASH}}`）。导演 Skill：`drama-video-director@{{DRAMA_VIDEO_DIRECTOR_VERSION}}`（hash：`{{DRAMA_VIDEO_DIRECTOR_HASH}}`）；服务端制作包规则 hash：`{{DRAMA_PACKAGE_RULES_HASH}}`；Seedance Skill、服务端规则和 Codex 工作单均由同一编译清单绑定。
 >
 > 使用约定：本模板是当前 v1 制作包的填写入口。完整制作包必须同时提供可导入的规范对象 JSON；JSON 是导入事实源，下面的章节是面向人工阅读的确定性展示。不要把历史制作包、旧 generationPrompt 或旧分镜正文当作新包模板。
+>
+> 正式生成：制作包只能通过项目服务端 `executeDramaScriptRun` 完成最终编排。用户提供的模板只决定格式，TXT/小说只提供剧情事实；Agent draft 通过契约定义的严格质量门禁后，由服务端从规范对象确定性导出本模板。最终规范对象必须写入 `authoring.source/provider`、`targetNarrativeChapter`、契约/导演/Seedance Skill 版本与内容哈希，以及模板/TXT/参考素材的 alias、role、顺序和内容哈希。
 >
 > v1 固定保留 13 个一级章节；每集必须完整提供剧本、场次、镜头、资产、表演、声音、连续性、逐帧计划和 QC 数据。
 >
@@ -78,6 +80,8 @@
 
 `videoPrompt` 由 Agent 直接生成完整公开内容；`framePlan.frames` 是同一视频内容的结构化镜像，不是服务端重建 `videoPrompt` 的素材。
 
+Agent draft 不能使用固定脚本或直接复制模板正文冒充生成结果。服务端最终只序列化通过严格门禁的规范对象；相邻动作差异、情绪递进、NPC 反应变化、运镜动机和镜头事件缺一项都不得标记为 Agent 完成。
+
 ### 逐帧字段职责
 
 `framePlan.frames[]` 只保留以下字段：
@@ -98,9 +102,13 @@ imagePrompt
 
 `framePlan.start.source` 只能是 `independent` 或 `previous_accepted_actual_tail`；`framePlan.end.required` 必须是布尔值。`framePlan.referenceManifest` 是参考图职责和顺序的唯一事实源，必须与当前镜头声明的角色、场景、道具和线索绑定；每张参考图只承担一个用途，不把 URL、内部 ID 或绑定信息写入图片正文。`framePolicy` 为 `agent` 时先识别真实镜头事件，再按不可合并的冻结可见状态自适应提供 2–9 帧；不能按时长、提示词长度、角色数量或参考图数量统一分配。固定策略只在用户明确选择后执行。
 
+### 视频时间段字段说明
+
+本模板只说明字段位置，不复制门禁实现。NPC 语法、对白表演、镜头模式、内部切镜、帧承接、素材绑定和其它硬门禁统一以 `docs/drama-production-package-v1.md` 的版本化契约、编译后的导演 Skill 和服务端质量报告为准；模板内容不能覆盖或放宽这些规则。
+
 ### 静态图片帧规则
 
-{{DRAMA_VIDEO_DIRECTOR_STATIC_FRAME_RULES}}
+`imagePrompt` 作为唯一静态画面事实源；按事实选择画面主体、可见状态、构图与空间、光色与风格、针对性约束五类短段，缺少事实的段落省略，不强制九段。完整规则由当前编译的 `drama-video-director` Skill 提供，服务端只校验契约并保留 Agent 原文。
 
 ## 五、角色一致性资产
 
@@ -120,7 +128,7 @@ imagePrompt
 场景一致性 Prompt。
 ```
 
-场景全景基准图保持高清、单视角、无人、无文字。`backgroundNpcPolicy` 只表达场景策略；背景 NPC 需要出现在镜头时，写入关键帧或视频时间段的可见群像结果，不进入角色资产编码。
+场景全景基准图保持高清、单视角、无人、无文字。`backgroundNpcPolicy` 只表达场景策略；`required` 场景填写 `countRange`，背景 NPC 需要出现在镜头时，按固定 `NPC群像` 语法写入每个受影响关键帧或视频时间段的可见群像结果，不进入角色资产编码。
 
 ## 七、关键视频资产 Prompt
 
