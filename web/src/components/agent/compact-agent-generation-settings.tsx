@@ -4,6 +4,7 @@ import { SlidersHorizontal } from "lucide-react";
 
 import { CreativeGenerationPreferences as GenerationPreferencesControl, type CreativeGenerationPreferencePatch, type MediaCapability } from "@/components/creative-generation-preferences";
 import type { CreativeGenerationPreferences } from "@/lib/creative-runtime-contract";
+import { DEFAULT_IMAGE_SIZE } from "@/lib/image-generation-sizes";
 import { cn } from "@/lib/utils";
 
 type AgentMediaCapability = Extract<MediaCapability, "image" | "video">;
@@ -42,7 +43,7 @@ export function compactAgentPreferenceSummary(capability: AgentMediaCapability, 
         return isExactSize(video?.size) ? size : `${size} · ${video?.seconds || 5}秒`;
     }
     const image = preferences.image;
-    const size = image?.size && image.size !== "auto" ? image.size.replace("x", "×") : "智能";
+    const size = image?.size ? (image.size === "auto" ? "智能" : image.size.replace("x", "×")) : DEFAULT_IMAGE_SIZE.replace("x", "×");
     return isExactSize(image?.size) ? size : `${size} · ${image?.count || 1}张`;
 }
 
@@ -54,7 +55,7 @@ function agentPreferenceSummary(capability: AgentMediaCapability, preferences: C
         return size === "智能" && quality === "智能" ? "智能参数" : `${size} · ${quality} · ${video?.seconds || 5}秒`;
     }
     const image = preferences.image;
-    const size = image?.size && image.size !== "auto" ? image.size.replace("x", "×") : "智能";
+    const size = image?.size ? (image.size === "auto" ? "智能" : image.size.replace("x", "×")) : DEFAULT_IMAGE_SIZE.replace("x", "×");
     const quality = ({ high: "高", medium: "中", low: "低", auto: "智能" } as const)[image?.quality || "auto"];
     return size === "智能" && quality === "智能" && (image?.count || 1) === 1 ? "智能参数" : `${size} · ${quality}${(image?.count || 1) > 1 ? ` · ${image?.count}张` : ""}`;
 }

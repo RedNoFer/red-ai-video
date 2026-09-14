@@ -66,7 +66,10 @@ describe("GlobalAiOpc image task paths", () => {
         expect(resolveRequestSize(undefined, "1200x7200")).toBe("1200x7200");
     });
 
-    it("maps Sub2API ratios to its supported portrait, landscape, and square sizes", () => {
+    it("preserves exact Sub2API resolutions and canonicalizes legacy ratios", () => {
+        expect(resolveSub2ApiImageSize({ size: "1024x1024" }, "1024x1024")).toBe("1024x1024");
+        expect(resolveSub2ApiImageSize({ size: "3840x2160" }, "3840x2160")).toBe("3840x2160");
+        expect(resolveSub2ApiImageSize({ size: "2160x3840" }, "2160x3840")).toBe("2160x3840");
         expect(resolveSub2ApiImageSize({ size: "9:16" }, "2160x3840")).toBe("1024x1536");
         expect(resolveSub2ApiImageSize({ size: "16:9" }, "3840x2160")).toBe("1536x1024");
         expect(resolveSub2ApiImageSize({ size: "1:1" }, "2880x2880")).toBe("1024x1024");

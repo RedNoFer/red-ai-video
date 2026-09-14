@@ -2,8 +2,10 @@
 
 import { useMemo } from "react";
 import { create } from "zustand";
+
 import { nanoid } from "nanoid";
 
+import { DEFAULT_IMAGE_SIZE } from "@/lib/image-generation-sizes";
 import { flattenPublicCapabilityModels, resolvePublicCapabilityModels } from "@/lib/public-model-catalog";
 import type { GlobalAiOpcPresetId } from "@/lib/globalaiopc-catalog";
 import { resolveChannelModelAdvancedConfig } from "@/lib/channel-protocol-registry";
@@ -210,7 +212,7 @@ export const defaultConfig: AiConfig = {
     textModels: [],
     audioModels: [],
     quality: "auto",
-    size: "1:1",
+    size: DEFAULT_IMAGE_SIZE,
     count: "1",
     canvasImageCount: "1",
     modelPointCosts: {},

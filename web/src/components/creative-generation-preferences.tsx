@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 
 import { audioFormatLabel, audioFormatOptions, audioVoiceLabel, audioVoiceOptions } from "@/lib/audio-generation";
 import type { CreativeGenerationPreferences } from "@/lib/creative-runtime-contract";
+import { DEFAULT_IMAGE_SIZE, IMAGE_SIZE_OPTIONS, normalizeImagePresetSize } from "@/lib/image-generation-sizes";
 import { cn } from "@/lib/utils";
 
 import { creativeComposerPopoverOverflow, creativeComposerPopoverPanelMaxHeight, type CreativeComposerPopoverPlacement } from "./creative-composer-popover";
@@ -28,17 +29,6 @@ export type CreativeGenerationPreferencePatch = {
     format?: string;
     speed?: number;
 };
-
-const imageRatios = [
-    { value: "auto", label: "智能", width: 18, height: 18 },
-    { value: "1:1", label: "1:1", width: 18, height: 18 },
-    { value: "16:9", label: "16:9", width: 24, height: 14 },
-    { value: "4:3", label: "4:3", width: 21, height: 16 },
-    { value: "3:2", label: "3:2", width: 23, height: 15 },
-    { value: "2:3", label: "2:3", width: 15, height: 23 },
-    { value: "3:4", label: "3:4", width: 16, height: 21 },
-    { value: "9:16", label: "9:16", width: 14, height: 24 },
-] as const;
 
 const videoRatios = [
     { value: "auto", label: "智能", width: 18, height: 18 },
@@ -239,8 +229,8 @@ function PreferencePanel({
     videoReferenceContent?: ReactNode;
     onChange: (patch: CreativeGenerationPreferencePatch) => void;
 }) {
-    const ratios = capability === "image" ? imageRatios : videoRatios;
-    const selectedSize = capability === "image" ? preferences.image?.size || "auto" : preferences.video?.size || "auto";
+    const ratios = capability === "image" ? IMAGE_SIZE_OPTIONS : videoRatios;
+    const selectedSize = capability === "image" ? normalizeImagePresetSize(preferences.image?.size || DEFAULT_IMAGE_SIZE) : preferences.video?.size || "auto";
     const selectedQuality = capability === "image" ? preferences.image?.quality || "auto" : preferences.video?.quality || "auto";
     const selectedCount = capability === "image" ? preferences.image?.count || 1 : preferences.video?.count || 1;
     const [customEditorOpen, setCustomEditorOpen] = useState(Boolean(parseCustomDimensions(selectedSize)));
@@ -308,7 +298,7 @@ function PreferencePanel({
                     ) : (
                         <div className="grid min-w-0 gap-1.5">
                             <div className="flex items-center justify-between gap-3">
-                                <p className="text-[11px] font-medium text-[#7b8591] dark:text-[#98a2ae]">比例</p>
+                                <p className="text-[11px] font-medium text-[#7b8591] dark:text-[#98a2ae]">{capability === "image" ? "尺寸" : "比例"}</p>
                                 <span className="text-[10px] text-[#a0a8b2] dark:text-[#707b88]">{selectedSize === "auto" ? "智能" : formatSizeLabel(selectedSize)}</span>
                             </div>
                             <div className="grid min-w-0 grid-cols-4 gap-1">
@@ -324,7 +314,7 @@ function PreferencePanel({
                                                 : "bg-[#f5f6f7] text-[#687481] hover:bg-[#edf0f2] hover:text-[#20242a] dark:bg-[#24282e] dark:text-[#a6afb9] dark:hover:bg-[#30363e] dark:hover:text-white",
                                         )}
                                         onClick={() => onChange({ size: ratio.value })}
-                                        aria-label={`选择${capability === "image" ? "图片" : "视频"}比例 ${ratio.label}`}
+                                        aria-label={`选择${capability === "image" ? "图片尺寸" : "视频比例"} ${ratio.label}`}
                                         aria-pressed={selectedSize === ratio.value}
                                     >
                                         <span className="grid h-4 w-5 shrink-0 place-items-center">
@@ -564,7 +554,8 @@ function PreferenceSelect<T extends string | number>({ label, ariaLabel, value, 
 function PreferenceSummaryIcon({ capability, preferences }: { capability: MediaCapability; preferences: CreativeGenerationPreferences }) {
     if (capability === "audio") return <AudioLines className="size-4" />;
     const size = capability === "image" ? preferences.image?.size : preferences.video?.size;
-    const ratio = (capability === "image" ? imageRatios : videoRatios).find((item) => item.value === size);
+    const normalizedSize = capability === "image" ? normalizeImagePresetSize(size) : size;
+    const ratio = (capability === "image" ? IMAGE_SIZE_OPTIONS : videoRatios).find((item) => item.value === normalizedSize);
     const custom = parseCustomDimensions(size);
     if (custom) {
         return (
@@ -583,11 +574,11 @@ function PreferenceSummaryIcon({ capability, preferences }: { capability: MediaC
 
 export function generationPreferenceSummary(capability: MediaCapability, preferences: CreativeGenerationPreferences) {
     if (capability === "audio") return `${audioVoiceLabel(preferences.audio?.voice || "alloy")} · ${audioFormatLabel(preferences.audio?.format || "mp3")} · ${preferences.audio?.speed || 1}x`;
-    const size = capability === "image" ? preferences.image?.size || "auto" : preferences.video?.size || "auto";
+    const size = capability === "image" ? normalizeImagePresetSize(preferences.image?.size || DEFAULT_IMAGE_SIZE) : preferences.video?.size || "auto";
     const quality = capability === "image" ? preferences.image?.quality || "auto" : preferences.video?.quality || "auto";
     const count = capability === "image" ? preferences.image?.count || 1 : preferences.video?.count || 1;
     const countLabel = count > 1 ? ` · ${count}${capability === "image" ? "张" : "条"}` : "";
-    const sizeLabel = size === "auto" ? "智能比例" : formatSizeLabel(size);
+    const sizeLabel = size === "auto" ? "智能尺寸" : formatSizeLabel(size);
     const qualityLabel = capability === "image" ? imageQualityOptions.find((item) => item.value === quality)?.label || quality : videoQualityLabel(quality);
     const referenceLabel = capability === "video" ? videoReferenceModeOptions.find((item) => item.value === (preferences.video?.referenceMode || "reference"))?.label : undefined;
     if (capability === "image") return size === "auto" && quality === "auto" ? `智能参数${countLabel}` : `${sizeLabel} · ${qualityLabel}${countLabel}`;

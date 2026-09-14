@@ -3,6 +3,12 @@ import { describe, expect, it } from "vitest";
 import { normalizeGenerationConcurrency, normalizeGenerationDefaults } from "./store-normalizers";
 
 describe("generation default normalization", () => {
+    it("defaults image generation to an exact 1024x1024 resolution", () => {
+        expect(normalizeGenerationDefaults({}).imageSize).toBe("1024x1024");
+        expect(normalizeGenerationDefaults({ imageSize: "1:1" }).imageSize).toBe("1024x1024");
+        expect(normalizeGenerationDefaults({ imageSize: "3840x2160" }).imageSize).toBe("3840x2160");
+    });
+
     it("preserves administrator-defined video quality and positive duration", () => {
         expect(normalizeGenerationDefaults({ videoQuality: "1440", videoSeconds: 60 })).toMatchObject({ videoQuality: "1440", videoSeconds: 60 });
         expect(normalizeGenerationDefaults({ videoQuality: "2K", videoSeconds: -1 })).toMatchObject({ videoQuality: "2K", videoSeconds: -1 });

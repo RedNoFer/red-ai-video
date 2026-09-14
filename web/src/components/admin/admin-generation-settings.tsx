@@ -5,6 +5,7 @@ import { CircleGauge, SlidersHorizontal, Sparkles } from "lucide-react";
 
 import type { AuthSettings } from "@/lib/auth/store";
 import { DRAMA_PROVIDER_VOICE_POOL } from "@/lib/drama-voice";
+import { IMAGE_SIZE_OPTIONS } from "@/lib/image-generation-sizes";
 import { resolveLogicalModelConfig } from "@/lib/model-routing-config";
 import { LabeledControl, SectionTitle } from "@/components/admin/admin-settings-controls";
 
@@ -87,13 +88,8 @@ export function GenerationDefaultsPanel({ settings, onChange }: { settings: Auth
                 <LabeledControl label="Agent 默认生图张数">
                     <InputNumber className="w-full" min={1} precision={0} value={settings.generationDefaults.imageCount} onChange={(value) => onChange("imageCount", value || 1)} />
                 </LabeledControl>
-                <LabeledControl label="默认图片/视频比例">
-                    <Select
-                        className="w-full"
-                        value={settings.generationDefaults.imageSize}
-                        options={["auto", "1:1", "3:2", "2:3", "4:3", "3:4", "16:9", "9:16"].map((value) => ({ value, label: value }))}
-                        onChange={(value) => onChange("imageSize", value)}
-                    />
+                <LabeledControl label="默认图片/视频尺寸">
+                    <Select className="w-full" value={settings.generationDefaults.imageSize} options={IMAGE_SIZE_OPTIONS.map(({ value, label }) => ({ value, label }))} onChange={(value) => onChange("imageSize", value)} />
                 </LabeledControl>
                 <LabeledControl label="默认图片质量">
                     <Select

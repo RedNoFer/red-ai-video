@@ -10,6 +10,7 @@ import { inferModelCapability, normalizeModelId } from "@/lib/model-capability";
 import { applyChannelProtocol, channelProtocolDefinition, normalizeStrictProtocolModelConfig, protocolCatalogCapability, protocolModelConfig } from "@/lib/channel-protocol-registry";
 import { resolveConfiguredModelPointCost } from "@/lib/model-point-cost";
 import { normalizeSystemChannelAdvancedConfig } from "./store-normalizers-channel";
+import { IMAGE_SIZE_VALUES } from "@/lib/image-generation-sizes";
 import {
     type UserRole,
     type UserStatus,
@@ -345,7 +346,7 @@ export function normalizeAgentSkills(skills: AgentSkill[] | undefined) {
 export function normalizeGenerationDefaults(settings: Partial<GenerationDefaultSettings> | undefined): GenerationDefaultSettings {
     return {
         canvasImageCount: normalizePositiveSafeInteger(settings?.canvasImageCount, DEFAULT_SETTINGS.generationDefaults.canvasImageCount),
-        imageSize: allowedText(settings?.imageSize, ["auto", "1:1", "3:2", "2:3", "4:3", "3:4", "16:9", "9:16"], DEFAULT_SETTINGS.generationDefaults.imageSize),
+        imageSize: allowedText(settings?.imageSize, ["auto", ...IMAGE_SIZE_VALUES], DEFAULT_SETTINGS.generationDefaults.imageSize),
         imageQuality: allowedText(settings?.imageQuality, ["auto", "low", "medium", "high"], DEFAULT_SETTINGS.generationDefaults.imageQuality),
         imageCount: normalizePositiveSafeInteger(settings?.imageCount, DEFAULT_SETTINGS.generationDefaults.imageCount),
         videoQuality: normalizeText(settings?.videoQuality, DEFAULT_SETTINGS.generationDefaults.videoQuality, 40),

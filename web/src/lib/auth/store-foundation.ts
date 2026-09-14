@@ -1,6 +1,7 @@
 import { ECOMMERCE_IMAGE_SKILL } from "@/lib/server/agent-skills/ecommerce-image";
 import { YANAI_BEAUTY_SKILL } from "@/lib/server/agent-skills/yanai-beauty";
 import { DEFAULT_CREATIVE_SHORTCUT_SKILLS } from "@/lib/server/agent-skills/creative-shortcuts";
+import { DEFAULT_IMAGE_SIZE } from "@/lib/image-generation-sizes";
 import {
     type UserRole,
     type UserStatus,
@@ -162,7 +163,7 @@ export const DEFAULT_SETTINGS: AuthSettings = {
     generationConcurrency: { agent: 2, image: 4, video: 1, audio: 2, text: 4, render: 1 },
     generationDefaults: {
         canvasImageCount: 1,
-        imageSize: "1:1",
+        imageSize: DEFAULT_IMAGE_SIZE,
         imageQuality: "auto",
         imageCount: 1,
         videoQuality: "480",

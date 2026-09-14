@@ -4,6 +4,7 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import { ConfigProvider, Switch } from "antd";
 
 import { type CanvasTheme } from "@/lib/canvas-theme";
+import { DEFAULT_IMAGE_SIZE, IMAGE_SIZE_OPTIONS, IMAGE_SIZE_PRESETS, normalizeImagePresetSize } from "@/lib/image-generation-sizes";
 import { parseImageDimensions } from "@/lib/image-size";
 import type { AiConfig } from "@/stores/use-config-store";
 
@@ -14,22 +15,6 @@ const qualityOptions = [
     { value: "low", label: "低" },
 ];
 const DIMENSION_STEP = 16;
-
-const aspectOptions = [
-    { value: "1:1", label: "1:1", width: 1024, height: 1024, icon: "square" },
-    { value: "3:2", label: "3:2", width: 1536, height: 1024, icon: "landscape" },
-    { value: "2:3", label: "2:3", width: 1024, height: 1536, icon: "portrait" },
-    { value: "4:3", label: "4:3", width: 1360, height: 1024, icon: "landscape" },
-    { value: "3:4", label: "3:4", width: 1024, height: 1360, icon: "portrait" },
-    { value: "16:9", label: "16:9", width: 1824, height: 1024, icon: "landscape" },
-    { value: "9:16", label: "9:16", width: 1024, height: 1824, icon: "portrait" },
-    { value: "1:1-2k", label: "1:1(2k)", size: "2048x2048", width: 2048, height: 2048, icon: "square" },
-    { value: "16:9-2k", label: "16:9(2k)", size: "2048x1152", width: 2048, height: 1152, icon: "landscape" },
-    { value: "9:16-2k", label: "9:16(2k)", size: "1152x2048", width: 1152, height: 2048, icon: "portrait" },
-    { value: "16:9-4k", label: "16:9(4k)", size: "3840x2160", width: 3840, height: 2160, icon: "landscape" },
-    { value: "9:16-4k", label: "9:16(4k)", size: "2160x3840", width: 2160, height: 3840, icon: "portrait" },
-    { value: "auto", label: "auto", width: 0, height: 0, icon: "auto" },
-];
 
 type ImageSettingsPanelProps = {
     config: AiConfig;
@@ -68,7 +53,7 @@ export function ImageSettingsPanel({ config, onConfigChange, theme, showTitle = 
                         ))}
                     </div>
                 </div>
-                {showSizeControls ? <ImageSizeControls size={config.size || "auto"} onChange={(value) => onConfigChange("size", value)} theme={theme} /> : null}
+                {showSizeControls ? <ImageSizeControls size={config.size || DEFAULT_IMAGE_SIZE} onChange={(value) => onConfigChange("size", value)} theme={theme} /> : null}
                 <div className="space-y-2.5">
                     <SettingTitle color={theme.node.muted}>生成张数</SettingTitle>
                     <div className="grid grid-cols-4 gap-2.5">
@@ -87,9 +72,9 @@ export function ImageSettingsPanel({ config, onConfigChange, theme, showTitle = 
 
 export function ImageSizeControls({ size, onChange, theme, compact = false }: { size: string; onChange: (value: string) => void; theme: CanvasTheme; compact?: boolean }) {
     const [snapDimensionToStep, setSnapDimensionToStep] = useState(true);
-    const activeSize = size || "auto";
-    const selectedAspect = aspectOptions.find((item) => imagePresetSize(item.value) === activeSize || item.value === activeSize);
-    const dimensions = readSizeDimensions(activeSize, selectedAspect || aspectOptions[0]);
+    const activeSize = normalizeImagePresetSize(size);
+    const selectedAspect = IMAGE_SIZE_OPTIONS.find((item) => item.value === activeSize);
+    const dimensions = readSizeDimensions(activeSize, selectedAspect || IMAGE_SIZE_PRESETS[0]);
     const updateDimension = (key: "width" | "height", value: number | null, commit = false) => {
         const next = Math.max(1, Math.floor(value || dimensions[key] || 1024));
         const width = key === "width" ? next : dimensions.width;
@@ -118,9 +103,9 @@ export function ImageSizeControls({ size, onChange, theme, compact = false }: { 
                 </div>
             </div>
             <div className="space-y-2.5">
-                <SettingTitle color={theme.node.muted}>宽高比</SettingTitle>
+                <SettingTitle color={theme.node.muted}>生成尺寸</SettingTitle>
                 <div className={compact ? "grid grid-cols-4 gap-2" : "grid grid-cols-4 gap-2.5"}>
-                    {aspectOptions.map((item) => (
+                    {IMAGE_SIZE_OPTIONS.map((item) => (
                         <button
                             key={item.value}
                             type="button"
@@ -131,7 +116,7 @@ export function ImageSizeControls({ size, onChange, theme, compact = false }: { 
                             }
                             style={{ borderColor: selectedAspect?.value === item.value ? theme.node.text : theme.node.stroke, background: "transparent", color: theme.node.text }}
                             onMouseDown={(event) => event.stopPropagation()}
-                            onClick={() => onChange(imagePresetSize(item.value))}
+                            onClick={() => onChange(item.value)}
                         >
                             <AspectIcon type={item.icon} width={item.width} height={item.height} color={theme.node.text} />
                             <span>{item.label}</span>
@@ -161,7 +146,8 @@ export function imageQualityLabel(value: string) {
 }
 
 export function imageSizeLabel(size: string) {
-    return aspectOptions.find((item) => (item.size || item.value) === size || item.value === size)?.label || size;
+    const normalized = normalizeImagePresetSize(size);
+    return IMAGE_SIZE_OPTIONS.find((item) => item.value === normalized)?.label || normalized;
 }
 
 function OptionPill({ selected, theme, onClick, children }: { selected: boolean; theme: CanvasTheme; onClick: () => void; children: ReactNode }) {
@@ -217,9 +203,7 @@ function DimensionInput({ prefix, value, theme, onChange, onCommit }: { prefix: 
 }
 
 export function imagePresetSize(value: string) {
-    const option = aspectOptions.find((item) => item.value === value);
-    if (!option || option.value === "auto") return option?.value || value;
-    return option.size || `${option.width}x${option.height}`;
+    return normalizeImagePresetSize(value || DEFAULT_IMAGE_SIZE);
 }
 
 function CountInput({ value, max, theme, onChange }: { value: number; max: number; theme: CanvasTheme; onChange: (value: number | null) => void }) {

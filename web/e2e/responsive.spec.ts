@@ -499,6 +499,11 @@ test("Agent generation inputs apply immediately and reveal video frame slots", a
     const preferencePopover = page.locator(".ant-popover").last();
     await openComposerPopover(preferenceTrigger, preferencePopover);
 
+    const landscape4kOption = preferencePopover.getByRole("button", { name: "选择图片尺寸 3840x2160", exact: true });
+    await expect(landscape4kOption).toBeVisible();
+    await landscape4kOption.click();
+    await expect(preferencePopover.getByText("3840×2160", { exact: true })).toBeVisible();
+
     await preferencePopover.getByRole("button", { name: "打开图片自定义像素尺寸" }).click();
     await expect(preferencePopover.getByText("修改后立即生效，例如 1024 × 1536")).toHaveCount(0);
     await expect(preferencePopover.getByRole("button", { name: "恢复智能" })).toHaveCount(0);

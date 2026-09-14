@@ -4,6 +4,7 @@ import { SlidersHorizontal } from "lucide-react";
 
 import { CreativeGenerationPreferences, generationPreferenceSummary, type CreativeGenerationPreferencePatch } from "@/components/creative-generation-preferences";
 import type { CreativeGenerationPreferences as GenerationPreferences } from "@/lib/creative-runtime-contract";
+import { DEFAULT_IMAGE_SIZE } from "@/lib/image-generation-sizes";
 import type { AiConfig } from "@/stores/use-config-store";
 import { useCreativeComposerPopoverPlacement, type CreativeComposerPopoverPlacement } from "@/components/creative-composer-popover";
 
@@ -21,7 +22,7 @@ export function CanvasImageSettingsPopover({ config, onConfigChange, onOpenChang
     const preferences: GenerationPreferences = {
         mode: "image",
         image: {
-            size: config.size || "auto",
+            size: config.size || DEFAULT_IMAGE_SIZE,
             quality: imageQuality(config.quality),
             count: positiveInteger(config.count),
         },
