@@ -504,7 +504,7 @@ function normalizeProductionPackage(value: unknown, options: DramaProductionPack
         ...(colorScript ? { colorScript } : {}),
         ...(normalizeDialogueTimingPolicy(bible.dialogueTiming) ? { dialogueTiming: normalizeDialogueTimingPolicy(bible.dialogueTiming) } : {}),
     };
-    const authoring = normalizePackageAuthoring(input.authoring);
+    const authoring = normalizePackageAuthoring(input.authoring, options);
     const result: DramaProductionPackageV1 = {
         schemaVersion: 1,
         project: {
@@ -565,7 +565,7 @@ function sameAuthoringMaterialManifest(actual: DramaProductionPackageAuthoringMa
     );
 }
 
-function normalizePackageAuthoring(value: unknown): DramaProductionPackageAuthoring | undefined {
+function normalizePackageAuthoring(value: unknown, options: DramaProductionPackageNormalizationOptions = {}): DramaProductionPackageAuthoring | undefined {
     const input = object(value);
     if (!Object.keys(input).length) return undefined;
     const directorSkill = normalizePackageSkillProvenance(input.directorSkill, "directorSkill");
@@ -589,7 +589,7 @@ function normalizePackageAuthoring(value: unknown): DramaProductionPackageAuthor
     if (materials.length !== rawMaterials.length || new Set(materials.map((material) => material.alias)).size !== materials.length) throw new DramaProductionPackageError("制作包 authoring provenance 的素材记录无效或 alias 重复");
     const targetNarrativeChapter = typeof input.targetNarrativeChapter === "number" || typeof input.targetNarrativeChapter === "string" ? input.targetNarrativeChapter : undefined;
     const contractInput = object(input.contract);
-    const contract = contractInput.id || contractInput.version || contractInput.contentHash ? normalizePackageContract(contractInput) : undefined;
+    const contract = contractInput.id || contractInput.version || contractInput.contentHash ? normalizePackageContract(contractInput, options) : undefined;
     const qualityGateReport = normalizeQualityGateReport(input.qualityGateReport);
     return {
         source,
@@ -614,11 +614,16 @@ function normalizePackageSkillProvenance(value: unknown, label: string) {
     return { id, version, contentHash };
 }
 
-function normalizePackageContract(value: Record<string, unknown>) {
+function normalizePackageContract(value: Record<string, unknown>, options: DramaProductionPackageNormalizationOptions = {}) {
     const id = text(value.id);
     const version = text(value.version);
     const contentHash = text(value.contentHash);
-    if (id !== DRAMA_PACKAGE_CONTRACT_ID || version !== DRAMA_PACKAGE_CONTRACT_VERSION || contentHash !== DRAMA_PACKAGE_CONTRACT.contentHash) throw new DramaProductionPackageError("制作包使用了过期或不一致的契约版本/内容哈希");
+    if (id !== DRAMA_PACKAGE_CONTRACT_ID || version !== DRAMA_PACKAGE_CONTRACT_VERSION || contentHash !== DRAMA_PACKAGE_CONTRACT.contentHash) {
+        const message = "制作包使用了过期或不一致的契约版本/内容哈希";
+        if (!options.allowImportWarnings) throw new DramaProductionPackageError(message);
+        options.importWarnings?.push(`${message}；已允许导入，已移除不受当前运行时确认的 authoring 契约凭据`);
+        return undefined;
+    }
     return { id: DRAMA_PACKAGE_CONTRACT_ID, version: DRAMA_PACKAGE_CONTRACT_VERSION, contentHash } as const;
 }
 

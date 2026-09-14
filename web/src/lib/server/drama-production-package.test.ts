@@ -7,6 +7,7 @@ import { defaultDramaProductionPlan, dramaVisualDirection } from "@/lib/drama-pr
 import { auditDramaShotDirectorQuality, DRAMA_VIDEO_DIRECTOR_SKILL } from "@/lib/server/agent-skills/drama-video-director";
 import { SEEDANCE_25_DIRECTOR_SKILL } from "@/lib/server/agent-skills/seedance-25";
 import { applyDramaProductionPackage, attachDramaProductionPackageAuthoring, buildDramaAssetReuseContext, mergeProjectAssetsIntoProductionPackage, previewDramaProductionPackage } from "@/lib/server/drama-production-package";
+import { DRAMA_PACKAGE_CONTRACT } from "@/lib/server/drama-production-package-contract";
 import { serializeDramaProductionPackageMarkdown } from "@/lib/drama-production-package-serializer";
 
 const productionPackage: DramaProductionPackageV1 = {
@@ -87,6 +88,7 @@ describe("production package boundary", () => {
         const authored = attachDramaProductionPackageAuthoring(productionPackage, {
             source: "executeDramaScriptRun",
             generatedAt: "2026-09-14T00:00:00.000Z",
+            contract: DRAMA_PACKAGE_CONTRACT,
             directorSkill: { id: DRAMA_VIDEO_DIRECTOR_SKILL.id, version: DRAMA_VIDEO_DIRECTOR_SKILL.sourceVersion, contentHash: DRAMA_VIDEO_DIRECTOR_SKILL.sourceContentHash },
             seedanceSkill: { id: SEEDANCE_25_DIRECTOR_SKILL.id, version: SEEDANCE_25_DIRECTOR_SKILL.sourceVersion, contentHash: SEEDANCE_25_DIRECTOR_SKILL.sourceContentHash },
             materials: [{ alias: "@模板", role: "package-template", type: "text", title: "制作包模板", contentHash: "c".repeat(64) }],
@@ -101,6 +103,24 @@ describe("production package boundary", () => {
         const stale = structuredClone(authored);
         stale.authoring!.directorSkill = { ...stale.authoring!.directorSkill, contentHash: "0".repeat(64) };
         expect(() => previewDramaProductionPackage(JSON.stringify(stale), "agent-package.json", undefined, { requireAgentAuthoring: true })).toThrow("导演 Skill 版本/内容哈希");
+    });
+
+    it("allows a stale contract on compatibility import and requires a warning confirmation", () => {
+        const authored = attachDramaProductionPackageAuthoring(productionPackage, {
+            source: "executeDramaScriptRun",
+            generatedAt: "2026-09-14T00:00:00.000Z",
+            contract: DRAMA_PACKAGE_CONTRACT,
+            directorSkill: { id: DRAMA_VIDEO_DIRECTOR_SKILL.id, version: DRAMA_VIDEO_DIRECTOR_SKILL.sourceVersion, contentHash: DRAMA_VIDEO_DIRECTOR_SKILL.sourceContentHash },
+            seedanceSkill: { id: SEEDANCE_25_DIRECTOR_SKILL.id, version: SEEDANCE_25_DIRECTOR_SKILL.sourceVersion, contentHash: SEEDANCE_25_DIRECTOR_SKILL.sourceContentHash },
+            materials: [{ alias: "@模板", role: "package-template", type: "text", title: "制作包模板", contentHash: "c".repeat(64) }],
+        });
+        authored.authoring!.contract = { ...DRAMA_PACKAGE_CONTRACT, contentHash: "0".repeat(64) };
+
+        const preview = previewDramaProductionPackage(JSON.stringify(authored), "agent-package.json", undefined, { allowImportWarnings: true });
+
+        expect(preview.importWarnings).toEqual(expect.arrayContaining([expect.stringContaining("过期或不一致的契约版本/内容哈希")]));
+        expect(preview.package.authoring?.contract).toBeUndefined();
+        expect(() => previewDramaProductionPackage(JSON.stringify(authored), "agent-package.json", undefined, { allowImportWarnings: false })).toThrow("过期或不一致的契约版本/内容哈希");
     });
 
     it("surfaces a dialogue capacity reminder without blocking package import", () => {
