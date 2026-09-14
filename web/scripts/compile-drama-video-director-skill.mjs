@@ -25,6 +25,7 @@ const body =
 const sourceContentHash = hashSkillContent(skillRoot);
 const sections = {
     common: extractSection(body, "共同前置审计"),
+    assetPrompt: extractSection(body, "资产事实与提示词统一编译"),
     cinematography: extractSection(body, "摄影与画面"),
     performance: extractSection(body, "表演与节奏"),
     frameAllocation: extractSection(body, "自适应关键帧与镜头事件"),
@@ -57,10 +58,10 @@ export type DramaDirectorSurface = "package" | "static-frame" | "video" | "exter
 export const DRAMA_VIDEO_DIRECTOR_SKILL = ${JSON.stringify(skill, null, 4)} as const;
 
 const SURFACE_SECTIONS: Record<DramaDirectorSurface, string[]> = {
-    package: ["common", "cinematography", "performance", "frameAllocation", "staticFrame", "video", "package", "gates"],
+    package: ["common", "assetPrompt", "cinematography", "performance", "frameAllocation", "staticFrame", "video", "package", "gates"],
     "static-frame": ["staticFrame"],
     video: ["common", "cinematography", "performance", "frameAllocation", "video", "gates"],
-    "external-codex": ["common", "cinematography", "performance", "package", "staticFrame", "video", "gates", "externalCodex"],
+    "external-codex": ["common", "assetPrompt", "cinematography", "performance", "package", "staticFrame", "video", "gates", "externalCodex"],
 };
 
 export function resolveDramaDirectorInstructions(surface: DramaDirectorSurface) {

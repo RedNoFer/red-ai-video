@@ -68,6 +68,11 @@ describe("creative shortcut skills", () => {
         expect(DRAMA_ASSET_IMAGE_SKILL.refinementRules).toContain("change / preserve / constraints");
     });
 
+    it("uses the integrated asset prompt layer in the package director", () => {
+        expect(DRAMA_PACKAGE_DIRECTOR_RULES).toContain("角色事实固定整理为六项");
+        expect(DRAMA_PACKAGE_DIRECTOR_RULES).toContain("资产基准图与镜头提示词承担不同职责");
+    });
+
     it("keeps one optional static-frame contract", () => {
         expect(DRAMA_STATIC_FRAME_DIRECTOR_RULES).toContain("五类短段");
         expect(DRAMA_STATIC_FRAME_DIRECTOR_RULES).toContain("不强制九段");

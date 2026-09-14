@@ -219,7 +219,13 @@ export async function executeAgentRun(run: AgentRun, origin: string, cookie: str
         if (latest && !["paused", "cancelled"].includes(latest.status))
             await updateAgentRunById(
                 run.id,
-                { status: "failed", executionId: undefined, ...(run.workflow === "drama-script" ? { dramaFailureKind: failure instanceof DramaAuthoringQualityGateError ? ("quality" as const) : isTimeoutLike(failure) ? ("timeout" as const) : ("error" as const) } : {}), ...(failure instanceof DramaAuthoringQualityGateError ? { dramaQualityGateReport: failure.report } : {}), timings: { ...(latest.timings || { requestAcceptedAt: latest.createdAt }), runCompletedAt: Date.now() } },
+                {
+                    status: "failed",
+                    executionId: undefined,
+                    ...(run.workflow === "drama-script" ? { dramaFailureKind: failure instanceof DramaAuthoringQualityGateError ? ("quality" as const) : isTimeoutLike(failure) ? ("timeout" as const) : ("error" as const) } : {}),
+                    ...(failure instanceof DramaAuthoringQualityGateError ? { dramaQualityGateReport: failure.report } : {}),
+                    timings: { ...(latest.timings || { requestAcceptedAt: latest.createdAt }), runCompletedAt: Date.now() },
+                },
                 { type: "run.failed", data: { message: toSafeGenerationErrorMessage(failure, "Agent 执行失败") } },
                 ["planning", "running"],
                 executionId,
@@ -291,14 +297,16 @@ function lightweightConversationMessages(prompt: string, context: CreativeConver
 type DramaPackageSkillInput = { id: string; name: string; instructions: string };
 
 export function buildDramaPackageSkillInstructions(selectedSkills: ReadonlyArray<DramaPackageSkillInput>, prompt: string, durationSeconds: number) {
-    const canonicalSkillIds = new Set(["drama-video-director", "seedance-director", "seedance-25-director", "drama-planning"]);
+    // Asset-image rules are embedded in the canonical package director layer;
+    // do not inject that Skill again as a competing prompt source.
+    const canonicalSkillIds = new Set(["drama-video-director", "drama-asset-image-director", "seedance-director", "seedance-25-director", "drama-planning"]);
     const supplementalSkills = selectedSkills.flatMap((skill) => {
         if (canonicalSkillIds.has(skill.id)) {
             if (skill.id !== SEEDANCE_25_DIRECTOR_SKILL.id) return [];
             const route = resolveSeedance25VideoPromptReferences({ prompt, durationSeconds });
             return route.instructions ? [`Seedance 2.5 本次时长补充（只用于当前制作规则，不输出模式名）：${route.instructions}`] : [];
         }
-        return [`用户本轮显式选择的补充 Skill ${skill.name}@${skill.id}：${skill.instructions}`];
+        return [];
     });
     return [
         `当前短剧制作包唯一导演 Skill：${DRAMA_VIDEO_DIRECTOR_SKILL.name}@${DRAMA_VIDEO_DIRECTOR_SKILL.id}（${DRAMA_VIDEO_DIRECTOR_SKILL.sourceVersion}；内容哈希 ${DRAMA_VIDEO_DIRECTOR_SKILL.sourceContentHash}）\n${DRAMA_PACKAGE_DIRECTOR_RULES}`,
@@ -381,10 +389,24 @@ export async function executeDramaScriptRun(run: AgentRun, origin: string, cooki
         : "本轮没有附件。";
     const instruction = `你是 VOZEB PRO 短剧项目的专属集数编剧 GPT。只处理当前集和用户本轮请求；超出范围时只回复“当前窗口只处理第 ${current.title} 的新剧本内容。请继续提供本集剧情、人物、冲突或制作包要求。”。只依据当前用户请求、当前项目正式事实、本轮 authoringSources、锁定生产方案和唯一导演 Skill，缺少必要事实时先提问。历史会话、旧制作包、productionArchive、历史 generationPrompt 和旧运行记录不是创作输入，禁止读取、复述或套用。
 
-目标小说章节：${String(targetNarrativeChapter)}。这里的“小说第 ${String(targetNarrativeChapter)} 章”是剧情素材范围；“制作包第 3 节｜第一集文学剧本”只是固定模板章节，二者绝不能混淆。未明确要求制作包时只返回自然中文剧本协作回复；明确要求时只返回 {"mode":"package","reply":"简短完成说明","markdown":"符合 vozeb-drama-production-package-v1 的完整 Markdown"}。markdown 是 Agent authoring draft，不是最终持久化文件：必须生成完整文学剧本，不得输出摘要、梗概、镜头摘要或模板示例；必须保留 TXT 的每条显式对白和关键剧情事实，并为每个镜头直接写出公开 videoPrompt 与 framePlan。服务端会校验 draft，再由规范化后的唯一对象确定性导出最终制作包，禁止依赖脚本读取模板或用固定文案冒充生成。制作包必须包含当前集、项目级正式资产、13 个章节和现有镜头字段；不要在其他字段重复规则，也不要把一个字段的正文复制到另一个字段。字段语义和质量门禁只以当前唯一导演 Skill 与制作包协议为准。
+目标小说章节：${String(targetNarrativeChapter)}。这里的“小说第 ${String(targetNarrativeChapter)} 章”是剧情素材范围；“制作包第 3 节｜第一集文学剧本”只是固定模板章节，二者绝不能混淆。未明确要求制作包时只返回自然中文剧本协作回复；明确要求时只返回 {"mode":"package","reply":"简短完成说明","markdown":"符合 vozeb-drama-production-package-v1 的完整 Markdown"}。markdown 是 Agent authoring draft，不是最终持久化文件：必须生成完整文学剧本，不得输出摘要、梗概、镜头摘要或模板示例；必须保留 TXT 的每条显式对白和关键剧情事实，并为每个镜头直接写出公开 videoPrompt 与 framePlan。服务端会校验 draft，再由规范化后的唯一对象确定性导出最终制作包，禁止依赖脚本读取模板或用固定文案冒充生成。制作包必须包含当前集、项目级正式资产、13 个章节和现有镜头字段；第 12、13 节只能放在 archive.sections，绝不能把 SEC01-SEC13 伪装成 shots；不要在其他字段重复规则，也不要把一个字段的正文复制到另一个字段。字段语义和质量门禁只以当前唯一导演 Skill 与制作包协议为准。
+
+生成每个镜头前必须逐项自检：imagePrompt 和 videoPrompt 都非空且分别只表达静态画面/可执行视频；performancePlan 的情绪目标、情绪递进、说话方式、节奏、呼吸、克制度及 start/middle/end 四项表演都写满具体可见结果；lightingPlan 的十个字段都写满光源、材质和前后镜衔接；continuity 的十个字段、entryState、exitState、dramaticFunction、cameraMotion、lens 都写满。framePlan 必须有首帧来源、尾帧要求和真实连续时间段；每个时间段都写 actionPrompt、transitionPrompt、endPrompt、imagePrompt，除第一段外 startPrompt 必须原样等于上一段 endPrompt。每个 imagePrompt 必须包含当前主体、冻结的可见状态和一项空间/视线/姿态/道具/环境结果；每个 videoPrompt 时间段必须镜像这些真实字段并写清动作触发、人物/对手/NPC/道具结果、对白表演和镜头动机。缺任何一项就继续补写或返回失败，不得用“自然反应、保持状态、情绪加剧、关键变化、电影感推进”等占位语代替。
 
 framePlan.frames 只能保留现有字段；静态正文和视频正文必须由 Agent 直接写出，并保持真实时间边界和节点对应；应用层只校验、保存和转发，不从 actionPrompt、镜头描述、资产、NPC 或历史记录重组正文。固定资产只用稳定 code/id/name，referenceManifest 只表达实际参考图绑定，内部执行信息不得进入公开正文。${lockedPlan ? `本次目标镜头时长为 ${requestedShotDuration} 秒；按完整剧情节拍重切，不机械复制旧拆分。锁定方案及其中的 customDirectorRules 只读取用户输入中的这一份，不从任何其他字段补充。` : "没有锁定生产方案时先提示用户完成配置。"} ${framePolicyInstruction} 任何收费或上游生产前先给出任务、参考和参数预览并等待明确确认。`;
-    const input = buildDramaPackageAuthoringInput({ runPrompt: run.prompt, project, current, assetReuseContext, adjacentEpisodes: adjacent, selectedSkills, lockedPlan, globalVisualContract, uploadedMaterials, requestedShotDuration, targetNarrativeChapter });
+    const input = buildDramaPackageAuthoringInput({
+        runPrompt: run.prompt,
+        project,
+        current,
+        assetReuseContext,
+        adjacentEpisodes: adjacent,
+        selectedSkills,
+        lockedPlan,
+        globalVisualContract,
+        uploadedMaterials,
+        requestedShotDuration,
+        targetNarrativeChapter,
+    });
     const tool = {
         name: "drama_script_response",
         description: "返回受限剧本协作回复或完整制作包",
@@ -512,7 +534,11 @@ framePlan.frames 只能保留现有字段；静态正文和视频正文必须由
 }
 
 function formatDramaQualityGateFailure(report: { checks: Array<{ code: string; severity: string; evidence: string }> }) {
-    const blockers = report.checks.filter((check) => check.severity === "blocker").slice(0, 5).map((check) => `${check.code}: ${check.evidence}`).join("；");
+    const blockers = report.checks
+        .filter((check) => check.severity === "blocker")
+        .slice(0, 5)
+        .map((check) => `${check.code}: ${check.evidence}`)
+        .join("；");
     return `制作包质量门禁未通过，禁止导入${blockers ? `：${blockers}` : ""}`;
 }
 

@@ -121,6 +121,34 @@ describe("production package boundary", () => {
         expect(preview.warnings).toEqual(expect.arrayContaining([expect.stringContaining("不阻止导入")]));
     });
 
+    it("allows a missing top-level prompt on compatibility import and returns a warning", () => {
+        const source = structuredClone(productionPackage);
+        source.episodes[0].shots[0].imagePrompt = "";
+
+        const preview = previewDramaProductionPackage(JSON.stringify(source), "package.json", undefined, { allowImportWarnings: true });
+
+        expect(preview.package.episodes[0].shots[0].imagePrompt).toBe("");
+        expect(preview.importWarnings).toEqual(expect.arrayContaining([expect.stringContaining("imagePrompt 无效")]));
+    });
+
+    it("blocks an Agent draft before normalization when a top-level image prompt is missing", () => {
+        const source = structuredClone(productionPackage);
+        source.episodes[0].shots[0].imagePrompt = "";
+
+        expect(() => previewDramaProductionPackage(JSON.stringify(source), "package.json", undefined, { validateVideoPrompt: true, requireCameraPlan: true, requireContentQuality: true })).toThrow("Agent 制作包草案不完整");
+    });
+
+    it("ignores section-shaped pseudo shots only on the compatibility import path", () => {
+        const source = structuredClone(productionPackage);
+        source.episodes[0].shots.push({ code: "SEC12", title: "资产映射与执行顺序" } as never);
+
+        const preview = previewDramaProductionPackage(JSON.stringify(source), "package.json", undefined, { allowImportWarnings: true });
+
+        expect(preview.package.episodes[0].shots.map((shot) => shot.code)).not.toContain("SEC12");
+        expect(preview.importWarnings).toEqual(expect.arrayContaining([expect.stringContaining("伪镜头")]));
+        expect(() => previewDramaProductionPackage(JSON.stringify(source), "package.json", undefined, { allowImportWarnings: false })).toThrow("错误放入镜头列表");
+    });
+
     it("builds a fixed-asset reuse catalog with stable codes and current-episode usage", () => {
         const current = project();
         current.characters = [

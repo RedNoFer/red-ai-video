@@ -62,6 +62,9 @@ contract:
 - `package-template` 只规定 13 个一级章节、字段顺序和字段职责；`story-source` 只规定当前目标小说章节的剧情事实；`reference` 只规定素材职责。三类 authoring source 必须保留 alias、role、顺序和内容哈希。
 - 目标小说章节使用 `targetNarrativeChapter` 单独记录；它是剧情素材范围，不得与制作包一级章节编号混用。当前集必须提供完整文学剧本、场次、镜头和可执行结果，不能只返回摘要或镜头概述。
 - 镜头规范对象必须分别填写 `dramaticFunction`、`performancePlan`、`lightingPlan`、`continuity`、`entryState`、`exitState`、`videoPrompt` 和 `framePlan`；`framePlan.start.source`、`framePlan.end.required`、`framePlan.referenceManifest`、每个帧段的 `imagePrompt` 及其时间/动作/静态状态必须可校验。
+- Agent authoring draft 在规范化前必须逐镜提交完整原始字段：不得依赖服务端默认值补齐 `performancePlan`、`lightingPlan`、`continuity`、`entryState`、`exitState`、`imagePrompt`、`videoPrompt` 或帧段正文。`performancePlan` 的六个标量和 start/middle/end 四项表演、`lightingPlan` 的十个字段、`continuity` 的十个字段以及 `dramaticFunction`、`cameraMotion`、`lens` 均为严格生成字段；缺失、空值或占位语必须在 Agent 草案阶段阻断。
+- 每个 Agent 帧段必须直接提供 `actionPrompt`、`transitionPrompt`、`endPrompt`、`imagePrompt`；除第一帧外 `startPrompt` 必须原样承接上一帧 `endPrompt`。第一帧不要求虚构 `startPrompt`，但视频 Prompt 必须逐段镜像真实字段，不能靠服务端从其它字段拼接。
+- `SEC01`—`SEC13` 只允许出现在 `archive.sections`；任何章节对象混入 `episodes[].shots` 都是伪镜头。兼容导入可以忽略并给出二次确认警告，Agent 严格生成和正式剧本导入必须阻断。
 - 场景的 `backgroundNpcPolicy` 只描述无名背景群像；背景 NPC 不进入 characterCodes。required 场景的数量、前中后景分布和可见反应必须落到受影响的关键帧或视频时间段。
 - `videoPrompt` 和 `framePlan` 都由 Agent 直接生成；应用层不得从模板、旧包、历史提示词、动作字段或帧计划重建、补写、删改公开视频正文。未经声明的内部切镜、未绑定道具或未声明角色不得出现。
 - Agent authoring draft 的硬门禁代码来自版本化契约；至少包括文学剧本完整性、对白覆盖率、剧情事实覆盖率、动作密度/差异、情绪递进、NPC 反应变化、运镜动机、镜头事件、时间轴、素材绑定、连续性和 provenance。任一 blocker 都不得标记完成或写入正式制作包。

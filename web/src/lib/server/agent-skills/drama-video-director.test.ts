@@ -11,6 +11,9 @@ describe("drama video director adapter", () => {
         expect(staticRules).toContain("静态帧只冻结一个已经发生的瞬间");
         expect(staticRules).toContain("运镜过程");
         expect(videoRules).toContain("每个真实时间段逐块写出起点、动作与触发、可见衔接和终点");
+        expect(videoRules).toContain("主体运动、相机运动、环境运动");
+        expect(videoRules).toContain("准备/触发 → 接触或受力 → 动作结果 → 反应/恢复");
+        expect(videoRules).toContain("actionPrompt` 写发生中的动作、方向、接触和受力");
         expect(videoRules).not.toContain("只冻结一个已经发生的瞬间");
     });
 

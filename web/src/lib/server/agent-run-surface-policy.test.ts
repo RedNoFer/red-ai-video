@@ -45,7 +45,11 @@ describe("selectAgentSkills", () => {
     });
 
     it("adds the Seedance 2.5 video director when generating a drama production package", () => {
-        expect(selectAgentSkills(DEFAULT_SETTINGS, "drama", ["seedance-director"], { workflow: "drama-script", prompt: "生成完整制作包" }).map((skill) => skill.id)).toEqual(["drama-video-director", "drama-planning", "seedance-25-director"]);
+        expect(selectAgentSkills(DEFAULT_SETTINGS, "drama", ["seedance-director", "drama-asset-image-director"], { workflow: "drama-script", prompt: "生成完整制作包" }).map((skill) => skill.id)).toEqual([
+            "drama-video-director",
+            "drama-planning",
+            "seedance-25-director",
+        ]);
     });
 
     it("always applies the drama planning skill to the script workflow", () => {

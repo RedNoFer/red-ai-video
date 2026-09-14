@@ -434,6 +434,7 @@ function mergeManualFields<T extends { fieldOrigins?: Record<string, DramaFieldO
 function normalizeProductionPackage(value: unknown, options: DramaProductionPackageNormalizationOptions = {}): DramaProductionPackageV1 {
     const input = object(value);
     if (Number(input.schemaVersion) !== 1) throw new DramaProductionPackageError("仅支持 schemaVersion 1 的制作包");
+    if (options.requireContentQuality || options.requireAuthoringQuality) validateRawAgentPackageDraft(input);
     const project = object(input.project);
     const bible = object(project.productionBible);
     const assets = object(input.assets);
@@ -555,10 +556,13 @@ function validateStrictAuthoringQuality(value: DramaProductionPackageV1, authori
 }
 
 function sameAuthoringMaterialManifest(actual: DramaProductionPackageAuthoringMaterial[], expected: DramaAuthoringSourceSnapshot[]) {
-    return actual.length === expected.length && actual.every((material, index) => {
-        const source = expected[index];
-        return Boolean(source) && material.alias === source.alias && material.role === source.role && material.type === source.type && material.title === source.title && material.contentHash === source.contentHash;
-    });
+    return (
+        actual.length === expected.length &&
+        actual.every((material, index) => {
+            const source = expected[index];
+            return Boolean(source) && material.alias === source.alias && material.role === source.role && material.type === source.type && material.title === source.title && material.contentHash === source.contentHash;
+        })
+    );
 }
 
 function normalizePackageAuthoring(value: unknown): DramaProductionPackageAuthoring | undefined {
@@ -614,8 +618,7 @@ function normalizePackageContract(value: Record<string, unknown>) {
     const id = text(value.id);
     const version = text(value.version);
     const contentHash = text(value.contentHash);
-    if (id !== DRAMA_PACKAGE_CONTRACT_ID || version !== DRAMA_PACKAGE_CONTRACT_VERSION || contentHash !== DRAMA_PACKAGE_CONTRACT.contentHash)
-        throw new DramaProductionPackageError("制作包使用了过期或不一致的契约版本/内容哈希");
+    if (id !== DRAMA_PACKAGE_CONTRACT_ID || version !== DRAMA_PACKAGE_CONTRACT_VERSION || contentHash !== DRAMA_PACKAGE_CONTRACT.contentHash) throw new DramaProductionPackageError("制作包使用了过期或不一致的契约版本/内容哈希");
     return { id: DRAMA_PACKAGE_CONTRACT_ID, version: DRAMA_PACKAGE_CONTRACT_VERSION, contentHash } as const;
 }
 
@@ -637,7 +640,11 @@ function normalizeQualityGateReport(value: unknown): DramaQualityGateReport | un
 }
 
 function formatDramaQualityGateFailure(report: DramaQualityGateReport) {
-    const blockers = report.checks.filter((check) => check.severity === "blocker").slice(0, 5).map((check) => `${check.code}: ${check.evidence}`).join("；");
+    const blockers = report.checks
+        .filter((check) => check.severity === "blocker")
+        .slice(0, 5)
+        .map((check) => `${check.code}: ${check.evidence}`)
+        .join("；");
     return `制作包质量门禁未通过，禁止导入${blockers ? `：${blockers}` : ""}`;
 }
 
@@ -895,11 +902,107 @@ function normalizeProductionArchive(value: unknown): DramaProductionPackageV1["a
     };
 }
 
+function isPackageSectionShotCode(code: string) {
+    return /^SEC(?:0[1-9]|1[0-3])$/u.test(code);
+}
+
+/**
+ * Agent packages must prove that every production field was authored before
+ * normalization. Compatibility imports may still show warnings, but strict
+ * package generation must never turn missing data into a plausible fallback.
+ */
+function validateRawAgentPackageDraft(input: Record<string, unknown>) {
+    const errors: string[] = [];
+    const episodes = array(input.episodes);
+    if (!episodes.length) throw new DramaProductionPackageError("Agent 制作包缺少当前集镜头，不能进入严格生成流程");
+    for (const [episodeIndex, value] of episodes.entries()) {
+        const episode = object(value);
+        const shots = array(episode.shots);
+        if (!shots.length) errors.push(`第 ${episodeIndex + 1} 集缺少镜头列表`);
+        for (const [shotIndex, value] of shots.entries()) {
+            const shot = object(value);
+            const label = text(shot.code) || `第 ${episodeIndex + 1} 集镜头 ${shotIndex + 1}`;
+            if (isPackageSectionShotCode(text(shot.code))) {
+                errors.push(`${label} 是制作包章节伪镜头；章节必须写入 archive.sections`);
+                continue;
+            }
+            if (!text(shot.imagePrompt)) errors.push(`${label}缺少 imagePrompt，必须由 Agent 直接填写静态画面提示词`);
+            else {
+                try {
+                    normalizeShotStaticPrompt(text(shot.imagePrompt), `${label} imagePrompt`);
+                } catch (error) {
+                    errors.push(error instanceof Error ? error.message : `${label} imagePrompt 无法解析`);
+                }
+            }
+            if (!text(shot.videoPrompt)) errors.push(`${label}缺少 videoPrompt，必须由 Agent 直接填写完整视频提示词`);
+            const framePlan = object(shot.framePlan);
+            const frameStart = object(framePlan.start);
+            const frameEnd = object(framePlan.end);
+            if (frameStart.source !== "independent" && frameStart.source !== "previous_accepted_actual_tail") errors.push(`${label} framePlan.start.source 无效`);
+            if (typeof frameEnd.required !== "boolean") errors.push(`${label} framePlan.end.required 必须是布尔值`);
+            const frames = array(framePlan.frames);
+            if (!frames.length) errors.push(`${label}缺少逐帧计划`);
+            for (const [frameIndex, frameValue] of frames.entries()) {
+                const frame = object(frameValue);
+                const frameLabel = `${label}第 ${frameIndex + 1} 个时间段`;
+                if (!text(frame.actionPrompt) || !text(frame.transitionPrompt) || !text(frame.endPrompt)) errors.push(`${frameLabel}必须填写 actionPrompt、transitionPrompt 和 endPrompt`);
+                if (frameIndex > 0 && text(frame.startPrompt) !== text(object(frames[frameIndex - 1]).endPrompt)) errors.push(`${frameLabel}的 startPrompt 必须原样承接上一段 endPrompt`);
+                if (!text(frame.imagePrompt)) errors.push(`${frameLabel}缺少 imagePrompt`);
+                else {
+                    try {
+                        normalizeShotStaticPrompt(text(frame.imagePrompt), `${frameLabel} imagePrompt`);
+                    } catch (error) {
+                        errors.push(error instanceof Error ? error.message : `${frameLabel} imagePrompt 无法解析`);
+                    }
+                }
+            }
+            const performance = normalizePerformancePlan(shot.performancePlan);
+            const dialoguePerformance = normalizeDialoguePerformance(shot.dialoguePerformance);
+            const utteranceCount = array(shot.utterances).filter((item) => object(item).type !== "voiceover").length;
+            errors.push(...validateDramaPerformanceDetail(performance, dialoguePerformance, utteranceCount, label));
+            const lighting = normalizeLightingPlan(shot.lightingPlan);
+            const lightingFields: Array<[string, string | undefined]> = [
+                ["palette", lighting?.palette],
+                ["colorTemperature", lighting?.colorTemperature],
+                ["keyLight", lighting?.keyLight],
+                ["fillLight", lighting?.fillLight],
+                ["rimLight", lighting?.rimLight],
+                ["contrast", lighting?.contrast],
+                ["materialResponse", lighting?.materialResponse],
+                ["skinToneProtection", lighting?.skinToneProtection],
+                ["inheritFromPrevious", lighting?.inheritFromPrevious],
+                ["transitionToNext", lighting?.transitionToNext],
+            ];
+            for (const [field, fieldValue] of lightingFields) if (isGenericDramaDetail(fieldValue)) errors.push(`${label} lightingPlan.${field} 缺少具体内容`);
+            const continuity = object(shot.continuity);
+            for (const field of ["shotSize", "cameraAngle", "composition", "characterBlocking", "gazeDirection", "actionStart", "actionEnd", "screenDirection", "axisRule", "continuityNotes"])
+                if (!text(continuity[field])) errors.push(`${label} continuity.${field} 缺少内容`);
+            for (const boundary of ["entryState", "exitState"]) {
+                const state = object(shot[boundary]);
+                if (!Object.keys(state).length || !text(state.environment) || !text(state.lighting)) errors.push(`${label} ${boundary} 必须填写环境和灯光状态`);
+            }
+            if (!text(shot.dramaticFunction)) errors.push(`${label}缺少 dramaticFunction`);
+            if (!text(shot.cameraMotion)) errors.push(`${label}缺少 cameraMotion`);
+            if (!text(shot.lens)) errors.push(`${label}缺少 lens`);
+        }
+    }
+    if (errors.length) throw new DramaProductionPackageError(`Agent 制作包草案不完整，禁止进入最终序列化：${errors.slice(0, 8).join("；")}`);
+}
+
 function normalizeEpisodePackage(value: unknown, episodeIndex: number, options: DramaProductionPackageNormalizationOptions & { backgroundNpcPolicyByLocationCode?: Map<string, DramaBackgroundNpcPolicy> } = {}): DramaProductionPackageEpisode {
     const input = object(value);
-    const shots = array(input.shots)
-        .map((shot, index) => normalizePackageShot(shot, index, options))
-        .filter((shot) => shot.code);
+    const shots = array(input.shots).flatMap((value, index) => {
+        const rawShot = object(value);
+        const code = text(rawShot.code);
+        if (isPackageSectionShotCode(code)) {
+            const message = `章节 ${code} 被错误放入镜头列表；制作包一级章节必须写入 archive.sections，不能作为镜头`;
+            if (!options.allowImportWarnings) throw new DramaProductionPackageError(message);
+            options.importWarnings?.push(`${message}；已忽略该伪镜头，未写入当前集`);
+            return [];
+        }
+        const shot = normalizePackageShot(value, index, options);
+        return shot.code ? [shot] : [];
+    });
     const shotCodes = new Set(shots.map((shot) => shot.code));
     return {
         code: text(input.code) || `E${String(episodeIndex + 1).padStart(2, "0")}`,
@@ -1036,6 +1139,35 @@ function normalizePackageShot(value: unknown, index: number, options: DramaProdu
         if (!options.allowImportWarnings) throw new DramaProductionPackageError(message);
         options.importWarnings?.push(`${message}；已允许导入，当前镜头保留为空帧计划，需在分镜阶段补齐`);
     }
+    let imagePrompt = "";
+    try {
+        imagePrompt = normalizeShotStaticPrompt(text(shot.imagePrompt), "镜头 imagePrompt");
+    } catch (error) {
+        const message = `${label}的 imagePrompt 无效：${error instanceof Error ? error.message : "无法解析"}`;
+        if (!options.allowImportWarnings) throw new DramaProductionPackageError(message);
+        options.importWarnings?.push(`${message}；已允许导入，后续生成前需要补充静态画面提示词`);
+    }
+    let videoPrompt = "";
+    try {
+        videoPrompt = normalizePackageVideoPrompt(text(shot.videoPrompt));
+    } catch (error) {
+        const message = `${label}的 videoPrompt 无效：${error instanceof Error ? error.message : "无法解析"}`;
+        if (!options.allowImportWarnings) throw new DramaProductionPackageError(message);
+        options.importWarnings?.push(`${message}；已允许导入，后续生成前需要补充视频提示词`);
+    }
+    const normalizeOptionalStaticPrompt = (value: unknown, promptLabel: string) => {
+        if (!optionalText(value)) return undefined;
+        try {
+            return normalizeShotStaticPrompt(text(value), promptLabel);
+        } catch (error) {
+            const message = `${label}的 ${promptLabel} 无效：${error instanceof Error ? error.message : "无法解析"}`;
+            if (!options.allowImportWarnings) throw new DramaProductionPackageError(message);
+            options.importWarnings?.push(`${message}；已允许导入，后续生成前需要补充静态帧提示词`);
+            return undefined;
+        }
+    };
+    const startFramePrompt = normalizeOptionalStaticPrompt(shot.startFramePrompt, "startFramePrompt");
+    const endFramePrompt = normalizeOptionalStaticPrompt(shot.endFramePrompt, "endFramePrompt");
     return {
         code: text(shot.code),
         order: positiveNumber(shot.order) || index + 1,
@@ -1046,10 +1178,10 @@ function normalizePackageShot(value: unknown, index: number, options: DramaProdu
         dialogue: text(shot.dialogue),
         narration: text(shot.narration),
         utterances,
-        imagePrompt: normalizeShotStaticPrompt(text(shot.imagePrompt), "镜头 imagePrompt"),
-        videoPrompt: normalizePackageVideoPrompt(text(shot.videoPrompt)),
-        ...(optionalText(shot.startFramePrompt) ? { startFramePrompt: normalizeShotStaticPrompt(text(shot.startFramePrompt), "镜头 startFramePrompt") } : {}),
-        ...(optionalText(shot.endFramePrompt) ? { endFramePrompt: normalizeShotStaticPrompt(text(shot.endFramePrompt), "镜头 endFramePrompt") } : {}),
+        imagePrompt,
+        videoPrompt,
+        ...(startFramePrompt ? { startFramePrompt } : {}),
+        ...(endFramePrompt ? { endFramePrompt } : {}),
         cameraMotion: text(shot.cameraMotion),
         negativePrompt: optionalText(shot.negativePrompt),
         continuity: {
@@ -1139,8 +1271,11 @@ function validateStrictPackageVideoPrompt(
     if (timelineFieldCounts.some((count) => count < frames.length)) throw new DramaProductionPackageError(`${label}的 Agent videoPrompt 未逐段写出起点、动作与触发、可见衔接和终点`);
     const timeline = frames.flatMap((frame) => {
         const range = `${escapeRegExp(String(frame.startSecond))}\\s*(?:-|至|到)\\s*${escapeRegExp(String(frame.endSecond))}\\s*(?:s|秒)`;
-        const mirroredValues = [frame.startPrompt, frame.actionPrompt, frame.transitionPrompt, frame.endPrompt];
-        return new RegExp(range, "iu").test(prompt) && mirroredValues.every((value) => value && prompt.includes(value)) ? [] : [`${frame.startSecond}-${frame.endSecond}s`];
+        const mirroredValues = [frame.actionPrompt, frame.transitionPrompt, frame.endPrompt];
+        const startPromptIsRequired = frame.startSecond > 0;
+        return new RegExp(range, "iu").test(prompt) && mirroredValues.every((value) => value && prompt.includes(value)) && (!startPromptIsRequired || Boolean(frame.startPrompt && prompt.includes(frame.startPrompt)))
+            ? []
+            : [`${frame.startSecond}-${frame.endSecond}s`];
     });
     if (timeline.length) throw new DramaProductionPackageError(`${label}的 Agent videoPrompt 未逐段镜像 framePlan：${timeline.join("、")}`);
     for (const [index, frame] of frames.entries()) {

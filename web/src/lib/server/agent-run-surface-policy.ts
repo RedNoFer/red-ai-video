@@ -45,7 +45,10 @@ export function selectAgentSkills(settings: AuthSettings, surface: CreativeSurfa
         available.set(SEEDANCE_25_DIRECTOR_SKILL.id, { ...SEEDANCE_25_DIRECTOR_SKILL, keywords: [...SEEDANCE_25_DIRECTOR_SKILL.keywords], workspaces: [...SEEDANCE_25_DIRECTOR_SKILL.workspaces] });
     }
     if (dramaAssetDefault && !available.has(DRAMA_ASSET_IMAGE_SKILL.id)) available.set(DRAMA_ASSET_IMAGE_SKILL.id, { ...DRAMA_ASSET_IMAGE_SKILL, keywords: [...DRAMA_ASSET_IMAGE_SKILL.keywords], workspaces: [...DRAMA_ASSET_IMAGE_SKILL.workspaces] });
-    const compatibleRequestedSkillIds = dramaAssetDefault ? requestedSkillIds.filter((id) => id.trim() !== "character-design") : requestedSkillIds;
+    const compatibleRequestedSkillIds =
+        context?.workflow === "drama-script"
+            ? requestedSkillIds.filter((id) => [DRAMA_VIDEO_DIRECTOR_SKILL.id, DRAMA_PLANNING_SKILL.id, SEEDANCE_25_DIRECTOR_SKILL.id, "seedance-director"].includes(id.trim()))
+            : requestedSkillIds.filter((id) => !(dramaAssetDefault && id.trim() === "character-design"));
     const ids = [
         ...(surface === "drama" ? [DRAMA_VIDEO_DIRECTOR_SKILL.id] : []),
         ...(context?.workflow === "drama-script" ? [DRAMA_PLANNING_SKILL.id] : []),
@@ -100,7 +103,7 @@ export function agentPlannerSystemPrompt(surface: CreativeSurface, fallbackExamp
             : "当前入口不得填写 projectHandoff。";
     const skillSelectionRule =
         surface === "drama"
-            ? "短剧入口即使 requestedSkillIds 为空也必须执行 canonical drama-video-director；seedance-director 只是历史 productionPlan 标识，不能作为第二套提示词规则参与生成；用户选择的其他兼容技能可以叠加，不能替换该默认导演层。"
+            ? "短剧入口即使 requestedSkillIds 为空也必须执行 canonical drama-video-director；制作包工作流（workflow=drama-script）使用该导演 Skill 内部的资产事实与提示词整合模块，不得再选择 drama-asset-image-director、character-design、image-motion 或其他普通 Skill 作为第二套提示词规则；drama-planning 只负责制作前置规划，不是公开提示词来源；seedance-director 只是历史 productionPlan 标识，不能作为第二套提示词规则参与生成；Seedance 2.5 只作为适配层补充当前时长/模式和参考职责。"
             : "视频创作需求（generationPreferences.mode=video，或自然语言明确要求视频/短片/动画/动效/镜头）即使 requestedSkillIds 为空也必须执行 seedance-25-director；用户选择的其他兼容技能可以叠加。非视频请求仍只使用用户显式选择的 Skill，requestedSkillIds 为空时不得自动选择普通 Skill。";
     const dialogueProtocol =
         "所有生成型对话都遵循统一创作协议：先锁定目标、受众、用途和参考素材，再给一个明确推荐方向。图片 Prompt 按主体/身份锚点、当前变化、构图、光色材质、用途和约束组织；编辑必须分别写 change、preserve、constraints，且一次只改一个变量。视频 Prompt 按“动态意图 → 全局设定 → 起始可见状态 → 按真实时间段写起点、动作与触发、可见衔接、终点 → 单一主运镜 → 环境压力与视觉母题 → 视觉风格与光色 → 声音意图 → 结束画面 → 连续性锁 → 针对性约束”组织；不另设顶层触发或主体动作摘要，每镜只保留一个主要变化，抽象情绪必须翻译成可观察的表情、视线、呼吸、手部或身体动作。多资产只能使用稳定 assetId 绑定，@引用只表达用途，不能按标题或文本相似度猜测；内部规划规则、供应商字段和执行提示词不得进入公开消息。视频 Skill 只作为字段级质量层参与：补充动作因果、空间调度、摄影、表演、声音和连续性建议，并写回固定提示词合同；不得生成第二套提示词、覆盖用户事实、改动素材顺序或把 Skill 原文附加到供应商请求。质量优先级固定为用户本轮事实、项目资产和已验收媒体、供应商协议、Skill 建议、默认风格。";

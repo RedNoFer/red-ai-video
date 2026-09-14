@@ -178,7 +178,9 @@ describe("executeAgentRun backend settings", () => {
         const instructions = buildDramaPackageSkillInstructions(
             [
                 { id: "drama-video-director", name: "旧配置导演", instructions: "旧规则不应重复注入" },
-                { id: "seedance-director", name: "Seedance 导演", instructions: "连续性规则" },
+                { id: "drama-asset-image-director", name: "资产图片导演", instructions: "资产图片规则不应作为第二套来源注入" },
+                { id: "character-design", name: "角色设定", instructions: "角色设定规则不应作为第二套来源注入" },
+                { id: "seedance-director", name: "Seedance 导演", instructions: "旧 Seedance 规则不应重复注入" },
             ],
             "生成制作包",
             30,
@@ -187,7 +189,10 @@ describe("executeAgentRun backend settings", () => {
         expect(instructions.match(/Agent 模式没有默认帧数/gu)).toHaveLength(1);
         expect(instructions).toContain("不能按镜头时长、提示词长度、角色数量");
         expect(instructions).not.toContain("旧规则不应重复注入");
-        expect(instructions).not.toContain("连续性规则");
+        expect(instructions).not.toContain("资产图片规则不应作为第二套来源注入");
+        expect(instructions).not.toContain("角色设定规则不应作为第二套来源注入");
+        expect(instructions).toContain("角色事实固定整理为六项");
+        expect(instructions).not.toContain("旧 Seedance 规则不应重复注入");
         expect(instructions.match(/当前短剧制作包唯一导演 Skill/gu)).toHaveLength(1);
     });
 
