@@ -135,7 +135,7 @@ export function DramaSourceImport({ project, onImported }: { project: DramaProje
         if (importWarnings.length && !warningsConfirmed) {
             modal.confirm({
                 title: "制作包存在识别警告",
-                content: `部分镜头缺少可选的生产字段，系统会保留可识别内容并允许继续导入。导入后请在分镜阶段补齐 ${importWarnings.length} 项提示。是否仍要导入？`,
+                content: `制作包存在 ${importWarnings.length} 项兼容性提示，系统会保留可识别内容并允许继续导入；不受当前运行时确认的 authoring 凭据不会被当作正式生成凭据。是否仍要导入？`,
                 okText: "仍然导入",
                 cancelText: "返回检查",
                 centered: true,
@@ -358,7 +358,7 @@ export function DramaSourceImport({ project, onImported }: { project: DramaProje
                                     <TriangleAlert className="size-3.5" />
                                     识别提示：允许继续导入
                                 </div>
-                                <p className="mt-1.5 leading-5">以下问题不会阻止本次导入，但对应镜头在分镜生成前需要补齐：</p>
+                                <p className="mt-1.5 leading-5">以下问题不会阻止本次导入，但对应内容在后续分镜或制作包生成前需要处理：</p>
                                 <ul className="mt-1.5 space-y-1">
                                     {packagePreview.importWarnings.map((warning) => (
                                         <li key={warning}>{warning}</li>
