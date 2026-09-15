@@ -16,7 +16,7 @@ vi.mock("@/lib/server/data-adapter", () => ({
     }),
 }));
 
-import { createDramaProject, deleteDramaProject, getDramaProject, listDramaProjectSummaries, updateDramaProject, updateDramaProjectShotMutation } from "./drama-project-store";
+import { createDramaProject, deleteDramaProject, getDramaProject, listDramaProjectSummaries, updateDramaProject, updateDramaProjectAssetMutation, updateDramaProjectShotMutation } from "./drama-project-store";
 
 describe("drama project file provider", () => {
     beforeEach(() => {
@@ -180,6 +180,25 @@ describe("drama project file provider", () => {
         expect(statement).toContain("jsonb_array_elements");
         expect(statement).not.toContain("SET title =");
         expect(values[4]).toBe(JSON.stringify(shot));
+        expect(String(values[4]).length).toBeLessThan(1024);
+    });
+
+    it("persists a single asset mutation without sending the full project to PostgreSQL", async () => {
+        mocks.provider = "postgres";
+        mocks.postgresQuery.mockResolvedValueOnce({ rows: [{ updated_at: "2026-09-15T00:00:01.000Z" }] });
+
+        const asset = { id: "scene-one", name: "当前场景", description: "更新后的场景" } as never;
+        await expect(updateDramaProjectAssetMutation("user-one", { projectId: "project-one", assetKind: "scenes", assetId: "scene-one", asset, expectedUpdatedAt: "2026-09-15T00:00:00.000Z" })).resolves.toMatchObject({
+            projectId: "project-one",
+            assetKind: "scenes",
+            asset,
+        });
+
+        const [statement, values] = mocks.postgresQuery.mock.calls[0] as [string, unknown[]];
+        expect(statement).toContain("jsonb_set");
+        expect(statement).toContain("jsonb_array_elements");
+        expect(statement).not.toContain("SET title =");
+        expect(values[4]).toBe(JSON.stringify(asset));
         expect(String(values[4]).length).toBeLessThan(1024);
     });
 });

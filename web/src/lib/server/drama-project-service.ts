@@ -64,6 +64,7 @@ import {
     getDramaProject,
     listDramaProjectSummaries,
     updateDramaProject,
+    updateDramaProjectAssetMutation,
     updateDramaProjectShotMutation,
 } from "@/lib/server/drama-project-store";
 import { createDramaProjectVersion, getDramaProjectVersion, listDramaProjectVersions } from "@/lib/server/drama-project-version-store";
@@ -1258,13 +1259,17 @@ export async function applyDramaEpisodeProductionPackageForUser(userId: string, 
 }
 
 export async function createDramaProductionRunForUser(userId: string, projectId: string, value: unknown) {
-    const project = await ensureSeriesBibleForUser(userId, await getDramaProjectForUser(userId, projectId));
-    const episodeId = cleanText(object(value).episodeId);
+    const input = object(value);
+    const isVisualRun = cleanText(input.scope) === "visual";
+    const loadedProject = isVisualRun ? await getDramaProject(cleanText(projectId), userId) : await ensureSeriesBibleForUser(userId, await getDramaProjectForUser(userId, projectId));
+    if (!loadedProject) throw new DramaProjectServiceError("短剧项目不存在", 404);
+    const project = loadedProject;
+    const episodeId = cleanText(input.episodeId);
     const episode = project.episodes.find((item) => item.id === episodeId);
     if (!episode) throw new DramaProjectServiceError("短剧剧集不存在", 404);
-    if (cleanText(object(value).scope) === "visual") {
-        const requestedShotIds = ids(object(value).shotIds);
-        const shotSnapshot = object(object(value).shotSnapshot);
+    if (isVisualRun) {
+        const requestedShotIds = ids(input.shotIds);
+        const shotSnapshot = object(input.shotSnapshot);
         let runProject = project;
         let runEpisode = episode;
         const snapshotId = cleanText(shotSnapshot.id);
@@ -1295,20 +1300,20 @@ export async function createDramaProductionRunForUser(userId: string, projectId:
             }
             runEpisode = runProject.episodes.find((candidate) => candidate.id === episode.id) || episode;
         }
-        const transport = { origin: cleanText(object(value).origin), cookie: cleanText(object(value).cookie), publicOrigin: cleanText(object(value).publicOrigin) };
+        const transport = { origin: cleanText(input.origin), cookie: cleanText(input.cookie), publicOrigin: cleanText(input.publicOrigin) };
         const settings = await getAuthSettings();
-        const requestedModel = cleanText(object(value).imageModel) || settings.defaultModels.imageModel;
-        const requestedChannelId = cleanText(object(value).imageChannelId);
+        const requestedModel = cleanText(input.imageModel) || settings.defaultModels.imageModel;
+        const requestedChannelId = cleanText(input.imageChannelId);
         const imageCandidate = resolveLogicalModelCandidates(settings, "image", requestedModel, requestedChannelId)[0];
         if (!imageCandidate) throw new DramaProjectServiceError("当前图片模型或渠道不可用，请刷新模型配置后重试", 409);
         const run = buildDramaVisualProductionRun(runProject, runEpisode, {
             imageModel: imageCandidate.logicalModelId,
             imageChannelId: imageCandidate.channelId,
-            imageQuality: cleanText(object(value).imageQuality) || settings.generationDefaults.imageQuality,
+            imageQuality: cleanText(input.imageQuality) || settings.generationDefaults.imageQuality,
             shotIds: requestedShotIds,
-            frameType: ["start_frame", "end_frame", "all_frames"].includes(cleanText(object(value).frameType)) ? (cleanText(object(value).frameType) as "start_frame" | "end_frame" | "all_frames") : undefined,
-            frameIds: ids(object(value).frameIds),
-            regenerateAll: object(value).regenerateAll === true,
+            frameType: ["start_frame", "end_frame", "all_frames"].includes(cleanText(input.frameType)) ? (cleanText(input.frameType) as "start_frame" | "end_frame" | "all_frames") : undefined,
+            frameIds: ids(input.frameIds),
+            regenerateAll: input.regenerateAll === true,
         });
         const latest = await findLatestDramaProductionRun(userId, project.id, episode.id, "visual");
         const syncedLatest = latest?.scope === "visual" ? await syncDramaVisualRun(userId, runProject, latest, transport) : latest;
@@ -1482,7 +1487,8 @@ export function mergeDramaShotMediaReferences(current: DramaShot, snapshot: Dram
 }
 
 export async function getLatestDramaProductionRunForUser(userId: string, projectId: string, episodeId: string, transport: { origin?: string; cookie?: string; publicOrigin?: string; scope?: "visual" | "production" } = {}) {
-    const project = await getDramaProjectForUser(userId, projectId);
+    const project = transport.scope === "visual" ? await getDramaProject(cleanText(projectId), userId) : await getDramaProjectForUser(userId, projectId);
+    if (!project) throw new DramaProjectServiceError("短剧项目不存在", 404);
     const run = await findLatestDramaProductionRun(userId, projectId, cleanText(episodeId), transport.scope || "production");
     if (!run) {
         if (transport.scope === "visual") await persistReleasedDramaVisualQueue(userId, project, cleanText(episodeId));
@@ -1513,14 +1519,67 @@ async function persistReleasedDramaVisualQueue(userId: string, project: DramaPro
     const released = releaseOrphanedDramaVisualFrameQueue(project, episodeId);
     if (released === project) return;
     try {
-        await updateDramaProject(userId, released, project.updatedAt);
+        await persistDramaVisualProjectChanges(userId, project, released);
     } catch (error) {
         if (!(error instanceof DramaProjectStoreError) || error.status !== 409) throw error;
         const latest = await getDramaProject(project.id, userId);
         if (!latest) return;
         const retried = releaseOrphanedDramaVisualFrameQueue(latest, episodeId);
-        if (retried !== latest) await updateDramaProject(userId, retried, latest.updatedAt);
+        if (retried !== latest) await persistDramaVisualProjectChanges(userId, latest, retried);
     }
+}
+
+async function persistDramaShotChanges(userId: string, previous: DramaProject, next: DramaProject) {
+    let persisted = previous;
+    let expectedUpdatedAt = previous.updatedAt;
+    for (const episode of next.episodes) {
+        for (const nextShot of episode.shots) {
+            const currentEpisode = persisted.episodes.find((item) => item.id === episode.id);
+            const currentShot = currentEpisode?.shots.find((item) => item.id === nextShot.id);
+            if (!currentShot || JSON.stringify(currentShot) === JSON.stringify(nextShot)) continue;
+            const saved = await updateDramaProjectShotMutation(userId, {
+                projectId: previous.id,
+                episodeId: episode.id,
+                shotId: nextShot.id,
+                shot: nextShot,
+                expectedUpdatedAt,
+            });
+            expectedUpdatedAt = saved.updatedAt;
+            persisted = {
+                ...persisted,
+                updatedAt: saved.updatedAt,
+                episodes: persisted.episodes.map((item) => (item.id === episode.id ? { ...item, shots: item.shots.map((shot) => (shot.id === nextShot.id ? saved.shot : shot)) } : item)),
+            };
+        }
+    }
+    return persisted;
+}
+
+async function persistDramaVisualProjectChanges(userId: string, previous: DramaProject, next: DramaProject) {
+    let persisted = await persistDramaShotChanges(userId, previous, next);
+    let expectedUpdatedAt = persisted.updatedAt;
+    for (const assetKind of ["characters", "scenes", "props", "clues"] as const) {
+        const currentAssets = persisted[assetKind] || [];
+        const nextAssets = next[assetKind] || [];
+        for (const nextAsset of nextAssets) {
+            const currentAsset = currentAssets.find((asset) => asset.id === nextAsset.id);
+            if (!currentAsset || JSON.stringify(currentAsset) === JSON.stringify(nextAsset)) continue;
+            const saved = await updateDramaProjectAssetMutation(userId, {
+                projectId: previous.id,
+                assetKind,
+                assetId: nextAsset.id,
+                asset: nextAsset,
+                expectedUpdatedAt,
+            });
+            expectedUpdatedAt = saved.updatedAt;
+            persisted = {
+                ...persisted,
+                updatedAt: saved.updatedAt,
+                [assetKind]: persisted[assetKind].map((asset) => (asset.id === nextAsset.id ? saved.asset : asset)),
+            };
+        }
+    }
+    return persisted;
 }
 
 function releaseOrphanedDramaVisualFrameQueue(project: DramaProject, episodeId: string) {
@@ -1655,15 +1714,15 @@ async function syncDramaVisualRun(userId: string, project: DramaProject, run: Dr
     }
     if (!changed) return run;
     const nextRun = unlockDramaVisualSteps({ ...run, steps });
-    if (JSON.stringify(nextProject) !== JSON.stringify(project)) {
+    if (changed) {
         try {
-            await updateDramaProject(userId, nextProject, project.updatedAt);
+            await persistDramaVisualProjectChanges(userId, project, nextProject);
         } catch (error) {
             if (!(error instanceof DramaProjectStoreError) || error.status !== 409 || !terminalFailureReconciled) throw error;
             const latestProject = await getDramaProject(project.id, userId);
             if (!latestProject) throw error;
             const rebasedProject = reconcileTerminalDramaVisualFailures(latestProject, run);
-            if (JSON.stringify(rebasedProject) !== JSON.stringify(latestProject)) await updateDramaProject(userId, rebasedProject, latestProject.updatedAt);
+            if (rebasedProject !== latestProject) await persistDramaVisualProjectChanges(userId, latestProject, rebasedProject);
         }
     }
     await updateDramaProductionRun(userId, nextRun);
@@ -1907,10 +1966,12 @@ export async function getDramaProductionPreflightForUser(userId: string, project
 }
 
 export async function updateDramaProductionRunForUser(userId: string, projectId: string, runId: string, value: unknown) {
-    const project = await getDramaProjectForUser(userId, projectId);
+    const input = object(value);
     const run = await getDramaProductionRun(userId, projectId, cleanText(runId));
     if (!run) throw new DramaProjectServiceError("生产运行不存在", 404);
-    const action = cleanText(object(value).action);
+    const project = run.scope === "visual" ? await getDramaProject(cleanText(projectId), userId) : await getDramaProjectForUser(userId, projectId);
+    if (!project) throw new DramaProjectServiceError("短剧项目不存在", 404);
+    const action = cleanText(input.action);
     let next: DramaProductionRun;
     if (action === "confirm" && run.scope === "visual") {
         if (run.confirmedAt) {
@@ -1930,8 +1991,8 @@ export async function updateDramaProductionRunForUser(userId: string, projectId:
             const episode = project.episodes.find((item) => item.id === run.episodeId);
             if (!episode) throw new DramaProjectServiceError("短剧剧集不存在", 404);
             const check = await preflightDramaGeneration({
-                origin: cleanText(object(value).origin),
-                cookie: cleanText(object(value).cookie),
+                origin: cleanText(input.origin),
+                cookie: cleanText(input.cookie),
                 userId,
                 requestId: `drama-run-retry:${run.id}:${Array.from(stepIds).sort().join(",")}`,
                 project,
@@ -1978,13 +2039,13 @@ export async function updateDramaProductionRunForUser(userId: string, projectId:
         let persistedProject = project;
         if (submissionProject !== project) {
             try {
-                persistedProject = await updateDramaProject(userId, submissionProject, project.updatedAt);
+                persistedProject = await persistDramaVisualProjectChanges(userId, project, submissionProject);
             } catch (error) {
                 if (error instanceof DramaProjectStoreError && error.status === 409) {
                     const latestProject = await getDramaProject(project.id, userId);
                     if (!latestProject) throw new DramaProjectServiceError("短剧项目不存在", 404);
                     try {
-                        persistedProject = await updateDramaProject(userId, applyDramaVisualRunSubmission(latestProject, saved), latestProject.updatedAt);
+                        persistedProject = await persistDramaVisualProjectChanges(userId, latestProject, applyDramaVisualRunSubmission(latestProject, saved));
                     } catch (rebasedError) {
                         if (rebasedError instanceof DramaProjectStoreError) throw new DramaProjectServiceError(rebasedError.message, rebasedError.status);
                         throw rebasedError;
@@ -1995,7 +2056,7 @@ export async function updateDramaProductionRunForUser(userId: string, projectId:
                 }
             }
         }
-        return dispatchDramaImageSteps(userId, persistedProject, saved, cleanText(object(value).origin), cleanText(object(value).cookie), cleanText(object(value).publicOrigin));
+        return dispatchDramaImageSteps(userId, persistedProject, saved, cleanText(input.origin), cleanText(input.cookie), cleanText(input.publicOrigin));
     }
     return saved;
 }
@@ -2100,7 +2161,7 @@ async function dispatchReadyDramaVisualSteps(userId: string, project: DramaProje
             const nextStep = { ...step, status: "failed" as const, error };
             current = { ...current, steps: current.steps.map((item) => (item.id === step.id ? nextStep : item)), status: "running", updatedAt: new Date().toISOString() };
             const failedProject = applyDramaVisualStepFailure(project, run.episodeId, step, error);
-            if (failedProject !== project) await updateDramaProject(userId, failedProject, project.updatedAt);
+            if (failedProject !== project) await persistDramaVisualProjectChanges(userId, project, failedProject);
             await updateDramaProductionRun(userId, current);
             continue;
         }
@@ -2830,6 +2891,7 @@ export async function updateDramaStoryboardFrameGenerationStateForUser(userId: s
     const currentShot = episode?.shots.find((item) => item.id === shotId);
     if (!episode) throw new DramaProjectServiceError("短剧剧集不存在", 404);
     if (!currentShot) throw new DramaProjectServiceError("短剧镜头不存在", 404);
+    const generationError = cleanText(input.error);
 
     let nextShot: DramaShot;
     if (frameType === "all_frames") {
@@ -2858,11 +2920,14 @@ export async function updateDramaStoryboardFrameGenerationStateForUser(userId: s
         const storyboardFrames = framePlan.frames.map((beat) => {
             const existing = currentFrames.find((frame) => frame.id === beat.id || frame.sequenceIndex === beat.sequenceIndex) || { id: beat.id, sequenceIndex: beat.sequenceIndex, source: "generated" as const, status: "idle" as const };
             if (!selected.has(beat.id)) return existing;
+            if (generationError) {
+                return existing.mediaUrl ? { ...existing, candidateStatus: "error" as const, candidateTaskId: undefined, candidateError: generationError } : { ...existing, status: "error" as const, taskId: undefined, error: generationError };
+            }
             return existing.mediaUrl
                 ? { ...existing, candidateStatus: "queued" as const, candidateTaskId: undefined, candidateError: undefined, mediaDeletedAt: undefined }
                 : { ...existing, status: "queued" as const, taskId: undefined, error: undefined, inputHash: undefined, continuityStatus: "pending" as const, continuityEvidenceId: undefined, mediaDeletedAt: undefined };
         });
-        nextShot = { ...currentShot, storyboardFrameMode: "all_frames", ...(hasFramePlanPatch ? { framePlan } : {}), storyboardFrames, storyboardError: undefined, ...clearDramaGeneratedMediaState };
+        nextShot = { ...currentShot, storyboardFrameMode: "all_frames", ...(hasFramePlanPatch ? { framePlan } : {}), storyboardFrames, storyboardError: generationError || undefined, ...clearDramaGeneratedMediaState };
     } else {
         const promptField = frameType === "start_frame" ? "startFramePrompt" : "endFramePrompt";
         const hasPromptPatch = Object.prototype.hasOwnProperty.call(input, promptField);
@@ -2870,8 +2935,12 @@ export async function updateDramaStoryboardFrameGenerationStateForUser(userId: s
         if (hasPromptPatch && !prompt) throw new DramaProjectServiceError("分镜提示词不能为空", 400);
         nextShot = {
             ...currentShot,
-            ...(frameType === "start_frame" ? { storyboardStatus: "queued" as const, storyboardTaskId: undefined, storyboardError: undefined, ...(hasPromptPatch ? { startFramePrompt: prompt } : {}) } : {}),
-            ...(frameType === "end_frame" ? { storyboardEndStatus: "queued" as const, storyboardEndTaskId: undefined, storyboardEndError: undefined, ...(hasPromptPatch ? { endFramePrompt: prompt } : {}) } : {}),
+            ...(frameType === "start_frame"
+                ? { storyboardStatus: generationError ? ("error" as const) : ("queued" as const), storyboardTaskId: undefined, storyboardError: generationError || undefined, ...(hasPromptPatch ? { startFramePrompt: prompt } : {}) }
+                : {}),
+            ...(frameType === "end_frame"
+                ? { storyboardEndStatus: generationError ? ("error" as const) : ("queued" as const), storyboardEndTaskId: undefined, storyboardEndError: generationError || undefined, ...(hasPromptPatch ? { endFramePrompt: prompt } : {}) }
+                : {}),
             ...clearDramaGeneratedMediaState,
         };
     }

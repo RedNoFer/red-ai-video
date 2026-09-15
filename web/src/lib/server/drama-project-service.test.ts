@@ -28,6 +28,7 @@ const mocks = vi.hoisted(() => {
         getDramaProject: vi.fn(),
         listDramaProjectSummaries: vi.fn(),
         updateDramaProject: vi.fn(),
+        updateDramaProjectAssetMutation: vi.fn(),
         updateDramaProjectShotMutation: vi.fn(),
         getStoredGenerationTask: vi.fn(),
         getStoredGenerationTaskByRequest: vi.fn(),
@@ -70,6 +71,7 @@ vi.mock("@/lib/server/drama-project-store", () => ({
     getDramaProject: mocks.getDramaProject,
     listDramaProjectSummaries: mocks.listDramaProjectSummaries,
     updateDramaProject: mocks.updateDramaProject,
+    updateDramaProjectAssetMutation: mocks.updateDramaProjectAssetMutation,
     updateDramaProjectShotMutation: mocks.updateDramaProjectShotMutation,
 }));
 vi.mock("@/lib/server/drama-project-version-store", () => ({
@@ -131,6 +133,14 @@ describe("drama project service updates", () => {
     beforeEach(() => {
         vi.clearAllMocks();
         mocks.updateDramaProject.mockImplementation(async (_userId: string, value: DramaProject) => value);
+        mocks.updateDramaProjectShotMutation.mockImplementation(async (_userId: string, mutation: { projectId: string; episodeId: string; shotId: string; shot: DramaProject["episodes"][number]["shots"][number]; expectedUpdatedAt?: string }) => ({
+            ...mutation,
+            updatedAt: "2026-09-15T00:00:01.000Z",
+        }));
+        mocks.updateDramaProjectAssetMutation.mockImplementation(async (_userId: string, mutation: { projectId: string; assetKind: string; assetId: string; asset: unknown; expectedUpdatedAt?: string }) => ({
+            ...mutation,
+            updatedAt: "2026-09-15T00:00:01.000Z",
+        }));
         mocks.createCreativeConversation.mockResolvedValue({ id: "conversation-new" });
         mocks.updateCreativeConversation.mockResolvedValue({ id: "conversation-new", status: "archived" });
         mocks.getCreativeConversation.mockResolvedValue({ id: "conversation-one", userId: "user-one", surface: "drama", source: "drama", projectId: "drama-one", status: "active" });
@@ -536,10 +546,9 @@ describe("drama project service updates", () => {
         await getLatestDramaProductionRunForUser("user-one", current.id, "episode-one", { scope: "visual" });
 
         expect(mocks.reviewCreativeOutputs).not.toHaveBeenCalled();
-        expect(mocks.updateDramaProject).toHaveBeenCalledWith(
+        expect(mocks.updateDramaProjectShotMutation).toHaveBeenCalledWith(
             "user-one",
-            expect.objectContaining({ episodes: [expect.objectContaining({ shots: [expect.objectContaining({ storyboardFrames: [expect.objectContaining({ continuityStatus: "pending" })] })] })] }),
-            current.updatedAt,
+            expect.objectContaining({ episodeId: "episode-one", shotId: "shot-one", expectedUpdatedAt: current.updatedAt, shot: expect.objectContaining({ storyboardFrames: [expect.objectContaining({ continuityStatus: "pending" })] }) }),
         );
     });
 
@@ -918,16 +927,14 @@ describe("drama project service updates", () => {
 
         await updateDramaProductionRunForUser("user-one", current.id, "run-frame-three", { action: "confirm" });
 
-        expect(mocks.updateDramaProject).toHaveBeenCalledWith(
+        expect(mocks.updateDramaProjectShotMutation).toHaveBeenCalledWith(
             "user-one",
             expect.objectContaining({
-                episodes: [
-                    expect.objectContaining({
-                        shots: [expect.objectContaining({ storyboardFrames: expect.arrayContaining([expect.objectContaining({ id: "f3", sequenceIndex: 3, status: "queued" })]) })],
-                    }),
-                ],
+                episodeId: "episode-one",
+                shotId: "shot-one",
+                expectedUpdatedAt: current.updatedAt,
+                shot: expect.objectContaining({ storyboardFrames: expect.arrayContaining([expect.objectContaining({ id: "f3", sequenceIndex: 3, status: "queued" })]) }),
             }),
-            current.updatedAt,
         );
     });
 
@@ -998,13 +1005,12 @@ describe("drama project service updates", () => {
         mocks.getDramaProject.mockResolvedValueOnce(current).mockResolvedValue(latest);
         mocks.getDramaProductionRun.mockResolvedValue(run);
         mocks.updateDramaProductionRun.mockImplementation(async (_userId: string, value: unknown) => value);
-        mocks.updateDramaProject.mockRejectedValueOnce(new DramaProjectStoreError("短剧项目已在其他页面更新，请刷新后重试", 409)).mockImplementation(async (_userId: string, value: DramaProject) => value);
+        mocks.updateDramaProjectShotMutation.mockRejectedValueOnce(new DramaProjectStoreError("短剧项目已在其他页面更新，请刷新后重试", 409));
 
         await expect(updateDramaProductionRunForUser("user-one", current.id, "run-frame-three", { action: "confirm" })).resolves.toMatchObject({ id: "run-frame-three" });
-        expect(mocks.updateDramaProject).toHaveBeenLastCalledWith(
+        expect(mocks.updateDramaProjectShotMutation).toHaveBeenLastCalledWith(
             "user-one",
-            expect.objectContaining({ episodes: [expect.objectContaining({ shots: [expect.objectContaining({ storyboardFrames: [expect.objectContaining({ id: "f3", status: "queued" })] })] })] }),
-            latest.updatedAt,
+            expect.objectContaining({ episodeId: "episode-one", shotId: "shot-one", expectedUpdatedAt: latest.updatedAt, shot: expect.objectContaining({ storyboardFrames: [expect.objectContaining({ id: "f3", status: "queued" })] }) }),
         );
     });
 
@@ -1248,12 +1254,14 @@ describe("drama project service updates", () => {
 
         await getLatestDramaProductionRunForUser("user-one", current.id, "episode-one", { scope: "visual" });
 
-        expect(mocks.updateDramaProject).toHaveBeenCalledWith(
+        expect(mocks.updateDramaProjectShotMutation).toHaveBeenCalledWith(
             "user-one",
             expect.objectContaining({
-                episodes: [expect.objectContaining({ shots: [expect.objectContaining({ storyboardFrames: [expect.objectContaining({ id: "f3", status: "error", error: "参考素材暂时无法提交给当前生成渠道" })] })] })],
+                episodeId: "episode-one",
+                shotId: "shot-one",
+                expectedUpdatedAt: current.updatedAt,
+                shot: expect.objectContaining({ storyboardFrames: [expect.objectContaining({ id: "f3", status: "error", error: "参考素材暂时无法提交给当前生成渠道" })] }),
             }),
-            current.updatedAt,
         );
     });
 
@@ -1516,11 +1524,51 @@ describe("drama project service updates", () => {
             status: "needs_review",
             steps: [expect.objectContaining({ id: "frame-shot-one-f2", status: "needs_review", error: "上游提交结果不确定" })],
         });
-        expect(mocks.updateDramaProject).toHaveBeenCalledWith(
+        expect(mocks.updateDramaProjectShotMutation).toHaveBeenCalledWith(
             "user-one",
-            expect.objectContaining({ episodes: [expect.objectContaining({ shots: [expect.objectContaining({ storyboardFrames: [expect.objectContaining({ id: "f2", status: "needs_review", error: "上游提交结果不确定" })] })] })] }),
-            current.updatedAt,
+            expect.objectContaining({
+                episodeId: "episode-one",
+                shotId: "shot-one",
+                expectedUpdatedAt: current.updatedAt,
+                shot: expect.objectContaining({ storyboardFrames: [expect.objectContaining({ id: "f2", status: "needs_review", error: "上游提交结果不确定" })] }),
+            }),
         );
+    });
+
+    it("persists an asset-anchor result through the asset mutation path", async () => {
+        const current = project("2026-07-19T08:00:00.000Z", "项目");
+        current.scenes = [{ id: "scene-one", name: "议事厅", description: "旧场景" }];
+        const run = {
+            id: "run-asset-anchor",
+            projectId: current.id,
+            episodeId: "episode-one",
+            status: "running",
+            scope: "visual",
+            mode: "strict",
+            confirmedAt: current.updatedAt,
+            parameterSnapshot: { imageModel: "image-default", videoModel: "", ratio: "9:16" },
+            steps: [{ id: "asset-anchor-scene-one", type: "asset_anchor", assetKind: "scenes", assetId: "scene-one", taskId: "image-task-scene-one", status: "running", dependsOn: [] }],
+            blockers: [],
+            createdAt: current.updatedAt,
+            updatedAt: current.updatedAt,
+        } as never;
+        mocks.getDramaProject.mockResolvedValue(current);
+        mocks.findLatestDramaProductionRun.mockResolvedValue(run);
+        mocks.getStoredGenerationTask.mockResolvedValue({ status: "success", result: { serverUrl: "/api/generated/scene-one.png", width: 1536, height: 1024 } });
+
+        await expect(getLatestDramaProductionRunForUser("user-one", current.id, "episode-one", { scope: "visual" })).resolves.toMatchObject({ id: "run-asset-anchor" });
+
+        expect(mocks.updateDramaProjectAssetMutation).toHaveBeenCalledWith(
+            "user-one",
+            expect.objectContaining({
+                projectId: current.id,
+                assetKind: "scenes",
+                assetId: "scene-one",
+                asset: expect.objectContaining({ references: [expect.objectContaining({ url: "/api/generated/scene-one.png" })] }),
+                expectedUpdatedAt: current.updatedAt,
+            }),
+        );
+        expect(mocks.updateDramaProject).not.toHaveBeenCalled();
     });
 
     it("releases queued visual frame placeholders when no visual run was persisted", async () => {
@@ -1545,10 +1593,14 @@ describe("drama project service updates", () => {
 
         await expect(getLatestDramaProductionRunForUser("user-one", current.id, "episode-one", { scope: "visual" })).resolves.toBeNull();
 
-        expect(mocks.updateDramaProject).toHaveBeenCalledWith(
+        expect(mocks.updateDramaProjectShotMutation).toHaveBeenCalledWith(
             "user-one",
-            expect.objectContaining({ episodes: [expect.objectContaining({ shots: [expect.objectContaining({ storyboardFrames: [expect.objectContaining({ id: "f1", status: "error", error: "未找到本次生图运行记录，请确认后重新提交" })] })] })] }),
-            current.updatedAt,
+            expect.objectContaining({
+                episodeId: "episode-one",
+                shotId: "shot-one",
+                expectedUpdatedAt: current.updatedAt,
+                shot: expect.objectContaining({ storyboardFrames: [expect.objectContaining({ id: "f1", status: "error", error: "未找到本次生图运行记录，请确认后重新提交" })] }),
+            }),
         );
     });
 
@@ -1581,10 +1633,14 @@ describe("drama project service updates", () => {
 
         await expect(getLatestDramaProductionRunForUser("user-one", current.id, "episode-one", { scope: "visual" })).resolves.toMatchObject({ id: "run-completed", status: "completed" });
 
-        expect(mocks.updateDramaProject).toHaveBeenCalledWith(
+        expect(mocks.updateDramaProjectShotMutation).toHaveBeenCalledWith(
             "user-one",
-            expect.objectContaining({ episodes: [expect.objectContaining({ shots: [expect.objectContaining({ storyboardFrames: [expect.objectContaining({ id: "f1", status: "error", error: "未找到本次生图运行记录，请确认后重新提交" })] })] })] }),
-            current.updatedAt,
+            expect.objectContaining({
+                episodeId: "episode-one",
+                shotId: "shot-one",
+                expectedUpdatedAt: current.updatedAt,
+                shot: expect.objectContaining({ storyboardFrames: [expect.objectContaining({ id: "f1", status: "error", error: "未找到本次生图运行记录，请确认后重新提交" })] }),
+            }),
         );
     });
 
@@ -1633,16 +1689,13 @@ describe("drama project service updates", () => {
         } as never;
         mocks.getDramaProject.mockResolvedValueOnce(current).mockResolvedValue(latest);
         mocks.findLatestDramaProductionRun.mockResolvedValue(failedRun);
-        mocks.updateDramaProject.mockRejectedValueOnce(new DramaProjectStoreError("短剧项目已在其他页面更新，请刷新后重试", 409)).mockImplementation(async (_userId: string, value: DramaProject) => value);
+        mocks.updateDramaProjectShotMutation.mockRejectedValueOnce(new DramaProjectStoreError("短剧项目已在其他页面更新，请刷新后重试", 409));
 
         await expect(getLatestDramaProductionRunForUser("user-one", current.id, "episode-one", { scope: "visual" })).resolves.toMatchObject({ id: "run-frame-three", status: "needs_review" });
 
-        expect(mocks.updateDramaProject).toHaveBeenLastCalledWith(
+        expect(mocks.updateDramaProjectShotMutation).toHaveBeenLastCalledWith(
             "user-one",
-            expect.objectContaining({
-                episodes: [expect.objectContaining({ shots: [expect.objectContaining({ storyboardFrames: [expect.objectContaining({ id: "f3", status: "error" })] })] })],
-            }),
-            latest.updatedAt,
+            expect.objectContaining({ episodeId: "episode-one", shotId: "shot-one", expectedUpdatedAt: latest.updatedAt, shot: expect.objectContaining({ storyboardFrames: [expect.objectContaining({ id: "f3", status: "error" })] }) }),
         );
     });
 

@@ -1,4 +1,4 @@
-import type { DramaProject, DramaProjectSummary, DramaProjectSummaryPage, DramaShot } from "@/lib/drama-project-contract";
+import type { DramaNamedAsset, DramaProject, DramaProjectSummary, DramaProjectSummaryPage, DramaShot } from "@/lib/drama-project-contract";
 import { normalizeDramaImageSize } from "@/lib/drama-image-size";
 import { summarizeDramaProject } from "@/lib/drama-project-summary";
 import { readJsonDataFile, writeJsonDataFile } from "@/lib/server/data-adapter";
@@ -14,6 +14,14 @@ export type DramaProjectShotMutation = {
     expectedUpdatedAt?: string;
 };
 export type DramaProjectShotMutationAck = { projectId: string; episodeId: string; shotId: string; updatedAt: string; shot: DramaShot };
+export type DramaProjectAssetMutation = {
+    projectId: string;
+    assetKind: "characters" | "scenes" | "props" | "clues";
+    assetId: string;
+    asset: DramaNamedAsset;
+    expectedUpdatedAt?: string;
+};
+export type DramaProjectAssetMutationAck = { projectId: string; assetKind: DramaProjectAssetMutation["assetKind"]; assetId: string; updatedAt: string; asset: DramaNamedAsset };
 
 const FILE_NAME = "drama-projects.json";
 
@@ -192,6 +200,73 @@ export async function updateDramaProjectShotMutation(userId: string, mutation: D
     if (!found) throw new DramaProjectStoreError("短剧项目不存在", 404);
     if (!ack) throw new DramaProjectStoreError("短剧镜头不存在", 404);
     return ack;
+}
+
+/** Persists a single project asset mutation without sending or rewriting the full project from the service layer. */
+export async function updateDramaProjectAssetMutation(userId: string, mutation: DramaProjectAssetMutation): Promise<DramaProjectAssetMutationAck> {
+    if (getDatabaseProvider() === "postgres") return updatePostgresProjectAssetMutation(userId, mutation);
+
+    let found = false;
+    let ack: DramaProjectAssetMutationAck | null = null;
+    await mutateDatabase((db) => ({
+        ...db,
+        projects: db.projects.map((record) => {
+            if (record.userId !== userId || record.project.id !== mutation.projectId) return record;
+            found = true;
+            const current = record.project;
+            if (mutation.expectedUpdatedAt && current.updatedAt !== mutation.expectedUpdatedAt) throw new DramaProjectStoreError("短剧项目已在其他页面更新，请刷新后重试", 409);
+            const assets = current[mutation.assetKind] || [];
+            if (!assets.some((asset) => asset.id === mutation.assetId)) throw new DramaProjectStoreError("短剧项目资产不存在", 404);
+            const updatedAt = nextProjectVersion(current.updatedAt);
+            ack = { projectId: mutation.projectId, assetKind: mutation.assetKind, assetId: mutation.assetId, updatedAt, asset: mutation.asset };
+            return { ...record, project: { ...current, [mutation.assetKind]: assets.map((asset) => (asset.id === mutation.assetId ? mutation.asset : asset)), updatedAt } };
+        }),
+    }));
+    if (!found) throw new DramaProjectStoreError("短剧项目不存在", 404);
+    if (!ack) throw new DramaProjectStoreError("短剧项目资产不存在", 404);
+    return ack;
+}
+
+async function updatePostgresProjectAssetMutation(userId: string, mutation: DramaProjectAssetMutation): Promise<DramaProjectAssetMutationAck> {
+    await ensurePostgresSchema();
+    const result = await postgresQuery<{ updated_at: Date | string }>(
+        `WITH versioned AS (SELECT clock_timestamp() AS now), target AS (
+             SELECT asset.ord AS asset_ord
+             FROM drama_projects AS project
+             CROSS JOIN LATERAL jsonb_array_elements(COALESCE(project.project_json-> $3, '[]'::jsonb)) WITH ORDINALITY AS asset(item, ord)
+             WHERE project.id = $1 AND project.user_id = $2
+               AND asset.item->>'id' = $4
+         )
+         UPDATE drama_projects AS project
+         SET project_json = jsonb_set(
+                 jsonb_set(project.project_json, ARRAY[$3, (target.asset_ord - 1)::text], $5::jsonb, false),
+                 '{updatedAt}', to_jsonb(to_char(versioned.now AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')), true
+             ),
+             updated_at = versioned.now
+         FROM target, versioned
+         WHERE project.id = $1 AND project.user_id = $2
+           AND ($6::text IS NULL OR project.project_json->>'updatedAt' = $6)
+         RETURNING project.updated_at AS updated_at`,
+        [mutation.projectId, userId, mutation.assetKind, mutation.assetId, JSON.stringify(mutation.asset), mutation.expectedUpdatedAt || null],
+    );
+    if (result.rows[0]) return { ...mutation, updatedAt: timestamp(result.rows[0].updated_at) };
+
+    const existing = await postgresQuery<{ project_updated_at: string | null; has_asset: boolean }>(
+        `SELECT project_json->>'updatedAt' AS project_updated_at,
+                EXISTS (
+                    SELECT 1
+                    FROM jsonb_array_elements(COALESCE(project_json-> $3, '[]'::jsonb)) asset
+                    WHERE asset->>'id' = $4
+                ) AS has_asset
+         FROM drama_projects
+         WHERE id = $1 AND user_id = $2`,
+        [mutation.projectId, userId, mutation.assetKind, mutation.assetId],
+    );
+    const row = existing.rows[0];
+    if (!row) throw new DramaProjectStoreError("短剧项目不存在", 404);
+    if (mutation.expectedUpdatedAt && row.project_updated_at !== mutation.expectedUpdatedAt) throw new DramaProjectStoreError("短剧项目已在其他页面更新，请刷新后重试", 409);
+    if (!row.has_asset) throw new DramaProjectStoreError("短剧项目资产不存在", 404);
+    throw new DramaProjectStoreError("短剧项目保存失败", 409);
 }
 
 async function updatePostgresProjectShotMutation(userId: string, mutation: DramaProjectShotMutation): Promise<DramaProjectShotMutationAck> {

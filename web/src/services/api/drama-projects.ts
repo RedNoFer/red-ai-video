@@ -500,7 +500,7 @@ export function updateDramaStoryboardFrameGenerationState(
     projectId: string,
     episodeId: string,
     shotId: string,
-    input: { frameType: "start_frame" | "end_frame" | "all_frames"; frameIds?: string[]; framePlan?: unknown; frameStates?: unknown; startFramePrompt?: string; endFramePrompt?: string },
+    input: { frameType: "start_frame" | "end_frame" | "all_frames"; frameIds?: string[]; framePlan?: unknown; frameStates?: unknown; startFramePrompt?: string; endFramePrompt?: string; error?: string },
 ) {
     return request<{ projectId: string; episodeId: string; shotId: string; updatedAt: string; shot: DramaShot }>(
         `/api/drama/projects/${encodeURIComponent(projectId)}/episodes/${encodeURIComponent(episodeId)}/shots/${encodeURIComponent(shotId)}/frames/generation-state`,

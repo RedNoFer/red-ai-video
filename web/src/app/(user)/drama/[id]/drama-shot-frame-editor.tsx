@@ -38,6 +38,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
     const { message, modal } = App.useApp();
     const copyText = useCopyText();
     const updateShot = useDramaStore((state) => state.updateShot);
+    const replaceShot = useDramaStore((state) => state.replaceShot);
     const replaceProject = useDramaStore((state) => state.replaceProject);
     const saveStoryboardFrameGenerationStateNow = useDramaStore((state) => state.saveStoryboardFrameGenerationStateNow);
     const config = useEffectiveConfig();
@@ -62,6 +63,11 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
     const [assetPickerOpen, setAssetPickerOpen] = useState(false);
     const [manualReferenceDraft, setManualReferenceDraft] = useState<DramaImageReferenceBinding[]>([]);
     const frameMode = shot.storyboardFrameMode || "single";
+    const updateShotLocally = (patch: Partial<DramaShot>) => {
+        const currentProject = useDramaStore.getState().projects.find((item) => item.id === project.id);
+        const currentShot = currentProject?.episodes.find((item) => item.id === episodeId)?.shots.find((item) => item.id === shot.id);
+        if (currentShot) replaceShot(project.id, episodeId, shot.id, { ...currentShot, ...patch });
+    };
     const startFrame = latestFrameEvidence(shot, "storyboard_start", ["candidate", "accepted"]);
     const endFrame = latestFrameEvidence(shot, "storyboard_end", ["candidate", "accepted"]);
     const startPromptEvidence = latestPromptEvidence(shot, "storyboard_start");
@@ -317,7 +323,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                     .projects.find((item) => item.id === project.id)
                     ?.episodes.find((item) => item.id === episodeId)
                     ?.shots.find((item) => item.id === shot.id)?.storyboardFrames || storedFrames;
-            updateShot(project.id, episodeId, shot.id, {
+            updateShotLocally({
                 storyboardFrames: beats.map((beat) => {
                     const frame = findStoryboardFrame(liveFrames, beat) || emptyStoryboardFrame(beat);
                     return input.frameIds.includes(beat.id)
@@ -330,7 +336,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
             });
         };
         try {
-            updateShot(project.id, episodeId, shot.id, {
+            updateShotLocally({
                 storyboardFrameMode: "all_frames",
                 storyboardFrames: beats.map((beat) => {
                     const existing = findStoryboardFrame(storedFrames, beat) || emptyStoryboardFrame(beat);
@@ -371,7 +377,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                 .projects.find((item) => item.id === project.id)
                 ?.episodes.find((item) => item.id === episodeId)
                 ?.shots.find((item) => item.id === shot.id);
-            updateShot(project.id, episodeId, shot.id, {
+            updateShotLocally({
                 storyboardFrames: beats.map((beat) => {
                     const live = findStoryboardFrame(confirmedShot?.storyboardFrames || [], beat);
                     const existing = live || findStoryboardFrame(storedFrames, beat) || emptyStoryboardFrame(beat);
@@ -413,7 +419,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                             .projects.find((item) => item.id === project.id)
                             ?.episodes.find((item) => item.id === episodeId)
                             ?.shots.find((item) => item.id === shot.id);
-                        updateShot(project.id, episodeId, shot.id, {
+                        updateShotLocally({
                             storyboardFrames: beats.map((beat) => {
                                 const live = findStoryboardFrame(recoveredShot?.storyboardFrames || [], beat) || findStoryboardFrame(storedFrames, beat) || emptyStoryboardFrame(beat);
                                 const step = recoveredSteps.find((item) => item.frameId === beat.id);
@@ -426,16 +432,16 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                         setSubmissionUncertain(false);
                         setUncertainFrameIds([]);
                     } else if (!recovered.run) {
-                        updateShot(project.id, episodeId, shot.id, {
+                        const missingRunError = "服务端未找到本次生图运行记录，请确认后重新提交";
+                        updateShotLocally({
                             storyboardFrames: beats.map((beat) => {
                                 const frame = findStoryboardFrame(storedFrames, beat) || emptyStoryboardFrame(beat);
                                 if (!input.frameIds.includes(beat.id)) return frame;
-                                return frame.mediaUrl
-                                    ? { ...frame, candidateStatus: "error" as const, candidateTaskId: undefined, candidateError: "服务端未找到本次生图运行记录，请确认后重新提交" }
-                                    : { ...frame, status: "error" as const, taskId: undefined, error: "服务端未找到本次生图运行记录，请确认后重新提交" };
+                                return frame.mediaUrl ? { ...frame, candidateStatus: "error" as const, candidateTaskId: undefined, candidateError: missingRunError } : { ...frame, status: "error" as const, taskId: undefined, error: missingRunError };
                             }),
-                            storyboardError: "服务端未找到本次生图运行记录，请确认后重新提交",
+                            storyboardError: missingRunError,
                         });
+                        await saveStoryboardFrameGenerationStateNow(project.id, episodeId, shot.id, { frameType: "all_frames", frameIds: input.frameIds, error: missingRunError });
                         setSubmissionUncertain(false);
                         setUncertainFrameIds([]);
                     }
@@ -451,7 +457,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                     .projects.find((item) => item.id === project.id)
                     ?.episodes.find((item) => item.id === episodeId)
                     ?.shots.find((item) => item.id === shot.id)?.storyboardFrames || storedFrames;
-            updateShot(project.id, episodeId, shot.id, {
+            updateShotLocally({
                 storyboardFrames: beats.map((beat) => {
                     const frame = findStoryboardFrame(liveFrames, beat) || emptyStoryboardFrame(beat);
                     return selected.has(beat.id)
@@ -514,10 +520,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
             });
             const confirmed = await updateDramaProductionRun(project.id, run.id, { action: "confirm" });
             const step = confirmed.steps.find((item) => item.shotId === shot.id && item.type === frameType);
-            updateShot(
-                project.id,
-                episodeId,
-                shot.id,
+            updateShotLocally(
                 frameType === "end_frame"
                     ? { storyboardEndStatus: storyboardTaskStatus(step), storyboardEndTaskId: step?.taskId, storyboardEndError: step?.error, storyboardEndPrompt: step?.executionPrompt || step?.prompt }
                     : { storyboardStatus: storyboardTaskStatus(step), storyboardTaskId: step?.taskId, storyboardError: step?.error, storyboardPrompt: step?.executionPrompt || step?.prompt },
