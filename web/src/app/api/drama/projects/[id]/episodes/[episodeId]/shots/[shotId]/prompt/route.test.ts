@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
     getCurrentUser: vi.fn(),
     updateDramaShotPromptForUser: vi.fn(),
+    updateDramaShotPromptPatchForUser: vi.fn(),
 }));
 
 vi.mock("@/lib/auth/session", () => ({ getCurrentUser: mocks.getCurrentUser }));
@@ -17,6 +18,7 @@ vi.mock("@/lib/server/drama-project-service", () => ({
         }
     },
     updateDramaShotPromptForUser: mocks.updateDramaShotPromptForUser,
+    updateDramaShotPromptPatchForUser: mocks.updateDramaShotPromptPatchForUser,
 }));
 
 import { PATCH } from "./route";
@@ -30,6 +32,7 @@ describe("PATCH /api/drama/projects/[id]/episodes/[episodeId]/shots/[shotId]/pro
             updatedAt: "2026-09-04T00:00:01.000Z",
             episodes: [{ id: "episode-one", shots: [{ id: "shot-one", executionVideoPrompt: "修改后的提示词" }] }],
         });
+        mocks.updateDramaShotPromptPatchForUser.mockResolvedValue({ projectId: "drama-one", episodeId: "episode-one", shotId: "shot-one", updatedAt: "2026-09-04T00:00:01.000Z", shot: { id: "shot-one", executionVideoPrompt: "修改后的提示词" } });
     });
 
     it("returns a compact shot patch when requested", async () => {

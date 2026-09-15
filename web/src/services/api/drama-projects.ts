@@ -380,6 +380,7 @@ export function createDramaProductionRun(
         frameCount?: number;
         frameIds?: string[];
         regenerateAll?: boolean;
+        frameOnly?: boolean;
         productionPlan?: DramaProductionPlan;
         shotSnapshot?: DramaShot;
         referenceSelections?: Record<string, string[]>;
@@ -408,6 +409,7 @@ export function createDramaProductionRun(
             ...(options.frameCount ? { frameCount: options.frameCount } : {}),
             ...(options.frameIds?.length ? { frameIds: options.frameIds } : {}),
             ...(options.regenerateAll ? { regenerateAll: true } : {}),
+            ...(options.frameOnly ? { frameOnly: true } : {}),
             ...(options.productionPlan ? { productionPlan: options.productionPlan } : {}),
             ...(options.shotSnapshot ? { shotSnapshot: options.shotSnapshot } : {}),
             ...(options.referenceSelections ? { referenceSelections: options.referenceSelections } : {}),
@@ -464,7 +466,7 @@ export function updateDramaShotPromptPatch(
     shotId: string,
     executionVideoPrompt?: string,
     imagePrompt?: string,
-    options?: { executionVideoPromptOrigin?: "manual" | "ai"; framePlan?: unknown; framePlanOrigin?: "manual" | "ai" },
+    options?: { executionVideoPromptOrigin?: "manual" | "ai"; framePlan?: unknown; framePlanOrigin?: "manual" | "ai"; storyboardFrames?: unknown },
 ) {
     return request<{ projectId: string; episodeId: string; shotId: string; updatedAt: string; shot: DramaShot }>(
         `/api/drama/projects/${encodeURIComponent(projectId)}/episodes/${encodeURIComponent(episodeId)}/shots/${encodeURIComponent(shotId)}/prompt?response=shot`,
@@ -475,6 +477,7 @@ export function updateDramaShotPromptPatch(
                 ...(executionVideoPrompt ? { executionVideoPrompt, ...(options?.executionVideoPromptOrigin ? { executionVideoPromptOrigin: options.executionVideoPromptOrigin } : {}) } : {}),
                 ...(imagePrompt ? { imagePrompt } : {}),
                 ...(options?.framePlan ? { framePlan: options.framePlan, ...(options.framePlanOrigin ? { framePlanOrigin: options.framePlanOrigin } : {}) } : {}),
+                ...(options?.storyboardFrames ? { storyboardFrames: options.storyboardFrames } : {}),
             }),
         },
     );

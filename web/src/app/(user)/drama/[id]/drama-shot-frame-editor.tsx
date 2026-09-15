@@ -20,6 +20,7 @@ import {
     getLatestDramaProductionRun,
     reviewDramaStoryboardFrame,
     updateDramaProductionRun,
+    updateDramaShotPromptPatch,
     updateDramaStoryboardFramePrompt,
 } from "@/services/api/drama-projects";
 import { getDramaFrameExternalBrief, optimizeDramaFramePrompt, optimizeDramaProjectFramePrompt } from "@/services/api/prompt-optimization";
@@ -45,6 +46,8 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
     const imageRequestConfig = resolveModelRequestConfig(config, config.imageModel || config.model);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const submittingRef = useRef(false);
+    const framePlanSaveQueueRef = useRef<{ framePlan: NonNullable<DramaShot["framePlan"]>; storyboardFrames: DramaShot["storyboardFrames"] } | null>(null);
+    const framePlanSaveActiveRef = useRef(false);
     const savingPromptRef = useRef(false);
     const [uploadTarget, setUploadTarget] = useState<{ kind: FrameKind; frameId?: string }>({ kind: "start" });
     const [uploading, setUploading] = useState("");
@@ -166,8 +169,8 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
         }
     };
 
-    const saveFramePlan = (nextBeats: DramaFrameBeat[], nextFrames = storedFrames) => {
-        updateShot(project.id, episodeId, shot.id, {
+    const saveFramePlan = async (nextBeats: DramaFrameBeat[], nextFrames = storedFrames) => {
+        const patch: Partial<DramaShot> = {
             storyboardFrameMode: "all_frames",
             framePlan: {
                 start: shot.framePlan?.start || { source: "independent" },
@@ -180,15 +183,38 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
             storyboardFrames: nextFrames,
             storyboardPrompt: undefined,
             storyboardEndPrompt: undefined,
-            fieldOrigins: { ...(shot.fieldOrigins || {}), framePlan: "manual" },
+            fieldOrigins: { ...(shot.fieldOrigins || {}), framePlan: "manual" as const },
             ...clearedGeneratedMedia,
-        });
+        };
+        updateShotLocally(patch);
+        if (!patch.framePlan) return;
+        framePlanSaveQueueRef.current = { framePlan: patch.framePlan, storyboardFrames: nextFrames };
+        if (framePlanSaveActiveRef.current) return;
+        framePlanSaveActiveRef.current = true;
+        try {
+            while (framePlanSaveQueueRef.current) {
+                const pending = framePlanSaveQueueRef.current;
+                framePlanSaveQueueRef.current = null;
+                try {
+                    const saved = await updateDramaShotPromptPatch(project.id, episodeId, shot.id, undefined, undefined, {
+                        framePlan: pending.framePlan,
+                        framePlanOrigin: "manual",
+                        storyboardFrames: pending.storyboardFrames,
+                    });
+                    if (!framePlanSaveQueueRef.current) replaceShot(project.id, episodeId, shot.id, saved.shot);
+                } catch (error) {
+                    message.error(error instanceof Error ? error.message : "帧计划保存失败");
+                }
+            }
+        } finally {
+            framePlanSaveActiveRef.current = false;
+        }
     };
 
     const editBeat = (beat: DramaFrameBeat, patch: Partial<Pick<DramaFrameBeat, "endSecond" | "actionPrompt" | "imagePrompt">>) => {
         try {
             const next = updateDramaFrameBeat(beats, storedFrames, beat.id, patch);
-            saveFramePlan(next.beats, next.frames);
+            void saveFramePlan(next.beats, next.frames);
         } catch (error) {
             message.error(error instanceof Error ? error.message : "帧计划更新失败");
         }
@@ -199,7 +225,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
             const nextBeats = insertDramaFrameBeat(beats, beat.id);
             const changedIndex = nextBeats.findIndex((item) => item.id === beat.id);
             const staleIds = new Set(nextBeats.slice(changedIndex).map((item) => item.id));
-            saveFramePlan(
+            void saveFramePlan(
                 nextBeats,
                 storedFrames.map((frame) => (staleIds.has(frame.id) ? staleFrame(frame) : frame)),
             );
@@ -214,7 +240,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
             const nextBeats = deleteDramaFrameBeat(beats, beat.id);
             const changedIndex = Math.max(0, index - 1);
             const staleIds = new Set(nextBeats.slice(changedIndex).map((item) => item.id));
-            saveFramePlan(
+            void saveFramePlan(
                 nextBeats,
                 storedFrames.filter((frame) => frame.id !== beat.id).map((frame) => (staleIds.has(frame.id) ? staleFrame(frame) : frame)),
             );
@@ -371,6 +397,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                 frameType: "all_frames",
                 frameIds: input.frameIds,
                 regenerateAll: input.regenerateAll,
+                frameOnly: input.frameIds.length === 1 && !input.regenerateAll,
             });
             const confirmed = await updateDramaProductionRun(project.id, run.id, { action: "confirm" });
             const frameSteps = confirmed.steps.filter((step) => step.shotId === shot.id && step.type === "keyframe");
@@ -451,6 +478,11 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                     // The next page sync or a manual refresh will reconcile the persisted run.
                 }
                 message.warning("生图提交结果暂时未确认，当前镜头已停止重复提交；刷新或切页回来会按服务端任务记录恢复状态");
+                return;
+            }
+            if (error instanceof DramaApiError && error.status === 409 && error.message === "短剧项目已在其他页面更新，请刷新后重试") {
+                updateShotLocally({ storyboardError: undefined });
+                message.warning("当前镜头版本刚刚发生变化，本次未提交生图；请再次点击当前帧“生成”");
                 return;
             }
             const liveFrames =
@@ -535,6 +567,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                 imageChannelId: imageRequestConfig.channelId,
                 imageQuality: config.quality,
                 frameType,
+                frameOnly: true,
             });
             const confirmed = await updateDramaProductionRun(project.id, run.id, { action: "confirm" });
             const step = confirmed.steps.find((item) => item.shotId === shot.id && item.type === frameType);

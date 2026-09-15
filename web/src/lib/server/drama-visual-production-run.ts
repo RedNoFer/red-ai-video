@@ -15,17 +15,19 @@ type VisualParameters = {
     frameType?: "start_frame" | "end_frame" | "all_frames";
     frameIds?: string[];
     regenerateAll?: boolean;
+    frameOnly?: boolean;
 };
 
 type AssetKind = "characters" | "scenes" | "props";
 // Reference-scene resolution changed: existing visual runs must not reuse stale snapshots.
-const VISUAL_DISPATCH_REVISION = "independent-frame-anchors-v4";
+const VISUAL_DISPATCH_REVISION = "independent-frame-anchors-v5";
 
 export function buildDramaVisualProductionRun(project: DramaProject, episode: DramaEpisode, parameters: VisualParameters): DramaProductionRun {
     const steps: DramaProductionStep[] = [];
     const assetSteps = new Map<string, string>();
     const selectedShots = selectedEpisodeShots(episode, parameters.shotIds);
-    const usedAssets = visualAssets(project, selectedShots);
+    const frameOnly = parameters.frameOnly === true;
+    const usedAssets = frameOnly ? [] : visualAssets(project, selectedShots);
 
     for (const { asset, kind, label } of usedAssets) {
         const id = `asset-${asset.id}`;
@@ -64,13 +66,14 @@ export function buildDramaVisualProductionRun(project: DramaProject, episode: Dr
             const selectedFrameIds = new Set(parameters.frameIds || []);
             for (const [index, beat] of beats.entries()) {
                 const frameReferences = orderedVisualReferenceIds(project, shot, beat);
-                const frameDependencies = frameReferences.map((id) => assetSteps.get(id)).filter((id): id is string => Boolean(id));
+                const frameDependencies = frameOnly ? [] : frameReferences.map((id) => assetSteps.get(id)).filter((id): id is string => Boolean(id));
                 const existing = shot.storyboardFrames?.find((frame) => frame.id === beat.id || frame.sequenceIndex === beat.sequenceIndex);
                 const continuityReference = index === 0 ? actualTail : undefined;
                 const inputHash = createHash("sha256")
                     .update(JSON.stringify({ beat, continuityReference: continuityReference?.mediaUrl, referenceUrls: frameReferences }))
                     .digest("hex");
                 const explicitlySelected = !selectedFrameIds.size || selectedFrameIds.has(beat.id);
+                if (frameOnly && !selectedFrameIds.has(beat.id)) continue;
                 const selectedForRegeneration = selectedFrameIds.size > 0 && selectedFrameIds.has(beat.id);
                 const existingReady = Boolean(
                     existing?.mediaUrl && existing.status === "success" && existing.continuityStatus === "passed" && (existing.source === "upload" || existing.inputHash === inputHash) && !parameters.regenerateAll && !selectedForRegeneration,
@@ -146,6 +149,7 @@ export function buildDramaVisualProductionRun(project: DramaProject, episode: Dr
                 frameType: parameters.frameType,
                 frameIds: parameters.frameIds,
                 regenerateAll: parameters.regenerateAll,
+                frameOnly,
             }),
         )
         .digest("hex");

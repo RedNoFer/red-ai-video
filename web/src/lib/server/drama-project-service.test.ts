@@ -122,6 +122,7 @@ import {
     deleteDramaStoryboardFrameForUser,
     updateDramaAssetForUser,
     updateDramaShotPromptForUser,
+    updateDramaShotPromptPatchForUser,
     updateDramaStoryboardFrameGenerationStateForUser,
     updateDramaStoryboardFramePromptForUser,
     validateDramaReferenceSelections,
@@ -162,6 +163,33 @@ describe("drama project service updates", () => {
         mocks.getDramaProductionRun.mockResolvedValue(null);
         mocks.updateDramaProductionRun.mockImplementation(async (_userId: string, run: unknown) => run);
         mocks.deleteUserOwnedMediaAssetsPhysically.mockResolvedValue({ deletedFiles: 1, deletedBytes: 12, blocked: [] });
+    });
+
+    it("saves a manual frame plan through the scoped shot mutation", async () => {
+        const current = project("2026-09-15T00:00:00.000Z", "项目");
+        current.episodes[0].shots = [
+            { id: "shot-one", title: "镜头", characterIds: [], sceneId: undefined, propIds: [], clueIds: [], imagePrompt: "画面", videoPrompt: "动作", cameraMotion: "固定", duration: 5, storyboardFrameMode: "all_frames", storyboardFrames: [] },
+        ] as never;
+        mocks.getDramaProject.mockResolvedValue(current);
+
+        const framePlan = {
+            start: { source: "independent" as const },
+            end: { required: false },
+            frames: [{ id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 5, actionPrompt: "抬手", imagePrompt: "人物抬手，位于桌边" }],
+        };
+        await updateDramaShotPromptPatchForUser("user-one", current.id, "episode-one", "shot-one", { framePlan, framePlanOrigin: "manual", storyboardFrames: [{ id: "f1", sequenceIndex: 1, source: "generated", status: "idle" }] });
+
+        expect(mocks.updateDramaProjectShotMutation).toHaveBeenCalledWith(
+            "user-one",
+            expect.objectContaining({
+                projectId: current.id,
+                episodeId: "episode-one",
+                shotId: "shot-one",
+                expectedUpdatedAt: current.updatedAt,
+                shot: expect.objectContaining({ framePlan, storyboardFrames: [{ id: "f1", sequenceIndex: 1, source: "generated", status: "idle" }] }),
+            }),
+        );
+        expect(mocks.updateDramaProject).not.toHaveBeenCalled();
     });
 
     it("removes a storyboard frame reference and physically deletes its owned media", async () => {
@@ -1408,6 +1436,53 @@ describe("drama project service updates", () => {
         const run = await createDramaProductionRunForUser("user-one", current.id, { episodeId: "episode-one", scope: "visual", shotIds: ["shot-one"], frameType: "all_frames", frameIds: ["f2"], shotSnapshot: snapshot });
 
         expect(run.steps.find((step) => step.frameId === "f2")).toMatchObject({ referenceImageUrls: undefined, referenceImageRemoteUrls: undefined });
+    });
+
+    it("uses an existing candidate asset for a direct frame run", async () => {
+        const current = project("2026-09-15T00:00:00.000Z", "项目");
+        current.characters = [
+            { id: "character-one", name: "角色", description: "角色", references: [{ id: "candidate", url: "https://cdn.example.com/character.png", source: "generated", status: "candidate", label: "角色候选", createdAt: current.updatedAt }] },
+        ];
+        current.episodes[0].shots = [
+            {
+                id: "shot-one",
+                title: "镜头",
+                characterIds: ["character-one"],
+                propIds: [],
+                clueIds: [],
+                imagePrompt: "角色站在桌边",
+                videoPrompt: "动作",
+                cameraMotion: "固定",
+                duration: 5,
+                storyboardFrameMode: "all_frames",
+                framePlan: { start: { source: "independent" }, end: { required: false }, frames: [{ id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 5, actionPrompt: "站立", imagePrompt: "角色站在桌边" }] },
+                storyboardFrames: [{ id: "f1", sequenceIndex: 1, source: "generated", status: "queued" }],
+            },
+        ] as never;
+        const run = {
+            id: "run-direct-frame",
+            projectId: current.id,
+            episodeId: "episode-one",
+            planRevision: "direct-frame",
+            status: "running",
+            scope: "visual",
+            mode: "strict",
+            confirmedAt: current.updatedAt,
+            parameterSnapshot: { imageModel: "image-default", videoModel: "", ratio: "9:16" },
+            steps: [{ id: "frame-shot-one-f1", type: "keyframe", shotId: "shot-one", frameId: "f1", sequenceIndex: 1, dependsOn: [], status: "ready", referenceAssetIds: ["character-one"] }],
+            blockers: [],
+            createdAt: current.updatedAt,
+            updatedAt: current.updatedAt,
+        } as never;
+        mocks.getDramaProject.mockResolvedValue(current);
+        mocks.findLatestDramaProductionRun.mockResolvedValue(run);
+        mocks.fetchInternalApi.mockResolvedValue({ ok: true, json: async () => ({ task: { id: "image-task-direct-frame" } }) });
+
+        await getLatestDramaProductionRunForUser("user-one", current.id, "episode-one", { scope: "visual", origin: "http://localhost:3010", cookie: "session=test" });
+
+        const body = JSON.parse(String(mocks.fetchInternalApi.mock.calls[0]?.[1]?.body));
+        expect(body.references).toEqual(expect.arrayContaining([expect.objectContaining({ id: "asset-character-one", url: "https://cdn.example.com/character.png" })]));
+        expect(mocks.fetchInternalApi).toHaveBeenCalledOnce();
     });
 
     it("submits the declared scene reference for a storyboard frame", async () => {

@@ -300,6 +300,21 @@ describe("drama director visual plan", () => {
         expect(unlocked.steps.find((step) => step.frameId === "f2")?.status).toBe("stale");
     });
 
+    it("builds a single-frame request without project asset anchor steps", () => {
+        const project = fixture();
+        const shot = project.episodes[0].shots[0];
+        shot.storyboardFrameMode = "all_frames";
+        shot.framePlan = {
+            start: { source: "independent" },
+            end: { required: false },
+            frames: [{ id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 2, actionPrompt: "抬手", imagePrompt: "人物抬手" }],
+        };
+
+        const run = buildDramaVisualProductionRun(project, project.episodes[0], { imageModel: "image-pro", frameType: "all_frames", frameIds: ["f1"], frameOnly: true });
+
+        expect(run.steps.map((step) => ({ type: step.type, frameId: step.frameId, assetId: step.assetId }))).toEqual([{ type: "keyframe", frameId: "f1", assetId: undefined }]);
+    });
+
     it("dispatches a selected later frame without generating its missing predecessors", () => {
         const project = fixture();
         project.characters[0].references = [{ id: "approved", url: "/api/character.png", source: "generated", status: "approved", label: "角色", createdAt: new Date(0).toISOString() }];
