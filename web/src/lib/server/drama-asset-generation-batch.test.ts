@@ -18,6 +18,7 @@ const updateBatch = vi.hoisted(() => vi.fn());
 const fetchInternalApi = vi.hoisted(() => vi.fn());
 const runRecovery = vi.hoisted(() => vi.fn());
 const listActiveBatches = vi.hoisted(() => vi.fn());
+const completeAsset = vi.hoisted(() => vi.fn());
 
 vi.mock("./drama-project-service", () => ({
     getDramaProjectForUser: vi.fn().mockResolvedValue({
@@ -44,7 +45,7 @@ vi.mock("./drama-asset-generation-batch-store", () => ({
     updateDramaAssetGenerationBatch: updateBatch,
 }));
 vi.mock("./internal-origin", () => ({ fetchInternalApi }));
-vi.mock("./drama-asset-completion-service", () => ({ completeDramaAsset: vi.fn() }));
+vi.mock("./drama-asset-completion-service", () => ({ completeDramaAsset: completeAsset }));
 vi.mock("./generation-task-recovery-service", () => ({ runGenerationTaskRecoveryBatch: runRecovery }));
 vi.mock("./maintenance-auth", () => ({ maintenanceWorkerHeaders: vi.fn(() => ({ authorization: "Bearer worker", "x-vozeb-pro-worker-user-id": "user-one" })), maintenanceWorkerContext: vi.fn(() => "worker-context:user-one") }));
 
@@ -185,6 +186,117 @@ describe("drama asset generation batches", () => {
         });
         expect(runRecovery).toHaveBeenCalledWith({ origin: "http://localhost:3000", cookie: "session=one", limit: 1, taskIds: ["image-task-one"] });
         expect(current.items[0]).toMatchObject({ status: "running", generationTaskId: "image-task-one" });
+    });
+
+    it("does not submit an image task after cancellation during settings completion", async () => {
+        fetchInternalApi.mockReset();
+        let current: DramaAssetGenerationBatch = {
+            id: "batch-cancel-during-completion",
+            projectId: "project-one",
+            status: "queued",
+            executionConfig: { completeSettings: true },
+            totalCount: 1,
+            completedCount: 0,
+            successCount: 0,
+            failedCount: 0,
+            cancelledCount: 0,
+            items: [{ id: "item-cancel-during-completion", kind: "characters", outputType: "reference_image", assetId: "rifa", assetName: "Rifa", prompt: "prompt", status: "queued", attempt: 0, referenceStatus: "queued" }],
+            createdAt: "2026-08-27T00:00:00.000Z",
+            updatedAt: "2026-08-27T00:00:00.000Z",
+        };
+        getBatch.mockImplementation(async () => current);
+        updateBatch.mockImplementation(async (_userId: string, next: typeof current) => {
+            current = next;
+            return current;
+        });
+        completeAsset.mockReset();
+        let finish!: (value: { project: unknown; planning: string; voice: string }) => void;
+        completeAsset.mockImplementationOnce(() => new Promise((resolve) => (finish = resolve)));
+
+        const processing = runDramaAssetGenerationBatchInBackground({ userId: "user-one", projectId: "project-one", batchId: current.id, config: current.executionConfig || {}, origin: "http://localhost:3000", cookie: "" });
+        await vi.waitFor(() => expect(completeAsset).toHaveBeenCalled());
+
+        current = { ...current, status: "cancelled", completedCount: 1, cancelledCount: 1, items: [{ ...current.items[0], status: "cancelled", completedAt: "2026-08-27T00:01:00.000Z" }] };
+        const project = await (await import("./drama-project-service")).getDramaProjectForUser("user-one", "project-one");
+        finish({ project, planning: "not_needed", voice: "not_needed" });
+        await processing;
+
+        expect(fetchInternalApi).not.toHaveBeenCalled();
+        expect(current.items[0].status).toBe("cancelled");
+    });
+
+    it("cancels a task created in the cancellation race instead of attaching it", async () => {
+        fetchInternalApi.mockReset();
+        let current: DramaAssetGenerationBatch = {
+            id: "batch-cancel-after-create",
+            projectId: "project-one",
+            status: "queued",
+            executionConfig: { completeSettings: false },
+            totalCount: 1,
+            completedCount: 0,
+            successCount: 0,
+            failedCount: 0,
+            cancelledCount: 0,
+            items: [{ id: "item-cancel-after-create", kind: "characters", outputType: "reference_image", assetId: "rifa", assetName: "Rifa", prompt: "prompt", status: "queued", attempt: 0, referenceStatus: "queued" }],
+            createdAt: "2026-08-27T00:00:00.000Z",
+            updatedAt: "2026-08-27T00:00:00.000Z",
+        };
+        getBatch.mockImplementation(async () => current);
+        updateBatch.mockImplementation(async (_userId: string, next: typeof current) => {
+            current = next;
+            return current;
+        });
+        fetchInternalApi.mockImplementation(async (url: string, options?: { method?: string }) => {
+            if (url.endsWith("/api/image-tasks")) {
+                current = { ...current, status: "cancelled", completedCount: 1, cancelledCount: 1, items: [{ ...current.items[0], status: "cancelled", completedAt: "2026-08-27T00:01:00.000Z" }] };
+                return { ok: true, status: 200, json: async () => ({ task: { id: "image-task-raced" } }) };
+            }
+            expect(options?.method).toBe("PATCH");
+            return { ok: true, status: 200, json: async () => ({}) };
+        });
+
+        await runDramaAssetGenerationBatchInBackground({ userId: "user-one", projectId: "project-one", batchId: current.id, config: current.executionConfig || {}, origin: "http://localhost:3000", cookie: "" });
+
+        expect(fetchInternalApi).toHaveBeenCalledTimes(2);
+        expect(fetchInternalApi.mock.calls[1]?.[0]).toBe("http://localhost:3000/api/image-tasks/image-task-raced");
+        expect(current.items[0].status).toBe("cancelled");
+        expect(current.items[0].generationTaskId).toBeUndefined();
+    });
+
+    it("cancels a task when cancellation wins immediately before the batch attach", async () => {
+        fetchInternalApi.mockReset();
+        let current: DramaAssetGenerationBatch = {
+            id: "batch-cancel-before-attach",
+            projectId: "project-one",
+            status: "queued",
+            executionConfig: { completeSettings: false },
+            totalCount: 1,
+            completedCount: 0,
+            successCount: 0,
+            failedCount: 0,
+            cancelledCount: 0,
+            items: [{ id: "item-cancel-before-attach", kind: "characters", outputType: "reference_image", assetId: "rifa", assetName: "Rifa", prompt: "prompt", status: "queued", attempt: 0, referenceStatus: "queued" }],
+            createdAt: "2026-08-27T00:00:00.000Z",
+            updatedAt: "2026-08-27T00:00:00.000Z",
+        };
+        let reads = 0;
+        getBatch.mockImplementation(async () => {
+            reads += 1;
+            const snapshot = current;
+            if (reads === 6) current = { ...current, status: "cancelled", completedCount: 1, cancelledCount: 1, items: [{ ...current.items[0], status: "cancelled", completedAt: "2026-08-27T00:01:00.000Z" }] };
+            return snapshot;
+        });
+        updateBatch.mockImplementation(async (_userId: string, next: typeof current) => {
+            current = next;
+            return current;
+        });
+        fetchInternalApi.mockResolvedValue({ ok: true, status: 200, json: async () => ({ task: { id: "image-task-before-attach" } }) });
+
+        await runDramaAssetGenerationBatchInBackground({ userId: "user-one", projectId: "project-one", batchId: current.id, config: current.executionConfig || {}, origin: "http://localhost:3000", cookie: "" });
+
+        expect(fetchInternalApi).toHaveBeenCalledTimes(2);
+        expect(fetchInternalApi.mock.calls[1]?.[0]).toBe("http://localhost:3000/api/image-tasks/image-task-before-attach");
+        expect(current.items[0].status).toBe("cancelled");
     });
 
     it("reconciles a completed image task into its batch item even when the item was not saved yet", async () => {

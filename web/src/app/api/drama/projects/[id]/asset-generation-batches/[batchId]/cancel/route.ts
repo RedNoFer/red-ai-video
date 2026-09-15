@@ -14,6 +14,7 @@ export async function POST(request: Request, context: Context) {
         const items = await Promise.all(
             batch.items.map(async (item) => {
                 if (item.status === "queued") return { ...item, status: "cancelled" as const, completedAt: new Date().toISOString() };
+                if (item.status === "running" && !item.generationTaskId) return { ...item, status: "cancelled" as const, completedAt: new Date().toISOString() };
                 if (item.status === "running" && item.generationTaskId) {
                     const endpoint = item.outputType === "character_voice" ? "audio-tasks" : "image-tasks";
                     const response = await fetch(new URL(`/api/${endpoint}/${encodeURIComponent(item.generationTaskId)}`, request.url), {

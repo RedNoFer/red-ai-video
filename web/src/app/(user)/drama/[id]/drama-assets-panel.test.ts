@@ -124,7 +124,7 @@ describe("drama asset image results", () => {
         expect(batchPanel).toContain("批量生成素材");
         expect(batchPanel).toContain("选择全部缺基准");
         expect(batchPanel).toContain("data-drama-asset-generation-progress");
-        expect(batchPanel).toContain("重试失败项");
+        expect(batchPanel).toContain("重试失败/取消项");
         expect(batchPanel).toContain('placement="bottomRight"');
         expect(batchPanel).toContain("autoAdjustOverflow");
         expect(batchPanel).toContain("calc(100vw - 24px)");

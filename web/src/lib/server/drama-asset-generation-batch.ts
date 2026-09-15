@@ -186,6 +186,7 @@ async function processDramaAssetGenerationBatch(input: { userId: string; project
     let batch = await getDramaAssetGenerationBatchForUser(input.userId, input.projectId, input.batchId);
     if (!batch || ["completed", "partial_failed", "failed", "cancelled"].includes(batch.status)) return;
     for (const item of batch.items) {
+        if (batch.status === "cancelled") return;
         if (item.status !== "queued" && !(item.status === "running" && !item.generationTaskId)) continue;
         if (item.outputType === "character_voice") {
             batch = await updateDramaAssetGenerationBatchForUser(input.userId, {
@@ -203,7 +204,12 @@ async function processDramaAssetGenerationBatch(input: { userId: string; project
         batch = running;
         const runningItem = running.items.find((candidate) => candidate.id === item.id) || item;
         const nextItem = await submitBatchItem(input, batch, runningItem, input.config);
-        batch = await updateDramaAssetGenerationBatchForUser(input.userId, { ...batch, items: batch.items.map((candidate) => (candidate.id === item.id ? nextItem : candidate)) });
+        const saved = await updateDramaAssetGenerationBatchForUser(input.userId, { ...batch, items: batch.items.map((candidate) => (candidate.id === item.id ? nextItem : candidate)) });
+        if (nextItem.status === "running" && nextItem.generationTaskId) {
+            const savedItem = saved.items.find((candidate) => candidate.id === item.id);
+            if (!savedItem || savedItem.status !== "running" || savedItem.generationTaskId !== nextItem.generationTaskId) await cancelCreatedImageTask(input, nextItem.generationTaskId);
+        }
+        batch = saved;
         if (nextItem.status === "queued") break;
     }
 }
@@ -214,6 +220,10 @@ async function submitBatchItem(
     item: DramaAssetGenerationBatchItem,
     config: BatchConfig,
 ) {
+    const initialState = await getDramaAssetGenerationBatchForUser(input.userId, input.projectId, batch.id);
+    const initialItem = initialState.items.find((candidate) => candidate.id === item.id);
+    if (!canSubmitBatchItem(initialItem, item)) return initialItem || item;
+
     let project = await getDramaProjectForUser(input.userId, input.projectId);
     let planningStatus = item.planningStatus;
     let voiceStatus = item.voiceStatus;
@@ -248,6 +258,10 @@ async function submitBatchItem(
         planningStatus = "success";
         voiceStatus = item.kind === "characters" ? "not_applicable" : voiceStatus;
     }
+
+    const readyState = await getDramaAssetGenerationBatchForUser(input.userId, input.projectId, batch.id);
+    const readyItem = readyState.items.find((candidate) => candidate.id === item.id);
+    if (!canSubmitBatchItem(readyItem, item)) return readyItem || item;
 
     const asset = project[item.kind].find((candidate) => candidate.id === item.assetId);
     const primary = asset ? (item.kind === "scenes" ? approvedScenePanoramaReference(asset) : approvedAssetReference(asset)) : undefined;
@@ -285,12 +299,44 @@ async function submitBatchItem(
             }
             return { ...common, referenceStatus: "error" as const, referenceError: error, status: "error" as const, error, completedAt: new Date().toISOString() };
         }
-        await runGenerationTaskRecoveryBatch({ origin: input.origin, cookie: input.cookie, limit: 1, taskIds: [payload.task.id] }).catch(() => undefined);
-        return { ...common, referenceStatus: "running" as const, status: "running" as const, generationTaskId: payload.task.id, candidateReferenceId: `batch-reference-${item.id}`, startedAt: item.startedAt || new Date().toISOString() };
+        const taskId = payload.task.id;
+        const createdState = await getDramaAssetGenerationBatchForUser(input.userId, input.projectId, batch.id);
+        const createdItem = createdState.items.find((candidate) => candidate.id === item.id);
+        if (batchItemNeedsCreatedTaskCancellation(createdItem, item, taskId)) {
+            await cancelCreatedImageTask(input, taskId);
+            return createdItem || withDramaAssetBatchTerminalStatus(common, "cancelled");
+        }
+        await runGenerationTaskRecoveryBatch({ origin: input.origin, cookie: input.cookie, limit: 1, taskIds: [taskId] }).catch(() => undefined);
+        const recoveredState = await getDramaAssetGenerationBatchForUser(input.userId, input.projectId, batch.id);
+        const recoveredItem = recoveredState.items.find((candidate) => candidate.id === item.id);
+        if (batchItemNeedsCreatedTaskCancellation(recoveredItem, item, taskId)) {
+            if (recoveredItem?.status !== "success" && recoveredItem?.status !== "error") await cancelCreatedImageTask(input, taskId);
+            return recoveredItem || withDramaAssetBatchTerminalStatus(common, "cancelled");
+        }
+        return { ...common, referenceStatus: "running" as const, status: "running" as const, generationTaskId: taskId, candidateReferenceId: `batch-reference-${item.id}`, startedAt: item.startedAt || new Date().toISOString() };
     } catch (error) {
         const message = error instanceof Error ? error.message : "图片任务创建失败";
-        return { ...common, status: "error" as const, error: message, completedAt: new Date().toISOString() };
+        return { ...common, referenceStatus: "error" as const, referenceError: message, status: "error" as const, error: message, completedAt: new Date().toISOString() };
     }
+}
+
+function canSubmitBatchItem(current: DramaAssetGenerationBatchItem | undefined, expected: DramaAssetGenerationBatchItem) {
+    return Boolean(current && current.status === "running" && current.attempt === expected.attempt && !current.generationTaskId);
+}
+
+function batchItemNeedsCreatedTaskCancellation(current: DramaAssetGenerationBatchItem | undefined, expected: DramaAssetGenerationBatchItem, taskId: string) {
+    if (!current || current.attempt !== expected.attempt) return true;
+    if (current.status === "success" || current.status === "error") return false;
+    return current.status !== "running" || Boolean(current.generationTaskId && current.generationTaskId !== taskId);
+}
+
+async function cancelCreatedImageTask(input: { userId: string; origin: string; cookie: string }, taskId: string) {
+    const authHeaders = input.cookie ? { cookie: input.cookie } : maintenanceWorkerHeaders(input.userId);
+    await fetchInternalApi(`${input.origin}/api/image-tasks/${encodeURIComponent(taskId)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...authHeaders },
+        body: JSON.stringify({ status: "cancelled" }),
+    }).catch(() => undefined);
 }
 
 function recomputeBatch(batch: DramaAssetGenerationBatch): DramaAssetGenerationBatch {

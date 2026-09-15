@@ -125,7 +125,7 @@ export function DramaAssetGenerationBatchPanel({ project, onProjectReload }: { p
         try {
             setBatch(await retryDramaAssetGenerationBatch(project.id, batch.id, { ...config, model: config.imageModel || config.model, imageModel: config.imageModel || config.model, count: "1", completeSettings }));
             setProgressError(undefined);
-            message.success("失败项已重新排队");
+            message.success("失败或取消项已重新排队");
         } catch (error) {
             message.error(error instanceof Error ? error.message : "重试失败");
         } finally {
@@ -292,9 +292,9 @@ function BatchProgressDetails({
                             取消未完成
                         </Button>
                     ) : null}
-                    {batch.failedCount ? (
+                    {batch.failedCount || batch.cancelledCount ? (
                         <Button size="small" icon={<RefreshCw className="size-3.5" />} loading={loading} onClick={onRetry}>
-                            重试失败项
+                            重试失败/取消项
                         </Button>
                     ) : null}
                     {!active ? (
@@ -327,7 +327,18 @@ function BatchProgressDetails({
                             <span>设定：{item.planningStatus === "success" ? "已补" : item.planningStatus === "error" ? "失败" : item.planningStatus === "queued" ? "排队中" : "无需"}</span>
                             <span>音色：{item.voiceStatus === "success" ? "已补" : item.voiceStatus === "error" ? "失败" : item.voiceStatus === "not_applicable" ? "不适用" : "排队中"}</span>
                             <span>
-                                基准图：{item.referenceStatus === "primary" ? "已设主基准" : item.referenceStatus === "candidate" ? "候选已生成" : item.referenceStatus === "error" ? "失败" : item.referenceStatus === "not_applicable" ? "无需" : "排队中"}
+                                基准图：
+                                {item.status === "cancelled"
+                                    ? "已取消"
+                                    : item.referenceStatus === "primary"
+                                      ? "已设主基准"
+                                      : item.referenceStatus === "candidate"
+                                        ? "候选已生成"
+                                        : item.referenceStatus === "error"
+                                          ? "失败"
+                                          : item.referenceStatus === "not_applicable"
+                                            ? "无需"
+                                            : "排队中"}
                             </span>
                             {item.generationExecutionPhase ? <span>任务：{generationPhaseLabel(item.generationExecutionPhase)}</span> : null}
                         </div>

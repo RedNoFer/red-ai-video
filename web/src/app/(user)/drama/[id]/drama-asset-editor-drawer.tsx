@@ -83,6 +83,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
     const [draft, setDraft] = useState<AssetDraft>(emptyDraft);
     const [uploading, setUploading] = useState(false);
     const [generating, setGenerating] = useState(false);
+    const [generationStatusLoading, setGenerationStatusLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const [refinementPrompt, setRefinementPrompt] = useState("");
     const [refinementProposal, setRefinementProposal] = useState<DramaAssetRefinementProposal>();
@@ -118,11 +119,15 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
     const voicePreviewStatus = draft.voiceProfile.previewStatus === "success" ? "试听已完成" : draft.voiceProfile.previewStatus === "error" ? "试听生成失败" : ["queued", "running"].includes(draft.voiceProfile.previewStatus || "") ? "试听生成中" : "";
     const voiceCreationActive = creatingVoice || ["queued", "running"].includes(draft.voiceProfile.creationStatus || "");
     const voicePreviewActive = syncingVoicePreview || ["queued", "running"].includes(draft.voiceProfile.previewStatus || "");
+    const generationBusy = generating || generationStatusLoading;
 
     useEffect(() => {
         if (!open) {
             editorKeyRef.current = "";
             generationHydrationKeyRef.current = "";
+            handledGenerationTaskIdsRef.current.clear();
+            setGenerating(false);
+            setGenerationStatusLoading(false);
             setRefinementPrompt("");
             setRefinementProposal(undefined);
             setSupplierPromptOverride("");
@@ -586,7 +591,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
         if (generationHydrationKeyRef.current === hydrationKey) return;
         generationHydrationKeyRef.current = hydrationKey;
         let disposed = false;
-        setGenerating(false);
+        setGenerationStatusLoading(true);
         void getDramaAssetGenerationStatus(project.id, kind, asset.id)
             .then(async (task) => {
                 if (disposed) return;
@@ -602,7 +607,10 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                     setGenerating(false);
                     return;
                 }
-                if (handledGenerationTaskIdsRef.current.has(task.id)) return;
+                if (handledGenerationTaskIdsRef.current.has(task.id)) {
+                    setGenerating(true);
+                    return;
+                }
                 handledGenerationTaskIdsRef.current.add(task.id);
                 setGenerating(true);
                 try {
@@ -634,6 +642,9 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
             })
             .catch(() => {
                 if (!disposed) setGenerating(false);
+            })
+            .finally(() => {
+                if (!disposed) setGenerationStatusLoading(false);
             });
         return () => {
             disposed = true;
@@ -641,7 +652,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
     }, [asset?.id, config.imageModel, config.imageModels[0], kind, message, open, persistGeneratedReference, project.id]);
 
     const generateReference = async (proposalOverride?: DramaAssetRefinementProposal, referenceOverride?: DramaAssetReference) => {
-        if (!asset || kind === "clues" || generating) return;
+        if (!asset || kind === "clues" || generationBusy) return;
         setGenerating(true);
         try {
             const activeProposal = proposalOverride || refinementProposal;
@@ -815,7 +826,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                         </Button>
                     ) : null}
                     {asset ? (
-                        <Button type="primary" size="small" className="!ml-auto !h-8 !px-3" icon={<Sparkles className="size-3.5" />} loading={generating} onClick={() => void runCompletion()}>
+                        <Button type="primary" size="small" className="!ml-auto !h-8 !px-3" icon={<Sparkles className="size-3.5" />} loading={generationBusy} disabled={generationBusy} onClick={() => void runCompletion()}>
                             智能补全全部缺失
                         </Button>
                     ) : null}
@@ -1014,7 +1025,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                                         <Button size="small" onClick={applyRefinementDraft}>
                                             仅应用到设定
                                         </Button>
-                                        <Button size="small" type="primary" icon={<Sparkles className="size-3.5" />} loading={generating} disabled={generating} onClick={() => void generateReference()}>
+                                        <Button size="small" type="primary" icon={<Sparkles className="size-3.5" />} loading={generationBusy} disabled={generationBusy} onClick={() => void generateReference()}>
                                             生成调整候选
                                         </Button>
                                     </div>
@@ -1083,7 +1094,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                                         上传候选
                                     </Button>
                                     {kind !== "clues" ? (
-                                        <Button icon={<Sparkles className="size-3.5" />} loading={generating} disabled={generating} onClick={() => void generateReference()}>
+                                        <Button icon={<Sparkles className="size-3.5" />} loading={generationBusy} disabled={generationBusy} onClick={() => void generateReference()}>
                                             生成候选
                                         </Button>
                                     ) : null}

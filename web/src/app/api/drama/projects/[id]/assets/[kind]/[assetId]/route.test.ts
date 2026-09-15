@@ -43,21 +43,19 @@ describe("PATCH /api/drama/projects/[id]/assets/[kind]/[assetId]", () => {
         expect(response.status).toBe(200);
         expect(mocks.queryStoredGenerationTasks).toHaveBeenCalledWith(
             "image",
-            expect.objectContaining({ userId: "user-one", projectId: "project-one", surface: "drama", assetKind: "characters", assetId: "character-one", statuses: ["pending", "running"], limit: 1 }),
+            expect.objectContaining({ userId: "user-one", projectId: "project-one", surface: "drama", assetKind: "characters", assetId: "character-one", statuses: ["pending", "running", "success"], limit: 1 }),
         );
         await expect(response.json()).resolves.toMatchObject({ data: { task: { id: "task-one", model: "image-model", status: "running" } } });
     });
 
-    it("does not restore a historical completed task as an active generation", async () => {
-        mocks.queryStoredGenerationTasks.mockImplementation(async (_type: string, options: { statuses?: string[] }) =>
-            options.statuses?.includes("success") ? [{ id: "historical-task", kind: "generation", status: "success", config: { model: "image-model" }, prompt: "历史场景图" }] : [],
-        );
+    it("returns a completed asset task so the editor can persist a result after the page was closed", async () => {
+        mocks.queryStoredGenerationTasks.mockResolvedValue([{ id: "completed-task", kind: "generation", status: "success", config: { model: "image-model" }, prompt: "中式书房道具图", generationStage: "initial" }]);
 
         const response = await GET(new Request("http://localhost"), context());
 
         expect(response.status).toBe(200);
-        expect(mocks.queryStoredGenerationTasks).toHaveBeenCalledWith("image", expect.objectContaining({ statuses: ["pending", "running"] }));
-        await expect(response.json()).resolves.toMatchObject({ data: { task: null } });
+        expect(mocks.queryStoredGenerationTasks).toHaveBeenCalledWith("image", expect.objectContaining({ statuses: ["pending", "running", "success"] }));
+        await expect(response.json()).resolves.toMatchObject({ data: { task: { id: "completed-task", status: "success" } } });
     });
 
     it("requires authentication", async () => {

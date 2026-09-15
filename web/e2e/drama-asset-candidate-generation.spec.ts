@@ -192,6 +192,81 @@ test("生成候选通过真实图片任务链路完成", async ({ page, request 
     expect(submittedSizes[0]).toBe("16:9");
 });
 
+test("资产生图在编辑器重开期间保持任务锁定", async ({ page, request }) => {
+    const created = await request.post("/api/drama/projects", { data: { title: `E2E 生图恢复锁定 ${Date.now()}`, ratio: "9:16" } });
+    expect(created.ok(), await created.text()).toBe(true);
+    const project = ((await created.json()) as { data: { project: DramaProject } }).data.project;
+    const propId = "prop-generation-recovery-lock-e2e";
+    const saved = await request.patch(`/api/drama/projects/${project.id}`, {
+        data: {
+            ...project,
+            props: [{ id: propId, name: "恢复锁定道具", description: "用于验证编辑器重开后仍不能重复提交", profile: { visualIdentity: "固定黑色金属道具" }, references: [] }],
+        },
+    });
+    expect(saved.ok(), await saved.text()).toBe(true);
+
+    let statusCalls = 0;
+    let imageTaskCalls = 0;
+    let releaseReopenedStatus!: () => void;
+    let releaseReopenedTask!: () => void;
+    const reopenedStatus = new Promise<void>((resolve) => {
+        releaseReopenedStatus = resolve;
+    });
+    const reopenedTask = new Promise<void>((resolve) => {
+        releaseReopenedTask = resolve;
+    });
+
+    await page.route(
+        (url) => url.pathname === `/api/drama/projects/${project.id}/assets/props/${propId}`,
+        async (route) => {
+            statusCalls += 1;
+            if (statusCalls === 2) await reopenedStatus;
+            await route.fulfill({
+                json: {
+                    code: 0,
+                    data: { task: { id: "task-recovery-lock", kind: "generation", model: "e2e-image", status: "pending", prompt: "固定黑色金属道具", generationStage: "initial" } },
+                    msg: "资产生成状态已读取",
+                },
+            });
+        },
+    );
+    await page.route(
+        (url) => url.pathname === "/api/image-tasks/task-recovery-lock",
+        async (route) => {
+            imageTaskCalls += 1;
+            if (imageTaskCalls > 1) await reopenedTask;
+            await route.fulfill({ json: { task: { id: "task-recovery-lock", kind: "generation", status: "error", error: "测试结束" } } });
+        },
+    );
+    try {
+        await page.goto(`/drama/${project.id}`, { waitUntil: "domcontentloaded" });
+        await page.getByRole("button", { name: "打开项目资产" }).click();
+        await page.locator('[aria-label="项目资产分类"] button').filter({ hasText: "道具" }).click();
+        await page.locator("[data-drama-assets-library] article").filter({ hasText: "恢复锁定道具" }).getByRole("button", { name: "编辑道具：恢复锁定道具" }).last().click();
+        const drawer = page.getByRole("dialog", { name: "编辑道具" });
+        const generate = drawer.getByRole("button", { name: /生成候选/ });
+        await expect.poll(() => statusCalls).toBe(1);
+        await expect.poll(() => imageTaskCalls).toBe(1);
+        await expect(generate).toBeEnabled();
+
+        await drawer.getByRole("button", { name: /取\s*消/ }).click();
+        await expect(drawer).toHaveCount(0);
+        await page.locator("[data-drama-assets-library] article").filter({ hasText: "恢复锁定道具" }).getByRole("button", { name: "编辑道具：恢复锁定道具" }).last().click();
+        const reopened = page.getByRole("dialog", { name: "编辑道具" });
+        const reopenedGenerate = reopened.getByRole("button", { name: /生成候选/ });
+        await expect.poll(() => statusCalls).toBe(2);
+        await expect(reopenedGenerate).toBeDisabled();
+
+        releaseReopenedStatus();
+        await expect(reopenedGenerate).toBeDisabled();
+        releaseReopenedTask();
+        await expect(reopenedGenerate).toBeEnabled();
+    } finally {
+        const deleted = await request.delete(`/api/drama/projects/${project.id}`);
+        expect(deleted.ok(), await deleted.text()).toBe(true);
+    }
+});
+
 test("生成调整候选通过历史方案链路完成", async ({ page, request }) => {
     await resetProtocolFixture(request);
     const settings = await request.patch("/api/admin/settings", { data: sub2ApiImageSettingsPatch() });
@@ -352,6 +427,95 @@ test("批量完成后将基准图写入项目资产列表", async ({ page, reque
     await page.getByRole("button", { name: "编辑场景：批量基准场景" }).click();
     const drawer = page.getByRole("dialog", { name: "编辑场景" });
     await expect(drawer.locator("[data-drama-primary-preview] [data-drama-scene-reference-board]")).toHaveCount(1);
+});
+
+test("批量进度取消后可以通过界面重新排队", async ({ page, request }) => {
+    const created = await request.post("/api/drama/projects", { data: { title: "E2E 批量取消重试", ratio: "9:16" } });
+    expect(created.ok(), await created.text()).toBe(true);
+    const project = ((await created.json()) as { data: { project: DramaProject } }).data.project;
+    const propId = "prop-batch-cancel-retry-e2e";
+    const saved = await request.patch(`/api/drama/projects/${project.id}`, {
+        data: {
+            ...project,
+            props: [{ id: propId, name: "取消重试道具", description: "用于验证批量任务取消和重新排队", profile: { visualIdentity: "黑色木盒", styling: "旧木质", colorPalette: "黑棕", consistencyRules: "木盒形状保持一致" }, references: [] }],
+        },
+    });
+    expect(saved.ok(), await saved.text()).toBe(true);
+
+    const batchId = "batch-ui-cancel-retry";
+    let state: "running" | "cancelled" | "queued" = "running";
+    let cancelCalls = 0;
+    let retryCalls = 0;
+    const batchPayload = () => ({
+        id: batchId,
+        projectId: project.id,
+        status: state,
+        totalCount: 1,
+        completedCount: state === "running" ? 0 : 1,
+        successCount: 0,
+        failedCount: 0,
+        cancelledCount: state === "cancelled" ? 1 : 0,
+        items: [
+            {
+                id: "batch-item-ui-cancel-retry",
+                kind: "props",
+                outputType: "reference_image",
+                assetId: propId,
+                assetName: "取消重试道具",
+                prompt: "批量测试",
+                status: state === "running" ? "running" : state === "cancelled" ? "cancelled" : "queued",
+                attempt: 1,
+                referenceStatus: state === "cancelled" ? "error" : "running",
+            },
+        ],
+        createdAt: "2026-09-15T00:00:00.000Z",
+        updatedAt: "2026-09-15T00:00:00.000Z",
+    });
+
+    await page.route(`**/api/drama/projects/${project.id}/asset-generation-batches`, async (route) => {
+        if (route.request().method() === "GET") {
+            await route.fulfill({ json: { code: 0, data: { batches: [batchPayload()] }, msg: "OK" } });
+            return;
+        }
+        await route.fallback();
+    });
+    await page.route(`**/api/drama/projects/${project.id}/asset-generation-batches/${batchId}`, async (route) => {
+        if (route.request().method() === "GET") {
+            await route.fulfill({ json: { code: 0, data: { batch: batchPayload() }, msg: "OK" } });
+            return;
+        }
+        await route.fallback();
+    });
+    await page.route(`**/api/drama/projects/${project.id}/asset-generation-batches/${batchId}/cancel`, async (route) => {
+        cancelCalls += 1;
+        state = "cancelled";
+        await route.fulfill({ json: { code: 0, data: { batch: batchPayload() }, msg: "批量任务已取消" } });
+    });
+    await page.route(`**/api/drama/projects/${project.id}/asset-generation-batches/${batchId}/retry`, async (route) => {
+        retryCalls += 1;
+        state = "queued";
+        await route.fulfill({ json: { code: 0, data: { batch: batchPayload() }, msg: "失败或取消项已重新排队，后台继续处理" } });
+    });
+
+    try {
+        await page.goto(`/drama/${project.id}`, { waitUntil: "networkidle" });
+        await page.getByRole("button", { name: "打开项目资产" }).click();
+        await expect(page.locator("[data-drama-assets-library]")).toBeVisible();
+        await expect(page.getByRole("button", { name: /批量生成进度/ })).toBeVisible();
+
+        await page.getByRole("button", { name: /批量生成进度/ }).click();
+        await page.getByRole("button", { name: "取消未完成" }).click();
+        await expect(page.getByText("取消 1", { exact: true })).toBeVisible();
+        await expect(page.getByRole("button", { name: "重试失败/取消项" })).toBeVisible();
+
+        await page.getByRole("button", { name: "重试失败/取消项" }).click();
+        await expect(page.getByRole("button", { name: "取消未完成" })).toBeVisible();
+        expect(cancelCalls).toBe(1);
+        expect(retryCalls).toBe(1);
+    } finally {
+        const deleted = await request.delete(`/api/drama/projects/${project.id}`);
+        expect(deleted.ok(), await deleted.text()).toBe(true);
+    }
 });
 
 function sub2ApiImageSettingsPatch() {
