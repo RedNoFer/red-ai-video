@@ -1760,7 +1760,7 @@ async function syncDramaVisualRunNow(userId: string, project: DramaProject, run:
 function reconcileTerminalDramaVisualSteps(project: DramaProject, run: DramaProductionRun, steps: DramaProductionRun["steps"]) {
     let nextProject = project;
     for (const step of steps) {
-        if (step.outputUrls?.length && step.status === "success") {
+        if (step.outputUrls?.length && (step.status === "success" || step.status === "needs_review")) {
             nextProject = applyDramaVisualStepResult(
                 nextProject,
                 run.episodeId,
