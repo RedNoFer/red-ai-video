@@ -16,7 +16,7 @@ vi.mock("@/lib/server/data-adapter", () => ({
     }),
 }));
 
-import { createDramaProject, deleteDramaProject, getDramaProject, listDramaProjectSummaries, updateDramaProject } from "./drama-project-store";
+import { createDramaProject, deleteDramaProject, getDramaProject, listDramaProjectSummaries, updateDramaProject, updateDramaProjectShotMutation } from "./drama-project-store";
 
 describe("drama project file provider", () => {
     beforeEach(() => {
@@ -144,6 +144,43 @@ describe("drama project file provider", () => {
 
         await expect(updateDramaProject("user-one", stale, original.updatedAt)).rejects.toMatchObject({ status: 409 });
         await expect(getDramaProject("one", "user-one")).resolves.toMatchObject({ title: "第一处修改" });
+    });
+
+    it("keeps the large archive while applying only the current shot mutation", async () => {
+        const original = project("one", "大型项目");
+        original.productionArchive = {
+            formatVersion: "vozeb-drama-production-package-v1",
+            sections: [{ code: "EP01", title: "完整制作包", content: "x".repeat(9 * 1024 * 1024) }],
+            promptAssets: [],
+            dialogueDirections: [],
+            voiceDirections: [],
+            silenceDirections: [],
+            referencePlan: [],
+            generationOrder: [],
+            qcReport: "",
+        };
+        original.episodes[0].shots = [{ id: "shot-one", title: "旧镜头" } as never];
+        await createDramaProject("user-one", original);
+
+        const shot = { id: "shot-one", title: "已排队" } as never;
+        await updateDramaProjectShotMutation("user-one", { projectId: original.id, episodeId: "episode-one", shotId: "shot-one", shot, expectedUpdatedAt: original.updatedAt });
+
+        await expect(getDramaProject("one", "user-one")).resolves.toMatchObject({ productionArchive: original.productionArchive, episodes: [{ shots: [shot] }] });
+    });
+
+    it("persists a shot mutation without sending the full project to PostgreSQL", async () => {
+        mocks.provider = "postgres";
+        mocks.postgresQuery.mockResolvedValueOnce({ rows: [{ updated_at: "2026-09-15T00:00:01.000Z" }] });
+
+        const shot = { id: "shot-one", title: "当前镜头" } as never;
+        await expect(updateDramaProjectShotMutation("user-one", { projectId: "project-one", episodeId: "episode-one", shotId: "shot-one", shot, expectedUpdatedAt: "2026-09-15T00:00:00.000Z" })).resolves.toMatchObject({ projectId: "project-one", shot });
+
+        const [statement, values] = mocks.postgresQuery.mock.calls[0] as [string, unknown[]];
+        expect(statement).toContain("jsonb_set");
+        expect(statement).toContain("jsonb_array_elements");
+        expect(statement).not.toContain("SET title =");
+        expect(values[4]).toBe(JSON.stringify(shot));
+        expect(String(values[4]).length).toBeLessThan(1024);
     });
 });
 

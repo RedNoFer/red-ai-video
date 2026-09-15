@@ -14,6 +14,7 @@ import {
     updateDramaShotImagePrompt,
     updateDramaShotPrompt,
     updateDramaShotPromptPatch,
+    updateDramaStoryboardFrameGenerationState,
     updateDramaStoryboardFramePrompt,
 } from "./drama-projects";
 import type { DramaProductionPackagePreview, DramaProject } from "@/lib/drama-project-contract";
@@ -58,6 +59,29 @@ describe("drama project api", () => {
         await createDramaProductionRun("project-one", "episode-one", "visual", undefined, { shotIds: ["shot-one"], frameType: "all_frames", frameIds: ["f2"], regenerateAll: true });
 
         expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({ episodeId: "episode-one", scope: "visual", shotIds: ["shot-one"], frameType: "all_frames", frameIds: ["f2"], regenerateAll: true });
+    });
+
+    it("saves only the current shot frame-generation patch", async () => {
+        const fetchMock = vi.fn().mockResolvedValue(Response.json({ code: 0, data: { projectId: "project-one", episodeId: "episode-one", shotId: "shot-one", updatedAt: "2026-09-15T00:00:01.000Z", shot: { id: "shot-one" } }, msg: "OK" }));
+        vi.stubGlobal("fetch", fetchMock);
+
+        await updateDramaStoryboardFrameGenerationState("project-one", "episode-one", "shot-one", {
+            frameType: "all_frames",
+            frameIds: ["f2"],
+            framePlan: {
+                frames: [
+                    { id: "f1", imagePrompt: "画面一" },
+                    { id: "f2", imagePrompt: "画面二" },
+                ],
+            },
+        });
+
+        const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+        expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/drama/projects/project-one/episodes/episode-one/shots/shot-one/frames/generation-state");
+        expect(body).toMatchObject({ frameType: "all_frames", frameIds: ["f2"] });
+        expect(body).not.toHaveProperty("project");
+        expect(body).not.toHaveProperty("episodes");
+        expect(String(fetchMock.mock.calls[0]?.[1]?.body).length).toBeLessThan(256 * 1024);
     });
 
     it("does not resend full AI prompt revisions when locking a production run", async () => {

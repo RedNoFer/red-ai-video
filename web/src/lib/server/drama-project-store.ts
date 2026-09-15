@@ -1,4 +1,4 @@
-import type { DramaProject, DramaProjectSummary, DramaProjectSummaryPage } from "@/lib/drama-project-contract";
+import type { DramaProject, DramaProjectSummary, DramaProjectSummaryPage, DramaShot } from "@/lib/drama-project-contract";
 import { normalizeDramaImageSize } from "@/lib/drama-image-size";
 import { summarizeDramaProject } from "@/lib/drama-project-summary";
 import { readJsonDataFile, writeJsonDataFile } from "@/lib/server/data-adapter";
@@ -6,6 +6,14 @@ import { ensurePostgresSchema, getDatabaseProvider, postgresQuery } from "@/lib/
 
 type DramaProjectRecord = { userId: string; project: DramaProject };
 type DramaProjectDatabase = { version: 1; projects: DramaProjectRecord[] };
+export type DramaProjectShotMutation = {
+    projectId: string;
+    episodeId: string;
+    shotId: string;
+    shot: DramaShot;
+    expectedUpdatedAt?: string;
+};
+export type DramaProjectShotMutationAck = { projectId: string; episodeId: string; shotId: string; updatedAt: string; shot: DramaShot };
 
 const FILE_NAME = "drama-projects.json";
 
@@ -154,6 +162,91 @@ export async function updateDramaProject(userId: string, project: DramaProject, 
     return project;
 }
 
+/** Persists a single shot mutation without sending or rewriting the full project from the service layer. */
+export async function updateDramaProjectShotMutation(userId: string, mutation: DramaProjectShotMutation): Promise<DramaProjectShotMutationAck> {
+    if (getDatabaseProvider() === "postgres") return updatePostgresProjectShotMutation(userId, mutation);
+
+    let found = false;
+    let ack: DramaProjectShotMutationAck | null = null;
+    await mutateDatabase((db) => ({
+        ...db,
+        projects: db.projects.map((record) => {
+            if (record.userId !== userId || record.project.id !== mutation.projectId) return record;
+            found = true;
+            const current = record.project;
+            if (mutation.expectedUpdatedAt && current.updatedAt !== mutation.expectedUpdatedAt) throw new DramaProjectStoreError("短剧项目已在其他页面更新，请刷新后重试", 409);
+            const updatedAt = nextProjectVersion(current.updatedAt);
+            const episodes = current.episodes.map((episode) => {
+                if (episode.id !== mutation.episodeId) return episode;
+                const shots = episode.shots.map((shot) => (shot.id === mutation.shotId ? mutation.shot : shot));
+                return { ...episode, renderTask: undefined, shots };
+            });
+            const episode = current.episodes.find((item) => item.id === mutation.episodeId);
+            const shot = episode?.shots.find((item) => item.id === mutation.shotId);
+            if (!episode) throw new DramaProjectStoreError("短剧剧集不存在", 404);
+            if (!shot) throw new DramaProjectStoreError("短剧镜头不存在", 404);
+            ack = { projectId: mutation.projectId, episodeId: mutation.episodeId, shotId: mutation.shotId, updatedAt, shot: mutation.shot };
+            return { ...record, project: { ...current, episodes, updatedAt } };
+        }),
+    }));
+    if (!found) throw new DramaProjectStoreError("短剧项目不存在", 404);
+    if (!ack) throw new DramaProjectStoreError("短剧镜头不存在", 404);
+    return ack;
+}
+
+async function updatePostgresProjectShotMutation(userId: string, mutation: DramaProjectShotMutation): Promise<DramaProjectShotMutationAck> {
+    await ensurePostgresSchema();
+    const result = await postgresQuery<{ updated_at: Date | string }>(
+        `WITH versioned AS (SELECT clock_timestamp() AS now), target AS (
+             SELECT episode.ord AS episode_ord, shot.ord AS shot_ord
+             FROM drama_projects AS project
+             CROSS JOIN LATERAL jsonb_array_elements(COALESCE(project.project_json->'episodes', '[]'::jsonb)) WITH ORDINALITY AS episode(item, ord)
+             CROSS JOIN LATERAL jsonb_array_elements(COALESCE(episode.item->'shots', '[]'::jsonb)) WITH ORDINALITY AS shot(item, ord)
+             WHERE project.id = $1 AND project.user_id = $2
+               AND episode.item->>'id' = $3
+               AND shot.item->>'id' = $4
+         )
+         UPDATE drama_projects AS project
+         SET project_json = jsonb_set(
+                 jsonb_set(project.project_json, ARRAY['episodes', (target.episode_ord - 1)::text, 'shots', (target.shot_ord - 1)::text], $5::jsonb, false)
+                 #- ARRAY['episodes', (target.episode_ord - 1)::text, 'renderTask'],
+                 '{updatedAt}', to_jsonb(to_char(versioned.now AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')), true
+             ),
+             updated_at = versioned.now
+         FROM target, versioned
+         WHERE project.id = $1 AND project.user_id = $2
+           AND ($6::text IS NULL OR project.project_json->>'updatedAt' = $6)
+         RETURNING project.updated_at AS updated_at`,
+        [mutation.projectId, userId, mutation.episodeId, mutation.shotId, JSON.stringify(mutation.shot), mutation.expectedUpdatedAt || null],
+    );
+    if (result.rows[0]) {
+        return { ...mutation, updatedAt: timestamp(result.rows[0].updated_at) };
+    }
+
+    const existing = await postgresQuery<{ project_updated_at: string | null; has_episode: boolean; has_shot: boolean }>(
+        `SELECT project_json->>'updatedAt' AS project_updated_at,
+                EXISTS (
+                    SELECT 1 FROM jsonb_array_elements(COALESCE(project_json->'episodes', '[]'::jsonb)) episode
+                    WHERE episode->>'id' = $3
+                ) AS has_episode,
+                EXISTS (
+                    SELECT 1
+                    FROM jsonb_array_elements(COALESCE(project_json->'episodes', '[]'::jsonb)) episode
+                    CROSS JOIN LATERAL jsonb_array_elements(COALESCE(episode->'shots', '[]'::jsonb)) shot
+                    WHERE episode->>'id' = $3 AND shot->>'id' = $4
+                ) AS has_shot
+         FROM drama_projects
+         WHERE id = $1 AND user_id = $2`,
+        [mutation.projectId, userId, mutation.episodeId, mutation.shotId],
+    );
+    const row = existing.rows[0];
+    if (!row) throw new DramaProjectStoreError("短剧项目不存在", 404);
+    if (mutation.expectedUpdatedAt && row.project_updated_at !== mutation.expectedUpdatedAt) throw new DramaProjectStoreError("短剧项目已在其他页面更新，请刷新后重试", 409);
+    if (!row.has_episode) throw new DramaProjectStoreError("短剧剧集不存在", 404);
+    if (!row.has_shot) throw new DramaProjectStoreError("短剧镜头不存在", 404);
+    throw new DramaProjectStoreError("短剧项目保存失败", 409);
+}
+
 export async function deleteDramaProject(userId: string, id: string) {
     if (getDatabaseProvider() === "postgres") {
         await ensurePostgresSchema();
@@ -237,4 +330,9 @@ function summaryFromRow(row: DramaProjectSummaryRow): DramaProjectSummary {
 
 function timestamp(value: Date | string) {
     return value instanceof Date ? value.toISOString() : value;
+}
+
+function nextProjectVersion(current: string) {
+    const previous = Date.parse(current);
+    return new Date(Math.max(Date.now(), Number.isFinite(previous) ? previous + 1 : 0)).toISOString();
 }

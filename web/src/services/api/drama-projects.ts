@@ -496,6 +496,22 @@ export function updateDramaStoryboardFramePrompt(projectId: string, episodeId: s
     }).then((data) => data.project);
 }
 
+export function updateDramaStoryboardFrameGenerationState(
+    projectId: string,
+    episodeId: string,
+    shotId: string,
+    input: { frameType: "start_frame" | "end_frame" | "all_frames"; frameIds?: string[]; framePlan?: unknown; frameStates?: unknown; startFramePrompt?: string; endFramePrompt?: string },
+) {
+    return request<{ projectId: string; episodeId: string; shotId: string; updatedAt: string; shot: DramaShot }>(
+        `/api/drama/projects/${encodeURIComponent(projectId)}/episodes/${encodeURIComponent(episodeId)}/shots/${encodeURIComponent(shotId)}/frames/generation-state`,
+        {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(input),
+        },
+    );
+}
+
 export function decideDramaContinuityFrame(projectId: string, episodeId: string, shotId: string, input: { frameEvidenceId: string; decision: "accept" | "reject"; expectedVideoRevision: string }) {
     return request<{ project: DramaProject }>(`/api/drama/projects/${encodeURIComponent(projectId)}/episodes/${encodeURIComponent(episodeId)}/shots/${encodeURIComponent(shotId)}/continuity-frame`, {
         method: "POST",

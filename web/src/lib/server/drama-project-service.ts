@@ -55,7 +55,17 @@ import { getAgentRun, listAgentRuns } from "@/lib/server/agent-run-store";
 import { reviewCreativeOutputs } from "@/lib/server/creative-review-service";
 import { CreativeEntityDeletionConflict, deleteDramaConversationAggregate } from "@/lib/server/creative-entity-deletion-store";
 import { createCreativeConversation, getCreativeConversation, listCreativeConversations, updateCreativeConversation } from "@/lib/server/creative-runtime-store";
-import { createDramaProject, deleteDramaProject, DramaProjectStoreError, findDramaEpisodeByCanvasProjectId, findDramaProjectBySourceHandoffId, getDramaProject, listDramaProjectSummaries, updateDramaProject } from "@/lib/server/drama-project-store";
+import {
+    createDramaProject,
+    deleteDramaProject,
+    DramaProjectStoreError,
+    findDramaEpisodeByCanvasProjectId,
+    findDramaProjectBySourceHandoffId,
+    getDramaProject,
+    listDramaProjectSummaries,
+    updateDramaProject,
+    updateDramaProjectShotMutation,
+} from "@/lib/server/drama-project-store";
 import { createDramaProjectVersion, getDramaProjectVersion, listDramaProjectVersions } from "@/lib/server/drama-project-version-store";
 import { persistDramaGeneratedImageReference } from "@/lib/server/drama-asset-reference-media";
 import { deleteUserLocalMediaAssets, deleteUserOwnedMediaAssetsPhysically } from "@/lib/server/local-media-storage";
@@ -78,6 +88,16 @@ const MAX_PROJECT_BYTES = 2 * 1024 * 1024;
 const REVIEW_COMPLETION_STALE_MS = TEXT_MODEL_REQUEST_TIMEOUT_MS * 4;
 const dramaImageDispatchLocks = new Map<string, Promise<DramaProductionRun>>();
 const dramaProductionDispatchLocks = new Map<string, Promise<DramaProductionRun>>();
+const clearDramaGeneratedMediaState = {
+    generationStatus: "idle" as const,
+    generationTaskId: undefined,
+    generationError: undefined,
+    videoUrl: undefined,
+    audioStatus: "idle" as const,
+    audioTaskId: undefined,
+    audioError: undefined,
+    audioUrl: undefined,
+};
 
 export class DramaProjectServiceError extends Error {
     constructor(
@@ -2796,6 +2816,72 @@ export async function updateDramaStoryboardFramePromptForUser(userId: string, pr
     if (!shotMatched) throw new DramaProjectServiceError("短剧镜头不存在", 404);
     if (!frameMatched) throw new DramaProjectServiceError("待更新帧不存在", 404);
     return updateDramaProject(userId, normalizeProject(nextProject, project), project.updatedAt);
+}
+
+export async function updateDramaStoryboardFrameGenerationStateForUser(userId: string, projectId: string, episodeIdValue: string, shotIdValue: string, value: unknown) {
+    const project = await getDramaProject(cleanText(projectId), userId);
+    if (!project) throw new DramaProjectServiceError("短剧项目不存在", 404);
+    const episodeId = cleanText(episodeIdValue);
+    const shotId = cleanText(shotIdValue);
+    const input = object(value);
+    const frameType = cleanText(input.frameType);
+    if (frameType !== "start_frame" && frameType !== "end_frame" && frameType !== "all_frames") throw new DramaProjectServiceError("分镜生图类型无效", 400);
+    const episode = project.episodes.find((item) => item.id === episodeId);
+    const currentShot = episode?.shots.find((item) => item.id === shotId);
+    if (!episode) throw new DramaProjectServiceError("短剧剧集不存在", 404);
+    if (!currentShot) throw new DramaProjectServiceError("短剧镜头不存在", 404);
+
+    let nextShot: DramaShot;
+    if (frameType === "all_frames") {
+        const frameIds = ids(input.frameIds);
+        if (!frameIds.length) throw new DramaProjectServiceError("至少选择一个待生成帧", 400);
+        const hasFramePlanPatch = Object.prototype.hasOwnProperty.call(input, "framePlan");
+        let framePlan = currentShot.framePlan;
+        if (hasFramePlanPatch) {
+            try {
+                framePlan = normalizeShotFramePlan(input.framePlan, resolveDramaShotDuration(currentShot.duration, 5));
+            } catch (error) {
+                throw new DramaProjectServiceError(error instanceof Error ? error.message : "逐帧计划无效", 400);
+            }
+        }
+        if (!framePlan?.frames.length) throw new DramaProjectServiceError("当前镜头没有可生成的逐帧计划", 400);
+        const frameSet = new Set(framePlan.frames.map((frame) => frame.id));
+        if (frameIds.some((frameId) => !frameSet.has(frameId))) throw new DramaProjectServiceError("待生成帧不属于当前镜头", 400);
+        const selected = new Set(frameIds);
+        const localFrameStates = Object.prototype.hasOwnProperty.call(input, "frameStates") ? normalizeStoryboardFrames(input.frameStates) || [] : [];
+        const currentFrames = [...(currentShot.storyboardFrames || [])];
+        for (const localFrame of localFrameStates) {
+            const existingIndex = currentFrames.findIndex((frame) => frame.id === localFrame.id || frame.sequenceIndex === localFrame.sequenceIndex);
+            if (existingIndex >= 0) currentFrames[existingIndex] = localFrame;
+            else currentFrames.push(localFrame);
+        }
+        const storyboardFrames = framePlan.frames.map((beat) => {
+            const existing = currentFrames.find((frame) => frame.id === beat.id || frame.sequenceIndex === beat.sequenceIndex) || { id: beat.id, sequenceIndex: beat.sequenceIndex, source: "generated" as const, status: "idle" as const };
+            if (!selected.has(beat.id)) return existing;
+            return existing.mediaUrl
+                ? { ...existing, candidateStatus: "queued" as const, candidateTaskId: undefined, candidateError: undefined, mediaDeletedAt: undefined }
+                : { ...existing, status: "queued" as const, taskId: undefined, error: undefined, inputHash: undefined, continuityStatus: "pending" as const, continuityEvidenceId: undefined, mediaDeletedAt: undefined };
+        });
+        nextShot = { ...currentShot, storyboardFrameMode: "all_frames", ...(hasFramePlanPatch ? { framePlan } : {}), storyboardFrames, storyboardError: undefined, ...clearDramaGeneratedMediaState };
+    } else {
+        const promptField = frameType === "start_frame" ? "startFramePrompt" : "endFramePrompt";
+        const hasPromptPatch = Object.prototype.hasOwnProperty.call(input, promptField);
+        const prompt = hasPromptPatch ? formatOptionalPromptField(input[promptField], "static") : currentShot[promptField];
+        if (hasPromptPatch && !prompt) throw new DramaProjectServiceError("分镜提示词不能为空", 400);
+        nextShot = {
+            ...currentShot,
+            ...(frameType === "start_frame" ? { storyboardStatus: "queued" as const, storyboardTaskId: undefined, storyboardError: undefined, ...(hasPromptPatch ? { startFramePrompt: prompt } : {}) } : {}),
+            ...(frameType === "end_frame" ? { storyboardEndStatus: "queued" as const, storyboardEndTaskId: undefined, storyboardEndError: undefined, ...(hasPromptPatch ? { endFramePrompt: prompt } : {}) } : {}),
+            ...clearDramaGeneratedMediaState,
+        };
+    }
+
+    try {
+        return await updateDramaProjectShotMutation(userId, { projectId: project.id, episodeId, shotId, shot: nextShot, expectedUpdatedAt: project.updatedAt });
+    } catch (error) {
+        if (error instanceof DramaProjectStoreError) throw new DramaProjectServiceError(error.message, error.status);
+        throw error;
+    }
 }
 
 export async function decideDramaContinuityFrameForUser(userId: string, projectId: string, episodeIdValue: string, shotIdValue: string, value: unknown) {

@@ -177,7 +177,9 @@ describe("Drama generation production workspace", () => {
         expect(frameEditorSource).toContain("object-contain");
         expect(frameEditorSource).not.toContain("object-cover");
         expect(frameEditorSource).not.toContain("group-hover:scale-[1.02]");
-        expect(frameEditorSource).toContain("await persistProjectNow(project.id)");
+        expect(frameEditorSource).not.toContain("persistProjectNow");
+        expect(frameEditorSource).toContain("saveStoryboardFrameGenerationStateNow");
+        expect(frameEditorSource).toContain("frameStates: compactStoryboardFrameStates");
         expect(frameEditorSource).toContain("aspectRatio: frameAspectRatio(frame)");
         expect(frameEditorSource).toContain("aspectRatio: frameAspectRatio(candidate)");
         expect(generationSource).toContain("productionPlan?.video.resolution");
@@ -200,8 +202,9 @@ describe("Drama generation production workspace", () => {
         const generateHandler = scriptSource.slice(scriptSource.indexOf("const savePlanAndGeneratePackage = async"), scriptSource.indexOf("const confirmApply = async"));
         expect(saveOnlyHandler).not.toContain("submit(");
         expect(generateHandler).toContain("await submit(");
-        expect(frameEditorSource).toContain("shotSnapshot:");
-        expect(frameEditorSource).toContain("compactShotSnapshot");
+        expect(frameEditorSource).not.toContain("shotSnapshot:");
+        expect(frameEditorSource).not.toContain("compactShotSnapshot");
+        expect(frameEditorSource).toContain("framePlan: liveShot.framePlan");
         expect(frameEditorSource).not.toContain("saveProjectNow(project.id)");
         expect(frameEditorSource).not.toContain("本次绑定图片");
         expect(frameEditorSource).toContain("保存提示词");

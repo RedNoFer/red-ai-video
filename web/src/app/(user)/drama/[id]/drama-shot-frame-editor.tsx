@@ -39,7 +39,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
     const copyText = useCopyText();
     const updateShot = useDramaStore((state) => state.updateShot);
     const replaceProject = useDramaStore((state) => state.replaceProject);
-    const persistProjectNow = useDramaStore((state) => state.saveProjectNow);
+    const saveStoryboardFrameGenerationStateNow = useDramaStore((state) => state.saveStoryboardFrameGenerationStateNow);
     const config = useEffectiveConfig();
     const imageRequestConfig = resolveModelRequestConfig(config, config.imageModel || config.model);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -343,9 +343,18 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                 storyboardError: undefined,
                 ...clearedGeneratedMedia,
             });
-            // The server must see the queue markers before it writes the visual run.
-            // This prevents an autosave from racing the run placeholder persistence.
-            await persistProjectNow(project.id);
+            const liveShot = useDramaStore
+                .getState()
+                .projects.find((item) => item.id === project.id)
+                ?.episodes.find((episode) => episode.id === episodeId)
+                ?.shots.find((item) => item.id === shot.id);
+            if (!liveShot) throw new Error("当前镜头不存在");
+            await saveStoryboardFrameGenerationStateNow(project.id, episodeId, shot.id, {
+                frameType: "all_frames",
+                frameIds: input.frameIds,
+                framePlan: liveShot.framePlan,
+                frameStates: compactStoryboardFrameStates(liveShot.storyboardFrames?.filter((frame) => input.frameIds.includes(frame.id))),
+            });
             const run = await createDramaProductionRun(project.id, episodeId, "visual", undefined, {
                 shotIds: [shot.id],
                 imageModel: imageRequestConfig.model,
@@ -354,13 +363,6 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                 frameType: "all_frames",
                 frameIds: input.frameIds,
                 regenerateAll: input.regenerateAll,
-                shotSnapshot: compactShotSnapshot(
-                    useDramaStore
-                        .getState()
-                        .projects.find((item) => item.id === project.id)
-                        ?.episodes.find((episode) => episode.id === episodeId)
-                        ?.shots.find((item) => item.id === shot.id),
-                ),
             });
             const confirmed = await updateDramaProductionRun(project.id, run.id, { action: "confirm" });
             const frameSteps = confirmed.steps.filter((step) => step.shotId === shot.id && step.type === "keyframe");
@@ -492,13 +494,23 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
         const frameType = startFrame && frameMode === "first_last" && !endFrame ? "end_frame" : "start_frame";
         setSubmitting(frameType);
         try {
+            const currentShot = useDramaStore
+                .getState()
+                .projects.find((item) => item.id === project.id)
+                ?.episodes.find((episode) => episode.id === episodeId)
+                ?.shots.find((item) => item.id === shot.id);
+            if (!currentShot) throw new Error("当前镜头不存在");
+            await saveStoryboardFrameGenerationStateNow(project.id, episodeId, shot.id, {
+                frameType,
+                ...(frameType === "start_frame" && currentShot.startFramePrompt ? { startFramePrompt: currentShot.startFramePrompt } : {}),
+                ...(frameType === "end_frame" && currentShot.endFramePrompt ? { endFramePrompt: currentShot.endFramePrompt } : {}),
+            });
             const run = await createDramaProductionRun(project.id, episodeId, "visual", undefined, {
                 shotIds: [shot.id],
                 imageModel: imageRequestConfig.model,
                 imageChannelId: imageRequestConfig.channelId,
                 imageQuality: config.quality,
                 frameType,
-                shotSnapshot: compactShotSnapshot(shot),
             });
             const confirmed = await updateDramaProductionRun(project.id, run.id, { action: "confirm" });
             const step = confirmed.steps.find((item) => item.shotId === shot.id && item.type === frameType);
@@ -1187,9 +1199,9 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
     );
 }
 
-function compactShotSnapshot(shot: DramaShot | undefined) {
-    if (!shot) return undefined;
-    return JSON.parse(JSON.stringify(shot, (_key, value) => (typeof value === "string" && /^(?:data|blob):/i.test(value) ? undefined : value))) as DramaShot;
+function compactStoryboardFrameStates(frames: DramaStoryboardFrame[] | undefined) {
+    if (!frames?.length) return undefined;
+    return JSON.parse(JSON.stringify(frames, (_key, value) => (typeof value === "string" && /^(?:data|blob):/i.test(value) ? undefined : value))) as DramaStoryboardFrame[];
 }
 
 function frameAspectRatio(dimensions?: { width?: number; height?: number }) {

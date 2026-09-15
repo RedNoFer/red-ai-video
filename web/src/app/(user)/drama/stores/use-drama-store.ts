@@ -24,7 +24,18 @@ import { activeFrameEvidence } from "@/lib/drama-continuity-policy";
 import type { DramaSourceEpisodeDraft } from "@/lib/drama-source-splitter";
 import { ensureUniqueDramaAssetReferenceIds } from "../[id]/drama-asset-reference-utils";
 import { dramaShotVideoMode } from "../[id]/drama-shot-generation-utils";
-import { createDramaProject, createDramaProjectVersion, deleteDramaProject, getDramaProject, listDramaProjectSummaries, listDramaProjectVersions, restoreDramaProjectVersion, saveDramaAsset, saveDramaProject } from "@/services/api/drama-projects";
+import {
+    createDramaProject,
+    createDramaProjectVersion,
+    deleteDramaProject,
+    getDramaProject,
+    listDramaProjectSummaries,
+    listDramaProjectVersions,
+    restoreDramaProjectVersion,
+    saveDramaAsset,
+    saveDramaProject,
+    updateDramaStoryboardFrameGenerationState,
+} from "@/services/api/drama-projects";
 import { useUserStore } from "@/stores/use-user-store";
 
 type DramaStore = {
@@ -65,6 +76,12 @@ type DramaStore = {
     updateShot: (projectId: string, episodeId: string, shotId: string, patch: Partial<DramaShot>) => void;
     replaceShot: (projectId: string, episodeId: string, shotId: string, shot: DramaShot, updatedAt?: string) => void;
     saveProjectNow: (projectId: string, updater?: (project: DramaProject) => DramaProject) => Promise<DramaProject>;
+    saveStoryboardFrameGenerationStateNow: (
+        projectId: string,
+        episodeId: string,
+        shotId: string,
+        input: { frameType: "start_frame" | "end_frame" | "all_frames"; frameIds?: string[]; framePlan?: unknown; frameStates?: unknown; startFramePrompt?: string; endFramePrompt?: string },
+    ) => Promise<{ projectId: string; episodeId: string; shotId: string; updatedAt: string; shot: DramaShot }>;
     saveAssetNow: (projectId: string, kind: DramaAssetKind, assetId: string, patch: unknown) => Promise<DramaProject>;
     queueShots: (projectId: string, episodeId: string, shotIds: string[]) => void;
     applyContentAnalysis: (projectId: string, episodeId: string, analysis: DramaContentAnalysis) => void;
@@ -392,6 +409,44 @@ export const useDramaStore = create<DramaStore>((set, get) => ({
         try {
             await operation;
             if (!saved) throw new Error("短剧项目保存失败");
+            return saved;
+        } finally {
+            if (saveQueues.get(key) === operation) saveQueues.delete(key);
+        }
+    },
+    saveStoryboardFrameGenerationStateNow: async (projectId, episodeId, shotId, input) => {
+        const session = requireSession();
+        clearProjectSave(session, projectId);
+        const key = sessionEpoch.key(session, projectId);
+        const previous = saveQueues.get(key);
+        let saved: Awaited<ReturnType<typeof updateDramaStoryboardFrameGenerationState>> | undefined;
+        const operation = (previous ? previous.catch(() => undefined) : Promise.resolve()).then(async () => {
+            assertCurrent(session);
+            const currentProject = get().projects.find((item) => item.id === projectId);
+            if (!currentProject) throw new Error("短剧项目不存在");
+            const expectedUpdatedAt = currentProject.updatedAt;
+            saved = await updateDramaStoryboardFrameGenerationState(projectId, episodeId, shotId, input);
+            assertCurrent(session);
+            set((state) => {
+                const latest = state.projects.find((item) => item.id === projectId);
+                if (!latest || latest.updatedAt !== expectedUpdatedAt) return state;
+                const nextProject = {
+                    ...latest,
+                    updatedAt: saved!.updatedAt,
+                    episodes: latest.episodes.map((episode) => (episode.id === episodeId ? { ...episode, shots: episode.shots.map((shot) => (shot.id === shotId ? saved!.shot : shot)) } : episode)),
+                };
+                return {
+                    projects: state.projects.map((item) => (item.id === projectId ? nextProject : item)),
+                    summaries: upsertSummary(state.summaries, nextProject),
+                    syncError: undefined,
+                    saveStateByProject: { ...state.saveStateByProject, [projectId]: { status: "saved", savedAt: saved!.updatedAt } },
+                };
+            });
+        });
+        saveQueues.set(key, operation);
+        try {
+            await operation;
+            if (!saved) throw new Error("分镜生成状态保存失败");
             return saved;
         } finally {
             if (saveQueues.get(key) === operation) saveQueues.delete(key);

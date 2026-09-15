@@ -28,6 +28,7 @@ const mocks = vi.hoisted(() => {
         getDramaProject: vi.fn(),
         listDramaProjectSummaries: vi.fn(),
         updateDramaProject: vi.fn(),
+        updateDramaProjectShotMutation: vi.fn(),
         getStoredGenerationTask: vi.fn(),
         getStoredGenerationTaskByRequest: vi.fn(),
         queryStoredGenerationTasks: vi.fn(),
@@ -69,6 +70,7 @@ vi.mock("@/lib/server/drama-project-store", () => ({
     getDramaProject: mocks.getDramaProject,
     listDramaProjectSummaries: mocks.listDramaProjectSummaries,
     updateDramaProject: mocks.updateDramaProject,
+    updateDramaProjectShotMutation: mocks.updateDramaProjectShotMutation,
 }));
 vi.mock("@/lib/server/drama-project-version-store", () => ({
     createDramaProjectVersion: mocks.createDramaProjectVersion,
@@ -118,6 +120,7 @@ import {
     deleteDramaStoryboardFrameForUser,
     updateDramaAssetForUser,
     updateDramaShotPromptForUser,
+    updateDramaStoryboardFrameGenerationStateForUser,
     updateDramaStoryboardFramePromptForUser,
     validateDramaReferenceSelections,
     saveDramaEpisodeSettingsForUser,
@@ -705,6 +708,67 @@ describe("drama project service updates", () => {
         expect(shot.storyboardFrames).toEqual([expect.objectContaining({ id: "f1", status: "success", mediaUrl: "/api/f1.png" }), expect.objectContaining({ id: "f2", status: "stale", mediaUrl: "/api/f2.png", continuityStatus: "stale" })]);
         expect(mocks.updateDramaProject.mock.calls.at(-1)?.[0]).toBe("user-one");
         expect("supplierPrompt" in (mocks.updateDramaProject.mock.calls.at(-1)?.[1] as DramaProject).episodes[0].shots[0].framePlan!.frames[1]).toBe(false);
+    });
+
+    it("persists only the current shot frame-generation state for a large project", async () => {
+        const current = project("2026-09-15T00:00:00.000Z", "大型项目");
+        current.productionArchive = {
+            formatVersion: "vozeb-drama-production-package-v1",
+            sections: [{ code: "EP01", title: "完整制作包", content: "x".repeat(9 * 1024 * 1024) }],
+            promptAssets: [],
+            dialogueDirections: [],
+            voiceDirections: [],
+            silenceDirections: [],
+            referencePlan: [],
+            generationOrder: [],
+            qcReport: "",
+        };
+        current.episodes[0].shots = [
+            {
+                id: "shot-one",
+                title: "当前镜头",
+                characterIds: [],
+                propIds: [],
+                clueIds: [],
+                imagePrompt: "画面",
+                videoPrompt: "动作",
+                cameraMotion: "固定",
+                duration: 6,
+                storyboardFrameMode: "all_frames",
+                framePlan: {
+                    start: { source: "independent" },
+                    end: { required: false },
+                    frames: [
+                        { id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 3, actionPrompt: "动作一", imagePrompt: "画面一" },
+                        { id: "f2", sequenceIndex: 2, startSecond: 3, endSecond: 6, actionPrompt: "动作二", imagePrompt: "画面二" },
+                    ],
+                },
+                storyboardFrames: [{ id: "f1", sequenceIndex: 1, source: "generated", status: "success", mediaUrl: "/api/f1.png", continuityStatus: "passed" }],
+            } as never,
+        ];
+        mocks.getDramaProject.mockResolvedValue(current);
+        mocks.updateDramaProjectShotMutation.mockImplementation(async (_userId: string, mutation: { projectId: string; episodeId: string; shotId: string; shot: DramaProject["episodes"][number]["shots"][number] }) => ({
+            projectId: mutation.projectId,
+            episodeId: mutation.episodeId,
+            shotId: mutation.shotId,
+            updatedAt: "2026-09-15T00:00:01.000Z",
+            shot: mutation.shot,
+        }));
+
+        const saved = await updateDramaStoryboardFrameGenerationStateForUser("user-one", current.id, "episode-one", "shot-one", {
+            frameType: "all_frames",
+            frameIds: ["f2"],
+            framePlan: current.episodes[0].shots[0].framePlan,
+            frameStates: [{ id: "f2", sequenceIndex: 2, source: "upload", status: "success", mediaUrl: "/api/local-f2.png" }],
+        });
+
+        expect(saved.shot).toMatchObject({ id: "shot-one", storyboardFrameMode: "all_frames", generationStatus: "idle" });
+        expect(saved.shot.storyboardFrames).toEqual([expect.objectContaining({ id: "f1", status: "success", mediaUrl: "/api/f1.png" }), expect.objectContaining({ id: "f2", status: "success", candidateStatus: "queued", mediaUrl: "/api/local-f2.png" })]);
+        expect(mocks.updateDramaProjectShotMutation).toHaveBeenCalledWith(
+            "user-one",
+            expect.objectContaining({ projectId: current.id, episodeId: "episode-one", shotId: "shot-one", expectedUpdatedAt: current.updatedAt, shot: expect.objectContaining({ id: "shot-one" }) }),
+        );
+        expect(mocks.updateDramaProject).not.toHaveBeenCalled();
     });
 
     it("persists a manually edited video prompt without rewriting the whole project", async () => {
