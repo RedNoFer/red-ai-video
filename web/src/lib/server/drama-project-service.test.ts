@@ -780,6 +780,47 @@ describe("drama project service updates", () => {
         expect(mocks.updateDramaProject).not.toHaveBeenCalled();
     });
 
+    it("rebases a frame-generation state mutation when orphan cleanup wins the version race", async () => {
+        const current = project("2026-09-15T00:00:00.000Z", "项目");
+        current.episodes[0].shots = [
+            {
+                id: "shot-one",
+                title: "当前镜头",
+                characterIds: [],
+                propIds: [],
+                clueIds: [],
+                imagePrompt: "画面",
+                videoPrompt: "动作",
+                cameraMotion: "固定",
+                duration: 6,
+                storyboardFrameMode: "all_frames",
+                framePlan: { frames: [{ id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 6, actionPrompt: "动作", imagePrompt: "画面" }] },
+                storyboardFrames: [],
+            },
+        ] as never;
+        const latest = {
+            ...current,
+            updatedAt: "2026-09-15T00:00:01.000Z",
+            episodes: current.episodes.map((episode) => ({
+                ...episode,
+                shots: episode.shots.map((shot) => ({
+                    ...shot,
+                    storyboardFrames: [{ id: "f1", sequenceIndex: 1, source: "generated", status: "error", error: "未找到本次生图运行记录，请确认后重新提交" }],
+                })),
+            })),
+        } as DramaProject;
+        mocks.getDramaProject.mockResolvedValueOnce(current).mockResolvedValue(latest);
+        mocks.updateDramaProjectShotMutation.mockRejectedValueOnce(new DramaProjectStoreError("短剧项目已在其他页面更新，请刷新后重试", 409));
+
+        const saved = await updateDramaStoryboardFrameGenerationStateForUser("user-one", current.id, "episode-one", "shot-one", { frameType: "all_frames", frameIds: ["f1"] });
+
+        expect(saved.shot.storyboardFrames).toEqual([expect.objectContaining({ id: "f1", status: "queued", error: undefined })]);
+        expect(mocks.updateDramaProjectShotMutation).toHaveBeenLastCalledWith(
+            "user-one",
+            expect.objectContaining({ expectedUpdatedAt: latest.updatedAt, shot: expect.objectContaining({ storyboardFrames: [expect.objectContaining({ id: "f1", status: "queued" })] }) }),
+        );
+    });
+
     it("persists a manually edited video prompt without rewriting the whole project", async () => {
         const current = project("2026-07-19T08:00:00.000Z", "项目");
         current.episodes[0].shots = [
