@@ -1649,7 +1649,6 @@ async function syncDramaVisualRun(userId: string, project: DramaProject, run: Dr
 
 async function syncDramaVisualRunNow(userId: string, project: DramaProject, run: DramaProductionRun, transport: { origin?: string; cookie?: string } = {}) {
     let changed = false;
-    let terminalFailureReconciled = false;
     let nextProject = project;
     const steps: DramaProductionRun["steps"] = [];
     for (const originalStep of run.steps) {
@@ -1660,7 +1659,6 @@ async function syncDramaVisualRunNow(userId: string, project: DramaProject, run:
             if (reconciledProject !== nextProject) {
                 nextProject = reconciledProject;
                 changed = true;
-                terminalFailureReconciled = true;
             }
             steps.push(step);
             continue;
@@ -1683,7 +1681,6 @@ async function syncDramaVisualRunNow(userId: string, project: DramaProject, run:
                 if (reconciledProject !== nextProject) {
                     nextProject = reconciledProject;
                     changed = true;
-                    terminalFailureReconciled = true;
                 }
             }
             steps.push(step);
@@ -1742,30 +1739,38 @@ async function syncDramaVisualRunNow(userId: string, project: DramaProject, run:
         try {
             await persistDramaVisualProjectChanges(userId, project, nextProject);
         } catch (error) {
-            if (!(error instanceof DramaProjectStoreError) || error.status !== 409 || !terminalFailureReconciled) throw error;
+            if (!(error instanceof DramaProjectStoreError) || error.status !== 409) throw error;
             const latestProject = await getDramaProject(project.id, userId);
             if (!latestProject) throw error;
-            const rebasedProject = reconcileTerminalDramaVisualFailures(latestProject, run);
-            if (rebasedProject !== latestProject) await persistDramaVisualProjectChanges(userId, latestProject, rebasedProject);
+            const rebasedProject = reconcileTerminalDramaVisualSteps(latestProject, run, steps);
+            if (rebasedProject !== latestProject) {
+                try {
+                    await persistDramaVisualProjectChanges(userId, latestProject, rebasedProject);
+                } catch (rebasedError) {
+                    if (!(rebasedError instanceof DramaProjectStoreError) || rebasedError.status !== 409) throw rebasedError;
+                    throw error;
+                }
+            }
         }
     }
     await updateDramaProductionRun(userId, nextRun);
     return nextRun;
 }
 
-function reconcileTerminalDramaVisualFailures(project: DramaProject, run: DramaProductionRun) {
+function reconcileTerminalDramaVisualSteps(project: DramaProject, run: DramaProductionRun, steps: DramaProductionRun["steps"]) {
     let nextProject = project;
-    for (const step of run.steps) {
-        if (!step.taskId || (step.status !== "failed" && step.status !== "cancelled")) continue;
-        const shot = nextProject.episodes.find((episode) => episode.id === run.episodeId)?.shots.find((candidate) => candidate.id === step.shotId);
-        const frame = step.type === "keyframe" ? shot?.storyboardFrames?.find((candidate) => candidate.id === step.frameId || candidate.sequenceIndex === step.sequenceIndex) : undefined;
-        const newerSubmissionPending =
-            step.type === "keyframe"
-                ? [shot?.storyboardStatus, frame?.status, frame?.candidateStatus].some((status) => status === "queued" || status === "running")
-                : step.type === "end_frame"
-                  ? shot?.storyboardEndStatus === "queued" || shot?.storyboardEndStatus === "running"
-                  : shot?.storyboardStatus === "queued" || shot?.storyboardStatus === "running";
-        if (!newerSubmissionPending) nextProject = applyDramaVisualStepFailure(nextProject, run.episodeId, step, step.error || (step.status === "cancelled" ? "图片任务已取消" : "图片任务失败"));
+    for (const step of steps) {
+        if (step.outputUrls?.length && step.status === "success") {
+            nextProject = applyDramaVisualStepResult(
+                nextProject,
+                run.episodeId,
+                step,
+                step.outputUrls.map((url, index) => ({ url, remoteUrl: step.outputRemoteUrls?.[index], width: step.outputWidth, height: step.outputHeight })),
+            );
+            continue;
+        }
+        if (step.status === "failed" || step.status === "cancelled" || step.status === "needs_review")
+            nextProject = applyDramaVisualStepFailure(nextProject, run.episodeId, step, step.error || "图片任务未完成", step.status === "needs_review" ? "needs_review" : "error");
     }
     return nextProject;
 }
@@ -1793,11 +1798,25 @@ export function applyDramaVisualStepResult(project: DramaProject, episodeId: str
             height: result.height,
             createdAt: new Date().toISOString(),
         }));
+        const assets = project[step.assetKind] || [];
+        const nextAssets = assets.map((asset) =>
+            asset.id === step.assetId
+                ? {
+                      ...asset,
+                      references: [
+                          ...(asset.references || []).filter((reference) => !references.some((item) => item.id === reference.id)),
+                          ...references.map((reference) => {
+                              const existing = (asset.references || []).find((item) => item.id === reference.id);
+                              return existing ? { ...reference, createdAt: existing.createdAt } : reference;
+                          }),
+                      ],
+                  }
+                : asset,
+        );
+        if (JSON.stringify(nextAssets) === JSON.stringify(assets)) return project;
         return {
             ...project,
-            [step.assetKind]: (project[step.assetKind] || []).map((asset) =>
-                asset.id === step.assetId ? { ...asset, references: [...(asset.references || []).filter((reference) => !references.some((item) => item.id === reference.id)), ...references] } : asset,
-            ),
+            [step.assetKind]: nextAssets,
             updatedAt: new Date().toISOString(),
         };
     }

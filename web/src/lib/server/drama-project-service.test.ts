@@ -1612,6 +1612,32 @@ describe("drama project service updates", () => {
         expect(mocks.updateDramaProject).not.toHaveBeenCalled();
     });
 
+    it("does not rewrite an already synchronized asset result", () => {
+        const current = project("2026-07-19T08:00:00.000Z", "项目");
+        current.scenes = [
+            {
+                id: "scene-one",
+                name: "议事厅",
+                description: "旧场景",
+                references: [
+                    {
+                        id: "generated-asset-anchor-scene-one-0",
+                        url: "/api/generated/scene-one.png",
+                        source: "generated",
+                        status: "candidate",
+                        label: "议事厅",
+                        createdAt: "2026-07-19T08:00:00.000Z",
+                    },
+                ],
+            },
+        ];
+        const step = { id: "asset-anchor-scene-one", type: "asset_anchor", assetKind: "scenes", assetId: "scene-one", taskId: "image-task-scene-one", status: "running", dependsOn: [] } as never;
+        const first = applyDramaVisualStepResult(current, "episode-one", step, [{ url: "/api/generated/scene-one.png" }]);
+        const second = applyDramaVisualStepResult(first, "episode-one", step, [{ url: "/api/generated/scene-one.png" }]);
+
+        expect(second).toBe(first);
+    });
+
     it("releases queued visual frame placeholders when no visual run was persisted", async () => {
         const current = project("2026-07-19T08:00:00.000Z", "项目");
         current.episodes[0].shots = [
