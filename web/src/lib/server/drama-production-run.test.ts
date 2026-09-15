@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { DramaEpisode, DramaProject } from "@/lib/drama-project-contract";
+import { createFrameEvidence } from "@/lib/drama-continuity-policy";
 import { buildDramaProductionRun, invalidateDramaProductionRunFromShot, refreshDramaVideoStepReferences } from "@/lib/server/drama-production-run";
 
 describe("drama production run planning", () => {
@@ -24,12 +25,12 @@ describe("drama production run planning", () => {
         };
         const run = buildDramaProductionRun(project, project.episodes[0], { imageModel: "image-one", videoModel: "video-one", audioModel: "audio-one", imageQuality: "2k", videoQuality: "1080p" });
         const firstQc = run.steps.find((step) => step.shotId === "shot-one" && step.type === "continuity_qc")!;
-        const secondStart = run.steps.find((step) => step.shotId === "shot-two" && step.type === "start_frame")!;
+        const secondVideo = run.steps.find((step) => step.shotId === "shot-two" && step.type === "video")!;
 
         expect(run).toMatchObject({ mode: "strict", parameterSnapshot: { imageModel: "image-one", videoModel: "video-one", ratio: "9:16", productionPlan: { video: { resolution: "480p" } } } });
-        expect(secondStart.dependsOn).toContain(firstQc.id);
-        expect(secondStart.referenceShotId).toBe("shot-one");
-        expect(run.steps.find((step) => step.shotId === "shot-three" && step.type === "start_frame")?.referenceShotId).toBeUndefined();
+        expect(secondVideo.dependsOn).toContain(firstQc.id);
+        expect(secondVideo.referenceBindingsSnapshot).toEqual([]);
+        expect(run.steps.some((step) => step.shotId === "shot-two" && ["start_frame", "end_frame", "keyframe"].includes(step.type))).toBe(false);
     });
 
     it("keeps first-last frames independent within the same shot", () => {
@@ -37,11 +38,11 @@ describe("drama production run planning", () => {
         project.characters = [];
         project.episodes[0].shots[0].characterIds = [];
         const run = buildDramaProductionRun(project, project.episodes[0], { imageModel: "image", videoModel: "video" });
-        const end = run.steps.find((step) => step.shotId === "shot-one" && step.type === "end_frame");
+        const video = run.steps.find((step) => step.shotId === "shot-one" && step.type === "video");
 
-        expect(end?.dependsOn).not.toContain("start-shot-one");
-        expect(end?.dependsOn).toEqual([]);
-        expect(end?.status).toBe("ready");
+        expect(run.steps.some((step) => ["start_frame", "end_frame", "keyframe"].includes(step.type))).toBe(false);
+        expect(video?.dependsOn).toEqual([]);
+        expect(video?.status).toBe("ready");
     });
 
     it("marks the changed shot and its dependency chain stale without invalidating a scene change", () => {
@@ -65,7 +66,11 @@ describe("drama production run planning", () => {
         };
         shot.storyboardFrames = shot.framePlan.frames.map((frame) => ({ id: frame.id, sequenceIndex: frame.sequenceIndex, mediaUrl: `/${frame.id}.png`, source: "upload", status: "success", continuityStatus: "passed" }));
 
-        const run = buildDramaProductionRun(project, { ...project.episodes[0], shots: [shot], continuityEdges: [] }, { imageModel: "image", videoModel: "video", minVideoSeconds: 2, maxVideoSeconds: 5, maxReferenceImages: 4 });
+        const run = buildDramaProductionRun(
+            project,
+            { ...project.episodes[0], shots: [shot], continuityEdges: [] },
+            { imageModel: "image", videoModel: "video", minVideoSeconds: 2, maxVideoSeconds: 5, maxReferenceImages: 4, referenceModes: { [shot.id]: "all_frames" } },
+        );
         const videos = run.steps.filter((step) => step.type === "video");
 
         expect(videos.map((step) => step.referenceImageUrls)).toEqual([
@@ -79,6 +84,9 @@ describe("drama production run planning", () => {
 
     it("keeps every ordered keyframe while retaining fixed assets", () => {
         const project = fixture();
+        const reference = { id: "character-reference", url: "/character.png", source: "generated" as const, status: "approved" as const, label: "角色基准", createdAt: new Date(0).toISOString() };
+        project.characters[0].references = [reference];
+        project.characters[0].primaryReferenceId = reference.id;
         const shot = project.episodes[0].shots[0];
         shot.storyboardFrameMode = "all_frames";
         shot.duration = 15;
@@ -89,7 +97,7 @@ describe("drama production run planning", () => {
         };
         shot.storyboardFrames = shot.framePlan.frames.map((frame) => ({ id: frame.id, sequenceIndex: frame.sequenceIndex, mediaUrl: `/${frame.id}.png`, source: "upload", status: "success", continuityStatus: "passed" }));
 
-        const run = buildDramaProductionRun(project, { ...project.episodes[0], shots: [shot], continuityEdges: [] }, { imageModel: "image", videoModel: "video", referenceSelections: { [shot.id]: ["f1", "f3", "f5"] } });
+        const run = buildDramaProductionRun(project, { ...project.episodes[0], shots: [shot], continuityEdges: [] }, { imageModel: "image", videoModel: "video", referenceModes: { [shot.id]: "all_frames" } });
         const video = run.steps.find((step) => step.type === "video")!;
 
         expect(video.referenceImageUrls).toEqual(["/f1.png", "/f2.png", "/f3.png", "/f4.png", "/f5.png"]);
@@ -115,7 +123,11 @@ describe("drama production run planning", () => {
         shot.storyboardFrames = shot.framePlan.frames.map((frame) => ({ id: frame.id, sequenceIndex: frame.sequenceIndex, mediaUrl: `/${frame.id}.png`, source: "upload", status: "success", continuityStatus: "passed" }));
         shot.storyboardFrames[1] = { ...shot.storyboardFrames[1], continuityStatus: "needs_review" };
 
-        const run = buildDramaProductionRun(project, { ...project.episodes[0], shots: [shot], continuityEdges: [] }, { imageModel: "image", videoModel: "video", referenceSelections: { [shot.id]: ["f1", "f3"] } });
+        const run = buildDramaProductionRun(
+            project,
+            { ...project.episodes[0], shots: [shot], continuityEdges: [] },
+            { imageModel: "image", videoModel: "video", referenceSelections: { [shot.id]: ["f1", "f3"] }, referenceModes: { [shot.id]: "all_frames" } },
+        );
         const video = run.steps.find((step) => step.type === "video");
 
         expect(run.steps.filter((step) => step.type === "keyframe")).toHaveLength(3);
@@ -148,6 +160,7 @@ describe("drama production run planning", () => {
                 imageModel: "image",
                 videoModel: "video",
                 referenceSelections: { [shot.id]: ["f1", "f2", "f3", "f4", "source-one"] },
+                referenceModes: { [shot.id]: "all_frames" },
             },
         );
         const video = run.steps.find((step) => step.type === "video")!;
@@ -168,6 +181,105 @@ describe("drama production run planning", () => {
 
         expect(video?.prompt).toContain("动态意图：Karin抬头锁定门外");
         expect(video?.prompt).not.toContain("B线钩子");
+    });
+
+    it("uses recommended scene and character images without inheriting storyboard frames", () => {
+        const project = fixture();
+        const sceneReference = { id: "scene-reference", url: "/scene.png", source: "generated" as const, status: "approved" as const, label: "场景基准", createdAt: new Date(0).toISOString() };
+        const characterReference = { id: "character-reference", url: "/character.png", source: "generated" as const, status: "approved" as const, label: "角色基准", createdAt: new Date(0).toISOString() };
+        project.scenes = [{ id: "scene-one", name: "门前", description: "", sceneReferenceBoard: { layout: "panorama", referenceId: sceneReference.id } }];
+        project.scenes[0].references = [sceneReference];
+        project.scenes[0].primaryReferenceId = sceneReference.id;
+        project.characters[0].references = [characterReference];
+        project.characters[0].primaryReferenceId = characterReference.id;
+        const shot = project.episodes[0].shots[0];
+        shot.sceneId = "scene-one";
+        shot.framePlan = {
+            start: { source: "independent" },
+            end: { required: true },
+            frames: [
+                { id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 7.5, actionPrompt: "抬头", imagePrompt: "人物抬头" },
+                { id: "f2", sequenceIndex: 2, startSecond: 7.5, endSecond: 15, actionPrompt: "转身", imagePrompt: "人物转身" },
+            ],
+        };
+        shot.storyboardFrameMode = "all_frames";
+        shot.storyboardFrames = shot.framePlan.frames.map((frame) => ({ id: frame.id, sequenceIndex: frame.sequenceIndex, mediaUrl: `/${frame.id}.png`, source: "generated", status: "success", continuityStatus: "passed" }));
+
+        const run = buildDramaProductionRun(project, { ...project.episodes[0], shots: [shot], continuityEdges: [] }, { imageModel: "image", videoModel: "video" });
+        const video = run.steps.find((step) => step.type === "video")!;
+
+        expect(video.referenceMode).toBe("reference");
+        expect(run.steps.filter((step) => ["start_frame", "end_frame", "keyframe"].includes(step.type))).toHaveLength(0);
+        expect(video.referenceImageUrls).toEqual([]);
+        expect(video.referenceBindingsSnapshot).toMatchObject([
+            { role: "scene_anchor", sourceId: "scene-one", url: "/scene.png" },
+            { role: "character_anchor", sourceId: "character-one", url: "/character.png" },
+        ]);
+    });
+
+    it("sends a selected storyboard frame as an ordinary reference", () => {
+        const project = fixture();
+        const shot = project.episodes[0].shots[0];
+        shot.framePlan = { start: { source: "independent" }, end: { required: false }, frames: [{ id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 15, actionPrompt: "抬头", imagePrompt: "人物抬头" }] };
+        shot.storyboardFrames = [{ id: "f1", sequenceIndex: 1, mediaUrl: "/f1.png", source: "generated", status: "success", continuityStatus: "needs_review" }];
+
+        const run = buildDramaProductionRun(project, { ...project.episodes[0], shots: [shot], continuityEdges: [] }, { imageModel: "image", videoModel: "video", referenceSelections: { [shot.id]: ["f1"] } });
+        const video = run.steps.find((step) => step.type === "video")!;
+
+        expect(video.referenceImageUrls).toEqual(["/f1.png"]);
+        expect(video.referenceBindingsSnapshot).toMatchObject([{ role: "reference", frameId: "f1", purpose: "可选细节参考图" }]);
+        expect(video.referenceBindingsSnapshot?.some((binding) => binding.keyframeIndex !== undefined)).toBe(false);
+    });
+
+    it("keeps an explicit empty reference selection empty after later storyboard frames appear", () => {
+        const project = fixture();
+        const shot = project.episodes[0].shots[0];
+        shot.framePlan = { start: { source: "independent" }, end: { required: false }, frames: [{ id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 15, actionPrompt: "抬头", imagePrompt: "人物抬头" }] };
+        const episode = { ...project.episodes[0], shots: [shot], continuityEdges: [] };
+        const locked = buildDramaProductionRun(project, episode, { imageModel: "image", videoModel: "video", referenceSelections: { [shot.id]: [] } });
+        const video = locked.steps.find((step) => step.type === "video")!;
+        shot.storyboardFrames = [{ id: "f1", sequenceIndex: 1, mediaUrl: "/late-frame.png", source: "generated", status: "success", continuityStatus: "passed" }];
+
+        const refreshed = refreshDramaVideoStepReferences(project, { ...episode, shots: [shot] }, video);
+
+        expect(refreshed.referenceImageUrls).toEqual([]);
+        expect(refreshed.referenceBindingsSnapshot).toEqual([]);
+    });
+
+    it("adds an accepted actual tail only for a declared continuity edge", () => {
+        const project = fixture();
+        const previous = project.episodes[0].shots[0];
+        previous.videoUrl = "/previous.mp4";
+        previous.frameEvidence = [createFrameEvidence({ role: "actual_end", source: "video_extraction", mediaUrl: "/previous-tail.png", sourceVideoUrl: previous.videoUrl, validity: "accepted" })];
+
+        const run = buildDramaProductionRun(project, project.episodes[0], { imageModel: "image", videoModel: "video" });
+        const nextVideo = run.steps.find((step) => step.shotId === "shot-two" && step.type === "video")!;
+
+        expect(nextVideo.referenceBindingsSnapshot?.[0]).toMatchObject({ role: "first_frame", shotId: "shot-one", url: "/previous-tail.png" });
+        expect(nextVideo.referenceMode).toBe("reference");
+    });
+
+    it("keeps strict keyframe indexes after the inherited actual tail", () => {
+        const project = fixture();
+        const previous = project.episodes[0].shots[0];
+        previous.videoUrl = "/previous.mp4";
+        previous.frameEvidence = [createFrameEvidence({ role: "actual_end", source: "video_extraction", mediaUrl: "/previous-tail.png", sourceVideoUrl: previous.videoUrl, validity: "accepted" })];
+        const shot = project.episodes[0].shots[1];
+        shot.framePlan = {
+            start: { source: "independent" },
+            end: { required: false },
+            frames: [
+                { id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 7.5, actionPrompt: "抬头", imagePrompt: "人物抬头" },
+                { id: "f2", sequenceIndex: 2, startSecond: 7.5, endSecond: 15, actionPrompt: "转身", imagePrompt: "人物转身" },
+            ],
+        };
+        shot.storyboardFrames = shot.framePlan.frames.map((frame) => ({ id: frame.id, sequenceIndex: frame.sequenceIndex, mediaUrl: `/${frame.id}.png`, source: "generated", status: "success", continuityStatus: "passed" }));
+
+        const run = buildDramaProductionRun(project, project.episodes[0], { imageModel: "image", videoModel: "video", referenceModes: { [shot.id]: "all_frames" } });
+        const video = run.steps.find((step) => step.shotId === shot.id && step.type === "video")!;
+
+        expect(video.referenceBindingsSnapshot?.map((binding) => binding.role)).toEqual(["first_frame", "keyframe", "keyframe"]);
+        expect(video.referenceBindingsSnapshot?.filter((binding) => binding.role === "keyframe").map((binding) => binding.keyframeIndex)).toEqual([1, 2]);
     });
 
     it("keeps production-package reference order and accepts usable project source images", () => {
@@ -196,7 +308,11 @@ describe("drama production run planning", () => {
         const framePlan = shot.framePlan!;
         shot.storyboardFrames = framePlan.frames.map((frame) => ({ id: frame.id, sequenceIndex: frame.sequenceIndex, mediaUrl: `/${frame.id}.png`, source: "upload", status: "success", continuityStatus: "passed" }));
 
-        const run = buildDramaProductionRun(project, { ...project.episodes[0], shots: [shot], continuityEdges: [] }, { imageModel: "image", videoModel: "video", maxReferenceImages: 4 });
+        const run = buildDramaProductionRun(
+            project,
+            { ...project.episodes[0], shots: [shot], continuityEdges: [] },
+            { imageModel: "image", videoModel: "video", maxReferenceImages: 4, referenceSelections: { [shot.id]: ["f1", "f2", "source-two", "source-one"] }, referenceModes: { [shot.id]: "all_frames" } },
+        );
 
         expect(run.steps.filter((step) => step.type === "asset_anchor")).toEqual([
             expect.objectContaining({ assetId: "source-two", status: "success", outputRemoteUrls: ["https://cdn.example.com/two.png"] }),
@@ -224,7 +340,7 @@ describe("drama production run planning", () => {
                 { id: "f2", sequenceIndex: 2, startSecond: 2, endSecond: 4, actionPrompt: "转身", imagePrompt: "人物转身" },
             ],
         };
-        const locked = buildDramaProductionRun(project, { ...project.episodes[0], shots: [shot], continuityEdges: [] }, { imageModel: "image", videoModel: "video", maxReferenceImages: 4 });
+        const locked = buildDramaProductionRun(project, { ...project.episodes[0], shots: [shot], continuityEdges: [] }, { imageModel: "image", videoModel: "video", maxReferenceImages: 4, referenceModes: { [shot.id]: "all_frames" } });
         const video = locked.steps.find((step) => step.type === "video")!;
         expect(video.referenceImageUrls).toEqual([]);
 
@@ -262,10 +378,10 @@ describe("drama production run planning", () => {
             continuityStatus: "pending",
         }));
 
-        const run = buildDramaProductionRun(project, { ...project.episodes[0], shots: [shot], continuityEdges: [] }, { imageModel: "image", videoModel: "video", maxReferenceImages: 4 });
+        const run = buildDramaProductionRun(project, { ...project.episodes[0], shots: [shot], continuityEdges: [] }, { imageModel: "image", videoModel: "video", maxReferenceImages: 4, referenceModes: { [shot.id]: "all_frames" } });
 
-        expect(run.steps.filter((step) => step.type === "keyframe")).toEqual(expect.arrayContaining([expect.objectContaining({ status: "success" })]));
-        expect(run.steps.find((step) => step.type === "video")).toMatchObject({ status: "ready", referenceImageUrls: ["/f1.png", "/f2.png"] });
+        expect(run.steps.filter((step) => step.type === "keyframe")).toEqual(expect.arrayContaining([expect.objectContaining({ status: "blocked" })]));
+        expect(run.steps.find((step) => step.type === "video")).toMatchObject({ status: "blocked", referenceImageUrls: ["/f1.png", "/f2.png"] });
     });
 
     it("blocks before submission when assets leave room for fewer than two frame anchors", () => {
@@ -285,7 +401,9 @@ describe("drama production run planning", () => {
             ],
         };
 
-        expect(() => buildDramaProductionRun(project, { ...project.episodes[0], shots: [shot], continuityEdges: [] }, { imageModel: "image", videoModel: "video", maxReferenceImages: 20 })).toThrow("至少 2 张逐帧锚点图");
+        const run = buildDramaProductionRun(project, { ...project.episodes[0], shots: [shot], continuityEdges: [] }, { imageModel: "image", videoModel: "video", maxReferenceImages: 20 });
+        expect(run.steps.filter((step) => step.type === "keyframe")).toHaveLength(0);
+        expect(run.steps.find((step) => step.type === "video")).toMatchObject({ status: "ready", referenceImageUrls: [] });
     });
 });
 

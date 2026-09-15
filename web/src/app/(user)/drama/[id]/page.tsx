@@ -394,10 +394,10 @@ function DramaProjectEditor({ project }: { project: DramaProject }) {
         const shotIds = Array.from(new Set(issues.map((issue) => issue.shotId).filter((id): id is string => Boolean(id))));
         let fixedCount = 0;
         for (const shotId of shotIds) if (await completeShotReview(shotId)) fixedCount += 1;
-        const assetBlocked = issues.some((issue) => ["CHARACTER_ANCHOR", "LOCATION_ANCHOR", "PROP_ANCHOR", "CHARACTER_REFERENCE", "LOCATION_REFERENCE", "PROP_REFERENCE", "CLUE_REFERENCE", "SERIES_BIBLE"].includes(issue.code));
+        const assetBlocked = issues.some((issue) => issue.severity === "blocking" && ["CHARACTER_REFERENCE", "LOCATION_REFERENCE", "PROP_REFERENCE", "CLUE_REFERENCE", "SERIES_BIBLE"].includes(issue.code));
         if (assetBlocked) {
             setAssetsOpen(true);
-            message.info(fixedCount ? "Agent 已补全镜头参数；请在项目资产中确认基准图或系列圣经后继续。" : "这些阻断项需要在项目资产中确认基准图或系列圣经。已为你打开维护入口。");
+            message.info(fixedCount ? "Agent 已补全镜头参数；请在项目资产中确认引用和系列圣经后继续。" : "这些阻断项需要在项目资产中确认引用或系列圣经。已为你打开维护入口。");
         }
         return fixedCount > 0;
     };

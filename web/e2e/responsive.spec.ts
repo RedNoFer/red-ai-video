@@ -1142,7 +1142,16 @@ test("drama shot generation previews prompt before confirmation", async ({ page 
                 references: [{ id: "scene-one-ref", url: "/scene.png", source: "generated", label: "基准", status: "approved", createdAt: "2026-01-01T00:00:00.000Z" }],
             },
         ],
-        props: [],
+        props: [
+            {
+                id: "prop-one",
+                name: "断剑",
+                description: "用于测试可选道具参考图",
+                profile: { visualIdentity: "黑色断剑", identityAnchors: ["断裂剑尖"] },
+                primaryReferenceId: "prop-one-ref",
+                references: [{ id: "prop-one-ref", url: "/prop.png", source: "generated", label: "基准", status: "approved", createdAt: "2026-01-01T00:00:00.000Z" }],
+            },
+        ],
         clues: [],
         episodes: [
             {
@@ -1225,7 +1234,7 @@ test("drama shot generation previews prompt before confirmation", async ({ page 
                             { id: "frame-two", sequenceIndex: 2, source: "generated", status: "success", mediaUrl: "/frame-two.png", continuityStatus: "passed" },
                         ],
                         characterIds: ["character-one"],
-                        propIds: [],
+                        propIds: ["prop-one"],
                         clueIds: [],
                         sceneId: "scene-one",
                         storyboardFrameMode: "all_frames",
@@ -1252,9 +1261,11 @@ test("drama shot generation previews prompt before confirmation", async ({ page 
     });
     expect(locked.ok(), await locked.text()).toBe(true);
     let productionRunCreates = 0;
+    let productionRunBody: Record<string, unknown> | undefined;
     await page.route(new RegExp(`/api/drama/projects/${project.id}/production-runs$`), async (route) => {
         if (route.request().method() !== "POST") return route.fallback();
         productionRunCreates += 1;
+        productionRunBody = (await route.request().postDataJSON()) as Record<string, unknown>;
         await route.fulfill({
             json: {
                 code: 0,
@@ -1299,31 +1310,40 @@ test("drama shot generation previews prompt before confirmation", async ({ page 
     await expect(previewDialog.getByText("动态意图：", { exact: false })).toBeVisible();
     await expect(previewDialog.getByText("时间段动作：", { exact: false })).toBeVisible();
     await expect(previewDialog.getByText("实际参考图绑定（编号与本次请求图片数组完全一致）", { exact: false })).toBeVisible();
-    await expect(previewDialog.getByText("@图片1：顺序帧 1", { exact: false })).toBeVisible();
-    await expect(previewDialog.getByText("@图片3：场景 · 黑湖", { exact: false })).toBeVisible();
+    await expect(previewDialog.getByText("关键帧为可选细节参考；未选择时按视频提示词和所选资产图生成", { exact: false })).toBeVisible();
+    await expect(previewDialog.getByText("@图片1：场景 · 黑湖", { exact: false })).toBeVisible();
     const referenceGallery = previewDialog.locator("[data-drama-prompt-reference-gallery]");
     await expect(referenceGallery).toBeVisible();
-    await expect(referenceGallery.getByRole("img")).toHaveCount(4);
+    await expect(referenceGallery.getByRole("img")).toHaveCount(5);
     await expect(referenceGallery.getByText("@图片1", { exact: true })).toBeVisible();
-    await expect(referenceGallery.getByText("@图片4", { exact: true })).toBeVisible();
-    await expect(referenceGallery.getByRole("img", { name: "顺序帧 1" })).toBeVisible();
+    await expect(referenceGallery.getByText("@图片2", { exact: true })).toBeVisible();
+    await expect(referenceGallery.getByRole("img", { name: "分镜帧 1" })).toBeVisible();
     await expect(referenceGallery.getByRole("img", { name: "角色 · Karin" })).toBeVisible();
+    await expect(referenceGallery.getByRole("img", { name: "道具 · 断剑" })).toBeVisible();
+    await expect(previewDialog.getByRole("checkbox", { name: "黑湖记忆 1/1启用按序关键帧驱动" })).not.toBeChecked();
+
+    const strictMode = previewDialog.getByRole("checkbox", { name: "黑湖记忆 1/1启用按序关键帧驱动" });
+    await strictMode.check();
+    await expect(referenceGallery.getByRole("checkbox", { name: "顺序关键帧" }).first()).toBeDisabled();
+    await strictMode.uncheck();
+    const frameCheckboxes = referenceGallery.locator("[data-drama-prompt-reference-item]").filter({ hasText: "分镜帧" }).getByRole("checkbox", { name: "引用此图" });
+    await expect(frameCheckboxes).toHaveCount(2);
+    await frameCheckboxes.nth(0).uncheck();
+    await frameCheckboxes.nth(1).uncheck();
+    const propReference = referenceGallery.locator("[data-drama-prompt-reference-item]").filter({ hasText: "道具 · 断剑" });
+    await propReference.getByRole("checkbox", { name: "引用此图" }).check();
+    await propReference.getByRole("checkbox", { name: "引用此图" }).uncheck();
     await expect(previewDialog.getByText("生成15秒", { exact: false })).toHaveCount(0);
     await expect(previewDialog.getByText("角色设定：", { exact: false })).toHaveCount(0);
     await expect(previewDialog.getByText("确认后才会创建视频任务并消耗额度", { exact: false })).toBeVisible();
     await expect(generationPanel.getByRole("button", { name: "生成镜头" })).toBeVisible();
     expect(productionRunCreates).toBe(0);
-
-    await previewDialog.getByRole("button", { name: "返回修改" }).click();
-    await generationPanel.getByRole("button", { name: "检查生成条件" }).click();
-    await expect.poll(() => preflightCalls).toBe(1);
-    await expect(page.getByText("生成前检查已通过", { exact: true })).toBeVisible();
-
-    await generationPanel.getByRole("button", { name: "生成镜头" }).click();
-    const reopenedPreviewDialog = page.getByRole("dialog", { name: "确认生成 1 个镜头" });
-    await reopenedPreviewDialog.getByRole("button", { name: "确认生成" }).click();
-    await expect(reopenedPreviewDialog).toBeHidden();
+    await previewDialog.getByRole("button", { name: "确认生成" }).click();
+    await expect(previewDialog).toBeHidden();
     expect(productionRunCreates).toBe(1);
+    expect(preflightCalls).toBe(0);
+    expect(productionRunBody?.referenceModes).toEqual({ "shot-one": "reference" });
+    expect(productionRunBody?.referenceSelections).toEqual({ "shot-one": ["scene-one", "character-one"] });
 });
 
 test("drama shot prompt optimization is available from the Agent menu and persists the result", async ({ page }) => {

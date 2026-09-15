@@ -38,6 +38,34 @@ describe("drama production preflight", () => {
         expect(result.issues.filter((issue) => issue.severity === "blocking")).toEqual([]);
     });
 
+    it("allows prompt-first video generation without storyboard or baseline images", () => {
+        const project = fixture();
+        project.seriesBible = { version: "series-bible-v1", canonCharacters: ["C01"], immutableRules: [], relationshipState: "", worldRules: [], unresolvedThreads: [], visualMotifs: [], soundMotifs: [] };
+        const shot = project.episodes[0].shots[0];
+        shot.imagePrompt = "";
+        shot.framePlan = undefined;
+        shot.entryState = {
+            characters: [{ assetId: "character-one", position: "左侧", gaze: "向右", pose: "站立", action: "抬头" }],
+            props: [{ assetId: "prop-one", state: "完整", holderId: "character-one" }],
+            environment: "城门",
+            lighting: "冷光",
+        };
+        shot.exitState = shot.entryState;
+
+        const result = preflightDramaProduction(project, project.episodes[0]);
+
+        expect(result.issues.some((issue) => issue.code === "VIDEO_PROMPT_MISSING")).toBe(false);
+        expect(result.issues.filter((issue) => issue.severity === "blocking")).toEqual([]);
+        expect(result.issues).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({ code: "FRAME_PLAN_MISSING", severity: "warning" }),
+                expect.objectContaining({ code: "CHARACTER_ANCHOR", severity: "warning" }),
+                expect.objectContaining({ code: "LOCATION_ANCHOR", severity: "warning" }),
+                expect.objectContaining({ code: "PROP_ANCHOR", severity: "warning" }),
+            ]),
+        );
+    });
+
     it("blocks names introduced by prompts without shot references", () => {
         const project = fixture();
         project.characters.push({ id: "character-two", code: "C02", name: "Rifa", description: "", activeEpisodeCodes: ["E01"] });
@@ -77,8 +105,8 @@ describe("drama production preflight", () => {
             { alias: "@角色", role: "character_anchor", purpose: "角色基准", assetId: "character-one" },
         ];
         const issues = preflightDramaProduction(project, project.episodes[0]).issues;
-        expect(issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "REFERENCE_MANIFEST_SCENE", severity: "blocking" })]));
-        expect(issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "REFERENCE_MANIFEST_PROP", severity: "blocking", assetId: "prop-one" })]));
+        expect(issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "REFERENCE_MANIFEST_SCENE", severity: "warning" })]));
+        expect(issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "REFERENCE_MANIFEST_PROP", severity: "warning", assetId: "prop-one" })]));
     });
 
     it("does not treat characters named only inside negative prompt constraints as references", () => {
@@ -116,7 +144,7 @@ describe("drama production preflight", () => {
         const project = fixture();
         project.episodes[0].shots[0].storyboardFrameMode = "all_frames";
         project.episodes[0].shots[0].framePlan!.frames[0].imagePrompt = "静态关键帧：待补全";
-        const result = preflightDramaProduction(project, project.episodes[0]);
+        const result = preflightDramaProduction(project, project.episodes[0], undefined, undefined, { [project.episodes[0].shots[0].id]: "all_frames" });
         expect(result.issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "FRAME_VISUAL_CONTENT", severity: "blocking" })]));
     });
 
@@ -144,7 +172,7 @@ describe("drama production preflight", () => {
         const shot = project.episodes[0].shots[0];
         shot.duration = 15;
         shot.storyboardFrameMode = "all_frames";
-        shot.sourceAssetIds = Array.from({ length: 4 }, (_, index) => `source-${index + 1}`);
+        shot.sourceAssetIds = Array.from({ length: 5 }, (_, index) => `source-${index + 1}`);
         project.sourceAssets = shot.sourceAssetIds.map((id) => ({ id, type: "image" as const, title: id, serverUrl: `/api/reference-assets/${id}.png` }));
         shot.framePlan!.frames = Array.from({ length: 5 }, (_, index) => ({
             id: `f${index + 1}`,
@@ -155,7 +183,9 @@ describe("drama production preflight", () => {
             imagePrompt: `人物保持第${index + 1}个不同姿态`,
         }));
 
-        expect(preflightDramaProduction(project, project.episodes[0]).issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "REFERENCE_IMAGE_BUDGET", severity: "warning" })]));
+        expect(preflightDramaProduction(project, project.episodes[0], undefined, { [shot.id]: [...shot.framePlan!.frames.map((frame) => frame.id), ...shot.sourceAssetIds] }, { [shot.id]: "all_frames" }).issues).toEqual(
+            expect.arrayContaining([expect.objectContaining({ code: "REFERENCE_IMAGE_BUDGET", severity: "warning" })]),
+        );
     });
 
     it("allows up to thirty references for a thirty second shot", () => {
@@ -174,7 +204,7 @@ describe("drama production preflight", () => {
             imagePrompt: `人物保持第${index + 1}个不同姿态`,
         }));
 
-        expect(preflightDramaProduction(project, project.episodes[0]).issues.some((issue) => issue.code === "REFERENCE_IMAGE_BUDGET")).toBe(false);
+        expect(preflightDramaProduction(project, project.episodes[0], undefined, undefined, { [shot.id]: "all_frames" }).issues.some((issue) => issue.code === "REFERENCE_IMAGE_BUDGET")).toBe(false);
     });
 
     it("blocks a multi-frame shot whose camera plan never changes", () => {
@@ -207,7 +237,7 @@ describe("drama production preflight", () => {
         const project = fixture();
         project.scenes[0].sceneReferenceBoard = { layout: "legacy-3x3", referenceId: "scene-ref" };
 
-        expect(preflightDramaProduction(project, project.episodes[0]).issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "LOCATION_ANCHOR", severity: "blocking", assetId: "scene-one" })]));
+        expect(preflightDramaProduction(project, project.episodes[0]).issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "LOCATION_ANCHOR", severity: "warning", assetId: "scene-one" })]));
     });
 
     it("does not block all-frames production when real frames are still pending inspection", () => {
@@ -220,7 +250,7 @@ describe("drama production preflight", () => {
         ];
         shot.storyboardFrames = [{ id: "f1", sequenceIndex: 1, mediaUrl: "/f1.png", source: "generated", status: "success", continuityStatus: "pending" }];
 
-        const result = preflightDramaProduction(project, project.episodes[0]);
+        const result = preflightDramaProduction(project, project.episodes[0], undefined, undefined, { [shot.id]: "all_frames" });
 
         expect(result.issues.some((issue) => issue.code === "FRAME_ASSET_NOT_ACCEPTED")).toBe(false);
         expect(result.issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "FRAME_ASSET_NOT_READY", shotId: shot.id, severity: "blocking" })]));
@@ -233,7 +263,7 @@ describe("drama production preflight", () => {
         shot.framePlan!.frames = [{ id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 15, actionPrompt: "抬头", imagePrompt: "人物抬头，手握断剑" }];
         shot.storyboardFrames = [{ id: "f1", sequenceIndex: 1, mediaUrl: "/f1.png", source: "generated", status: "success", continuityStatus: "passed" }];
 
-        expect(preflightDramaProduction(project, project.episodes[0]).issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "FRAME_COUNT_MIN", severity: "blocking" })]));
+        expect(preflightDramaProduction(project, project.episodes[0], undefined, undefined, { [shot.id]: "all_frames" }).issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "FRAME_COUNT_MIN", severity: "blocking" })]));
     });
 
     it("blocks video instructions mixed into static frame content", () => {
@@ -250,7 +280,7 @@ describe("drama production preflight", () => {
         };
         shot.storyboardFrames = shot.framePlan.frames.map((frame) => ({ id: frame.id, sequenceIndex: frame.sequenceIndex, mediaUrl: `/${frame.id}.png`, source: "upload", status: "success", continuityStatus: "passed" }));
 
-        const result = preflightDramaProduction(project, project.episodes[0]);
+        const result = preflightDramaProduction(project, project.episodes[0], undefined, undefined, { [shot.id]: "all_frames" });
 
         expect(result.issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "FRAME_VISUAL_CONTENT", severity: "blocking" })]));
     });

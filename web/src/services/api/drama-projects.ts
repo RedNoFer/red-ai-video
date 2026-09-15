@@ -17,6 +17,7 @@ import type {
     DramaAssetGenerationBatch,
     DramaVisualReview,
     DramaShot,
+    DramaVideoReferenceMode,
 } from "@/lib/drama-project-contract";
 import { resolveDramaGlobalVisualContract } from "@/lib/drama-style";
 
@@ -265,11 +266,11 @@ export class DramaApiError extends Error {
     }
 }
 
-export function preflightDramaGeneration(projectId: string, episodeId: string, shotIds: string[], requestId: string) {
+export function preflightDramaGeneration(projectId: string, episodeId: string, shotIds: string[], requestId: string, options: { referenceSelections?: Record<string, string[]>; referenceModes?: Record<string, DramaVideoReferenceMode> } = {}) {
     return request<{ preflight: DramaProductionPreflight }>("/api/drama/preflight", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId, episodeId, shotIds, requestId }),
+        body: JSON.stringify({ projectId, episodeId, shotIds, requestId, ...(options.referenceSelections ? { referenceSelections: options.referenceSelections } : {}), ...(options.referenceModes ? { referenceModes: options.referenceModes } : {}) }),
     }).then((data) => data.preflight);
 }
 
@@ -384,6 +385,7 @@ export function createDramaProductionRun(
         productionPlan?: DramaProductionPlan;
         shotSnapshot?: DramaShot;
         referenceSelections?: Record<string, string[]>;
+        referenceModes?: Record<string, DramaVideoReferenceMode>;
     } = {},
 ) {
     const compactPreflight = preflight
@@ -413,6 +415,7 @@ export function createDramaProductionRun(
             ...(options.productionPlan ? { productionPlan: options.productionPlan } : {}),
             ...(options.shotSnapshot ? { shotSnapshot: options.shotSnapshot } : {}),
             ...(options.referenceSelections ? { referenceSelections: options.referenceSelections } : {}),
+            ...(options.referenceModes ? { referenceModes: options.referenceModes } : {}),
         }),
     }).then((data) => data.run);
 }

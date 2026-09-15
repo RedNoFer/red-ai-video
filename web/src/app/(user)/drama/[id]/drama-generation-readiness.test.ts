@@ -4,12 +4,12 @@ import type { DramaProject, DramaShot } from "../types";
 import { summarizeDramaGeneration } from "./drama-generation-readiness";
 
 describe("drama generation readiness", () => {
-    it("separates queueable shots from prompt and baseline blockers", () => {
-        const project = projectFixture([shotFixture({ id: "direct", videoMode: "direct" }), shotFixture({ id: "missing-prompt", videoMode: "storyboard", imagePrompt: "" }), shotFixture({ id: "legacy-reference", videoMode: "reference" })]);
+    it("keeps optional visual baselines out of the video queue blockers", () => {
+        const project = projectFixture([shotFixture({ id: "direct", videoMode: "direct" }), shotFixture({ id: "missing-prompt", videoMode: "storyboard", videoPrompt: "" }), shotFixture({ id: "legacy-reference", videoMode: "reference" })]);
 
         const summary = summarizeDramaGeneration(project, project.episodes[0]);
 
-        expect(summary.queueableShotIds).toEqual([]);
+        expect(summary.queueableShotIds).toEqual(["direct", "legacy-reference"]);
         expect(summary.missingBaselineShotIds).toHaveLength(3);
         expect(summary.missingPromptShotIds).toEqual(["missing-prompt"]);
         expect(summary.missingReferenceShotIds).toEqual([]);

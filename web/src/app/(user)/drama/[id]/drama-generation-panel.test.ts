@@ -71,6 +71,9 @@ describe("Drama generation production workspace", () => {
         expect(source).toContain("sm:[content-visibility:auto]");
         expect(source).toContain("publicUpstreamError");
         expect(source).toContain("上游渠道暂时不可用");
+        expect(source).toContain('body: JSON.stringify({ action: "refresh" })');
+        expect(source).toContain('method: "POST"');
+        expect(source).toContain("拉取最新视频");
         expect(source).toContain("data-drama-shot-preflight-blockers");
         expect(source).toContain("completeShotReviewAndRefresh");
         expect(source).toContain("去内容审核");
@@ -153,17 +156,17 @@ describe("Drama generation production workspace", () => {
 
         expect(referenceBuilder).toContain('frame.mediaUrl && frame.status === "success"');
         expect(referenceBuilder).not.toContain('frame.continuityStatus === "passed"');
-        expect(source).toContain("全能帧必须全量按时间顺序引用；普通参考图可按需选择");
-        expect(source).not.toContain("全能帧必须全量按时间顺序引用并完成验收");
+        expect(source).toContain("关键帧为可选细节参考；未选择时按视频提示词和所选资产图生成");
+        expect(source).toContain("普通模式下不参与时间轴");
     });
 
     it("allows optional fixed references to be deselected while keeping frame anchors locked", async () => {
         const source = await readFile(resolve(process.cwd(), "src/app/(user)/drama/[id]/drama-generation-panel.tsx"), "utf8");
 
-        expect(source).toContain("disabled={reference.required || (allFrames && frameIds.has(reference.id))}");
-        expect(source).toContain('{allFrames && frameIds.has(reference.id) ? "全量关键帧" : reference.required ? "必须引用" : "引用此图"}');
-        expect(source).toContain("required: false });");
-        expect(source).toContain("const selected = row.references.map((reference) => reference.id);");
+        expect(source).toContain('disabled={reference.required || (allFrames && reference.kind === "frame")}');
+        expect(source).toContain('{reference.required ? "连续性必选" : allFrames && reference.kind === "frame" ? "顺序关键帧"');
+        expect(source).toContain('kind: "frame"');
+        expect(source).toContain('const allFrames = referenceModes[row.shot.id] === "all_frames"');
         expect(source).toContain("return selected.length > dramaReferenceImageBudget(row.shot.duration)");
     });
 

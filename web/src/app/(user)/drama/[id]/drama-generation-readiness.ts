@@ -1,5 +1,4 @@
 import type { DramaEpisode, DramaProject, DramaShot } from "../types";
-import { dramaShotVideoMode } from "./drama-shot-generation-utils";
 import { hasApprovedAssetReference } from "@/lib/drama-asset-baseline";
 
 const ACTIVE_TASK_STATUSES = new Set(["queued", "running"]);
@@ -37,10 +36,9 @@ export function summarizeDramaGeneration(project: DramaProject, episode: DramaEp
     let completedAudioCount = 0;
 
     for (const shot of episode.shots) {
-        const mode = dramaShotVideoMode(project, shot);
         const active = [shot.storyboardStatus, shot.storyboardEndStatus, shot.generationStatus, shot.audioStatus].some((status) => ACTIVE_TASK_STATUSES.has(status || ""));
         const failed = [shot.storyboardStatus, shot.storyboardEndStatus, shot.generationStatus, shot.audioStatus].some((status) => status === "error");
-        const missingPrompt = !shot.videoPrompt.trim() || (mode === "storyboard" && !shot.imagePrompt.trim());
+        const missingPrompt = !(shot.executionVideoPrompt?.trim() || shot.videoPrompt.trim());
         const missingReference = false;
         const shotAssets = [
             shot.sceneId ? project.scenes.find((item) => item.id === shot.sceneId) : undefined,
@@ -64,7 +62,7 @@ export function summarizeDramaGeneration(project: DramaProject, episode: DramaEp
         }
     }
 
-    const blockedShotIds = new Set([...missingPromptShotIds, ...missingReferenceShotIds, ...missingBaselineShotIds]);
+    const blockedShotIds = new Set([...missingPromptShotIds, ...missingReferenceShotIds]);
     const activeIds = new Set(activeShotIds);
     const queueableShotIds = incompleteShotIds.filter((shotId) => !blockedShotIds.has(shotId) && !activeIds.has(shotId));
 

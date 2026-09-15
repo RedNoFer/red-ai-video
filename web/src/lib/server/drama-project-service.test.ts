@@ -340,7 +340,7 @@ describe("drama project service updates", () => {
         expect(mocks.deleteUserOwnedMediaAssetsPhysically).toHaveBeenCalledWith("user-one", ["permanent/one.png"]);
     });
 
-    it("allows eight total image references for a 15-second shot", () => {
+    it("rejects explicitly selected unreadable image references", () => {
         const shot = {
             id: "shot-one",
             title: "镜头一",
@@ -354,10 +354,10 @@ describe("drama project service updates", () => {
             framePlan: { frames: ["f1", "f2", "f3", "f4"].map((id, index) => ({ id, sequenceIndex: index + 1 })) },
         } as never;
 
-        expect(() => validateDramaReferenceSelections({} as DramaProject, { continuityEdges: [] } as never, [shot], { "shot-one": ["scene-one", "character-one", "character-two", "prop-one", "f1", "f2", "f3", "f4"] })).not.toThrow();
+        expect(() => validateDramaReferenceSelections({} as DramaProject, { continuityEdges: [] } as never, [shot], { "shot-one": ["scene-one", "character-one", "character-two", "prop-one", "f1", "f2", "f3", "f4"] })).toThrow("不可读");
     });
 
-    it("allows optional fixed asset references to be cancelled before video submission", () => {
+    it("allows prompt-only submission when optional fixed references are omitted", () => {
         const shot = {
             id: "shot-one",
             title: "镜头一",
@@ -371,7 +371,7 @@ describe("drama project service updates", () => {
             framePlan: { frames: ["f1", "f2", "f3", "f4"].map((id, index) => ({ id, sequenceIndex: index + 1 })) },
         } as never;
 
-        expect(() => validateDramaReferenceSelections({} as DramaProject, { continuityEdges: [] } as never, [shot], { "shot-one": ["scene-one", "character-one", "character-two", "f1", "f2", "f3", "f4"] })).not.toThrow();
+        expect(() => validateDramaReferenceSelections({} as DramaProject, { continuityEdges: [] } as never, [shot], { "shot-one": [] })).not.toThrow();
     });
 
     it("reattaches a video step to the active task created by the same request", () => {

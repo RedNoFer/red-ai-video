@@ -1,4 +1,4 @@
-import type { DramaEpisode, DramaProductionPreflight, DramaProject } from "@/lib/drama-project-contract";
+import type { DramaEpisode, DramaProductionPreflight, DramaProject, DramaVideoReferenceMode } from "@/lib/drama-project-contract";
 import { compileDramaShotPrompts } from "@/lib/drama-prompt-compiler";
 import { resolveDramaVisualStyle } from "@/lib/drama-style";
 import { getAuthSettings, refundUserPoints } from "@/lib/auth/store";
@@ -7,11 +7,43 @@ import { rankTextPlanningCandidates, requestStructuredText } from "@/lib/server/
 import { preflightDramaProduction } from "@/lib/server/drama-production-preflight";
 import { hasSystemAiCharge, readSystemAiBilling, systemAiBillingHeaders, systemAiIdempotencyKey } from "@/lib/server/system-ai-billing";
 
-export type DramaGenerationPreflightInput = { origin: string; cookie: string; userId: string; requestId: string; project: DramaProject; episode: DramaEpisode; shotIds?: string[] };
+const NON_BLOCKING_VISUAL_ISSUES = new Set([
+    "CHARACTER_ANCHOR",
+    "FRAME_ASSET_NOT_READY",
+    "FRAME_CAMERA_CHANGE_MISSING",
+    "FRAME_COUNT_PATTERN",
+    "FRAME_PLAN_END",
+    "FRAME_PLAN_INVALID",
+    "FRAME_PLAN_MISSING",
+    "FRAME_VISUAL_CONTENT",
+    "FRAME_VISUAL_DUPLICATE",
+    "FRAME_VISUAL_QUALITY",
+    "INACTIVE_CHARACTER",
+    "LOCATION_ANCHOR",
+    "LOCATION_REFERENCE",
+    "PROMPT_CHARACTER_REFERENCE",
+    "PROMPT_PROP_REFERENCE",
+    "PROP_ANCHOR",
+    "REFERENCE_MANIFEST_CHARACTER",
+    "REFERENCE_MANIFEST_PROP",
+    "REFERENCE_MANIFEST_SCENE",
+]);
+
+export type DramaGenerationPreflightInput = {
+    origin: string;
+    cookie: string;
+    userId: string;
+    requestId: string;
+    project: DramaProject;
+    episode: DramaEpisode;
+    shotIds?: string[];
+    referenceSelections?: Record<string, string[]>;
+    referenceModes?: Record<string, DramaVideoReferenceMode>;
+};
 
 export async function preflightDramaGeneration(input: DramaGenerationPreflightInput): Promise<DramaProductionPreflight> {
     const selected = new Set(input.shotIds?.length ? input.shotIds : input.episode.shots.map((shot) => shot.id));
-    const base = preflightDramaProduction(input.project, input.episode, [...selected]);
+    const base = preflightDramaProduction(input.project, input.episode, [...selected], input.referenceSelections, input.referenceModes);
     const issues = [
         ...base.issues.filter((issue) => !issue.shotId || selected.has(issue.shotId)),
         ...input.episode.shots
@@ -24,6 +56,8 @@ export async function preflightDramaGeneration(input: DramaGenerationPreflightIn
     const status = issues.some((issue) => issue.severity === "blocking") ? "blocked" : issues.length ? "needs_confirmation" : "passed";
     const result: DramaProductionPreflight = { ...base, status, issues, checkedShotIds: [...selected] };
     if (result.status === "blocked" || !issues.some((issue) => issue.severity === "warning")) return result;
+    const modelIssues = issues.filter((issue) => !NON_BLOCKING_VISUAL_ISSUES.has(issue.code));
+    if (!modelIssues.length) return result;
 
     const settings = await getAuthSettings();
     const logicalModel = settings.defaultModels.textModel;
@@ -31,7 +65,7 @@ export async function preflightDramaGeneration(input: DramaGenerationPreflightIn
     if (!candidates.length) return result;
     const shots = input.episode.shots
         .filter((shot) => selected.has(shot.id))
-        .map((shot) => ({ id: shot.id, title: shot.title, prompt: compileDramaShotPrompts(input.project, input.episode, shot).videoPrompt, risks: issues.filter((issue) => issue.shotId === shot.id) }));
+        .map((shot) => ({ id: shot.id, title: shot.title, prompt: compileDramaShotPrompts(input.project, input.episode, shot).videoPrompt, risks: modelIssues.filter((issue) => issue.shotId === shot.id) }));
     const tool = {
         name: "preflight_drama_generation",
         description: "检查短剧镜头生成提示词并返回必要的公开提示词修订",
@@ -43,7 +77,7 @@ export async function preflightDramaGeneration(input: DramaGenerationPreflightIn
                     items: {
                         type: "object",
                         properties: { shotId: { type: "string" }, videoPrompt: { type: "string" }, imagePrompt: { type: "string" }, summary: { type: "string" } },
-                        required: ["shotId", "imagePrompt", "videoPrompt", "summary"],
+                        required: ["shotId", "videoPrompt", "summary"],
                         additionalProperties: false,
                     },
                 },
@@ -74,7 +108,7 @@ export async function preflightDramaGeneration(input: DramaGenerationPreflightIn
                 },
             });
             const parsed = JSON.parse(call.arguments) as { revisions?: Array<{ shotId?: string; videoPrompt?: string; imagePrompt?: string; summary?: string }> };
-            const valid = (parsed.revisions || []).filter((revision) => selected.has(String(revision.shotId)) && String(revision.imagePrompt || "").trim() && String(revision.videoPrompt || "").trim() && String(revision.summary || "").trim());
+            const valid = (parsed.revisions || []).filter((revision) => selected.has(String(revision.shotId)) && String(revision.videoPrompt || "").trim() && String(revision.summary || "").trim());
             if (!valid.length) continue;
             const revisedPrompts = Object.fromEntries(valid.map((revision) => [String(revision.shotId), { videoPrompt: String(revision.videoPrompt).trim(), ...(revision.imagePrompt?.trim() ? { imagePrompt: revision.imagePrompt.trim() } : {}) }]));
             return { ...result, revisedPrompts, changeSummary: valid.map((revision) => String(revision.summary).trim()).slice(0, 8) };
@@ -89,7 +123,7 @@ export async function preflightDramaGeneration(input: DramaGenerationPreflightIn
     }
     return {
         ...result,
-        status: "blocked",
-        issues: [...result.issues, { code: "MODEL_PREFLIGHT_FAILED", severity: "blocking", message: "生成前模型预检没有返回有效修订，未创建生成任务，请稍后重试" }],
+        status: "needs_confirmation",
+        issues: [...result.issues, { code: "MODEL_PREFLIGHT_FAILED", severity: "warning", message: "生成前模型预检未返回额外修订，已保留当前视频提示词继续生成" }],
     };
 }

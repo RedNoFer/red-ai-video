@@ -78,7 +78,7 @@ export type DramaReferenceManifestItem = {
 
 export type DramaVideoReferenceBinding = {
     alias: string;
-    role: "first_frame" | "last_frame" | "keyframe" | "character_anchor" | "scene_anchor" | "prop_anchor";
+    role: "reference" | "first_frame" | "last_frame" | "keyframe" | "character_anchor" | "scene_anchor" | "prop_anchor";
     purpose: string;
     sourceId?: string;
     shotId?: string;
@@ -87,6 +87,8 @@ export type DramaVideoReferenceBinding = {
     remoteUrl?: string;
     keyframeIndex?: number;
 };
+
+export type DramaVideoReferenceMode = "reference" | "all_frames";
 
 export type DramaAssetReference = {
     id: string;
@@ -1007,6 +1009,7 @@ export type DramaProductionStep = {
     referenceImageRemoteUrls?: Array<string | undefined>;
     referenceManifest?: DramaReferenceManifestItem[];
     referenceBindingsSnapshot?: DramaVideoReferenceBinding[];
+    referenceMode?: DramaVideoReferenceMode;
     referenceImagesSnapshot?: DramaImageReferenceBinding[];
     manualReferenceImages?: DramaImageReferenceBinding[];
     frameId?: string;
@@ -1035,6 +1038,8 @@ export type DramaProductionRun = {
         videoQuality?: string;
         productionPlan?: DramaProductionPlan;
         modelParameters?: Record<string, unknown>;
+        referenceSelections?: Record<string, string[]>;
+        referenceModes?: Record<string, DramaVideoReferenceMode>;
     };
     steps: DramaProductionStep[];
     scope?: "visual";
