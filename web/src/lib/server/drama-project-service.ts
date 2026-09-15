@@ -90,6 +90,7 @@ const MAX_PROJECT_BYTES = 2 * 1024 * 1024;
 const REVIEW_COMPLETION_STALE_MS = TEXT_MODEL_REQUEST_TIMEOUT_MS * 4;
 const dramaImageDispatchLocks = new Map<string, Promise<DramaProductionRun>>();
 const dramaProductionDispatchLocks = new Map<string, Promise<DramaProductionRun>>();
+const dramaVisualSyncLocks = new Map<string, Promise<DramaProductionRun>>();
 const clearDramaGeneratedMediaState = {
     generationStatus: "idle" as const,
     generationTaskId: undefined,
@@ -1625,6 +1626,28 @@ export async function preflightDramaGenerationForUser(userId: string, projectId:
 }
 
 async function syncDramaVisualRun(userId: string, project: DramaProject, run: DramaProductionRun, transport: { origin?: string; cookie?: string } = {}) {
+    const lockKey = `${userId}:${project.id}:${run.id}`;
+    const previous = dramaVisualSyncLocks.get(lockKey);
+    const current = (async () => {
+        if (previous) {
+            await previous.catch(() => undefined);
+            const latestRun = await getDramaProductionRun(userId, project.id, run.id);
+            if (!latestRun) return run;
+            if (latestRun.updatedAt !== run.updatedAt) return latestRun;
+            const latestProject = await getDramaProject(project.id, userId);
+            if (latestProject) project = latestProject;
+        }
+        return syncDramaVisualRunNow(userId, project, run, transport);
+    })();
+    dramaVisualSyncLocks.set(lockKey, current);
+    try {
+        return await current;
+    } finally {
+        if (dramaVisualSyncLocks.get(lockKey) === current) dramaVisualSyncLocks.delete(lockKey);
+    }
+}
+
+async function syncDramaVisualRunNow(userId: string, project: DramaProject, run: DramaProductionRun, transport: { origin?: string; cookie?: string } = {}) {
     let changed = false;
     let terminalFailureReconciled = false;
     let nextProject = project;
@@ -2996,7 +3019,10 @@ async function releaseOrphanedDramaStoryboardFrameGenerationForUser(userId: stri
     if (activeFrameTask || activeLegacyTask) throw new DramaProjectServiceError("当前帧仍绑定图片任务，请刷新任务状态后再试", 409);
     const hasOrphanedState =
         frameType === "all_frames"
-            ? selectedFrames.some((frame) => [frame.status, frame.candidateStatus].some((status) => status === "queued" || status === "running") && !frame.taskId && !frame.candidateTaskId)
+            ? frameIds.some((frameId) => {
+                  const frame = selectedFrames.find((item) => item.id === frameId);
+                  return !frame || ([frame.status, frame.candidateStatus].some((status) => status === "queued" || status === "running") && !frame.taskId && !frame.candidateTaskId);
+              })
             : frameType === "start_frame"
               ? ["queued", "running"].includes(shot.storyboardStatus || "") && !shot.storyboardTaskId
               : ["queued", "running"].includes(shot.storyboardEndStatus || "") && !shot.storyboardEndTaskId;
