@@ -67,6 +67,7 @@ import {
     updateDramaProjectAssetMutation,
     updateDramaProjectShotMutation,
 } from "@/lib/server/drama-project-store";
+import type { DramaProjectShotMutationAck } from "@/lib/server/drama-project-store";
 import { createDramaProjectVersion, getDramaProjectVersion, listDramaProjectVersions } from "@/lib/server/drama-project-version-store";
 import { persistDramaGeneratedImageReference } from "@/lib/server/drama-asset-reference-media";
 import { deleteUserLocalMediaAssets, deleteUserOwnedMediaAssetsPhysically } from "@/lib/server/local-media-storage";
@@ -2879,12 +2880,15 @@ export async function updateDramaStoryboardFramePromptForUser(userId: string, pr
     return updateDramaProject(userId, normalizeProject(nextProject, project), project.updatedAt);
 }
 
-export async function updateDramaStoryboardFrameGenerationStateForUser(userId: string, projectId: string, episodeIdValue: string, shotIdValue: string, value: unknown) {
+export async function updateDramaStoryboardFrameGenerationStateForUser(userId: string, projectId: string, episodeIdValue: string, shotIdValue: string, value: unknown): Promise<DramaProjectShotMutationAck> {
     const project = await getDramaProject(cleanText(projectId), userId);
     if (!project) throw new DramaProjectServiceError("短剧项目不存在", 404);
     const episodeId = cleanText(episodeIdValue);
     const shotId = cleanText(shotIdValue);
     const input = object(value);
+    const action = cleanText(input.action);
+    if (action === "release_orphaned") return releaseOrphanedDramaStoryboardFrameGenerationForUser(userId, project, episodeId, shotId, input);
+    if (action) throw new DramaProjectServiceError("分镜生图状态操作无效", 400);
     const frameType = cleanText(input.frameType);
     if (frameType !== "start_frame" && frameType !== "end_frame" && frameType !== "all_frames") throw new DramaProjectServiceError("分镜生图类型无效", 400);
     const generationError = cleanText(input.error);
@@ -2966,6 +2970,55 @@ export async function updateDramaStoryboardFrameGenerationStateForUser(userId: s
             throw rebasedError;
         }
     }
+}
+
+async function releaseOrphanedDramaStoryboardFrameGenerationForUser(userId: string, project: DramaProject, episodeId: string, shotId: string, input: Record<string, unknown>): Promise<DramaProjectShotMutationAck> {
+    const episode = project.episodes.find((item) => item.id === episodeId);
+    const shot = episode?.shots.find((item) => item.id === shotId);
+    if (!episode) throw new DramaProjectServiceError("短剧剧集不存在", 404);
+    if (!shot) throw new DramaProjectServiceError("短剧镜头不存在", 404);
+    const frameType = cleanText(input.frameType);
+    if (frameType !== "start_frame" && frameType !== "end_frame" && frameType !== "all_frames") throw new DramaProjectServiceError("分镜生图类型无效", 400);
+    const frameIds = ids(input.frameIds);
+    const selectedFrames = frameType === "all_frames" ? (shot.storyboardFrames || []).filter((frame) => frameIds.includes(frame.id)) : [];
+    if (frameType === "all_frames") {
+        if (!frameIds.length) throw new DramaProjectServiceError("至少选择一个待解除的排队帧", 400);
+        const framePlanIds = new Set((shot.framePlan?.frames || []).map((frame) => frame.id));
+        if (frameIds.some((frameId) => !framePlanIds.has(frameId))) throw new DramaProjectServiceError("待解除帧不属于当前镜头", 400);
+    }
+    const activeFrameTask = selectedFrames.find((frame) => [frame.status, frame.candidateStatus].some((status) => status === "queued" || status === "running") && (frame.taskId || frame.candidateTaskId));
+    const activeLegacyTask =
+        frameType === "start_frame"
+            ? ["queued", "running"].includes(shot.storyboardStatus || "") && shot.storyboardTaskId
+            : frameType === "end_frame"
+              ? ["queued", "running"].includes(shot.storyboardEndStatus || "") && shot.storyboardEndTaskId
+              : undefined;
+    if (activeFrameTask || activeLegacyTask) throw new DramaProjectServiceError("当前帧仍绑定图片任务，请刷新任务状态后再试", 409);
+    const hasOrphanedState =
+        frameType === "all_frames"
+            ? selectedFrames.some((frame) => [frame.status, frame.candidateStatus].some((status) => status === "queued" || status === "running") && !frame.taskId && !frame.candidateTaskId)
+            : frameType === "start_frame"
+              ? ["queued", "running"].includes(shot.storyboardStatus || "") && !shot.storyboardTaskId
+              : ["queued", "running"].includes(shot.storyboardEndStatus || "") && !shot.storyboardEndTaskId;
+    if (!hasOrphanedState) throw new DramaProjectServiceError("当前没有可解除的孤儿排队状态，请刷新后重试", 409);
+
+    const run = await findLatestDramaProductionRun(userId, project.id, episodeId, "visual");
+    if (run && ["planning", "ready", "running", "paused"].includes(run.status)) {
+        const activeTask = run.steps.find((step) => ["asset_anchor", "start_frame", "end_frame", "keyframe"].includes(step.type) && ["ready", "running", "blocked"].includes(step.status) && step.taskId);
+        if (activeTask) throw new DramaProjectServiceError("当前视觉计划仍有图片任务在执行，请等待任务结束后再重试", 409);
+        const cancelled = {
+            ...run,
+            status: "cancelled" as const,
+            steps: run.steps.map((step) => (["success", "failed", "cancelled", "needs_review"].includes(step.status) ? step : { ...step, status: "cancelled" as const })),
+            updatedAt: new Date().toISOString(),
+        };
+        await updateDramaProductionRun(userId, cancelled);
+    }
+    return updateDramaStoryboardFrameGenerationStateForUser(userId, project.id, episodeId, shotId, {
+        frameType,
+        ...(frameType === "all_frames" ? { frameIds } : {}),
+        error: "上次生图没有创建可执行图片任务，已解除排队状态，请重新生成",
+    });
 }
 
 export async function decideDramaContinuityFrameForUser(userId: string, projectId: string, episodeIdValue: string, shotIdValue: string, value: unknown) {

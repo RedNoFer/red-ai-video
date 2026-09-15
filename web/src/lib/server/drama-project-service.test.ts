@@ -1685,6 +1685,80 @@ describe("drama project service updates", () => {
         );
     });
 
+    it("cancels an unsubmitted visual run and releases its queued frame for explicit retry", async () => {
+        const current = project("2026-09-15T08:00:00.000Z", "项目");
+        current.episodes[0].shots = [
+            {
+                id: "shot-one",
+                title: "镜头",
+                characterIds: [],
+                propIds: [],
+                clueIds: [],
+                imagePrompt: "画面",
+                videoPrompt: "动作",
+                cameraMotion: "固定",
+                duration: 6,
+                storyboardFrameMode: "all_frames",
+                framePlan: { frames: [{ id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 6, actionPrompt: "动作", imagePrompt: "画面" }] },
+                storyboardFrames: [{ id: "f1", sequenceIndex: 1, source: "generated", status: "queued" }],
+            } as never,
+        ];
+        const run = {
+            id: "run-unsubmitted",
+            projectId: current.id,
+            episodeId: "episode-one",
+            status: "running",
+            scope: "visual",
+            confirmedAt: current.updatedAt,
+            steps: [{ id: "frame-shot-one-f1", type: "keyframe", shotId: "shot-one", frameId: "f1", sequenceIndex: 1, status: "ready", dependsOn: [] }],
+        } as never;
+        mocks.getDramaProject.mockResolvedValue(current);
+        mocks.findLatestDramaProductionRun.mockResolvedValue(run);
+
+        const saved = await updateDramaStoryboardFrameGenerationStateForUser("user-one", current.id, "episode-one", "shot-one", {
+            action: "release_orphaned",
+            frameType: "all_frames",
+            frameIds: ["f1"],
+        });
+
+        expect(mocks.updateDramaProductionRun).toHaveBeenCalledWith("user-one", expect.objectContaining({ id: "run-unsubmitted", status: "cancelled", steps: [expect.objectContaining({ id: "frame-shot-one-f1", status: "cancelled" })] }));
+        expect(saved.shot.storyboardFrames).toEqual([expect.objectContaining({ id: "f1", status: "error", error: "上次生图没有创建可执行图片任务，已解除排队状态，请重新生成" })]);
+        expect(mocks.fetchInternalApi).not.toHaveBeenCalled();
+    });
+
+    it("does not release a frame that is already bound to a live image task", async () => {
+        const current = project("2026-09-15T08:00:00.000Z", "项目");
+        current.episodes[0].shots = [
+            {
+                id: "shot-one",
+                title: "镜头",
+                characterIds: [],
+                propIds: [],
+                clueIds: [],
+                imagePrompt: "画面",
+                videoPrompt: "动作",
+                cameraMotion: "固定",
+                duration: 6,
+                storyboardFrameMode: "all_frames",
+                framePlan: { frames: [{ id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 6, actionPrompt: "动作", imagePrompt: "画面" }] },
+                storyboardFrames: [{ id: "f1", sequenceIndex: 1, source: "generated", status: "running", taskId: "task-live" }],
+            } as never,
+        ];
+        mocks.getDramaProject.mockResolvedValue(current);
+        mocks.findLatestDramaProductionRun.mockResolvedValue({
+            id: "run-live",
+            projectId: current.id,
+            episodeId: "episode-one",
+            status: "running",
+            scope: "visual",
+            steps: [{ id: "frame-shot-one-f1", type: "keyframe", shotId: "shot-one", frameId: "f1", sequenceIndex: 1, status: "running", taskId: "task-live", dependsOn: [] }],
+        } as never);
+
+        await expect(updateDramaStoryboardFrameGenerationStateForUser("user-one", current.id, "episode-one", "shot-one", { action: "release_orphaned", frameType: "all_frames", frameIds: ["f1"] })).rejects.toMatchObject({ status: 409 });
+        expect(mocks.updateDramaProductionRun).not.toHaveBeenCalled();
+        expect(mocks.updateDramaProjectShotMutation).not.toHaveBeenCalled();
+    });
+
     it("rebases a fast terminal visual failure when the project changed concurrently", async () => {
         const current = project("2026-07-19T08:00:00.000Z", "项目");
         current.episodes[0].shots = [

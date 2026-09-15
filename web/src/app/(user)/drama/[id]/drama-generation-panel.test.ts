@@ -243,6 +243,9 @@ describe("Drama generation production workspace", () => {
         expect(source).toContain("data-drama-generation-overlay");
         expect(source).toContain("pointer-events-none absolute inset-x-0 top-0");
         expect(source).toContain("当前镜头已锁定，内容仍可查看");
+        expect(source).toContain('action: "release_orphaned"');
+        expect(source).toContain("解除排队状态");
+        expect(source).toContain('await saveStoryboardFrameGenerationStateNow(project.id, episodeId, shot.id, { frameType: "all_frames", frameIds: input.frameIds, error: errorMessage })');
         expect(source).toContain("刷新或切页回来自动恢复");
         expect(source).toContain('getLatestDramaProductionRun(project.id, episodeId, "visual")');
         expect(source).toContain("服务端未找到本次生图运行记录，请确认后重新提交");

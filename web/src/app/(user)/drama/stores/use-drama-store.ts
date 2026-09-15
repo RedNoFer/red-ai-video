@@ -80,7 +80,7 @@ type DramaStore = {
         projectId: string,
         episodeId: string,
         shotId: string,
-        input: { frameType: "start_frame" | "end_frame" | "all_frames"; frameIds?: string[]; framePlan?: unknown; frameStates?: unknown; startFramePrompt?: string; endFramePrompt?: string; error?: string },
+        input: { action?: "release_orphaned"; frameType: "start_frame" | "end_frame" | "all_frames"; frameIds?: string[]; framePlan?: unknown; frameStates?: unknown; startFramePrompt?: string; endFramePrompt?: string; error?: string },
     ) => Promise<{ projectId: string; episodeId: string; shotId: string; updatedAt: string; shot: DramaShot }>;
     saveAssetNow: (projectId: string, kind: DramaAssetKind, assetId: string, patch: unknown) => Promise<DramaProject>;
     queueShots: (projectId: string, episodeId: string, shotIds: string[]) => void;

@@ -49,6 +49,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
     const [uploadTarget, setUploadTarget] = useState<{ kind: FrameKind; frameId?: string }>({ kind: "start" });
     const [uploading, setUploading] = useState("");
     const [submitting, setSubmitting] = useState("");
+    const [recoveringGeneration, setRecoveringGeneration] = useState(false);
     const [submissionUncertain, setSubmissionUncertain] = useState(false);
     const [uncertainFrameIds, setUncertainFrameIds] = useState<string[]>([]);
     const [deletingFrameId, setDeletingFrameId] = useState("");
@@ -78,6 +79,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
     const storedFrames = useMemo(() => [...(shot.storyboardFrames || [])].sort((left, right) => left.sequenceIndex - right.sequenceIndex), [shot.storyboardFrames]);
     const frameById = useMemo(() => new Map(storedFrames.map((frame) => [frame.id, frame])), [storedFrames]);
     const generationActive = storedFrames.some(isDramaStoryboardFrameActive) || [shot.storyboardStatus, shot.storyboardEndStatus].some((status) => status === "queued" || status === "running");
+    const orphanedActiveFrameIds = storedFrames.filter((frame) => isDramaStoryboardFrameActive(frame) && !frame.taskId && !frame.candidateTaskId).map((frame) => frame.id);
     const completedCount = beats.filter((beat) => frameById.get(beat.id)?.status === "success" && frameById.get(beat.id)?.mediaUrl).length;
     const activeFrame = beats.find((beat) => {
         const frame = frameById.get(beat.id);
@@ -468,6 +470,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                 }),
                 storyboardError: errorMessage,
             });
+            await saveStoryboardFrameGenerationStateNow(project.id, episodeId, shot.id, { frameType: "all_frames", frameIds: input.frameIds, error: errorMessage }).catch(() => undefined);
             message.error(errorMessage);
         } finally {
             submittingRef.current = false;
@@ -492,6 +495,21 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
             okButtonProps: { danger: true },
             onOk: () => generateSequence({ frameIds: beats.map((beat) => beat.id), regenerateAll: true, label: "全部帧重生任务" }),
         });
+    };
+
+    const releaseOrphanedGeneration = async () => {
+        if (recoveringGeneration || !orphanedActiveFrameIds.length) return;
+        setRecoveringGeneration(true);
+        try {
+            await saveStoryboardFrameGenerationStateNow(project.id, episodeId, shot.id, { action: "release_orphaned", frameType: "all_frames", frameIds: orphanedActiveFrameIds });
+            setSubmissionUncertain(false);
+            setUncertainFrameIds([]);
+            message.success("已解除卡住的排队状态，请点击当前帧“生成”重新提交");
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : "解除排队状态失败");
+        } finally {
+            setRecoveringGeneration(false);
+        }
     };
 
     const generateLegacy = async () => {
@@ -676,10 +694,23 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
         <div className="relative mt-3.5 border-t border-border/70 pt-3.5">
             {generationOverlayVisible ? (
                 <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex justify-center p-2" role="status" aria-live="polite" data-drama-generation-overlay>
-                    <div className="sticky top-3 flex items-center gap-2 rounded-md border border-primary/30 bg-background px-3 py-2 text-sm text-foreground shadow-sm">
+                    <div className="sticky top-3 flex flex-wrap items-center gap-2 rounded-md border border-primary/30 bg-background px-3 py-2 text-sm text-foreground shadow-sm">
                         <LoaderCircle className="size-4 animate-spin text-primary" aria-hidden="true" />
                         <span>{generationOverlayLabel}</span>
                         <span className="text-xs text-muted-foreground">当前镜头已锁定，内容仍可查看</span>
+                        {orphanedActiveFrameIds.length ? (
+                            <Button
+                                size="small"
+                                type="primary"
+                                icon={<RotateCcw className="size-3.5" />}
+                                loading={recoveringGeneration}
+                                disabled={Boolean(submitting)}
+                                className="pointer-events-auto !ml-auto !shrink-0"
+                                onClick={() => void releaseOrphanedGeneration()}
+                            >
+                                解除排队状态
+                            </Button>
+                        ) : null}
                     </div>
                 </div>
             ) : null}
