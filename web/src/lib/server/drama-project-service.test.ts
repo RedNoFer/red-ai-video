@@ -1726,6 +1726,52 @@ describe("drama project service updates", () => {
         expect(mocks.fetchInternalApi).not.toHaveBeenCalled();
     });
 
+    it("reconciles completed prerequisite tasks before releasing an orphaned frame", async () => {
+        const current = project("2026-09-15T08:00:00.000Z", "项目");
+        current.props = [{ id: "prop-one", name: "道具", references: [] }] as never;
+        current.episodes[0].shots = [
+            {
+                id: "shot-one",
+                title: "镜头",
+                characterIds: [],
+                propIds: ["prop-one"],
+                clueIds: [],
+                imagePrompt: "画面",
+                videoPrompt: "动作",
+                cameraMotion: "固定",
+                duration: 6,
+                storyboardFrameMode: "all_frames",
+                framePlan: { frames: [{ id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 6, actionPrompt: "动作", imagePrompt: "画面" }] },
+                storyboardFrames: [{ id: "f1", sequenceIndex: 1, source: "generated", status: "queued" }],
+            } as never,
+        ];
+        const run = {
+            id: "run-stale-prerequisite",
+            projectId: current.id,
+            episodeId: "episode-one",
+            status: "running",
+            scope: "visual",
+            confirmedAt: current.updatedAt,
+            steps: [
+                { id: "asset-prop-one", type: "asset_anchor", assetKind: "props", assetId: "prop-one", status: "running", taskId: "task-completed", dependsOn: [] },
+                { id: "frame-shot-one-f1", type: "keyframe", shotId: "shot-one", frameId: "f1", sequenceIndex: 1, status: "blocked", dependsOn: ["asset-prop-one"] },
+            ],
+        } as never;
+        mocks.getDramaProject.mockResolvedValue(current);
+        mocks.findLatestDramaProductionRun.mockResolvedValue(run);
+        mocks.getStoredGenerationTask.mockResolvedValue({ status: "success", result: { serverUrl: "/api/prop-anchor.png" } });
+
+        const saved = await updateDramaStoryboardFrameGenerationStateForUser("user-one", current.id, "episode-one", "shot-one", {
+            action: "release_orphaned",
+            frameType: "all_frames",
+            frameIds: ["f1"],
+        });
+
+        expect(mocks.getStoredGenerationTask).toHaveBeenCalledWith("image", "task-completed");
+        expect(mocks.updateDramaProductionRun).toHaveBeenCalledWith("user-one", expect.objectContaining({ id: "run-stale-prerequisite", status: "needs_review" }));
+        expect(saved.shot.storyboardFrames).toEqual([expect.objectContaining({ id: "f1", status: "error", error: "上次生图没有创建可执行图片任务，已解除排队状态，请重新生成" })]);
+    });
+
     it("does not release a frame that is already bound to a live image task", async () => {
         const current = project("2026-09-15T08:00:00.000Z", "项目");
         current.episodes[0].shots = [

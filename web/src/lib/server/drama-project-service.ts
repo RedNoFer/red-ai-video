@@ -3002,17 +3002,25 @@ async function releaseOrphanedDramaStoryboardFrameGenerationForUser(userId: stri
               : ["queued", "running"].includes(shot.storyboardEndStatus || "") && !shot.storyboardEndTaskId;
     if (!hasOrphanedState) throw new DramaProjectServiceError("当前没有可解除的孤儿排队状态，请刷新后重试", 409);
 
-    const run = await findLatestDramaProductionRun(userId, project.id, episodeId, "visual");
+    let run = await findLatestDramaProductionRun(userId, project.id, episodeId, "visual");
     if (run && ["planning", "ready", "running", "paused"].includes(run.status)) {
-        const activeTask = run.steps.find((step) => ["asset_anchor", "start_frame", "end_frame", "keyframe"].includes(step.type) && ["ready", "running", "blocked"].includes(step.status) && step.taskId);
-        if (activeTask) throw new DramaProjectServiceError("当前视觉计划仍有图片任务在执行，请等待任务结束后再重试", 409);
-        const cancelled = {
-            ...run,
-            status: "cancelled" as const,
-            steps: run.steps.map((step) => (["success", "failed", "cancelled", "needs_review"].includes(step.status) ? step : { ...step, status: "cancelled" as const })),
-            updatedAt: new Date().toISOString(),
-        };
-        await updateDramaProductionRun(userId, cancelled);
+        const activeTaskSteps = run.steps.filter((step) => ["asset_anchor", "start_frame", "end_frame", "keyframe"].includes(step.type) && ["ready", "running", "blocked"].includes(step.status) && step.taskId);
+        for (const step of activeTaskSteps) {
+            const task = await getStoredGenerationTask<{ status?: string; executionPhase?: string }>("image", step.taskId!);
+            if (!task || ["pending", "running"].includes(String(task.status)) || task.executionPhase === "needs_review") {
+                throw new DramaProjectServiceError("当前视觉计划仍有图片任务在执行，请等待任务结束后再重试", 409);
+            }
+        }
+        if (activeTaskSteps.length) run = await syncDramaVisualRun(userId, project, run);
+        if (["planning", "ready", "running", "paused"].includes(run.status)) {
+            const cancelled = {
+                ...run,
+                status: "cancelled" as const,
+                steps: run.steps.map((step) => (["success", "failed", "cancelled", "needs_review"].includes(step.status) ? step : { ...step, status: "cancelled" as const })),
+                updatedAt: new Date().toISOString(),
+            };
+            await updateDramaProductionRun(userId, cancelled);
+        }
     }
     return updateDramaStoryboardFrameGenerationStateForUser(userId, project.id, episodeId, shotId, {
         frameType,
