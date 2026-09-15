@@ -108,6 +108,7 @@ import {
     stringField,
     delay,
     parseGeminiImagePayload,
+    applyDramaAssetImageDefaults,
     toGeminiImagePart,
     buildImageEditFormData,
     imageReferenceToFile,
@@ -153,7 +154,7 @@ export async function POST(request: Request) {
     if (requestId) resolvedBody.context = { ...(resolvedBody.context || {}), clientRequestId: requestId, ...(headerAttemptNo ? { attemptNo: headerAttemptNo } : {}) };
     const settings = await getAuthSettings();
     const response = await withGenerationConcurrencyLimit(currentUser.id, "image", 10 * 60 * 1000, settings.generationConcurrency.image, async () => {
-        const configs = sanitizeConfigs(resolvedBody.config, settings);
+        const configs = sanitizeConfigs(applyDramaAssetImageDefaults(resolvedBody.config, resolvedBody.context, settings), settings);
         const prompt = (resolvedBody.prompt || "").trim();
         const kind = resolvedBody.kind === "edit" ? "edit" : "generation";
         if (!configs.length || !prompt) return NextResponse.json({ error: "任务参数不完整" }, { status: 400 });

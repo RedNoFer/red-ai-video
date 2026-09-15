@@ -120,7 +120,7 @@ export async function completeDramaAsset(input: {
                 references: [],
                 source: "drama",
                 title: `${project.title} · ${current.name}智能补全`,
-                context: { surface: "drama", projectId: project.id, clientRequestId: `${input.requestId}:reference`, ...(input.publicOrigin ? { publicOrigin: input.publicOrigin } : {}) },
+                context: { surface: "drama", projectId: project.id, assetKind: input.kind, assetId: input.assetId, clientRequestId: `${input.requestId}:reference`, ...(input.publicOrigin ? { publicOrigin: input.publicOrigin } : {}) },
             }),
         });
         const payload = (await response.json().catch(() => ({}))) as { task?: { id?: string }; error?: string };

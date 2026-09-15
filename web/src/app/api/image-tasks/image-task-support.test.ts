@@ -6,6 +6,7 @@ import { GenerationSubmissionSafeFailure, GenerationSubmissionUncertainError } f
 import { maintenanceWorkerContext } from "@/lib/server/maintenance-auth";
 import {
     allowsImageProtocolFallback,
+    applyDramaAssetImageDefaults,
     ImageQueryContractError,
     imageRequestAspectRatio,
     imageTaskPollAttempts,
@@ -78,9 +79,18 @@ describe("GlobalAiOpc image task paths", () => {
 
     it("normalizes ratio results to the exact upstream request while restoring custom output dimensions", () => {
         expect(resolveResultSize("low", "1:1")).toBe("1024x1024");
-        expect(resolveResultSize("high", "16:9")).toBe(resolveRequestSize("high", "16:9"));
+        expect(resolveRequestSize("high", "16:9")).toBe("3840x2160");
+        expect(resolveRequestSize("high", "9:16")).toBe("2160x3840");
+        expect(resolveResultSize("high", "16:9")).toBe("3840x2160");
+        expect(resolveResultSize("high", "9:16")).toBe("2160x3840");
         expect(resolveResultSize(undefined, "400x600")).toBe("400x600");
         expect(resolveResultSize(undefined, "auto")).toBeUndefined();
+    });
+
+    it("uses the latest admin image quality for drama asset tasks", () => {
+        const settings = { generationDefaults: { imageQuality: "high" } } as never;
+        expect(applyDramaAssetImageDefaults({ quality: "auto", size: "16:9" } as never, { surface: "drama", assetKind: "characters" }, settings)).toMatchObject({ quality: "high", size: "16:9" });
+        expect(applyDramaAssetImageDefaults({ quality: "auto", size: "16:9" } as never, { surface: "chat", assetKind: "characters" }, settings)).toMatchObject({ quality: "auto", size: "16:9" });
     });
 
     it("uses the model binding timeout for synchronous requests and asynchronous polling", () => {

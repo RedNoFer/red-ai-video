@@ -66,6 +66,11 @@ export function publicTask(task: ImageTask) {
     };
 }
 
+export function applyDramaAssetImageDefaults(config: ImageTaskConfig | undefined, context: GenerationTaskContext | undefined, settings: Awaited<ReturnType<typeof getAuthSettings>>) {
+    if (!config || context?.surface !== "drama" || !["characters", "scenes", "props"].includes(context.assetKind || "")) return config;
+    return { ...config, quality: settings.generationDefaults.imageQuality };
+}
+
 export function sanitizeConfigs(config: ImageTaskConfig | undefined, settings: Awaited<ReturnType<typeof getAuthSettings>>): ImageTaskConfig[] {
     const requestedModel = (config as (ImageTaskConfig & { imageModel?: string }) | undefined)?.imageModel || config?.model || settings.defaultModels.imageModel;
     return resolveLogicalModelCandidates(settings, "image", requestedModel, config?.channelId).map((resolved) => {
