@@ -2206,109 +2206,108 @@ async function dispatchReadyDramaVisualSteps(userId: string, project: DramaProje
     let current = unlockDramaVisualSteps(run);
     const episode = project.episodes.find((candidate) => candidate.id === run.episodeId);
     if (!episode) return run;
-    for (const candidate of current.steps) {
-        const step = current.steps.find((item) => item.id === candidate.id)!;
-        const prompt = compileDramaVisualStepPrompt(project, episode, step);
-        if (step.status !== "ready" || step.taskId || !prompt || !["start_frame", "end_frame", "keyframe", "asset_anchor"].includes(step.type)) continue;
-        const continuitySource = step.referenceShotId ? episode.shots.find((shot) => shot.id === step.referenceShotId) : undefined;
-        const references = [
-            ...(step.referenceImageUrls || [])
-                .map((url, index) => {
-                    const label =
-                        step.type === "end_frame"
-                            ? `本镜头「${episode.shots.find((shot) => shot.id === step.shotId)?.title || "当前镜头"}」已生成起始帧`
-                            : continuitySource
-                              ? `上一镜「${continuitySource.title}」已人工验收的实际尾帧`
-                              : "本镜头连续性参考图";
-                    return createDramaVisualImageReference(
-                        `continuity-${index}`,
-                        url,
-                        origin,
-                        step.referenceImageRemoteUrls?.[index],
-                        label,
-                        continuitySource ? "仅锁定上一镜已验收实际尾帧的入口连续性" : "仅按当前任务明确声明的固定参考使用，当前帧独立呈现自己的可见状态",
-                    );
-                })
-                .filter((reference): reference is NonNullable<typeof reference> => Boolean(reference)),
-            ...(step.manualReferenceImages || [])
-                .map((reference) => createDramaVisualImageReference(`manual-${reference.id}`, reference.url, origin, reference.remoteUrl, reference.label, reference.binding))
-                .filter((reference): reference is NonNullable<typeof reference> => Boolean(reference)),
-            ...(step.referenceAssetIds || [])
-                .map((id) => ({ id, reference: assetUrls.get(id) }))
-                .map(({ id, reference }) => {
-                    const purpose = step.referenceManifest?.find((item) => item.assetId === id)?.purpose;
-                    return createDramaVisualImageReference(`asset-${id}`, reference?.url, origin, reference?.remoteUrl, reference?.label, [reference?.binding, purpose ? `本镜用途：${purpose}` : ""].filter(Boolean).join("；"));
-                })
-                .filter((reference): reference is NonNullable<typeof reference> => Boolean(reference)),
-        ];
-        const missingAssetIds = Array.from(new Set(step.referenceAssetIds || [])).filter((assetId) => !references.some((reference) => reference.id === `asset-${assetId}`));
-        if (missingAssetIds.length) {
-            const error = `参考素材不可用：${missingAssetIds.join("、")} 没有可读的图片，已停止提交当前帧。`;
-            const nextStep = { ...step, status: "failed" as const, error };
-            current = { ...current, steps: current.steps.map((item) => (item.id === step.id ? nextStep : item)), status: "running", updatedAt: new Date().toISOString() };
-            const failedProject = applyDramaVisualStepFailure(project, run.episodeId, step, error);
-            if (failedProject !== project) await persistDramaVisualProjectChanges(userId, project, failedProject);
-            await updateDramaProductionRun(userId, current);
-            continue;
-        }
-        if ((step.referenceImageUrls || []).length && !references.some((reference) => reference.id.startsWith("continuity-"))) {
-            const nextStep = {
-                ...step,
-                status: "failed" as const,
-                error: "上一镜实际尾帧是本地提取帧，当前图片渠道要求公网图片 URL；请部署并配置外部 NEXT_PUBLIC_SITE_URL 后重试。",
-            };
-            current = { ...current, steps: current.steps.map((item) => (item.id === step.id ? nextStep : item)), status: "running", updatedAt: new Date().toISOString() };
-            await updateDramaProductionRun(userId, current);
-            continue;
-        }
-        const attemptNo = step.attemptNo || 1;
-        const requestId = `drama:${run.id}:${step.id}:attempt-${attemptNo}`;
-        const executionPrompt = compileDramaReferencePrompt(prompt, references);
-        const imageQuality = step.type === "asset_anchor" && step.assetKind === "scenes" ? "high" : ["start_frame", "end_frame", "keyframe"].includes(step.type) ? "high" : run.parameterSnapshot.imageQuality;
-        const referenceImagesSnapshot: DramaImageReferenceBinding[] = references.map((reference) => ({
-            id: reference.id,
-            label: reference.label || "参考图",
-            binding: reference.binding || "按提示词中的职责使用",
-            url: reference.serverUrl || reference.url,
-            ...(reference.remoteUrl ? { remoteUrl: reference.remoteUrl } : {}),
-        }));
-        let nextStep: DramaProductionStep;
-        try {
-            const response = await fetchInternalApi(`${origin}/api/image-tasks`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json", cookie, "X-VOZEB-PRO-Client-Request-Id": requestId, "X-VOZEB-PRO-Attempt-No": String(attemptNo) },
-                body: JSON.stringify({
-                    kind: references.length ? "edit" : "generation",
-                    config: { model: run.parameterSnapshot.imageModel, channelId: run.parameterSnapshot.imageChannelId, quality: imageQuality, size: run.parameterSnapshot.ratio, count: "1" },
-                    prompt: executionPrompt,
-                    references,
-                    source: "drama",
-                    title: `${project.title} · ${step.title || step.id}`,
-                    context: {
-                        runId: run.id,
-                        surface: "drama",
-                        projectId: project.id,
-                        episodeId: run.episodeId,
-                        shotId: step.shotId,
-                        frameId: step.frameId,
-                        inputHash: step.inputHash,
-                        clientRequestId: requestId,
-                        attemptNo,
-                        ...(publicOrigin ? { publicOrigin } : {}),
-                    },
-                }),
-            });
-            const payload = (await response.json().catch(() => ({}))) as { task?: { id?: string }; error?: string; msg?: string };
-            nextStep =
-                response.ok && payload.task?.id
-                    ? { ...step, executionPrompt, referenceImagesSnapshot, taskId: payload.task.id, status: "running", error: undefined }
-                    : { ...step, executionPrompt, referenceImagesSnapshot, status: "failed", error: payload.error || payload.msg || "导演图片任务创建失败" };
-        } catch {
-            nextStep = { ...step, executionPrompt, referenceImagesSnapshot, status: "needs_review", error: "图片任务提交结果未知，请先在供应商任务记录中核对，禁止直接重复创建" };
-        }
-        current = { ...current, steps: current.steps.map((item) => (item.id === step.id ? nextStep : item)), status: "running", updatedAt: new Date().toISOString() };
-        await updateDramaProductionRun(userId, current);
+    const submissions = await Promise.all(
+        current.steps
+            .filter((step) => {
+                const prompt = compileDramaVisualStepPrompt(project, episode, step);
+                return step.status === "ready" && !step.taskId && Boolean(prompt) && ["start_frame", "end_frame", "keyframe", "asset_anchor"].includes(step.type);
+            })
+            .map(async (step): Promise<{ step: DramaProductionStep; failure?: { step: DramaProductionStep; error: string } }> => {
+                const prompt = compileDramaVisualStepPrompt(project, episode, step);
+                const continuitySource = step.referenceShotId ? episode.shots.find((shot) => shot.id === step.referenceShotId) : undefined;
+                const references = [
+                    ...(step.referenceImageUrls || [])
+                        .map((url, index) => {
+                            const label =
+                                step.type === "end_frame"
+                                    ? `本镜头「${episode.shots.find((shot) => shot.id === step.shotId)?.title || "当前镜头"}」已生成起始帧`
+                                    : continuitySource
+                                      ? `上一镜「${continuitySource.title}」已人工验收的实际尾帧`
+                                      : "本镜头连续性参考图";
+                            return createDramaVisualImageReference(
+                                `continuity-${index}`,
+                                url,
+                                origin,
+                                step.referenceImageRemoteUrls?.[index],
+                                label,
+                                continuitySource ? "仅锁定上一镜已验收实际尾帧的入口连续性" : "仅按当前任务明确声明的固定参考使用，当前帧独立呈现自己的可见状态",
+                            );
+                        })
+                        .filter((reference): reference is NonNullable<typeof reference> => Boolean(reference)),
+                    ...(step.manualReferenceImages || [])
+                        .map((reference) => createDramaVisualImageReference(`manual-${reference.id}`, reference.url, origin, reference.remoteUrl, reference.label, reference.binding))
+                        .filter((reference): reference is NonNullable<typeof reference> => Boolean(reference)),
+                    ...(step.referenceAssetIds || [])
+                        .map((id) => ({ id, reference: assetUrls.get(id) }))
+                        .map(({ id, reference }) => {
+                            const purpose = step.referenceManifest?.find((item) => item.assetId === id)?.purpose;
+                            return createDramaVisualImageReference(`asset-${id}`, reference?.url, origin, reference?.remoteUrl, reference?.label, [reference?.binding, purpose ? `本镜用途：${purpose}` : ""].filter(Boolean).join("；"));
+                        })
+                        .filter((reference): reference is NonNullable<typeof reference> => Boolean(reference)),
+                ];
+                const missingAssetIds = Array.from(new Set(step.referenceAssetIds || [])).filter((assetId) => !references.some((reference) => reference.id === `asset-${assetId}`));
+                if (missingAssetIds.length) {
+                    const error = `参考素材不可用：${missingAssetIds.join("、")} 没有可读的图片，已停止提交当前帧。`;
+                    return { step: { ...step, status: "failed" as const, error }, failure: { step, error } };
+                }
+                if ((step.referenceImageUrls || []).length && !references.some((reference) => reference.id.startsWith("continuity-")))
+                    return { step: { ...step, status: "failed" as const, error: "上一镜实际尾帧是本地提取帧，当前图片渠道要求公网图片 URL；请部署并配置外部 NEXT_PUBLIC_SITE_URL 后重试。" } };
+
+                const attemptNo = step.attemptNo || 1;
+                const requestId = `drama:${run.id}:${step.id}:attempt-${attemptNo}`;
+                const executionPrompt = compileDramaReferencePrompt(prompt, references);
+                const imageQuality = step.type === "asset_anchor" && step.assetKind === "scenes" ? "high" : ["start_frame", "end_frame", "keyframe"].includes(step.type) ? "high" : run.parameterSnapshot.imageQuality;
+                const referenceImagesSnapshot: DramaImageReferenceBinding[] = references.map((reference) => ({
+                    id: reference.id,
+                    label: reference.label || "参考图",
+                    binding: reference.binding || "按提示词中的职责使用",
+                    url: reference.serverUrl || reference.url,
+                    ...(reference.remoteUrl ? { remoteUrl: reference.remoteUrl } : {}),
+                }));
+                try {
+                    const response = await fetchInternalApi(`${origin}/api/image-tasks`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json", cookie, "X-VOZEB-PRO-Client-Request-Id": requestId, "X-VOZEB-PRO-Attempt-No": String(attemptNo) },
+                        body: JSON.stringify({
+                            kind: references.length ? "edit" : "generation",
+                            config: { model: run.parameterSnapshot.imageModel, channelId: run.parameterSnapshot.imageChannelId, quality: imageQuality, size: run.parameterSnapshot.ratio, count: "1" },
+                            prompt: executionPrompt,
+                            references,
+                            source: "drama",
+                            title: `${project.title} · ${step.title || step.id}`,
+                            context: {
+                                runId: run.id,
+                                surface: "drama",
+                                projectId: project.id,
+                                episodeId: run.episodeId,
+                                shotId: step.shotId,
+                                frameId: step.frameId,
+                                inputHash: step.inputHash,
+                                clientRequestId: requestId,
+                                attemptNo,
+                                ...(publicOrigin ? { publicOrigin } : {}),
+                            },
+                        }),
+                    });
+                    const payload = (await response.json().catch(() => ({}))) as { task?: { id?: string }; error?: string; msg?: string };
+                    return {
+                        step:
+                            response.ok && payload.task?.id
+                                ? { ...step, executionPrompt, referenceImagesSnapshot, taskId: payload.task.id, status: "running" as const, error: undefined }
+                                : { ...step, executionPrompt, referenceImagesSnapshot, status: "failed" as const, error: payload.error || payload.msg || "导演图片任务创建失败" },
+                    };
+                } catch {
+                    return { step: { ...step, executionPrompt, referenceImagesSnapshot, status: "needs_review" as const, error: "图片任务提交结果未知，请先在供应商任务记录中核对，禁止直接重复创建" } };
+                }
+            }),
+    );
+    let failedProject = project;
+    for (const submission of submissions) {
+        current = { ...current, steps: current.steps.map((item) => (item.id === submission.step.id ? submission.step : item)), status: "running", updatedAt: new Date().toISOString() };
+        if (submission.failure) failedProject = applyDramaVisualStepFailure(failedProject, run.episodeId, submission.failure.step, submission.failure.error);
     }
+    if (failedProject !== project) await persistDramaVisualProjectChanges(userId, project, failedProject);
+    if (submissions.length) await updateDramaProductionRun(userId, current);
     const finalized = unlockDramaVisualSteps(current);
     if (finalized.status !== current.status || finalized.steps.some((step, index) => step.status !== current.steps[index]?.status)) await updateDramaProductionRun(userId, finalized);
     return finalized;

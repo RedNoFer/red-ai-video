@@ -23,6 +23,7 @@ const mocks = vi.hoisted(() => ({
     getDramaProject: vi.fn(),
     createDramaProject: vi.fn(),
     saveDramaProject: vi.fn(),
+    updateDramaStoryboardFrameGenerationState: vi.fn(),
     deleteDramaProject: vi.fn(),
     createDramaProjectVersion: vi.fn(),
     listDramaProjectVersions: vi.fn(),
@@ -57,6 +58,7 @@ vi.mock("@/services/api/drama-projects", () => ({
     getDramaProject: mocks.getDramaProject,
     createDramaProject: mocks.createDramaProject,
     saveDramaProject: mocks.saveDramaProject,
+    updateDramaStoryboardFrameGenerationState: mocks.updateDramaStoryboardFrameGenerationState,
     deleteDramaProject: mocks.deleteDramaProject,
     createDramaProjectVersion: mocks.createDramaProjectVersion,
     listDramaProjectVersions: mocks.listDramaProjectVersions,
@@ -488,6 +490,28 @@ describe("client store session isolation", () => {
         await Promise.all([first, second]);
 
         expect(mocks.saveDramaProject).toHaveBeenLastCalledWith(expect.objectContaining({ title: "最新主基准状态" }));
+    });
+
+    it("submits a frame state patch without waiting for an in-flight full project save", async () => {
+        const fullProjectSave = deferred<DramaProject>();
+        const frameStateSave = deferred<{ projectId: string; episodeId: string; shotId: string; updatedAt: string; shot: DramaProject["episodes"][number]["shots"][number] }>();
+        mocks.saveDramaProject.mockReturnValueOnce(fullProjectSave.promise);
+        mocks.updateDramaStoryboardFrameGenerationState.mockReturnValue(frameStateSave.promise);
+        useUserStore.getState().setUser(user("user-a"));
+        const project = dramaProject("drama-a", "用户 A 短剧");
+        project.episodes[0].shots = [dramaShot("shot-one")];
+        useDramaStore.setState({ projects: [project], hydrated: true, hydratedUserId: "user-a" });
+
+        const fullSave = useDramaStore.getState().saveProjectNow(project.id);
+        await Promise.resolve();
+        const frameSave = useDramaStore.getState().saveStoryboardFrameGenerationStateNow(project.id, project.episodes[0].id, project.episodes[0].shots[0].id, { frameType: "all_frames", frameIds: ["frame-one"] });
+        await Promise.resolve();
+
+        expect(mocks.updateDramaStoryboardFrameGenerationState).toHaveBeenCalledWith(project.id, project.episodes[0].id, project.episodes[0].shots[0].id, { frameType: "all_frames", frameIds: ["frame-one"] });
+
+        fullProjectSave.resolve(project);
+        frameStateSave.resolve({ projectId: project.id, episodeId: project.episodes[0].id, shotId: project.episodes[0].shots[0].id, updatedAt: "2026-09-15T00:00:01.000Z", shot: project.episodes[0].shots[0] });
+        await Promise.all([fullSave, frameSave]);
     });
 
     it("commits a locked production plan after cancelling a queued autosave", async () => {

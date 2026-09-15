@@ -102,6 +102,7 @@ type DramaAssetKind = "characters" | "scenes" | "props" | "clues";
 
 const saveTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const saveQueues = new Map<string, Promise<void>>();
+const frameStateSaveQueues = new Map<string, Promise<void>>();
 const suspendedSaves = new Set<string>();
 const latestProjectTimes = new Map<string, number>();
 const projectRequests = new Map<string, Promise<DramaProject>>();
@@ -241,6 +242,7 @@ export const useDramaStore = create<DramaStore>((set, get) => ({
         const key = sessionEpoch.key(session, id);
         clearProjectSave(session, id);
         await saveQueues.get(key)?.catch(() => undefined);
+        await frameStateSaveQueues.get(key)?.catch(() => undefined);
         assertCurrent(session);
         await deleteDramaProject(id);
         if (!sessionEpoch.isCurrent(session)) return;
@@ -386,7 +388,7 @@ export const useDramaStore = create<DramaStore>((set, get) => ({
         const session = requireSession();
         clearProjectSave(session, projectId);
         const key = sessionEpoch.key(session, projectId);
-        const previous = saveQueues.get(key);
+        const previous = pendingProjectSaves(key);
         let saved: DramaProject | undefined;
         const operation = (previous ? previous.catch(() => undefined) : Promise.resolve()).then(async () => {
             assertCurrent(session);
@@ -418,7 +420,7 @@ export const useDramaStore = create<DramaStore>((set, get) => ({
         const session = requireSession();
         clearProjectSave(session, projectId);
         const key = sessionEpoch.key(session, projectId);
-        const previous = saveQueues.get(key);
+        const previous = frameStateSaveQueues.get(key);
         let saved: Awaited<ReturnType<typeof updateDramaStoryboardFrameGenerationState>> | undefined;
         const operation = (previous ? previous.catch(() => undefined) : Promise.resolve()).then(async () => {
             assertCurrent(session);
@@ -443,20 +445,20 @@ export const useDramaStore = create<DramaStore>((set, get) => ({
                 };
             });
         });
-        saveQueues.set(key, operation);
+        frameStateSaveQueues.set(key, operation);
         try {
             await operation;
             if (!saved) throw new Error("分镜生成状态保存失败");
             return saved;
         } finally {
-            if (saveQueues.get(key) === operation) saveQueues.delete(key);
+            if (frameStateSaveQueues.get(key) === operation) frameStateSaveQueues.delete(key);
         }
     },
     saveAssetNow: async (projectId, kind, assetId, patch) => {
         const session = requireSession();
         clearProjectSave(session, projectId);
         const key = sessionEpoch.key(session, projectId);
-        const previous = saveQueues.get(key);
+        const previous = pendingProjectSaves(key);
         let saved: DramaProject | undefined;
         const operation = (previous ? previous.catch(() => undefined) : Promise.resolve()).then(async () => {
             assertCurrent(session);
@@ -780,6 +782,7 @@ export const useDramaStore = create<DramaStore>((set, get) => ({
         suspendedSaves.add(key);
         try {
             await saveQueues.get(key)?.catch(() => undefined);
+            await frameStateSaveQueues.get(key)?.catch(() => undefined);
             assertCurrent(session);
             const project = await restoreDramaProjectVersion(projectId, versionId);
             assertCurrent(session);
@@ -1000,7 +1003,7 @@ function queueSave(session: ClientSessionStamp, project: DramaProject) {
         setTimeout(() => {
             saveTimers.delete(key);
             if (!sessionEpoch.isCurrent(session)) return;
-            const previous = saveQueues.get(key) || Promise.resolve();
+            const previous = pendingProjectSaves(key) || Promise.resolve();
             const operation = previous.then(async () => {
                 if (!sessionEpoch.isCurrent(session)) return;
                 try {
@@ -1043,6 +1046,11 @@ function clearProjectSave(session: ClientSessionStamp, projectId: string) {
     const timer = saveTimers.get(key);
     if (timer) clearTimeout(timer);
     saveTimers.delete(key);
+}
+
+function pendingProjectSaves(key: string) {
+    const pending = [saveQueues.get(key), frameStateSaveQueues.get(key)].filter((operation): operation is Promise<void> => Boolean(operation));
+    return pending.length ? Promise.all(pending) : undefined;
 }
 
 function isActiveHydrate(session: ClientSessionStamp, requestId: number) {

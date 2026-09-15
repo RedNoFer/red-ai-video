@@ -1051,6 +1051,69 @@ describe("drama project service updates", () => {
         expect(result.steps[0]).toMatchObject({ taskId: "image-task-redispatched", status: "running" });
     });
 
+    it("submits independent ready frames concurrently", async () => {
+        const current = project("2026-07-19T08:00:00.000Z", "项目");
+        current.episodes[0].shots = [
+            {
+                id: "shot-one",
+                title: "镜头",
+                characterIds: [],
+                propIds: [],
+                clueIds: [],
+                imagePrompt: "画面",
+                videoPrompt: "动作",
+                cameraMotion: "固定",
+                duration: 6,
+                storyboardFrameMode: "all_frames",
+                framePlan: {
+                    start: { source: "independent" },
+                    end: { required: false },
+                    frames: [
+                        { id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 3, actionPrompt: "动作一", imagePrompt: "画面一" },
+                        { id: "f2", sequenceIndex: 2, startSecond: 3, endSecond: 6, actionPrompt: "动作二", imagePrompt: "画面二" },
+                    ],
+                },
+                storyboardFrames: [],
+            } as never,
+        ];
+        const runId = "run-concurrent-frames";
+        const run = {
+            id: runId,
+            projectId: current.id,
+            episodeId: "episode-one",
+            planRevision: "revision-concurrent-frames",
+            status: "running",
+            scope: "visual",
+            mode: "strict",
+            confirmedAt: current.updatedAt,
+            parameterSnapshot: { imageModel: "image-default", imageChannelId: "image-channel", imageQuality: "standard", videoModel: "", ratio: "9:16" },
+            steps: [
+                { id: "frame-shot-one-f1", type: "keyframe", shotId: "shot-one", frameId: "f1", sequenceIndex: 1, dependsOn: [], status: "ready" },
+                { id: "frame-shot-one-f2", type: "keyframe", shotId: "shot-one", frameId: "f2", sequenceIndex: 2, dependsOn: [], status: "ready" },
+            ],
+            blockers: [],
+            createdAt: current.updatedAt,
+            updatedAt: current.updatedAt,
+        } as never;
+        let activeRequests = 0;
+        let maximumConcurrentRequests = 0;
+        let taskNumber = 0;
+        mocks.getDramaProject.mockResolvedValue(current);
+        mocks.getDramaProductionRun.mockResolvedValue(run);
+        mocks.fetchInternalApi.mockImplementation(async () => {
+            activeRequests += 1;
+            maximumConcurrentRequests = Math.max(maximumConcurrentRequests, activeRequests);
+            await Promise.resolve();
+            activeRequests -= 1;
+            taskNumber += 1;
+            return new Response(JSON.stringify({ task: { id: `image-task-${taskNumber}` } }), { status: 200, headers: { "content-type": "application/json" } });
+        });
+
+        await updateDramaProductionRunForUser("user-one", current.id, runId, { action: "confirm", origin: "http://localhost:3010", cookie: "session=test" });
+
+        expect(maximumConcurrentRequests).toBe(2);
+    });
+
     it("rebases submission placeholders when an optimistic project save wins the race", async () => {
         const current = project("2026-07-19T08:00:00.000Z", "项目");
         current.episodes[0].shots = [

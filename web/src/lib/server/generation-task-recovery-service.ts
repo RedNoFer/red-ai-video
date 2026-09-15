@@ -37,11 +37,13 @@ export async function runGenerationTaskRecoveryBatch(input: { origin: string; pu
     }, 25_000);
     try {
         const persistence = leases.filter(needsPersistence);
-        const queries = leases.filter((lease) => !needsPersistence(lease));
-        const results = [
-            ...(await runWithConcurrency(queries, 20, (lease) => processGenerationTaskLease(lease, workerId, input.origin, input.publicOrigin || input.origin, input.cookie || ""))),
-            ...(await runWithConcurrency(persistence, 4, (lease) => processGenerationTaskLease(lease, workerId, input.origin, input.publicOrigin || input.origin, input.cookie || ""))),
-        ];
+        const active = leases.filter((lease) => !needsPersistence(lease));
+        const prioritized = [...active.filter(needsUpstreamSubmission), ...active.filter((lease) => !needsUpstreamSubmission(lease))];
+        const [activeResults, persistenceResults] = await Promise.all([
+            runWithConcurrency(prioritized, 20, (lease) => processGenerationTaskLease(lease, workerId, input.origin, input.publicOrigin || input.origin, input.cookie || "")),
+            runWithConcurrency(persistence, 4, (lease) => processGenerationTaskLease(lease, workerId, input.origin, input.publicOrigin || input.origin, input.cookie || "")),
+        ]);
+        const results = [...activeResults, ...persistenceResults];
         return summarize(results);
     } finally {
         clearInterval(heartbeat);
@@ -777,6 +779,10 @@ async function persistVideoLease(task: VideoTask, lease: GenerationTaskLease, wo
 
 function needsPersistence(lease: GenerationTaskLease) {
     return lease.executionPhase === "result_ready" || lease.executionPhase === "persisting";
+}
+
+function needsUpstreamSubmission(lease: GenerationTaskLease) {
+    return lease.executionPhase === "created" || (lease.executionPhase === "submitting" && !lease.upstreamTaskId);
 }
 
 async function runWithConcurrency<T, R>(items: T[], limit: number, run: (item: T) => Promise<R>) {

@@ -96,6 +96,45 @@ describe("generation task recovery service", () => {
         expect(mocks.release).not.toHaveBeenCalled();
     });
 
+    it("starts an unsubmitted image before older polling tasks in the same worker batch", async () => {
+        let releasePolling: (() => void) | undefined;
+        const pollingGate = new Promise<void>((resolve) => {
+            releasePolling = resolve;
+        });
+        const createdTaskId = "image-created";
+        const pollingTaskIds = Array.from({ length: 20 }, (_, index) => `image-polling-${index}`);
+        const leases = [
+            ...pollingTaskIds.map((id) => ({ ...lease(), id, type: "image" as const, status: "running" as const, executionPhase: "polling" as const, upstreamTaskId: `upstream-${id}` })),
+            { ...lease(), id: createdTaskId, type: "image" as const, status: "pending" as const, executionPhase: "created" as const },
+        ];
+        const startedSubmissions: string[] = [];
+        mocks.claim.mockResolvedValue(leases);
+        mocks.getImageTask.mockImplementation(async (id: string) => ({
+            id,
+            userId: "user-one",
+            status: id === createdTaskId ? "pending" : "running",
+            upstream: id === createdTaskId ? undefined : { id: `upstream-${id}` },
+            config: { channelId: "channel-one", apiFormat: "openai", advancedConfig: { protocol: "openai", queryPath: "/tasks/status" } },
+        }));
+        mocks.queryImageTaskUpstreamStep.mockImplementation(async () => {
+            await pollingGate;
+            return { state: "pending", status: "processing", upstream: { id: "upstream-polling" } };
+        });
+        mocks.createImageTaskUpstreamStep.mockImplementation(async (task: { id: string }) => {
+            startedSubmissions.push(task.id);
+            return { state: "pending", status: "submitted", upstream: { id: `upstream-${task.id}` } };
+        });
+
+        const batch = runGenerationTaskRecoveryBatch({ origin: "http://internal", workerId: "worker-one" });
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(startedSubmissions).toContain(createdTaskId);
+
+        releasePolling!();
+        await expect(batch).resolves.toMatchObject({ claimed: 21, pending: 21 });
+    });
+
     it("executes an active Agent through its persisted lease and closes the terminal schedule", async () => {
         const run = { id: "agent-one", userId: "user-one", status: "planning", tasks: [], createdAt: 1_000 };
         mocks.claim.mockResolvedValue([lease()]);
