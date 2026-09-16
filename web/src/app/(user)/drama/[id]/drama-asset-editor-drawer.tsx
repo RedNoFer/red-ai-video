@@ -174,7 +174,6 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                     ...(kind === "characters" ? { voiceProfile: draft.voiceProfile } : {}),
                     ...(kind === "clues" ? { payoff: draft.payoff.trim() } : {}),
                 };
-                updateAsset(project.id, kind, asset.id, patch);
                 const savedProject = await saveAssetNow(project.id, kind, asset.id, patch);
                 replaceProject(savedProject);
             } else if (kind === "characters") {
@@ -228,7 +227,6 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                 supplierPrompt: prompt,
                 ...(fields ? { description: fields.description, profile: { ...draft.profile, ...profilePatch } } : {}),
             };
-            updateAsset(project.id, kind, asset.id, patch, { markShotsStale: false });
             const savedProject = await saveAssetNow(project.id, kind, asset.id, { ...patch, markShotsStale: false });
             replaceProject(savedProject);
             setSupplierPromptOverride(prompt || undefined);

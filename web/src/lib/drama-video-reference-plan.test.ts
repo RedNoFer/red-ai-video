@@ -35,4 +35,19 @@ describe("drama video reference plan", () => {
         expect(selectedDramaShotFrameIds(shot, "reference", { [shot.id]: ["frame-two"] })).toEqual(["frame-two"]);
         expect(selectedDramaShotFrameIds(shot, "all_frames", { [shot.id]: [] })).toEqual(["frame-one", "frame-two"]);
     });
+
+    it("keeps a current single panorama usable when an older snapshot still says legacy board", () => {
+        const recovered = {
+            ...project,
+            scenes: [
+                {
+                    ...project.scenes[0],
+                    supplierPrompt: "构图与画幅：9:16 画幅，一张高清、完整、无人物、无文字的单视角场景全景建立图；不生成九宫格、分格或360°贴图。",
+                    sceneReferenceBoard: { layout: "legacy-3x3" as const, referenceId: "scene-ref" },
+                },
+            ],
+        } as unknown as DramaProject;
+
+        expect(defaultDramaShotReferenceAssetIds(recovered, shot)).toEqual(["scene-one", "character-one"]);
+    });
 });

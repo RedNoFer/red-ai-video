@@ -1,5 +1,6 @@
 import { nanoid } from "nanoid";
 
+import { isLegacySceneReferenceBoard } from "@/lib/drama-asset-baseline";
 import type { DramaAssetReference, DramaAssetRefinementProposal, DramaNamedAsset } from "@/lib/drama-project-contract";
 import type { ImageGenerationResult } from "@/services/api/image";
 
@@ -29,7 +30,7 @@ export function isDramaSceneBoardReference(asset: DramaNamedAsset, reference: Dr
 }
 
 export function isLegacyDramaSceneReference(asset: DramaNamedAsset) {
-    return asset.sceneReferenceBoard?.layout === "legacy-3x3";
+    return isLegacySceneReferenceBoard(asset);
 }
 
 /** Keep malformed historical snapshots from producing duplicate React keys. */

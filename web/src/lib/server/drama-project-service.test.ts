@@ -519,6 +519,29 @@ describe("drama project service updates", () => {
         expect(normalized.scenes[0].sceneReferenceBoard).toEqual({ layout: "legacy-3x3", referenceId: "scene-ref" });
     });
 
+    it("does not classify a panorama prompt's negative nine-grid rule as a legacy board", () => {
+        const current = project("2026-07-19T08:00:00.000Z", "项目");
+        const normalized = normalizeProject(
+            {
+                ...current,
+                scenes: [
+                    {
+                        id: "scene-one",
+                        name: "迎客大厅",
+                        description: "固定大厅空间",
+                        supplierPrompt: "构图与画幅：9:16 画幅，一张高清、完整、无人物、无文字的单视角场景全景建立图；不生成九宫格、分格或360°贴图。",
+                        references: [{ id: "scene-ref", url: "/scene-panorama.png", source: "generated", status: "approved", label: "AI 基准图", createdAt: "2026-01-01T00:00:00.000Z" }],
+                        primaryReferenceId: "scene-ref",
+                        sceneReferenceBoard: { layout: "legacy-3x3", referenceId: "scene-ref" },
+                    },
+                ],
+            },
+            current,
+        );
+
+        expect(normalized.scenes[0].sceneReferenceBoard).toEqual({ layout: "panorama", referenceId: "scene-ref" });
+    });
+
     it("round-trips the scene background NPC policy without adding NPC assets", () => {
         const current = project("2026-07-19T08:00:00.000Z", "项目");
         const normalized = normalizeProject(

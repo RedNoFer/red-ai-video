@@ -167,6 +167,10 @@ describe("drama asset image results", () => {
         expect(editor).toContain("mergeGeneratedReferenceReviews");
         expect(editor).toContain("await loadProject(project.id, true)");
         expect(editor).toContain("await saveProjectNow(project.id)");
+        const explicitAssetSave = editor.slice(editor.indexOf("const save = async"), editor.indexOf("const saveSupplierPrompt"));
+        expect(explicitAssetSave).not.toContain("updateAsset(");
+        const explicitPromptSave = editor.slice(editor.indexOf("const saveSupplierPrompt"), editor.indexOf("const createVoice"));
+        expect(explicitPromptSave).not.toContain("updateAsset(");
     });
 
     it("filters derived readiness and usage states without changing project data", () => {

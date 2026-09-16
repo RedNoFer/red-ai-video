@@ -44,7 +44,7 @@ import type {
 } from "@/lib/drama-project-contract";
 import { dramaRichContentToPlainText, normalizeDramaScriptRichContent } from "@/lib/drama-script-rich-content";
 import { appendDramaImageReferenceBindings, dramaAssetPromptFields, hasDramaAssetPromptQuality, stripDramaReferenceBindingSections } from "@/lib/drama-prompt-compiler";
-import { approvedAssetReference, approvedScenePanoramaReference } from "@/lib/drama-asset-baseline";
+import { approvedAssetReference, approvedScenePanoramaReference, isLegacySceneReferenceBoard } from "@/lib/drama-asset-baseline";
 import { createFrameEvidence, decideActualEndFrame, invalidateFrameEvidence, replaceFrameEvidence, supersedeFrameEvidence } from "@/lib/drama-continuity-policy";
 import { DRAMA_STYLE_NAME, normalizeDramaStyleName, resolveDramaStyleContract } from "@/lib/drama-style";
 import { normalizeDramaImageSize } from "@/lib/drama-image-size";
@@ -3878,19 +3878,20 @@ function normalizeBackgroundNpcPolicy(value: unknown): DramaBackgroundNpcPolicy 
 
 function normalizeSceneReferenceBoard(value: unknown, primaryReferenceId?: string, legacy = false) {
     const input = object(value);
-    if (!Object.keys(input).length && !legacy) return undefined;
+    if (!Object.keys(input).length && !legacy && !primaryReferenceId) return undefined;
     const referenceId = optionalText(input.referenceId) || primaryReferenceId;
-    const layout = !legacy && input.layout === "panorama" ? ("panorama" as const) : ("legacy-3x3" as const);
+    const layout = legacy ? ("legacy-3x3" as const) : ("panorama" as const);
     return { layout, ...(referenceId ? { referenceId } : {}) };
 }
 
 function isLegacySceneAsset(value: unknown) {
     const asset = object(value);
     const boardLayout = cleanText(object(asset.sceneReferenceBoard).layout);
-    if (["3x3", "legacy-3x3"].includes(boardLayout)) return true;
+    if (["3x3", "legacy-3x3"].includes(boardLayout)) return isLegacySceneReferenceBoard(asset as unknown as DramaNamedAsset);
     const profile = object(asset.profile);
     const source = [asset.description, asset.supplierPrompt, profile.visualIdentity, profile.designPrompt, profile.consistencyRules].map(cleanText).filter(Boolean).join("\n");
-    return /九宫格|九格|3\s*[x×*]\s*3|三列[\s\S]*三行|3列[\s\S]*3行/u.test(source);
+    const withoutNegativeRules = source.replace(/(?:不生成|禁止(?:生成)?|不要|不得|无|避免)[^。；;\n]{0,24}(?:九宫格|九格|3\s*[x×*]\s*3|三列[\s\S]*三行|3列[\s\S]*3行)/gu, "");
+    return /九宫格|九格|3\s*[x×*]\s*3|三列[\s\S]*三行|3列[\s\S]*3行/u.test(withoutNegativeRules);
 }
 
 function normalizeClues(value: unknown) {
