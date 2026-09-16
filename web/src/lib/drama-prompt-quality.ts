@@ -102,7 +102,10 @@ export function validateDramaNpcSegmentDetail(value: unknown, label: string, cou
     if (!match) {
         const slotMatch = text.match(NPC_SLOT_SEGMENT_PATTERN);
         if (!slotMatch) return [`${label}要求背景 NPC，但必须写出“NPC群像：人数/分布/密度/反应”或“NPC连续性：可见槽位/世界锚点/状态变化”`];
-        const visibleSlots = slotMatch[1].split(/[、,，\s]+/u).map((slot) => slot.trim()).filter(Boolean);
+        const visibleSlots = slotMatch[1]
+            .split(/[、,，\s]+/u)
+            .map((slot) => slot.trim())
+            .filter(Boolean);
         const anchors = slotMatch[2].trim();
         const reaction = slotMatch[3].trim();
         const errors: string[] = [];

@@ -133,15 +133,7 @@ export function mergeProjectAssetsIntoProductionPackage<T extends DramaProductio
     };
 }
 
-function mergeProjectAssetCollection(
-    incoming: DramaProductionPackageAsset[],
-    existing: DramaNamedAsset[],
-    prefix: string,
-    referenced: Set<string>,
-    episodeCodes: Set<string>,
-    project?: DramaProjectAssetCollection,
-    kind?: "角色" | "场景" | "道具",
-) {
+function mergeProjectAssetCollection(incoming: DramaProductionPackageAsset[], existing: DramaNamedAsset[], prefix: string, referenced: Set<string>, episodeCodes: Set<string>, project?: DramaProjectAssetCollection, kind?: "角色" | "场景" | "道具") {
     const codes = allocateAssetCodes(existing, prefix);
     const existingWithCodes = existing.map((asset, index) => ({ asset, code: codes[index] }));
     const byCode = new Map(incoming.map((asset) => [asset.code, asset]));

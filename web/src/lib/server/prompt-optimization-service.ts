@@ -29,15 +29,7 @@ type PromptOptimizationMode = "agent" | CreativeGenerationMode | "drama-frame" |
 type NonAssetPromptOptimizationMode = Exclude<PromptOptimizationMode, "drama-asset">;
 type PromptOptimizationInput = { origin: string; cookie: string; userId: string; requestId: string; prompt: string; visualContract?: DramaGlobalVisualContract; correctionDirection?: string };
 export type PromptOptimizationReasonCode =
-    | "configuration"
-    | "missing_story_source"
-    | "missing_asset_reference"
-    | "invalid_input"
-    | "unsupported_model_capability"
-    | "unresolved_shot_reference"
-    | "invalid_model_response"
-    | "quality_gate_failed"
-    | "upstream_failure";
+    "configuration" | "missing_story_source" | "missing_asset_reference" | "invalid_input" | "unsupported_model_capability" | "unresolved_shot_reference" | "invalid_model_response" | "quality_gate_failed" | "upstream_failure";
 
 export class PromptOptimizationError extends Error {
     constructor(

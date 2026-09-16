@@ -225,9 +225,7 @@ describe("executeAgentRun backend settings", () => {
     });
 
     it("injects the system-owned package template when the user only provides story text", () => {
-        const sources = ensureDramaPackageTemplateSource([
-            { alias: "@TXT", role: "story-source", type: "text", title: "第一章.txt", contentHash: "a".repeat(64), textContent: "小说正文" },
-        ]);
+        const sources = ensureDramaPackageTemplateSource([{ alias: "@TXT", role: "story-source", type: "text", title: "第一章.txt", contentHash: "a".repeat(64), textContent: "小说正文" }]);
 
         expect(sources[0]).toMatchObject({ alias: "@系统制作包模板", role: "package-template", type: "text" });
         expect(sources[0]?.textContent).toContain("第一集文学剧本");

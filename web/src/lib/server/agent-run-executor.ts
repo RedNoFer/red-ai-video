@@ -528,14 +528,20 @@ framePlan.frames 只能保留现有字段；静态正文和视频正文必须由
                         cookie,
                         candidate,
                         [
-                            { role: "system", content: `${authoringRules}\n\n${instruction}\n${visualInstruction}\n${attachmentInstruction}\n\n这是内部 authoring revision，不是新的用户请求。上一版草案没有达到制作包生成门槛。请根据反馈重新完整生成一份可直接交付的制作包 Markdown，不要只返回补丁、解释或摘要；保留所有已覆盖的剧情事实和对白，但逐项修正反馈中的字段。对白表演必须逐段绑定当前说话人和实际台词，写具体语气、停顿、重音、说后可见反应；对白结束段必须写具体静默/反应结果；相邻段不得复制同一表演文本。生成前完成内部自检，禁止把模板句、质量反馈或内部规则写入公开制作包。` },
+                            {
+                                role: "system",
+                                content: `${authoringRules}\n\n${instruction}\n${visualInstruction}\n${attachmentInstruction}\n\n这是内部 authoring revision，不是新的用户请求。上一版草案没有达到制作包生成门槛。请根据反馈重新完整生成一份可直接交付的制作包 Markdown，不要只返回补丁、解释或摘要；保留所有已覆盖的剧情事实和对白，但逐项修正反馈中的字段。对白表演必须逐段绑定当前说话人和实际台词，写具体语气、停顿、重音、说后可见反应；对白结束段必须写具体静默/反应结果；相邻段不得复制同一表演文本。生成前完成内部自检，禁止把模板句、质量反馈或内部规则写入公开制作包。`,
+                            },
                             {
                                 role: "user",
                                 content: JSON.stringify({
                                     ...input,
                                     authoringRevision: {
                                         previousDraft: draft.markdown,
-                                        feedback: error instanceof DramaAuthoringQualityGateError ? error.report.checks.filter((check) => check.severity === "blocker").map((check) => ({ code: check.code, scope: check.scope, evidence: check.evidence, fixHint: check.fixHint })) : [{ code: "PACKAGE_DRAFT_INVALID", scope: "制作包草案", evidence: error.message, fixHint: "按当前制作包契约返回完整可执行字段" }],
+                                        feedback:
+                                            error instanceof DramaAuthoringQualityGateError
+                                                ? error.report.checks.filter((check) => check.severity === "blocker").map((check) => ({ code: check.code, scope: check.scope, evidence: check.evidence, fixHint: check.fixHint }))
+                                                : [{ code: "PACKAGE_DRAFT_INVALID", scope: "制作包草案", evidence: error.message, fixHint: "按当前制作包契约返回完整可执行字段" }],
                                     },
                                 }),
                             },
@@ -552,8 +558,7 @@ framePlan.frames 只能保留现有字段；静态正文和视频正文必须由
                     if (repaired.mode !== "package" || !repaired.markdown?.trim()) throw new Error("制作包 authoring revision 未返回完整制作包");
                     await persistDraft({ mode: "package", reply: repaired.reply?.trim() || draft.reply, markdown: repaired.markdown.trim() }, "project-gpt");
                 }
-            }
-            else
+            } else
                 await updateAgentRunById(
                     run.id,
                     { status: "completed", tasks: [], reviewed: true, executionId: undefined, timings: { ...(run.timings || { requestAcceptedAt: run.createdAt }), runCompletedAt: Date.now() } },
