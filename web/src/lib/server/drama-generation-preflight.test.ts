@@ -55,7 +55,7 @@ describe("drama generation preflight", () => {
         expect(result.issues.every((issue) => issue.shotId !== "shot-two")).toBe(true);
     });
 
-    it("blocks generation when a configured model returns an invalid revision", async () => {
+    it("keeps generation actionable when a configured model returns no revision", async () => {
         const project = fixture();
         project.seriesBible = { version: "series-bible-v1", canonCharacters: [], immutableRules: [], relationshipState: "", worldRules: [], unresolvedThreads: [], visualMotifs: [], soundMotifs: [] };
         project.episodes[0].shots[0].duration = 6;
@@ -71,7 +71,7 @@ describe("drama generation preflight", () => {
         mocks.resolveLogicalModelCandidates.mockReturnValue([{ channelId: "channel", upstreamModel: "gpt", channel: { id: "channel" } }]);
         mocks.requestStructuredText.mockResolvedValue({ arguments: JSON.stringify({ revisions: [] }), headers: new Headers(), protocol: "chat", elapsedMs: 1 });
         const result = await preflightDramaGeneration({ origin: "http://localhost", cookie: "", userId: "user", requestId: "request", project, episode: project.episodes[0] });
-        expect(result).toMatchObject({ status: "blocked", issues: expect.arrayContaining([expect.objectContaining({ code: "MODEL_PREFLIGHT_FAILED" })]) });
+        expect(result).toMatchObject({ status: "needs_confirmation", issues: expect.arrayContaining([expect.objectContaining({ code: "MODEL_PREFLIGHT_FAILED", severity: "warning" })]) });
     });
 });
 
