@@ -2692,8 +2692,8 @@ describe("drama project service updates", () => {
         expect(saved.productionBible?.productionPlan).toMatchObject({ lockedAt: lockedPlan.lockedAt, video: { resolution: "480p" } });
     });
 
-    it("uses an unknown Buming default video model for all-frame production instead of blocking the run", async () => {
-        const plan = { ...defaultDramaProductionPlan("manual"), lockedAt: "2026-07-19T08:00:00.000Z", video: { ...defaultDramaProductionPlan("manual").video, model: "selected-video" } };
+    it("allows video production when the plan has advisory preflight findings", async () => {
+        const plan = { ...defaultDramaProductionPlan("manual"), video: { ...defaultDramaProductionPlan("manual").video, model: "selected-video" } };
         const current = project("2026-07-19T08:00:01.000Z", "项目");
         current.productionBible = { ...current.productionBible!, productionPlan: plan };
         current.seriesBible = { version: "series-bible-v1", canonCharacters: [], immutableRules: [], relationshipState: "", worldRules: [], unresolvedThreads: [], visualMotifs: [], soundMotifs: [] };

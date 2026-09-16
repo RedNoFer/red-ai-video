@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { DramaEpisode, DramaProject, DramaShot } from "@/lib/drama-project-contract";
+import { defaultDramaProductionPlan } from "@/lib/drama-production-plan";
 import { preflightDramaProduction } from "@/lib/server/drama-production-preflight";
 
 describe("drama production preflight", () => {
@@ -64,6 +65,13 @@ describe("drama production preflight", () => {
                 expect.objectContaining({ code: "PROP_ANCHOR", severity: "warning" }),
             ]),
         );
+    });
+
+    it("keeps an unsaved production plan as a warning instead of a generation blocker", () => {
+        const project = fixture();
+        project.productionBible = { ...project.productionBible, productionPlan: defaultDramaProductionPlan("manual") } as never;
+
+        expect(preflightDramaProduction(project, project.episodes[0]).issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "PRODUCTION_PLAN_UNCONFIRMED", severity: "warning" })]));
     });
 
     it("blocks names introduced by prompts without shot references", () => {

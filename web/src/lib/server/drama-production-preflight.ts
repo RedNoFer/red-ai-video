@@ -12,7 +12,7 @@ import { auditDramaShotDirectorQuality } from "@/lib/server/agent-skills/drama-v
 const blocking = (code: string, message: string, extra: Partial<DramaProductionPreflightIssue> = {}): DramaProductionPreflightIssue => ({ code, severity: "blocking", message, ...extra });
 const warning = (code: string, message: string, extra: Partial<DramaProductionPreflightIssue> = {}): DramaProductionPreflightIssue => ({ code, severity: "warning", message, ...extra });
 
-/** Hard executable checks stay blocking; prompt-quality findings remain actionable warnings. */
+/** Only checks required to construct an executable request stay blocking; workflow and prompt-quality findings remain actionable warnings. */
 export function preflightDramaProduction(project: DramaProject, episode: DramaEpisode, shotIds?: string[], referenceSelections?: Record<string, string[]>, referenceModes?: Record<string, DramaVideoReferenceMode>): DramaProductionPreflight {
     const issues: DramaProductionPreflightIssue[] = [];
     const selected = new Set(shotIds?.length ? shotIds : episode.shots.map((shot) => shot.id));
@@ -26,7 +26,7 @@ export function preflightDramaProduction(project: DramaProject, episode: DramaEp
         // The executable video model is selected by the backend channel binding at task creation.
         // Do not gate production on the stale model label persisted in the editable plan.
         if (plan.references.minImages < 1 || plan.references.maxImages < plan.references.minImages) issues.push(blocking("REFERENCE_PLAN_INVALID", "多帧参考数量范围无效"));
-        if (!plan.lockedAt) issues.push(blocking("PRODUCTION_PLAN_UNCONFIRMED", "生产方案尚未锁定，请先在剧本生成前完成方案配置"));
+        if (!plan.lockedAt) issues.push(warning("PRODUCTION_PLAN_UNCONFIRMED", "生产方案尚未锁定，视频仍可依据当前镜头提示词生成", { correction: "如需固定本集统一参数，可先保存本集生产方案" }));
         if (plan.video.shotDuration !== 15 && plan.video.shotDuration !== 30) issues.push(blocking("SHOT_DURATION_PLAN_INVALID", "生产方案每镜时长只能为 15 秒或 30 秒"));
         if (plan.video.framePolicy === "agent" && plan.video.frameCount !== undefined) issues.push(blocking("FRAME_POLICY_CONFLICT", "Agent 智能切分不能携带固定帧数"));
     }
