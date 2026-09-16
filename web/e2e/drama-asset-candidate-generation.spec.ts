@@ -37,6 +37,19 @@ test("编辑角色视觉设定后保存并恢复全部字段", async ({ page, re
         for (const [label, value] of Object.entries(fields)) await drawer.getByRole("textbox").nth({ visualIdentity: 2, styling: 3, colorPalette: 4, consistencyRules: 5 }[label]).fill(value);
         await drawer.getByText("实际供应商提示词（可编辑）").click();
         const supplierPrompt = drawer.getByLabel("供应商提示词");
+        const optimizationRequests: string[] = [];
+        page.on("request", (request) => {
+            if (request.method() === "POST" && request.url().endsWith("/api/agent/prompt-optimization")) optimizationRequests.push(request.url());
+        });
+        await supplierPrompt.fill("");
+        await expect(supplierPrompt).toHaveValue("");
+        await expect(drawer.getByRole("button", { name: "恢复自动提示词" })).toBeVisible();
+        const rawSupplierPrompt = "用户手工维护的原始供应商提示词，不需要保存时调用 GPT。";
+        await supplierPrompt.fill(rawSupplierPrompt);
+        const promptSaveResponse = page.waitForResponse((response) => response.request().method() === "PATCH" && response.url().includes(`/api/drama/projects/${project.id}/assets/characters/${characterId}`));
+        await drawer.getByRole("button", { name: "保存提示词" }).click();
+        await promptSaveResponse;
+        expect(optimizationRequests).toHaveLength(0);
         const savedSupplierPrompt = "主体与资产类型：角色「保存测试角色」\n身份/结构锚点：用户手工维护的固定外观。\n负面约束：无额外人物、无文字、无水印。";
         await supplierPrompt.fill(savedSupplierPrompt);
         await drawer.getByRole("button", { name: "保存设定" }).click();

@@ -138,6 +138,11 @@ describe("drama asset image results", () => {
         expect(editor).toContain("width={640}");
         expect(editor).toContain("if (!asset)");
         expect(editor).toContain("size={620}");
+        const saveSection = editor.slice(editor.indexOf("const save = async"), editor.indexOf("const createVoice"));
+        expect(saveSection).not.toContain("optimizeDramaAssetPrompt");
+        expect(saveSection).toContain("markShotsStale: false");
+        expect(editor).toContain("resolveDramaSupplierPrompt");
+        expect(editor).toContain("supplierPromptOverride !== undefined");
         expect(editor).toContain('maxWidth: "100vw"');
         expect(editor).toContain("从来源选择");
         expect(editor).toContain("上传候选");
@@ -152,7 +157,7 @@ describe("drama asset image results", () => {
         expect(editor).toContain("dataUrl: storedReferenceUrl");
         expect(editor).toContain("const existingReferenceUrl");
         expect(editor).toContain("referenceOverride || (activeProposal ? primary : undefined)");
-        expect(editor).toContain("supplierPromptOverride.trim() ||");
+        expect(editor).toContain("supplierPromptOverride?.trim() ||");
         expect(editor).toContain("data-drama-primary-preview");
         expect(editor).toContain("!object-contain");
         expect(editor).toContain("aspectRatio: primary?.width && primary?.height");

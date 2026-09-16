@@ -1169,10 +1169,12 @@ export async function approveDramaAssetReferenceForUser(userId: string, id: stri
 
 export async function updateDramaAssetForUser(userId: string, id: string, kind: string, assetId: string, value: unknown) {
     if (kind !== "characters" && kind !== "scenes" && kind !== "props" && kind !== "clues") throw new DramaProjectServiceError("当前资产类型不支持设定保存", 400);
-    const current = await getDramaProjectForUser(userId, id);
+    const current = await getDramaProject(cleanText(id), userId);
+    if (!current) throw new DramaProjectServiceError("短剧项目不存在", 404);
     const asset = current[kind].find((item) => item.id === assetId);
     if (!asset) throw new DramaProjectServiceError("项目资产不存在，请刷新后重试", 404);
     const input = object(value);
+    const markShotsStale = input.markShotsStale !== false;
     const incomingProfile = object(input.profile);
     const incomingSupplierPrompt = typeof input.supplierPrompt === "string" ? optionalText(input.supplierPrompt) : undefined;
     const assetKind = kind === "characters" ? "角色" : kind === "scenes" ? "场景" : "道具";
@@ -1209,7 +1211,15 @@ export async function updateDramaAssetForUser(userId: string, id: string, kind: 
         ...(kind === "characters" && input.voiceProfile !== undefined ? { voiceProfile: input.voiceProfile } : {}),
         ...(kind === "clues" && typeof input.payoff === "string" ? { payoff: cleanText(input.payoff) } : {}),
     };
-    const nextProject = normalizeProject(markDramaAssetChanged({ ...current, [kind]: current[kind].map((item) => (item.id === assetId ? { ...item, ...patch } : item)), updatedAt: nextTimestamp(current.updatedAt) }, kind, assetId), current);
+    const projectWithAsset = { ...current, [kind]: current[kind].map((item) => (item.id === assetId ? { ...item, ...patch } : item)), updatedAt: nextTimestamp(current.updatedAt) };
+    const normalizedProject = normalizeProject(markShotsStale ? markDramaAssetChanged(projectWithAsset, kind, assetId) : projectWithAsset, current);
+    const nextProject = markShotsStale
+        ? normalizedProject
+        : {
+              ...current,
+              [kind]: current[kind].map((item) => (item.id === assetId ? normalizedProject[kind].find((candidate) => candidate.id === assetId) || item : item)),
+              updatedAt: normalizedProject.updatedAt,
+          };
     try {
         assertUniqueDramaVoices(nextProject.characters);
     } catch (error) {
@@ -1217,7 +1227,7 @@ export async function updateDramaAssetForUser(userId: string, id: string, kind: 
         throw error;
     }
     try {
-        return await updateDramaProject(userId, nextProject, current.updatedAt);
+        return await persistDramaVisualProjectChanges(userId, current, nextProject);
     } catch (error) {
         if (error instanceof DramaProjectStoreError) throw new DramaProjectServiceError(error.message, error.status);
         throw error;

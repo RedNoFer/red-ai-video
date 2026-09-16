@@ -5,20 +5,9 @@ import { Check, FolderInput, ImagePlus, MessageCircle, RotateCcw, Send, Sparkles
 import { nanoid } from "nanoid";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { compileDramaAssetReferencePrompt, compileDramaAssetRefinementPrompt, dramaAssetPromptFields, DRAMA_CHARACTER_TURNAROUND_SIZE, hasDramaAssetPromptQuality, preflightDramaAssetGeneration } from "@/lib/drama-prompt-compiler";
+import { compileDramaAssetReferencePrompt, compileDramaAssetRefinementPrompt, dramaAssetPromptFields, DRAMA_CHARACTER_TURNAROUND_SIZE, preflightDramaAssetGeneration } from "@/lib/drama-prompt-compiler";
 import { approvedAssetReference } from "@/lib/drama-asset-baseline";
-import type {
-    DramaAssetProfile,
-    DramaAssetPromptOptimization,
-    DramaAssetReference,
-    DramaAssetRefinementMessage,
-    DramaAssetRefinementProposal,
-    DramaBackgroundNpcPolicy,
-    DramaCharacter,
-    DramaNamedAsset,
-    DramaProject,
-    DramaVoiceProfile,
-} from "@/lib/drama-project-contract";
+import type { DramaAssetProfile, DramaAssetReference, DramaAssetRefinementMessage, DramaAssetRefinementProposal, DramaBackgroundNpcPolicy, DramaCharacter, DramaNamedAsset, DramaProject, DramaVoiceProfile } from "@/lib/drama-project-contract";
 import { imagePreviewUrl } from "@/lib/media-image-url";
 import { resolveDramaGlobalVisualContract } from "@/lib/drama-style";
 import { createImageGenerationTask, waitForImageGenerationTask, type ImageGenerationTask } from "@/services/api/image";
@@ -43,6 +32,7 @@ import { DRAMA_ASSET_DEFINITIONS, type DramaAssetKind } from "./drama-asset-defi
 import { dramaAssetReferences, dramaSceneBoardReference, ensureUniqueDramaAssetReferenceIds, imageResultsToReferences, isDramaSceneBoardReference, mergeGeneratedReferenceReviews } from "./drama-asset-reference-utils";
 import { DramaSceneReferenceBoard } from "./drama-scene-reference-board";
 import { dramaAssetAutoCompletionItems, dramaAssetMissingFields } from "./drama-asset-library-utils";
+import { resolveDramaSupplierPrompt } from "./drama-asset-editor-utils";
 import { getDramaAssetMissingItems } from "@/lib/drama-asset-completion";
 import { dramaGenerationSize } from "./drama-shot-generation-utils";
 
@@ -87,7 +77,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
     const [saving, setSaving] = useState(false);
     const [refinementPrompt, setRefinementPrompt] = useState("");
     const [refinementProposal, setRefinementProposal] = useState<DramaAssetRefinementProposal>();
-    const [supplierPromptOverride, setSupplierPromptOverride] = useState("");
+    const [supplierPromptOverride, setSupplierPromptOverride] = useState<string | undefined>();
     const [optimizingAssetPrompt, setOptimizingAssetPrompt] = useState(false);
     const [refining, setRefining] = useState(false);
     const [creatingVoice, setCreatingVoice] = useState(false);
@@ -110,7 +100,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                   kind === "characters" ? "角色" : kind === "scenes" ? "场景" : "道具",
               )
             : "";
-    const supplierPrompt = supplierPromptOverride.trim() || automaticSupplierPrompt;
+    const supplierPrompt = resolveDramaSupplierPrompt(supplierPromptOverride, automaticSupplierPrompt);
     const cloneAvailable = config.channels.some((channel) =>
         Object.values(channel.advancedConfig?.modelConfigs || {}).some(
             (operation) => operation.audioOperation === "voice-clone" && Boolean(operation.cloneSampleField) && /\{\{\s*(?:clone_sample_url|sample_audio_url|sample_url)\s*\}\}/i.test(operation.requestTemplate || ""),
@@ -130,7 +120,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
             setGenerationStatusLoading(false);
             setRefinementPrompt("");
             setRefinementProposal(undefined);
-            setSupplierPromptOverride("");
+            setSupplierPromptOverride(undefined);
             return;
         }
         const editorKey = `${kind}:${assetId || "new"}`;
@@ -142,7 +132,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
         }
         const latestRefinement = asset.refinementHistory?.at(-1)?.proposal;
         setRefinementProposal(latestRefinement);
-        setSupplierPromptOverride(kind === "props" ? compileDramaAssetReferencePrompt(project, { ...asset, supplierPrompt: undefined }, "道具") : asset.supplierPrompt || "");
+        setSupplierPromptOverride(asset.supplierPrompt?.trim() || undefined);
         setDraft({
             name: asset.name,
             description: asset.description,
@@ -174,40 +164,19 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                 JSON.stringify(draft.profile) !== JSON.stringify(asset.profile || {}) ||
                 JSON.stringify(draft.backgroundNpcPolicy || {}) !== JSON.stringify(asset.backgroundNpcPolicy || {})),
         );
-        const supplierPromptChanged = Boolean(asset && supplierPromptOverride.trim() !== (asset.supplierPrompt || "").trim());
+        const supplierPromptChanged = Boolean(asset && (supplierPromptOverride || "").trim() !== (asset.supplierPrompt || "").trim());
         try {
             if (asset) {
-                let supplierPrompt = kind !== "clues" ? supplierPromptOverride.trim() : "";
-                let synchronizedFields: DramaAssetPromptOptimization["fields"] | undefined;
-                if (supplierPrompt && !assetFactsChanged && !hasDramaAssetPromptQuality(supplierPrompt, kind === "characters" ? "角色" : kind === "scenes" ? "场景" : "道具")) {
-                    const assetKind = kind === "characters" ? "角色" : kind === "scenes" ? "场景" : "道具";
-                    const optimized = await optimizeDramaAssetPrompt(assetKind, supplierPrompt, `drama-asset-save-settings:${project.id}:${asset.id}:${nanoid()}`, resolveDramaGlobalVisualContract(project));
-                    supplierPrompt = optimized.optimizedPrompt;
-                    synchronizedFields = optimized.fields;
-                }
-                const synchronizedProfile = synchronizedFields
-                    ? {
-                          ...draft.profile,
-                          visualIdentity: synchronizedFields.visualIdentity,
-                          styling: synchronizedFields.styling,
-                          colorPalette: synchronizedFields.colorPalette,
-                          consistencyRules: synchronizedFields.consistencyRules,
-                      }
-                    : draft.profile;
+                const supplierPrompt = kind !== "clues" ? (supplierPromptOverride === undefined ? asset.supplierPrompt?.trim() || "" : supplierPromptOverride.trim()) : "";
                 const patch = {
                     ...base,
                     ...(kind !== "clues" ? { supplierPrompt: assetFactsChanged && !supplierPromptChanged ? "" : supplierPrompt } : {}),
-                    ...(synchronizedFields ? { description: synchronizedFields.description, profile: synchronizedProfile } : {}),
                     ...(kind === "characters" ? { voiceProfile: draft.voiceProfile } : {}),
                     ...(kind === "clues" ? { payoff: draft.payoff.trim() } : {}),
                 };
                 updateAsset(project.id, kind, asset.id, patch);
                 const savedProject = await saveAssetNow(project.id, kind, asset.id, patch);
                 replaceProject(savedProject);
-                if (synchronizedFields) {
-                    setDraft((current) => ({ ...current, description: synchronizedFields!.description, profile: synchronizedProfile }));
-                    setSupplierPromptOverride(supplierPrompt);
-                }
             } else if (kind === "characters") {
                 addCharacter(project.id, { ...base, voiceProfile: draft.voiceProfile, references: [] });
             } else if (kind === "scenes") {
@@ -227,30 +196,26 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
         }
     };
 
-    const saveSupplierPrompt = async (nextPrompt = supplierPromptOverride.trim()) => {
+    const saveSupplierPrompt = async (nextPrompt?: string) => {
         if (!asset || kind === "clues" || saving) return;
-        let prompt = nextPrompt.trim();
-        if (!prompt) {
-            setSupplierPromptOverride("");
-            if (!asset.supplierPrompt?.trim()) return;
+        const restoringAutomatic = nextPrompt === "";
+        const prompt = (nextPrompt === undefined ? supplierPrompt : nextPrompt).trim();
+        if (!prompt && !restoringAutomatic) return;
+        if (restoringAutomatic && !asset.supplierPrompt?.trim()) {
+            setSupplierPromptOverride(undefined);
+            return;
         }
         setSaving(true);
         try {
-            let fields: DramaAssetPromptOptimization["fields"] | undefined;
-            const assetKind = kind === "characters" ? "角色" : kind === "scenes" ? "场景" : "道具";
-            if (prompt && !hasDramaAssetPromptQuality(prompt, assetKind)) {
-                const optimized = await optimizeDramaAssetPrompt(assetKind, prompt, `drama-asset-save:${project.id}:${asset.id}:${nanoid()}`, resolveDramaGlobalVisualContract(project));
-                prompt = optimized.optimizedPrompt;
-                fields = optimized.fields;
-            } else if (prompt) {
-                fields = dramaAssetPromptFields(prompt, {
-                    description: draft.description.trim(),
-                    visualIdentity: draft.profile.visualIdentity,
-                    styling: draft.profile.styling,
-                    colorPalette: draft.profile.colorPalette,
-                    consistencyRules: draft.profile.consistencyRules,
-                });
-            }
+            const fields = prompt
+                ? dramaAssetPromptFields(prompt, {
+                      description: draft.description.trim(),
+                      visualIdentity: draft.profile.visualIdentity,
+                      styling: draft.profile.styling,
+                      colorPalette: draft.profile.colorPalette,
+                      consistencyRules: draft.profile.consistencyRules,
+                  })
+                : undefined;
             const profilePatch = fields
                 ? {
                       visualIdentity: fields.visualIdentity,
@@ -264,9 +229,9 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                 ...(fields ? { description: fields.description, profile: { ...draft.profile, ...profilePatch } } : {}),
             };
             updateAsset(project.id, kind, asset.id, patch, { markShotsStale: false });
-            const savedProject = await saveAssetNow(project.id, kind, asset.id, patch);
+            const savedProject = await saveAssetNow(project.id, kind, asset.id, { ...patch, markShotsStale: false });
             replaceProject(savedProject);
-            setSupplierPromptOverride(prompt);
+            setSupplierPromptOverride(prompt || undefined);
             if (fields) {
                 setDraft((current) => ({ ...current, description: fields!.description, profile: { ...current.profile, ...profilePatch } }));
             }
@@ -329,7 +294,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
 
     const requestRefinement = async () => {
         if (!asset || kind === "clues" || !refinementPrompt.trim()) return;
-        setSupplierPromptOverride("");
+        setSupplierPromptOverride(undefined);
         setRefining(true);
         try {
             const proposal = await refineDramaAsset(project.id, kind as "characters" | "scenes" | "props", asset.id, refinementPrompt.trim(), `${asset.id}:${Date.now()}`);
@@ -346,7 +311,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
 
     const applyRefinementDraft = () => {
         if (!asset || !refinementProposal) return;
-        setSupplierPromptOverride("");
+        setSupplierPromptOverride(undefined);
         setDraft((current) => ({ ...current, profile: refinementProposal.updatedProfile, description: refinementProposal.updatedDescription || current.description }));
         message.success("调整已应用到未保存草稿");
     };
@@ -432,7 +397,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
             .filter(Boolean)
             .join("；");
         const request = correction ? `请根据审核建议调整：${correction}` : "请修正这张候选图中审核指出的问题，并保留角色身份、五官、年龄和一致性规则。";
-        setSupplierPromptOverride("");
+        setSupplierPromptOverride(undefined);
         setRefinementPrompt((current) => (current.trim() ? `${current.trim()}；${request}` : request));
         refinementSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
         message.info("已回填审核建议，你可以继续修改后再生成调整方案");
@@ -580,7 +545,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
             replaceProject(savedProject);
             message.success(`已生成 ${nextReferences.length} 张候选图${review.status === "passed" ? "，可直接使用" : "，图片已保留，请查看审核建议"}`);
             setRefinementProposal(undefined);
-            setSupplierPromptOverride("");
+            setSupplierPromptOverride(undefined);
         },
         [asset?.id, kind, loadProject, message, replaceProject, saveProjectNow, updateAsset],
     );
@@ -662,7 +627,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                 message.warning(`暂不能生成：${preflight.errors.join("；")}`);
                 return;
             }
-            const prompt = activeProposal ? compileDramaAssetRefinementPrompt(project, asset, assetKind, activeProposal, refinementPrompt) : supplierPromptOverride.trim() || supplierPrompt;
+            const prompt = activeProposal ? compileDramaAssetRefinementPrompt(project, asset, assetKind, activeProposal, refinementPrompt) : supplierPromptOverride?.trim() || supplierPrompt;
             const imageModel = config.imageModel || config.imageModels[0] || "";
             if (!imageModel) throw new Error("后台尚未配置可用的图片模型，请先在管理后台配置图片渠道");
             const imageConfig = {
@@ -760,7 +725,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                         <Input
                             value={draft.name}
                             onChange={(event) => {
-                                setSupplierPromptOverride("");
+                                setSupplierPromptOverride(undefined);
                                 setDraft((current) => ({ ...current, name: event.target.value }));
                             }}
                             placeholder={definition.placeholder}
@@ -771,7 +736,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                         <Input.TextArea
                             value={draft.description}
                             onChange={(event) => {
-                                setSupplierPromptOverride("");
+                                setSupplierPromptOverride(undefined);
                                 setDraft((current) => ({ ...current, description: event.target.value }));
                             }}
                             autoSize={{ minRows: asset ? 3 : 2, maxRows: 5 }}
@@ -838,7 +803,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                             <Input.TextArea
                                 value={draft.profile[key]}
                                 onChange={(event) => {
-                                    setSupplierPromptOverride("");
+                                    setSupplierPromptOverride(undefined);
                                     setDraft((current) => ({ ...current, profile: { ...current.profile, [key]: event.target.value } }));
                                 }}
                                 autoSize={{ minRows: asset ? 2 : 1, maxRows: 4 }}
@@ -996,7 +961,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                             <Input.TextArea
                                 value={refinementPrompt}
                                 onChange={(event) => {
-                                    setSupplierPromptOverride("");
+                                    setSupplierPromptOverride(undefined);
                                     setRefinementPrompt(event.target.value);
                                 }}
                                 autoSize={{ minRows: 3, maxRows: 6 }}
@@ -1062,11 +1027,11 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                                                 data-drama-supplier-prompt
                                             />
                                             <div className="flex justify-end">
-                                                <Button size="small" type="primary" icon={<Check className="size-3.5" />} loading={saving} disabled={!supplierPromptOverride.trim()} onClick={() => void saveSupplierPrompt()}>
+                                                <Button size="small" type="primary" icon={<Check className="size-3.5" />} loading={saving} disabled={!supplierPromptOverride?.trim()} onClick={() => void saveSupplierPrompt()}>
                                                     保存提示词
                                                 </Button>
                                             </div>
-                                            {supplierPromptOverride ? (
+                                            {supplierPromptOverride !== undefined ? (
                                                 <div className="flex justify-end">
                                                     <Button size="small" icon={<RotateCcw className="size-3.5" />} loading={saving} onClick={() => void saveSupplierPrompt("")}>
                                                         恢复自动提示词

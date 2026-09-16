@@ -2933,7 +2933,25 @@ describe("drama project service updates", () => {
         expect(saved.characters[0]).toMatchObject({ description: "更新身份", supplierPrompt: "主体与资产类型：角色「主角」\n负面约束：不要额外人物", profile: expect.objectContaining({ styling: "新造型", colorPalette: "新配色" }) });
         expect(saved.characters[1]).toMatchObject({ id: "character-two", description: "保留" });
         expect(saved.episodes[0].shots).toEqual(expect.arrayContaining([expect.objectContaining({ id: "shot-one", continuityStatus: "stale" }), expect.objectContaining({ id: "shot-two", continuityStatus: "blocked" })]));
-        expect(mocks.updateDramaProject).toHaveBeenCalledWith("user-one", expect.objectContaining({ characters: expect.arrayContaining([expect.objectContaining({ id: "character-two", description: "保留" })]) }), current.updatedAt);
+        expect(mocks.updateDramaProject).not.toHaveBeenCalled();
+        expect(mocks.updateDramaProjectAssetMutation).toHaveBeenCalledWith(
+            "user-one",
+            expect.objectContaining({ projectId: current.id, assetKind: "characters", assetId: "character-one", asset: expect.objectContaining({ id: "character-one", description: "更新身份" }) }),
+        );
+    });
+
+    it("saves a prompt-only asset edit without invalidating dependent shots", async () => {
+        const current = project("2026-07-19T08:00:01.000Z", "项目");
+        current.characters = [{ id: "character-one", name: "主角", description: "身份", profile: { visualIdentity: "外貌" }, references: [] }] as never;
+        current.episodes[0].shots = [{ id: "shot-one", title: "镜头一", characterIds: ["character-one"], sceneId: undefined, propIds: [], clueIds: [], continuityStatus: "passed" }] as never;
+        mocks.getDramaProject.mockResolvedValue(current);
+
+        await updateDramaAssetForUser("user-one", current.id, "characters", "character-one", { supplierPrompt: "用户清空后重新输入的提示词", markShotsStale: false });
+
+        expect(mocks.updateDramaProject).not.toHaveBeenCalled();
+        expect(mocks.updateDramaProjectShotMutation).not.toHaveBeenCalled();
+        expect(mocks.queryStoredGenerationTasks).not.toHaveBeenCalled();
+        expect(mocks.updateDramaProjectAssetMutation).toHaveBeenCalledWith("user-one", expect.objectContaining({ assetKind: "characters", assetId: "character-one", asset: expect.objectContaining({ supplierPrompt: "用户清空后重新输入的提示词" }) }));
     });
 
     it("preserves exact project dimensions without a platform ceiling", async () => {
