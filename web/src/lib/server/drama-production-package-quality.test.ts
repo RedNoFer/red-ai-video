@@ -23,11 +23,11 @@ function packageValue(input: { script?: string; videoPrompt?: string; actions?: 
         code: "SH01",
         duration: 30,
         cameraMotion: "中景平视固定机位，沿中央长桌轴线缓慢推进，为了让观众看见萧炎从承受到质问的重心变化",
-        videoPrompt: input.videoPrompt || "镜头模式：连续镜头\n单一主运镜：中景平视固定机位沿中央长桌轴线缓慢推进，为了让观众看见萧炎抬眼质问纳兰。\n时间段动作：0-15秒，起点萧炎低头；动作与触发萧炎抬眼并压住桌沿；可见衔接指节受力；终点萧炎抬眼。15-30秒，起点承接；动作与触发肩背直起并回看纳兰；可见衔接萧战前倾；终点萧炎直视纳兰。",
+        videoPrompt:
+            input.videoPrompt ||
+            "镜头模式：连续镜头\n单一主运镜：中景平视固定机位沿中央长桌轴线缓慢推进，为了让观众看见萧炎抬眼质问纳兰。\n时间段动作：0-15秒，起点萧炎低头；动作与触发萧炎抬眼并压住桌沿；可见衔接指节受力；终点萧炎抬眼。15-30秒，起点承接；动作与触发肩背直起并回看纳兰；可见衔接萧战前倾；终点萧炎直视纳兰。",
         dialogue: "",
-        utterances: input.dialogue
-            ? [{ id: "u1", order: 1, type: "dialogue" as const, speaker: "萧炎", text: "纳兰小姐，你来了。", startSecond: 1, endSecond: 8 }]
-            : [],
+        utterances: input.dialogue ? [{ id: "u1", order: 1, type: "dialogue" as const, speaker: "萧炎", text: "纳兰小姐，你来了。", startSecond: 1, endSecond: 8 }] : [],
         performancePlan: {
             emotionalObjective: "把私人难堪转成家族颜面质问",
             emotionalArc: "低头承受→抬眼施压→直视逼问",
@@ -41,7 +41,18 @@ function packageValue(input: { script?: string; videoPrompt?: string; actions?: 
                 end: { emotion: "逼问", facialAction: "冷笑压成质问，颌线绷紧", gaze: "直视纳兰不移开", bodyAction: "身体前送，右手停在身侧" },
             },
         },
-        continuity: { shotSize: "中景", cameraAngle: "平视", composition: "长桌轴线对峙", characterBlocking: "萧炎东侧、纳兰西侧、萧战北侧首位", gazeDirection: "萧炎看纳兰", actionStart: "萧炎低头", actionEnd: "萧炎直视纳兰", screenDirection: "180度轴线不变", axisRule: "中央长桌轴线", continuityNotes: "茶盏保持右手边" },
+        continuity: {
+            shotSize: "中景",
+            cameraAngle: "平视",
+            composition: "长桌轴线对峙",
+            characterBlocking: "萧炎东侧、纳兰西侧、萧战北侧首位",
+            gazeDirection: "萧炎看纳兰",
+            actionStart: "萧炎低头",
+            actionEnd: "萧炎直视纳兰",
+            screenDirection: "180度轴线不变",
+            axisRule: "中央长桌轴线",
+            continuityNotes: "茶盏保持右手边",
+        },
         entryState: { characters: [], props: [], environment: "萧家议事大厅" },
         exitState: { characters: [], props: [], environment: "萧家议事大厅，萧炎直视纳兰" },
         framePlan: { start: { source: "independent" }, end: { required: true }, frames },
@@ -50,7 +61,22 @@ function packageValue(input: { script?: string; videoPrompt?: string; actions?: 
         schemaVersion: 1,
         project: { title: "三年之约", summary: "家族议事", style: "东方玄幻", ratio: "9:16", productionBible: { language: "中文", ratio: "9:16", visualStyle: "东方玄幻", continuityMode: "strict" } },
         assets: { characters: [], locations: [{ code: "S01", name: "萧家议事大厅", description: "固定大厅", ...(input.npcPolicy ? { backgroundNpcPolicy: { mode: "required" as const, countRange: { min: 5, max: 8 } } } : {}) }], props: [], clues: [] },
-        episodes: [{ code: "E01", title: "第三章", script: input.script || "场景：萧家议事大厅。萧炎低头承受众人的目光，纳兰嫣然将退婚要求放到长桌中央。萧战按住茶盏，等待儿子开口。萧炎抬眼，右手指节压住桌沿，把私人难堪推向父亲和萧家颜面。纳兰下颌微抬，旁听者收声。萧战离开椅背前倾，大厅里的风声停住，所有人等待回应。", outline: "退婚冲突", hook: "萧炎质问", nextPreview: "纳兰回应", sourceRange: input.sourceRange || "第3章", storyScenes: [{ code: "SC01", order: 1, title: "议事大厅", summary: "退婚冲突", locationCode: "S01", shotCodes: ["SH01"] }], shots: [shot], continuityEdges: [] }],
+        episodes: [
+            {
+                code: "E01",
+                title: "第三章",
+                script:
+                    input.script ||
+                    "场景：萧家议事大厅。萧炎低头承受众人的目光，纳兰嫣然将退婚要求放到长桌中央。萧战按住茶盏，等待儿子开口。萧炎抬眼，右手指节压住桌沿，把私人难堪推向父亲和萧家颜面。纳兰下颌微抬，旁听者收声。萧战离开椅背前倾，大厅里的风声停住，所有人等待回应。",
+                outline: "退婚冲突",
+                hook: "萧炎质问",
+                nextPreview: "纳兰回应",
+                sourceRange: input.sourceRange || "第3章",
+                storyScenes: [{ code: "SC01", order: 1, title: "议事大厅", summary: "退婚冲突", locationCode: "S01", shotCodes: ["SH01"] }],
+                shots: [shot],
+                continuityEdges: [],
+            },
+        ],
     } as unknown as DramaProductionPackageV1;
 }
 
@@ -66,7 +92,11 @@ describe("drama authoring quality gates", () => {
     });
 
     it("blocks missing TXT dialogue from both literary and timed dialogue coverage", () => {
-        const report = validateDramaAuthoringQuality({ package: packageValue({ script: "场景：议事大厅。萧炎说：“纳兰小姐，你来了。”他抬眼看向对方。萧战按住茶盏。", }), sources: [source("第3章。\n“纳兰小姐，你来了。”\n“我不会退让。”")], targetNarrativeChapter: 3 });
+        const report = validateDramaAuthoringQuality({
+            package: packageValue({ script: "场景：议事大厅。萧炎说：“纳兰小姐，你来了。”他抬眼看向对方。萧战按住茶盏。" }),
+            sources: [source("第3章。\n“纳兰小姐，你来了。”\n“我不会退让。”")],
+            targetNarrativeChapter: 3,
+        });
         expect(blockers(report, "DIALOGUE_COVERAGE")).not.toHaveLength(0);
     });
 
@@ -85,7 +115,11 @@ describe("drama authoring quality gates", () => {
     });
 
     it("blocks a package that omits an explicit plot fact", () => {
-        const report = validateDramaAuthoringQuality({ package: packageValue({ script: "场景：议事大厅。萧炎与纳兰嫣然对视，萧战等待回应。" }), sources: [source("第3章。于是黑衣长老开启血色法阵，山门上空落下雷火，众人退到石阶后方。")], targetNarrativeChapter: 3 });
+        const report = validateDramaAuthoringQuality({
+            package: packageValue({ script: "场景：议事大厅。萧炎与纳兰嫣然对视，萧战等待回应。" }),
+            sources: [source("第3章。于是黑衣长老开启血色法阵，山门上空落下雷火，众人退到石阶后方。")],
+            targetNarrativeChapter: 3,
+        });
         expect(blockers(report, "PLOT_FACT_COVERAGE")).not.toHaveLength(0);
     });
 
@@ -95,7 +129,8 @@ describe("drama authoring quality gates", () => {
     });
 
     it("blocks an NPC group that never changes reaction", () => {
-        const prompt = "镜头模式：连续镜头\n单一主运镜：中景固定，为了让观众看见质问升级。\n0-10秒 NPC群像：7名；分布：前景2名、中景3名、后景2名；密度：中低；反应：收声低头。10-20秒 NPC群像：7名；分布：前景2名、中景3名、后景2名；密度：中低；反应：收声低头。";
+        const prompt =
+            "镜头模式：连续镜头\n单一主运镜：中景固定，为了让观众看见质问升级。\n0-10秒 NPC群像：7名；分布：前景2名、中景3名、后景2名；密度：中低；反应：收声低头。10-20秒 NPC群像：7名；分布：前景2名、中景3名、后景2名；密度：中低；反应：收声低头。";
         const report = validateDramaAuthoringQuality({ package: packageValue({ npcPolicy: true, videoPrompt: prompt }), sources: [] });
         expect(blockers(report, "NPC_REACTION_CHANGE")).not.toHaveLength(0);
     });

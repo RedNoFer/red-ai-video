@@ -36,12 +36,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         const draft = normalizeDraft(input.draft);
         const executionId = `codex-${nanoid()}`;
         const submittedWorkOrder = { ...workOrder, status: "submitted" as const };
-        const claimed = await updateAgentRunById(
-            result.run.id,
-            { status: "running", executionId, dramaAuthoring: submittedWorkOrder },
-            { type: "drama.authoring.work-order.submitted", data: { workOrderId: workOrder.id } },
-            ["failed"],
-        );
+        const claimed = await updateAgentRunById(result.run.id, { status: "running", executionId, dramaAuthoring: submittedWorkOrder }, { type: "drama.authoring.work-order.submitted", data: { workOrderId: workOrder.id } }, ["failed"]);
         if (!claimed) throw new DramaAuthoringWorkOrderError("任务状态已变化，请重新读取后提交");
         try {
             await executeDramaScriptRun(claimed, resolveInternalOrigin(new URL(request.url).origin), request.headers.get("cookie") || "", new AbortController().signal, { provider: "codex-work-order", draft });
@@ -53,7 +48,13 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
             const latest = await getAgentRun(result.run.id);
             const rejectedWorkOrder = { ...submittedWorkOrder, status: "rejected" as const };
             if (latest)
-                await updateAgentRunById(latest.id, { status: "failed", executionId: undefined, dramaAuthoring: rejectedWorkOrder, ...(error instanceof DramaAuthoringQualityGateError ? { dramaQualityGateReport: error.report } : {}) }, { type: "run.failed", data: { message: toSafeGenerationErrorMessage(error, "Codex 草案未通过质量门禁") } }, ["running"], executionId);
+                await updateAgentRunById(
+                    latest.id,
+                    { status: "failed", executionId: undefined, dramaAuthoring: rejectedWorkOrder, ...(error instanceof DramaAuthoringQualityGateError ? { dramaQualityGateReport: error.report } : {}) },
+                    { type: "run.failed", data: { message: toSafeGenerationErrorMessage(error, "Codex 草案未通过质量门禁") } },
+                    ["running"],
+                    executionId,
+                );
             throw new DramaAuthoringWorkOrderError(toSafeGenerationErrorMessage(error, "Codex 草案未通过质量门禁"));
         }
     } catch (error) {

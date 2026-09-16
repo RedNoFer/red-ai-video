@@ -118,7 +118,12 @@ export function createDramaAuthoringWorkOrder(runId: string) {
     });
 }
 
-export function submitDramaAuthoringDraft(runId: string, workOrderId: string, draft: DramaAuthoringDraft, manifest: { contract: DramaAuthoringWorkOrder["contract"]; directorSkill: DramaAuthoringWorkOrder["directorSkill"]; seedanceSkill: DramaAuthoringWorkOrder["seedanceSkill"]; sources: Array<{ alias: string; role: string; contentHash: string }> }) {
+export function submitDramaAuthoringDraft(
+    runId: string,
+    workOrderId: string,
+    draft: DramaAuthoringDraft,
+    manifest: { contract: DramaAuthoringWorkOrder["contract"]; directorSkill: DramaAuthoringWorkOrder["directorSkill"]; seedanceSkill: DramaAuthoringWorkOrder["seedanceSkill"]; sources: Array<{ alias: string; role: string; contentHash: string }> },
+) {
     return request<{ run: CreativeAgentRun; workOrder: DramaAuthoringWorkOrder }>(`/api/agent/runs/${encodeURIComponent(runId)}/external-authoring`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

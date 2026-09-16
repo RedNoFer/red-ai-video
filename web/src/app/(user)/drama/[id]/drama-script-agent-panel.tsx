@@ -8,7 +8,18 @@ import { useEffect, useRef, useState } from "react";
 import type { CreativeAsset, CreativeConversation, CreativeMessage } from "@/lib/creative-runtime-contract";
 import type { DramaAuthoringWorkOrder, DramaProductionPackagePreview, DramaProject, DramaEpisode } from "@/lib/drama-project-contract";
 import { AgentMarkdown } from "@/components/agent/agent-markdown";
-import { controlCreativeAgentRun, createCreativeAgentRun, createCreativeConversation, createDramaAuthoringWorkOrder, getCreativeAgentRun, listCreativeConversationPage, listCreativeMessages, submitDramaAuthoringDraft, uploadCreativeAsset, watchCreativeAgentRun } from "@/services/api/creative";
+import {
+    controlCreativeAgentRun,
+    createCreativeAgentRun,
+    createCreativeConversation,
+    createDramaAuthoringWorkOrder,
+    getCreativeAgentRun,
+    listCreativeConversationPage,
+    listCreativeMessages,
+    submitDramaAuthoringDraft,
+    uploadCreativeAsset,
+    watchCreativeAgentRun,
+} from "@/services/api/creative";
 import { CREATIVE_UPLOAD_MAX_BYTES, isCreativeTextFile } from "@/lib/creative-upload";
 import { applyDramaEpisodeProductionPackage, saveDramaProductionPlan } from "@/services/api/drama-projects";
 import { useDramaStore } from "../stores/use-drama-store";
@@ -449,7 +460,9 @@ export function DramaScriptAgentPanel({ project, episode, open, onOpenChange }: 
                 {failedRunId ? (
                     <div className="mt-2 flex items-center justify-between gap-2 rounded-md border border-amber-300/70 bg-amber-50 px-2 py-1.5 text-xs text-amber-900 dark:border-amber-700/70 dark:bg-amber-950/30 dark:text-amber-200">
                         <span>项目 GPT 已超时，外部 Codex 只能在确认后接续 authoring。</span>
-                        <Button size="small" onClick={() => void createExternalWorkOrder()}>生成 Codex 工作单</Button>
+                        <Button size="small" onClick={() => void createExternalWorkOrder()}>
+                            生成 Codex 工作单
+                        </Button>
                     </div>
                 ) : null}
             </div>
@@ -500,10 +513,22 @@ export function DramaScriptAgentPanel({ project, episode, open, onOpenChange }: 
                     </div>
                 ) : null}
             </Modal>
-            <Modal title="Codex authoring 工作单" open={workOrderOpen} width={760} centered confirmLoading={submittingExternalDraft} okText="提交 draft 并校验" cancelText="关闭" onCancel={() => setWorkOrderOpen(false)} onOk={() => void submitExternalDraft()}>
+            <Modal
+                title="Codex authoring 工作单"
+                open={workOrderOpen}
+                width={760}
+                centered
+                confirmLoading={submittingExternalDraft}
+                okText="提交 draft 并校验"
+                cancelText="关闭"
+                onCancel={() => setWorkOrderOpen(false)}
+                onOk={() => void submitExternalDraft()}
+            >
                 {workOrder ? (
                     <div className="space-y-3">
-                        <p className="text-xs leading-5 text-muted-foreground">复制下面的工作单给外部 Codex。Codex 只能返回 <code>{`{"mode":"package","reply":"…","markdown":"…"}`}</code>，不能直接导入项目。完成后将返回内容粘贴到下方。</p>
+                        <p className="text-xs leading-5 text-muted-foreground">
+                            复制下面的工作单给外部 Codex。Codex 只能返回 <code>{`{"mode":"package","reply":"…","markdown":"…"}`}</code>，不能直接导入项目。完成后将返回内容粘贴到下方。
+                        </p>
                         <pre className="max-h-[34vh] overflow-auto whitespace-pre-wrap rounded-md border border-border bg-muted/20 p-3 text-xs leading-5">{JSON.stringify(workOrder, null, 2)}</pre>
                         <Input.TextArea value={externalDraft} onChange={(event) => setExternalDraft(event.target.value)} autoSize={{ minRows: 8, maxRows: 16 }} placeholder='粘贴 Codex 返回的 {"mode":"package", "reply":"…", "markdown":"…"}' />
                     </div>

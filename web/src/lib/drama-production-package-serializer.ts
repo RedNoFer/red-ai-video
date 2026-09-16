@@ -84,8 +84,20 @@ function fallbackSectionContent(value: DramaProductionPackageV1, index: number) 
     if (index === 2) return episode?.script || "无";
     if (index === 4) return value.assets.characters.map((asset) => `${asset.code}｜${asset.name}｜${asset.description}`).join("\n") || "无";
     if (index === 5) return value.assets.locations.map((asset) => `${asset.code}｜${asset.name}｜${asset.description}`).join("\n") || "无";
-    if (index === 6) return value.archive?.promptAssets.filter((asset) => asset.category === "keyframe").map((asset) => `${asset.code}｜${asset.title}\n${asset.prompt}`).join("\n\n") || "无";
-    if (index === 7) return value.archive?.promptAssets.filter((asset) => asset.category === "storyboard").map((asset) => `${asset.code}｜${asset.title}\n${asset.prompt}`).join("\n\n") || "无";
+    if (index === 6)
+        return (
+            value.archive?.promptAssets
+                .filter((asset) => asset.category === "keyframe")
+                .map((asset) => `${asset.code}｜${asset.title}\n${asset.prompt}`)
+                .join("\n\n") || "无"
+        );
+    if (index === 7)
+        return (
+            value.archive?.promptAssets
+                .filter((asset) => asset.category === "storyboard")
+                .map((asset) => `${asset.code}｜${asset.title}\n${asset.prompt}`)
+                .join("\n\n") || "无"
+        );
     if (index === 8) return value.archive?.dialogueDirections.map((direction) => `${direction.id}｜${direction.shotCode}｜${direction.speaker}｜${direction.text}\n${direction.performance}`).join("\n\n") || "无对白";
     if (index === 9) return episode?.shots.map((shot) => `${shot.code}｜环境音：${shot.sound?.ambience || "无"}｜拟音：${shot.sound?.soundEffects || "无"}｜音乐：${shot.sound?.music || "无"}`).join("\n") || "无";
     if (index === 10) return videoPromptSection(value) || "无";

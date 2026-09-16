@@ -15,7 +15,11 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/lib/auth/session", () => ({ getCurrentUser: mocks.getCurrentUser }));
 vi.mock("@/lib/server/agent-run-executor", () => ({ executeDramaScriptRun: mocks.executeDramaScriptRun }));
 vi.mock("@/lib/server/agent-run-store", () => ({ getAgentRun: mocks.getAgentRun, updateAgentRunById: mocks.updateAgentRunById }));
-vi.mock("@/lib/server/drama-authoring-work-order", () => ({ createDramaAuthoringWorkOrderForRun: mocks.createWorkOrder, getDramaAuthoringWorkOrderForRun: mocks.getWorkOrder, DramaAuthoringWorkOrderError: class DramaAuthoringWorkOrderError extends Error {} }));
+vi.mock("@/lib/server/drama-authoring-work-order", () => ({
+    createDramaAuthoringWorkOrderForRun: mocks.createWorkOrder,
+    getDramaAuthoringWorkOrderForRun: mocks.getWorkOrder,
+    DramaAuthoringWorkOrderError: class DramaAuthoringWorkOrderError extends Error {},
+}));
 vi.mock("@/lib/server/agent-run-public", () => ({ publicAgentRun: mocks.publicAgentRun }));
 vi.mock("@/lib/server/internal-origin", () => ({ resolveInternalOrigin: vi.fn(() => "http://localhost") }));
 
@@ -73,7 +77,12 @@ describe("external drama authoring handoff", () => {
 });
 
 function manifest(overrides: Partial<{ contract: DramaAuthoringWorkOrder["contract"]; directorSkill: DramaAuthoringWorkOrder["directorSkill"]; seedanceSkill: DramaAuthoringWorkOrder["seedanceSkill"] }> = {}) {
-    return { contract: overrides.contract || workOrder.contract, directorSkill: overrides.directorSkill || workOrder.directorSkill, seedanceSkill: overrides.seedanceSkill || workOrder.seedanceSkill, sources: workOrder.sources.map(({ alias, role, contentHash }) => ({ alias, role, contentHash })) };
+    return {
+        contract: overrides.contract || workOrder.contract,
+        directorSkill: overrides.directorSkill || workOrder.directorSkill,
+        seedanceSkill: overrides.seedanceSkill || workOrder.seedanceSkill,
+        sources: workOrder.sources.map(({ alias, role, contentHash }) => ({ alias, role, contentHash })),
+    };
 }
 
 function request(body: unknown) {
