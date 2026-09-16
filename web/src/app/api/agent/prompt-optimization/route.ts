@@ -49,7 +49,7 @@ export async function POST(request: Request) {
     } catch (error) {
         const status = error instanceof PromptOptimizationError ? error.status : 502;
         const message = error instanceof PromptOptimizationError ? error.message : "提示词优化失败，请稍后重试";
-        return NextResponse.json({ code: status, data: null, msg: message }, { status });
+        return NextResponse.json({ code: status, data: error instanceof PromptOptimizationError ? { reasonCode: error.reasonCode } : { reasonCode: "upstream_failure" }, msg: message }, { status });
     }
 }
 

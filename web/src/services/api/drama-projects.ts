@@ -315,23 +315,25 @@ export function generateDramaVideoPrompt(input: { project: DramaProject; episode
 }
 
 export class DramaVideoPromptQualityError extends Error {
+    readonly reasonCode: "quality_gate_failed" | "missing_asset_reference" | "unresolved_shot_reference" | "unsupported_model_capability" | "invalid_model_response" | "upstream_failure";
     candidate?: {
         shotId?: string;
         videoPrompt?: string;
         framePlan?: DramaVideoPromptAnalysis["shots"][number]["framePlan"];
     };
 
-    constructor(message: string, candidate?: DramaVideoPromptAnalysis["shots"][number]) {
+    constructor(message: string, candidate?: DramaVideoPromptAnalysis["shots"][number], reasonCode: DramaVideoPromptQualityError["reasonCode"] = "quality_gate_failed") {
         super(message);
         this.name = "DramaVideoPromptQualityError";
+        this.reasonCode = reasonCode;
         this.candidate = candidate;
     }
 }
 
 async function requestDramaVideoPrompt<T>(url: string, init?: RequestInit) {
     const response = await fetch(url, { cache: "no-store", ...init });
-    const payload = (await response.json().catch(() => ({}))) as { data?: T & { candidate?: DramaVideoPromptAnalysis["shots"][number] }; msg?: string };
-    if (!response.ok) throw new DramaVideoPromptQualityError(payload.msg || "视频提示词优化失败", payload.data?.candidate);
+    const payload = (await response.json().catch(() => ({}))) as { data?: T & { candidate?: DramaVideoPromptAnalysis["shots"][number]; reasonCode?: DramaVideoPromptQualityError["reasonCode"] }; msg?: string };
+    if (!response.ok) throw new DramaVideoPromptQualityError(payload.msg || "视频提示词优化失败", payload.data?.candidate, payload.data?.reasonCode);
     if (!payload.data) throw new Error(payload.msg || "短剧项目请求失败");
     return payload.data;
 }

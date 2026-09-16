@@ -46,7 +46,7 @@ vi.mock("@/lib/server/agent-run-store", async (importOriginal) => {
     };
 });
 
-import { buildDramaPackageAuthoringInput, buildDramaPackageSkillInstructions, classifyDramaAuthoringMaterial, executeAgentRun } from "./agent-run-executor";
+import { buildDramaPackageAuthoringInput, buildDramaPackageSkillInstructions, classifyDramaAuthoringMaterial, ensureDramaPackageTemplateSource, executeAgentRun } from "./agent-run-executor";
 import { processAgentRunReview, taskResultOps } from "./agent-run-execution";
 import { resetTextPlanningRuntime } from "./text-planning-runtime";
 
@@ -172,6 +172,8 @@ describe("executeAgentRun backend settings", () => {
         expect(serialized).not.toContain("旧生成提示词");
         expect(serialized).toContain("本轮文章内容");
         expect(serialized.match(/"name":"角色一"/gu)).toHaveLength(1);
+        expect(input.project.compositionProfile).toMatchObject({ aspectRatio: "9:16", orientation: "portrait" });
+        expect(input.compositionContract).toContain("上下纵深");
     });
 
     it("always injects the canonical package frame rule once", () => {
@@ -193,7 +195,11 @@ describe("executeAgentRun backend settings", () => {
         expect(instructions).not.toContain("角色设定规则不应作为第二套来源注入");
         expect(instructions).toContain("角色事实固定整理为六项");
         expect(instructions).not.toContain("旧 Seedance 规则不应重复注入");
-        expect(instructions.match(/当前短剧制作包唯一导演 Skill/gu)).toHaveLength(1);
+        expect(instructions.match(/当前短剧制作包默认启用唯一导演 Skill/gu)).toHaveLength(1);
+        expect(instructions).toContain("用户无需重复提供切镜、运镜、表演和连续性规则");
+        expect(instructions).toContain("制作包的目标是让用户只提交“配置 + 剧情来源”");
+        expect(instructions).toContain("画幅不是只写在输出参数里的尺寸标签");
+        expect(instructions).toContain("不要求用户在请求中重复粘贴");
     });
 
     it("passes the template and TXT as classified formal authoring sources", () => {
@@ -216,6 +222,17 @@ describe("executeAgentRun backend settings", () => {
         });
 
         expect(input.authoringSources).toEqual(expect.arrayContaining([expect.objectContaining({ alias: "@附件1", role: "package-template" }), expect.objectContaining({ alias: "@附件2", role: "story-source" })]));
+    });
+
+    it("injects the system-owned package template when the user only provides story text", () => {
+        const sources = ensureDramaPackageTemplateSource([
+            { alias: "@TXT", role: "story-source", type: "text", title: "第一章.txt", contentHash: "a".repeat(64), textContent: "小说正文" },
+        ]);
+
+        expect(sources[0]).toMatchObject({ alias: "@系统制作包模板", role: "package-template", type: "text" });
+        expect(sources[0]?.textContent).toContain("第一集文学剧本");
+        expect(sources[1]).toMatchObject({ alias: "@TXT", role: "story-source" });
+        expect(ensureDramaPackageTemplateSource(sources)).toEqual(sources);
     });
 
     it("preserves generated media dimensions in canvas output ops", () => {

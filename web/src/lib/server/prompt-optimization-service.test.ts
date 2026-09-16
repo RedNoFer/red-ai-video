@@ -198,9 +198,12 @@ describe("prompt optimization service", () => {
     it("optimizes video prompts around visible action beats", async () => {
         vi.mocked(requestStructuredText).mockResolvedValue({ arguments: JSON.stringify({ optimizedPrompt: "0-2秒建立黑湖，2-4秒镜头推进，4-5秒Karin收紧握剑，5-6秒断口冷光匹配切入马车。" }), headers: new Headers(), protocol: "chat", elapsedMs: 10 });
 
-        await optimizeCreativePrompt({ origin: "http://localhost:3000", cookie: "session=1", userId: "user-one", requestId: "video-request", prompt: "30 秒黑湖边的人握剑", mode: "video" });
+        await optimizeCreativePrompt({ origin: "http://localhost:3000", cookie: "session=1", userId: "user-one", requestId: "video-request", prompt: "30 秒 9:16 黑湖边的人握剑", mode: "video" });
 
         const systemMessage = vi.mocked(requestStructuredText).mock.calls[0]?.[0].messages.find((message) => message.role === "system")?.content || "";
+        expect(systemMessage).toContain("不要只做同义改写");
+        expect(systemMessage).toContain("默认按多镜头导演方案组织");
+        expect(systemMessage).toContain("镜头事件：时间、类型、触发事件、新机位、切后主运镜、信息目的、承接");
         expect(systemMessage).toContain("主体动作与反应");
         expect(systemMessage).toContain("起始可见状态");
         expect(systemMessage).toContain("每个非空字段必须独立一行");
@@ -208,6 +211,8 @@ describe("prompt optimization service", () => {
         expect(systemMessage).toContain("每段独立成块，依次写“起点、动作与触发、可见衔接、终点”");
         expect(systemMessage).toContain("每镜只保留一个有动机的景别/机位/运镜");
         expect(systemMessage).toContain("不得用“保持状态、情绪加剧、自然反应”等空泛词替代可见结果");
+        expect(systemMessage).toContain("9:16");
+        expect(systemMessage).toContain("上下纵深");
         expect(systemMessage).toContain("模式：30 秒精确时间轴");
     });
 
@@ -242,7 +247,7 @@ describe("prompt optimization service", () => {
     it("fails clearly when no default text binding is available", async () => {
         vi.mocked(resolveLogicalModelCandidates).mockReturnValue([]);
 
-        await expect(optimizeCreativePrompt({ origin: "http://localhost:3000", cookie: "", userId: "user-one", requestId: "request-one", prompt: "优化这句话", mode: "agent" })).rejects.toMatchObject({ status: 503 });
+        await expect(optimizeCreativePrompt({ origin: "http://localhost:3000", cookie: "", userId: "user-one", requestId: "request-one", prompt: "优化这句话", mode: "agent" })).rejects.toMatchObject({ status: 503, reasonCode: "configuration" });
         expect(requestStructuredText).not.toHaveBeenCalled();
     });
 });

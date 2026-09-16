@@ -40,6 +40,8 @@ export function validateDramaAuthoringQuality(input: DramaAuthoringQualityInput)
     checkActionDifference(checks, input.package);
     checkEmotionProgression(checks, input.package);
     checkNpcReactionChange(checks, input.package);
+    checkNpcContinuityWarnings(checks, input.package);
+    checkVisualClarityWarnings(checks, input.package);
     checkCameraMotivation(checks, input.package);
     checkCameraEvents(checks, input.package);
     checkSimpleStructuralChecks(checks, input.package);
@@ -210,11 +212,43 @@ function checkNpcReactionChange(checks: DramaQualityGateCheck[], value: DramaPro
         for (const shot of episode.shots) {
             const required = value.assets.locations.find((location) => location.code === shot.locationCode)?.backgroundNpcPolicy?.mode === "required";
             const prompts = [shot.videoPrompt || "", ...(shot.framePlan?.frames || []).map((frame) => `${frame.actionPrompt}\n${frame.transitionPrompt || ""}\n${frame.endPrompt || ""}`)];
-            const reactions = prompts.flatMap((prompt) => [...prompt.matchAll(/反应\s*[：:]\s*([^；;\n。]+)/gu)].map((match) => match[1].trim())).filter(Boolean);
+            const reactions = prompts
+                .flatMap((prompt) => [...prompt.matchAll(/(?:反应|可见反应|状态变化)\s*[：:]\s*([^；;\n。]+)/gu)].map((match) => match[1].trim()))
+                .filter(Boolean);
             if ((required || reactions.length) && new Set(reactions).size < 2) failed.push(shot.code);
         }
     }
     add(checks, "NPC_REACTION_CHANGE", !failed.length, "NPC 群像反应变化", failed.length ? `镜头 ${failed.join(", ")} 的 NPC 反应没有形成至少两种可见结果` : "required NPC 或已声明 NPC 的群像反应存在变化，或当前没有 NPC 事实", ["backgroundNpcPolicy", "videoPrompt", "framePlan.frames"], "按事件改变群像的收声、视线、姿态、分布或密度；不要在每段重复“旁听、屏息、保持关注”。");
+}
+
+function checkNpcContinuityWarnings(checks: DramaQualityGateCheck[], value: DramaProductionPackageV1) {
+    const warnings: string[] = [];
+    for (const location of value.assets.locations) {
+        const policy = location.backgroundNpcPolicy;
+        if (!policy || policy.mode === "forbidden") continue;
+        const roster = policy.roster || [];
+        const duplicateIds = roster.map((slot) => slot.slotId).filter((slotId, index, all) => all.indexOf(slotId) !== index);
+        if (policy.mode === "required" && !roster.length) warnings.push(`${location.code} 未声明稳定 NPC 槽位`);
+        if (duplicateIds.length) warnings.push(`${location.code} 的 NPC 槽位 ID 重复：${Array.from(new Set(duplicateIds)).join("、")}`);
+        if (!roster.length) continue;
+        for (const shot of value.episodes.flatMap((episode) => episode.shots.filter((item) => item.locationCode === location.code))) {
+            const text = `${shot.videoPrompt || ""}\n${(shot.framePlan?.frames || []).map((frame) => `${frame.actionPrompt}\n${frame.transitionPrompt || ""}\n${frame.endPrompt || ""}`).join("\n")}`;
+            if (/NPC群像|旁听|旁观者|路人/u.test(text) && !roster.some((slot) => text.includes(slot.slotId) || text.includes(slot.worldAnchor))) warnings.push(`${shot.code} 使用 NPC 群像但没有引用稳定槽位或世界锚点`);
+        }
+    }
+    addWarning(checks, "NPC_ROSTER_CONTINUITY", warnings.length ? warnings.join("；") : "NPC 群像具备稳定槽位或当前没有需要连续追踪的背景群像", ["assets.locations[].backgroundNpcPolicy.roster", "videoPrompt", "framePlan.frames"], "为跨镜头 NPC 建立 slotId、世界空间锚点、稳定变体和默认状态；镜头只引用当前可见槽位及其变化。");
+}
+
+function checkVisualClarityWarnings(checks: DramaQualityGateCheck[], value: DramaProductionPackageV1) {
+    const warnings: string[] = [];
+    for (const shot of value.episodes.flatMap((episode) => episode.shots)) {
+        const text = `${shot.imagePrompt || ""}\n${shot.videoPrompt || ""}\n${(shot.framePlan?.frames || []).map((frame) => frame.imagePrompt).join("\n")}`;
+        const hasUnqualifiedBlur = /模糊|虚焦|焦外|浅景深|雾化|泛光|光晕/u.test(text) && !/明确要求|有意|只保留.*清晰|背影.*虚焦|背景.*虚焦.*主体.*清晰/u.test(text);
+        const hasClarityAnchor = /清晰|可辨|完整入画|不遮挡|保持脸部|五官.*可见|结构.*可读/u.test(text);
+        if (hasUnqualifiedBlur) warnings.push(`${shot.code} 使用了未说明原因的模糊/虚焦/浅景深`);
+        if (!hasClarityAnchor) warnings.push(`${shot.code} 未明确当前景别下的主体清晰度`);
+    }
+    addWarning(checks, "VISUAL_CLARITY", warnings.length ? warnings.join("；") : "可见主体具有清晰度合同或明确的有意模糊说明", ["project.ratio", "imagePrompt", "videoPrompt", "framePlan.frames[].imagePrompt"], "默认让主角、关键 NPC、道具和场景锚点清晰可辨；信息过载时拆镜，不缩小或虚化全部主体。");
 }
 
 function checkCameraMotivation(checks: DramaQualityGateCheck[], value: DramaProductionPackageV1) {
@@ -238,7 +272,7 @@ function checkCameraEvents(checks: DramaQualityGateCheck[], value: DramaProducti
         if (hasCut && !internal) failed.push(`${shot.code}:未声明内部切镜`);
         if (internal) {
             const events = [...prompt.matchAll(/镜头事件\s*[：:]\s*([^\n]+)/gu)].map((match) => match[1]);
-            if (!events.length || events.some((event) => !/(?:时间|秒).{0,12}(?:类型|硬切|匹配切|插入|甩镜).{0,40}(?:触发事件).{0,80}(?:新机位).{0,80}(?:信息目的).{0,80}(?:承接)/u.test(event))) failed.push(`${shot.code}:镜头事件字段不完整`);
+            if (!events.length || events.some((event) => !/(?:时间|秒).{0,12}(?:类型|硬切|匹配切|插入|甩镜).{0,40}(?:触发事件).{0,80}(?:新机位).{0,100}(?:切后主运镜).{0,100}(?:信息目的).{0,100}(?:承接)/u.test(event))) failed.push(`${shot.code}:镜头事件字段不完整`);
             const starts = new Set((shot.framePlan?.frames || []).map((frame) => Number(frame.startSecond).toFixed(3)));
             for (const event of events) {
                 const match = event.match(/(?:时间|发生时间)\s*[：:]?\s*(\d+(?:\.\d+)?)\s*秒/u);
@@ -246,7 +280,7 @@ function checkCameraEvents(checks: DramaQualityGateCheck[], value: DramaProducti
             }
         }
     }
-    add(checks, "CAMERA_EVENT", !failed.length, "镜头事件", failed.length ? failed.join("；") : "未声明切镜的镜头没有出现隐式 Cut；声明内部切镜时字段和边界完整", ["videoPrompt", "framePlan.frames[].startSecond"], "出现 Cut to 时先声明“镜头模式：内部切镜”，并在可见衔接写时间、类型、触发事件、新机位、信息目的和承接；切点必须对齐帧段起点。");
+    add(checks, "CAMERA_EVENT", !failed.length, "镜头事件", failed.length ? failed.join("；") : "未声明切镜的镜头没有出现隐式 Cut；声明内部切镜时字段和边界完整", ["videoPrompt", "framePlan.frames[].startSecond"], "出现 Cut to 时先声明“镜头模式：内部切镜”，并在可见衔接写时间、类型、触发事件、新机位、切后主运镜、信息目的和承接；切点必须对齐帧段起点。");
 }
 
 function checkSimpleStructuralChecks(checks: DramaQualityGateCheck[], value: DramaProductionPackageV1) {
@@ -263,6 +297,10 @@ function checkSimpleStructuralChecks(checks: DramaQualityGateCheck[], value: Dra
 
 function add(checks: DramaQualityGateCheck[], code: string, passed: boolean, scope: string, evidence: string, sourceRefs: string[], fixHint: string) {
     checks.push({ code, severity: passed ? "warning" : "blocker", scope, evidence: passed ? `通过：${evidence}` : evidence, sourceRefs, fixHint });
+}
+
+function addWarning(checks: DramaQualityGateCheck[], code: string, evidence: string, sourceRefs: string[], fixHint: string) {
+    checks.push({ code, severity: "warning", scope: code, evidence: evidence ? `提示：${evidence}` : "提示：未发现风险", sourceRefs, fixHint });
 }
 
 function extractDialogueLines(source: string) {

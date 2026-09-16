@@ -43,7 +43,8 @@ export async function POST(request: Request, context: Context) {
         return NextResponse.json({ code: 0, data: { prompt: optimizedPrompt }, msg: "OK" });
     } catch (error) {
         const status = error instanceof DramaProjectServiceError || error instanceof PromptOptimizationError ? error.status : 502;
-        return NextResponse.json({ code: status, data: null, msg: error instanceof Error ? error.message : "图片帧提示词优化失败" }, { status });
+        const reasonCode = error instanceof PromptOptimizationError ? error.reasonCode : error instanceof DramaProjectServiceError ? "unresolved_shot_reference" : "upstream_failure";
+        return NextResponse.json({ code: status, data: { reasonCode }, msg: error instanceof Error ? error.message : "图片帧提示词优化失败" }, { status });
     }
 }
 

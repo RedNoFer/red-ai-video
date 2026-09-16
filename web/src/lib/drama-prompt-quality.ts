@@ -19,6 +19,7 @@ const WEAK_VIDEO_DETAIL_PATTERNS = [/^保持本镜可见反应$/u, /^保持可�
 const CONCRETE_CAMERA_PATTERN = /固定机位|推(?:进|近|镜)|拉(?:远|镜)|摇镜|横移|跟拍|滑轨|环绕|吊臂|升降|手持|变焦|俯拍|仰拍|平视|低机位|高机位|中景|近景|特写|远景/u;
 const OBSERVABLE_DRAMA_DETAIL_PATTERN = /眉|眼|目光|视线|嘴角|下颌|呼吸|肩|背|身体|重心|手|指|掌|站|坐|抬|低|转|握|松|触|茶盏|文书|纸|桌|案|地面|水面|光线|影子|门|墙|尘|衣袍|NPC|旁听者|旁观者|人群|族人|执事|开口|说|重音|停顿|语速|语气/u;
 const NPC_SEGMENT_PATTERN = /NPC群像\s*[：:]\s*(\d+)\s*名\s*[；;]\s*分布\s*[：:]\s*前景\s*(\d+)\s*名\s*[、,，]\s*中景\s*(\d+)\s*名\s*[、,，]\s*后景\s*(\d+)\s*名\s*[；;]\s*密度\s*[：:]\s*([^；;\n]+)\s*[；;]\s*反应\s*[：:]\s*([^\n]+)/u;
+const NPC_SLOT_SEGMENT_PATTERN = /NPC(?:连续性|槽位|群像槽位)\s*[：:]\s*可见槽位\s*[：:]\s*([^；;\n]+)\s*[；;]\s*(?:世界锚点|空间锚点|锚点)\s*[：:]\s*([^；;\n]+)\s*[；;]\s*(?:状态变化|可见反应|反应)\s*[：:]\s*([^\n]+)/u;
 const OBSERVABLE_NPC_REACTION_PATTERN = /抬眼|抬头|低头|收声|屏息|静默|看向|望向|交换眼神|后退|退开|分列|让出|肩背|僵住|停住|避开|回望|垂下|侧身/u;
 const DIALOGUE_SEGMENT_MARKER = /对白表演\s*[：:]/u;
 const CAMERA_CUT_EVENT_PATTERN = /镜头事件\s*[：:]/u;
@@ -98,7 +99,18 @@ export function validateDramaVideoSegmentDetail(
 export function validateDramaNpcSegmentDetail(value: unknown, label: string, countRange?: { min: number; max: number }) {
     const text = typeof value === "string" ? value : "";
     const match = text.match(NPC_SEGMENT_PATTERN);
-    if (!match) return [`${label}要求背景 NPC，但必须按“NPC群像：人数；分布：前景/中景/后景；密度；反应”写出机器可验收的群像结果`];
+    if (!match) {
+        const slotMatch = text.match(NPC_SLOT_SEGMENT_PATTERN);
+        if (!slotMatch) return [`${label}要求背景 NPC，但必须写出“NPC群像：人数/分布/密度/反应”或“NPC连续性：可见槽位/世界锚点/状态变化”`];
+        const visibleSlots = slotMatch[1].split(/[、,，\s]+/u).map((slot) => slot.trim()).filter(Boolean);
+        const anchors = slotMatch[2].trim();
+        const reaction = slotMatch[3].trim();
+        const errors: string[] = [];
+        if (!visibleSlots.length) errors.push(`${label}背景 NPC 的可见槽位不能为空`);
+        if (!anchors) errors.push(`${label}背景 NPC 缺少稳定世界空间锚点`);
+        if (!reaction || !OBSERVABLE_NPC_REACTION_PATTERN.test(reaction)) errors.push(`${label}背景 NPC 缺少具体密度或可见反应`);
+        return errors;
+    }
     const count = Number(match[1]);
     const distribution = [Number(match[2]), Number(match[3]), Number(match[4])];
     const errors: string[] = [];
@@ -147,6 +159,7 @@ export function validateDramaCameraPlan(prompt: string, frames: ReadonlyArray<Dr
             [
                 ["触发事件", /触发事件\s*[：:][^；;\n]+/u],
                 ["新机位", /新机位\s*[：:][^；;\n]+/u],
+                ["切后主运镜", /切后主运镜\s*[：:][^；;\n]+/u],
                 ["信息目的", /(?:信息目的|目的)\s*[：:][^；;\n]+/u],
                 ["承接", /承接\s*[：:][^；;\n]+/u],
             ] as const
@@ -207,5 +220,7 @@ function normalizeAuthoringSignature(value: string | undefined) {
 }
 
 function extractNpcReaction(value: string) {
-    return value.match(NPC_SEGMENT_PATTERN)?.[6]?.trim() || "";
+    const legacy = value.match(NPC_SEGMENT_PATTERN)?.[6]?.trim();
+    if (legacy) return legacy;
+    return value.match(NPC_SLOT_SEGMENT_PATTERN)?.[3]?.trim() || "";
 }

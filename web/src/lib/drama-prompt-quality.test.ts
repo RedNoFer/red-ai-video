@@ -54,6 +54,12 @@ describe("drama prompt quality", () => {
         expect(validateDramaNpcSegmentDetail("NPC群像：7名；分布：前景1名、中景3名、后景2名；密度：中低密度；反应：保持关注", "SH01", { min: 5, max: 8 })).not.toEqual([]);
     });
 
+    it("accepts stable NPC slots without treating screen depth as identity", () => {
+        const valid = "NPC连续性：可见槽位：seat-left-01、seat-wall-02；世界锚点：左侧后席、北墙阴影处；状态变化：seat-left-01从低头看纸延迟抬眼，seat-wall-02保持贴墙收声";
+        expect(validateDramaNpcSegmentDetail(valid, "SH01")).toEqual([]);
+        expect(validateDramaNpcSegmentDetail("NPC连续性：可见槽位：seat-left-01；世界锚点：左侧后席；状态变化：保持状态", "SH01")).not.toEqual([]);
+    });
+
     it("requires dialogue performance details inside each segment", () => {
         expect(validateDramaDialogueSegmentDetail("萧炎抬眼；对白表演：语气：压怒；停顿：半拍；重音：落在父亲；说后反应：闭口盯视", "SH01")).toEqual([]);
         expect(validateDramaDialogueSegmentDetail("萧炎开口，情绪加剧", "SH01")).not.toEqual([]);
@@ -74,7 +80,7 @@ describe("drama prompt quality", () => {
         const prompt = [
             "时间段动作：0-10秒；10-21秒；21-30秒",
             "单一主运镜：镜头模式：内部切镜（1次）；先中景固定，再切近景",
-            "可见衔接：镜头事件：10秒；类型：硬切；触发事件：萧炎抬眼质问；新机位：近景平视锁定萧炎与纳兰；信息目的：把家族压力收束到质问；承接：沿180度轴线接住萧炎视线",
+            "可见衔接：镜头事件：10秒；类型：硬切；触发事件：萧炎抬眼质问；新机位：近景平视锁定萧炎与纳兰；切后主运镜：锁定机位，随萧炎呼吸保留极轻微手持；信息目的：把家族压力收束到质问；承接：沿180度轴线接住萧炎视线",
         ].join("\n");
         expect(
             validateDramaCameraPlan(prompt, [
@@ -83,6 +89,13 @@ describe("drama prompt quality", () => {
                 { startSecond: 21, endSecond: 30 },
             ]),
         ).toBe("");
+        expect(
+            validateDramaCameraPlan(prompt.replace("切后主运镜：锁定机位，随萧炎呼吸保留极轻微手持；", ""), [
+                { startSecond: 0, endSecond: 10 },
+                { startSecond: 10, endSecond: 21 },
+                { startSecond: 21, endSecond: 30 },
+            ]),
+        ).toContain("切后主运镜");
         expect(
             validateDramaCameraPlan(prompt.replace("镜头事件：10秒", "镜头事件：11秒"), [
                 { startSecond: 0, endSecond: 10 },

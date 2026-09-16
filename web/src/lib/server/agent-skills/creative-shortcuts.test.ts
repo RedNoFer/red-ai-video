@@ -14,6 +14,7 @@ import {
     SEEDANCE_DIRECTOR_SKILL,
     SEEDANCE_25_DIRECTOR_SKILL,
     SEEDANCE_VIDEO_PROMPT_LAYOUT,
+    VIDEO_PROMPT_DIRECTOR_DEFAULTS,
 } from "./creative-shortcuts";
 
 describe("creative shortcut skills", () => {
@@ -21,9 +22,11 @@ describe("creative shortcut skills", () => {
         expect(DRAMA_VIDEO_DIRECTOR_SKILL.id).toBe("drama-video-director");
         expect(DRAMA_VIDEO_DIRECTOR_SKILL.sourceContentHash).toMatch(/^[a-f0-9]{64}$/u);
         expect(DRAMA_PACKAGE_DIRECTOR_RULES).toContain("dramaticFunction");
+        expect(DRAMA_PACKAGE_DIRECTOR_RULES).toContain("固定的是字段语义、时间连续性和可验收事实");
+        expect(DRAMA_VIDEO_PROMPT_DIRECTOR_RULES).toContain("切后主运镜");
         expect(DRAMA_STATIC_FRAME_DIRECTOR_RULES).toContain("运镜过程");
         expect(DRAMA_VIDEO_PROMPT_DIRECTOR_RULES).toContain("每个真实时间段");
-        expect(DRAMA_EXTERNAL_CODEX_DIRECTOR_RULES).toContain("显式选择本 Skill");
+        expect(DRAMA_EXTERNAL_CODEX_DIRECTOR_RULES).toContain("默认执行本 Skill");
     });
 
     it("keeps the extracted image workflow rules in character design", () => {
@@ -93,6 +96,15 @@ describe("creative shortcut skills", () => {
         expect(SEEDANCE_VIDEO_PROMPT_LAYOUT).not.toContain("阶段节拍：只有多事件");
         expect(SEEDANCE_VIDEO_PROMPT_LAYOUT).toContain("视觉风格与光色");
         expect(SEEDANCE_VIDEO_PROMPT_LAYOUT).toContain("每个非空字段必须独立一行");
+    });
+
+    it("defaults standalone video optimization to a director-quality pass", () => {
+        expect(VIDEO_PROMPT_DIRECTOR_DEFAULTS).toContain("不要只做同义改写");
+        expect(VIDEO_PROMPT_DIRECTOR_DEFAULTS).toContain("对白、多个动作节点、人物反应或信息转折");
+        expect(VIDEO_PROMPT_DIRECTOR_DEFAULTS).toContain("镜头模式：内部切镜（N次）");
+        expect(VIDEO_PROMPT_DIRECTOR_DEFAULTS).toContain("切后主运镜");
+        expect(VIDEO_PROMPT_DIRECTOR_DEFAULTS).toContain("起点 → 动作与触发 → 可见衔接 → 终点");
+        expect(VIDEO_PROMPT_DIRECTOR_DEFAULTS).toContain("支撑/接触/受力");
     });
 
     it("keeps the production package on the same static source", () => {

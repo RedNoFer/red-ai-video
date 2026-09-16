@@ -60,13 +60,15 @@ contract:
 ## Agent 运行时规则
 
 - 制作包只能由 `executeDramaScriptRun` 组织；Agent 必须在返回 `mode=package` 草案前完成一次内部导演自检，逐镜补齐具体的表演、对白、动作、NPC、运镜、镜头事件和实际场景细节。草案若未通过门禁，执行器必须把具体失败项作为当前 authoring revision feedback 回传同一生成渠道，要求返回完整修订草案；未通过的中间草案不得展示给用户、写入当前集或进入导入流程。只有通过门禁的草案才从规范对象确定性序列化 JSON/Markdown。
-- `package-template` 只规定 13 个一级章节、字段顺序和字段职责；`story-source` 只规定当前目标小说章节的剧情事实；`reference` 只规定素材职责。三类 authoring source 必须保留 alias、role、顺序和内容哈希。
+- `package-template` 只规定 13 个一级章节、字段顺序和字段职责；制作包正式生成时由系统自动注入唯一系统模板，用户可以提供同角色的自定义模板覆盖它；`story-source` 只规定当前目标小说章节的剧情事实；`reference` 只规定素材职责。三类 authoring source 必须保留 alias、role、顺序和内容哈希。用户不应因为未重复上传模板而被阻止生成制作包。
 - 目标小说章节使用 `targetNarrativeChapter` 单独记录；它是剧情素材范围，不得与制作包一级章节编号混用。当前集必须提供完整文学剧本、场次、镜头和可执行结果，不能只返回摘要或镜头概述。
 - 镜头规范对象必须分别填写 `dramaticFunction`、`performancePlan`、`lightingPlan`、`continuity`、`entryState`、`exitState`、`videoPrompt` 和 `framePlan`；`framePlan.start.source`、`framePlan.end.required`、`framePlan.referenceManifest`、每个帧段的 `imagePrompt` 及其时间/动作/静态状态必须可校验。
 - Agent authoring draft 在规范化前必须逐镜提交完整原始字段：不得依赖服务端默认值补齐 `performancePlan`、`lightingPlan`、`continuity`、`entryState`、`exitState`、`imagePrompt`、`videoPrompt` 或帧段正文。`performancePlan` 的六个标量和 start/middle/end 四项表演、`lightingPlan` 的十个字段、`continuity` 的十个字段以及 `dramaticFunction`、`cameraMotion`、`lens` 均为严格生成字段；缺失、空值或占位语必须在 Agent 草案阶段阻断。
 - 每个 Agent 帧段必须直接提供 `actionPrompt`、`transitionPrompt`、`endPrompt`、`imagePrompt`；除第一帧外 `startPrompt` 必须原样承接上一帧 `endPrompt`。第一帧不要求虚构 `startPrompt`，但视频 Prompt 必须逐段镜像真实字段，不能靠服务端从其它字段拼接。
 - `SEC01`—`SEC13` 只允许出现在 `archive.sections`；任何章节对象混入 `episodes[].shots` 都是伪镜头。兼容导入可以忽略并给出二次确认警告，Agent 严格生成和正式剧本导入必须阻断。
-- 场景的 `backgroundNpcPolicy` 只描述无名背景群像；背景 NPC 不进入 characterCodes。required 场景的数量、前中后景分布和可见反应必须落到受影响的关键帧或视频时间段。
+- 场景的 `backgroundNpcPolicy` 只描述无名背景群像；背景 NPC 不进入 characterCodes。required 场景的数量、前中后景分布和可见反应必须落到受影响的关键帧或视频时间段。需要跨镜头连续的群像可在策略中提供稳定 `roster`：每个槽位包含 `slotId`、世界空间 `worldAnchor`、稳定 `variant` 和 `defaultState`；镜头正文引用当前可见槽位及其状态变化，不得用画面前/中/后景重新分配同一个人。
+- 默认清晰度合同要求所有可见主角、关键 NPC、剧情道具和场景锚点在当前景别下清楚可辨；不得用无意模糊、过度浅景深、雾气、泛光或颗粒遮盖脸、手、道具接触面和空间结构。只有用户明确要求的背影、虚焦或浅景深才可模糊，信息过载时应拆镜而不是缩小或虚化全部主体。
+- 画幅必须先参与构图编译：9:16 优先单人/双人、过肩和纵向深度，16:9 优先横向空间、长桌和群像关系；禁止把同一套横屏站位只替换比例后复用。
 - `videoPrompt` 和 `framePlan` 都由 Agent 直接生成；应用层不得从模板、旧包、历史提示词、动作字段或帧计划重建、补写、删改公开视频正文。未经声明的内部切镜、未绑定道具或未声明角色不得出现。
 - Agent authoring draft 的硬门禁代码来自版本化契约；至少包括文学剧本完整性、对白覆盖率、对白表演质量、剧情事实覆盖率、动作密度/差异、情绪递进、NPC 反应变化、运镜动机、镜头事件、时间轴、素材绑定、连续性和 provenance。任一 blocker 都必须先进入 authoring revision，不得把失败草案标记完成或写入正式制作包。
 

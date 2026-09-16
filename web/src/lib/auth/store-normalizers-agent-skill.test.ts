@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { DRAMA_VIDEO_DIRECTOR_SKILL } from "../server/agent-skills/drama-video-director.generated";
 import { normalizeAgentSkill, normalizeAgentSkills } from "./store-normalizers";
 
 describe("normalizeAgentSkill", () => {
@@ -50,5 +51,12 @@ describe("normalizeAgentSkill", () => {
         expect(normalizeAgentSkills([{ id: "custom", name: "自定义", description: "", instructions: "自定义规则", enabled: true, keywords: [] }])).toEqual(
             expect.arrayContaining([expect.objectContaining({ id: "seedance-25-director", sourceRepository: "liyue-aigc/seedance-2-5-video-director" })]),
         );
+    });
+
+    it("replaces stale built-in director instructions while preserving the saved enabled state", () => {
+        const normalized = normalizeAgentSkills([{ id: "drama-video-director", name: "旧导演", description: "", instructions: "旧规则", enabled: false, keywords: [] }]);
+        const director = normalized.find((skill) => skill.id === "drama-video-director");
+        expect(director).toMatchObject({ enabled: false, sourceVersion: DRAMA_VIDEO_DIRECTOR_SKILL.sourceVersion });
+        expect(director?.instructions).not.toBe("旧规则");
     });
 });

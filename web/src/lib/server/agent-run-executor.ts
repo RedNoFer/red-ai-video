@@ -22,11 +22,12 @@ import { attachDramaProductionPackageAuthoring, buildDramaAssetReuseContext, Dra
 import { serializeDramaProductionPackageMarkdown } from "@/lib/drama-production-package-serializer";
 import { defaultDramaProductionPlan, normalizeDramaProductionPlan, resolveDramaShotDurationPreference } from "@/lib/drama-production-plan";
 import { DRAMA_PACKAGE_ARCHITECTURE_RULES } from "@/lib/server/drama-production-package-rules";
-import { DRAMA_PACKAGE_CONTRACT } from "@/lib/server/drama-production-package-contract";
+import { COMPILED_DRAMA_PACKAGE_TEMPLATE_SOURCE, DRAMA_PACKAGE_CONTRACT } from "@/lib/server/drama-production-package-contract";
 import { DRAMA_PACKAGE_DIRECTOR_RULES, DRAMA_VIDEO_DIRECTOR_SKILL, SEEDANCE_25_DIRECTOR_SKILL } from "@/lib/server/agent-skills/creative-shortcuts";
 import type { DramaAuthoringDraft, DramaAuthoringProvider, DramaAuthoringSourceSnapshot, DramaEpisode, DramaNamedAsset, DramaProject } from "@/lib/drama-project-contract";
 import { resolveSeedance25VideoPromptReferences } from "@/lib/server/agent-skills/seedance-25";
 import { resolveDramaGlobalVisualContract } from "@/lib/drama-style";
+import { formatDramaCompositionContract, resolveDramaCompositionProfile } from "@/lib/drama-composition";
 import { DramaAuthoringQualityGateError, validateDramaAuthoringQuality } from "@/lib/server/drama-production-package-quality";
 
 const globalAgentExecutors = globalThis as typeof globalThis & { __vozebProAgentRunControllers?: Map<string, AbortController> };
@@ -309,7 +310,7 @@ export function buildDramaPackageSkillInstructions(selectedSkills: ReadonlyArray
         return [];
     });
     return [
-        `当前短剧制作包唯一导演 Skill：${DRAMA_VIDEO_DIRECTOR_SKILL.name}@${DRAMA_VIDEO_DIRECTOR_SKILL.id}（${DRAMA_VIDEO_DIRECTOR_SKILL.sourceVersion}；内容哈希 ${DRAMA_VIDEO_DIRECTOR_SKILL.sourceContentHash}）\n${DRAMA_PACKAGE_DIRECTOR_RULES}`,
+        `当前短剧制作包默认启用唯一导演 Skill：${DRAMA_VIDEO_DIRECTOR_SKILL.name}@${DRAMA_VIDEO_DIRECTOR_SKILL.id}（${DRAMA_VIDEO_DIRECTOR_SKILL.sourceVersion}；内容哈希 ${DRAMA_VIDEO_DIRECTOR_SKILL.sourceContentHash}）。用户无需重复提供切镜、运镜、表演和连续性规则；先补齐可生产的导演字段，再输出制作包。\n${DRAMA_PACKAGE_DIRECTOR_RULES}`,
         `当前 Seedance 2.5 适配 Skill：${SEEDANCE_25_DIRECTOR_SKILL.name}@${SEEDANCE_25_DIRECTOR_SKILL.id}（${SEEDANCE_25_DIRECTOR_SKILL.sourceVersion}；内容哈希 ${SEEDANCE_25_DIRECTOR_SKILL.sourceContentHash}）。本次只注入与当前时长/模式相关的适配规则，不创建第二套制作包字段或覆盖项目导演规则。`,
         ...supplementalSkills,
     ].join("\n");
@@ -356,8 +357,9 @@ export async function executeDramaScriptRun(run: AgentRun, origin: string, cooki
         };
         return { ...base, role: classifyDramaAuthoringMaterial(base), contentHash: hashDramaAuthoringMaterial(base) };
     });
-    const authoringRoles = new Set(uploadedMaterials.filter((material) => material.type === "text").map((material) => material.role));
-    if (!authoringRoles.has("package-template") || !authoringRoles.has("story-source")) throw new Error("短剧制作包正式生成必须同时提供文本模板和 TXT/小说素材");
+    const authoringSources = ensureDramaPackageTemplateSource(uploadedMaterials as DramaAuthoringSourceSnapshot[]);
+    const authoringRoles = new Set(authoringSources.filter((material) => material.type === "text").map((material) => material.role));
+    if (!authoringRoles.has("package-template") || !authoringRoles.has("story-source")) throw new Error("短剧制作包正式生成必须提供 TXT/小说素材；制作包模板由系统自动注入");
     const skillInstructions = buildDramaPackageSkillInstructions(selectedSkills, run.prompt, requestedShotDuration);
     const authoringRules = composeDramaAuthoringRules(skillInstructions, DRAMA_PACKAGE_ARCHITECTURE_RULES);
     if (isOutsideDramaScriptScope(run.prompt)) {
@@ -384,10 +386,10 @@ export async function executeDramaScriptRun(run: AgentRun, origin: string, cooki
             : `当前使用用户明确锁定的 ${requestedFramePolicy} 方案：每个镜头必须严格生成 ${requestedFrameCount} 个连续帧段。`;
     const visualInstruction = "视觉参数必须写入制作包并服从当前输入中的锁定方案与全局视觉合同；不得用历史提示词或旧制作包补齐。";
     const globalVisualContract = resolveDramaGlobalVisualContract(project);
-    const attachmentInstruction = uploadedMaterials.length
-        ? "本轮用户附件已经作为正式 authoringSources 传入，并保留原顺序、alias、role、title、contentHash 和可读 textContent。role=package-template 的模板只拥有格式、字段和章节结构权威，不提供剧情事实；role=story-source 的 TXT/小说只提供当前剧情事实，不改变制作包格式；role=reference 只提供参考素材职责。必须在写作前读取模板和 TXT，不能只读取其中一个；不得把内部路径、contentHash、隐藏执行信息或模板示例事实写入公开制作包。"
+    const attachmentInstruction = authoringSources.length
+        ? "本轮 authoringSources 已由系统整理完成：系统在缺少用户模板时自动注入唯一的 role=package-template 制作包模板，用户 TXT/小说保留为 role=story-source，参考素材保留原顺序、alias、role、title、contentHash 和可读 textContent。package-template 只拥有格式、字段和章节结构权威，不提供剧情事实；story-source 只提供当前剧情事实，不改变制作包格式；reference 只提供参考素材职责。必须在写作前读取模板和 TXT，不能只读取其中一个；不得把内部路径、contentHash、隐藏执行信息或模板示例事实写入公开制作包。"
         : "本轮没有附件。";
-    const instruction = `你是 VOZEB PRO 短剧项目的专属集数编剧 GPT。只处理当前集和用户本轮请求；超出范围时只回复“当前窗口只处理第 ${current.title} 的新剧本内容。请继续提供本集剧情、人物、冲突或制作包要求。”。只依据当前用户请求、当前项目正式事实、本轮 authoringSources、锁定生产方案和唯一导演 Skill，缺少必要事实时先提问。历史会话、旧制作包、productionArchive、历史 generationPrompt 和旧运行记录不是创作输入，禁止读取、复述或套用。
+    const instruction = `你是 VOZEB PRO 短剧项目的专属集数编剧 GPT。只处理当前集和用户本轮请求；超出范围时只回复“当前窗口只处理第 ${current.title} 的新剧本内容。请继续提供本集剧情、人物、冲突或制作包要求。”。制作包默认采用“用户配置 + TXT/小说剧情来源”的最小输入方式：画幅、分辨率、时长、帧率等配置由当前请求或已锁定生产方案提供，项目正式资产和制作包模板由系统提供；用户无需手写角色动作、镜头数量、切镜、景别、焦段、运镜、表演、NPC 分布或逐段时间线。只依据当前用户请求、当前项目正式事实、本轮 authoringSources、可用生产方案和唯一导演 Skill 自动完成导演级补全；没有锁定生产方案时，直接采用当前请求中的画幅/分辨率/时长配置和项目默认视频能力，不要因为缺少模板或镜头细节而要求用户补写导演规则；只有缺少会改变身份、剧情结果、资产绑定、空间拓扑或明确禁用项的事实时才提出一个聚焦问题。历史会话、旧制作包、productionArchive、历史 generationPrompt 和旧运行记录不是创作输入，禁止读取、复述或套用。
 
 目标小说章节：${String(targetNarrativeChapter)}。这里的“小说第 ${String(targetNarrativeChapter)} 章”是剧情素材范围；“制作包第 3 节｜第一集文学剧本”只是固定模板章节，二者绝不能混淆。未明确要求制作包时只返回自然中文剧本协作回复；明确要求时只返回 {"mode":"package","reply":"简短完成说明","markdown":"符合 vozeb-drama-production-package-v1 的完整 Markdown"}。markdown 是 Agent authoring draft，不是最终持久化文件：必须生成完整文学剧本，不得输出摘要、梗概、镜头摘要或模板示例；必须保留 TXT 的每条显式对白和关键剧情事实，并为每个镜头直接写出公开 videoPrompt 与 framePlan。服务端会校验 draft，再由规范化后的唯一对象确定性导出最终制作包，禁止依赖脚本读取模板或用固定文案冒充生成。制作包必须包含当前集、项目级正式资产、13 个章节和现有镜头字段；第 12、13 节只能放在 archive.sections，绝不能把 SEC01-SEC13 伪装成 shots；不要在其他字段重复规则，也不要把一个字段的正文复制到另一个字段。字段语义和质量门禁只以当前唯一导演 Skill 与制作包协议为准。
 
@@ -403,7 +405,7 @@ framePlan.frames 只能保留现有字段；静态正文和视频正文必须由
         selectedSkills,
         lockedPlan,
         globalVisualContract,
-        uploadedMaterials,
+        uploadedMaterials: authoringSources,
         requestedShotDuration,
         targetNarrativeChapter,
     });
@@ -412,7 +414,6 @@ framePlan.frames 只能保留现有字段；静态正文和视频正文必须由
         description: "返回受限剧本协作回复或完整制作包",
         parameters: { type: "object", properties: { mode: { type: "string", enum: ["reply", "package"] }, reply: { type: "string" }, markdown: { type: "string" } }, required: ["mode", "reply"], additionalProperties: false },
     };
-    const authoringSources = uploadedMaterials as DramaAuthoringSourceSnapshot[];
     const persistDraft = async (draft: DramaAuthoringDraft, provider: DramaAuthoringProvider) => {
         const markdown = draft.markdown.trim();
         if (!markdown) throw new Error("剧本 Agent 没有返回制作包正文");
@@ -454,7 +455,7 @@ framePlan.frames 只能保留现有字段；静态正文和视频正文必须由
             contract: DRAMA_PACKAGE_CONTRACT,
             directorSkill: { id: DRAMA_VIDEO_DIRECTOR_SKILL.id, version: DRAMA_VIDEO_DIRECTOR_SKILL.sourceVersion, contentHash: DRAMA_VIDEO_DIRECTOR_SKILL.sourceContentHash },
             seedanceSkill: { id: SEEDANCE_25_DIRECTOR_SKILL.id, version: SEEDANCE_25_DIRECTOR_SKILL.sourceVersion, contentHash: SEEDANCE_25_DIRECTOR_SKILL.sourceContentHash },
-            materials: uploadedMaterials.map(({ alias, role, type, title, contentHash }) => ({ alias, role, type, title, contentHash })),
+            materials: authoringSources.map(({ alias, role, type, title, contentHash }) => ({ alias, role, type, title, contentHash })),
         };
         const withInitialProvenance = attachDramaProductionPackageAuthoring(preview.package, { ...provenance, qualityGateReport: initialReport });
         const finalReport = validateDramaAuthoringQuality({ package: withInitialProvenance, sources: authoringSources, targetNarrativeChapter });
@@ -652,6 +653,7 @@ export function buildDramaPackageAuthoringInput(input: {
             summary: input.project.summary,
             style: input.project.style,
             ratio: input.project.ratio,
+            compositionProfile: resolveDramaCompositionProfile(input.project.ratio),
             seriesBible: input.project.seriesBible,
             ...assetCatalog,
         },
@@ -667,6 +669,7 @@ export function buildDramaPackageAuthoringInput(input: {
         selectedSkills: input.selectedSkills.map(({ id, name }) => ({ id, name })),
         lockedProductionPlan: input.lockedPlan,
         globalVisualContract: input.globalVisualContract,
+        compositionContract: formatDramaCompositionContract(input.project.ratio),
         authoringSources: input.uploadedMaterials,
         requestedShotDuration: input.requestedShotDuration,
         targetNarrativeChapter: input.targetNarrativeChapter ?? "当前集素材",
@@ -697,6 +700,24 @@ export function classifyDramaAuthoringMaterial(value: { title?: unknown; type?: 
     if (/(?:模板|模版|template|production[-_ ]?package|制作包)/iu.test(title) || /vozeb-drama-production-package-v1|规范对象|镜头执行表/u.test(content)) return "package-template";
     if (/(?:\.txt$|小说|章节|原文|故事|剧本)/iu.test(title)) return "story-source";
     return "reference";
+}
+
+/**
+ * The package template is a system-owned authoring source. A user may still
+ * provide a custom template, but a TXT/story source must never be blocked just
+ * because the UI did not attach the built-in template again.
+ */
+export function ensureDramaPackageTemplateSource(materials: DramaAuthoringSourceSnapshot[]) {
+    if (materials.some((material) => material.type === "text" && material.role === "package-template")) return materials;
+    const template: DramaAuthoringSourceSnapshot = {
+        alias: "@系统制作包模板",
+        role: "package-template",
+        type: "text",
+        title: "VOZEB PRO 短剧制作包系统模板",
+        contentHash: hashDramaAuthoringMaterial({ type: "text", title: "VOZEB PRO 短剧制作包系统模板", textContent: COMPILED_DRAMA_PACKAGE_TEMPLATE_SOURCE }),
+        textContent: COMPILED_DRAMA_PACKAGE_TEMPLATE_SOURCE,
+    };
+    return [template, ...materials];
 }
 
 function hashDramaAuthoringMaterial(value: { title?: unknown; type?: unknown; textContent?: unknown }) {

@@ -5,6 +5,7 @@ import { nanoid } from "nanoid";
 import type {
     DramaContinuityEdge,
     DramaBackgroundNpcPolicy,
+    DramaBackgroundNpcSlot,
     DramaEpisode,
     DramaFieldOrigin,
     DramaNamedAsset,
@@ -37,6 +38,7 @@ import {
 import { dramaDialogueTimingReminder, dramaFrameDialogueTimingReminder, dramaUtteranceTimingIssues, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
 import { resolveDramaStyleContract } from "@/lib/drama-style";
 import { normalizeDramaCharacterProfile } from "@/lib/drama-character-rules";
+import { compileDramaAssetReferencePrompt } from "@/lib/drama-prompt-compiler";
 import { resolveDramaShotDuration } from "@/lib/server/drama-shot-config";
 import { hasConcreteDramaCameraDirection, isGenericDramaDetail, validateDramaCameraPlan, validateDramaPerformanceDetail, validateDramaVideoAuthoringQuality, validateDramaVideoSegmentDetail } from "@/lib/drama-prompt-quality";
 import { DRAMA_VIDEO_DIRECTOR_SKILL } from "@/lib/server/agent-skills/drama-video-director";
@@ -46,7 +48,7 @@ import { validateDramaAuthoringQuality } from "@/lib/server/drama-production-pac
 
 export class DramaProductionPackageError extends Error {}
 
-type DramaProjectAssetCollection = Pick<DramaProject, "characters" | "scenes" | "props" | "clues">;
+type DramaProjectAssetCollection = Pick<DramaProject, "title" | "style" | "ratio" | "productionBible" | "characters" | "scenes" | "props" | "clues">;
 
 export type DramaProductionPackageNormalizationOptions = {
     validateVideoPrompt?: boolean;
@@ -123,15 +125,23 @@ export function mergeProjectAssetsIntoProductionPackage<T extends DramaProductio
         ...value,
         assets: {
             ...assets,
-            characters: mergeProjectAssetCollection(assets.characters, project.characters, "C", referenced.C, episodeCodes),
-            locations: mergeProjectAssetCollection(assets.locations, project.scenes, "S", referenced.S, episodeCodes),
-            props: mergeProjectAssetCollection(assets.props, project.props, "P", referenced.P, episodeCodes),
+            characters: mergeProjectAssetCollection(assets.characters, project.characters, "C", referenced.C, episodeCodes, project, "角色"),
+            locations: mergeProjectAssetCollection(assets.locations, project.scenes, "S", referenced.S, episodeCodes, project, "场景"),
+            props: mergeProjectAssetCollection(assets.props, project.props, "P", referenced.P, episodeCodes, project, "道具"),
             clues: mergeProjectAssetCollection(assets.clues, project.clues, "L", referenced.L, episodeCodes),
         },
     };
 }
 
-function mergeProjectAssetCollection(incoming: DramaProductionPackageAsset[], existing: DramaNamedAsset[], prefix: string, referenced: Set<string>, episodeCodes: Set<string>) {
+function mergeProjectAssetCollection(
+    incoming: DramaProductionPackageAsset[],
+    existing: DramaNamedAsset[],
+    prefix: string,
+    referenced: Set<string>,
+    episodeCodes: Set<string>,
+    project?: DramaProjectAssetCollection,
+    kind?: "角色" | "场景" | "道具",
+) {
     const codes = allocateAssetCodes(existing, prefix);
     const existingWithCodes = existing.map((asset, index) => ({ asset, code: codes[index] }));
     const byCode = new Map(incoming.map((asset) => [asset.code, asset]));
@@ -139,7 +149,7 @@ function mergeProjectAssetCollection(incoming: DramaProductionPackageAsset[], ex
     const merged = existingWithCodes.map(({ asset, code }) => {
         const current = asset.code ? byCode.get(code) || byName.get(normalizeKey(asset.name)) : byName.get(normalizeKey(asset.name)) || byCode.get(code);
         const activeEpisodeCodes = asset.activeEpisodeCodes?.length ? asset.activeEpisodeCodes : current?.activeEpisodeCodes;
-        return {
+        const merged = {
             ...(current || {}),
             code,
             name: asset.name,
@@ -150,6 +160,10 @@ function mergeProjectAssetCollection(incoming: DramaProductionPackageAsset[], ex
             ...(asset.backgroundNpcPolicy || current?.backgroundNpcPolicy ? { backgroundNpcPolicy: asset.backgroundNpcPolicy || current?.backgroundNpcPolicy } : {}),
             ...(activeEpisodeCodes?.length || referenced.has(code) ? { activeEpisodeCodes: [...new Set([...(activeEpisodeCodes || []), ...(referenced.has(code) ? episodeCodes : [])])] } : {}),
         } as DramaProductionPackageAsset;
+        if (!merged.supplierPrompt && project && kind) {
+            merged.supplierPrompt = compileDramaAssetReferencePrompt(project, { id: `package-${code}`, ...merged }, kind);
+        }
+        return merged;
     });
     const existingKeys = new Set(existingWithCodes.flatMap(({ asset, code }) => [code, normalizeKey(asset.name)]));
     return [...merged, ...incoming.filter((asset) => !existingKeys.has(asset.code) && !existingKeys.has(normalizeKey(asset.name)))];
@@ -1602,7 +1616,17 @@ function normalizeBackgroundNpcPolicy(value: unknown): DramaBackgroundNpcPolicy 
     const min = Number.isInteger(Number(range.min)) ? Math.max(0, Number(range.min)) : undefined;
     const max = Number.isInteger(Number(range.max)) ? Math.max(min ?? 0, Number(range.max)) : undefined;
     const countRange = min !== undefined && max !== undefined ? { min, max } : undefined;
-    return { mode, ...(guidance ? { guidance } : {}), ...(continuity ? { continuity } : {}), ...(countRange ? { countRange } : {}) };
+    const roster = Array.isArray(policy.roster)
+        ? policy.roster.flatMap((item): DramaBackgroundNpcSlot[] => {
+              const slot = object(item);
+              const slotId = optionalText(slot.slotId);
+              const worldAnchor = optionalText(slot.worldAnchor);
+              const variant = optionalText(slot.variant);
+              const defaultState = optionalText(slot.defaultState);
+              return slotId && worldAnchor && variant && defaultState ? [{ slotId, worldAnchor, variant, defaultState }] : [];
+          })
+        : [];
+    return { mode, ...(guidance ? { guidance } : {}), ...(continuity ? { continuity } : {}), ...(countRange ? { countRange } : {}), ...(roster.length ? { roster } : {}) };
 }
 
 function isLegacySceneReferenceBoard(value: unknown) {
@@ -1611,7 +1635,8 @@ function isLegacySceneReferenceBoard(value: unknown) {
     if (["3x3", "legacy-3x3"].includes(boardLayout)) return true;
     const profile = object(asset.profile);
     const source = [asset.description, asset.supplierPrompt, profile.visualIdentity, profile.designPrompt, profile.consistencyRules].map(text).filter(Boolean).join("\n");
-    return /九宫格|九格|3\s*[x×*]\s*3|三列[\s\S]*三行|3列[\s\S]*3行/u.test(source);
+    const withoutNegativeRules = source.replace(/(?:不生成|禁止(?:生成)?|不要|不得|无|避免)[^。；;\n]{0,24}(?:九宫格|九格|3\s*[x×*]\s*3|三列[\s\S]*三行|3列[\s\S]*3行)/gu, "");
+    return /九宫格|九格|3\s*[x×*]\s*3|三列[\s\S]*三行|3列[\s\S]*3行/u.test(withoutNegativeRules);
 }
 
 function isGenericConsistencyRule(value: string) {

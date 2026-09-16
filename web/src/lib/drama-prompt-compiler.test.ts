@@ -898,6 +898,10 @@ describe("drama prompt compiler", () => {
         expect(hasDramaAssetPromptQuality(prop.supplierPrompt, "道具")).toBe(false);
         expect(hasDramaAssetPromptQuality(prompt, "道具")).toBe(true);
         expect(prompt).toContain("只展示道具本体");
+        expect(prompt).toContain("纯白色无缝背景");
+        expect(prompt).toContain("不出现展示台");
+        expect(prompt).not.toContain("静置在中性展示台");
+        expect(prompt).not.toContain("项目风格的桌面");
         expect(prompt).toContain("人物、手部、持有人");
         expect(prompt).not.toContain("萧炎");
         expect(prompt).not.toContain("奋笔疾书");

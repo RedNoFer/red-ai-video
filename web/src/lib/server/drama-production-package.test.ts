@@ -206,6 +206,8 @@ describe("production package boundary", () => {
 
         expect(merged.assets.characters).toEqual(expect.arrayContaining([expect.objectContaining({ code: "C01", name: "Karin", description: "项目固定描述", profile: expect.objectContaining({ visualIdentity: "固定脸型" }) })]));
         expect(merged.assets.locations).toEqual(expect.arrayContaining([expect.objectContaining({ code: "S01", name: "城门", description: "项目固定场景" })]));
+        expect(merged.assets.characters.find((asset) => asset.code === "C01")?.supplierPrompt).toContain("四视图");
+        expect(merged.assets.locations.find((asset) => asset.code === "S01")?.supplierPrompt).toContain("高清");
     });
 
     it("restores omitted assets before normalization so shot references are not filtered out", () => {
@@ -297,6 +299,24 @@ describe("production package boundary", () => {
         expect(karin.profile?.forbiddenChanges).toEqual(expect.arrayContaining(["换脸", "大头娃娃", "塑料皮肤", "手指畸形"]));
         expect(rifa.profile?.visualIdentity).toContain("Rifa的脸型、五官、发型和年龄感");
         expect(rifa.profile?.identityAnchors).toEqual(expect.arrayContaining([expect.stringContaining("Rifa的脸型、五官、发型和年龄感")]));
+    });
+
+    it("preserves stable NPC roster slots and world anchors during package normalization", () => {
+        const source = structuredClone(productionPackage);
+        source.assets.locations[0].backgroundNpcPolicy = {
+            mode: "required",
+            countRange: { min: 2, max: 3 },
+            roster: [
+                { slotId: "seat-left-01", worldAnchor: "左侧后席", variant: "灰袖、短发、窄脸", defaultState: "低头看纸，收声" },
+                { slotId: "wall-back-01", worldAnchor: "北墙阴影处", variant: "深褐袖、束发、宽肩", defaultState: "贴墙静坐" },
+            ],
+        };
+
+        const location = previewDramaProductionPackage(JSON.stringify(source), "package.json").package.assets.locations[0];
+        expect(location.backgroundNpcPolicy?.roster).toEqual([
+            { slotId: "seat-left-01", worldAnchor: "左侧后席", variant: "灰袖、短发、窄脸", defaultState: "低头看纸，收声" },
+            { slotId: "wall-back-01", worldAnchor: "北墙阴影处", variant: "深褐袖、束发、宽肩", defaultState: "贴墙静坐" },
+        ]);
     });
 
     it("round-trips a saved supplier prompt with a package asset", () => {

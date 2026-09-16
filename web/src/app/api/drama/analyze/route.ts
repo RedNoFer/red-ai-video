@@ -76,7 +76,7 @@ export async function POST(request: Request) {
     const settings = await getAuthSettings();
     const model = settings.defaultModels.textModel;
     const candidates = resolveLogicalModelCandidates(settings, "text", model);
-    if (!model || !candidates.length) return NextResponse.json({ code: 400, data: null, msg: "后台尚未配置可用的默认文本模型" }, { status: 400 });
+    if (!model || !candidates.length) return NextResponse.json({ code: 400, data: { reasonCode: "configuration" }, msg: "后台尚未配置可用的默认文本模型" }, { status: 400 });
 
     let refundedPointsRemaining: number | undefined;
     let videoPromptCandidate: ReturnType<typeof previewDramaVideoPromptOutput> = [];
@@ -243,10 +243,21 @@ export async function POST(request: Request) {
         throw latestError instanceof Error ? latestError : new Error("没有可用的文本模型渠道");
     } catch (error) {
         const status = error instanceof DramaVideoPromptQualityError || error instanceof DramaContentQualityError ? error.status : 502;
-        const response = NextResponse.json({ code: status, data: phase === "video_prompt" && videoPromptCandidate.length ? { candidate: videoPromptCandidate[0] } : null, msg: error instanceof Error ? error.message : "剧本分析失败" }, { status });
+        const candidate = phase === "video_prompt" && videoPromptCandidate.length ? { candidate: videoPromptCandidate[0] } : {};
+        const response = NextResponse.json({ code: status, data: { ...candidate, reasonCode: classifyDramaAnalysisFailure(error) }, msg: error instanceof Error ? error.message : "剧本分析失败" }, { status });
         if (typeof refundedPointsRemaining === "number") response.headers.set("x-vozeb-pro-points-remaining", String(refundedPointsRemaining));
         return response;
     }
+}
+
+function classifyDramaAnalysisFailure(error: unknown) {
+    const message = error instanceof Error ? error.message : String(error || "");
+    if (error instanceof DramaVideoPromptQualityError || error instanceof DramaContentQualityError || /质量|摄影契约|逐帧|提示词缺少|标准字段|内部模式|叙事标签/u.test(message)) return "quality_gate_failed";
+    if (/(?:素材绑定|引用素材|参考素材|资产引用|referenceMaterials)/iu.test(message)) return "missing_asset_reference";
+    if (/(?:镜头|shot|frame).{0,20}(?:不存在|未找到|无法解析|引用无效)/iu.test(message)) return "unresolved_shot_reference";
+    if (/(?:模型没有|结构化剧本结果|有效内容结构|返回有效)/u.test(message)) return "invalid_model_response";
+    if (/(?:不支持|未支持).{0,20}(?:模型|运镜|模式|能力|功能)/iu.test(message)) return "unsupported_model_capability";
+    return "upstream_failure";
 }
 
 async function requestFunctionCall(

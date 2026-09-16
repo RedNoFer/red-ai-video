@@ -2,7 +2,7 @@
 
 > 制作包格式：`vozeb-drama-production-package-v1`
 >
-> 模板版本：由 `pnpm compile:skills` 自动生成；唯一制作包契约：`vozeb-drama-production-package-v1@1.0.0`（契约 hash：`6d0459d2b3d489afdbb9d39ea7a2f801b1f6a9d1fcd46be65a3b3388d19346c1`，规范源 hash：`0bc9bccb5ecff6c3a2f9908fff65f2ad9879a5db9ccd1cc4904fb85197127169`）。导演 Skill：`drama-video-director@1.4.0`（hash：`f1f8715bce3bfbcc3e4158e750fb76d17248c2bc50a4e62c91a12d678553cf99`）；服务端制作包规则 hash：`40ce63198304901e6a2277f107559beedeec9b473b3dbf066b342559881a11d5`；Seedance Skill、服务端规则和 Codex 工作单均由同一编译清单绑定。
+> 模板版本：由 `pnpm compile:skills` 自动生成；唯一制作包契约：`vozeb-drama-production-package-v1@1.0.0`（契约 hash：`6d0459d2b3d489afdbb9d39ea7a2f801b1f6a9d1fcd46be65a3b3388d19346c1`，规范源 hash：`f176ed6a3928a719fc7b2d0dc5f81ed3eaf52b7e1fdf764f9473601382757a2f`）。导演 Skill：`drama-video-director@1.7.0`（hash：`5b132c790d0727cd4614a2f8808c0c21fb48c69d693c5b2ef3702f4ff677db6f`）；服务端制作包规则 hash：`ca15836ba0bd87222b8d02c5948efd453eb30bfee4f1821c8b91d4e963876f06`；Seedance Skill、服务端规则和 Codex 工作单均由同一编译清单绑定。
 >
 > 使用约定：本模板是当前 v1 制作包的填写入口。完整制作包必须同时提供可导入的规范对象 JSON；JSON 是导入事实源，下面的章节是面向人工阅读的确定性展示。不要把历史制作包、旧 generationPrompt 或旧分镜正文当作新包模板。
 >
@@ -35,10 +35,12 @@
 - 角色目标与需求：
 - 关系弧：
 
-### 9:16 竖屏导演规则
+### 画幅构图与清晰度导演规则
 
 - 当前项目画幅与安全区：按锁定生产方案填写，不把本标题当作强制比例值。
-- 视觉与叙事规则：只填写本项目实际采用的导演规则。
+- 9:16 优先单人/双人、过肩和纵向深度；16:9 优先横向空间、长桌和群像关系。不能把横屏站位只替换比例后复用。
+- 所有可见主角、关键 NPC、剧情道具和场景锚点在当前景别下清晰可辨；只有明确要求时才使用背影、虚焦或浅景深。
+- 镜头数量、时间段和切换次数按真实可见信息自适应，不固定为 10 段、9 次切换或固定运镜配额。
 
 ## 二、原创第一章
 
@@ -128,7 +130,7 @@ imagePrompt
 场景一致性 Prompt。
 ```
 
-场景全景基准图保持高清、单视角、无人、无文字。`backgroundNpcPolicy` 只表达场景策略；`required` 场景填写 `countRange`，背景 NPC 需要出现在镜头时，按固定 `NPC群像` 语法写入每个受影响关键帧或视频时间段的可见群像结果，不进入角色资产编码。
+场景全景基准图保持高清、单视角、无人、无文字。`backgroundNpcPolicy` 只表达场景策略；`required` 场景填写 `countRange`。跨镜头群像可以声明稳定 `roster` 槽位，每个槽位绑定世界空间锚点和稳定变体；背景 NPC 需要出现在镜头时，按槽位及其可见状态写入每个受影响关键帧或视频时间段的群像结果，不进入角色资产编码。
 
 ## 七、关键视频资产 Prompt
 

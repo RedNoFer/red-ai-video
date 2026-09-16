@@ -25,6 +25,10 @@ const body =
 const sourceContentHash = hashSkillContent(skillRoot);
 const sections = {
     common: extractSection(body, "共同前置审计"),
+    inputBoundary: extractSection(body, "制作包最小输入协议"),
+    aspectAdaptation: extractSection(body, "画幅适配编译"),
+    antiTemplate: extractSection(body, "反模板化编排原则"),
+    storyboardMethod: extractSection(body, "分镜方法借鉴：把导演判断落到可见画面"),
     assetPrompt: extractSection(body, "资产事实与提示词统一编译"),
     cinematography: extractSection(body, "摄影与画面"),
     performance: extractSection(body, "表演与节奏"),
@@ -58,10 +62,10 @@ export type DramaDirectorSurface = "package" | "static-frame" | "video" | "exter
 export const DRAMA_VIDEO_DIRECTOR_SKILL = ${JSON.stringify(skill, null, 4)} as const;
 
 const SURFACE_SECTIONS: Record<DramaDirectorSurface, string[]> = {
-    package: ["common", "assetPrompt", "cinematography", "performance", "frameAllocation", "staticFrame", "video", "package", "gates"],
+    package: ["common", "inputBoundary", "aspectAdaptation", "antiTemplate", "storyboardMethod", "assetPrompt", "cinematography", "performance", "frameAllocation", "staticFrame", "video", "package", "gates"],
     "static-frame": ["staticFrame"],
-    video: ["common", "cinematography", "performance", "frameAllocation", "video", "gates"],
-    "external-codex": ["common", "assetPrompt", "cinematography", "performance", "package", "staticFrame", "video", "gates", "externalCodex"],
+    video: ["common", "antiTemplate", "storyboardMethod", "cinematography", "performance", "frameAllocation", "video", "gates"],
+    "external-codex": ["common", "inputBoundary", "aspectAdaptation", "antiTemplate", "storyboardMethod", "assetPrompt", "cinematography", "performance", "package", "staticFrame", "video", "gates", "externalCodex"],
 };
 
 export function resolveDramaDirectorInstructions(surface: DramaDirectorSurface) {

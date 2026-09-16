@@ -4,7 +4,7 @@ import { formatAccountId, parseAccountId } from "@/lib/account-id";
 import { decryptSecretValue, encryptSecretValue, isEncryptedSecretValue } from "@/lib/server/secret-crypto";
 import { ECOMMERCE_IMAGE_SKILL } from "@/lib/server/agent-skills/ecommerce-image";
 import { YANAI_BEAUTY_SKILL } from "@/lib/server/agent-skills/yanai-beauty";
-import { DEFAULT_CREATIVE_SHORTCUT_SKILLS } from "@/lib/server/agent-skills/creative-shortcuts";
+import { DEFAULT_CREATIVE_SHORTCUT_SKILLS, DRAMA_VIDEO_DIRECTOR_SKILL, SEEDANCE_25_DIRECTOR_SKILL } from "@/lib/server/agent-skills/creative-shortcuts";
 import { deriveLogicalModelsConfig, normalizeDefaultModelsConfig, normalizeLogicalModelsConfig } from "@/lib/model-routing-config";
 import { inferModelCapability, normalizeModelId } from "@/lib/model-capability";
 import { applyChannelProtocol, channelProtocolDefinition, normalizeStrictProtocolModelConfig, protocolCatalogCapability, protocolModelConfig } from "@/lib/channel-protocol-registry";
@@ -338,6 +338,7 @@ export function normalizeAgentSkills(skills: AgentSkill[] | undefined) {
     for (const skill of DEFAULT_CREATIVE_SHORTCUT_SKILLS) {
         const index = normalized.findIndex((item) => item.id === skill.id);
         if (index < 0) normalized.push({ ...skill, keywords: [...skill.keywords], workspaces: [...skill.workspaces] });
+        else if (skill.id === DRAMA_VIDEO_DIRECTOR_SKILL.id || skill.id === SEEDANCE_25_DIRECTOR_SKILL.id) normalized[index] = { ...skill, enabled: normalized[index].enabled, keywords: [...skill.keywords], workspaces: [...skill.workspaces] };
         else normalized[index] = { ...normalized[index], workspaces: [...new Set([...skill.workspaces, ...(normalized[index].workspaces || [])])] };
     }
     return normalized;

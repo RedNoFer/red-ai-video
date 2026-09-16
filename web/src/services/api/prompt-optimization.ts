@@ -9,6 +9,14 @@ import { throwIfClientSessionExpired } from "@/services/api/session-expiration";
 type PromptOptimizationInput = { requestId: string; prompt: string; mode: "agent" | CreativeGenerationMode | "drama-frame" | "drama-asset"; visualContract?: DramaGlobalVisualContract };
 type AssetPromptOptimizationInput = Omit<PromptOptimizationInput, "mode"> & { mode: "drama-asset" };
 type NonAssetPromptOptimizationInput = Omit<PromptOptimizationInput, "mode"> & { mode: "agent" | CreativeGenerationMode | "drama-frame" };
+export type PromptOptimizationReasonCode = "configuration" | "missing_story_source" | "missing_asset_reference" | "invalid_input" | "unsupported_model_capability" | "unresolved_shot_reference" | "invalid_model_response" | "quality_gate_failed" | "upstream_failure";
+
+export class PromptOptimizationApiError extends Error {
+    constructor(message: string, readonly reasonCode: PromptOptimizationReasonCode = "upstream_failure", readonly status?: number) {
+        super(message);
+        this.name = "PromptOptimizationApiError";
+    }
+}
 
 async function optimizePromptResult(input: PromptOptimizationInput) {
     try {
@@ -18,9 +26,9 @@ async function optimizePromptResult(input: PromptOptimizationInput) {
             body: JSON.stringify(input),
         });
         throwIfClientSessionExpired(response);
-        const payload = (await response.json().catch(() => null)) as { data?: { prompt?: string; fields?: DramaAssetPromptOptimization["fields"] }; msg?: string } | null;
+        const payload = (await response.json().catch(() => null)) as { data?: { prompt?: string; fields?: DramaAssetPromptOptimization["fields"]; reasonCode?: PromptOptimizationReasonCode }; msg?: string } | null;
         const prompt = payload?.data?.prompt?.trim();
-        if (!response.ok || !prompt) throw new Error(payload?.msg || "提示词优化失败");
+        if (!response.ok || !prompt) throw new PromptOptimizationApiError(payload?.msg || "提示词优化失败", payload?.data?.reasonCode, response.status);
         return { prompt, fields: payload?.data?.fields };
     } finally {
         void refreshUserPointsIfSystem("system");
@@ -50,9 +58,9 @@ export async function optimizeDramaProjectFramePrompt(input: { projectId: string
             body: JSON.stringify({ requestId: input.requestId || crypto.randomUUID(), prompt: input.prompt, correctionDirection: input.correctionDirection }),
         });
         throwIfClientSessionExpired(response);
-        const payload = (await response.json().catch(() => null)) as { data?: { prompt?: string }; msg?: string } | null;
+        const payload = (await response.json().catch(() => null)) as { data?: { prompt?: string; reasonCode?: PromptOptimizationReasonCode }; msg?: string } | null;
         const prompt = payload?.data?.prompt?.trim();
-        if (!response.ok || !prompt) throw new Error(payload?.msg || "图片帧提示词优化失败");
+        if (!response.ok || !prompt) throw new PromptOptimizationApiError(payload?.msg || "图片帧提示词优化失败", payload?.data?.reasonCode, response.status);
         return prompt;
     } finally {
         void refreshUserPointsIfSystem("system");

@@ -178,6 +178,15 @@ export type DramaBackgroundNpcPolicy = {
     guidance?: string;
     continuity?: string;
     countRange?: { min: number; max: number };
+    /** Stable world-space anonymous NPC slots reused across shots. */
+    roster?: DramaBackgroundNpcSlot[];
+};
+
+export type DramaBackgroundNpcSlot = {
+    slotId: string;
+    worldAnchor: string;
+    variant: string;
+    defaultState: string;
 };
 
 export type DramaAssetPromptFields = {

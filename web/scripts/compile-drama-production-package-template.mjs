@@ -69,6 +69,7 @@ const formattedContract = await prettier.format(
 export const COMPILED_DRAMA_PACKAGE_CONTRACT = ${JSON.stringify({ id: "vozeb-drama-production-package-v1", version: contractVersion, contentHash: contractHash }, null, 4)} as const;
 export const COMPILED_DRAMA_PACKAGE_SPEC_HASH = ${JSON.stringify(packageSpecHash)} as const;
 export const COMPILED_DRAMA_PACKAGE_TEMPLATE_SOURCE_HASH = ${JSON.stringify(sha256(templateSource))} as const;
+export const COMPILED_DRAMA_PACKAGE_TEMPLATE_SOURCE = ${JSON.stringify(templateSource)} as const;
 export const COMPILED_DRAMA_PACKAGE_RULES_HASH = ${JSON.stringify(packageRulesHash)} as const;
 export const COMPILED_DRAMA_PACKAGE_AUTHORING_RULES = ${JSON.stringify(packageAuthoringRules)} as const;
 export const COMPILED_DRAMA_PACKAGE_SECTION_TITLES = ${JSON.stringify(packageChapterHeadings)} as const;

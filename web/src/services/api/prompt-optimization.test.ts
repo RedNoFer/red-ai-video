@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { refreshUserPointsIfSystem } from "@/services/api/points";
-import { optimizeDramaAssetPrompt, optimizePrompt } from "./prompt-optimization";
+import { optimizeDramaAssetPrompt, optimizePrompt, PromptOptimizationApiError } from "./prompt-optimization";
 
 vi.mock("@/services/api/points", () => ({ refreshUserPointsIfSystem: vi.fn(async () => undefined) }));
 vi.mock("@/services/api/session-expiration", () => ({ throwIfClientSessionExpired: vi.fn() }));
@@ -21,9 +21,9 @@ describe("prompt optimization API client", () => {
     });
 
     it("surfaces the server message", async () => {
-        vi.mocked(fetch).mockResolvedValue(Response.json({ code: 503, data: null, msg: "后台尚未配置可用的默认文本模型" }, { status: 503 }));
+        vi.mocked(fetch).mockResolvedValue(Response.json({ code: 503, data: { reasonCode: "configuration" }, msg: "后台尚未配置可用的默认文本模型" }, { status: 503 }));
 
-        await expect(optimizePrompt({ requestId: "request-one", prompt: "原文", mode: "agent" })).rejects.toThrow("后台尚未配置可用的默认文本模型");
+        await expect(optimizePrompt({ requestId: "request-one", prompt: "原文", mode: "agent" })).rejects.toMatchObject({ message: "后台尚未配置可用的默认文本模型", reasonCode: "configuration", status: 503 });
         expect(refreshUserPointsIfSystem).toHaveBeenCalledWith("system");
     });
 

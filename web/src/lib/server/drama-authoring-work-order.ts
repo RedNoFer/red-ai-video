@@ -11,7 +11,7 @@ import { getCreativeAssetsByIds } from "@/lib/server/creative-runtime-store";
 import { getDramaProject } from "@/lib/server/drama-project-store";
 import { getAgentRun, updateAgentRunById, type AgentRun } from "@/lib/server/agent-run-store";
 import { buildDramaAssetReuseContext } from "@/lib/server/drama-production-package";
-import { buildDramaPackageAuthoringInput, resolveDramaTargetNarrativeChapter, classifyDramaAuthoringMaterial } from "@/lib/server/agent-run-executor";
+import { buildDramaPackageAuthoringInput, resolveDramaTargetNarrativeChapter, classifyDramaAuthoringMaterial, ensureDramaPackageTemplateSource } from "@/lib/server/agent-run-executor";
 import { selectAgentSkills } from "@/lib/server/agent-run-surface-policy";
 import { DRAMA_VIDEO_DIRECTOR_SKILL } from "@/lib/server/agent-skills/drama-video-director";
 import { SEEDANCE_25_DIRECTOR_SKILL } from "@/lib/server/agent-skills/seedance-25";
@@ -75,6 +75,7 @@ function buildWorkOrderContext(run: AgentRun) {
             const base = { alias: `@附件${index + 1}`, type: asset.type, title: asset.title, ...(asset.textContent ? { textContent: asset.textContent } : {}), ...(asset.mimeType ? { mimeType: asset.mimeType } : {}) };
             return { ...base, role: classifyDramaAuthoringMaterial(base), contentHash: hashMaterial(base) } as DramaAuthoringSourceSnapshot;
         });
+        const materialsWithSystemTemplate = ensureDramaPackageTemplateSource(materials);
         const assetReuseContext = buildDramaAssetReuseContext(project, current);
         const adjacent = [project.episodes[project.episodes.indexOf(current) - 1], project.episodes[project.episodes.indexOf(current) + 1]]
             .filter(Boolean)
@@ -89,13 +90,13 @@ function buildWorkOrderContext(run: AgentRun) {
             selectedSkills: selectAgentSkills(settings, "drama", run.selectedSkillIds || [], run).map(({ id, name }) => ({ id, name })),
             lockedPlan: plan?.lockedAt ? plan : undefined,
             globalVisualContract: resolveDramaGlobalVisualContract(project),
-            uploadedMaterials: materials,
+            uploadedMaterials: materialsWithSystemTemplate,
             requestedShotDuration: shotDuration,
             targetNarrativeChapter,
         });
-        const textRoles = new Set(materials.filter((material) => material.type === "text").map((material) => material.role));
-        if (!textRoles.has("package-template") || !textRoles.has("story-source")) throw new DramaAuthoringWorkOrderError("Codex 工作单必须同时绑定文本模板和 TXT/小说素材");
-        return { input: { ...input, contract: DRAMA_PACKAGE_CONTRACT, targetNarrativeChapter }, sources: materials, targetNarrativeChapter };
+        const textRoles = new Set(materialsWithSystemTemplate.filter((material) => material.type === "text").map((material) => material.role));
+        if (!textRoles.has("package-template") || !textRoles.has("story-source")) throw new DramaAuthoringWorkOrderError("Codex 工作单必须提供 TXT/小说素材；制作包模板由系统自动注入");
+        return { input: { ...input, contract: DRAMA_PACKAGE_CONTRACT, targetNarrativeChapter }, sources: materialsWithSystemTemplate, targetNarrativeChapter };
     });
 }
 
