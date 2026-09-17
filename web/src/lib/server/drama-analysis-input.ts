@@ -1,6 +1,6 @@
 import { resolveDramaShotDuration } from "@/lib/server/drama-shot-config";
 import { dramaFrameVisualSignature } from "@/lib/drama-frame-sequence";
-import { hasConcreteDramaCameraDirection, isGenericDramaDetail, validateDramaCameraPlan, validateDramaVideoSegmentDetail } from "@/lib/drama-prompt-quality";
+import { dramaTimeRangePattern, extractDramaVideoPromptSection, hasConcreteDramaCameraDirection, isGenericDramaDetail, validateDramaCameraPlan, validateDramaVideoPromptTemplateLayout, validateDramaVideoSegmentDetail } from "@/lib/drama-prompt-quality";
 import { dramaFrameDialogueTimingReminder, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
 
 export type DramaAnalyzeBody = {
@@ -181,9 +181,9 @@ export function validateDramaVideoPromptReferenceBindings(prompt: string, refere
     if (!expectedCount) return "";
     const lines = prompt.split(/\r?\n/u);
     const bindingLineIndex = lines.findIndex((line) => /^\s*素材绑定\s*[：:]/u.test(line));
-    if (bindingLineIndex < 0) return `模型生成的视频提示词缺少素材绑定字段（应包含 ${referenceList.join("、")}）；请按当前 Skill 重新生成`;
     const bindingEnd = lines.findIndex((line, index) => index > bindingLineIndex && /^(?:\s*)(?:动态意图|全局设定|起始可见状态|时间段动作|单一主运镜|环境压力与视觉母题|视觉风格与光色|声音意图|结束画面|连续性锁|针对性约束)\s*[：:]/u.test(line));
-    const bindingText = lines.slice(bindingLineIndex, bindingEnd < 0 ? lines.length : bindingEnd).join("\n");
+    const bindingText = bindingLineIndex >= 0 ? lines.slice(bindingLineIndex, bindingEnd < 0 ? lines.length : bindingEnd).join("\n") : extractDramaVideoPromptSection(prompt, "素材绑定");
+    if (!bindingText) return `模型生成的视频提示词缺少素材绑定字段（应包含 ${referenceList.join("、")}）；请按当前 Skill 重新生成`;
     const bindingAliases = parseReferenceAliases(bindingText);
     const aliases = bindingAliases.length ? bindingAliases : parseReferenceAliases(prompt);
     const expectedAliases = referenceList;
@@ -204,7 +204,7 @@ export function validateDramaVideoPromptOutput(
     shotIds: string[],
     sourceShots: ReadonlyArray<{ id: string; framePlan?: unknown; utterances?: readonly DramaDialogueTimingInput[] }>,
     references: unknown,
-    options: { requireCameraPlan?: boolean } = {},
+    options: { requireCameraPlan?: boolean; requireTemplateLayout?: boolean } = {},
 ) {
     const output = object(value);
     const outputShots = array(output.shots).map(object);
@@ -217,7 +217,7 @@ export function validateDramaVideoPromptOutput(
         if (/^\s*模式\s*[：:]/mu.test(prompt)) return `镜头 ${shotId} 的公开视频提示词暴露了内部模式字段，请按当前 Skill 重新生成`;
         const requiredFields = ["动态意图", "时间段动作", "单一主运镜", "结束画面"];
         const missingFields = requiredFields.filter((field) => !new RegExp(`(?:^|\\n)\\s*${field}[：:]`, "u").test(prompt));
-        if (missingFields.length) return `镜头 ${shotId} 的公开视频提示词缺少标准字段：${missingFields.join("、")}；请按当前 Skill 重新生成`;
+        if (missingFields.length && !options.requireTemplateLayout) return `镜头 ${shotId} 的公开视频提示词缺少标准字段：${missingFields.join("、")}；请按当前 Skill 重新生成`;
         const orderError = validatePublicVideoPromptFieldOrder(prompt);
         if (orderError) return `镜头 ${shotId} 的公开视频提示词${orderError}；请按当前 Skill 重新生成`;
         if (/(?:^|\n)\s*(?:触发|主体动作与反应)\s*[：:]/u.test(prompt)) return `镜头 ${shotId} 的公开视频提示词仍使用旧的顶层动作字段；请将触发和主体反应写入每个时间段的“动作与触发”`;
@@ -232,12 +232,16 @@ export function validateDramaVideoPromptOutput(
         const outputFrames = array(object(shot.framePlan).frames).map(object);
         if (!outputFrames.length) return `镜头 ${shotId} 缺少逐帧动作计划；请按当前 Skill 返回 framePlan.frames`;
         if (expectedFrames.length && outputFrames.length !== expectedFrames.length) return `镜头 ${shotId} 的逐帧计划数量不一致：应为 ${expectedFrames.length} 段，实际为 ${outputFrames.length} 段；请按当前 Skill 原样保留时间段`;
+        if (options.requireTemplateLayout) {
+            const layoutErrors = validateDramaVideoPromptTemplateLayout(prompt, expectedFrames.length || outputFrames.length, `镜头 ${shotId}`);
+            if (layoutErrors.length) return layoutErrors.join("；");
+        }
         if (options.requireCameraPlan) {
             const cameraError = validateDramaCameraPlan(prompt, (expectedFrames.length ? expectedFrames : outputFrames) as Array<{ startSecond: number; endSecond: number }>);
             if (cameraError) return "镜头 " + shotId + " 的摄影契约无效：" + cameraError + "；请按当前 Skill 重新生成";
         }
         const timelineFrameCount = expectedFrames.length || outputFrames.length;
-        const cameraMotion = prompt.match(/(?:^|\n)\s*单一主运镜[：:]([^\n]+)/u)?.[1]?.trim() || "";
+        const cameraMotion = prompt.match(/(?:^|\n)\s*单一主运镜[：:]([^\n]+)/u)?.[1]?.trim() || extractDramaVideoPromptSection(prompt, "摄影总则");
         if (!hasConcreteDramaCameraDirection(cameraMotion)) return `镜头 ${shotId} 的公开视频提示词缺少具体主运镜或机位语言，请写明固定机位、推近、跟拍等一个有动机的摄影选择`;
         const timelineFieldCounts = Object.fromEntries(["起点", "动作与触发", "可见衔接", "终点"].map((field) => [field, (prompt.match(new RegExp(`(?:^|\\n)\\s*${field}[：:]`, "gu")) || []).length]));
         if (Object.values(timelineFieldCounts).some((count) => count < timelineFrameCount)) return `镜头 ${shotId} 的“时间段动作”没有逐段写出起点、动作与触发、可见衔接和终点，请按当前 Skill 重新生成`;
@@ -277,14 +281,19 @@ export function validateDramaVideoPromptOutput(
             ] as const;
             const generic = genericField.find(([, value]) => isGenericDramaDetail(value));
             if (generic) return `镜头 ${shotId} 的第 ${index + 1} 个时间段${generic[0]}过于笼统，必须写出具体人物、道具或环境结果`;
-            const detailErrors = validateDramaVideoSegmentDetail(actionPrompt, transitionPrompt, endPrompt, `镜头 ${shotId} 第 ${index + 1} 个时间段`);
+            const dialogueUtterances = (sourceShot?.utterances || []).filter((utterance) => utterance.type === "dialogue");
+            const requiresDialoguePerformance = dialogueUtterances.some((utterance) => {
+                const dialogueStart = Number(utterance.startSecond);
+                const dialogueEnd = Number(utterance.endSecond);
+                return !Number.isFinite(dialogueStart) || !Number.isFinite(dialogueEnd) ? true : dialogueStart < endSecond && dialogueEnd > startSecond;
+            });
+            const detailErrors = validateDramaVideoSegmentDetail(actionPrompt, transitionPrompt, endPrompt, `镜头 ${shotId} 第 ${index + 1} 个时间段`, { requiresDialoguePerformance });
             if (detailErrors.length) return detailErrors.join("；");
             if (expectedFrames.length && (Math.abs(startSecond - Number(expected.startSecond)) > 0.01 || Math.abs(endSecond - Number(expected.endSecond)) > 0.01))
                 return `镜头 ${shotId} 的第 ${index + 1} 个时间段改变了既有时间边界；请按当前 Skill 保留 ${expected.startSecond}-${expected.endSecond}s`;
             const expectedStart = expectedFrames.length ? Number(expected.startSecond) : startSecond;
             const expectedEnd = expectedFrames.length ? Number(expected.endSecond) : endSecond;
-            const rangePattern = `${escapeRegExp(String(expectedStart))}\\s*(?:-|至|到)\\s*${escapeRegExp(String(expectedEnd))}\\s*(?:s|秒)`;
-            if (!new RegExp(rangePattern, "iu").test(prompt)) return `镜头 ${shotId} 的第 ${index + 1} 个时间段未在公开视频提示词中写出 ${expectedStart}-${expectedEnd}s，请按当前 Skill 逐段输出`;
+            if (!dramaTimeRangePattern(expectedStart, expectedEnd).test(prompt)) return `镜头 ${shotId} 的第 ${index + 1} 个时间段未在公开视频提示词中写出 ${expectedStart}-${expectedEnd}s，请按当前 Skill 逐段输出`;
             const stateKey = `${startPrompt}\n${actionPrompt}\n${transitionPrompt}\n${endPrompt}\n${imagePrompt}`;
             if (seenStates.has(stateKey)) return `镜头 ${shotId} 的第 ${index + 1} 个时间段与其他阶段重复，请返回具体可见变化`;
             const visualSignature = dramaFrameVisualSignature(imagePrompt);
@@ -521,12 +530,12 @@ function normalizeReferenceMaterials(value: unknown) {
 }
 
 function parseReferenceAliases(value: string) {
-    return Array.from(value.matchAll(/@(图片|视频|音频)\s*(\d+)(?=\s*(?:[：:，,；;、（）()\s]|$))/gu), (match) => `@${match[1]}${match[2]}`);
+    return Array.from(value.matchAll(/@(图片|参考|视频|音频)\s*(\d+)(?=\s*(?:[：:，,；;、（）()\s]|$))/gu), (match) => `@${match[1] === "参考" ? "图片" : match[1]}${match[2]}`);
 }
 
 function normalizeReferenceAlias(value: string) {
-    const match = value.match(/^@(图片|视频|音频)\s*(\d+)$/u);
-    return match ? `@${match[1]}${match[2]}` : "";
+    const match = value.match(/^@(图片|参考|视频|音频)\s*(\d+)$/u);
+    return match ? `@${match[1] === "参考" ? "图片" : match[1]}${match[2]}` : "";
 }
 
 function normalizeUtterances(value: unknown, legacyDialogue?: unknown) {

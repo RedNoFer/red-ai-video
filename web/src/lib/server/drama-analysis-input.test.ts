@@ -131,6 +131,12 @@ describe("video prompt reference instructions", () => {
     it("validates that the Agent returns every bound image alias", () => {
         expect(validateDramaVideoPromptReferenceBindings("素材绑定：@图片1：顺序帧 1\n@图片2：角色基准图", [{ role: "keyframe" }, { role: "character_anchor" }])).toBe("");
         expect(
+            validateDramaVideoPromptReferenceBindings("【素材绑定】\n@参考1：顺序帧 1\n@参考2：角色基准图", [
+                { alias: "@图片1", role: "keyframe" },
+                { alias: "@图片2", role: "character_anchor" },
+            ]),
+        ).toBe("");
+        expect(
             validateDramaVideoPromptReferenceBindings("素材绑定：@图片1（顺序帧 1）\n@图片2 用于角色基准图", [
                 { alias: "@图片1", role: "keyframe" },
                 { alias: "@图片2", role: "character_anchor" },
@@ -417,7 +423,7 @@ describe("video prompt reference instructions", () => {
                             "动态意图：萧炎开口",
                             "全局设定：大厅冷灰暖金",
                             "起始可见状态：萧炎低头",
-                            `时间段动作：0-3秒 起点：萧炎低头；动作与触发：萧炎开口说“${dialogue}”；可见衔接：萧炎抬眼；终点：萧炎抬眼`,
+                            `时间段动作：0-3秒 起点：萧炎低头；动作与触发：对白表演：萧炎说：“${dialogue}”；语气：低声克制；停顿：开口前半拍；重音：句中转折；说后反应：合唇后抬眼盯住对方；可见衔接：萧炎抬眼；终点：萧炎抬眼`,
                             "单一主运镜：固定机位",
                             "环境压力与视觉母题：茶水轻颤",
                             "视觉风格与光色：冷灰暖金",
@@ -434,7 +440,7 @@ describe("video prompt reference instructions", () => {
                                     startSecond: 0,
                                     endSecond: 3,
                                     startPrompt: "萧炎低头",
-                                    actionPrompt: `萧炎开口说“${dialogue}”`,
+                                    actionPrompt: `对白表演：萧炎说：“${dialogue}”；语气：低声克制；停顿：开口前半拍；重音：句中转折；说后反应：合唇后抬眼盯住对方`,
                                     transitionPrompt: "萧炎抬眼",
                                     endPrompt: "萧炎抬眼",
                                     imagePrompt: "萧炎抬眼，手指收紧",
@@ -451,6 +457,7 @@ describe("video prompt reference instructions", () => {
                     utterances: [
                         {
                             type: "dialogue",
+                            speaker: "萧炎",
                             text: fullDialogue,
                             startSecond: 0.6,
                             endSecond: 6.4,

@@ -128,7 +128,7 @@ export async function POST(request: Request) {
                     phase === "visual"
                         ? `你是影视视觉导演和表演导演。输入内容已经由用户审核，必须严格保留每个 shotId、镜头数量、顺序、人物、场景、对白、旁白、原文和时长。当前制作包只执行一次 canonical drama-video-director Skill；它负责静态画面、视频正文、帧分配、表演、调度、灯光和连续性，输出必须直接写入对应字段，不得让应用层二次拼接。必须调用 design_drama_visuals。不要使用 Markdown。\n${DRAMA_PACKAGE_DIRECTOR_RULES}${globalVisualInstruction}${schemaInstruction}`
                         : phase === "video_prompt"
-                          ? `你是图生视频执行提示词导演。本次只执行一次 canonical drama-video-director Skill：\n${DRAMA_VIDEO_PROMPT_DIRECTOR_RULES}${seedance25VideoInstructions ? `\n本次时长与供应商路由补充（只用于当前执行，不输出模式名）：\n${seedance25VideoInstructions}` : ""}仅根据输入的镜头事实、已验收帧、连续性状态和脱敏 referenceMaterials 直接生成完整公开视频提示词；不得生成图片提示词、改变镜头事实、输出 URL、内部 ID、JSON、Markdown 标题或解释文字。必须调用 generate_drama_video_prompts。${DRAMA_DIALOGUE_TIMING_RULES}优化时必须逐句读取输入 shots.utterances 的 startSecond/endSecond、pauseBeforeSeconds/pauseAfterSeconds、speechRate 和 speechRateCharsPerSecond；对白不能被压进短于其可说时长的时间段，若当前时间段容纳不下，应保留动作节点并把对白放入足够长的连续时间段，不能通过异常加速解决。以下是服务端对白容量预检，必须逐条执行：\n${dialogueCapacityInstruction}${videoPerformanceInstruction}${videoOptimizationInstruction}${globalVisualInstruction}${videoReferenceInstruction}${schemaInstruction}`
+                          ? `你是图生视频执行提示词导演。本次只执行一次 canonical drama-video-director Skill：\n${DRAMA_VIDEO_PROMPT_DIRECTOR_RULES}${seedance25VideoInstructions ? `\n本次时长与供应商路由补充（只用于当前执行，不输出模式名）：\n${seedance25VideoInstructions}` : ""}仅根据输入的镜头事实、已验收帧、连续性状态和脱敏 referenceMaterials 直接生成完整公开视频提示词；不得生成图片提示词、改变镜头事实、输出 URL、内部 ID、JSON、Markdown 标题或解释文字。必须调用 generate_drama_video_prompts。公开视频必须按【重要剪辑指令】【素材绑定】【故事意图】【空间与连续性】【灯光与画面】【摄影总则】【逐镜头时间线】【硬性禁止】排版，并让每个 framePlan 时间段对应一个“镜头 N”段落。${DRAMA_DIALOGUE_TIMING_RULES}优化时必须逐句读取输入 shots.utterances 的 startSecond/endSecond、pauseBeforeSeconds/pauseAfterSeconds、speechRate 和 speechRateCharsPerSecond；对白不能被压进短于其可说时长的时间段，若当前时间段容纳不下，应保留动作节点并把对白放入足够长的连续时间段，不能通过异常加速解决。以下是服务端对白容量预检，必须逐条执行：\n${dialogueCapacityInstruction}${videoPerformanceInstruction}${videoOptimizationInstruction}${globalVisualInstruction}${videoReferenceInstruction}${schemaInstruction}`
                           : phase === "image_prompt"
                             ? `你是静态图片帧提示词编辑器。本次只执行一次 canonical 静态帧 Skill：\n${DRAMA_STATIC_FRAME_DIRECTOR_RULES}\n只优化当前镜头的图片提示词，不改变剧情事实、人物身份、资产造型或镜头数量。${globalVisualInstruction}保留原文事实，删除重复和内部执行信息，不从 actionPrompt、镜头描述、资产档案或连续性规则补写静态画面。只返回公开提示词，不输出解释、ID、URL、JSON 或参考绑定。${schemaInstruction}`
                             : phase === "review_completion"
@@ -170,7 +170,7 @@ export async function POST(request: Request) {
                               }
                             : data;
                     if (phase === "video_prompt") {
-                        const qualityError = validateDramaVideoPromptOutput(parsed, videoPromptInput!.shotIds, videoPromptInput!.payload.shots, videoPromptInput!.payload.referenceMaterials, { requireCameraPlan: true });
+                        const qualityError = validateDramaVideoPromptOutput(parsed, videoPromptInput!.shotIds, videoPromptInput!.payload.shots, videoPromptInput!.payload.referenceMaterials, { requireCameraPlan: true, requireTemplateLayout: true });
                         if (qualityError) throw new DramaVideoPromptQualityError(qualityError);
                     }
                     const videoPromptTimingWarnings = phase === "video_prompt" ? dramaVideoPromptTimingWarnings(parsed, videoPromptInput!.shotIds, videoPromptInput!.payload.shots) : [];

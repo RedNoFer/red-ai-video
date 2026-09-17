@@ -10,8 +10,10 @@ export type DramaShotDuration = (typeof DRAMA_SHOT_DURATION_OPTIONS)[number];
 export const DRAMA_SCRIPT_SHOT_DURATION_OPTIONS = DRAMA_SHOT_DURATION_OPTIONS;
 export type DramaScriptShotDuration = (typeof DRAMA_SCRIPT_SHOT_DURATION_OPTIONS)[number];
 export const DRAMA_FRAME_COUNT_DEFAULT = 2;
-export const DRAMA_FRAME_COUNT_MAX = 9;
+/** Package frame-plan ceiling: 8–11 frames can represent 7–10 explicit internal cuts. */
+export const DRAMA_FRAME_COUNT_MAX = 11;
 export const DRAMA_FRAME_COUNT_RANGE_DEFAULT = { min: 2, max: DRAMA_FRAME_COUNT_MAX } as const;
+export const DRAMA_DENSE_HARD_CUT_RANGE_30S = { min: 7, max: 10 } as const;
 export const DRAMA_FRAME_POLICY_OPTIONS = ["fixed-4", "fixed-5", "agent"] as const;
 export type DramaFramePolicy = (typeof DRAMA_FRAME_POLICY_OPTIONS)[number];
 export const DRAMA_VIDEO_REFERENCE_IMAGE_LIMIT = 9;

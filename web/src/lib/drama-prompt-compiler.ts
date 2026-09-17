@@ -9,6 +9,7 @@ import {
     DRAMA_CHARACTER_WARDROBE_MATERIAL_RULES,
 } from "@/lib/drama-character-rules";
 import { resolveDramaStyleContract, sanitizeDramaVisualPrompt } from "@/lib/drama-style";
+import { formatDramaDialogueLine } from "@/lib/drama-dialogue-timing";
 import { formatPromptFieldLines } from "@/lib/drama-frame-sequence";
 
 export type DramaAssetGenerationPreflight = { ok: true; constraints: string[] } | { ok: false; errors: string[]; constraints: string[] };
@@ -268,8 +269,14 @@ export function compileDramaFrameSupplierPrompt(project: DramaProject, episode: 
 
 export function compileDramaDialogueAudioInstructions(shot: DramaShot) {
     const plan = shot.performancePlan;
+    const dialogueLines = shot.utterances
+        .filter((utterance) => utterance.type === "dialogue")
+        .map((utterance) => formatDramaDialogueLine(utterance.speaker, utterance.text))
+        .filter(Boolean)
+        .join("\n");
     return compact([
         plan ? `整体语气：${plan.speechStyle}；节奏：${plan.pace}；呼吸：${plan.breath}；情绪递进：${plan.emotionalArc}` : "",
+        dialogueLines ? `对白原文：\n${dialogueLines}` : "",
         shot.dialoguePerformance?.length ? shot.dialoguePerformance.map((item) => `【${item.utteranceId}】意图${item.intent}，语气${item.tone}，节奏${item.pace}，停顿${item.pause}，重音${item.emphasis}`).join("\n") : "",
     ]).join("\n");
 }
@@ -286,7 +293,13 @@ function performanceLines(shot: DramaShot) {
         beats ? `微表情中段：${beatText(beats.middle)}` : "",
         beats ? `微表情结束：${beatText(beats.end)}` : "",
         shot.dialoguePerformance?.length
-            ? `逐句表演：${shot.dialoguePerformance.map((item) => `【${item.utteranceId}】意图${item.intent}，语气${item.tone}，节奏${item.pace}，停顿${item.pause}，重音${item.emphasis}；开口前${item.facialReactionBefore}，说话中${item.facialReactionDuring}，说完后${item.facialReactionAfter}`).join("；")}`
+            ? `逐句表演：${shot.dialoguePerformance
+                  .map((item) => {
+                      const utterance = shot.utterances.find((candidate) => candidate.id === item.utteranceId);
+                      const line = utterance && utterance.type === "dialogue" ? formatDramaDialogueLine(utterance.speaker, utterance.text) : "";
+                      return `【${item.utteranceId}】${line ? `${line}；` : ""}意图${item.intent}，语气${item.tone}，节奏${item.pace}，停顿${item.pause}，重音${item.emphasis}；开口前${item.facialReactionBefore}，说话中${item.facialReactionDuring}，说完后${item.facialReactionAfter}`;
+                  })
+                  .join("；")}`
             : "",
     ]).join("\n");
 }

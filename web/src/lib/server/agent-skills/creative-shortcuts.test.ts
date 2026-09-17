@@ -83,18 +83,18 @@ describe("creative shortcut skills", () => {
     });
 
     it("injects adaptive frame allocation once through the canonical director layer", () => {
-        expect(DRAMA_PACKAGE_DIRECTOR_RULES.match(/没有默认帧数/gu)).toHaveLength(1);
-        expect(DRAMA_PLANNING_SKILL.instructions).not.toContain("没有默认帧数");
+        expect(DRAMA_PACKAGE_DIRECTOR_RULES.match(/没有普通镜头的默认帧数/gu)).toHaveLength(1);
+        expect(DRAMA_PLANNING_SKILL.instructions).not.toContain("没有普通镜头的默认帧数");
     });
 
     it("keeps the shared video prompt layout", () => {
-        expect(SEEDANCE_VIDEO_PROMPT_LAYOUT).toContain("起始可见状态");
-        expect(SEEDANCE_VIDEO_PROMPT_LAYOUT).toContain("全局设定");
-        expect(SEEDANCE_VIDEO_PROMPT_LAYOUT).toContain("时间段动作");
-        expect(SEEDANCE_VIDEO_PROMPT_LAYOUT).toContain("起点、动作与触发、可见衔接、终点");
+        expect(SEEDANCE_VIDEO_PROMPT_LAYOUT).toContain("【重要剪辑指令】");
+        expect(SEEDANCE_VIDEO_PROMPT_LAYOUT).toContain("【逐镜头时间线】");
+        expect(SEEDANCE_VIDEO_PROMPT_LAYOUT).toContain("镜头1");
+        expect(SEEDANCE_VIDEO_PROMPT_LAYOUT).toContain("起点、动作与触发、可见衔接和终点");
+        expect(SEEDANCE_VIDEO_PROMPT_LAYOUT).toContain("机器字段只是职责映射");
         expect(SEEDANCE_VIDEO_PROMPT_LAYOUT).toContain("公开 videoPrompt 只使用本布局字段");
         expect(SEEDANCE_VIDEO_PROMPT_LAYOUT).not.toContain("阶段节拍：只有多事件");
-        expect(SEEDANCE_VIDEO_PROMPT_LAYOUT).toContain("视觉风格与光色");
         expect(SEEDANCE_VIDEO_PROMPT_LAYOUT).toContain("每个非空字段必须独立一行");
     });
 

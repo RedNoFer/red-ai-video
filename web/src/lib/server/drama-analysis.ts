@@ -1134,7 +1134,7 @@ export const dramaVisualTool = {
                                 frames: {
                                     type: "array",
                                     minItems: 2,
-                                    maxItems: 9,
+                                    maxItems: 11,
                                     items: {
                                         type: "object",
                                         additionalProperties: false,
@@ -1202,7 +1202,7 @@ export const dramaVideoPromptTool = {
                         videoPrompt: {
                             type: "string",
                             description:
-                                "由当前唯一导演 Skill 直接生成完整公开 videoPrompt；必须在单一主运镜中明确声明连续镜头或内部切镜次数。时间段动作必须逐段镜像 framePlan 的真实时间范围、起点、动作与触发、可见衔接和终点，写出具体人物、道具或环境结果；镜头数量和切换次数按可见信息变化自适应，不固定配额；内部切镜还必须在可见衔接中写出带时间、类型、触发事件、新机位、切后主运镜、信息目的和承接的完整镜头事件，不输出内部信息。",
+                                "由当前唯一导演 Skill 直接生成完整公开 videoPrompt；必须按【重要剪辑指令】【素材绑定】【故事意图】【空间与连续性】【灯光与画面】【摄影总则】【逐镜头时间线】【硬性禁止】排版，并让每个 framePlan 时间段对应一个“镜头 N”段落。在单一主运镜中明确声明连续镜头或内部切镜次数。时间段动作必须逐段镜像 framePlan 的真实时间范围、起点、动作与触发、可见衔接和终点，写出具体人物、道具或环境结果；镜头数量和切换次数按可见信息变化自适应，不固定配额；内部切镜还必须在可见衔接中写出带时间、类型、触发事件、新机位、切后主运镜、信息目的和承接的完整镜头事件，不输出内部信息。直接对白必须使用“说话人说：“完整原句””格式。",
                         },
                         framePlan: {
                             type: "object",
@@ -1212,8 +1212,9 @@ export const dramaVideoPromptTool = {
                                 frames: {
                                     type: "array",
                                     minItems: 1,
-                                    maxItems: 9,
-                                    description: "必须由 Agent 为每个真实动作节点返回具体的起点、动作与触发、可见衔接、终点和画面状态；沿用输入帧的 sequenceIndex、startSecond 和 endSecond，不得用通用阶段词代替具体描述",
+                                    maxItems: 11,
+                                    description:
+                                        "必须由 Agent 为每个真实动作节点返回具体的起点、动作与触发、可见衔接、终点和画面状态；沿用输入帧的 sequenceIndex、startSecond 和 endSecond，不得用通用阶段词代替具体描述；30秒高密度硬切最多使用11个时间段，优先用8—11段承载7—10次真实切换",
                                     items: {
                                         type: "object",
                                         additionalProperties: false,

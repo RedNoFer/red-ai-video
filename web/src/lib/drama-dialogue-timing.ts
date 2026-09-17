@@ -1,10 +1,11 @@
 export const DRAMA_DIALOGUE_CHARS_PER_SECOND = 5;
 export const DRAMA_DIALOGUE_TIMING_TOLERANCE_CHARS = 10;
 
-export const DRAMA_DIALOGUE_TIMING_RULES = `对白时长规则：默认按中文对白每秒约 ${DRAMA_DIALOGUE_CHARS_PER_SECOND} 个可发音字估算，不把标点、停顿和动作反应当作可压缩空间。制作包必须按逐句记录 startSecond/endSecond（相对当前镜头，且不含停顿）、pauseBeforeSeconds/pauseAfterSeconds 和情绪语速 speechRate；需要可复核时同时填写 speechRateCharsPerSecond。逐句时间不得越界或重叠，停顿不得跑出镜头。容量偏差只作提醒，不阻止内容分析、制作包导入或生产；不超过 ${DRAMA_DIALOGUE_TIMING_TOLERANCE_CHARS} 个可发音字标记为轻微上线偏差，超过该容差建议在说话人转换、自然分句或动作反应处拆镜。每个镜头先完成对白容量核算，再安排动作节点、表演和画面帧。`;
+export const DRAMA_DIALOGUE_TIMING_RULES = `对白时长规则：默认按中文对白每秒约 ${DRAMA_DIALOGUE_CHARS_PER_SECOND} 个可发音字估算，不把标点、停顿和动作反应当作可压缩空间。制作包必须按逐句记录 startSecond/endSecond（相对当前镜头，且不含停顿）、pauseBeforeSeconds/pauseAfterSeconds 和情绪语速 speechRate；需要可复核时同时填写 speechRateCharsPerSecond。逐句时间不得越界或重叠，停顿不得跑出镜头。容量偏差只作提醒，不阻止内容分析、制作包导入或生产；不超过 ${DRAMA_DIALOGUE_TIMING_TOLERANCE_CHARS} 个可发音字标记为轻微上线偏差，超过该容差建议在说话人转换、自然分句或动作反应处拆镜。每个镜头先完成对白容量核算，再安排动作节点、表演和画面帧。公开视频中的直接对白必须使用“说话人说：“完整原句””格式，不能只写说话人标签或把台词塞进重音字段。`;
 
 export type DramaDialogueTimingInput = {
     type?: string;
+    speaker?: string;
     text?: string;
     order?: number;
     startSecond?: number;
@@ -14,6 +15,27 @@ export type DramaDialogueTimingInput = {
     speechRate?: string;
     speechRateCharsPerSecond?: number;
 };
+
+const QUOTED_DRAMA_DIALOGUE_PATTERN = /(?:^|[\n；;])\s*(?:对白表演\s*[：:]\s*)?([^：:；;\n]{1,32}?)\s*说\s*[：:]\s*“([^”\n]{1,240})”/gu;
+
+export function formatDramaDialogueLine(speaker: string, text: string) {
+    const cleanSpeaker = speaker.trim();
+    const cleanText = text
+        .trim()
+        .replace(/^[“「『"']|[”」』"']$/gu, "")
+        .trim();
+    return cleanSpeaker && cleanText ? `${cleanSpeaker}说：“${cleanText}”` : "";
+}
+
+export function hasQuotedDramaDialogue(value: string, speaker?: string, text?: string) {
+    const expectedSpeaker = speaker?.replace(/\s+/gu, "").trim();
+    const expectedText = text?.replace(/\s+/gu, "").trim();
+    return [...value.matchAll(QUOTED_DRAMA_DIALOGUE_PATTERN)].some((match) => {
+        const actualSpeaker = match[1].replace(/\s+/gu, "");
+        const actualText = match[2].replace(/\s+/gu, "");
+        return (!expectedSpeaker || actualSpeaker.includes(expectedSpeaker)) && (!expectedText || actualText.includes(expectedText));
+    });
+}
 
 export type DramaDialogueTimingIssue = {
     spokenCharacters: number;

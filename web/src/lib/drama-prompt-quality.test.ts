@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 
-import { isGenericDramaDetail, validateDramaCameraPlan, validateDramaDialogueSegmentDetail, validateDramaNpcSegmentDetail, validateDramaPerformanceDetail, validateDramaVideoAuthoringQuality, validateDramaVideoSegmentDetail } from "./drama-prompt-quality";
+import {
+    isGenericDramaDetail,
+    validateDramaCameraPlan,
+    validateDramaDialogueSegmentDetail,
+    validateDramaNpcSegmentDetail,
+    validateDramaPerformanceDetail,
+    validateDramaVideoAuthoringQuality,
+    validateDramaVideoPromptTemplateLayout,
+    validateDramaVideoSegmentDetail,
+} from "./drama-prompt-quality";
 
 describe("drama prompt quality", () => {
     it("recognizes generic placeholder performance language", () => {
@@ -61,8 +70,24 @@ describe("drama prompt quality", () => {
     });
 
     it("requires dialogue performance details inside each segment", () => {
-        expect(validateDramaDialogueSegmentDetail("萧炎抬眼；对白表演：语气：压怒；停顿：半拍；重音：落在父亲；说后反应：闭口盯视", "SH01")).toEqual([]);
+        expect(validateDramaDialogueSegmentDetail("萧炎抬眼；对白表演：萧炎说：“他是一族之长。”；语气：压怒；停顿：半拍；重音：落在父亲；说后反应：闭口盯视", "SH01")).toEqual([]);
         expect(validateDramaDialogueSegmentDetail("萧炎开口，情绪加剧", "SH01")).not.toEqual([]);
+        expect(validateDramaDialogueSegmentDetail("对白表演：说话人：萧炎；语气：低声克制；停顿：半拍；重音：纳兰小姐；说后反应：视线承接", "SH01")).toEqual(expect.arrayContaining([expect.stringContaining("实际台词")]));
+    });
+
+    it("requires the production video prompt layout and one named shot per frame", () => {
+        const prompt = [
+            "【重要剪辑指令】\n真实硬切。",
+            "【素材绑定】\n@图片1：角色。",
+            "【故事意图】\n把压力交还给对手。",
+            "【空间与连续性】\n180度轴线不变。",
+            "【灯光与画面】\n左侧窗光。",
+            "【摄影总则】\n近景保持脸部清晰。",
+            "【逐镜头时间线】\n镜头1，00.0—02.0秒，起点：萧炎低头；动作与触发：萧炎抬眼；可见衔接：纳兰接住视线；终点：萧炎抬眼停住。\n镜头2，02.0—04.0秒，起点：萧炎抬眼；动作与触发：右手压住桌沿；可见衔接：桌沿出现受力；终点：指节停在桌沿。",
+            "【硬性禁止】\n不新增人物。",
+        ].join("\n\n");
+        expect(validateDramaVideoPromptTemplateLayout(prompt, 2, "SH01")).toEqual([]);
+        expect(validateDramaVideoPromptTemplateLayout(prompt.replace("镜头2，", "时间段2，"), 2, "SH01")).toEqual(expect.arrayContaining([expect.stringContaining("写出")]));
     });
 
     it("does not treat keyframe boundaries as implicit cuts", () => {

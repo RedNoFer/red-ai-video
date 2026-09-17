@@ -140,6 +140,44 @@ describe("drama authoring quality gates", () => {
         expect(blockers(report, "CAMERA_EVENT")).not.toHaveLength(0);
     });
 
+    it("blocks a 30-second dense-cut package that silently falls back to three cuts", () => {
+        const value = packageValue({
+            videoPrompt:
+                "镜头模式：内部切镜（3次）\n单一主运镜：每次硬切后重新锁定焦点，为了让观众看清人物和关键道具。\n时间段动作：0-15秒，萧炎抬眼；15-30秒，萧炎直视纳兰。\n镜头事件：时间：15秒；类型：硬切；触发事件：萧炎抬眼；新机位：50mm侧45度中近景；切后主运镜：向萧炎慢推10厘米；信息目的：看清少年脸部；承接：视线和轴线不变。\n镜头事件：时间：15秒；类型：硬切；触发事件：萧炎压住桌沿；新机位：85mm手部近景；切后主运镜：锁定机位；信息目的：看清指节受力；承接：桌沿状态不变。\n镜头事件：时间：15秒；类型：硬切；触发事件：萧战抬眼；新机位：65mm父亲中近景；切后主运镜：锁定机位；信息目的：看清父亲反应；承接：声音连续。",
+        });
+        value.project.productionBible = { ...(value.project.productionBible || {}), productionPlan: { shotDuration: 30, framePolicy: "agent", customDirectorRules: "当前用户明确要求30秒高密度硬切，目标7—10次" } } as never;
+        const report = validateDramaAuthoringQuality({ package: value, sources: [] });
+        expect(blockers(report, "CAMERA_EVENT")).not.toHaveLength(0);
+    });
+
+    it("accepts the eight-section prompt layout with cut events inferred from the timeline", () => {
+        const value = packageValue({
+            videoPrompt: [
+                "【重要剪辑指令】\n两个真实信息节点之间发生一次可见硬切。",
+                "【素材绑定】\n@图片1：萧炎身份；@图片2：萧家迎客大厅。",
+                "【故事意图】\n把萧炎的克制推进为对纳兰的质问。",
+                "【空间与连续性】\n萧炎画面右看左，纳兰画面左看右，180度轴线不变。",
+                "【灯光与画面】\n左侧窗光照亮人物侧前方，脸部和手部清晰。",
+                "【摄影总则】\n中景平视，沿长桌轴线缓慢推进，为了让观众看见萧炎从低头到抬眼的压力变化。",
+                "【逐镜头时间线】\n镜头1，0-15秒，起点：萧炎低头；动作与触发：萧炎抬眼并压住桌沿；可见衔接：纳兰接住视线；终点：指节停在桌沿。\n镜头事件：时间：15秒；类型：硬切；触发事件：萧炎抬眼并收住右手；新机位：50mm侧45度中近景；切后主运镜：向萧炎慢推10厘米；信息目的：看清少年脸部压力；承接：视线、轴线和桌沿受力状态连续。\n镜头2，15-30秒，起点：指节停在桌沿；动作与触发：萧炎肩背直起并回看纳兰；可见衔接：萧战目光移向父子；终点：萧炎直视纳兰。",
+                "【硬性禁止】\n禁止一镜到底、越轴、运动模糊和新增对白。",
+            ].join("\n\n"),
+        });
+        const report = validateDramaAuthoringQuality({ package: value, sources: [] });
+        expect(blockers(report, "VIDEO_PROMPT_LAYOUT")).toHaveLength(0);
+        expect(blockers(report, "CAMERA_EVENT")).toHaveLength(0);
+    });
+
+    it("allows fewer dense cuts only when a static or provider reason is explicit", () => {
+        const value = packageValue({
+            videoPrompt:
+                "镜头模式：内部切镜（1次）\n单一主运镜：切后锁定机位，重新稳定焦点，为了看清萧战手掌和玉粉。\n减切原因：结果停留，萧战摊开的手掌需要保留静默观察。\n镜头事件：时间：15秒；类型：硬切；触发事件：萧炎说完族长；新机位：85mm主桌手部近景；切后主运镜：锁定机位；信息目的：看清父亲压住怒意的手部结果；承接：萧战手掌、玉粉位置和声音状态不变。",
+        });
+        value.project.productionBible = { ...(value.project.productionBible || {}), productionPlan: { shotDuration: 30, framePolicy: "agent", customDirectorRules: "当前用户明确要求30秒高密度硬切，目标7—10次" } } as never;
+        const report = validateDramaAuthoringQuality({ package: value, sources: [] });
+        expect(blockers(report, "CAMERA_EVENT")).toHaveLength(0);
+    });
+
     it("keeps narrative chapter 3 separate from package section 3", () => {
         const report = validateDramaAuthoringQuality({ package: packageValue({ sourceRange: "第3章" }), sources: [source("第3章：萧炎在议事大厅抬眼。")], targetNarrativeChapter: 3 });
         expect(report.checks.find((check) => check.scope === "目标小说章节")?.evidence).toContain("一级章节编号与小说章节独立");

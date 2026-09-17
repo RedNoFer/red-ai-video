@@ -188,7 +188,7 @@ describe("executeAgentRun backend settings", () => {
             30,
         );
 
-        expect(instructions.match(/Agent 模式没有默认帧数/gu)).toHaveLength(1);
+        expect(instructions.match(/Agent 模式没有普通镜头的默认帧数/gu)).toHaveLength(1);
         expect(instructions).toContain("不能按镜头时长、提示词长度、角色数量");
         expect(instructions).not.toContain("旧规则不应重复注入");
         expect(instructions).not.toContain("资产图片规则不应作为第二套来源注入");

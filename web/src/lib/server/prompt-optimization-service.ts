@@ -1,6 +1,8 @@
 import { getAuthSettings, refundUserPoints } from "@/lib/auth/store";
 import { CREATE_AGENT_PROMPT_MAX_LENGTH } from "@/lib/create-agent-prompt";
+import { hasQuotedDramaDialogue } from "@/lib/drama-dialogue-timing";
 import { formatPromptFieldLines, validateDramaFrameVisualContent } from "@/lib/drama-frame-sequence";
+import { validateDramaVideoPromptTemplateLayout } from "@/lib/drama-prompt-quality";
 import { DRAMA_ASSET_IMAGE_SKILL } from "@/lib/drama-image-skill";
 import {
     DRAMA_CHARACTER_DEFAULT_CONSISTENCY,
@@ -132,6 +134,13 @@ function parseOptimizedPrompt(value: string, mode: PromptOptimizationMode, sourc
         const optimized = payload.optimizedPrompt;
         const prompt = typeof optimized === "string" ? (mode === "video" ? optimized.trim() : formatPromptFieldLines(optimized, mode === "drama-frame" ? "static" : "static")) : "";
         if (mode === "drama-frame" && validateDramaFrameVisualContent(prompt)) return "";
+        if (mode === "video") {
+            if (validateDramaVideoPromptTemplateLayout(prompt, 1, "视频提示词").length) return "";
+            const sourceAndOutput = `${sourcePrompt}\n${prompt}`;
+            const dialogueRequested = /(?:对白表演|对白\s*[：:]|对话\s*[：:]|台词|说话人\s*[：:]|说\s*[：:])/u.test(sourceAndOutput);
+            const sourceSuppressesDialogue = /(?:无对白|无台词|不要新增对白|禁止新增对白|不添加对白)/u.test(sourcePrompt);
+            if (dialogueRequested && !sourceSuppressesDialogue && !hasQuotedDramaDialogue(prompt)) return "";
+        }
         if (mode !== "drama-asset") return prompt && prompt.length <= CREATE_AGENT_PROMPT_MAX_LENGTH ? prompt : "";
         const fields = normalizeDramaAssetPromptFields(payload.fields, sourcePrompt);
         if (!fields) return "";

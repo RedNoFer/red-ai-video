@@ -1,4 +1,7 @@
 import type { DramaAuthoringSourceSnapshot, DramaProductionPackageV1, DramaQualityGateCheck, DramaQualityGateReport } from "@/lib/drama-project-contract";
+import { hasQuotedDramaDialogue } from "@/lib/drama-dialogue-timing";
+import { DRAMA_DENSE_HARD_CUT_RANGE_30S } from "@/lib/drama-production-plan";
+import { validateDramaVideoPromptTemplateLayout } from "@/lib/drama-prompt-quality";
 import { DRAMA_PACKAGE_GATE_CODES, DRAMA_PACKAGE_SECTIONS } from "@/lib/server/drama-production-package-contract";
 
 export type DramaAuthoringQualityInput = {
@@ -22,6 +25,7 @@ const observableActionPattern = /抬|低|看|望|移|转|起身|前倾|后退|�
 const observableResultPattern = /停在|落在|变为|变得|露出|显出|抬起|垂下|松开|收紧|移向|转向|对准|接住|落下|留下|响起|静止|形成|暴露|显现|被看见|无人插话|沉默|低头|抬眼|受力|改变/u;
 const actionFactPattern = /因为|由于|于是|随后|最终|决定|提出|答应|拒绝|要求|悔婚|退婚|离开|进入|走进|看见|发现|说|喊|跪|拔|抬|转身|交给|拿起|放下|撞|倒|死|活|承认|质问|回应/u;
 const cinematicPlaceholderPattern = /^(?:入口构图已建立|动作展开|关键变化|结果状态|动作节点已经成立|主体的眉眼、呼吸、手部和道具接触关系清晰可见|情绪通过身体动作呈现)$/u;
+const denseCutExceptionPattern = /(?:减切原因|减切理由)\s*[：:]\s*(?:(?:静态留白|结果停留|凝视停留|供应商能力限制|供应商限制)[^。\n；;]*)/u;
 
 export function validateDramaAuthoringQuality(input: DramaAuthoringQualityInput): DramaQualityGateReport {
     const checks: DramaQualityGateCheck[] = [];
@@ -33,6 +37,7 @@ export function validateDramaAuthoringQuality(input: DramaAuthoringQualityInput)
     checkLiteraryCompleteness(checks, input.package, sourceText, input.targetNarrativeChapter);
     checkDialogueCoverage(checks, input.package, sourceText);
     checkDialoguePerformanceQuality(checks, input.package);
+    checkVideoPromptLayout(checks, input.package);
     checkPlotFacts(checks, input.package, sourceText);
     checkActionDensity(checks, input.package);
     checkActionDifference(checks, input.package);
@@ -48,6 +53,19 @@ export function validateDramaAuthoringQuality(input: DramaAuthoringQualityInput)
         status: checks.some((check) => check.severity === "blocker") ? "blocked" : "passed",
         checks,
     };
+}
+
+function checkVideoPromptLayout(checks: DramaQualityGateCheck[], value: DramaProductionPackageV1) {
+    const failures = value.episodes.flatMap((episode) => episode.shots.flatMap((shot) => validateDramaVideoPromptTemplateLayout(shot.videoPrompt, shot.framePlan?.frames.length || 0, shot.code || shot.title)));
+    add(
+        checks,
+        "VIDEO_PROMPT_LAYOUT",
+        !failures.length,
+        "视频提示词排版",
+        failures.length ? failures.slice(0, 8).join("；") : "每个镜头都使用总则、素材、故事意图、空间、灯光、摄影、逐镜头时间线和硬性禁止八段结构",
+        ["episodes[].shots[].videoPrompt", "episodes[].shots[].framePlan.frames[]"],
+        "按固定视频 Prompt 成稿骨架重写：依次提供【重要剪辑指令】【素材绑定】【故事意图】【空间与连续性】【灯光与画面】【摄影总则】【逐镜头时间线】【硬性禁止】，并让每个时间段对应一个“镜头N”段落。",
+    );
 }
 
 function checkLiteraryCompleteness(checks: DramaQualityGateCheck[], value: DramaProductionPackageV1, sourceText: string, targetNarrativeChapter?: number | string) {
@@ -104,6 +122,7 @@ function checkDialogueCoverage(checks: DramaQualityGateCheck[], value: DramaProd
     const missingSequence = lines.filter((line) => !containsNormalized(sequenceText, line));
     const utterances = episode?.shots.flatMap((shot) => shot.utterances || []) || [];
     const directions = value.archive?.dialogueDirections || [];
+    const missingFormat = utterances.filter((utterance) => utterance.type === "dialogue" && (!utterance.speaker || !hasQuotedDramaDialogue(sequenceText, utterance.speaker, utterance.text)));
     const missingMetadata = lines.filter((line) => {
         const utterance = utterances.find((item) => containsNormalized(item.text, line));
         const direction = directions.find((item) => containsNormalized(item.text, line));
@@ -112,10 +131,12 @@ function checkDialogueCoverage(checks: DramaQualityGateCheck[], value: DramaProd
             (direction && direction.speaker && direction.startSecond !== undefined && direction.endSecond !== undefined)
         );
     });
-    const complete = !missingLiterary.length && !missingSequence.length && !missingMetadata.length;
+    const complete = !missingLiterary.length && !missingSequence.length && !missingMetadata.length && !missingFormat.length;
     const evidence = lines.length
-        ? `TXT 显式对白 ${lines.length} 句；文学正文缺失 ${missingLiterary.length} 句；台词/镜头序列缺失 ${missingSequence.length} 句；说话人/时间缺失 ${missingMetadata.length} 句`
-        : "TXT 未提取到带引号的显式对白，按无对白素材处理";
+        ? `TXT 显式对白 ${lines.length} 句；文学正文缺失 ${missingLiterary.length} 句；台词/镜头序列缺失 ${missingSequence.length} 句；说话人/时间缺失 ${missingMetadata.length} 句；说话格式缺失 ${missingFormat.length} 句`
+        : utterances.length
+          ? `结构化对白 ${utterances.length} 句；说话格式缺失 ${missingFormat.length} 句`
+          : "TXT 未提取到带引号的显式对白，按无对白素材处理";
     add(checks, "DIALOGUE_COVERAGE", complete, "对白覆盖率", evidence, ["story-source", "currentEpisode.script", "episodes[].shots[].utterances"], "逐句补回 TXT 原对白，并绑定说话人、镜头、时间和表演信息；不得静默遗漏或无授权改写。");
 }
 
@@ -135,17 +156,21 @@ function checkDialoguePerformanceQuality(checks: DramaQualityGateCheck[], value:
             for (const { frame, segmentText, spoken } of segmentPerformances) {
                 const label = `${shot.code || shot.title}/${frame.id}`;
                 const performanceMatch = segmentText.match(/对白表演\s*[：:]([^\n]+)/u);
-                if (!performanceMatch) {
+                const directDialogueMatch = performanceMatch ? null : segmentText.match(/(?:^|[\n；;])\s*[^：:；;\n]{1,32}?\s*说\s*[：:]\s*“[^”\n]{1,240}”(?:[；;][^\n]*)?/u);
+                if (!performanceMatch && !directDialogueMatch) {
                     if (!spoken.length && frame.startSecond >= Math.max(...utterances.map((utterance) => Number(utterance.endSecond)))) {
                         const hasSilenceResult = /对白结束|对白后|反应停顿|静默|沉默/u.test(segmentText) && /视线|目光|呼吸|肩|身体|手|指|嘴角|下颌|僵|停住|低头|抬眼/u.test(segmentText);
                         if (!hasSilenceResult) failures.push(`${label}对白结束后缺少具体静默/反应结果`);
                     } else failures.push(`${label}缺少对白表演：说话人、语气、停顿、重音、说后反应`);
                     continue;
                 }
-                const block = performanceMatch[1].trim();
+                const block = (performanceMatch?.[1] || directDialogueMatch?.[0] || "").replace(/^[\n；;]\s*/u, "").trim();
                 performanceBlocks.push(block);
-                const missing = ["说话人", "语气", "停顿", "重音", "说后反应"].filter((field) => !new RegExp(`${field}\\s*[：:]\\s*[^；;\\n]+`, "u").test(block));
+                const missing = ["说话人", "语气", "停顿", "重音", "说后反应"].filter((field) =>
+                    field === "说话人" ? !new RegExp(`${field}\\s*[：:]\\s*[^；;\\n]+`, "u").test(block) && !hasQuotedDramaDialogue(block) : !new RegExp(`${field}\\s*[：:]\\s*[^；;\\n]+`, "u").test(block),
+                );
                 if (missing.length) failures.push(`${label}对白表演缺少${missing.join("、")}`);
+                if (spoken.length && spoken.some((utterance) => !utterance.speaker || !hasQuotedDramaDialogue(segmentText, utterance.speaker))) failures.push(`${label}对白必须逐段写成“说话人说：“实际台词””格式，不能只写说话人、语气或重音`);
                 if (/随本段|当前冲突信息|接住下一状态|动作触发前后留出|按台词表执行|自然反应|保持状态|情绪加剧|准备回应/u.test(block)) failures.push(`${label}对白表演仍是模板化描述`);
                 const after = block.match(/说后反应\s*[：:]\s*([^；;\n]+)/u)?.[1] || "";
                 if (!after || !/视线|目光|呼吸|肩|身体|手|指|嘴角|下颌|僵|停住|低头|抬眼|前倾|收紧|松开|转向/u.test(after)) failures.push(`${label}说后反应没有落到具体可见结果`);
@@ -161,9 +186,9 @@ function checkDialoguePerformanceQuality(checks: DramaQualityGateCheck[], value:
         "DIALOGUE_PERFORMANCE",
         !failures.length,
         "对白表演质量",
-        failures.length ? failures.slice(0, 8).join("；") : "每个对白时间段均绑定当前说话人，并写出具体语气、停顿、重音和说后可见反应",
+        failures.length ? failures.slice(0, 8).join("；") : "每个对白时间段均绑定当前说话人、带完整引号台词，并写出具体语气、停顿、重音和说后可见反应",
         ["episodes[].shots[].videoPrompt", "episodes[].shots[].framePlan.frames[]", "episodes[].shots[].utterances"],
-        "按当前台词和时间段重写具体表演；对白结束段改为明确的呼吸、视线、身体或道具静默结果，禁止复制模板句。",
+        "按当前台词和时间段重写具体表演；对白统一使用“说话人说：“实际台词””格式，禁止把台词塞进重音字段；对白结束段改为明确的呼吸、视线、身体或道具静默结果，禁止复制模板句。",
     );
 }
 
@@ -342,19 +367,37 @@ function checkCameraMotivation(checks: DramaQualityGateCheck[], value: DramaProd
 
 function checkCameraEvents(checks: DramaQualityGateCheck[], value: DramaProductionPackageV1) {
     const failed: string[] = [];
+    const productionPlan = value.project.productionBible?.productionPlan;
     for (const shot of value.episodes.flatMap((episode) => episode.shots)) {
         const prompt = shot.videoPrompt || "";
+        const eventLines = [...prompt.matchAll(/镜头事件\s*[：:]\s*([^\n]+)/gu)].map((match) => match[1]);
         const hasCut = /(?:\bCut\s+to\b|\bCamera\s+cut\s+to\b|镜头事件\s*[：:])/iu.test(prompt);
         const internal = /镜头模式\s*[：:]\s*内部切镜/u.test(prompt);
-        if (hasCut && !internal) failed.push(`${shot.code}:未声明内部切镜`);
-        if (internal) {
-            const events = [...prompt.matchAll(/镜头事件\s*[：:]\s*([^\n]+)/gu)].map((match) => match[1]);
+        const inferredInternal = !internal && eventLines.length > 0;
+        const denseMaterial = `${productionPlan?.customDirectorRules || ""}\n${prompt}`;
+        const denseRequested = shot.duration === 30 && /高密度硬切|7\s*[—-]\s*10\s*次(?:可见)?硬切/u.test(denseMaterial);
+        const denseCutException = denseRequested && denseCutExceptionPattern.test(denseMaterial);
+        if (hasCut && !internal && !inferredInternal) failed.push(`${shot.code}:未声明内部切镜`);
+        if (internal || inferredInternal) {
+            const events = eventLines;
             if (!events.length || events.some((event) => !/(?:时间|秒).{0,12}(?:类型|硬切|匹配切|插入|甩镜).{0,40}(?:触发事件).{0,80}(?:新机位).{0,100}(?:切后主运镜).{0,100}(?:信息目的).{0,100}(?:承接)/u.test(event)))
                 failed.push(`${shot.code}:镜头事件字段不完整`);
             const starts = new Set((shot.framePlan?.frames || []).map((frame) => Number(frame.startSecond).toFixed(3)));
             for (const event of events) {
                 const match = event.match(/(?:时间|发生时间)\s*[：:]?\s*(\d+(?:\.\d+)?)\s*秒/u);
                 if (match && !starts.has(Number(match[1]).toFixed(3))) failed.push(`${shot.code}:切点未对齐帧边界`);
+            }
+            if (denseRequested) {
+                const hardCutCount = events.filter((event) => /类型\s*[：:]\s*硬切/u.test(event)).length;
+                const frameCount = shot.framePlan?.frames.length || 0;
+                const outsideMaximum = hardCutCount > DRAMA_DENSE_HARD_CUT_RANGE_30S.max || frameCount > DRAMA_DENSE_HARD_CUT_RANGE_30S.max + 1;
+                const belowTargetWithoutReason = !denseCutException && (hardCutCount < DRAMA_DENSE_HARD_CUT_RANGE_30S.min || frameCount < DRAMA_DENSE_HARD_CUT_RANGE_30S.min + 1);
+                if (outsideMaximum || belowTargetWithoutReason)
+                    failed.push(
+                        denseCutException
+                            ? `${shot.code}:已记录减切原因，但不得超过10次硬切/11个帧段，当前为${frameCount}帧/${hardCutCount}次硬切`
+                            : `${shot.code}:30秒高密度硬切需用8—11个帧段承载7—10次硬切；若确需少切，必须写明“减切原因：静态留白/结果停留/供应商能力限制”，当前为${frameCount}帧/${hardCutCount}次硬切`,
+                    );
             }
         }
     }

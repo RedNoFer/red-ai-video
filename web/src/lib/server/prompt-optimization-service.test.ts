@@ -5,6 +5,18 @@ import { resolveLogicalModelCandidates } from "@/lib/server/logical-model-router
 import { requestStructuredText } from "@/lib/server/text-planning-runtime";
 import { optimizeCreativePrompt } from "./prompt-optimization-service";
 
+const validVideoPrompt = (body: string) =>
+    [
+        "【重要剪辑指令】\n按真实动作节点切换。",
+        "【素材绑定】\n当前参考图只锁定主体与场景。",
+        "【故事意图】\n把压力交给对手。\n动态意图：主体从克制转为追问。",
+        "【空间与连续性】\n180度轴线不变。\n起始可见状态：人物站在长桌右侧。",
+        "【灯光与画面】\n左侧窗光保留脸部纹理。",
+        "【摄影总则】\n50mm侧45度平视固定机位，服务于视线接住。\n单一主运镜：镜头模式：连续镜头；锁定机位。",
+        `【逐镜头时间线】\n镜头1，0-5秒；${body}\n时间段动作：0-5秒 起点：人物站在长桌右侧；动作与触发：人物抬眼并收紧手指；可见衔接：视线接住对手；终点：人物直视对手。\n声音意图：室内底噪。\n结束画面：人物直视对手。\n连续性锁：人物身份、长桌位置和轴线不变。\n针对性约束：无字幕、无水印。`,
+        "【硬性禁止】\n不新增人物、对白或道具。",
+    ].join("\n\n");
+
 vi.mock("@/lib/auth/store", () => ({ getAuthSettings: vi.fn(), refundUserPoints: vi.fn() }));
 vi.mock("@/lib/server/logical-model-router", () => ({ resolveLogicalModelCandidates: vi.fn() }));
 vi.mock("@/lib/server/text-planning-runtime", () => ({
@@ -93,7 +105,7 @@ describe("prompt optimization service", () => {
     });
 
     it("injects the persisted global visual contract into prompt optimization", async () => {
-        vi.mocked(requestStructuredText).mockResolvedValue({ arguments: JSON.stringify({ optimizedPrompt: "优化后的提示词" }), headers: new Headers(), protocol: "chat", elapsedMs: 10 });
+        vi.mocked(requestStructuredText).mockResolvedValue({ arguments: JSON.stringify({ optimizedPrompt: validVideoPrompt("优化后的提示词") }), headers: new Headers(), protocol: "chat", elapsedMs: 10 });
 
         await optimizeCreativePrompt({
             origin: "http://localhost:3000",
@@ -196,7 +208,12 @@ describe("prompt optimization service", () => {
     });
 
     it("optimizes video prompts around visible action beats", async () => {
-        vi.mocked(requestStructuredText).mockResolvedValue({ arguments: JSON.stringify({ optimizedPrompt: "0-2秒建立黑湖，2-4秒镜头推进，4-5秒Karin收紧握剑，5-6秒断口冷光匹配切入马车。" }), headers: new Headers(), protocol: "chat", elapsedMs: 10 });
+        vi.mocked(requestStructuredText).mockResolvedValue({
+            arguments: JSON.stringify({ optimizedPrompt: validVideoPrompt("0-2秒建立黑湖，2-4秒镜头推进，4-5秒Karin收紧握剑，5-6秒断口冷光匹配切入马车。") }),
+            headers: new Headers(),
+            protocol: "chat",
+            elapsedMs: 10,
+        });
 
         await optimizeCreativePrompt({ origin: "http://localhost:3000", cookie: "session=1", userId: "user-one", requestId: "video-request", prompt: "30 秒 9:16 黑湖边的人握剑", mode: "video" });
 
@@ -208,8 +225,8 @@ describe("prompt optimization service", () => {
         expect(systemMessage).toContain("起始可见状态");
         expect(systemMessage).toContain("每个非空字段必须独立一行");
         expect(systemMessage).toContain("每个时间段都必须让姿态");
-        expect(systemMessage).toContain("每段独立成块，依次写“起点、动作与触发、可见衔接、终点”");
-        expect(systemMessage).toContain("每镜只保留一个有动机的景别/机位/运镜");
+        expect(systemMessage).toContain("每个时间段按“起点 → 动作与触发 → 可见衔接 → 终点”组织");
+        expect(systemMessage).toContain("每镜只保留一个主要变化");
         expect(systemMessage).toContain("不得用“保持状态、情绪加剧、自然反应”等空泛词替代可见结果");
         expect(systemMessage).toContain("9:16");
         expect(systemMessage).toContain("上下纵深");
@@ -218,7 +235,7 @@ describe("prompt optimization service", () => {
 
     it("does not rewrite narrative labels returned by the Agent", async () => {
         vi.mocked(requestStructuredText).mockResolvedValue({
-            arguments: JSON.stringify({ optimizedPrompt: "动态意图：B线钩子中，Karin握住完整断剑，断口从掌心裂开。\n结束画面：Karin惊醒后仍握住断剑。" }),
+            arguments: JSON.stringify({ optimizedPrompt: validVideoPrompt("动态意图：B线钩子中，Karin握住完整断剑，断口从掌心裂开。\n结束画面：Karin惊醒后仍握住断剑。") }),
             headers: new Headers(),
             protocol: "chat",
             elapsedMs: 10,
@@ -230,6 +247,19 @@ describe("prompt optimization service", () => {
         expect(systemMessage).toContain("不得输出 A线、B线、主线、副线、钩子");
         expect(result).toContain("Karin握住完整断剑");
         expect(result).toContain("B线钩子");
+    });
+
+    it("rejects a video optimization result that turns dialogue into metadata", async () => {
+        vi.mocked(requestStructuredText).mockResolvedValue({
+            arguments: JSON.stringify({ optimizedPrompt: validVideoPrompt("对白表演：说话人：萧炎；语气：低声克制；停顿：半拍；重音：一族之长；说后反应：视线压向纳兰。") }),
+            headers: new Headers(),
+            protocol: "chat",
+            elapsedMs: 10,
+        });
+
+        await expect(optimizeCreativePrompt({ origin: "http://localhost:3000", cookie: "session=1", userId: "user-one", requestId: "video-dialogue-request", prompt: "萧炎说：他是一族之长。", mode: "video" })).rejects.toThrow(
+            "默认文本模型没有返回有效提示词",
+        );
     });
 
     it("refunds an invalid charged response instead of accepting hidden or empty output", async () => {

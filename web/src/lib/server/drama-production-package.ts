@@ -40,7 +40,17 @@ import { resolveDramaStyleContract } from "@/lib/drama-style";
 import { normalizeDramaCharacterProfile } from "@/lib/drama-character-rules";
 import { compileDramaAssetReferencePrompt } from "@/lib/drama-prompt-compiler";
 import { resolveDramaShotDuration } from "@/lib/server/drama-shot-config";
-import { hasConcreteDramaCameraDirection, isGenericDramaDetail, validateDramaCameraPlan, validateDramaPerformanceDetail, validateDramaVideoAuthoringQuality, validateDramaVideoSegmentDetail } from "@/lib/drama-prompt-quality";
+import {
+    dramaTimeRangePattern,
+    extractDramaVideoPromptSection,
+    hasConcreteDramaCameraDirection,
+    isGenericDramaDetail,
+    validateDramaCameraPlan,
+    validateDramaPerformanceDetail,
+    validateDramaVideoAuthoringQuality,
+    validateDramaVideoPromptTemplateLayout,
+    validateDramaVideoSegmentDetail,
+} from "@/lib/drama-prompt-quality";
 import { DRAMA_VIDEO_DIRECTOR_SKILL } from "@/lib/server/agent-skills/drama-video-director";
 import { SEEDANCE_25_DIRECTOR_SKILL } from "@/lib/server/agent-skills/seedance-25";
 import { DRAMA_PACKAGE_CONTRACT, DRAMA_PACKAGE_CONTRACT_ID, DRAMA_PACKAGE_CONTRACT_VERSION, DRAMA_PACKAGE_GATE_CODES } from "@/lib/server/drama-production-package-contract";
@@ -716,8 +726,8 @@ function validateProductionPackageCompleteness(value: Record<string, unknown>, o
             const label = text(item.code) || text(item.title) || "镜头";
             const frameCount = array(object(item.framePlan).frames).length;
             const minFrameCount = plan.video.framePolicy === "agent" ? plan.frameCountRange?.min || 2 : 1;
-            if (frameCount < minFrameCount || frameCount > (plan.video.framePolicy === "agent" ? plan.frameCountRange?.max || 9 : 9)) {
-                const message = `${label}的逐帧计划必须包含 ${minFrameCount}-${plan.video.framePolicy === "agent" ? plan.frameCountRange?.max || 9 : 9} 个真实动作节点`;
+            if (frameCount < minFrameCount || frameCount > (plan.video.framePolicy === "agent" ? plan.frameCountRange?.max || 11 : 9)) {
+                const message = `${label}的逐帧计划必须包含 ${minFrameCount}-${plan.video.framePolicy === "agent" ? plan.frameCountRange?.max || 11 : 9} 个真实动作节点`;
                 if (!options.allowImportWarnings) throw new DramaProductionPackageError(message);
                 options.importWarnings?.push(`${message}；已允许导入，后续生成前需要补齐逐帧动作节点`);
             }
@@ -1140,6 +1150,7 @@ function normalizePackageShot(value: unknown, index: number, options: DramaProdu
                 requiresBackgroundNpc: npcPolicy?.mode === "required" || (options.requireContentQuality === true && npcDeclaredInFramePlan),
                 backgroundNpcCountRange: npcPolicy?.countRange,
                 requiresDialoguePerformance: utterances.some((item) => item.type === "dialogue"),
+                dialogueUtterances: utterances,
                 requireCameraPlan: options.requireCameraPlan,
                 requireContentQuality: options.requireContentQuality,
                 performancePlan,
@@ -1262,36 +1273,49 @@ function validateStrictPackageVideoPrompt(
         requiresBackgroundNpc?: boolean;
         backgroundNpcCountRange?: { min: number; max: number };
         requiresDialoguePerformance?: boolean;
+        dialogueUtterances?: DramaShot["utterances"];
         requireCameraPlan?: boolean;
         requireContentQuality?: boolean;
         performancePlan?: DramaShot["performancePlan"];
     } = {},
 ) {
+    if (options.requireContentQuality) {
+        const layoutErrors = validateDramaVideoPromptTemplateLayout(prompt, frames.length, label);
+        if (layoutErrors.length) throw new DramaProductionPackageError(layoutErrors.join("；"));
+    }
     if (options.requireCameraPlan) {
         const cameraError = validateDramaCameraPlan(prompt, frames);
         if (cameraError) throw new DramaProductionPackageError(label + "的 Agent videoPrompt 摄影契约无效：" + cameraError);
     }
     const requiredFields = ["动态意图", "时间段动作", "单一主运镜", "结束画面"];
     const missing = requiredFields.filter((field) => !new RegExp(`(?:^|\\n)\\s*${field}[：:]`, "u").test(prompt));
-    if (missing.length) throw new DramaProductionPackageError(`${label}的 Agent videoPrompt 缺少标准字段：${missing.join("、")}`);
+    if (missing.length && !options.requireContentQuality) throw new DramaProductionPackageError(`${label}的 Agent videoPrompt 缺少标准字段：${missing.join("、")}`);
     if (/(?:^|\\n)\\s*(?:触发|主体动作与反应)\\s*[：:]/u.test(prompt)) throw new DramaProductionPackageError(`${label}的 Agent videoPrompt 仍使用旧的顶层动作字段`);
     if (/(?:https?:\/\/|data:image\/|assetId|内部 ID|参考图职责|prompt-authoring-only|seedance-director|seedance-25-director)/iu.test(prompt)) throw new DramaProductionPackageError(`${label}的 Agent videoPrompt 包含内部执行信息`);
-    const cameraMotion = prompt.match(/(?:^|\n)\s*单一主运镜[：:]([^\n]+)/u)?.[1]?.trim() || "";
+    const cameraMotion = prompt.match(/(?:^|\n)\s*单一主运镜[：:]([^\n]+)/u)?.[1]?.trim() || extractDramaVideoPromptSection(prompt, "摄影总则");
     if (!hasConcreteDramaCameraDirection(cameraMotion)) throw new DramaProductionPackageError(`${label}的 Agent videoPrompt 缺少具体主运镜或机位语言`);
     const timelineFieldCounts = ["起点", "动作与触发", "可见衔接", "终点"].map((field) => (prompt.match(new RegExp(`(?:^|\\n)\\s*${field}[：:]`, "gu")) || []).length);
     if (timelineFieldCounts.some((count) => count < frames.length)) throw new DramaProductionPackageError(`${label}的 Agent videoPrompt 未逐段写出起点、动作与触发、可见衔接和终点`);
     const timeline = frames.flatMap((frame) => {
-        const range = `${escapeRegExp(String(frame.startSecond))}\\s*(?:-|至|到)\\s*${escapeRegExp(String(frame.endSecond))}\\s*(?:s|秒)`;
         const mirroredValues = [frame.actionPrompt, frame.transitionPrompt, frame.endPrompt];
         const startPromptIsRequired = frame.startSecond > 0;
-        return new RegExp(range, "iu").test(prompt) && mirroredValues.every((value) => value && prompt.includes(value)) && (!startPromptIsRequired || Boolean(frame.startPrompt && prompt.includes(frame.startPrompt)))
+        return dramaTimeRangePattern(frame.startSecond, frame.endSecond).test(prompt) && mirroredValues.every((value) => value && prompt.includes(value)) && (!startPromptIsRequired || Boolean(frame.startPrompt && prompt.includes(frame.startPrompt)))
             ? []
             : [`${frame.startSecond}-${frame.endSecond}s`];
     });
     if (timeline.length) throw new DramaProductionPackageError(`${label}的 Agent videoPrompt 未逐段镜像 framePlan：${timeline.join("、")}`);
     for (const [index, frame] of frames.entries()) {
         if (index > 0 && frame.startPrompt !== frames[index - 1].endPrompt) throw new DramaProductionPackageError(`${label}第 ${index + 1} 个时间段的起点必须原样承接上一段终点`);
-        const detailErrors = validateDramaVideoSegmentDetail(frame.actionPrompt, frame.transitionPrompt, frame.endPrompt, `${label}第 ${index + 1} 个时间段`, options);
+        const requiresDialoguePerformance =
+            options.requiresDialoguePerformance &&
+            (options.dialogueUtterances?.some((utterance) => {
+                if (utterance.type !== "dialogue") return false;
+                const start = Number(utterance.startSecond);
+                const end = Number(utterance.endSecond);
+                return !Number.isFinite(start) || !Number.isFinite(end) ? true : start < frame.endSecond && end > frame.startSecond;
+            }) ??
+                true);
+        const detailErrors = validateDramaVideoSegmentDetail(frame.actionPrompt, frame.transitionPrompt, frame.endPrompt, `${label}第 ${index + 1} 个时间段`, { ...options, requiresDialoguePerformance });
         if (detailErrors.length) throw new DramaProductionPackageError(detailErrors.join("；"));
     }
     if (options.requireContentQuality) {
@@ -1302,7 +1326,7 @@ function validateStrictPackageVideoPrompt(
 
 function validatePromptAssetBindings(prompt: string, characterCodes: string[], propCodes: string[], locationCode: string, rawCharacters: unknown[], rawProps: unknown[], rawLocations: unknown[], label: string) {
     const errors: string[] = [];
-    const bindingLine = prompt.match(/(?:^|\n)\s*素材绑定\s*[：:]([^\n]+)/u)?.[1] || "";
+    const bindingLine = prompt.match(/(?:^|\n)\s*素材绑定\s*[：:]([^\n]+)/u)?.[1] || extractDramaVideoPromptSection(prompt, "素材绑定");
     if (!bindingLine && (characterCodes.length || propCodes.length || locationCode)) errors.push(`${label}的 videoPrompt 缺少素材绑定，不能确认本镜资产职责`);
     const characters = rawCharacters.map(object);
     const props = rawProps.map(object);

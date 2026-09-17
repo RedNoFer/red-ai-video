@@ -2,11 +2,11 @@ import type { DramaEpisode, DramaProductionPreflight, DramaProductionPreflightIs
 import { hasApprovedAssetReference, hasApprovedScenePanoramaReference } from "@/lib/drama-asset-baseline";
 import { continuityStartEvidence } from "@/lib/drama-continuity-policy";
 import { dramaFrameVisualSubject, normalizeDramaFrameBeats, validateDramaFramePlanVisuals, validateDramaFrameVisualContent, warnDramaFrameCountUniformity, warnDramaFrameVisualContent } from "@/lib/drama-frame-sequence";
-import { dramaDialogueTimingReminder, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
+import { dramaDialogueTimingReminder, hasQuotedDramaDialogue, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
 import { dramaReferenceImageBudget } from "@/lib/drama-production-plan";
 import { dramaShotReferenceSelectionIds, resolveDramaVideoReferenceMode } from "@/lib/drama-video-reference-plan";
 import type { DramaVideoReferenceMode } from "@/lib/drama-project-contract";
-import { validateDramaPerformanceDetail } from "@/lib/drama-prompt-quality";
+import { validateDramaPerformanceDetail, validateDramaVideoPromptTemplateLayout } from "@/lib/drama-prompt-quality";
 import { auditDramaShotDirectorQuality } from "@/lib/server/agent-skills/drama-video-director";
 
 const blocking = (code: string, message: string, extra: Partial<DramaProductionPreflightIssue> = {}): DramaProductionPreflightIssue => ({ code, severity: "blocking", message, ...extra });
@@ -129,6 +129,13 @@ function checkShot(
     if (!performance?.emotionalObjective || !performance.emotionalArc || !performance.speechStyle || !performance.pace || !performance.breath || !beats?.start.facialAction || !beats.middle.facialAction || !beats.end.facialAction)
         issues.push(warning("PERFORMANCE_PLAN_MISSING", `${label}缺少完整人物表演规划`, { shotId: shot.id }));
     const dialogueCount = shot.utterances.filter((item) => item.type === "dialogue").length || (shot.dialogue.trim() ? 1 : 0);
+    const generatedPromptOrigin = shot.fieldOrigins?.videoPrompt === "package" || shot.fieldOrigins?.executionVideoPrompt === "ai";
+    if (generatedPromptOrigin && shot.framePlan?.frames.length) {
+        const layoutErrors = validateDramaVideoPromptTemplateLayout(videoPrompt || "", shot.framePlan.frames.length, label);
+        if (layoutErrors.length) issues.push(blocking("VIDEO_PROMPT_LAYOUT", layoutErrors[0], { shotId: shot.id, correction: "重新优化或生成视频提示词，按八段式公开排版并让每个 framePlan 时间段对应一个镜头段落" }));
+        const malformedDialogue = shot.utterances.filter((item) => item.type === "dialogue" && (!item.speaker || !hasQuotedDramaDialogue(videoPrompt || "", item.speaker, item.text)));
+        if (malformedDialogue.length) issues.push(blocking("DIALOGUE_PROMPT_FORMAT", `${label}包含未使用中文引号的对白，必须写成“说话人说：“实际台词””`, { shotId: shot.id, correction: "重新生成带实际台词和中文引号的对白表演" }));
+    }
     for (const detail of validateDramaPerformanceDetail(shot.performancePlan, shot.dialoguePerformance, dialogueCount, label)) issues.push(warning("PERFORMANCE_DETAIL", detail, { shotId: shot.id }));
     if (dialogueCount && (!shot.dialoguePerformance?.length || shot.dialoguePerformance.length < dialogueCount)) issues.push(warning("DIALOGUE_PERFORMANCE_MISSING", `${label}对白缺少逐句语气、节奏和面部反应指导`, { shotId: shot.id }));
     const light = shot.lightingPlan;

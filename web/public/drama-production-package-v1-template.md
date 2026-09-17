@@ -2,7 +2,7 @@
 
 > 制作包格式：`vozeb-drama-production-package-v1`
 >
-> 模板版本：由 `pnpm compile:skills` 自动生成；唯一制作包契约：`vozeb-drama-production-package-v1@1.0.0`（契约 hash：`6d0459d2b3d489afdbb9d39ea7a2f801b1f6a9d1fcd46be65a3b3388d19346c1`，规范源 hash：`f176ed6a3928a719fc7b2d0dc5f81ed3eaf52b7e1fdf764f9473601382757a2f`）。导演 Skill：`drama-video-director@1.7.0`（hash：`5b132c790d0727cd4614a2f8808c0c21fb48c69d693c5b2ef3702f4ff677db6f`）；服务端制作包规则 hash：`ca15836ba0bd87222b8d02c5948efd453eb30bfee4f1821c8b91d4e963876f06`；Seedance Skill、服务端规则和 Codex 工作单均由同一编译清单绑定。
+> 模板版本：由 `pnpm compile:skills` 自动生成；唯一制作包契约：`vozeb-drama-production-package-v1@1.0.0`（契约 hash：`c2052c957c380214c50eb822a263d1c0bc6809267e31eb43e7447195e0629b9f`，规范源 hash：`55847bed26f267a6e0cf69b6a8c16c8455f2c8ae3fd382d9397d5e15fd9df306`）。导演 Skill：`drama-video-director@1.9.0`（hash：`43a6dade3e0914df43ca0578067aa44974d127120a7cb9c5406b400ec61e468c`）；服务端制作包规则 hash：`ef468601c28d809e84bfc1ac4f077a756fce37b96b5fe35b14b2943f5f16fceb`；Seedance Skill、服务端规则和 Codex 工作单均由同一编译清单绑定。
 >
 > 使用约定：本模板是当前 v1 制作包的填写入口。完整制作包必须同时提供可导入的规范对象 JSON；JSON 是导入事实源，下面的章节是面向人工阅读的确定性展示。不要把历史制作包、旧 generationPrompt 或旧分镜正文当作新包模板。
 >
@@ -102,7 +102,7 @@ imagePrompt
 
 其中 `startPrompt`、`actionPrompt`、`transitionPrompt`、`endPrompt` 服务视频时间段；`imagePrompt` 只服务当前冻结的静态画面。每帧从 0 秒连续覆盖当前镜头时长，不能有空白或重叠。
 
-`framePlan.start.source` 只能是 `independent` 或 `previous_accepted_actual_tail`；`framePlan.end.required` 必须是布尔值。`framePlan.referenceManifest` 是参考图职责和顺序的唯一事实源，必须与当前镜头声明的角色、场景、道具和线索绑定；每张参考图只承担一个用途，不把 URL、内部 ID 或绑定信息写入图片正文。`framePolicy` 为 `agent` 时先识别真实镜头事件，再按不可合并的冻结可见状态自适应提供 2–9 帧；不能按时长、提示词长度、角色数量或参考图数量统一分配。固定策略只在用户明确选择后执行。
+`framePlan.start.source` 只能是 `independent` 或 `previous_accepted_actual_tail`；`framePlan.end.required` 必须是布尔值。`framePlan.referenceManifest` 是参考图职责和顺序的唯一事实源，必须与当前镜头声明的角色、场景、道具和线索绑定；每张参考图只承担一个用途，不把 URL、内部 ID 或绑定信息写入图片正文。`framePolicy` 为 `agent` 时先识别真实镜头事件，再按不可合并的冻结可见状态自适应提供 2–11 帧；不能按时长、提示词长度、角色数量或参考图数量统一分配。用户或项目明确要求30秒高密度硬切时，优先使用8–11帧承载7–10次硬切；静态留白、结果停留或供应商能力限制可以少切，但必须说明原因。固定策略只在用户明确选择后执行。
 
 ### 视频时间段字段说明
 
@@ -186,7 +186,22 @@ imagePrompt
 当前 Agent 生成的完整 videoPrompt。
 ```
 
-每个真实时间段必须写出具体时间范围、起点、动作与触发、可见衔接和终点；按动作节点切分，不机械逐秒拆写。该章节只展示当前 `videoPrompt` 原文，不从 `framePlan` 重新拼接。
+视频 Prompt 统一按以下排版骨架生成，并将当前镜头事实填入每段，不得把标题当成空泛模板：
+
+```text
+【重要剪辑指令】
+【素材绑定】
+【故事意图】
+【空间与连续性】
+【灯光与画面】
+【摄影总则】
+【逐镜头时间线】
+镜头1，时间、景别/机位、画面动作、对白/声音、镜头事件或承接
+镜头2，时间、景别/机位、画面动作、对白/声音、镜头事件或承接
+【硬性禁止】
+```
+
+八个标题是用户直接检查和供应商直接读取的公开视频正文主结构；机器字段只作为职责锚点自然嵌入对应段落，不得再在八个标题之外单独平铺一套旧字段。每个 `framePlan` 时间段都必须在“逐镜头时间线”中对应一个“镜头 N”段落；有对白时必须使用 `说话人说：“实际台词”`，不能只写“说话人：角色名”。该章节只展示当前 `videoPrompt` 原文，不从 `framePlan` 重新拼接。
 
 ## 十二、资产映射与执行顺序
 

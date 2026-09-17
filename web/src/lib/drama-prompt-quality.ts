@@ -1,4 +1,5 @@
 import type { DramaDialoguePerformance, DramaPerformancePlan } from "@/lib/drama-project-contract";
+import { hasQuotedDramaDialogue } from "@/lib/drama-dialogue-timing";
 
 const GENERIC_DETAIL_PATTERNS = [
     /^表情(?:自然|丰富|到位|稳定)$/u,
@@ -24,6 +25,7 @@ const OBSERVABLE_NPC_REACTION_PATTERN = /抬眼|抬头|低头|收声|屏息|静�
 const DIALOGUE_SEGMENT_MARKER = /对白表演\s*[：:]/u;
 const CAMERA_CUT_EVENT_PATTERN = /镜头事件\s*[：:]/u;
 const ACTIVE_CAMERA_CUT_PATTERN = /硬切|镜头切换|Camera\s+cut\s+to|Cut\s+to/iu;
+export const DRAMA_VIDEO_PROMPT_TEMPLATE_SECTIONS = ["重要剪辑指令", "素材绑定", "故事意图", "空间与连续性", "灯光与画面", "摄影总则", "逐镜头时间线", "硬性禁止"] as const;
 
 export type DramaCameraPlanFrame = Pick<{ startSecond: number; endSecond: number }, "startSecond" | "endSecond">;
 
@@ -78,6 +80,41 @@ export function validateDramaFrameDetail(value: unknown, label: string) {
     return isGenericDramaDetail(value) ? `${label}缺少具体可见动作或状态` : "";
 }
 
+export function validateDramaVideoPromptTemplateLayout(value: unknown, frameCount: number, label: string) {
+    const text = typeof value === "string" ? value.trim() : "";
+    const positions = DRAMA_VIDEO_PROMPT_TEMPLATE_SECTIONS.map((section) => ({ section, position: text.search(new RegExp(`(?:^|\\n)\\s*【${escapeRegExp(section)}】(?:\\s*\\n|\\s*$)`, "u")) }));
+    const errors = positions.filter(({ position }) => position < 0).map(({ section }) => `缺少“【${section}】”段落`);
+    const presentPositions = positions.filter(({ position }) => position >= 0).map(({ position }) => position);
+    if (presentPositions.some((position, index) => index > 0 && position <= presentPositions[index - 1])) errors.push("八段标题顺序必须为“重要剪辑指令→素材绑定→故事意图→空间与连续性→灯光与画面→摄影总则→逐镜头时间线→硬性禁止”");
+    const timeline = text.match(/【逐镜头时间线】([\s\S]*?)(?:\n\s*【硬性禁止】|$)/u)?.[1] || "";
+    const shotMarkers = [...timeline.matchAll(/(?:^|\n)\s*镜头\s*\d+\s*[，,：:]/gu)];
+    if (frameCount > 0 && shotMarkers.length !== frameCount) errors.push(`“【逐镜头时间线】”写出 ${shotMarkers.length} 个镜头段，必须与 ${frameCount} 个 framePlan 时间段一一对应`);
+    for (const [index, marker] of shotMarkers.entries()) {
+        const start = marker.index ?? 0;
+        const end = shotMarkers[index + 1]?.index ?? timeline.length;
+        const segment = timeline.slice(start, end);
+        const missing = ["起点", "动作与触发", "可见衔接", "终点"].filter((field) => !new RegExp(`(?:^|\\n|[，,；;\\s])\\s*${field}\\s*[：:]`, "u").test(segment));
+        if (missing.length) errors.push(`逐镜头时间线第 ${index + 1} 段缺少${missing.join("、")}`);
+    }
+    return errors.map((error) => `${label}${error}`);
+}
+
+export function extractDramaVideoPromptSection(value: string, section: string) {
+    const heading = new RegExp(`(?:^|\\n)\\s*【${escapeRegExp(section)}】(?:\\s*\\n|\\s*$)`, "u").exec(value);
+    if (!heading) return "";
+    const start = (heading.index ?? 0) + heading[0].length;
+    const nextHeading = /\n\s*【[^】]+】(?:\s*\n|\s*$)/u.exec(value.slice(start));
+    return value.slice(start, nextHeading ? start + (nextHeading.index ?? 0) : value.length).trim();
+}
+
+export function dramaTimeRangePattern(startSecond: number, endSecond: number) {
+    const numberPattern = (value: number) => {
+        const [integer, fraction] = String(value).split(".");
+        return fraction ? "0*" + integer + "\\." + fraction + "0*" : "0*" + integer + "(?:\\.0+)?";
+    };
+    return new RegExp(numberPattern(startSecond) + "\\s*(?:-|至|到|—|–|~)\\s*" + numberPattern(endSecond) + "\\s*(?:s|秒)", "iu");
+}
+
 export function validateDramaVideoSegmentDetail(
     actionPrompt: unknown,
     transitionPrompt: unknown,
@@ -125,9 +162,11 @@ export function validateDramaNpcSegmentDetail(value: unknown, label: string, cou
 
 export function validateDramaDialogueSegmentDetail(value: unknown, label: string) {
     const text = typeof value === "string" ? value : "";
-    if (!DIALOGUE_SEGMENT_MARKER.test(text)) return [`${label}含对白但缺少“对白表演”段落`];
-    const missing = ["语气", "停顿", "重音", "说后反应"].filter((field) => !new RegExp(`${field}\s*[：:]`, "u").test(text));
-    return missing.length ? [`${label}对白表演缺少${missing.join("、")}`] : [];
+    if (!DIALOGUE_SEGMENT_MARKER.test(text) && !hasQuotedDramaDialogue(text)) return [`${label}含对白但缺少“对白表演”或带引号的实际台词`];
+    const missing = ["说话人", "语气", "停顿", "重音", "说后反应"].filter((field) => (field === "说话人" ? !new RegExp(`${field}\\s*[：:]`, "u").test(text) && !hasQuotedDramaDialogue(text) : !new RegExp(`${field}\\s*[：:]`, "u").test(text)));
+    const errors = missing.length ? [`${label}对白表演缺少${missing.join("、")}`] : [];
+    if (!hasQuotedDramaDialogue(text)) errors.push(`${label}对白必须写成“说话人说：“实际台词””格式，不能只写说话人或把台词塞进重音字段`);
+    return errors;
 }
 
 export function hasConcreteDramaCameraDirection(value: unknown) {
@@ -136,12 +175,15 @@ export function hasConcreteDramaCameraDirection(value: unknown) {
 
 export function validateDramaCameraPlan(prompt: string, frames: ReadonlyArray<DramaCameraPlanFrame>) {
     const cameraLine = prompt.match(/(?:^|\n)\s*单一主运镜\s*[：:]([^\n]+)/u)?.[1]?.trim() || "";
-    const modeMatch = cameraLine.match(/镜头模式\s*[=:：]\s*(连续镜头|内部切镜)(?:\s*[（(]\s*(\d+)\s*次\s*[）)])?/u);
-    if (!modeMatch) return "缺少镜头模式声明，必须明确写“连续镜头”或“内部切镜（N次）”";
-
+    const cameraSource = cameraLine || extractDramaVideoPromptSection(prompt, "摄影总则");
+    const modeMatch = cameraSource.match(/镜头模式\s*[=:：]\s*(连续镜头|内部切镜)(?:\s*[（(]\s*(\d+)\s*次\s*[）)])?/u);
     const lines = prompt.split(/\r?\n/u);
     const eventLines = lines.filter((line) => CAMERA_CUT_EVENT_PATTERN.test(line));
     const activeCutLines = lines.filter((line) => ACTIVE_CAMERA_CUT_PATTERN.test(line) && !/(?:无|不得|禁止|不发生|不含)\s*(?:内部)?(?:硬切|镜头切换|Cut\s+to|Camera\s+cut)/iu.test(line));
+    if (!modeMatch) {
+        if (!eventLines.length) return "缺少镜头模式声明，必须明确写“连续镜头”或“内部切镜（N次）”，或在逐镜头时间线中提供完整镜头事件";
+        return validateCameraCutEvents(eventLines, activeCutLines, frames, eventLines.length);
+    }
     if (modeMatch[1] === "连续镜头") {
         if (eventLines.length || activeCutLines.length) return "已声明连续镜头，却又写入内部切镜事件";
         return "";
@@ -149,6 +191,10 @@ export function validateDramaCameraPlan(prompt: string, frames: ReadonlyArray<Dr
 
     const declaredCount = Number(modeMatch[2]);
     if (!Number.isInteger(declaredCount) || declaredCount < 1) return "内部切镜必须声明正整数切镜次数";
+    return validateCameraCutEvents(eventLines, activeCutLines, frames, declaredCount);
+}
+
+function validateCameraCutEvents(eventLines: string[], activeCutLines: string[], frames: ReadonlyArray<DramaCameraPlanFrame>, declaredCount: number) {
     if (eventLines.length !== declaredCount) return "内部切镜声明为 " + declaredCount + " 次，但实际只有 " + eventLines.length + " 条镜头事件";
     if (activeCutLines.length > eventLines.length) return "存在未按镜头事件格式声明的切镜，请补齐时间、触发事件、新机位、信息目的和承接";
 
@@ -189,7 +235,7 @@ type DramaVideoAuthoringFrame = {
  */
 export function validateDramaVideoAuthoringQuality(prompt: string, frames: ReadonlyArray<DramaVideoAuthoringFrame>, performancePlan: DramaPerformancePlan | undefined, label = "镜头", options: { requiresBackgroundNpc?: boolean } = {}) {
     const errors: string[] = [];
-    const cameraLine = prompt.match(/(?:^|\n)\s*单一主运镜\s*[：:]([^\n]+)/u)?.[1]?.trim() || "";
+    const cameraLine = prompt.match(/(?:^|\n)\s*单一主运镜\s*[：:]([^\n]+)/u)?.[1]?.trim() || extractDramaVideoPromptSection(prompt, "摄影总则");
     const purpose = cameraLine.match(/(?:服务于|响应|为了|用于|让观众看见|强调)\s*([^；;\n]+)/u)?.[1]?.trim() || "";
     if (!purpose || !OBSERVABLE_DRAMA_DETAIL_PATTERN.test(purpose) || /当前(?:信息|动作|变化)|动作变化|情绪变化|剧情推进|氛围|节奏/u.test(purpose)) {
         errors.push(`${label}的主运镜缺少具体动机，必须说明它响应的可见动作、信息、表情、视线、道具或环境变化`);
@@ -226,4 +272,8 @@ function extractNpcReaction(value: string) {
     const legacy = value.match(NPC_SEGMENT_PATTERN)?.[6]?.trim();
     if (legacy) return legacy;
     return value.match(NPC_SLOT_SEGMENT_PATTERN)?.[3]?.trim() || "";
+}
+
+function escapeRegExp(value: string) {
+    return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }

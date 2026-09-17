@@ -1,4 +1,5 @@
 import type { DramaProductionPackageV1 } from "@/lib/drama-project-contract";
+import { formatDramaDialogueLine } from "@/lib/drama-dialogue-timing";
 import { formatPromptFieldLines } from "@/lib/drama-frame-sequence";
 import { DRAMA_PACKAGE_SECTIONS } from "@/lib/server/drama-production-package-contract";
 
@@ -98,7 +99,7 @@ function fallbackSectionContent(value: DramaProductionPackageV1, index: number) 
                 .map((asset) => `${asset.code}｜${asset.title}\n${asset.prompt}`)
                 .join("\n\n") || "无"
         );
-    if (index === 8) return value.archive?.dialogueDirections.map((direction) => `${direction.id}｜${direction.shotCode}｜${direction.speaker}｜${direction.text}\n${direction.performance}`).join("\n\n") || "无对白";
+    if (index === 8) return value.archive?.dialogueDirections.map((direction) => `${direction.id}｜${direction.shotCode}｜${formatDramaDialogueLine(direction.speaker, direction.text) || direction.text}\n${direction.performance}`).join("\n\n") || "无对白";
     if (index === 9) return episode?.shots.map((shot) => `${shot.code}｜环境音：${shot.sound?.ambience || "无"}｜拟音：${shot.sound?.soundEffects || "无"}｜音乐：${shot.sound?.music || "无"}`).join("\n") || "无";
     if (index === 10) return videoPromptSection(value) || "无";
     if (index === 11) return episode?.shots.map((shot) => `${shot.code}：场景 ${shot.locationCode || "未指定"}；角色 ${shot.characterCodes.join("、") || "无"}；道具 ${shot.propCodes.join("、") || "无"}`).join("\n") || "无";
