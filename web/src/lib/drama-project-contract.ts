@@ -361,6 +361,7 @@ export type DramaProductionBible = {
     targetPlatform?: string;
     language: string;
     ratio: string;
+    /** Derived from the complete episode shot plan; never used as the source for splitting. */
     targetDuration?: number;
     visualStyle: string;
     colorScript?: string;
@@ -395,6 +396,8 @@ export type DramaProductionPlan = {
         duration?: number;
         /** Target duration of each logical shot in the production package. */
         shotDuration?: 15 | 30;
+        /** Internal edit density inside each logical shot; independent from episode shot count. */
+        internalCutPolicy?: "adaptive" | "dense-30s";
         /** Default number of storyboard frames for each logical shot. */
         frameCount?: number;
         framePolicy?: "fixed-4" | "fixed-5" | "agent";

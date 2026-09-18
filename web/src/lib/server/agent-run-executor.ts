@@ -20,7 +20,7 @@ import { orderCreativeAssetsByIds } from "@/lib/creative-asset-references";
 import { getDramaProject } from "@/lib/server/drama-project-store";
 import { attachDramaProductionPackageAuthoring, buildDramaAssetReuseContext, DramaProductionPackageError, previewDramaProductionPackage } from "@/lib/server/drama-production-package";
 import { serializeDramaProductionPackageMarkdown } from "@/lib/drama-production-package-serializer";
-import { DRAMA_DENSE_HARD_CUT_RANGE_30S, DRAMA_FRAME_COUNT_RANGE_DEFAULT, defaultDramaProductionPlan, normalizeDramaProductionPlan, resolveDramaShotDurationPreference } from "@/lib/drama-production-plan";
+import { DRAMA_DENSE_HARD_CUT_RANGE_30S, DRAMA_FRAME_COUNT_RANGE_DEFAULT, defaultDramaProductionPlan, normalizeDramaProductionPlan, resolveDramaInternalCutPolicyPreference, resolveDramaShotDurationPreference } from "@/lib/drama-production-plan";
 import { DRAMA_PACKAGE_ARCHITECTURE_RULES } from "@/lib/server/drama-production-package-rules";
 import { COMPILED_DRAMA_PACKAGE_TEMPLATE_SOURCE, DRAMA_PACKAGE_CONTRACT } from "@/lib/server/drama-production-package-contract";
 import { DRAMA_PACKAGE_DIRECTOR_RULES, DRAMA_VIDEO_DIRECTOR_SKILL, SEEDANCE_25_DIRECTOR_SKILL } from "@/lib/server/agent-skills/creative-shortcuts";
@@ -332,6 +332,9 @@ export async function executeDramaScriptRun(run: AgentRun, origin: string, cooki
     const normalizedSnapshotPlan = snapshotPlan ? normalizeDramaProductionPlan(snapshotPlan, defaultDramaProductionPlan("manual")) : undefined;
     const hasLockedPlan = Boolean(normalizedSnapshotPlan?.lockedAt);
     const requestedShotDuration = hasLockedPlan ? (normalizedSnapshotPlan?.video.shotDuration === 30 ? 30 : 15) : resolveDramaShotDurationPreference(run.prompt, 15);
+    const requestedInternalCutPolicy = hasLockedPlan
+        ? normalizedSnapshotPlan?.video.internalCutPolicy || (/(?:高密度硬切|7\s*[—-]\s*10\s*次|8\s*[—-]\s*11\s*帧)/u.test(normalizedSnapshotPlan?.customDirectorRules || "") ? "dense-30s" : "adaptive")
+        : resolveDramaInternalCutPolicyPreference(run.prompt, "adaptive");
     const requestedFramePolicy = hasLockedPlan ? normalizedSnapshotPlan?.video.framePolicy || "agent" : "agent";
     const requestedFrameCount = requestedFramePolicy === "fixed-4" ? 4 : requestedFramePolicy === "fixed-5" ? 5 : undefined;
     const requestedFrameRange = requestedFramePolicy === "agent" ? normalizedSnapshotPlan?.frameCountRange || DRAMA_FRAME_COUNT_RANGE_DEFAULT : undefined;
@@ -340,10 +343,10 @@ export async function executeDramaScriptRun(run: AgentRun, origin: string, cooki
             ? {
                   ...normalizedSnapshotPlan,
                   video: requestedFrameCount
-                      ? { ...normalizedSnapshotPlan.video, shotDuration: requestedShotDuration, framePolicy: requestedFramePolicy, frameCount: requestedFrameCount }
+                      ? { ...normalizedSnapshotPlan.video, shotDuration: requestedShotDuration, internalCutPolicy: requestedInternalCutPolicy, framePolicy: requestedFramePolicy, frameCount: requestedFrameCount }
                       : (() => {
                             const { frameCount: _frameCount, ...video } = normalizedSnapshotPlan.video;
-                            return { ...video, shotDuration: requestedShotDuration, framePolicy: requestedFramePolicy };
+                            return { ...video, shotDuration: requestedShotDuration, internalCutPolicy: requestedInternalCutPolicy, framePolicy: requestedFramePolicy };
                         })(),
               }
             : undefined;
@@ -361,7 +364,7 @@ export async function executeDramaScriptRun(run: AgentRun, origin: string, cooki
     const authoringRoles = new Set(authoringSources.filter((material) => material.type === "text").map((material) => material.role));
     if (!authoringRoles.has("package-template") || !authoringRoles.has("story-source")) throw new Error("短剧制作包正式生成必须提供 TXT/小说素材；制作包模板由系统自动注入");
     const skillInstructions = buildDramaPackageSkillInstructions(selectedSkills, run.prompt, requestedShotDuration);
-    const authoringRules = composeDramaAuthoringRules(skillInstructions, DRAMA_PACKAGE_ARCHITECTURE_RULES);
+    const authoringRules = `${composeDramaAuthoringRules(skillInstructions, DRAMA_PACKAGE_ARCHITECTURE_RULES)}\n\n时长拆解契约：必须先完整读取 TXT/小说来源并按剧情事实、对白自然时长、动作节拍和反应留白确定逻辑片段数量；每个逻辑片段严格为 ${requestedShotDuration} 秒，整集总时长只能由最终逻辑片段数量乘以 ${requestedShotDuration} 秒推导。用户没有指定总时长时不得自设总时长；即使输入出现 targetDuration，也只能把它当作待校验信息，不能反向压缩或扩写剧情。片段内 framePlan 帧段和硬切次数不计入逻辑片段数量。`;
     if (isOutsideDramaScriptScope(run.prompt)) {
         const reply = `当前窗口只处理${current.title}的新剧本内容。请继续提供本集剧情、人物、冲突或制作包要求。`;
         await updateAgentRunById(
@@ -382,7 +385,9 @@ export async function executeDramaScriptRun(run: AgentRun, origin: string, cooki
     const assetReuseContext = buildDramaAssetReuseContext(project, current);
     const framePolicyInstruction =
         requestedFramePolicy === "agent"
-            ? `当前使用 Agent 自适应帧数模式，允许范围为 ${requestedFrameRange?.min || DRAMA_FRAME_COUNT_RANGE_DEFAULT.min}-${requestedFrameRange?.max || DRAMA_FRAME_COUNT_RANGE_DEFAULT.max} 帧。30秒高密度硬切镜头优先生成 8-${DRAMA_FRAME_COUNT_RANGE_DEFAULT.max} 帧，对应 ${DRAMA_DENSE_HARD_CUT_RANGE_30S.min}-${DRAMA_DENSE_HARD_CUT_RANGE_30S.max} 次完整硬切；静态留白或供应商能力限制必须在镜头中说明减切原因。普通镜头仍按不可合并的真实事件自适应，不得机械套用统一数量。`
+            ? requestedInternalCutPolicy === "dense-30s"
+                ? `当前使用 Agent 自适应帧数模式，但已锁定“片段层/内部剪辑层分离”：每个 ${requestedShotDuration} 秒逻辑片段必须使用 8-${DRAMA_FRAME_COUNT_RANGE_DEFAULT.max} 个真实帧段，承载 ${DRAMA_DENSE_HARD_CUT_RANGE_30S.min}-${DRAMA_DENSE_HARD_CUT_RANGE_30S.max} 次内部硬切；这不会增加逻辑片段数量，也不会改变每个片段的 ${requestedShotDuration} 秒时长。`
+                : `当前使用 Agent 自适应帧数模式，允许范围为 ${requestedFrameRange?.min || DRAMA_FRAME_COUNT_RANGE_DEFAULT.min}-${requestedFrameRange?.max || DRAMA_FRAME_COUNT_RANGE_DEFAULT.max} 帧。普通逻辑片段按不可合并的真实事件自适应；帧段和内部硬切只属于当前逻辑片段，不得用来新增或删除逻辑片段。`
             : `当前使用用户明确锁定的 ${requestedFramePolicy} 方案：每个镜头必须严格生成 ${requestedFrameCount} 个连续帧段。`;
     const visualInstruction = "视觉参数必须写入制作包并服从当前输入中的锁定方案与全局视觉合同；不得用历史提示词或旧制作包补齐。";
     const globalVisualContract = resolveDramaGlobalVisualContract(project);
@@ -407,6 +412,7 @@ framePlan.frames 只能保留现有字段；静态正文和视频正文必须由
         globalVisualContract,
         uploadedMaterials: authoringSources,
         requestedShotDuration,
+        requestedInternalCutPolicy,
         targetNarrativeChapter,
     });
     const tool = {
@@ -606,6 +612,7 @@ export function buildDramaPackageAuthoringInput(input: {
     globalVisualContract: unknown;
     uploadedMaterials: unknown[];
     requestedShotDuration: number;
+    requestedInternalCutPolicy?: "adaptive" | "dense-30s";
     targetNarrativeChapter?: number | string;
 }) {
     const currentEpisodeFacts = {
@@ -676,7 +683,9 @@ export function buildDramaPackageAuthoringInput(input: {
         globalVisualContract: input.globalVisualContract,
         compositionContract: formatDramaCompositionContract(input.project.ratio),
         authoringSources: input.uploadedMaterials,
+        episodeDurationPolicy: { mode: "derive-from-story", shotDuration: input.requestedShotDuration, totalDuration: "由完整 TXT/剧本拆解后的逻辑片段数量乘以每镜时长推导" },
         requestedShotDuration: input.requestedShotDuration,
+        requestedInternalCutPolicy: input.requestedInternalCutPolicy || "adaptive",
         targetNarrativeChapter: input.targetNarrativeChapter ?? "当前集素材",
     };
 }

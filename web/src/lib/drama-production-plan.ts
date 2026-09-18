@@ -9,6 +9,8 @@ export const DRAMA_SHOT_DURATION_OPTIONS = [15, 30] as const;
 export type DramaShotDuration = (typeof DRAMA_SHOT_DURATION_OPTIONS)[number];
 export const DRAMA_SCRIPT_SHOT_DURATION_OPTIONS = DRAMA_SHOT_DURATION_OPTIONS;
 export type DramaScriptShotDuration = (typeof DRAMA_SCRIPT_SHOT_DURATION_OPTIONS)[number];
+export const DRAMA_INTERNAL_CUT_POLICY_OPTIONS = ["adaptive", "dense-30s"] as const;
+export type DramaInternalCutPolicy = (typeof DRAMA_INTERNAL_CUT_POLICY_OPTIONS)[number];
 export const DRAMA_FRAME_COUNT_DEFAULT = 2;
 /** Package frame-plan ceiling: 8–11 frames can represent 7–10 explicit internal cuts. */
 export const DRAMA_FRAME_COUNT_MAX = 11;
@@ -35,6 +37,7 @@ export function defaultDramaProductionPlan(source: DramaProductionPlan["source"]
             resolution: "720p",
             durationPolicy: "shot",
             shotDuration: 15,
+            internalCutPolicy: "adaptive",
             framePolicy: "agent",
             count: 1,
             audioMode: "native",
@@ -74,6 +77,7 @@ export function normalizeDramaProductionPlan(value: unknown, fallback?: DramaPro
     const roles = Array.isArray(referenceInput.roles) ? referenceInput.roles.map(text).filter((role): role is DramaReferenceManifestRole => DRAMA_REFERENCE_ROLES.includes(role as DramaReferenceManifestRole)) : base.references.roles;
     const requestedShotDuration = positive(videoInput.shotDuration) || (videoInput.durationPolicy === "fixed" ? positive(videoInput.duration) : undefined);
     const shotDuration = normalizeShotDuration(requestedShotDuration, base.video.shotDuration || 15);
+    const internalCutPolicy = normalizeInternalCutPolicy(videoInput.internalCutPolicy, base.video.internalCutPolicy || "adaptive");
     const durationBudget = dramaReferenceImageBudget(shotDuration);
     const minImages = Math.min(durationBudget, boundedInteger(referenceInput.minImages, base.references.minImages, 1, 30));
     const configuredMax = boundedInteger(referenceInput.maxImages, base.references.maxImages, minImages, 30);
@@ -103,6 +107,7 @@ export function normalizeDramaProductionPlan(value: unknown, fallback?: DramaPro
             durationPolicy: videoInput.durationPolicy === "fixed" ? "fixed" : "shot",
             duration: positive(videoInput.duration) || base.video.duration,
             shotDuration,
+            internalCutPolicy,
             ...(frameCount ? { frameCount } : {}),
             framePolicy,
             count: boundedInteger(videoInput.count, base.video.count, 1, 50),
@@ -145,6 +150,14 @@ export function resolveDramaShotDurationPreference(prompt: string, fallback: Dra
     return unique.length === 1 ? unique[0] : fallback;
 }
 
+export function resolveDramaInternalCutPolicyPreference(prompt: string, fallback: DramaInternalCutPolicy = "adaptive"): DramaInternalCutPolicy {
+    const value = prompt.trim();
+    if (/(?:30\s*(?:秒|s)|每镜\s*30|每个\s*30\s*秒).{0,80}(?:高密度硬切|7\s*[—-]\s*10\s*次|8\s*[—-]\s*11\s*帧)|(?:高密度硬切|7\s*[—-]\s*10\s*次|8\s*[—-]\s*11\s*帧).{0,80}(?:30\s*(?:秒|s)|每镜\s*30|每个\s*30\s*秒)/iu.test(value)) {
+        return "dense-30s";
+    }
+    return DRAMA_INTERNAL_CUT_POLICY_OPTIONS.includes(fallback) ? fallback : "adaptive";
+}
+
 export function resolveDramaFrameCountPreference(prompt: string, fallback = DRAMA_FRAME_COUNT_DEFAULT): number {
     const values = Array.from(prompt.matchAll(/(?:分\s*)?(\d+)\s*(?:个)?\s*帧/giu), (match) => Number(match[1])).filter((value) => Number.isInteger(value) && value >= DRAMA_FRAME_COUNT_RANGE_DEFAULT.min && value <= DRAMA_FRAME_COUNT_MAX);
     return values.length ? values.at(-1)! : Math.max(DRAMA_FRAME_COUNT_RANGE_DEFAULT.min, Math.min(DRAMA_FRAME_COUNT_MAX, Math.floor(fallback)));
@@ -172,6 +185,10 @@ function normalizeShotDuration(value: unknown, fallback: number) {
 function normalizeFramePolicy(value: unknown, fallback: DramaFramePolicy): DramaFramePolicy {
     if (DRAMA_FRAME_POLICY_OPTIONS.includes(value as DramaFramePolicy)) return value as DramaFramePolicy;
     return DRAMA_FRAME_POLICY_OPTIONS.includes(fallback) ? fallback : "agent";
+}
+
+function normalizeInternalCutPolicy(value: unknown, fallback: DramaInternalCutPolicy): DramaInternalCutPolicy {
+    return DRAMA_INTERNAL_CUT_POLICY_OPTIONS.includes(value as DramaInternalCutPolicy) ? (value as DramaInternalCutPolicy) : DRAMA_INTERNAL_CUT_POLICY_OPTIONS.includes(fallback) ? fallback : "adaptive";
 }
 
 function normalizeResolution(value: unknown, fallback: string) {

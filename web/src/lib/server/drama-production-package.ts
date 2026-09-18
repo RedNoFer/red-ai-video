@@ -504,6 +504,7 @@ function normalizeProductionPackage(value: unknown, options: DramaProductionPack
         };
     });
     const synchronizedEpisodes = normalizedEpisodes.map(synchronizeContinuityStates);
+    const derivedTargetDuration = synchronizedEpisodes.reduce((total, episode) => total + episode.shots.reduce((sum, shot) => sum + shot.duration, 0), 0);
     // Validate the caller's raw plan before normalization can apply defaults or
     // coerce an invalid value into a seemingly valid runtime plan.
     validateRawProductionPlan(bible);
@@ -532,7 +533,7 @@ function normalizeProductionPackage(value: unknown, options: DramaProductionPack
                 targetPlatform: optionalText(bible.targetPlatform),
                 language: text(bible.language) || "中文",
                 ratio: text(bible.ratio) || text(project.ratio) || "9:16",
-                targetDuration: positiveNumber(bible.targetDuration),
+                targetDuration: derivedTargetDuration > 0 ? derivedTargetDuration : undefined,
                 visualStyle: styleContract.name,
                 ...(colorScript ? { colorScript } : {}),
                 soundBible: optionalText(bible.soundBible),
@@ -794,8 +795,10 @@ function validateRawProductionPlan(bible: Record<string, unknown>) {
     const rawPlan = object(bible.productionPlan);
     const rawVideo = object(rawPlan.video);
     const rawShotDuration = rawVideo.shotDuration;
+    const rawInternalCutPolicy = rawVideo.internalCutPolicy;
     const rawFramePolicy = rawVideo.framePolicy;
     if (rawShotDuration !== undefined && Number(rawShotDuration) !== 15 && Number(rawShotDuration) !== 30) throw new DramaProductionPackageError("制作包每镜时长只能为 15 秒或 30 秒");
+    if (rawInternalCutPolicy !== undefined && !["adaptive", "dense-30s"].includes(String(rawInternalCutPolicy))) throw new DramaProductionPackageError("制作包内部切镜策略无效");
     if (rawFramePolicy !== undefined && !["fixed-4", "fixed-5", "agent"].includes(String(rawFramePolicy))) throw new DramaProductionPackageError("制作包帧数策略无效");
     if (rawFramePolicy === "agent" && rawVideo.frameCount !== undefined) throw new DramaProductionPackageError("Agent 智能切分方案不能携带固定帧数");
 }

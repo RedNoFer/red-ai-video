@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { App, Button, Input, Select } from "antd";
 import { Save } from "lucide-react";
 
-import { applyDramaVisualDirection, defaultDramaProductionPlan, dramaVisualDirection, DRAMA_SCRIPT_SHOT_DURATION_OPTIONS, DRAMA_VIDEO_RESOLUTION_OPTIONS, normalizeDramaProductionPlan } from "@/lib/drama-production-plan";
+import { applyDramaVisualDirection, defaultDramaProductionPlan, dramaVisualDirection, DRAMA_INTERNAL_CUT_POLICY_OPTIONS, DRAMA_SCRIPT_SHOT_DURATION_OPTIONS, DRAMA_VIDEO_RESOLUTION_OPTIONS, normalizeDramaProductionPlan } from "@/lib/drama-production-plan";
 import type { DramaProductionPlan } from "@/lib/drama-project-contract";
 import { saveDramaEpisodeSettings } from "@/services/api/drama-projects";
 import type { DramaEpisode, DramaProject } from "../types";
@@ -113,6 +113,16 @@ export function DramaEpisodeSettings({ project, episode, embedded = false }: { p
                             />
                         </label>
                         <label className="block space-y-1">
+                            <span className="text-[11px] text-muted-foreground">片段内剪辑</span>
+                            <Select
+                                size="small"
+                                className="w-full"
+                                value={planDraft.video.internalCutPolicy || "adaptive"}
+                                options={DRAMA_INTERNAL_CUT_POLICY_OPTIONS.map((value) => ({ label: value === "dense-30s" ? "30秒高密度硬切（8–11帧 / 7–10切）" : "按真实事件自适应", value }))}
+                                onChange={(internalCutPolicy: "adaptive" | "dense-30s") => setPlanDraft((current) => ({ ...current, video: { ...current.video, internalCutPolicy } }))}
+                            />
+                        </label>
+                        <label className="block space-y-1">
                             <span className="text-[11px] text-muted-foreground">每镜帧数</span>
                             <Select
                                 size="small"
@@ -148,8 +158,7 @@ export function DramaEpisodeSettings({ project, episode, embedded = false }: { p
                         <span className="text-[11px] leading-5 text-muted-foreground">本次用户补充优先于项目规则；项目规则会同步影响制作包、图片帧和视频提示词 Agent。</span>
                     </label>
                     <p className="text-[11px] leading-5 text-muted-foreground">
-                        保存后会刷新锁定时间。生成制作包时，剧本 GPT 使用这里最新的方案；Agent 模式按真实事件在 {planDraft.frameCountRange?.min || 2}-{planDraft.frameCountRange?.max || 11} 帧内自适应，30 秒高密度硬切优先承载 7—10 次切换；固定 4/5
-                        帧仅在主动选择时生效。
+                        保存后会刷新锁定时间。生成制作包时，剧本 GPT 使用这里最新的方案；每镜时长决定逻辑片段数量与整集总时长，片段内剪辑只决定当前30秒片段的帧段/硬切密度。高密度模式固定承载 8—11 帧和 7—10 次切换；固定 4/5 帧仅在主动选择时生效。
                     </p>
                 </div>
             </div>

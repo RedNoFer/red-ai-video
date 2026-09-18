@@ -4,7 +4,7 @@ import { nanoid } from "nanoid";
 
 import type { DramaAuthoringSourceSnapshot, DramaAuthoringWorkOrder } from "@/lib/drama-project-contract";
 import { orderCreativeAssetsByIds } from "@/lib/creative-asset-references";
-import { defaultDramaProductionPlan, normalizeDramaProductionPlan, resolveDramaShotDurationPreference } from "@/lib/drama-production-plan";
+import { defaultDramaProductionPlan, normalizeDramaProductionPlan, resolveDramaInternalCutPolicyPreference, resolveDramaShotDurationPreference } from "@/lib/drama-production-plan";
 import { resolveDramaGlobalVisualContract } from "@/lib/drama-style";
 import { getAuthSettings } from "@/lib/auth/store";
 import { getCreativeAssetsByIds } from "@/lib/server/creative-runtime-store";
@@ -71,6 +71,7 @@ function buildWorkOrderContext(run: AgentRun) {
         const snapshot = run.snapshot && typeof run.snapshot === "object" && !Array.isArray(run.snapshot) ? (run.snapshot as { productionPlan?: unknown }).productionPlan : undefined;
         const plan = snapshot ? normalizeDramaProductionPlan(snapshot, defaultDramaProductionPlan("manual")) : undefined;
         const shotDuration = plan?.lockedAt ? (plan.video.shotDuration === 30 ? 30 : 15) : resolveDramaShotDurationPreference(run.prompt, 15);
+        const internalCutPolicy = plan?.lockedAt ? plan.video.internalCutPolicy || resolveDramaInternalCutPolicyPreference(plan.customDirectorRules || "", "adaptive") : resolveDramaInternalCutPolicyPreference(run.prompt, "adaptive");
         const materials = orderCreativeAssetsByIds(uploadedAssets, run.referencedAssetIds || []).map((asset, index) => {
             const base = { alias: `@附件${index + 1}`, type: asset.type, title: asset.title, ...(asset.textContent ? { textContent: asset.textContent } : {}), ...(asset.mimeType ? { mimeType: asset.mimeType } : {}) };
             return { ...base, role: classifyDramaAuthoringMaterial(base), contentHash: hashMaterial(base) } as DramaAuthoringSourceSnapshot;
@@ -92,6 +93,7 @@ function buildWorkOrderContext(run: AgentRun) {
             globalVisualContract: resolveDramaGlobalVisualContract(project),
             uploadedMaterials: materialsWithSystemTemplate,
             requestedShotDuration: shotDuration,
+            requestedInternalCutPolicy: internalCutPolicy,
             targetNarrativeChapter,
         });
         const textRoles = new Set(materialsWithSystemTemplate.filter((material) => material.type === "text").map((material) => material.role));

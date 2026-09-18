@@ -1,13 +1,22 @@
 import { describe, expect, it } from "vitest";
 
-import { applyDramaVisualDirection, defaultDramaProductionPlan, dramaReferenceImageBudget, dramaVisualDirection, normalizeDramaProductionPlan, resolveDramaFrameCountPreference, resolveDramaShotDurationPreference } from "@/lib/drama-production-plan";
+import {
+    applyDramaVisualDirection,
+    defaultDramaProductionPlan,
+    dramaReferenceImageBudget,
+    dramaVisualDirection,
+    normalizeDramaProductionPlan,
+    resolveDramaFrameCountPreference,
+    resolveDramaInternalCutPolicyPreference,
+    resolveDramaShotDurationPreference,
+} from "@/lib/drama-production-plan";
 
 describe("drama production plan", () => {
     it("defaults new projects to locked-by-confirmation storyboard settings", () => {
         const plan = defaultDramaProductionPlan();
         expect(plan).toMatchObject({
             visual: { visualStyle: "", artStyle: "", source: "agent" },
-            video: { model: "seedance-2-0-official", mode: "storyboard", resolution: "720p", shotDuration: 15, framePolicy: "agent", count: 1, allowExplicitFallback: false },
+            video: { model: "seedance-2-0-official", mode: "storyboard", resolution: "720p", shotDuration: 15, internalCutPolicy: "adaptive", framePolicy: "agent", count: 1, allowExplicitFallback: false },
             frameCountRange: { min: 2, max: 11 },
         });
         expect(plan.video.frameCount).toBeUndefined();
@@ -68,6 +77,11 @@ describe("drama production plan", () => {
 
         expect(plan).toMatchObject({ frameCountRange: { min: 2, max: 11 }, customDirectorRules: "公共场景增加旁听 NPC", video: { framePolicy: "agent" } });
         expect(resolveDramaFrameCountPreference("每个镜头1帧")).toBe(2);
+    });
+
+    it("keeps logical shot duration separate from dense internal cuts", () => {
+        expect(resolveDramaInternalCutPolicyPreference("每个片段30秒，内部使用7-10次高密度硬切")).toBe("dense-30s");
+        expect(normalizeDramaProductionPlan({ video: { shotDuration: 30, internalCutPolicy: "dense-30s" } })?.video).toMatchObject({ shotDuration: 30, internalCutPolicy: "dense-30s" });
     });
 
     it("round-trips the editable visual direction without losing its split fields", () => {

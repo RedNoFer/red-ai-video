@@ -16,31 +16,29 @@ export function serializeDramaProductionPackageMarkdown(value: DramaProductionPa
         return `## ${chapterTitle(index)}\n\n${content}`;
     }).join("\n\n");
     const embeddedJson = JSON.stringify(canonical, null, 2).replace(/```/gu, "\\u0060\\u0060\\u0060");
-    return `${`# 《${canonical.project.title}》完整制作包\n\n> 制作包格式：\`vozeb-drama-production-package-v1\`\n> 规范数据源：JSON；本文件由同一对象确定性导出。\n> 目标平台：${canonical.project.productionBible.targetPlatform || "未指定"}｜语言：${canonical.project.productionBible.language}｜画幅：${canonical.project.ratio}｜成片：约 ${canonical.project.productionBible.targetDuration || canonical.episodes.reduce((total, episode) => total + episode.shots.reduce((sum, shot) => sum + shot.duration, 0), 0)} 秒\n\n## 规范对象（导入权威数据）\n\n\`\`\`drama-production-package\n${embeddedJson}\n\`\`\`\n\n${body}`.trimEnd()}\n`;
+    return `${`# 《${canonical.project.title}》完整制作包\n\n> 制作包格式：\`vozeb-drama-production-package-v1\`\n> 规范数据源：JSON；本文件由同一对象确定性导出。\n> 目标平台：${canonical.project.productionBible.targetPlatform || "未指定"}｜语言：${canonical.project.productionBible.language}｜画幅：${canonical.project.ratio}｜成片：由 ${canonical.episodes.length ? "TXT/剧本拆解后的逻辑片段" : "当前剧情"} 推导，共 ${canonical.project.productionBible.targetDuration || 0} 秒\n\n## 规范对象（导入权威数据）\n\n\`\`\`drama-production-package\n${embeddedJson}\n\`\`\`\n\n${body}`.trimEnd()}\n`;
 }
 
 function withDeterministicVideoSection(value: DramaProductionPackageV1): DramaProductionPackageV1 {
+    const episodes = value.episodes.map((episode) => ({
+        ...episode,
+        shots: episode.shots.map((shot) => ({
+            ...shot,
+            imagePrompt: formatPromptFieldLines(shot.imagePrompt, "static"),
+            ...(shot.startFramePrompt ? { startFramePrompt: formatPromptFieldLines(shot.startFramePrompt, "static") } : {}),
+            ...(shot.endFramePrompt ? { endFramePrompt: formatPromptFieldLines(shot.endFramePrompt, "static") } : {}),
+            videoPrompt: shot.videoPrompt.trim(),
+            framePlan: {
+                ...shot.framePlan,
+                frames: shot.framePlan.frames.map((frame) => ({ ...frame, imagePrompt: formatPromptFieldLines(frame.imagePrompt, "static") })),
+            },
+        })),
+    }));
+    const targetDuration = episodes.reduce((total, episode) => total + episode.shots.reduce((sum, shot) => sum + shot.duration, 0), 0);
     const canonical = {
         ...value,
-        episodes: value.episodes.map((episode) => ({
-            ...episode,
-            shots: episode.shots.map((shot) => {
-                return {
-                    ...shot,
-                    imagePrompt: formatPromptFieldLines(shot.imagePrompt, "static"),
-                    ...(shot.startFramePrompt ? { startFramePrompt: formatPromptFieldLines(shot.startFramePrompt, "static") } : {}),
-                    ...(shot.endFramePrompt ? { endFramePrompt: formatPromptFieldLines(shot.endFramePrompt, "static") } : {}),
-                    videoPrompt: shot.videoPrompt.trim(),
-                    framePlan: {
-                        ...shot.framePlan,
-                        frames: shot.framePlan.frames.map((frame) => ({
-                            ...frame,
-                            imagePrompt: formatPromptFieldLines(frame.imagePrompt, "static"),
-                        })),
-                    },
-                };
-            }),
-        })),
+        project: { ...value.project, productionBible: { ...value.project.productionBible, targetDuration } },
+        episodes,
     };
     const existingSections = canonical.archive?.sections || [];
     const emptyArchive = {

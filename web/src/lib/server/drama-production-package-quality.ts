@@ -375,7 +375,7 @@ function checkCameraEvents(checks: DramaQualityGateCheck[], value: DramaProducti
         const internal = /镜头模式\s*[：:]\s*内部切镜/u.test(prompt);
         const inferredInternal = !internal && eventLines.length > 0;
         const denseMaterial = `${productionPlan?.customDirectorRules || ""}\n${prompt}`;
-        const denseRequested = shot.duration === 30 && /高密度硬切|7\s*[—-]\s*10\s*次(?:可见)?硬切/u.test(denseMaterial);
+        const denseRequested = shot.duration === 30 && (productionPlan?.video?.internalCutPolicy === "dense-30s" || /高密度硬切|7\s*[—-]\s*10\s*次(?:可见)?硬切/u.test(denseMaterial));
         const denseCutException = denseRequested && denseCutExceptionPattern.test(denseMaterial);
         if (hasCut && !internal && !inferredInternal) failed.push(`${shot.code}:未声明内部切镜`);
         if (internal || inferredInternal) {
@@ -413,6 +413,19 @@ function checkCameraEvents(checks: DramaQualityGateCheck[], value: DramaProducti
 }
 
 function checkSimpleStructuralChecks(checks: DramaQualityGateCheck[], value: DramaProductionPackageV1) {
+    const target = value.project.productionBible?.productionPlan?.video?.shotDuration;
+    if (target) {
+        const invalid = value.episodes.flatMap((episode) => episode.shots.filter((shot) => shot.duration !== target).map((shot) => `${episode.code}/${shot.code}=${shot.duration}s`));
+        add(
+            checks,
+            "SHOT_DURATION_POLICY",
+            !invalid.length,
+            "逻辑片段时长",
+            invalid.length ? `生产方案要求每个逻辑片段 ${target} 秒，但发现 ${invalid.join("、")}` : `所有逻辑片段均为 ${target} 秒；片段内硬切不改变逻辑片段时长`,
+            ["project.productionBible.productionPlan.video.shotDuration", "episodes[].shots[].duration"],
+            "先按故事节拍拆成多个逻辑片段，再让每个逻辑片段严格使用生产方案规定的时长；内部帧段/硬切数量不计入片段数量。",
+        );
+    }
     const timelineValid = value.episodes.every((episode) =>
         episode.shots.every((shot) => {
             const frames = shot.framePlan?.frames || [];

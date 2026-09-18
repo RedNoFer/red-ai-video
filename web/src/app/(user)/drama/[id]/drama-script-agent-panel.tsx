@@ -24,7 +24,7 @@ import { CREATIVE_UPLOAD_MAX_BYTES, isCreativeTextFile } from "@/lib/creative-up
 import { applyDramaEpisodeProductionPackage, saveDramaProductionPlan } from "@/services/api/drama-projects";
 import { useDramaStore } from "../stores/use-drama-store";
 import { useCreativeAgentOptions } from "@/hooks/use-creative-agent-options";
-import { applyDramaVisualDirection, defaultDramaProductionPlan, dramaVisualDirection, DRAMA_SCRIPT_SHOT_DURATION_OPTIONS, DRAMA_VIDEO_RESOLUTION_OPTIONS, normalizeDramaProductionPlan } from "@/lib/drama-production-plan";
+import { applyDramaVisualDirection, defaultDramaProductionPlan, dramaVisualDirection, DRAMA_INTERNAL_CUT_POLICY_OPTIONS, DRAMA_SCRIPT_SHOT_DURATION_OPTIONS, DRAMA_VIDEO_RESOLUTION_OPTIONS, normalizeDramaProductionPlan } from "@/lib/drama-production-plan";
 import type { DramaProductionPlan } from "@/lib/drama-project-contract";
 
 type Props = { project: DramaProject; episode: DramaEpisode; open: boolean; onOpenChange: (open: boolean) => void };
@@ -613,6 +613,15 @@ export function DramaScriptAgentPanel({ project, episode, open, onOpenChange }: 
                             />
                         </label>
                         <label className="block space-y-1">
+                            <span className="text-xs font-medium">片段内剪辑</span>
+                            <Select
+                                className="w-full"
+                                value={planDraft.video.internalCutPolicy || "adaptive"}
+                                options={DRAMA_INTERNAL_CUT_POLICY_OPTIONS.map((value) => ({ label: value === "dense-30s" ? "30秒高密度硬切（8–11帧 / 7–10切）" : "按真实事件自适应", value }))}
+                                onChange={(internalCutPolicy: "adaptive" | "dense-30s") => setPlanDraft((current) => ({ ...current, video: { ...current.video, internalCutPolicy } }))}
+                            />
+                        </label>
+                        <label className="block space-y-1">
                             <span className="text-xs font-medium">每镜帧数</span>
                             <Select
                                 className="w-full"
@@ -680,9 +689,10 @@ export function DramaScriptAgentPanel({ project, episode, open, onOpenChange }: 
                         <span className="text-[11px] leading-5 text-muted-foreground">本次用户补充优先于这里；该规则会同时用于制作包、图片帧优化、视频提示词和外部 Agent 工作单。</span>
                     </label>
                     <p className="text-xs leading-5 text-muted-foreground">
-                        Agent 会按每镜 {planDraft.video.shotDuration || 15} 秒和“
+                        Agent 会先按每个逻辑片段 {planDraft.video.shotDuration || 15} 秒拆分整集，再按“
                         {planDraft.video.framePolicy === "fixed-4" ? "4 帧" : planDraft.video.framePolicy === "fixed-5" ? "5 帧" : `自适应 ${planDraft.frameCountRange?.min || 2}-${planDraft.frameCountRange?.max || 11} 帧`}
-                        ”重新切分剧情；相邻碎片镜头会合并为完整逻辑镜头。空白视觉参数由 Agent 补出具体值并写入制作包。连续性固定为严格模式：下一镜只能引用上一镜当前视频版本且已人工验收的实际尾帧。
+                        ”生成每个片段内部画面；{planDraft.video.internalCutPolicy === "dense-30s" ? "30秒高密度模式要求每个片段8–11帧、7–10次内部硬切，硬切不新增片段。" : "片段内硬切按真实可见事件自适应，不能改变片段数量。"} 空白视觉参数由 Agent
+                        补出具体值并写入制作包。连续性固定为严格模式：下一镜只能引用上一镜当前视频版本且已人工验收的实际尾帧。
                     </p>
                     <div className="flex flex-col justify-end gap-2 border-t border-border pt-3 sm:flex-row">
                         <Button disabled={savingPlan} onClick={() => setPlanOpen(false)}>
