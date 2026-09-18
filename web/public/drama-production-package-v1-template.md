@@ -2,7 +2,7 @@
 
 > 制作包格式：`vozeb-drama-production-package-v1`
 >
-> 模板版本：由 `pnpm compile:skills` 自动生成；唯一制作包契约：`vozeb-drama-production-package-v1@1.0.0`（契约 hash：`c2052c957c380214c50eb822a263d1c0bc6809267e31eb43e7447195e0629b9f`，规范源 hash：`eb94fdc08aa6e8ed47e54630cdcf48a8dcaf96ecf07772ccffdac878e76edebd`）。导演 Skill：`drama-video-director@1.9.0`（hash：`cc703819baadc90a77ac8de07e8c5794a6488a45c18d4683c49f944f54e723b9`）；服务端制作包规则 hash：`ef468601c28d809e84bfc1ac4f077a756fce37b96b5fe35b14b2943f5f16fceb`；Seedance Skill、服务端规则和 Codex 工作单均由同一编译清单绑定。
+> 模板版本：由 `pnpm compile:skills` 自动生成；唯一制作包契约：`vozeb-drama-production-package-v1@1.0.0`（契约 hash：`c2052c957c380214c50eb822a263d1c0bc6809267e31eb43e7447195e0629b9f`，规范源 hash：`eb94fdc08aa6e8ed47e54630cdcf48a8dcaf96ecf07772ccffdac878e76edebd`）。导演 Skill：`drama-video-director@1.9.0`（hash：`51e1291da016e9c3e786b7e447b532627fb9acf7b80d5405cd650c3e1d6568ff`）；服务端制作包规则 hash：`ef468601c28d809e84bfc1ac4f077a756fce37b96b5fe35b14b2943f5f16fceb`；Seedance Skill、服务端规则和 Codex 工作单均由同一编译清单绑定。
 >
 > 使用约定：本模板是当前 v1 制作包的填写入口。完整制作包必须同时提供可导入的规范对象 JSON；JSON 是导入事实源，下面的章节是面向人工阅读的确定性展示。不要把历史制作包、旧 generationPrompt 或旧分镜正文当作新包模板。
 >
@@ -40,7 +40,7 @@
 - 当前项目画幅与安全区：按锁定生产方案填写，不把本标题当作强制比例值。
 - 9:16 优先单人/双人、过肩和纵向深度；16:9 优先横向空间、长桌和群像关系。不能把横屏站位只替换比例后复用。
 - 所有可见主角、关键 NPC、剧情道具和场景锚点在当前景别下清晰可辨；只有明确要求时才使用背影、虚焦或浅景深。
-- 逻辑片段数量与片段内部切换次数是两个不同层级：`shotDuration` 只规定每个逻辑片段的时长，整集总时长等于所有逻辑片段时长之和；`framePlan` 和内部硬切只属于当前逻辑片段，不能据此新增、删除或改变逻辑片段时长。逻辑片段数量按完整剧情节拍和对白容量确定，不得因帧数变化而漂移。
+- 两条轴必须分开填写和校验：**逻辑片段轴**使用 `shots`、`shotDuration` 和整集总时长，先完整读取 TXT/剧本，按剧情节拍、对白自然时长与反应留白确定片段数量，再让每个片段使用配置时长；**片段内部剪辑密度轴**使用 `framePlan.frames`、镜头事件和内部硬切，只描述当前逻辑片段内部的可见状态变化。内部帧段或硬切数量绝不能新增、删除或改变逻辑片段，也不能改变整集总时长。若当前生产方案明确要求 `30秒高密度硬切`，必须使用 `internalCutPolicy=dense-30s`，每个30秒片段默认提供8—11个帧段承载7—10次硬切；不得用 `adaptive` 或3—4帧静默降级。
 
 ## 二、原创第一章
 

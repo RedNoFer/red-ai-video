@@ -71,7 +71,9 @@ function buildWorkOrderContext(run: AgentRun) {
         const snapshot = run.snapshot && typeof run.snapshot === "object" && !Array.isArray(run.snapshot) ? (run.snapshot as { productionPlan?: unknown }).productionPlan : undefined;
         const plan = snapshot ? normalizeDramaProductionPlan(snapshot, defaultDramaProductionPlan("manual")) : undefined;
         const shotDuration = plan?.lockedAt ? (plan.video.shotDuration === 30 ? 30 : 15) : resolveDramaShotDurationPreference(run.prompt, 15);
-        const internalCutPolicy = plan?.lockedAt ? plan.video.internalCutPolicy || resolveDramaInternalCutPolicyPreference(plan.customDirectorRules || "", "adaptive") : resolveDramaInternalCutPolicyPreference(run.prompt, "adaptive");
+        const promptInternalCutPolicy = resolveDramaInternalCutPolicyPreference(run.prompt, "adaptive");
+        const lockedInternalCutPolicy = plan?.lockedAt ? plan.video.internalCutPolicy || resolveDramaInternalCutPolicyPreference(plan.customDirectorRules || "", "adaptive") : undefined;
+        const internalCutPolicy = promptInternalCutPolicy === "dense-30s" || lockedInternalCutPolicy === "dense-30s" ? "dense-30s" : lockedInternalCutPolicy || promptInternalCutPolicy;
         const materials = orderCreativeAssetsByIds(uploadedAssets, run.referencedAssetIds || []).map((asset, index) => {
             const base = { alias: `@附件${index + 1}`, type: asset.type, title: asset.title, ...(asset.textContent ? { textContent: asset.textContent } : {}), ...(asset.mimeType ? { mimeType: asset.mimeType } : {}) };
             return { ...base, role: classifyDramaAuthoringMaterial(base), contentHash: hashMaterial(base) } as DramaAuthoringSourceSnapshot;

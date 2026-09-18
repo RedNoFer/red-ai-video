@@ -161,6 +161,31 @@ describe("drama authoring quality gates", () => {
         expect(blockers(report, "CAMERA_EVENT")).not.toHaveLength(0);
     });
 
+    it("blocks a dense-30s plan when the package only contains three frame segments", () => {
+        const value = packageValue({
+            videoPrompt:
+                "镜头模式：内部切镜（3次）\n单一主运镜：每次切换后重新合焦，为了让观众看清萧炎的眼神、手部和主位关系。\n镜头事件：时间：15秒；类型：硬切；触发事件：萧炎抬眼；新机位：50mm侧45度中近景；切后主运镜：锁定机位；信息目的：看清眼神变化；承接：视线和轴线连续。\n镜头事件：时间：15秒；类型：硬切；触发事件：萧炎压住桌沿；新机位：85mm手部近景；切后主运镜：锁定机位；信息目的：看清手部受力；承接：桌沿状态连续。\n镜头事件：时间：15秒；类型：硬切；触发事件：萧战抬眼；新机位：65mm父亲中近景；切后主运镜：锁定机位；信息目的：看清主位反应；承接：声音连续。",
+        });
+        value.project.productionBible = {
+            ...(value.project.productionBible || {}),
+            productionPlan: { video: { shotDuration: 30, framePolicy: "agent", internalCutPolicy: "dense-30s" } },
+        } as never;
+        const report = validateDramaAuthoringQuality({ package: value, sources: [] });
+        expect(blockers(report, "CAMERA_EVENT")).not.toHaveLength(0);
+    });
+
+    it("blocks a dense-cut rule that is silently downgraded to adaptive", () => {
+        const value = packageValue({
+            videoPrompt: "镜头模式：内部切镜（3次）\n单一主运镜：锁定机位，为了让观众看清萧炎抬眼。\n镜头事件：时间：15秒；类型：硬切；触发事件：萧炎抬眼；新机位：50mm中近景；切后主运镜：锁定机位；信息目的：看清眼神；承接：视线连续。",
+        });
+        value.project.productionBible = {
+            ...(value.project.productionBible || {}),
+            productionPlan: { video: { shotDuration: 30, framePolicy: "agent", internalCutPolicy: "adaptive" }, customDirectorRules: "当前用户要求30秒高密度硬切，目标7—10次" },
+        } as never;
+        const report = validateDramaAuthoringQuality({ package: value, sources: [] });
+        expect(blockers(report, "CAMERA_EVENT")).not.toHaveLength(0);
+    });
+
     it("accepts the eight-section prompt layout with cut events inferred from the timeline", () => {
         const value = packageValue({
             videoPrompt: [

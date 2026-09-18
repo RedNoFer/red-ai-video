@@ -1346,7 +1346,9 @@ function validatePromptAssetBindings(prompt: string, characterCodes: string[], p
         const prop = props.find((item) => text(item.code) === propCode);
         if (prop && ![...semanticAssetTerms(prop)].some((term) => bindingLine.includes(term))) errors.push(`${label}的素材绑定未明确写出道具 ${text(prop.name) || propCode}`);
     }
-    const shotSpecificPrompt = prompt.split(/(?:^|\n)\s*针对性约束\s*[：:]/u)[0];
+    const shotSpecificPrompt = prompt
+        .replace(/【素材绑定】[\s\S]*?(?=【故事意图】)/u, "")
+        .split(/(?:^|\n)\s*针对性约束\s*[：:]/u)[0];
     for (const prop of props) {
         const code = text(prop.code);
         if (!code || declared.has(code)) continue;
@@ -1362,7 +1364,14 @@ function semanticAssetTerms(asset: Record<string, unknown> | undefined) {
     const terms = new Set<string>();
     for (const chunk of source.match(/[\p{Script=Han}A-Za-z0-9]{2,}/gu) || []) {
         terms.add(chunk);
-        if (/^[\p{Script=Han}]+$/u.test(chunk)) for (let size = 2; size <= Math.min(4, chunk.length); size += 1) for (let start = 0; start + size <= chunk.length; start += 1) terms.add(chunk.slice(start, start + size));
+        if (/^[\p{Script=Han}]+$/u.test(chunk)) {
+            for (let size = 2; size <= Math.min(4, chunk.length); size += 1) {
+                for (let start = 0; start + size <= chunk.length; start += 1) {
+                    const term = chunk.slice(start, start + size);
+                    if (!new Set(["桌面", "桌沿"]).has(term)) terms.add(term);
+                }
+            }
+        }
     }
     return terms;
 }

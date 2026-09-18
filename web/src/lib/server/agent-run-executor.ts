@@ -20,7 +20,7 @@ import { orderCreativeAssetsByIds } from "@/lib/creative-asset-references";
 import { getDramaProject } from "@/lib/server/drama-project-store";
 import { attachDramaProductionPackageAuthoring, buildDramaAssetReuseContext, DramaProductionPackageError, previewDramaProductionPackage } from "@/lib/server/drama-production-package";
 import { serializeDramaProductionPackageMarkdown } from "@/lib/drama-production-package-serializer";
-import { DRAMA_DENSE_HARD_CUT_RANGE_30S, DRAMA_FRAME_COUNT_RANGE_DEFAULT, defaultDramaProductionPlan, normalizeDramaProductionPlan, resolveDramaInternalCutPolicyPreference, resolveDramaShotDurationPreference } from "@/lib/drama-production-plan";
+import { DRAMA_DENSE_HARD_CUT_RANGE_30S, DRAMA_FRAME_COUNT_RANGE_DEFAULT, defaultDramaProductionPlan, normalizeDramaProductionPlan, resolveDramaInternalCutPolicyPreference, resolveDramaShotDurationPreference, type DramaInternalCutPolicy } from "@/lib/drama-production-plan";
 import { DRAMA_PACKAGE_ARCHITECTURE_RULES } from "@/lib/server/drama-production-package-rules";
 import { COMPILED_DRAMA_PACKAGE_TEMPLATE_SOURCE, DRAMA_PACKAGE_CONTRACT } from "@/lib/server/drama-production-package-contract";
 import { DRAMA_PACKAGE_DIRECTOR_RULES, DRAMA_VIDEO_DIRECTOR_SKILL, SEEDANCE_25_DIRECTOR_SKILL } from "@/lib/server/agent-skills/creative-shortcuts";
@@ -332,9 +332,11 @@ export async function executeDramaScriptRun(run: AgentRun, origin: string, cooki
     const normalizedSnapshotPlan = snapshotPlan ? normalizeDramaProductionPlan(snapshotPlan, defaultDramaProductionPlan("manual")) : undefined;
     const hasLockedPlan = Boolean(normalizedSnapshotPlan?.lockedAt);
     const requestedShotDuration = hasLockedPlan ? (normalizedSnapshotPlan?.video.shotDuration === 30 ? 30 : 15) : resolveDramaShotDurationPreference(run.prompt, 15);
-    const requestedInternalCutPolicy = hasLockedPlan
-        ? normalizedSnapshotPlan?.video.internalCutPolicy || (/(?:高密度硬切|7\s*[—-]\s*10\s*次|8\s*[—-]\s*11\s*帧)/u.test(normalizedSnapshotPlan?.customDirectorRules || "") ? "dense-30s" : "adaptive")
-        : resolveDramaInternalCutPolicyPreference(run.prompt, "adaptive");
+    const promptInternalCutPolicy = resolveDramaInternalCutPolicyPreference(run.prompt, "adaptive");
+    const lockedInternalCutPolicy = hasLockedPlan
+        ? normalizedSnapshotPlan?.video.internalCutPolicy || resolveDramaInternalCutPolicyPreference(normalizedSnapshotPlan?.customDirectorRules || "", "adaptive")
+        : undefined;
+    const requestedInternalCutPolicy: DramaInternalCutPolicy = promptInternalCutPolicy === "dense-30s" || lockedInternalCutPolicy === "dense-30s" ? "dense-30s" : lockedInternalCutPolicy || promptInternalCutPolicy;
     const requestedFramePolicy = hasLockedPlan ? normalizedSnapshotPlan?.video.framePolicy || "agent" : "agent";
     const requestedFrameCount = requestedFramePolicy === "fixed-4" ? 4 : requestedFramePolicy === "fixed-5" ? 5 : undefined;
     const requestedFrameRange = requestedFramePolicy === "agent" ? normalizedSnapshotPlan?.frameCountRange || DRAMA_FRAME_COUNT_RANGE_DEFAULT : undefined;

@@ -1,6 +1,6 @@
 import type { DramaAuthoringSourceSnapshot, DramaProductionPackageV1, DramaQualityGateCheck, DramaQualityGateReport } from "@/lib/drama-project-contract";
 import { dramaDialogueTimingReminder, hasQuotedDramaDialogue, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
-import { DRAMA_DENSE_HARD_CUT_RANGE_30S } from "@/lib/drama-production-plan";
+import { DRAMA_DENSE_HARD_CUT_RANGE_30S, hasDramaDenseCutRule } from "@/lib/drama-production-plan";
 import { validateDramaVideoPromptTemplateLayout } from "@/lib/drama-prompt-quality";
 import { DRAMA_PACKAGE_GATE_CODES, DRAMA_PACKAGE_SECTIONS } from "@/lib/server/drama-production-package-contract";
 
@@ -184,7 +184,7 @@ function checkDialoguePerformanceQuality(checks: DramaQualityGateCheck[], value:
                 const performanceMatch = segmentText.match(/对白表演\s*[：:]([^\n]+)/u);
                 const directDialogueMatch = performanceMatch ? null : segmentText.match(/(?:^|[\n；;])\s*[^：:；;\n]{1,32}?\s*说\s*[：:]\s*“[^”\n]{1,240}”(?:[；;][^\n]*)?/u);
                 if (!performanceMatch && !directDialogueMatch) {
-                    if (!spoken.length && frame.startSecond >= Math.max(...utterances.map((utterance) => Number(utterance.endSecond)))) {
+                    if (!spoken.length) {
                         const hasSilenceResult = /对白结束|对白后|反应停顿|静默|沉默/u.test(segmentText) && /视线|目光|呼吸|肩|身体|手|指|嘴角|下颌|僵|停住|低头|抬眼/u.test(segmentText);
                         if (!hasSilenceResult) failures.push(`${label}对白结束后缺少具体静默/反应结果`);
                     } else failures.push(`${label}缺少对白表演：说话人、语气、停顿、重音、说后反应`);
@@ -314,7 +314,9 @@ function checkNpcReactionChange(checks: DramaQualityGateCheck[], value: DramaPro
         for (const shot of episode.shots) {
             const required = value.assets.locations.find((location) => location.code === shot.locationCode)?.backgroundNpcPolicy?.mode === "required";
             const prompts = [shot.videoPrompt || "", ...(shot.framePlan?.frames || []).map((frame) => `${frame.actionPrompt}\n${frame.transitionPrompt || ""}\n${frame.endPrompt || ""}`)];
-            const reactions = prompts.flatMap((prompt) => [...prompt.matchAll(/(?:反应|可见反应|状态变化)\s*[：:]\s*([^；;\n。]+)/gu)].map((match) => match[1].trim())).filter(Boolean);
+            const npcPrompts = prompts.filter((prompt) => /NPC群像|NPC连续性|旁听者|旁观者|人群/u.test(prompt));
+            if (!required && !npcPrompts.length) continue;
+            const reactions = npcPrompts.flatMap((prompt) => [...prompt.matchAll(/(?:反应|可见反应|状态变化)\s*[：:]\s*([^；;\n。]+)/gu)].map((match) => match[1].trim())).filter(Boolean);
             if ((required || reactions.length) && new Set(reactions).size < 2) failed.push(shot.code);
         }
     }
@@ -401,10 +403,13 @@ function checkCameraEvents(checks: DramaQualityGateCheck[], value: DramaProducti
         const internal = /镜头模式\s*[：:]\s*内部切镜/u.test(prompt);
         const inferredInternal = !internal && eventLines.length > 0;
         const denseMaterial = `${productionPlan?.customDirectorRules || ""}\n${prompt}`;
-        const denseRequested = shot.duration === 30 && (productionPlan?.video?.internalCutPolicy === "dense-30s" || /高密度硬切|7\s*[—-]\s*10\s*次(?:可见)?硬切/u.test(denseMaterial));
+        const denseRuleRequested = hasDramaDenseCutRule(denseMaterial);
+        const denseRequested = shot.duration === 30 && (productionPlan?.video?.internalCutPolicy === "dense-30s" || denseRuleRequested);
         const denseCutException = denseRequested && denseCutExceptionPattern.test(denseMaterial);
+        if (shot.duration === 30 && denseRuleRequested && productionPlan?.video?.internalCutPolicy === "adaptive")
+            failed.push(`${shot.code}:已声明30秒高密度硬切，但 productionPlan.video.internalCutPolicy 仍为 ${productionPlan?.video?.internalCutPolicy || "未声明"}，不能降级为 adaptive`);
         if (hasCut && !internal && !inferredInternal) failed.push(`${shot.code}:未声明内部切镜`);
-        if (internal || inferredInternal) {
+        if (internal || inferredInternal || denseRequested) {
             const events = eventLines;
             if (!events.length || events.some((event) => !/(?:时间|秒).{0,12}(?:类型|硬切|匹配切|插入|甩镜).{0,40}(?:触发事件).{0,80}(?:新机位).{0,100}(?:切后主运镜).{0,100}(?:信息目的).{0,100}(?:承接)/u.test(event)))
                 failed.push(`${shot.code}:镜头事件字段不完整`);

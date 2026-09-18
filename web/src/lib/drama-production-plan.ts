@@ -93,7 +93,6 @@ export function normalizeDramaProductionPlan(value: unknown, fallback?: DramaPro
     const roles = Array.isArray(referenceInput.roles) ? referenceInput.roles.map(text).filter((role): role is DramaReferenceManifestRole => DRAMA_REFERENCE_ROLES.includes(role as DramaReferenceManifestRole)) : base.references.roles;
     const requestedShotDuration = positive(videoInput.shotDuration) || (videoInput.durationPolicy === "fixed" ? positive(videoInput.duration) : undefined);
     const shotDuration = normalizeShotDuration(requestedShotDuration, base.video.shotDuration || 15);
-    const internalCutPolicy = normalizeInternalCutPolicy(videoInput.internalCutPolicy, base.video.internalCutPolicy || "adaptive");
     const durationBudget = dramaReferenceImageBudget(shotDuration);
     const minImages = Math.min(durationBudget, boundedInteger(referenceInput.minImages, base.references.minImages, 1, 30));
     const configuredMax = boundedInteger(referenceInput.maxImages, base.references.maxImages, minImages, 30);
@@ -105,6 +104,8 @@ export function normalizeDramaProductionPlan(value: unknown, fallback?: DramaPro
     const visualDirection = typeof visualInput.visualDirection === "string" ? text(visualInput.visualDirection) : base.visual.visualDirection;
     const frameCount = framePolicy === "fixed-4" ? 4 : framePolicy === "fixed-5" ? 5 : undefined;
     const customDirectorRules = sanitizeDramaCustomDirectorRules(typeof input.customDirectorRules === "string" ? input.customDirectorRules : base.customDirectorRules);
+    const normalizedInternalCutPolicy = normalizeInternalCutPolicy(videoInput.internalCutPolicy, base.video.internalCutPolicy || "adaptive");
+    const internalCutPolicy = shotDuration === 30 && hasDramaDenseCutRule(customDirectorRules) ? "dense-30s" : normalizedInternalCutPolicy;
     return {
         version: DRAMA_PRODUCTION_PLAN_VERSION,
         skills: normalizedSkills,
@@ -166,9 +167,16 @@ export function resolveDramaShotDurationPreference(prompt: string, fallback: Dra
     return unique.length === 1 ? unique[0] : fallback;
 }
 
+const DRAMA_DENSE_CUT_RULE_PATTERN = /高密度硬切|(?:至少|目标|要求)?\s*7\s*(?:[—–-]|至|到)\s*10\s*(?:次|个)?\s*(?:可见\s*)?(?:硬切|切换|镜头)|8\s*(?:[—–-]|至|到)\s*11\s*(?:个)?\s*帧/iu;
+
+export function hasDramaDenseCutRule(value: unknown) {
+    return typeof value === "string" && DRAMA_DENSE_CUT_RULE_PATTERN.test(value);
+}
+
 export function resolveDramaInternalCutPolicyPreference(prompt: string, fallback: DramaInternalCutPolicy = "adaptive"): DramaInternalCutPolicy {
     const value = prompt.trim();
-    if (/(?:30\s*(?:秒|s)|每镜\s*30|每个\s*30\s*秒).{0,80}(?:高密度硬切|7\s*[—-]\s*10\s*次|8\s*[—-]\s*11\s*帧)|(?:高密度硬切|7\s*[—-]\s*10\s*次|8\s*[—-]\s*11\s*帧).{0,80}(?:30\s*(?:秒|s)|每镜\s*30|每个\s*30\s*秒)/iu.test(value)) {
+    const thirtySecondRule = /30\s*(?:秒|s)|每镜\s*30|每个\s*30\s*秒/iu;
+    if (thirtySecondRule.test(value) && hasDramaDenseCutRule(value)) {
         return "dense-30s";
     }
     return DRAMA_INTERNAL_CUT_POLICY_OPTIONS.includes(fallback) ? fallback : "adaptive";

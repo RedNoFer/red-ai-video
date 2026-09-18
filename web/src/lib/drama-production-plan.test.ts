@@ -82,7 +82,10 @@ describe("drama production plan", () => {
 
     it("keeps logical shot duration separate from dense internal cuts", () => {
         expect(resolveDramaInternalCutPolicyPreference("每个片段30秒，内部使用7-10次高密度硬切")).toBe("dense-30s");
+        expect(resolveDramaInternalCutPolicyPreference("每个30秒逻辑片段至少7—10个硬切镜头")).toBe("dense-30s");
+        expect(resolveDramaInternalCutPolicyPreference("每个镜头30秒，至少7至10次可见切换")).toBe("dense-30s");
         expect(normalizeDramaProductionPlan({ video: { shotDuration: 30, internalCutPolicy: "dense-30s" } })?.video).toMatchObject({ shotDuration: 30, internalCutPolicy: "dense-30s" });
+        expect(normalizeDramaProductionPlan({ video: { shotDuration: 30, internalCutPolicy: "adaptive" }, customDirectorRules: "每个30秒逻辑片段至少7—10个硬切镜头" })?.video).toMatchObject({ shotDuration: 30, internalCutPolicy: "dense-30s" });
     });
 
     it("removes the accidental fixed-eight-shot duration rule without removing valid custom rules", () => {
