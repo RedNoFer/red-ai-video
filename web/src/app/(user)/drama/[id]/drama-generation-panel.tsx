@@ -21,6 +21,7 @@ import {
 } from "@/services/api/drama-projects";
 import { resolveModelRequestConfig, useEffectiveConfig } from "@/stores/use-config-store";
 import { appendDramaImageReferenceBindings, compileDramaShotExecutionPrompts } from "@/lib/drama-prompt-compiler";
+import { analyzeDramaPromptAdvice, compactDramaSupplierPrompt, type DramaPromptAdvice, type DramaPromptAdviceReport } from "@/lib/drama-prompt-advice";
 import { formatPromptFieldLines } from "@/lib/drama-frame-sequence";
 import { approvedAssetReference } from "@/lib/drama-asset-baseline";
 import { dramaReferenceImageBudget } from "@/lib/drama-production-plan";
@@ -61,6 +62,7 @@ export function DramaGenerationPanel({
     const router = useRouter();
     const config = useEffectiveConfig();
     const imageRequestConfig = resolveModelRequestConfig(config, config.imageModel || config.model);
+    const videoRequestConfig = resolveModelRequestConfig(config, config.videoModel || config.model);
     const updateEpisode = useDramaStore((state) => state.updateEpisode);
     const updateShot = useDramaStore((state) => state.updateShot);
     const loadProject = useDramaStore((state) => state.loadProject);
@@ -393,6 +395,7 @@ export function DramaGenerationPanel({
             shot,
             references: previewVideoReferenceBindings(project, episode, shot),
             basePrompt: compileDramaShotExecutionPrompts(project, episode, shot).videoPrompt,
+            model: productionRun?.parameterSnapshot.videoModel || videoRequestConfig.model,
         }));
         const selectionState = {
             selections: Object.fromEntries(promptRows.map((row) => [row.shot.id, row.references.map((reference) => reference.id)])),
@@ -405,7 +408,7 @@ export function DramaGenerationPanel({
         modal.confirm({
             title: `确认生成 ${selectedShots.length} 个镜头`,
             width: 760,
-            content: <ProductionPromptPreview project={project} rows={promptRows} onChange={(value) => Object.assign(selectionState, value)} />,
+            content: <ProductionPromptPreview project={project} episode={episode} rows={promptRows} onChange={(value) => Object.assign(selectionState, value)} />,
             okText: "确认生成",
             cancelText: "返回修改",
             onOk: () => {
@@ -779,6 +782,7 @@ export function DramaGenerationPanel({
                                 episode={episode}
                                 shot={shot}
                                 productionRun={productionRun}
+                                videoModel={productionRun?.parameterSnapshot.videoModel || videoRequestConfig.model}
                                 audioReady={audioReady}
                                 onPreview={setPreviewMedia}
                                 onCancel={() => void cancelShot(shot)}
@@ -882,6 +886,30 @@ function VisualReview({ project, episode, onRetry }: { project: DramaProject; ep
                     })}
                 </div>
             ) : null}
+            <div className="mt-4 rounded-md border border-border/70 bg-muted/15 p-3" data-drama-post-generation-review>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="font-medium text-sm">生成后人工复盘提示</div>
+                    <span className="text-[11px] text-muted-foreground">仅作复核清单，不影响通过或重试</span>
+                </div>
+                <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    {[
+                        ["切点", "实际切点是否与计划时间线一致，硬切后是否真的改变了景别、机位或信息目的"],
+                        ["竖屏构图", "9:16 画面中是否保留完整头顶、下巴、衣领和主要手部，运镜时是否裁脸"],
+                        ["对白", "对白是否由声明角色说出，是否漏句、错句或新增了剧本没有的对白"],
+                        ["站位轴线", "角色左右站位、相反视线和 180° 对话轴是否稳定，回到全景时是否恢复座次"],
+                        ["连续性", "场景光线、人物服装、神态动作和道具状态是否从上一镜正确继承"],
+                        ["新增内容", "是否出现未声明人物、道具、文字、水印、音乐或剧情动作"],
+                    ].map(([title, detail]) => (
+                        <div key={title} className="rounded-md border border-border/70 bg-background/60 p-2.5 text-xs leading-5">
+                            <div className="flex items-center gap-1.5 font-medium text-foreground">
+                                <CircleDashed className="size-3.5 text-muted-foreground" />
+                                {title}
+                            </div>
+                            <p className="mt-1 text-muted-foreground">{detail}</p>
+                        </div>
+                    ))}
+                </div>
+            </div>
         </section>
     );
 }
@@ -929,6 +957,7 @@ function ShotTaskRow({
     episode,
     shot,
     productionRun,
+    videoModel,
     audioReady,
     onPreview,
     onCancel,
@@ -945,6 +974,7 @@ function ShotTaskRow({
     episode: DramaEpisode;
     shot: DramaShot;
     productionRun: DramaProductionRun | null;
+    videoModel: string;
     audioReady: boolean;
     onPreview: (media: DramaPreviewMedia) => void;
     onCancel: () => void;
@@ -1039,7 +1069,7 @@ function ShotTaskRow({
 
                 <ShotErrors shot={shot} />
                 {preflightIssues.length ? <ShotPreflightBlockers issues={preflightIssues} onMaintain={onMaintain} /> : null}
-                {detailsOpen ? <ShotExecutionDetails project={project} episode={episode} shot={shot} productionRun={productionRun} onPreview={onPreview} /> : null}
+                {detailsOpen ? <ShotExecutionDetails project={project} episode={episode} shot={shot} productionRun={productionRun} videoModel={videoModel} onPreview={onPreview} /> : null}
 
                 {startFrames.length || endFrames.length || shot.videoUrl ? (
                     <div className="ml-11 mt-3 flex max-w-2xl flex-wrap gap-2">
@@ -1172,7 +1202,21 @@ function publicUpstreamError(raw: string) {
     return raw;
 }
 
-function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview }: { project: DramaProject; episode: DramaEpisode; shot: DramaShot; productionRun: DramaProductionRun | null; onPreview: (media: DramaPreviewMedia) => void }) {
+function ShotExecutionDetails({
+    project,
+    episode,
+    shot,
+    productionRun,
+    videoModel,
+    onPreview,
+}: {
+    project: DramaProject;
+    episode: DramaEpisode;
+    shot: DramaShot;
+    productionRun: DramaProductionRun | null;
+    videoModel: string;
+    onPreview: (media: DramaPreviewMedia) => void;
+}) {
     const { message } = App.useApp();
     const replaceShot = useDramaStore((state) => state.replaceShot);
     const beginVideoPrompt = useDramaStore((state) => state.beginVideoPrompt);
@@ -1182,6 +1226,7 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
     const [optimizedFramePlan, setOptimizedFramePlan] = useState<DramaVideoPromptAnalysis["shots"][number]["framePlan"]>();
     const [optimizingVideoPrompt, setOptimizingVideoPrompt] = useState(false);
     const [savingVideoPrompt, setSavingVideoPrompt] = useState(false);
+    const [resolvedAdviceIds, setResolvedAdviceIds] = useState<string[]>([]);
     const promptSnapshot = productionRun?.preflightSnapshot?.prompts?.[shot.id];
     const sourceImagePrompt = promptSnapshot?.sourceImagePrompt || shot.imagePrompt;
     const sourceVideoPrompt = promptSnapshot?.sourceVideoPrompt || shot.videoPrompt;
@@ -1202,10 +1247,15 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
     ];
     const executionReferences = resolveShotVideoReferences(project, episode, shot, productionRun);
     const supplierVideoPrompt = shot.executionVideoPrompt?.trim() || shot.videoPrompt?.trim() || videoStep?.executionPrompt?.trim() || "";
+    const promptAdvice = useMemo(
+        () => analyzeDramaPromptAdvice({ project, episode, shot, prompt: videoPromptDraft, model: productionRun?.parameterSnapshot.videoModel || videoModel }),
+        [episode, productionRun?.parameterSnapshot.videoModel, project, shot, videoModel, videoPromptDraft],
+    );
     useEffect(() => {
         setVideoPromptDraft(supplierVideoPrompt);
         setVideoPromptOriginal(supplierVideoPrompt);
         setOptimizedFramePlan(undefined);
+        setResolvedAdviceIds([]);
     }, [shot.id, supplierVideoPrompt]);
     const optimizeVideoPrompt = async () => {
         const source = videoPromptDraft.trim() !== videoPromptOriginal.trim() ? videoPromptDraft.trim() : resolveShotVideoOptimizationSource(shot);
@@ -1253,6 +1303,24 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
             setSavingVideoPrompt(false);
         }
     };
+    const applyPromptAdvice = (advice: DramaPromptAdvice) => {
+        if (advice.insertText && typeof navigator !== "undefined" && navigator.clipboard) {
+            void navigator.clipboard.writeText(advice.insertText).catch(() => undefined);
+            message.success("建议已复制并标记为采纳，请在执行版中核对后手动修改");
+        } else {
+            message.info("已标记采纳；这条建议需要人工判断后手动写入执行版");
+        }
+        setResolvedAdviceIds((current) => [...new Set([...current, advice.id])]);
+    };
+    const compactPrompt = () => {
+        const compacted = compactDramaSupplierPrompt(videoPromptDraft);
+        if (compacted === videoPromptDraft.trim()) {
+            message.info("当前没有发现可安全去重的重复行");
+            return;
+        }
+        setVideoPromptDraft(compacted);
+        message.success("已生成去重后的精简候选，请检查后保存");
+    };
     const continuityEdge = episode.continuityEdges?.find((edge) => edge.toShotId === shot.id && edge.inheritActualEndFrame);
     const continuitySource = continuityEdge ? episode.shots.find((item) => item.id === continuityEdge.fromShotId) : undefined;
     const voiceSource = shot.audioMode === "mute" ? "静音" : shot.audioMode === "source" ? "视频原声" : shotVoiceSource(project, shot);
@@ -1268,6 +1336,24 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
         ["模型与方式", `${modelText}；${dramaShotVideoMode(project, shot) === "storyboard" ? "分镜驱动" : "直接生成"}；${shot.storyboardFrameMode === "first_last" ? "首尾帧，起止约束不代表质量保证" : "单帧"}`],
         ["声音来源", voiceSource],
     ].filter(([, value]) => String(value || "").trim());
+    const sceneName = project.scenes.find((scene) => scene.id === shot.sceneId)?.name || "未声明场景";
+    const characterFacts = shot.characterIds.map((characterId) => {
+        const character = project.characters.find((item) => item.id === characterId);
+        const entry = shot.entryState?.characters.find((item) => item.assetId === characterId);
+        const exit = shot.exitState?.characters.find((item) => item.assetId === characterId);
+        return {
+            name: character?.name || characterId,
+            entry: [entry?.position, entry?.pose, entry?.gaze, entry?.expression].filter(Boolean).join("；") || "入口状态未记录",
+            exit: [exit?.position, exit?.pose, exit?.gaze, exit?.action].filter(Boolean).join("；") || "出口状态未记录",
+        };
+    });
+    const propFacts = shot.propIds.map((propId) => {
+        const prop = project.props.find((item) => item.id === propId);
+        const entry = shot.entryState?.props.find((item) => item.assetId === propId);
+        const exit = shot.exitState?.props.find((item) => item.assetId === propId);
+        return `${prop?.name || propId}：入口${entry?.state || "未记录"} → 出口${exit?.state || "未记录"}`;
+    });
+    const dialogueFacts = shot.utterances.filter((item) => item.text.trim()).map((item) => `${item.speaker || "未指定说话人"}：“${item.text.trim()}”`);
     return (
         <div className="ml-11 mt-3 grid min-w-0 gap-2 rounded-md border border-border bg-muted/15 p-3 text-xs leading-5" data-drama-shot-execution-details>
             {rows.map(([label, value]) => (
@@ -1276,6 +1362,31 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
                     <p className="min-w-0 whitespace-pre-wrap break-words text-muted-foreground">{value}</p>
                 </div>
             ))}
+            <details className="mt-1 rounded-md border border-border/70 bg-background/60 p-2.5" data-drama-story-facts>
+                <summary className="cursor-pointer font-medium text-foreground">剧情与连续性事实</summary>
+                <div className="mt-2 grid gap-2 leading-5 text-muted-foreground">
+                    <div>
+                        <span className="font-medium text-foreground">当前场景：</span>
+                        {sceneName}
+                    </div>
+                    <div>
+                        <span className="font-medium text-foreground">在场人物与状态：</span>
+                        {characterFacts.length ? characterFacts.map((item) => `${item.name}（入口：${item.entry}；出口：${item.exit}）`).join("；") : "未声明人物"}
+                    </div>
+                    <div>
+                        <span className="font-medium text-foreground">道具状态：</span>
+                        {propFacts.length ? propFacts.join("；") : "未声明关键道具"}
+                    </div>
+                    <div>
+                        <span className="font-medium text-foreground">对白归属：</span>
+                        {dialogueFacts.length ? dialogueFacts.join("；") : "本镜没有逐句对白记录"}
+                    </div>
+                    <div>
+                        <span className="font-medium text-foreground">下一镜需要继承：</span>
+                        {shot.exitState ? [shot.exitState.environment, shot.exitState.lighting, shot.exitState.axis, shot.exitState.screenDirection].filter(Boolean).join("；") || "已记录出口状态，但未填写环境/灯光/轴线摘要" : "未记录出口状态"}
+                    </div>
+                </div>
+            </details>
             <div className="mt-1 border-t border-border/70 pt-3" data-drama-shot-reference-assets>
                 <div className="flex items-center justify-between gap-2">
                     <span className="font-medium text-foreground">引用资产图片</span>
@@ -1391,6 +1502,11 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
                 ) : null}
             </div>
             <div className="mt-1 border-t border-border/70 pt-3" data-drama-shot-supplier-prompt>
+                <details className="rounded-md border border-border/70 bg-background/60 p-2.5 text-xs" data-drama-director-prompt>
+                    <summary className="cursor-pointer font-medium text-foreground">完整导演版 / 追溯版</summary>
+                    <p className="mt-2 whitespace-pre-wrap break-words leading-5 text-muted-foreground">{sourceVideoPrompt || "暂无完整导演版提示词"}</p>
+                    <p className="mt-2 text-[11px] text-muted-foreground">此版本用于人工审阅和保留完整制作逻辑；实际生成使用下方供应商执行版。</p>
+                </details>
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0">
                         <div className="font-medium text-foreground">视频执行提示词（当前标准）</div>
@@ -1399,6 +1515,9 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
                     <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5 sm:ml-3">
                         <Button size="small" className="shrink-0" icon={<Sparkles className="size-3.5" />} loading={optimizingVideoPrompt} disabled={!videoPromptDraft.trim() || optimizingVideoPrompt} onClick={() => void optimizeVideoPrompt()}>
                             提示词优化
+                        </Button>
+                        <Button size="small" className="shrink-0" disabled={!videoPromptDraft.trim()} onClick={compactPrompt}>
+                            生成精简版
                         </Button>
                         <Button size="small" className="shrink-0" icon={<RefreshCw className="size-3.5" />} disabled={videoPromptDraft === videoPromptOriginal} onClick={() => setVideoPromptDraft(videoPromptOriginal)}>
                             还原上次
@@ -1416,16 +1535,80 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
                     </div>
                 </div>
                 <Input.TextArea className="mt-2" value={videoPromptDraft} onChange={(event) => setVideoPromptDraft(event.target.value)} autoSize={{ minRows: 5, maxRows: 14 }} placeholder="先生成顺序帧，再生成或编辑视频提示词" />
+                <DramaPromptUsageHint report={promptAdvice} />
+                <DramaPromptAdvicePanel report={promptAdvice} resolvedIds={resolvedAdviceIds} onAccept={applyPromptAdvice} onIgnore={(id) => setResolvedAdviceIds((current) => [...new Set([...current, id])])} />
             </div>
+        </div>
+    );
+}
+
+function DramaPromptUsageHint({ report }: { report: DramaPromptAdviceReport }) {
+    const { profile, usage } = report;
+    const current = usage.unit === "characters" ? `${usage.characterCount} 字符` : usage.unit === "words" ? `${usage.wordCount} 词` : `${usage.characterCount} 字符 / ${usage.wordCount} 词`;
+    const limit = usage.limit ? ` / 上限 ${usage.limit}${usage.unit === "characters" ? " 字符" : " 词"}` : "";
+    const tone = usage.overLimit
+        ? "border-rose-300 bg-rose-50/70 text-rose-800 dark:border-rose-800 dark:bg-rose-950/20 dark:text-rose-200"
+        : usage.nearLimit
+          ? "border-amber-300 bg-amber-50/70 text-amber-900 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-200"
+          : "border-border bg-background/60 text-muted-foreground";
+    return (
+        <div className={`mt-2 flex flex-wrap items-center justify-between gap-1.5 rounded-md border px-2.5 py-2 text-[11px] leading-5 ${tone}`} data-drama-prompt-usage>
+            <span>
+                提示词长度：{current}
+                {limit} · {profile.label}
+            </span>
+            <span>{profile.known ? (usage.overLimit ? "可能被截断" : usage.nearLimit ? `建议保留约 ${usage.remaining}${usage.unit === "characters" ? " 字符" : " 词"}余量` : "在已知上限内") : profile.note}</span>
+        </div>
+    );
+}
+
+function DramaPromptAdvicePanel({ report, resolvedIds, onAccept, onIgnore }: { report: DramaPromptAdviceReport; resolvedIds: string[]; onAccept: (advice: DramaPromptAdvice) => void; onIgnore: (id: string) => void }) {
+    const visible = report.suggestions.filter((advice) => !resolvedIds.includes(advice.id));
+    if (!visible.length)
+        return (
+            <p className="mt-2 text-[11px] text-muted-foreground" data-drama-prompt-advice="empty">
+                暂无新增建议；仍可根据完整导演版人工复核剧情与连续性。
+            </p>
+        );
+    return (
+        <div className="mt-2 space-y-2" data-drama-prompt-advice>
+            <div className="flex items-center justify-between gap-2 text-xs">
+                <span className="font-medium text-foreground">视频提示优化建议</span>
+                <span className="text-muted-foreground">仅供参考，不影响生成</span>
+            </div>
+            {visible.map((advice) => (
+                <div key={advice.id} className={`rounded-md border p-2.5 ${advice.severity === "warning" ? "border-amber-300/80 bg-amber-50/50 dark:border-amber-800/70 dark:bg-amber-950/15" : "border-border bg-background/60"}`}>
+                    <div className="flex items-start justify-between gap-2">
+                        <div className="flex min-w-0 items-start gap-1.5">
+                            {advice.severity === "warning" ? <CircleAlert className="mt-0.5 size-3.5 shrink-0 text-amber-600" /> : <Sparkles className="mt-0.5 size-3.5 shrink-0 text-violet-600" />}
+                            <div className="min-w-0">
+                                <div className="font-medium text-foreground">{advice.title}</div>
+                                <p className="mt-1 leading-5 text-muted-foreground">问题：{advice.message}</p>
+                                <p className="mt-1 leading-5 text-muted-foreground">影响：{advice.impact}</p>
+                                <p className="mt-1 leading-5 text-muted-foreground">建议：{advice.recommendation}</p>
+                            </div>
+                        </div>
+                        <Tag className="!m-0 shrink-0 !text-[10px]">{{ length: "长度", cut: "切镜", composition: "构图", continuity: "连续性", dialogue: "对白", references: "参考图", skill: "镜头语言" }[advice.category]}</Tag>
+                    </div>
+                    <div className="mt-2 flex flex-wrap justify-end gap-1.5">
+                        <Button size="small" type="primary" onClick={() => onAccept(advice)}>
+                            采纳建议
+                        </Button>
+                        <Button size="small" onClick={() => onIgnore(advice.id)}>
+                            忽略建议
+                        </Button>
+                    </div>
+                </div>
+            ))}
         </div>
     );
 }
 
 type ShotReferenceAsset = { id: string; label: string; url: string; width?: number; height?: number };
 type PromptReferenceBinding = ShotReferenceAsset & { alias: string; purpose: string; alt: string; required: boolean };
-type ProductionPromptRow = { shot: DramaShot; references: PromptReferenceBinding[]; basePrompt: string };
+type ProductionPromptRow = { shot: DramaShot; references: PromptReferenceBinding[]; basePrompt: string; model?: string };
 
-function ProductionPromptPreview({ project, rows, onChange }: { project: DramaProject; rows: ProductionPromptRow[]; onChange: (value: { selections: Record<string, string[]>; invalid: boolean }) => void }) {
+function ProductionPromptPreview({ project, episode, rows, onChange }: { project: DramaProject; episode: DramaEpisode; rows: ProductionPromptRow[]; onChange: (value: { selections: Record<string, string[]>; invalid: boolean }) => void }) {
     const [selections, setSelections] = useState<Record<string, string[]>>(() => Object.fromEntries(rows.map((row) => [row.shot.id, row.references.map((reference) => reference.id)])));
     const invalid = rows.some((row) => {
         const selected = selections[row.shot.id] || [];
@@ -1444,9 +1627,9 @@ function ProductionPromptPreview({ project, rows, onChange }: { project: DramaPr
                 <span>清晰度：{project.productionBible?.productionPlan?.video.resolution || "按后台默认"}</span>
                 <span>画幅：{project.ratio}</span>
                 <span>时长：{rows.map((row) => `${row.shot.duration}s`).join("、")}</span>
-                <span>全部图片默认引用，首尾帧与连续性帧固定保留</span>
+                <span>完整导演版供审阅；供应商执行版用于实际生成</span>
             </div>
-            {rows.map(({ shot, basePrompt, references }) => {
+            {rows.map(({ shot, basePrompt, references, model }) => {
                 const selectedIds = selections[shot.id] || [];
                 const selectedReferences = references.filter((reference) => selectedIds.includes(reference.id)).map((reference, index) => ({ ...reference, alias: `@图片${index + 1}` }));
                 const limit = dramaReferenceImageBudget(shot.duration);
@@ -1458,6 +1641,7 @@ function ProductionPromptPreview({ project, rows, onChange }: { project: DramaPr
                 const frameIds = new Set(shot.framePlan?.frames.map((frame) => frame.id) || []);
                 const allFramesReady = !allFrames || (frameIds.size >= 2 && references.filter((reference) => frameIds.has(reference.id)).length === frameIds.size);
                 const overLimit = selectedReferences.length > limit;
+                const advice = analyzeDramaPromptAdvice({ project, episode, shot, prompt, model });
                 return (
                     <section key={shot.id} className={`mb-3 rounded-md border p-3 last:mb-0 ${overLimit ? "border-red-500" : "border-border"}`}>
                         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1466,6 +1650,17 @@ function ProductionPromptPreview({ project, rows, onChange }: { project: DramaPr
                                 {selectedReferences.length}/{limit} 张 · {shot.duration} 秒 · {shot.storyboardFrameMode === "all_frames" ? "全能帧" : shot.storyboardFrameMode === "first_last" ? "首尾帧" : "单帧"}
                             </span>
                         </div>
+                        <DramaPromptUsageHint report={advice} />
+                        {advice.suggestions.length ? (
+                            <div className="mt-2 rounded-md border border-amber-300/60 bg-amber-50/40 px-2.5 py-2 text-[11px] leading-5 text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/15 dark:text-amber-200">
+                                建议预览：
+                                {advice.suggestions
+                                    .slice(0, 3)
+                                    .map((item) => item.title)
+                                    .join("、")}
+                                {advice.suggestions.length > 3 ? ` 等 ${advice.suggestions.length} 项` : ""}（仅提示，不影响生成）
+                            </div>
+                        ) : null}
                         <p className="mt-2 whitespace-pre-wrap break-words leading-6 text-muted-foreground">{prompt}</p>
                         {references.length ? (
                             <div className="mt-3 border-t border-border/70 pt-3" data-drama-prompt-reference-gallery>
