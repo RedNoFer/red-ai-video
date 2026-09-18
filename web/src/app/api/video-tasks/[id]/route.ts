@@ -83,12 +83,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const origin = resolveInternalOrigin(new URL(request.url).origin);
     const cookie = request.headers.get("cookie") || "";
     try {
-        const refreshed =
-            task.status === "success"
-                ? await refreshCompletedVideoTask(task, origin, cookie)
-                : canReconcileVideoTask(task)
-                  ? await refreshVideoTaskFromUpstream(task, origin, cookie, true)
-                  : task;
+        const refreshed = task.status === "success" ? await refreshCompletedVideoTask(task, origin, cookie) : canReconcileVideoTask(task) ? await refreshVideoTaskFromUpstream(task, origin, cookie, true) : task;
         const responseTask = refreshed || (await getVideoTask(task.id)) || task;
         return NextResponse.json({ task: publicTask(responseTask), refreshed: responseTask !== task }, { headers: pointsResponseHeaders(await getCurrentUser(request)) });
     } catch (error) {
