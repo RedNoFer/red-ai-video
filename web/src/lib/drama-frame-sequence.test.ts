@@ -159,10 +159,12 @@ describe("drama frame sequence", () => {
         expect(normalized.some((frame) => !Number.isInteger(frame.endSecond))).toBe(true);
     });
 
-    it("accepts one to nine ordered beats that continuously cover the shot", () => {
+    it("accepts up to eleven ordered beats that continuously cover the shot", () => {
         expect(normalizeDramaFrameBeats(beats, 8)).toEqual(beats);
         expect(() => normalizeDramaFrameBeats([{ ...beats[0], endSecond: 1 }], 8)).toThrow("完整覆盖");
-        expect(() => normalizeDramaFrameBeats([...beats, ...Array.from({ length: 6 }, (_, index) => ({ ...beats[0], id: `extra-${index}`, sequenceIndex: index + 5 }))], 8)).toThrow("最多 9 帧");
+        const eleven = Array.from({ length: 11 }, (_, index) => ({ ...beats[0], id: `frame-${index + 1}`, sequenceIndex: index + 1, startSecond: Number(((8 / 11) * index).toFixed(3)), endSecond: Number(((8 / 11) * (index + 1)).toFixed(3)) }));
+        expect(normalizeDramaFrameBeats(eleven, 8)).toHaveLength(11);
+        expect(() => normalizeDramaFrameBeats([...eleven, { ...beats[0], id: "frame-12", sequenceIndex: 12, startSecond: 8, endSecond: 8.1 }], 8)).toThrow("最多 11 帧");
     });
 
     it("preserves Agent-authored frame start, transition and end descriptions", () => {

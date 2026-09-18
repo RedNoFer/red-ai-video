@@ -11,6 +11,7 @@ import { cancellationExecutionPatch, type GenerationCancellationTarget } from "@
 import { refundVideoTask } from "@/lib/server/video-task-refund";
 import { getStoredGenerationTaskRecord } from "@/lib/server/generation-task-store";
 import { writeVideoGenerationLog } from "@/lib/server/video-task-log";
+import { persistVideoTaskResult, queryVideoTaskUpstream, refreshVideoTaskFromUpstream } from "@/lib/server/video-task-runtime";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -69,6 +70,32 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ task: publicTask(next) }, { headers: pointsResponseHeaders(refreshedUser) });
 }
 
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+    const user = await getCurrentUser(request);
+    const id = (await params).id;
+    const task = user ? await getVideoTask(id) : null;
+    if (!user || !task || (task.userId !== user.id && user.role !== "admin")) return NextResponse.json({ error: "视频任务不存在" }, { status: user ? 404 : 401 });
+
+    const parsed = await readJsonBodyResult<{ action?: string }>(request);
+    if (!parsed.ok) return NextResponse.json({ error: parsed.message }, { status: parsed.status });
+    if (parsed.data.action !== "refresh") return NextResponse.json({ error: "不支持的视频任务操作" }, { status: 400 });
+
+    const origin = resolveInternalOrigin(new URL(request.url).origin);
+    const cookie = request.headers.get("cookie") || "";
+    try {
+        const refreshed =
+            task.status === "success"
+                ? await refreshCompletedVideoTask(task, origin, cookie)
+                : canReconcileVideoTask(task)
+                  ? await refreshVideoTaskFromUpstream(task, origin, cookie, true)
+                  : task;
+        const responseTask = refreshed || (await getVideoTask(task.id)) || task;
+        return NextResponse.json({ task: publicTask(responseTask), refreshed: responseTask !== task }, { headers: pointsResponseHeaders(await getCurrentUser(request)) });
+    } catch (error) {
+        return NextResponse.json({ error: error instanceof Error ? error.message : "供应商视频状态同步失败" }, { status: 502 });
+    }
+}
+
 type VideoTask = NonNullable<Awaited<ReturnType<typeof getVideoTask>>>;
 
 function publicTask(task: VideoTask) {
@@ -77,4 +104,11 @@ function publicTask(task: VideoTask) {
 
 function settledExecutionPhase(status: string) {
     return status === "pending" || status === "running" ? "created" : "completed";
+}
+
+async function refreshCompletedVideoTask(task: VideoTask, origin: string, cookie: string) {
+    const step = await queryVideoTaskUpstream(task, origin, cookie, "", true);
+    if (step.state === "pending") return task;
+    if (step.state === "failed") throw new Error(step.error);
+    return (await persistVideoTaskResult(task, step.resultUrl, origin, cookie, "", true)) || task;
 }

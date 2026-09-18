@@ -681,7 +681,7 @@ export function DramaScriptAgentPanel({ project, episode, open, onOpenChange }: 
                     </label>
                     <p className="text-xs leading-5 text-muted-foreground">
                         Agent 会按每镜 {planDraft.video.shotDuration || 15} 秒和“
-                        {planDraft.video.framePolicy === "fixed-4" ? "4 帧" : planDraft.video.framePolicy === "fixed-5" ? "5 帧" : `自适应 ${planDraft.frameCountRange?.min || 2}-${planDraft.frameCountRange?.max || 9} 帧`}
+                        {planDraft.video.framePolicy === "fixed-4" ? "4 帧" : planDraft.video.framePolicy === "fixed-5" ? "5 帧" : `自适应 ${planDraft.frameCountRange?.min || 2}-${planDraft.frameCountRange?.max || 11} 帧`}
                         ”重新切分剧情；相邻碎片镜头会合并为完整逻辑镜头。空白视觉参数由 Agent 补出具体值并写入制作包。连续性固定为严格模式：下一镜只能引用上一镜当前视频版本且已人工验收的实际尾帧。
                     </p>
                     <div className="flex flex-col justify-end gap-2 border-t border-border pt-3 sm:flex-row">

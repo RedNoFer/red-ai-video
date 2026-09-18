@@ -256,3 +256,48 @@ test("Voice Design 生成独立 voice_id 并可播放本地试听音频", async 
     await expect.poll(async () => audio.evaluate((element) => ({ paused: element.paused, currentTime: element.currentTime }))).toMatchObject({ paused: false });
     await expect.poll(async () => audio.evaluate((element) => element.currentTime)).toBeGreaterThan(0);
 });
+
+test("已完成镜头可以手动拉取供应商最新视频", async ({ page, request }) => {
+    const created = await request.post("/api/drama/projects", { data: { title: "E2E 拉取最新视频", summary: "验证已完成镜头的手动同步入口", ratio: "9:16" } });
+    expect(created.ok(), await created.text()).toBe(true);
+    const project = ((await created.json()) as { data: { project: DramaProject } }).data.project;
+    const episode = project.episodes[0];
+    const shot = {
+        id: "shot-refresh-video",
+        code: "SH001",
+        order: 1,
+        title: "手动同步镜头",
+        description: "验证供应商视频同步",
+        sourceText: "验证供应商视频同步",
+        imagePrompt: "室内人物，竖屏构图",
+        videoPrompt: "人物抬头并看向镜头",
+        duration: 5,
+        characterIds: [],
+        propIds: [],
+        clueIds: [],
+        generationStatus: "success",
+        generationTaskId: "e2e-refresh-video-task",
+        videoUrl: "https://example.com/old-video.mp4",
+    };
+    const saved = await request.patch(`/api/drama/projects/${project.id}`, {
+        data: { ...project, activeEpisodeId: episode.id, episodes: project.episodes.map((item) => (item.id === episode.id ? { ...item, reviewStatus: "visual_ready", shots: [shot] } : item)) },
+    });
+    expect(saved.ok(), await saved.text()).toBe(true);
+
+    let refreshRequestCount = 0;
+    await page.route("**/api/video-tasks/e2e-refresh-video-task", async (route) => {
+        if (route.request().method() !== "POST") return route.continue();
+        expect(route.request().postDataJSON()).toEqual({ action: "refresh" });
+        refreshRequestCount += 1;
+        await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ task: { id: "e2e-refresh-video-task", status: "success", result: { url: "https://example.com/latest-video.mp4" } } }) });
+    });
+
+    await page.goto(`/drama/${project.id}`, { waitUntil: "domcontentloaded" });
+    await page.getByRole("button", { name: "切换到镜头生成" }).click();
+    const refreshButton = page.getByRole("button", { name: "拉取最新视频" });
+    await expect(refreshButton).toBeVisible();
+    await refreshButton.click();
+    await expect(page.getByText("已拉取供应商最新视频并保存到项目", { exact: true })).toBeVisible();
+    expect(refreshRequestCount).toBe(1);
+    await expectNoHorizontalOverflow(page, "manual video refresh");
+});

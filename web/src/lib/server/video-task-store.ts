@@ -50,10 +50,10 @@ export async function getVideoTask(id: string) {
     return getStoredGenerationTask<VideoTask>("video", id);
 }
 
-export function claimVideoTaskPoll(id: string, intervalMs: number) {
+export function claimVideoTaskPoll(id: string, intervalMs: number, force = false) {
     const now = Date.now();
     return mutateStoredGenerationTask<VideoTask>("video", id, GENERATION_TASK_RETENTION_MS, (task) => {
-        if (!canReconcileVideoTask(task) || Number(task.polling?.nextAttemptAt || 0) > now) return null;
+        if (!canReconcileVideoTask(task) || (!force && Number(task.polling?.nextAttemptAt || 0) > now)) return null;
         return { ...task, polling: { lastAttemptAt: now, nextAttemptAt: now + Math.max(1_000, intervalMs) } };
     });
 }

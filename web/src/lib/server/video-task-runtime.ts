@@ -27,9 +27,9 @@ import { geminiVideoQueryPath, parseGeminiVideoOperation } from "@/lib/server/ge
 
 export type VideoUpstreamStep = { state: "pending"; status: string } | { state: "result_ready"; status: string; resultUrl: string } | { state: "failed"; status: string; error: string };
 
-export async function refreshVideoTaskFromUpstream(task: VideoTask, origin: string, cookie: string) {
+export async function refreshVideoTaskFromUpstream(task: VideoTask, origin: string, cookie: string, forceRefresh = false) {
     const polling = taskPollingPolicy(task);
-    const claimed = await claimVideoTaskPoll(task.id, polling.intervalMs);
+    const claimed = await claimVideoTaskPoll(task.id, polling.intervalMs, forceRefresh);
     if (!claimed) return getVideoTask(task.id);
 
     const step = await queryVideoTaskUpstream(claimed, origin, cookie);

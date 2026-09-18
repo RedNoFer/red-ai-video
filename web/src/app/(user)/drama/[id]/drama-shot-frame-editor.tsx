@@ -757,7 +757,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                 <div className="min-w-0">
                     <div className="flex items-baseline gap-2">
                         <div className="shrink-0 text-sm font-semibold">分镜帧</div>
-                        <p className="truncate text-xs leading-5 text-muted-foreground">Agent 自适应 2–9 帧；每帧对应一个真实动作事件时间段</p>
+                        <p className="truncate text-xs leading-5 text-muted-foreground">Agent 自适应 2–11 帧；30 秒高密度硬切优先对应 7—10 次切换，每帧对应真实动作事件</p>
                     </div>
                     {frameMode === "all_frames" ? (
                         <p className="mt-0.5 text-xs text-muted-foreground" aria-live="polite">

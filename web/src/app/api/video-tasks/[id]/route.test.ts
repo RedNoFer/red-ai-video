@@ -5,6 +5,9 @@ const mocks = vi.hoisted(() => ({
     getVideoTask: vi.fn(),
     getSchedule: vi.fn(),
     recover: vi.fn(),
+    refresh: vi.fn(),
+    query: vi.fn(),
+    persist: vi.fn(),
     refund: vi.fn(),
     transition: vi.fn(),
     writeLog: vi.fn(),
@@ -19,6 +22,7 @@ vi.mock("@/lib/auth/store", () => ({ refundUserPoints: mocks.refund }));
 vi.mock("@/lib/server/internal-origin", () => ({ fetchInternalApi: vi.fn(), resolveInternalOrigin: vi.fn(() => "http://localhost") }));
 vi.mock("@/lib/server/points-response", () => ({ pointsResponseHeaders: vi.fn(() => new Headers()) }));
 vi.mock("@/lib/server/generation-task-recovery-service", () => ({ runGenerationTaskRecoveryBatch: mocks.recover }));
+vi.mock("@/lib/server/video-task-runtime", () => ({ refreshVideoTaskFromUpstream: mocks.refresh, queryVideoTaskUpstream: mocks.query, persistVideoTaskResult: mocks.persist }));
 vi.mock("@/lib/server/generation-task-store", () => ({ getStoredGenerationTaskRecord: mocks.getSchedule }));
 vi.mock("@/lib/server/video-task-log", () => ({ writeVideoGenerationLog: mocks.writeLog }));
 vi.mock("@/lib/server/video-task-store", () => ({
@@ -27,7 +31,7 @@ vi.mock("@/lib/server/video-task-store", () => ({
     transitionVideoTask: mocks.transition,
 }));
 
-import { GET, PATCH } from "./route";
+import { GET, PATCH, POST } from "./route";
 
 const context = { params: Promise.resolve({ id: "local-video" }) };
 
@@ -37,6 +41,8 @@ describe("GET /api/video-tasks/[id]", () => {
         mocks.currentUser.mockResolvedValue({ id: "user", role: "user", pointsBalance: 100 });
         mocks.getSchedule.mockResolvedValue({ executionPhase: "polling" });
         mocks.writeLog.mockResolvedValue(undefined);
+        mocks.refresh.mockResolvedValue(undefined);
+        mocks.query.mockResolvedValue({ state: "pending", status: "processing" });
     });
 
     it("returns a running task immediately and schedules a low-cost Worker wakeup", async () => {
@@ -124,6 +130,47 @@ describe("GET /api/video-tasks/[id]", () => {
         expect(mocks.transition).toHaveBeenCalledWith(task, { status: "cancelled", error: "任务已取消", retryable: false }, expect.objectContaining({ executionPhase: "cancel_requested", upstreamTaskId: "upstream-video" }));
         expect(mocks.writeLog).toHaveBeenCalledWith(expect.objectContaining({ status: "cancelled" }), "failed", "任务已取消", false);
         expect(mocks.refund).not.toHaveBeenCalled();
+    });
+
+    it("manually refreshes a running provider task without creating a new task", async () => {
+        const task = videoTask();
+        mocks.getVideoTask.mockResolvedValue(task);
+        mocks.refresh.mockResolvedValue({ ...task, status: "running" });
+
+        const response = await POST(
+            new Request("http://localhost/api/video-tasks/local-video", {
+                method: "POST",
+                headers: { "content-type": "application/json", cookie: "session=test" },
+                body: JSON.stringify({ action: "refresh" }),
+            }),
+            context,
+        );
+
+        expect(response.status).toBe(200);
+        expect(mocks.refresh).toHaveBeenCalledWith(task, "http://localhost", "session=test", true);
+        expect((await response.json()).task).toMatchObject({ id: task.id, status: "running", upstreamId: task.upstream.id });
+    });
+
+    it("pulls and persists a newer provider result for an already successful task", async () => {
+        const task = videoTask({ status: "success", result: { url: "/api/reference-assets/old.mp4" } });
+        const refreshed = { ...task, result: { url: "/api/reference-assets/new.mp4" } };
+        mocks.getVideoTask.mockResolvedValue(task);
+        mocks.query.mockResolvedValue({ state: "result_ready", status: "completed", resultUrl: "https://supplier.example/new.mp4" });
+        mocks.persist.mockResolvedValue(refreshed);
+
+        const response = await POST(
+            new Request("http://localhost/api/video-tasks/local-video", {
+                method: "POST",
+                headers: { "content-type": "application/json", cookie: "session=test" },
+                body: JSON.stringify({ action: "refresh" }),
+            }),
+            context,
+        );
+
+        expect(response.status).toBe(200);
+        expect(mocks.query).toHaveBeenCalledWith(task, "http://localhost", "session=test", "", true);
+        expect(mocks.persist).toHaveBeenCalledWith(task, "https://supplier.example/new.mp4", "http://localhost", "session=test", "", true);
+        expect((await response.json()).task.result).toEqual(refreshed.result);
     });
 });
 

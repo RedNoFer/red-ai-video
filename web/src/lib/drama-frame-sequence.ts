@@ -2,7 +2,8 @@ import { nanoid } from "nanoid";
 
 import type { DramaFrameBeat, DramaStoryboardFrame } from "./drama-project-contract";
 
-export const MAX_FRAME_BEATS = 9;
+/** Production-package frame ceiling; 8–11 frames can anchor 7–10 internal hard cuts. */
+export const MAX_FRAME_BEATS = 11;
 const TIME_EPSILON = 0.001;
 const STATIC_FRAME_PROMPT_LABELS = ["画面主体", "可见状态", "构图与空间", "光色与风格", "针对性约束"] as const;
 // Legacy labels are recognized only so existing text keeps its line boundaries; they are never injected into new prompts.
@@ -52,7 +53,7 @@ export function dramaStaticFramePositiveText(value: string) {
 
 export function normalizeDramaFrameBeats(value: readonly DramaFrameBeat[], duration: number): DramaFrameBeat[] {
     if (!value.length) throw new Error("逐帧计划至少需要 1 帧");
-    if (value.length > MAX_FRAME_BEATS) throw new Error("逐帧计划最多 9 帧");
+    if (value.length > MAX_FRAME_BEATS) throw new Error(`逐帧计划最多 ${MAX_FRAME_BEATS} 帧`);
     if (!Number.isFinite(duration) || duration <= 0 || !Number.isInteger(duration)) throw new Error("镜头时长必须为正整数秒");
     const frames = value.map((frame, index) => ({
         id: frame.id.trim() || `frame-${nanoid()}`,
@@ -241,7 +242,7 @@ function hasVisibleSpatialResult(value: string) {
 }
 
 export function insertDramaFrameBeat(frames: readonly DramaFrameBeat[], frameId: string): DramaFrameBeat[] {
-    if (frames.length >= MAX_FRAME_BEATS) throw new Error("逐帧计划最多 9 帧");
+    if (frames.length >= MAX_FRAME_BEATS) throw new Error(`逐帧计划最多 ${MAX_FRAME_BEATS} 帧`);
     const index = frames.findIndex((frame) => frame.id === frameId);
     if (index < 0) throw new Error("待拆分帧不存在");
     const current = frames[index];
