@@ -689,7 +689,7 @@ export function DramaScriptAgentPanel({ project, episode, open, onOpenChange }: 
                         <span className="text-[11px] leading-5 text-muted-foreground">本次用户补充优先于这里；该规则会同时用于制作包、图片帧优化、视频提示词和外部 Agent 工作单。</span>
                     </label>
                     <p className="text-xs leading-5 text-muted-foreground">
-                        Agent 会先按每个逻辑片段 {planDraft.video.shotDuration || 15} 秒拆分整集，再按“
+                        Agent 会先完整读取当前 TXT，按对白自然时长、动作节拍和反应留白推导逻辑片段数量，再让每个逻辑片段使用 {planDraft.video.shotDuration || 15} 秒；片段数量不能固定为 8 段或任何预设值。之后按“
                         {planDraft.video.framePolicy === "fixed-4" ? "4 帧" : planDraft.video.framePolicy === "fixed-5" ? "5 帧" : `自适应 ${planDraft.frameCountRange?.min || 2}-${planDraft.frameCountRange?.max || 11} 帧`}
                         ”生成每个片段内部画面；{planDraft.video.internalCutPolicy === "dense-30s" ? "30秒高密度模式要求每个片段8–11帧、7–10次内部硬切，硬切不新增片段。" : "片段内硬切按真实可见事件自适应，不能改变片段数量。"} 空白视觉参数由 Agent
                         补出具体值并写入制作包。连续性固定为严格模式：下一镜只能引用上一镜当前视频版本且已人工验收的实际尾帧。

@@ -1,7 +1,7 @@
 export const DRAMA_DIALOGUE_CHARS_PER_SECOND = 5;
 export const DRAMA_DIALOGUE_TIMING_TOLERANCE_CHARS = 10;
 
-export const DRAMA_DIALOGUE_TIMING_RULES = `对白时长规则：默认按中文对白每秒约 ${DRAMA_DIALOGUE_CHARS_PER_SECOND} 个可发音字估算，不把标点、停顿和动作反应当作可压缩空间。制作包必须按逐句记录 startSecond/endSecond（相对当前镜头，且不含停顿）、pauseBeforeSeconds/pauseAfterSeconds 和情绪语速 speechRate；需要可复核时同时填写 speechRateCharsPerSecond。逐句时间不得越界或重叠，停顿不得跑出镜头。容量偏差只作提醒，不阻止内容分析、制作包导入或生产；不超过 ${DRAMA_DIALOGUE_TIMING_TOLERANCE_CHARS} 个可发音字标记为轻微上线偏差，超过该容差建议在说话人转换、自然分句或动作反应处拆镜。每个镜头先完成对白容量核算，再安排动作节点、表演和画面帧。公开视频中的直接对白必须使用“说话人说：“完整原句””格式，不能只写说话人标签或把台词塞进重音字段。`;
+export const DRAMA_DIALOGUE_TIMING_RULES = `对白时长规则：默认按中文对白每秒约 ${DRAMA_DIALOGUE_CHARS_PER_SECOND} 个可发音字估算，不把标点、停顿和动作反应当作可压缩空间。制作包必须按逐句记录 startSecond/endSecond（相对当前镜头，且不含停顿）、pauseBeforeSeconds/pauseAfterSeconds 和情绪语速 speechRate；需要可复核时同时填写 speechRateCharsPerSecond。逐句时间不得越界或重叠，停顿不得跑出镜头。不超过 ${DRAMA_DIALOGUE_TIMING_TOLERANCE_CHARS} 个可发音字的偏差只作轻微提醒；超过该容差必须在正式制作包生成前按自然分句、说话人转换、动作反应或增加逻辑片段重新拆解，不能通过异常加速解决，正式 authoring 质量门禁会阻止生成。每个镜头先完成对白容量核算，再安排动作节点、表演和画面帧。公开视频中的直接对白必须使用“说话人说：“完整原句””格式，不能只写说话人标签或把台词塞进重音字段。`;
 
 export type DramaDialogueTimingInput = {
     type?: string;
@@ -83,7 +83,7 @@ export function dramaDialogueTimingIssue(duration: number, values: readonly Dram
     return dramaDialogueTimingReminder(duration, values, fallback, label);
 }
 
-/** Returns a non-blocking capacity reminder for any dialogue that runs past the shot. */
+/** Returns the capacity issue; compatibility and formal-generation callers choose the gate severity. */
 export function dramaDialogueTimingReminder(duration: number, values: readonly DramaDialogueTimingInput[] | readonly string[], fallback = "", label = "镜头"): DramaDialogueTimingIssue | undefined {
     const safeDuration = Number.isFinite(duration) && duration > 0 ? duration : 0;
     const estimate = estimateDramaDialogueSeconds(values, fallback);
@@ -99,7 +99,7 @@ export function dramaDialogueTimingReminder(duration: number, values: readonly D
         requiredSeconds,
         overageCharacters,
         withinTolerance,
-        message: `${label}包含约 ${estimate.spokenCharacters} 个可发音字，按逐句语速和停顿约需 ${Number(requiredSeconds.toFixed(1))} 秒（默认每秒约 ${DRAMA_DIALOGUE_CHARS_PER_SECOND} 个字），当前仅 ${safeDuration} 秒；对白时长仅作提醒，不阻止导入${withinTolerance ? `，当前偏差约 ${overageCharacters} 字，处于 ${DRAMA_DIALOGUE_TIMING_TOLERANCE_CHARS} 字上线容差内` : `，当前约超出 ${overageCharacters} 字，建议按自然分句/说话人转换拆镜或增加时长`}`,
+        message: `${label}包含约 ${estimate.spokenCharacters} 个可发音字，按逐句语速和停顿约需 ${Number(requiredSeconds.toFixed(1))} 秒（默认每秒约 ${DRAMA_DIALOGUE_CHARS_PER_SECOND} 个字），当前仅 ${safeDuration} 秒；兼容导入阶段仅作提醒，不阻止导入${withinTolerance ? `，当前偏差约 ${overageCharacters} 字，处于 ${DRAMA_DIALOGUE_TIMING_TOLERANCE_CHARS} 字上线容差内` : `，当前约超出 ${overageCharacters} 字，正式制作包 authoring/生产前必须按自然分句、说话人转换或动作反应拆镜`}`,
     };
 }
 

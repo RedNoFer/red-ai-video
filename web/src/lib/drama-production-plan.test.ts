@@ -9,6 +9,7 @@ import {
     resolveDramaFrameCountPreference,
     resolveDramaInternalCutPolicyPreference,
     resolveDramaShotDurationPreference,
+    sanitizeDramaCustomDirectorRules,
 } from "@/lib/drama-production-plan";
 
 describe("drama production plan", () => {
@@ -82,6 +83,13 @@ describe("drama production plan", () => {
     it("keeps logical shot duration separate from dense internal cuts", () => {
         expect(resolveDramaInternalCutPolicyPreference("每个片段30秒，内部使用7-10次高密度硬切")).toBe("dense-30s");
         expect(normalizeDramaProductionPlan({ video: { shotDuration: 30, internalCutPolicy: "dense-30s" } })?.video).toMatchObject({ shotDuration: 30, internalCutPolicy: "dense-30s" });
+    });
+
+    it("removes the accidental fixed-eight-shot duration rule without removing valid custom rules", () => {
+        const legacy = "本集由完整TXT拆解为8个独立30秒逻辑片段，总时长240秒。每段内部按真实事件切换；公共场景增加旁听 NPC";
+        expect(sanitizeDramaCustomDirectorRules(legacy)).toBe("每段内部按真实事件切换；公共场景增加旁听 NPC");
+        expect(normalizeDramaProductionPlan({ customDirectorRules: legacy })?.customDirectorRules).toBe("每段内部按真实事件切换；公共场景增加旁听 NPC");
+        expect(sanitizeDramaCustomDirectorRules("整集固定为12个独立30秒逻辑片段，总时长360秒；保留自然停顿")).toBe("保留自然停顿");
     });
 
     it("round-trips the editable visual direction without losing its split fields", () => {

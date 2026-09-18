@@ -143,7 +143,12 @@ function checkShot(
         issues.push(warning("LIGHTING_PLAN_MISSING", `${label}缺少完整色彩与灯光规划`, { shotId: shot.id }));
     if (!Number.isFinite(shot.duration) || shot.duration <= 0) issues.push(blocking("DURATION", `${label}缺少有效时长`, { shotId: shot.id }));
     const dialogueTiming = dramaDialogueTimingReminder(shot.duration, shot.utterances as DramaDialogueTimingInput[], shot.dialogue, label);
-    if (dialogueTiming) issues.push(warning("DIALOGUE_TIMING", dialogueTiming.message, { shotId: shot.id, correction: "对白时长仅作提醒；如需优化，再按自然分句、说话人转换或动作反应拆镜" }));
+    if (dialogueTiming) {
+        const issue = dialogueTiming.withinTolerance
+            ? warning("DIALOGUE_TIMING", dialogueTiming.message, { shotId: shot.id, correction: "轻微偏差可保留；如需优化，按自然分句、说话人转换或动作反应拆镜" })
+            : blocking("DIALOGUE_TIMING", dialogueTiming.message, { shotId: shot.id, correction: "正式生产前必须按自然分句、说话人转换、动作反应或逻辑片段边界拆镜；禁止异常加速对白" });
+        issues.push(issue);
+    }
     if (targetShotDuration && shot.duration !== targetShotDuration)
         issues.push(warning("SHOT_DURATION_MISMATCH", `${label}当前为${shot.duration}秒，生产方案目标为${targetShotDuration}秒`, { shotId: shot.id, correction: `按生产方案重新生成或调整为${targetShotDuration}秒逻辑镜头` }));
     const selectedReferenceCount = dramaShotReferenceSelectionIds(project, shot, referenceMode, referenceSelections).length;

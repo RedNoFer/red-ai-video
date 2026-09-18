@@ -100,6 +100,17 @@ describe("drama authoring quality gates", () => {
         expect(blockers(report, "DIALOGUE_COVERAGE")).not.toHaveLength(0);
     });
 
+    it("blocks an overpacked logical shot before the authoring package can be completed", () => {
+        const speech = "甲".repeat(86);
+        const value = packageValue({ dialogue: true });
+        value.episodes[0].shots[0].duration = 15;
+        value.episodes[0].shots[0].dialogue = speech;
+        value.episodes[0].shots[0].utterances = [{ id: "u1", order: 1, type: "dialogue", speaker: "萧炎", text: speech }];
+        const overpackedReport = validateDramaAuthoringQuality({ package: value, sources: [source("第3章。场景在议事大厅。萧炎抬眼。")], targetNarrativeChapter: 3 });
+        expect(overpackedReport.status).toBe("blocked");
+        expect(blockers(overpackedReport, "DIALOGUE_CAPACITY")).not.toHaveLength(0);
+    });
+
     it("does not expose a package until dialogue performance is concrete and segment-specific", () => {
         const prompt = "镜头模式：连续镜头\n单一主运镜：中景平视沿长桌缓慢推进，为了让观众看见萧炎抬眼质问纳兰。";
         const report = validateDramaAuthoringQuality({

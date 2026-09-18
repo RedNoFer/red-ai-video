@@ -21,6 +21,22 @@ export type DramaFramePolicy = (typeof DRAMA_FRAME_POLICY_OPTIONS)[number];
 export const DRAMA_VIDEO_REFERENCE_IMAGE_LIMIT = 9;
 export const DRAMA_VIDEO_REFERENCE_IMAGE_LIMIT_30S = 30;
 
+/**
+ * Remove the legacy package-specific duration assertion that was accidentally
+ * written into a generated package's custom rules. Logical-shot count must be
+ * derived from the story; only the duration of each logical shot is configurable.
+ */
+export function sanitizeDramaCustomDirectorRules(value: unknown) {
+    if (typeof value !== "string") return "";
+    return value
+        .replace(/(?:本集|整集|当前集)?\s*(?:由完整(?:TXT|剧本)拆解为|拆成|固定(?:为|使用)?)\s*\d+\s*个(?:独立)?\s*\d+\s*秒逻辑片段\s*[，,、；;]\s*总时长\s*\d+\s*秒[。．]?/gu, "")
+        .replace(/(?:本集|整集|当前集)\s*固定(?:为|使用)?\s*\d+\s*个(?:独立)?\s*逻辑片段\s*[，,、；;]\s*总时长\s*\d+\s*秒[。．]?/gu, "")
+        .replace(/^[\s，,、；;]+/u, "")
+        .replace(/[ \t]{2,}/gu, " ")
+        .replace(/\n{3,}/gu, "\n\n")
+        .trim();
+}
+
 export function dramaReferenceImageBudget(duration: DramaShotDuration | number): number {
     return duration >= 30 ? DRAMA_VIDEO_REFERENCE_IMAGE_LIMIT_30S : DRAMA_VIDEO_REFERENCE_IMAGE_LIMIT;
 }
@@ -88,7 +104,7 @@ export function normalizeDramaProductionPlan(value: unknown, fallback?: DramaPro
     const artStyle = typeof visualInput.artStyle === "string" ? text(visualInput.artStyle) : base.visual.artStyle;
     const visualDirection = typeof visualInput.visualDirection === "string" ? text(visualInput.visualDirection) : base.visual.visualDirection;
     const frameCount = framePolicy === "fixed-4" ? 4 : framePolicy === "fixed-5" ? 5 : undefined;
-    const customDirectorRules = typeof input.customDirectorRules === "string" ? text(input.customDirectorRules) : text(base.customDirectorRules);
+    const customDirectorRules = sanitizeDramaCustomDirectorRules(typeof input.customDirectorRules === "string" ? input.customDirectorRules : base.customDirectorRules);
     return {
         version: DRAMA_PRODUCTION_PLAN_VERSION,
         skills: normalizedSkills,

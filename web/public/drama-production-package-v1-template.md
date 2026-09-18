@@ -2,7 +2,7 @@
 
 > 制作包格式：`vozeb-drama-production-package-v1`
 >
-> 模板版本：由 `pnpm compile:skills` 自动生成；唯一制作包契约：`vozeb-drama-production-package-v1@1.0.0`（契约 hash：`c2052c957c380214c50eb822a263d1c0bc6809267e31eb43e7447195e0629b9f`，规范源 hash：`55847bed26f267a6e0cf69b6a8c16c8455f2c8ae3fd382d9397d5e15fd9df306`）。导演 Skill：`drama-video-director@1.9.0`（hash：`cc703819baadc90a77ac8de07e8c5794a6488a45c18d4683c49f944f54e723b9`）；服务端制作包规则 hash：`ef468601c28d809e84bfc1ac4f077a756fce37b96b5fe35b14b2943f5f16fceb`；Seedance Skill、服务端规则和 Codex 工作单均由同一编译清单绑定。
+> 模板版本：由 `pnpm compile:skills` 自动生成；唯一制作包契约：`vozeb-drama-production-package-v1@1.0.0`（契约 hash：`c2052c957c380214c50eb822a263d1c0bc6809267e31eb43e7447195e0629b9f`，规范源 hash：`eb94fdc08aa6e8ed47e54630cdcf48a8dcaf96ecf07772ccffdac878e76edebd`）。导演 Skill：`drama-video-director@1.9.0`（hash：`cc703819baadc90a77ac8de07e8c5794a6488a45c18d4683c49f944f54e723b9`）；服务端制作包规则 hash：`ef468601c28d809e84bfc1ac4f077a756fce37b96b5fe35b14b2943f5f16fceb`；Seedance Skill、服务端规则和 Codex 工作单均由同一编译清单绑定。
 >
 > 使用约定：本模板是当前 v1 制作包的填写入口。完整制作包必须同时提供可导入的规范对象 JSON；JSON 是导入事实源，下面的章节是面向人工阅读的确定性展示。不要把历史制作包、旧 generationPrompt 或旧分镜正文当作新包模板。
 >
@@ -164,7 +164,7 @@ imagePrompt
 | --- | ---- | ------ | ------ | -------------- | ---- |
 | D01 | SH01 | 角色名 | “台词” | 按逐句时序填写 | 是   |
 
-含对白镜头必须在规范对象中逐句记录相对镜头的开始、结束、前后停顿和语速；这些内容不写入静态图片正文。
+含对白镜头必须在规范对象中逐句记录相对镜头的开始、结束、前后停顿和语速；对白先按自然语速核算，超过10个可发音字容差时不得完成正式 authoring，必须按自然分句、说话人转换、动作反应或逻辑片段边界拆分；这些内容不写入静态图片正文。
 
 ### 沉默设计
 

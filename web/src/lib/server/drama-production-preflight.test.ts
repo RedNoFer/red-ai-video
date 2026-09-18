@@ -165,14 +165,14 @@ describe("drama production preflight", () => {
         expect(result.issues.some((issue) => issue.code.startsWith("DIRECTOR_") && issue.severity === "blocking")).toBe(false);
     });
 
-    it("keeps dialogue capacity as a warning instead of a production blocker", () => {
+    it("blocks dialogue that cannot fit at natural speaking speed", () => {
         const project = fixture();
         const shot = project.episodes[0].shots[0];
         shot.dialogue = "甲".repeat(39);
         shot.utterances = [{ id: "dialogue-one", order: 1, type: "dialogue", speaker: "Karin", text: shot.dialogue }];
         shot.duration = 5;
 
-        expect(preflightDramaProduction(project, project.episodes[0]).issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "DIALOGUE_TIMING", severity: "warning" })]));
+        expect(preflightDramaProduction(project, project.episodes[0]).issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "DIALOGUE_TIMING", severity: "blocking" })]));
     });
 
     it("warns before submit when frame images plus fixed assets exceed the shot budget", () => {

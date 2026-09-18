@@ -1,5 +1,5 @@
 import type { DramaAuthoringSourceSnapshot, DramaProductionPackageV1, DramaQualityGateCheck, DramaQualityGateReport } from "@/lib/drama-project-contract";
-import { hasQuotedDramaDialogue } from "@/lib/drama-dialogue-timing";
+import { dramaDialogueTimingReminder, hasQuotedDramaDialogue, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
 import { DRAMA_DENSE_HARD_CUT_RANGE_30S } from "@/lib/drama-production-plan";
 import { validateDramaVideoPromptTemplateLayout } from "@/lib/drama-prompt-quality";
 import { DRAMA_PACKAGE_GATE_CODES, DRAMA_PACKAGE_SECTIONS } from "@/lib/server/drama-production-package-contract";
@@ -36,6 +36,7 @@ export function validateDramaAuthoringQuality(input: DramaAuthoringQualityInput)
 
     checkLiteraryCompleteness(checks, input.package, sourceText, input.targetNarrativeChapter);
     checkDialogueCoverage(checks, input.package, sourceText);
+    checkDialogueCapacity(checks, input.package);
     checkDialoguePerformanceQuality(checks, input.package);
     checkVideoPromptLayout(checks, input.package);
     checkPlotFacts(checks, input.package, sourceText);
@@ -53,6 +54,31 @@ export function validateDramaAuthoringQuality(input: DramaAuthoringQualityInput)
         status: checks.some((check) => check.severity === "blocker") ? "blocked" : "passed",
         checks,
     };
+}
+
+function checkDialogueCapacity(checks: DramaQualityGateCheck[], value: DramaProductionPackageV1) {
+    const blockers: string[] = [];
+    const reminders: string[] = [];
+    for (const episode of value.episodes) {
+        for (const shot of episode.shots) {
+            const issue = dramaDialogueTimingReminder(shot.duration, shot.utterances as DramaDialogueTimingInput[], shot.dialogue, `${episode.code}/${shot.code}`);
+            if (!issue) continue;
+            if (issue.withinTolerance) reminders.push(issue.message);
+            else blockers.push(issue.message);
+        }
+    }
+    checks.push({
+        code: "DIALOGUE_CAPACITY",
+        severity: blockers.length ? "blocker" : "warning",
+        scope: "对白容量",
+        evidence: blockers.length
+            ? blockers.slice(0, 8).join("；")
+            : reminders.length
+              ? `存在 ${reminders.length} 个未超过上线容差的轻微对白容量偏差：${reminders.slice(0, 3).join("；")}`
+              : "每个含对白逻辑片段的自然语速、停顿和镜头时长匹配",
+        sourceRefs: ["episodes[].shots[].utterances", "episodes[].shots[].duration"],
+        fixHint: "先按自然语速和停顿计算对白容量，再在自然分句、说话人转换、动作反应或逻辑片段边界处拆分；不得把一秒内读不完的台词压进镜头。",
+    });
 }
 
 function checkVideoPromptLayout(checks: DramaQualityGateCheck[], value: DramaProductionPackageV1) {
