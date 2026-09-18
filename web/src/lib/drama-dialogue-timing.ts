@@ -99,7 +99,7 @@ export function dramaDialogueTimingReminder(duration: number, values: readonly D
         requiredSeconds,
         overageCharacters,
         withinTolerance,
-        message: `${label}包含约 ${estimate.spokenCharacters} 个可发音字，按逐句语速和停顿约需 ${Number(requiredSeconds.toFixed(1))} 秒（默认每秒约 ${DRAMA_DIALOGUE_CHARS_PER_SECOND} 个字），当前仅 ${safeDuration} 秒；兼容导入阶段仅作提醒，不阻止导入${withinTolerance ? `，当前偏差约 ${overageCharacters} 字，处于 ${DRAMA_DIALOGUE_TIMING_TOLERANCE_CHARS} 字上线容差内` : `，当前约超出 ${overageCharacters} 字，正式制作包 authoring/生产前必须按自然分句、说话人转换或动作反应拆镜`}`,
+        message: `${label}包含约 ${estimate.spokenCharacters} 个可发音字，按逐句语速和停顿约需 ${Number(requiredSeconds.toFixed(1))} 秒（默认每秒约 ${DRAMA_DIALOGUE_CHARS_PER_SECOND} 个字），当前仅 ${safeDuration} 秒；对白时长仅作提醒，兼容导入阶段不阻止导入${withinTolerance ? `，当前偏差约 ${overageCharacters} 字，处于 ${DRAMA_DIALOGUE_TIMING_TOLERANCE_CHARS} 字上线容差内` : `，当前约超出 ${overageCharacters} 字，正式制作包 authoring/生产前必须按自然分句、说话人转换或动作反应拆镜`}`,
     };
 }
 

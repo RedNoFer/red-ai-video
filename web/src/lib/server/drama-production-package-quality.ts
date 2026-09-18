@@ -1,6 +1,6 @@
 import type { DramaAuthoringSourceSnapshot, DramaProductionPackageV1, DramaQualityGateCheck, DramaQualityGateReport } from "@/lib/drama-project-contract";
 import { dramaDialogueTimingReminder, hasQuotedDramaDialogue, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
-import { DRAMA_DENSE_HARD_CUT_RANGE_30S, hasDramaDenseCutRule } from "@/lib/drama-production-plan";
+import { DRAMA_DENSE_HARD_CUT_RANGE_30S, hasDramaDenseCutRule, hasDramaDenseCutRuleInCustomTemplateSources } from "@/lib/drama-production-plan";
 import { validateDramaVideoPromptTemplateLayout } from "@/lib/drama-prompt-quality";
 import { DRAMA_PACKAGE_GATE_CODES, DRAMA_PACKAGE_SECTIONS } from "@/lib/server/drama-production-package-contract";
 
@@ -33,6 +33,7 @@ export function validateDramaAuthoringQuality(input: DramaAuthoringQualityInput)
         .filter((source) => source.role === "story-source" && source.type === "text")
         .map((source) => source.textContent || "")
         .join("\n");
+    const customTemplateDenseRule = hasDramaDenseCutRuleInCustomTemplateSources(input.sources);
 
     checkLiteraryCompleteness(checks, input.package, sourceText, input.targetNarrativeChapter);
     checkDialogueCoverage(checks, input.package, sourceText);
@@ -47,7 +48,7 @@ export function validateDramaAuthoringQuality(input: DramaAuthoringQualityInput)
     checkNpcContinuityWarnings(checks, input.package);
     checkVisualClarityWarnings(checks, input.package);
     checkCameraMotivation(checks, input.package);
-    checkCameraEvents(checks, input.package);
+    checkCameraEvents(checks, input.package, customTemplateDenseRule);
     checkSimpleStructuralChecks(checks, input.package);
 
     return {
@@ -71,11 +72,7 @@ function checkDialogueCapacity(checks: DramaQualityGateCheck[], value: DramaProd
         code: "DIALOGUE_CAPACITY",
         severity: blockers.length ? "blocker" : "warning",
         scope: "对白容量",
-        evidence: blockers.length
-            ? blockers.slice(0, 8).join("；")
-            : reminders.length
-              ? `存在 ${reminders.length} 个未超过上线容差的轻微对白容量偏差：${reminders.slice(0, 3).join("；")}`
-              : "每个含对白逻辑片段的自然语速、停顿和镜头时长匹配",
+        evidence: blockers.length ? blockers.slice(0, 8).join("；") : reminders.length ? `存在 ${reminders.length} 个未超过上线容差的轻微对白容量偏差：${reminders.slice(0, 3).join("；")}` : "每个含对白逻辑片段的自然语速、停顿和镜头时长匹配",
         sourceRefs: ["episodes[].shots[].utterances", "episodes[].shots[].duration"],
         fixHint: "先按自然语速和停顿计算对白容量，再在自然分句、说话人转换、动作反应或逻辑片段边界处拆分；不得把一秒内读不完的台词压进镜头。",
     });
@@ -179,6 +176,8 @@ function checkDialoguePerformanceQuality(checks: DramaQualityGateCheck[], value:
                 return { frame, segmentText, spoken };
             });
             const performanceBlocks: string[] = [];
+            let previousSpokenIds = "";
+            let previousQuotedTexts: string[] = [];
             for (const { frame, segmentText, spoken } of segmentPerformances) {
                 const label = `${shot.code || shot.title}/${frame.id}`;
                 const performanceMatch = segmentText.match(/对白表演\s*[：:]([^\n]+)/u);
@@ -192,6 +191,12 @@ function checkDialoguePerformanceQuality(checks: DramaQualityGateCheck[], value:
                 }
                 const block = (performanceMatch?.[1] || directDialogueMatch?.[0] || "").replace(/^[\n；;]\s*/u, "").trim();
                 performanceBlocks.push(block);
+                const quotedTexts = extractQuotedDialogueTexts(segmentText).map(normalizeQualityText).filter(Boolean);
+                const spokenIds = spoken.map((utterance) => `${utterance.speaker || ""}:${normalizeQualityText(utterance.text || "")}`).join("|");
+                if (spoken.length && spokenIds === previousSpokenIds && quotedTexts.some((text) => previousQuotedTexts.includes(text) && text.length >= 4))
+                    failures.push(`${label}重复了上一时间段的完整对白，必须只保留当前句段或改写为对白结束后的具体反应`);
+                previousSpokenIds = spoken.length ? spokenIds : "";
+                previousQuotedTexts = spoken.length ? quotedTexts : [];
                 const missing = ["说话人", "语气", "停顿", "重音", "说后反应"].filter((field) =>
                     field === "说话人" ? !new RegExp(`${field}\\s*[：:]\\s*[^；;\\n]+`, "u").test(block) && !hasQuotedDramaDialogue(block) : !new RegExp(`${field}\\s*[：:]\\s*[^；;\\n]+`, "u").test(block),
                 );
@@ -220,6 +225,10 @@ function checkDialoguePerformanceQuality(checks: DramaQualityGateCheck[], value:
 
 function normalizeQualityText(value: string) {
     return value.replace(/[，。；：、,.!?！？\s]+/gu, "").trim();
+}
+
+function extractQuotedDialogueTexts(value: string) {
+    return [...value.matchAll(/(?:^|[\n；;])\s*[^：:；;\n]{1,32}?\s*说\s*[：:]\s*“([^”\n]{1,240})”/gu)].map((match) => match[1].trim()).filter(Boolean);
 }
 
 function checkPlotFacts(checks: DramaQualityGateCheck[], value: DramaProductionPackageV1, sourceText: string) {
@@ -393,7 +402,7 @@ function checkCameraMotivation(checks: DramaQualityGateCheck[], value: DramaProd
     );
 }
 
-function checkCameraEvents(checks: DramaQualityGateCheck[], value: DramaProductionPackageV1) {
+function checkCameraEvents(checks: DramaQualityGateCheck[], value: DramaProductionPackageV1, customTemplateDenseRule = false) {
     const failed: string[] = [];
     const productionPlan = value.project.productionBible?.productionPlan;
     for (const shot of value.episodes.flatMap((episode) => episode.shots)) {
@@ -403,10 +412,10 @@ function checkCameraEvents(checks: DramaQualityGateCheck[], value: DramaProducti
         const internal = /镜头模式\s*[：:]\s*内部切镜/u.test(prompt);
         const inferredInternal = !internal && eventLines.length > 0;
         const denseMaterial = `${productionPlan?.customDirectorRules || ""}\n${prompt}`;
-        const denseRuleRequested = hasDramaDenseCutRule(denseMaterial);
+        const denseRuleRequested = hasDramaDenseCutRule(denseMaterial) || customTemplateDenseRule;
         const denseRequested = shot.duration === 30 && (productionPlan?.video?.internalCutPolicy === "dense-30s" || denseRuleRequested);
         const denseCutException = denseRequested && denseCutExceptionPattern.test(denseMaterial);
-        if (shot.duration === 30 && denseRuleRequested && productionPlan?.video?.internalCutPolicy === "adaptive")
+        if (shot.duration === 30 && denseRuleRequested && (productionPlan?.video?.internalCutPolicy === "adaptive" || (customTemplateDenseRule && productionPlan?.video?.internalCutPolicy !== "dense-30s")))
             failed.push(`${shot.code}:已声明30秒高密度硬切，但 productionPlan.video.internalCutPolicy 仍为 ${productionPlan?.video?.internalCutPolicy || "未声明"}，不能降级为 adaptive`);
         if (hasCut && !internal && !inferredInternal) failed.push(`${shot.code}:未声明内部切镜`);
         if (internal || inferredInternal || denseRequested) {

@@ -10,6 +10,7 @@ import {
     resolveDramaInternalCutPolicyPreference,
     resolveDramaShotDurationPreference,
     sanitizeDramaCustomDirectorRules,
+    hasDramaDenseCutRuleInCustomTemplateSources,
 } from "@/lib/drama-production-plan";
 
 describe("drama production plan", () => {
@@ -86,6 +87,16 @@ describe("drama production plan", () => {
         expect(resolveDramaInternalCutPolicyPreference("每个镜头30秒，至少7至10次可见切换")).toBe("dense-30s");
         expect(normalizeDramaProductionPlan({ video: { shotDuration: 30, internalCutPolicy: "dense-30s" } })?.video).toMatchObject({ shotDuration: 30, internalCutPolicy: "dense-30s" });
         expect(normalizeDramaProductionPlan({ video: { shotDuration: 30, internalCutPolicy: "adaptive" }, customDirectorRules: "每个30秒逻辑片段至少7—10个硬切镜头" })?.video).toMatchObject({ shotDuration: 30, internalCutPolicy: "dense-30s" });
+    });
+
+    it("only promotes an explicitly supplied custom template dense rule", () => {
+        expect(
+            hasDramaDenseCutRuleInCustomTemplateSources([
+                { alias: "@系统制作包模板", role: "package-template", textContent: "30秒高密度硬切，7—10次" },
+                { alias: "@附件1", role: "story-source", textContent: "每镜30秒" },
+            ]),
+        ).toBe(false);
+        expect(hasDramaDenseCutRuleInCustomTemplateSources([{ alias: "@附件1", role: "package-template", textContent: "每个30秒逻辑片段使用7—10次可见硬切" }])).toBe(true);
     });
 
     it("removes the accidental fixed-eight-shot duration rule without removing valid custom rules", () => {

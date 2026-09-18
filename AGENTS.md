@@ -105,6 +105,7 @@
 - 短剧视频提示词优化的公开 `videoPrompt` 与 `framePlan.frames` 必须由当前 Seedance 2.5 Skill 在 Agent 输出阶段直接生成，素材引用、时间范围、起点、动作与触发、可见衔接、终点和具体画面状态都必须来自该输出；后端只允许做契约、顺序、引用、内部字段和重复状态校验并原样保存，禁止拼接引用正文、补写阶段文案、重写 Agent 提示词或把内部模式/叙事标签转成公开字段。
 - 交给短剧视频提示词 Agent 的脱敏 `referenceMaterials` 必须保留本次请求的稳定 `alias`、`role`、`purpose` 和顺序；只能移除媒体 URL、内部 ID 等执行数据。服务端引用校验必须依据这些 alias，兼容冒号、括号和空格等正常分隔符，但不能要求 Agent 猜测已被后端删除的编号。
 - 短剧视频提示词优化的服务端质量门禁必须区分“镜头级摘要字段”和“按事实提供的可选字段”：只要求 Skill 合同规定的最小核心字段，`全局设定`、`起始可见状态`、`触发`、`主体动作与反应`、`环境压力与视觉母题`、`视觉风格与光色`、`声音意图`、`连续性锁` 等没有事实时不得因缺失而拒绝；逐帧 `framePlan` 仍必须有真实动作和可见画面状态。
+- 短剧制作包的规则优先级必须在生成前锁定：本轮用户请求和本轮上传的自定义制作包模板（排除仅描述可选模式的系统模板）高于旧的锁定 `productionPlan` 和历史输出；自定义模板明确声明30秒高密度硬切时，执行入口必须先提升为 `internalCutPolicy=dense-30s`，不能让旧 `adaptive` 继续生成。含对白的相邻帧段不得复制同一完整对白，必须按实际说话时间段拆分或改写为具体的对白后反应；这两项冲突必须在 Agent authoring 和导入前质量门禁中阻断。
 - 短剧制作包 Agent 的 authoring input 只能包含本轮请求、当前附件、正式资产、当前集事实、相邻剧情摘要、锁定方案、当前显式 Skill 和全局视觉合同；禁止传入 `conversationContext`、`productionArchive`、历史 `generationPrompt`、旧镜头提示词或历史运行记录。canonical Skill 在每个入口只注入一次；锁定方案、全局视觉合同和项目定制规则不得同时作为 system 文本与 authoring JSON 重复注入。
 - 短剧制作包正式生成只能由 `executeDramaScriptRun` 调用项目 GPT 完成；禁止新增或保留从 TXT/模板读取后用固定脚本拼出剧情、分镜或视频 Prompt 的制作包生成器。用户模板和 TXT 必须作为带有 `role`、顺序和内容哈希的正式 authoring source 传入；Agent draft 必须经过动作差异、情绪递进、required NPC 反应变化、运镜动机和镜头事件严格门禁，再由规范对象确定性序列化为最终制作包，并记录导演 Skill 版本与内容哈希。内部 GPT 与 Codex 导演审阅统一读取项目 `.agents/skills` 的编译产物及同一版本/内容哈希。
 - 短剧页面的异步任务轮询只能更新对应的局部控件或 `shotId`/`frameId` 状态；禁止用 `loadProject(..., true)`、整项目 `replaceProject` 或路由刷新覆盖整个工作区。轮询 effect 不得依赖整个 `episode.shots` 对象，避免单个镜头状态变化重建全部计时器、滚动位置和编辑状态。

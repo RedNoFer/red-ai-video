@@ -4,7 +4,7 @@ import { nanoid } from "nanoid";
 
 import type { DramaAuthoringSourceSnapshot, DramaAuthoringWorkOrder } from "@/lib/drama-project-contract";
 import { orderCreativeAssetsByIds } from "@/lib/creative-asset-references";
-import { defaultDramaProductionPlan, normalizeDramaProductionPlan, resolveDramaInternalCutPolicyPreference, resolveDramaShotDurationPreference } from "@/lib/drama-production-plan";
+import { defaultDramaProductionPlan, hasDramaDenseCutRuleInCustomTemplateSources, normalizeDramaProductionPlan, resolveDramaInternalCutPolicyPreference, resolveDramaShotDurationPreference } from "@/lib/drama-production-plan";
 import { resolveDramaGlobalVisualContract } from "@/lib/drama-style";
 import { getAuthSettings } from "@/lib/auth/store";
 import { getCreativeAssetsByIds } from "@/lib/server/creative-runtime-store";
@@ -73,12 +73,13 @@ function buildWorkOrderContext(run: AgentRun) {
         const shotDuration = plan?.lockedAt ? (plan.video.shotDuration === 30 ? 30 : 15) : resolveDramaShotDurationPreference(run.prompt, 15);
         const promptInternalCutPolicy = resolveDramaInternalCutPolicyPreference(run.prompt, "adaptive");
         const lockedInternalCutPolicy = plan?.lockedAt ? plan.video.internalCutPolicy || resolveDramaInternalCutPolicyPreference(plan.customDirectorRules || "", "adaptive") : undefined;
-        const internalCutPolicy = promptInternalCutPolicy === "dense-30s" || lockedInternalCutPolicy === "dense-30s" ? "dense-30s" : lockedInternalCutPolicy || promptInternalCutPolicy;
         const materials = orderCreativeAssetsByIds(uploadedAssets, run.referencedAssetIds || []).map((asset, index) => {
             const base = { alias: `@附件${index + 1}`, type: asset.type, title: asset.title, ...(asset.textContent ? { textContent: asset.textContent } : {}), ...(asset.mimeType ? { mimeType: asset.mimeType } : {}) };
             return { ...base, role: classifyDramaAuthoringMaterial(base), contentHash: hashMaterial(base) } as DramaAuthoringSourceSnapshot;
         });
         const materialsWithSystemTemplate = ensureDramaPackageTemplateSource(materials);
+        const sourceInternalCutPolicy = hasDramaDenseCutRuleInCustomTemplateSources(materialsWithSystemTemplate) && shotDuration === 30 ? "dense-30s" : "adaptive";
+        const internalCutPolicy = sourceInternalCutPolicy === "dense-30s" || promptInternalCutPolicy === "dense-30s" || lockedInternalCutPolicy === "dense-30s" ? "dense-30s" : lockedInternalCutPolicy || promptInternalCutPolicy;
         const assetReuseContext = buildDramaAssetReuseContext(project, current);
         const adjacent = [project.episodes[project.episodes.indexOf(current) - 1], project.episodes[project.episodes.indexOf(current) + 1]]
             .filter(Boolean)

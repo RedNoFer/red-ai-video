@@ -173,6 +173,21 @@ export function hasDramaDenseCutRule(value: unknown) {
     return typeof value === "string" && DRAMA_DENSE_CUT_RULE_PATTERN.test(value);
 }
 
+/**
+ * A user-supplied package template can carry an explicit dense-cut contract.
+ * The system template is intentionally excluded because it documents both
+ * adaptive and dense modes; it must not silently turn every 30-second shot
+ * into dense mode.
+ */
+export function hasDramaDenseCutRuleInCustomTemplateSources(value: unknown) {
+    if (!Array.isArray(value)) return false;
+    return value.some((source) => {
+        if (!source || typeof source !== "object" || Array.isArray(source)) return false;
+        const item = source as { role?: unknown; alias?: unknown; textContent?: unknown };
+        return item.role === "package-template" && item.alias !== "@系统制作包模板" && hasDramaDenseCutRule(item.textContent);
+    });
+}
+
 export function resolveDramaInternalCutPolicyPreference(prompt: string, fallback: DramaInternalCutPolicy = "adaptive"): DramaInternalCutPolicy {
     const value = prompt.trim();
     const thirtySecondRule = /30\s*(?:秒|s)|每镜\s*30|每个\s*30\s*秒/iu;

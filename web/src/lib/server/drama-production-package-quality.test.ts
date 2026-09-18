@@ -186,6 +186,32 @@ describe("drama authoring quality gates", () => {
         expect(blockers(report, "CAMERA_EVENT")).not.toHaveLength(0);
     });
 
+    it("blocks a custom template dense-cut rule before it can be downgraded to adaptive", () => {
+        const value = packageValue({
+            videoPrompt: "镜头模式：内部切镜（3次）\n单一主运镜：锁定机位，为了让观众看清萧炎抬眼。\n镜头事件：时间：15秒；类型：硬切；触发事件：萧炎抬眼；新机位：50mm中近景；切后主运镜：锁定机位；信息目的：看清眼神；承接：视线连续。",
+        });
+        value.project.productionBible = {
+            ...(value.project.productionBible || {}),
+            productionPlan: { video: { shotDuration: 30, framePolicy: "agent", internalCutPolicy: "adaptive" } },
+        } as never;
+        const report = validateDramaAuthoringQuality({
+            package: value,
+            sources: [{ alias: "@模板", role: "package-template", type: "text", title: "最新模板.md", contentHash: "b".repeat(64), textContent: "30秒逻辑片段必须使用8—11个帧段承载7—10次内部硬切" }],
+        });
+        expect(blockers(report, "CAMERA_EVENT")).not.toHaveLength(0);
+    });
+
+    it("blocks repeating the same complete dialogue in adjacent active frame segments", () => {
+        const value = packageValue({ dialogue: true });
+        const shot = value.episodes[0].shots[0];
+        shot.utterances = [{ id: "u1", order: 1, type: "dialogue", speaker: "萧炎", text: "纳兰小姐，你来了。", startSecond: 1, endSecond: 29 }];
+        shot.dialogue = "纳兰小姐，你来了。";
+        shot.framePlan!.frames[0].actionPrompt = "萧炎说：“纳兰小姐，你来了。”；语气：低声克制；停顿：开口前半拍；重音：纳兰小姐；说后反应：目光锁住纳兰。";
+        shot.framePlan!.frames[1].actionPrompt = "萧炎说：“纳兰小姐，你来了。”；语气：硬度增加；停顿：句中短停；重音：来了；说后反应：眉心收紧。";
+        const report = validateDramaAuthoringQuality({ package: value, sources: [] });
+        expect(blockers(report, "DIALOGUE_PERFORMANCE")).not.toHaveLength(0);
+    });
+
     it("accepts the eight-section prompt layout with cut events inferred from the timeline", () => {
         const value = packageValue({
             videoPrompt: [
