@@ -1360,9 +1360,7 @@ function validatePromptAssetBindings(prompt: string, characterCodes: string[], p
         const prop = props.find((item) => text(item.code) === propCode);
         if (prop && ![...semanticAssetTerms(prop)].some((term) => bindingLine.includes(term))) errors.push(`${label}的素材绑定未明确写出道具 ${text(prop.name) || propCode}`);
     }
-    const shotSpecificPrompt = prompt
-        .replace(/【素材绑定】[\s\S]*?(?=【故事意图】)/u, "")
-        .split(/(?:^|\n)\s*针对性约束\s*[：:]/u)[0];
+    const shotSpecificPrompt = prompt.replace(/【素材绑定】[\s\S]*?(?=【故事意图】)/u, "").split(/(?:^|\n)\s*针对性约束\s*[：:]/u)[0];
     for (const prop of props) {
         const code = text(prop.code);
         if (!code || declared.has(code)) continue;

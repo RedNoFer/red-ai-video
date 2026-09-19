@@ -221,15 +221,17 @@ describe("drama authoring quality gates", () => {
             actions: ["萧炎抬眼，目光锁住纳兰", "萧炎眉心收紧，声音继续", "萧炎下颌收紧，视线不移"],
         });
         const shot = value.episodes[0].shots[0];
-        shot.utterances = [{
-            id: "u1",
-            order: 1,
-            type: "dialogue",
-            speaker: "萧炎",
-            text: "纳兰小姐…你应该知道，在斗气大陆，女方悔婚会让对方有多难堪。",
-            startSecond: 1,
-            endSecond: 29,
-        }];
+        shot.utterances = [
+            {
+                id: "u1",
+                order: 1,
+                type: "dialogue",
+                speaker: "萧炎",
+                text: "纳兰小姐…你应该知道，在斗气大陆，女方悔婚会让对方有多难堪。",
+                startSecond: 1,
+                endSecond: 29,
+            },
+        ];
         shot.dialogue = shot.utterances[0].text;
         shot.framePlan!.frames[0].actionPrompt = "萧炎说：“纳兰小姐…你应该知道，在”；语气：低声克制；停顿：开口前半拍；重音：知道；说后反应：目光锁住纳兰。";
         shot.framePlan!.frames[1].actionPrompt = "萧炎说：“纳兰小姐…你应该知道，”；语气：硬度增加；停顿：句中短停；重音：知道；说后反应：眉心收紧。";

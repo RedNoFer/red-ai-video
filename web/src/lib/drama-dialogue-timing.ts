@@ -48,13 +48,10 @@ export function dramaDialogueFragmentOverlap(previous: string, current: string, 
     return 0;
 }
 
-export function dramaDialogueFragmentSequenceError(
-    segmentText: string,
-    utterances: readonly DramaDialogueTimingInput[],
-    previousFragmentsByUtterance: Map<string, string[]>,
-    label: string,
-) {
-    const quotedTexts = extractQuotedDramaDialogues(segmentText).map((item) => item.text).filter((text) => normalizeDramaDialogueSequenceText(text));
+export function dramaDialogueFragmentSequenceError(segmentText: string, utterances: readonly DramaDialogueTimingInput[], previousFragmentsByUtterance: Map<string, string[]>, label: string) {
+    const quotedTexts = extractQuotedDramaDialogues(segmentText)
+        .map((item) => item.text)
+        .filter((text) => normalizeDramaDialogueSequenceText(text));
     if (!quotedTexts.length) return "";
     for (const utterance of utterances) {
         const sourceText = normalizeDramaDialogueSequenceText(utterance.text || "");
@@ -62,9 +59,7 @@ export function dramaDialogueFragmentSequenceError(
         if (!currentFragments.length) continue;
         const key = `${utterance.speaker || ""}:${sourceText}`;
         const previousFragments = previousFragmentsByUtterance.get(key) || [];
-        const overlap = currentFragments
-            .flatMap((currentText) => previousFragments.map((previousText) => ({ currentText, length: dramaDialogueFragmentOverlap(previousText, currentText) })))
-            .sort((left, right) => right.length - left.length)[0];
+        const overlap = currentFragments.flatMap((currentText) => previousFragments.map((previousText) => ({ currentText, length: dramaDialogueFragmentOverlap(previousText, currentText) }))).sort((left, right) => right.length - left.length)[0];
         if (overlap?.length) return `${label}对白片段与上一时间段重叠约${overlap.length}字（“${overlap.currentText}”），必须沿对白游标继续，不得重新起句或重复已说内容；请按当前 Skill 重新生成`;
         previousFragmentsByUtterance.set(key, currentFragments);
     }

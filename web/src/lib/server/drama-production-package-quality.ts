@@ -1,10 +1,5 @@
 import type { DramaAuthoringSourceSnapshot, DramaProductionPackageV1, DramaQualityGateCheck, DramaQualityGateReport } from "@/lib/drama-project-contract";
-import {
-    dramaDialogueFragmentSequenceError,
-    dramaDialogueTimingReminder,
-    hasQuotedDramaDialogue,
-    type DramaDialogueTimingInput,
-} from "@/lib/drama-dialogue-timing";
+import { dramaDialogueFragmentSequenceError, dramaDialogueTimingReminder, hasQuotedDramaDialogue, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
 import { DRAMA_DENSE_HARD_CUT_RANGE_30S, hasDramaDenseCutRule, hasDramaDenseCutRuleInCustomTemplateSources } from "@/lib/drama-production-plan";
 import { validateDramaVideoPromptTemplateLayout } from "@/lib/drama-prompt-quality";
 import { DRAMA_PACKAGE_GATE_CODES, DRAMA_PACKAGE_SECTIONS } from "@/lib/server/drama-production-package-contract";

@@ -3019,12 +3019,7 @@ function validateSavedDramaDialogueSequence(framePlan: DramaShotFramePlan, utter
             const end = Number(utterance.endSecond);
             return !Number.isFinite(start) || !Number.isFinite(end) ? true : start < frame.endSecond && end > frame.startSecond;
         });
-        const error = dramaDialogueFragmentSequenceError(
-            [frame.actionPrompt, frame.transitionPrompt || "", frame.endPrompt || ""].join("\n"),
-            activeDialogueUtterances,
-            previousFragmentsByUtterance,
-            `${label}/${frame.id}`,
-        );
+        const error = dramaDialogueFragmentSequenceError([frame.actionPrompt, frame.transitionPrompt || "", frame.endPrompt || ""].join("\n"), activeDialogueUtterances, previousFragmentsByUtterance, `${label}/${frame.id}`);
         if (error) throw new DramaProjectServiceError(error, 422);
     }
 }

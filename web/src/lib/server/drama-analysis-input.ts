@@ -294,12 +294,7 @@ export function validateDramaVideoPromptOutput(
                 const dialogueEnd = Number(utterance.endSecond);
                 return !Number.isFinite(dialogueStart) || !Number.isFinite(dialogueEnd) ? true : dialogueStart < endSecond && dialogueEnd > startSecond;
             });
-            const dialogueOverlapError = dramaDialogueFragmentSequenceError(
-                [actionPrompt, transitionPrompt, endPrompt].join("\n"),
-                activeDialogueUtterances,
-                previousDialogueFragmentsByUtterance,
-                `${shotId} 第 ${index + 1} 个时间段`,
-            );
+            const dialogueOverlapError = dramaDialogueFragmentSequenceError([actionPrompt, transitionPrompt, endPrompt].join("\n"), activeDialogueUtterances, previousDialogueFragmentsByUtterance, `${shotId} 第 ${index + 1} 个时间段`);
             if (dialogueOverlapError) return dialogueOverlapError;
             const detailErrors = validateDramaVideoSegmentDetail(actionPrompt, transitionPrompt, endPrompt, `镜头 ${shotId} 第 ${index + 1} 个时间段`, { requiresDialoguePerformance });
             if (detailErrors.length) return detailErrors.join("；");

@@ -250,15 +250,46 @@ describe("video prompt reference instructions", () => {
                         videoPrompt: prompt,
                         framePlan: {
                             frames: [
-                                { id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 3, startPrompt: "萧炎低头", actionPrompt: "萧炎说：“纳兰小姐…你应该知道，在”；语气：低声克制；停顿：开口前半拍；重音：知道；说后反应：目光锁住纳兰。", transitionPrompt: "视线接住纳兰", endPrompt: "萧炎抬眼锁住纳兰", imagePrompt: "萧炎抬眼锁住纳兰，纳兰在左侧" },
-                                { id: "f2", sequenceIndex: 2, startSecond: 3, endSecond: 6, startPrompt: "萧炎抬眼锁住纳兰", actionPrompt: "萧炎说：“纳兰小姐…你应该知道，”；语气：硬度增加；停顿：句中短停；重音：知道；说后反应：眉心收紧。", transitionPrompt: "纳兰肩线僵住", endPrompt: "萧炎眉心收紧", imagePrompt: "萧炎眉心收紧看向纳兰，纳兰肩线僵住" },
+                                {
+                                    id: "f1",
+                                    sequenceIndex: 1,
+                                    startSecond: 0,
+                                    endSecond: 3,
+                                    startPrompt: "萧炎低头",
+                                    actionPrompt: "萧炎说：“纳兰小姐…你应该知道，在”；语气：低声克制；停顿：开口前半拍；重音：知道；说后反应：目光锁住纳兰。",
+                                    transitionPrompt: "视线接住纳兰",
+                                    endPrompt: "萧炎抬眼锁住纳兰",
+                                    imagePrompt: "萧炎抬眼锁住纳兰，纳兰在左侧",
+                                },
+                                {
+                                    id: "f2",
+                                    sequenceIndex: 2,
+                                    startSecond: 3,
+                                    endSecond: 6,
+                                    startPrompt: "萧炎抬眼锁住纳兰",
+                                    actionPrompt: "萧炎说：“纳兰小姐…你应该知道，”；语气：硬度增加；停顿：句中短停；重音：知道；说后反应：眉心收紧。",
+                                    transitionPrompt: "纳兰肩线僵住",
+                                    endPrompt: "萧炎眉心收紧",
+                                    imagePrompt: "萧炎眉心收紧看向纳兰，纳兰肩线僵住",
+                                },
                             ],
                         },
                     },
                 ],
             },
             ["shot-one"],
-            [{ id: "shot-one", utterances: [{ type: "dialogue", speaker: "萧炎", text: dialogue, startSecond: 0.5, endSecond: 5 }] , framePlan: { frames: [{ id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 3 }, { id: "f2", sequenceIndex: 2, startSecond: 3, endSecond: 6 }] } }],
+            [
+                {
+                    id: "shot-one",
+                    utterances: [{ type: "dialogue", speaker: "萧炎", text: dialogue, startSecond: 0.5, endSecond: 5 }],
+                    framePlan: {
+                        frames: [
+                            { id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 3 },
+                            { id: "f2", sequenceIndex: 2, startSecond: 3, endSecond: 6 },
+                        ],
+                    },
+                },
+            ],
             [],
         );
 
