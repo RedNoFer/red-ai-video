@@ -1247,9 +1247,13 @@ function ShotExecutionDetails({
     ];
     const executionReferences = resolveShotVideoReferences(project, episode, shot, productionRun);
     const supplierVideoPrompt = shot.executionVideoPrompt?.trim() || shot.videoPrompt?.trim() || videoStep?.executionPrompt?.trim() || "";
+    const finalSupplierVideoPrompt = appendDramaImageReferenceBindings(
+        videoPromptDraft,
+        executionReferences.map((reference) => ({ id: reference.alias || ("id" in reference ? reference.id : "reference"), label: reference.purpose || ("label" in reference ? reference.label : "项目参考图") })),
+    );
     const promptAdvice = useMemo(
-        () => analyzeDramaPromptAdvice({ project, episode, shot, prompt: videoPromptDraft, model: productionRun?.parameterSnapshot.videoModel || videoModel }),
-        [episode, productionRun?.parameterSnapshot.videoModel, project, shot, videoModel, videoPromptDraft],
+        () => analyzeDramaPromptAdvice({ project, episode, shot, prompt: finalSupplierVideoPrompt, model: productionRun?.parameterSnapshot.videoModel || videoModel }),
+        [episode, finalSupplierVideoPrompt, productionRun?.parameterSnapshot.videoModel, project, shot, videoModel],
     );
     useEffect(() => {
         setVideoPromptDraft(supplierVideoPrompt);
@@ -1544,20 +1548,18 @@ function ShotExecutionDetails({
 
 function DramaPromptUsageHint({ report }: { report: DramaPromptAdviceReport }) {
     const { profile, usage } = report;
-    const current = usage.unit === "characters" ? `${usage.characterCount} 字符` : usage.unit === "words" ? `${usage.wordCount} 词` : `${usage.characterCount} 字符 / ${usage.wordCount} 词`;
-    const limit = usage.limit ? ` / 上限 ${usage.limit}${usage.unit === "characters" ? " 字符" : " 词"}` : "";
-    const tone = usage.overLimit
+    const packageUsage = report.packageUsage;
+    const supplierCurrent = usage.unit === "characters" ? `${usage.characterCount} 字符` : usage.unit === "words" ? `${usage.wordCount} 词` : `${usage.characterCount} 字符 / ${usage.wordCount} 词`;
+    const supplierLimit = usage.limit ? ` / 建议线 ${usage.limit}${usage.unit === "characters" ? " 字符" : " 词"}` : "";
+    const tone = packageUsage.overLimit
         ? "border-rose-300 bg-rose-50/70 text-rose-800 dark:border-rose-800 dark:bg-rose-950/20 dark:text-rose-200"
-        : usage.nearLimit
+        : packageUsage.nearLimit
           ? "border-amber-300 bg-amber-50/70 text-amber-900 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-200"
           : "border-border bg-background/60 text-muted-foreground";
     return (
         <div className={`mt-2 flex flex-wrap items-center justify-between gap-1.5 rounded-md border px-2.5 py-2 text-[11px] leading-5 ${tone}`} data-drama-prompt-usage>
-            <span>
-                提示词长度：{current}
-                {limit} · {profile.label}
-            </span>
-            <span>{profile.known ? (usage.overLimit ? "已超过建议线，可压缩但不阻止生成" : usage.nearLimit ? `建议保留约 ${usage.remaining}${usage.unit === "characters" ? " 字符" : " 词"}余量` : "在建议线内") : profile.note}</span>
+            <span>制作包最终执行文本：{packageUsage.characterCount} / 5000 字符（含图片绑定）</span>
+            <span>{packageUsage.overLimit ? "已超过 5000 字符建议线，可压缩但不阻止生成" : packageUsage.nearLimit ? `建议保留约 ${packageUsage.remaining} 字符余量` : `供应商参考：${supplierCurrent}${supplierLimit} · ${profile.label}`}</span>
         </div>
     );
 }

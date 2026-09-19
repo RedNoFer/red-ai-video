@@ -39,8 +39,12 @@ export type DramaPromptAdvice = {
 export type DramaPromptAdviceReport = {
     profile: DramaPromptLimitProfile;
     usage: DramaPromptUsage;
+    packageUsage: DramaPromptUsage;
     suggestions: DramaPromptAdvice[];
 };
+
+/** Internal production-package budget, measured after image-binding text is appended. */
+export const DRAMA_PACKAGE_VIDEO_PROMPT_MAX_CHARACTERS = 5_000;
 
 const seedanceSpecialModelIds = new Set<string>(SEEDANCE_SPECIAL_MODELS.map(([id]) => id));
 
@@ -111,6 +115,23 @@ export function compactDramaSupplierPrompt(prompt: string) {
     return output.join("\n");
 }
 
+export function measureDramaPackagePrompt(prompt: string): DramaPromptUsage {
+    const characterCount = Array.from(prompt.trim()).length;
+    const limit = DRAMA_PACKAGE_VIDEO_PROMPT_MAX_CHARACTERS;
+    const ratio = characterCount / limit;
+    return {
+        characterCount,
+        wordCount: prompt.trim() ? prompt.trim().split(/\s+/).filter(Boolean).length : 0,
+        chineseCharacterCount: Array.from(prompt.match(/\p{Script=Han}/gu) || []).length,
+        limit,
+        unit: "characters",
+        remaining: Math.max(0, limit - characterCount),
+        ratio,
+        nearLimit: ratio >= 0.85,
+        overLimit: ratio > 1,
+    };
+}
+
 function normalizedPromptText(value?: string) {
     return (value || "")
         .replace(/\s+/g, "")
@@ -134,6 +155,7 @@ function addAdvice(target: DramaPromptAdvice[], advice: DramaPromptAdvice) {
 export function analyzeDramaPromptAdvice(input: { project: DramaProject; episode: DramaEpisode; shot: DramaShot; prompt: string; model?: string }): DramaPromptAdviceReport {
     const profile = resolveDramaPromptLimit(input.model);
     const usage = measureDramaPrompt(input.prompt, profile);
+    const packageUsage = measureDramaPackagePrompt(input.prompt);
     const prompt = input.prompt.trim();
     const normalized = normalizedPromptText(prompt);
     const suggestions: DramaPromptAdvice[] = [];
@@ -141,6 +163,28 @@ export function analyzeDramaPromptAdvice(input: { project: DramaProject; episode
     const dialogue = input.shot.utterances.filter((item) => item.text.trim());
     const hasDialogue = dialogue.length > 0 || Boolean(input.shot.dialogue.trim());
     const vertical = isVertical(input.project);
+
+    if (packageUsage.overLimit) {
+        addAdvice(suggestions, {
+            id: "package-prompt-length-over-limit",
+            category: "length",
+            severity: "warning",
+            title: "制作包执行版超过 5000 字符",
+            message: `当前最终执行文本约 ${packageUsage.characterCount} 字符，已超过制作包建议上限 5000 字符；统计包含自动追加的图片绑定文案。`,
+            impact: "过长内容可能让时间线、对白、站位和连续性约束在供应商侧被弱化或截断。",
+            recommendation: "优先保留人物身份与服装、动作、关键对白、时间线、站位空间关系、道具状态和图片绑定；删除重复风格词、重复禁止项和解释性段落。",
+        });
+    } else if (packageUsage.nearLimit) {
+        addAdvice(suggestions, {
+            id: "package-prompt-length-near-limit",
+            category: "length",
+            severity: "warning",
+            title: "制作包执行版接近 5000 字符",
+            message: `当前最终执行文本约 ${packageUsage.characterCount} 字符，剩余 ${packageUsage.remaining} 字符；图片绑定文案已计入。`,
+            impact: "后续新增镜头说明或参考图职责可能挤掉对白和连续性信息。",
+            recommendation: "建议先生成去重候选，并预留图片绑定、角色职责和时间线所需空间。",
+        });
+    }
 
     if (usage.overLimit) {
         addAdvice(suggestions, {
@@ -320,5 +364,5 @@ export function analyzeDramaPromptAdvice(input: { project: DramaProject; episode
         });
     }
 
-    return { profile, usage, suggestions };
+    return { profile, usage, packageUsage, suggestions };
 }

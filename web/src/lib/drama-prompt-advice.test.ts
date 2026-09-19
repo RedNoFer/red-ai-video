@@ -20,6 +20,13 @@ describe("drama prompt advice", () => {
         expect(report.suggestions.some((item) => item.id.startsWith("prompt-length"))).toBe(false);
     });
 
+    it("uses a separate 5000-character budget for the final package prompt", () => {
+        const report = analyzeDramaPromptAdvice({ project: baseProject(), episode: baseEpisode(), shot: baseShot(), prompt: "啊".repeat(5001), model: "vendor-model" });
+
+        expect(report.packageUsage).toMatchObject({ characterCount: 5001, limit: 5000, unit: "characters", overLimit: true });
+        expect(report.suggestions.map((item) => item.id)).toContain("package-prompt-length-over-limit");
+    });
+
     it("removes only exact duplicate lines when creating a compact candidate", () => {
         expect(compactDramaSupplierPrompt("人物抬眼\n人物抬眼\n\n保持轴线\n\n保持轴线\n")).toBe("人物抬眼\n\n保持轴线");
     });
