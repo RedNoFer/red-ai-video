@@ -15,6 +15,12 @@ export const SEEDANCE_SPECIAL_MODELS = [
 
 export const SEEDANCE_SPECIAL_RATIOS = ["16:9", "9:16", "1:1", "4:3", "3:4", "21:9", "adaptive"] as const;
 
+/** The supplier documents these as recommendations, not request-schema hard limits. */
+export const SEEDANCE_SPECIAL_PROMPT_GUIDANCE = {
+    chineseCharacters: 500,
+    englishWords: 1000,
+} as const;
+
 type SeedanceSpecialReferences = {
     images?: string[];
     videos?: string[];
@@ -100,11 +106,6 @@ function normalizeSeedanceReferences(references: SeedanceSpecialReferences | Vid
 
 function assertSeedanceSpecialPrompt(prompt: string) {
     if (!prompt) throw new Error("Seedance 2.0 特价版必须填写文本提示词");
-    if (/\p{Script=Han}/u.test(prompt)) {
-        if (Array.from(prompt).length > 500) throw new Error("Seedance 中文提示词不能超过 500 字");
-        return;
-    }
-    if (prompt.split(/\s+/).filter(Boolean).length > 1_000) throw new Error("Seedance 英文提示词不能超过 1000 词");
 }
 
 function uniqueReferences(values: string[] | undefined, limit: number, label: string) {

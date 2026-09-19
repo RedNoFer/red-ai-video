@@ -46,6 +46,11 @@ describe("Seedance special request", () => {
         });
     });
 
+    it("keeps the supplier's 500-character guidance advisory instead of rejecting longer prompts", () => {
+        const prompt = "啊".repeat(501);
+        expect(buildSeedanceSpecialRequest({ model: "sd_2.0_fast_special_720p", prompt, ratio: "16:9", duration: 5 }).content[0]).toEqual({ type: "text", text: prompt });
+    });
+
     it.each([
         [
             [

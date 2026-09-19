@@ -1,4 +1,4 @@
-import { SEEDANCE_SPECIAL_MODELS } from "@/lib/seedance-special";
+import { SEEDANCE_SPECIAL_MODELS, SEEDANCE_SPECIAL_PROMPT_GUIDANCE } from "@/lib/seedance-special";
 import type { DramaEpisode, DramaProject, DramaShot } from "@/lib/drama-project-contract";
 
 export type DramaPromptAdviceCategory = "length" | "cut" | "composition" | "continuity" | "dialogue" | "references" | "skill";
@@ -55,10 +55,10 @@ export function resolveDramaPromptLimit(model?: string): DramaPromptLimitProfile
             providerId: "seedance-special",
             label: "Seedance 2.0 特价版",
             model: normalizedModel || undefined,
-            characterLimit: 500,
-            wordLimit: 1000,
+            characterLimit: SEEDANCE_SPECIAL_PROMPT_GUIDANCE.chineseCharacters,
+            wordLimit: SEEDANCE_SPECIAL_PROMPT_GUIDANCE.englishWords,
             known: true,
-            note: "含中文时按 500 字符判断；纯英文按 1000 词判断。",
+            note: "供应商文档将此作为建议线，不是当前请求构造器的硬拒绝条件。含中文时参考 500 字符，纯英文参考 1000 词。",
         };
     }
     return {
@@ -147,9 +147,9 @@ export function analyzeDramaPromptAdvice(input: { project: DramaProject; episode
             id: "prompt-length-over-limit",
             category: "length",
             severity: "warning",
-            title: "可能超过供应商提示词上限",
-            message: `${profile.label}当前约 ${usage.unit === "characters" ? usage.characterCount : usage.wordCount}${usage.unit === "characters" ? " 字符" : " 词"}，已超过 ${usage.limit} 上限，存在被截断的风险。`,
-            impact: "后半段时间线、对白或连续性要求可能无法被供应商完整识别。",
+            title: "超过供应商建议长度",
+            message: `${profile.label}当前约 ${usage.unit === "characters" ? usage.characterCount : usage.wordCount}${usage.unit === "characters" ? " 字符" : " 词"}，已超过 ${usage.limit} 建议线，不代表接口必然拒绝。`,
+            impact: "提示词越长，后半段时间线、对白或连续性要求越可能被弱化、截断或执行不完整。",
             recommendation: "优先保留人物身份与服装、动作、关键对白、时间线、站位空间关系和道具状态；删除重复风格词、重复禁止项和解释性段落。",
         });
     } else if (usage.nearLimit) {

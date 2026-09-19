@@ -1557,7 +1557,7 @@ function DramaPromptUsageHint({ report }: { report: DramaPromptAdviceReport }) {
                 提示词长度：{current}
                 {limit} · {profile.label}
             </span>
-            <span>{profile.known ? (usage.overLimit ? "可能被截断" : usage.nearLimit ? `建议保留约 ${usage.remaining}${usage.unit === "characters" ? " 字符" : " 词"}余量` : "在已知上限内") : profile.note}</span>
+            <span>{profile.known ? (usage.overLimit ? "已超过建议线，可压缩但不阻止生成" : usage.nearLimit ? `建议保留约 ${usage.remaining}${usage.unit === "characters" ? " 字符" : " 词"}余量` : "在建议线内") : profile.note}</span>
         </div>
     );
 }
