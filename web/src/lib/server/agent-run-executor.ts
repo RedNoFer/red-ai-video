@@ -37,6 +37,7 @@ import type { DramaAuthoringDraft, DramaAuthoringProvider, DramaAuthoringSourceS
 import { resolveSeedance25VideoPromptReferences } from "@/lib/server/agent-skills/seedance-25";
 import { resolveDramaGlobalVisualContract } from "@/lib/drama-style";
 import { formatDramaCompositionContract, resolveDramaCompositionProfile } from "@/lib/drama-composition";
+import { DRAMA_DIALOGUE_TIMING_RULES } from "@/lib/drama-dialogue-timing";
 import { DramaAuthoringQualityGateError, validateDramaAuthoringQuality } from "@/lib/server/drama-production-package-quality";
 
 const globalAgentExecutors = globalThis as typeof globalThis & { __vozebProAgentRunControllers?: Map<string, AbortController> };
@@ -375,7 +376,7 @@ export async function executeDramaScriptRun(run: AgentRun, origin: string, cooki
               }
             : undefined;
     const skillInstructions = buildDramaPackageSkillInstructions(selectedSkills, run.prompt, requestedShotDuration);
-    const authoringRules = `${composeDramaAuthoringRules(skillInstructions, DRAMA_PACKAGE_ARCHITECTURE_RULES)}\n\n时长拆解契约：必须先完整读取 TXT/小说来源并按剧情事实、对白自然时长、动作节拍和反应留白确定逻辑片段数量；每个逻辑片段严格为 ${requestedShotDuration} 秒，整集总时长只能由最终逻辑片段数量乘以 ${requestedShotDuration} 秒推导。用户没有指定总时长时不得自设总时长；即使输入出现 targetDuration，也只能把它当作待校验信息，不能反向压缩或扩写剧情。片段内 framePlan 帧段和硬切次数不计入逻辑片段数量。`;
+    const authoringRules = `${composeDramaAuthoringRules(skillInstructions, DRAMA_PACKAGE_ARCHITECTURE_RULES)}\n\n${DRAMA_DIALOGUE_TIMING_RULES}\n\n时长拆解契约：必须先完整读取 TXT/小说来源并按剧情事实、对白自然时长、动作节拍和反应留白确定逻辑片段数量；每个逻辑片段严格为 ${requestedShotDuration} 秒，整集总时长只能由最终逻辑片段数量乘以 ${requestedShotDuration} 秒推导。用户没有指定总时长时不得自设总时长；即使输入出现 targetDuration，也只能把它当作待校验信息，不能反向压缩或扩写剧情。片段内 framePlan 帧段和硬切次数不计入逻辑片段数量。`;
     if (isOutsideDramaScriptScope(run.prompt)) {
         const reply = `当前窗口只处理${current.title}的新剧本内容。请继续提供本集剧情、人物、冲突或制作包要求。`;
         await updateAgentRunById(

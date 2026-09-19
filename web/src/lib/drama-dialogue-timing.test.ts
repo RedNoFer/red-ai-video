@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { dramaDialogueTimingIssue, dramaDialogueTimingReminder, dramaUtteranceTimingIssues, estimateDramaDialogueSeconds } from "@/lib/drama-dialogue-timing";
+import { dramaDialogueFragmentOverlap, dramaDialogueTimingIssue, dramaDialogueTimingReminder, dramaUtteranceTimingIssues, estimateDramaDialogueSeconds, extractQuotedDramaDialogues } from "@/lib/drama-dialogue-timing";
 
 describe("drama dialogue timing", () => {
+    it("extracts dialogue after inline field labels and detects repeated fragments", () => {
+        expect(extractQuotedDramaDialogues("动作与触发：对白表演：萧炎说：“纳兰小姐，你应该知道，在”")).toEqual([{ speaker: "萧炎", text: "纳兰小姐，你应该知道，在" }]);
+        expect(dramaDialogueFragmentOverlap("纳兰小姐，你应该知道，在", "纳兰小姐，你应该知道，")).toBeGreaterThanOrEqual(8);
+    });
+
     it("accounts for emotional speech rate and pauses", () => {
         const estimate = estimateDramaDialogueSeconds([{ type: "dialogue", text: "三年之后我会找你。", speechRate: "克制偏慢", speechRateCharsPerSecond: 4, pauseBeforeSeconds: 0.5, pauseAfterSeconds: 1 }]);
 

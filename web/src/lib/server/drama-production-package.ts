@@ -35,7 +35,7 @@ import {
     warnDramaFramePlanVisuals,
     warnDramaFrameVisualContent,
 } from "@/lib/drama-frame-sequence";
-import { dramaDialogueTimingReminder, dramaFrameDialogueTimingReminder, dramaUtteranceTimingIssues, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
+import { dramaDialogueFragmentSequenceError, dramaDialogueTimingReminder, dramaFrameDialogueTimingReminder, dramaUtteranceTimingIssues, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
 import { resolveDramaStyleContract } from "@/lib/drama-style";
 import { normalizeDramaCharacterProfile } from "@/lib/drama-character-rules";
 import { compileDramaAssetReferencePrompt } from "@/lib/drama-prompt-compiler";
@@ -1307,6 +1307,7 @@ function validateStrictPackageVideoPrompt(
             : [`${frame.startSecond}-${frame.endSecond}s`];
     });
     if (timeline.length) throw new DramaProductionPackageError(`${label}的 Agent videoPrompt 未逐段镜像 framePlan：${timeline.join("、")}`);
+    const previousDialogueFragmentsByUtterance = new Map<string, string[]>();
     for (const [index, frame] of frames.entries()) {
         if (index > 0 && frame.startPrompt !== frames[index - 1].endPrompt) throw new DramaProductionPackageError(`${label}第 ${index + 1} 个时间段的起点必须原样承接上一段终点`);
         const requiresDialoguePerformance =
@@ -1320,6 +1321,19 @@ function validateStrictPackageVideoPrompt(
                 true);
         const detailErrors = validateDramaVideoSegmentDetail(frame.actionPrompt, frame.transitionPrompt, frame.endPrompt, `${label}第 ${index + 1} 个时间段`, { ...options, requiresDialoguePerformance });
         if (detailErrors.length) throw new DramaProductionPackageError(detailErrors.join("；"));
+        const activeDialogueUtterances = (options.dialogueUtterances || []).filter((utterance) => {
+            if (utterance.type !== "dialogue") return false;
+            const start = Number(utterance.startSecond);
+            const end = Number(utterance.endSecond);
+            return !Number.isFinite(start) || !Number.isFinite(end) ? true : start < frame.endSecond && end > frame.startSecond;
+        });
+        const dialogueOverlapError = dramaDialogueFragmentSequenceError(
+            [frame.actionPrompt, frame.transitionPrompt || "", frame.endPrompt || ""].join("\n"),
+            activeDialogueUtterances,
+            previousDialogueFragmentsByUtterance,
+            `${label}第 ${index + 1} 个时间段`,
+        );
+        if (dialogueOverlapError) throw new DramaProductionPackageError(dialogueOverlapError);
     }
     if (options.requireContentQuality) {
         const qualityErrors = validateDramaVideoAuthoringQuality(prompt, frames, options.performancePlan, label, { requiresBackgroundNpc: options.requiresBackgroundNpc });

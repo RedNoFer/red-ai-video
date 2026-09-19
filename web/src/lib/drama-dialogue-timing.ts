@@ -1,7 +1,7 @@
 export const DRAMA_DIALOGUE_CHARS_PER_SECOND = 5;
 export const DRAMA_DIALOGUE_TIMING_TOLERANCE_CHARS = 10;
 
-export const DRAMA_DIALOGUE_TIMING_RULES = `对白时长规则：默认按中文对白每秒约 ${DRAMA_DIALOGUE_CHARS_PER_SECOND} 个可发音字估算，不把标点、停顿和动作反应当作可压缩空间。制作包必须按逐句记录 startSecond/endSecond（相对当前镜头，且不含停顿）、pauseBeforeSeconds/pauseAfterSeconds 和情绪语速 speechRate；需要可复核时同时填写 speechRateCharsPerSecond。逐句时间不得越界或重叠，停顿不得跑出镜头。不超过 ${DRAMA_DIALOGUE_TIMING_TOLERANCE_CHARS} 个可发音字的偏差只作轻微提醒；超过该容差必须在正式制作包生成前按自然分句、说话人转换、动作反应或增加逻辑片段重新拆解，不能通过异常加速解决，正式 authoring 质量门禁会阻止生成。每个镜头先完成对白容量核算，再安排动作节点、表演和画面帧。公开视频中的直接对白必须使用“说话人说：“完整原句””格式，不能只写说话人标签或把台词塞进重音字段。`;
+export const DRAMA_DIALOGUE_TIMING_RULES = `对白时长规则：默认按中文对白每秒约 ${DRAMA_DIALOGUE_CHARS_PER_SECOND} 个可发音字估算，不把标点、停顿和动作反应当作可压缩空间。制作包必须按逐句记录 startSecond/endSecond（相对当前镜头，且不含停顿）、pauseBeforeSeconds/pauseAfterSeconds 和情绪语速 speechRate；需要可复核时同时填写 speechRateCharsPerSecond。逐句时间不得越界或重叠，停顿不得跑出镜头。不超过 ${DRAMA_DIALOGUE_TIMING_TOLERANCE_CHARS} 个可发音字的偏差只作轻微提醒；超过该容差必须在正式制作包生成前按自然分句、说话人转换、动作反应或增加逻辑片段重新拆解，不能通过异常加速解决，正式 authoring 质量门禁会阻止生成。每个镜头先完成对白容量核算，再安排动作节点、表演和画面帧。公开视频中的直接对白必须使用“说话人说：“完整原句””格式，不能只写说话人标签或把台词塞进重音字段。同一 utterance 跨多个 framePlan 时间段时必须维护单调对白游标：后段只能从上一段已说内容之后继续，禁止重新起句、重复已说片段或与上一段出现4个及以上可发音字重叠；“继续说”不是跳过对白正文的许可。`;
 
 export type DramaDialogueTimingInput = {
     type?: string;
@@ -16,7 +16,60 @@ export type DramaDialogueTimingInput = {
     speechRateCharsPerSecond?: number;
 };
 
-const QUOTED_DRAMA_DIALOGUE_PATTERN = /(?:^|[\n；;])\s*(?:对白表演\s*[：:]\s*)?([^：:；;\n]{1,32}?)\s*说\s*[：:]\s*“([^”\n]{1,240})”/gu;
+const QUOTED_DRAMA_DIALOGUE_PATTERN = /(?:^|[\n；;：:])\s*(?:对白表演\s*[：:]\s*)?([^：:；;\n]{1,32}?)\s*说\s*[：:]\s*“([^”\n]{1,240})”/gu;
+
+export type QuotedDramaDialogue = { speaker: string; text: string };
+
+export function extractQuotedDramaDialogues(value: string): QuotedDramaDialogue[] {
+    return [...value.matchAll(QUOTED_DRAMA_DIALOGUE_PATTERN)].map((match) => ({ speaker: match[1].trim(), text: match[2].trim() })).filter((item) => item.speaker && item.text);
+}
+
+export function normalizeDramaDialogueSequenceText(value: string) {
+    return value.replace(/[\s\u3000，。；：、,.!?！？“”"「」『』…—-]+/gu, "").trim();
+}
+
+/**
+ * Returns the meaningful amount of text that would be spoken twice when two
+ * adjacent frame fragments are played in sequence. Prefix restarts and
+ * suffix-to-prefix repeats are both invalid; one or two shared characters are
+ * too common to be useful evidence in Chinese punctuation-free dialogue.
+ */
+export function dramaDialogueFragmentOverlap(previous: string, current: string, minimumCharacters = 4) {
+    const left = normalizeDramaDialogueSequenceText(previous);
+    const right = normalizeDramaDialogueSequenceText(current);
+    if (!left || !right) return 0;
+    if (left === right) return left.length >= minimumCharacters ? left.length : 0;
+    const shorter = Math.min(left.length, right.length);
+    if (shorter >= minimumCharacters && (left.startsWith(right) || right.startsWith(left))) return shorter;
+    const max = Math.min(left.length, right.length);
+    for (let length = max; length >= minimumCharacters; length -= 1) {
+        if (left.slice(-length) === right.slice(0, length)) return length;
+    }
+    return 0;
+}
+
+export function dramaDialogueFragmentSequenceError(
+    segmentText: string,
+    utterances: readonly DramaDialogueTimingInput[],
+    previousFragmentsByUtterance: Map<string, string[]>,
+    label: string,
+) {
+    const quotedTexts = extractQuotedDramaDialogues(segmentText).map((item) => item.text).filter((text) => normalizeDramaDialogueSequenceText(text));
+    if (!quotedTexts.length) return "";
+    for (const utterance of utterances) {
+        const sourceText = normalizeDramaDialogueSequenceText(utterance.text || "");
+        const currentFragments = quotedTexts.filter((text) => sourceText.includes(normalizeDramaDialogueSequenceText(text)));
+        if (!currentFragments.length) continue;
+        const key = `${utterance.speaker || ""}:${sourceText}`;
+        const previousFragments = previousFragmentsByUtterance.get(key) || [];
+        const overlap = currentFragments
+            .flatMap((currentText) => previousFragments.map((previousText) => ({ currentText, length: dramaDialogueFragmentOverlap(previousText, currentText) })))
+            .sort((left, right) => right.length - left.length)[0];
+        if (overlap?.length) return `${label}对白片段与上一时间段重叠约${overlap.length}字（“${overlap.currentText}”），必须沿对白游标继续，不得重新起句或重复已说内容；请按当前 Skill 重新生成`;
+        previousFragmentsByUtterance.set(key, currentFragments);
+    }
+    return "";
+}
 
 export function formatDramaDialogueLine(speaker: string, text: string) {
     const cleanSpeaker = speaker.trim();
@@ -30,9 +83,9 @@ export function formatDramaDialogueLine(speaker: string, text: string) {
 export function hasQuotedDramaDialogue(value: string, speaker?: string, text?: string) {
     const expectedSpeaker = speaker?.replace(/\s+/gu, "").trim();
     const expectedText = text?.replace(/\s+/gu, "").trim();
-    return [...value.matchAll(QUOTED_DRAMA_DIALOGUE_PATTERN)].some((match) => {
-        const actualSpeaker = match[1].replace(/\s+/gu, "");
-        const actualText = match[2].replace(/\s+/gu, "");
+    return extractQuotedDramaDialogues(value).some((match) => {
+        const actualSpeaker = match.speaker.replace(/\s+/gu, "");
+        const actualText = match.text.replace(/\s+/gu, "");
         return (!expectedSpeaker || actualSpeaker.includes(expectedSpeaker)) && (!expectedText || actualText.includes(expectedText));
     });
 }

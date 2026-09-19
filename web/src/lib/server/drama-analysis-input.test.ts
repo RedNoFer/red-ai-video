@@ -226,6 +226,45 @@ describe("video prompt reference instructions", () => {
         expect(error).toBe("");
     });
 
+    it("rejects overlapping dialogue prefixes in consecutive video frame prompts", () => {
+        const dialogue = "纳兰小姐…你应该知道，在斗气大陆，女方悔婚会让对方有多难堪。";
+        const prompt = [
+            "动态意图：萧炎低声质问",
+            "全局设定：大厅冷灰侧光",
+            "起始可见状态：萧炎站在通道右侧，纳兰位于左侧",
+            "时间段动作：0-3秒 起点：萧炎抬眼；动作与触发：对白表演：萧炎说：“纳兰小姐…你应该知道，在”；语气：低声克制；停顿：开口前半拍；重音：知道；说后反应：目光锁住纳兰；可见衔接：视线接住；终点：萧炎抬眼锁住纳兰。",
+            "时间段动作：3-6秒 起点：萧炎抬眼锁住纳兰；动作与触发：对白表演：萧炎说：“纳兰小姐…你应该知道，”；语气：硬度增加；停顿：句中短停；重音：知道；说后反应：眉心收紧；可见衔接：纳兰肩线僵住；终点：萧炎眉心收紧。",
+            "单一主运镜：固定机位，沿视线方向保持对话压力",
+            "环境压力与视觉母题：大厅底噪压低",
+            "视觉风格与光色：冷灰侧光，皮肤和衣纹清晰",
+            "声音意图：萧炎对白连续，留出呼吸",
+            "结束画面：萧炎眉心收紧看向纳兰",
+            "连续性锁：180度轴线不变",
+            "针对性约束：无字幕、无新增对白",
+        ].join("\n");
+        const error = validateDramaVideoPromptOutput(
+            {
+                shots: [
+                    {
+                        shotId: "shot-one",
+                        videoPrompt: prompt,
+                        framePlan: {
+                            frames: [
+                                { id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 3, startPrompt: "萧炎低头", actionPrompt: "萧炎说：“纳兰小姐…你应该知道，在”；语气：低声克制；停顿：开口前半拍；重音：知道；说后反应：目光锁住纳兰。", transitionPrompt: "视线接住纳兰", endPrompt: "萧炎抬眼锁住纳兰", imagePrompt: "萧炎抬眼锁住纳兰，纳兰在左侧" },
+                                { id: "f2", sequenceIndex: 2, startSecond: 3, endSecond: 6, startPrompt: "萧炎抬眼锁住纳兰", actionPrompt: "萧炎说：“纳兰小姐…你应该知道，”；语气：硬度增加；停顿：句中短停；重音：知道；说后反应：眉心收紧。", transitionPrompt: "纳兰肩线僵住", endPrompt: "萧炎眉心收紧", imagePrompt: "萧炎眉心收紧看向纳兰，纳兰肩线僵住" },
+                            ],
+                        },
+                    },
+                ],
+            },
+            ["shot-one"],
+            [{ id: "shot-one", utterances: [{ type: "dialogue", speaker: "萧炎", text: dialogue, startSecond: 0.5, endSecond: 5 }] , framePlan: { frames: [{ id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 3 }, { id: "f2", sequenceIndex: 2, startSecond: 3, endSecond: 6 }] } }],
+            [],
+        );
+
+        expect(error).toContain("对白片段与上一时间段重叠");
+    });
+
     it("accepts common list markers in Agent prompt fields", () => {
         const prompt = [
             "- 动态意图：人物抬头",

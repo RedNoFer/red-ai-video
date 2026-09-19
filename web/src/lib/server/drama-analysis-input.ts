@@ -1,7 +1,8 @@
 import { resolveDramaShotDuration } from "@/lib/server/drama-shot-config";
 import { dramaFrameVisualSignature } from "@/lib/drama-frame-sequence";
+import { dramaDialogueFragmentSequenceError, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
 import { dramaTimeRangePattern, extractDramaVideoPromptSection, hasConcreteDramaCameraDirection, isGenericDramaDetail, validateDramaCameraPlan, validateDramaVideoPromptTemplateLayout, validateDramaVideoSegmentDetail } from "@/lib/drama-prompt-quality";
-import { dramaFrameDialogueTimingReminder, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
+import { dramaFrameDialogueTimingReminder } from "@/lib/drama-dialogue-timing";
 
 export type DramaAnalyzeBody = {
     phase?: "content" | "visual" | "review_completion" | "video_prompt" | "image_prompt";
@@ -247,6 +248,7 @@ export function validateDramaVideoPromptOutput(
         if (Object.values(timelineFieldCounts).some((count) => count < timelineFrameCount)) return `镜头 ${shotId} 的“时间段动作”没有逐段写出起点、动作与触发、可见衔接和终点，请按当前 Skill 重新生成`;
         const seenStates = new Set<string>();
         const seenVisualStates = new Set<string>();
+        const previousDialogueFragmentsByUtterance = new Map<string, string[]>();
         for (const [index, frame] of outputFrames.entries()) {
             const expected = object(expectedFrames[index]);
             const frameId = dramaAnalysisText(frame.id);
@@ -287,6 +289,18 @@ export function validateDramaVideoPromptOutput(
                 const dialogueEnd = Number(utterance.endSecond);
                 return !Number.isFinite(dialogueStart) || !Number.isFinite(dialogueEnd) ? true : dialogueStart < endSecond && dialogueEnd > startSecond;
             });
+            const activeDialogueUtterances = dialogueUtterances.filter((utterance) => {
+                const dialogueStart = Number(utterance.startSecond);
+                const dialogueEnd = Number(utterance.endSecond);
+                return !Number.isFinite(dialogueStart) || !Number.isFinite(dialogueEnd) ? true : dialogueStart < endSecond && dialogueEnd > startSecond;
+            });
+            const dialogueOverlapError = dramaDialogueFragmentSequenceError(
+                [actionPrompt, transitionPrompt, endPrompt].join("\n"),
+                activeDialogueUtterances,
+                previousDialogueFragmentsByUtterance,
+                `${shotId} 第 ${index + 1} 个时间段`,
+            );
+            if (dialogueOverlapError) return dialogueOverlapError;
             const detailErrors = validateDramaVideoSegmentDetail(actionPrompt, transitionPrompt, endPrompt, `镜头 ${shotId} 第 ${index + 1} 个时间段`, { requiresDialoguePerformance });
             if (detailErrors.length) return detailErrors.join("；");
             if (expectedFrames.length && (Math.abs(startSecond - Number(expected.startSecond)) > 0.01 || Math.abs(endSecond - Number(expected.endSecond)) > 0.01))

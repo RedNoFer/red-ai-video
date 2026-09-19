@@ -51,6 +51,7 @@ import { normalizeDramaImageSize } from "@/lib/drama-image-size";
 import { deleteDramaFrameBeat, formatPromptFieldLines, normalizeDramaFrameBeats, updateDramaFrameBeat } from "@/lib/drama-frame-sequence";
 import { defaultDramaProductionPlan, dramaReferenceImageBudget, normalizeDramaProductionPlan } from "@/lib/drama-production-plan";
 import { resolveDramaShotDuration } from "@/lib/server/drama-shot-config";
+import { dramaDialogueFragmentSequenceError } from "@/lib/drama-dialogue-timing";
 import { TEXT_MODEL_REQUEST_TIMEOUT_MS } from "@/lib/server/model-request-policy";
 import { getAgentRun, listAgentRuns } from "@/lib/server/agent-run-store";
 import { reviewCreativeOutputs } from "@/lib/server/creative-review-service";
@@ -2877,6 +2878,7 @@ export async function updateDramaShotPromptForUser(userId: string, projectId: st
                           matched = true;
                           const framePlan = hasFramePlanPatch ? normalizeAgentFramePlan(input.framePlan, shot.framePlan, shot.duration) : undefined;
                           if (hasFramePlanPatch && !framePlan) throw new DramaProjectServiceError("Agent 逐帧计划无效，未保存本次提示词", 422);
+                          if (framePlan) validateSavedDramaDialogueSequence(framePlan, shot.utterances, `${episode.code || episode.title}/${shot.code || shot.title}`);
                           const fieldOrigins = {
                               ...(shot.fieldOrigins || {}),
                               ...(videoPrompt ? { executionVideoPrompt: videoPromptOrigin } : {}),
@@ -2931,6 +2933,7 @@ export async function updateDramaShotPromptPatchForUser(userId: string, projectI
                 throw new DramaProjectServiceError(error instanceof Error ? error.message : "逐帧计划无效", 400);
             }
             if (!framePlan) throw new DramaProjectServiceError("逐帧计划无效，未保存本次提示词", 422);
+            validateSavedDramaDialogueSequence(framePlan, currentShot.utterances, `${currentEpisode.code || currentEpisode.title}/${currentShot.code || currentShot.title}`);
         }
         const storyboardFrames = hasStoryboardFramesPatch ? normalizeStoryboardFrames(input.storyboardFrames) : currentShot.storyboardFrames;
         if (hasStoryboardFramesPatch && !storyboardFrames) throw new DramaProjectServiceError("分镜帧状态无效", 400);
@@ -3004,6 +3007,25 @@ function normalizeAgentFramePlan(value: unknown, current: DramaShotFramePlan | u
         };
     } catch {
         return undefined;
+    }
+}
+
+function validateSavedDramaDialogueSequence(framePlan: DramaShotFramePlan, utterances: readonly DramaUtterance[] | undefined, label: string) {
+    const previousFragmentsByUtterance = new Map<string, string[]>();
+    for (const frame of framePlan.frames) {
+        const activeDialogueUtterances = (utterances || []).filter((utterance) => {
+            if (utterance.type !== "dialogue") return false;
+            const start = Number(utterance.startSecond);
+            const end = Number(utterance.endSecond);
+            return !Number.isFinite(start) || !Number.isFinite(end) ? true : start < frame.endSecond && end > frame.startSecond;
+        });
+        const error = dramaDialogueFragmentSequenceError(
+            [frame.actionPrompt, frame.transitionPrompt || "", frame.endPrompt || ""].join("\n"),
+            activeDialogueUtterances,
+            previousFragmentsByUtterance,
+            `${label}/${frame.id}`,
+        );
+        if (error) throw new DramaProjectServiceError(error, 422);
     }
 }
 
@@ -3090,6 +3112,7 @@ export async function updateDramaStoryboardFrameGenerationStateForUser(userId: s
                 } catch (error) {
                     throw new DramaProjectServiceError(error instanceof Error ? error.message : "逐帧计划无效", 400);
                 }
+                if (framePlan) validateSavedDramaDialogueSequence(framePlan, currentShot.utterances, `${episode.code || episode.title}/${currentShot.code || currentShot.title}`);
             }
             if (!framePlan?.frames.length) throw new DramaProjectServiceError("当前镜头没有可生成的逐帧计划", 400);
             const frameSet = new Set(framePlan.frames.map((frame) => frame.id));

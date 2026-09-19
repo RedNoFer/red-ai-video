@@ -202,7 +202,10 @@ describe("drama authoring quality gates", () => {
     });
 
     it("blocks repeating the same complete dialogue in adjacent active frame segments", () => {
-        const value = packageValue({ dialogue: true });
+        const value = packageValue({
+            dialogue: true,
+            actions: ["萧炎抬眼，目光锁住纳兰", "萧炎眉心收紧，声音继续", "萧炎下颌收紧，视线不移"],
+        });
         const shot = value.episodes[0].shots[0];
         shot.utterances = [{ id: "u1", order: 1, type: "dialogue", speaker: "萧炎", text: "纳兰小姐，你来了。", startSecond: 1, endSecond: 29 }];
         shot.dialogue = "纳兰小姐，你来了。";
@@ -210,6 +213,30 @@ describe("drama authoring quality gates", () => {
         shot.framePlan!.frames[1].actionPrompt = "萧炎说：“纳兰小姐，你来了。”；语气：硬度增加；停顿：句中短停；重音：来了；说后反应：眉心收紧。";
         const report = validateDramaAuthoringQuality({ package: value, sources: [] });
         expect(blockers(report, "DIALOGUE_PERFORMANCE")).not.toHaveLength(0);
+    });
+
+    it("blocks overlapping dialogue prefixes across adjacent frame segments", () => {
+        const value = packageValue({
+            dialogue: true,
+            actions: ["萧炎抬眼，目光锁住纳兰", "萧炎眉心收紧，声音继续", "萧炎下颌收紧，视线不移"],
+        });
+        const shot = value.episodes[0].shots[0];
+        shot.utterances = [{
+            id: "u1",
+            order: 1,
+            type: "dialogue",
+            speaker: "萧炎",
+            text: "纳兰小姐…你应该知道，在斗气大陆，女方悔婚会让对方有多难堪。",
+            startSecond: 1,
+            endSecond: 29,
+        }];
+        shot.dialogue = shot.utterances[0].text;
+        shot.framePlan!.frames[0].actionPrompt = "萧炎说：“纳兰小姐…你应该知道，在”；语气：低声克制；停顿：开口前半拍；重音：知道；说后反应：目光锁住纳兰。";
+        shot.framePlan!.frames[1].actionPrompt = "萧炎说：“纳兰小姐…你应该知道，”；语气：硬度增加；停顿：句中短停；重音：知道；说后反应：眉心收紧。";
+        shot.framePlan!.frames[2].actionPrompt = "萧炎继续说：“在斗气大陆，女方悔婚，”；语气：硬度增加；停顿：句中短停；重音：悔婚；说后反应：下颌收紧。";
+        const report = validateDramaAuthoringQuality({ package: value, sources: [] });
+        expect(report.status).toBe("blocked");
+        expect(blockers(report, "DIALOGUE_PERFORMANCE").some((check) => check.evidence.includes("对白片段与上一时间段重叠"))).toBe(true);
     });
 
     it("accepts the eight-section prompt layout with cut events inferred from the timeline", () => {
