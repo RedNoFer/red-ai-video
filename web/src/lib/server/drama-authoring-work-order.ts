@@ -4,7 +4,14 @@ import { nanoid } from "nanoid";
 
 import type { DramaAuthoringSourceSnapshot, DramaAuthoringWorkOrder } from "@/lib/drama-project-contract";
 import { orderCreativeAssetsByIds } from "@/lib/creative-asset-references";
-import { defaultDramaProductionPlan, hasDramaDenseCutRuleInCustomTemplateSources, normalizeDramaProductionPlan, resolveDramaInternalCutPolicyPreference, resolveDramaShotDurationPreference } from "@/lib/drama-production-plan";
+import {
+    defaultDramaProductionPlan,
+    hasDramaDenseCutRuleInCustomTemplateSources,
+    normalizeDramaProductionPlan,
+    resolveDramaInternalCutPolicyPreference,
+    resolveDramaShotDurationOverride,
+    resolveDramaShotDurationPreference,
+} from "@/lib/drama-production-plan";
 import { resolveDramaGlobalVisualContract } from "@/lib/drama-style";
 import { getAuthSettings } from "@/lib/auth/store";
 import { getCreativeAssetsByIds } from "@/lib/server/creative-runtime-store";
@@ -70,14 +77,18 @@ function buildWorkOrderContext(run: AgentRun) {
         if (!current) throw new DramaAuthoringWorkOrderError("当前集不存在或已被删除");
         const snapshot = run.snapshot && typeof run.snapshot === "object" && !Array.isArray(run.snapshot) ? (run.snapshot as { productionPlan?: unknown }).productionPlan : undefined;
         const plan = snapshot ? normalizeDramaProductionPlan(snapshot, defaultDramaProductionPlan("manual")) : undefined;
-        const shotDuration = plan?.lockedAt ? (plan.video.shotDuration === 30 ? 30 : 15) : resolveDramaShotDurationPreference(run.prompt, 15);
-        const promptInternalCutPolicy = resolveDramaInternalCutPolicyPreference(run.prompt, "adaptive");
-        const lockedInternalCutPolicy = plan?.lockedAt ? plan.video.internalCutPolicy || resolveDramaInternalCutPolicyPreference(plan.customDirectorRules || "", "adaptive") : undefined;
         const materials = orderCreativeAssetsByIds(uploadedAssets, run.referencedAssetIds || []).map((asset, index) => {
             const base = { alias: `@附件${index + 1}`, type: asset.type, title: asset.title, ...(asset.textContent ? { textContent: asset.textContent } : {}), ...(asset.mimeType ? { mimeType: asset.mimeType } : {}) };
             return { ...base, role: classifyDramaAuthoringMaterial(base), contentHash: hashMaterial(base) } as DramaAuthoringSourceSnapshot;
         });
         const materialsWithSystemTemplate = ensureDramaPackageTemplateSource(materials);
+        const customTemplateText = materialsWithSystemTemplate
+            .filter((material) => material.role === "package-template" && material.alias !== "@系统制作包模板")
+            .map((material) => material.textContent || "")
+            .join("\n");
+        const shotDuration = resolveDramaShotDurationOverride(run.prompt) || resolveDramaShotDurationOverride(customTemplateText) || (plan?.lockedAt ? (plan.video.shotDuration === 30 ? 30 : 15) : resolveDramaShotDurationPreference(run.prompt, 15));
+        const promptInternalCutPolicy = resolveDramaInternalCutPolicyPreference(run.prompt, "adaptive");
+        const lockedInternalCutPolicy = plan?.lockedAt ? plan.video.internalCutPolicy || resolveDramaInternalCutPolicyPreference(plan.customDirectorRules || "", "adaptive") : undefined;
         const sourceInternalCutPolicy = hasDramaDenseCutRuleInCustomTemplateSources(materialsWithSystemTemplate) && shotDuration === 30 ? "dense-30s" : "adaptive";
         const internalCutPolicy = sourceInternalCutPolicy === "dense-30s" || promptInternalCutPolicy === "dense-30s" || lockedInternalCutPolicy === "dense-30s" ? "dense-30s" : lockedInternalCutPolicy || promptInternalCutPolicy;
         const assetReuseContext = buildDramaAssetReuseContext(project, current);

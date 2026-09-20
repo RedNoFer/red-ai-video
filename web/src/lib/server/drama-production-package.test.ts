@@ -442,7 +442,7 @@ describe("production package boundary", () => {
         expect(() => previewDramaProductionPackage(JSON.stringify(source), "package.json", undefined, { validateVideoPrompt: true })).toThrow("position、gaze、pose 和 action");
     });
 
-    it("requires the Agent video prompt to mirror every frame segment in strict generation mode", () => {
+    it("accepts a Xiaomo public prompt without copying internal frame fields", () => {
         const source = structuredClone(productionPackage);
         const staticPrompt = [
             "静态关键帧：Karin站在城门内，手掌压住断剑",
@@ -481,9 +481,52 @@ describe("production package boundary", () => {
                 imagePrompt: staticPrompt.replace("指节发白，断剑贴在右手掌心", "视线锁定城门缝隙，断剑仍贴在右手掌心").replace("眉心收紧，视线锁定城门缝隙，肩背绷直", "眉心抬起，视线锁定城门缝隙，肩背从前倾转为直立"),
             },
         ];
-        source.episodes[0].shots[0].videoPrompt = "动态意图：Karin压住断剑\n时间段动作：0-15s\n单一主运镜：固定机位\n结束画面：Karin停住";
+        source.episodes[0].shots[0].videoPrompt = [
+            "### 镜头 01 | 0-7.5秒 | 中景 | 35mm | 门框侧面平视 | 锁定机位 | 人物镜头",
+            "场景：双塔石城门。",
+            "画面内容：Karin站在右侧门框内，手掌压住断剑，指节逐渐收紧。",
+            "光影：冷灰侧光落在手背和断剑金属上。",
+            "色调：冷灰石墙与暗铁色。",
+            "台词：无",
+            "人声：压低呼吸。",
+            "音效：断剑贴过掌心的金属轻响。",
+            "### 镜头 02 | 7.5-15秒 | 中近景 | 50mm | 城门侧45度平视 | 微推8厘米 | 人物镜头",
+            "场景：双塔石城门。",
+            "画面内容：Karin抬眼锁定城门缝隙，肩背从前倾转为直立，断剑仍贴在右手掌心。",
+            "光影：冷灰侧光沿门缝切出窄亮边。",
+            "色调：冷灰石墙与暗铁色。",
+            "台词：无",
+            "人声：呼吸在视线抬起时停半拍。",
+            "音效：金属声逐渐消退。",
+        ].join("\n");
+        source.episodes[0].shots[1].videoPrompt = [
+            "### 镜头 01 | 0-7.5秒 | 中景 | 35mm | 马车内侧面平视 | 锁定机位 | 双人关系镜头",
+            "场景：阿佐雷斯城门前的马车。",
+            "画面内容：Karin接住Rifa递来的水囊，双方视线在车厢内短暂交汇。",
+            "光影：冷白窗光落在两人的手部和水囊表面。",
+            "色调：冷灰与暗墨绿。",
+            "台词：无",
+            "人声：两人的呼吸和车厢底噪。",
+            "音效：水囊交接的皮革轻响。",
+            "### 镜头 02 | 7.5-15秒 | 中近景 | 50mm | 马车内侧45度平视 | 微推8厘米 | 手部细节镜头",
+            "场景：阿佐雷斯城门前的马车。",
+            "画面内容：水囊落入Karin掌心，Rifa收回手，车轮颠簸让水面轻晃后停住。",
+            "光影：窗光沿水囊边缘形成柔和反光。",
+            "色调：冷灰与暗墨绿。",
+            "台词：无",
+            "人声：车厢内短促呼吸。",
+            "音效：水面轻晃和车轮声。",
+        ].join("\n");
+        const secondShotFrames = source.episodes[0].shots[1].framePlan.frames;
+        secondShotFrames[0].actionPrompt = "Karin伸手接住Rifa递来的水囊，手指收紧，水囊落入掌心";
+        secondShotFrames[0].transitionPrompt = "Rifa收回手，水囊的晃动传到Karin的手腕";
+        secondShotFrames[0].endPrompt = "Karin握稳水囊，Rifa的手停在胸前";
+        secondShotFrames[1].startPrompt = "Karin握稳水囊，Rifa的手停在胸前";
+        secondShotFrames[1].actionPrompt = "车轮颠簸使水面轻晃，Karin拇指压住水囊边缘";
+        secondShotFrames[1].transitionPrompt = "水面从晃动回落，Rifa视线转向车窗";
+        secondShotFrames[1].endPrompt = "水囊停在Karin掌心，车窗光线稳定落在两人之间";
 
-        expect(() => previewDramaProductionPackage(JSON.stringify(source), "package.json", undefined, { validateVideoPrompt: true })).toThrow("未逐段写出起点、动作与触发、可见衔接和终点");
+        expect(() => previewDramaProductionPackage(JSON.stringify(source), "package.json", undefined, { validateVideoPrompt: true })).not.toThrow();
     });
 
     it("deduplicates package assets by stable code before preview and apply", () => {

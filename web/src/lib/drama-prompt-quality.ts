@@ -17,7 +17,7 @@ const GENERIC_DETAIL_PATTERNS = [
     /^推动当前镜头行动并回应对手或环境$/u,
 ];
 const WEAK_VIDEO_DETAIL_PATTERNS = [/^保持本镜可见反应$/u, /^保持可读的具体反应$/u, /(?:眉眼|表情|呼吸).*(?:随|根据).*(?:变化|推进|触发).*(?:可见变化)/u, /^(?:准备回应|承受(?:压力)?|情绪(?:逐步)?加剧|保持状态|自然反应)$/u];
-const CONCRETE_CAMERA_PATTERN = /固定机位|推(?:进|近|镜)|拉(?:远|镜)|摇镜|横移|跟拍|滑轨|环绕|吊臂|升降|手持|变焦|俯拍|仰拍|平视|低机位|高机位|中景|近景|特写|远景/u;
+const CONCRETE_CAMERA_PATTERN = /固定机位|锁定机位|推(?:进|近|镜)|拉(?:远|镜)|摇镜|横移|跟拍|滑轨|环绕|吊臂|升降|手持|变焦|俯拍|仰拍|平视|低机位|高机位|中景|近景|特写|远景/u;
 const OBSERVABLE_DRAMA_DETAIL_PATTERN = /眉|眼|目光|视线|嘴角|下颌|呼吸|肩|背|身体|重心|手|指|掌|站|坐|抬|低|转|握|松|触|器物|容器|纸张|文字|纸|桌|案|地面|水面|光线|影子|门|墙|尘|衣袍|NPC|背景角色|配角|旁观者|人群|开口|说|重音|停顿|语速|语气/u;
 const NPC_SEGMENT_PATTERN = /NPC群像\s*[：:]\s*(\d+)\s*名\s*[；;]\s*分布\s*[：:]\s*前景\s*(\d+)\s*名\s*[、,，]\s*中景\s*(\d+)\s*名\s*[、,，]\s*后景\s*(\d+)\s*名\s*[；;]\s*密度\s*[：:]\s*([^；;\n]+)\s*[；;]\s*反应\s*[：:]\s*([^\n]+)/u;
 const NPC_SLOT_SEGMENT_PATTERN = /NPC(?:连续性|槽位|群像槽位)\s*[：:]\s*可见槽位\s*[：:]\s*([^；;\n]+)\s*[；;]\s*(?:世界锚点|空间锚点|锚点)\s*[：:]\s*([^；;\n]+)\s*[；;]\s*(?:状态变化|可见反应|反应)\s*[：:]\s*([^\n]+)/u;
@@ -25,9 +25,32 @@ const OBSERVABLE_NPC_REACTION_PATTERN = /抬眼|抬头|低头|收声|屏息|静�
 const DIALOGUE_SEGMENT_MARKER = /对白表演\s*[：:]/u;
 const CAMERA_CUT_EVENT_PATTERN = /镜头事件\s*[：:]/u;
 const ACTIVE_CAMERA_CUT_PATTERN = /硬切|镜头切换|Camera\s+cut\s+to|Cut\s+to/iu;
+const VIDEO_CARD_HEADER = /^###\s*镜头\s*(\d+)\s*\|([^\n]+)$/gmu;
+const VIDEO_CARD_FIELDS = ["场景", "画面内容", "光影", "色调", "台词", "人声", "音效"] as const;
+const VIDEO_CARD_CAMERA_TERMS = /平视|俯视|俯拍|仰视|仰拍|正面|侧面|侧[0-9一二三四五六七八九十]+度|过肩|入口侧|低机位|高机位|顶视|跟随视线/u;
+const VIDEO_CARD_LENS_TERMS = /\d+(?:\.\d+)?\s*mm|广角|标准焦段|长焦|变形宽银幕/u;
+/** @deprecated Legacy export retained for compatibility only; it is not a production gate. */
 export const DRAMA_VIDEO_PROMPT_TEMPLATE_SECTIONS = ["重要剪辑指令", "素材绑定", "故事意图", "空间与连续性", "灯光与画面", "摄影总则", "逐镜头时间线", "硬性禁止"] as const;
 
 export type DramaCameraPlanFrame = Pick<{ startSecond: number; endSecond: number }, "startSecond" | "endSecond">;
+
+export type DramaVideoPromptCard = {
+    index: number;
+    timeRange: string;
+    shotSize: string;
+    lens: string;
+    cameraAngle: string;
+    cameraMotion: string;
+    subjectMode: string;
+    scene: string;
+    visual: string;
+    lighting: string;
+    color: string;
+    dialogue: string;
+    voice: string;
+    sound: string;
+    raw: string;
+};
 
 export function isGenericDramaDetail(value: unknown) {
     const text = typeof value === "string" ? value.trim() : "";
@@ -97,6 +120,65 @@ export function validateDramaVideoPromptTemplateLayout(value: unknown, frameCoun
         if (missing.length) errors.push(`逐镜头时间线第 ${index + 1} 段缺少${missing.join("、")}`);
     }
     return errors.map((error) => `${label}${error}`);
+}
+
+export function extractDramaVideoPromptCards(value: unknown): DramaVideoPromptCard[] {
+    const text = typeof value === "string" ? value.trim() : "";
+    const markers = [...text.matchAll(VIDEO_CARD_HEADER)];
+    return markers.map((marker, index) => {
+        const start = marker.index ?? 0;
+        const end = markers[index + 1]?.index ?? text.length;
+        const raw = text.slice(start, end).trim();
+        const columns = marker[2].split("|").map((item) => item.trim());
+        const field = (name: string) => extractVideoCardField(raw, name);
+        return {
+            index: Number(marker[1]),
+            timeRange: columns[0] || "",
+            shotSize: columns[1] || "",
+            lens: columns[2] || "",
+            cameraAngle: columns[3] || "",
+            cameraMotion: columns[4] || "",
+            subjectMode: columns[5] || "",
+            scene: field("场景"),
+            visual: field("画面内容"),
+            lighting: field("光影"),
+            color: field("色调"),
+            dialogue: field("台词"),
+            voice: field("人声"),
+            sound: field("音效"),
+            raw,
+        };
+    });
+}
+
+export function validateDramaVideoPromptCardLayout(value: unknown, frames: ReadonlyArray<DramaCameraPlanFrame> | number, label: string) {
+    const text = typeof value === "string" ? value.trim() : "";
+    const expectedFrames = typeof frames === "number" ? [] : frames;
+    const frameCount = typeof frames === "number" ? frames : frames.length;
+    const cards = extractDramaVideoPromptCards(text);
+    const errors: string[] = [];
+    if (!cards.length) errors.push("缺少小墨式“### 镜头”公开镜头卡");
+    if (frameCount > 0 && cards.length !== frameCount) errors.push(`公开镜头卡写出 ${cards.length} 个镜头，必须与 ${frameCount} 个 framePlan 时间段一一对应`);
+    for (const [index, card] of cards.entries()) {
+        const cardLabel = `第 ${index + 1} 个镜头卡`;
+        if (!card.timeRange || !/\d+(?:\.\d+)?\s*(?:-|至|到|—|–|~)\s*\d+(?:\.\d+)?\s*(?:s|秒)/iu.test(card.timeRange)) errors.push(`${label}${cardLabel}缺少真实时间范围`);
+        if (!card.shotSize || /待定|未知|镜头/u.test(card.shotSize)) errors.push(`${label}${cardLabel}缺少可识别景别`);
+        if (!card.lens || !VIDEO_CARD_LENS_TERMS.test(card.lens)) errors.push(`${label}${cardLabel}缺少可识别焦段`);
+        if (!card.cameraAngle || !VIDEO_CARD_CAMERA_TERMS.test(card.cameraAngle)) errors.push(`${label}${cardLabel}缺少可识别机位角度`);
+        if (!card.cameraMotion || !hasConcreteDramaCameraDirection(card.cameraMotion)) errors.push(`${label}${cardLabel}缺少具体主运镜`);
+        if (!card.subjectMode || !/人物|非人物|主体|道具|空间|手部|双人|单人/u.test(card.subjectMode)) errors.push(`${label}${cardLabel}缺少人物镜头/非人物镜头主体标识`);
+        for (const field of VIDEO_CARD_FIELDS) if (!extractVideoCardField(card.raw, field)) errors.push(`${label}${cardLabel}缺少“${field}”字段`);
+        if (!card.scene || !card.visual || isGenericDramaDetail(card.visual)) errors.push(`${label}${cardLabel}的画面内容必须写出可见进行中动作，不能使用空泛占位词`);
+        if (card.dialogue && card.dialogue !== "无" && !hasQuotedDramaDialogue(card.dialogue)) errors.push(`${label}${cardLabel}的台词必须使用“说话人说：“实际台词””格式`);
+        if (expectedFrames[index] && !dramaTimeRangePattern(expectedFrames[index].startSecond, expectedFrames[index].endSecond).test(card.timeRange))
+            errors.push(`${label}${cardLabel}的时间范围未对应 framePlan 的 ${expectedFrames[index].startSecond}-${expectedFrames[index].endSecond}s`);
+    }
+    return errors.map((error) => (error.startsWith(label) ? error : `${label}${error}`));
+}
+
+function extractVideoCardField(value: string, field: string) {
+    const fieldPattern = VIDEO_CARD_FIELDS.map(escapeRegExp).join("|");
+    return value.match(new RegExp(`(?:^|\\n)\\s*${escapeRegExp(field)}\\s*[：:]\\s*([\\s\\S]*?)(?=\\n\\s*(?:${fieldPattern})\\s*[：:]|$)`, "u"))?.[1]?.trim() || "";
 }
 
 export function extractDramaVideoPromptSection(value: string, section: string) {
@@ -174,6 +256,11 @@ export function hasConcreteDramaCameraDirection(value: unknown) {
 }
 
 export function validateDramaCameraPlan(prompt: string, frames: ReadonlyArray<DramaCameraPlanFrame>) {
+    const cards = extractDramaVideoPromptCards(prompt);
+    if (cards.length) {
+        const cardErrors = validateDramaVideoPromptCardLayout(prompt, frames, "视频提示词");
+        return cardErrors.length ? cardErrors[0] : "";
+    }
     const cameraLine = prompt.match(/(?:^|\n)\s*单一主运镜\s*[：:]([^\n]+)/u)?.[1]?.trim() || "";
     const cameraSource = cameraLine || extractDramaVideoPromptSection(prompt, "摄影总则");
     const modeMatch = cameraSource.match(/镜头模式\s*[=:：]\s*(连续镜头|内部切镜)(?:\s*[（(]\s*(\d+)\s*次\s*[）)])?/u);
@@ -235,9 +322,13 @@ type DramaVideoAuthoringFrame = {
  */
 export function validateDramaVideoAuthoringQuality(prompt: string, frames: ReadonlyArray<DramaVideoAuthoringFrame>, performancePlan: DramaPerformancePlan | undefined, label = "镜头", options: { requiresBackgroundNpc?: boolean } = {}) {
     const errors: string[] = [];
+    const cards = extractDramaVideoPromptCards(prompt);
     const cameraLine = prompt.match(/(?:^|\n)\s*单一主运镜\s*[：:]([^\n]+)/u)?.[1]?.trim() || extractDramaVideoPromptSection(prompt, "摄影总则");
     const purpose = cameraLine.match(/(?:服务于|响应|为了|用于|让观众看见|强调)\s*([^；;\n]+)/u)?.[1]?.trim() || "";
-    if (!purpose || !OBSERVABLE_DRAMA_DETAIL_PATTERN.test(purpose) || /当前(?:信息|动作|变化)|动作变化|情绪变化|剧情推进|氛围|节奏/u.test(purpose)) {
+    if (cards.length) {
+        if (cards.length !== frames.length) errors.push(`${label}公开视频镜头卡数量必须与 framePlan 一致`);
+        if (cards.some((card) => !hasConcreteDramaCameraDirection(card.cameraMotion))) errors.push(`${label}每个镜头卡都必须有具体主运镜`);
+    } else if (!purpose || !OBSERVABLE_DRAMA_DETAIL_PATTERN.test(purpose) || /当前(?:信息|动作|变化)|动作变化|情绪变化|剧情推进|氛围|节奏/u.test(purpose)) {
         errors.push(`${label}的主运镜缺少具体动机，必须说明它响应的可见动作、信息、表情、视线、道具或环境变化`);
     }
 

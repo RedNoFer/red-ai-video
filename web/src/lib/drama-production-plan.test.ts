@@ -8,6 +8,7 @@ import {
     normalizeDramaProductionPlan,
     resolveDramaFrameCountPreference,
     resolveDramaInternalCutPolicyPreference,
+    resolveDramaShotDurationOverride,
     resolveDramaShotDurationPreference,
     sanitizeDramaCustomDirectorRules,
     hasDramaDenseCutRuleInCustomTemplateSources,
@@ -52,6 +53,8 @@ describe("drama production plan", () => {
         expect(normalizeDramaProductionPlan({ video: { shotDuration: 12 } })?.video.shotDuration).toBe(15);
         expect(resolveDramaShotDurationPreference("请按每个视频片段30s重新拆分")).toBe(30);
         expect(resolveDramaShotDurationPreference("请按每个视频片段15秒重新拆分")).toBe(15);
+        expect(resolveDramaShotDurationOverride("本轮模板明确要求每镜30s，覆盖旧锁定方案")).toBe(30);
+        expect(resolveDramaShotDurationOverride("没有明确每镜时长")).toBeUndefined();
         expect(resolveDramaShotDurationPreference("每个镜头20s，分7个帧")).toBe(15);
         expect(resolveDramaFrameCountPreference("每个镜头20s，分7个帧")).toBe(7);
         expect(resolveDramaFrameCountPreference("请分 6 帧")).toBe(6);

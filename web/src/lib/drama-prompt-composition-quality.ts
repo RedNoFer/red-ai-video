@@ -32,7 +32,7 @@ const HORIZONTAL_PACKING = /横向并排|横向并列|左右并排|横排|横向
 const VERTICAL_DEPTH = /纵向深度|上下纵深|前中后景|前中后分层|通道纵深|上下安全区|纵深关系|主体.*后方|前景.*中景.*后景/u;
 const OCCLUSION = /(?:前景|门框|肩膀|肩线|人物|衣肩)[^。；;\n]{0,30}(?:穿过|挡住|遮住|遮挡|压住)[^。；;\n]{0,20}(?:脸|面部|五官)|(?:脸|面部|五官)[^。；;\n]{0,20}(?:被|遭到)(?:遮挡|挡住|裁掉)|遮脸|裁脸/u;
 const REACTION_TERMS = /眉|眉心|眼睛|目光|视线|肩|下颌|嘴角|呼吸|吸气|僵|停住|看向|望向|回望|前倾|收紧|松开|沉默|反应/u;
-const DETAIL_TERMS = /手部|掌根|掌心|指节|桌沿|接触|受力|道具|物件|器物|容器|武器|法器|信物|文字|证据|物证/u;
+const DETAIL_TERMS = /手部|手指|掌根|掌心|指节|桌沿|接触|受力|道具|物件|器物|容器|武器|法器|信物|文字|证据|物证/u;
 const EXPLICIT_SPEAKER = /[\p{L}·]{2,20}\s*说\s*[：:]/u;
 
 export function validateDramaPromptComposition(input: DramaPromptCompositionInput) {
@@ -75,13 +75,23 @@ export function validateDramaCutInformationDiversity(input: DramaPromptCompositi
     const label = input.label || "镜头";
     const text = input.prompt;
     const events = [...text.matchAll(/镜头事件\s*[：:]\s*([^\n]+)/gu)].map((match) => match[1]);
-    if (events.length < 2) return [];
-    const targets = events.map((event) => classifyCutTargets(event, unique(input.subjectNames || [])));
+    const cardMode = input.frames.length > 1 && /(?:^|\n)\s*###\s*镜头\s*\d+\s*\|/u.test(text);
+    const cardSegments = [...text.matchAll(/(^|\n)(###\s*镜头\s*\d+\s*\|[^\n]+[\s\S]*?)(?=\n###\s*镜头\s*\d+\s*\||$)/gmu)].map((match) => {
+        const block = match[2];
+        const visual = block.match(/(?:^|\n)\s*画面内容\s*[：:]\s*([^\n]+)/u)?.[1] || "";
+        return `${block.split("\n")[0]} ${visual}`;
+    });
+    const sourceSegments = events.length >= 2 ? events : cardMode ? cardSegments : [];
+    if (sourceSegments.length < 2) return [];
+    const targets = sourceSegments.map((segment) => classifyCutTargets(segment, unique(input.subjectNames || [])));
     const errors: string[] = [];
     const nonEmpty = targets.filter((target) => target.size);
-    if (nonEmpty.length !== events.length) errors.push(`${label}存在硬切事件未明确新的信息主体或动作细节`);
+    if (nonEmpty.length !== sourceSegments.length) errors.push(`${label}存在硬切/镜头卡未明确新的信息主体或动作细节`);
     const categories = new Set([...targets.flatMap((target) => [...target])]);
     if (categories.size < 2) errors.push(`${label}所有硬切都指向同一信息主体，必须在不同角色、关系、手部/道具、空间或结果信息之间形成可见差异`);
+    const characters = new Set([...categories].filter((target) => target.startsWith("character:")));
+    const nonCharacterCategories = new Set([...categories].filter((target) => !target.startsWith("character:")));
+    if (cardMode && characters.size === 1 && nonCharacterCategories.size === 0) errors.push(`${label}所有镜头卡都只覆盖同一角色，必须加入对手反应、双人关系、空间或手部/道具细节镜头`);
     const requiredReactions = unique(input.requiredReactionNames || []).filter((name) => name.trim());
     for (const subject of requiredReactions) {
         if (!targets.some((target) => target.has(`character:${subject}`))) errors.push(`${label}包含 ${subject} 的剧情反应，但没有对应的独立硬切主体`);
@@ -90,7 +100,7 @@ export function validateDramaCutInformationDiversity(input: DramaPromptCompositi
     return unique(errors);
 }
 
-export function validateDramaReferenceAliasConsistency(input: { prompt: string; manifest?: readonly DramaReferenceAliasInput[]; references?: readonly { alias?: string; role?: string; purpose?: string }[]; label?: string }) {
+export function validateDramaReferenceAliasConsistency(input: { prompt: string; manifest?: readonly DramaReferenceAliasInput[]; references?: readonly { alias?: string; role?: string; purpose?: string }[]; label?: string; requireBinding?: boolean }) {
     const label = input.label || "镜头";
     const entries = input.manifest?.length ? input.manifest : input.references || [];
     if (!entries.length) return [];
@@ -99,7 +109,7 @@ export function validateDramaReferenceAliasConsistency(input: { prompt: string; 
     const duplicate = aliases.find((alias, index) => aliases.indexOf(alias) !== index);
     if (duplicate) errors.push(`${label}参考图 alias ${duplicate} 重复，不能映射到多个素材`);
     const binding = extractBindingSection(input.prompt);
-    if (!binding) return [`${label}缺少素材绑定，无法确认参考图 alias 与职责`];
+    if (!binding) return input.requireBinding === false && !parsePromptReferenceAliases(input.prompt).length ? [] : [`${label}缺少素材绑定，无法确认参考图 alias 与职责`];
     const positions = aliases.map((alias) => binding.indexOf(alias));
     if (positions.some((position) => position < 0)) errors.push(`${label}素材绑定缺少参考图 ${aliases.filter((alias, index) => positions[index] < 0).join("、")}`);
     if (positions.some((position, index) => index > 0 && position <= positions[index - 1])) errors.push(`${label}公开提示词中的参考图 alias 顺序与 referenceManifest 不一致`);
@@ -165,6 +175,10 @@ function extractBindingSection(prompt: string) {
     if (heading) return heading[1].trim();
     const line = prompt.match(/(?:^|\n)\s*素材绑定\s*[：:]([\s\S]*?)(?=\n\s*(?:动态意图|全局设定|起始可见状态|时间段动作|单一主运镜|环境压力|视觉风格|声音意图|结束画面|连续性锁|针对性约束)\s*[：:]|$)/u);
     return line?.[1]?.trim() || "";
+}
+
+function parsePromptReferenceAliases(prompt: string) {
+    return [...prompt.matchAll(/@(?:图片|参考)\s*\d+/gu)].map((match) => match[0].replace(/\s+/gu, ""));
 }
 
 function normalizeRatio(value: string | undefined) {

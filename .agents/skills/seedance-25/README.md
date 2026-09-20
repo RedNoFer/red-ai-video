@@ -22,7 +22,7 @@
 
 ## 文件
 
-- `SKILL.md`：主路由、完整视频提示词合同和来源元数据。
+- `SKILL.md`：主路由、Seedance 供应商适配边界和小墨式公开视频契约的交接说明。
 - `references/capabilities-and-limits.md`：能力事实、稳定性建议和项目边界。
 - `references/prompt-blueprints.md`：按主模式选择提示词字段和时间粒度；运行时按 15/20 秒普通视频、30 秒时间轴或用户明确的专用模式读取对应规则。
 - `references/multimodal-patterns.md`：参考素材职责、范围和排除项。

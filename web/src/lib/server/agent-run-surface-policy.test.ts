@@ -106,7 +106,7 @@ describe("agentPlannerInput", () => {
         expect(prompt).toContain("currentTurnReferences");
         expect(prompt).toContain("不得把短剧入口当成脱离项目的通用图片或视频工作台");
         expect(prompt).toContain("change、preserve、constraints");
-        expect(prompt).toContain("单一主运镜");
+        expect(prompt).toContain("每镜保留一个有动机的主运镜");
         expect(prompt).toContain("稳定 assetId 绑定");
     });
 

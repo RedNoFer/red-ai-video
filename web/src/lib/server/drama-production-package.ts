@@ -48,7 +48,7 @@ import {
     validateDramaCameraPlan,
     validateDramaPerformanceDetail,
     validateDramaVideoAuthoringQuality,
-    validateDramaVideoPromptTemplateLayout,
+    validateDramaVideoPromptCardLayout,
     validateDramaVideoSegmentDetail,
 } from "@/lib/drama-prompt-quality";
 import { DRAMA_VIDEO_DIRECTOR_SKILL } from "@/lib/server/agent-skills/drama-video-director";
@@ -1283,30 +1283,16 @@ function validateStrictPackageVideoPrompt(
     } = {},
 ) {
     if (options.requireContentQuality) {
-        const layoutErrors = validateDramaVideoPromptTemplateLayout(prompt, frames.length, label);
+        const layoutErrors = validateDramaVideoPromptCardLayout(prompt, frames, label);
         if (layoutErrors.length) throw new DramaProductionPackageError(layoutErrors.join("；"));
     }
     if (options.requireCameraPlan) {
         const cameraError = validateDramaCameraPlan(prompt, frames);
         if (cameraError) throw new DramaProductionPackageError(label + "的 Agent videoPrompt 摄影契约无效：" + cameraError);
     }
-    const requiredFields = ["动态意图", "时间段动作", "单一主运镜", "结束画面"];
-    const missing = requiredFields.filter((field) => !new RegExp(`(?:^|\\n)\\s*${field}[：:]`, "u").test(prompt));
-    if (missing.length && !options.requireContentQuality) throw new DramaProductionPackageError(`${label}的 Agent videoPrompt 缺少标准字段：${missing.join("、")}`);
     if (/(?:^|\\n)\\s*(?:触发|主体动作与反应)\\s*[：:]/u.test(prompt)) throw new DramaProductionPackageError(`${label}的 Agent videoPrompt 仍使用旧的顶层动作字段`);
     if (/(?:https?:\/\/|data:image\/|assetId|内部 ID|参考图职责|prompt-authoring-only|seedance-director|seedance-25-director)/iu.test(prompt)) throw new DramaProductionPackageError(`${label}的 Agent videoPrompt 包含内部执行信息`);
-    const cameraMotion = prompt.match(/(?:^|\n)\s*单一主运镜[：:]([^\n]+)/u)?.[1]?.trim() || extractDramaVideoPromptSection(prompt, "摄影总则");
-    if (!hasConcreteDramaCameraDirection(cameraMotion)) throw new DramaProductionPackageError(`${label}的 Agent videoPrompt 缺少具体主运镜或机位语言`);
-    const timelineFieldCounts = ["起点", "动作与触发", "可见衔接", "终点"].map((field) => (prompt.match(new RegExp(`(?:^|\\n)\\s*${field}[：:]`, "gu")) || []).length);
-    if (timelineFieldCounts.some((count) => count < frames.length)) throw new DramaProductionPackageError(`${label}的 Agent videoPrompt 未逐段写出起点、动作与触发、可见衔接和终点`);
-    const timeline = frames.flatMap((frame) => {
-        const mirroredValues = [frame.actionPrompt, frame.transitionPrompt, frame.endPrompt];
-        const startPromptIsRequired = frame.startSecond > 0;
-        return dramaTimeRangePattern(frame.startSecond, frame.endSecond).test(prompt) && mirroredValues.every((value) => value && prompt.includes(value)) && (!startPromptIsRequired || Boolean(frame.startPrompt && prompt.includes(frame.startPrompt)))
-            ? []
-            : [`${frame.startSecond}-${frame.endSecond}s`];
-    });
-    if (timeline.length) throw new DramaProductionPackageError(`${label}的 Agent videoPrompt 未逐段镜像 framePlan：${timeline.join("、")}`);
+    if (!hasConcreteDramaCameraDirection(prompt)) throw new DramaProductionPackageError(`${label}的 Agent videoPrompt 缺少具体主运镜或机位语言`);
     const previousDialogueFragmentsByUtterance = new Map<string, string[]>();
     for (const [index, frame] of frames.entries()) {
         if (index > 0 && frame.startPrompt !== frames[index - 1].endPrompt) throw new DramaProductionPackageError(`${label}第 ${index + 1} 个时间段的起点必须原样承接上一段终点`);
@@ -1344,7 +1330,7 @@ function validateStrictPackageVideoPrompt(
 function validatePromptAssetBindings(prompt: string, characterCodes: string[], propCodes: string[], locationCode: string, rawCharacters: unknown[], rawProps: unknown[], rawLocations: unknown[], label: string) {
     const errors: string[] = [];
     const bindingLine = prompt.match(/(?:^|\n)\s*素材绑定\s*[：:]([^\n]+)/u)?.[1] || extractDramaVideoPromptSection(prompt, "素材绑定");
-    if (!bindingLine && (characterCodes.length || propCodes.length || locationCode)) errors.push(`${label}的 videoPrompt 缺少素材绑定，不能确认本镜资产职责`);
+    if (!bindingLine) return errors;
     const characters = rawCharacters.map(object);
     const props = rawProps.map(object);
     const locations = rawLocations.map(object);

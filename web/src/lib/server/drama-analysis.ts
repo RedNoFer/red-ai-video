@@ -1049,7 +1049,8 @@ export const dramaVisualTool = {
                         imagePrompt: { type: "string" },
                         videoPrompt: {
                             type: "string",
-                            description: "必须由当前唯一导演 Skill 直接写出完整公开视频提示词；每个真实帧段都要写出时间范围、起点、动作与触发、可见衔接和终点，包含具体人物、道具或环境的可见结果。",
+                            description:
+                                "必须由当前唯一导演 Skill 直接写出完整公开视频提示词和内部 framePlan；公开视频使用小墨式简洁导演镜头卡，每个真实帧段一个卡片，标题包含时间范围、景别、焦段、机位角度、运镜方式和人物镜头/非人物镜头，卡片正文包含场景、画面内容、光影、色调、台词、人声、音效。画面内容必须是可见进行中动作和结果，直接对白必须使用“说话人说：\“实际台词\””格式，不输出 URL、内部 ID、供应商字段或八段式内部结构。",
                         },
                         cameraMotion: { type: "string" },
                         startFramePrompt: { type: "string" },
@@ -1202,7 +1203,7 @@ export const dramaVideoPromptTool = {
                         videoPrompt: {
                             type: "string",
                             description:
-                                "由当前唯一导演 Skill 直接生成完整公开 videoPrompt；必须按【重要剪辑指令】【素材绑定】【故事意图】【空间与连续性】【灯光与画面】【摄影总则】【逐镜头时间线】【硬性禁止】排版，并让每个 framePlan 时间段对应一个“镜头 N”段落。在单一主运镜中明确声明连续镜头或内部切镜次数。时间段动作必须逐段镜像 framePlan 的真实时间范围、起点、动作与触发、可见衔接和终点，写出具体人物、道具或环境结果；镜头数量和切换次数按可见信息变化自适应，不固定配额；内部切镜还必须在可见衔接中写出带时间、类型、触发事件、新机位、切后主运镜、信息目的和承接的完整镜头事件，不输出内部信息。直接对白必须使用“说话人说：“完整原句””格式。",
+                                "由当前唯一导演 Skill 直接生成完整公开 videoPrompt 和内部 framePlan；公开视频必须使用小墨式简洁导演镜头卡：每个 framePlan 时间段一个“### 镜头 N | 时间范围 | 景别 | 焦段 | 机位角度 | 运镜方式 | 人物镜头/非人物镜头”卡片，并填写场景、画面内容、光影、色调、台词、人声、音效。画面内容只写屏幕上能看见的进行中动作和结果；直接对白必须使用“说话人说：“完整原句””格式；不输出八段标题、起点/动作与触发/可见衔接/终点等内部字段、URL、内部 ID 或供应商字段。framePlan 仍必须保留真实时间边界、动作差异、连续性、对白游标和静态画面状态。镜头数量和切换次数按可见信息变化自适应，不固定配额；用户或项目明确的密集硬切策略才提升为对应硬门禁。",
                         },
                         framePlan: {
                             type: "object",
@@ -1214,7 +1215,7 @@ export const dramaVideoPromptTool = {
                                     minItems: 1,
                                     maxItems: 11,
                                     description:
-                                        "必须由 Agent 为每个真实动作节点返回具体的起点、动作与触发、可见衔接、终点和画面状态；沿用输入帧的 sequenceIndex、startSecond 和 endSecond，不得用通用阶段词代替具体描述；30秒高密度硬切最多使用11个时间段，优先用8—11段承载7—10次真实切换",
+                                        "必须由 Agent 为每个真实动作节点返回具体的 startPrompt、actionPrompt、transitionPrompt、endPrompt 和 imagePrompt；沿用输入帧的 sequenceIndex、startSecond 和 endSecond，不得用通用阶段词代替具体描述；framePlan 是内部严格事实，不要求公开视频逐项复制这些字段名；30秒高密度硬切只有在用户或项目明确配置时才执行对应帧段和切换范围",
                                     items: {
                                         type: "object",
                                         additionalProperties: false,

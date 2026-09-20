@@ -3,19 +3,20 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getAuthSettings, refundUserPoints } from "@/lib/auth/store";
 import { resolveLogicalModelCandidates } from "@/lib/server/logical-model-router";
 import { requestStructuredText } from "@/lib/server/text-planning-runtime";
+import { validateDramaVideoPromptCardLayout } from "@/lib/drama-prompt-quality";
 import { optimizeCreativePrompt } from "./prompt-optimization-service";
 
 const validVideoPrompt = (body: string) =>
     [
-        "【重要剪辑指令】\n按真实动作节点切换。",
-        "【素材绑定】\n当前参考图只锁定主体与场景。",
-        "【故事意图】\n把压力交给对手。\n动态意图：主体从克制转为追问。",
-        "【空间与连续性】\n180度轴线不变。\n起始可见状态：人物站在长桌右侧。",
-        "【灯光与画面】\n左侧窗光保留脸部纹理。",
-        "【摄影总则】\n50mm侧45度平视固定机位，服务于视线接住。\n单一主运镜：镜头模式：连续镜头；锁定机位。",
-        `【逐镜头时间线】\n镜头1，0-5秒；${body}\n时间段动作：0-5秒 起点：人物站在长桌右侧；动作与触发：人物抬眼并收紧手指；可见衔接：视线接住对手；终点：人物直视对手。\n声音意图：室内底噪。\n结束画面：人物直视对手。\n连续性锁：人物身份、长桌位置和轴线不变。\n针对性约束：无字幕、无水印。`,
-        "【硬性禁止】\n不新增人物、对白或道具。",
-    ].join("\n\n");
+        "### 镜头 01 | 0-5秒 | 中景 | 50mm | 侧45度平视 | 锁定机位，沿视线方向保持压力 | 人物镜头",
+        "场景：长桌旁的室内对话空间。",
+        `画面内容：人物站在长桌右侧抬眼看向对手，手指逐渐收紧；${body}`,
+        "光影：左侧窗光落在脸部和手部，保留皮肤与衣料纹理。",
+        "色调：冷灰蓝，局部暖白反光。",
+        "台词：无",
+        "人声：短促呼吸。",
+        "音效：室内底噪和衣料轻响。",
+    ].join("\n");
 
 vi.mock("@/lib/auth/store", () => ({ getAuthSettings: vi.fn(), refundUserPoints: vi.fn() }));
 vi.mock("@/lib/server/logical-model-router", () => ({ resolveLogicalModelCandidates: vi.fn() }));
@@ -105,6 +106,7 @@ describe("prompt optimization service", () => {
     });
 
     it("injects the persisted global visual contract into prompt optimization", async () => {
+        expect(validateDramaVideoPromptCardLayout(validVideoPrompt("优化后的提示词"), 1, "视频提示词")).toEqual([]);
         vi.mocked(requestStructuredText).mockResolvedValue({ arguments: JSON.stringify({ optimizedPrompt: validVideoPrompt("优化后的提示词") }), headers: new Headers(), protocol: "chat", elapsedMs: 10 });
 
         await optimizeCreativePrompt({
@@ -220,12 +222,10 @@ describe("prompt optimization service", () => {
         const systemMessage = vi.mocked(requestStructuredText).mock.calls[0]?.[0].messages.find((message) => message.role === "system")?.content || "";
         expect(systemMessage).toContain("不要只做同义改写");
         expect(systemMessage).toContain("默认按多镜头导演方案组织");
-        expect(systemMessage).toContain("镜头事件：<时间>秒；类型：硬切/匹配切/插入/甩镜");
-        expect(systemMessage).toContain("主体动作与方向");
-        expect(systemMessage).toContain("起始可见状态");
-        expect(systemMessage).toContain("每个非空字段必须独立一行");
+        expect(systemMessage).toContain("小墨 6.3 简镜头卡");
+        expect(systemMessage).toContain("每个真实 `framePlan.frames[]` 对应一张独立镜头卡");
+        expect(systemMessage).toContain("framePlan");
         expect(systemMessage).toContain("每个时间段都必须让姿态");
-        expect(systemMessage).toContain("每个时间段都写“起点 → 动作与触发 → 可见衔接 → 终点”");
         expect(systemMessage).toContain("一个时间段只安排一个主动作变化");
         expect(systemMessage).toContain("不得用“保持状态、情绪加剧、自然反应”等空泛词替代可见结果");
         expect(systemMessage).toContain("9:16");
@@ -233,9 +233,9 @@ describe("prompt optimization service", () => {
         expect(systemMessage).toContain("30 秒高密度硬切");
     });
 
-    it("does not rewrite narrative labels returned by the Agent", async () => {
+    it("keeps the public card free of internal narrative labels", async () => {
         vi.mocked(requestStructuredText).mockResolvedValue({
-            arguments: JSON.stringify({ optimizedPrompt: validVideoPrompt("动态意图：B线钩子中，Karin握住完整断剑，断口从掌心裂开。\n结束画面：Karin惊醒后仍握住断剑。") }),
+            arguments: JSON.stringify({ optimizedPrompt: validVideoPrompt("Karin握住完整断剑，断口从掌心裂开；镜头停在她惊醒后仍握住断剑的结果。") }),
             headers: new Headers(),
             protocol: "chat",
             elapsedMs: 10,
@@ -246,7 +246,7 @@ describe("prompt optimization service", () => {
         const systemMessage = vi.mocked(requestStructuredText).mock.calls[0]?.[0].messages.find((message) => message.role === "system")?.content || "";
         expect(systemMessage).toContain("不得输出 A线、B线、主线、副线、钩子");
         expect(result).toContain("Karin握住完整断剑");
-        expect(result).toContain("B线钩子");
+        expect(result).not.toContain("B线钩子");
     });
 
     it("rejects a video optimization result that turns dialogue into metadata", async () => {

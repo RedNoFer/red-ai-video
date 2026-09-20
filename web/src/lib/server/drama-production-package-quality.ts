@@ -2,7 +2,7 @@ import type { DramaAuthoringSourceSnapshot, DramaProductionPackageV1, DramaQuali
 import { dramaDialogueFragmentSequenceError, dramaDialogueTimingReminder, hasQuotedDramaDialogue, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
 import { DRAMA_DENSE_HARD_CUT_RANGE_30S, hasDramaDenseCutRule, hasDramaDenseCutRuleInCustomTemplateSources } from "@/lib/drama-production-plan";
 import { validateDramaCharacterWardrobeContinuity, validateDramaCutInformationDiversity, validateDramaPromptComposition, validateDramaReferenceAliasConsistency } from "@/lib/drama-prompt-composition-quality";
-import { validateDramaVideoPromptTemplateLayout } from "@/lib/drama-prompt-quality";
+import { validateDramaVideoPromptCardLayout } from "@/lib/drama-prompt-quality";
 import { DRAMA_PACKAGE_GATE_CODES, DRAMA_PACKAGE_SECTIONS } from "@/lib/server/drama-production-package-contract";
 
 export type DramaAuthoringQualityInput = {
@@ -85,15 +85,15 @@ function checkDialogueCapacity(checks: DramaQualityGateCheck[], value: DramaProd
 }
 
 function checkVideoPromptLayout(checks: DramaQualityGateCheck[], value: DramaProductionPackageV1) {
-    const failures = value.episodes.flatMap((episode) => episode.shots.flatMap((shot) => validateDramaVideoPromptTemplateLayout(shot.videoPrompt, shot.framePlan?.frames.length || 0, shot.code || shot.title)));
+    const failures = value.episodes.flatMap((episode) => episode.shots.flatMap((shot) => validateDramaVideoPromptCardLayout(shot.videoPrompt, shot.framePlan?.frames || [], shot.code || shot.title)));
     add(
         checks,
         "VIDEO_PROMPT_LAYOUT",
         !failures.length,
         "视频提示词排版",
-        failures.length ? failures.slice(0, 8).join("；") : "每个镜头都使用总则、素材、故事意图、空间、灯光、摄影、逐镜头时间线和硬性禁止八段结构",
+        failures.length ? failures.slice(0, 8).join("；") : "每个真实 framePlan 时间段都有完整的小墨式导演镜头卡",
         ["episodes[].shots[].videoPrompt", "episodes[].shots[].framePlan.frames[]"],
-        "按固定视频 Prompt 成稿骨架重写：依次提供【重要剪辑指令】【素材绑定】【故事意图】【空间与连续性】【灯光与画面】【摄影总则】【逐镜头时间线】【硬性禁止】，并让每个时间段对应一个“镜头N”段落。",
+        "按小墨式导演成稿补齐：每个真实 framePlan 时间段对应一个镜头卡，标题包含时间、景别、焦段、机位和运镜，正文写具体可见画面与声音；内部起点/动作/衔接/终点继续只在 framePlan 中校验。",
     );
 }
 
@@ -555,6 +555,7 @@ function checkReferenceAliasConsistency(checks: DramaQualityGateCheck[], value: 
             ...validateDramaReferenceAliasConsistency({
                 prompt: shot.videoPrompt,
                 manifest: shot.framePlan?.referenceManifest || [],
+                requireBinding: false,
                 label: shot.code,
             }),
         );

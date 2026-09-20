@@ -6,7 +6,7 @@ import { dramaDialogueTimingReminder, hasQuotedDramaDialogue, type DramaDialogue
 import { dramaReferenceImageBudget } from "@/lib/drama-production-plan";
 import { dramaShotReferenceSelectionIds, resolveDramaVideoReferenceMode } from "@/lib/drama-video-reference-plan";
 import type { DramaVideoReferenceMode } from "@/lib/drama-project-contract";
-import { validateDramaPerformanceDetail, validateDramaVideoPromptTemplateLayout } from "@/lib/drama-prompt-quality";
+import { validateDramaPerformanceDetail, validateDramaVideoPromptCardLayout } from "@/lib/drama-prompt-quality";
 import { validateDramaCharacterWardrobeContinuity, validateDramaCutInformationDiversity, validateDramaPromptComposition, validateDramaReferenceAliasConsistency } from "@/lib/drama-prompt-composition-quality";
 import { auditDramaShotDirectorQuality } from "@/lib/server/agent-skills/drama-video-director";
 
@@ -132,8 +132,8 @@ function checkShot(
     const dialogueCount = shot.utterances.filter((item) => item.type === "dialogue").length || (shot.dialogue.trim() ? 1 : 0);
     const generatedPromptOrigin = shot.fieldOrigins?.videoPrompt === "package" || shot.fieldOrigins?.executionVideoPrompt === "ai";
     if (generatedPromptOrigin && shot.framePlan?.frames.length) {
-        const layoutErrors = validateDramaVideoPromptTemplateLayout(videoPrompt || "", shot.framePlan.frames.length, label);
-        if (layoutErrors.length) issues.push(blocking("VIDEO_PROMPT_LAYOUT", layoutErrors[0], { shotId: shot.id, correction: "重新优化或生成视频提示词，按八段式公开排版并让每个 framePlan 时间段对应一个镜头段落" }));
+        const layoutErrors = validateDramaVideoPromptCardLayout(videoPrompt || "", shot.framePlan.frames, label);
+        if (layoutErrors.length) issues.push(blocking("VIDEO_PROMPT_LAYOUT", layoutErrors[0], { shotId: shot.id, correction: "重新优化或生成视频提示词，按小墨式导演镜头卡逐帧补齐时间、景别、焦段、机位、运镜和可见画面" }));
         const malformedDialogue = shot.utterances.filter((item) => item.type === "dialogue" && (!item.speaker || !hasQuotedDramaDialogue(videoPrompt || "", item.speaker, item.text)));
         if (malformedDialogue.length) issues.push(blocking("DIALOGUE_PROMPT_FORMAT", `${label}包含未使用中文引号的对白，必须写成“说话人说：“实际台词””`, { shotId: shot.id, correction: "重新生成带实际台词和中文引号的对白表演" }));
         const shotText = [
@@ -173,7 +173,7 @@ function checkShot(
             label,
         });
         if (cutErrors.length) issues.push(blocking("CUT_INFORMATION_DIVERSITY", `${label}${cutErrors.join("；")}`, { shotId: shot.id, correction: "重新分配硬切信息主体，覆盖剧情实际存在的反应、关系、空间或手部/道具细节" }));
-        const aliasErrors = validateDramaReferenceAliasConsistency({ prompt: videoPrompt || "", manifest: shot.framePlan.referenceManifest, label });
+        const aliasErrors = validateDramaReferenceAliasConsistency({ prompt: videoPrompt || "", manifest: shot.framePlan.referenceManifest, requireBinding: false, label });
         if (aliasErrors.length) issues.push(blocking("REFERENCE_ALIAS_CONSISTENCY", aliasErrors.join("；"), { shotId: shot.id, correction: "严格按 referenceManifest 的 alias、职责和顺序提交供应商参考图" }));
         const wardrobeErrors = validateDramaCharacterWardrobeContinuity({ prompt: videoPrompt || "", characters: project.characters, characterCodes: shot.characterIds, label });
         if (wardrobeErrors.length) issues.push(blocking("CHARACTER_WARDROBE_CONTINUITY", wardrobeErrors.join("；"), { shotId: shot.id, correction: "补齐正式角色资产的年龄感、脸型/发型、服装和固定配饰锚点" }));

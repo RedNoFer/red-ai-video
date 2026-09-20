@@ -161,10 +161,14 @@ export function applyDramaVisualDirection(plan: DramaProductionPlan, value: stri
     return { ...plan, visual: { ...plan.visual, visualStyle, artStyle, visualDirection: direction, source: visualStyle && artStyle ? "manual" : "agent" } };
 }
 
-export function resolveDramaShotDurationPreference(prompt: string, fallback: DramaShotDuration = 15): DramaShotDuration {
+export function resolveDramaShotDurationOverride(prompt: string): DramaShotDuration | undefined {
     const values = Array.from(prompt.matchAll(/(?:^|[^\d])(15|20|30)\s*(?:秒|s)(?!\w)/giu), (match) => Number(match[1])).filter((value): value is DramaShotDuration => DRAMA_SHOT_DURATION_OPTIONS.includes(value as DramaShotDuration));
     const unique = [...new Set(values)];
-    return unique.length === 1 ? unique[0] : fallback;
+    return unique.length === 1 ? unique[0] : undefined;
+}
+
+export function resolveDramaShotDurationPreference(prompt: string, fallback: DramaShotDuration = 15): DramaShotDuration {
+    return resolveDramaShotDurationOverride(prompt) || fallback;
 }
 
 const DRAMA_DENSE_CUT_RULE_PATTERN = /高密度硬切|(?:至少|目标|要求)?\s*7\s*(?:[—–-]|至|到)\s*10\s*(?:次|个)?\s*(?:可见\s*)?(?:硬切|切换|镜头)|8\s*(?:[—–-]|至|到)\s*11\s*(?:个)?\s*帧/iu;

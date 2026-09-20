@@ -259,18 +259,26 @@ describe("drama authoring quality gates", () => {
         expect(blockers(report, "DIALOGUE_PERFORMANCE").some((check) => check.evidence.includes("对白片段与上一时间段重叠"))).toBe(true);
     });
 
-    it("accepts the eight-section prompt layout with cut events inferred from the timeline", () => {
+    it("accepts Xiaomo director cards with cut events represented by frame boundaries", () => {
         const value = packageValue({
             videoPrompt: [
-                "【重要剪辑指令】\n两个真实信息节点之间发生一次可见硬切。",
-                "【素材绑定】\n@图片1：萧炎身份；@图片2：萧家迎客大厅。",
-                "【故事意图】\n把萧炎的克制推进为对纳兰的质问。",
-                "【空间与连续性】\n萧炎画面右看左，纳兰画面左看右，180度轴线不变。",
-                "【灯光与画面】\n左侧窗光照亮人物侧前方，脸部和手部清晰。",
-                "【摄影总则】\n中景平视，沿长桌轴线缓慢推进，为了让观众看见萧炎从低头到抬眼的压力变化。",
-                "【逐镜头时间线】\n镜头1，0-15秒，起点：萧炎低头；动作与触发：萧炎抬眼并压住桌沿；可见衔接：纳兰接住视线；终点：指节停在桌沿。\n镜头事件：时间：15秒；类型：硬切；触发事件：萧炎抬眼并收住右手；新机位：50mm侧45度中近景；切后主运镜：向萧炎慢推10厘米；信息目的：看清少年脸部压力；承接：视线、轴线和桌沿受力状态连续。\n镜头2，15-30秒，起点：指节停在桌沿；动作与触发：萧炎肩背直起并回看纳兰；可见衔接：萧战目光移向父子；终点：萧炎直视纳兰。",
-                "【硬性禁止】\n禁止一镜到底、越轴、运动模糊和新增对白。",
-            ].join("\n\n"),
+                "### 镜头 01 | 0-15秒 | 中景 | 35mm | 入口侧45度平视 | 缓慢推近10厘米 | 人物镜头",
+                "场景：议事大厅。",
+                "画面内容：萧炎低头后抬眼，右手压住桌沿，纳兰接住视线，指节停在桌沿形成压力。",
+                "光影：左侧窗光照亮萧炎侧前方，桌面保留冷灰反光。",
+                "色调：冷中性栗灰。",
+                "台词：无",
+                "人声：短促吸气。",
+                "音效：指节接触桌沿的轻响。",
+                "### 镜头 02 | 15-30秒 | 中近景 | 50mm | 入口侧45度平视 | 锁定机位 | 双人关系镜头",
+                "场景：议事大厅。",
+                "画面内容：萧炎肩背直起并回看纳兰，萧战在主位抬眼，父子与纳兰的视线关系重新落回同一空间。",
+                "光影：窗光沿人物侧脸落下，主位比窗边暗一档。",
+                "色调：冷中性栗灰，局部暖白反光。",
+                "台词：无",
+                "人声：大厅保持静默。",
+                "音效：室内底噪持续。",
+            ].join("\n"),
         });
         const report = validateDramaAuthoringQuality({ package: value, sources: [] });
         expect(blockers(report, "VIDEO_PROMPT_LAYOUT")).toHaveLength(0);

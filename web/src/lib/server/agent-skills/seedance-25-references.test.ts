@@ -30,8 +30,8 @@ describe("Seedance 2.5 video reference routing", () => {
     it("delegates ordered image aliases to the Skill instead of application prompt rewriting", () => {
         const instructions = resolveSeedance25DirectorInstructions({ durationSeconds: 15 }).instructions;
 
-        expect(instructions).toContain("referenceMaterials");
-        expect(instructions).toContain("应用代码不得代写 Agent 的公开提示词正文");
-        expect(instructions).toContain("不得输出 `A线`、`B线`");
+        expect(instructions).toContain("参考素材按稳定 alias");
+        expect(instructions).toContain("小墨 6.3 简镜头卡");
+        expect(instructions).not.toContain("A线");
     });
 });

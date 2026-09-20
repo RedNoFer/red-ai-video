@@ -27,6 +27,7 @@ import {
     hasDramaDenseCutRuleInCustomTemplateSources,
     normalizeDramaProductionPlan,
     resolveDramaInternalCutPolicyPreference,
+    resolveDramaShotDurationOverride,
     resolveDramaShotDurationPreference,
     type DramaInternalCutPolicy,
 } from "@/lib/drama-production-plan";
@@ -354,7 +355,12 @@ export async function executeDramaScriptRun(run: AgentRun, origin: string, cooki
     const snapshotPlan = run.snapshot && typeof run.snapshot === "object" && !Array.isArray(run.snapshot) ? (run.snapshot as { productionPlan?: unknown }).productionPlan : undefined;
     const normalizedSnapshotPlan = snapshotPlan ? normalizeDramaProductionPlan(snapshotPlan, defaultDramaProductionPlan("manual")) : undefined;
     const hasLockedPlan = Boolean(normalizedSnapshotPlan?.lockedAt);
-    const requestedShotDuration = hasLockedPlan ? (normalizedSnapshotPlan?.video.shotDuration === 30 ? 30 : 15) : resolveDramaShotDurationPreference(run.prompt, 15);
+    const customTemplateText = authoringSources
+        .filter((material) => material.role === "package-template" && material.alias !== "@系统制作包模板")
+        .map((material) => material.textContent || "")
+        .join("\n");
+    const requestedShotDuration =
+        resolveDramaShotDurationOverride(run.prompt) || resolveDramaShotDurationOverride(customTemplateText) || (hasLockedPlan ? (normalizedSnapshotPlan?.video.shotDuration === 30 ? 30 : 15) : resolveDramaShotDurationPreference(run.prompt, 15));
     const promptInternalCutPolicy = resolveDramaInternalCutPolicyPreference(run.prompt, "adaptive");
     const sourceInternalCutPolicy = hasDramaDenseCutRuleInCustomTemplateSources(authoringSources) && requestedShotDuration === 30 ? "dense-30s" : "adaptive";
     const lockedInternalCutPolicy = hasLockedPlan ? normalizedSnapshotPlan?.video.internalCutPolicy || resolveDramaInternalCutPolicyPreference(normalizedSnapshotPlan?.customDirectorRules || "", "adaptive") : undefined;
@@ -410,7 +416,7 @@ export async function executeDramaScriptRun(run: AgentRun, origin: string, cooki
 
 目标小说章节：${String(targetNarrativeChapter)}。这里的“小说第 ${String(targetNarrativeChapter)} 章”是剧情素材范围；“制作包第 3 节｜第一集文学剧本”只是固定模板章节，二者绝不能混淆。未明确要求制作包时只返回自然中文剧本协作回复；明确要求时只返回 {"mode":"package","reply":"简短完成说明","markdown":"符合 vozeb-drama-production-package-v1 的完整 Markdown"}。markdown 是 Agent authoring draft，不是最终持久化文件：必须生成完整文学剧本，不得输出摘要、梗概、镜头摘要或模板示例；必须保留 TXT 的每条显式对白和关键剧情事实，并为每个镜头直接写出公开 videoPrompt 与 framePlan。服务端会校验 draft，再由规范化后的唯一对象确定性导出最终制作包，禁止依赖脚本读取模板或用固定文案冒充生成。制作包必须包含当前集、项目级正式资产、13 个章节和现有镜头字段；第 12、13 节只能放在 archive.sections，绝不能把 SEC01-SEC13 伪装成 shots；不要在其他字段重复规则，也不要把一个字段的正文复制到另一个字段。字段语义和质量门禁只以当前唯一导演 Skill 与制作包协议为准。
 
-生成每个镜头前必须逐项自检：imagePrompt 和 videoPrompt 都非空且分别只表达静态画面/可执行视频；performancePlan 的情绪目标、情绪递进、说话方式、节奏、呼吸、克制度及 start/middle/end 四项表演都写满具体可见结果；lightingPlan 的十个字段都写满光源、材质和前后镜衔接；continuity 的十个字段、entryState、exitState、dramaticFunction、cameraMotion、lens 都写满。framePlan 必须有首帧来源、尾帧要求和真实连续时间段；每个时间段都写 actionPrompt、transitionPrompt、endPrompt、imagePrompt，除第一段外 startPrompt 必须原样等于上一段 endPrompt。每个 imagePrompt 必须包含当前主体、冻结的可见状态和一项空间/视线/姿态/道具/环境结果；每个 videoPrompt 必须采用 \`【重要剪辑指令】→【素材绑定】→【故事意图】→【空间与连续性】→【灯光与画面】→【摄影总则】→【逐镜头时间线】→【硬性禁止】\` 的成稿结构，并在逐镜头时间线中为每个 framePlan 时间段写一个“镜头 N”段落，段落内镜像真实时间、起点、动作与触发、可见衔接和终点，写清动作触发、人物/对手/NPC/道具结果、对白表演和镜头动机。含对白时，“对白表演” 必须逐段写成 \`说话人说：“完整台词”；语气：…；停顿：…；重音：…；说后反应：…\` 的实际格式（说话人随事实变化），必须使用原句和中文引号；不得只写“说话人标签”，不得把台词塞进“重音”。本轮制作包的剧情事实、角色名称、地点和道具只能来自当前 authoringSources 与正式项目资产，不得把任何示例角色、地点、对白或道具当作固定规则。不同时间段必须使用不同的可见表演结果，不能复制“随本段冲突动作由克制向明确推进、当前冲突信息、接住下一状态”等模板句。台词结束后的时间段改写为“对白结束后的反应停顿/静默”，具体写出呼吸、视线、嘴角、身体、手部、道具或 NPC 结果，不得继续伪装成对白表演。缺任何一项就先在内部修订，不能把半成品交付给用户，也不得用“自然反应、保持状态、情绪加剧、关键变化、电影感推进”等占位语代替。
+生成每个镜头前必须逐项自检：imagePrompt 和 videoPrompt 都非空且分别只表达静态画面/可执行视频；performancePlan 的情绪目标、情绪递进、说话方式、节奏、呼吸、克制度及 start/middle/end 四项表演都写满具体可见结果；lightingPlan 的十个字段都写满光源、材质和前后镜衔接；continuity 的十个字段、entryState、exitState、dramaticFunction、cameraMotion、lens 都写满。framePlan 必须有首帧来源、尾帧要求和真实连续时间段；每个时间段都写 actionPrompt、transitionPrompt、endPrompt、imagePrompt，除第一段外 startPrompt 必须原样等于上一段 endPrompt。每个 imagePrompt 必须包含当前主体、冻结的可见状态和一项空间/视线/姿态/道具/环境结果；每个 videoPrompt 必须采用小墨 6.3 式简洁导演镜头卡：每个真实 framePlan 时间段对应一张 \`### 镜头 N | 时间范围 | 景别 | 焦段 | 机位角度 | 运镜方式 | 人物镜头/非人物镜头\` 卡片，卡片内写场景、画面内容、光影、色调、台词、人声和音效。画面内容必须是屏幕上正在发生的可见动作与结果；直接对白必须写成 \`说话人说：“完整台词”\`，同一对白只按自然语速和对白游标连续出现，不得在相邻镜头重复完整台词。不要在公开视频中输出【重要剪辑指令】等旧八段标题或起点、动作与触发、可见衔接、终点等内部字段名；这些字段只在 framePlan 内校验。镜头数量、硬切次数和逻辑片段时长按剧情与项目配置自适应，只有当前请求明确配置密集硬切时才执行对应密度。台词结束后的时间段必须写具体静默或反应结果。本轮制作包的剧情事实、角色名称、地点和道具只能来自当前 authoringSources 与正式项目资产，不得把任何示例角色、地点、对白或道具当作固定规则。缺任何一项就先在内部修订，不能把半成品交付给用户，也不得用“自然反应、保持状态、情绪加剧、关键变化、电影感推进”等占位语代替。
 
 framePlan.frames 只能保留现有字段；静态正文和视频正文必须由 Agent 直接写出，并保持真实时间边界和节点对应；应用层只校验、保存和转发，不从 actionPrompt、镜头描述、资产、NPC 或历史记录重组正文。固定资产只用稳定 code/id/name，referenceManifest 只表达实际参考图绑定，内部执行信息不得进入公开正文。${lockedPlan ? `本次目标镜头时长为 ${requestedShotDuration} 秒；按完整剧情节拍重切，不机械复制旧拆分。锁定方案及其中的 customDirectorRules 只读取用户输入中的这一份，不从任何其他字段补充。` : "没有锁定生产方案时先提示用户完成配置。"} ${framePolicyInstruction} 任何收费或上游生产前先给出任务、参考和参数预览并等待明确确认。`;
     const input = buildDramaPackageAuthoringInput({
@@ -548,7 +554,7 @@ framePlan.frames 只能保留现有字段；静态正文和视频正文必须由
                         [
                             {
                                 role: "system",
-                                content: `${authoringRules}\n\n${instruction}\n${visualInstruction}\n${attachmentInstruction}\n\n这是内部 authoring revision，不是新的用户请求。上一版草案没有达到制作包生成门槛。请根据反馈重新完整生成一份可直接交付的制作包 Markdown，不要只返回补丁、解释或摘要；保留所有已覆盖的剧情事实和对白，但逐项修正反馈中的字段。videoPrompt 必须按【重要剪辑指令】【素材绑定】【故事意图】【空间与连续性】【灯光与画面】【摄影总则】【逐镜头时间线】【硬性禁止】排版，并让每个 framePlan 时间段对应一个“镜头 N”段落。对白表演必须逐段使用“说话人说：“完整台词””格式，写具体语气、停顿、重音、说后可见反应；不得只写说话人标签或把台词塞进重音字段；对白结束段必须写具体静默/反应结果；相邻段不得复制同一表演文本。生成前完成内部自检，禁止把模板句、质量反馈或内部规则写入公开制作包。`,
+                                content: `${authoringRules}\n\n${instruction}\n${visualInstruction}\n${attachmentInstruction}\n\n这是内部 authoring revision，不是新的用户请求。上一版草案没有达到制作包生成门槛。请根据反馈重新完整生成一份可直接交付的制作包 Markdown，不要只返回补丁、解释或摘要；保留所有已覆盖的剧情事实和对白，但逐项修正反馈中的字段。公开视频 videoPrompt 必须改为小墨 6.3 式简洁导演镜头卡：每个真实 framePlan 时间段对应一张“### 镜头 N | 时间范围 | 景别 | 焦段 | 机位角度 | 运镜方式 | 人物镜头/非人物镜头”卡片，并填写场景、画面内容、光影、色调、台词、人声、音效；不得输出旧八段标题或起点、动作与触发、可见衔接、终点等内部字段名。对白必须逐段使用“说话人说：“完整台词””格式，按自然语速和对白游标分配，禁止相邻镜头复制同一完整台词；对白结束段必须写具体静默/反应结果。framePlan 内部字段仍需完整、连续且逐项通过门禁。生成前完成内部自检，禁止把模板句、质量反馈或内部规则写入公开制作包。`,
                             },
                             {
                                 role: "user",

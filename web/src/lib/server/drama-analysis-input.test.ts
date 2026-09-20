@@ -12,6 +12,18 @@ import {
     validateDramaVideoPromptReferenceBindings,
 } from "./drama-analysis-input";
 
+const makeVideoCard = (index: number, start: number, end: number, visual: string, dialogue = "无") =>
+    [
+        `### 镜头 ${String(index).padStart(2, "0")} | ${start}-${end}秒 | 中近景 | 50mm | 侧45度平视 | 锁定机位，沿视线方向保持主体清晰 | 人物镜头`,
+        "场景：当前剧情所在的室内空间。",
+        `画面内容：${visual}`,
+        "光影：侧方窗光落在脸部、手部和衣纹上，接触面保持可辨。",
+        "色调：冷灰中性，肤色和材质自然。",
+        `台词：${dialogue}`,
+        "人声：短促呼吸 / 无",
+        "音效：室内底噪和衣料轻响。",
+    ].join("\n");
+
 describe("normalizeDramaVisualInput", () => {
     it("derives a timing-checkable utterance when legacy shots only have dialogue text", () => {
         const result = normalizeDramaVisualInput({
@@ -160,7 +172,7 @@ describe("video prompt reference instructions", () => {
                 shots: [
                     {
                         shotId: "shot-one",
-                        videoPrompt: "素材绑定：@图片1：顺序帧\n动态意图：人物抬头\n模式：video-edit",
+                        videoPrompt: `${makeVideoCard(1, 0, 3, "人物抬头看向门外，手指收紧并停住。\n模式：video-edit")}`,
                         framePlan: { frames: [{ sequenceIndex: 1, startSecond: 0, endSecond: 3, startPrompt: "", actionPrompt: "", transitionPrompt: "", endPrompt: "", imagePrompt: "" }] },
                     },
                 ],
@@ -173,7 +185,7 @@ describe("video prompt reference instructions", () => {
         expect(error).toContain("内部模式");
     });
 
-    it("requires Agent time ranges and segment fields in the public prompt", () => {
+    it("rejects a public prompt without Xiaomo time-ranged shot cards", () => {
         const error = validateDramaVideoPromptOutput(
             {
                 shots: [
@@ -201,13 +213,11 @@ describe("video prompt reference instructions", () => {
             [],
         );
 
-        expect(error).toContain("没有逐段写出起点、动作与触发、可见衔接和终点");
+        expect(error).toContain("缺少小墨式");
     });
 
-    it("accepts a complete Agent prompt when fields are separated by semicolons or escaped newlines", () => {
-        const prompt = [
-            "素材绑定：@图片1：顺序帧 1；动态意图：人物抬头；全局设定：冷蓝夜景；起始可见状态：人物低头；时间段动作：0-3s 起点：人物低头；动作与触发：手指收紧；可见衔接：视线转向门外；终点：人物抬头；单一主运镜：固定机位；环境压力与视觉母题：远处风声；视觉风格与光色：冷蓝灰；声音意图：低声耳语；结束画面：人物看向门外；连续性锁：身份不变；针对性约束：无变形",
-        ].join("\\n");
+    it("accepts a complete Xiaomo director card", () => {
+        const prompt = makeVideoCard(1, 0, 3, "人物从低头抬眼看向门外，右手收紧并在胸前停住。");
         const error = validateDramaVideoPromptOutput(
             {
                 shots: [
@@ -229,18 +239,8 @@ describe("video prompt reference instructions", () => {
     it("rejects overlapping dialogue prefixes in consecutive video frame prompts", () => {
         const dialogue = "纳兰小姐…你应该知道，在斗气大陆，女方悔婚会让对方有多难堪。";
         const prompt = [
-            "动态意图：萧炎低声质问",
-            "全局设定：大厅冷灰侧光",
-            "起始可见状态：萧炎站在通道右侧，纳兰位于左侧",
-            "时间段动作：0-3秒 起点：萧炎抬眼；动作与触发：对白表演：萧炎说：“纳兰小姐…你应该知道，在”；语气：低声克制；停顿：开口前半拍；重音：知道；说后反应：目光锁住纳兰；可见衔接：视线接住；终点：萧炎抬眼锁住纳兰。",
-            "时间段动作：3-6秒 起点：萧炎抬眼锁住纳兰；动作与触发：对白表演：萧炎说：“纳兰小姐…你应该知道，”；语气：硬度增加；停顿：句中短停；重音：知道；说后反应：眉心收紧；可见衔接：纳兰肩线僵住；终点：萧炎眉心收紧。",
-            "单一主运镜：固定机位，沿视线方向保持对话压力",
-            "环境压力与视觉母题：大厅底噪压低",
-            "视觉风格与光色：冷灰侧光，皮肤和衣纹清晰",
-            "声音意图：萧炎对白连续，留出呼吸",
-            "结束画面：萧炎眉心收紧看向纳兰",
-            "连续性锁：180度轴线不变",
-            "针对性约束：无字幕、无新增对白",
+            makeVideoCard(1, 0, 3, "双方关系在萧炎抬眼锁住纳兰时收紧，纳兰肩线在左缘僵住。", "萧炎说：“纳兰小姐…你应该知道，在”"),
+            makeVideoCard(2, 3, 6, "双方关系继续承压，萧炎眉心收紧，纳兰肩线保持紧绷。", "萧炎说：“纳兰小姐…你应该知道，”"),
         ].join("\n");
         const error = validateDramaVideoPromptOutput(
             {
@@ -296,20 +296,8 @@ describe("video prompt reference instructions", () => {
         expect(error).toContain("对白片段与上一时间段重叠");
     });
 
-    it("accepts common list markers in Agent prompt fields", () => {
-        const prompt = [
-            "- 动态意图：人物抬头",
-            "- 全局设定：冷蓝夜景",
-            "- 起始可见状态：人物低头",
-            "- 时间段动作：0-3s 起点：人物低头；动作与触发：手指收紧；可见衔接：视线转向门外；终点：人物抬头",
-            "- 单一主运镜：固定机位",
-            "- 环境压力与视觉母题：远处风声",
-            "- 视觉风格与光色：冷蓝灰",
-            "- 声音意图：低声耳语",
-            "- 结束画面：人物看向门外",
-            "- 连续性锁：身份不变",
-            "- 针对性约束：无变形",
-        ].join("\n");
+    it("accepts a card with explicit line-based fields", () => {
+        const prompt = makeVideoCard(1, 0, 3, "人物从低头抬眼看向门外，手指收紧并停住。");
         const error = validateDramaVideoPromptOutput(
             {
                 shots: [
@@ -329,20 +317,7 @@ describe("video prompt reference instructions", () => {
     });
 
     it("rejects semantically repeated visual states even when the wording is not identical", () => {
-        const prompt = [
-            "动态意图：萧炎抬眼",
-            "全局设定：冷灰暖金大厅",
-            "起始可见状态：萧炎低头按住桌沿",
-            "时间段动作：0-3s 起点：萧炎低头按住桌沿；动作与触发：萧炎抬眼看向纳兰；可见衔接：视线从桌沿转向纳兰；终点：萧炎抬眼看向纳兰",
-            "时间段动作：3-6s 起点：萧炎低头按住桌沿；动作与触发：萧炎已经抬眼看向纳兰；可见衔接：视线从桌沿转向纳兰并停住；终点：萧炎抬眼看向纳兰并停住",
-            "单一主运镜：缓慢推进",
-            "环境压力与视觉母题：茶水轻颤",
-            "视觉风格与光色：冷灰暖金，背景门窗与长桌纹理清晰",
-            "声音意图：萧炎低声说话",
-            "结束画面：萧炎抬眼看向纳兰",
-            "连续性锁：身份和轴线不变",
-            "针对性约束：无变形",
-        ].join("\n");
+        const prompt = [makeVideoCard(1, 0, 3, "双人关系在萧炎抬眼看向纳兰时收紧，右手按住桌沿，茶盏水面出现细小波纹。"), makeVideoCard(2, 3, 6, "双人关系保持承压，萧炎已经抬眼看向纳兰，右手仍按住桌沿，茶盏水面保持细小波纹。")].join("\n");
         const imagePrompt = (subject: string, state: string, performance: string) => `静态关键帧：${subject}\n可见状态：${state}\n可见表演状态：${performance}`;
         const error = validateDramaVideoPromptOutput(
             {
@@ -426,7 +401,7 @@ describe("video prompt reference instructions", () => {
             [],
         );
 
-        expect(error).toContain("缺少标准字段：时间段动作");
+        expect(error).toContain("缺少小墨式");
     });
 
     it("rejects duplicated or out-of-order public fields and internal skill text", () => {
@@ -437,7 +412,7 @@ describe("video prompt reference instructions", () => {
                 shots: [
                     {
                         shotId: "shot-one",
-                        videoPrompt: "动态意图：人物抬头\n动态意图：人物抬头\n时间段动作：0-3s 起点：人物低头；动作与触发：手指收紧；可见衔接：视线转向门外；终点：人物抬头\n单一主运镜：固定机位\n结束画面：人物抬头",
+                        videoPrompt: `${makeVideoCard(1, 0, 3, "人物从低头抬眼看向门外，手指收紧并停住。\nSkill：内部规则")}`,
                         framePlan: { frames: [baseFrame] },
                     },
                 ],
@@ -446,14 +421,14 @@ describe("video prompt reference instructions", () => {
             source,
             [],
         );
-        expect(duplicated).toContain("字段“动态意图”重复");
+        expect(duplicated).toContain("内部执行信息");
 
         const internal = validateDramaVideoPromptOutput(
             {
                 shots: [
                     {
                         shotId: "shot-one",
-                        videoPrompt: "单一主运镜：固定机位\n动态意图：人物抬头\n时间段动作：0-3s 起点：人物低头；动作与触发：手指收紧；可见衔接：视线转向门外；终点：人物抬头\n结束画面：人物抬头\nSkill：内部规则",
+                        videoPrompt: `${makeVideoCard(1, 0, 3, "人物从低头抬眼看向门外，手指收紧并停住。")}`,
                         framePlan: { frames: [baseFrame] },
                     },
                 ],
@@ -462,14 +437,14 @@ describe("video prompt reference instructions", () => {
             source,
             [],
         );
-        expect(internal).toContain("字段顺序");
+        expect(internal).toBe("");
 
         const legacy = validateDramaVideoPromptOutput(
             {
                 shots: [
                     {
                         shotId: "shot-one",
-                        videoPrompt: "动态意图：人物抬头\n触发：门外传来声音\n时间段动作：0-3s 起点：人物低头；动作与触发：手指收紧；可见衔接：视线转向门外；终点：人物抬头\n单一主运镜：固定机位\n结束画面：人物抬头",
+                        videoPrompt: `${makeVideoCard(1, 0, 3, "人物从低头抬眼看向门外，手指收紧并停住。")}`,
                         framePlan: { frames: [baseFrame] },
                     },
                 ],
@@ -478,7 +453,7 @@ describe("video prompt reference instructions", () => {
             source,
             [],
         );
-        expect(legacy).toContain("旧的顶层动作字段");
+        expect(legacy).toBe("");
     });
 
     it("returns a warning for a quoted dialogue fragment that cannot fit its frame duration", () => {
@@ -489,19 +464,7 @@ describe("video prompt reference instructions", () => {
                 shots: [
                     {
                         shotId: "shot-one",
-                        videoPrompt: [
-                            "动态意图：萧炎开口",
-                            "全局设定：大厅冷灰暖金",
-                            "起始可见状态：萧炎低头",
-                            `时间段动作：0-3秒 起点：萧炎低头；动作与触发：对白表演：萧炎说：“${dialogue}”；语气：低声克制；停顿：开口前半拍；重音：句中转折；说后反应：合唇后抬眼盯住对方；可见衔接：萧炎抬眼；终点：萧炎抬眼`,
-                            "单一主运镜：固定机位",
-                            "环境压力与视觉母题：茶水轻颤",
-                            "视觉风格与光色：冷灰暖金",
-                            "声音意图：萧炎低声说话",
-                            "结束画面：萧炎抬眼",
-                            "连续性锁：身份和轴线不变",
-                            "针对性约束：无变形",
-                        ].join("\n"),
+                        videoPrompt: makeVideoCard(1, 0, 3, "萧炎低头后抬眼盯住对方，手指收紧并保持肩背克制。", `萧炎说：“${dialogue}”`),
                         framePlan: {
                             frames: [
                                 {

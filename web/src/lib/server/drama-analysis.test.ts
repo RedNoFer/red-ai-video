@@ -51,7 +51,7 @@ describe("drama analysis contracts", () => {
     it("keeps material binding and frame planning in the Skill-owned video prompt contract", () => {
         expect(dramaVideoPromptTool.description).toContain("当前唯一 drama-video-director Skill");
         expect(dramaVideoPromptTool.parameters.properties.shots.items.properties.videoPrompt.description).toContain("当前唯一导演 Skill");
-        expect(dramaVideoPromptTool.parameters.properties.shots.items.properties.videoPrompt.description).toContain("具体人物、道具或环境结果");
+        expect(dramaVideoPromptTool.parameters.properties.shots.items.properties.videoPrompt.description).toContain("画面内容只写屏幕上能看见的进行中动作和结果");
         expect(dramaVisualTool.parameters.properties.shots.items.properties.framePlan.description).toContain("imagePrompt 仅填写当前冻结画面正文");
         expect(dramaVisualTool.parameters.properties.shots.items.properties.framePlan.description).not.toContain("眉眼、呼吸、手部关系清晰可见");
         expect(dramaVisualTool.parameters.properties.shots.items.properties.framePlan.properties.frames.minItems).toBe(2);

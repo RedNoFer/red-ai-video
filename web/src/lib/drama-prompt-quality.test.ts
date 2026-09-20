@@ -7,6 +7,7 @@ import {
     validateDramaNpcSegmentDetail,
     validateDramaPerformanceDetail,
     validateDramaVideoAuthoringQuality,
+    validateDramaVideoPromptCardLayout,
     validateDramaVideoPromptTemplateLayout,
     validateDramaVideoSegmentDetail,
 } from "./drama-prompt-quality";
@@ -88,6 +89,37 @@ describe("drama prompt quality", () => {
         ].join("\n\n");
         expect(validateDramaVideoPromptTemplateLayout(prompt, 2, "SH01")).toEqual([]);
         expect(validateDramaVideoPromptTemplateLayout(prompt.replace("镜头2，", "时间段2，"), 2, "SH01")).toEqual(expect.arrayContaining([expect.stringContaining("写出")]));
+    });
+
+    it("accepts Xiaomo director cards without the legacy eight-section headings", () => {
+        const prompt = [
+            "### 镜头 01 | 0-2秒 | 中近景 | 50mm | 侧45度平视 | 锁定机位，等萧炎抬眼 | 人物镜头",
+            "场景：室内长桌对话空间。",
+            "画面内容：萧炎抬眼看向左侧对手，右手从身侧抬到腰前，纳兰的衣肩停在左缘。",
+            "光影：左侧窗光落在萧炎脸部，黑戒边缘出现冷白反光。",
+            "色调：冷灰栗色，肤色自然。",
+            "台词：萧炎说：“纳兰小姐，你应该知道。”",
+            "人声：开口前半拍吸气。",
+            "音效：衣料轻响和室内底噪。",
+            "### 镜头 02 | 2-4秒 | 手部近景 | 85mm | 侧30度平视 | 沿桌沿横移8厘米，停在指节受力结果 | 非人物镜头",
+            "场景：同一张长桌。",
+            "画面内容：萧炎掌根压住桌沿，指节发白，玉粉在接触面旁保持原位。",
+            "光影：窗光沿桌沿扫过手背和木石纹理。",
+            "色调：冷灰中保留一处暖白反光。",
+            "台词：无",
+            "人声：无",
+            "音效：掌根与桌沿接触的轻响。",
+        ].join("\n");
+        expect(
+            validateDramaVideoPromptCardLayout(
+                prompt,
+                [
+                    { startSecond: 0, endSecond: 2 },
+                    { startSecond: 2, endSecond: 4 },
+                ],
+                "SH01",
+            ),
+        ).toEqual([]);
     });
 
     it("does not treat keyframe boundaries as implicit cuts", () => {

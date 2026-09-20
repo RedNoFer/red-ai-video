@@ -23,7 +23,7 @@ describe("creative shortcut skills", () => {
         expect(DRAMA_PACKAGE_DIRECTOR_RULES).toContain("固定的是字段语义、时间连续性和可验收事实");
         expect(DRAMA_VIDEO_PROMPT_DIRECTOR_RULES).toContain("切后主运镜");
         expect(DRAMA_STATIC_FRAME_DIRECTOR_RULES).toContain("运镜过程");
-        expect(DRAMA_VIDEO_PROMPT_DIRECTOR_RULES).toContain("每个真实时间段");
+        expect(DRAMA_VIDEO_PROMPT_DIRECTOR_RULES).toContain("每个真实 `framePlan.frames[]` 对应一张独立镜头卡");
         expect(DRAMA_EXTERNAL_CODEX_DIRECTOR_RULES).toContain("默认执行本 Skill");
     });
 
@@ -49,16 +49,16 @@ describe("creative shortcut skills", () => {
         expect(SEEDANCE_DIRECTOR_SKILL.instructions).toContain("每张参考图的唯一用途");
         expect(SEEDANCE_DIRECTOR_SKILL.instructions).toContain("已人工验收的实际尾帧");
         expect(SEEDANCE_DIRECTOR_SKILL.instructions).toContain("每次返修只改变一个已定位变量");
-        expect(SEEDANCE_DIRECTOR_SKILL.instructions).toContain("角色名是正式业务事实");
-        expect(SEEDANCE_DIRECTOR_SKILL.instructions).toContain("本集/本镜不出镜");
+        expect(SEEDANCE_DIRECTOR_SKILL.instructions).toContain("小墨 6.3 简镜头卡");
+        expect(SEEDANCE_DIRECTOR_SKILL.instructions).toContain("内部 framePlan");
     });
 
     it("keeps the complete Seedance 2.5 prompt contract available", () => {
         expect(SEEDANCE_25_DIRECTOR_SKILL.id).toBe("seedance-25-director");
         expect(SEEDANCE_25_DIRECTOR_SKILL.instructions).toContain("timestamp-30s");
-        expect(SEEDANCE_25_DIRECTOR_SKILL.instructions).toContain("素材绑定");
-        expect(SEEDANCE_25_DIRECTOR_SKILL.instructions).toContain("起点 → 动作与触发 → 可见衔接 → 终点");
-        expect(SEEDANCE_25_DIRECTOR_SKILL.instructions).toContain("只修改一个已定位变量");
+        expect(SEEDANCE_25_DIRECTOR_SKILL.instructions).toContain("小墨 6.3 简镜头卡");
+        expect(SEEDANCE_25_DIRECTOR_SKILL.instructions).toContain("内部 framePlan");
+        expect(SEEDANCE_25_DIRECTOR_SKILL.instructions).toContain("每次返修只改变一个已定位变量");
         expect(SEEDANCE_25_DIRECTOR_SKILL.sourceCommit).toHaveLength(40);
         expect(SEEDANCE_25_DIRECTOR_SKILL.defaultConfig).toEqual({});
     });
@@ -87,12 +87,11 @@ describe("creative shortcut skills", () => {
 
     it("uses the canonical video surface for every video prompt authoring path", () => {
         expect(DRAMA_VIDEO_PROMPT_DIRECTOR_RULES).toContain("9:16");
-        expect(DRAMA_VIDEO_PROMPT_DIRECTOR_RULES).toContain("【逐镜头时间线】");
-        expect(DRAMA_VIDEO_PROMPT_DIRECTOR_RULES).toContain("起点、动作与触发、可见衔接和终点");
-        expect(DRAMA_VIDEO_PROMPT_DIRECTOR_RULES).toContain("机器可校验字段只允许自然嵌入");
-        expect(DRAMA_VIDEO_PROMPT_DIRECTOR_RULES).toContain("公开 `videoPrompt` 只使用这八个布局字段");
+        expect(DRAMA_VIDEO_PROMPT_DIRECTOR_RULES).toContain("小墨 6.3 简镜头卡");
+        expect(DRAMA_VIDEO_PROMPT_DIRECTOR_RULES).toContain("场景、角色服装、光源和参考图职责");
+        expect(DRAMA_VIDEO_PROMPT_DIRECTOR_RULES).toContain("内部仍严格生成并校验 `framePlan.frames[]`");
+        expect(DRAMA_VIDEO_PROMPT_DIRECTOR_RULES).not.toContain("公开 `videoPrompt` 只使用这八个布局字段");
         expect(DRAMA_VIDEO_PROMPT_DIRECTOR_RULES).not.toContain("阶段节拍：只有多事件");
-        expect(DRAMA_VIDEO_PROMPT_DIRECTOR_RULES).toContain("每个非空字段必须独立一行");
         expect(DRAMA_VIDEO_PROMPT_DIRECTOR_RULES).toContain("不要只做同义改写");
         expect(DRAMA_VIDEO_PROMPT_DIRECTOR_RULES).toContain("支撑/接触/受力");
     });
