@@ -293,6 +293,7 @@ export function generateDramaVideoPrompt(input: { project: DramaProject; episode
             requestId: input.requestId || crypto.randomUUID(),
             summary: input.project.summary,
             style: input.project.style,
+            ratio: input.project.ratio,
             visualContract: resolveDramaGlobalVisualContract(input.project),
             episode,
             characters: input.project.characters.filter((item) => characterIds.has(item.id)),

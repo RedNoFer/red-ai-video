@@ -123,6 +123,7 @@ export function buildDramaProductionRun(project: DramaProject, episode: DramaEpi
                 referenceAssetIds: assetIds,
                 referenceImageUrls: orderedFrames.map((frame) => frame.mediaUrl!),
                 referenceImageRemoteUrls: orderedFrames.map((frame) => frame.remoteUrl),
+                referenceManifest: shot.framePlan?.referenceManifest,
                 referenceBindingsSnapshot: buildVideoReferenceBindings(project, shot, orderedFrames, assetIds, incoming?.fromShotId, referenceMode),
                 referenceMode,
             });
@@ -210,6 +211,7 @@ export function refreshDramaVideoStepReferences(project: DramaProject, episode: 
         prompt: basePrompt,
         referenceImageUrls: orderedFrames.map((frame) => frame.mediaUrl),
         referenceImageRemoteUrls: orderedFrames.map((frame) => frame.remoteUrl),
+        referenceManifest: shot.framePlan?.referenceManifest,
         referenceBindingsSnapshot: buildVideoReferenceBindings(project, shot, orderedFrames, step.referenceAssetIds || [], incoming?.fromShotId, referenceMode),
         referenceMode,
     };
@@ -219,7 +221,7 @@ function episodeShot(project: DramaProject, episode: DramaEpisode, shotId: strin
     return episode.shots.find((shot) => shot.id === shotId) || project.episodes.flatMap((item) => item.shots).find((shot) => shot.id === shotId);
 }
 
-function buildVideoReferenceBindings(
+export function buildVideoReferenceBindings(
     project: DramaProject,
     shot: DramaEpisode["shots"][number],
     frames: Array<{ mediaUrl: string; remoteUrl?: string; frameId?: string; sequenceIndex?: number }>,
@@ -236,14 +238,12 @@ function buildVideoReferenceBindings(
         if (shot.characterIds.includes(assetId)) return "character_anchor";
         return "prop_anchor";
     };
-    const purposeFor = (assetId: string) => manifest.find((item) => item.assetId === assetId)?.purpose || "项目资产基准图";
     const hasPreviousTail = Boolean(previousShotId && frames[0] && !frames[0].frameId);
-    const bindings: DramaVideoReferenceBinding[] = frames.map((frame, index) => {
+    const frameCandidates: Array<Omit<DramaVideoReferenceBinding, "alias">> = frames.map((frame, index) => {
         const isPreviousTail = index === 0 && Boolean(previousShotId) && !frame.frameId;
-        const role = isPreviousTail ? "first_frame" : referenceMode === "all_frames" ? "keyframe" : "reference";
+        const role: DramaVideoReferenceBinding["role"] = isPreviousTail ? "first_frame" : referenceMode === "all_frames" ? "keyframe" : "reference";
         const assignedKeyframeIndex = role === "keyframe" ? index + 1 - (hasPreviousTail ? 1 : 0) : undefined;
         return {
-            alias: `@图片${index + 1}`,
             role,
             purpose: isPreviousTail ? "上一镜当前视频版本的已人工验收实际尾帧" : referenceMode === "all_frames" ? `顺序帧 ${assignedKeyframeIndex}` : "可选细节参考图",
             shotId: isPreviousTail ? previousShotId : shot.id,
@@ -253,7 +253,7 @@ function buildVideoReferenceBindings(
             ...(assignedKeyframeIndex ? { keyframeIndex: assignedKeyframeIndex } : {}),
         };
     });
-    const assetBindings: DramaVideoReferenceBinding[] = [];
+    const assetCandidates: Array<Omit<DramaVideoReferenceBinding, "alias"> & { assetId: string }> = [];
     for (const assetId of assetIds) {
         const asset = [...project.characters, ...project.scenes, ...project.props, ...project.clues].find((item) => item.id === assetId);
         const source = project.sourceAssets?.find((item) => item.id === assetId && item.type === "image");
@@ -269,9 +269,60 @@ function buildVideoReferenceBindings(
             : source?.serverUrl || source?.remoteUrl
               ? { url: source.serverUrl || source.remoteUrl!, remoteUrl: source.remoteUrl }
               : undefined;
-        if (reference?.url) assetBindings.push({ alias: `@图片${bindings.length + assetBindings.length + 1}`, role: roleFor(assetId), purpose: purposeFor(assetId), sourceId: assetId, url: reference.url, remoteUrl: reference.remoteUrl });
+        if (reference?.url) assetCandidates.push({ assetId, role: roleFor(assetId), purpose: manifest.find((item) => item.assetId === assetId)?.purpose || "项目资产基准图", sourceId: assetId, url: reference.url, remoteUrl: reference.remoteUrl });
     }
-    return [...bindings, ...assetBindings];
+    if (!manifest.length) {
+        return [...frameCandidates.map((candidate, index) => ({ alias: `@图片${index + 1}`, ...candidate })), ...assetCandidates.map((candidate, index) => ({ alias: `@图片${frameCandidates.length + index + 1}`, ...candidate }))];
+    }
+
+    const usedFrames = new Set<number>();
+    const usedAssets = new Set<string>();
+    let keyframeIndex = 0;
+    const bindings: DramaVideoReferenceBinding[] = [];
+    for (const item of manifest) {
+        let candidate: Omit<DramaVideoReferenceBinding, "alias"> | undefined;
+        let frameIndex = -1;
+        if (item.role === "previous_actual_tail") {
+            frameIndex = frameCandidates.findIndex((frame, index) => index === 0 && frame.role === "first_frame");
+        } else if (item.frameEvidenceId) {
+            frameIndex = frameCandidates.findIndex((frame) => frame.frameId === item.frameEvidenceId);
+        } else if (item.assetId) {
+            const asset = assetCandidates.find((entry) => entry.assetId === item.assetId && !usedAssets.has(entry.assetId));
+            if (asset) {
+                candidate = asset;
+                usedAssets.add(asset.assetId);
+            }
+        } else if (item.role === "action_keyframe" || item.role === "composition_keyframe") {
+            frameIndex = frameCandidates.findIndex((_, index) => !usedFrames.has(index));
+        }
+        if (frameIndex >= 0) {
+            if (usedFrames.has(frameIndex)) throw new Error(`镜头 ${shot.code || shot.title} 的 referenceManifest 重复绑定帧 ${item.frameEvidenceId || frameIndex + 1}`);
+            usedFrames.add(frameIndex);
+            candidate = frameCandidates[frameIndex];
+        }
+        if (!candidate) throw new Error(`镜头 ${shot.code || shot.title} 的 referenceManifest ${item.alias} 无法解析到实际帧或资产，已阻止供应商请求`);
+        const role: DramaVideoReferenceBinding["role"] = item.role === "previous_actual_tail" ? "first_frame" : item.role === "action_keyframe" || item.role === "composition_keyframe" ? "keyframe" : item.role;
+        if (role === "keyframe") keyframeIndex += 1;
+        bindings.push({ alias: item.alias, ...candidate, role, purpose: item.purpose || candidate.purpose, ...(role === "keyframe" ? { keyframeIndex } : {}) });
+    }
+    const aliasesUsed = new Set(bindings.map((binding) => binding.alias));
+    let nextAliasIndex = 1;
+    const nextGeneratedAlias = () => {
+        while (aliasesUsed.has(`@图片${nextAliasIndex}`)) nextAliasIndex += 1;
+        const alias = `@图片${nextAliasIndex}`;
+        aliasesUsed.add(alias);
+        nextAliasIndex += 1;
+        return alias;
+    };
+    for (const [index, candidate] of frameCandidates.entries()) {
+        if (usedFrames.has(index)) continue;
+        bindings.push({ alias: nextGeneratedAlias(), ...candidate });
+    }
+    for (const candidate of assetCandidates) {
+        if (usedAssets.has(candidate.assetId)) continue;
+        bindings.push({ alias: nextGeneratedAlias(), ...candidate });
+    }
+    return bindings;
 }
 
 function assetReference(asset: NonNullable<DramaProject["characters"]>[number], scene = false) {

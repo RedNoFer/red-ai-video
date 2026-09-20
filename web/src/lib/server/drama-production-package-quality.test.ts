@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { DramaAuthoringSourceSnapshot, DramaProductionPackageV1 } from "@/lib/drama-project-contract";
 import { DRAMA_PACKAGE_CONTRACT } from "@/lib/server/drama-production-package-contract";
-import { validateDramaAuthoringQuality } from "@/lib/server/drama-production-package-quality";
+import { dramaAuthoringQualityGateCodes, validateDramaAuthoringQuality } from "@/lib/server/drama-production-package-quality";
 
 const source = (textContent: string): DramaAuthoringSourceSnapshot => ({ alias: "@TXT", role: "story-source", type: "text", title: "3.txt", contentHash: "a".repeat(64), textContent });
 
@@ -85,6 +85,24 @@ function blockers(report: ReturnType<typeof validateDramaAuthoringQuality>, code
 }
 
 describe("drama authoring quality gates", () => {
+    it("emits every versioned hard-gate code before a package can be imported", () => {
+        const value = packageValue();
+        value.authoring = {
+            source: "executeDramaScriptRun",
+            generatedAt: "2026-09-20T00:00:00.000Z",
+            directorSkill: { id: "drama-video-director", version: "test", contentHash: "a".repeat(64) },
+            seedanceSkill: { id: "seedance-25-director", version: "test", contentHash: "b".repeat(64) },
+            materials: [],
+        };
+        const report = validateDramaAuthoringQuality({ package: value, sources: [] });
+        expect(report.checks.map((check) => check.code)).toEqual(expect.arrayContaining(dramaAuthoringQualityGateCodes()));
+    });
+
+    it("blocks an unqualified blur or missing clarity anchor instead of leaving VISUAL_CLARITY as a warning", () => {
+        const report = validateDramaAuthoringQuality({ package: packageValue({ videoPrompt: "镜头模式：连续镜头\n单一主运镜：固定机位。\n时间段动作：0-30秒，人物虚焦。" }), sources: [] });
+        expect(blockers(report, "VISUAL_CLARITY")).not.toHaveLength(0);
+    });
+
     it("blocks a short summary instead of treating it as a literary script", () => {
         const report = validateDramaAuthoringQuality({ package: packageValue({ script: "听着退婚要求，萧炎最终质问萧家颜面。" }), sources: [source("第3章：纳兰嫣然来到萧家议事大厅，提出退婚。")], targetNarrativeChapter: 3 });
         expect(report.status).toBe("blocked");

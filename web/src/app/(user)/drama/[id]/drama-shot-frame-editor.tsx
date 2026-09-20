@@ -1158,7 +1158,7 @@ export function DramaShotFrameEditor({ project, episodeId, shot }: { project: Dr
                             <Input.TextArea
                                 value={promptCorrectionDirection}
                                 onChange={(event) => setPromptCorrectionDirection(event.target.value)}
-                                placeholder="例如：增加场外旁听 NPC，改成反打近景，并明确人物眉眼、手部受力和茶盏水面变化"
+                                placeholder="例如：增加场外背景 NPC，改成反打近景，并明确人物眉眼、手部受力和关键道具或液面变化"
                                 autoSize={{ minRows: 2, maxRows: 4 }}
                                 aria-label="本次整改方向"
                                 className="text-xs leading-5"

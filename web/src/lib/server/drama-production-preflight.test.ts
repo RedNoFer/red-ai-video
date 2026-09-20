@@ -5,6 +5,12 @@ import { defaultDramaProductionPlan } from "@/lib/drama-production-plan";
 import { preflightDramaProduction } from "@/lib/server/drama-production-preflight";
 
 describe("drama production preflight", () => {
+    it("accepts either supported production aspect ratio without applying the 9:16 contract to 16:9", () => {
+        const project = fixture();
+        project.ratio = "16:9";
+        expect(preflightDramaProduction(project, project.episodes[0]).issues).not.toEqual(expect.arrayContaining([expect.objectContaining({ code: "RATIO" })]));
+    });
+
     it("blocks paid production before canon assets and executable continuity are ready", () => {
         const project = fixture();
         const result = preflightDramaProduction(project, project.episodes[0]);

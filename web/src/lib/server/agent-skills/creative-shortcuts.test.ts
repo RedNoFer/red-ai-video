@@ -13,8 +13,6 @@ import {
     IMAGE_MOTION_SKILL,
     SEEDANCE_DIRECTOR_SKILL,
     SEEDANCE_25_DIRECTOR_SKILL,
-    SEEDANCE_VIDEO_PROMPT_LAYOUT,
-    VIDEO_PROMPT_DIRECTOR_DEFAULTS,
 } from "./creative-shortcuts";
 
 describe("creative shortcut skills", () => {
@@ -87,24 +85,16 @@ describe("creative shortcut skills", () => {
         expect(DRAMA_PLANNING_SKILL.instructions).not.toContain("没有普通镜头的默认帧数");
     });
 
-    it("keeps the shared video prompt layout", () => {
-        expect(SEEDANCE_VIDEO_PROMPT_LAYOUT).toContain("【重要剪辑指令】");
-        expect(SEEDANCE_VIDEO_PROMPT_LAYOUT).toContain("【逐镜头时间线】");
-        expect(SEEDANCE_VIDEO_PROMPT_LAYOUT).toContain("镜头1");
-        expect(SEEDANCE_VIDEO_PROMPT_LAYOUT).toContain("起点、动作与触发、可见衔接和终点");
-        expect(SEEDANCE_VIDEO_PROMPT_LAYOUT).toContain("机器字段只是职责映射");
-        expect(SEEDANCE_VIDEO_PROMPT_LAYOUT).toContain("公开 videoPrompt 只使用本布局字段");
-        expect(SEEDANCE_VIDEO_PROMPT_LAYOUT).not.toContain("阶段节拍：只有多事件");
-        expect(SEEDANCE_VIDEO_PROMPT_LAYOUT).toContain("每个非空字段必须独立一行");
-    });
-
-    it("defaults standalone video optimization to a director-quality pass", () => {
-        expect(VIDEO_PROMPT_DIRECTOR_DEFAULTS).toContain("不要只做同义改写");
-        expect(VIDEO_PROMPT_DIRECTOR_DEFAULTS).toContain("对白、多个动作节点、人物反应或信息转折");
-        expect(VIDEO_PROMPT_DIRECTOR_DEFAULTS).toContain("镜头模式：内部切镜（N次）");
-        expect(VIDEO_PROMPT_DIRECTOR_DEFAULTS).toContain("切后主运镜");
-        expect(VIDEO_PROMPT_DIRECTOR_DEFAULTS).toContain("起点 → 动作与触发 → 可见衔接 → 终点");
-        expect(VIDEO_PROMPT_DIRECTOR_DEFAULTS).toContain("支撑/接触/受力");
+    it("uses the canonical video surface for every video prompt authoring path", () => {
+        expect(DRAMA_VIDEO_PROMPT_DIRECTOR_RULES).toContain("9:16");
+        expect(DRAMA_VIDEO_PROMPT_DIRECTOR_RULES).toContain("【逐镜头时间线】");
+        expect(DRAMA_VIDEO_PROMPT_DIRECTOR_RULES).toContain("起点、动作与触发、可见衔接和终点");
+        expect(DRAMA_VIDEO_PROMPT_DIRECTOR_RULES).toContain("机器可校验字段只允许自然嵌入");
+        expect(DRAMA_VIDEO_PROMPT_DIRECTOR_RULES).toContain("公开 `videoPrompt` 只使用这八个布局字段");
+        expect(DRAMA_VIDEO_PROMPT_DIRECTOR_RULES).not.toContain("阶段节拍：只有多事件");
+        expect(DRAMA_VIDEO_PROMPT_DIRECTOR_RULES).toContain("每个非空字段必须独立一行");
+        expect(DRAMA_VIDEO_PROMPT_DIRECTOR_RULES).toContain("不要只做同义改写");
+        expect(DRAMA_VIDEO_PROMPT_DIRECTOR_RULES).toContain("支撑/接触/受力");
     });
 
     it("keeps the production package on the same static source", () => {

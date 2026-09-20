@@ -584,7 +584,7 @@ function normalizeAssets(value: unknown, kind: "character" | "scene" | "prop" = 
         const record = object(item);
         const name = text(record.name);
         const key = name.toLocaleLowerCase();
-        if (!name || seen.has(key) || (kind === "character" && /(木匣|断剑|护符|探测器|短刃|银戒|锤柄|铜镜|剑鞘|马车|声音)/u.test(name))) return [];
+        if (!name || seen.has(key)) return [];
         seen.add(key);
         return name
             ? [

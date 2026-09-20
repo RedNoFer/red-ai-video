@@ -17,7 +17,7 @@ import {
 } from "@/lib/drama-character-rules";
 import { DRAMA_CHARACTER_TURNAROUND_LABEL, DRAMA_CHARACTER_TURNAROUND_LAYOUT, DRAMA_CHARACTER_TURNAROUND_SIZE } from "@/lib/drama-prompt-compiler";
 import type { CreativeGenerationMode } from "@/lib/creative-runtime-contract";
-import { DRAMA_STATIC_FRAME_DIRECTOR_RULES, SEEDANCE_VIDEO_PROMPT_LAYOUT, VIDEO_PROMPT_DIRECTOR_DEFAULTS } from "@/lib/server/agent-skills/creative-shortcuts";
+import { DRAMA_STATIC_FRAME_DIRECTOR_RULES, DRAMA_VIDEO_PROMPT_DIRECTOR_RULES } from "@/lib/server/agent-skills/creative-shortcuts";
 import { inferSeedance25VideoDuration, resolveSeedance25VideoPromptReferences } from "@/lib/server/agent-skills/seedance-25";
 import { toSafeGenerationErrorMessage } from "@/lib/server/generation-errors";
 import { resolveLogicalModelCandidates } from "@/lib/server/logical-model-router";
@@ -121,7 +121,7 @@ function promptOptimizationInstruction(mode: PromptOptimizationMode, prompt = ""
     if (mode === "video") {
         const seedance25 = resolveSeedance25VideoPromptReferences({ prompt, durationSeconds: inferSeedance25VideoDuration(prompt) });
         const ratio = prompt.match(/(?:画幅|比例|aspect ratio|ratio)[：:= ]*([^，,；;\s]+)/iu)?.[1] || prompt.match(/\b(?:9:16|16:9|1:1)\b/u)?.[0];
-        return `你是 VOZEB PRO 视频提示词编辑器。把用户原文改写为可直接发送的中文视频提示词。${VIDEO_PROMPT_DIRECTOR_DEFAULTS}${SEEDANCE_VIDEO_PROMPT_LAYOUT}${formatDramaCompositionContract(ratio)}${seedance25.instructions ? `\n本次时长与供应商路由补充（只用于当前编辑，不输出模式名）：${seedance25.instructions}` : ""}${globalVisualRule}每个时间段都必须让姿态、表情/视线、呼吸、手部/道具或环境产生可验证变化；不得用“保持状态、情绪加剧、自然反应”等空泛词替代可见结果。不得输出 A线、B线、主线、副线、钩子等叙事规划标签，必须改写为对应的可见动作、状态或触发。保留用户的主体、人名、品牌、比例、时长、参考素材和否定要求，不新增剧情事实；只返回优化后的公开提示词，不解释修改过程，不输出内部规划、模型选择理由或思维链。`;
+        return `你是 VOZEB PRO 视频提示词编辑器。把用户原文改写为可直接发送的中文视频提示词。本次视频提示词优化只执行 canonical drama-video-director Skill 的视频适配器，不得使用另一套旧版视频导演模板：\n${DRAMA_VIDEO_PROMPT_DIRECTOR_RULES}\n${formatDramaCompositionContract(ratio)}${seedance25.instructions ? `\n本次时长与供应商路由补充（只用于当前编辑，不输出模式名）：${seedance25.instructions}` : ""}${globalVisualRule}每个时间段都必须让姿态、表情/视线、呼吸、手部/道具或环境产生可验证变化；不得用“保持状态、情绪加剧、自然反应”等空泛词替代可见结果。不得输出 A线、B线、主线、副线、钩子等叙事规划标签，必须改写为对应的可见动作、状态或触发。保留用户的主体、人名、品牌、比例、时长、参考素材和否定要求，不新增剧情事实；只返回优化后的公开提示词，不解释修改过程，不输出内部规划、模型选择理由或思维链。`;
     }
     const target = mode === "audio" ? "音频" : "创作";
     return `你是 VOZEB PRO 提示词编辑器。把用户原文改写为清晰、紧凑、可直接发送的中文${target}提示词。保留主体、人名、品牌、数量、尺寸、比例、时长、文字内容、参考素材要求和否定要求；不得改变用户意图，不得虚构事实或添加用户没有要求的复杂设定。只返回优化后的公开提示词，不解释修改过程，不输出内部规划、模型选择理由或思维链。`;

@@ -1247,7 +1247,7 @@ const DRAMA_AGENT_STAGE_GUIDES: Record<DramaProjectStage, { label: string; promp
 };
 
 const visualAssetKinds: Array<{ value: VisualAssetKind; label: string; placeholder: string }> = [
-    { value: "characters", label: "角色", placeholder: "女主角" },
+    { value: "characters", label: "角色", placeholder: "具体角色名" },
     { value: "scenes", label: "场景", placeholder: "医院走廊" },
     { value: "props", label: "道具", placeholder: "旧手机" },
     { value: "clues", label: "线索", placeholder: "染血的手帕" },

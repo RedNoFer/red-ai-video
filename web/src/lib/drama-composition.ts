@@ -23,7 +23,7 @@ export function resolveDramaCompositionProfile(ratio: string | undefined): Drama
         return {
             aspectRatio: normalized,
             orientation: "landscape",
-            subjectPriority: "优先长桌、通道、三人权力关系和群像定场；主次人物保持清晰层级",
+            subjectPriority: "优先横向空间关系、多人关系和群像定场；主次人物保持清晰层级",
             framingStrategy: "使用横向关系、视线链、柱列递退和真实空间尺度，不把画面旋转或裁切成竖屏",
             movementStrategy: "横移、摇镜或横向跟拍只在空间关系和视线转移需要时使用",
             clarityContract: "三位主角、重要道具和空间锚点清楚可辨；背景人物不以无意义超广角缩小",

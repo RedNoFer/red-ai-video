@@ -180,7 +180,7 @@ export function DramaStoryboardShotCard({
                                     value={formattedImagePrompt}
                                     onChange={(event) => updateShot(project.id, episodeId, shot.id, { imagePrompt: event.target.value })}
                                     autoSize={{ minRows: 2, maxRows: 5 }}
-                                    placeholder="例如：女主站在雨夜天台，中景，侧逆光，压抑冷色调"
+                                    placeholder="例如：角色A站在当前场景的高处或开阔区域，中景，侧逆光，压抑冷色调"
                                 />
                             </label>
                             <label className="block space-y-1.5">
@@ -193,7 +193,7 @@ export function DramaStoryboardShotCard({
                                     value={shot.videoPrompt}
                                     onChange={(event) => updateShot(project.id, episodeId, shot.id, { videoPrompt: event.target.value })}
                                     autoSize={{ minRows: 2, maxRows: 5 }}
-                                    placeholder="例如：女主缓慢回头，雨水掠过脸侧，最后看向门口"
+                                    placeholder="例如：角色A缓慢回头，环境中的水滴掠过脸侧，最后看向入口方向"
                                 />
                             </label>
                             <label className="block space-y-1.5">

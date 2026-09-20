@@ -1148,7 +1148,7 @@ function normalizePackageShot(value: unknown, index: number, options: DramaProdu
         if (visualErrors.length) throw new DramaProductionPackageError(`镜头 ${text(shot.code) || index + 1} 的逐帧画面无效：${visualErrors.join("；")}`);
         if (options.validateVideoPrompt) {
             const npcPolicy = locationCode ? options.backgroundNpcPolicyByLocationCode?.get(locationCode) : undefined;
-            const npcDeclaredInFramePlan = frames.some((frame) => /NPC群像|旁听者|旁观者|人群/u.test(`${frame.actionPrompt}\n${frame.transitionPrompt}\n${frame.endPrompt}`));
+            const npcDeclaredInFramePlan = frames.some((frame) => /NPC群像|背景角色|配角|旁观者|人群/u.test(`${frame.actionPrompt}\n${frame.transitionPrompt}\n${frame.endPrompt}`));
             validateStrictPackageVideoPrompt(text(shot.videoPrompt), frames, text(shot.code) || String(index + 1), {
                 requiresBackgroundNpc: npcPolicy?.mode === "required" || (options.requireContentQuality === true && npcDeclaredInFramePlan),
                 backgroundNpcCountRange: npcPolicy?.countRange,
@@ -1411,8 +1411,8 @@ function normalizeReferenceCount(value: unknown) {
 
 function defaultShotSize(description: string, title: string) {
     const value = `${title}\n${description}`;
-    if (/(眼神|嘴角|眉|手指|戒指|护符|剑刃|特写|近距离)/u.test(value)) return "近景或特写";
-    if (/(抵达|城门|远处|全貌|街道|塔楼|广场|全景)/u.test(value)) return "全景或远景";
+    if (/(眼神|嘴角|眉|手指|手部|握住|扣住|持握|手持|局部|细节|特写|近距离)/u.test(value)) return "近景或特写";
+    if (/(抵达|远处|空间全貌|环境全貌|大范围|建立镜头|群像|全景|远景)/u.test(value)) return "全景或远景";
     return "中景";
 }
 

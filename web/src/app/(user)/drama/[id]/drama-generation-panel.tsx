@@ -39,6 +39,16 @@ import { markDramaCanvasSynced } from "../../canvas/[id]/canvas-drama-navigation
 import type { DramaVideoPromptAnalysis, DramaVideoReferenceMode } from "@/lib/drama-project-contract";
 
 const actionButtonClass = "!h-9 !px-3 [&>span:last-child]:whitespace-nowrap";
+const DRAMA_VIDEO_PROMPT_SECTIONS = ["重要剪辑指令", "素材绑定", "故事意图", "故事含义", "空间与连续性", "灯光与画面", "摄影总则", "逐镜头时间线", "硬性禁止"] as const;
+
+function formatDramaVideoPromptForDisplay(value: string) {
+    const sectionPattern = DRAMA_VIDEO_PROMPT_SECTIONS.join("|");
+    return formatPromptFieldLines(value, "video")
+        .replace(new RegExp(`[ \\t]*(?=【(?:${sectionPattern})】)`, "gu"), "\n")
+        .replace(/[ \t]*(?=镜头\d+[，,:：]\s*(?:时间|起点|终点|画面))/gu, "\n")
+        .replace(/[ \t]*\n[ \t]*/gu, "\n")
+        .trim();
+}
 
 export function DramaGenerationPanel({
     project,
@@ -409,7 +419,7 @@ export function DramaGenerationPanel({
         };
         modal.confirm({
             title: `确认生成 ${selectedShots.length} 个镜头`,
-            width: 760,
+            width: "min(760px, calc(100vw - 24px))",
             content: <ProductionPromptPreview project={project} rows={promptRows} initialSelections={selectionState.selections} initialReferenceModes={selectionState.referenceModes} onChange={(value) => Object.assign(selectionState, value)} />,
             okText: "确认生成",
             cancelText: "返回修改",
@@ -1243,9 +1253,6 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
     const [optimizedFramePlan, setOptimizedFramePlan] = useState<DramaVideoPromptAnalysis["shots"][number]["framePlan"]>();
     const [optimizingVideoPrompt, setOptimizingVideoPrompt] = useState(false);
     const [savingVideoPrompt, setSavingVideoPrompt] = useState(false);
-    const promptSnapshot = productionRun?.preflightSnapshot?.prompts?.[shot.id];
-    const sourceImagePrompt = promptSnapshot?.sourceImagePrompt || shot.imagePrompt;
-    const sourceVideoPrompt = promptSnapshot?.sourceVideoPrompt || shot.videoPrompt;
     const assets = shotAssetLabels(project, shot);
     const referenceAssets = shotReferenceAssets(project, shot);
     const videoStep = productionRun?.steps.filter((step) => step.shotId === shot.id && step.type === "video").sort((left, right) => (right.clipIndex || 0) - (left.clipIndex || 0))[0];
@@ -1332,7 +1339,6 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
         ["镜头事实", shot.shotBoundary || shot.sourceText],
         ["对白/旁白", [shot.dialogue, shot.narration].filter(Boolean).join("\n")],
         ["原文依据", shot.sourceText],
-        ["用户/剧本原始提示词（仅记录）", [sourceImagePrompt ? `画面：${sourceImagePrompt}` : "", sourceVideoPrompt ? `动态：${sourceVideoPrompt}` : ""].filter(Boolean).join("\n")],
         ["实际引用资产", assets.length ? assets.join("、") : "无显式资产引用"],
         ["连续性来源", continuitySource ? `继承 ${continuitySource.title || `镜头 ${continuitySource.order}`} 的实际尾帧${continuityStartEvidence(continuitySource) ? "，已人工验收" : "，等待上镜尾帧验收"}` : "未继承上一镜实际尾帧"],
         ["模型与方式", `${modelText}；${dramaShotVideoMode(project, shot) === "storyboard" ? "分镜驱动" : "直接生成"}；${shot.storyboardFrameMode === "first_last" ? "首尾帧，起止约束不代表质量保证" : "单帧"}`],
@@ -1464,7 +1470,7 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0">
                         <div className="font-medium text-foreground">视频执行提示词（当前标准）</div>
-                        <p className="mt-1 text-[11px] text-muted-foreground">上方原始提示词只用于追溯；生成与重试以此执行版为准。</p>
+                        <p className="mt-1 text-[11px] text-muted-foreground">生成与重试以此执行版为准。</p>
                     </div>
                     <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5 sm:ml-3">
                         <Button size="small" className="shrink-0" icon={<Sparkles className="size-3.5" />} loading={optimizingVideoPrompt} disabled={!videoPromptDraft.trim() || optimizingVideoPrompt} onClick={() => void optimizeVideoPrompt()}>
@@ -1586,7 +1592,7 @@ function ProductionPromptPreview({
                             </Checkbox>
                             <span className="text-muted-foreground">{allFrames ? "要求完整、可用并按时间顺序的计划帧" : "关键帧只是可选细节参考，不参与时间轴门禁"}</span>
                         </div>
-                        <p className="mt-2 whitespace-pre-wrap break-words leading-6 text-muted-foreground">{prompt}</p>
+                        <p className="mt-2 whitespace-pre-wrap break-words leading-6 text-muted-foreground">{formatDramaVideoPromptForDisplay(prompt)}</p>
                         {references.length ? (
                             <div className="mt-3 border-t border-border/70 pt-3" data-drama-prompt-reference-gallery>
                                 <div className="flex items-center justify-between gap-2 text-xs">

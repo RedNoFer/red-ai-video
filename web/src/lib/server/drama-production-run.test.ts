@@ -320,10 +320,10 @@ describe("drama production run planning", () => {
         ]);
         expect(run.steps.find((step) => step.type === "video")?.referenceAssetIds).toEqual(["source-two", "source-one"]);
         expect(run.steps.find((step) => step.type === "video")?.referenceBindingsSnapshot).toMatchObject([
-            { alias: "@图片1", role: "keyframe", frameId: "f1" },
-            { alias: "@图片2", role: "keyframe", frameId: "f2" },
-            { alias: "@图片3", role: "scene_anchor", sourceId: "source-two", url: "/api/reference-assets/two.png" },
-            { alias: "@图片4", role: "character_anchor", sourceId: "source-one", url: "/api/reference-assets/one.png" },
+            { alias: "@图片1", role: "scene_anchor", sourceId: "source-two", url: "/api/reference-assets/two.png" },
+            { alias: "@图片2", role: "character_anchor", sourceId: "source-one", url: "/api/reference-assets/one.png" },
+            { alias: "@图片3", role: "keyframe", frameId: "f1" },
+            { alias: "@图片4", role: "keyframe", frameId: "f2" },
         ]);
     });
 

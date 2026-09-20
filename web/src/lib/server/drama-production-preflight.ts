@@ -7,6 +7,7 @@ import { dramaReferenceImageBudget } from "@/lib/drama-production-plan";
 import { dramaShotReferenceSelectionIds, resolveDramaVideoReferenceMode } from "@/lib/drama-video-reference-plan";
 import type { DramaVideoReferenceMode } from "@/lib/drama-project-contract";
 import { validateDramaPerformanceDetail, validateDramaVideoPromptTemplateLayout } from "@/lib/drama-prompt-quality";
+import { validateDramaCharacterWardrobeContinuity, validateDramaCutInformationDiversity, validateDramaPromptComposition, validateDramaReferenceAliasConsistency } from "@/lib/drama-prompt-composition-quality";
 import { auditDramaShotDirectorQuality } from "@/lib/server/agent-skills/drama-video-director";
 
 const blocking = (code: string, message: string, extra: Partial<DramaProductionPreflightIssue> = {}): DramaProductionPreflightIssue => ({ code, severity: "blocking", message, ...extra });
@@ -16,7 +17,7 @@ const warning = (code: string, message: string, extra: Partial<DramaProductionPr
 export function preflightDramaProduction(project: DramaProject, episode: DramaEpisode, shotIds?: string[], referenceSelections?: Record<string, string[]>, referenceModes?: Record<string, DramaVideoReferenceMode>): DramaProductionPreflight {
     const issues: DramaProductionPreflightIssue[] = [];
     const selected = new Set(shotIds?.length ? shotIds : episode.shots.map((shot) => shot.id));
-    if (project.ratio !== "9:16") issues.push(blocking("RATIO", `本集必须使用9:16，当前为${project.ratio}`));
+    if (project.ratio !== "9:16" && project.ratio !== "16:9") issues.push(blocking("RATIO", `本集画幅必须是9:16或16:9，当前为${project.ratio}`));
     if (!project.seriesBible) issues.push(blocking("SERIES_BIBLE", "项目缺少已锁定的系列圣经，不能跨集生产"));
     const plan = project.productionBible?.productionPlan;
     const targetShotDuration = plan?.video.shotDuration;
@@ -135,6 +136,47 @@ function checkShot(
         if (layoutErrors.length) issues.push(blocking("VIDEO_PROMPT_LAYOUT", layoutErrors[0], { shotId: shot.id, correction: "重新优化或生成视频提示词，按八段式公开排版并让每个 framePlan 时间段对应一个镜头段落" }));
         const malformedDialogue = shot.utterances.filter((item) => item.type === "dialogue" && (!item.speaker || !hasQuotedDramaDialogue(videoPrompt || "", item.speaker, item.text)));
         if (malformedDialogue.length) issues.push(blocking("DIALOGUE_PROMPT_FORMAT", `${label}包含未使用中文引号的对白，必须写成“说话人说：“实际台词””`, { shotId: shot.id, correction: "重新生成带实际台词和中文引号的对白表演" }));
+        const shotText = [
+            shot.sourceText,
+            shot.description,
+            shot.dialogue,
+            shot.narration,
+            videoPrompt,
+            shot.imagePrompt,
+            ...shot.framePlan.frames.map((frame) => [frame.startPrompt, frame.actionPrompt, frame.transitionPrompt, frame.endPrompt, frame.imagePrompt].filter(Boolean).join("\n")),
+        ]
+            .filter(Boolean)
+            .join("\n");
+        const subjectNames = project.characters.filter((character) => shot.characterIds.includes(character.id)).map((character) => character.name);
+        const requiredReactionNames = project.characters.filter((character) => shot.characterIds.includes(character.id) && hasCharacterReaction(shotText, character.name)).map((character) => character.name);
+        const compositionErrors = validateDramaPromptComposition({
+            ratio: project.ratio,
+            prompt: videoPrompt || "",
+            frames: shot.framePlan.frames,
+            subjectNames,
+            requiredReactionNames,
+            requiresDetail: /手部|掌根|掌心|指节|桌沿|接触|受力|道具|物证/u.test(shotText),
+            label,
+        });
+        if (compositionErrors.length) {
+            issues.push(blocking("COMPOSITION_CONTRACT", `${label}${compositionErrors.join("；")}`, { shotId: shot.id, correction: "按当前画幅重写每个时间段的主要主体、可见范围、防裁脸和防遮挡安全区" }));
+            const subjectErrors = compositionErrors.filter((error) => /未明确本段主要主体|未在时间段中写出/u.test(error));
+            if (subjectErrors.length) issues.push(blocking("SUBJECT_COVERAGE", `${label}${subjectErrors.join("；")}`, { shotId: shot.id, correction: "为剧情事实中需要反应的角色、NPC或关键动作安排独立可见主体，不能只作为背景描述" }));
+        }
+        const cutErrors = validateDramaCutInformationDiversity({
+            ratio: project.ratio,
+            prompt: videoPrompt || "",
+            frames: shot.framePlan.frames,
+            subjectNames,
+            requiredReactionNames,
+            requiresDetail: /手部|掌根|掌心|指节|桌沿|接触|受力|道具|物证/u.test(shotText),
+            label,
+        });
+        if (cutErrors.length) issues.push(blocking("CUT_INFORMATION_DIVERSITY", `${label}${cutErrors.join("；")}`, { shotId: shot.id, correction: "重新分配硬切信息主体，覆盖剧情实际存在的反应、关系、空间或手部/道具细节" }));
+        const aliasErrors = validateDramaReferenceAliasConsistency({ prompt: videoPrompt || "", manifest: shot.framePlan.referenceManifest, label });
+        if (aliasErrors.length) issues.push(blocking("REFERENCE_ALIAS_CONSISTENCY", aliasErrors.join("；"), { shotId: shot.id, correction: "严格按 referenceManifest 的 alias、职责和顺序提交供应商参考图" }));
+        const wardrobeErrors = validateDramaCharacterWardrobeContinuity({ prompt: videoPrompt || "", characters: project.characters, characterCodes: shot.characterIds, label });
+        if (wardrobeErrors.length) issues.push(blocking("CHARACTER_WARDROBE_CONTINUITY", wardrobeErrors.join("；"), { shotId: shot.id, correction: "补齐正式角色资产的年龄感、脸型/发型、服装和固定配饰锚点" }));
     }
     for (const detail of validateDramaPerformanceDetail(shot.performancePlan, shot.dialoguePerformance, dialogueCount, label)) issues.push(warning("PERFORMANCE_DETAIL", detail, { shotId: shot.id }));
     if (dialogueCount && (!shot.dialoguePerformance?.length || shot.dialoguePerformance.length < dialogueCount)) issues.push(warning("DIALOGUE_PERFORMANCE_MISSING", `${label}对白缺少逐句语气、节奏和面部反应指导`, { shotId: shot.id }));
@@ -288,4 +330,16 @@ function validateReferenceManifest(shot: DramaShot, issues: DramaProductionPrefl
 /** Names inside explicit negative constraints are exclusions, not shot references. */
 function stripNegativeReferenceClauses(value: string) {
     return value.replace(/(?:无|没有|不得|禁止|避免|不出现|不展示|不含|不包含)[^。；，,\n]{0,48}/gu, "").replace(/\b(?:no|without|avoid|exclude)\b[^.;,\n]{0,48}/giu, "");
+}
+
+function hasCharacterReaction(text: string, name: string) {
+    if (!name.trim()) return false;
+    return new RegExp(
+        `${escapeRegExp(name)}[^\\n。；;]{0,40}(?:眉|目光|视线|肩|下颌|嘴角|呼吸|吸气|僵|停住|看向|望向|回望|前倾|收紧|松开|沉默|反应)|(?:眉|目光|视线|肩|下颌|嘴角|呼吸|吸气|僵|停住|看向|望向|回望|前倾|收紧|松开|沉默|反应)[^\\n。；;]{0,40}${escapeRegExp(name)}`,
+        "u",
+    ).test(text);
+}
+
+function escapeRegExp(value: string) {
+    return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }

@@ -220,17 +220,17 @@ describe("prompt optimization service", () => {
         const systemMessage = vi.mocked(requestStructuredText).mock.calls[0]?.[0].messages.find((message) => message.role === "system")?.content || "";
         expect(systemMessage).toContain("不要只做同义改写");
         expect(systemMessage).toContain("默认按多镜头导演方案组织");
-        expect(systemMessage).toContain("镜头事件：时间、类型、触发事件、新机位、切后主运镜、信息目的、承接");
-        expect(systemMessage).toContain("主体动作与反应");
+        expect(systemMessage).toContain("镜头事件：<时间>秒；类型：硬切/匹配切/插入/甩镜");
+        expect(systemMessage).toContain("主体动作与方向");
         expect(systemMessage).toContain("起始可见状态");
         expect(systemMessage).toContain("每个非空字段必须独立一行");
         expect(systemMessage).toContain("每个时间段都必须让姿态");
-        expect(systemMessage).toContain("每个时间段按“起点 → 动作与触发 → 可见衔接 → 终点”组织");
-        expect(systemMessage).toContain("每镜只保留一个主要变化");
+        expect(systemMessage).toContain("每个时间段都写“起点 → 动作与触发 → 可见衔接 → 终点”");
+        expect(systemMessage).toContain("一个时间段只安排一个主动作变化");
         expect(systemMessage).toContain("不得用“保持状态、情绪加剧、自然反应”等空泛词替代可见结果");
         expect(systemMessage).toContain("9:16");
         expect(systemMessage).toContain("上下纵深");
-        expect(systemMessage).toContain("模式：30 秒精确时间轴");
+        expect(systemMessage).toContain("30 秒高密度硬切");
     });
 
     it("does not rewrite narrative labels returned by the Agent", async () => {

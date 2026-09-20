@@ -14,14 +14,14 @@ export const DRAMA_ASSET_DEFINITIONS: Record<
         title: "角色",
         label: "人物",
         description: "固定人物外貌、造型、配色与声音，供所有镜头稳定引用。",
-        placeholder: "例如：女主角林夏",
+        placeholder: "例如：角色A或正式角色名",
         profileLabels: ["固定外貌", "服装与造型", "标志色", "一致性规则"],
     },
     scenes: {
         title: "场景",
         label: "地点",
         description: "记录空间结构、陈设、材质和环境色，保证跨镜头空间连续。",
-        placeholder: "例如：旧城区诊所",
+        placeholder: "例如：正式场景名",
         profileLabels: ["空间结构", "陈设与材质", "环境色", "固定空间规则"],
     },
     props: {

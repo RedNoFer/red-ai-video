@@ -1,6 +1,7 @@
 import { resolveDramaShotDuration } from "@/lib/server/drama-shot-config";
 import { dramaFrameVisualSignature } from "@/lib/drama-frame-sequence";
 import { dramaDialogueFragmentSequenceError, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
+import { inferDramaPromptSubjects, validateDramaCharacterWardrobeContinuity, validateDramaCutInformationDiversity, validateDramaPromptComposition, validateDramaReferenceAliasConsistency } from "@/lib/drama-prompt-composition-quality";
 import { dramaTimeRangePattern, extractDramaVideoPromptSection, hasConcreteDramaCameraDirection, isGenericDramaDetail, validateDramaCameraPlan, validateDramaVideoPromptTemplateLayout, validateDramaVideoSegmentDetail } from "@/lib/drama-prompt-quality";
 import { dramaFrameDialogueTimingReminder } from "@/lib/drama-dialogue-timing";
 
@@ -22,6 +23,8 @@ export type DramaAnalyzeBody = {
     referenceMaterials?: unknown;
     optimizationIssues?: unknown;
     visualContract?: unknown;
+    ratio?: unknown;
+    project?: unknown;
 };
 
 export function dramaAnalysisText(value: unknown) {
@@ -80,7 +83,12 @@ export function normalizeDramaVisualInput(body: DramaAnalyzeBody) {
     return {
         shotIds: shots.map((shot) => shot.id),
         payload: {
-            project: { summary: dramaAnalysisText(body.summary), style: dramaAnalysisText(body.style), visualContract: normalizeVisualContract(body.visualContract) },
+            project: {
+                summary: dramaAnalysisText(body.summary),
+                style: dramaAnalysisText(body.style),
+                ratio: dramaAnalysisText(object(body.project).ratio) || dramaAnalysisText(body.ratio) || "9:16",
+                visualContract: normalizeVisualContract(body.visualContract),
+            },
             episode: object(body.episode),
             assets: {
                 characters: normalizeVisualAssets(body.characters),
@@ -203,9 +211,9 @@ export function validateDramaVideoPromptReferenceBindings(prompt: string, refere
 export function validateDramaVideoPromptOutput(
     value: unknown,
     shotIds: string[],
-    sourceShots: ReadonlyArray<{ id: string; framePlan?: unknown; utterances?: readonly DramaDialogueTimingInput[] }>,
+    sourceShots: ReadonlyArray<{ id: string; framePlan?: unknown; utterances?: readonly DramaDialogueTimingInput[]; characterIds?: readonly string[] }>,
     references: unknown,
-    options: { requireCameraPlan?: boolean; requireTemplateLayout?: boolean } = {},
+    options: { requireCameraPlan?: boolean; requireTemplateLayout?: boolean; ratio?: string; characters?: readonly { id?: string; code?: string; name: string; profile?: { visualIdentity?: string; styling?: string; consistencyRules?: string } }[] } = {},
 ) {
     const output = object(value);
     const outputShots = array(output.shots).map(object);
@@ -228,6 +236,8 @@ export function validateDramaVideoPromptOutput(
         if (/(?:\n|^)\s*(?:全局设定|起始可见状态|视觉风格与光色|连续性锁)\s*[：:]\s*(?:无|暂无|保持不变|同上|略)\s*$/mu.test(prompt)) return `镜头 ${shotId} 的公开视频提示词包含空泛全局或连续性占位，请按当前镜头事实重新生成`;
         const referenceError = validateDramaVideoPromptReferenceBindings(prompt, references);
         if (referenceError) return `镜头 ${shotId}：${referenceError}`;
+        const sharedReferenceError = validateDramaReferenceAliasConsistency({ prompt, references: array(references).map((reference) => object(reference)), label: `镜头 ${shotId}` });
+        if (sharedReferenceError.length) return sharedReferenceError.join("；");
         const expectedFrames = array(sourcePlans.get(shotId)?.frames);
         const sourceShot = sourceShots.find((item) => item.id === shotId);
         const outputFrames = array(object(shot.framePlan).frames).map(object);
@@ -244,6 +254,38 @@ export function validateDramaVideoPromptOutput(
         const timelineFrameCount = expectedFrames.length || outputFrames.length;
         const cameraMotion = prompt.match(/(?:^|\n)\s*单一主运镜[：:]([^\n]+)/u)?.[1]?.trim() || extractDramaVideoPromptSection(prompt, "摄影总则");
         if (!hasConcreteDramaCameraDirection(cameraMotion)) return `镜头 ${shotId} 的公开视频提示词缺少具体主运镜或机位语言，请写明固定机位、推近、跟拍等一个有动机的摄影选择`;
+        const sourceCharacterNames = (options.characters || [])
+            .filter((character) => (sourceShot?.characterIds || []).some((id) => id === character.id || id === character.code))
+            .map((character) => character.name)
+            .filter(Boolean);
+        const promptSubjectNames = inferDramaPromptSubjects(
+            [prompt, ...outputFrames.map((frame) => dramaAnalysisText(frame.imagePrompt))].join("\n"),
+            sourceCharacterNames.length ? sourceCharacterNames : (options.characters || []).map((character) => character.name),
+        );
+        const compositionErrors = validateDramaPromptComposition({
+            ratio: options.ratio || "",
+            prompt,
+            frames: outputFrames as Array<{ startSecond: number; endSecond: number; startPrompt: string; actionPrompt: string; transitionPrompt: string; endPrompt: string; imagePrompt: string }>,
+            subjectNames: promptSubjectNames,
+            label: `镜头 ${shotId}`,
+        });
+        if (compositionErrors.length) return compositionErrors.join("；");
+        const cutDiversityErrors = validateDramaCutInformationDiversity({
+            ratio: options.ratio || "",
+            prompt,
+            frames: outputFrames as Array<{ startSecond: number; endSecond: number; startPrompt: string; actionPrompt: string; transitionPrompt: string; endPrompt: string; imagePrompt: string }>,
+            subjectNames: promptSubjectNames,
+            requiresDetail: /手部|掌根|掌心|指节|桌沿|接触|受力|道具|物证/u.test(prompt),
+            label: `镜头 ${shotId}`,
+        });
+        if (cutDiversityErrors.length) return cutDiversityErrors.join("；");
+        const wardrobeErrors = validateDramaCharacterWardrobeContinuity({
+            prompt,
+            characters: options.characters || [],
+            characterCodes: sourceShot?.characterIds || [],
+            label: `镜头 ${shotId}`,
+        });
+        if (wardrobeErrors.length) return wardrobeErrors.join("；");
         const timelineFieldCounts = Object.fromEntries(["起点", "动作与触发", "可见衔接", "终点"].map((field) => [field, (prompt.match(new RegExp(`(?:^|\\n)\\s*${field}[：:]`, "gu")) || []).length]));
         if (Object.values(timelineFieldCounts).some((count) => count < timelineFrameCount)) return `镜头 ${shotId} 的“时间段动作”没有逐段写出起点、动作与触发、可见衔接和终点，请按当前 Skill 重新生成`;
         const seenStates = new Set<string>();

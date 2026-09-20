@@ -24,6 +24,8 @@ const body =
         : normalized;
 const sourceContentHash = hashSkillContent(skillRoot);
 const sections = {
+    preamble: extractPreamble(body),
+    defaultQuality: extractSection(body, "默认导演质量层"),
     common: extractSection(body, "共同前置审计"),
     inputBoundary: extractSection(body, "制作包最小输入协议"),
     aspectAdaptation: extractSection(body, "画幅适配编译"),
@@ -62,10 +64,10 @@ export type DramaDirectorSurface = "package" | "static-frame" | "video" | "exter
 export const DRAMA_VIDEO_DIRECTOR_SKILL = ${JSON.stringify(skill, null, 4)} as const;
 
 const SURFACE_SECTIONS: Record<DramaDirectorSurface, string[]> = {
-    package: ["common", "inputBoundary", "aspectAdaptation", "antiTemplate", "storyboardMethod", "assetPrompt", "cinematography", "performance", "frameAllocation", "staticFrame", "video", "package", "gates"],
-    "static-frame": ["staticFrame"],
-    video: ["common", "antiTemplate", "storyboardMethod", "cinematography", "performance", "frameAllocation", "video", "gates"],
-    "external-codex": ["common", "inputBoundary", "aspectAdaptation", "antiTemplate", "storyboardMethod", "assetPrompt", "cinematography", "performance", "package", "staticFrame", "video", "gates", "externalCodex"],
+    package: ["preamble", "defaultQuality", "common", "inputBoundary", "aspectAdaptation", "antiTemplate", "storyboardMethod", "assetPrompt", "cinematography", "performance", "frameAllocation", "staticFrame", "video", "package", "gates"],
+    "static-frame": ["preamble", "defaultQuality", "staticFrame"],
+    video: ["preamble", "defaultQuality", "common", "aspectAdaptation", "antiTemplate", "storyboardMethod", "cinematography", "performance", "frameAllocation", "video", "gates"],
+    "external-codex": ["preamble", "defaultQuality", "common", "inputBoundary", "aspectAdaptation", "antiTemplate", "storyboardMethod", "assetPrompt", "cinematography", "performance", "package", "staticFrame", "video", "gates", "externalCodex"],
 };
 
 export function resolveDramaDirectorInstructions(surface: DramaDirectorSurface) {
@@ -111,4 +113,13 @@ function extractSection(value, heading) {
         content.push(line);
     }
     return content.join("\n").trim();
+}
+
+function extractPreamble(value) {
+    const lines = value.split(/\r?\n/u);
+    const firstSection = lines.findIndex((line) => /^##\s+/u.test(line.trim()));
+    return lines
+        .slice(0, firstSection < 0 ? lines.length : firstSection)
+        .join("\n")
+        .trim();
 }

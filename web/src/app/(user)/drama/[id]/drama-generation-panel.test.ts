@@ -41,7 +41,7 @@ describe("Drama generation production workspace", () => {
         expect(source).toContain("data-drama-shot-task");
         expect(source).toContain("data-drama-shot-execution-details");
         expect(source).toContain("展开详情");
-        expect(source).toContain("用户/剧本原始提示词（仅记录）");
+        expect(source).not.toContain("用户/剧本原始提示词（仅记录）");
         expect(source).toContain("视频执行提示词（当前标准）");
         expect(source).toContain("generateDramaVideoPrompt({");
         expect(source).toContain("project,");
@@ -59,7 +59,10 @@ describe("Drama generation production workspace", () => {
         expect(source).toContain("generateDramaVideoPrompt");
         expect(source).not.toContain("已提交供应商的执行快照");
         expect(source).not.toContain('["视频执行提示词（当前标准）", supplierVideoPrompt]');
-        expect(source).toContain("上方原始提示词只用于追溯；生成与重试以此执行版为准");
+        expect(source).toContain("生成与重试以此执行版为准");
+        expect(source).toContain("formatDramaVideoPromptForDisplay");
+        expect(source).toContain("镜头\\d+");
+        expect(source).toContain('width: "min(760px, calc(100vw - 24px))"');
         expect(source).toContain("实际引用资产");
         expect(source).toContain("data-drama-shot-reference-assets");
         expect(source).toContain("引用资产图片");
@@ -190,7 +193,7 @@ describe("Drama generation production workspace", () => {
         expect(settingsSource).toContain("清晰度");
         expect(settingsSource).toContain("视觉方案");
         expect(settingsSource).toContain("可人工调整全局生产参数");
-        expect(settingsSource).toContain("生成制作包时，剧本 GPT 使用这里最新的方案");
+        expect(settingsSource).toMatch(/生成制作包时，剧本 GPT\s+使用这里最新的方案/u);
         expect(settingsSource).toContain("保存本集信息");
         expect(settingsSource).toContain("本集设置已保存");
         expect(settingsSource).toContain("setSavedLockAt(persistedPlan.lockedAt)");

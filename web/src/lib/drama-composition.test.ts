@@ -13,7 +13,7 @@ describe("drama composition profiles", () => {
     it("uses horizontal spatial relationships for 16:9", () => {
         const profile = resolveDramaCompositionProfile("16:9");
         expect(profile.orientation).toBe("landscape");
-        expect(profile.subjectPriority).toContain("长桌");
+        expect(profile.subjectPriority).toContain("多人关系");
         expect(profile.framingStrategy).toContain("横向关系");
     });
 

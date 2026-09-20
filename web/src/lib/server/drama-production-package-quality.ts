@@ -1,6 +1,7 @@
 import type { DramaAuthoringSourceSnapshot, DramaProductionPackageV1, DramaQualityGateCheck, DramaQualityGateReport } from "@/lib/drama-project-contract";
 import { dramaDialogueFragmentSequenceError, dramaDialogueTimingReminder, hasQuotedDramaDialogue, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
 import { DRAMA_DENSE_HARD_CUT_RANGE_30S, hasDramaDenseCutRule, hasDramaDenseCutRuleInCustomTemplateSources } from "@/lib/drama-production-plan";
+import { validateDramaCharacterWardrobeContinuity, validateDramaCutInformationDiversity, validateDramaPromptComposition, validateDramaReferenceAliasConsistency } from "@/lib/drama-prompt-composition-quality";
 import { validateDramaVideoPromptTemplateLayout } from "@/lib/drama-prompt-quality";
 import { DRAMA_PACKAGE_GATE_CODES, DRAMA_PACKAGE_SECTIONS } from "@/lib/server/drama-production-package-contract";
 
@@ -49,6 +50,11 @@ export function validateDramaAuthoringQuality(input: DramaAuthoringQualityInput)
     checkVisualClarityWarnings(checks, input.package);
     checkCameraMotivation(checks, input.package);
     checkCameraEvents(checks, input.package, customTemplateDenseRule);
+    checkCompositionContract(checks, input.package);
+    checkSubjectCoverage(checks, input.package);
+    checkCutInformationDiversity(checks, input.package);
+    checkReferenceAliasConsistency(checks, input.package);
+    checkCharacterWardrobeContinuity(checks, input.package);
     checkSimpleStructuralChecks(checks, input.package);
 
     return {
@@ -314,7 +320,7 @@ function checkNpcReactionChange(checks: DramaQualityGateCheck[], value: DramaPro
         for (const shot of episode.shots) {
             const required = value.assets.locations.find((location) => location.code === shot.locationCode)?.backgroundNpcPolicy?.mode === "required";
             const prompts = [shot.videoPrompt || "", ...(shot.framePlan?.frames || []).map((frame) => `${frame.actionPrompt}\n${frame.transitionPrompt || ""}\n${frame.endPrompt || ""}`)];
-            const npcPrompts = prompts.filter((prompt) => /NPC群像|NPC连续性|旁听者|旁观者|人群/u.test(prompt));
+            const npcPrompts = prompts.filter((prompt) => /NPC群像|NPC连续性|背景角色|配角|旁观者|人群/u.test(prompt));
             if (!required && !npcPrompts.length) continue;
             const reactions = npcPrompts.flatMap((prompt) => [...prompt.matchAll(/(?:反应|可见反应|状态变化)\s*[：:]\s*([^；;\n。]+)/gu)].map((match) => match[1].trim())).filter(Boolean);
             if ((required || reactions.length) && new Set(reactions).size < 2) failed.push(shot.code);
@@ -356,18 +362,20 @@ function checkNpcContinuityWarnings(checks: DramaQualityGateCheck[], value: Dram
 }
 
 function checkVisualClarityWarnings(checks: DramaQualityGateCheck[], value: DramaProductionPackageV1) {
-    const warnings: string[] = [];
+    const failures: string[] = [];
     for (const shot of value.episodes.flatMap((episode) => episode.shots)) {
         const text = `${shot.imagePrompt || ""}\n${shot.videoPrompt || ""}\n${(shot.framePlan?.frames || []).map((frame) => frame.imagePrompt).join("\n")}`;
         const hasUnqualifiedBlur = /模糊|虚焦|焦外|浅景深|雾化|泛光|光晕/u.test(text) && !/明确要求|有意|只保留.*清晰|背影.*虚焦|背景.*虚焦.*主体.*清晰/u.test(text);
         const hasClarityAnchor = /清晰|可辨|完整入画|不遮挡|保持脸部|五官.*可见|结构.*可读/u.test(text);
-        if (hasUnqualifiedBlur) warnings.push(`${shot.code} 使用了未说明原因的模糊/虚焦/浅景深`);
-        if (!hasClarityAnchor) warnings.push(`${shot.code} 未明确当前景别下的主体清晰度`);
+        if (hasUnqualifiedBlur) failures.push(`${shot.code} 使用了未说明原因的模糊/虚焦/浅景深`);
+        if (!hasClarityAnchor) failures.push(`${shot.code} 未明确当前景别下的主体清晰度`);
     }
-    addWarning(
+    add(
         checks,
         "VISUAL_CLARITY",
-        warnings.length ? warnings.join("；") : "可见主体具有清晰度合同或明确的有意模糊说明",
+        !failures.length,
+        "画面清晰度",
+        failures.length ? failures.join("；") : "可见主体具有清晰度合同或明确的有意模糊说明",
         ["project.ratio", "imagePrompt", "videoPrompt", "framePlan.frames[].imagePrompt"],
         "默认让主角、关键 NPC、道具和场景锚点清晰可辨；信息过载时拆镜，不缩小或虚化全部主体。",
     );
@@ -441,6 +449,165 @@ function checkCameraEvents(checks: DramaQualityGateCheck[], value: DramaProducti
         ["videoPrompt", "framePlan.frames[].startSecond"],
         "出现 Cut to 时先声明“镜头模式：内部切镜”，并在可见衔接写时间、类型、触发事件、新机位、切后主运镜、信息目的和承接；切点必须对齐帧段起点。",
     );
+}
+
+function checkCompositionContract(checks: DramaQualityGateCheck[], value: DramaProductionPackageV1) {
+    const failures: string[] = [];
+    const ratio = value.project.productionBible?.ratio || value.project.ratio;
+    const characters = value.assets.characters;
+    for (const shot of value.episodes.flatMap((episode) => episode.shots)) {
+        const shotText = [shot.sourceText, shot.description, shot.dialogue, shot.narration, shot.videoPrompt, shot.imagePrompt, shot.entryState?.environment, shot.exitState?.environment].filter(Boolean).join("\n");
+        const subjectNames = characters.filter((character) => (shot.characterCodes || []).includes(character.code)).map((character) => character.name);
+        const requiredReactionNames = characters.filter((character) => (shot.characterCodes || []).includes(character.code) && characterNameHasReaction(shotText, character.name)).map((character) => character.name);
+        const errors = validateDramaPromptComposition({
+            ratio,
+            prompt: shot.videoPrompt,
+            frames: (shot.framePlan?.frames || []).map((frame) => ({
+                startSecond: frame.startSecond,
+                endSecond: frame.endSecond,
+                startPrompt: frame.startPrompt,
+                actionPrompt: frame.actionPrompt,
+                transitionPrompt: frame.transitionPrompt,
+                endPrompt: frame.endPrompt,
+                imagePrompt: frame.imagePrompt,
+            })),
+            subjectNames,
+            requiredReactionNames,
+            requiresDetail: /手部|掌根|掌心|指节|桌沿|接触|受力|道具|物证/u.test(shotText),
+            label: shot.code,
+        });
+        failures.push(...errors);
+    }
+    add(
+        checks,
+        "COMPOSITION_CONTRACT",
+        !failures.length,
+        "画幅构图与遮挡门禁",
+        failures.length ? failures.slice(0, 10).join("；") : "每个时间段都明确主体和可见范围，9:16/16:9构图策略、清晰安全区和遮挡关系通过校验",
+        ["project.ratio", "episodes[].shots[].videoPrompt", "episodes[].shots[].framePlan.frames[]"],
+        "按当前画幅重写逐段主体、可见范围和纵横构图；9:16改为单人/双人/过肩/上下纵深，禁止横向塞入多人，并补齐完整头顶、下巴、主要衣领和防遮脸安全区。",
+    );
+}
+
+function checkSubjectCoverage(checks: DramaQualityGateCheck[], value: DramaProductionPackageV1) {
+    const failures: string[] = [];
+    const characters = value.assets.characters;
+    for (const shot of value.episodes.flatMap((episode) => episode.shots)) {
+        const shotText = [shot.sourceText, shot.description, shot.dialogue, shot.narration, shot.videoPrompt, shot.imagePrompt].filter(Boolean).join("\n");
+        const subjectNames = characters.filter((character) => (shot.characterCodes || []).includes(character.code)).map((character) => character.name);
+        const promptText = [shot.videoPrompt, ...(shot.framePlan?.frames || []).map((frame) => [frame.startPrompt, frame.actionPrompt, frame.transitionPrompt, frame.endPrompt, frame.imagePrompt].filter(Boolean).join("\n"))].filter(Boolean).join("\n");
+        if (!subjectNames.length && !/(?:主体|人物|角色|手部|道具|场景|空间|座位|锚点|双人|群像)/u.test(promptText)) failures.push(`${shot.code}未明确任何可见主体`);
+        for (const character of characters.filter((item) => (shot.characterCodes || []).includes(item.code) && characterNameHasReaction(shotText, item.name))) {
+            if (
+                !new RegExp(
+                    `${escapeRegExp(character.name)}[^\\n。；;]{0,40}(?:眉|目光|视线|肩|下颌|嘴角|呼吸|吸气|僵|停住|看向|望向|回望|前倾|收紧|松开|沉默|反应)|(?:眉|目光|视线|肩|下颌|嘴角|呼吸|吸气|僵|停住|看向|望向|回望|前倾|收紧|松开|沉默|反应)[^\\n。；;]{0,40}${escapeRegExp(character.name)}`,
+                    "u",
+                ).test(promptText)
+            )
+                failures.push(`${shot.code}未给 ${character.name} 安排独立可见反应`);
+        }
+    }
+    add(
+        checks,
+        "SUBJECT_COVERAGE",
+        !failures.length,
+        "主体覆盖",
+        failures.length ? failures.slice(0, 10).join("；") : "每个镜头和剧情要求的角色反应均有可见主体与独立画面信息",
+        ["episodes[].shots[].characterCodes", "episodes[].shots[].videoPrompt", "episodes[].shots[].framePlan.frames[]"],
+        "为每个时间段写明本段主要主体和可见范围；剧情事实中出现需要反应的角色、NPC或关键动作时，必须安排对应独立反应或细节信息，不能只作为背景描述。",
+    );
+}
+
+function checkCutInformationDiversity(checks: DramaQualityGateCheck[], value: DramaProductionPackageV1) {
+    const failures: string[] = [];
+    const characters = value.assets.characters;
+    for (const shot of value.episodes.flatMap((episode) => episode.shots)) {
+        const shotText = [shot.sourceText, shot.description, shot.dialogue, shot.narration, shot.videoPrompt, shot.imagePrompt].filter(Boolean).join("\n");
+        const subjectNames = characters.filter((character) => (shot.characterCodes || []).includes(character.code)).map((character) => character.name);
+        const requiredReactionNames = characters.filter((character) => (shot.characterCodes || []).includes(character.code) && characterNameHasReaction(shotText, character.name)).map((character) => character.name);
+        failures.push(
+            ...validateDramaCutInformationDiversity({
+                ratio: value.project.productionBible?.ratio || value.project.ratio,
+                prompt: shot.videoPrompt,
+                frames: shot.framePlan?.frames || [],
+                subjectNames,
+                requiredReactionNames,
+                requiresDetail: /手部|掌根|掌心|指节|桌沿|接触|受力|道具|物证/u.test(shotText),
+                label: shot.code,
+            }),
+        );
+    }
+    add(
+        checks,
+        "CUT_INFORMATION_DIVERSITY",
+        !failures.length,
+        "硬切信息主体覆盖",
+        failures.length ? failures.slice(0, 10).join("；") : "每次硬切都指向不同的角色反应、关系、空间或手部/道具信息",
+        ["episodes[].shots[].videoPrompt", "episodes[].shots[].framePlan.frames[]", "episodes[].shots[].characterCodes"],
+        "重新分配硬切主体：至少覆盖剧情事实中的不同角色、关系、手部/道具、空间或结果信息之一；7—10次硬切不等于同一角色的7—10个角度。",
+    );
+}
+
+function checkReferenceAliasConsistency(checks: DramaQualityGateCheck[], value: DramaProductionPackageV1) {
+    const failures: string[] = [];
+    for (const shot of value.episodes.flatMap((episode) => episode.shots)) {
+        failures.push(
+            ...validateDramaReferenceAliasConsistency({
+                prompt: shot.videoPrompt,
+                manifest: shot.framePlan?.referenceManifest || [],
+                label: shot.code,
+            }),
+        );
+    }
+    add(
+        checks,
+        "REFERENCE_ALIAS_CONSISTENCY",
+        !failures.length,
+        "参考图 alias 与职责顺序",
+        failures.length ? failures.slice(0, 10).join("；") : "公开视频素材绑定、referenceManifest alias、职责和顺序一致",
+        ["episodes[].shots[].framePlan.referenceManifest", "episodes[].shots[].videoPrompt"],
+        "按 referenceManifest 原顺序逐项写出 @图片 alias 与角色/场景/道具职责；禁止使用“@图片1至@图片N”这种无法确认映射的泛化写法。",
+    );
+}
+
+function checkCharacterWardrobeContinuity(checks: DramaQualityGateCheck[], value: DramaProductionPackageV1) {
+    const failures: string[] = [];
+    for (const shot of value.episodes.flatMap((episode) => episode.shots)) {
+        failures.push(
+            ...validateDramaCharacterWardrobeContinuity({
+                prompt: [
+                    shot.videoPrompt,
+                    shot.imagePrompt,
+                    shot.continuity?.continuityNotes,
+                    shot.entryState?.characters.map((item) => `${item.assetId} ${item.state || ""} ${item.action || ""}`).join("\n"),
+                    shot.exitState?.characters.map((item) => `${item.assetId} ${item.state || ""} ${item.action || ""}`).join("\n"),
+                ]
+                    .filter(Boolean)
+                    .join("\n"),
+                characters: value.assets.characters,
+                characterCodes: shot.characterCodes,
+                label: shot.code,
+            }),
+        );
+    }
+    add(
+        checks,
+        "CHARACTER_WARDROBE_CONTINUITY",
+        !failures.length,
+        "角色外观与服装连续性",
+        failures.length ? failures.slice(0, 10).join("；") : "出镜角色均保留年龄感、脸型/发型、服装和固定配饰锚点",
+        ["assets.characters[].profile", "episodes[].shots[].characterCodes", "episodes[].shots[].videoPrompt", "episodes[].shots[].continuity"],
+        "为每个出镜角色补充与正式资产一致的服装、发型、年龄感和固定配饰锚点；发现冲突时不得用另一张角色图替代。",
+    );
+}
+
+function characterNameHasReaction(text: string, name: string) {
+    if (!name.trim()) return false;
+    const pattern = new RegExp(
+        `${escapeRegExp(name)}[^\\n。；;]{0,40}(?:眉|目光|视线|肩|下颌|嘴角|呼吸|吸气|僵|停住|看向|望向|回望|前倾|收紧|松开|沉默|反应)|(?:眉|目光|视线|肩|下颌|嘴角|呼吸|吸气|僵|停住|看向|望向|回望|前倾|收紧|松开|沉默|反应)[^\\n。；;]{0,40}${escapeRegExp(name)}`,
+        "u",
+    );
+    return pattern.test(text);
 }
 
 function checkSimpleStructuralChecks(checks: DramaQualityGateCheck[], value: DramaProductionPackageV1) {

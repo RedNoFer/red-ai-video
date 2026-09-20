@@ -118,8 +118,8 @@ export function DramaShotContinuityEditor({ project, episode, shot }: { project:
                     <ContinuityInput label="景别" value={continuity.shotSize} placeholder="特写 / 近景 / 中景 / 全景" onChange={(value) => updateContinuity("shotSize", value)} />
                     <ContinuityInput label="机位与角度" value={continuity.cameraAngle} placeholder="平视、俯拍、侧后方" onChange={(value) => updateContinuity("cameraAngle", value)} />
                     <ContinuityInput label="构图" value={continuity.composition} placeholder="主体位于画面左侧，门口留出视线空间" onChange={(value) => updateContinuity("composition", value)} />
-                    <ContinuityInput label="人物站位" value={continuity.characterBlocking} placeholder="女主在前景右侧，男主位于门边" onChange={(value) => updateContinuity("characterBlocking", value)} />
-                    <ContinuityInput label="视线与屏幕方向" value={continuity.gazeDirection} placeholder="女主看向画面左侧，保持向右运动" onChange={(value) => updateContinuity("gazeDirection", value)} />
+                    <ContinuityInput label="人物站位" value={continuity.characterBlocking} placeholder="角色A在前景一侧，角色B位于入口附近" onChange={(value) => updateContinuity("characterBlocking", value)} />
+                    <ContinuityInput label="视线与屏幕方向" value={continuity.gazeDirection} placeholder="角色A看向画面一侧，保持既定运动方向" onChange={(value) => updateContinuity("gazeDirection", value)} />
                     <ContinuityInput label="轴线规则" value={continuity.axisRule} placeholder="保持人物连线同侧，不越轴" onChange={(value) => updateContinuity("axisRule", value)} />
                     <ContinuityTextArea label="动作起始状态" value={continuity.actionStart} placeholder="镜头开始时人物正在做什么" onChange={(value) => updateContinuity("actionStart", value)} />
                     <ContinuityTextArea label="动作结束状态" value={continuity.actionEnd} placeholder="镜头结束时动作停在哪里，为下一镜头留下什么状态" onChange={(value) => updateContinuity("actionEnd", value)} />
@@ -189,7 +189,7 @@ export function DramaShotContinuityEditor({ project, episode, shot }: { project:
                                 }
                             }}
                             autoSize={{ minRows: 2, maxRows: 4 }}
-                            placeholder="例如：让这一镜和上一镜的视线方向更自然，保留女主右侧站位"
+                            placeholder="例如：让这一镜和上一镜的视线方向更自然，保留指定角色的既定站位"
                             disabled={agentLoading}
                         />
                         <Button type="primary" shape="circle" icon={<Send className="size-4" />} disabled={!agentInput.trim() || agentLoading} onClick={() => void askAgent()} aria-label="发送连续性 Agent 请求" />
