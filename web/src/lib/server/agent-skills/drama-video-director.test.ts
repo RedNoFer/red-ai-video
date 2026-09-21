@@ -11,6 +11,7 @@ describe("drama video director adapter", () => {
         expect(staticRules).toContain("静态帧只冻结一个已经发生的瞬间");
         expect(staticRules).toContain("运镜过程");
         expect(videoRules).toContain("小墨 6.3 简镜头卡");
+        expect(videoRules).toContain("storyboard-director@6.3.0");
         expect(videoRules).toContain("内部仍严格生成并校验 `framePlan.frames[]`");
         expect(videoRules).toContain("主体运动、相机运动、环境运动");
         expect(videoRules).toContain("准备/触发 → 接触或受力 → 动作结果 → 反应/恢复");

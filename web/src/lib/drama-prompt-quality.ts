@@ -1,5 +1,5 @@
 import type { DramaDialoguePerformance, DramaPerformancePlan } from "@/lib/drama-project-contract";
-import { hasQuotedDramaDialogue } from "@/lib/drama-dialogue-timing";
+import { hasQuotedDramaDialogue, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
 
 const GENERIC_DETAIL_PATTERNS = [
     /^表情(?:自然|丰富|到位|稳定)$/u,
@@ -29,6 +29,9 @@ const VIDEO_CARD_HEADER = /^###\s*镜头\s*(\d+)\s*\|([^\n]+)$/gmu;
 const VIDEO_CARD_FIELDS = ["场景", "画面内容", "光影", "色调", "台词", "人声", "音效"] as const;
 const VIDEO_CARD_CAMERA_TERMS = /平视|俯视|俯拍|仰视|仰拍|正面|侧面|侧[0-9一二三四五六七八九十]+度|过肩|入口侧|低机位|高机位|顶视|跟随视线/u;
 const VIDEO_CARD_LENS_TERMS = /\d+(?:\.\d+)?\s*mm|广角|标准焦段|长焦|变形宽银幕/u;
+const DIRECT_DIALOGUE_IN_VISUAL_PATTERN = /(?:对白表演|(?:画外|内心声)?[^；：\n]{0,20}(?:说|道|问|喊|答|继续说|声音落下)\s*[：:]\s*[“"][^”\n]+[”"]|[“"][^”"\n]{2,}[”"])/u;
+const CAUSAL_TRIGGER_PATTERN = /因|因为|由于|听见|看见|发现|面对|遭到|受到|被|在[^。；\n]{0,20}后|话音|声音|风声|对白|说完|回应|接住|触到|压住|握住|拦住|撞上|落下|逼近|传来|为了|当[^。；\n]{0,20}时|承接/u;
+const SOUND_ANCHOR_PATTERN = /音效|人声|呼吸|吸气|吐气|喘息|衣料|脚步|碰撞|摩擦|风声|水声|门响|木石|混响|静默|沉默|屏息|余响|底噪|无声/u;
 /** @deprecated Legacy export retained for compatibility only; it is not a production gate. */
 export const DRAMA_VIDEO_PROMPT_TEMPLATE_SECTIONS = ["重要剪辑指令", "素材绑定", "故事意图", "空间与连续性", "灯光与画面", "摄影总则", "逐镜头时间线", "硬性禁止"] as const;
 
@@ -169,11 +172,45 @@ export function validateDramaVideoPromptCardLayout(value: unknown, frames: Reado
         if (!card.subjectMode || !/人物|非人物|主体|道具|空间|手部|双人|单人/u.test(card.subjectMode)) errors.push(`${label}${cardLabel}缺少人物镜头/非人物镜头主体标识`);
         for (const field of VIDEO_CARD_FIELDS) if (!extractVideoCardField(card.raw, field)) errors.push(`${label}${cardLabel}缺少“${field}”字段`);
         if (!card.scene || !card.visual || isGenericDramaDetail(card.visual)) errors.push(`${label}${cardLabel}的画面内容必须写出可见进行中动作，不能使用空泛占位词`);
+        if (DIRECT_DIALOGUE_IN_VISUAL_PATTERN.test(card.visual)) errors.push(`${label}${cardLabel}的画面内容不得包含完整对白或说话人台词指令；只写可见口型、呼吸和表演，完整台词只能放在“台词”字段`);
         if (card.dialogue && card.dialogue !== "无" && !hasQuotedDramaDialogue(card.dialogue)) errors.push(`${label}${cardLabel}的台词必须使用“说话人说：“实际台词””格式`);
         if (expectedFrames[index] && !dramaTimeRangePattern(expectedFrames[index].startSecond, expectedFrames[index].endSecond).test(card.timeRange))
             errors.push(`${label}${cardLabel}的时间范围未对应 framePlan 的 ${expectedFrames[index].startSecond}-${expectedFrames[index].endSecond}s`);
     }
     return errors.map((error) => (error.startsWith(label) ? error : `${label}${error}`));
+}
+
+/**
+ * A frame plan with timed speech must expose the speech boundaries as visual
+ * edit points. Mechanical equal-duration frames are only acceptable when
+ * they happen to land on every timed utterance boundary.
+ */
+export function validateDramaFrameTiming(frames: ReadonlyArray<DramaCameraPlanFrame>, utterances: readonly DramaDialogueTimingInput[], label: string) {
+    if (frames.length < 2) return [];
+    const timedUtterances = utterances.filter((item) => {
+        const type = item.type || "dialogue";
+        return (type === "dialogue" || type === "voiceover") && Number.isFinite(item.startSecond) && Number.isFinite(item.endSecond) && Number(item.endSecond) > Number(item.startSecond);
+    });
+    if (!timedUtterances.length) return [];
+    const boundaries = new Set(frames.flatMap((frame) => [Number(frame.startSecond), Number(frame.endSecond)]).map((value) => value.toFixed(2)));
+    const unaligned = timedUtterances.some((item) => !boundaries.has(Number(item.startSecond).toFixed(2)) || !boundaries.has(Number(item.endSecond).toFixed(2)));
+    return unaligned
+        ? [`${label}含有带自然时间边界的对白/旁白，但至少一个开口或收句边界落在帧段内部；必须按对白自然时长、停顿、动作触发和反应留白重新分配帧段，不能把对白切在段内`]
+        : [];
+}
+
+/** Every executable frame must expose a causal beat, not just an action noun. */
+export function validateDramaFrameCausalChain(actionPrompt: unknown, transitionPrompt: unknown, endPrompt: unknown, label: string) {
+    const action = typeof actionPrompt === "string" ? actionPrompt.trim() : "";
+    const transition = typeof transitionPrompt === "string" ? transitionPrompt.trim() : "";
+    const end = typeof endPrompt === "string" ? endPrompt.trim() : "";
+    const all = `${action}\n${transition}\n${end}`;
+    const errors: string[] = [];
+    if (!CAUSAL_TRIGGER_PATTERN.test(all)) errors.push(`${label}缺少“因为什么/承接什么而动作触发”的明确原因`);
+    if (!SOUND_ANCHOR_PATTERN.test(all)) errors.push(`${label}缺少声音锚点；即使是静默也必须写明静默、屏息、底噪或余响`);
+    if (!end || !OBSERVABLE_DRAMA_DETAIL_PATTERN.test(end) || !/(?:停|落|变|露|显|抬|垂|松|收|移|转|对准|接住|形成|沉默|静默|屏息|受力|改变|看见)/u.test(end))
+        errors.push(`${label}终点没有写出由本段动作产生的具体可见结果`);
+    return errors;
 }
 
 function extractVideoCardField(value: string, field: string) {

@@ -8,7 +8,7 @@
 
 最适合当前 VOZEB PRO 的不是引入一个“大而全”的外部产品，而是把外部能力拆成四层：
 
-1. **规划规则层**：继续以当前固定版本的 `seedance-director` 为短剧默认 Skill；从 `seedance-skills` 只吸收 sequence、continuation、camera、lighting、characters、audio、antislop 等与当前制作包契约直接相交的规则。
+1. **规划规则层**：以当前固定版本的 `drama-video-director` 为短剧唯一导演 Skill；`seedance-director` 仅保留为旧请求兼容别名。从 `seedance-skills` 只吸收 sequence、continuation、camera、lighting、characters、audio、antislop 等与当前制作包契约直接相交的规则。
 2. **故事一致性层**：用 StoryDiffusion 的连续自注意力思路生成角色/场景/分镜候选图；用 IP-Adapter 保持身份与参考风格，用 ControlNet 锁定姿态、深度、边缘和构图。
 3. **图片执行层**：优先评估 InvokeAI（Apache-2.0）作为图片 Provider；需要复杂节点编排时再以外部服务方式接 ComfyUI（GPL-3.0），不要把 GPL 代码直接链接进 VOZEB PRO。
 4. **视频执行层**：Wan2.1（Apache-2.0）最贴合当前的 T2V/I2V/FLF2V/VACE 与首尾帧工作流；LTX-Video/Open-Sora 可做后续 Provider 试验，不应先改动剧本和分镜数据契约。
@@ -21,7 +21,7 @@
 
 | Skill 仓库 | Stars / 最近推送 / 许可证 | 主要能力 | 与 VOZEB 的整合建议 |
 |---|---:|---|---|
-| [dexhunter/seedance2-skill](https://github.com/dexhunter/seedance2-skill) | 3,478 / 2026-02-18 / MIT（[API](https://api.github.com/repos/dexhunter/seedance2-skill)） | Seedance 2.0 的参考图 `@` 语法、镜头语言、结构模板，覆盖广告、短剧、MV 等。见 [README](https://github.com/dexhunter/seedance2-skill#readme)。 | **可提炼**。补充当前 `seedance-director` 的供应商语法和模板；不替换项目的首尾帧、连续性和失败终态规则。 |
+| [dexhunter/seedance2-skill](https://github.com/dexhunter/seedance2-skill) | 3,478 / 2026-02-18 / MIT（[API](https://api.github.com/repos/dexhunter/seedance2-skill)） | Seedance 2.0 的参考图 `@` 语法、镜头语言、结构模板，覆盖广告、短剧、MV 等。见 [README](https://github.com/dexhunter/seedance2-skill#readme)。 | **可提炼**。补充 Seedance 供应商语法和模板；不替换项目的首尾帧、连续性和失败终态规则。 |
 | [songguoxs/seedance-prompt-skill](https://github.com/songguoxs/seedance-prompt-skill) | 2,745 / 2026-02-12 / 未声明（[API](https://api.github.com/repos/songguoxs/seedance-prompt-skill)） | Seedance 2.0 提示词 Skill，专注视频提示词生成。 | **仅审查后试用**。许可证未声明，先固定 commit 并完成法务确认；不要直接启用为默认 Skill。 |
 | [eternityspring/shuohao-skills](https://github.com/eternityspring/shuohao-skills) | 2,464 / 2026-08-26 / Apache-2.0（[API](https://api.github.com/repos/eternityspring/shuohao-skills)） | `novel-outline`、`novel-characters`、`novel-art`、`novel-script`、`novel-storyboard`，带时长、节拍、资产和分镜质量门。见 [README](https://github.com/eternityspring/shuohao-skills#readme)。 | **短剧规则高匹配**。吸收剧本节拍/时长和分镜质量门；不要引入其五份 Markdown 作为第二套事实源，最终仍落 `vozeb-drama-production-package-v1`。 |
 | [liangdabiao/Seedance2-Storyboard-Generator](https://github.com/liangdabiao/Seedance2-Storyboard-Generator) | 2,239 / 2026-06-19 / 未声明（[API](https://api.github.com/repos/liangdabiao/Seedance2-Storyboard-Generator)） | 小说/故事到多集剧本、C/S/P 资产编号、Seedance 时间轴提示词和尾帧衔接。见 [README](https://github.com/liangdabiao/Seedance2-Storyboard-Generator#readme)。 | **可借鉴编号和时间轴**。许可证未声明，不能直接作为依赖；C/S/P 需映射到现有资产 ID，不得按文本去重。 |
@@ -42,7 +42,7 @@
 | 项目 | GitHub 快照（Stars / 最近推送 / 许可证） | 官方 README 能力 | 对 VOZEB PRO 的判断 |
 |---|---|---|---|
 | [ArcReel/ArcReel](https://github.com/ArcReel/ArcReel) | 4,289 / 2026-08-31 / AGPL-3.0（[API](https://api.github.com/repos/ArcReel/ArcReel)） | 自托管 AI 视频工作台；把小说/剧本转为角色、场景、道具、分镜、视频、配音和剪映草稿，含一致性、审核、成本追踪和可恢复流程。见 [README](https://github.com/ArcReel/ArcReel#readme)。 | **架构参考，高相关**。本项目快捷方式中的 `image-motion`、`drama-planning` 已记录该仓库为来源；可继续对照其阶段化流程，但 AGPL 网络服务义务要求把代码复用和 Provider 边界分开审查。 |
-| [LeoYeAI/seedance-skills](https://github.com/LeoYeAI/seedance-skills) | 38 / 2026-07-08 / MIT（[API](https://api.github.com/repos/LeoYeAI/seedance-skills)） | README 列出 28 个 Agent Skill、56 份参考文档，覆盖 interview、sequence、continuation、camera、motion、lighting、characters、audio、pipeline、QC，以及 T2V/I2V/V2V/R2V/FLF2V、多片段和多语言。见 [README](https://github.com/LeoYeAI/seedance-skills#readme)。 | **直接可整合，优先级最高**。当前 `seedance-director` 已固定到该仓库 commit；建议按需导入少数规则，保持 VOZEB 的公开提示词、制作包和连续性校验不变，不把 28 个 Skill 常驻暴露给所有工作区。 |
+| [LeoYeAI/seedance-skills](https://github.com/LeoYeAI/seedance-skills) | 38 / 2026-07-08 / MIT（[API](https://api.github.com/repos/LeoYeAI/seedance-skills)） | README 列出 28 个 Agent Skill、56 份参考文档，覆盖 interview、sequence、continuation、camera、motion、lighting、characters、audio、pipeline、QC，以及 T2V/I2V/V2V/R2V/FLF2V、多片段和多语言。见 [README](https://github.com/LeoYeAI/seedance-skills#readme)。 | **直接可整合，优先级最高**。外部规则已固定到仓库 commit；建议按需导入少数规则，保持 VOZEB 的公开提示词、制作包和连续性校验不变，不把 28 个 Skill 常驻暴露给所有工作区。 |
 | [HVision-NKU/StoryDiffusion](https://github.com/HVision-NKU/StoryDiffusion) | 6,455 / 2024-09-26 / Apache-2.0（[API](https://api.github.com/repos/HVision-NKU/StoryDiffusion)） | 一致性自注意力用于长序列角色一致图片，兼容 SD1.5/SDXL；至少 3 个文本提示，另有条件图之间的长视频运动预测。视频模型源码/权重仍在 README TODO。见 [README](https://github.com/HVision-NKU/StoryDiffusion#readme)。 | **图片分镜高匹配，视频暂不依赖**。可作为 `character-design`/`drama-planning` 的候选图 Provider，按 `framePlan.frames` 批量生成并保留每帧独立 Prompt；不能宣称它已解决视频连续性。 |
 | [wonderunit/storyboarder](https://github.com/wonderunit/storyboarder) | 3,823 / 2024-03-17 / GitHub API 未识别 SPDX（[API](https://api.github.com/repos/wonderunit/storyboarder)） | 面向编剧/导演的手绘故事板工具，支持 Fountain screenplay、onion skin、参考层、轨迹回放、协作和多格式导出。见 [README](https://github.com/wonderunit/storyboarder#readme) 与 [许可证说明](https://wonderunit.com/thoughts-on-free-and-open-source/)。 | **人工审核/导出中等匹配**。可设计 `framePlan` 或 Fountain 导出适配器，让导演在生成前后验收镜头；许可证与资产使用条款不清，不能作为服务端依赖前先过法务。 |
 | [Comfy-Org/ComfyUI](https://github.com/Comfy-Org/ComfyUI) | 130,826 / 2026-08-31 / GPL-3.0（[API](https://api.github.com/repos/Comfy-Org/ComfyUI)） | 模块化节点图和本地 API；支持图像、视频、音频、3D、参考条件、ControlNet/Adapter、队列、部分重算、工作流 JSON、离线运行和大量模型。见 [README](https://github.com/Comfy-Org/ComfyUI#readme)。 | **图片/视频执行器高匹配，但需隔离**。可把工作流 JSON、输入哈希和输出尺寸映射到 Provider 任务；建议独立进程/服务调用并保存 workflow 版本，避免 GPL 代码与 VOZEB 核心形成不可控衍生关系。 |
@@ -59,7 +59,7 @@
 
 | 当前能力 | 推荐吸收/接入 | 需要保留的 VOZEB 事实源与边界 |
 |---|---|---|
-| `seedance-director`（短剧默认） | `seedance-sequence`、`seedance-continuation`、`seedance-camera`、`seedance-lighting`、`seedance-characters`、`seedance-audio`、`seedance-antislop` | 继续固定 Skill commit、版本、内容哈希和审计；外部规则只用于规划输入，公开摘要不得显示内部导演规则。 |
+| `drama-video-director`（短剧唯一导演） | `seedance-sequence`、`seedance-continuation`、`seedance-camera`、`seedance-lighting`、`seedance-characters`、`seedance-audio`、`seedance-antislop` | 继续固定 Skill commit、版本、内容哈希和审计；外部规则只用于规划输入，公开摘要不得显示内部导演规则。 |
 | `drama-planning` | StoryDiffusion 的多提示序列思想；Storyboarder 的 Fountain/故事板导出思路 | 服务端仍生成 `vozeb-drama-production-package-v1` 的 13 章，并强制每镜表演、灯光、连续性、逐帧动作和 QC；不能只保存外部 Markdown。 |
 | `character-design` | IP-Adapter 做身份/风格参考；StoryDiffusion 做多帧一致候选图；ControlNet 做姿态/构图约束 | 角色编码、资产版本、参考图可读性和 `referenceManifest` 由 VOZEB 持有；外部模型结果必须完整落盘，不能只保留第一张。 |
 | `image-motion` | Wan2.1 I2V/FLF2V、LTX-Video I2V、AnimateDiff；ComfyUI 可承载组合工作流 | 只能从已验收图片/视频帧开始；`first_frame`/`last_frame`、实际宽高、任务版本和失败终态必须走现有 Provider/任务存储。 |
@@ -69,7 +69,7 @@
 
 ### P0：先做规则与审计，不接新模型
 
-- 保持当前 `seedance-director` 为短剧必选默认；将外部 Skill 以固定 commit 导入，记录 `sourceRepository`、`sourcePath`、`sourceCommit`、`sourceContentHash`、许可证和工作区。
+- 保持当前 `drama-video-director` 为短剧必选默认；将外部 Skill 以固定 commit 导入，记录 `sourceRepository`、`sourcePath`、`sourceCommit`、`sourceContentHash`、许可证和工作区；旧 `seedance-director` 只做请求兼容映射。
 - 在 `drama-planning`/制作包生成器中吸收 sequence、continuation、camera、lighting、characters、audio、antislop 的**结构化要求**，确保最终落库仍符合 13 章和每镜 `framePlan`。
 - 增加能力矩阵：Provider 是否支持 T2V/I2V/FLF2V、多参考图、首尾帧、精确尺寸、异步取消、结果数组和真实媒体校验；没有公开契约的能力不进入目录。
 
@@ -100,7 +100,7 @@
 
 ## 最终推荐
 
-**立即整合**：保留并细化 `seedance-director`，选择性吸收 `seedance-skills` 的导演规则；以 StoryDiffusion + IP-Adapter + ControlNet 补强角色/场景/分镜图片一致性；用 InvokeAI 做第一图片 Provider。
+**立即整合**：保留并细化 `drama-video-director`，选择性吸收 `seedance-skills` 的导演规则；以 StoryDiffusion + IP-Adapter + ControlNet 补强角色/场景/分镜图片一致性；用 InvokeAI 做第一图片 Provider。
 
 **第二阶段整合**：以 Wan2.1 作为支持首尾帧的视频 Provider，ComfyUI 作为隔离的复杂工作流执行服务。
 

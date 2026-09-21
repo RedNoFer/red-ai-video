@@ -4,6 +4,7 @@ import { nanoid } from "nanoid";
 
 import type {
     DramaContinuityEdge,
+    DramaContinuityEntityState,
     DramaBackgroundNpcPolicy,
     DramaBackgroundNpcSlot,
     DramaEpisode,
@@ -24,6 +25,7 @@ import type {
     DramaShot,
     DramaStoryScene,
 } from "@/lib/drama-project-contract";
+import { continuityStateChangeIsIntentional, validateDramaContinuityEdges } from "@/lib/drama-continuity-policy";
 import { defaultDramaProductionPlan, normalizeDramaProductionPlan } from "@/lib/drama-production-plan";
 import {
     dramaStaticFramePositiveText,
@@ -46,6 +48,7 @@ import {
     hasConcreteDramaCameraDirection,
     isGenericDramaDetail,
     validateDramaCameraPlan,
+    validateDramaFrameTiming,
     validateDramaPerformanceDetail,
     validateDramaVideoAuthoringQuality,
     validateDramaVideoPromptCardLayout,
@@ -67,6 +70,8 @@ export type DramaProductionPackageNormalizationOptions = {
     requireAgentAuthoring?: boolean;
     requireAuthoringQuality?: boolean;
     allowImportWarnings?: boolean;
+    /** Enforce the current authoring continuity contract before state synchronization. */
+    strictContinuity?: boolean;
     importWarnings?: string[];
     authoringSources?: import("@/lib/drama-project-contract").DramaAuthoringSourceSnapshot[];
     targetNarrativeChapter?: number | string;
@@ -503,6 +508,14 @@ function normalizeProductionPackage(value: unknown, options: DramaProductionPack
             })),
         };
     });
+    const rawAuthoring = object(input.authoring);
+    const strictContinuity = Boolean(options.strictContinuity || options.requireAuthoringQuality || rawAuthoring.source === "executeDramaScriptRun");
+    const continuityIssues = strictContinuity ? validateDramaContinuityEdges(normalizedEpisodes) : [];
+    if (continuityIssues.length) {
+        const message = `制作包跨镜连续性预检未通过：${continuityIssues.slice(0, 12).join("；")}`;
+        if (!options.allowImportWarnings) throw new DramaProductionPackageError(message);
+        options.importWarnings?.push(message);
+    }
     const synchronizedEpisodes = normalizedEpisodes.map(synchronizeContinuityStates);
     const derivedTargetDuration = synchronizedEpisodes.reduce((total, episode) => total + episode.shots.reduce((sum, shot) => sum + shot.duration, 0), 0);
     // Validate the caller's raw plan before normalization can apply defaults or
@@ -693,6 +706,7 @@ function validateProductionPackageCompleteness(value: Record<string, unknown>, o
     validateRawProductionPlan(bible);
     const plan = normalizePackageProductionPlan(bible);
     const dialogueTiming = normalizeDialogueTimingPolicy(bible.dialogueTiming);
+    const referencesDisabled = plan?.references.minImages === 0 && plan.references.maxImages === 0;
     if (options.requireAgentAuthoring) {
         const authoring = object(value.authoring);
         if (authoring.source !== "executeDramaScriptRun") throw new DramaProductionPackageError("Agent 制作包缺少 authoring provenance，必须由 executeDramaScriptRun 生成");
@@ -703,7 +717,7 @@ function validateProductionPackageCompleteness(value: Record<string, unknown>, o
         if (seedanceSkill.id !== SEEDANCE_25_DIRECTOR_SKILL.id || seedanceSkill.version !== SEEDANCE_25_DIRECTOR_SKILL.sourceVersion || seedanceSkill.contentHash !== SEEDANCE_25_DIRECTOR_SKILL.sourceContentHash)
             throw new DramaProductionPackageError("Agent 制作包使用了过期或不一致的 Seedance 2.5 Skill 版本/内容哈希");
     }
-    if (!plan?.skills.some((skill) => skill.id === "seedance-director")) throw new DramaProductionPackageError("制作包缺少必需的 Seedance 2.0 导演 Skill");
+    if (!plan?.skills.some((skill) => skill.id === DRAMA_VIDEO_DIRECTOR_SKILL.id)) throw new DramaProductionPackageError("制作包缺少必需的当前短剧视频导演 Skill");
     if (!plan.skills.some((skill) => skill.id === "seedance-25-director")) throw new DramaProductionPackageError("制作包缺少必需的 Seedance 2.5 视频导演 Skill");
     if (plan.lockedAt && (!plan.visual.visualStyle.trim() || !plan.visual.artStyle.trim())) throw new DramaProductionPackageError("已锁定的制作方案必须包含具体的视觉风格和画风");
     if (plan.video.framePolicy === "agent" && plan.video.frameCount !== undefined) throw new DramaProductionPackageError("Agent 智能切分方案不能携带固定帧数");
@@ -766,25 +780,27 @@ function validateProductionPackageCompleteness(value: Record<string, unknown>, o
             if (/(?:运镜|焦段|推近|拉远|摇镜|跟拍|滑轨|环绕|吊臂|慢推|慢拉|后拉|时间段|时间轴|动作过程|对白|声音|口型)/u.test(dramaStaticFramePositiveText(text(item.imagePrompt))))
                 throw new DramaProductionPackageError(`${label}的 imagePrompt 必须是单一静态画面，不能包含运镜、时间过程、对白或声音`);
             if (/(?:本内部镜头只执行|内部 ID|assetId|参考图清单|URL)/u.test(text(item.videoPrompt))) throw new DramaProductionPackageError(`${label}的 videoPrompt 不能包含内部说明、资产 ID、URL 或参考图清单`);
-            const manifest = array(object(item.framePlan).referenceManifest);
-            const has = (role: string, code: string) => manifest.some((entry) => object(entry).role === role && text(object(entry).assetId) === code);
-            if (!has("scene_anchor", text(item.locationCode))) {
-                const message = `${label}的 referenceManifest 缺少当前场景锚点`;
-                if (!options.allowImportWarnings) throw new DramaProductionPackageError(message);
-                options.importWarnings?.push(`${message}；已允许导入，后续生成前需要补充场景参考绑定`);
-            }
-            for (const code of strings(item.characterCodes)) {
-                if (!has("character_anchor", code)) {
-                    const message = `${label}的 referenceManifest 缺少角色 ${code} 锚点`;
+            if (!referencesDisabled) {
+                const manifest = array(object(item.framePlan).referenceManifest);
+                const has = (role: string, code: string) => manifest.some((entry) => object(entry).role === role && text(object(entry).assetId) === code);
+                if (!has("scene_anchor", text(item.locationCode))) {
+                    const message = `${label}的 referenceManifest 缺少当前场景锚点`;
                     if (!options.allowImportWarnings) throw new DramaProductionPackageError(message);
-                    options.importWarnings?.push(`${message}；已允许导入，后续生成前需要补充角色参考绑定`);
+                    options.importWarnings?.push(`${message}；已允许导入，后续生成前需要补充场景参考绑定`);
                 }
-            }
-            for (const code of strings(item.propCodes)) {
-                if (!has("prop_anchor", code)) {
-                    const message = `${label}的 referenceManifest 缺少道具 ${code} 锚点`;
-                    if (!options.allowImportWarnings) throw new DramaProductionPackageError(message);
-                    options.importWarnings?.push(`${message}；已允许导入，后续生成前需要补充道具参考绑定`);
+                for (const code of strings(item.characterCodes)) {
+                    if (!has("character_anchor", code)) {
+                        const message = `${label}的 referenceManifest 缺少角色 ${code} 锚点`;
+                        if (!options.allowImportWarnings) throw new DramaProductionPackageError(message);
+                        options.importWarnings?.push(`${message}；已允许导入，后续生成前需要补充角色参考绑定`);
+                    }
+                }
+                for (const code of strings(item.propCodes)) {
+                    if (!has("prop_anchor", code)) {
+                        const message = `${label}的 referenceManifest 缺少道具 ${code} 锚点`;
+                        if (!options.allowImportWarnings) throw new DramaProductionPackageError(message);
+                        options.importWarnings?.push(`${message}；已允许导入，后续生成前需要补充道具参考绑定`);
+                    }
                 }
             }
         }
@@ -821,9 +837,11 @@ function synchronizeContinuityStates(episode: DramaProductionPackageEpisode): Dr
         const previousProps = new Map(from.exitState.props.map((item) => [item.assetId, item]));
         const carriedCharacters = new Set(edge.carryCharacterIds);
         const carriedProps = new Set(edge.carryPropIds);
+        const firstFrame = to.framePlan?.frames[0];
+        const firstFrameText = firstFrame ? [firstFrame.startPrompt, firstFrame.actionPrompt, firstFrame.transitionPrompt, firstFrame.endPrompt, firstFrame.imagePrompt].filter(Boolean).join("\n") : "";
         if (to.entryState) {
-            to.entryState.characters = mergeCarriedEntities(to.entryState.characters, previousCharacters, carriedCharacters);
-            to.entryState.props = mergeCarriedEntities(to.entryState.props, previousProps, carriedProps);
+            to.entryState.characters = mergeCarriedEntities(to.entryState.characters, previousCharacters, carriedCharacters, edge.notes, firstFrameText);
+            to.entryState.props = mergeCarriedEntities(to.entryState.props, previousProps, carriedProps, edge.notes, firstFrameText);
         }
         if (edge.inheritActualEndFrame) {
             if (to.framePlan) to.framePlan = { ...to.framePlan, start: { source: "previous_accepted_actual_tail" } };
@@ -832,8 +850,12 @@ function synchronizeContinuityStates(episode: DramaProductionPackageEpisode): Dr
     return { ...episode, shots: synchronized };
 }
 
-function mergeCarriedEntities<T extends { assetId: string }>(current: T[], previous: Map<string, T>, carried: Set<string>) {
-    const result = current.map((item) => (carried.has(item.assetId) && previous.has(item.assetId) ? previous.get(item.assetId)! : item));
+function mergeCarriedEntities<T extends DramaContinuityEntityState>(current: T[], previous: Map<string, T>, carried: Set<string>, edgeNotes: string | undefined, firstFrameText: string) {
+    const result = current.map((item) => {
+        const previousItem = previous.get(item.assetId);
+        if (!carried.has(item.assetId) || !previousItem) return item;
+        return continuityStateChangeIsIntentional(previousItem, item, edgeNotes, firstFrameText) ? ({ ...previousItem, ...item } as T) : previousItem;
+    });
     const present = new Set(result.map((item) => item.assetId));
     for (const assetId of carried) {
         const item = previous.get(assetId);
@@ -1285,6 +1307,8 @@ function validateStrictPackageVideoPrompt(
     if (options.requireContentQuality) {
         const layoutErrors = validateDramaVideoPromptCardLayout(prompt, frames, label);
         if (layoutErrors.length) throw new DramaProductionPackageError(layoutErrors.join("；"));
+        const timingErrors = validateDramaFrameTiming(frames, (options.dialogueUtterances || []) as DramaDialogueTimingInput[], label);
+        if (timingErrors.length) throw new DramaProductionPackageError(timingErrors.join("；"));
     }
     if (options.requireCameraPlan) {
         const cameraError = validateDramaCameraPlan(prompt, frames);

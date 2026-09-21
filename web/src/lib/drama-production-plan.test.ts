@@ -19,11 +19,11 @@ describe("drama production plan", () => {
         const plan = defaultDramaProductionPlan();
         expect(plan).toMatchObject({
             visual: { visualStyle: "", artStyle: "", source: "agent" },
-            video: { model: "seedance-2-0-official", mode: "storyboard", resolution: "720p", shotDuration: 15, internalCutPolicy: "adaptive", framePolicy: "agent", count: 1, allowExplicitFallback: false },
+            video: { model: "seedance-2-5-special", mode: "storyboard", resolution: "720p", shotDuration: 15, internalCutPolicy: "adaptive", framePolicy: "agent", count: 1, allowExplicitFallback: false },
             frameCountRange: { min: 2, max: 11 },
         });
         expect(plan.video.frameCount).toBeUndefined();
-        expect(plan.skills.map((skill) => skill.id)).toEqual(["seedance-director", "seedance-25-director"]);
+        expect(plan.skills.map((skill) => skill.id)).toEqual(["drama-video-director", "seedance-25-director"]);
         expect(plan.references).toMatchObject({ strategy: "adaptive", minImages: 3, maxImages: 9 });
         expect(plan.continuity).toMatchObject({ mode: "strict", requireAcceptedActualTail: true });
     });
@@ -31,7 +31,18 @@ describe("drama production plan", () => {
     it("normalizes legacy multi-reference plans into storyboard workflow", () => {
         const plan = normalizeDramaProductionPlan({ video: { model: "seedance-2-5", mode: "reference", resolution: "720p", count: 2 }, references: { minImages: 3, maxImages: 5 }, continuity: { requireAcceptedActualTail: true } });
         expect(plan).toMatchObject({ video: { model: "seedance-2-5", mode: "storyboard", count: 2 }, references: { minImages: 3, maxImages: 9 }, continuity: { requireAcceptedActualTail: true } });
-        expect(plan?.skills.map((skill) => skill.id)).toEqual(["seedance-director", "seedance-25-director"]);
+        expect(plan?.skills.map((skill) => skill.id)).toEqual(["drama-video-director", "seedance-25-director"]);
+    });
+
+    it("removes the legacy Seedance 2.0 alias from new production plans", () => {
+        const plan = normalizeDramaProductionPlan({ skills: [{ id: "seedance-director", name: "旧导演", version: "2.0" }] });
+        expect(plan?.skills.map((skill) => skill.id)).toEqual(["drama-video-director", "seedance-25-director"]);
+    });
+
+    it("preserves an explicit no-reference-image production plan", () => {
+        const plan = normalizeDramaProductionPlan({ references: { minImages: 0, maxImages: 0, roles: [] } });
+
+        expect(plan?.references).toEqual({ strategy: "adaptive", minImages: 0, maxImages: 0, roles: [] });
     });
 
     it("derives the drama reference budget from the target duration", () => {

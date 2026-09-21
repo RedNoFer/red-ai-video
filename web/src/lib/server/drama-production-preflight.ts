@@ -6,7 +6,7 @@ import { dramaDialogueTimingReminder, hasQuotedDramaDialogue, type DramaDialogue
 import { dramaReferenceImageBudget } from "@/lib/drama-production-plan";
 import { dramaShotReferenceSelectionIds, resolveDramaVideoReferenceMode } from "@/lib/drama-video-reference-plan";
 import type { DramaVideoReferenceMode } from "@/lib/drama-project-contract";
-import { validateDramaPerformanceDetail, validateDramaVideoPromptCardLayout } from "@/lib/drama-prompt-quality";
+import { validateDramaFrameTiming, validateDramaPerformanceDetail, validateDramaVideoPromptCardLayout } from "@/lib/drama-prompt-quality";
 import { validateDramaCharacterWardrobeContinuity, validateDramaCutInformationDiversity, validateDramaPromptComposition, validateDramaReferenceAliasConsistency } from "@/lib/drama-prompt-composition-quality";
 import { auditDramaShotDirectorQuality } from "@/lib/server/agent-skills/drama-video-director";
 
@@ -134,6 +134,8 @@ function checkShot(
     if (generatedPromptOrigin && shot.framePlan?.frames.length) {
         const layoutErrors = validateDramaVideoPromptCardLayout(videoPrompt || "", shot.framePlan.frames, label);
         if (layoutErrors.length) issues.push(blocking("VIDEO_PROMPT_LAYOUT", layoutErrors[0], { shotId: shot.id, correction: "重新优化或生成视频提示词，按小墨式导演镜头卡逐帧补齐时间、景别、焦段、机位、运镜和可见画面" }));
+        const timingErrors = validateDramaFrameTiming(shot.framePlan.frames, shot.utterances as DramaDialogueTimingInput[], label);
+        if (timingErrors.length) issues.push(blocking("FRAME_DIALOGUE_TIMING", timingErrors[0], { shotId: shot.id, correction: "按对白自然开口、收句、停顿和反应重新分配帧段，禁止机械等长" }));
         const malformedDialogue = shot.utterances.filter((item) => item.type === "dialogue" && (!item.speaker || !hasQuotedDramaDialogue(videoPrompt || "", item.speaker, item.text)));
         if (malformedDialogue.length) issues.push(blocking("DIALOGUE_PROMPT_FORMAT", `${label}包含未使用中文引号的对白，必须写成“说话人说：“实际台词””`, { shotId: shot.id, correction: "重新生成带实际台词和中文引号的对白表演" }));
         const shotText = [

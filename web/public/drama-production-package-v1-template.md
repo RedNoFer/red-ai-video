@@ -2,7 +2,7 @@
 
 > 制作包格式：`vozeb-drama-production-package-v1`
 >
-> 模板版本：由 `pnpm compile:skills` 自动生成；唯一制作包契约：`vozeb-drama-production-package-v1@1.0.0`（契约 hash：`e62436d65763e341d6ffd5156e3e5eaedcc75730a7bc6e6e6a31f342b5791eaf`，规范源 hash：`45b1cf1ebf11f18175a61cb82f0fc589423e417d11e86f8b438711eac4dbedc8`）。导演 Skill：`drama-video-director@1.11.0`（hash：`ff5228bad1d35b51435c45cb379ec456d474f16f0c66660c1fc5883f4322665f`）；服务端制作包规则 hash：`7dfbd2fd9b152a14ab0f94a9d8e8b03569e41dbde64584db2f09f6fb695e4045`；Seedance Skill、服务端规则和 Codex 工作单均由同一编译清单绑定。
+> 模板版本：由 `pnpm compile:skills` 自动生成；唯一制作包契约：`vozeb-drama-production-package-v1@1.0.0`（契约 hash：`29514979881185ae347d74696cfb02c79eae37129a9fc77893ad85b50c7d7678`，规范源 hash：`a8c563de6cb3d76e5735ec3477d73f9575593b9c81954c02c6ffb4ef0614987e`）。导演 Skill：`drama-video-director@1.12.0`（hash：`a05c29555cd33fe04c7165fd0ad987236d03cc947ba3c54c076b7d40cd0839c2`）；服务端制作包规则 hash：`431ac723691bfc8b3272990634aa5a5217b9a9aa2ee798fe475815b67094df06`；Seedance Skill、服务端规则和 Codex 工作单均由同一编译清单绑定。
 >
 > 使用约定：本模板是当前 v1 制作包的填写入口。完整制作包必须同时提供可导入的规范对象 JSON；JSON 是导入事实源，下面的章节是面向人工阅读的确定性展示。不要把历史制作包、旧 generationPrompt 或旧分镜正文当作新包模板。
 >

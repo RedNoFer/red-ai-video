@@ -1,8 +1,10 @@
 import type { DramaAuthoringSourceSnapshot, DramaProductionPackageV1, DramaQualityGateCheck, DramaQualityGateReport } from "@/lib/drama-project-contract";
 import { dramaDialogueFragmentSequenceError, dramaDialogueTimingReminder, hasQuotedDramaDialogue, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
 import { DRAMA_DENSE_HARD_CUT_RANGE_30S, hasDramaDenseCutRule, hasDramaDenseCutRuleInCustomTemplateSources } from "@/lib/drama-production-plan";
+import { hasDramaReferenceAnchorClarity } from "@/lib/drama-prompt-compiler";
 import { validateDramaCharacterWardrobeContinuity, validateDramaCutInformationDiversity, validateDramaPromptComposition, validateDramaReferenceAliasConsistency } from "@/lib/drama-prompt-composition-quality";
-import { validateDramaVideoPromptCardLayout } from "@/lib/drama-prompt-quality";
+import { validateDramaFrameCausalChain, validateDramaFrameTiming, validateDramaVideoPromptCardLayout } from "@/lib/drama-prompt-quality";
+import { validateDramaContinuityEdges } from "@/lib/drama-continuity-policy";
 import { DRAMA_PACKAGE_GATE_CODES, DRAMA_PACKAGE_SECTIONS } from "@/lib/server/drama-production-package-contract";
 
 export type DramaAuthoringQualityInput = {
@@ -39,6 +41,7 @@ export function validateDramaAuthoringQuality(input: DramaAuthoringQualityInput)
     checkLiteraryCompleteness(checks, input.package, sourceText, input.targetNarrativeChapter);
     checkDialogueCoverage(checks, input.package, sourceText);
     checkDialogueCapacity(checks, input.package);
+    checkFrameDialogueTiming(checks, input.package);
     checkDialoguePerformanceQuality(checks, input.package);
     checkVideoPromptLayout(checks, input.package);
     checkPlotFacts(checks, input.package, sourceText);
@@ -69,9 +72,22 @@ function checkDialogueCapacity(checks: DramaQualityGateCheck[], value: DramaProd
     for (const episode of value.episodes) {
         for (const shot of episode.shots) {
             const issue = dramaDialogueTimingReminder(shot.duration, shot.utterances as DramaDialogueTimingInput[], shot.dialogue, `${episode.code}/${shot.code}`);
-            if (!issue) continue;
-            if (issue.withinTolerance) reminders.push(issue.message);
-            else blockers.push(issue.message);
+            if (issue) {
+                if (issue.withinTolerance) reminders.push(issue.message);
+                else blockers.push(issue.message);
+            }
+            for (const [utteranceIndex, utterance] of (shot.utterances as DramaDialogueTimingInput[]).entries()) {
+                if ((utterance.type !== "dialogue" && utterance.type !== "voiceover") || utterance.startSecond === undefined || utterance.endSecond === undefined) continue;
+                const startSecond = Number(utterance.startSecond);
+                const endSecond = Number(utterance.endSecond);
+                if (!Number.isFinite(startSecond) || !Number.isFinite(endSecond) || endSecond <= startSecond) continue;
+                const utteranceLabel = utterance.order === undefined ? `utterance-${utteranceIndex + 1}` : `utterance-${utterance.order}`;
+                const windowIssue = dramaDialogueTimingReminder(endSecond - startSecond, [utterance], "", `${episode.code}/${shot.code}/${utteranceLabel}`);
+                if (!windowIssue) continue;
+                const message = `对白 ${utteranceLabel} 的实际口型窗口不足：${windowIssue.message}`;
+                if (windowIssue.withinTolerance) reminders.push(message);
+                else blockers.push(message);
+            }
         }
     }
     checks.push({
@@ -82,6 +98,27 @@ function checkDialogueCapacity(checks: DramaQualityGateCheck[], value: DramaProd
         sourceRefs: ["episodes[].shots[].utterances", "episodes[].shots[].duration"],
         fixHint: "先按自然语速和停顿计算对白容量，再在自然分句、说话人转换、动作反应或逻辑片段边界处拆分；不得把一秒内读不完的台词压进镜头。",
     });
+}
+
+function checkFrameDialogueTiming(checks: DramaQualityGateCheck[], value: DramaProductionPackageV1) {
+    const failures = value.episodes.flatMap((episode) =>
+        episode.shots.flatMap((shot) =>
+            validateDramaFrameTiming(
+                shot.framePlan?.frames || [],
+                shot.utterances as DramaDialogueTimingInput[],
+                `${episode.code}/${shot.code}`,
+            ),
+        ),
+    );
+    add(
+        checks,
+        "FRAME_DIALOGUE_TIMING",
+        !failures.length,
+        "对白与帧段节奏",
+        failures.length ? failures.slice(0, 8).join("；") : "带时间对白的帧段按自然开口、收句、停顿和反应边界组织，没有机械等分",
+        ["episodes[].shots[].utterances", "episodes[].shots[].framePlan.frames[]"],
+        "先按对白自然时长和动作反应重新划分 framePlan 时间段；禁止把含对白的30秒镜头机械切成相同长度的帧段。",
+    );
 }
 
 function checkVideoPromptLayout(checks: DramaQualityGateCheck[], value: DramaProductionPackageV1) {
@@ -254,10 +291,13 @@ function checkActionDensity(checks: DramaQualityGateCheck[], value: DramaProduct
     for (const episode of value.episodes) {
         for (const shot of episode.shots) {
             const frames = shot.framePlan?.frames || [];
+            const dramaticFunction = `${shot.dramaticFunction || ""}\n${shot.performanceNotes || ""}\n${shot.performancePlan?.emotionalObjective || ""}`;
+            if (!/(?:目标|欲望|想要|试图|必须|为了|守住|逼迫|阻止|拒绝|压力|阻力|承受|取回|保护|揭示|隐瞒)/u.test(dramaticFunction)) missing.push(`${shot.code}/dramaticFunction`);
             for (const frame of frames) {
                 const action = frame.actionPrompt.trim();
                 const result = `${frame.endPrompt || ""}\n${frame.transitionPrompt || ""}\n${frame.imagePrompt}`.trim();
                 if (!action || genericActionPattern.test(action) || !observableActionPattern.test(action) || !result || !observableResultPattern.test(result) || cinematicPlaceholderPattern.test(result)) missing.push(`${shot.code}/${frame.id}`);
+                missing.push(...validateDramaFrameCausalChain(frame.actionPrompt, frame.transitionPrompt, frame.endPrompt, `${shot.code}/${frame.id}`));
             }
         }
     }
@@ -266,9 +306,9 @@ function checkActionDensity(checks: DramaQualityGateCheck[], value: DramaProduct
         "ACTION_DENSITY",
         !missing.length,
         "逐时间段动作密度",
-        missing.length ? `${missing.length} 个时间段缺少“触发→可见变化→结果”闭环：${missing.slice(0, 5).join(", ")}` : "每个真实时间段都有可观察动作和结果状态",
+        missing.length ? `${missing.length} 个镜头/时间段缺少“谁做什么→因为什么→可见变化→声音锚点”闭环：${missing.slice(0, 5).join(", ")}` : "每个镜头和真实时间段都有欲望/阻力、触发、可观察动作、结果和声音锚点",
         ["episodes[].shots[].framePlan.frames[]"],
-        "每段写清动作触发、人物可见变化，以及对手/NPC/道具/环境的结果；抽象词不能代替动作。",
+        "每段写清谁做什么、因为什么触发、身体微动作/手部受力、对手/NPC/道具/环境的可见结果和声音锚点；抽象词不能代替动作。",
     );
 }
 
@@ -369,6 +409,14 @@ function checkVisualClarityWarnings(checks: DramaQualityGateCheck[], value: Dram
         const hasClarityAnchor = /清晰|可辨|完整入画|不遮挡|保持脸部|五官.*可见|结构.*可读/u.test(text);
         if (hasUnqualifiedBlur) failures.push(`${shot.code} 使用了未说明原因的模糊/虚焦/浅景深`);
         if (!hasClarityAnchor) failures.push(`${shot.code} 未明确当前景别下的主体清晰度`);
+        for (const code of shot.characterCodes || []) {
+            const asset = value.assets.characters.find((item) => item.code === code);
+            if (asset?.supplierPrompt && !hasDramaReferenceAnchorClarity(asset.supplierPrompt, "角色")) failures.push(`${shot.code} 的角色资产 ${code} 缺少清晰身份特写、四视图/转面或服装配饰锚点`);
+        }
+        if (shot.locationCode) {
+            const asset = value.assets.locations.find((item) => item.code === shot.locationCode);
+            if (asset?.supplierPrompt && !hasDramaReferenceAnchorClarity(asset.supplierPrompt, "场景")) failures.push(`${shot.code} 的场景资产 ${shot.locationCode} 不是高清16:9单视角全景或缺少可读空间拓扑`);
+        }
     }
     add(
         checks,
@@ -649,14 +697,15 @@ function checkSimpleStructuralChecks(checks: DramaQualityGateCheck[], value: Dra
         ["locationCode", "characterCodes", "propCodes"],
         "只引用当前正式资产的稳定 code，并让正文道具与镜头绑定一致。",
     );
+    const continuityFailures = validateDramaContinuityEdges(value.episodes);
     add(
         checks,
         "CONTINUITY",
-        value.episodes.every((episode) => episode.shots.every((shot) => Boolean(shot.entryState && shot.exitState && shot.continuity))),
+        value.episodes.every((episode) => episode.shots.every((shot) => Boolean(shot.entryState && shot.exitState && shot.continuity))) && !continuityFailures.length,
         "连续性",
-        "每个镜头都提供入口、出口和连续性事实",
-        ["entryState", "exitState", "continuity"],
-        "补充可继承的入口/出口状态、轴线、站位、视线和动作起止。",
+        continuityFailures.length ? continuityFailures.slice(0, 8).join("；") : "每个镜头都提供入口、出口和连续性事实，跨硬切的站位、轴线、道具和首个帧段均明确承接",
+        ["entryState", "exitState", "continuity", "continuityEdges", "framePlan.frames[0]"],
+        "硬切可以开始新视频片段，但必须逐项继承上一镜出口的角色/道具空间状态；若确实移动，要写清触发、路径、受力、结果，并在下一镜首帧重复站位锁定。",
     );
     if (value.authoring)
         add(

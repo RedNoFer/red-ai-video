@@ -13,7 +13,7 @@ import { agentModelOptions, agentPlanFallbackExample, agentPlanToolForMode, canC
 import { isExplicitProjectHandoffRequest, normalizeAgentProjectHandoff } from "./agent-run-project-handoff";
 import { normalizeCanvasPlanForSelection } from "./agent-run-task-input";
 import { GenerationSubmissionUncertainError } from "@/lib/server/generation-submission-error";
-import { rankTextPlanningCandidates } from "@/lib/server/text-planning-runtime";
+import { rankTextPlanningCandidates, TextPlanningRequestError } from "@/lib/server/text-planning-runtime";
 import { filterAgentPlannerModels, isLikelyConversationPlannerPrompt } from "@/lib/server/agent-run-planning-profile";
 import { buildAgentRunPlannerAudit } from "@/lib/server/agent-run-audit";
 import { orderCreativeAssetsByIds } from "@/lib/creative-asset-references";
@@ -369,10 +369,12 @@ export async function executeDramaScriptRun(run: AgentRun, origin: string, cooki
     const requestedFramePolicy = hasLockedPlan ? normalizedSnapshotPlan?.video.framePolicy || "agent" : "agent";
     const requestedFrameCount = requestedFramePolicy === "fixed-4" ? 4 : requestedFramePolicy === "fixed-5" ? 5 : undefined;
     const requestedFrameRange = requestedFramePolicy === "agent" ? normalizedSnapshotPlan?.frameCountRange || DRAMA_FRAME_COUNT_RANGE_DEFAULT : undefined;
+    const referencesDisabledByRequest = /(?:无图片参考|无参考图|没有(?:角色图|场景图|参考图|图片)|(?:不|无需|不要).{0,8}(?:图片|参考图|素材图))/u.test(run.prompt);
     const lockedPlan =
         hasLockedPlan && normalizedSnapshotPlan
             ? {
                   ...normalizedSnapshotPlan,
+                  references: referencesDisabledByRequest ? { ...normalizedSnapshotPlan.references, minImages: 0, maxImages: 0, roles: [] } : normalizedSnapshotPlan.references,
                   video: requestedFrameCount
                       ? { ...normalizedSnapshotPlan.video, shotDuration: requestedShotDuration, internalCutPolicy: requestedInternalCutPolicy, framePolicy: requestedFramePolicy, frameCount: requestedFrameCount }
                       : (() => {
@@ -416,7 +418,7 @@ export async function executeDramaScriptRun(run: AgentRun, origin: string, cooki
 
 目标小说章节：${String(targetNarrativeChapter)}。这里的“小说第 ${String(targetNarrativeChapter)} 章”是剧情素材范围；“制作包第 3 节｜第一集文学剧本”只是固定模板章节，二者绝不能混淆。未明确要求制作包时只返回自然中文剧本协作回复；明确要求时只返回 {"mode":"package","reply":"简短完成说明","markdown":"符合 vozeb-drama-production-package-v1 的完整 Markdown"}。markdown 是 Agent authoring draft，不是最终持久化文件：必须生成完整文学剧本，不得输出摘要、梗概、镜头摘要或模板示例；必须保留 TXT 的每条显式对白和关键剧情事实，并为每个镜头直接写出公开 videoPrompt 与 framePlan。服务端会校验 draft，再由规范化后的唯一对象确定性导出最终制作包，禁止依赖脚本读取模板或用固定文案冒充生成。制作包必须包含当前集、项目级正式资产、13 个章节和现有镜头字段；第 12、13 节只能放在 archive.sections，绝不能把 SEC01-SEC13 伪装成 shots；不要在其他字段重复规则，也不要把一个字段的正文复制到另一个字段。字段语义和质量门禁只以当前唯一导演 Skill 与制作包协议为准。
 
-生成每个镜头前必须逐项自检：imagePrompt 和 videoPrompt 都非空且分别只表达静态画面/可执行视频；performancePlan 的情绪目标、情绪递进、说话方式、节奏、呼吸、克制度及 start/middle/end 四项表演都写满具体可见结果；lightingPlan 的十个字段都写满光源、材质和前后镜衔接；continuity 的十个字段、entryState、exitState、dramaticFunction、cameraMotion、lens 都写满。framePlan 必须有首帧来源、尾帧要求和真实连续时间段；每个时间段都写 actionPrompt、transitionPrompt、endPrompt、imagePrompt，除第一段外 startPrompt 必须原样等于上一段 endPrompt。每个 imagePrompt 必须包含当前主体、冻结的可见状态和一项空间/视线/姿态/道具/环境结果；每个 videoPrompt 必须采用小墨 6.3 式简洁导演镜头卡：每个真实 framePlan 时间段对应一张 \`### 镜头 N | 时间范围 | 景别 | 焦段 | 机位角度 | 运镜方式 | 人物镜头/非人物镜头\` 卡片，卡片内写场景、画面内容、光影、色调、台词、人声和音效。画面内容必须是屏幕上正在发生的可见动作与结果；直接对白必须写成 \`说话人说：“完整台词”\`，同一对白只按自然语速和对白游标连续出现，不得在相邻镜头重复完整台词。不要在公开视频中输出【重要剪辑指令】等旧八段标题或起点、动作与触发、可见衔接、终点等内部字段名；这些字段只在 framePlan 内校验。镜头数量、硬切次数和逻辑片段时长按剧情与项目配置自适应，只有当前请求明确配置密集硬切时才执行对应密度。台词结束后的时间段必须写具体静默或反应结果。本轮制作包的剧情事实、角色名称、地点和道具只能来自当前 authoringSources 与正式项目资产，不得把任何示例角色、地点、对白或道具当作固定规则。缺任何一项就先在内部修订，不能把半成品交付给用户，也不得用“自然反应、保持状态、情绪加剧、关键变化、电影感推进”等占位语代替。
+生成每个镜头前必须逐项自检：imagePrompt 和 videoPrompt 都非空且分别只表达静态画面/可执行视频；performancePlan 的情绪目标、情绪递进、说话方式、节奏、呼吸、克制度及 start/middle/end 四项表演都写满具体可见结果；lightingPlan 的十个字段都写满光源、材质和前后镜衔接；continuity 的十个字段、entryState、exitState、dramaticFunction、cameraMotion、lens 都写满。dramaticFunction必须写出当前人物要达成的目标/欲望和具体阻力/压力。framePlan 必须有首帧来源、尾帧要求和真实连续时间段；每个时间段都写 actionPrompt、transitionPrompt、endPrompt、imagePrompt，除第一段外 startPrompt 必须原样等于上一段 endPrompt。每帧都必须写清“谁做什么→因为什么触发→身体/手部/道具发生什么→产生什么可见结果→声音锚点”；静默也要写出屏息、底噪或余响。每个 imagePrompt 必须包含当前主体、冻结的可见状态和一项空间/视线/姿态/道具/环境结果；每个 videoPrompt 必须采用小墨 6.3 式简洁导演镜头卡：每个真实 framePlan 时间段对应一张 \`### 镜头 N | 时间范围 | 景别 | 焦段 | 机位角度 | 运镜方式 | 人物镜头/非人物镜头\` 卡片，卡片内写场景、画面内容、光影、色调、台词、人声和音效。画面内容必须是屏幕上正在发生的可见动作与结果；直接对白必须写成 \`说话人说：“完整台词”\`，同一对白只按自然语速和对白游标连续出现，不得在相邻镜头重复完整台词。不要在公开视频中输出【重要剪辑指令】等旧八段标题或起点、动作与触发、可见衔接、终点等内部字段名；这些字段只在 framePlan 内校验。镜头数量、硬切次数和逻辑片段时长按剧情与项目配置自适应，只有当前请求明确配置密集硬切时才执行对应密度。硬切可以开始新视频片段，但携带角色/道具/环境/轴线时，下一镜entryState和首个公开镜头卡必须逐项继承上一镜exitState的空间位置、支撑/接触、姿态、视线、持有关系和轴线；只有上一镜写明移动路径/受力及到达结果才可换位。不能把20秒剧情机械装进30秒容器；台词结束后的每个时间段都必须写具体剧情职责、反应结果或有目的的静默，不得留空。本轮制作包的剧情事实、角色名称、地点和道具只能来自当前 authoringSources 与正式项目资产，不得把任何示例角色、地点、对白或道具当作固定规则。缺任何一项就先在内部修订，不能把半成品交付给用户，也不得用“自然反应、保持状态、情绪加剧、关键变化、电影感推进”等占位语代替。
 
 framePlan.frames 只能保留现有字段；静态正文和视频正文必须由 Agent 直接写出，并保持真实时间边界和节点对应；应用层只校验、保存和转发，不从 actionPrompt、镜头描述、资产、NPC 或历史记录重组正文。固定资产只用稳定 code/id/name，referenceManifest 只表达实际参考图绑定，内部执行信息不得进入公开正文。${lockedPlan ? `本次目标镜头时长为 ${requestedShotDuration} 秒；按完整剧情节拍重切，不机械复制旧拆分。锁定方案及其中的 customDirectorRules 只读取用户输入中的这一份，不从任何其他字段补充。` : "没有锁定生产方案时先提示用户完成配置。"} ${framePolicyInstruction} 任何收费或上游生产前先给出任务、参考和参数预览并等待明确确认。`;
     const input = buildDramaPackageAuthoringInput({
@@ -438,10 +440,20 @@ framePlan.frames 只能保留现有字段；静态正文和视频正文必须由
         description: "返回受限剧本协作回复或完整制作包",
         parameters: { type: "object", properties: { mode: { type: "string", enum: ["reply", "package"] }, reply: { type: "string" }, markdown: { type: "string" } }, required: ["mode", "reply"], additionalProperties: false },
     };
+    const isPackageRequest = /制作包|制作包提示词|production package/iu.test(run.prompt);
+    const authoringPreflight = `制作包返回前必须先完成一次内部自检：逐项核对当前模板章节和字段职责、TXT对白与剧情事实覆盖、先按剧情节拍拆逻辑片段再按配置固定每镜时长、对白自然时长与帧段边界、每帧“谁做什么→因为什么触发→身体/手部/道具可见变化→结果→声音锚点”、dramaticFunction中的欲望/目标与阻力/压力、画面内容不得含完整对白、framePlan连续性、镜头模式与硬切事件、跨硬切的entryState/exitState/首帧站位继承、最小素材绑定、角色/场景清晰度和当前productionPlan。硬切可以开始新视频片段，但不得重置世界空间；只有明确写出移动路径/受力和到达结果才能改变位置。对白结束后的时间必须有剧情职责，不能用静态反应填空。自检不通过时不要输出半成品；直接在同一次生成中修正，最终只返回一份可直接导入的完整制作包。`;
     const persistDraft = async (draft: DramaAuthoringDraft, provider: DramaAuthoringProvider) => {
         const markdown = draft.markdown.trim();
         if (!markdown) throw new Error("剧本 Agent 没有返回制作包正文");
-        let preview = previewDramaProductionPackage(markdown, "剧本 Agent 制作包.md", project, { validateVideoPrompt: true, requireCameraPlan: true, requireContentQuality: true });
+        const authoringPreflightWarnings: string[] = [];
+        let preview = previewDramaProductionPackage(markdown, "剧本 Agent 制作包.md", project, {
+            validateVideoPrompt: true,
+            requireCameraPlan: true,
+            requireContentQuality: true,
+            strictContinuity: true,
+            allowImportWarnings: true,
+            importWarnings: authoringPreflightWarnings,
+        });
         if (lockedPlan) {
             const generatedPlan = preview.package.project.productionBible?.productionPlan;
             const mergedVisual = {
@@ -466,8 +478,17 @@ framePlan.frames 只能保留现有字段；静态正文和视频正文必须由
                     },
                 },
             };
-            preview = previewDramaProductionPackage(serializeDramaProductionPackageMarkdown(packageWithPlan), "剧本 Agent 制作包.md", project, { validateVideoPrompt: true, requireCameraPlan: true, requireContentQuality: true });
+            preview = previewDramaProductionPackage(serializeDramaProductionPackageMarkdown(packageWithPlan), "剧本 Agent 制作包.md", project, {
+                validateVideoPrompt: true,
+                requireCameraPlan: true,
+                requireContentQuality: true,
+                strictContinuity: true,
+                allowImportWarnings: true,
+                importWarnings: authoringPreflightWarnings,
+            });
         }
+        const uniquePreflightWarnings = [...new Set(authoringPreflightWarnings)];
+        if (uniquePreflightWarnings.length) throw new DramaProductionPackageError(`制作包 authoring 预检未通过：${uniquePreflightWarnings.slice(0, 24).join("；")}`);
         const initialReport = validateDramaAuthoringQuality({ package: preview.package, sources: authoringSources, targetNarrativeChapter });
         if (initialReport.status === "blocked") throw new DramaAuthoringQualityGateError(formatDramaQualityGateFailure(initialReport), initialReport);
         const provenance = {
@@ -492,6 +513,7 @@ framePlan.frames 只能保留现有字段；静态正文和视频正文必须由
             requireContentQuality: true,
             requireAgentAuthoring: true,
             requireAuthoringQuality: true,
+            strictContinuity: true,
             authoringSources,
             targetNarrativeChapter,
         });
@@ -508,6 +530,8 @@ framePlan.frames 只能保留现有字段；静态正文和视频正文必须由
                 status: "completed",
                 tasks: [],
                 reviewed: true,
+                dramaFailureKind: undefined,
+                dramaQualityGateReport: undefined,
                 dramaScriptPackage: { markdown: canonicalMarkdown, preview: canonicalPreview },
                 executionId: undefined,
                 timings: { ...(run.timings || { requestAcceptedAt: run.createdAt }), runCompletedAt: Date.now() },
@@ -522,6 +546,7 @@ framePlan.frames 只能保留现有字段；静态正文和视频正文必须由
         return;
     }
     let latestError: unknown;
+    let authoringCandidateStarted = false;
     for (const candidate of rankTextPlanningCandidates(candidates.map((item) => ({ ...item, channelId: item.channel.id })))) {
         try {
             const call = await requestFunctionCall(
@@ -529,7 +554,7 @@ framePlan.frames 只能保留现有字段；静态正文和视频正文必须由
                 cookie,
                 candidate,
                 [
-                    { role: "system", content: `${authoringRules}\n\n${instruction}\n${visualInstruction}\n${attachmentInstruction}` },
+                    { role: "system", content: `${authoringRules}\n\n${instruction}\n${visualInstruction}\n${attachmentInstruction}\n\n${authoringPreflight}` },
                     { role: "user", content: JSON.stringify(input) },
                 ],
                 tool,
@@ -541,6 +566,7 @@ framePlan.frames 只能保留现有字段；静态正文和视频正文必须由
                 systemAiIdempotencyKey("drama-script", run.userId, run.id, candidate.channel.id, candidate.upstreamModel),
             );
             const parsed = JSON.parse(call.arguments) as { mode?: string; reply?: string; markdown?: string };
+            if (isPackageRequest) authoringCandidateStarted = true;
             if (parsed.mode === "package") {
                 const draft = { mode: "package" as const, reply: parsed.reply?.trim() || "", markdown: parsed.markdown?.trim() || "" };
                 try {
@@ -582,17 +608,62 @@ framePlan.frames 只能保留现有字段；静态正文和视频正文必须由
                     if (repaired.mode !== "package" || !repaired.markdown?.trim()) throw new Error("制作包 authoring revision 未返回完整制作包");
                     await persistDraft({ mode: "package", reply: repaired.reply?.trim() || draft.reply, markdown: repaired.markdown.trim() }, "project-gpt");
                 }
-            } else
-                await updateAgentRunById(
-                    run.id,
-                    { status: "completed", tasks: [], reviewed: true, executionId: undefined, timings: { ...(run.timings || { requestAcceptedAt: run.createdAt }), runCompletedAt: Date.now() } },
-                    { type: "run.completed", data: { reply: parsed.reply?.trim() || "已收到本集剧本要求。" } },
-                    ["running"],
-                    run.executionId,
-                );
+            } else {
+                // A package request must never be acknowledged as completed when
+                // the authoring model returned a conversational reply. The strict
+                // package gates may have already rejected the available inputs. Give
+                // the same authoring candidate one complete revision opportunity;
+                // surfacing the first conversational reply as a failure makes the
+                // UI look as if the model was not asked to author a package at all.
+                if (isPackageRequest) {
+                    const repairCall = await requestFunctionCall(
+                        origin,
+                        cookie,
+                        candidate,
+                        [
+                            {
+                                role: "system",
+                                content: `${authoringRules}\n\n${instruction}\n${visualInstruction}\n${attachmentInstruction}\n\n这是内部 authoring revision，不是新的用户请求。上一轮没有返回完整 package 草案，可能返回了普通回复或缺少 markdown。请忽略上一轮回复，直接重新完整生成一份可交付的制作包 Markdown；不要只返回补丁、解释、提问或摘要。公开视频 videoPrompt 必须采用小墨 6.3 式简洁导演镜头卡：每个真实 framePlan 时间段对应一张“### 镜头 N | 时间范围 | 景别 | 焦段 | 机位角度 | 运镜方式 | 人物镜头/非人物镜头”卡片，并填写场景、画面内容、光影、色调、台词、人声、音效；不得输出旧八段标题或起点、动作与触发、可见衔接、终点等内部字段名。对白必须按自然语速和对白游标分配，禁止相邻镜头复制完整台词；对白结束段必须写具体静默或反应结果。framePlan 内部字段仍需完整、连续且逐项通过门禁。只能返回 mode=package、reply 和完整 markdown。`,
+                            },
+                            {
+                                role: "user",
+                                content: JSON.stringify({
+                                    ...input,
+                                    authoringRevision: {
+                                        previousDraft: "",
+                                        feedback: [{ code: "PACKAGE_DRAFT_MISSING", scope: "制作包 authoring", evidence: "上一轮未返回 mode=package 的完整 markdown 草案", fixHint: "直接返回完整可执行制作包，不要返回普通对话" }],
+                                    },
+                                }),
+                            },
+                        ],
+                        tool,
+                        tool.name,
+                        signal,
+                        run.userId,
+                        model,
+                        false,
+                        systemAiIdempotencyKey("drama-script-authoring-revision", run.userId, run.id, candidate.channel.id, candidate.upstreamModel),
+                    );
+                    const repaired = JSON.parse(repairCall.arguments) as { mode?: string; reply?: string; markdown?: string };
+                    if (repaired.mode !== "package" || !repaired.markdown?.trim()) throw new Error("制作包 authoring revision 未返回完整制作包");
+                    await persistDraft({ mode: "package", reply: repaired.reply?.trim() || "", markdown: repaired.markdown.trim() }, "project-gpt");
+                } else
+                    await updateAgentRunById(
+                        run.id,
+                        { status: "completed", tasks: [], reviewed: true, executionId: undefined, timings: { ...(run.timings || { requestAcceptedAt: run.createdAt }), runCompletedAt: Date.now() } },
+                        { type: "run.completed", data: { reply: parsed.reply?.trim() || "已收到本集剧本要求。" } },
+                        ["running"],
+                        run.executionId,
+                    );
+            }
             return;
         } catch (error) {
             latestError = error;
+            // Once a model has returned an authoring response, a content-gate
+            // failure is not a provider failure. Do not submit the same full
+            // package to another candidate; only request-level errors may fail
+            // over to the next channel.
+            if (isPackageRequest && authoringCandidateStarted && !isDramaAuthoringRequestFailure(error)) throw error;
         }
     }
     throw latestError instanceof Error ? latestError : new Error("剧本 Agent 执行失败");
@@ -609,6 +680,10 @@ function formatDramaQualityGateFailure(report: { checks: Array<{ code: string; s
 
 function isTimeoutLike(error: unknown) {
     return error instanceof Error && (error.name === "TimeoutError" || /timeout|timed out|响应超时|请求超时/iu.test(error.message));
+}
+
+function isDramaAuthoringRequestFailure(error: unknown) {
+    return isTimeoutLike(error) || error instanceof GenerationSubmissionUncertainError || (error instanceof TextPlanningRequestError && error.retryable);
 }
 
 export function isOutsideDramaScriptScope(prompt: string) {

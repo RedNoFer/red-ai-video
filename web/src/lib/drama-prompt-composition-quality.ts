@@ -76,7 +76,7 @@ export function validateDramaCutInformationDiversity(input: DramaPromptCompositi
     const text = input.prompt;
     const events = [...text.matchAll(/镜头事件\s*[：:]\s*([^\n]+)/gu)].map((match) => match[1]);
     const cardMode = input.frames.length > 1 && /(?:^|\n)\s*###\s*镜头\s*\d+\s*\|/u.test(text);
-    const cardSegments = [...text.matchAll(/(^|\n)(###\s*镜头\s*\d+\s*\|[^\n]+[\s\S]*?)(?=\n###\s*镜头\s*\d+\s*\||$)/gmu)].map((match) => {
+    const cardSegments = [...text.matchAll(/(^|\n)(###\s*镜头\s*\d+\s*\|[^\n]+[\s\S]*?)(?=\n###\s*镜头\s*\d+\s*\||$)/gu)].map((match) => {
         const block = match[2];
         const visual = block.match(/(?:^|\n)\s*画面内容\s*[：:]\s*([^\n]+)/u)?.[1] || "";
         return `${block.split("\n")[0]} ${visual}`;

@@ -78,6 +78,17 @@ export function hasDramaAssetPromptQuality(value: string | undefined, kind: "角
     return visibleLines.every((line) => !hasDramaPropNarrative(line)) && !hasPositiveEnvironment && /(?:单一道具主体|只展示道具|道具本体)/u.test(prompt) && /(?:静置|展示)/u.test(prompt);
 }
 
+export function hasDramaReferenceAnchorClarity(value: string | undefined, kind: "角色" | "场景" | "道具") {
+    const prompt = formatDramaAssetPrompt(value || "");
+    if (!hasDramaAssetPromptQuality(prompt, kind)) return false;
+    if (kind === "角色") return /身份特写/u.test(prompt) && /四视图|转面/u.test(prompt) && /服装|固定配饰/u.test(prompt);
+    if (kind === "场景") {
+        const topologyTerms = prompt.match(/长案|主位|入口|高窗|门|窗|通道|墙|桌|座位/gu) || [];
+        return /高清|高精度|1080p|4K/iu.test(prompt) && /16\s*[:：]\s*9/u.test(prompt) && /单视角[^\n]{0,20}全景|全景建立图/u.test(prompt) && new Set(topologyTerms).size >= 2;
+    }
+    return true;
+}
+
 /** Read the editable six-section prompt back into the durable asset fields. */
 export function dramaAssetPromptFields(value: string, fallback: DramaAssetPromptFields): DramaAssetPromptFields | undefined {
     const prompt = formatDramaAssetPrompt(value);

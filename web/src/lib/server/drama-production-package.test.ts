@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import type { DramaProductionPackageV1, DramaProject, DramaShot } from "@/lib/drama-project-contract";
 import { DRAMA_STYLE_COLOR_SCRIPT, DRAMA_STYLE_NAME } from "@/lib/drama-style";
 import { defaultDramaProductionPlan, dramaVisualDirection } from "@/lib/drama-production-plan";
+import { validateDramaContinuityEdges } from "@/lib/drama-continuity-policy";
 import { auditDramaShotDirectorQuality, DRAMA_VIDEO_DIRECTOR_SKILL } from "@/lib/server/agent-skills/drama-video-director";
 import { SEEDANCE_25_DIRECTOR_SKILL } from "@/lib/server/agent-skills/seedance-25";
 import { applyDramaProductionPackage, attachDramaProductionPackageAuthoring, buildDramaAssetReuseContext, mergeProjectAssetsIntoProductionPackage, previewDramaProductionPackage } from "@/lib/server/drama-production-package";
@@ -121,6 +122,19 @@ describe("production package boundary", () => {
         expect(preview.importWarnings).toEqual(expect.arrayContaining([expect.stringContaining("过期或不一致的契约版本/内容哈希")]));
         expect(preview.package.authoring?.contract).toBeUndefined();
         expect(() => previewDramaProductionPackage(JSON.stringify(authored), "agent-package.json", undefined, { allowImportWarnings: false })).toThrow("过期或不一致的契约版本/内容哈希");
+    });
+
+    it("does not require reference manifests when the locked production plan disables images", () => {
+        const source = structuredClone(productionPackage);
+        source.project.productionBible.productionPlan = {
+            ...defaultDramaProductionPlan("package"),
+            references: { strategy: "adaptive", minImages: 0, maxImages: 0, roles: [] },
+        };
+        for (const shot of source.episodes[0].shots) delete shot.framePlan.referenceManifest;
+
+        const preview = previewDramaProductionPackage(JSON.stringify(source), "package.json");
+
+        expect(preview.package.episodes[0].shots[0].framePlan.referenceManifest).toBeUndefined();
     });
 
     it("surfaces a dialogue capacity reminder without blocking package import", () => {
@@ -913,17 +927,15 @@ describe("production package boundary", () => {
         }
     });
 
-    it("normalizes an incompatible carried entry state before package output", () => {
+    it("blocks an incompatible carried entry state instead of silently overwriting it", () => {
         const inconsistent = structuredClone(productionPackage);
         const entryState = inconsistent.episodes[0].shots[1].entryState!;
         inconsistent.episodes[0].shots[1].entryState = {
             ...entryState,
             props: [{ assetId: "P01", state: "错误的持有状态", holderId: "C02" }],
         };
-        const normalized = previewDramaProductionPackage(JSON.stringify(inconsistent), "package.json").package.episodes[0];
-        const previous = normalized.shots[0].exitState?.props.find((item) => item.assetId === "P01");
-        const next = normalized.shots[1].entryState?.props.find((item) => item.assetId === "P01");
-        expect(next).toMatchObject({ assetId: "P01", state: previous?.state, holderId: previous?.holderId });
+        expect(validateDramaContinuityEdges(inconsistent.episodes as never)).toEqual(expect.arrayContaining([expect.stringContaining("holderId")]));
+        expect(() => previewDramaProductionPackage(JSON.stringify(inconsistent), "package.json", undefined, { strictContinuity: true })).toThrow("没有");
     });
 
     it("applies package codes to stable project ids and preserves manual fields", () => {

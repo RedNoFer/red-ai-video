@@ -6,6 +6,8 @@ import {
     validateDramaDialogueSegmentDetail,
     validateDramaNpcSegmentDetail,
     validateDramaPerformanceDetail,
+    validateDramaFrameTiming,
+    validateDramaFrameCausalChain,
     validateDramaVideoAuthoringQuality,
     validateDramaVideoPromptCardLayout,
     validateDramaVideoPromptTemplateLayout,
@@ -120,6 +122,70 @@ describe("drama prompt quality", () => {
                 "SH01",
             ),
         ).toEqual([]);
+    });
+
+    it("keeps complete dialogue in the dialogue field instead of duplicating it in visual action", () => {
+        const prompt = [
+            "### 镜头 01 | 0-2秒 | 中近景 | 50mm | 侧45度平视 | 缓慢推近4厘米 | 人物镜头",
+            "场景：室内长桌对话空间。",
+            "画面内容：萧炎嘴唇开启完成起句，眉心收紧，右手压住桌沿，纳兰肩线停在左缘。",
+            "光影：窗光落在眼睛和手背。",
+            "色调：冷青白。",
+            "台词：萧炎说：“纳兰小姐，你应该知道。”",
+            "人声：开口前轻吸气。",
+            "音效：衣料轻响。",
+        ].join("\n");
+        expect(validateDramaVideoPromptCardLayout(prompt, [{ startSecond: 0, endSecond: 2 }], "SH01")).toEqual([]);
+        expect(
+            validateDramaVideoPromptCardLayout(
+                prompt.replace("嘴唇开启完成起句，", "萧炎说：“纳兰小姐，你应该知道。”；"),
+                [{ startSecond: 0, endSecond: 2 }],
+                "SH01",
+            ),
+        ).toEqual(expect.arrayContaining([expect.stringContaining("画面内容不得包含完整对白")]));
+    });
+
+    it("rejects equal frame durations when timed dialogue boundaries fall inside frames", () => {
+        expect(
+            validateDramaFrameTiming(
+                [
+                    { startSecond: 0, endSecond: 3.75 },
+                    { startSecond: 3.75, endSecond: 7.5 },
+                    { startSecond: 7.5, endSecond: 11.25 },
+                    { startSecond: 11.25, endSecond: 15 },
+                ],
+                [{ type: "dialogue", startSecond: 1.2, endSecond: 6.8 }],
+                "SH01",
+            ),
+        ).toEqual(expect.arrayContaining([expect.stringContaining("不能把对白切在段内")]));
+        expect(
+            validateDramaFrameTiming(
+                [
+                    { startSecond: 0, endSecond: 3 },
+                    { startSecond: 3, endSecond: 8 },
+                    { startSecond: 8, endSecond: 15 },
+                ],
+                [{ type: "dialogue", startSecond: 3, endSecond: 8 }],
+                "SH01",
+            ),
+        ).toEqual([]);
+        expect(
+            validateDramaFrameTiming(
+                [
+                    { startSecond: 0, endSecond: 2.5 },
+                    { startSecond: 2.5, endSecond: 6.5 },
+                    { startSecond: 6.5, endSecond: 10.5 },
+                    { startSecond: 10.5, endSecond: 15 },
+                ],
+                [{ type: "dialogue", startSecond: 1.1, endSecond: 5.8 }],
+                "SH01",
+            ),
+        ).toEqual(expect.arrayContaining([expect.stringContaining("不能把对白切在段内")]));
+    });
+
+    it("requires a causal trigger, visible result, and sound anchor for an executable frame", () => {
+        expect(validateDramaFrameCausalChain("萧炎抬眼", "", "萧炎停住", "SH01/F01")).toEqual(expect.arrayContaining([expect.stringContaining("触发"), expect.stringContaining("声音锚点")]));
+        expect(validateDramaFrameCausalChain("听见门外脚步，萧炎压住桌沿", "衣料摩擦后纳兰收回手", "指节收紧发白，视线停在门缝", "SH01/F01")).toEqual([]);
     });
 
     it("does not treat keyframe boundaries as implicit cuts", () => {

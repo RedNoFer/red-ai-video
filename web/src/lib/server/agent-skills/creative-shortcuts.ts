@@ -60,8 +60,9 @@ export const DRAMA_PLANNING_SKILL = {
 } as const;
 
 /**
- * Vetted through the GitHub Skill import contract. This is the mandatory
- * default for drama; the server-side continuity policy still runs separately.
+ * Legacy compatibility alias for older requests. It is intentionally not part
+ * of DEFAULT_CREATIVE_SHORTCUT_SKILLS; new drama authoring uses the canonical
+ * project director and the Seedance 2.5 adapter.
  */
 export const SEEDANCE_DIRECTOR_SKILL = {
     id: "seedance-director",
@@ -89,4 +90,4 @@ export const SEEDANCE_DIRECTOR_SKILL = {
  * It is not an active prompt source; all drama authoring uses the canonical
  * project director plus the Seedance 2.5 adapter when a video is generated.
  */
-export const DEFAULT_CREATIVE_SHORTCUT_SKILLS = [CHARACTER_DESIGN_SKILL, IMAGE_MOTION_SKILL, DRAMA_PLANNING_SKILL, DRAMA_VIDEO_DIRECTOR_SKILL, SEEDANCE_DIRECTOR_SKILL, SEEDANCE_25_DIRECTOR_SKILL, DRAMA_ASSET_IMAGE_SKILL] as const;
+export const DEFAULT_CREATIVE_SHORTCUT_SKILLS = [CHARACTER_DESIGN_SKILL, IMAGE_MOTION_SKILL, DRAMA_PLANNING_SKILL, DRAMA_VIDEO_DIRECTOR_SKILL, SEEDANCE_25_DIRECTOR_SKILL, DRAMA_ASSET_IMAGE_SKILL] as const;

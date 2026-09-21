@@ -1,7 +1,7 @@
 import type { DramaProductionPlan, DramaProductionBible, DramaReferenceManifestRole } from "@/lib/drama-project-contract";
 
 export const DRAMA_PRODUCTION_PLAN_VERSION = "drama-production-plan-v1" as const;
-export const DEFAULT_DRAMA_SKILL = { id: "seedance-director", name: "Seedance 导演", version: "2.0" } as const;
+export const DEFAULT_DRAMA_SKILL = { id: "drama-video-director", name: "短剧视频导演", version: "1.12.0" } as const;
 export const DEFAULT_DRAMA_VIDEO_SKILL = { id: "seedance-25-director", name: "Seedance 2.5 导演", version: "2.5" } as const;
 export const DRAMA_REFERENCE_ROLES: DramaReferenceManifestRole[] = ["previous_actual_tail", "character_anchor", "scene_anchor", "prop_anchor", "action_keyframe", "composition_keyframe"];
 export const DRAMA_VIDEO_RESOLUTION_OPTIONS = ["480p", "720p", "1080p"] as const;
@@ -47,7 +47,7 @@ export function defaultDramaProductionPlan(source: DramaProductionPlan["source"]
         skills: [DEFAULT_DRAMA_SKILL, DEFAULT_DRAMA_VIDEO_SKILL],
         visual: { visualStyle: "", artStyle: "", source: "agent" },
         video: {
-            model: "seedance-2-0-official",
+            model: "seedance-2-5-special",
             mode: "storyboard",
             ratio: "9:16",
             resolution: "720p",
@@ -83,20 +83,25 @@ export function normalizeDramaProductionPlan(value: unknown, fallback?: DramaPro
         ? input.skills.flatMap((item) => {
               const skill = object(item);
               const id = text(skill.id);
-              return id ? [{ id, name: text(skill.name) || id, version: text(skill.version) || "unknown" }] : [];
+              return id && id !== "seedance-director" ? [{ id, name: text(skill.name) || id, version: text(skill.version) || "unknown" }] : [];
           })
         : base.skills;
     const normalizedSkills = [DEFAULT_DRAMA_SKILL, DEFAULT_DRAMA_VIDEO_SKILL].reduce((current, required) => (current.some((skill) => skill.id === required.id) ? current : [...current, required]), skills);
     const requestedMode = text(videoInput.mode);
     const baseMode = base.video.mode === "text-to-video" ? "text-to-video" : "storyboard";
     const mode = requestedMode === "text-to-video" ? "text-to-video" : ["storyboard", "reference", "first-frame", "first-last"].includes(requestedMode) ? "storyboard" : baseMode;
-    const roles = Array.isArray(referenceInput.roles) ? referenceInput.roles.map(text).filter((role): role is DramaReferenceManifestRole => DRAMA_REFERENCE_ROLES.includes(role as DramaReferenceManifestRole)) : base.references.roles;
+    const referencesDisabled = referenceInput.minImages === 0 && referenceInput.maxImages === 0;
+    const roles = referencesDisabled
+        ? []
+        : Array.isArray(referenceInput.roles)
+          ? referenceInput.roles.map(text).filter((role): role is DramaReferenceManifestRole => DRAMA_REFERENCE_ROLES.includes(role as DramaReferenceManifestRole))
+          : base.references.roles;
     const requestedShotDuration = positive(videoInput.shotDuration) || (videoInput.durationPolicy === "fixed" ? positive(videoInput.duration) : undefined);
     const shotDuration = normalizeShotDuration(requestedShotDuration, base.video.shotDuration || 15);
     const durationBudget = dramaReferenceImageBudget(shotDuration);
-    const minImages = Math.min(durationBudget, boundedInteger(referenceInput.minImages, base.references.minImages, 1, 30));
-    const configuredMax = boundedInteger(referenceInput.maxImages, base.references.maxImages, minImages, 30);
-    const maxImages = Math.min(durationBudget, Math.max(minImages, durationBudget, configuredMax));
+    const minImages = referencesDisabled ? 0 : Math.min(durationBudget, boundedInteger(referenceInput.minImages, base.references.minImages, 1, 30));
+    const configuredMax = referencesDisabled ? 0 : boundedInteger(referenceInput.maxImages, base.references.maxImages, minImages, 30);
+    const maxImages = referencesDisabled ? 0 : Math.min(durationBudget, Math.max(minImages, durationBudget, configuredMax));
     const framePolicy = normalizeFramePolicy(videoInput.framePolicy, base.video.framePolicy || "agent");
     const frameCountRange = normalizeFrameCountRange(input.frameCountRange ?? videoInput.frameCountRange, base.frameCountRange);
     const visualStyle = typeof visualInput.visualStyle === "string" ? text(visualInput.visualStyle) : base.visual.visualStyle;
@@ -132,7 +137,7 @@ export function normalizeDramaProductionPlan(value: unknown, fallback?: DramaPro
             allowExplicitFallback: videoInput.allowExplicitFallback === true,
             modelParameters: object(videoInput.modelParameters),
         },
-        references: { strategy: "adaptive", minImages, maxImages, roles: roles.length ? roles : base.references.roles },
+        references: { strategy: "adaptive", minImages, maxImages, roles: referencesDisabled ? [] : roles.length ? roles : base.references.roles },
         continuity: { mode: continuityInput.mode === "balanced" ? "balanced" : "strict", requireAcceptedActualTail: continuityInput.requireAcceptedActualTail !== false },
         frameCountRange,
         ...(customDirectorRules ? { customDirectorRules } : {}),

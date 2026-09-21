@@ -19,7 +19,7 @@ import { formatPromptFieldLines, normalizeDramaFrameBeats, validateDramaFramePla
 import { dramaDialogueTimingReminder, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
 import { resolveDramaShotDuration } from "@/lib/server/drama-shot-config";
 import { strictJsonObjectText } from "@/lib/server/structured-model-output";
-import { isGenericDramaDetail, validateDramaPerformanceDetail } from "@/lib/drama-prompt-quality";
+import { isGenericDramaDetail, validateDramaFrameTiming, validateDramaPerformanceDetail } from "@/lib/drama-prompt-quality";
 
 export function normalizeDramaContentAnalysis(value: unknown, defaultVideoSeconds: number, sourceScript = ""): DramaContentAnalysis {
     const source = object(value);
@@ -122,7 +122,7 @@ export function normalizeDramaVisualAnalysis(value: unknown, shotIds: string[], 
     return { shots };
 }
 
-export function validateDramaVisualAnalysis(value: DramaVisualAnalysis, sourceShots: ReadonlyArray<{ id: string; utterances?: Array<{ type?: string }>; dialogue?: string }> = []) {
+export function validateDramaVisualAnalysis(value: DramaVisualAnalysis, sourceShots: ReadonlyArray<{ id: string; utterances?: readonly DramaDialogueTimingInput[]; dialogue?: string }> = []) {
     const errors: string[] = [];
     for (const shot of value.shots) {
         const label = shot.shotId;
@@ -175,6 +175,7 @@ export function validateDramaVisualAnalysis(value: DramaVisualAnalysis, sourceSh
         )
             errors.push(`${label}缺少完整的连续性字段`);
         if (!shot.framePlan.frames.length) errors.push(`${label}缺少逐帧计划`);
+        errors.push(...validateDramaFrameTiming(shot.framePlan.frames, source?.utterances || [], label));
         for (const [index, frame] of shot.framePlan.frames.entries()) {
             for (const [field, text] of [
                 ["起点", frame.startPrompt],
@@ -1050,7 +1051,7 @@ export const dramaVisualTool = {
                         videoPrompt: {
                             type: "string",
                             description:
-                                "必须由当前唯一导演 Skill 直接写出完整公开视频提示词和内部 framePlan；公开视频使用小墨式简洁导演镜头卡，每个真实帧段一个卡片，标题包含时间范围、景别、焦段、机位角度、运镜方式和人物镜头/非人物镜头，卡片正文包含场景、画面内容、光影、色调、台词、人声、音效。画面内容必须是可见进行中动作和结果，直接对白必须使用“说话人说：\“实际台词\””格式，不输出 URL、内部 ID、供应商字段或八段式内部结构。",
+                            "必须由当前唯一导演 Skill 直接写出完整公开视频提示词和内部 framePlan；公开视频使用小墨式简洁导演镜头卡，每个真实帧段一个卡片，标题包含时间范围、景别、焦段、机位角度、运镜方式和人物镜头/非人物镜头，卡片正文包含场景、画面内容、光影、色调、台词、人声、音效。画面内容只写屏幕上能看见的进行中动作和结果；其中仅允许写可见的口型、呼吸、视线、表情、身体/手部/道具状态和结果，禁止复制完整对白、中文引号台词或“某人说：”指令；完整原句只能写在台词字段。直接对白必须使用“说话人说：\“实际台词\””格式，不输出 URL、内部 ID、供应商字段或八段式内部结构。每帧必须完成“谁做什么→因为什么触发→可见结果→声音锚点”，静默也要写明屏息、底噪或余响。framePlan 时间边界必须按对白自然开口、收句、停顿、动作触发和反应重新分配，不能机械等分。",
                         },
                         cameraMotion: { type: "string" },
                         startFramePrompt: { type: "string" },
@@ -1128,7 +1129,7 @@ export const dramaVisualTool = {
                             additionalProperties: false,
                             required: ["start", "end", "frames"],
                             description:
-                                "framePlan.frames 只按当前已注入的连续动作帧 Skill 组织真实动作节点；固定帧数仅在项目主动选择后执行。framePlan 服务视频时间段，imagePrompt 仅填写当前冻结画面正文并遵守本次静态帧 Skill，不从整镜头或 actionPrompt 复制静态内容。",
+                                "framePlan.frames 只按当前已注入的连续动作帧 Skill 组织真实动作节点；固定帧数仅在项目主动选择后执行。framePlan 服务视频时间段，imagePrompt 仅填写当前冻结画面正文并遵守本次静态帧 Skill，不从整镜头或 actionPrompt 复制静态内容。每帧必须写清谁做什么、因为什么触发、身体/手部/道具发生什么、产生什么可见结果和声音锚点；静默也要写明屏息、底噪或余响。含定时对白/旁白时，时间段必须对齐自然开口、收句、停顿、动作触发或反应留白；对白边界落在段内时禁止所有帧段机械等长。",
                             properties: {
                                 start: { type: "object", additionalProperties: false, required: ["source"], properties: { source: { type: "string", enum: ["independent", "previous_accepted_actual_tail"] } } },
                                 end: { type: "object", additionalProperties: false, required: ["required"], properties: { required: { type: "boolean" } } },
@@ -1146,7 +1147,7 @@ export const dramaVisualTool = {
                                             startSecond: { type: "number", minimum: 0 },
                                             endSecond: { type: "number", exclusiveMinimum: 0 },
                                             startPrompt: { type: "string", description: "本时间段开始时已经可见的具体姿态、视线、手部/道具或环境状态" },
-                                            actionPrompt: { type: "string", description: "由触发引起的可见人物动作、表情反应、受力和道具结果" },
+                                            actionPrompt: { type: "string", description: "谁做什么、因为什么触发，以及可见人物动作、表情反应、身体微动作、受力和道具结果；必须包含声音锚点或明确静默" },
                                             transitionPrompt: { type: "string", description: "从起点到终点的可见衔接，必须承接上一帧终点" },
                                             endPrompt: { type: "string", description: "本时间段结束时已经成立的具体姿态、视线、手部/道具或环境状态" },
                                             imagePrompt: { type: "string" },
@@ -1203,7 +1204,7 @@ export const dramaVideoPromptTool = {
                         videoPrompt: {
                             type: "string",
                             description:
-                                "由当前唯一导演 Skill 直接生成完整公开 videoPrompt 和内部 framePlan；公开视频必须使用小墨式简洁导演镜头卡：每个 framePlan 时间段一个“### 镜头 N | 时间范围 | 景别 | 焦段 | 机位角度 | 运镜方式 | 人物镜头/非人物镜头”卡片，并填写场景、画面内容、光影、色调、台词、人声、音效。画面内容只写屏幕上能看见的进行中动作和结果；直接对白必须使用“说话人说：“完整原句””格式；不输出八段标题、起点/动作与触发/可见衔接/终点等内部字段、URL、内部 ID 或供应商字段。framePlan 仍必须保留真实时间边界、动作差异、连续性、对白游标和静态画面状态。镜头数量和切换次数按可见信息变化自适应，不固定配额；用户或项目明确的密集硬切策略才提升为对应硬门禁。",
+                                "由当前唯一导演 Skill 直接生成完整公开 videoPrompt 和内部 framePlan；公开视频必须使用小墨式简洁导演镜头卡：每个 framePlan 时间段一个“### 镜头 N | 时间范围 | 景别 | 焦段 | 机位角度 | 运镜方式 | 人物镜头/非人物镜头”卡片，并填写场景、画面内容、光影、色调、台词、人声、音效。画面内容只写屏幕上能看见的进行中动作和结果；其中仅允许写可见的口型、呼吸、表情、视线、身体/手部/道具状态和结果，禁止复制完整对白、中文引号台词或“某人说：”指令；完整原句只能写在台词字段。直接对白必须使用“说话人说：“完整原句””格式；不输出八段标题、起点/动作与触发/可见衔接/终点等内部字段、URL、内部 ID 或供应商字段。framePlan 仍必须保留真实时间边界、动作差异、连续性、对白游标和静态画面状态；含定时对白时禁止机械等长分段。镜头数量和切换次数按可见信息变化自适应，不固定配额；用户或项目明确的密集硬切策略才提升为对应硬门禁。",
                         },
                         framePlan: {
                             type: "object",
@@ -1352,10 +1353,10 @@ export const dramaReviewCompletionTool = {
                                 continuityNotes: { type: "string" },
                             },
                         },
-                        entryState: { type: "object", description: "镜头开始时的可观察状态：characters 每项必须写 assetId、position、gaze、pose、action，必要时补 wardrobe/expression；props 每项必须写 assetId、state、holderId；另写环境、光色和轴线。" },
+                        entryState: { type: "object", description: "镜头开始时的可观察状态：characters 每项必须写 assetId、position、gaze、pose、action，必要时补 wardrobe/expression；props 每项必须写 assetId、state、holderId；另写环境、光色和轴线。跨硬切继承时必须与上一镜 exitState 逐项一致；只有明确写出移动路径/受力和到达结果才允许改变位置。" },
                         exitState: {
                             type: "object",
-                            description: "镜头结束时的可观察状态：characters 每项必须写 assetId、position、gaze、pose、action，必要时补 wardrobe/expression；props 每项必须写 assetId、state、holderId；另写环境、光色和轴线，供下一镜继承。",
+                            description: "镜头结束时的可观察状态：characters 每项必须写 assetId、position、gaze、pose、action，必要时补 wardrobe/expression；props 每项必须写 assetId、state、holderId；另写环境、光色和轴线，供下一镜继承。下一镜可以硬切开始，但不得因此重置站位。",
                         },
                         continuityEdge: { type: "object" },
                     },
