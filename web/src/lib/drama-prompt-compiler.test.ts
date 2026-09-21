@@ -661,16 +661,10 @@ describe("drama prompt compiler", () => {
 
     it("requires identity and spatial clarity for reference anchors", () => {
         expect(
-            hasDramaReferenceAnchorClarity(
-                "主体与资产类型：角色\n身份/结构锚点：自然骨骼与五官\n可见状态与材质：自然骨骼比例、五官、头发、服装与固定配饰\n构图与画幅：纯白色四视图、身份特写、严格左侧面全身\n光色与风格：高精度\n负面约束：无文字",
-                "角色",
-            ),
+            hasDramaReferenceAnchorClarity("主体与资产类型：角色\n身份/结构锚点：自然骨骼与五官\n可见状态与材质：自然骨骼比例、五官、头发、服装与固定配饰\n构图与画幅：纯白色四视图、身份特写、严格左侧面全身\n光色与风格：高精度\n负面约束：无文字", "角色"),
         ).toBe(true);
         expect(
-            hasDramaReferenceAnchorClarity(
-                "主体与资产类型：场景\n身份/结构锚点：萧家议事大厅\n可见状态与材质：木石与长案\n构图与画幅：高清16:9单视角场景全景建立图，长案、主位、高窗、后右入口可辨\n光色与风格：高精度\n负面约束：无人无文字",
-                "场景",
-            ),
+            hasDramaReferenceAnchorClarity("主体与资产类型：场景\n身份/结构锚点：萧家议事大厅\n可见状态与材质：木石与长案\n构图与画幅：高清16:9单视角场景全景建立图，长案、主位、高窗、后右入口可辨\n光色与风格：高精度\n负面约束：无人无文字", "场景"),
         ).toBe(true);
         expect(hasDramaReferenceAnchorClarity("主体与资产类型：场景\n构图与画幅：三视图", "场景")).toBe(false);
     });

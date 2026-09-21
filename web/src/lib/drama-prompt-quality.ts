@@ -194,9 +194,7 @@ export function validateDramaFrameTiming(frames: ReadonlyArray<DramaCameraPlanFr
     if (!timedUtterances.length) return [];
     const boundaries = new Set(frames.flatMap((frame) => [Number(frame.startSecond), Number(frame.endSecond)]).map((value) => value.toFixed(2)));
     const unaligned = timedUtterances.some((item) => !boundaries.has(Number(item.startSecond).toFixed(2)) || !boundaries.has(Number(item.endSecond).toFixed(2)));
-    return unaligned
-        ? [`${label}含有带自然时间边界的对白/旁白，但至少一个开口或收句边界落在帧段内部；必须按对白自然时长、停顿、动作触发和反应留白重新分配帧段，不能把对白切在段内`]
-        : [];
+    return unaligned ? [`${label}含有带自然时间边界的对白/旁白，但至少一个开口或收句边界落在帧段内部；必须按对白自然时长、停顿、动作触发和反应留白重新分配帧段，不能把对白切在段内`] : [];
 }
 
 /** Every executable frame must expose a causal beat, not just an action noun. */
@@ -208,8 +206,7 @@ export function validateDramaFrameCausalChain(actionPrompt: unknown, transitionP
     const errors: string[] = [];
     if (!CAUSAL_TRIGGER_PATTERN.test(all)) errors.push(`${label}缺少“因为什么/承接什么而动作触发”的明确原因`);
     if (!SOUND_ANCHOR_PATTERN.test(all)) errors.push(`${label}缺少声音锚点；即使是静默也必须写明静默、屏息、底噪或余响`);
-    if (!end || !OBSERVABLE_DRAMA_DETAIL_PATTERN.test(end) || !/(?:停|落|变|露|显|抬|垂|松|收|移|转|对准|接住|形成|沉默|静默|屏息|受力|改变|看见)/u.test(end))
-        errors.push(`${label}终点没有写出由本段动作产生的具体可见结果`);
+    if (!end || !OBSERVABLE_DRAMA_DETAIL_PATTERN.test(end) || !/(?:停|落|变|露|显|抬|垂|松|收|移|转|对准|接住|形成|沉默|静默|屏息|受力|改变|看见)/u.test(end)) errors.push(`${label}终点没有写出由本段动作产生的具体可见结果`);
     return errors;
 }
 

@@ -136,13 +136,9 @@ describe("drama prompt quality", () => {
             "音效：衣料轻响。",
         ].join("\n");
         expect(validateDramaVideoPromptCardLayout(prompt, [{ startSecond: 0, endSecond: 2 }], "SH01")).toEqual([]);
-        expect(
-            validateDramaVideoPromptCardLayout(
-                prompt.replace("嘴唇开启完成起句，", "萧炎说：“纳兰小姐，你应该知道。”；"),
-                [{ startSecond: 0, endSecond: 2 }],
-                "SH01",
-            ),
-        ).toEqual(expect.arrayContaining([expect.stringContaining("画面内容不得包含完整对白")]));
+        expect(validateDramaVideoPromptCardLayout(prompt.replace("嘴唇开启完成起句，", "萧炎说：“纳兰小姐，你应该知道。”；"), [{ startSecond: 0, endSecond: 2 }], "SH01")).toEqual(
+            expect.arrayContaining([expect.stringContaining("画面内容不得包含完整对白")]),
+        );
     });
 
     it("rejects equal frame durations when timed dialogue boundaries fall inside frames", () => {

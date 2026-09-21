@@ -2,7 +2,16 @@ import { resolveDramaShotDuration } from "@/lib/server/drama-shot-config";
 import { dramaFrameVisualSignature } from "@/lib/drama-frame-sequence";
 import { dramaDialogueFragmentSequenceError, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
 import { inferDramaPromptSubjects, validateDramaCharacterWardrobeContinuity, validateDramaCutInformationDiversity, validateDramaPromptComposition, validateDramaReferenceAliasConsistency } from "@/lib/drama-prompt-composition-quality";
-import { dramaTimeRangePattern, extractDramaVideoPromptSection, hasConcreteDramaCameraDirection, isGenericDramaDetail, validateDramaCameraPlan, validateDramaFrameTiming, validateDramaVideoPromptCardLayout, validateDramaVideoSegmentDetail } from "@/lib/drama-prompt-quality";
+import {
+    dramaTimeRangePattern,
+    extractDramaVideoPromptSection,
+    hasConcreteDramaCameraDirection,
+    isGenericDramaDetail,
+    validateDramaCameraPlan,
+    validateDramaFrameTiming,
+    validateDramaVideoPromptCardLayout,
+    validateDramaVideoSegmentDetail,
+} from "@/lib/drama-prompt-quality";
 import { dramaFrameDialogueTimingReminder } from "@/lib/drama-dialogue-timing";
 
 export type DramaAnalyzeBody = {

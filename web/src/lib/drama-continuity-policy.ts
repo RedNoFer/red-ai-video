@@ -64,7 +64,8 @@ export function decideActualEndFrame(shot: DramaShot, frameEvidenceId: string, d
     };
 }
 
-const MOVEMENT_CUE = /移动到|走向|离开[^。；\n]{0,18}(?:到|至|门|座|案|侧|前|后)|进入[^。；\n]{0,18}(?:门|房|厅|座|案|侧)|起身[^。；\n]{0,18}(?:走|到|向)|坐下|站起[^。；\n]{0,18}(?:走|到|向)|后退到|前进到|转身走向|绕过[^。；\n]{0,18}(?:到|向)|换位到|挪到|靠近[^。；\n]{0,18}(?:对方|门|案|座|侧)|远离[^。；\n]{0,18}(?:对方|门|案|座|侧)|被迫[^。；\n]{0,18}(?:退|移|走)|推开[^。；\n]{0,18}(?:门|人)|拉开[^。；\n]{0,18}(?:门|人)|交给|递给|接过|落座于|出画|入画/u;
+const MOVEMENT_CUE =
+    /移动到|走向|离开[^。；\n]{0,18}(?:到|至|门|座|案|侧|前|后)|进入[^。；\n]{0,18}(?:门|房|厅|座|案|侧)|起身[^。；\n]{0,18}(?:走|到|向)|坐下|站起[^。；\n]{0,18}(?:走|到|向)|后退到|前进到|转身走向|绕过[^。；\n]{0,18}(?:到|向)|换位到|挪到|靠近[^。；\n]{0,18}(?:对方|门|案|座|侧)|远离[^。；\n]{0,18}(?:对方|门|案|座|侧)|被迫[^。；\n]{0,18}(?:退|移|走)|推开[^。；\n]{0,18}(?:门|人)|拉开[^。；\n]{0,18}(?:门|人)|交给|递给|接过|落座于|出画|入画/u;
 const AXIS_CHANGE_CUE = /轴线切换|越轴|转轴|重新建立轴线|改变视线轴/u;
 const POSITION_SEPARATOR = /[，,；;、/]|或者?|(?:\s+and\s+)/iu;
 const POSITIONAL_STATE_FIELDS = ["position", "pose", "holderId"] as const;
@@ -100,8 +101,7 @@ function validateEpisodeContinuityEdges(episode: DramaProductionPackageEpisode):
         const nextProps = new Map(to.entryState.props.map((item) => [item.assetId, item]));
         for (const assetId of edge.carryCharacterIds) validateEntityCarry(issues, episode.code, edge, assetId, previousCharacters.get(assetId), nextCharacters.get(assetId), firstFrameText, "角色");
         for (const assetId of edge.carryPropIds) validateEntityCarry(issues, episode.code, edge, assetId, previousProps.get(assetId), nextProps.get(assetId), firstFrameText, "道具");
-        if (edge.carryEnvironment && normalize(from.exitState.environment) !== normalize(to.entryState.environment))
-            issues.push(issue(episode.code, edge, "跨硬切继承的环境状态发生变化；必须在上一镜出口动作或 edge notes 中写明场景变化原因"));
+        if (edge.carryEnvironment && normalize(from.exitState.environment) !== normalize(to.entryState.environment)) issues.push(issue(episode.code, edge, "跨硬切继承的环境状态发生变化；必须在上一镜出口动作或 edge notes 中写明场景变化原因"));
         if (edge.carryAxis && (normalize(from.exitState.axis) !== normalize(to.entryState.axis) || normalize(from.exitState.screenDirection) !== normalize(to.entryState.screenDirection)) && !AXIS_CHANGE_CUE.test(edge.notes || ""))
             issues.push(issue(episode.code, edge, "跨硬切继承的轴线/屏幕方向发生变化；未声明越轴或重新建立轴线的可见原因"));
         if (edge.carryCharacterIds.length || edge.carryPropIds.length) {

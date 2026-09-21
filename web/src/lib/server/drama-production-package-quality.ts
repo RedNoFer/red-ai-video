@@ -101,15 +101,7 @@ function checkDialogueCapacity(checks: DramaQualityGateCheck[], value: DramaProd
 }
 
 function checkFrameDialogueTiming(checks: DramaQualityGateCheck[], value: DramaProductionPackageV1) {
-    const failures = value.episodes.flatMap((episode) =>
-        episode.shots.flatMap((shot) =>
-            validateDramaFrameTiming(
-                shot.framePlan?.frames || [],
-                shot.utterances as DramaDialogueTimingInput[],
-                `${episode.code}/${shot.code}`,
-            ),
-        ),
-    );
+    const failures = value.episodes.flatMap((episode) => episode.shots.flatMap((shot) => validateDramaFrameTiming(shot.framePlan?.frames || [], shot.utterances as DramaDialogueTimingInput[], `${episode.code}/${shot.code}`)));
     add(
         checks,
         "FRAME_DIALOGUE_TIMING",
