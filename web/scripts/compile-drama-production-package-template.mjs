@@ -25,6 +25,10 @@ const contractHash = sha256(contractBlock);
 const contractVersion = contractBlock.match(/version:\s*([0-9.]+)/u)?.[1] || "1.0.0";
 const packageAuthoringRules = extractSection(packageSpec, "Agent 运行时规则");
 if (!packageAuthoringRules) throw new Error("制作包规范缺少 Agent 运行时规则章节");
+const externalGateRules = extractSection(packageSpec, "外部独立生成门禁");
+if (!externalGateRules) throw new Error("制作包规范缺少外部独立生成门禁章节");
+const externalGateRegister = extractMarkdownSubsection(externalGateRules, "门禁登记表");
+if (!externalGateRegister) throw new Error("制作包规范缺少外部门禁登记表");
 const packageRulesHash = sha256(packageAuthoringRules);
 const packageChapterHeadings = extractPackageChapterHeadings(packageSpec);
 const gateCodes = extractContractGateCodes(contractBlock);
@@ -46,6 +50,7 @@ const replacements = {
     "{{DRAMA_PACKAGE_CONTRACT_VERSION}}": contractVersion,
     "{{DRAMA_PACKAGE_CONTRACT_HASH}}": contractHash,
     "{{DRAMA_PACKAGE_RULES_HASH}}": packageRulesHash,
+    "{{DRAMA_PACKAGE_EXTERNAL_GATE_RULES}}": externalGateRegister,
     "{{DRAMA_VIDEO_DIRECTOR_STATIC_FRAME_RULES}}": `当前静态帧规则由编译后的 drama-video-director Skill 提供（Skill hash：${skillHash}）；模板仅保留字段位置。`,
 };
 const template =
@@ -57,9 +62,13 @@ for (const heading of packageChapterHeadings) {
     if (!new RegExp(`^##\\s+[^\\n]*${escapeRegExp(heading)}`, "mu").test(template)) throw new Error(`制作包模板缺少规范章节：${heading}`);
 }
 const packageContractMarkers = ["imagePrompt", "framePlan.start.source", "framePlan.end.required", "framePlan.referenceManifest", "dramaticFunction", "backgroundNpcPolicy"];
+const templateContractMarkers = ["## 规范对象（机器导入必填）", "```drama-production-package", '"schemaVersion": 1', '"episodes"'];
 for (const marker of packageContractMarkers) {
     if (!packageAuthoringRules.includes(marker)) throw new Error(`制作包规范缺少规范字段：${marker}`);
     if (!template.includes(marker)) throw new Error(`制作包模板缺少规范字段：${marker}`);
+}
+for (const marker of templateContractMarkers) {
+    if (!template.includes(marker)) throw new Error(`制作包模板缺少机器导入字段：${marker}`);
 }
 
 const prettierConfig = (await prettier.resolveConfig(contractRuntimePath)) || {};
@@ -73,6 +82,7 @@ export const COMPILED_DRAMA_PACKAGE_TEMPLATE_SOURCE_HASH = ${JSON.stringify(sha2
 export const COMPILED_DRAMA_PACKAGE_TEMPLATE_SOURCE = ${JSON.stringify(templateSource)} as const;
 export const COMPILED_DRAMA_PACKAGE_RULES_HASH = ${JSON.stringify(packageRulesHash)} as const;
 export const COMPILED_DRAMA_PACKAGE_AUTHORING_RULES = ${JSON.stringify(packageAuthoringRules)} as const;
+export const COMPILED_DRAMA_PACKAGE_EXTERNAL_GATE_RULES = ${JSON.stringify(externalGateRules)} as const;
 export const COMPILED_DRAMA_PACKAGE_SECTION_TITLES = ${JSON.stringify(packageChapterHeadings)} as const;
 export const COMPILED_DRAMA_PACKAGE_GATE_CODES = ${JSON.stringify(gateCodes)} as const;
 export const COMPILED_DRAMA_CODEX_WORK_ORDER_RULES = ${JSON.stringify(codexWorkOrderRules)} as const;
@@ -92,6 +102,18 @@ function extractSection(value, heading) {
     const content = [];
     for (const line of lines.slice(start + 1)) {
         if (/^##\s+/u.test(line.trim())) break;
+        content.push(line);
+    }
+    return content.join("\n").trim();
+}
+
+function extractMarkdownSubsection(value, heading) {
+    const lines = value.split(/\r?\n/u);
+    const start = lines.findIndex((line) => line.trim() === `### ${heading}`);
+    if (start < 0) return "";
+    const content = [];
+    for (const line of lines.slice(start + 1)) {
+        if (/^###\s+/u.test(line.trim())) break;
         content.push(line);
     }
     return content.join("\n").trim();

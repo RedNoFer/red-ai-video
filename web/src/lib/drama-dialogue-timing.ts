@@ -1,7 +1,7 @@
 export const DRAMA_DIALOGUE_CHARS_PER_SECOND = 5;
 export const DRAMA_DIALOGUE_TIMING_TOLERANCE_CHARS = 10;
 
-export const DRAMA_DIALOGUE_TIMING_RULES = `对白时长规则：默认按中文对白每秒约 ${DRAMA_DIALOGUE_CHARS_PER_SECOND} 个可发音字估算，不把标点、停顿和动作反应当作可压缩空间。制作包必须按逐句记录 startSecond/endSecond（相对当前镜头，且不含停顿）、pauseBeforeSeconds/pauseAfterSeconds 和情绪语速 speechRate；需要可复核时同时填写 speechRateCharsPerSecond。逐句时间不得越界或重叠，停顿不得跑出镜头。不超过 ${DRAMA_DIALOGUE_TIMING_TOLERANCE_CHARS} 个可发音字的偏差只作轻微提醒；超过该容差必须在正式制作包生成前按自然分句、说话人转换、动作反应或增加逻辑片段重新拆解，不能通过异常加速解决，正式 authoring 质量门禁会阻止生成。每个镜头先完成对白容量核算，再安排动作节点、表演和画面帧。公开视频中的直接对白必须使用“说话人说：“完整原句””格式，不能只写说话人标签或把台词塞进重音字段。同一 utterance 跨多个 framePlan 时间段时必须维护单调对白游标：后段只能从上一段已说内容之后继续，禁止重新起句、重复已说片段或与上一段出现4个及以上可发音字重叠；“继续说”不是跳过对白正文的许可。`;
+export const DRAMA_DIALOGUE_TIMING_RULES = `对白时长规则：默认按中文对白每秒约 ${DRAMA_DIALOGUE_CHARS_PER_SECOND} 个可发音字估算，不把标点和动作反应当作可压缩空间。制作包必须按逐句记录 startSecond/endSecond（相对当前镜头，只计实际说话口型，不含 pauseBeforeSeconds/pauseAfterSeconds）、pauseBeforeSeconds/pauseAfterSeconds、情绪语速 speechRate 和可复核的 speechRateCharsPerSecond。每句必须先计算 availableSpeechSeconds=endSecond-startSecond，再计算 requiredSpeechSeconds=可发音字数/speechRateCharsPerSecond；availableSpeechSeconds 小于 requiredSpeechSeconds 时，正式 authoring、制作包导入和生产前预检一律阻断，不得把“整镜总时长够”当作单句通过。pauseBeforeSeconds 与 pauseAfterSeconds 另行占用 startSecond 前后空间，必须保持在镜头边界内且不得与其他对白重叠。${DRAMA_DIALOGUE_TIMING_TOLERANCE_CHARS} 个可发音字容差只用于整镜总量的兼容提醒，不适用于逐句口型窗口。不能通过异常加速解决，必须在自然分句、说话人转换、动作反应或逻辑片段边界重新拆解。每个镜头先完成逐句对白容量表，再安排动作节点、表演和画面帧。公开视频中的直接对白必须使用“说话人说：“完整原句””格式，不能只写说话人标签或把台词塞进重音字段；公开镜头卡的台词窗口必须与对应 framePlan 时间段一一相容。同一 utterance 跨多个 framePlan 时间段时必须维护单调对白游标：后段只能从上一段已说内容之后继续，禁止重新起句、重复已说片段或与上一段出现4个及以上可发音字重叠；“继续说”不是跳过对白正文的许可。`;
 
 export type DramaDialogueTimingInput = {
     type?: string;
@@ -160,7 +160,7 @@ export function dramaFrameDialogueTimingReminder(startSecond: number, endSecond:
     const quotedFragments = Array.from(action.matchAll(/[“「『"']([^”」』"']+)[”」』"']/gu), (match) => match[1].trim()).filter(Boolean);
     const matched = values
         .flatMap((value) => {
-            const text = typeof value === "string" ? value : value.type === "dialogue" ? value.text || "" : "";
+            const text = typeof value === "string" ? value : value.type === "dialogue" || value.type === "voiceover" ? value.text || "" : "";
             if (!text) return [];
             const fragments = quotedFragments.filter((fragment) => text.includes(fragment));
             if (action.includes(text)) return [typeof value === "string" ? { text: value, type: "dialogue" } : value];
@@ -172,6 +172,30 @@ export function dramaFrameDialogueTimingReminder(startSecond: number, endSecond:
         });
     const issue = dramaDialogueTimingReminder(endSecond - startSecond, matched, "", label);
     return issue ? { ...issue, startSecond, endSecond } : undefined;
+}
+
+export type DramaTimedDialogueCapacityIssue = DramaDialogueTimingIssue & {
+    utteranceIndex: number;
+    startSecond: number;
+    endSecond: number;
+    text: string;
+};
+
+/**
+ * Checks each spoken utterance against its own mouth-sync window. The whole
+ * shot reminder is intentionally separate: a 30-second shot can fit its total
+ * dialogue while one short utterance is still impossible to perform.
+ */
+export function dramaTimedDialogueCapacityIssues(values: readonly DramaDialogueTimingInput[], label = "镜头") {
+    return values.flatMap((value, utteranceIndex): DramaTimedDialogueCapacityIssue[] => {
+        const type = value.type || "dialogue";
+        const startSecond = Number(value.startSecond);
+        const endSecond = Number(value.endSecond);
+        const text = value.text?.trim() || "";
+        if ((type !== "dialogue" && type !== "voiceover") || !text || !Number.isFinite(startSecond) || !Number.isFinite(endSecond) || endSecond <= startSecond) return [];
+        const issue = dramaDialogueTimingReminder(endSecond - startSecond, [{ ...value, pauseBeforeSeconds: 0, pauseAfterSeconds: 0 }], "", `${label}/utterance-${value.order ?? utteranceIndex + 1}`);
+        return issue ? [{ ...issue, utteranceIndex, startSecond, endSecond, text }] : [];
+    });
 }
 
 export function dramaUtteranceTimingIssues(duration: number, values: readonly DramaDialogueTimingInput[], requireAll = false, label = "镜头") {

@@ -1,5 +1,5 @@
 import type { DramaDialoguePerformance, DramaPerformancePlan } from "@/lib/drama-project-contract";
-import { hasQuotedDramaDialogue, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
+import { dramaFrameDialogueTimingReminder, hasQuotedDramaDialogue, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
 
 const GENERIC_DETAIL_PATTERNS = [
     /^表情(?:自然|丰富|到位|稳定)$/u,
@@ -195,6 +195,27 @@ export function validateDramaFrameTiming(frames: ReadonlyArray<DramaCameraPlanFr
     const boundaries = new Set(frames.flatMap((frame) => [Number(frame.startSecond), Number(frame.endSecond)]).map((value) => value.toFixed(2)));
     const unaligned = timedUtterances.some((item) => !boundaries.has(Number(item.startSecond).toFixed(2)) || !boundaries.has(Number(item.endSecond).toFixed(2)));
     return unaligned ? [`${label}含有带自然时间边界的对白/旁白，但至少一个开口或收句边界落在帧段内部；必须按对白自然时长、停顿、动作触发和反应留白重新分配帧段，不能把对白切在段内`] : [];
+}
+
+/**
+ * The public Xiaomo card is executable too. Its quoted dialogue must fit the
+ * exact card window, not only the structured utterance window in framePlan.
+ */
+export function validateDramaVideoPromptDialogueTiming(prompt: string, frames: ReadonlyArray<DramaCameraPlanFrame>, utterances: readonly DramaDialogueTimingInput[], label: string) {
+    const cards = extractDramaVideoPromptCards(prompt);
+    if (!cards.length || !utterances.length) return [];
+    return cards.flatMap((card, index) => {
+        const frame = frames[index];
+        if (!frame || !card.dialogue || card.dialogue === "无") return [];
+        const issue = dramaFrameDialogueTimingReminder(
+            frame.startSecond,
+            frame.endSecond,
+            card.dialogue,
+            utterances.map((utterance) => ({ ...utterance, pauseBeforeSeconds: 0, pauseAfterSeconds: 0 })),
+            `${label}/镜头卡${index + 1}`,
+        );
+        return issue ? [`${label}第 ${index + 1} 个公开镜头卡的台词窗口不足：${issue.message}`] : [];
+    });
 }
 
 /** Every executable frame must expose a causal beat, not just an action noun. */

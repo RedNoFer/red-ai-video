@@ -4,13 +4,92 @@
 >
 > 模板版本：由 `pnpm compile:skills` 自动生成；唯一制作包契约：`vozeb-drama-production-package-v1@{{DRAMA_PACKAGE_CONTRACT_VERSION}}`（契约 hash：`{{DRAMA_PACKAGE_CONTRACT_HASH}}`，规范源 hash：`{{DRAMA_PACKAGE_SPEC_HASH}}`）。导演 Skill：`drama-video-director@{{DRAMA_VIDEO_DIRECTOR_VERSION}}`（hash：`{{DRAMA_VIDEO_DIRECTOR_HASH}}`）；服务端制作包规则 hash：`{{DRAMA_PACKAGE_RULES_HASH}}`；Seedance Skill、服务端规则和 Codex 工作单均由同一编译清单绑定。
 >
-> 使用约定：本模板是当前 v1 制作包的填写入口。完整制作包必须同时提供可导入的规范对象 JSON；JSON 是导入事实源，下面的章节是面向人工阅读的确定性展示。不要把历史制作包、旧 generationPrompt 或旧分镜正文当作新包模板。
+> 使用约定：本模板是当前 v1 制作包的填写入口。用于项目导入时，完整 Markdown 制作包必须在“规范对象”代码块中嵌入完整标准 JSON，JSON 是唯一导入事实源；不能只提供下方人工阅读章节，也不能把 JSON 作为可省略的附件。外部 Codex 独立交付时，同一份 Markdown 必须同时包含 JSON 和 13 章可读正文。不要把历史制作包、旧 generationPrompt 或旧分镜正文当作新包模板。
 >
-> 正式生成：制作包只能通过项目服务端 `executeDramaScriptRun` 完成最终编排。用户提供的模板只决定格式，TXT/小说只提供剧情事实；Agent draft 通过契约定义的严格质量门禁后，由服务端从规范对象确定性导出本模板。最终规范对象必须写入 `authoring.source/provider`、`targetNarrativeChapter`、契约/导演/Seedance Skill 版本与内容哈希，以及模板/TXT/参考素材的 alias、role、顺序和内容哈希。
+> 生成方式：本模板支持外部 Codex 独立生成。外部 Codex 只依据本模板、当前用户请求、当前 TXT/小说、当前正式资产和当前参考素材完成一次 authoring、自检和修正，不需要调用项目内部 `executeDramaScriptRun` 或依赖隐藏硬编码。项目内导入时可以再次执行同一门禁作为安全校验，但不得从 `framePlan`、旧提示词或模板示例重建、补写或改写外部 Codex 已生成的 `videoPrompt`。
+>
+> 来源优先级：本轮用户请求与本轮自定义模板 > 当前 TXT/小说事实 > 当前正式资产与已验收连续性 > 本模板与当前导演 Skill 的通用规则 > 最小合理导演补全。不得读取历史制作包、历史脚本、旧 generationPrompt 或旧运行记录。没有角色/场景图片不阻断制作包生成；有图片时必须按 alias、职责、顺序和清晰度登记，不能伪造引用。
 >
 > v1 固定保留 13 个一级章节；每集必须完整提供剧本、场次、镜头、资产、表演、声音、连续性、逐帧计划和 QC 数据。
 >
 > 目标平台：按当前锁定生产方案填写｜语言：按当前项目填写｜画幅：按当前项目填写｜每个逻辑片段时长：按当前方案填写｜整集成片时长：由 TXT/剧本拆解后的逻辑片段数量推导
+
+## 规范对象（机器导入必填）
+
+正式制作包必须在本节保留且只保留一个 `drama-production-package` JSON 代码块。项目导入器只解析这个代码块，不会从下方 13 章 Markdown、旧镜头表或 `framePlan` 文本反向重建对象。
+
+生成正式制作包时必须满足：
+
+1. 代码块语言必须是 `drama-production-package`（也兼容 `json`）。
+2. 代码块内容必须是一个完整、可解析的 JSON 对象，不得保留 `<占位符>`、省略号、注释或 Markdown 列表。
+3. 根对象必须至少包含 `schemaVersion`、`project`、`assets`、`episodes` 和 `archive`；`episodes[].shots[]` 必须保存每个逻辑片段及其 `videoPrompt`、`framePlan.frames[]`、表演、对白、光影和连续性字段。
+4. 下方 13 章是同一规范对象的人工阅读投影，不能替代 JSON；JSON 与正文不一致时，以 JSON 为准，正式包不得出现不一致。
+
+下面仅展示容器形状，属于模板示意，不能直接导入；正式生成时必须替换为完整对象：
+
+```drama-production-package
+{
+  "schemaVersion": 1,
+  "project": {
+    "title": "替换为项目与集名称",
+    "summary": "替换为本集摘要",
+    "style": "替换为当前视觉风格",
+    "ratio": "16:9",
+    "productionBible": "替换为完整生产方案对象"
+  },
+  "assets": {
+    "characters": [],
+    "locations": [],
+    "props": [],
+    "clues": []
+  },
+  "episodes": [],
+  "archive": {
+    "formatVersion": "vozeb-drama-production-package-v1",
+    "sections": [],
+    "promptAssets": [],
+    "dialogueDirections": [],
+    "voiceDirections": [],
+    "silenceDirections": [],
+    "referencePlan": [],
+    "generationOrder": [],
+    "qcReport": ""
+  }
+}
+```
+
+独立 Codex 交付时，不得把上述示意对象原样返回；必须将它替换成当前 TXT/剧本真实生成的完整规范对象，并让 Markdown 正文与 JSON 同源。
+
+## 独立生成协议与完整门禁
+
+以下规则随模板一并发布，外部 Codex 可以只使用本模板和本轮输入完成制作包，不需要读取项目内部实现。门禁不是生成后的补充检查，而是 authoring 阶段必须一次完成的自检条件；任何 blocker 未通过，都不得输出“可直接使用”的制作包。
+
+### 当前绑定版本
+
+- 制作包契约：`vozeb-drama-production-package-v1@{{DRAMA_PACKAGE_CONTRACT_VERSION}}`，契约 hash：`{{DRAMA_PACKAGE_CONTRACT_HASH}}`。
+- 规范源 hash：`{{DRAMA_PACKAGE_SPEC_HASH}}`；编译规则 hash：`{{DRAMA_PACKAGE_RULES_HASH}}`。
+- 主导演 Skill：`drama-video-director@{{DRAMA_VIDEO_DIRECTOR_VERSION}}`，hash：`{{DRAMA_VIDEO_DIRECTOR_HASH}}`。
+- 视频提示词公开格式：小墨个人分镜 Skill 6.3，来源标识 `storyboard-director@6.3.0`。
+- 供应商适配层：`seedance-25-director`，只负责 Seedance 2.5 的时长、画幅、参考素材和模式适配，不替代主导演 Skill。
+
+### 外部 Codex 输入与输出
+
+1. 输入只允许：本轮用户请求、本模板全文、本轮 TXT/小说/剧本、当前正式资产、当前用户提供的参考素材和明确的生产参数。
+2. 输出必须包含固定 13 个一级章节、完整文学剧本、场次、镜头、资产、表演、声音、连续性、逐帧计划、分段视频 Prompt 和 QC。
+3. 每个真实 `framePlan.frames[]` 必须对应一张 Agent 直接写出的公开视频镜头卡；不得由脚本或应用层拼接。
+4. 输出前必须附带逐项 `selfCheck`，列出每个门禁的 `code`、`severity`、`status`、`evidence` 和 `fixHint`。任何 blocker 失败时，只能先修正后再返回。
+5. 外部生成不要求角色、场景或道具图片存在；没有图片时保留文字资产事实，不新增 `@图片` alias。已有图片必须检查清晰度和职责，低清或拓扑不可辨的图片只能标记待修，不能作为正式锚点。
+
+### 门禁登记表
+
+{{DRAMA_PACKAGE_EXTERNAL_GATE_RULES}}
+
+### 外部生成结束条件
+
+- 先按完整剧情、对白自然时长、动作节拍和反应留白确定逻辑片段数量，再为每个片段使用 15 秒或 30 秒配置；内部帧段和硬切不改变逻辑片段数量或整集时长。
+- 普通镜头按真实可见事件决定帧数；只有用户或项目明确 `internalCutPolicy=dense-30s` 时，30 秒逻辑片段才执行 8—11 个帧段、7—10 次可见硬切目标。少切必须写“减切原因：静态留白/结果停留/供应商能力限制”。
+- 完成“生成 → 逐镜自检 → 聚合修正 → 再自检”后，才可标记为可直接使用；warning 必须保留在 QC 中，不能改写成通过。
+- 外部 Codex 不得返回半成品、待服务端补齐、待内部 Agent 重建、只含镜头摘要或只含完整对白而缺少逐帧画面的结果。
 
 ## 一、项目总览
 
@@ -85,7 +164,7 @@
 
 `videoPrompt` 由 Agent 直接生成完整公开内容；`framePlan.frames` 是同一视频内容的结构化镜像，不是服务端重建 `videoPrompt` 的素材。
 
-Agent draft 不能使用固定脚本或直接复制模板正文冒充生成结果。服务端最终只序列化通过严格门禁的规范对象；相邻动作差异、情绪递进、NPC 反应变化、运镜动机和镜头事件缺一项都不得标记为 Agent 完成。
+Agent draft 不能使用固定脚本或直接复制模板正文冒充生成结果。外部 Codex 必须自行完成规范对象所需字段和门禁自检；项目内导入层只能序列化已经通过严格门禁的规范对象，不能替外部生成补齐或改写公开视频正文。相邻动作差异、情绪递进、NPC 反应变化、运镜动机和镜头事件缺一项都不得标记为 Agent 完成。
 
 ### 逐帧字段职责
 
@@ -167,7 +246,7 @@ imagePrompt
 | --- | ---- | ------ | ------ | -------------- | ---- |
 | D01 | SH01 | 角色名 | “台词” | 按逐句时序填写 | 是   |
 
-含对白镜头必须在规范对象中逐句记录相对镜头的开始、结束、前后停顿和语速；对白先按自然语速核算，超过10个可发音字容差时不得完成正式 authoring，必须按自然分句、说话人转换、动作反应或逻辑片段边界拆分；这些内容不写入静态图片正文。
+含对白镜头必须在规范对象中逐句记录相对镜头的开始、结束、前后停顿和语速，并在 authoring 前完成逐句对白容量表：`availableSpeechSeconds = endSecond - startSecond`；`requiredSpeechSeconds = 可发音字数 / speechRateCharsPerSecond`；`pauseBeforeSeconds` 与 `pauseAfterSeconds` 另行占用句前/句后空间并必须留在镜头边界内。任何一句 `availableSpeechSeconds < requiredSpeechSeconds` 都不得完成正式 authoring、制作包导入或生产前预检，即使整镜总时长仍然足够也不能通过；必须移动帧段边界、拆自然分句/说话人转换/动作反应或增加逻辑片段。10 个可发音字容差只用于整镜总量的兼容提醒，不适用于逐句口型窗口；不得异常加速。公开 `videoPrompt` 的每个实际说话时间段还必须和对应 `framePlan` 时间段相容，台词字段写完整原句，画面内容只写可见口型、呼吸、视线和反应；这些内容不写入静态图片正文。
 
 ### 沉默设计
 

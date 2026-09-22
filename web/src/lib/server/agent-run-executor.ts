@@ -441,7 +441,7 @@ framePlan.frames 只能保留现有字段；静态正文和视频正文必须由
         parameters: { type: "object", properties: { mode: { type: "string", enum: ["reply", "package"] }, reply: { type: "string" }, markdown: { type: "string" } }, required: ["mode", "reply"], additionalProperties: false },
     };
     const isPackageRequest = /制作包|制作包提示词|production package/iu.test(run.prompt);
-    const authoringPreflight = `制作包返回前必须先完成一次内部自检：逐项核对当前模板章节和字段职责、TXT对白与剧情事实覆盖、先按剧情节拍拆逻辑片段再按配置固定每镜时长、对白自然时长与帧段边界、每帧“谁做什么→因为什么触发→身体/手部/道具可见变化→结果→声音锚点”、dramaticFunction中的欲望/目标与阻力/压力、画面内容不得含完整对白、framePlan连续性、镜头模式与硬切事件、跨硬切的entryState/exitState/首帧站位继承、最小素材绑定、角色/场景清晰度和当前productionPlan。硬切可以开始新视频片段，但不得重置世界空间；只有明确写出移动路径/受力和到达结果才能改变位置。对白结束后的时间必须有剧情职责，不能用静态反应填空。自检不通过时不要输出半成品；直接在同一次生成中修正，最终只返回一份可直接导入的完整制作包。`;
+    const authoringPreflight = `制作包返回前必须先完成一次内部自检：逐项核对当前模板章节和字段职责、TXT对白与剧情事实覆盖、先按剧情节拍拆逻辑片段再按配置固定每镜时长、逐句对白容量表与帧段边界、每帧“谁做什么→因为什么触发→身体/手部/道具可见变化→结果→声音锚点”、dramaticFunction中的欲望/目标与阻力/压力、画面内容不得含完整对白、framePlan连续性、镜头模式与硬切事件、跨硬切的entryState/exitState/首帧站位继承、最小素材绑定、角色/场景清晰度和当前productionPlan。每句对白必须核算 availableSpeechSeconds=endSecond-startSecond 与 requiredSpeechSeconds=可发音字数/speechRateCharsPerSecond；pauseBeforeSeconds/pauseAfterSeconds 另行检查边界和重叠；前者小于后者时立即阻断并重排，不得用整镜总时长或十字兼容容差掩盖，也不得异常加速。公开镜头卡中的台词窗口还必须与对应 framePlan 时间段相容。硬切可以开始新视频片段，但不得重置世界空间；只有明确写出移动路径/受力和到达结果才能改变位置。对白结束后的时间必须有剧情职责，不能用静态反应填空。自检不通过时不要输出半成品；直接在同一次生成中修正，最终只返回一份可直接导入的完整制作包。`;
     const persistDraft = async (draft: DramaAuthoringDraft, provider: DramaAuthoringProvider) => {
         const markdown = draft.markdown.trim();
         if (!markdown) throw new Error("剧本 Agent 没有返回制作包正文");
@@ -580,7 +580,7 @@ framePlan.frames 只能保留现有字段；静态正文和视频正文必须由
                         [
                             {
                                 role: "system",
-                                content: `${authoringRules}\n\n${instruction}\n${visualInstruction}\n${attachmentInstruction}\n\n这是内部 authoring revision，不是新的用户请求。上一版草案没有达到制作包生成门槛。请根据反馈重新完整生成一份可直接交付的制作包 Markdown，不要只返回补丁、解释或摘要；保留所有已覆盖的剧情事实和对白，但逐项修正反馈中的字段。公开视频 videoPrompt 必须改为小墨 6.3 式简洁导演镜头卡：每个真实 framePlan 时间段对应一张“### 镜头 N | 时间范围 | 景别 | 焦段 | 机位角度 | 运镜方式 | 人物镜头/非人物镜头”卡片，并填写场景、画面内容、光影、色调、台词、人声、音效；不得输出旧八段标题或起点、动作与触发、可见衔接、终点等内部字段名。对白必须逐段使用“说话人说：“完整台词””格式，按自然语速和对白游标分配，禁止相邻镜头复制同一完整台词；对白结束段必须写具体静默/反应结果。framePlan 内部字段仍需完整、连续且逐项通过门禁。生成前完成内部自检，禁止把模板句、质量反馈或内部规则写入公开制作包。`,
+                                content: `${authoringRules}\n\n${instruction}\n${visualInstruction}\n${attachmentInstruction}\n\n这是内部 authoring revision，不是新的用户请求。上一版草案没有达到制作包生成门槛。请根据反馈重新完整生成一份可直接交付的制作包 Markdown，不要只返回补丁、解释或摘要；保留所有已覆盖的剧情事实和对白，但逐项修正反馈中的字段。先为每句对白计算“可发音字数/语速”的 requiredSpeechSeconds，再为该句分配不短于 requiredSpeechSeconds 的 startSecond/endSecond 口型窗口；pauseBeforeSeconds/pauseAfterSeconds 另行留在镜头边界内。单句窗口不足即使整镜有余量也必须重排，十字兼容容差不适用于单句。公开视频 videoPrompt 必须改为小墨 6.3 式简洁导演镜头卡：每个真实 framePlan 时间段对应一张“### 镜头 N | 时间范围 | 景别 | 焦段 | 机位角度 | 运镜方式 | 人物镜头/非人物镜头”卡片，并填写场景、画面内容、光影、色调、台词、人声、音效；不得输出旧八段标题或起点、动作与触发、可见衔接、终点等内部字段名。对白必须逐段使用“说话人说：“完整台词””格式，按自然语速和对白游标分配，公开镜头卡台词窗口必须与对应 framePlan 一致，禁止相邻镜头复制同一完整台词；对白结束段必须写具体静默/反应结果。framePlan 内部字段仍需完整、连续且逐项通过门禁。生成前完成内部自检，禁止把模板句、质量反馈或内部规则写入公开制作包。`,
                             },
                             {
                                 role: "user",
@@ -623,7 +623,7 @@ framePlan.frames 只能保留现有字段；静态正文和视频正文必须由
                         [
                             {
                                 role: "system",
-                                content: `${authoringRules}\n\n${instruction}\n${visualInstruction}\n${attachmentInstruction}\n\n这是内部 authoring revision，不是新的用户请求。上一轮没有返回完整 package 草案，可能返回了普通回复或缺少 markdown。请忽略上一轮回复，直接重新完整生成一份可交付的制作包 Markdown；不要只返回补丁、解释、提问或摘要。公开视频 videoPrompt 必须采用小墨 6.3 式简洁导演镜头卡：每个真实 framePlan 时间段对应一张“### 镜头 N | 时间范围 | 景别 | 焦段 | 机位角度 | 运镜方式 | 人物镜头/非人物镜头”卡片，并填写场景、画面内容、光影、色调、台词、人声、音效；不得输出旧八段标题或起点、动作与触发、可见衔接、终点等内部字段名。对白必须按自然语速和对白游标分配，禁止相邻镜头复制完整台词；对白结束段必须写具体静默或反应结果。framePlan 内部字段仍需完整、连续且逐项通过门禁。只能返回 mode=package、reply 和完整 markdown。`,
+                                content: `${authoringRules}\n\n${instruction}\n${visualInstruction}\n${attachmentInstruction}\n\n这是内部 authoring revision，不是新的用户请求。上一轮没有返回完整 package 草案，可能返回了普通回复或缺少 markdown。请忽略上一轮回复，直接重新完整生成一份可交付的制作包 Markdown；每句对白先计算 requiredSpeechSeconds=可发音字数/语速，startSecond/endSecond 的实际口型窗口不得短于该值，pauseBeforeSeconds/pauseAfterSeconds 另行检查边界；单句不足一律重排，十字兼容容差只适用于整镜总量，不得用于单句。公开视频 videoPrompt 必须采用小墨 6.3 式简洁导演镜头卡：每个真实 framePlan 时间段对应一张“### 镜头 N | 时间范围 | 景别 | 焦段 | 机位角度 | 运镜方式 | 人物镜头/非人物镜头”卡片，并填写场景、画面内容、光影、色调、台词、人声、音效；不得输出旧八段标题或起点、动作与触发、可见衔接、终点等内部字段名。对白必须按自然语速和对白游标分配，公开镜头卡台词窗口必须与对应 framePlan 一致，禁止相邻镜头复制完整台词；对白结束段必须写具体静默或反应结果。framePlan 内部字段仍需完整、连续且逐项通过门禁。只能返回 mode=package、reply 和完整 markdown。`,
                             },
                             {
                                 role: "user",

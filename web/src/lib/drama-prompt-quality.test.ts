@@ -10,6 +10,7 @@ import {
     validateDramaFrameCausalChain,
     validateDramaVideoAuthoringQuality,
     validateDramaVideoPromptCardLayout,
+    validateDramaVideoPromptDialogueTiming,
     validateDramaVideoPromptTemplateLayout,
     validateDramaVideoSegmentDetail,
 } from "./drama-prompt-quality";
@@ -177,6 +178,21 @@ describe("drama prompt quality", () => {
                 "SH01",
             ),
         ).toEqual(expect.arrayContaining([expect.stringContaining("不能把对白切在段内")]));
+    });
+
+    it("rejects a public dialogue card whose mouth window is shorter than its utterance", () => {
+        const text = "甲".repeat(25);
+        const prompt = [
+            "### 镜头 01 | 0-4秒 | 近景 | 65mm | 侧45度平视 | 锁定眼睛与嘴部 | 人物镜头",
+            "场景：室内长案。",
+            "画面内容：人物开口，眉心收紧，手指压住衣料。",
+            "光影：冷光落在眼睛和手背。",
+            "色调：冷青白。",
+            `台词：萧炎说：“${text}”`,
+            "人声：压低声线。",
+            "音效：衣料轻响。",
+        ].join("\n");
+        expect(validateDramaVideoPromptDialogueTiming(prompt, [{ startSecond: 0, endSecond: 4 }], [{ type: "dialogue", speaker: "萧炎", text }], "SH01")).toEqual(expect.arrayContaining([expect.stringContaining("台词窗口不足")]));
     });
 
     it("requires a causal trigger, visible result, and sound anchor for an executable frame", () => {

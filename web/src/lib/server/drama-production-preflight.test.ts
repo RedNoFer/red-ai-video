@@ -181,6 +181,17 @@ describe("drama production preflight", () => {
         expect(preflightDramaProduction(project, project.episodes[0]).issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "DIALOGUE_TIMING", severity: "blocking" })]));
     });
 
+    it("blocks an individually overpacked utterance even when the shot total is otherwise long enough", () => {
+        const project = fixture();
+        const shot = project.episodes[0].shots[0];
+        const text = "甲".repeat(25);
+        shot.dialogue = text;
+        shot.utterances = [{ id: "dialogue-one", order: 1, type: "dialogue", speaker: "Karin", text, startSecond: 1, endSecond: 5 }];
+        shot.duration = 15;
+
+        expect(preflightDramaProduction(project, project.episodes[0]).issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "DIALOGUE_CAPACITY", severity: "blocking" })]));
+    });
+
     it("warns before submit when frame images plus fixed assets exceed the shot budget", () => {
         const project = fixture();
         const shot = project.episodes[0].shots[0];

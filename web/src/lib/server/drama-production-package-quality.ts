@@ -1,9 +1,9 @@
 import type { DramaAuthoringSourceSnapshot, DramaProductionPackageV1, DramaQualityGateCheck, DramaQualityGateReport } from "@/lib/drama-project-contract";
-import { dramaDialogueFragmentSequenceError, dramaDialogueTimingReminder, hasQuotedDramaDialogue, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
+import { dramaDialogueFragmentSequenceError, dramaDialogueTimingReminder, dramaTimedDialogueCapacityIssues, dramaUtteranceTimingIssues, hasQuotedDramaDialogue, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
 import { DRAMA_DENSE_HARD_CUT_RANGE_30S, hasDramaDenseCutRule, hasDramaDenseCutRuleInCustomTemplateSources } from "@/lib/drama-production-plan";
 import { hasDramaReferenceAnchorClarity } from "@/lib/drama-prompt-compiler";
 import { validateDramaCharacterWardrobeContinuity, validateDramaCutInformationDiversity, validateDramaPromptComposition, validateDramaReferenceAliasConsistency } from "@/lib/drama-prompt-composition-quality";
-import { validateDramaFrameCausalChain, validateDramaFrameTiming, validateDramaVideoPromptCardLayout } from "@/lib/drama-prompt-quality";
+import { validateDramaFrameCausalChain, validateDramaFrameTiming, validateDramaVideoPromptCardLayout, validateDramaVideoPromptDialogueTiming } from "@/lib/drama-prompt-quality";
 import { validateDramaContinuityEdges } from "@/lib/drama-continuity-policy";
 import { DRAMA_PACKAGE_GATE_CODES, DRAMA_PACKAGE_SECTIONS } from "@/lib/server/drama-production-package-contract";
 
@@ -71,23 +71,24 @@ function checkDialogueCapacity(checks: DramaQualityGateCheck[], value: DramaProd
     const reminders: string[] = [];
     for (const episode of value.episodes) {
         for (const shot of episode.shots) {
+            const utterances = shot.utterances as DramaDialogueTimingInput[];
+            const timingIssues = dramaUtteranceTimingIssues(
+                shot.duration,
+                utterances,
+                utterances.some((utterance) => utterance.type === "dialogue" || utterance.type === "voiceover"),
+                `${episode.code}/${shot.code}`,
+            );
+            blockers.push(...timingIssues);
             const issue = dramaDialogueTimingReminder(shot.duration, shot.utterances as DramaDialogueTimingInput[], shot.dialogue, `${episode.code}/${shot.code}`);
             if (issue) {
                 if (issue.withinTolerance) reminders.push(issue.message);
                 else blockers.push(issue.message);
             }
-            for (const [utteranceIndex, utterance] of (shot.utterances as DramaDialogueTimingInput[]).entries()) {
-                if ((utterance.type !== "dialogue" && utterance.type !== "voiceover") || utterance.startSecond === undefined || utterance.endSecond === undefined) continue;
-                const startSecond = Number(utterance.startSecond);
-                const endSecond = Number(utterance.endSecond);
-                if (!Number.isFinite(startSecond) || !Number.isFinite(endSecond) || endSecond <= startSecond) continue;
-                const utteranceLabel = utterance.order === undefined ? `utterance-${utteranceIndex + 1}` : `utterance-${utterance.order}`;
-                const windowIssue = dramaDialogueTimingReminder(endSecond - startSecond, [utterance], "", `${episode.code}/${shot.code}/${utteranceLabel}`);
-                if (!windowIssue) continue;
-                const message = `对白 ${utteranceLabel} 的实际口型窗口不足：${windowIssue.message}`;
-                if (windowIssue.withinTolerance) reminders.push(message);
-                else blockers.push(message);
-            }
+            // A whole-shot estimate can pass while a short individual utterance
+            // is impossible to perform. Per-utterance mouth windows are strict:
+            // the ten-character compatibility tolerance never applies here.
+            for (const windowIssue of dramaTimedDialogueCapacityIssues(shot.utterances as DramaDialogueTimingInput[], `${episode.code}/${shot.code}`))
+                blockers.push(`对白 utterance-${windowIssue.utteranceIndex + 1} 的实际口型窗口不足：${windowIssue.message}`);
         }
     }
     checks.push({
@@ -101,7 +102,13 @@ function checkDialogueCapacity(checks: DramaQualityGateCheck[], value: DramaProd
 }
 
 function checkFrameDialogueTiming(checks: DramaQualityGateCheck[], value: DramaProductionPackageV1) {
-    const failures = value.episodes.flatMap((episode) => episode.shots.flatMap((shot) => validateDramaFrameTiming(shot.framePlan?.frames || [], shot.utterances as DramaDialogueTimingInput[], `${episode.code}/${shot.code}`)));
+    const failures = value.episodes.flatMap((episode) =>
+        episode.shots.flatMap((shot) => {
+            const label = `${episode.code}/${shot.code}`;
+            const frames = shot.framePlan?.frames || [];
+            return [...validateDramaFrameTiming(frames, shot.utterances as DramaDialogueTimingInput[], label), ...validateDramaVideoPromptDialogueTiming(shot.videoPrompt, frames, shot.utterances as DramaDialogueTimingInput[], label)];
+        }),
+    );
     add(
         checks,
         "FRAME_DIALOGUE_TIMING",
@@ -664,7 +671,16 @@ function checkSimpleStructuralChecks(checks: DramaQualityGateCheck[], value: Dra
             ["project.productionBible.productionPlan.video.shotDuration", "episodes[].shots[].duration"],
             "先按故事节拍拆成多个逻辑片段，再让每个逻辑片段严格使用生产方案规定的时长；内部帧段/硬切数量不计入片段数量。",
         );
-    }
+    } else
+        add(
+            checks,
+            "SHOT_DURATION_POLICY",
+            true,
+            "逻辑片段时长",
+            "当前制作包未声明固定目标时长，本门禁不启用；不得用内部帧段或硬切数量推导逻辑片段数量",
+            ["project.productionBible.productionPlan.video.shotDuration", "episodes[].shots[].duration"],
+            "如项目要求固定 15 秒或 30 秒，请先在生产方案中声明目标时长，再按剧情节拍拆分逻辑片段。",
+        );
     const timelineValid = value.episodes.every((episode) =>
         episode.shots.every((shot) => {
             const frames = shot.framePlan?.frames || [];

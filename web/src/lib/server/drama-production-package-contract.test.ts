@@ -11,11 +11,16 @@ const template = readFileSync(new URL("../../../public/drama-production-package-
 describe("drama production package contract compilation", () => {
     it("keeps generated runtime, template, server manifest and Codex work-order rules on one source hash", () => {
         expect(DRAMA_PACKAGE_SECTIONS).toHaveLength(13);
-        expect(DRAMA_PACKAGE_GATE_CODES).toEqual(expect.arrayContaining(["LITERARY_SCRIPT_COMPLETENESS", "CAMERA_EVENT", "PROVENANCE"]));
+        expect(DRAMA_PACKAGE_GATE_CODES).toEqual(expect.arrayContaining(["LITERARY_SCRIPT_COMPLETENESS", "DIALOGUE_CAPACITY", "SHOT_DURATION_POLICY", "CAMERA_EVENT", "PROVENANCE"]));
         expect(DRAMA_PACKAGE_COMPILE_MANIFEST.contract.contentHash).toBe(sha256(section(docs, "版本化契约块")));
         expect(template).toContain(`契约 hash：\`${DRAMA_PACKAGE_COMPILE_MANIFEST.contract.contentHash}\``);
         expect(template).toContain(DRAMA_PACKAGE_COMPILE_MANIFEST.packageSpecHash);
         expect(DRAMA_PACKAGE_COMPILE_MANIFEST.codexWorkOrderRules).toContain("executeDramaScriptRun");
+        expect(template).toContain("外部 Codex 独立生成");
+        expect(template).toContain("逐项 `selfCheck`");
+        expect(template).toContain("availableSpeechSeconds = endSecond - startSecond");
+        expect(template).toContain("不适用于逐句口型窗口");
+        for (const gateCode of DRAMA_PACKAGE_GATE_CODES) expect(template).toContain(`\`${gateCode}\``);
         for (const title of DRAMA_PACKAGE_SECTIONS) expect(template).toContain(title);
     });
 });

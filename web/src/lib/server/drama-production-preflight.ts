@@ -2,11 +2,11 @@ import type { DramaEpisode, DramaProductionPreflight, DramaProductionPreflightIs
 import { hasApprovedAssetReference, hasApprovedScenePanoramaReference } from "@/lib/drama-asset-baseline";
 import { continuityStartEvidence } from "@/lib/drama-continuity-policy";
 import { dramaFrameVisualSubject, normalizeDramaFrameBeats, validateDramaFramePlanVisuals, validateDramaFrameVisualContent, warnDramaFrameCountUniformity, warnDramaFrameVisualContent } from "@/lib/drama-frame-sequence";
-import { dramaDialogueTimingReminder, hasQuotedDramaDialogue, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
+import { dramaDialogueTimingReminder, dramaTimedDialogueCapacityIssues, dramaUtteranceTimingIssues, hasQuotedDramaDialogue, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
 import { dramaReferenceImageBudget } from "@/lib/drama-production-plan";
 import { dramaShotReferenceSelectionIds, resolveDramaVideoReferenceMode } from "@/lib/drama-video-reference-plan";
 import type { DramaVideoReferenceMode } from "@/lib/drama-project-contract";
-import { validateDramaFrameTiming, validateDramaPerformanceDetail, validateDramaVideoPromptCardLayout } from "@/lib/drama-prompt-quality";
+import { validateDramaFrameTiming, validateDramaPerformanceDetail, validateDramaVideoPromptCardLayout, validateDramaVideoPromptDialogueTiming } from "@/lib/drama-prompt-quality";
 import { validateDramaCharacterWardrobeContinuity, validateDramaCutInformationDiversity, validateDramaPromptComposition, validateDramaReferenceAliasConsistency } from "@/lib/drama-prompt-composition-quality";
 import { auditDramaShotDirectorQuality } from "@/lib/server/agent-skills/drama-video-director";
 
@@ -136,6 +136,8 @@ function checkShot(
         if (layoutErrors.length) issues.push(blocking("VIDEO_PROMPT_LAYOUT", layoutErrors[0], { shotId: shot.id, correction: "重新优化或生成视频提示词，按小墨式导演镜头卡逐帧补齐时间、景别、焦段、机位、运镜和可见画面" }));
         const timingErrors = validateDramaFrameTiming(shot.framePlan.frames, shot.utterances as DramaDialogueTimingInput[], label);
         if (timingErrors.length) issues.push(blocking("FRAME_DIALOGUE_TIMING", timingErrors[0], { shotId: shot.id, correction: "按对白自然开口、收句、停顿和反应重新分配帧段，禁止机械等长" }));
+        const promptTimingErrors = validateDramaVideoPromptDialogueTiming(videoPrompt || "", shot.framePlan.frames, shot.utterances as DramaDialogueTimingInput[], label);
+        if (promptTimingErrors.length) issues.push(blocking("DIALOGUE_CAPACITY", promptTimingErrors[0], { shotId: shot.id, correction: "把公开镜头卡中的台词移动到足够长的 framePlan 时间段；逐句口型窗口不足时必须重切或拆分，不能异常加速" }));
         const malformedDialogue = shot.utterances.filter((item) => item.type === "dialogue" && (!item.speaker || !hasQuotedDramaDialogue(videoPrompt || "", item.speaker, item.text)));
         if (malformedDialogue.length) issues.push(blocking("DIALOGUE_PROMPT_FORMAT", `${label}包含未使用中文引号的对白，必须写成“说话人说：“实际台词””`, { shotId: shot.id, correction: "重新生成带实际台词和中文引号的对白表演" }));
         const shotText = [
@@ -186,6 +188,13 @@ function checkShot(
     if (!light?.palette || !light.colorTemperature || !light.keyLight || !light.fillLight || !light.rimLight || !light.materialResponse || !light.skinToneProtection)
         issues.push(warning("LIGHTING_PLAN_MISSING", `${label}缺少完整色彩与灯光规划`, { shotId: shot.id }));
     if (!Number.isFinite(shot.duration) || shot.duration <= 0) issues.push(blocking("DURATION", `${label}缺少有效时长`, { shotId: shot.id }));
+    const utteranceTimingIssues = dramaUtteranceTimingIssues(
+        shot.duration,
+        shot.utterances as DramaDialogueTimingInput[],
+        shot.utterances.some((item) => item.type === "dialogue" || item.type === "voiceover"),
+        label,
+    );
+    if (utteranceTimingIssues.length) issues.push(blocking("DIALOGUE_TIMING", utteranceTimingIssues[0], { shotId: shot.id, correction: "为每句对白填写不重叠的 startSecond/endSecond、前后停顿和语速，并确保均在当前镜头边界内" }));
     const dialogueTiming = dramaDialogueTimingReminder(shot.duration, shot.utterances as DramaDialogueTimingInput[], shot.dialogue, label);
     if (dialogueTiming) {
         const issue = dialogueTiming.withinTolerance
@@ -193,6 +202,13 @@ function checkShot(
             : blocking("DIALOGUE_TIMING", dialogueTiming.message, { shotId: shot.id, correction: "正式生产前必须按自然分句、说话人转换、动作反应或逻辑片段边界拆镜；禁止异常加速对白" });
         issues.push(issue);
     }
+    for (const windowIssue of dramaTimedDialogueCapacityIssues(shot.utterances as DramaDialogueTimingInput[], label))
+        issues.push(
+            blocking("DIALOGUE_CAPACITY", `逐句对白口型窗口不足：${windowIssue.message}`, {
+                shotId: shot.id,
+                correction: "先按可发音字数/语速核算每句 requiredSpeechSeconds，再单独检查前后停顿边界，随后移动帧段边界、拆分自然分句或增加逻辑片段；不得异常加速",
+            }),
+        );
     if (targetShotDuration && shot.duration !== targetShotDuration)
         issues.push(warning("SHOT_DURATION_MISMATCH", `${label}当前为${shot.duration}秒，生产方案目标为${targetShotDuration}秒`, { shotId: shot.id, correction: `按生产方案重新生成或调整为${targetShotDuration}秒逻辑镜头` }));
     const selectedReferenceCount = dramaShotReferenceSelectionIds(project, shot, referenceMode, referenceSelections).length;

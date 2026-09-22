@@ -2,15 +2,120 @@
 
 > 制作包格式：`vozeb-drama-production-package-v1`
 >
-> 模板版本：由 `pnpm compile:skills` 自动生成；唯一制作包契约：`vozeb-drama-production-package-v1@1.0.0`（契约 hash：`29514979881185ae347d74696cfb02c79eae37129a9fc77893ad85b50c7d7678`，规范源 hash：`a8c563de6cb3d76e5735ec3477d73f9575593b9c81954c02c6ffb4ef0614987e`）。导演 Skill：`drama-video-director@1.12.0`（hash：`a05c29555cd33fe04c7165fd0ad987236d03cc947ba3c54c076b7d40cd0839c2`）；服务端制作包规则 hash：`431ac723691bfc8b3272990634aa5a5217b9a9aa2ee798fe475815b67094df06`；Seedance Skill、服务端规则和 Codex 工作单均由同一编译清单绑定。
+> 模板版本：由 `pnpm compile:skills` 自动生成；唯一制作包契约：`vozeb-drama-production-package-v1@1.0.0`（契约 hash：`5ef0b526b7437590e93db6e88ff22767fa8070ea880274b3c41d932894a3f3dc`，规范源 hash：`ec6cae3e784630367ba64bbf2487bf4f46c7b44fcc92951430db46b0cfff5eb3`）。导演 Skill：`drama-video-director@1.12.0`（hash：`a05c29555cd33fe04c7165fd0ad987236d03cc947ba3c54c076b7d40cd0839c2`）；服务端制作包规则 hash：`431ac723691bfc8b3272990634aa5a5217b9a9aa2ee798fe475815b67094df06`；Seedance Skill、服务端规则和 Codex 工作单均由同一编译清单绑定。
 >
-> 使用约定：本模板是当前 v1 制作包的填写入口。完整制作包必须同时提供可导入的规范对象 JSON；JSON 是导入事实源，下面的章节是面向人工阅读的确定性展示。不要把历史制作包、旧 generationPrompt 或旧分镜正文当作新包模板。
+> 使用约定：本模板是当前 v1 制作包的填写入口。用于项目导入时，完整 Markdown 制作包必须在“规范对象”代码块中嵌入完整标准 JSON，JSON 是唯一导入事实源；不能只提供下方人工阅读章节，也不能把 JSON 作为可省略的附件。外部 Codex 独立交付时，同一份 Markdown 必须同时包含 JSON 和 13 章可读正文。不要把历史制作包、旧 generationPrompt 或旧分镜正文当作新包模板。
 >
-> 正式生成：制作包只能通过项目服务端 `executeDramaScriptRun` 完成最终编排。用户提供的模板只决定格式，TXT/小说只提供剧情事实；Agent draft 通过契约定义的严格质量门禁后，由服务端从规范对象确定性导出本模板。最终规范对象必须写入 `authoring.source/provider`、`targetNarrativeChapter`、契约/导演/Seedance Skill 版本与内容哈希，以及模板/TXT/参考素材的 alias、role、顺序和内容哈希。
+> 生成方式：本模板支持外部 Codex 独立生成。外部 Codex 只依据本模板、当前用户请求、当前 TXT/小说、当前正式资产和当前参考素材完成一次 authoring、自检和修正，不需要调用项目内部 `executeDramaScriptRun` 或依赖隐藏硬编码。项目内导入时可以再次执行同一门禁作为安全校验，但不得从 `framePlan`、旧提示词或模板示例重建、补写或改写外部 Codex 已生成的 `videoPrompt`。
+>
+> 来源优先级：本轮用户请求与本轮自定义模板 > 当前 TXT/小说事实 > 当前正式资产与已验收连续性 > 本模板与当前导演 Skill 的通用规则 > 最小合理导演补全。不得读取历史制作包、历史脚本、旧 generationPrompt 或旧运行记录。没有角色/场景图片不阻断制作包生成；有图片时必须按 alias、职责、顺序和清晰度登记，不能伪造引用。
 >
 > v1 固定保留 13 个一级章节；每集必须完整提供剧本、场次、镜头、资产、表演、声音、连续性、逐帧计划和 QC 数据。
 >
 > 目标平台：按当前锁定生产方案填写｜语言：按当前项目填写｜画幅：按当前项目填写｜每个逻辑片段时长：按当前方案填写｜整集成片时长：由 TXT/剧本拆解后的逻辑片段数量推导
+
+## 规范对象（机器导入必填）
+
+正式制作包必须在本节保留且只保留一个 `drama-production-package` JSON 代码块。项目导入器只解析这个代码块，不会从下方 13 章 Markdown、旧镜头表或 `framePlan` 文本反向重建对象。
+
+生成正式制作包时必须满足：
+
+1. 代码块语言必须是 `drama-production-package`（也兼容 `json`）。
+2. 代码块内容必须是一个完整、可解析的 JSON 对象，不得保留 `<占位符>`、省略号、注释或 Markdown 列表。
+3. 根对象必须至少包含 `schemaVersion`、`project`、`assets`、`episodes` 和 `archive`；`episodes[].shots[]` 必须保存每个逻辑片段及其 `videoPrompt`、`framePlan.frames[]`、表演、对白、光影和连续性字段。
+4. 下方 13 章是同一规范对象的人工阅读投影，不能替代 JSON；JSON 与正文不一致时，以 JSON 为准，正式包不得出现不一致。
+
+下面仅展示容器形状，属于模板示意，不能直接导入；正式生成时必须替换为完整对象：
+
+```drama-production-package
+{
+  "schemaVersion": 1,
+  "project": {
+    "title": "替换为项目与集名称",
+    "summary": "替换为本集摘要",
+    "style": "替换为当前视觉风格",
+    "ratio": "16:9",
+    "productionBible": "替换为完整生产方案对象"
+  },
+  "assets": {
+    "characters": [],
+    "locations": [],
+    "props": [],
+    "clues": []
+  },
+  "episodes": [],
+  "archive": {
+    "formatVersion": "vozeb-drama-production-package-v1",
+    "sections": [],
+    "promptAssets": [],
+    "dialogueDirections": [],
+    "voiceDirections": [],
+    "silenceDirections": [],
+    "referencePlan": [],
+    "generationOrder": [],
+    "qcReport": ""
+  }
+}
+```
+
+独立 Codex 交付时，不得把上述示意对象原样返回；必须将它替换成当前 TXT/剧本真实生成的完整规范对象，并让 Markdown 正文与 JSON 同源。
+
+## 独立生成协议与完整门禁
+
+以下规则随模板一并发布，外部 Codex 可以只使用本模板和本轮输入完成制作包，不需要读取项目内部实现。门禁不是生成后的补充检查，而是 authoring 阶段必须一次完成的自检条件；任何 blocker 未通过，都不得输出“可直接使用”的制作包。
+
+### 当前绑定版本
+
+- 制作包契约：`vozeb-drama-production-package-v1@1.0.0`，契约 hash：`5ef0b526b7437590e93db6e88ff22767fa8070ea880274b3c41d932894a3f3dc`。
+- 规范源 hash：`ec6cae3e784630367ba64bbf2487bf4f46c7b44fcc92951430db46b0cfff5eb3`；编译规则 hash：`431ac723691bfc8b3272990634aa5a5217b9a9aa2ee798fe475815b67094df06`。
+- 主导演 Skill：`drama-video-director@1.12.0`，hash：`a05c29555cd33fe04c7165fd0ad987236d03cc947ba3c54c076b7d40cd0839c2`。
+- 视频提示词公开格式：小墨个人分镜 Skill 6.3，来源标识 `storyboard-director@6.3.0`。
+- 供应商适配层：`seedance-25-director`，只负责 Seedance 2.5 的时长、画幅、参考素材和模式适配，不替代主导演 Skill。
+
+### 外部 Codex 输入与输出
+
+1. 输入只允许：本轮用户请求、本模板全文、本轮 TXT/小说/剧本、当前正式资产、当前用户提供的参考素材和明确的生产参数。
+2. 输出必须包含固定 13 个一级章节、完整文学剧本、场次、镜头、资产、表演、声音、连续性、逐帧计划、分段视频 Prompt 和 QC。
+3. 每个真实 `framePlan.frames[]` 必须对应一张 Agent 直接写出的公开视频镜头卡；不得由脚本或应用层拼接。
+4. 输出前必须附带逐项 `selfCheck`，列出每个门禁的 `code`、`severity`、`status`、`evidence` 和 `fixHint`。任何 blocker 失败时，只能先修正后再返回。
+5. 外部生成不要求角色、场景或道具图片存在；没有图片时保留文字资产事实，不新增 `@图片` alias。已有图片必须检查清晰度和职责，低清或拓扑不可辨的图片只能标记待修，不能作为正式锚点。
+
+### 门禁登记表
+
+| code                            | 级别              | 必须满足的条件                                                                                                                                                                                                                                                                                                                       |
+| ------------------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `LITERARY_SCRIPT_COMPLETENESS`  | blocker           | 文学正文完整，含场次、行为、冲突推进、对白/事实和可见结果；固定 13 章齐全；目标小说章节单独标识。                                                                                                                                                                                                                                    |
+| `DIALOGUE_COVERAGE`             | blocker           | TXT/剧本中的每条显式对白都出现在文学正文和镜头序列中，并绑定说话人、镜头、时间和表演；不得静默遗漏或擅自改写。                                                                                                                                                                                                                       |
+| `FRAME_DIALOGUE_TIMING`         | blocker           | 帧段边界对齐自然开口、收句、停顿、动作触发或反应留白；禁止把含对白镜头机械等分。                                                                                                                                                                                                                                                     |
+| `DIALOGUE_CAPACITY`             | blocker / warning | 逐句口型窗口是硬门禁：`availableSpeechSeconds=endSecond-startSecond` 必须不小于 `requiredSpeechSeconds=可发音字数/speechRateCharsPerSecond`；`pauseBeforeSeconds`/`pauseAfterSeconds` 另行占用句前/句后空间并必须留在镜头边界内。任何单句不足都阻断。10 个可发音字容差只用于整镜总量的兼容提醒，不适用于逐句口型窗口；不得异常加速。 |
+| `DIALOGUE_PERFORMANCE`          | blocker           | 每个对白帧段写说话人、实际台词、语气、停顿、重音和具体说后反应；`画面内容`不得复制完整对白；相邻段不得重复对白游标或表演块。                                                                                                                                                                                                         |
+| `VIDEO_PROMPT_LAYOUT`           | blocker           | 每个真实帧段对应一张镜头卡；标题含时间、景别、焦段、机位、一个主运镜和主体类型；正文含场景、画面内容、光影、色调、台词、人声、音效。                                                                                                                                                                                                 |
+| `PLOT_FACT_COVERAGE`            | blocker           | 当前剧情事实、人物关系、动作结果和结尾状态都在制作包中有可追溯表达；不得以泛化氛围替代事实。                                                                                                                                                                                                                                         |
+| `ACTION_DENSITY`                | blocker           | 每帧完成“谁做什么 → 触发原因 → 身体/手部/道具受力 → 可见结果 → 声音锚点”；对白结束后的时间必须有剧情职责或有目的的结果停留。                                                                                                                                                                                                         |
+| `ACTION_DIFFERENCE`             | blocker           | 相邻帧至少有一项可验收的主体、姿态、视线、表情、重心、手部、道具、环境或摄影信息变化；不得只换形容词。                                                                                                                                                                                                                               |
+| `EMOTION_PROGRESSION`           | blocker           | 起点、中段、终点的可见表演、压力或关系状态有递进；不得整镜保持同一情绪状态。                                                                                                                                                                                                                                                         |
+| `NPC_REACTION_CHANGE`           | blocker           | 剧情要求的 NPC/其他角色有独立、具体且随主事件变化的反应；没有事实依据时不得凭空添加 NPC。                                                                                                                                                                                                                                            |
+| `NPC_ROSTER_CONTINUITY`         | warning           | required 群像的数量、槽位、世界锚点、分布和状态在受影响帧段保持一致；风险必须显式记录。                                                                                                                                                                                                                                              |
+| `CAMERA_MOTIVATION`             | blocker           | 景别、焦段、机位、轴线和主运镜服务于明确的视线、关系、空间、压力或信息揭示；连续镜头只有一条主运镜。                                                                                                                                                                                                                                 |
+| `CAMERA_EVENT`                  | blocker           | 内部切镜声明模式、时间、类型、触发事件、新机位、切后主运镜、信息目的和承接；切点落在真实帧边界；不得隐式 Cut。启用 `dense-30s` 时默认 8—11 帧/7—10 次硬切，少切必须写减切原因。                                                                                                                                                      |
+| `VISUAL_CLARITY`                | blocker           | 主角、关键 NPC、手部、道具接触面和场景锚点在当前景别可辨；有参考图时角色图须有身份特写和清晰四视图/转面，场景图须为高清 16:9 单视角全景并能读出拓扑。无图片不等于失败，但不得伪造图片绑定。                                                                                                                                          |
+| `TIMELINE`                      | blocker           | 每个镜头的帧段从 0 秒开始连续覆盖到镜头结束，无空白、重叠或超界。                                                                                                                                                                                                                                                                    |
+| `SHOT_DURATION_POLICY`          | blocker           | 若生产方案指定 15 秒或 30 秒，每个逻辑片段严格使用该时长；内部帧段和硬切不改变逻辑片段数量和整集时长。                                                                                                                                                                                                                               |
+| `ASSET_BINDING`                 | blocker           | 镜头只使用当前正式资产的稳定 code；场景、角色、道具、线索声明与正文和参考绑定一致；没有绑定的对象不得写入公开提示词。                                                                                                                                                                                                                |
+| `CONTINUITY`                    | blocker           | 下一镜继承上一镜出口的空间位置、支撑/接触、姿态、视线、持有关系、环境和 180 度轴线；改变位置必须写触发、路径/受力和到达结果。                                                                                                                                                                                                        |
+| `COMPOSITION_CONTRACT`          | blocker           | 画幅先参与构图；9:16 优先单人/双人/过肩/纵深并保留头顶、下巴、衣领和关键手部，16:9 保留横向主体层级；不得遮脸或把人物缩成不可辨识的小人。                                                                                                                                                                                            |
+| `SUBJECT_COVERAGE`              | blocker           | 每个时间段明确主要主体和可见范围；剧情中需要独立呈现的角色、NPC 反应、手部或道具受力必须有独立信息。                                                                                                                                                                                                                                 |
+| `CUT_INFORMATION_DIVERSITY`     | blocker           | 每次硬切带来新的角色关系、表演、空间、手部、道具或结果信息；7—10 次硬切不能只是同一角色的多个角度。                                                                                                                                                                                                                                  |
+| `REFERENCE_ALIAS_CONSISTENCY`   | blocker           | 严格沿用 `referenceManifest` 的 alias、role、purpose 和顺序；禁止“@图片1至@图片N”、URL、assetId 或擅自重新编号。                                                                                                                                                                                                                     |
+| `CHARACTER_WARDROBE_CONTINUITY` | blocker           | 出镜角色持续锁定身份、年龄感、脸型/发型、服装结构、颜色和固定配饰；角色图与场景图职责不能互换。                                                                                                                                                                                                                                      |
+| `PROVENANCE`                    | blocker           | 记录模板、TXT/剧情源、参考素材、契约、导演 Skill、Seedance Skill 的版本/内容哈希和生成时间；外部独立生成可标注 `codex-standalone`，项目内导入再记录实际导入来源。                                                                                                                                                                    |
+
+### 外部生成结束条件
+
+- 先按完整剧情、对白自然时长、动作节拍和反应留白确定逻辑片段数量，再为每个片段使用 15 秒或 30 秒配置；内部帧段和硬切不改变逻辑片段数量或整集时长。
+- 普通镜头按真实可见事件决定帧数；只有用户或项目明确 `internalCutPolicy=dense-30s` 时，30 秒逻辑片段才执行 8—11 个帧段、7—10 次可见硬切目标。少切必须写“减切原因：静态留白/结果停留/供应商能力限制”。
+- 完成“生成 → 逐镜自检 → 聚合修正 → 再自检”后，才可标记为可直接使用；warning 必须保留在 QC 中，不能改写成通过。
+- 外部 Codex 不得返回半成品、待服务端补齐、待内部 Agent 重建、只含镜头摘要或只含完整对白而缺少逐帧画面的结果。
 
 ## 一、项目总览
 
@@ -85,7 +190,7 @@
 
 `videoPrompt` 由 Agent 直接生成完整公开内容；`framePlan.frames` 是同一视频内容的结构化镜像，不是服务端重建 `videoPrompt` 的素材。
 
-Agent draft 不能使用固定脚本或直接复制模板正文冒充生成结果。服务端最终只序列化通过严格门禁的规范对象；相邻动作差异、情绪递进、NPC 反应变化、运镜动机和镜头事件缺一项都不得标记为 Agent 完成。
+Agent draft 不能使用固定脚本或直接复制模板正文冒充生成结果。外部 Codex 必须自行完成规范对象所需字段和门禁自检；项目内导入层只能序列化已经通过严格门禁的规范对象，不能替外部生成补齐或改写公开视频正文。相邻动作差异、情绪递进、NPC 反应变化、运镜动机和镜头事件缺一项都不得标记为 Agent 完成。
 
 ### 逐帧字段职责
 
@@ -167,7 +272,7 @@ imagePrompt
 | --- | ---- | ------ | ------ | -------------- | ---- |
 | D01 | SH01 | 角色名 | “台词” | 按逐句时序填写 | 是   |
 
-含对白镜头必须在规范对象中逐句记录相对镜头的开始、结束、前后停顿和语速；对白先按自然语速核算，超过10个可发音字容差时不得完成正式 authoring，必须按自然分句、说话人转换、动作反应或逻辑片段边界拆分；这些内容不写入静态图片正文。
+含对白镜头必须在规范对象中逐句记录相对镜头的开始、结束、前后停顿和语速，并在 authoring 前完成逐句对白容量表：`availableSpeechSeconds = endSecond - startSecond`；`requiredSpeechSeconds = 可发音字数 / speechRateCharsPerSecond`；`pauseBeforeSeconds` 与 `pauseAfterSeconds` 另行占用句前/句后空间并必须留在镜头边界内。任何一句 `availableSpeechSeconds < requiredSpeechSeconds` 都不得完成正式 authoring、制作包导入或生产前预检，即使整镜总时长仍然足够也不能通过；必须移动帧段边界、拆自然分句/说话人转换/动作反应或增加逻辑片段。10 个可发音字容差只用于整镜总量的兼容提醒，不适用于逐句口型窗口；不得异常加速。公开 `videoPrompt` 的每个实际说话时间段还必须和对应 `framePlan` 时间段相容，台词字段写完整原句，画面内容只写可见口型、呼吸、视线和反应；这些内容不写入静态图片正文。
 
 ### 沉默设计
 
