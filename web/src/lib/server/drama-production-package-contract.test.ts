@@ -11,7 +11,20 @@ const template = readFileSync(new URL("../../../public/drama-production-package-
 describe("drama production package contract compilation", () => {
     it("keeps generated runtime, template, server manifest and Codex work-order rules on one source hash", () => {
         expect(DRAMA_PACKAGE_SECTIONS).toHaveLength(13);
-        expect(DRAMA_PACKAGE_GATE_CODES).toEqual(expect.arrayContaining(["LITERARY_SCRIPT_COMPLETENESS", "DIALOGUE_CAPACITY", "SHOT_DURATION_POLICY", "CAMERA_EVENT", "PROVENANCE"]));
+        expect(DRAMA_PACKAGE_GATE_CODES).toEqual(
+            expect.arrayContaining([
+                "LITERARY_SCRIPT_COMPLETENESS",
+                "DIALOGUE_CAPACITY",
+                "DIALOGUE_SPEAKER_VISUAL_MATCH",
+                "ACTION_RESULT",
+                "TEXT_STATE_CONTINUITY",
+                "CROSS_SHOT_STATE_INHERITANCE",
+                "SHOT_DURATION_POLICY",
+                "CAMERA_EVENT",
+                "JSON_MARKDOWN_CONSISTENCY",
+                "PROVENANCE",
+            ]),
+        );
         expect(DRAMA_PACKAGE_COMPILE_MANIFEST.contract.contentHash).toBe(sha256(section(docs, "版本化契约块")));
         expect(template).toContain(`契约 hash：\`${DRAMA_PACKAGE_COMPILE_MANIFEST.contract.contentHash}\``);
         expect(template).toContain(DRAMA_PACKAGE_COMPILE_MANIFEST.packageSpecHash);
@@ -20,6 +33,10 @@ describe("drama production package contract compilation", () => {
         expect(template).toContain("qualityGateStatus=passed");
         expect(template).toContain("availableSpeechSeconds = endSecond - startSecond");
         expect(template).toContain("不适用于逐句口型窗口");
+        expect(template).toContain("默认必须使用 `independent` 并由文字状态锁定连续性");
+        expect(template).toContain("剪辑承接");
+        expect(template).toContain("只有全部 blocker 门禁均为 `passed`");
+        expect(template).toContain("准备回应");
         for (const gateCode of DRAMA_PACKAGE_GATE_CODES) expect(template).toContain(`\`${gateCode}\``);
         for (const title of DRAMA_PACKAGE_SECTIONS) expect(template).toContain(title);
     });

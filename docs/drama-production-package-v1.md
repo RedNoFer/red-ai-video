@@ -44,11 +44,13 @@ contract:
     - DIALOGUE_COVERAGE
     - DIALOGUE_CAPACITY
     - FRAME_DIALOGUE_TIMING
+    - DIALOGUE_SPEAKER_VISUAL_MATCH
     - DIALOGUE_PERFORMANCE
     - VIDEO_PROMPT_LAYOUT
     - VIDEO_PROMPT_SEMANTIC_QUALITY
     - PLOT_FACT_COVERAGE
     - ACTION_DENSITY
+    - ACTION_RESULT
     - ACTION_DIFFERENCE
     - EMOTION_PROGRESSION
     - NPC_REACTION_CHANGE
@@ -59,11 +61,14 @@ contract:
     - SHOT_DURATION_POLICY
     - ASSET_BINDING
     - CONTINUITY
+    - TEXT_STATE_CONTINUITY
+    - CROSS_SHOT_STATE_INHERITANCE
     - COMPOSITION_CONTRACT
     - SUBJECT_COVERAGE
     - CUT_INFORMATION_DIVERSITY
     - REFERENCE_ALIAS_CONSISTENCY
     - CHARACTER_WARDROBE_CONTINUITY
+    - JSON_MARKDOWN_CONSISTENCY
     - PROVENANCE
 ```
 
@@ -87,6 +92,33 @@ contract:
 3. 角色、场景、道具图片不是生成制作包的必需前置条件。没有图片时不得阻断整包，也不得伪造 `@图片` alias；有图片时必须逐项登记其 alias、职责、顺序、清晰度和可读性。
 4. 模板只规定制作包结构和质量合同；TXT/小说只提供剧情事实；素材只提供身份、空间、道具或连续性锚点。不得把模板示例中的角色、地点、对白或道具带入新剧情。
 
+### Authoring 预检顺序与连续性默认策略
+
+外部 Codex 必须严格按照以下顺序 authoring，不能先固定帧数或镜头数量再压缩对白：
+
+```text
+读取完整 TXT/剧本
+→ 提取显式对白和剧情事实
+→ 逐句计算对白容量
+→ 确定逻辑片段数量与每段职责
+→ 分配对白、动作、反应和静默时间
+→ 根据真实事件确定内部帧段与硬切
+→ 生成公开视频卡和 framePlan
+→ 逐镜自检
+→ 只修失败镜头及相邻连续性
+→ 再自检并输出
+```
+
+后续镜头默认采用文字状态连续性，不要求实际尾帧：
+
+- 没有用户明确要求时，`framePlan.start.source` 使用 `independent`，连续性通过上一镜 `exitState`、当前镜 `entryState`、首帧 `framePlan` 和首张公开视频卡锁定。
+- `entryState` 与 `exitState` 必须逐项记录角色相对场景的位置、姿态/重心、支撑/接触、视线、表情、手部、道具持有关系、服装/发型/固定配饰、场景锚点、光源方向、180 度轴线和屏幕方向。
+- 下一镜必须逐项继承上一镜出口状态；只有写出“触发事件 → 移动路径/受力 → 到达位置 → 下一镜首帧接住”时，才允许改变位置、姿态、持有关系或轴线。
+- 除第一帧外，每帧 `startPrompt` 必须原样承接上一帧 `endPrompt`；“从上一状态继承”“保持当前状态”“自然调整”“新片段开始”不能代替具体状态。
+- 只有用户明确要求实际尾帧，或当前连续性边显式设置 `inheritActualEndFrame=true` 时，才允许使用 `previous_accepted_actual_tail`；此时才要求上一镜当前视频版本的已人工验收尾帧。
+
+对白容量必须在拆镜前完成。每句对白都要记录可发音字数、`speechRateCharsPerSecond`、`requiredSpeechSeconds`、`availableSpeechSeconds`、逻辑片段、帧段、句前停顿和句后停顿。`availableSpeechSeconds < requiredSpeechSeconds`、对白收句落在帧段内部、说话人与画面主体不一致、对白重复起句或对白结束后没有新的可见职责，均为 blocker。
+
 ### 必须交付的独立结果
 
 - Markdown 必须完整保留固定 13 个一级章节，并包含唯一 `drama-production-package` JSON 代码块；JSON 与正文由 Codex 同一轮生成，不能只返回镜头表、视频提示词或摘要。
@@ -94,7 +126,7 @@ contract:
 - 每个逻辑片段先按完整剧情、对白自然时长、动作节拍和反应留白确定数量，再使用当前配置的 15 秒或 30 秒时长；整集时长由逻辑片段数量推导。
 - 每个镜头直接生成 `dramaticFunction`、`performancePlan`、`dialoguePerformance`、`lightingPlan`、`continuity`、`entryState`、`exitState`、`videoPrompt`、`framePlan` 和当前资产编码；不得等待应用层补齐。
 - `videoPrompt` 必须由 Agent 直接生成小墨个人分镜 Skill 6.3（`storyboard-director@6.3.0`）适配版镜头卡；每个真实 `framePlan.frames[]` 对应一张卡。服务端或外部脚本不得从 `framePlan`、旧提示词或模板示例重建公开正文。
-- 第十三章必须附带逐门禁 QC 自检表，逐项记录 `passed` 或 `warning`、证据镜头/帧号和修订范围；不得保留 blocker 或“待服务端检查”。
+- 第十三章必须附带逐门禁 QC 自检表，逐项记录状态、证据镜头/帧号、修订范围和最终备注；登记为 blocker 的门禁只能是 `passed`，不能以 `warning`、“待检查”或“待服务端检查”交付。只有全部 blocker 通过，才可写 `qualityGateStatus=passed`。
 
 ### 门禁登记表
 
@@ -103,28 +135,33 @@ contract:
 | `LITERARY_SCRIPT_COMPLETENESS` | blocker | 文学正文完整，含场次、行为、冲突推进、对白/事实和可见结果；固定 13 章齐全；目标小说章节单独标识。 |
 | `DIALOGUE_COVERAGE` | blocker | TXT/剧本中的每条显式对白都出现在文学正文和镜头序列中，并绑定说话人、镜头、时间和表演；不得静默遗漏或擅自改写。 |
 | `FRAME_DIALOGUE_TIMING` | blocker | 帧段边界对齐自然开口、收句、停顿、动作触发或反应留白；禁止把含对白镜头机械等分。 |
-| `DIALOGUE_CAPACITY` | blocker / warning | 逐句口型窗口是硬门禁：`availableSpeechSeconds=endSecond-startSecond` 必须不小于 `requiredSpeechSeconds=可发音字数/speechRateCharsPerSecond`；`pauseBeforeSeconds`/`pauseAfterSeconds` 另行占用句前/句后空间并必须留在镜头边界内。任何单句不足都阻断。10 个可发音字容差只用于整镜总量的兼容提醒，不适用于逐句口型窗口；不得异常加速。 |
+| `DIALOGUE_CAPACITY` | blocker | 逐句口型窗口是硬门禁：`availableSpeechSeconds=endSecond-startSecond` 必须不小于 `requiredSpeechSeconds=可发音字数/speechRateCharsPerSecond`；`pauseBeforeSeconds`/`pauseAfterSeconds` 另行占用句前/句后空间并必须留在镜头边界内。任何单句不足都阻断。10 个可发音字容差只用于整镜总量的兼容提醒，不适用于逐句口型窗口；不得异常加速。 |
+| `DIALOGUE_SPEAKER_VISUAL_MATCH` | blocker | `台词`、`utterances`、口型主体和画面动作必须属于同一说话人；不允许画面写萧炎开口而台词归纳兰，或把未开口角色写成当前说话人。 |
 | `DIALOGUE_PERFORMANCE` | blocker | 每个对白帧段写说话人、实际台词、语气、停顿、重音和具体说后反应；`画面内容`不得复制完整对白；相邻段不得重复对白游标或表演块。 |
 | `VIDEO_PROMPT_LAYOUT` | blocker | 每个真实帧段对应一张镜头卡；标题含时间、景别、焦段、机位、一个主运镜和主体类型；正文含场景、画面内容、光影、色调、台词、人声、音效。 |
 | `VIDEO_PROMPT_SEMANTIC_QUALITY` | blocker | 直接检查公开视频卡片：画面内容必须有明确主体、进行中的可见动作、触发/因果、可见结果和声音锚点；不得出现“准备回应”“保持状态”“社会后果停在三人之间”等抽象占位或未来意图；相邻卡片必须带来可拍摄的信息增量。 |
 | `PLOT_FACT_COVERAGE` | blocker | 当前剧情事实、人物关系、动作结果和结尾状态都在制作包中有可追溯表达；不得以泛化氛围替代事实。 |
 | `ACTION_DENSITY` | blocker | 每帧完成“谁做什么 → 触发原因 → 身体/手部/道具受力 → 可见结果 → 声音锚点”；对白结束后的时间必须有剧情职责或有目的的结果停留。 |
+| `ACTION_RESULT` | blocker | 每个动作必须写出具体可见结果；不得只写“准备回应”“情绪加剧”“保持疑问”“关系冻结”或其它不可拍摄的意图。 |
 | `ACTION_DIFFERENCE` | blocker | 相邻帧至少有一项可验收的主体、姿态、视线、表情、重心、手部、道具、环境或摄影信息变化；不得只换形容词。 |
 | `EMOTION_PROGRESSION` | blocker | 起点、中段、终点的可见表演、压力或关系状态有递进；不得整镜保持同一情绪状态。 |
 | `NPC_REACTION_CHANGE` | blocker | 剧情要求的 NPC/其他角色有独立、具体且随主事件变化的反应；没有事实依据时不得凭空添加 NPC。 |
 | `NPC_ROSTER_CONTINUITY` | warning | required 群像的数量、槽位、世界锚点、分布和状态在受影响帧段保持一致；风险必须显式记录。 |
 | `CAMERA_MOTIVATION` | blocker | 景别、焦段、机位、轴线和主运镜服务于明确的视线、关系、空间、压力或信息揭示；连续镜头只有一条主运镜。 |
-| `CAMERA_EVENT` | blocker | 内部切镜声明模式、时间、类型、触发事件、新机位、切后主运镜、信息目的和承接；切点落在真实帧边界；不得隐式 Cut。启用 `dense-30s` 时默认 8—11 帧/7—10 次硬切，少切必须写减切原因。 |
+| `CAMERA_EVENT` | blocker | 内部切镜声明模式、时间、类型、触发事件、新机位、切后主运镜、信息目的和承接；切点落在真实帧边界；不得隐式 Cut。启用 `dense-30s` 时默认 8—11 帧/7—10 次硬切，少切必须写减切原因；每次硬切还必须在对应公开卡片的 `剪辑承接` 中写出时间、触发、新机位、切后主运镜、新增信息和连续性承接。 |
 | `VISUAL_CLARITY` | blocker | 主角、关键 NPC、手部、道具接触面和场景锚点在当前景别可辨；有参考图时角色图须有身份特写和清晰四视图/转面，场景图须为高清 16:9 单视角全景并能读出拓扑。无图片不等于失败，但不得伪造图片绑定。 |
 | `TIMELINE` | blocker | 每个镜头的帧段从 0 秒开始连续覆盖到镜头结束，无空白、重叠或超界。 |
 | `SHOT_DURATION_POLICY` | blocker | 若生产方案指定 15 秒或 30 秒，每个逻辑片段严格使用该时长；内部帧段和硬切不改变逻辑片段数量和整集时长。 |
 | `ASSET_BINDING` | blocker | 镜头只使用当前正式资产的稳定 code；场景、角色、道具、线索声明与正文和参考绑定一致；没有绑定的对象不得写入公开提示词。 |
 | `CONTINUITY` | blocker | 下一镜继承上一镜出口的空间位置、支撑/接触、姿态、视线、持有关系、环境和 180 度轴线；改变位置必须写触发、路径/受力和到达结果。 |
+| `TEXT_STATE_CONTINUITY` | blocker | 默认 `framePlan.start.source=independent`，通过文字状态连续；`entryState`、首帧 `framePlan` 和首张公开视频卡必须具体重复上一镜出口的角色位置、姿态/重心、支撑/接触、视线、道具、服装/发型/固定配饰、环境、光源和轴线；不得用抽象继承语句代替。 |
+| `CROSS_SHOT_STATE_INHERITANCE` | blocker | 相邻镜头的入口状态必须逐项等于上一镜出口状态；发生变化时必须提供触发、路径/受力、到达结果和下一镜首帧承接证据。未显式要求实际尾帧时不得以尾帧缺失阻断；显式启用实际尾帧时才检查 `previous_accepted_actual_tail`。 |
 | `COMPOSITION_CONTRACT` | blocker | 画幅先参与构图；9:16 优先单人/双人/过肩/纵深并保留头顶、下巴、衣领和关键手部，16:9 保留横向主体层级；不得遮脸或把人物缩成不可辨识的小人。 |
 | `SUBJECT_COVERAGE` | blocker | 每个时间段明确主要主体和可见范围；剧情中需要独立呈现的角色、NPC 反应、手部或道具受力必须有独立信息。 |
 | `CUT_INFORMATION_DIVERSITY` | blocker | 每次硬切带来新的角色关系、表演、空间、手部、道具或结果信息；7—10 次硬切不能只是同一角色的多个角度。 |
 | `REFERENCE_ALIAS_CONSISTENCY` | blocker | 严格沿用 `referenceManifest` 的 alias、role、purpose 和顺序；禁止“@图片1至@图片N”、URL、assetId 或擅自重新编号。 |
 | `CHARACTER_WARDROBE_CONTINUITY` | blocker | 出镜角色持续锁定身份、年龄感、脸型/发型、服装结构、颜色和固定配饰；角色图与场景图职责不能互换。 |
+| `JSON_MARKDOWN_CONSISTENCY` | blocker | 第十一章公开 `videoPrompt`、规范对象中的同一字段和第十三章 QC 结论必须来自同一轮 authoring，原文一致，不得一处为空或另行改写。 |
 | `PROVENANCE` | blocker | 记录模板、TXT/剧情源、参考素材、契约、导演 Skill、Seedance Skill 的版本/内容哈希和生成时间；外部独立生成可标注 `codex-standalone`，项目内导入再记录实际导入来源。 |
 
 ### 视频提示词与静态帧的硬分工
@@ -132,12 +169,13 @@ contract:
 - `画面内容`只写可见口型、呼吸、视线、表情、身体受力、手部/道具状态、空间层次和结果；完整原句只能在`台词`字段，格式为“说话人说：‘实际台词’”。
 - `imagePrompt`只冻结一个静态时刻，至少包含主体、可见状态和一项空间/视线/姿态/道具/环境结果；不得写对白、声音、运镜、时间段或动作过程。
 - `framePlan`内部字段负责 `startPrompt → actionPrompt → transitionPrompt → endPrompt`、连续性、时间边界和动作因果；公开视频不得把这些内部字段名机械抄入卡片。
+- 除第一张卡外，每张公开视频卡必须增加 `剪辑承接`，明确本卡与上一卡的连续镜头/硬切关系、触发事件、新机位、切后主运镜、新增信息和人物/道具/场景/轴线承接；第一张卡写明入口状态已锁定。硬切只存在于内部 `cameraEvents` 而不在公开卡片表达，视为 `CAMERA_EVENT` 失败。
 - 同一 utterance 必须沿单调对白游标分段；不能在相邻卡片重新起句、复制完整台词或重叠四个及以上可发音字。
 - 参考素材不是提示词正文事实源；职责和顺序只由 `referenceManifest` 承载。每镜使用最小必要集合，默认仅当前出镜角色基准图和当前场景全景锚点。
 
 ### 独立生成结束条件
 
-外部 Codex 必须在输出前完成“生成 → 逐镜自检 → 只修失败镜头 → 再自检”闭环。正式结果必须是完整 13 章 Markdown，不得输出半成品、待门禁、待服务端补齐或仅有镜头摘要的结果。所有 blocker 通过后，才可在第十三章标记 `qualityGateStatus=passed`；warning 必须保留在 QC 中，不得改写成通过证据。服务端不得把 JSON 再投影成 Markdown。
+外部 Codex 必须在输出前完成“生成 → 逐镜自检 → 只修失败镜头 → 再自检”闭环。正式结果必须是完整 13 章 Markdown，不得输出半成品、待门禁、待服务端补齐或仅有镜头摘要的结果。第十三章必须逐项列出全部门禁代码、状态、镜头/帧证据、修订范围和备注；登记为 blocker 的项目只能为 `passed`。所有 blocker 通过后，才可标记 `qualityGateStatus=passed`；warning 必须保留在 QC 中，不得改写成通过证据。实际尾帧缺失只有在用户显式启用实际尾帧模式时才可成为 blocker。服务端不得把 JSON 再投影成 Markdown。
 
 本文件与模板内嵌的门禁登记表是外部生成的可执行规范；项目服务端仍可作为导入安全校验，但不得以隐藏的固定脚本、旧模板或历史包重建、补写或改写外部 Codex 已生成的公开视频正文。
 
@@ -196,7 +234,7 @@ contract:
 - 项目、资产、场次、镜头、声音与连续性进入可执行生产数据。
 - 每个镜头的完整公开 `videoPrompt` 必须由 Agent 直接生成：使用小墨式镜头卡写出每个真实时间段的时间范围、景别、焦段、机位角度、主运镜、场景、可见画面、光影、色调、对白和声音。`framePlan.frames` 保存严格的内部结构化事实，运行时和第十一章不得从它拼接、补写或改写 `videoPrompt`；`起点 / 动作与触发 / 可见衔接 / 终点`只属于内部帧计划质量契约，不是公开正文固定排版。
 - 独立 Codex 必须在最终输出前完成同一套模板/Skill 自检：相邻时间段有真实动作差异，起始/中段/结束形成情绪递进，required NPC 反应随主事件发生变化，主运镜有具体可见动机，内部切镜与 framePlan 边界一致；公开 videoPrompt 必须使用小墨个人分镜 Skill 6.3（`storyboard-director@6.3.0`）制作包适配版的简洁导演镜头卡，每个真实 framePlan 时间段对应一个 `### 镜头` 卡片，标题含时间范围、景别、焦段、机位角度、运镜方式和主体类型，正文含场景、画面内容、光影、色调、台词、人声和音效。公开视频不再强制八段标题或逐段复制 `起点/动作与触发/可见衔接/终点`；这些字段只在内部 framePlan 中校验。`画面内容`只能写可见口型、呼吸、视线、表情、身体和道具结果，禁止复制完整对白、引号台词或“某人说：”指令；完整原句只能放在 `台词` 字段。有对白的镜头卡必须使用 `说话人说：“实际台词”`，相邻段不得复制同一完整台词或同一表演块；对白结束段必须写具体静默或反应结果。用户本轮上传的自定义制作包模板若明确声明30秒高密度硬切，必须在本轮生成前提升为 `internalCutPolicy=dense-30s`，不得被旧的 `adaptive` 方案覆盖；系统模板中的条件说明不自动提升为高密度。自检失败只在当前 Codex 上下文内修复失败镜头；未失败镜头、剧情事实、资产身份、逻辑片段数量和总时长冻结。服务端导入不重复执行这套语义自检，也不生成镜头级工单；它只拒绝结构损坏或明确标记为 blocked 的包。
-- 公开视频 Prompt 采用小墨 6.3 式简洁导演镜头卡：每个真实 `framePlan.frames[]` 对应一张 `### 镜头 N | 时间范围 | 景别 | 焦段 | 机位角度 | 运镜方式 | 人物镜头/非人物镜头` 卡片；卡片填写场景、画面内容、光影、色调、台词、人声和音效。公开视频不再强制八段标题，也不要求逐段输出起点、动作与触发、可见衔接、终点等内部字段；这些事实只在 `framePlan` 和质量门禁中校验。全局设定、素材职责、参考 alias 和供应商顺序由结构化字段管理，不在每张卡片机械复制。
+- 公开视频 Prompt 采用小墨 6.3 式简洁导演镜头卡：每个真实 `framePlan.frames[]` 对应一张 `### 镜头 N | 时间范围 | 景别 | 焦段 | 机位角度 | 运镜方式 | 人物镜头/非人物镜头` 卡片；卡片填写场景、画面内容、光影、色调、台词、人声和音效。除第一张卡外，每张卡还必须填写 `剪辑承接`，公开表达本卡与上一卡的连续/硬切关系、触发、新机位、切后主运镜、新增信息和连续性承接；第一张卡写入口状态已锁定。公开视频不再强制八段标题，也不要求逐段输出起点、动作与触发、可见衔接、终点等内部字段；这些事实只在 `framePlan` 和质量门禁中校验。全局设定、素材职责、参考 alias 和供应商顺序由结构化字段管理，不在每张卡片机械复制。
 - 每张镜头卡必须声明一个有动机的主运镜；连续镜头只保留一条连续摄影路径，内部切镜则由 `framePlan` 的真实时间边界和镜头事件校验。切点必须带来新的关系、表演、道具、空间或结果信息，不能只更换焦段或同一角色角度；没有用户/项目明确配置时，不固定镜头数量或硬切配额。`propCodes` 与正文道具事实必须一致，没有绑定的道具不能写入画面内容、动作、结果或声音。
 - 镜头级 `imagePrompt`、`startFramePrompt` 和 `endFramePrompt` 只描述单一静态画面，包含主体身份、当前可见姿态/表情/视线、道具或环境状态、景别、构图、光线与必要约束；不得写运镜、焦段、时间段、动作过程、对白或声音。生成前必须先由场景资产推演可用座位、长凳、地面、通道、门窗、隔断与遮挡；人物的姿态必须有合理支撑，人与物接触、动作路径及多人关系必须符合该空间，不能为突出人物把其摆在不合场景常理的位置，也不得新增原文或资产未声明的人物。图片编辑请求统一使用 `change / preserve / constraints`，其中 `change` 每次只允许一个已定位变量。
 - 场景资产可配置 `backgroundNpcPolicy`：`auto` 由 Agent 按场景类型、空间容量、景别和剧情功能判断，`required` 必须安排合理数量、位置、密度和行为的无名背景 NPC，`forbidden` 禁止 NPC。`required` 场景应声明 `countRange: { min, max }`，每个受事件影响的关键帧/视频时间段必须使用 `NPC群像：N名；分布：前景X名、中景Y名、后景Z名；密度：具体密度；反应：具体可见反应`，并满足 `X+Y+Z=N`、人数在范围内；不能只写全局人数或“旁听、屏息、关注”。NPC 只作为镜头关键帧、视频时间段或构图参考中的背景群像，不进入 `characterCodes`、角色锚点或独立角色资产；场景全景基准图始终保持高清、无人、无文字。没有配置时按 `auto` 执行，不能把空配置当成禁止 NPC。

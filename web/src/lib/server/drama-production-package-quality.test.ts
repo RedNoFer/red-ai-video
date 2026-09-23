@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import type { DramaAuthoringSourceSnapshot, DramaProductionPackageV1 } from "@/lib/drama-project-contract";
-import { DRAMA_PACKAGE_CONTRACT } from "@/lib/server/drama-production-package-contract";
-import { dramaAuthoringQualityGateCodes, validateDramaAuthoringQuality } from "@/lib/server/drama-production-package-quality";
+import { DRAMA_PACKAGE_CONTRACT, DRAMA_PACKAGE_GATE_CODES } from "@/lib/server/drama-production-package-contract";
+import { validateDramaAuthoringQuality } from "@/lib/server/drama-production-package-quality";
 
 const source = (textContent: string): DramaAuthoringSourceSnapshot => ({ alias: "@TXT", role: "story-source", type: "text", title: "3.txt", contentHash: "a".repeat(64), textContent });
 
@@ -85,7 +85,7 @@ function blockers(report: ReturnType<typeof validateDramaAuthoringQuality>, code
 }
 
 describe("drama authoring quality gates", () => {
-    it("emits every versioned hard-gate code before a package can be imported", () => {
+    it("keeps project-agent runtime gate codes within the versioned contract", () => {
         const value = packageValue();
         value.authoring = {
             source: "executeDramaScriptRun",
@@ -95,7 +95,7 @@ describe("drama authoring quality gates", () => {
             materials: [],
         };
         const report = validateDramaAuthoringQuality({ package: value, sources: [] });
-        expect(report.checks.map((check) => check.code)).toEqual(expect.arrayContaining(dramaAuthoringQualityGateCodes()));
+        expect(DRAMA_PACKAGE_GATE_CODES).toEqual(expect.arrayContaining([...new Set(report.checks.filter((check) => check.severity === "blocker").map((check) => check.code))]));
     });
 
     it("blocks an unqualified blur or missing clarity anchor instead of leaving VISUAL_CLARITY as a warning", () => {
