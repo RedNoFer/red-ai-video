@@ -377,6 +377,25 @@ export type DramaProductionBible = {
     productionPlan?: DramaProductionPlan;
 };
 
+export type DramaProductionLock = {
+    shotDuration: 15 | 30;
+    targetDuration: number;
+    internalCutPolicy: "adaptive" | "dense-30s";
+    framePolicy: "fixed-4" | "fixed-5" | "agent";
+    storySourceHash: string;
+    templateHash: string;
+    contractHash: string;
+    specHash: string;
+    directorSkillHash: string;
+    seedanceSkillHash: string;
+    authoringSchemaHash: string;
+    projectionVersion: string;
+    qualityGateRulesHash: string;
+    repairPolicyHash: string;
+    lockedAt: string;
+    lockedBy: "codex-current-conversation";
+};
+
 export type DramaProductionPlan = {
     version: "drama-production-plan-v1";
     skills: Array<{ id: string; name: string; version: string }>;
@@ -732,6 +751,7 @@ export type DramaProject = {
     summary: string;
     style: string;
     ratio: string;
+    productionLock?: DramaProductionLock;
     productionBible?: DramaProductionBible;
     seriesBible?: DramaSeriesBible;
     productionArchive?: DramaProductionArchive;
@@ -882,16 +902,85 @@ export type DramaProductionPackageAuthoringMaterial = {
     role: "package-template" | "story-source" | "reference";
     type: "text" | "image" | "video" | "audio";
     title: string;
-    contentHash: string;
+    contentHash?: string;
 };
 
-export type DramaAuthoringProvider = "project-gpt" | "codex-work-order";
-export type DramaAuthoringDraft = { mode: "package"; reply: string; markdown: string };
+export type DramaAuthoringProvider = "project-gpt" | "codex-work-order" | "codex-standalone";
+export type DramaAuthoringAuditFrame = {
+    frameId: string;
+    subject: string;
+    trigger: string;
+    visibleAction: string;
+    visibleResult: string;
+    informationDelta: string;
+    cameraPurpose: string;
+    soundAnchor: string;
+};
+
+export type DramaAuthoringAuditShot = {
+    shotId: string;
+    frames: DramaAuthoringAuditFrame[];
+};
+
+export type DramaAuthoringAudit = {
+    schemaVersion: 1;
+    shots: DramaAuthoringAuditShot[];
+};
+
+export type DramaAuthoringPackageDraft = {
+    mode: "package";
+    reply: string;
+    package: DramaProductionPackageV1;
+    authoringAudit: DramaAuthoringAudit;
+};
+
+export type DramaAuthoringStandalonePackageDraft = {
+    mode: "package-markdown";
+    reply: string;
+    markdown: string;
+};
+
+export type DramaAuthoringRepairFailure = {
+    shotId: string;
+    frameIds: string[];
+    gateCode: string;
+    evidence: string;
+    fixHint: string;
+    lockedFields: string[];
+};
+
+export type DramaAuthoringShotRepairDraft = {
+    mode: "shot-repair";
+    reply: string;
+    basePackageHash: string;
+    repairScope: "shot";
+    failures: DramaAuthoringRepairFailure[];
+    patches: Array<{
+        shotId: string;
+        videoPrompt: string;
+        framePlan: DramaShotFramePlan;
+        performancePlan?: DramaPerformancePlan;
+        dialoguePerformance?: DramaDialoguePerformance[];
+        lightingPlan?: DramaLightingPlan;
+        cameraMotion?: string;
+        lens?: string;
+        lighting?: string;
+        colorPalette?: string;
+        continuity?: DramaShotContinuity;
+        authoringAudit?: DramaAuthoringAuditShot;
+    }>;
+};
+
+export type DramaAuthoringDraft = DramaAuthoringPackageDraft | DramaAuthoringStandalonePackageDraft | DramaAuthoringShotRepairDraft;
 
 export type DramaQualityGateCheck = {
     code: string;
     severity: "blocker" | "warning";
     scope: string;
+    repairScope?: "shot" | "package";
+    shotIds?: string[];
+    frameIds?: string[];
+    lockedFields?: string[];
     evidence: string;
     sourceRefs: string[];
     fixHint: string;
@@ -919,7 +1008,7 @@ export type DramaAuthoringWorkOrder = {
     projectId: string;
     episodeId: string;
     provider: "codex-work-order";
-    status: "ready" | "submitted" | "accepted" | "rejected";
+    status: "ready" | "submitted" | "repair-ready" | "full-repair-ready" | "accepted" | "rejected";
     createdAt: string;
     targetNarrativeChapter: number | string;
     request: string;
@@ -934,20 +1023,44 @@ export type DramaAuthoringWorkOrder = {
     };
     directorSkill: { id: string; version: string; contentHash: string };
     seedanceSkill: { id: string; version: string; contentHash: string };
-    draftContract: { mode: "package"; reply: "string"; markdown: "string" };
+    draftContract: { mode: "package-markdown"; reply: "string"; markdown: "complete-13-chapter-markdown-with-embedded-json" };
+    repair?: {
+        basePackageHash: string;
+        package: DramaProductionPackageV1;
+        authoringAudit: DramaAuthoringAudit;
+        failures: DramaAuthoringRepairFailure[];
+        adjacentShotIds: string[];
+    };
+    fullRepair?: {
+        attempt: 1;
+        reason: string;
+        lockedFields: string[];
+        failures: Array<{ gateCode: string; scope: string; evidence: string; fixHint: string }>;
+    };
     strictGateCodes: string[];
 };
 
 export type DramaProductionPackageAuthoring = {
-    source: "executeDramaScriptRun";
+    source: "executeDramaScriptRun" | "codex-standalone";
     provider?: DramaAuthoringProvider;
+    authoringMode?: "codex-standalone" | "project-gpt";
+    canonicalSource?: "structured-package" | "markdown-with-embedded-json";
+    projectionVersion?: string;
+    qualityGateStatus?: "passed" | "blocked";
+    repairCount?: number;
+    fullPackageRepairCount?: number;
+    authoringSchemaHash?: string;
+    qualityGateRulesHash?: string;
+    repairPolicyHash?: string;
+    selfCheckRuleVersion?: string;
     runId?: string;
     targetNarrativeChapter?: number | string;
     generatedAt: string;
     contract?: DramaProductionPackageContract;
-    directorSkill: { id: string; version: string; contentHash: string };
-    seedanceSkill: { id: string; version: string; contentHash: string };
+    directorSkill?: { id: string; version: string; contentHash?: string };
+    seedanceSkill?: { id: string; version: string; contentHash?: string };
     materials: DramaProductionPackageAuthoringMaterial[];
+    authoringAudit?: DramaAuthoringAudit;
     qualityGateReport?: DramaQualityGateReport;
 };
 
@@ -958,6 +1071,7 @@ export type DramaProductionPackageV1 = {
         summary: string;
         style: string;
         ratio: string;
+        productionLock?: DramaProductionLock;
         productionBible: DramaProductionBible;
     };
     assets: {

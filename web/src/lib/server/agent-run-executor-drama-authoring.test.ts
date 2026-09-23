@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
     getAgentRun: vi.fn(),
     updateAgentRunById: vi.fn(),
     previewDramaProductionPackage: vi.fn(),
+    previewDramaProductionPackageObject: vi.fn(),
     serializeDramaProductionPackage: vi.fn(),
     attachDramaProductionPackageAuthoring: vi.fn(),
     validateDramaAuthoringQuality: vi.fn(),
@@ -28,6 +29,7 @@ vi.mock("@/lib/server/drama-production-package", () => ({
     attachDramaProductionPackageAuthoring: mocks.attachDramaProductionPackageAuthoring,
     buildDramaAssetReuseContext: () => ({ rule: "", episodeCode: "E01", characters: [], locations: [], props: [], clues: [] }),
     previewDramaProductionPackage: mocks.previewDramaProductionPackage,
+    previewDramaProductionPackageObject: mocks.previewDramaProductionPackageObject,
 }));
 vi.mock("@/lib/drama-production-package-serializer", () => ({ serializeDramaProductionPackageMarkdown: mocks.serializeDramaProductionPackage }));
 vi.mock("@/lib/server/drama-production-package-quality", () => ({
@@ -112,6 +114,13 @@ describe("drama package authoring recovery", () => {
                 episodes: [{ shots: [] }],
             },
         });
+        mocks.previewDramaProductionPackageObject.mockReturnValue({
+            package: {
+                project: { productionBible: { productionPlan: { visual: { visualStyle: "东方玄幻", artStyle: "3D 半写实" } } } },
+                episodes: [{ shots: [] }],
+            },
+            warnings: [],
+        });
         mocks.serializeDramaProductionPackage.mockReturnValue("# 正式制作包");
         mocks.attachDramaProductionPackageAuthoring.mockImplementation((value: unknown) => value);
         mocks.validateDramaAuthoringQuality.mockReturnValue({ status: "passed", checks: [] });
@@ -122,7 +131,9 @@ describe("drama package authoring recovery", () => {
     it("revises when the first structured authoring response is not a package", async () => {
         const run = runFixture();
         mocks.currentRun = run;
-        mocks.requestFunctionCall.mockResolvedValueOnce({ arguments: JSON.stringify({ mode: "reply", reply: "请先补充信息" }) }).mockResolvedValueOnce({ arguments: JSON.stringify({ mode: "package", reply: "制作包已生成", markdown: "# 制作包" }) });
+        mocks.requestFunctionCall
+            .mockResolvedValueOnce({ arguments: JSON.stringify({ mode: "reply", reply: "请先补充信息" }) })
+            .mockResolvedValueOnce({ arguments: JSON.stringify({ mode: "package", reply: "制作包已生成", package: { schemaVersion: 1 }, authoringAudit: { schemaVersion: 1, shots: [] } }) });
 
         await executeAgentRun(run, "http://localhost", "session=test");
 
@@ -130,11 +141,11 @@ describe("drama package authoring recovery", () => {
         expect(mocks.currentRun?.status).toBe("completed");
     });
 
-    it("aggregates structural preflight failures before requesting one revision", async () => {
+    it("stops after one structured authoring response when structural preflight fails", async () => {
         const run = runFixture();
         mocks.currentRun = run;
         let previewCalls = 0;
-        mocks.previewDramaProductionPackage.mockImplementation((_source: string, _fileName: string, _project: unknown, options?: { importWarnings?: string[] }) => {
+        mocks.previewDramaProductionPackageObject.mockImplementation((_source: unknown, _project: unknown, options?: { importWarnings?: string[] }) => {
             previewCalls += 1;
             if (previewCalls === 1) options?.importWarnings?.push("SH04 startFramePrompt 无效", "SH06 imagePrompt 含对白");
             return {
@@ -144,22 +155,17 @@ describe("drama package authoring recovery", () => {
                 },
             };
         });
-        mocks.requestFunctionCall
-            .mockResolvedValueOnce({ arguments: JSON.stringify({ mode: "package", reply: "初版", markdown: "# 初版" }) })
-            .mockResolvedValueOnce({ arguments: JSON.stringify({ mode: "package", reply: "修订版", markdown: "# 修订版" }) });
+        mocks.requestFunctionCall.mockResolvedValueOnce({ arguments: JSON.stringify({ mode: "package", reply: "初版", package: { schemaVersion: 1 }, authoringAudit: { schemaVersion: 1, shots: [] } }) });
 
         await executeAgentRun(run, "http://localhost", "session=test");
 
-        expect(mocks.requestFunctionCall).toHaveBeenCalledTimes(2);
-        const revisionMessages = mocks.requestFunctionCall.mock.calls[1][3] as Array<{ content?: string }>;
-        expect(revisionMessages[1]?.content).toContain("SH04 startFramePrompt 无效");
-        expect(revisionMessages[1]?.content).toContain("SH06 imagePrompt 含对白");
+        expect(mocks.requestFunctionCall).toHaveBeenCalledTimes(1);
     });
 
-    it("does not fail over to another candidate after the complete revision fails a content gate", async () => {
+    it("does not fail over or regenerate a full package after a content gate fails", async () => {
         const run = runFixture();
         mocks.currentRun = run;
-        mocks.previewDramaProductionPackage.mockImplementation((_source: string, _fileName: string, _project: unknown, options?: { importWarnings?: string[] }) => {
+        mocks.previewDramaProductionPackageObject.mockImplementation((_source: unknown, _project: unknown, options?: { importWarnings?: string[] }) => {
             options?.importWarnings?.push("SH01 package content gate failed");
             return {
                 package: {
@@ -168,14 +174,11 @@ describe("drama package authoring recovery", () => {
                 },
             };
         });
-        mocks.requestFunctionCall
-            .mockResolvedValueOnce({ arguments: JSON.stringify({ mode: "package", reply: "初版", markdown: "# 初版" }) })
-            .mockResolvedValueOnce({ arguments: JSON.stringify({ mode: "package", reply: "修订版", markdown: "# 修订版" }) })
-            .mockResolvedValueOnce({ arguments: JSON.stringify({ mode: "package", reply: "不应调用", markdown: "# 不应调用" }) });
+        mocks.requestFunctionCall.mockResolvedValueOnce({ arguments: JSON.stringify({ mode: "package", reply: "初版", package: { schemaVersion: 1 }, authoringAudit: { schemaVersion: 1, shots: [] } }) });
 
         await executeAgentRun(run, "http://localhost", "session=test");
 
-        expect(mocks.requestFunctionCall).toHaveBeenCalledTimes(2);
+        expect(mocks.requestFunctionCall).toHaveBeenCalledTimes(1);
         expect(mocks.currentRun?.status).toBe("failed");
     });
 });

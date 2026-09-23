@@ -1248,6 +1248,12 @@ export function previewDramaProductionPackageForUser(value: unknown, options: Dr
 }
 
 export function previewDramaScriptProductionPackageForUser(value: unknown) {
+    const standalonePreview = previewDramaProductionPackageForUser(value, { allowImportWarnings: false, preserveAuthoredVideoPrompt: true });
+    if (standalonePreview.package.authoring?.authoringMode === "codex-standalone") {
+        if (standalonePreview.package.authoring.canonicalSource !== "markdown-with-embedded-json" || standalonePreview.package.authoring.qualityGateStatus !== "passed")
+            throw new DramaProjectServiceError("独立 Codex 制作包必须在第十三章/QC 元数据中标记 qualityGateStatus=passed", 400);
+        return standalonePreview;
+    }
     const preview = previewDramaProductionPackageForUser(value, { allowImportWarnings: false, validateVideoPrompt: true, requireCameraPlan: true, requireContentQuality: true, requireAgentAuthoring: true, requireAuthoringQuality: true });
     const plan = preview.package.project.productionBible?.productionPlan;
     if (!plan?.lockedAt || !plan.visual.visualStyle.trim() || !plan.visual.artStyle.trim()) throw new DramaProjectServiceError("剧本 Agent 制作包必须包含已锁定且具体的视觉风格和画风", 400);
@@ -1278,13 +1284,18 @@ export async function applyDramaEpisodeProductionPackageForUser(userId: string, 
     const target = current.episodes.find((episode) => episode.id === episodeId);
     if (!target) throw new DramaProjectServiceError("短剧剧集不存在", 404);
     const preview = previewDramaScriptProductionPackageForUser(input);
-    const authoringRunId = preview.package.authoring?.runId;
-    if (!authoringRunId) throw new DramaProjectServiceError("制作包缺少可核验的 executeDramaScriptRun 运行凭据", 400);
-    const authoringRun = await getAgentRun(authoringRunId);
-    if (!authoringRun || authoringRun.userId !== userId || authoringRun.status !== "completed" || authoringRun.projectId !== id || authoringRun.episodeId !== episodeId || !authoringRun.dramaScriptPackage)
-        throw new DramaProjectServiceError("制作包不是当前项目 GPT/Codex 统一流水线生成的已完成结果，禁止回填", 409);
+    const isStandalone = preview.package.authoring?.authoringMode === "codex-standalone";
+    let authoringRun: Awaited<ReturnType<typeof getAgentRun>> | undefined;
+    if (!isStandalone) {
+        const authoringRunId = preview.package.authoring?.runId;
+        if (!authoringRunId) throw new DramaProjectServiceError("制作包缺少可核验的 executeDramaScriptRun 运行凭据", 400);
+        authoringRun = await getAgentRun(authoringRunId);
+        if (!authoringRun || authoringRun.userId !== userId || authoringRun.status !== "completed" || authoringRun.projectId !== id || authoringRun.episodeId !== episodeId || !authoringRun.dramaScriptPackage)
+            throw new DramaProjectServiceError("制作包不是当前项目 GPT/Codex 统一流水线生成的已完成结果，禁止回填", 409);
+    }
     if (cleanText(input.sourceHash) !== preview.sourceHash) throw new DramaProjectServiceError("制作包内容已变化，请重新预览", 409);
-    if (createHash("sha256").update(cleanText(input.source), "utf8").digest("hex") !== createHash("sha256").update(authoringRun.dramaScriptPackage.markdown, "utf8").digest("hex"))
+    const authoringMarkdown = authoringRun?.dramaScriptPackage?.markdown;
+    if (!isStandalone && (!authoringMarkdown || createHash("sha256").update(cleanText(input.source), "utf8").digest("hex") !== createHash("sha256").update(authoringMarkdown, "utf8").digest("hex")))
         throw new DramaProjectServiceError("制作包内容与执行结果不一致，请重新加载最新 Agent 结果", 409);
     if (preview.package.episodes.length !== 1) throw new DramaProjectServiceError("剧本 Agent 制作包只能包含当前集", 400);
     const scoped = { ...current, episodes: [target], activeEpisodeId: target.id };

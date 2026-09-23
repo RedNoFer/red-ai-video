@@ -15,9 +15,9 @@ describe("drama production package contract compilation", () => {
         expect(DRAMA_PACKAGE_COMPILE_MANIFEST.contract.contentHash).toBe(sha256(section(docs, "版本化契约块")));
         expect(template).toContain(`契约 hash：\`${DRAMA_PACKAGE_COMPILE_MANIFEST.contract.contentHash}\``);
         expect(template).toContain(DRAMA_PACKAGE_COMPILE_MANIFEST.packageSpecHash);
-        expect(DRAMA_PACKAGE_COMPILE_MANIFEST.codexWorkOrderRules).toContain("executeDramaScriptRun");
+        expect(DRAMA_PACKAGE_COMPILE_MANIFEST.codexWorkOrderRules).toContain("不调用 executeDramaScriptRun");
         expect(template).toContain("外部 Codex 独立生成");
-        expect(template).toContain("逐项 `selfCheck`");
+        expect(template).toContain("qualityGateStatus=passed");
         expect(template).toContain("availableSpeechSeconds = endSecond - startSecond");
         expect(template).toContain("不适用于逐句口型窗口");
         for (const gateCode of DRAMA_PACKAGE_GATE_CODES) expect(template).toContain(`\`${gateCode}\``);

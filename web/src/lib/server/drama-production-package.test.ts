@@ -102,7 +102,7 @@ describe("production package boundary", () => {
         expect(exported.package.authoring).toEqual(preview.package.authoring);
         expect(() => previewDramaProductionPackage(JSON.stringify(productionPackage), "agent-package.json", undefined, { requireAgentAuthoring: true })).toThrow("executeDramaScriptRun");
         const stale = structuredClone(authored);
-        stale.authoring!.directorSkill = { ...stale.authoring!.directorSkill, contentHash: "0".repeat(64) };
+        stale.authoring!.directorSkill = { ...stale.authoring!.directorSkill!, contentHash: "0".repeat(64) };
         expect(() => previewDramaProductionPackage(JSON.stringify(stale), "agent-package.json", undefined, { requireAgentAuthoring: true })).toThrow("导演 Skill 版本/内容哈希");
     });
 
@@ -836,6 +836,25 @@ describe("production package boundary", () => {
         const shot = previewDramaProductionPackage(JSON.stringify(source), "package.json").package.episodes[0].shots[0];
 
         expect(shot.videoPrompt).toBe("生成15秒9:16竖屏电影级视频。角色抬手后停住");
+    });
+
+    it("imports standalone Codex metadata without rewriting authored videoPrompt text", () => {
+        const source = structuredClone(productionPackage);
+        const authoredVideoPrompt = "  ### 镜头 01 | 0.0—15.0秒\n画面内容：萧炎因木案受力抬眼，指节压出白痕，案面轻响。  \n";
+        source.episodes[0].shots[0].videoPrompt = authoredVideoPrompt;
+        source.authoring = {
+            source: "codex-standalone",
+            authoringMode: "codex-standalone",
+            canonicalSource: "markdown-with-embedded-json",
+            qualityGateStatus: "passed",
+            generatedAt: "2026-09-14T00:00:00.000Z",
+            materials: [],
+        };
+
+        const preview = previewDramaProductionPackage(JSON.stringify(source), "codex-standalone.md", undefined, { preserveAuthoredVideoPrompt: true, allowImportWarnings: false });
+
+        expect(preview.package.episodes[0].shots[0].videoPrompt).toBe(authoredVideoPrompt);
+        expect(preview.package.authoring).toMatchObject({ source: "codex-standalone", authoringMode: "codex-standalone", canonicalSource: "markdown-with-embedded-json", qualityGateStatus: "passed" });
     });
 
     it("preserves repetitive frame image prompts and leaves similarity as a warning", () => {

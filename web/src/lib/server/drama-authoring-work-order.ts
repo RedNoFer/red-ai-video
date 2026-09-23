@@ -30,8 +30,8 @@ export async function createDramaAuthoringWorkOrderForRun(userId: string, runId:
     const run = await getAgentRun(runId);
     if (!run || run.userId !== userId) throw new DramaAuthoringWorkOrderError("Agent 任务不存在");
     if (run.workflow !== "drama-script" || !run.projectId || !run.episodeId) throw new DramaAuthoringWorkOrderError("只有短剧剧本 Agent 任务可以生成 Codex 工作单");
+    if (run.dramaAuthoring && ["ready", "repair-ready", "full-repair-ready"].includes(run.dramaAuthoring.status)) return { run, workOrder: run.dramaAuthoring };
     if (run.status !== "failed" || run.dramaFailureKind !== "timeout") throw new DramaAuthoringWorkOrderError("只有项目 GPT 明确超时且任务已结束后，才能由用户确认切换到外部 Codex");
-    if (run.dramaAuthoring?.status === "ready") return { run, workOrder: run.dramaAuthoring };
 
     const context = await buildWorkOrderContext(run);
     const workOrder: DramaAuthoringWorkOrder = {
@@ -55,7 +55,7 @@ export async function createDramaAuthoringWorkOrderForRun(userId: string, runId:
         },
         directorSkill: { id: DRAMA_VIDEO_DIRECTOR_SKILL.id, version: DRAMA_VIDEO_DIRECTOR_SKILL.sourceVersion, contentHash: DRAMA_VIDEO_DIRECTOR_SKILL.sourceContentHash },
         seedanceSkill: { id: SEEDANCE_25_DIRECTOR_SKILL.id, version: SEEDANCE_25_DIRECTOR_SKILL.sourceVersion, contentHash: SEEDANCE_25_DIRECTOR_SKILL.sourceContentHash },
-        draftContract: { mode: "package", reply: "string", markdown: "string" },
+        draftContract: { mode: "package-markdown", reply: "string", markdown: "complete-13-chapter-markdown-with-embedded-json" },
         strictGateCodes: [...DRAMA_PACKAGE_GATE_CODES],
     };
     const updated = await updateAgentRunById(run.id, { dramaAuthoring: workOrder }, { type: "drama.authoring.work-order.created", data: { workOrder } }, ["failed"]);

@@ -17,8 +17,11 @@ import type {
     DramaProductionPackagePreview,
     DramaProductionPackageV1,
     DramaProductionBible,
+    DramaProductionLock,
     DramaProject,
     DramaAuthoringSourceSnapshot,
+    DramaAuthoringAudit,
+    DramaQualityGateCheck,
     DramaQualityGateReport,
     DramaReferenceManifestRole,
     DramaSeriesBible,
@@ -72,6 +75,8 @@ export type DramaProductionPackageNormalizationOptions = {
     allowImportWarnings?: boolean;
     /** Enforce the current authoring continuity contract before state synchronization. */
     strictContinuity?: boolean;
+    /** Keep standalone Codex videoPrompt bytes unchanged during import normalization. */
+    preserveAuthoredVideoPrompt?: boolean;
     importWarnings?: string[];
     authoringSources?: import("@/lib/drama-project-contract").DramaAuthoringSourceSnapshot[];
     targetNarrativeChapter?: number | string;
@@ -185,6 +190,24 @@ export function previewDramaProductionPackage(source: string, fileName = "produc
     // preview and apply use the same normalized source of truth.
     const parsed = format === "markdown" ? parseObject(embedded || "") || parseObject((embedded || "").replace(/\\u0060/gu, "`")) : parseObject(trimmed);
     if (!parsed) throw new DramaProductionPackageError("Markdown 制作包必须嵌入标准清单 JSON；不会从旧镜头表重建制作包");
+    return previewDramaProductionPackageObject(parsed, project, options, createHash("sha256").update(source).digest("hex"), format);
+}
+
+/**
+ * Structured authoring is already the canonical package object. Keep it on
+ * the object path so authoring does not pay for a Markdown round trip before
+ * the quality gate. Markdown remains a deterministic projection performed
+ * only after this path passes.
+ */
+export function previewDramaProductionPackageObject(
+    source: unknown,
+    project?: DramaProjectAssetCollection,
+    options: DramaProductionPackageNormalizationOptions = {},
+    sourceHash?: string,
+    format: "json" | "markdown" = "json",
+): DramaProductionPackagePreview {
+    const parsed = object(source);
+    if (!Object.keys(parsed).length) throw new DramaProductionPackageError("制作包内容不能为空");
     const packageWithProjectAssets = project ? mergeProjectAssetsIntoProductionPackage(parsed as DramaProductionPackageV1, project) : parsed;
     const importWarnings: string[] = [];
     const normalizedPackage = normalizeProductionPackage(packageWithProjectAssets, { ...options, importWarnings });
@@ -192,7 +215,7 @@ export function previewDramaProductionPackage(source: string, fileName = "produc
     const allWarnings = [...new Set([...importWarnings, ...collectWarnings(productionPackage)])];
     return {
         package: productionPackage,
-        sourceHash: createHash("sha256").update(source).digest("hex"),
+        sourceHash: sourceHash || createHash("sha256").update(JSON.stringify(source)).digest("hex"),
         format,
         warnings: allWarnings,
         importWarnings,
@@ -247,6 +270,7 @@ export function applyDramaProductionPackage(project: DramaProject, source: Drama
         summary: preferred(project.summary, project.fieldOrigins, "summary", projectPatch.summary),
         style: styleContract.name,
         ratio: preferred(project.ratio, project.fieldOrigins, "ratio", projectPatch.ratio),
+        productionLock: productionPackage.project.productionLock || project.productionLock,
         productionBible: synchronizedBible,
         seriesBible: productionPackage.seriesBible || project.seriesBible,
         productionArchive: productionPackage.archive,
@@ -528,6 +552,7 @@ function normalizeProductionPackage(value: unknown, options: DramaProductionPack
     });
     const { colorScript: _rawColorScript, ...bibleWithoutColorScript } = bible;
     const colorScript = optionalText(bible.colorScript);
+    const productionLock = normalizeProductionLock(project.productionLock);
     const normalizedBible = {
         ...bibleWithoutColorScript,
         visualStyle: styleContract.name,
@@ -542,6 +567,7 @@ function normalizeProductionPackage(value: unknown, options: DramaProductionPack
             summary: text(project.summary),
             style: styleContract.name,
             ratio: text(project.ratio) || "9:16",
+            ...(productionLock ? { productionLock } : {}),
             productionBible: {
                 targetPlatform: optionalText(bible.targetPlatform),
                 language: text(bible.language) || "中文",
@@ -580,7 +606,7 @@ function validateStrictAuthoringQuality(value: DramaProductionPackageV1, authori
     if (options.authoringSources && !sameAuthoringMaterialManifest(authoring.materials, options.authoringSources)) throw new DramaProductionPackageError("制作包 authoring 素材 alias、role、顺序或内容哈希与本次输入不一致");
     const missingGateCodes = DRAMA_PACKAGE_GATE_CODES.filter((code) => !authoring.qualityGateReport!.checks.some((check) => check.code === code));
     if (missingGateCodes.length) throw new DramaProductionPackageError(`制作包质量门禁报告缺少检查项：${missingGateCodes.join("、")}`);
-    const report = validateDramaAuthoringQuality({ package: value, sources: options.authoringSources || [], targetNarrativeChapter: options.targetNarrativeChapter ?? authoring.targetNarrativeChapter });
+    const report = validateDramaAuthoringQuality({ package: value, sources: options.authoringSources || [], targetNarrativeChapter: options.targetNarrativeChapter ?? authoring.targetNarrativeChapter, authoringAudit: authoring.authoringAudit });
     if (report.status === "blocked") throw new DramaProductionPackageError(formatDramaQualityGateFailure(report));
     if (authoring.qualityGateReport.status !== "passed") throw new DramaProductionPackageError("制作包 authoring 质量门禁报告不是 passed，禁止导入");
 }
@@ -595,9 +621,88 @@ function sameAuthoringMaterialManifest(actual: DramaProductionPackageAuthoringMa
     );
 }
 
+function normalizeProductionLock(value: unknown): DramaProductionLock | undefined {
+    const input = object(value);
+    const shotDuration = Number(input.shotDuration);
+    const targetDuration = Number(input.targetDuration);
+    const hashFields = ["storySourceHash", "templateHash", "contractHash", "specHash", "directorSkillHash", "seedanceSkillHash", "authoringSchemaHash", "qualityGateRulesHash", "repairPolicyHash"] as const;
+    if (
+        (shotDuration !== 15 && shotDuration !== 30) ||
+        !Number.isFinite(targetDuration) ||
+        targetDuration <= 0 ||
+        !["adaptive", "dense-30s"].includes(text(input.internalCutPolicy)) ||
+        !["fixed-4", "fixed-5", "agent"].includes(text(input.framePolicy)) ||
+        hashFields.some((field) => !/^[a-f0-9]{64}$/u.test(text(input[field]))) ||
+        !text(input.projectionVersion) ||
+        !text(input.lockedAt) ||
+        text(input.lockedBy) !== "codex-current-conversation"
+    )
+        return undefined;
+    return {
+        shotDuration: shotDuration as 15 | 30,
+        targetDuration,
+        internalCutPolicy: text(input.internalCutPolicy) as DramaProductionLock["internalCutPolicy"],
+        framePolicy: text(input.framePolicy) as DramaProductionLock["framePolicy"],
+        ...Object.fromEntries(hashFields.map((field) => [field, text(input[field])])),
+        projectionVersion: text(input.projectionVersion),
+        lockedAt: text(input.lockedAt),
+        lockedBy: "codex-current-conversation",
+    } as DramaProductionLock;
+}
+
 function normalizePackageAuthoring(value: unknown, options: DramaProductionPackageNormalizationOptions = {}): DramaProductionPackageAuthoring | undefined {
     const input = object(value);
     if (!Object.keys(input).length) return undefined;
+    const source = text(input.source);
+    if (source === "codex-standalone") {
+        const generatedAt = text(input.generatedAt);
+        if (!generatedAt) throw new DramaProductionPackageError("独立 Codex 制作包缺少生成时间");
+        const rawMaterials = array(input.materials);
+        const materials = rawMaterials.flatMap((item) => {
+            const material = object(item);
+            const role = text(material.role);
+            const type = text(material.type);
+            const alias = text(material.alias);
+            const title = text(material.title);
+            const contentHash = text(material.contentHash);
+            if (!alias || !title || !["package-template", "story-source", "reference"].includes(role) || !["text", "image", "video", "audio"].includes(type)) return [];
+            if (contentHash && !/^[a-f0-9]{64}$/u.test(contentHash)) return [];
+            return [{ alias, role: role as DramaProductionPackageAuthoringMaterial["role"], type: type as DramaProductionPackageAuthoringMaterial["type"], title, ...(contentHash ? { contentHash } : {}) }];
+        });
+        if (materials.length !== rawMaterials.length || new Set(materials.map((material) => material.alias)).size !== materials.length) throw new DramaProductionPackageError("独立 Codex 制作包的来源记录无效或 alias 重复");
+        const contractInput = object(input.contract);
+        const contract = contractInput.id || contractInput.version || contractInput.contentHash ? normalizePackageContract(contractInput, options) : undefined;
+        const normalizeOptionalSkill = (value: unknown) => {
+            const skill = object(value);
+            const id = text(skill.id);
+            const version = text(skill.version);
+            const contentHash = text(skill.contentHash);
+            if (!id && !version && !contentHash) return undefined;
+            if (!id || !version || (contentHash && !/^[a-f0-9]{64}$/u.test(contentHash))) throw new DramaProductionPackageError("独立 Codex 制作包的 Skill provenance 无效");
+            return { id, version, ...(contentHash ? { contentHash } : {}) };
+        };
+        const authoringAudit = normalizeAuthoringAudit(input.authoringAudit);
+        const qualityGateReport = normalizeQualityGateReport(input.qualityGateReport);
+        const directorSkill = normalizeOptionalSkill(input.directorSkill);
+        const seedanceSkill = normalizeOptionalSkill(input.seedanceSkill);
+        return {
+            source,
+            provider: "codex-standalone",
+            authoringMode: "codex-standalone",
+            canonicalSource: "markdown-with-embedded-json",
+            ...(input.qualityGateStatus === "passed" || input.qualityGateStatus === "blocked" ? { qualityGateStatus: input.qualityGateStatus } : {}),
+            ...(Number.isInteger(input.repairCount) && Number(input.repairCount) >= 0 ? { repairCount: Number(input.repairCount) } : {}),
+            ...(Number.isInteger(input.fullPackageRepairCount) && Number(input.fullPackageRepairCount) >= 0 ? { fullPackageRepairCount: Number(input.fullPackageRepairCount) } : {}),
+            ...(typeof input.selfCheckRuleVersion === "string" && input.selfCheckRuleVersion.trim() ? { selfCheckRuleVersion: input.selfCheckRuleVersion.trim() } : {}),
+            generatedAt,
+            ...(contract ? { contract } : {}),
+            ...(directorSkill ? { directorSkill } : {}),
+            ...(seedanceSkill ? { seedanceSkill } : {}),
+            materials,
+            ...(authoringAudit ? { authoringAudit } : {}),
+            ...(qualityGateReport ? { qualityGateReport } : {}),
+        };
+    }
     const directorSkill = normalizePackageSkillProvenance(input.directorSkill, "directorSkill");
     const seedanceSkill = normalizePackageSkillProvenance(input.seedanceSkill, "seedanceSkill");
     const rawMaterials = array(input.materials);
@@ -611,7 +716,6 @@ function normalizePackageAuthoring(value: unknown, options: DramaProductionPacka
         if (!alias || !title || !contentHash || !/^[a-f0-9]{64}$/u.test(contentHash) || !["package-template", "story-source", "reference"].includes(role) || !["text", "image", "video", "audio"].includes(type)) return [];
         return [{ alias, role: role as DramaProductionPackageAuthoringMaterial["role"], type: type as DramaProductionPackageAuthoringMaterial["type"], title, contentHash }];
     });
-    const source = text(input.source);
     const provider = text(input.provider);
     const runId = text(input.runId);
     const generatedAt = text(input.generatedAt);
@@ -620,10 +724,20 @@ function normalizePackageAuthoring(value: unknown, options: DramaProductionPacka
     const targetNarrativeChapter = typeof input.targetNarrativeChapter === "number" || typeof input.targetNarrativeChapter === "string" ? input.targetNarrativeChapter : undefined;
     const contractInput = object(input.contract);
     const contract = contractInput.id || contractInput.version || contractInput.contentHash ? normalizePackageContract(contractInput, options) : undefined;
+    const authoringAudit = normalizeAuthoringAudit(input.authoringAudit);
     const qualityGateReport = normalizeQualityGateReport(input.qualityGateReport);
     return {
         source,
         ...(provider === "project-gpt" || provider === "codex-work-order" ? { provider } : {}),
+        ...(input.authoringMode === "codex-standalone" || input.authoringMode === "project-gpt" ? { authoringMode: input.authoringMode } : {}),
+        ...(input.canonicalSource === "structured-package" ? { canonicalSource: input.canonicalSource } : {}),
+        ...(typeof input.projectionVersion === "string" && input.projectionVersion.trim() ? { projectionVersion: input.projectionVersion.trim() } : {}),
+        ...(input.qualityGateStatus === "passed" || input.qualityGateStatus === "blocked" ? { qualityGateStatus: input.qualityGateStatus } : {}),
+        ...(Number.isInteger(input.repairCount) && Number(input.repairCount) >= 0 ? { repairCount: Number(input.repairCount) } : {}),
+        ...(Number.isInteger(input.fullPackageRepairCount) && Number(input.fullPackageRepairCount) >= 0 ? { fullPackageRepairCount: Number(input.fullPackageRepairCount) } : {}),
+        ...(typeof input.authoringSchemaHash === "string" && /^[a-f0-9]{64}$/u.test(input.authoringSchemaHash) ? { authoringSchemaHash: input.authoringSchemaHash } : {}),
+        ...(typeof input.qualityGateRulesHash === "string" && /^[a-f0-9]{64}$/u.test(input.qualityGateRulesHash) ? { qualityGateRulesHash: input.qualityGateRulesHash } : {}),
+        ...(typeof input.repairPolicyHash === "string" && /^[a-f0-9]{64}$/u.test(input.repairPolicyHash) ? { repairPolicyHash: input.repairPolicyHash } : {}),
         ...(runId ? { runId } : {}),
         ...(targetNarrativeChapter !== undefined ? { targetNarrativeChapter } : {}),
         generatedAt,
@@ -631,8 +745,32 @@ function normalizePackageAuthoring(value: unknown, options: DramaProductionPacka
         directorSkill,
         seedanceSkill,
         materials,
+        ...(authoringAudit ? { authoringAudit } : {}),
         ...(qualityGateReport ? { qualityGateReport } : {}),
     };
+}
+
+function normalizeAuthoringAudit(value: unknown): DramaAuthoringAudit | undefined {
+    const input = object(value);
+    if (!Object.keys(input).length) return undefined;
+    if (input.schemaVersion !== 1 || !Array.isArray(input.shots)) throw new DramaProductionPackageError("制作包 authoringAudit 格式无效");
+    const shots = input.shots.flatMap((item) => {
+        const shot = object(item);
+        const shotId = text(shot.shotId);
+        if (!shotId || !Array.isArray(shot.frames)) return [];
+        const frames = shot.frames.flatMap((frameValue) => {
+            const frame = object(frameValue);
+            const frameId = text(frame.frameId);
+            const values = ["subject", "trigger", "visibleAction", "visibleResult", "informationDelta", "cameraPurpose", "soundAnchor"].map((key) => text(frame[key]));
+            if (!frameId || values.some((value) => !value)) return [];
+            const [subject, trigger, visibleAction, visibleResult, informationDelta, cameraPurpose, soundAnchor] = values;
+            return [{ frameId, subject, trigger, visibleAction, visibleResult, informationDelta, cameraPurpose, soundAnchor }];
+        });
+        if (frames.length !== shot.frames.length) return [];
+        return [{ shotId, frames }];
+    });
+    if (shots.length !== input.shots.length || new Set(shots.map((shot) => shot.shotId)).size !== shots.length) throw new DramaProductionPackageError("制作包 authoringAudit 包含无效或重复镜头");
+    return { schemaVersion: 1, shots };
 }
 
 function normalizePackageSkillProvenance(value: unknown, label: string) {
@@ -667,7 +805,21 @@ function normalizeQualityGateReport(value: unknown): DramaQualityGateReport | un
         const code = text(check.code);
         const severity = check.severity === "blocker" || check.severity === "warning" ? check.severity : "";
         if (!code || !severity) return [];
-        return [{ code, severity: severity as "blocker" | "warning", scope: text(check.scope), evidence: text(check.evidence), sourceRefs: strings(check.sourceRefs), fixHint: text(check.fixHint) }];
+        const repairScope: DramaQualityGateCheck["repairScope"] = check.repairScope === "shot" || check.repairScope === "package" ? check.repairScope : undefined;
+        return [
+            {
+                code,
+                severity: severity as "blocker" | "warning",
+                scope: text(check.scope),
+                ...(repairScope ? { repairScope } : {}),
+                ...(Array.isArray(check.shotIds) ? { shotIds: strings(check.shotIds) } : {}),
+                ...(Array.isArray(check.frameIds) ? { frameIds: strings(check.frameIds) } : {}),
+                ...(Array.isArray(check.lockedFields) ? { lockedFields: strings(check.lockedFields) } : {}),
+                evidence: text(check.evidence),
+                sourceRefs: strings(check.sourceRefs),
+                fixHint: text(check.fixHint),
+            },
+        ];
     });
     if (checks.length !== input.checks.length) throw new DramaProductionPackageError("制作包质量门禁报告包含无效检查项");
     if ((status === "blocked") !== checks.some((check) => check.severity === "blocker")) throw new DramaProductionPackageError("制作包质量门禁报告状态与检查项不一致");
@@ -1196,7 +1348,7 @@ function normalizePackageShot(value: unknown, index: number, options: DramaProdu
     }
     let videoPrompt = "";
     try {
-        videoPrompt = normalizePackageVideoPrompt(text(shot.videoPrompt));
+        videoPrompt = options.preserveAuthoredVideoPrompt ? (typeof shot.videoPrompt === "string" ? shot.videoPrompt : "") : normalizePackageVideoPrompt(text(shot.videoPrompt));
     } catch (error) {
         const message = `${label}的 videoPrompt 无效：${error instanceof Error ? error.message : "无法解析"}`;
         if (!options.allowImportWarnings) throw new DramaProductionPackageError(message);

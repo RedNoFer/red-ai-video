@@ -33,7 +33,7 @@ describe("drama source import workspace", () => {
         expect(template).toContain("dramaticFunction");
         expect(template).toContain("backgroundNpcPolicy");
         expect(template).toContain("模板版本：由 `pnpm compile:skills` 自动生成");
-        expect(template).toContain("服务端制作包规则 hash");
+        expect(template).toContain("编译规则 hash");
         expect(template).not.toContain("可见表演状态");
         expect(template).not.toContain("每镜仅保留一种相机运动");
         expect(template).toMatch(/\| 镜号 \|\s+时间 \| 阶段 \| 景别 \| 运镜 \| 焦段 \| 灯光 \| 色彩 \| 转场 \| 动作描述 \| end_state \|/u);

@@ -1,9 +1,17 @@
-import type { DramaAuthoringSourceSnapshot, DramaProductionPackageV1, DramaQualityGateCheck, DramaQualityGateReport } from "@/lib/drama-project-contract";
+import type { DramaAuthoringAudit, DramaAuthoringRepairFailure, DramaAuthoringSourceSnapshot, DramaProductionPackageV1, DramaQualityGateCheck, DramaQualityGateReport } from "@/lib/drama-project-contract";
 import { dramaDialogueFragmentSequenceError, dramaDialogueTimingReminder, dramaTimedDialogueCapacityIssues, dramaUtteranceTimingIssues, hasQuotedDramaDialogue, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
 import { DRAMA_DENSE_HARD_CUT_RANGE_30S, hasDramaDenseCutRule, hasDramaDenseCutRuleInCustomTemplateSources } from "@/lib/drama-production-plan";
 import { hasDramaReferenceAnchorClarity } from "@/lib/drama-prompt-compiler";
 import { validateDramaCharacterWardrobeContinuity, validateDramaCutInformationDiversity, validateDramaPromptComposition, validateDramaReferenceAliasConsistency } from "@/lib/drama-prompt-composition-quality";
-import { validateDramaFrameCausalChain, validateDramaFrameTiming, validateDramaVideoPromptCardLayout, validateDramaVideoPromptDialogueTiming } from "@/lib/drama-prompt-quality";
+import {
+    extractDramaVideoPromptCards,
+    hasConcreteDramaCameraDirection,
+    validateDramaFrameCausalChain,
+    validateDramaFrameTiming,
+    validateDramaVideoPromptCardLayout,
+    validateDramaVideoPromptDialogueTiming,
+    validateDramaVideoPromptSemanticQuality,
+} from "@/lib/drama-prompt-quality";
 import { validateDramaContinuityEdges } from "@/lib/drama-continuity-policy";
 import { DRAMA_PACKAGE_GATE_CODES, DRAMA_PACKAGE_SECTIONS } from "@/lib/server/drama-production-package-contract";
 
@@ -11,6 +19,7 @@ export type DramaAuthoringQualityInput = {
     package: DramaProductionPackageV1;
     sources: readonly DramaAuthoringSourceSnapshot[];
     targetNarrativeChapter?: number | string;
+    authoringAudit?: DramaAuthoringAudit;
 };
 
 export class DramaAuthoringQualityGateError extends Error {
@@ -23,10 +32,66 @@ export class DramaAuthoringQualityGateError extends Error {
     }
 }
 
+const SHOT_REPAIR_GATE_CODES = new Set([
+    "VIDEO_PROMPT_LAYOUT",
+    "VIDEO_PROMPT_SEMANTIC_QUALITY",
+    "FRAME_DIALOGUE_TIMING",
+    "DIALOGUE_CAPACITY",
+    "DIALOGUE_PERFORMANCE",
+    "ACTION_DENSITY",
+    "ACTION_DIFFERENCE",
+    "EMOTION_PROGRESSION",
+    "CAMERA_MOTIVATION",
+    "CAMERA_EVENT",
+    "VISUAL_CLARITY",
+    "TIMELINE",
+    "COMPOSITION_CONTRACT",
+    "SUBJECT_COVERAGE",
+    "CUT_INFORMATION_DIVERSITY",
+]);
+
+export function buildDramaAuthoringRepairPlan(report: DramaQualityGateReport) {
+    const failures = report.checks.filter((check) => check.severity === "blocker");
+    const shotFailures = failures.map((check) => {
+        const shotIds = check.shotIds?.length ? check.shotIds : extractShotIds(check.evidence);
+        const frameIds = check.frameIds?.length ? check.frameIds : extractFrameIds(check.evidence);
+        return { check, shotIds, frameIds };
+    });
+    const shotRepairable = shotFailures.length > 0 && shotFailures.every(({ check, shotIds }) => check.repairScope === "shot" || (SHOT_REPAIR_GATE_CODES.has(check.code) && shotIds.length > 0));
+    const uniqueShotIds = [...new Set(shotFailures.flatMap(({ shotIds }) => shotIds))];
+    const uniqueFrameIds = [...new Set(shotFailures.flatMap(({ frameIds }) => frameIds))];
+    const repairFailures: DramaAuthoringRepairFailure[] = shotFailures.flatMap(({ check, shotIds, frameIds }) =>
+        shotIds.map((shotId) => ({
+            shotId,
+            frameIds,
+            gateCode: check.code,
+            evidence: check.evidence,
+            fixHint: check.fixHint,
+            lockedFields: check.lockedFields || ["project", "assets", "episodes[].script", "shots[].duration", "productionPlan", "unfailedShots"],
+        })),
+    );
+    return {
+        scope: shotRepairable ? ("shot" as const) : ("package" as const),
+        shotIds: uniqueShotIds,
+        frameIds: uniqueFrameIds,
+        failures: repairFailures,
+        fullPackageRepairEligible: !shotRepairable,
+    };
+}
+
+function extractShotIds(value: string) {
+    return [...new Set([...value.matchAll(/(?:^|\/)\b(SH\d+)\b/gu)].map((match) => match[1]))];
+}
+
+function extractFrameIds(value: string) {
+    return [...new Set([...value.matchAll(/\b(F\d+)\b/gu)].map((match) => match[1]))];
+}
+
 const genericActionPattern = /^(?:自然反应|情绪加剧|准备回应|保持状态|承受压力|电影感推进|动作展开|关键变化|结果状态|动作节点已经成立|保持一致)$/u;
 const observableActionPattern = /抬|低|看|望|移|转|起身|前倾|后退|按|压|握|松|收|推|拉|停|吸气|呼吸|屏息|皱|眯|睁|闭|抬手|放下|落下|走|跪|拍|碰|拿|放|递|撕|捏|拔|挥|闪|震|响|开门|关门|离开|进入|凝视|回看/u;
 const observableResultPattern = /停在|落在|变为|变得|露出|显出|抬起|垂下|松开|收紧|移向|转向|对准|接住|落下|留下|响起|静止|形成|暴露|显现|被看见|无人插话|沉默|低头|抬眼|受力|改变/u;
 const actionFactPattern = /因为|由于|于是|随后|最终|决定|提出|答应|拒绝|要求|悔婚|退婚|离开|进入|走进|看见|发现|说|喊|跪|拔|抬|转身|交给|拿起|放下|撞|倒|死|活|承认|质问|回应/u;
+const publicSoundAnchorPattern = /人声|呼吸|吸气|吐气|衣料|脚步|碰撞|摩擦|风声|水声|门响|木石|混响|静默|沉默|屏息|余响|底噪|无声/u;
 const cinematicPlaceholderPattern = /^(?:入口构图已建立|动作展开|关键变化|结果状态|动作节点已经成立|主体的眉眼、呼吸、手部和道具接触关系清晰可见|情绪通过身体动作呈现)$/u;
 const denseCutExceptionPattern = /(?:减切原因|减切理由)\s*[：:]\s*(?:(?:静态留白|结果停留|凝视停留|供应商能力限制|供应商限制)[^。\n；;]*)/u;
 
@@ -44,6 +109,7 @@ export function validateDramaAuthoringQuality(input: DramaAuthoringQualityInput)
     checkFrameDialogueTiming(checks, input.package);
     checkDialoguePerformanceQuality(checks, input.package);
     checkVideoPromptLayout(checks, input.package);
+    checkVideoPromptSemanticQuality(checks, input.package, input.authoringAudit);
     checkPlotFacts(checks, input.package, sourceText);
     checkActionDensity(checks, input.package);
     checkActionDifference(checks, input.package);
@@ -51,7 +117,7 @@ export function validateDramaAuthoringQuality(input: DramaAuthoringQualityInput)
     checkNpcReactionChange(checks, input.package);
     checkNpcContinuityWarnings(checks, input.package);
     checkVisualClarityWarnings(checks, input.package);
-    checkCameraMotivation(checks, input.package);
+    checkCameraMotivation(checks, input.package, input.authoringAudit);
     checkCameraEvents(checks, input.package, customTemplateDenseRule);
     checkCompositionContract(checks, input.package);
     checkSubjectCoverage(checks, input.package);
@@ -130,6 +196,47 @@ function checkVideoPromptLayout(checks: DramaQualityGateCheck[], value: DramaPro
         failures.length ? failures.slice(0, 8).join("；") : "每个真实 framePlan 时间段都有完整的小墨式导演镜头卡",
         ["episodes[].shots[].videoPrompt", "episodes[].shots[].framePlan.frames[]"],
         "按小墨式导演成稿补齐：每个真实 framePlan 时间段对应一个镜头卡，标题包含时间、景别、焦段、机位和运镜，正文写具体可见画面与声音；内部起点/动作/衔接/终点继续只在 framePlan 中校验。",
+    );
+}
+
+function checkVideoPromptSemanticQuality(checks: DramaQualityGateCheck[], value: DramaProductionPackageV1, audit?: DramaAuthoringAudit) {
+    const failures: string[] = [];
+    const auditByShot = new Map((audit?.shots || []).map((shot) => [shot.shotId, shot]));
+    for (const episode of value.episodes) {
+        for (const shot of episode.shots) {
+            const label = `${episode.code}/${shot.code}`;
+            failures.push(...validateDramaVideoPromptSemanticQuality(shot.videoPrompt, shot.framePlan?.frames || [], label));
+            const cards = extractDramaVideoPromptCards(shot.videoPrompt);
+            const auditShot = auditByShot.get(shot.code || "");
+            if (audit) {
+                if (!auditShot || auditShot.frames.length !== (shot.framePlan?.frames.length || 0)) {
+                    failures.push(`${label}缺少与真实帧一一对应的 authoringAudit`);
+                } else {
+                    for (const [index, frame] of (auditShot.frames || []).entries()) {
+                        const required = [frame.subject, frame.trigger, frame.visibleAction, frame.visibleResult, frame.informationDelta, frame.cameraPurpose, frame.soundAnchor];
+                        if (required.some((item) => !item.trim())) failures.push(`${label}/F${index + 1} authoringAudit 缺少主体、触发、动作、结果、信息增量、运镜动机或声音锚点`);
+                        if (frame.frameId !== shot.framePlan?.frames[index]?.id) failures.push(`${label}/F${index + 1} authoringAudit frameId 未与真实 framePlan 对齐`);
+                        const visual = cards[index]?.visual || "";
+                        if (visual && frame.subject && !visual.includes(frame.subject)) failures.push(`${label}/F${index + 1} authoringAudit 主体未出现在公开画面内容中`);
+                    }
+                }
+            }
+        }
+    }
+    add(
+        checks,
+        "VIDEO_PROMPT_SEMANTIC_QUALITY",
+        !failures.length,
+        "公开视频语义质量",
+        failures.length ? failures.slice(0, 12).join("；") : "公开视频卡片逐帧具备具体主体、动作触发、可见结果、信息增量和声音锚点",
+        ["episodes[].shots[].videoPrompt", "episodes[].shots[].framePlan.frames[]", "authoringAudit"],
+        "重写失败镜头的公开视频卡片和对应 framePlan；删除抽象/未来意图，补齐主体、触发、可见动作、结果、信息增量、运镜动机和声音锚点。",
+        {
+            repairScope: "shot",
+            shotIds: [...new Set(failures.flatMap((failure) => [...failure.matchAll(/(?:^|\/)\b(SH\d+)\b/gu)].map((match) => match[1])))],
+            frameIds: [...new Set(failures.flatMap((failure) => [...failure.matchAll(/\b(F\d+)\b/gu)].map((match) => match[1])))],
+            lockedFields: ["project", "assets", "episodes[].script", "shots[].duration", "productionPlan", "unfailedShots"],
+        },
     );
 }
 
@@ -298,6 +405,12 @@ function checkActionDensity(checks: DramaQualityGateCheck[], value: DramaProduct
                 if (!action || genericActionPattern.test(action) || !observableActionPattern.test(action) || !result || !observableResultPattern.test(result) || cinematicPlaceholderPattern.test(result)) missing.push(`${shot.code}/${frame.id}`);
                 missing.push(...validateDramaFrameCausalChain(frame.actionPrompt, frame.transitionPrompt, frame.endPrompt, `${shot.code}/${frame.id}`));
             }
+            const publicCards = extractDramaVideoPromptCards(shot.videoPrompt);
+            if (publicCards.length !== frames.length) missing.push(shot.code + "/videoPrompt 卡片数量与真实 framePlan 不一致");
+            for (const [index, card] of publicCards.entries()) {
+                const publicText = [card.visual, card.voice, card.sound].join("\n");
+                if (!observableActionPattern.test(card.visual) || !observableResultPattern.test(card.visual) || !publicSoundAnchorPattern.test(publicText)) missing.push(shot.code + "/F" + (index + 1) + "/videoPrompt 缺少公开可见动作、结果或声音锚点");
+            }
         }
     }
     add(
@@ -306,7 +419,7 @@ function checkActionDensity(checks: DramaQualityGateCheck[], value: DramaProduct
         !missing.length,
         "逐时间段动作密度",
         missing.length ? `${missing.length} 个镜头/时间段缺少“谁做什么→因为什么→可见变化→声音锚点”闭环：${missing.slice(0, 5).join(", ")}` : "每个镜头和真实时间段都有欲望/阻力、触发、可观察动作、结果和声音锚点",
-        ["episodes[].shots[].framePlan.frames[]"],
+        ["episodes[].shots[].framePlan.frames[]", "episodes[].shots[].videoPrompt.画面内容", "episodes[].shots[].videoPrompt.人声", "episodes[].shots[].videoPrompt.音效"],
         "每段写清谁做什么、因为什么触发、身体微动作/手部受力、对手/NPC/道具/环境的可见结果和声音锚点；抽象词不能代替动作。",
     );
 }
@@ -317,7 +430,14 @@ function checkActionDifference(checks: DramaQualityGateCheck[], value: DramaProd
         for (const shot of episode.shots) {
             const frames = shot.framePlan?.frames || [];
             const signatures = frames.map((frame) => actionSignature(frame.actionPrompt));
-            if (signatures.length > 1 && new Set(signatures).size < 2) repeated.push(shot.code);
+            const publicSignatures = extractDramaVideoPromptCards(shot.videoPrompt).map((card) =>
+                [card.visual, card.dialogue]
+                    .join("\n")
+                    .replace(/[\s，。；：、,.!?！？]+/gu, "")
+                    .replace(/(?:极慢|缓慢|微|轻微|短暂|保持|清晰|自然|真实|电影级)/gu, "")
+                    .slice(0, 180),
+            );
+            if ((signatures.length > 1 && new Set(signatures).size < 2) || (publicSignatures.length > 1 && new Set(publicSignatures).size < 2)) repeated.push(shot.code);
         }
     }
     add(
@@ -428,14 +548,23 @@ function checkVisualClarityWarnings(checks: DramaQualityGateCheck[], value: Dram
     );
 }
 
-function checkCameraMotivation(checks: DramaQualityGateCheck[], value: DramaProductionPackageV1) {
+function checkCameraMotivation(checks: DramaQualityGateCheck[], value: DramaProductionPackageV1, audit?: DramaAuthoringAudit) {
     const failed: string[] = [];
+    const auditByShot = new Map((audit?.shots || []).map((shot) => [shot.shotId, shot]));
     for (const shot of value.episodes.flatMap((episode) => episode.shots)) {
-        const text = `${shot.cameraMotion || ""}\n${shot.videoPrompt || ""}`;
+        const cards = extractDramaVideoPromptCards(shot.videoPrompt);
+        const text = `${shot.cameraMotion || ""}\n${shot.videoPrompt || ""}\n${cards.map((card) => card.cameraMotion).join("\n")}`;
         const hasCamera = /机位|景别|角度|焦段|固定|推|拉|摇|移|跟拍|环绕|镜头/u.test(text);
         const hasConcretePurpose = /为了|服务于|让观众看见|揭示|强调|承接|跟随|锁定|暴露|突出|把[^。；\n]{0,20}(?:看见|传给|压到|推向)/u.test(text);
         const genericPurpose = /服务于当前(?:信息|动作)变化|电影感推进|中轴缓慢推进/u.test(text) && !hasConcretePurpose;
         if (!hasCamera || !hasConcretePurpose || genericPurpose) failed.push(shot.code);
+        if (audit) {
+            const auditFrames = auditByShot.get(shot.code || "")?.frames || [];
+            for (const [index, card] of cards.entries()) {
+                const purpose = auditFrames[index]?.cameraPurpose || card.raw;
+                if (!card.cameraMotion || !hasConcreteDramaCameraDirection(card.cameraMotion) || !/(?:为了|揭示|强调|跟随|锁定|暴露|突出|让观众看见|把[^。；\n]{0,20}(?:看见|传给|压到|推向))/u.test(purpose)) failed.push(`${shot.code}/F${index + 1}`);
+            }
+        }
     }
     add(
         checks,
@@ -719,7 +848,7 @@ function checkSimpleStructuralChecks(checks: DramaQualityGateCheck[], value: Dra
         add(
             checks,
             "PROVENANCE",
-            Boolean(value.authoring.source === "executeDramaScriptRun" && value.authoring.contract?.contentHash && value.authoring.directorSkill.contentHash && value.authoring.seedanceSkill.contentHash),
+            Boolean(value.authoring.source === "executeDramaScriptRun" && value.authoring.contract?.contentHash && value.authoring.directorSkill?.contentHash && value.authoring.seedanceSkill?.contentHash),
             "来源凭据",
             "已记录 executeDramaScriptRun、契约和两个 Skill 哈希",
             ["authoring"],
@@ -727,8 +856,8 @@ function checkSimpleStructuralChecks(checks: DramaQualityGateCheck[], value: Dra
         );
 }
 
-function add(checks: DramaQualityGateCheck[], code: string, passed: boolean, scope: string, evidence: string, sourceRefs: string[], fixHint: string) {
-    checks.push({ code, severity: passed ? "warning" : "blocker", scope, evidence: passed ? `通过：${evidence}` : evidence, sourceRefs, fixHint });
+function add(checks: DramaQualityGateCheck[], code: string, passed: boolean, scope: string, evidence: string, sourceRefs: string[], fixHint: string, repair?: Pick<DramaQualityGateCheck, "repairScope" | "shotIds" | "frameIds" | "lockedFields">) {
+    checks.push({ code, severity: passed ? "warning" : "blocker", scope, evidence: passed ? `通过：${evidence}` : evidence, sourceRefs, fixHint, ...(repair || {}) });
 }
 
 function addWarning(checks: DramaQualityGateCheck[], code: string, evidence: string, sourceRefs: string[], fixHint: string) {

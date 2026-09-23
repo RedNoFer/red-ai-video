@@ -6,7 +6,7 @@ import { nanoid } from "nanoid";
 import { useEffect, useRef, useState } from "react";
 
 import type { CreativeAsset, CreativeConversation, CreativeMessage } from "@/lib/creative-runtime-contract";
-import type { DramaAuthoringWorkOrder, DramaProductionPackagePreview, DramaProject, DramaEpisode } from "@/lib/drama-project-contract";
+import type { DramaAuthoringDraft, DramaAuthoringStandalonePackageDraft, DramaAuthoringWorkOrder, DramaProductionPackagePreview, DramaProject, DramaEpisode } from "@/lib/drama-project-contract";
 import { AgentMarkdown } from "@/components/agent/agent-markdown";
 import {
     controlCreativeAgentRun,
@@ -217,20 +217,20 @@ export function DramaScriptAgentPanel({ project, episode, open, onOpenChange }: 
             const result = await createDramaAuthoringWorkOrder(failedRunId);
             setWorkOrder(result.workOrder);
             setWorkOrderOpen(true);
-            message.success("已生成 Codex 工作单；请将工作单内容交给外部 Codex，完成后粘贴 draft JSON 回传");
+            message.success("已生成 Codex 工作单；请将工作单内容交给当前 Codex，完成后粘贴完整 13 章 Markdown 回传");
         } catch (error) {
             message.error(error instanceof Error ? error.message : "Codex 工作单生成失败");
         }
     };
     const submitExternalDraft = async () => {
         if (!workOrder || submittingExternalDraft) return;
-        let draft: { mode: "package"; reply: string; markdown: string };
+        let draft: DramaAuthoringDraft;
         try {
-            const parsed = JSON.parse(externalDraft) as { mode?: string; reply?: string; markdown?: string };
-            if (parsed.mode !== "package" || !parsed.markdown?.trim()) throw new Error("请粘贴 mode=package 且包含 markdown 的 draft JSON");
-            draft = { mode: "package", reply: parsed.reply?.trim() || "Codex authoring draft 已提交。", markdown: parsed.markdown.trim() };
+            const markdown = externalDraft.trim();
+            if (!markdown.includes("## 十三、QC 报告") || !markdown.includes("drama-production-package")) throw new Error("请粘贴完整 13 章 Markdown 制作包，并包含 drama-production-package JSON 代码块");
+            draft = { mode: "package-markdown", reply: "Codex 独立制作包已提交。", markdown } satisfies DramaAuthoringStandalonePackageDraft;
         } catch (error) {
-            message.error(error instanceof Error ? error.message : "draft JSON 格式无效");
+            message.error(error instanceof Error ? error.message : "制作包 Markdown 格式无效");
             return;
         }
         setSubmittingExternalDraft(true);
@@ -239,7 +239,7 @@ export function DramaScriptAgentPanel({ project, episode, open, onOpenChange }: 
                 contract: workOrder.contract,
                 directorSkill: workOrder.directorSkill,
                 seedanceSkill: workOrder.seedanceSkill,
-                sources: workOrder.sources.map(({ alias, role, contentHash }) => ({ alias, role, contentHash })),
+                sources: workOrder.sources.map(({ alias, role, contentHash }) => ({ alias, role, contentHash: contentHash || "" })),
             });
             const loaded = conversation ? await listCreativeMessages(conversation.id) : [];
             const assistant = loaded.find((item) => item.id === result.run.assistantMessageId);
@@ -248,7 +248,7 @@ export function DramaScriptAgentPanel({ project, episode, open, onOpenChange }: 
             setMessages(loaded);
             setWorkOrderOpen(false);
             setFailedRunId(undefined);
-            message.success("Codex 草案已通过统一门禁，请在预览中确认导入");
+            message.success("Codex Markdown 已通过结构安全校验，请在预览中确认导入");
         } catch (error) {
             message.error(error instanceof Error ? error.message : "Codex 草案提交失败");
         } finally {
@@ -519,7 +519,7 @@ export function DramaScriptAgentPanel({ project, episode, open, onOpenChange }: 
                 width={760}
                 centered
                 confirmLoading={submittingExternalDraft}
-                okText="提交 draft 并校验"
+                okText="提交 Markdown 并导入"
                 cancelText="关闭"
                 onCancel={() => setWorkOrderOpen(false)}
                 onOk={() => void submitExternalDraft()}
@@ -527,10 +527,11 @@ export function DramaScriptAgentPanel({ project, episode, open, onOpenChange }: 
                 {workOrder ? (
                     <div className="space-y-3">
                         <p className="text-xs leading-5 text-muted-foreground">
-                            复制下面的工作单给外部 Codex。Codex 只能返回 <code>{`{"mode":"package","reply":"…","markdown":"…"}`}</code>，不能直接导入项目。完成后将返回内容粘贴到下方。
+                            复制下面的独立 authoring 工作单给当前 Codex。Codex 必须依据其中的模板、TXT、Skill 和本轮参数，直接生成完整 13 章 Markdown；生成前自行完成视频提示词门禁检查和失败镜头局部修订。完成后将完整 Markdown
+                            粘贴到下方，项目只做结构安全校验，不重写内容。
                         </p>
                         <pre className="max-h-[34vh] overflow-auto whitespace-pre-wrap rounded-md border border-border bg-muted/20 p-3 text-xs leading-5">{JSON.stringify(workOrder, null, 2)}</pre>
-                        <Input.TextArea value={externalDraft} onChange={(event) => setExternalDraft(event.target.value)} autoSize={{ minRows: 8, maxRows: 16 }} placeholder='粘贴 Codex 返回的 {"mode":"package", "reply":"…", "markdown":"…"}' />
+                        <Input.TextArea value={externalDraft} onChange={(event) => setExternalDraft(event.target.value)} autoSize={{ minRows: 12, maxRows: 24 }} placeholder="粘贴 Codex 返回的完整 13 章 Markdown 制作包" />
                     </div>
                 ) : null}
             </Modal>

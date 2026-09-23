@@ -6,7 +6,7 @@
 
 以后由 Codex、项目 Agent 或人工编写的完整制作包，都必须保持以下一级章节、表头和编号规则。13 章是 v1 的固定制作包结构，不因项目、集数或对话内容改变。多集项目在一个总包中仍只保留一套固定一级章节，但每一集必须在规范对象中拥有完整且自洽的剧本、场次、镜头、资产引用、表演、声音、连续性、逐帧计划和 QC 数据；按单集生成或导入时，该单集制作包也必须完整保留全部 13 章，不得只输出镜头表或局部字段。允许扩写正文，不允许改名、换序或省略必填章节。没有内容时保留章节并明确写“无”。
 
-制作包支持两种等价的 authoring 方式：项目内生成由 `executeDramaScriptRun` 负责编排和导入校验；外部 Codex 可以只依据本模板、当前 TXT/小说、当前用户请求和可用资产独立生成完整制作包。两种方式都必须执行本文件、模板内嵌门禁登记表和当前导演 Skill 的同一套规则。固定脚本、历史制作包、旧 generationPrompt 或直接读取模板复制正文不得作为制作包生成器。项目内最终导入仍可由服务端进行事实与质量校验；这只是安全兜底，不是外部 Codex 生成制作包的前置依赖。外部独立包必须在正文中保留来源清单、契约版本、导演 Skill/Seedance Skill 版本与内容哈希，以及模板/TXT/参考素材的 alias、role、顺序和内容哈希。
+制作包支持两种彼此隔离的 authoring 方式：项目内生成由 `executeDramaScriptRun` 负责编排；独立 Codex authoring 只依据本模板、当前 TXT/小说、当前用户请求、当前导演 Skill 和可用资产，直接生成完整 13 章 Markdown 制作包。独立 Codex 的 Markdown 与其中唯一的规范对象 JSON 在同一轮直接生成，服务端不参与创作、不投影章节、不重写 `videoPrompt`。两种方式共享本文件、模板内嵌门禁登记表和当前导演 Skill，但独立 Codex 必须在输出前完成模板内自检与局部修订。固定脚本、历史制作包、旧 generationPrompt 或直接读取模板复制正文不得作为制作包生成器。项目导入阶段只执行 JSON、章节、字段、时间轴、资产和权限等结构安全校验，不能把导入校验当作独立 authoring 的质量门禁。最终包必须保留来源清单、契约版本、导演 Skill/Seedance Skill 版本与内容哈希（能够获得时记录），以及模板/TXT/参考素材的 alias、role、顺序和内容哈希。
 
 ## 版本化契约块
 
@@ -16,16 +16,25 @@ contract:
   version: 1.0.0
   targetNarrativeChapter: 当前 TXT/小说的目标章节标识；它不是制作包一级章节编号
   authoringProviders:
+    - codex-standalone
     - project-gpt
-    - codex-work-order
-  finalizer: executeDramaScriptRun
+  finalizer: codex-standalone-or-project-gpt
   externalWorkOrder:
     trigger: user-confirmed-project-gpt-timeout
-    output: authoring-draft-only
-    reentry: executeDramaScriptRun
+    output: complete-13-chapter-markdown-with-embedded-json
+    reentry: optional-import-only
   draft:
-    mode: package
+    mode: package-markdown
     fields: [reply, markdown]
+  productionLock:
+    fields: [shotDuration, targetDuration, internalCutPolicy, framePolicy, storySourceHash, templateHash, contractHash, specHash, directorSkillHash, seedanceSkillHash, selfCheckRuleVersion]
+  finalAuthoringMetadata:
+    fields: [authoringMode, canonicalSource, qualityGateStatus, repairCount, fullPackageRepairCount, selfCheckRuleVersion]
+  shotRepair:
+    mode: shot-repair
+    fields: [reply, basePackageHash, repairScope, failures, patches]
+    scope: failed-shot-only
+    visibility: codex-internal-workflow-only; not-an-independent-submission-format
   sourceRoles:
     - package-template
     - story-source
@@ -37,6 +46,7 @@ contract:
     - FRAME_DIALOGUE_TIMING
     - DIALOGUE_PERFORMANCE
     - VIDEO_PROMPT_LAYOUT
+    - VIDEO_PROMPT_SEMANTIC_QUALITY
     - PLOT_FACT_COVERAGE
     - ACTION_DENSITY
     - ACTION_DIFFERENCE
@@ -57,17 +67,18 @@ contract:
     - PROVENANCE
 ```
 
-## 外部 Codex 工作单协议
+## 独立 Codex authoring 协议
 
-- 触发条件：项目 GPT 已明确超时、运行已进入失败终态，且用户主动确认切换；不得自动并发调用外部模型。
-- 工作单输入：当前用户请求、模板全文（`role=package-template`）、TXT/小说全文（`role=story-source`）、参考素材职责、当前项目正式资产、当前集事实、目标小说章节、锁定生产方案，以及本契约和两个 Skill 的版本/内容哈希。
-- 草案输出：只能返回 `{ "mode": "package", "reply": "...", "markdown": "..." }`；Codex 不得直接导入、修改当前集或声明已生成正式制作包。
-- 回传校验：服务端重新核对 `runId`、`workOrderId`、用户身份、source alias/role/顺序/contentHash、契约哈希和两个 Skill 哈希；任一不一致直接拒绝。
-- 最终入口：草案回传后仍调用 `executeDramaScriptRun`，使用同一份门禁、规范对象和确定性序列化；最终 provenance 的 `provider` 才标记为 `codex-work-order`。
+- 输入只允许：本轮用户请求、本模板全文、当前 TXT/小说/剧本、当前 Skill、当前正式资产、当前参考素材和明确生产参数；禁止读取历史制作包、旧 generationPrompt、旧运行记录或项目内部 Agent 记录。
+- 正式输出必须是完整 13 章 Markdown，并且只包含一个 `drama-production-package` JSON 代码块。JSON 与 13 章正文由 Codex 同一轮生成；第十一章直接填写 Codex 写出的 `videoPrompt`，第十三章填写自检结果。
+- 输出前必须完成“读取事实 → 确定逻辑片段 → 编排镜头与帧 → 生成视频提示词 → 逐镜门禁自检 → 只修失败镜头 → 再自检”的闭环。未通过 blocker 时不得输出可生产制作包。
+- 普通质量失败只允许修复失败镜头的 `videoPrompt`、`framePlan`、表演、对白时间和连续性；未失败镜头、剧情、资产、逻辑片段数量、时长和总时长冻结。
+- 只有协议损坏或多镜头事实冲突才允许一次完整 package 修订；第二次仍失败时停止，不自动重建或换渠道。
+- 项目导入只接收已完成 Markdown，服务端可检查 JSON、章节、字段、时间轴、资产和权限，但不得调用 `executeDramaScriptRun`、完整语义门禁或 Markdown 投影器。
 
 ## 外部独立生成门禁
 
-本节会随模板一并编译发布，是外部 Codex 直接生成制作包时的自包含执行规范。外部 Codex 不需要调用 `executeDramaScriptRun`、读取项目内部硬编码或等待服务端补写字段；必须在返回前完成一次完整自检，并只返回一份已经通过自检的完整制作包。项目内导入时可以再次执行同一门禁，但不得依赖导入阶段补齐、重写或拼接公开视频提示词。
+本节会随模板一并编译发布，是外部 Codex 直接生成制作包时的自包含执行规范。外部 Codex 不需要调用 `executeDramaScriptRun`、读取项目内部硬编码或等待服务端补写字段；必须在返回前完成一次完整自检，直接返回已经通过自检的完整 13 章 Markdown。项目导入时只做结构安全校验，不重复执行本节的导演语义门禁，也不得补齐、重写或拼接公开视频提示词。
 
 ### 输入边界与来源优先级
 
@@ -78,11 +89,12 @@ contract:
 
 ### 必须交付的独立结果
 
-- 固定 13 个一级章节，完整保留 `project`、`assets`、`episodes`、`seriesBible`、`archive` 和每镜字段；不能只返回镜头表、视频提示词或摘要。
+- Markdown 必须完整保留固定 13 个一级章节，并包含唯一 `drama-production-package` JSON 代码块；JSON 与正文由 Codex 同一轮生成，不能只返回镜头表、视频提示词或摘要。
+- Codex 可在 JSON 中记录当前 15/30 秒逻辑片段方案、内部剪辑策略、帧策略、TXT/模板/契约/两个 Skill 的版本或哈希，以及 `selfCheckRuleVersion`；不得从历史包或旧锁定方案补写。
 - 每个逻辑片段先按完整剧情、对白自然时长、动作节拍和反应留白确定数量，再使用当前配置的 15 秒或 30 秒时长；整集时长由逻辑片段数量推导。
 - 每个镜头直接生成 `dramaticFunction`、`performancePlan`、`dialoguePerformance`、`lightingPlan`、`continuity`、`entryState`、`exitState`、`videoPrompt`、`framePlan` 和当前资产编码；不得等待应用层补齐。
 - `videoPrompt` 必须由 Agent 直接生成小墨个人分镜 Skill 6.3（`storyboard-director@6.3.0`）适配版镜头卡；每个真实 `framePlan.frames[]` 对应一张卡。服务端或外部脚本不得从 `framePlan`、旧提示词或模板示例重建公开正文。
-- 完成后附带逐门禁 `selfCheck`：每项写 `code`、`severity`、`status`、`evidence`、`fixHint`；任何 blocker 未通过都不得声称完成。
+- 第十三章必须附带逐门禁 QC 自检表，逐项记录 `passed` 或 `warning`、证据镜头/帧号和修订范围；不得保留 blocker 或“待服务端检查”。
 
 ### 门禁登记表
 
@@ -94,6 +106,7 @@ contract:
 | `DIALOGUE_CAPACITY` | blocker / warning | 逐句口型窗口是硬门禁：`availableSpeechSeconds=endSecond-startSecond` 必须不小于 `requiredSpeechSeconds=可发音字数/speechRateCharsPerSecond`；`pauseBeforeSeconds`/`pauseAfterSeconds` 另行占用句前/句后空间并必须留在镜头边界内。任何单句不足都阻断。10 个可发音字容差只用于整镜总量的兼容提醒，不适用于逐句口型窗口；不得异常加速。 |
 | `DIALOGUE_PERFORMANCE` | blocker | 每个对白帧段写说话人、实际台词、语气、停顿、重音和具体说后反应；`画面内容`不得复制完整对白；相邻段不得重复对白游标或表演块。 |
 | `VIDEO_PROMPT_LAYOUT` | blocker | 每个真实帧段对应一张镜头卡；标题含时间、景别、焦段、机位、一个主运镜和主体类型；正文含场景、画面内容、光影、色调、台词、人声、音效。 |
+| `VIDEO_PROMPT_SEMANTIC_QUALITY` | blocker | 直接检查公开视频卡片：画面内容必须有明确主体、进行中的可见动作、触发/因果、可见结果和声音锚点；不得出现“准备回应”“保持状态”“社会后果停在三人之间”等抽象占位或未来意图；相邻卡片必须带来可拍摄的信息增量。 |
 | `PLOT_FACT_COVERAGE` | blocker | 当前剧情事实、人物关系、动作结果和结尾状态都在制作包中有可追溯表达；不得以泛化氛围替代事实。 |
 | `ACTION_DENSITY` | blocker | 每帧完成“谁做什么 → 触发原因 → 身体/手部/道具受力 → 可见结果 → 声音锚点”；对白结束后的时间必须有剧情职责或有目的的结果停留。 |
 | `ACTION_DIFFERENCE` | blocker | 相邻帧至少有一项可验收的主体、姿态、视线、表情、重心、手部、道具、环境或摄影信息变化；不得只换形容词。 |
@@ -124,7 +137,7 @@ contract:
 
 ### 独立生成结束条件
 
-外部 Codex 必须在输出前完成“生成 → 逐镜自检 → 聚合修正 → 再自检”闭环。不得输出半成品、待门禁、待服务端补齐或仅有镜头摘要的结果。所有 blocker 通过后，才可把 Markdown/JSON 标记为“可直接使用”；若只通过了 warning，必须在 QC 中列出 warning，不得把 warning 改写成通过证据。
+外部 Codex 必须在输出前完成“生成 → 逐镜自检 → 只修失败镜头 → 再自检”闭环。正式结果必须是完整 13 章 Markdown，不得输出半成品、待门禁、待服务端补齐或仅有镜头摘要的结果。所有 blocker 通过后，才可在第十三章标记 `qualityGateStatus=passed`；warning 必须保留在 QC 中，不得改写成通过证据。服务端不得把 JSON 再投影成 Markdown。
 
 本文件与模板内嵌的门禁登记表是外部生成的可执行规范；项目服务端仍可作为导入安全校验，但不得以隐藏的固定脚本、旧模板或历史包重建、补写或改写外部 Codex 已生成的公开视频正文。
 
@@ -132,13 +145,13 @@ contract:
 
 ## Agent 运行时规则
 
-- 制作包只能由 `executeDramaScriptRun` 组织；Agent 必须在返回 `mode=package` 草案前完成一次内部导演自检，逐镜补齐具体的表演、对白、动作、NPC、运镜、镜头事件和实际场景细节。草案若未通过门禁，执行器必须把具体失败项作为当前 authoring revision feedback 回传同一生成渠道，要求返回完整修订草案；未通过的中间草案不得展示给用户、写入当前集或进入导入流程。只有通过门禁的草案才从规范对象确定性序列化 JSON/Markdown。
+- 项目内 Agent 制作包仍由 `executeDramaScriptRun` 组织；独立 Codex 不经过该入口。两条路径都必须依据同一模板和 Skill 自检，但独立 Codex 的正式结果是完整 Markdown，项目服务端不得把独立结果改写成另一份 Markdown。
 - `package-template` 只规定 13 个一级章节、字段顺序和字段职责；制作包正式生成时由系统自动注入唯一系统模板，用户可以提供同角色的自定义模板覆盖它；`story-source` 只规定当前目标小说章节的剧情事实；`reference` 只规定素材职责。三类 authoring source 必须保留 alias、role、顺序和内容哈希。用户不应因为未重复上传模板而被阻止生成制作包。
 - 目标小说章节使用 `targetNarrativeChapter` 单独记录；它是剧情素材范围，不得与制作包一级章节编号混用。当前集必须提供完整文学剧本、场次、镜头和可执行结果，不能只返回摘要或镜头概述。
 - 镜头规范对象必须分别填写 `dramaticFunction`、`performancePlan`、`lightingPlan`、`continuity`、`entryState`、`exitState`、`videoPrompt` 和 `framePlan`；`framePlan.start.source`、`framePlan.end.required`、`framePlan.referenceManifest`、每个帧段的 `imagePrompt` 及其时间/动作/静态状态必须可校验。
 - 跨镜头连续性是硬门禁：硬切允许从独立视频片段开始，但携带角色、道具、环境或轴线时，下一镜不得重置人物位置。`entryState` 必须继承上一镜 `exitState`；若位置、姿态、持有关系或轴线改变，必须在上一镜出口/edge notes/下一镜首帧写出触发、移动路径或受力和到达结果，且首个 framePlan 必须重复空间锚点。服务端不得静默用上一镜状态覆盖错误输入来伪造通过。
 - 跨镜头连续性是硬门禁：硬切允许从独立视频片段开始，但携带角色、道具、环境或轴线时，下一镜不得重置人物位置。`entryState` 必须继承上一镜 `exitState`；若位置、姿态、持有关系或轴线改变，必须在上一镜出口/edge notes/下一镜首帧写出触发、移动路径或受力和到达结果，且首个 framePlan 必须重复空间锚点。服务端不得静默用上一镜状态覆盖错误输入来伪造通过。
-- Agent authoring draft 在规范化前必须逐镜提交完整原始字段：不得依赖服务端默认值补齐 `performancePlan`、`lightingPlan`、`continuity`、`entryState`、`exitState`、`imagePrompt`、`videoPrompt` 或帧段正文。`performancePlan` 的六个标量和 start/middle/end 四项表演、`lightingPlan` 的十个字段、`continuity` 的十个字段以及 `dramaticFunction`、`cameraMotion`、`lens` 均为严格生成字段；缺失、空值或占位语必须在 Agent 草案阶段阻断。
+- 项目内 `project-gpt` 的结构化 authoring draft 在规范化前必须逐镜提交完整原始字段：不得依赖服务端默认值补齐 `performancePlan`、`lightingPlan`、`continuity`、`entryState`、`exitState`、`imagePrompt`、`videoPrompt` 或帧段正文。独立 Codex 不提交该 draft，而是直接提交完整 Markdown 与唯一 JSON；同样的字段必须在 Codex 输出前完成自检。
 - 每个 Agent 帧段必须直接提供 `actionPrompt`、`transitionPrompt`、`endPrompt`、`imagePrompt`；除第一帧外 `startPrompt` 必须原样承接上一帧 `endPrompt`。第一帧不要求虚构 `startPrompt`，但视频 Prompt 必须由 Agent 直接生成，不能靠服务端从其它字段拼接。公开视频 Prompt 必须使用小墨个人分镜 Skill 6.3（`storyboard-director@6.3.0`）的制作包适配版简洁镜头卡；每个真实 framePlan 时间段对应一张镜头卡，内部字段仍在 `framePlan` 中严格校验。
 - 每个真实帧段必须完成“谁做什么 → 因为什么触发 → 身体微动作/手部或道具受力 → 可见结果 → 声音锚点”的闭环；`dramaticFunction` 还必须写出当前角色欲望/目标与阻力/压力。声音锚点可以是台词、人声、呼吸、动作拟音、环境音、余响或明确静默，但不得留空。对白结束后的时间只能承载新的剧情职责或有目的的结果停留，不能生成无职责静态反应。
 - 每个真实帧段必须完成“谁做什么 → 因为什么触发 → 身体微动作/手部或道具受力 → 可见结果 → 声音锚点”的闭环；`dramaticFunction` 还必须写出当前角色欲望/目标与阻力/压力。声音锚点可以是台词、人声、呼吸、动作拟音、环境音、余响或明确静默，但不得留空。对白结束后的时间只能承载新的剧情职责或有目的的结果停留，不能生成无职责静态反应。
@@ -150,7 +163,7 @@ contract:
 - 内部硬切必须通过主体覆盖门禁：每个切点都要写新的信息主体或动作细节；如果当前剧情包含需要独立呈现的其他角色、NPC反应，必须至少有对应反应镜头；如果包含手部、道具接触或受力事实，必须至少有一个手部/道具细节硬切。7—10 次硬切不等于同一角色的多个角度。
 - `framePlan.referenceManifest` 是提示词 alias、执行快照和供应商参考列表的唯一顺序事实源；公开提示词必须逐项写出 alias 与角色/场景/道具职责，禁止用“@图片1至@图片N”替代映射。角色锚点必须包含身份、年龄感、脸型/发型、服装和固定配饰；场景锚点不得承担角色职责，道具锚点不得承担角色职责。
 - `videoPrompt` 和 `framePlan` 都由 Agent 直接生成；应用层不得从模板、旧包、历史提示词、动作字段或帧计划重建、补写、删改公开视频正文。未经声明的内部切镜、未绑定道具或未声明角色不得出现。
-- Agent authoring draft 的硬门禁代码来自版本化契约；至少包括文学剧本完整性、对白覆盖率、对白表演质量、视频提示词排版、剧情事实覆盖率、动作密度/差异、情绪递进、NPC 反应变化、运镜动机、镜头事件、时间轴、素材绑定、连续性、画幅构图、主体覆盖、硬切信息差异、参考 alias 一致性、角色服装连续性和 provenance。任一 blocker 都必须先进入 authoring revision，不得把失败草案标记完成或写入正式制作包。
+- 模板自检硬门禁至少包括文学剧本完整性、对白覆盖率、对白表演质量、视频提示词排版与语义、剧情事实覆盖率、动作密度/差异、情绪递进、NPC 反应变化、运镜动机、镜头事件、时间轴、素材绑定、连续性、画幅构图、主体覆盖、硬切信息差异、参考 alias 一致性和角色服装连续性。任一 blocker 都必须先在 Codex 当前上下文内修订，不得把失败草案标记完成。
 
 ## 固定章节顺序
 
@@ -182,7 +195,7 @@ contract:
 
 - 项目、资产、场次、镜头、声音与连续性进入可执行生产数据。
 - 每个镜头的完整公开 `videoPrompt` 必须由 Agent 直接生成：使用小墨式镜头卡写出每个真实时间段的时间范围、景别、焦段、机位角度、主运镜、场景、可见画面、光影、色调、对白和声音。`framePlan.frames` 保存严格的内部结构化事实，运行时和第十一章不得从它拼接、补写或改写 `videoPrompt`；`起点 / 动作与触发 / 可见衔接 / 终点`只属于内部帧计划质量契约，不是公开正文固定排版。
-- Agent authoring draft 进入最终序列化前必须通过严格质量门禁：相邻时间段有真实动作差异，起始/中段/结束形成情绪递进，required NPC 反应随主事件发生变化，主运镜有具体可见动机，内部切镜与 framePlan 边界一致；公开 videoPrompt 必须使用小墨个人分镜 Skill 6.3（`storyboard-director@6.3.0`）制作包适配版的简洁导演镜头卡，每个真实 framePlan 时间段对应一个 `### 镜头` 卡片，标题含时间范围、景别、焦段、机位角度、运镜方式和主体类型，正文含场景、画面内容、光影、色调、台词、人声和音效。公开视频不再强制八段标题或逐段复制 `起点/动作与触发/可见衔接/终点`；这些字段只在内部 framePlan 中校验。`画面内容`只能写可见口型、呼吸、视线、表情、身体和道具结果，禁止复制完整对白、引号台词或“某人说：”指令；完整原句只能放在 `台词` 字段。有对白的镜头卡必须使用 `说话人说：“实际台词”`，相邻段不得复制同一完整台词或同一表演块；对白结束段必须写具体静默或反应结果。用户本轮上传的自定义制作包模板若明确声明30秒高密度硬切，必须在本轮生成前提升为 `internalCutPolicy=dense-30s`，不得被旧的 `adaptive` 方案覆盖；系统模板中的条件说明不自动提升为高密度。门禁用于生成阶段的内部返工，不得让用户先收到半成品再在导入时失败；手工或历史包导入仍按兼容门禁处理，但不得伪装成 Agent 正式生成结果。
+- 独立 Codex 必须在最终输出前完成同一套模板/Skill 自检：相邻时间段有真实动作差异，起始/中段/结束形成情绪递进，required NPC 反应随主事件发生变化，主运镜有具体可见动机，内部切镜与 framePlan 边界一致；公开 videoPrompt 必须使用小墨个人分镜 Skill 6.3（`storyboard-director@6.3.0`）制作包适配版的简洁导演镜头卡，每个真实 framePlan 时间段对应一个 `### 镜头` 卡片，标题含时间范围、景别、焦段、机位角度、运镜方式和主体类型，正文含场景、画面内容、光影、色调、台词、人声和音效。公开视频不再强制八段标题或逐段复制 `起点/动作与触发/可见衔接/终点`；这些字段只在内部 framePlan 中校验。`画面内容`只能写可见口型、呼吸、视线、表情、身体和道具结果，禁止复制完整对白、引号台词或“某人说：”指令；完整原句只能放在 `台词` 字段。有对白的镜头卡必须使用 `说话人说：“实际台词”`，相邻段不得复制同一完整台词或同一表演块；对白结束段必须写具体静默或反应结果。用户本轮上传的自定义制作包模板若明确声明30秒高密度硬切，必须在本轮生成前提升为 `internalCutPolicy=dense-30s`，不得被旧的 `adaptive` 方案覆盖；系统模板中的条件说明不自动提升为高密度。自检失败只在当前 Codex 上下文内修复失败镜头；未失败镜头、剧情事实、资产身份、逻辑片段数量和总时长冻结。服务端导入不重复执行这套语义自检，也不生成镜头级工单；它只拒绝结构损坏或明确标记为 blocked 的包。
 - 公开视频 Prompt 采用小墨 6.3 式简洁导演镜头卡：每个真实 `framePlan.frames[]` 对应一张 `### 镜头 N | 时间范围 | 景别 | 焦段 | 机位角度 | 运镜方式 | 人物镜头/非人物镜头` 卡片；卡片填写场景、画面内容、光影、色调、台词、人声和音效。公开视频不再强制八段标题，也不要求逐段输出起点、动作与触发、可见衔接、终点等内部字段；这些事实只在 `framePlan` 和质量门禁中校验。全局设定、素材职责、参考 alias 和供应商顺序由结构化字段管理，不在每张卡片机械复制。
 - 每张镜头卡必须声明一个有动机的主运镜；连续镜头只保留一条连续摄影路径，内部切镜则由 `framePlan` 的真实时间边界和镜头事件校验。切点必须带来新的关系、表演、道具、空间或结果信息，不能只更换焦段或同一角色角度；没有用户/项目明确配置时，不固定镜头数量或硬切配额。`propCodes` 与正文道具事实必须一致，没有绑定的道具不能写入画面内容、动作、结果或声音。
 - 镜头级 `imagePrompt`、`startFramePrompt` 和 `endFramePrompt` 只描述单一静态画面，包含主体身份、当前可见姿态/表情/视线、道具或环境状态、景别、构图、光线与必要约束；不得写运镜、焦段、时间段、动作过程、对白或声音。生成前必须先由场景资产推演可用座位、长凳、地面、通道、门窗、隔断与遮挡；人物的姿态必须有合理支撑，人与物接触、动作路径及多人关系必须符合该空间，不能为突出人物把其摆在不合场景常理的位置，也不得新增原文或资产未声明的人物。图片编辑请求统一使用 `change / preserve / constraints`，其中 `change` 每次只允许一个已定位变量。

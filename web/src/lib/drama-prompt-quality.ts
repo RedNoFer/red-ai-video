@@ -32,6 +32,10 @@ const VIDEO_CARD_LENS_TERMS = /\d+(?:\.\d+)?\s*mm|广角|标准焦段|长焦|变
 const DIRECT_DIALOGUE_IN_VISUAL_PATTERN = /(?:对白表演|(?:画外|内心声)?[^；：\n]{0,20}(?:说|道|问|喊|答|继续说|声音落下)\s*[：:]\s*[“"][^”\n]+[”"]|[“"][^”"\n]{2,}[”"])/u;
 const CAUSAL_TRIGGER_PATTERN = /因|因为|由于|听见|看见|发现|面对|遭到|受到|被|在[^。；\n]{0,20}后|话音|声音|风声|对白|说完|回应|接住|触到|压住|握住|拦住|撞上|落下|逼近|传来|为了|当[^。；\n]{0,20}时|承接/u;
 const SOUND_ANCHOR_PATTERN = /音效|人声|呼吸|吸气|吐气|喘息|衣料|脚步|碰撞|摩擦|风声|水声|门响|木石|混响|静默|沉默|屏息|余响|底噪|无声/u;
+const PUBLIC_VIDEO_ABSTRACTION_PATTERN =
+    /准备(?:回应|进入|开口|下一条件)|保持(?:状态|疑问|关系|站位|压力|当前状态)|社会后果|关系(?:结果|冻结|停在|落地)|为下一镜(?:提供|承接)|提供空间承接|一次建立|情绪加剧|自然反应|成为主体|画面关系被固定|停在新的压力面|准备进入具体条件/u;
+const PUBLIC_VIDEO_VISIBLE_ACTION_PATTERN = /抬|低|看|望|移|转|起身|前倾|后退|按|压|握|松|收|推|拉|停|吸气|呼吸|屏息|皱|眯|睁|闭|抬手|放下|落下|走|跪|拍|碰|拿|递|撕|捏|拔|挥|闪|震|响|开门|关门|离开|进入|凝视|回看|咬|张口|闭唇|绷紧|松开/u;
+const PUBLIC_VIDEO_VISIBLE_RESULT_PATTERN = /停在|落在|变为|变得|露出|显出|抬起|垂下|松开|收紧|移向|转向|对准|接住|落下|留下|响起|静止|形成|暴露|显现|被看见|沉默|低头|抬眼|受力|改变|回到|锁住|停住/u;
 /** @deprecated Legacy export retained for compatibility only; it is not a production gate. */
 export const DRAMA_VIDEO_PROMPT_TEMPLATE_SECTIONS = ["重要剪辑指令", "素材绑定", "故事意图", "空间与连续性", "灯光与画面", "摄影总则", "逐镜头时间线", "硬性禁止"] as const;
 
@@ -178,6 +182,44 @@ export function validateDramaVideoPromptCardLayout(value: unknown, frames: Reado
             errors.push(`${label}${cardLabel}的时间范围未对应 framePlan 的 ${expectedFrames[index].startSecond}-${expectedFrames[index].endSecond}s`);
     }
     return errors.map((error) => (error.startsWith(label) ? error : `${label}${error}`));
+}
+
+/**
+ * Checks the public Xiaomo cards themselves. Internal framePlan fields can be
+ * perfectly detailed while the user-facing videoPrompt remains a sequence of
+ * generic camera labels and emotional placeholders, so this gate deliberately
+ * does not inspect framePlan prose.
+ */
+export function validateDramaVideoPromptSemanticQuality(value: unknown, frames: ReadonlyArray<DramaCameraPlanFrame>, label: string) {
+    const cards = extractDramaVideoPromptCards(value);
+    if (!cards.length) return [`${label}缺少可执行的公开视频镜头卡`];
+    const errors: string[] = [];
+    const signatures: string[] = [];
+    for (const [index, card] of cards.entries()) {
+        const cardLabel = `${label}第 ${index + 1} 个公开镜头卡`;
+        const visual = card.visual.trim();
+        const sound = `${card.voice}\n${card.sound}`.trim();
+        if (!visual || !PUBLIC_VIDEO_VISIBLE_ACTION_PATTERN.test(visual)) errors.push(`${cardLabel}的画面内容缺少正在发生的可见动作`);
+        if (!visual || !PUBLIC_VIDEO_VISIBLE_RESULT_PATTERN.test(visual)) errors.push(`${cardLabel}的画面内容缺少动作产生的可见结果`);
+        if (PUBLIC_VIDEO_ABSTRACTION_PATTERN.test(visual)) errors.push(`${cardLabel}的画面内容含不可拍摄的抽象/未来意图：${visual}`);
+        if (!CAUSAL_TRIGGER_PATTERN.test(`${visual}\n${card.voice}\n${card.sound}`)) errors.push(`${cardLabel}缺少动作触发或承接原因`);
+        if (!sound || /^(?:无|无声|没有)$/u.test(sound.replace(/[\s；;、,，]+/gu, ""))) errors.push(`${cardLabel}缺少声音锚点；静默必须明确写出屏息、底噪、余响或沉默`);
+        if (!card.cameraMotion || !hasConcreteDramaCameraDirection(card.cameraMotion)) errors.push(`${cardLabel}缺少可执行的主运镜`);
+        if (frames[index] && !dramaTimeRangePattern(frames[index].startSecond, frames[index].endSecond).test(card.timeRange)) errors.push(`${cardLabel}的时间范围未与 framePlan 对齐`);
+        signatures.push(publicVideoCardSignature(card));
+    }
+    if (signatures.length > 1 && new Set(signatures).size < Math.min(2, signatures.length)) errors.push(`${label}公开镜头卡的主体、动作和结果没有形成可辨识差异`);
+    return errors;
+}
+
+function publicVideoCardSignature(card: DramaVideoPromptCard) {
+    // Camera changes are not information by themselves. A sequence that only
+    // swaps focal length or pans around the same unchanged action must fail the
+    // public-card diversity gate.
+    return `${card.visual}\n${card.dialogue}`
+        .replace(/[\s\u3000，。；：、,.!?！？]+/gu, "")
+        .replace(/(?:极慢|缓慢|微|轻微|短暂|保持|清晰|自然|真实|电影级)/gu, "")
+        .slice(0, 180);
 }
 
 /**

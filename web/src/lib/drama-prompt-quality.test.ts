@@ -11,6 +11,7 @@ import {
     validateDramaVideoAuthoringQuality,
     validateDramaVideoPromptCardLayout,
     validateDramaVideoPromptDialogueTiming,
+    validateDramaVideoPromptSemanticQuality,
     validateDramaVideoPromptTemplateLayout,
     validateDramaVideoSegmentDetail,
 } from "./drama-prompt-quality";
@@ -123,6 +124,59 @@ describe("drama prompt quality", () => {
                 "SH01",
             ),
         ).toEqual([]);
+    });
+
+    it("blocks Xiaomo cards that are structurally complete but only describe abstract intent", () => {
+        const prompt = [
+            "### 镜头 01 | 0-2秒 | 中景 | 50mm | 入口侧45度平视 | 极慢横移 | 人物镜头",
+            "场景：萧家议事大厅。",
+            "画面内容：三人的关系停在新的压力面，纳兰准备回应，画面为下一镜提供空间承接。",
+            "光影：高窗冷青白光。",
+            "色调：冷青白、黛青。",
+            "台词：无",
+            "人声：三人自然反应。",
+            "音效：大厅余响。",
+        ].join("\n");
+        expect(validateDramaVideoPromptSemanticQuality(prompt, [{ startSecond: 0, endSecond: 2 }], "SH02")).toEqual(expect.arrayContaining([expect.stringContaining("抽象/未来意图")]));
+    });
+
+    it("accepts a public card with a visible trigger, action, result, and sound anchor", () => {
+        const prompt = [
+            "### 镜头 01 | 0-2秒 | 中近景 | 50mm | 入口侧45度平视 | 沿萧炎视线缓慢推近 | 人物镜头",
+            "场景：萧家议事大厅长案前。",
+            "画面内容：听见纳兰的条件后，萧炎抬眼锁住她，右手压住腰侧衣料，指节发白，纳兰的肩线停在左缘。",
+            "光影：高窗冷青白光落在眼睛、下颌和指节。",
+            "色调：冷青白、低饱和黛青。",
+            "台词：萧炎说：“什么约定？”",
+            "人声：萧炎短促吸气后开口，句尾收住。",
+            "音效：衣料绷紧，长案产生短混响。",
+        ].join("\n");
+        expect(validateDramaVideoPromptSemanticQuality(prompt, [{ startSecond: 0, endSecond: 2 }], "SH02")).toEqual([]);
+    });
+
+    it("does not treat focal-length-only changes as public information diversity", () => {
+        const card = (lens: string, motion: string) =>
+            [
+                `### 镜头 01 | 0-2秒 | 中近景 | ${lens} | 入口侧45度平视 | ${motion} | 人物镜头`,
+                "场景：萧家议事大厅长案前。",
+                "画面内容：听见对方的条件后，萧炎抬眼锁住纳兰，右手压住腰侧衣料，指节发白，纳兰肩线停在左缘。",
+                "光影：高窗冷青白光落在眼睛、下颌和指节。",
+                "色调：冷青白、低饱和黛青。",
+                "台词：无",
+                "人声：萧炎短促吸气。",
+                "音效：衣料绷紧，长案产生短混响。",
+            ].join("\n");
+        const prompt = `${card("50mm", "缓慢推近")}\n${card("85mm", "固定机位").replace("镜头 01 | 0-2秒", "镜头 02 | 2-4秒")}`;
+        expect(
+            validateDramaVideoPromptSemanticQuality(
+                prompt,
+                [
+                    { startSecond: 0, endSecond: 2 },
+                    { startSecond: 2, endSecond: 4 },
+                ],
+                "SH02",
+            ),
+        ).toEqual(expect.arrayContaining([expect.stringContaining("可辨识差异")]));
     });
 
     it("keeps complete dialogue in the dialogue field instead of duplicating it in visual action", () => {

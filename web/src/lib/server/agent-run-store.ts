@@ -114,12 +114,20 @@ export type AgentRunPlannerContextSummary = {
 };
 export type AgentRunTimings = {
     requestAcceptedAt: number;
+    dramaAuthoringStartedAt?: number;
+    dramaAuthoringModelCompletedAt?: number;
+    dramaAuthoringInputChars?: number;
+    dramaAuthoringOutputChars?: number;
+    dramaAuthoringRepairCount?: number;
+    dramaAuthoringFullPackageRepairCount?: number;
     planningStartedAt?: number;
     planningCompletedAt?: number;
     firstTaskSubmittedAt?: number;
     firstResultReadyAt?: number;
     allResultsReadyAt?: number;
     reviewCompletedAt?: number;
+    dramaAuthoringQualityGateCompletedAt?: number;
+    dramaAuthoringCompletedAt?: number;
     runCompletedAt?: number;
 };
 const TTL = 365 * 24 * 60 * 60 * 1000;
