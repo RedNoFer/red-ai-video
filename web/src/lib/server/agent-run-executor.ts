@@ -456,6 +456,7 @@ framePlan.frames 只能保留现有字段；静态正文和视频正文必须由
     const persistDraft = async (draft: DramaAuthoringDraft, provider: DramaAuthoringProvider) => {
         if (draft.mode !== "package") throw new Error("当前 authoring 入口只接受完整 package；局部 shot-repair 由修订工作单处理");
         const authoringPreflightWarnings: string[] = [];
+        const preflightStartedAt = Date.now();
         let preview = previewDramaProductionPackageObject(draft.package, project, {
             validateVideoPrompt: true,
             requireCameraPlan: true,
@@ -497,13 +498,23 @@ framePlan.frames 只能保留现有字段；静态正文和视频正文必须由
                 importWarnings: authoringPreflightWarnings,
             });
         }
+        const preflightCompletedAt = Date.now();
         const uniquePreflightWarnings = [...new Set(authoringPreflightWarnings)];
         if (uniquePreflightWarnings.length) throw new DramaProductionPackageError(`制作包 authoring 预检未通过：${uniquePreflightWarnings.slice(0, 24).join("；")}`);
+        const preflightTargetDuration = preview.summary?.duration || preview.package.episodes.reduce((total, episode) => total + episode.shots.reduce((sum, shot) => sum + shot.duration, 0), 0);
+        const preflightProductionLock = buildDramaProductionLock(preview.package, preflightTargetDuration, authoringSources, options.repairCount || 0, options.fullPackageRepairCount || 0);
+        preview = { ...preview, package: { ...preview.package, project: { ...preview.package.project, productionLock: preflightProductionLock } } };
         const qualityStartedAt = Date.now();
         const report = validateDramaAuthoringQuality({ package: preview.package, sources: authoringSources, targetNarrativeChapter, authoringAudit: draft.authoringAudit });
         await updateAgentRunById(
             run.id,
-            { timings: { ...(run.timings || { requestAcceptedAt: run.createdAt }), dramaAuthoringQualityGateCompletedAt: Date.now() } },
+            {
+                timings: {
+                    ...(run.timings || { requestAcceptedAt: run.createdAt }),
+                    dramaAuthoringPreflightMs: preflightCompletedAt - preflightStartedAt,
+                    dramaAuthoringQualityGateCompletedAt: Date.now(),
+                },
+            },
             { type: "drama.authoring.quality-gate", data: { status: report.status, blockerCount: report.checks.filter((check) => check.severity === "blocker").length, elapsedMs: Date.now() - qualityStartedAt } },
             ["running"],
             run.executionId,
@@ -532,8 +543,12 @@ framePlan.frames 只能保留现有字段；静态正文和视频正文必须由
         const targetDuration = preview.summary?.duration || preview.package.episodes.reduce((total, episode) => total + episode.shots.reduce((sum, shot) => sum + shot.duration, 0), 0);
         const productionLock = buildDramaProductionLock(preview.package, targetDuration, authoringSources, options.repairCount || 0, options.fullPackageRepairCount || 0);
         const authoredPackage = attachDramaProductionPackageAuthoring({ ...preview.package, project: { ...preview.package.project, productionLock } }, { ...provenance, qualityGateReport: report });
+        const serializationStartedAt = Date.now();
         const canonicalMarkdown = serializeDramaProductionPackageMarkdown(authoredPackage);
+        const serializationCompletedAt = Date.now();
+        const canonicalPreviewStartedAt = Date.now();
         const canonicalPreview = previewDramaProductionPackage(canonicalMarkdown, "剧本 Agent 制作包.md", project, { strictContinuity: true, allowImportWarnings: false });
+        const canonicalPreviewCompletedAt = Date.now();
         if (canonicalPreview.package.episodes.flatMap((episode) => episode.shots).some((shot, index) => shot.videoPrompt !== authoredPackage.episodes.flatMap((episode) => episode.shots)[index]?.videoPrompt))
             throw new Error("最终 Markdown 投影改变了 canonical videoPrompt");
         const packagePlan = canonicalPreview.package.project.productionBible?.productionPlan;
@@ -559,6 +574,10 @@ framePlan.frames 只能保留现有字段；静态正文和视频正文必须由
                     dramaAuthoringModelCompletedAt: run.timings?.dramaAuthoringModelCompletedAt || Date.now(),
                     dramaAuthoringInputChars: JSON.stringify(input).length,
                     dramaAuthoringOutputChars: JSON.stringify(draft).length,
+                    dramaAuthoringPreflightMs: preflightCompletedAt - preflightStartedAt,
+                    dramaAuthoringQualityGateMs: Date.now() - qualityStartedAt,
+                    dramaAuthoringSerializationMs: serializationCompletedAt - serializationStartedAt,
+                    dramaAuthoringCanonicalPreviewMs: canonicalPreviewCompletedAt - canonicalPreviewStartedAt,
                     dramaAuthoringRepairCount: authoredPackage.authoring?.repairCount || 0,
                     dramaAuthoringFullPackageRepairCount: authoredPackage.authoring?.fullPackageRepairCount || 0,
                     dramaAuthoringCompletedAt: Date.now(),
@@ -693,6 +712,23 @@ function buildDramaProductionLock(packageValue: DramaAuthoringPackageDraft["pack
     return {
         shotDuration: video?.shotDuration === 30 ? 30 : 15,
         targetDuration,
+        logicalShotCount: packageValue.episodes.reduce((total, episode) => total + episode.shots.length, 0),
+        dialogueCapacityPlan: packageValue.episodes.flatMap((episode) =>
+            episode.shots.flatMap((shot) =>
+                shot.utterances.map((utterance) => ({
+                    dialogueId: utterance.id,
+                    speaker: utterance.speaker,
+                    characterCount: [...utterance.text].length,
+                    speechRateCharsPerSecond: utterance.speechRateCharsPerSecond || 5,
+                    requiredSpeechSeconds: [...utterance.text].length / (utterance.speechRateCharsPerSecond || 5),
+                    availableSpeechSeconds: Math.max(0, (utterance.endSecond || 0) - (utterance.startSecond || 0)),
+                    episodeCode: episode.code,
+                    shotCode: shot.code,
+                })),
+            ),
+        ),
+        narrativeBeatPlan: packageValue.episodes.flatMap((episode) => episode.shots.map((shot) => ({ id: shot.code, responsibility: shot.dramaticFunction || shot.title, shotCodes: [shot.code] }))),
+        selfCheckRuleVersion: "drama-production-package-v1-standalone-preflight-1",
         internalCutPolicy: video?.internalCutPolicy === "dense-30s" ? "dense-30s" : "adaptive",
         framePolicy: video?.framePolicy === "fixed-4" || video?.framePolicy === "fixed-5" ? video.framePolicy : "agent",
         storySourceHash: hashDramaAuthoringSourceGroup(sources, "story-source"),

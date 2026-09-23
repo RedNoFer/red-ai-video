@@ -35,8 +35,23 @@
     "summary": "替换为本集摘要",
     "style": "替换为当前视觉风格",
     "ratio": "16:9",
-    "productionLock": "按本轮用户参数和模板自检规则填写的当前生产锁定对象",
-    "productionBible": "替换为完整生产方案对象"
+    "productionLock": {
+      "shotDuration": 30,
+      "logicalShotCount": 1,
+      "targetDuration": 30,
+      "dialogueCapacityPlan": [],
+      "narrativeBeatPlan": [{ "id": "BEAT01", "responsibility": "替换为独立剧情职责", "shotCodes": ["SH01"] }],
+      "internalCutPolicy": "dense-30s",
+      "framePolicy": "agent",
+      "selfCheckRuleVersion": "drama-production-package-v1-standalone-preflight-1"
+    },
+    "productionBible": {
+      "language": "中文",
+      "ratio": "16:9",
+      "visualStyle": "替换为当前视觉风格",
+      "continuityMode": "strict",
+      "productionPlan": "替换为完整 productionPlan 对象"
+    }
   },
   "assets": {
     "characters": [],
@@ -60,6 +75,37 @@
 ```
 
 独立 Codex authoring 时，不得把上述示意对象原样返回；必须替换为当前 TXT/剧本真实生成的完整 JSON 和 13 章正文。服务端导入时只解析该 JSON，不得从 JSON 重新投影、补写或改写正文。
+
+### 正式字段锁定与逻辑片段轴
+
+独立 Codex 输出的 JSON 必须使用当前导入契约字段，不能使用历史或服务端内部别名：
+
+```text
+episodes[].code                  ✅
+episodes[].shots[].code          ✅
+episodes[].shots[].duration      ✅
+episodes[].shots[].timecode      ✅
+episodes[].shots[].framePlan     ✅ 当前逻辑片段内部帧段
+```
+
+以下字段命中即为 blocker，禁止“先识别再转换”：`episodes[].episodeId`、`episodes[].shots[].shotId`、`episodes[].shots[].shotDuration`、`projectionVersion`、`qualityGateRulesHash`、`repairPolicyHash`、`runId`、`workOrderId`。注意：`project.productionLock.shotDuration` 是逻辑片段时长锁定字段，属于必填字段；只有把 `shotDuration` 错放在单个 `shot` 对象上才是非契约字段。镜头缺少 `code` 时不得依靠数组序号补码，必须在当前 Codex 对话修复后再输出。
+
+在写任何 `framePlan` 或公开视频卡之前，必须冻结唯一的 `productionLock`：`logicalShotCount`、`shotDuration`、`targetDuration`、`dialogueCapacityPlan`、`narrativeBeatPlan`、`internalCutPolicy`、`framePolicy` 和 `selfCheckRuleVersion`。满足以下关系才可继续：
+
+```text
+逻辑片段总数 = episodes[].shots 的实际数量 = logicalShotCount
+每个 duration = shotDuration
+每个 timecode 的跨度 = duration，且同一集连续无空洞
+targetDuration = logicalShotCount × shotDuration
+```
+
+`framePlan.frames`、内部硬切和公开视频卡只是当前逻辑片段内部的剪辑密度轴。8—11 个帧段、7—10 次硬切、自然分句或换景别都不能新增逻辑片段；若相邻片段没有独立剧情职责、关系变化、动作结果或场景信息，必须合并并回到对白容量预检重算。
+
+### 输出前不可跳过的结构自检
+
+正式输出前必须逐项检查并在第十三章给出证据：根对象可解析且只有一个 `drama-production-package` JSON 代码块；13 个一级章节齐全且顺序正确；每个 episode/shot 使用 `code`；`duration` 与 `timecode` 一致；`productionPlan` 完整；`authoring.materials` 是数组；每个逻辑片段的帧段从 0 连续覆盖到自身时长；公开视频卡与帧段一一对应；JSON 中的 `videoPrompt` 与第十一章原文一致；全部门禁代码都有状态、镜头/帧证据和修订范围。
+
+若发现字段错误、逻辑片段总数错误、对白容量不足、帧时间不连续、公开视频卡缺失或 QC 证据缺失，必须在当前 Codex 对话内修复后重新自检。不得把错误包交给用户，也不得把错误交给导入器“过滤后继续”。
 
 正式独立包的根级 `authoring` 必须记录：`source=codex-standalone`、`authoringMode=codex-standalone`、`canonicalSource=markdown-with-embedded-json`、`qualityGateStatus=passed`、实际 `repairCount`、`fullPackageRepairCount`、`generatedAt` 和 `materials`；模板/TXT/参考素材的 hash 能取得时记录，不能取得时记录来源名称和版本，不得伪造 hash。不得写入 `executeDramaScriptRun`、`workOrderId`、`projectionVersion`、`qualityGateRulesHash`、`repairPolicyHash` 或服务端运行凭据。
 

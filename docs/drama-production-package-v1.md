@@ -27,7 +27,7 @@ contract:
     mode: package-markdown
     fields: [reply, markdown]
   productionLock:
-    fields: [shotDuration, targetDuration, internalCutPolicy, framePolicy, storySourceHash, templateHash, contractHash, specHash, directorSkillHash, seedanceSkillHash, selfCheckRuleVersion]
+    fields: [shotDuration, logicalShotCount, targetDuration, dialogueCapacityPlan, narrativeBeatPlan, internalCutPolicy, framePolicy, selfCheckRuleVersion, storySourceHash, templateHash, contractHash, specHash, directorSkillHash, seedanceSkillHash]
   finalAuthoringMetadata:
     fields: [authoringMode, canonicalSource, qualityGateStatus, repairCount, fullPackageRepairCount, selfCheckRuleVersion]
   shotRepair:
@@ -70,6 +70,10 @@ contract:
     - CHARACTER_WARDROBE_CONTINUITY
     - JSON_MARKDOWN_CONSISTENCY
     - PROVENANCE
+    - PACKAGE_SCHEMA
+    - PRODUCTION_PLAN_COMPLETENESS
+    - LOGICAL_SHOT_COUNT
+    - LOGICAL_SHOT_ECONOMY
 ```
 
 ## 独立 Codex authoring 协议
@@ -80,6 +84,14 @@ contract:
 - 普通质量失败只允许修复失败镜头的 `videoPrompt`、`framePlan`、表演、对白时间和连续性；未失败镜头、剧情、资产、逻辑片段数量、时长和总时长冻结。
 - 只有协议损坏或多镜头事实冲突才允许一次完整 package 修订；第二次仍失败时停止，不自动重建或换渠道。
 - 项目导入只接收已完成 Markdown，服务端可检查 JSON、章节、字段、时间轴、资产和权限，但不得调用 `executeDramaScriptRun`、完整语义门禁或 Markdown 投影器。
+
+### Canonical 字段与逻辑片段经济性
+
+正式 JSON 只允许使用当前导入字段：`episodes[].code`、`episodes[].shots[].code`、`episodes[].shots[].duration` 和 `episodes[].shots[].timecode`。`episodes[].episodeId`、`episodes[].shots[].shotId`、`episodes[].shots[].shotDuration` 以及 `projectionVersion`、`qualityGateRulesHash`、`repairPolicyHash`、`runId`、`workOrderId` 等服务端运行字段属于 blocker；`project.productionLock.shotDuration` 是逻辑片段时长锁定字段，仍然必填。导入器不得把别名转换为正式字段，也不得过滤后继续导入。
+
+在生成 `framePlan` 前，Codex 必须冻结 `productionLock.logicalShotCount`、`shotDuration`、`targetDuration`、`dialogueCapacityPlan`、`narrativeBeatPlan`、`internalCutPolicy`、`framePolicy` 和 `selfCheckRuleVersion`。实际关系必须满足：`episodes[].shots` 总数等于 `logicalShotCount`，每个 `duration` 等于 `shotDuration`，同一集 `timecode` 连续，`targetDuration=logicalShotCount×shotDuration`。`framePlan.frames`、内部硬切、自然分句、换焦段和换机位只能改变当前逻辑片段内部剪辑密度，不能增加逻辑片段。
+
+每个逻辑片段必须有独立剧情职责、关系变化、动作结果或空间信息。只有“同一对白前半/后半”、只改变摄影参数或为了凑 `dense-30s` 切数的相邻片段必须合并；这类包命中 `LOGICAL_SHOT_ECONOMY`，必须回到对白容量预检重算，而不是把错误的总时长交给导入器。
 
 ## 外部独立生成门禁
 
@@ -163,6 +175,10 @@ contract:
 | `CHARACTER_WARDROBE_CONTINUITY` | blocker | 出镜角色持续锁定身份、年龄感、脸型/发型、服装结构、颜色和固定配饰；角色图与场景图职责不能互换。 |
 | `JSON_MARKDOWN_CONSISTENCY` | blocker | 第十一章公开 `videoPrompt`、规范对象中的同一字段和第十三章 QC 结论必须来自同一轮 authoring，原文一致，不得一处为空或另行改写。 |
 | `PROVENANCE` | blocker | 记录模板、TXT/剧情源、参考素材、契约、导演 Skill、Seedance Skill 的版本/内容哈希和生成时间；外部独立生成可标注 `codex-standalone`，项目内导入再记录实际导入来源。 |
+| `PACKAGE_SCHEMA` | blocker | JSON 只能使用当前契约字段；`episodes[].code`、`shots[].code`、`duration`、`timecode`、完整 `productionPlan` 和数组型 `authoring.materials` 必须存在；出现 `episodeId`、`shotId`、`shotDuration` 或服务端运行字段立即阻断，不得静默别名转换。 |
+| `PRODUCTION_PLAN_COMPLETENESS` | blocker | `project.productionBible.productionPlan` 必须是完整对象，包含视频时长、内部切镜策略、帧策略、技能、视觉、参考、连续性和来源；不能让运行时默认值掩盖缺失生产方案。 |
+| `LOGICAL_SHOT_COUNT` | blocker | 先冻结 `logicalShotCount`、`shotDuration`、`targetDuration`、对白容量计划和剧情节拍计划；实际逻辑片段数与锁定值一致，`targetDuration=logicalShotCount×shotDuration`，内部帧段/硬切不得改变三者。 |
+| `LOGICAL_SHOT_ECONOMY` | blocker | 每个逻辑片段必须有独立剧情职责、关系变化、动作结果或场景信息；只把同一对白切成前半/后半、只换景别或为了凑 7—10 次硬切而新增的片段必须合并并阻断。 |
 
 ### 视频提示词与静态帧的硬分工
 

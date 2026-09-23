@@ -124,12 +124,107 @@ export function validateDramaAuthoringQuality(input: DramaAuthoringQualityInput)
     checkCutInformationDiversity(checks, input.package);
     checkReferenceAliasConsistency(checks, input.package);
     checkCharacterWardrobeContinuity(checks, input.package);
+    checkPackageSchema(checks, input.package);
+    checkProductionPlanCompleteness(checks, input.package);
+    checkLogicalShotCount(checks, input.package);
+    checkLogicalShotEconomy(checks, input.package);
     checkSimpleStructuralChecks(checks, input.package);
 
     return {
         status: checks.some((check) => check.severity === "blocker") ? "blocked" : "passed",
         checks,
     };
+}
+
+function checkPackageSchema(checks: DramaQualityGateCheck[], value: DramaProductionPackageV1) {
+    const failures: string[] = [];
+    if (value.schemaVersion !== 1) failures.push("schemaVersion 必须为 1");
+    if (!value.episodes.length) failures.push("episodes 不能为空");
+    for (const [episodeIndex, episode] of value.episodes.entries()) {
+        if (!episode.code) failures.push(`episodes[${episodeIndex}].code 缺失`);
+        for (const [shotIndex, shot] of episode.shots.entries()) {
+            if (!shot.code) failures.push(`episodes[${episodeIndex}].shots[${shotIndex}].code 缺失`);
+            if (!Number.isFinite(shot.duration) || !shot.timecode) failures.push(`${episode.code}/shots[${shotIndex}] 缺少 duration 或 timecode`);
+        }
+    }
+    const materials = value.authoring?.materials;
+    if (value.authoring?.source === "codex-standalone" && !Array.isArray(materials)) failures.push("authoring.materials 必须是数组");
+    add(
+        checks,
+        "PACKAGE_SCHEMA",
+        !failures.length,
+        "制作包契约字段",
+        failures.length ? failures.slice(0, 10).join("；") : "根字段、episode code、shot code、duration、timecode 和 authoring 数组字段符合当前契约",
+        ["schemaVersion", "episodes[].code", "episodes[].shots[].code", "episodes[].shots[].duration", "episodes[].shots[].timecode", "authoring.materials"],
+        "修复当前契约字段；禁止使用 episodeId、shotId、shotDuration 或依赖导入器静默别名转换。",
+    );
+}
+
+function checkProductionPlanCompleteness(checks: DramaQualityGateCheck[], value: DramaProductionPackageV1) {
+    const plan = value.project.productionBible?.productionPlan;
+    const failures: string[] = [];
+    if (!plan) failures.push("productionPlan 缺失");
+    else {
+        if (!plan.version || !plan.skills?.length || !plan.visual || !plan.video || !plan.references || !plan.continuity || !plan.frameCountRange || !plan.source)
+            failures.push("productionPlan 缺少完整的 version/skills/visual/video/references/continuity/frameCountRange/source");
+        if (plan.video && plan.video.shotDuration !== 15 && plan.video.shotDuration !== 30) failures.push("productionPlan.video.shotDuration 必须为 15 或 30");
+        if (plan.video && (!plan.video.internalCutPolicy || !plan.video.framePolicy)) failures.push("productionPlan.video 缺少 internalCutPolicy 或 framePolicy");
+    }
+    add(
+        checks,
+        "PRODUCTION_PLAN_COMPLETENESS",
+        !failures.length,
+        "生产方案完整性",
+        failures.length ? failures.join("；") : "productionBible.productionPlan 是完整对象，未依赖运行时默认值补齐",
+        ["project.productionBible.productionPlan"],
+        "直接在 JSON 中补齐完整 productionPlan；不能让缺失方案被默认值掩盖。",
+    );
+}
+
+function checkLogicalShotCount(checks: DramaQualityGateCheck[], value: DramaProductionPackageV1) {
+    const lock = value.project.productionLock;
+    const shots = value.episodes.flatMap((episode) => episode.shots);
+    const count = shots.length;
+    const duration = shots.reduce((sum, shot) => sum + shot.duration, 0);
+    const configuredDuration = value.project.productionBible.productionPlan?.video?.shotDuration;
+    const failures: string[] = [];
+    if (!lock?.logicalShotCount) failures.push("productionLock.logicalShotCount 缺失");
+    else if (lock.logicalShotCount !== count) failures.push(`logicalShotCount=${lock.logicalShotCount}，实际逻辑片段=${count}`);
+    if (lock && lock.targetDuration !== duration) failures.push(`targetDuration=${lock.targetDuration}，实际逻辑片段总时长=${duration}`);
+    if (configuredDuration && shots.some((shot) => shot.duration !== configuredDuration)) failures.push("存在镜头 duration 与 productionPlan.video.shotDuration 不一致");
+    if (lock?.narrativeBeatPlan && lock.narrativeBeatPlan.length !== count) failures.push(`narrativeBeatPlan=${lock.narrativeBeatPlan.length}，实际逻辑片段=${count}`);
+    add(
+        checks,
+        "LOGICAL_SHOT_COUNT",
+        !failures.length,
+        "逻辑片段数量与总时长",
+        failures.length ? failures.join("；") : `逻辑片段 ${count} 个，每镜 ${configuredDuration || "按镜头"} 秒，内部帧段/硬切未改变整集时长`,
+        ["project.productionLock.logicalShotCount", "project.productionLock.targetDuration", "project.productionBible.productionPlan.video.shotDuration", "episodes[].shots[].duration"],
+        "回到完整 TXT 和对白容量计划重新确定逻辑片段数量；不要把内部帧段或硬切当成新逻辑片段。",
+    );
+}
+
+function checkLogicalShotEconomy(checks: DramaQualityGateCheck[], value: DramaProductionPackageV1) {
+    const failures: string[] = [];
+    const shots = value.episodes.flatMap((episode) => episode.shots.map((shot) => ({ episode, shot })));
+    const beats = value.project.productionLock?.narrativeBeatPlan || [];
+    if (beats.length && beats.some((beat) => !beat.id || !beat.responsibility.trim() || !beat.shotCodes.length)) failures.push("narrativeBeatPlan 存在没有独立职责或镜头绑定的节拍");
+    for (let index = 1; index < shots.length; index += 1) {
+        const previous = shots[index - 1];
+        const current = shots[index];
+        const previousIdentity = [previous.episode.code, previous.shot.locationCode, previous.shot.dramaticFunction || previous.shot.title, previous.shot.dialogue].map((item) => normalizeQualityText(item || "")).join("|");
+        const currentIdentity = [current.episode.code, current.shot.locationCode, current.shot.dramaticFunction || current.shot.title, current.shot.dialogue].map((item) => normalizeQualityText(item || "")).join("|");
+        if (previousIdentity && previousIdentity === currentIdentity) failures.push(`${previous.episode.code}/${previous.shot.code} 与 ${current.episode.code}/${current.shot.code} 没有独立剧情职责，疑似把同一对白或内部切镜错误拆成两个逻辑片段`);
+    }
+    add(
+        checks,
+        "LOGICAL_SHOT_ECONOMY",
+        !failures.length,
+        "逻辑片段经济性",
+        failures.length ? failures.join("；") : "每个逻辑片段都有独立剧情职责或可验收的信息变化，内部帧段/硬切未被提升为逻辑片段",
+        ["project.productionLock.narrativeBeatPlan", "episodes[].shots[].dramaticFunction", "episodes[].shots[].shotBoundary", "framePlan.frames"],
+        "合并只承担同一对白分句、同一关系停顿或同一内部剪辑职责的相邻逻辑片段，再重新执行对白容量预检。",
+    );
 }
 
 function checkDialogueCapacity(checks: DramaQualityGateCheck[], value: DramaProductionPackageV1) {

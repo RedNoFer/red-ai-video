@@ -253,6 +253,14 @@ Skill 的文字规则就是独立 Codex authoring 的质量门禁。当前 Codex
 
 - `shots` 是整集拆出的逻辑片段；`shotDuration` 只规定每个逻辑片段的时长，整集总时长等于逻辑片段时长之和。`framePlan.frames` 是当前逻辑片段内部的真实时间段，内部硬切次数只决定这个片段的剪辑密度，绝不能反过来新增、删除或改变逻辑片段。当前目标为30秒且 `internalCutPolicy=dense-30s` 时，每个30秒逻辑片段默认生成7—10个硬切事件、8—11个帧段；静态镜头必须明确记录减切原因，不能默默退化成3—4段模板。
 - 这是两条不可合并的轴：先由完整 TXT/剧本、对白自然时长、动作节拍和留白确定 `shots` 的逻辑片段数量与整集总时长，再在每个逻辑片段内部编排 `framePlan.frames` 和硬切。内部帧段数量、硬切次数或 `internalCutPolicy` 变化都不得反向改变 `shots` 数量；反过来，逻辑片段数量变化也不得被用来逃避当前片段的高密度硬切要求。若用户/项目明确要求每个30秒片段7—10次硬切，必须锁定 `dense-30s`，不能交付 `adaptive` 或3—4帧的静默降级结果。
+
+### 制作包契约字段与逻辑片段经济性
+
+独立 Codex 制作包只能使用当前导入字段：`episodes[].code`、`episodes[].shots[].code`、`duration`、`timecode`。`episodeId`、`shotId`、`shotDuration` 是禁止字段，不能由导入器替换成正式字段；缺少 `code` 必须在 authoring 阶段修复。生成 `framePlan` 前必须冻结 `productionLock.logicalShotCount`、`shotDuration`、`targetDuration`、`dialogueCapacityPlan`、`narrativeBeatPlan`、`internalCutPolicy`、`framePolicy` 和 `selfCheckRuleVersion`，并证明 `targetDuration = logicalShotCount × shotDuration`。
+
+每个逻辑片段都必须有独立的剧情职责、关系变化、动作结果或空间信息；仅把同一段对白切成前半/后半、只换景别/焦段、或为了凑 7—10 次硬切而增加的片段，均属于 `LOGICAL_SHOT_ECONOMY` 失败，必须合并后重新做对白容量预检。内部帧段和硬切永远不能改变逻辑片段数量。
+
+`productionBible.productionPlan` 必须作为完整对象直接写入，不能依靠运行时默认值补齐；`authoring.materials` 必须是数组；QC 报告必须逐项包含所有门禁代码、状态、镜头/帧证据和修订范围。只有结构字段、逻辑片段轴、对白容量、逐帧时间轴、公开视频卡与 QC 证据全部通过，才可写 `qualityGateStatus=passed`。
 - `cameraMotion` 与 `videoPrompt` 必须互相解释：连续镜头写一条贯穿路径；内部切镜按每个切后段写独立的机位和主运镜，并让每个镜头事件说明为什么此刻改变观众的视觉注意力。
 
 - `dramaticFunction`：唯一戏剧职责和情绪/压力变化。

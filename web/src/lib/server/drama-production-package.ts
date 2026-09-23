@@ -476,9 +476,150 @@ function mergeManualFields<T extends { fieldOrigins?: Record<string, DramaFieldO
     return result as T;
 }
 
+/** Validate standalone Codex data before compatibility normalization can drop malformed shots. */
+function validateStandalonePackageShape(input: Record<string, unknown>) {
+    const has = (value: Record<string, unknown>, key: string) => Object.prototype.hasOwnProperty.call(value, key);
+    const fail = (path: string, message: string): never => {
+        throw new DramaProductionPackageError(`${path}${message}`);
+    };
+    if (!Array.isArray(input.episodes) || !input.episodes.length) fail("episodes", " 必须是非空数组");
+    const project = object(input.project);
+    const bible = object(project.productionBible);
+    const plan = object(bible.productionPlan);
+    const video = object(plan.video);
+    for (const field of ["version", "skills", "visual", "video", "references", "continuity", "frameCountRange", "source"]) if (!has(plan, field)) fail(`project.productionBible.productionPlan.${field}`, " 缺失；独立制作包必须携带完整 productionPlan");
+    const assets = object(input.assets);
+    for (const field of ["characters", "locations", "props", "clues"]) if (!Array.isArray(assets[field])) fail(`assets.${field}`, " 必须是数组");
+
+    const authoring = object(input.authoring);
+    if (authoring.authoringMode !== "codex-standalone" || authoring.canonicalSource !== "markdown-with-embedded-json") fail("authoring", " 必须声明 codex-standalone 与 markdown-with-embedded-json");
+    if (authoring.qualityGateStatus !== "passed") fail("authoring.qualityGateStatus", " 必须为 passed；未通过自检的制作包不得导入");
+    if (!text(authoring.generatedAt)) fail("authoring.generatedAt", " 缺失");
+    if (!Array.isArray(authoring.materials)) fail("authoring.materials", " 必须是数组，不能是对象或省略");
+    const materials = authoring.materials as unknown[];
+    const materialRoles = new Set(materials.map((item) => text(object(item).role)));
+    if (!materialRoles.has("package-template") || !materialRoles.has("story-source")) fail("authoring.materials", " 必须同时记录 package-template 与 story-source");
+    const report = object(authoring.qualityGateReport);
+    if (!Object.keys(report).length) fail("authoring.qualityGateReport", " 缺失；qualityGateStatus=passed 必须附带完整 QC 报告");
+    if (report.status !== "passed" || !Array.isArray(report.checks)) fail("authoring.qualityGateReport", " 状态或 checks 无效");
+    const reportChecks = report.checks as unknown[];
+    const reportCodes = new Set(reportChecks.map((item) => text(object(item).code)));
+    const missingGateCodes = DRAMA_PACKAGE_GATE_CODES.filter((code) => !reportCodes.has(code));
+    if (missingGateCodes.length) fail("authoring.qualityGateReport.checks", ` 缺少门禁：${missingGateCodes.join("、")}`);
+    if (reportChecks.some((item) => object(item).severity === "blocker")) fail("authoring.qualityGateReport.checks", " 仍包含 blocker，不能标记 passed");
+
+    for (const field of ["projectionVersion", "qualityGateRulesHash", "repairPolicyHash", "runId", "workOrderId", "executeDramaScriptRun"]) {
+        if (has(authoring, field)) fail(`authoring.${field}`, " 是服务端运行字段，codex-standalone 不得写入");
+        if (has(object(project.productionLock), field)) fail(`project.productionLock.${field}`, " 是服务端运行字段，codex-standalone 不得写入");
+    }
+    const lock = object(project.productionLock);
+    for (const field of ["shotDuration", "targetDuration", "logicalShotCount", "internalCutPolicy", "framePolicy", "dialogueCapacityPlan", "narrativeBeatPlan", "selfCheckRuleVersion"])
+        if (!has(lock, field)) fail(`project.productionLock.${field}`, " 缺失；必须先冻结逻辑片段轴和对白容量计划");
+    const shotDuration = Number(lock.shotDuration);
+    const logicalShotCount = Number(lock.logicalShotCount);
+    const targetDuration = Number(lock.targetDuration);
+    if (![15, 30].includes(shotDuration)) fail("project.productionLock.shotDuration", " 必须为 15 或 30");
+    if (!Number.isInteger(logicalShotCount) || logicalShotCount < 1) fail("project.productionLock.logicalShotCount", " 必须是正整数");
+    if (!Number.isFinite(targetDuration) || targetDuration <= 0) fail("project.productionLock.targetDuration", " 必须是正数");
+    if (!["adaptive", "dense-30s"].includes(text(lock.internalCutPolicy))) fail("project.productionLock.internalCutPolicy", " 必须为 adaptive 或 dense-30s");
+    if (!["fixed-4", "fixed-5", "agent"].includes(text(lock.framePolicy))) fail("project.productionLock.framePolicy", " 必须为 fixed-4、fixed-5 或 agent");
+    if (!Array.isArray(lock.dialogueCapacityPlan) || !Array.isArray(lock.narrativeBeatPlan)) fail("project.productionLock", " dialogueCapacityPlan 与 narrativeBeatPlan 必须是数组");
+    for (const [index, item] of (lock.dialogueCapacityPlan as unknown[]).entries()) {
+        const planItem = object(item);
+        const path = `project.productionLock.dialogueCapacityPlan[${index}]`;
+        const characterCount = Number(planItem.characterCount);
+        const speechRate = Number(planItem.speechRateCharsPerSecond);
+        const requiredSpeechSeconds = Number(planItem.requiredSpeechSeconds);
+        const availableSpeechSeconds = Number(planItem.availableSpeechSeconds);
+        if (
+            !text(planItem.dialogueId) ||
+            !text(planItem.speaker) ||
+            !Number.isFinite(characterCount) ||
+            characterCount < 0 ||
+            !Number.isFinite(speechRate) ||
+            speechRate <= 0 ||
+            !Number.isFinite(requiredSpeechSeconds) ||
+            !Number.isFinite(availableSpeechSeconds)
+        )
+            fail(path, " 缺少有效对白 ID、说话人、字数、语速或时间窗口");
+        const pauseBefore = Number(planItem.pauseBeforeSeconds || 0);
+        const pauseAfter = Number(planItem.pauseAfterSeconds || 0);
+        if (requiredSpeechSeconds > availableSpeechSeconds - pauseBefore - pauseAfter + 0.01) fail(path, ` 对白容量不足：requiredSpeechSeconds=${requiredSpeechSeconds}，availableSpeechSeconds=${availableSpeechSeconds}，且必须另留句前/句后停顿`);
+    }
+    const narrativeBeatPlan = lock.narrativeBeatPlan as unknown[];
+    if (narrativeBeatPlan.length !== logicalShotCount) fail("project.productionLock.narrativeBeatPlan", ` 必须有 ${logicalShotCount} 个独立剧情职责，不能用内部帧段或对白分句翻倍镜头`);
+    if (narrativeBeatPlan.some((item) => !text(object(item).id) || !text(object(item).responsibility) || !Array.isArray(object(item).shotCodes) || !(object(item).shotCodes as unknown[]).length))
+        fail("project.productionLock.narrativeBeatPlan", " 每个剧情节拍必须有独立责任和 shotCodes 绑定");
+    if (!text(lock.selfCheckRuleVersion)) fail("project.productionLock.selfCheckRuleVersion", " 缺失");
+    if (Number(video.shotDuration) !== shotDuration) fail("project.productionLock.shotDuration", " 与 project.productionBible.productionPlan.video.shotDuration 不一致");
+
+    let totalShots = 0;
+    let totalDuration = 0;
+    const shotCodes = new Set<string>();
+    for (const [episodeIndex, episodeValue] of (input.episodes as unknown[]).entries()) {
+        const episode = object(episodeValue);
+        if (has(episode, "episodeId")) fail(`episodes[${episodeIndex}].episodeId`, " 是非契约字段；请使用 code，制作包未导入");
+        if (!text(episode.code)) fail(`episodes[${episodeIndex}].code`, " 缺失；检测到非契约剧集字段，制作包未导入");
+        if (!Array.isArray(episode.shots) || !episode.shots.length) fail(`episodes[${episodeIndex}].shots`, " 必须是非空数组");
+        let previousEnd = 0;
+        for (const [shotIndex, shotValue] of (episode.shots as unknown[]).entries()) {
+            const shot = object(shotValue);
+            const path = `episodes[${episodeIndex}].shots[${shotIndex}]`;
+            if (has(shot, "shotId")) fail(`${path}.shotId`, " 是非契约字段；请使用 code，制作包未导入");
+            if (has(shot, "shotDuration")) fail(`${path}.shotDuration`, " 是非契约字段；请使用 duration，制作包未导入");
+            if (!text(shot.code)) fail(`${path}.code`, " 缺失；请使用当前导入契约字段 code，制作包未导入");
+            shotCodes.add(text(shot.code));
+            const duration = Number(shot.duration);
+            if (duration !== shotDuration) fail(`${path}.duration`, ` 必须等于 ${shotDuration}；内部帧段和硬切不能改变逻辑片段时长`);
+            const parsedTimecode = parseTimecode(shot.timecode);
+            if (!parsedTimecode) fail(`${path}.timecode`, " 缺失或格式无效；必须是 start-end[s] 时间码");
+            const [timecodeStart, timecodeEnd] = parsedTimecode as [number, number];
+            if (timecodeEnd - timecodeStart !== duration) fail(`${path}.timecode`, ` 与 duration=${duration} 不一致`);
+            if (timecodeStart !== previousEnd) fail(`${path}.timecode`, ` 未与上一逻辑片段连续；期望起点 ${previousEnd}s`);
+            previousEnd = timecodeEnd;
+            const framePlan = object(shot.framePlan);
+            const frames = Array.isArray(framePlan.frames) ? (framePlan.frames as unknown[]) : [];
+            if (!frames.length) fail(`${path}.framePlan.frames`, " 缺失；内部帧段只能存在于当前逻辑片段内部");
+            const startSource = text(object(framePlan.start).source);
+            if (startSource !== "independent" && startSource !== "previous_accepted_actual_tail") fail(`${path}.framePlan.start.source`, " 必须为 independent 或 previous_accepted_actual_tail");
+            if (startSource === "previous_accepted_actual_tail" && !array(framePlan.referenceManifest).some((item) => text(object(item).role) === "previous_actual_tail"))
+                fail(`${path}.framePlan.referenceManifest`, " 启用了 previous_accepted_actual_tail 但缺少已验收实际尾帧 alias；未显式要求实际尾帧时请使用 independent");
+            let previousFrameEnd = 0;
+            for (const [frameIndex, frameValue] of frames.entries()) {
+                const frame = object(frameValue);
+                const framePath = `${path}.framePlan.frames[${frameIndex}]`;
+                const start = Number(frame.startSecond);
+                const end = Number(frame.endSecond);
+                if (!Number.isFinite(start) || !Number.isFinite(end) || start !== previousFrameEnd || end <= start || end > duration) fail(framePath, " 时间必须从 0 连续覆盖到当前镜头 duration，不能空白、重叠或超界");
+                if (!text(frame.actionPrompt) || !text(frame.endPrompt) || !text(frame.imagePrompt)) fail(framePath, " 必须同时填写 actionPrompt、endPrompt 和 imagePrompt");
+                previousFrameEnd = end;
+            }
+            if (previousFrameEnd !== duration) fail(`${path}.framePlan.frames`, ` 未完整覆盖 ${duration}s 逻辑片段`);
+            if (!text(shot.videoPrompt)) fail(`${path}.videoPrompt`, " 不能为空");
+            const publicCardCount = (text(shot.videoPrompt).match(/^###\s*镜头\s*\d+/gmu) || []).length;
+            if (publicCardCount !== frames.length) fail(`${path}.videoPrompt`, ` 必须与 framePlan.frames 一一对应；当前 ${publicCardCount} 张公开卡/${frames.length} 个帧段`);
+            if (shotDuration === 30 && text(video.internalCutPolicy) === "dense-30s") {
+                if (frames.length < 8 || frames.length > 11) fail(`${path}.framePlan.frames`, " dense-30s 必须在每个 30 秒逻辑片段内使用 8—11 个帧段");
+                const hardCuts = (text(shot.videoPrompt).match(/(?:剪辑承接|镜头事件)[^\n]{0,240}硬切/gu) || []).length;
+                if (hardCuts < 7 || hardCuts > 10) fail(`${path}.videoPrompt`, ` dense-30s 必须公开表达 7—10 次硬切，当前检测到 ${hardCuts} 次`);
+            }
+            totalShots += 1;
+            totalDuration += duration;
+        }
+    }
+    if (totalShots !== logicalShotCount) fail("project.productionLock.logicalShotCount", `=${logicalShotCount}，但 episodes[].shots 实际为 ${totalShots}；内部帧段/硬切不能生成新逻辑片段`);
+    const plannedShotCodes = new Set(narrativeBeatPlan.flatMap((item) => (object(item).shotCodes as unknown[]).map(text)));
+    if (plannedShotCodes.size !== shotCodes.size || [...shotCodes].some((code) => !plannedShotCodes.has(code))) fail("project.productionLock.narrativeBeatPlan", " 未覆盖全部逻辑片段 code；不能用内部帧段或对白分句伪造剧情节拍");
+    if (targetDuration !== totalDuration) fail("project.productionLock.targetDuration", `=${targetDuration}，但逻辑片段总时长为 ${totalDuration}；不能把内部帧段时长累计为整集时长`);
+    if (bible.targetDuration !== undefined && Number(bible.targetDuration) !== totalDuration) fail("project.productionBible.targetDuration", ` 与逻辑片段总时长 ${totalDuration} 不一致`);
+}
+
 function normalizeProductionPackage(value: unknown, options: DramaProductionPackageNormalizationOptions = {}): DramaProductionPackageV1 {
     const input = object(value);
     if (Number(input.schemaVersion) !== 1) throw new DramaProductionPackageError("仅支持 schemaVersion 1 的制作包");
+    const rawAuthoring = object(input.authoring);
+    if (rawAuthoring.source === "codex-standalone") validateStandalonePackageShape(input);
+    const normalizationOptions = rawAuthoring.source === "codex-standalone" ? { ...options, preserveAuthoredVideoPrompt: true } : options;
     if (options.requireContentQuality || options.requireAuthoringQuality) validateRawAgentPackageDraft(input);
     const project = object(input.project);
     const bible = object(project.productionBible);
@@ -492,7 +633,7 @@ function normalizeProductionPackage(value: unknown, options: DramaProductionPack
         }),
     );
     const episodes = array(input.episodes)
-        .map((episode, index) => normalizeEpisodePackage(episode, index, { ...options, backgroundNpcPolicyByLocationCode }))
+        .map((episode, index) => normalizeEpisodePackage(episode, index, { ...normalizationOptions, backgroundNpcPolicyByLocationCode }))
         .filter((episode) => episode.shots.length);
     if (!episodes.length) throw new DramaProductionPackageError("制作包至少需要一个包含镜头的剧集");
     const normalizedAssets = {
@@ -532,7 +673,6 @@ function normalizeProductionPackage(value: unknown, options: DramaProductionPack
             })),
         };
     });
-    const rawAuthoring = object(input.authoring);
     const strictContinuity = Boolean(options.strictContinuity || options.requireAuthoringQuality || rawAuthoring.source === "executeDramaScriptRun");
     const continuityIssues = strictContinuity ? validateDramaContinuityEdges(normalizedEpisodes) : [];
     if (continuityIssues.length) {
@@ -625,7 +765,29 @@ function normalizeProductionLock(value: unknown): DramaProductionLock | undefine
     const input = object(value);
     const shotDuration = Number(input.shotDuration);
     const targetDuration = Number(input.targetDuration);
+    const logicalShotCount = Number(input.logicalShotCount);
+    const standaloneLockIsValid =
+        (shotDuration === 15 || shotDuration === 30) &&
+        Number.isFinite(targetDuration) &&
+        targetDuration > 0 &&
+        Number.isInteger(logicalShotCount) &&
+        logicalShotCount > 0 &&
+        Array.isArray(input.dialogueCapacityPlan) &&
+        Array.isArray(input.narrativeBeatPlan) &&
+        Boolean(text(input.selfCheckRuleVersion));
     const hashFields = ["storySourceHash", "templateHash", "contractHash", "specHash", "directorSkillHash", "seedanceSkillHash", "authoringSchemaHash", "qualityGateRulesHash", "repairPolicyHash"] as const;
+    if (standaloneLockIsValid && !text(input.projectionVersion) && !text(input.lockedBy)) {
+        return {
+            shotDuration: shotDuration as 15 | 30,
+            targetDuration,
+            logicalShotCount,
+            dialogueCapacityPlan: input.dialogueCapacityPlan as DramaProductionLock["dialogueCapacityPlan"],
+            narrativeBeatPlan: input.narrativeBeatPlan as DramaProductionLock["narrativeBeatPlan"],
+            selfCheckRuleVersion: text(input.selfCheckRuleVersion),
+            internalCutPolicy: text(input.internalCutPolicy) as DramaProductionLock["internalCutPolicy"],
+            framePolicy: text(input.framePolicy) as DramaProductionLock["framePolicy"],
+        } as DramaProductionLock;
+    }
     if (
         (shotDuration !== 15 && shotDuration !== 30) ||
         !Number.isFinite(targetDuration) ||
@@ -1115,10 +1277,13 @@ function validateRawAgentPackageDraft(input: Record<string, unknown>) {
     if (!episodes.length) throw new DramaProductionPackageError("Agent 制作包缺少当前集镜头，不能进入严格生成流程");
     for (const [episodeIndex, value] of episodes.entries()) {
         const episode = object(value);
+        if (Object.prototype.hasOwnProperty.call(episode, "episodeId")) errors.push(`episodes[${episodeIndex}].episodeId 是非契约字段；请使用 code`);
         const shots = array(episode.shots);
         if (!shots.length) errors.push(`第 ${episodeIndex + 1} 集缺少镜头列表`);
         for (const [shotIndex, value] of shots.entries()) {
             const shot = object(value);
+            if (Object.prototype.hasOwnProperty.call(shot, "shotId")) errors.push(`episodes[${episodeIndex}].shots[${shotIndex}].shotId 是非契约字段；请使用 code`);
+            if (Object.prototype.hasOwnProperty.call(shot, "shotDuration")) errors.push(`episodes[${episodeIndex}].shots[${shotIndex}].shotDuration 是非契约字段；请使用 duration`);
             const label = text(shot.code) || `第 ${episodeIndex + 1} 集镜头 ${shotIndex + 1}`;
             if (isPackageSectionShotCode(text(shot.code))) {
                 errors.push(`${label} 是制作包章节伪镜头；章节必须写入 archive.sections`);

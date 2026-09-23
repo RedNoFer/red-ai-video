@@ -242,6 +242,16 @@ describe("drama authoring quality gates", () => {
         expect(blockers(report, "DIALOGUE_PERFORMANCE")).not.toHaveLength(0);
     });
 
+    it("blocks logical shots that only duplicate the same narrative duty", () => {
+        const value = packageValue();
+        const duplicate = structuredClone(value.episodes[0].shots[0]);
+        duplicate.code = "SH02";
+        duplicate.title = value.episodes[0].shots[0].title;
+        value.episodes[0].shots.push(duplicate);
+        const report = validateDramaAuthoringQuality({ package: value, sources: [] });
+        expect(blockers(report, "LOGICAL_SHOT_ECONOMY").some((check) => check.evidence.includes("没有独立剧情职责"))).toBe(true);
+    });
+
     it("blocks overlapping dialogue prefixes across adjacent frame segments", () => {
         const value = packageValue({
             dialogue: true,

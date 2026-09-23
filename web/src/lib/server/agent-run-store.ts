@@ -118,6 +118,10 @@ export type AgentRunTimings = {
     dramaAuthoringModelCompletedAt?: number;
     dramaAuthoringInputChars?: number;
     dramaAuthoringOutputChars?: number;
+    dramaAuthoringPreflightMs?: number;
+    dramaAuthoringQualityGateMs?: number;
+    dramaAuthoringSerializationMs?: number;
+    dramaAuthoringCanonicalPreviewMs?: number;
     dramaAuthoringRepairCount?: number;
     dramaAuthoringFullPackageRepairCount?: number;
     planningStartedAt?: number;

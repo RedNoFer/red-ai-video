@@ -380,6 +380,24 @@ export type DramaProductionBible = {
 export type DramaProductionLock = {
     shotDuration: 15 | 30;
     targetDuration: number;
+    /** Total logical shots in the package; internal frames/cuts never change it. */
+    logicalShotCount?: number;
+    /** Preflight evidence created before frame planning. */
+    dialogueCapacityPlan?: Array<{
+        dialogueId: string;
+        speaker: string;
+        characterCount: number;
+        speechRateCharsPerSecond: number;
+        requiredSpeechSeconds: number;
+        availableSpeechSeconds: number;
+        episodeCode: string;
+        shotCode: string;
+        frameId?: string;
+        pauseBeforeSeconds?: number;
+        pauseAfterSeconds?: number;
+    }>;
+    narrativeBeatPlan?: Array<{ id: string; responsibility: string; shotCodes: string[] }>;
+    selfCheckRuleVersion?: string;
     internalCutPolicy: "adaptive" | "dense-30s";
     framePolicy: "fixed-4" | "fixed-5" | "agent";
     storySourceHash: string;
