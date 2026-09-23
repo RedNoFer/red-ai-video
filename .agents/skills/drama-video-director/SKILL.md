@@ -95,10 +95,13 @@ Skill 的文字规则就是独立 Codex authoring 的质量门禁。当前 Codex
 - `REFERENCE_ALIAS_CONSISTENCY`：严格沿用 `referenceManifest` 的 alias、role、purpose 和顺序，公开提示词、执行快照和供应商请求不得重新编号或把帧图放到角色图前面；素材绑定必须逐项说明职责。
 - `CHARACTER_WARDROBE_CONTINUITY`：每个出镜角色必须持续锁定身份、年龄感、脸型/发型、服装结构、颜色和固定配饰；角色参考图不能替代场景图，场景参考图不能改写角色。
 - `VIDEO_PROMPT_LAYOUT` 同时检查字段职责：任何完整对白、引号台词或“某人说：”指令出现在 `画面内容` 都直接阻断；台词原句只能存在于 `台词` 字段。
+- `VIDEO_PROMPT_LAYOUT` 同时阻断 `undefined`、`null`、`NaN`、`[object Object]` 和 `palette=...`、`saturation=...`、`film_stock=...`、`grain=...`、`halation=...` 等未声明伪参数串；视觉风格必须用自然语言表达，不把供应商内部参数假装成必填视频参数。
+- `VIDEO_PROMPT_LENGTH`：每个逻辑片段完整 `videoPrompt`（所有公开帧卡、台词、声音和剪辑承接合计）最多 4500 个 Unicode 字符。超限时只压缩重复的全局场景、光影、色调和材质说明，不能删掉主体、触发、动作、可见结果、声音锚点、对白边界、连续性状态或硬切承接。
 - `VIDEO_PROMPT_SEMANTIC_QUALITY` 与 `ACTION_RESULT`：每张公开卡必须明确主体、触发、进行中的可见动作、身体/手部/道具变化、可见结果、摄影目的和声音锚点；“准备回应”“保持状态”“关系停在压力面”“为下一镜承接”以及没有结果的情绪形容词都直接阻断。
 - `DIALOGUE_SPEAKER_VISUAL_MATCH`：台词字段、对白游标、口型主体、画面动作和说后反应必须属于同一说话人；不允许画面写萧炎开口而台词归纳兰，或当前画面只拍听者却把听者写成说话人。
 - `FRAME_DIALOGUE_TIMING`：有自然时间边界的对白/旁白不得被机械等长帧段覆盖；帧段必须能对齐开口、收句、停顿、动作触发或反应留白，否则返回 authoring revision。
 - `CAMERA_EVENT` 与 `CUT_INFORMATION_DIVERSITY`：`dense-30s` 每个30秒逻辑片段保持 8—11 个真实帧段、7—10 次硬切；每次硬切必须在内部事件和对应公开卡片的 `剪辑承接` 中同时写出时间、触发、新机位、切后主运镜、新增信息和连续性承接。只改焦段、景别、推近形容词或台词视角不算信息差异。
+- 同一逻辑片段的硬切不能全部复用相同景别、焦段、机位和主运镜；若切后没有新的主体、手部/道具、反应、空间层级或结果信息，`CAMERA_EVENT` 与 `CUT_INFORMATION_DIVERSITY` 均判定失败。
 - `TEXT_STATE_CONTINUITY` 与 `CROSS_SHOT_STATE_INHERITANCE`：默认独立起镜但文字状态逐项继承；上一镜出口、下一镜入口、首帧 framePlan 和首张公开视频卡的站位、接触、视线、道具、环境和轴线必须一致。
 - `VISUAL_CLARITY` 同时检查参考锚点：角色基准图必须有身份特写和四视图/转面，场景图必须是高清16:9单视角全景并可读本场拓扑；低清或职责不清的图不得进入付费执行。
 

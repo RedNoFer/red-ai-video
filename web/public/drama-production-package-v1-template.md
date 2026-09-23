@@ -2,7 +2,7 @@
 
 > 制作包格式：`vozeb-drama-production-package-v1`
 >
-> 模板版本：由 `pnpm compile:skills` 自动生成；唯一制作包契约：`vozeb-drama-production-package-v1@1.0.0`（契约 hash：`a031168428fba56455a258d1735daf0554ea5136cf961de36366cee964cbb668`，规范源 hash：`c4958c063fdd6bbeee4e4c0acbe511bae199d59c1379a2a6984f91d0e6bed09c`）。导演 Skill：`drama-video-director@1.12.0`（hash：`bbde1b92dc5665383c43056a952a475f890cd02fa3716ccbdd6bad1c4743a595`）；模板自检规则、Seedance Skill 和来源版本由同一编译清单绑定。
+> 模板版本：由 `pnpm compile:skills` 自动生成；唯一制作包契约：`vozeb-drama-production-package-v1@1.0.0`（契约 hash：`77541e4dc34e638a56a3273bab74ee1d1911933c2c84792cbad60d2e31144107`，规范源 hash：`6f5b65775b707296f554a9fd91865f02c59b57b11891780d880492a0d12418b9`）。导演 Skill：`drama-video-director@1.12.0`（hash：`5cd3666d05d9e35a4bf8112d49667a577e62f3a258b36fae7600c35cf1675ec1`）；模板自检规则、Seedance Skill 和来源版本由同一编译清单绑定。
 >
 > 使用约定：本模板是当前 v1 制作包的结构、自检规则和最终交付格式。独立 Codex 必须直接生成完整 13 章 Markdown，并在“规范对象”代码块中嵌入唯一标准 JSON；JSON 与正文由 Codex 同一轮生成，服务端不负责章节投影或视频提示词重写。不要把历史制作包、旧 generationPrompt 或旧分镜正文当作新包模板。
 >
@@ -115,10 +115,12 @@ targetDuration = logicalShotCount × shotDuration
 
 ### 当前绑定版本
 
-- 制作包契约：`vozeb-drama-production-package-v1@1.0.0`，契约 hash：`a031168428fba56455a258d1735daf0554ea5136cf961de36366cee964cbb668`。
-- 规范源 hash：`c4958c063fdd6bbeee4e4c0acbe511bae199d59c1379a2a6984f91d0e6bed09c`；编译规则 hash：`a65d64f347b58ffdd54d22c195f5317a7c2c0e9a8b7da59f3cc91963b9130bb7`。
-- 主导演 Skill：`drama-video-director@1.12.0`，hash：`bbde1b92dc5665383c43056a952a475f890cd02fa3716ccbdd6bad1c4743a595`。
+- 制作包契约：`vozeb-drama-production-package-v1@1.0.0`，契约 hash：`77541e4dc34e638a56a3273bab74ee1d1911933c2c84792cbad60d2e31144107`。
+- 规范源 hash：`6f5b65775b707296f554a9fd91865f02c59b57b11891780d880492a0d12418b9`；编译规则 hash：`ce46f6a5dad1b11da48ec2ed0b440e28ebb119652b575f89fb4bc2245993fb27`。
+- 主导演 Skill：`drama-video-director@1.12.0`，hash：`5cd3666d05d9e35a4bf8112d49667a577e62f3a258b36fae7600c35cf1675ec1`。
 - 视频提示词公开格式：小墨个人分镜 Skill 6.3，来源标识 `storyboard-director@6.3.0`。
+- 每个逻辑片段的完整 `videoPrompt`（包含全部公开帧卡、台词、人声、音效和剪辑承接）必须控制在 4500 个 Unicode 字符以内；超限只能压缩重复的全局场景/风格描述，不能删除主体、触发、动作、可见结果、声音锚点、连续性或硬切事件。
+- 公开视频卡使用自然语言，不得出现 `palette=...`、`saturation=...`、`film_stock=...`、`grain=...`、`halation=...` 等未声明伪参数串，也不得出现 `undefined`、`null`、`NaN`、`[object Object]`；光色、材质、胶片感如确有作用，只用自然语言写入 `productionBible` 或当前帧新增作用。
 - 供应商适配层：`seedance-25-director`，只负责 Seedance 2.5 的时长、画幅、参考素材和模式适配，不替代主导演 Skill。
 
 ### 独立 Codex 输入与输出
@@ -167,7 +169,8 @@ Codex 必须先做预检，再开始拆镜和写公开视频卡；不能先按�
 | `DIALOGUE_CAPACITY`             | blocker | 逐句口型窗口是硬门禁：`availableSpeechSeconds=endSecond-startSecond` 必须不小于 `requiredSpeechSeconds=可发音字数/speechRateCharsPerSecond`；`pauseBeforeSeconds`/`pauseAfterSeconds` 另行占用句前/句后空间并必须留在镜头边界内。任何单句不足都阻断。10 个可发音字容差只用于整镜总量的兼容提醒，不适用于逐句口型窗口；不得异常加速。 |
 | `DIALOGUE_SPEAKER_VISUAL_MATCH` | blocker | `台词`、`utterances`、口型主体和画面动作必须属于同一说话人；不允许画面写萧炎开口而台词归纳兰，或把未开口角色写成当前说话人。                                                                                                                                                                                                         |
 | `DIALOGUE_PERFORMANCE`          | blocker | 每个对白帧段写说话人、实际台词、语气、停顿、重音和具体说后反应；`画面内容`不得复制完整对白；相邻段不得重复对白游标或表演块。                                                                                                                                                                                                         |
-| `VIDEO_PROMPT_LAYOUT`           | blocker | 每个真实帧段对应一张镜头卡；标题含时间、景别、焦段、机位、一个主运镜和主体类型；正文含场景、画面内容、光影、色调、台词、人声、音效。                                                                                                                                                                                                 |
+| `VIDEO_PROMPT_LAYOUT`           | blocker | 每个真实帧段对应一张镜头卡；标题含时间、景别、焦段、机位、一个主运镜和主体类型；正文含场景、画面内容、光影、色调、台词、人声、音效。禁止 `undefined`、`null`、`NaN`、`[object Object]` 等程序占位值，以及 `palette=.../saturation=.../film_stock=.../grain=.../halation=...` 这类未声明的伪参数串；视觉要求必须用自然语言表达。      |
+| `VIDEO_PROMPT_LENGTH`           | blocker | 每个逻辑片段的完整 `videoPrompt`（包含该片段全部公开帧卡、台词、声音和剪辑承接）最多 4500 个 Unicode 字符；超限必须在当前 Codex 对话内压缩重复全局设定，不得删除主体、触发、动作、结果、声音锚点、连续性或硬切承接。                                                                                                                 |
 | `VIDEO_PROMPT_SEMANTIC_QUALITY` | blocker | 直接检查公开视频卡片：画面内容必须有明确主体、进行中的可见动作、触发/因果、可见结果和声音锚点；不得出现“准备回应”“保持状态”“社会后果停在三人之间”等抽象占位或未来意图；相邻卡片必须带来可拍摄的信息增量。                                                                                                                            |
 | `PLOT_FACT_COVERAGE`            | blocker | 当前剧情事实、人物关系、动作结果和结尾状态都在制作包中有可追溯表达；不得以泛化氛围替代事实。                                                                                                                                                                                                                                         |
 | `ACTION_DENSITY`                | blocker | 每帧完成“谁做什么 → 触发原因 → 身体/手部/道具受力 → 可见结果 → 声音锚点”；对白结束后的时间必须有剧情职责或有目的的结果停留。                                                                                                                                                                                                         |
@@ -212,11 +215,14 @@ Codex 必须先做预检，再开始拆镜和写公开视频卡；不能先按�
 
 - “准备回应”“准备进入下一条件”“保持状态”“关系停在压力面”“为下一镜承接”等未来意图或内部剪辑说明；
 - 只有“说话、看向对方、保持站位、情绪加剧”等抽象情绪，没有身体、手部、道具、视线、重心或环境的可见变化；
+- 单个逻辑片段的 `videoPrompt` 超过 4500 个 Unicode 字符，或通过重复完整场景/光影/色调段落填充长度；
+- 出现 `undefined`、`null`、`NaN`、`[object Object]` 或 `palette=.../saturation=.../film_stock=.../grain=.../halation=...` 伪参数串；
 - 只改变焦段、景别、机位或形容词，却没有新的角色反应、动作结果、道具受力、空间信息或声音变化；
 - 空的 `画面内容`，或把完整对白、引号台词和“某人说”指令写进 `画面内容`；
 - 长时间站桩说话，或对白结束后没有具体反应、结果、环境变化或有目的的静默；
 - 没有“主体 → 触发 → 可见动作 → 可见结果 → 声音锚点”闭环的镜头卡。
 - `dense-30s` 只在 JSON 的 `cameraEvents` 中声明硬切、但公开卡片没有明确 `剪辑承接：时间、触发、新机位、切后主运镜、新增信息、连续性承接`。
+- 一个逻辑片段的硬切全部复用相同景别、焦段、机位和主运镜，只更换形容词或“继续说话/看向对方”的，直接判定 `CAMERA_EVENT` 与 `CUT_INFORMATION_DIVERSITY` 失败；
 - 相邻镜头没有逐项写出入口状态，或用“承接上一镜”等抽象短语代替位置、接触、视线、道具、光源和轴线事实。
 
 Codex 必须在输出第十三章前逐镜抽查上述禁项；命中任一项时只修复命中的镜头和必要相邻连续性，不得重新创作未失败镜头。

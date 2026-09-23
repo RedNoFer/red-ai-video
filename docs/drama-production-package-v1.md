@@ -47,6 +47,7 @@ contract:
     - DIALOGUE_SPEAKER_VISUAL_MATCH
     - DIALOGUE_PERFORMANCE
     - VIDEO_PROMPT_LAYOUT
+    - VIDEO_PROMPT_LENGTH
     - VIDEO_PROMPT_SEMANTIC_QUALITY
     - PLOT_FACT_COVERAGE
     - ACTION_DENSITY
@@ -150,7 +151,8 @@ contract:
 | `DIALOGUE_CAPACITY` | blocker | 逐句口型窗口是硬门禁：`availableSpeechSeconds=endSecond-startSecond` 必须不小于 `requiredSpeechSeconds=可发音字数/speechRateCharsPerSecond`；`pauseBeforeSeconds`/`pauseAfterSeconds` 另行占用句前/句后空间并必须留在镜头边界内。任何单句不足都阻断。10 个可发音字容差只用于整镜总量的兼容提醒，不适用于逐句口型窗口；不得异常加速。 |
 | `DIALOGUE_SPEAKER_VISUAL_MATCH` | blocker | `台词`、`utterances`、口型主体和画面动作必须属于同一说话人；不允许画面写萧炎开口而台词归纳兰，或把未开口角色写成当前说话人。 |
 | `DIALOGUE_PERFORMANCE` | blocker | 每个对白帧段写说话人、实际台词、语气、停顿、重音和具体说后反应；`画面内容`不得复制完整对白；相邻段不得重复对白游标或表演块。 |
-| `VIDEO_PROMPT_LAYOUT` | blocker | 每个真实帧段对应一张镜头卡；标题含时间、景别、焦段、机位、一个主运镜和主体类型；正文含场景、画面内容、光影、色调、台词、人声、音效。 |
+| `VIDEO_PROMPT_LAYOUT` | blocker | 每个真实帧段对应一张镜头卡；标题含时间、景别、焦段、机位、一个主运镜和主体类型；正文含场景、画面内容、光影、色调、台词、人声、音效。禁止 `undefined`、`null`、`NaN`、`[object Object]` 等程序占位值，以及 `palette=.../saturation=.../film_stock=.../grain=.../halation=...` 这类未声明的伪参数串；视觉要求必须用自然语言表达。 |
+| `VIDEO_PROMPT_LENGTH` | blocker | 每个逻辑片段的完整 `videoPrompt`（包含该片段全部公开帧卡、台词、声音和剪辑承接）最多 4500 个 Unicode 字符；超限必须在当前 Codex 对话内压缩重复全局设定，不得删除主体、触发、动作、结果、声音锚点、连续性或硬切承接。 |
 | `VIDEO_PROMPT_SEMANTIC_QUALITY` | blocker | 直接检查公开视频卡片：画面内容必须有明确主体、进行中的可见动作、触发/因果、可见结果和声音锚点；不得出现“准备回应”“保持状态”“社会后果停在三人之间”等抽象占位或未来意图；相邻卡片必须带来可拍摄的信息增量。 |
 | `PLOT_FACT_COVERAGE` | blocker | 当前剧情事实、人物关系、动作结果和结尾状态都在制作包中有可追溯表达；不得以泛化氛围替代事实。 |
 | `ACTION_DENSITY` | blocker | 每帧完成“谁做什么 → 触发原因 → 身体/手部/道具受力 → 可见结果 → 声音锚点”；对白结束后的时间必须有剧情职责或有目的的结果停留。 |
@@ -183,6 +185,8 @@ contract:
 ### 视频提示词与静态帧的硬分工
 
 - `画面内容`只写可见口型、呼吸、视线、表情、身体受力、手部/道具状态、空间层次和结果；完整原句只能在`台词`字段，格式为“说话人说：‘实际台词’”。
+- 单个逻辑片段的完整 `videoPrompt` 以 Unicode 字符数计不得超过 4500；场景、全局视觉方案和不变量只在 `productionBible` 锁定，公开卡片只保留当前帧新增的主体、触发、动作、结果、声音和连续性事实。不得通过删掉对白边界、动作结果或硬切承接来压缩。
+- 公开卡片必须使用自然语言，不写未声明的供应商 DSL 或胶片参数串，例如 `palette=...`、`saturation=...`、`film_stock=...`、`grain=...`、`halation=...`；也不得出现 `undefined`、`null`、`NaN`、`[object Object]`。色彩、材质、颗粒和光晕要求只在确有叙事作用时用中文自然语言写一次。
 - `imagePrompt`只冻结一个静态时刻，至少包含主体、可见状态和一项空间/视线/姿态/道具/环境结果；不得写对白、声音、运镜、时间段或动作过程。
 - `framePlan`内部字段负责 `startPrompt → actionPrompt → transitionPrompt → endPrompt`、连续性、时间边界和动作因果；公开视频不得把这些内部字段名机械抄入卡片。
 - 除第一张卡外，每张公开视频卡必须增加 `剪辑承接`，明确本卡与上一卡的连续镜头/硬切关系、触发事件、新机位、切后主运镜、新增信息和人物/道具/场景/轴线承接；第一张卡写明入口状态已锁定。硬切只存在于内部 `cameraEvents` 而不在公开卡片表达，视为 `CAMERA_EVENT` 失败。
@@ -217,6 +221,7 @@ contract:
 - 内部硬切必须通过主体覆盖门禁：每个切点都要写新的信息主体或动作细节；如果当前剧情包含需要独立呈现的其他角色、NPC反应，必须至少有对应反应镜头；如果包含手部、道具接触或受力事实，必须至少有一个手部/道具细节硬切。7—10 次硬切不等于同一角色的多个角度。
 - `framePlan.referenceManifest` 是提示词 alias、执行快照和供应商参考列表的唯一顺序事实源；公开提示词必须逐项写出 alias 与角色/场景/道具职责，禁止用“@图片1至@图片N”替代映射。角色锚点必须包含身份、年龄感、脸型/发型、服装和固定配饰；场景锚点不得承担角色职责，道具锚点不得承担角色职责。
 - `videoPrompt` 和 `framePlan` 都由 Agent 直接生成；应用层不得从模板、旧包、历史提示词、动作字段或帧计划重建、补写、删改公开视频正文。未经声明的内部切镜、未绑定道具或未声明角色不得出现。
+- 一个逻辑片段的 7—10 次硬切不能全部复用相同景别、焦段、机位和主运镜；如果没有新的主体、手部/道具、反应、空间层级或结果信息，直接判定 `CAMERA_EVENT` 与 `CUT_INFORMATION_DIVERSITY` 失败。
 - 模板自检硬门禁至少包括文学剧本完整性、对白覆盖率、对白表演质量、视频提示词排版与语义、剧情事实覆盖率、动作密度/差异、情绪递进、NPC 反应变化、运镜动机、镜头事件、时间轴、素材绑定、连续性、画幅构图、主体覆盖、硬切信息差异、参考 alias 一致性和角色服装连续性。任一 blocker 都必须先在 Codex 当前上下文内修订，不得把失败草案标记完成。
 
 ## 固定章节顺序

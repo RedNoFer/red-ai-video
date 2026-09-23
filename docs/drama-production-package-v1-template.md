@@ -119,6 +119,8 @@ targetDuration = logicalShotCount × shotDuration
 - 规范源 hash：`{{DRAMA_PACKAGE_SPEC_HASH}}`；编译规则 hash：`{{DRAMA_PACKAGE_RULES_HASH}}`。
 - 主导演 Skill：`drama-video-director@{{DRAMA_VIDEO_DIRECTOR_VERSION}}`，hash：`{{DRAMA_VIDEO_DIRECTOR_HASH}}`。
 - 视频提示词公开格式：小墨个人分镜 Skill 6.3，来源标识 `storyboard-director@6.3.0`。
+- 每个逻辑片段的完整 `videoPrompt`（包含全部公开帧卡、台词、人声、音效和剪辑承接）必须控制在 4500 个 Unicode 字符以内；超限只能压缩重复的全局场景/风格描述，不能删除主体、触发、动作、可见结果、声音锚点、连续性或硬切事件。
+- 公开视频卡使用自然语言，不得出现 `palette=...`、`saturation=...`、`film_stock=...`、`grain=...`、`halation=...` 等未声明伪参数串，也不得出现 `undefined`、`null`、`NaN`、`[object Object]`；光色、材质、胶片感如确有作用，只用自然语言写入 `productionBible` 或当前帧新增作用。
 - 供应商适配层：`seedance-25-director`，只负责 Seedance 2.5 的时长、画幅、参考素材和模式适配，不替代主导演 Skill。
 
 ### 独立 Codex 输入与输出
@@ -176,11 +178,14 @@ Codex 必须先做预检，再开始拆镜和写公开视频卡；不能先按�
 
 - “准备回应”“准备进入下一条件”“保持状态”“关系停在压力面”“为下一镜承接”等未来意图或内部剪辑说明；
 - 只有“说话、看向对方、保持站位、情绪加剧”等抽象情绪，没有身体、手部、道具、视线、重心或环境的可见变化；
+- 单个逻辑片段的 `videoPrompt` 超过 4500 个 Unicode 字符，或通过重复完整场景/光影/色调段落填充长度；
+- 出现 `undefined`、`null`、`NaN`、`[object Object]` 或 `palette=.../saturation=.../film_stock=.../grain=.../halation=...` 伪参数串；
 - 只改变焦段、景别、机位或形容词，却没有新的角色反应、动作结果、道具受力、空间信息或声音变化；
 - 空的 `画面内容`，或把完整对白、引号台词和“某人说”指令写进 `画面内容`；
 - 长时间站桩说话，或对白结束后没有具体反应、结果、环境变化或有目的的静默；
 - 没有“主体 → 触发 → 可见动作 → 可见结果 → 声音锚点”闭环的镜头卡。
 - `dense-30s` 只在 JSON 的 `cameraEvents` 中声明硬切、但公开卡片没有明确 `剪辑承接：时间、触发、新机位、切后主运镜、新增信息、连续性承接`。
+- 一个逻辑片段的硬切全部复用相同景别、焦段、机位和主运镜，只更换形容词或“继续说话/看向对方”的，直接判定 `CAMERA_EVENT` 与 `CUT_INFORMATION_DIVERSITY` 失败；
 - 相邻镜头没有逐项写出入口状态，或用“承接上一镜”等抽象短语代替位置、接触、视线、道具、光源和轴线事实。
 
 Codex 必须在输出第十三章前逐镜抽查上述禁项；命中任一项时只修复命中的镜头和必要相邻连续性，不得重新创作未失败镜头。

@@ -94,6 +94,9 @@ const actionFactPattern = /因为|由于|于是|随后|最终|决定|提出|答�
 const publicSoundAnchorPattern = /人声|呼吸|吸气|吐气|衣料|脚步|碰撞|摩擦|风声|水声|门响|木石|混响|静默|沉默|屏息|余响|底噪|无声/u;
 const cinematicPlaceholderPattern = /^(?:入口构图已建立|动作展开|关键变化|结果状态|动作节点已经成立|主体的眉眼、呼吸、手部和道具接触关系清晰可见|情绪通过身体动作呈现)$/u;
 const denseCutExceptionPattern = /(?:减切原因|减切理由)\s*[：:]\s*(?:(?:静态留白|结果停留|凝视停留|供应商能力限制|供应商限制)[^。\n；;]*)/u;
+const videoPromptPseudoParameterPattern = /(?:palette|saturation|film_stock|grain|halation)\s*=/u;
+const videoPromptRuntimePlaceholderPattern = /undefined|null|NaN|\[object Object\]/u;
+const videoPromptMaxUnicodeCharacters = 4500;
 
 export function validateDramaAuthoringQuality(input: DramaAuthoringQualityInput): DramaQualityGateReport {
     const checks: DramaQualityGateCheck[] = [];
@@ -109,6 +112,7 @@ export function validateDramaAuthoringQuality(input: DramaAuthoringQualityInput)
     checkFrameDialogueTiming(checks, input.package);
     checkDialoguePerformanceQuality(checks, input.package);
     checkVideoPromptLayout(checks, input.package);
+    checkVideoPromptLength(checks, input.package);
     checkVideoPromptSemanticQuality(checks, input.package, input.authoringAudit);
     checkPlotFacts(checks, input.package, sourceText);
     checkActionDensity(checks, input.package);
@@ -282,7 +286,15 @@ function checkFrameDialogueTiming(checks: DramaQualityGateCheck[], value: DramaP
 }
 
 function checkVideoPromptLayout(checks: DramaQualityGateCheck[], value: DramaProductionPackageV1) {
-    const failures = value.episodes.flatMap((episode) => episode.shots.flatMap((shot) => validateDramaVideoPromptCardLayout(shot.videoPrompt, shot.framePlan?.frames || [], shot.code || shot.title)));
+    const failures = value.episodes.flatMap((episode) =>
+        episode.shots.flatMap((shot) => {
+            const label = `${episode.code}/${shot.code || shot.title}`;
+            const promptFailures = validateDramaVideoPromptCardLayout(shot.videoPrompt, shot.framePlan?.frames || [], shot.code || shot.title);
+            if (videoPromptRuntimePlaceholderPattern.test(shot.videoPrompt)) promptFailures.push(`${label}公开视频含程序占位值 undefined/null/NaN/[object Object]`);
+            if (videoPromptPseudoParameterPattern.test(shot.videoPrompt)) promptFailures.push(`${label}公开视频含未声明伪参数串；请用自然语言表达视觉要求`);
+            return promptFailures;
+        }),
+    );
     add(
         checks,
         "VIDEO_PROMPT_LAYOUT",
@@ -291,6 +303,30 @@ function checkVideoPromptLayout(checks: DramaQualityGateCheck[], value: DramaPro
         failures.length ? failures.slice(0, 8).join("；") : "每个真实 framePlan 时间段都有完整的小墨式导演镜头卡",
         ["episodes[].shots[].videoPrompt", "episodes[].shots[].framePlan.frames[]"],
         "按小墨式导演成稿补齐：每个真实 framePlan 时间段对应一个镜头卡，标题包含时间、景别、焦段、机位和运镜，正文写具体可见画面与声音；内部起点/动作/衔接/终点继续只在 framePlan 中校验。",
+    );
+}
+
+function checkVideoPromptLength(checks: DramaQualityGateCheck[], value: DramaProductionPackageV1) {
+    const failures = value.episodes.flatMap((episode) =>
+        episode.shots.flatMap((shot) => {
+            const characterCount = Array.from(shot.videoPrompt || "").length;
+            return characterCount > videoPromptMaxUnicodeCharacters ? [`${episode.code}/${shot.code || shot.title} videoPrompt=${characterCount}个Unicode字符，超过4500上限`] : [];
+        }),
+    );
+    add(
+        checks,
+        "VIDEO_PROMPT_LENGTH",
+        !failures.length,
+        "视频提示词长度",
+        failures.length ? failures.join("；") : "每个逻辑片段完整 videoPrompt 均不超过4500个Unicode字符",
+        ["episodes[].shots[].videoPrompt"],
+        "只删除重复的全局场景、光影、色调和材质描述；保留主体、触发、动作、可见结果、声音锚点、对白边界、连续性状态和硬切承接后重新自检。",
+        {
+            repairScope: "shot",
+            shotIds: failures.map((failure) => failure.match(/(?:^|\/)(SH\d+)\b/u)?.[1]).filter((code): code is string => Boolean(code)),
+            frameIds: [],
+            lockedFields: ["project", "assets", "episodes[].script", "shots[].duration", "productionPlan", "unfailedShots"],
+        },
     );
 }
 
