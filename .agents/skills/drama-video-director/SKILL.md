@@ -261,6 +261,8 @@ Skill 的文字规则就是独立 Codex authoring 的质量门禁。当前 Codex
 
 独立 Codex 制作包只能使用当前导入字段：`episodes[].code`、`episodes[].shots[].code`、`duration`、`timecode`。`episodeId`、`shotId`、`shotDuration` 是禁止字段，不能由导入器替换成正式字段；缺少 `code` 必须在 authoring 阶段修复。生成 `framePlan` 前必须冻结 `productionLock.logicalShotCount`、`shotDuration`、`targetDuration`、`dialogueCapacityPlan`、`narrativeBeatPlan`、`internalCutPolicy`、`framePolicy` 和 `selfCheckRuleVersion`，并证明 `targetDuration = logicalShotCount × shotDuration`。
 
+独立 Codex 的 `authoring.materials[]` 只能包含 `package-template`、`story-source`、`reference` 三类来源记录，来源类型允许 `text`、`markdown`、`image`、`video`、`audio`；导演 Skill、公开镜头卡格式 Skill 和供应商适配 Skill 必须分别放入可选的 `authoring.directorSkill`、`authoring.storyboardSkill`、`authoring.seedanceSkill`，禁止伪造 `director-skill`、`provider-adapter` 素材角色。三个 Skill 字段只做 authoring provenance 记录，项目导入不得要求当前服务器安装、执行或匹配它们；没有 Skill 字段也不能因此阻断结构合法的独立包。`framePlan.frames[]` 只保留契约字段，禁止把 `meta` 或其它生成器内部辅助对象带入正式 JSON。
+
 每个逻辑片段都必须有独立的剧情职责、关系变化、动作结果或空间信息；仅把同一段对白切成前半/后半、只换景别/焦段、或为了凑 7—10 次硬切而增加的片段，均属于 `LOGICAL_SHOT_ECONOMY` 失败，必须合并后重新做对白容量预检。内部帧段和硬切永远不能改变逻辑片段数量。
 
 `productionBible.productionPlan` 必须作为完整对象直接写入，不能依靠运行时默认值补齐；`authoring.materials` 必须是数组；QC 报告必须逐项包含所有门禁代码、状态、镜头/帧证据和修订范围。只有结构字段、逻辑片段轴、对白容量、逐帧时间轴、公开视频卡与 QC 证据全部通过，才可写 `qualityGateStatus=passed`。
@@ -284,7 +286,7 @@ Skill 的文字规则就是独立 Codex authoring 的质量门禁。当前 Codex
 
 制作包有两条隔离入口。独立 Codex 只读取本轮用户请求、模板、TXT/剧本、当前 Skill 和当前资产，直接输出完整 13 章 Markdown；项目内 Agent 继续由 `executeDramaScriptRun` 组织。模板只决定字段、章节格式和自检规则，TXT 只提供剧情事实，两者必须都被读取；固定脚本、历史制作包、旧 generationPrompt 或直接从模板复制正文都不能冒充 authoring。
 
-独立 Codex 的最终包记录 `authoringMode=codex-standalone`、`canonicalSource=markdown-with-embedded-json`、模板/TXT/参考素材来源和当前 Skill 版本（能够获得哈希时记录）。项目内 Agent 可以记录 `authoring.source=executeDramaScriptRun` 并使用服务端质量门禁，但服务端不得把独立 Codex 的 Markdown 重建成另一份内容。
+独立 Codex 的最终包记录 `authoringMode=codex-standalone`、`canonicalSource=markdown-with-embedded-json`、模板/TXT/参考素材来源和实际使用的 Skill 版本（能够获得哈希时记录）。这些记录用于追溯生成依据，不是导入授权。项目内 Agent 可以记录 `authoring.source=executeDramaScriptRun` 并使用服务端质量门禁，但服务端不得把独立 Codex 的 Markdown 重建成另一份内容，也不得用当前项目 Skill 覆盖或否定独立 Codex 已完成的 authoring。
 
 内部项目 GPT 和用户显式调用的 Codex 导演审阅都必须从同一份 `.agents/skills/drama-video-director/SKILL.md` 编译产物读取相同版本与内容哈希；Codex 侧不得维护一份手工规则副本，项目服务端也不得注入第二套冲突的导演规则。
 

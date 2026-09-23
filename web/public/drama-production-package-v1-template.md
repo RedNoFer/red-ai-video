@@ -2,7 +2,7 @@
 
 > 制作包格式：`vozeb-drama-production-package-v1`
 >
-> 模板版本：由 `pnpm compile:skills` 自动生成；唯一制作包契约：`vozeb-drama-production-package-v1@1.0.0`（契约 hash：`77541e4dc34e638a56a3273bab74ee1d1911933c2c84792cbad60d2e31144107`，规范源 hash：`6f5b65775b707296f554a9fd91865f02c59b57b11891780d880492a0d12418b9`）。导演 Skill：`drama-video-director@1.12.0`（hash：`5cd3666d05d9e35a4bf8112d49667a577e62f3a258b36fae7600c35cf1675ec1`）；模板自检规则、Seedance Skill 和来源版本由同一编译清单绑定。
+> 模板版本：由 `pnpm compile:skills` 自动生成；唯一制作包契约：`vozeb-drama-production-package-v1@1.0.0`（契约 hash：`77541e4dc34e638a56a3273bab74ee1d1911933c2c84792cbad60d2e31144107`，规范源 hash：`abfc0ce656e01fd4baca3bc9e7f03ed5be94e3be5fff23661b0e87256a33f85d`）。导演 Skill：`drama-video-director@1.12.0`（hash：`af6f070d9ff74c382ee065ff80a3c78d5e6e87b776631ba21774d8faa4f5a7c3`）；模板自检规则、Seedance Skill 和来源版本由同一编译清单绑定。
 >
 > 使用约定：本模板是当前 v1 制作包的结构、自检规则和最终交付格式。独立 Codex 必须直接生成完整 13 章 Markdown，并在“规范对象”代码块中嵌入唯一标准 JSON；JSON 与正文由 Codex 同一轮生成，服务端不负责章节投影或视频提示词重写。不要把历史制作包、旧 generationPrompt 或旧分镜正文当作新包模板。
 >
@@ -105,9 +105,11 @@ targetDuration = logicalShotCount × shotDuration
 
 正式输出前必须逐项检查并在第十三章给出证据：根对象可解析且只有一个 `drama-production-package` JSON 代码块；13 个一级章节齐全且顺序正确；每个 episode/shot 使用 `code`；`duration` 与 `timecode` 一致；`productionPlan` 完整；`authoring.materials` 是数组；每个逻辑片段的帧段从 0 连续覆盖到自身时长；公开视频卡与帧段一一对应；JSON 中的 `videoPrompt` 与第十一章原文一致；全部门禁代码都有状态、镜头/帧证据和修订范围。
 
+`authoring.materials[]` 只能登记 `package-template`、`story-source`、`reference` 三种来源角色；每条来源必须有唯一 `alias`、`title` 和合法 `type`（`text`、`markdown`、`image`、`video`、`audio`），hash 能取得时填写 `contentHash`。导演 Skill、公开视频格式 Skill 和供应商适配 Skill 不是素材来源，必须分别放入可选的 `authoring.directorSkill`、`authoring.storyboardSkill`、`authoring.seedanceSkill`，不能写成 `director-skill` 或 `provider-adapter` 混入 `materials[]`。这三个字段只记录本次 authoring 实际使用的来源，不要求项目当前安装同名 Skill，也不参与导入准入、版本匹配或语义复检。`framePlan.frames[]` 也只能保留本模板列出的契约字段，禁止写入 `meta` 等生成器内部辅助对象。
+
 若发现字段错误、逻辑片段总数错误、对白容量不足、帧时间不连续、公开视频卡缺失或 QC 证据缺失，必须在当前 Codex 对话内修复后重新自检。不得把错误包交给用户，也不得把错误交给导入器“过滤后继续”。
 
-正式独立包的根级 `authoring` 必须记录：`source=codex-standalone`、`authoringMode=codex-standalone`、`canonicalSource=markdown-with-embedded-json`、`qualityGateStatus=passed`、实际 `repairCount`、`fullPackageRepairCount`、`generatedAt` 和 `materials`；模板/TXT/参考素材的 hash 能取得时记录，不能取得时记录来源名称和版本，不得伪造 hash。不得写入 `executeDramaScriptRun`、`workOrderId`、`projectionVersion`、`qualityGateRulesHash`、`repairPolicyHash` 或服务端运行凭据。
+正式独立包的根级 `authoring` 必须记录：`source=codex-standalone`、`authoringMode=codex-standalone`、`canonicalSource=markdown-with-embedded-json`、`qualityGateStatus=passed`、实际 `repairCount`、`fullPackageRepairCount`、`generatedAt` 和 `materials`；模板/TXT/参考素材的 hash 能取得时记录，不能取得时记录来源名称和版本，不得伪造 hash。`directorSkill`、`storyboardSkill`、`seedanceSkill` 是可选 provenance 字段，只用于审计“本包按什么规则生成”，不属于项目导入限制；即使当前项目没有这些 Skill，结构合法且 QC 通过的独立包仍可导入。不得写入 `executeDramaScriptRun`、`workOrderId`、`projectionVersion`、`qualityGateRulesHash`、`repairPolicyHash` 或服务端运行凭据。
 
 ## 独立生成协议与完整门禁
 
@@ -116,8 +118,8 @@ targetDuration = logicalShotCount × shotDuration
 ### 当前绑定版本
 
 - 制作包契约：`vozeb-drama-production-package-v1@1.0.0`，契约 hash：`77541e4dc34e638a56a3273bab74ee1d1911933c2c84792cbad60d2e31144107`。
-- 规范源 hash：`6f5b65775b707296f554a9fd91865f02c59b57b11891780d880492a0d12418b9`；编译规则 hash：`ce46f6a5dad1b11da48ec2ed0b440e28ebb119652b575f89fb4bc2245993fb27`。
-- 主导演 Skill：`drama-video-director@1.12.0`，hash：`5cd3666d05d9e35a4bf8112d49667a577e62f3a258b36fae7600c35cf1675ec1`。
+- 规范源 hash：`abfc0ce656e01fd4baca3bc9e7f03ed5be94e3be5fff23661b0e87256a33f85d`；编译规则 hash：`e822f493b3bb4fd9c6541b30184e397da67b08178b7c13d225895feb3872c994`。
+- 主导演 Skill：`drama-video-director@1.12.0`，hash：`af6f070d9ff74c382ee065ff80a3c78d5e6e87b776631ba21774d8faa4f5a7c3`。
 - 视频提示词公开格式：小墨个人分镜 Skill 6.3，来源标识 `storyboard-director@6.3.0`。
 - 每个逻辑片段的完整 `videoPrompt`（包含全部公开帧卡、台词、人声、音效和剪辑承接）必须控制在 4500 个 Unicode 字符以内；超限只能压缩重复的全局场景/风格描述，不能删除主体、触发、动作、可见结果、声音锚点、连续性或硬切事件。
 - 公开视频卡使用自然语言，不得出现 `palette=...`、`saturation=...`、`film_stock=...`、`grain=...`、`halation=...` 等未声明伪参数串，也不得出现 `undefined`、`null`、`NaN`、`[object Object]`；光色、材质、胶片感如确有作用，只用自然语言写入 `productionBible` 或当前帧新增作用。
@@ -194,7 +196,7 @@ Codex 必须先做预检，再开始拆镜和写公开视频卡；不能先按�
 | `REFERENCE_ALIAS_CONSISTENCY`   | blocker | 严格沿用 `referenceManifest` 的 alias、role、purpose 和顺序；禁止“@图片1至@图片N”、URL、assetId 或擅自重新编号。                                                                                                                                                                                                                     |
 | `CHARACTER_WARDROBE_CONTINUITY` | blocker | 出镜角色持续锁定身份、年龄感、脸型/发型、服装结构、颜色和固定配饰；角色图与场景图职责不能互换。                                                                                                                                                                                                                                      |
 | `JSON_MARKDOWN_CONSISTENCY`     | blocker | 第十一章公开 `videoPrompt`、规范对象中的同一字段和第十三章 QC 结论必须来自同一轮 authoring，原文一致，不得一处为空或另行改写。                                                                                                                                                                                                       |
-| `PROVENANCE`                    | blocker | 记录模板、TXT/剧情源、参考素材、契约、导演 Skill、Seedance Skill 的版本/内容哈希和生成时间；外部独立生成可标注 `codex-standalone`，项目内导入再记录实际导入来源。                                                                                                                                                                    |
+| `PROVENANCE`                    | blocker | 记录模板、TXT/剧情源、参考素材、契约、实际使用的导演 Skill、小墨公开视频格式 Skill、Seedance Skill 的版本/内容哈希和生成时间；这些是来源审计信息，不是独立包导入的 Skill 白名单。                                                                                                                                                    |
 | `PACKAGE_SCHEMA`                | blocker | JSON 只能使用当前契约字段；`episodes[].code`、`shots[].code`、`duration`、`timecode`、完整 `productionPlan` 和数组型 `authoring.materials` 必须存在；出现 `episodeId`、`shotId`、`shotDuration` 或服务端运行字段立即阻断，不得静默别名转换。                                                                                         |
 | `PRODUCTION_PLAN_COMPLETENESS`  | blocker | `project.productionBible.productionPlan` 必须是完整对象，包含视频时长、内部切镜策略、帧策略、技能、视觉、参考、连续性和来源；不能让运行时默认值掩盖缺失生产方案。                                                                                                                                                                    |
 | `LOGICAL_SHOT_COUNT`            | blocker | 先冻结 `logicalShotCount`、`shotDuration`、`targetDuration`、对白容量计划和剧情节拍计划；实际逻辑片段数与锁定值一致，`targetDuration=logicalShotCount×shotDuration`，内部帧段/硬切不得改变三者。                                                                                                                                     |
@@ -458,7 +460,7 @@ Codex 必须在输出前自检内部 `framePlan` 的起点、动作、衔接、�
 
 ### 全部门禁 QC 表
 
-必须逐项列出门禁登记表中的全部 `code`，每项填写 `status=passed|warning`、证据镜号/帧号、实际修订范围和备注；门禁登记表中标记为 blocker 的项目只能填写 `passed`，不能填写 `warning`；不得省略门禁代码，不得出现 `blocker`、“待检查”或“待服务端检查”。
+必须逐项列出门禁登记表中的全部 `code`，每项填写 `status=passed|warning`、证据镜号/帧号、实际修订范围和备注；门禁登记表中标记为 blocker 的项目只能填写 `passed`，不能填写 `warning`；不得省略门禁代码，不得出现 `blocker`、“待检查”或“待服务端检查”。嵌入 JSON 的 `authoring.qualityGateReport` 使用契约字段：报告顶层 `status` 只能是 `passed|blocked`，每个 `checks[]` 使用 `code`、`status=passed|warning|blocked`、`severity=blocker|warning`、`scope`、`evidence`、`sourceRefs`、`fixHint` 及可选修订范围字段；`status` 表示本项结果，`severity` 只表示门禁级别，不能把 `passed` 写进 `severity`。报告顶层为 `passed` 时不得存在 `status=blocked`；`severity=blocker` 且 `status=passed` 是合法的“阻断级门禁已通过”。
 
 ### 视频评分
 

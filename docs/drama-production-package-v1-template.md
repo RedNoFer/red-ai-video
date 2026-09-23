@@ -105,9 +105,11 @@ targetDuration = logicalShotCount × shotDuration
 
 正式输出前必须逐项检查并在第十三章给出证据：根对象可解析且只有一个 `drama-production-package` JSON 代码块；13 个一级章节齐全且顺序正确；每个 episode/shot 使用 `code`；`duration` 与 `timecode` 一致；`productionPlan` 完整；`authoring.materials` 是数组；每个逻辑片段的帧段从 0 连续覆盖到自身时长；公开视频卡与帧段一一对应；JSON 中的 `videoPrompt` 与第十一章原文一致；全部门禁代码都有状态、镜头/帧证据和修订范围。
 
+`authoring.materials[]` 只能登记 `package-template`、`story-source`、`reference` 三种来源角色；每条来源必须有唯一 `alias`、`title` 和合法 `type`（`text`、`markdown`、`image`、`video`、`audio`），hash 能取得时填写 `contentHash`。导演 Skill、公开视频格式 Skill 和供应商适配 Skill 不是素材来源，必须分别放入可选的 `authoring.directorSkill`、`authoring.storyboardSkill`、`authoring.seedanceSkill`，不能写成 `director-skill` 或 `provider-adapter` 混入 `materials[]`。这三个字段只记录本次 authoring 实际使用的来源，不要求项目当前安装同名 Skill，也不参与导入准入、版本匹配或语义复检。`framePlan.frames[]` 也只能保留本模板列出的契约字段，禁止写入 `meta` 等生成器内部辅助对象。
+
 若发现字段错误、逻辑片段总数错误、对白容量不足、帧时间不连续、公开视频卡缺失或 QC 证据缺失，必须在当前 Codex 对话内修复后重新自检。不得把错误包交给用户，也不得把错误交给导入器“过滤后继续”。
 
-正式独立包的根级 `authoring` 必须记录：`source=codex-standalone`、`authoringMode=codex-standalone`、`canonicalSource=markdown-with-embedded-json`、`qualityGateStatus=passed`、实际 `repairCount`、`fullPackageRepairCount`、`generatedAt` 和 `materials`；模板/TXT/参考素材的 hash 能取得时记录，不能取得时记录来源名称和版本，不得伪造 hash。不得写入 `executeDramaScriptRun`、`workOrderId`、`projectionVersion`、`qualityGateRulesHash`、`repairPolicyHash` 或服务端运行凭据。
+正式独立包的根级 `authoring` 必须记录：`source=codex-standalone`、`authoringMode=codex-standalone`、`canonicalSource=markdown-with-embedded-json`、`qualityGateStatus=passed`、实际 `repairCount`、`fullPackageRepairCount`、`generatedAt` 和 `materials`；模板/TXT/参考素材的 hash 能取得时记录，不能取得时记录来源名称和版本，不得伪造 hash。`directorSkill`、`storyboardSkill`、`seedanceSkill` 是可选 provenance 字段，只用于审计“本包按什么规则生成”，不属于项目导入限制；即使当前项目没有这些 Skill，结构合法且 QC 通过的独立包仍可导入。不得写入 `executeDramaScriptRun`、`workOrderId`、`projectionVersion`、`qualityGateRulesHash`、`repairPolicyHash` 或服务端运行凭据。
 
 ## 独立生成协议与完整门禁
 
@@ -421,7 +423,7 @@ Codex 必须在输出前自检内部 `framePlan` 的起点、动作、衔接、�
 
 ### 全部门禁 QC 表
 
-必须逐项列出门禁登记表中的全部 `code`，每项填写 `status=passed|warning`、证据镜号/帧号、实际修订范围和备注；门禁登记表中标记为 blocker 的项目只能填写 `passed`，不能填写 `warning`；不得省略门禁代码，不得出现 `blocker`、“待检查”或“待服务端检查”。
+必须逐项列出门禁登记表中的全部 `code`，每项填写 `status=passed|warning`、证据镜号/帧号、实际修订范围和备注；门禁登记表中标记为 blocker 的项目只能填写 `passed`，不能填写 `warning`；不得省略门禁代码，不得出现 `blocker`、“待检查”或“待服务端检查”。嵌入 JSON 的 `authoring.qualityGateReport` 使用契约字段：报告顶层 `status` 只能是 `passed|blocked`，每个 `checks[]` 使用 `code`、`status=passed|warning|blocked`、`severity=blocker|warning`、`scope`、`evidence`、`sourceRefs`、`fixHint` 及可选修订范围字段；`status` 表示本项结果，`severity` 只表示门禁级别，不能把 `passed` 写进 `severity`。报告顶层为 `passed` 时不得存在 `status=blocked`；`severity=blocker` 且 `status=passed` 是合法的“阻断级门禁已通过”。
 
 ### 视频评分
 

@@ -918,7 +918,7 @@ export type DramaProductionPackageEpisode = {
 export type DramaProductionPackageAuthoringMaterial = {
     alias: string;
     role: "package-template" | "story-source" | "reference";
-    type: "text" | "image" | "video" | "audio";
+    type: "text" | "markdown" | "image" | "video" | "audio";
     title: string;
     contentHash?: string;
 };
@@ -993,6 +993,7 @@ export type DramaAuthoringDraft = DramaAuthoringPackageDraft | DramaAuthoringSta
 
 export type DramaQualityGateCheck = {
     code: string;
+    status?: "passed" | "warning" | "blocked";
     severity: "blocker" | "warning";
     scope: string;
     repairScope?: "shot" | "package";
@@ -1076,6 +1077,7 @@ export type DramaProductionPackageAuthoring = {
     generatedAt: string;
     contract?: DramaProductionPackageContract;
     directorSkill?: { id: string; version: string; contentHash?: string };
+    storyboardSkill?: { id: string; version: string; contentHash?: string };
     seedanceSkill?: { id: string; version: string; contentHash?: string };
     materials: DramaProductionPackageAuthoringMaterial[];
     authoringAudit?: DramaAuthoringAudit;

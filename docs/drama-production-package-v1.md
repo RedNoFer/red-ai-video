@@ -6,7 +6,7 @@
 
 以后由 Codex、项目 Agent 或人工编写的完整制作包，都必须保持以下一级章节、表头和编号规则。13 章是 v1 的固定制作包结构，不因项目、集数或对话内容改变。多集项目在一个总包中仍只保留一套固定一级章节，但每一集必须在规范对象中拥有完整且自洽的剧本、场次、镜头、资产引用、表演、声音、连续性、逐帧计划和 QC 数据；按单集生成或导入时，该单集制作包也必须完整保留全部 13 章，不得只输出镜头表或局部字段。允许扩写正文，不允许改名、换序或省略必填章节。没有内容时保留章节并明确写“无”。
 
-制作包支持两种彼此隔离的 authoring 方式：项目内生成由 `executeDramaScriptRun` 负责编排；独立 Codex authoring 只依据本模板、当前 TXT/小说、当前用户请求、当前导演 Skill 和可用资产，直接生成完整 13 章 Markdown 制作包。独立 Codex 的 Markdown 与其中唯一的规范对象 JSON 在同一轮直接生成，服务端不参与创作、不投影章节、不重写 `videoPrompt`。两种方式共享本文件、模板内嵌门禁登记表和当前导演 Skill，但独立 Codex 必须在输出前完成模板内自检与局部修订。固定脚本、历史制作包、旧 generationPrompt 或直接读取模板复制正文不得作为制作包生成器。项目导入阶段只执行 JSON、章节、字段、时间轴、资产和权限等结构安全校验，不能把导入校验当作独立 authoring 的质量门禁。最终包必须保留来源清单、契约版本、导演 Skill/Seedance Skill 版本与内容哈希（能够获得时记录），以及模板/TXT/参考素材的 alias、role、顺序和内容哈希。
+制作包支持两种彼此隔离的 authoring 方式：项目内生成由 `executeDramaScriptRun` 负责编排；独立 Codex authoring 只依据本模板、当前 TXT/小说、当前用户请求、当前导演 Skill 和可用资产，直接生成完整 13 章 Markdown 制作包。独立 Codex 的 Markdown 与其中唯一的规范对象 JSON 在同一轮直接生成，服务端不参与创作、不投影章节、不重写 `videoPrompt`。两种方式共享本文件、模板内嵌门禁登记表和当前导演 Skill，但独立 Codex 必须在输出前完成模板内自检与局部修订。固定脚本、历史制作包、旧 generationPrompt 或直接读取模板复制正文不得作为制作包生成器。项目导入阶段只执行 JSON、章节、字段、时间轴、资产和权限等结构安全校验，不能把导入校验当作独立 authoring 的质量门禁。最终包必须保留来源清单、契约版本、实际使用的导演 Skill/小墨公开视频格式 Skill/Seedance Skill 版本与内容哈希（能够获得时记录），以及模板/TXT/参考素材的 alias、role、顺序和内容哈希。Skill 字段是 authoring provenance，不是项目导入授权；独立包导入不要求服务器安装、执行或匹配这些 Skill。
 
 ## 版本化契约块
 
@@ -141,6 +141,8 @@ contract:
 - `videoPrompt` 必须由 Agent 直接生成小墨个人分镜 Skill 6.3（`storyboard-director@6.3.0`）适配版镜头卡；每个真实 `framePlan.frames[]` 对应一张卡。服务端或外部脚本不得从 `framePlan`、旧提示词或模板示例重建公开正文。
 - 第十三章必须附带逐门禁 QC 自检表，逐项记录状态、证据镜头/帧号、修订范围和最终备注；登记为 blocker 的门禁只能是 `passed`，不能以 `warning`、“待检查”或“待服务端检查”交付。只有全部 blocker 通过，才可写 `qualityGateStatus=passed`。
 
+QC JSON 必须区分“结果”和“级别”：`authoring.qualityGateReport.status` 是整包结果；每个 `checks[]` 的 `status` 是该项结果，`severity` 是该项级别。`severity=blocker` 且 `status=passed` 表示阻断级门禁已通过，不得把 `passed` 写入 `severity`，也不得因为存在已通过的 blocker 就把整包判为 blocked。
+
 ### 门禁登记表
 
 | code | 级别 | 必须满足的条件 |
@@ -176,7 +178,7 @@ contract:
 | `REFERENCE_ALIAS_CONSISTENCY` | blocker | 严格沿用 `referenceManifest` 的 alias、role、purpose 和顺序；禁止“@图片1至@图片N”、URL、assetId 或擅自重新编号。 |
 | `CHARACTER_WARDROBE_CONTINUITY` | blocker | 出镜角色持续锁定身份、年龄感、脸型/发型、服装结构、颜色和固定配饰；角色图与场景图职责不能互换。 |
 | `JSON_MARKDOWN_CONSISTENCY` | blocker | 第十一章公开 `videoPrompt`、规范对象中的同一字段和第十三章 QC 结论必须来自同一轮 authoring，原文一致，不得一处为空或另行改写。 |
-| `PROVENANCE` | blocker | 记录模板、TXT/剧情源、参考素材、契约、导演 Skill、Seedance Skill 的版本/内容哈希和生成时间；外部独立生成可标注 `codex-standalone`，项目内导入再记录实际导入来源。 |
+| `PROVENANCE` | blocker | 记录模板、TXT/剧情源、参考素材、契约、实际使用的导演 Skill、小墨公开视频格式 Skill、Seedance Skill 的版本/内容哈希和生成时间；这些是来源审计信息，不是独立包导入的 Skill 白名单。 |
 | `PACKAGE_SCHEMA` | blocker | JSON 只能使用当前契约字段；`episodes[].code`、`shots[].code`、`duration`、`timecode`、完整 `productionPlan` 和数组型 `authoring.materials` 必须存在；出现 `episodeId`、`shotId`、`shotDuration` 或服务端运行字段立即阻断，不得静默别名转换。 |
 | `PRODUCTION_PLAN_COMPLETENESS` | blocker | `project.productionBible.productionPlan` 必须是完整对象，包含视频时长、内部切镜策略、帧策略、技能、视觉、参考、连续性和来源；不能让运行时默认值掩盖缺失生产方案。 |
 | `LOGICAL_SHOT_COUNT` | blocker | 先冻结 `logicalShotCount`、`shotDuration`、`targetDuration`、对白容量计划和剧情节拍计划；实际逻辑片段数与锁定值一致，`targetDuration=logicalShotCount×shotDuration`，内部帧段/硬切不得改变三者。 |
@@ -204,7 +206,7 @@ contract:
 ## Agent 运行时规则
 
 - 项目内 Agent 制作包仍由 `executeDramaScriptRun` 组织；独立 Codex 不经过该入口。两条路径都必须依据同一模板和 Skill 自检，但独立 Codex 的正式结果是完整 Markdown，项目服务端不得把独立结果改写成另一份 Markdown。
-- `package-template` 只规定 13 个一级章节、字段顺序和字段职责；制作包正式生成时由系统自动注入唯一系统模板，用户可以提供同角色的自定义模板覆盖它；`story-source` 只规定当前目标小说章节的剧情事实；`reference` 只规定素材职责。三类 authoring source 必须保留 alias、role、顺序和内容哈希。用户不应因为未重复上传模板而被阻止生成制作包。
+- `authoring.materials[]` 只允许三类来源记录：`package-template`、`story-source`、`reference`，每条必须有唯一 `alias`、`title`、`type`（`text`、`markdown`、`image`、`video`、`audio`）；可取得时记录 `contentHash`。`director-skill`、`provider-adapter` 不是素材来源角色，禁止放入 `authoring.materials[]`；实际使用的当前导演 Skill、公开镜头卡格式 Skill 与 Seedance 适配 Skill 可分别记录在 `authoring.directorSkill`、`authoring.storyboardSkill`、`authoring.seedanceSkill`，并在 `productionBible.productionPlan.skills` 写入版本。它们是生成来源记录，不是导入器的 Skill 白名单或版本匹配条件。`package-template` 只规定 13 个一级章节、字段顺序和字段职责；制作包正式生成时由系统自动注入唯一系统模板，用户可以提供同角色的自定义模板覆盖它；`story-source` 只规定当前目标小说章节的剧情事实；`reference` 只规定素材职责。三类 authoring source 必须保留 alias、role、顺序和内容哈希。用户不应因为未重复上传模板而被阻止生成制作包。
 - 目标小说章节使用 `targetNarrativeChapter` 单独记录；它是剧情素材范围，不得与制作包一级章节编号混用。当前集必须提供完整文学剧本、场次、镜头和可执行结果，不能只返回摘要或镜头概述。
 - 镜头规范对象必须分别填写 `dramaticFunction`、`performancePlan`、`lightingPlan`、`continuity`、`entryState`、`exitState`、`videoPrompt` 和 `framePlan`；`framePlan.start.source`、`framePlan.end.required`、`framePlan.referenceManifest`、每个帧段的 `imagePrompt` 及其时间/动作/静态状态必须可校验。
 - 跨镜头连续性是硬门禁：硬切允许从独立视频片段开始，但携带角色、道具、环境或轴线时，下一镜不得重置人物位置。`entryState` 必须继承上一镜 `exitState`；若位置、姿态、持有关系或轴线改变，必须在上一镜出口/edge notes/下一镜首帧写出触发、移动路径或受力和到达结果，且首个 framePlan 必须重复空间锚点。服务端不得静默用上一镜状态覆盖错误输入来伪造通过。

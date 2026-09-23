@@ -842,6 +842,7 @@ describe("production package boundary", () => {
         const source = structuredClone(productionPackage);
         const authoredVideoPrompt = "  ### 镜头 01 | 0.0—7.5秒\n画面内容：萧炎因木案受力抬眼，指节压出白痕，案面轻响。  \n### 镜头 02 | 7.5—15.0秒\n画面内容：萧炎肩背抬起，视线锁定前方，桌沿留下受力声。\n";
         source.episodes[0].shots[0].videoPrompt = authoredVideoPrompt;
+        source.episodes[0].shots[0].imagePrompt = "镜头推进，声音增强；这是由独立 Codex authoring 自检负责的语义内容";
         source.episodes[0].shots[1].framePlan.start = { source: "independent" };
         source.episodes[0].shots[1].videoPrompt = authoredVideoPrompt.replaceAll("萧炎", "Karin");
         for (const shot of source.episodes[0].shots) for (const frame of shot.framePlan.frames) frame.endPrompt = frame.imagePrompt;
@@ -858,14 +859,16 @@ describe("production package boundary", () => {
             framePolicy: "agent",
             selfCheckRuleVersion: "drama-production-package-v1-standalone-preflight-1",
         } as never;
+        source.project.productionBible.productionPlan = { ...source.project.productionBible.productionPlan!, skills: [] };
         source.authoring = {
             source: "codex-standalone",
             authoringMode: "codex-standalone",
             canonicalSource: "markdown-with-embedded-json",
             qualityGateStatus: "passed",
             generatedAt: "2026-09-14T00:00:00.000Z",
+            storyboardSkill: { id: "storyboard-director", version: "6.3.0", contentHash: "6cc953399603c3ee271b137073e7d7a7a94c63dc658a00fe2ca378e19cd6c866" },
             materials: [
-                { alias: "@模板", role: "package-template", type: "text", title: "制作包模板" },
+                { alias: "@模板", role: "package-template", type: "markdown", title: "制作包模板" },
                 { alias: "@TXT", role: "story-source", type: "text", title: "当前 TXT" },
             ],
             qualityGateReport: {
@@ -873,11 +876,16 @@ describe("production package boundary", () => {
                 checks: DRAMA_PACKAGE_GATE_CODES.map((code) => ({ code, severity: "warning" as const, scope: code, evidence: "测试证据", sourceRefs: ["test"], fixHint: "" })),
             },
         };
+        source.authoring.qualityGateReport!.checks[0] = { ...source.authoring.qualityGateReport!.checks[0], status: "passed", severity: "blocker" };
 
         const preview = previewDramaProductionPackage(JSON.stringify(source), "codex-standalone.md", undefined, { allowImportWarnings: false });
 
         expect(preview.package.episodes[0].shots[0].videoPrompt).toBe(authoredVideoPrompt);
         expect(preview.package.authoring).toMatchObject({ source: "codex-standalone", authoringMode: "codex-standalone", canonicalSource: "markdown-with-embedded-json", qualityGateStatus: "passed" });
+        expect(preview.package.authoring?.storyboardSkill).toEqual({ id: "storyboard-director", version: "6.3.0", contentHash: "6cc953399603c3ee271b137073e7d7a7a94c63dc658a00fe2ca378e19cd6c866" });
+        expect(preview.package.authoring?.materials[0]).toMatchObject({ alias: "@模板", role: "package-template", type: "markdown" });
+        expect(preview.package.authoring?.directorSkill).toBeUndefined();
+        expect(preview.package.authoring?.seedanceSkill).toBeUndefined();
     });
 
     it("rejects non-contract episode and shot aliases before normalization", () => {
@@ -947,6 +955,81 @@ describe("production package boundary", () => {
             materials: { template: "bad" },
         };
         expect(() => previewDramaProductionPackage(JSON.stringify(source), "standalone.json")).toThrow("authoring.materials 必须是数组");
+    });
+
+    it("rejects Skill roles inside standalone materials with a precise path", () => {
+        const source = structuredClone(productionPackage) as unknown as Record<string, unknown>;
+        (source.project as Record<string, unknown>).productionLock = {
+            shotDuration: 15,
+            targetDuration: 30,
+            logicalShotCount: 2,
+            dialogueCapacityPlan: [],
+            narrativeBeatPlan: [
+                { id: "B01", responsibility: "梦中惊醒", shotCodes: ["SH01"] },
+                { id: "B02", responsibility: "接住水囊", shotCodes: ["SH02"] },
+            ],
+            internalCutPolicy: "adaptive",
+            framePolicy: "agent",
+            selfCheckRuleVersion: "test",
+        };
+        for (const episode of source.episodes as Array<Record<string, unknown>>) {
+            for (const shot of episode.shots as Array<Record<string, unknown>>) {
+                shot.videoPrompt = "### 镜头 01\n画面内容：角色抬眼，手部受力，桌面产生轻响。\n### 镜头 02\n画面内容：角色收住视线，手部停在桌沿，呼吸落地。";
+                (shot.framePlan as Record<string, unknown>).start = { source: "independent" };
+                for (const frame of (shot.framePlan as { frames: Array<Record<string, unknown>> }).frames) {
+                    frame.startPrompt = frame.imagePrompt;
+                    frame.transitionPrompt = frame.actionPrompt;
+                    frame.endPrompt = frame.imagePrompt;
+                }
+            }
+        }
+        source.authoring = {
+            source: "codex-standalone",
+            authoringMode: "codex-standalone",
+            canonicalSource: "markdown-with-embedded-json",
+            qualityGateStatus: "passed",
+            generatedAt: "2026-09-14T00:00:00.000Z",
+            materials: [
+                { alias: "@模板", role: "package-template", type: "text", title: "模板" },
+                { alias: "@TXT", role: "story-source", type: "text", title: "TXT" },
+                { alias: "@导演Skill", role: "director-skill", type: "markdown", title: "导演 Skill" },
+            ],
+            qualityGateReport: { status: "passed", checks: DRAMA_PACKAGE_GATE_CODES.map((code) => ({ code, severity: "warning", scope: code, evidence: "test", sourceRefs: ["test"], fixHint: "" })) },
+        };
+        expect(() => previewDramaProductionPackage(JSON.stringify(source), "standalone.json")).toThrow("authoring.materials[2]");
+    });
+
+    it("rejects generator-only frame metadata before normalization", () => {
+        const source = structuredClone(productionPackage) as unknown as Record<string, unknown>;
+        (source.project as Record<string, unknown>).productionLock = {
+            shotDuration: 15,
+            targetDuration: 30,
+            logicalShotCount: 2,
+            dialogueCapacityPlan: [],
+            narrativeBeatPlan: [
+                { id: "B01", responsibility: "梦中惊醒", shotCodes: ["SH01"] },
+                { id: "B02", responsibility: "接住水囊", shotCodes: ["SH02"] },
+            ],
+            internalCutPolicy: "adaptive",
+            framePolicy: "agent",
+            selfCheckRuleVersion: "test",
+        };
+        const shot = ((source.episodes as Array<Record<string, unknown>>)[0].shots as Array<Record<string, unknown>>)[0];
+        const frames = (shot.framePlan as { frames: Array<Record<string, unknown>> }).frames;
+        frames[0].meta = { internal: true };
+        source.authoring = {
+            source: "codex-standalone",
+            authoringMode: "codex-standalone",
+            canonicalSource: "markdown-with-embedded-json",
+            qualityGateStatus: "passed",
+            generatedAt: "2026-09-14T00:00:00.000Z",
+            materials: [
+                { alias: "@模板", role: "package-template", type: "text", title: "模板" },
+                { alias: "@TXT", role: "story-source", type: "text", title: "TXT" },
+            ],
+            qualityGateReport: { status: "passed", checks: DRAMA_PACKAGE_GATE_CODES.map((code) => ({ code, severity: "warning", scope: code, evidence: "test", sourceRefs: ["test"], fixHint: "" })) },
+        };
+        expect(() => previewDramaProductionPackage(JSON.stringify(source), "standalone.json")).toThrow("framePlan.frames[0].meta");
     });
 
     it("rejects logical-shot inflation even when the package contains valid frame plans", () => {
