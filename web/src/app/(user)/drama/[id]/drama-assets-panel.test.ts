@@ -173,6 +173,17 @@ describe("drama asset image results", () => {
         expect(explicitPromptSave).not.toContain("updateAsset(");
     });
 
+    it("keeps the scene reference preview large and opens the original image for zoom", async () => {
+        const sceneReferenceBoard = await readFile(resolve(process.cwd(), "src/app/(user)/drama/[id]/drama-scene-reference-board.tsx"), "utf8");
+
+        expect(sceneReferenceBoard).toContain('width="min(1440px, calc(100vw - 24px))"');
+        expect(sceneReferenceBoard).toContain('maxHeight: "calc(100dvh - 24px)"');
+        expect(sceneReferenceBoard).toContain('maxHeight: "calc(100dvh - 108px)"');
+        expect(sceneReferenceBoard).toContain("originalImageDownloadUrl");
+        expect(sceneReferenceBoard).toContain('mask: "放大查看"');
+        expect(sceneReferenceBoard).not.toContain("max-h-[70vh] max-w-full object-contain");
+    });
+
     it("filters derived readiness and usage states without changing project data", () => {
         const rows: DramaAssetLibraryRow[] = [
             {
