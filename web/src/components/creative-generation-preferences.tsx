@@ -40,13 +40,6 @@ const videoRatios = [
     { value: "9:16", label: "9:16", width: 14, height: 24 },
 ] as const;
 
-const imageQualityOptions = [
-    { value: "auto", label: "智能画质", shortLabel: "智能" },
-    { value: "high", label: "高画质", shortLabel: "高" },
-    { value: "medium", label: "中画质", shortLabel: "中" },
-    { value: "low", label: "低画质", shortLabel: "低" },
-] as const;
-
 const videoQualityOptions = [
     { value: "auto", label: "智能清晰度", shortLabel: "智能" },
     { value: "480", label: "480P", shortLabel: "480P" },
@@ -231,7 +224,7 @@ function PreferencePanel({
 }) {
     const ratios = capability === "image" ? IMAGE_SIZE_OPTIONS : videoRatios;
     const selectedSize = capability === "image" ? normalizeImagePresetSize(preferences.image?.size || DEFAULT_IMAGE_SIZE) : preferences.video?.size || "auto";
-    const selectedQuality = capability === "image" ? preferences.image?.quality || "auto" : preferences.video?.quality || "auto";
+    const selectedQuality = preferences.video?.quality || "auto";
     const selectedCount = capability === "image" ? preferences.image?.count || 1 : preferences.video?.count || 1;
     const [customEditorOpen, setCustomEditorOpen] = useState(Boolean(parseCustomDimensions(selectedSize)));
     const [section, setSection] = useState<"canvas" | "output">("canvas");
@@ -348,7 +341,10 @@ function PreferencePanel({
                     {capability === "video" ? (
                         <VideoQualityField value={selectedQuality} options={videoQualityOptions} onChange={(quality) => onChange({ quality })} />
                     ) : (
-                        <CompactOptionGroup label="画质" ariaLabel="选择图片画质" value={selectedQuality} options={imageQualityOptions} onChange={(quality) => onChange({ quality })} />
+                        <div className="flex h-9 items-center justify-between rounded-lg bg-[#f5f6f7] px-3 text-[11px] dark:bg-[#24282e]">
+                            <span className="font-medium text-[#7b8591] dark:text-[#98a2ae]">画质</span>
+                            <span className="text-[#20242a] dark:text-white">4K 高清（模型绑定）</span>
+                        </div>
                     )}
                     {showCount ? <GenerationCountGroup key={capability} capability={capability} value={selectedCount} onChange={(count) => onChange({ count })} /> : null}
                     {capability === "video" ? (
@@ -575,13 +571,13 @@ function PreferenceSummaryIcon({ capability, preferences }: { capability: MediaC
 export function generationPreferenceSummary(capability: MediaCapability, preferences: CreativeGenerationPreferences) {
     if (capability === "audio") return `${audioVoiceLabel(preferences.audio?.voice || "alloy")} · ${audioFormatLabel(preferences.audio?.format || "mp3")} · ${preferences.audio?.speed || 1}x`;
     const size = capability === "image" ? normalizeImagePresetSize(preferences.image?.size || DEFAULT_IMAGE_SIZE) : preferences.video?.size || "auto";
-    const quality = capability === "image" ? preferences.image?.quality || "auto" : preferences.video?.quality || "auto";
+    const quality = preferences.video?.quality || "auto";
     const count = capability === "image" ? preferences.image?.count || 1 : preferences.video?.count || 1;
     const countLabel = count > 1 ? ` · ${count}${capability === "image" ? "张" : "条"}` : "";
     const sizeLabel = size === "auto" ? "智能尺寸" : formatSizeLabel(size);
-    const qualityLabel = capability === "image" ? imageQualityOptions.find((item) => item.value === quality)?.label || quality : videoQualityLabel(quality);
+    const qualityLabel = capability === "image" ? "4K 高清（模型绑定）" : videoQualityLabel(quality);
     const referenceLabel = capability === "video" ? videoReferenceModeOptions.find((item) => item.value === (preferences.video?.referenceMode || "reference"))?.label : undefined;
-    if (capability === "image") return size === "auto" && quality === "auto" ? `智能参数${countLabel}` : `${sizeLabel} · ${qualityLabel}${countLabel}`;
+    if (capability === "image") return `${sizeLabel} · ${qualityLabel}${countLabel}`;
     const parameterLabel = size === "auto" && quality === "auto" ? "智能参数" : `${sizeLabel} · ${qualityLabel}`;
     const audioLabel = (preferences.video?.generateAudio ?? true) ? "有声" : "无声";
     const watermarkLabel = (preferences.video?.watermark ?? false) ? "带水印" : "无水印";

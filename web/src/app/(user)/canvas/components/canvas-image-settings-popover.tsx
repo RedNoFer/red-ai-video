@@ -23,12 +23,12 @@ export function CanvasImageSettingsPopover({ config, onConfigChange, onOpenChang
         mode: "image",
         image: {
             size: config.size || DEFAULT_IMAGE_SIZE,
-            quality: imageQuality(config.quality),
+            quality: "high",
             count: positiveInteger(config.count),
         },
     };
     const summary = canvasImagePreferenceSummary(preferences, fixedSizeLabel);
-    const fullSummary = fixedSizeLabel ? `${fixedSizeLabel} · ${imageQualityLabel(preferences.image?.quality)} · ${preferences.image?.count || 1}张` : generationPreferenceSummary("image", preferences);
+    const fullSummary = fixedSizeLabel ? `${fixedSizeLabel} · 4K 高清（模型绑定） · ${preferences.image?.count || 1}张` : generationPreferenceSummary("image", preferences);
 
     return (
         <CreativeGenerationPreferences
@@ -51,24 +51,13 @@ export function CanvasImageSettingsPopover({ config, onConfigChange, onOpenChang
 export function canvasImagePreferenceSummary(preferences: GenerationPreferences, fixedSizeLabel?: string) {
     const image = preferences.image;
     const size = fixedSizeLabel || compactSizeLabel(image?.size);
-    if (!fixedSizeLabel && /^\d+x\d+$/i.test(image?.size || "")) return size;
-    const quality = ({ auto: "智能", high: "高", medium: "中", low: "低" } as Record<string, string>)[image?.quality || "auto"] || image?.quality || "智能";
     const count = image?.count || 1;
-    return `${size} · ${quality}${count > 1 ? ` · ${count}张` : ""}`;
+    return `${size} · 4K 高清${count > 1 ? ` · ${count}张` : ""}`;
 }
 
 function applyImagePreferencePatch(patch: CreativeGenerationPreferencePatch, onChange: (key: keyof AiConfig, value: string) => void) {
     if (patch.size !== undefined) onChange("size", patch.size);
-    if (patch.quality !== undefined) onChange("quality", patch.quality);
     if (patch.count !== undefined) onChange("count", String(patch.count));
-}
-
-function imageQuality(value?: string): NonNullable<GenerationPreferences["image"]>["quality"] {
-    return value === "high" || value === "medium" || value === "low" ? value : "auto";
-}
-
-function imageQualityLabel(value?: string) {
-    return ({ auto: "智能画质", high: "高画质", medium: "中画质", low: "低画质" } as Record<string, string>)[value || "auto"] || value;
 }
 
 function positiveInteger(value: unknown) {

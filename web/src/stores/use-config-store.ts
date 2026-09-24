@@ -211,7 +211,7 @@ export const defaultConfig: AiConfig = {
     videoModels: [],
     textModels: [],
     audioModels: [],
-    quality: "auto",
+    quality: "high",
     size: DEFAULT_IMAGE_SIZE,
     count: "1",
     canvasImageCount: "1",

@@ -34,6 +34,7 @@ const defaultFields: Array<{ capability: LogicalModelCapability; key: keyof Syst
 
 export function defaultLogicalModelCapabilityProfile(capability: LogicalModelCapability): LogicalModelCapabilityProfile {
     return {
+        ...(capability === "image" ? { imageQuality: "high" as const } : {}),
         supportsReferenceImage: true,
         supportsReferenceVideo: true,
         supportsReferenceAudio: true,
@@ -355,6 +356,20 @@ function BindingEditor({ binding, capability, channels, onChange }: { binding: L
                     <LabeledControl label="最大参考图数量">
                         <InputNumber className="w-full" min={0} max={16} precision={0} value={profile.maxReferenceImages} onChange={(value) => updateProfile({ maxReferenceImages: Number(value) || 0 })} />
                     </LabeledControl>
+                    {capability === "image" ? (
+                        <LabeledControl label="图片质量（模型绑定）">
+                            <Select
+                                className="w-full"
+                                value={profile.imageQuality || "high"}
+                                options={[
+                                    { label: "4K 高清", value: "high" },
+                                    { label: "2K 中等", value: "medium" },
+                                    { label: "1K 低清", value: "low" },
+                                ]}
+                                onChange={(value) => updateProfile({ imageQuality: value })}
+                            />
+                        </LabeledControl>
+                    ) : null}
                     {bumingQualityOptions.length ? (
                         <LabeledControl label="版本档位">
                             <Select className="w-full" value={resolveBumingSeedanceQuality(binding.upstreamModel, profile.bumingQuality)} options={bumingQualityOptions} onChange={(value) => updateProfile({ bumingQuality: value })} />

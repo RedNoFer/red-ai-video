@@ -43,6 +43,10 @@ describe("admin logical model editor", () => {
         });
     });
 
+    it("defaults image model bindings to 4K high quality", () => {
+        expect(defaultLogicalModelCapabilityProfile("image").imageQuality).toBe("high");
+    });
+
     it("persists the default capability profile when a new capability variant is created", () => {
         const original: LogicalModel = {
             id: "seedance-2-5",

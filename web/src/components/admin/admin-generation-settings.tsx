@@ -91,19 +91,6 @@ export function GenerationDefaultsPanel({ settings, onChange }: { settings: Auth
                 <LabeledControl label="默认图片/视频尺寸">
                     <Select className="w-full" value={settings.generationDefaults.imageSize} options={IMAGE_SIZE_OPTIONS.map(({ value, label }) => ({ value, label }))} onChange={(value) => onChange("imageSize", value)} />
                 </LabeledControl>
-                <LabeledControl label="默认图片质量">
-                    <Select
-                        className="w-full"
-                        value={settings.generationDefaults.imageQuality}
-                        options={[
-                            { value: "auto", label: "自动" },
-                            { value: "low", label: "低清" },
-                            { value: "medium", label: "中等" },
-                            { value: "high", label: "高清" },
-                        ]}
-                        onChange={(value) => onChange("imageQuality", value)}
-                    />
-                </LabeledControl>
                 <LabeledControl label="默认视频清晰度">
                     <AutoComplete
                         className="w-full"
@@ -123,7 +110,7 @@ export function GenerationDefaultsPanel({ settings, onChange }: { settings: Auth
                     <Select className="w-full" value={settings.generationDefaults.audioFormat} options={["mp3", "wav", "opus", "aac", "flac"].map((value) => ({ value, label: value.toUpperCase() }))} onChange={(value) => onChange("audioFormat", value)} />
                 </LabeledControl>
             </div>
-            <div className="mt-2 text-xs leading-5 text-stone-500 dark:text-stone-400">新建画布生图节点和配置节点默认使用，单个节点仍可单独覆盖。</div>
+            <div className="mt-2 text-xs leading-5 text-stone-500 dark:text-stone-400">尺寸作为平台默认值；图片质量由上游图片模型绑定中的“图片质量”决定，未单独配置时默认使用 4K 高清。</div>
         </div>
     );
 }

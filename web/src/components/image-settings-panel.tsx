@@ -8,12 +8,6 @@ import { DEFAULT_IMAGE_SIZE, IMAGE_SIZE_OPTIONS, IMAGE_SIZE_PRESETS, normalizeIm
 import { parseImageDimensions } from "@/lib/image-size";
 import type { AiConfig } from "@/stores/use-config-store";
 
-const qualityOptions = [
-    { value: "auto", label: "自动" },
-    { value: "high", label: "高" },
-    { value: "medium", label: "中" },
-    { value: "low", label: "低" },
-];
 const DIMENSION_STEP = 16;
 
 type ImageSettingsPanelProps = {
@@ -28,7 +22,6 @@ type ImageSettingsPanelProps = {
 };
 
 export function ImageSettingsPanel({ config, onConfigChange, theme, showTitle = true, className = "w-[320px] space-y-4 rounded-2xl px-1 py-0.5", maxCount = 15, quickCount = 10, showSizeControls = true }: ImageSettingsPanelProps) {
-    const quality = config.quality || "auto";
     const count = Math.max(1, Math.min(maxCount, Math.floor(Math.abs(Number(config.count)) || 1)));
 
     return (
@@ -45,12 +38,8 @@ export function ImageSettingsPanel({ config, onConfigChange, theme, showTitle = 
                 {showTitle ? <div className="text-lg font-semibold">图像设置</div> : null}
                 <div className="space-y-2.5">
                     <SettingTitle color={theme.node.muted}>质量</SettingTitle>
-                    <div className="grid grid-cols-4 gap-2.5">
-                        {qualityOptions.map((item) => (
-                            <OptionPill key={item.value} selected={quality === item.value} theme={theme} onClick={() => onConfigChange("quality", item.value)}>
-                                {item.label}
-                            </OptionPill>
-                        ))}
+                    <div className="flex h-9 items-center rounded-full border px-3 text-sm" style={{ borderColor: theme.node.stroke, color: theme.node.text }}>
+                        4K 高清（模型绑定）
                     </div>
                 </div>
                 {showSizeControls ? <ImageSizeControls size={config.size || DEFAULT_IMAGE_SIZE} onChange={(value) => onConfigChange("size", value)} theme={theme} /> : null}
@@ -142,7 +131,7 @@ export function ImageSettingsTheme({ theme, children }: { theme: CanvasTheme; ch
 }
 
 export function imageQualityLabel(value: string) {
-    return ({ auto: "自动", high: "高", medium: "中", low: "低" } as Record<string, string>)[value] || value;
+    return value === "high" ? "4K 高清（模型绑定）" : value;
 }
 
 export function imageSizeLabel(size: string) {

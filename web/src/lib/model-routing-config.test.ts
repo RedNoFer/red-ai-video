@@ -420,6 +420,12 @@ describe("model routing config", () => {
         expect(normalized[0]?.bindings[0]?.capabilityProfile).toMatchObject({ bumingQuality: "fast" });
     });
 
+    it("defaults image model bindings to 4K high quality", () => {
+        const profile = resolveLogicalModelCapabilityProfile({ capabilityProfile: {} }, "image", channel("image", ["image-model"]), "image-model");
+
+        expect(profile?.imageQuality).toBe("high");
+    });
+
     it("uses the exact Buming Seedance 2.5 provider duration over a stale 15-second binding cap", () => {
         const buming = applyChannelProtocol({ ...channel("buming", ["seedance-2-5-special"]), advancedConfig: {} as never }, "buming-seedance");
 

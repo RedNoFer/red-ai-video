@@ -44,7 +44,7 @@ describe("creativeRunPresentation", () => {
         expect(creativeRunPresentation(run, new Map())).toEqual([
             { key: "mode", label: "类型", value: "图片生成" },
             { key: "size", label: "尺寸", value: "3:4" },
-            { key: "quality", label: "画质", value: "高画质" },
+            { key: "quality", label: "画质", value: "4K 高清（模型绑定）" },
             { key: "status", label: "状态", value: "规划中" },
         ]);
     });

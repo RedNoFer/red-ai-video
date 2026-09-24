@@ -125,10 +125,13 @@ export type SystemModelChannel = {
 };
 
 export type LogicalModelCapability = "text" | "image" | "video" | "audio";
+export type ImageGenerationQuality = "low" | "medium" | "high";
 export type LogicalModelFallbackStrategy = "priority" | "cheapest";
 export type LogicalModelCostBasis = "call" | "second";
 
 export type LogicalModelCapabilityProfile = {
+    /** 图片模型绑定的供应商质量档位；high 按比例解析为 4K。 */
+    imageQuality?: ImageGenerationQuality;
     /** 不鸣 Seedance 视频版本档位；仅 buming-seedance 绑定读取。 */
     bumingQuality?: string;
     supportsReferenceImage?: boolean;

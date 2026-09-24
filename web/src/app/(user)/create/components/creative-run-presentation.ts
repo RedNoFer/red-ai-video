@@ -17,8 +17,8 @@ export function creativeRunPresentation(run: CreativeAgentRun | undefined, model
     const size = firstText(tasks.map((task) => task.ratio)) || (preferences && "size" in preferences ? preferences.size : undefined);
     if (size) items.push({ key: "size", label: mode === "video" ? "比例" : "尺寸", value: size });
 
-    const quality = firstText(tasks.map((task) => task.quality)) || (preferences && "quality" in preferences ? preferences.quality : undefined);
-    if (quality) items.push({ key: "quality", label: mode === "video" ? "清晰度" : "画质", value: qualityLabel(quality) });
+    const quality = mode === "image" ? "high" : firstText(tasks.map((task) => task.quality)) || (preferences && "quality" in preferences ? preferences.quality : undefined);
+    if (quality) items.push({ key: "quality", label: mode === "video" ? "清晰度" : "画质", value: mode === "image" ? "4K 高清（模型绑定）" : qualityLabel(quality) });
 
     const seconds = firstNumber(tasks.map((task) => task.seconds)) || (preferences && "seconds" in preferences ? preferences.seconds : undefined);
     if (seconds) items.push({ key: "seconds", label: "时长", value: `${seconds}秒` });

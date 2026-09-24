@@ -119,7 +119,6 @@ import {
     resolveRequestSize,
     imageRequestAspectRatio,
     resolveSize,
-    parseImageRatio,
     parseImageDimensions,
     validateImageSize,
     globalAiOpcImagePreset,
@@ -454,10 +453,8 @@ function buildSub2ApiImageBody(model: string, prompt: string, size?: string, ima
 export function resolveSub2ApiImageSize(config: Pick<ImageTaskConfig, "size">, requestSize?: string) {
     const configuredSize = (config.size || "").trim();
     if (!configuredSize.includes(":")) return requestSize;
-    // Sub2API's OpenAI-compatible image contract accepts the canonical image sizes; keep exact user dimensions untouched.
-    const { width, height } = parseImageRatio(configuredSize);
-    if (width === height) return "1024x1024";
-    return width > height ? "1536x1024" : "1024x1536";
+    // The model binding quality determines the target pixels. Keep 4K for both landscape and portrait ratios.
+    return requestSize;
 }
 
 export function buildSub2ApiImageEditPrompt(prompt: string, references: readonly unknown[]) {

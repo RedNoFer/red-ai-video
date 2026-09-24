@@ -1,4 +1,4 @@
-import type { LogicalModel, LogicalModelBinding, LogicalModelCapability, LogicalModelCapabilityProfile, LogicalModelCostBasis, SystemChannelProtocol, SystemDefaultModels, SystemModelChannel } from "@/lib/auth/store";
+import type { ImageGenerationQuality, LogicalModel, LogicalModelBinding, LogicalModelCapability, LogicalModelCapabilityProfile, LogicalModelCostBasis, SystemChannelProtocol, SystemDefaultModels, SystemModelChannel } from "@/lib/auth/store";
 import { resolveGlobalAiOpcPreset } from "@/lib/globalaiopc-catalog";
 import { inferModelCapability, isCreativeGenerationModel, normalizeModelId } from "@/lib/model-capability";
 import {
@@ -273,6 +273,7 @@ export function resolveLogicalModelCapabilityProfile(binding: Pick<LogicalModelB
         return declared ?? fallback;
     };
     return {
+        ...(capability === "image" ? { imageQuality: normalizeImageQuality(stored.imageQuality) || "high" } : {}),
         ...(bumingQualityOptions.length ? { bumingQuality: text(stored.bumingQuality, 40) || "标准" } : {}),
         supportsReferenceImage: providerCapability("supportsReferenceImage", Boolean(globalPreset?.supportsReferenceImage ?? modelConfig?.supportsReferenceImage ?? advanced?.supportsReferenceImage)),
         supportsReferenceVideo: providerCapability("supportsReferenceVideo", Boolean(globalPreset?.supportsReferenceVideo ?? modelConfig?.supportsReferenceVideo ?? advanced?.supportsReferenceVideo)),
@@ -292,6 +293,10 @@ export function resolveLogicalModelCapabilityProfile(binding: Pick<LogicalModelB
         unitCostCurrency: text(stored.unitCostCurrency, 12) || undefined,
         unitCostBasis: normalizeCostBasis(stored.unitCostBasis),
     };
+}
+
+function normalizeImageQuality(value: unknown): ImageGenerationQuality | undefined {
+    return value === "low" || value === "medium" || value === "high" ? value : undefined;
 }
 
 function durationRangeMaximum(value: unknown) {
@@ -388,6 +393,7 @@ function normalizeStoredCapabilityProfile(value: unknown): LogicalModelCapabilit
     if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
     const input = value as Record<string, unknown>;
     const profile: LogicalModelCapabilityProfile = {
+        imageQuality: normalizeImageQuality(input.imageQuality),
         bumingQuality: text(input.bumingQuality, 40) || undefined,
         supportsReferenceImage: optionalBoolean(input.supportsReferenceImage),
         supportsReferenceVideo: optionalBoolean(input.supportsReferenceVideo),

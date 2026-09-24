@@ -22,15 +22,15 @@ export function resolveRequestSize(quality: string | undefined, size: string) {
 
 export function resolveResultSize(quality: string | undefined, size: string) {
     const value = size.trim();
+    const qualityValue = String(quality || "")
+        .trim()
+        .toLowerCase();
+    const normalizedQuality = QUALITY_ALIASES[qualityValue] || qualityValue;
     const dimensions = parseImageDimensions(value);
     if (dimensions) {
         validateImageDimensions(dimensions.width, dimensions.height);
         return `${dimensions.width}x${dimensions.height}`;
     }
-    const qualityValue = String(quality || "")
-        .trim()
-        .toLowerCase();
-    const normalizedQuality = QUALITY_ALIASES[qualityValue] || qualityValue;
     return resolveRequestSize(QUALITY_BASE[normalizedQuality] ? normalizedQuality : undefined, value);
 }
 

@@ -68,7 +68,9 @@ export function publicTask(task: ImageTask) {
 
 export function applyDramaAssetImageDefaults(config: ImageTaskConfig | undefined, context: GenerationTaskContext | undefined, settings: Awaited<ReturnType<typeof getAuthSettings>>) {
     if (!config || context?.surface !== "drama" || !["characters", "scenes", "props"].includes(context.assetKind || "")) return config;
-    return { ...config, quality: settings.generationDefaults.imageQuality };
+    const requestedModel = (config as (ImageTaskConfig & { imageModel?: string }) | undefined)?.imageModel || config.model || settings.defaultModels?.imageModel || "";
+    const resolved = resolveLogicalModelCandidates(settings, "image", requestedModel, config.channelId)[0];
+    return { ...config, quality: resolved?.capabilityProfile?.imageQuality || "high" };
 }
 
 export function sanitizeConfigs(config: ImageTaskConfig | undefined, settings: Awaited<ReturnType<typeof getAuthSettings>>): ImageTaskConfig[] {
@@ -79,6 +81,7 @@ export function sanitizeConfigs(config: ImageTaskConfig | undefined, settings: A
             ...channel,
             channelId: resolved.channelId,
             ...resolveImageTaskOptions(config || {}, settings.generationDefaults),
+            quality: resolved.capabilityProfile?.imageQuality || "high",
             systemPrompt: "",
             advancedConfig: sanitizeAdvancedConfig(channel.advancedConfig),
         };

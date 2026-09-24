@@ -71,9 +71,9 @@ describe("GlobalAiOpc image task paths", () => {
         expect(resolveSub2ApiImageSize({ size: "1024x1024" }, "1024x1024")).toBe("1024x1024");
         expect(resolveSub2ApiImageSize({ size: "3840x2160" }, "3840x2160")).toBe("3840x2160");
         expect(resolveSub2ApiImageSize({ size: "2160x3840" }, "2160x3840")).toBe("2160x3840");
-        expect(resolveSub2ApiImageSize({ size: "9:16" }, "2160x3840")).toBe("1024x1536");
-        expect(resolveSub2ApiImageSize({ size: "16:9" }, "3840x2160")).toBe("1536x1024");
-        expect(resolveSub2ApiImageSize({ size: "1:1" }, "2880x2880")).toBe("1024x1024");
+        expect(resolveSub2ApiImageSize({ size: "9:16" }, "2160x3840")).toBe("2160x3840");
+        expect(resolveSub2ApiImageSize({ size: "16:9" }, "3840x2160")).toBe("3840x2160");
+        expect(resolveSub2ApiImageSize({ size: "1:1" }, "2880x2880")).toBe("2880x2880");
         expect(resolveSub2ApiImageSize({ size: "1800x3200" }, "1800x3200")).toBe("1800x3200");
     });
 
@@ -87,7 +87,7 @@ describe("GlobalAiOpc image task paths", () => {
         expect(resolveResultSize(undefined, "auto")).toBeUndefined();
     });
 
-    it("uses the latest admin image quality for drama asset tasks", () => {
+    it("uses the model-bound high quality for drama asset tasks by default", () => {
         const settings = { generationDefaults: { imageQuality: "high" } } as never;
         expect(applyDramaAssetImageDefaults({ quality: "auto", size: "16:9" } as never, { surface: "drama", assetKind: "characters" }, settings)).toMatchObject({ quality: "high", size: "16:9" });
         expect(applyDramaAssetImageDefaults({ quality: "auto", size: "16:9" } as never, { surface: "chat", assetKind: "characters" }, settings)).toMatchObject({ quality: "auto", size: "16:9" });
@@ -376,6 +376,26 @@ describe("GlobalAiOpc image task paths", () => {
 
         expect(resolved?.model).toBe("image-model");
         expect(resolved?.channelId).toBe("image-channel");
+    });
+
+    it("uses the image binding quality instead of the client or global quality", () => {
+        const settings = {
+            generationDefaults: { imageQuality: "low" },
+            systemChannels: [{ id: "image-channel", name: "图片", baseUrl: "https://image.example.com/v1", apiKey: "image-key", apiFormat: "openai", enabled: true, models: ["image-model"] }],
+            logicalModels: [
+                {
+                    id: "image-model",
+                    name: "图片模型",
+                    capability: "image",
+                    enabled: true,
+                    bindings: [{ id: "image-binding", channelId: "image-channel", upstreamModel: "image-model", enabled: true, priority: 1, capabilityProfile: { imageQuality: "high" } }],
+                },
+            ],
+        } as never;
+
+        const [resolved] = sanitizeConfigs({ model: "image-model", quality: "low", size: "16:9" } as never, settings);
+
+        expect(resolved).toMatchObject({ quality: "high", size: "16:9" });
     });
 
     it("keeps the client-selected compatible channel first", () => {

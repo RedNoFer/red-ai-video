@@ -44,7 +44,7 @@ export function compactAgentPreferenceSummary(capability: AgentMediaCapability, 
     }
     const image = preferences.image;
     const size = image?.size ? (image.size === "auto" ? "智能" : image.size.replace("x", "×")) : DEFAULT_IMAGE_SIZE.replace("x", "×");
-    return isExactSize(image?.size) ? size : `${size} · ${image?.count || 1}张`;
+    return `${size} · 4K 高清${isExactSize(image?.size) ? "" : ` · ${image?.count || 1}张`}`;
 }
 
 function agentPreferenceSummary(capability: AgentMediaCapability, preferences: CreativeGenerationPreferences) {
@@ -56,15 +56,13 @@ function agentPreferenceSummary(capability: AgentMediaCapability, preferences: C
     }
     const image = preferences.image;
     const size = image?.size ? (image.size === "auto" ? "智能" : image.size.replace("x", "×")) : DEFAULT_IMAGE_SIZE.replace("x", "×");
-    const quality = ({ high: "高", medium: "中", low: "低", auto: "智能" } as const)[image?.quality || "auto"];
-    return size === "智能" && quality === "智能" && (image?.count || 1) === 1 ? "智能参数" : `${size} · ${quality}${(image?.count || 1) > 1 ? ` · ${image?.count}张` : ""}`;
+    return `${size} · 4K 高清${(image?.count || 1) > 1 ? ` · ${image?.count}张` : ""}`;
 }
 
 export function updateAgentGenerationPreferences(preferences: CreativeGenerationPreferences, capability: AgentMediaCapability, patch: CreativeGenerationPreferencePatch): CreativeGenerationPreferences {
     if (capability === "image") {
         const image = { ...preferences.image };
         if (patch.size !== undefined) image.size = patch.size;
-        if (patch.quality === "auto" || patch.quality === "high" || patch.quality === "medium" || patch.quality === "low") image.quality = patch.quality;
         if (patch.count !== undefined) image.count = patch.count;
         return { ...preferences, mode: "image", image };
     }

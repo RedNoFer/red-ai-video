@@ -209,7 +209,7 @@ describe("OpenAI image provider over a live compatible fixture", () => {
                 prompt: "create a blue protocol test image",
                 n: 1,
                 quality: "high",
-                size: "1024x1536",
+                size: "2160x3840",
                 output_format: "png",
             });
         } finally {
