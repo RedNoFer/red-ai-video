@@ -566,6 +566,24 @@ export type DramaLightingPlan = {
     transitionToNext: string;
 };
 
+export const DRAMA_LIGHTING_PLAN_REQUIRED_FIELDS = [
+    "palette",
+    "colorTemperature",
+    "keyLight",
+    "fillLight",
+    "rimLight",
+    "contrast",
+    "materialResponse",
+    "skinToneProtection",
+    "inheritFromPrevious",
+    "transitionToNext",
+] as const satisfies readonly (keyof DramaLightingPlan)[];
+
+export function hasCompleteDramaLightingPlan(value: unknown): value is DramaLightingPlan {
+    const input = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+    return DRAMA_LIGHTING_PLAN_REQUIRED_FIELDS.every((field) => typeof input[field] === "string" && Boolean((input[field] as string).trim()));
+}
+
 export type DramaStoryboardFrame = {
     id: string;
     sequenceIndex: number;

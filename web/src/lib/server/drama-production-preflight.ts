@@ -1,3 +1,4 @@
+import { hasCompleteDramaLightingPlan } from "@/lib/drama-project-contract";
 import type { DramaEpisode, DramaProductionPreflight, DramaProductionPreflightIssue, DramaProject, DramaShot } from "@/lib/drama-project-contract";
 import { hasApprovedAssetReference, hasApprovedScenePanoramaReference } from "@/lib/drama-asset-baseline";
 import { continuityStartEvidence } from "@/lib/drama-continuity-policy";
@@ -185,8 +186,7 @@ function checkShot(
     for (const detail of validateDramaPerformanceDetail(shot.performancePlan, shot.dialoguePerformance, dialogueCount, label)) issues.push(warning("PERFORMANCE_DETAIL", detail, { shotId: shot.id }));
     if (dialogueCount && (!shot.dialoguePerformance?.length || shot.dialoguePerformance.length < dialogueCount)) issues.push(warning("DIALOGUE_PERFORMANCE_MISSING", `${label}对白缺少逐句语气、节奏和面部反应指导`, { shotId: shot.id }));
     const light = shot.lightingPlan;
-    if (!light?.palette || !light.colorTemperature || !light.keyLight || !light.fillLight || !light.rimLight || !light.materialResponse || !light.skinToneProtection)
-        issues.push(warning("LIGHTING_PLAN_MISSING", `${label}缺少完整色彩与灯光规划`, { shotId: shot.id }));
+    if (!hasCompleteDramaLightingPlan(light)) issues.push(warning("LIGHTING_PLAN_MISSING", `${label}缺少完整色彩与灯光规划`, { shotId: shot.id }));
     if (!Number.isFinite(shot.duration) || shot.duration <= 0) issues.push(blocking("DURATION", `${label}缺少有效时长`, { shotId: shot.id }));
     const utteranceTimingIssues = dramaUtteranceTimingIssues(
         shot.duration,

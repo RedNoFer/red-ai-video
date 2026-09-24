@@ -7,6 +7,7 @@ import { ArrowLeft, Check, ChevronDown, SlidersHorizontal } from "lucide-react";
 import { AgentMarkdown } from "@/components/agent/agent-markdown";
 import { latestFrameEvidence } from "@/lib/drama-continuity-policy";
 import { decideDramaContinuityFrame } from "@/services/api/drama-projects";
+import { hasCompleteDramaLightingPlan } from "@/lib/drama-project-contract";
 import type { DramaEpisode, DramaProject, DramaShot } from "@/lib/drama-project-contract";
 import { useDramaStore } from "../stores/use-drama-store";
 import { DramaStageHeader } from "./drama-editor-elements";
@@ -545,7 +546,7 @@ function hasPerformancePlan(value: DramaShot["performancePlan"]) {
 }
 
 function hasLightingPlan(value: DramaShot["lightingPlan"]) {
-    return Boolean(value?.palette && value.colorTemperature && value.keyLight && value.fillLight && value.rimLight && value.materialResponse && value.skinToneProtection);
+    return hasCompleteDramaLightingPlan(value);
 }
 
 function hasContinuityPlan(shot: DramaEpisode["shots"][number]) {

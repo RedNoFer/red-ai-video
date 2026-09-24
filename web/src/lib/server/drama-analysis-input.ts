@@ -1,4 +1,5 @@
 import { resolveDramaShotDuration } from "@/lib/server/drama-shot-config";
+import { hasCompleteDramaLightingPlan } from "@/lib/drama-project-contract";
 import { dramaFrameVisualSignature } from "@/lib/drama-frame-sequence";
 import { dramaDialogueFragmentSequenceError, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
 import { inferDramaPromptSubjects, validateDramaCharacterWardrobeContinuity, validateDramaCutInformationDiversity, validateDramaPromptComposition, validateDramaReferenceAliasConsistency } from "@/lib/drama-prompt-composition-quality";
@@ -507,16 +508,7 @@ function hasPerformancePlan(value: unknown) {
 }
 
 function hasLightingPlan(value: unknown) {
-    const input = object(value);
-    return Boolean(
-        dramaAnalysisText(input.palette) &&
-        dramaAnalysisText(input.colorTemperature) &&
-        dramaAnalysisText(input.keyLight) &&
-        dramaAnalysisText(input.fillLight) &&
-        dramaAnalysisText(input.rimLight) &&
-        dramaAnalysisText(input.materialResponse) &&
-        dramaAnalysisText(input.skinToneProtection),
-    );
+    return hasCompleteDramaLightingPlan(value);
 }
 
 function hasContinuityPlan(value: unknown) {

@@ -28,6 +28,7 @@ import type {
     DramaShot,
     DramaStoryScene,
 } from "@/lib/drama-project-contract";
+import { hasCompleteDramaLightingPlan } from "@/lib/drama-project-contract";
 import { continuityStateChangeIsIntentional, validateDramaContinuityEdges } from "@/lib/drama-continuity-policy";
 import { defaultDramaProductionPlan, normalizeDramaProductionPlan } from "@/lib/drama-production-plan";
 import {
@@ -68,6 +69,8 @@ type DramaProjectAssetCollection = Pick<DramaProject, "title" | "style" | "ratio
 
 export type DramaProductionPackageNormalizationOptions = {
     validateVideoPrompt?: boolean;
+    /** Enforce the same executable field contract used by generation preflight. */
+    enforceExecutionContract?: boolean;
     requireCameraPlan?: boolean;
     requireContentQuality?: boolean;
     requireAgentAuthoring?: boolean;
@@ -734,8 +737,29 @@ function normalizeProductionPackage(value: unknown, options: DramaProductionPack
     };
     if (options.requireAuthoringQuality) validateStrictAuthoringQuality(result, authoring, options);
     validateProductionPackageCompleteness(result, normalizationOptions);
+    if (normalizationOptions.enforceExecutionContract) validateProductionPackageExecutionContract(result);
     if (!normalizationOptions.standaloneImport) validateSplitShotFramePlans(synchronizedEpisodes, options.allowImportWarnings);
     return result;
+}
+
+function validateProductionPackageExecutionContract(value: DramaProductionPackageV1) {
+    const issues: string[] = [];
+    for (const episode of value.episodes) {
+        for (const shot of episode.shots) {
+            const label = `${episode.code}/${shot.code || shot.title}`;
+            const timingIssues = dramaUtteranceTimingIssues(
+                shot.duration,
+                shot.utterances as DramaDialogueTimingInput[],
+                shot.utterances.some((item) => item.type === "dialogue" || item.type === "voiceover"),
+                label,
+            );
+            if (timingIssues.length) issues.push(...timingIssues);
+            const promptIssues = validateDramaVideoPromptCardLayout(shot.videoPrompt, shot.framePlan?.frames || [], label);
+            if (promptIssues.length) issues.push(promptIssues[0]);
+            if (!hasCompleteDramaLightingPlan(shot.lightingPlan)) issues.push(`${label} lightingPlan 必须完整填写当前 canonical 字段`);
+        }
+    }
+    if (issues.length) throw new DramaProductionPackageError(`制作包执行字段契约未通过：${issues.slice(0, 12).join("；")}`);
 }
 
 function validateStrictAuthoringQuality(value: DramaProductionPackageV1, authoring: DramaProductionPackageAuthoring | undefined, options: DramaProductionPackageNormalizationOptions) {
@@ -1478,7 +1502,8 @@ function normalizePackageShot(value: unknown, index: number, options: DramaProdu
     const performanceFallback = defaultPerformancePlan(title, description, actionEnd, utterances.length > 0);
     const lightingFallback = defaultLightingPlan(lighting, colorPalette);
     const performancePlan = mergePerformancePlan(normalizePerformancePlan(shot.performancePlan), performanceFallback);
-    const lightingPlan = mergeLightingPlan(normalizeLightingPlan(shot.lightingPlan), lightingFallback);
+    const normalizedLightingPlan = normalizeLightingPlan(shot.lightingPlan);
+    const lightingPlan = options.enforceExecutionContract ? normalizedLightingPlan : mergeLightingPlan(normalizedLightingPlan, lightingFallback);
     const dialoguePerformance = mergeDialoguePerformance(normalizeDialoguePerformance(shot.dialoguePerformance), utterances);
     const timecode = parseTimecode(shot.timecode);
     const duration = timecode ? Math.max(1, timecode[1] - timecode[0]) : resolveDramaShotDuration(shot.duration, 5);
@@ -1931,7 +1956,7 @@ function hasPerformancePlan(value: DramaShot["performancePlan"]) {
 }
 
 function hasLightingPlan(value: DramaShot["lightingPlan"]) {
-    return Boolean(value && Object.values(value).some(Boolean));
+    return hasCompleteDramaLightingPlan(value);
 }
 
 function hasContinuityPlan(shot: DramaProductionPackageEpisode["shots"][number]) {

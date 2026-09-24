@@ -1240,7 +1240,7 @@ export function previewDramaProductionPackageForUser(value: unknown, options: Dr
     const source = cleanText(input.source);
     const fileName = cleanText(input.fileName) || "production-package.md";
     try {
-        return previewDramaProductionPackage(source, fileName, undefined, { allowImportWarnings: true, ...options });
+        return previewDramaProductionPackage(source, fileName, undefined, { allowImportWarnings: true, enforceExecutionContract: true, ...options });
     } catch (error) {
         if (error instanceof DramaProductionPackageError) throw new DramaProjectServiceError(error.message, 400);
         throw error;

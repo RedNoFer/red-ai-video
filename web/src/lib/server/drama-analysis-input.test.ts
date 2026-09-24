@@ -592,7 +592,18 @@ describe("review completion input", () => {
                     end: { emotion: "强行镇定", facialAction: "下颌绷住，嘴唇压成直线", gaze: "重新盯住右侧声源", bodyAction: "脊背贴住床头并抬起下巴" },
                 },
             },
-            lightingPlan: { palette: "冷青", colorTemperature: "4200K", keyLight: "窗侧硬光", fillLight: "弱补光", rimLight: "背后轮廓光", materialResponse: "金属反光偏冷", skinToneProtection: "脸部保留暖色" },
+            lightingPlan: {
+                palette: "冷青",
+                colorTemperature: "4200K",
+                keyLight: "窗侧硬光",
+                fillLight: "弱补光",
+                rimLight: "背后轮廓光",
+                contrast: "中等反差",
+                materialResponse: "金属反光偏冷",
+                skinToneProtection: "脸部保留暖色",
+                inheritFromPrevious: "无",
+                transitionToNext: "冷光延续",
+            },
             continuity: { shotSize: "中景", cameraAngle: "平视", composition: "人物居左", characterBlocking: "女主靠床", gazeDirection: "看向右侧", actionStart: "抬头", actionEnd: "停住", screenDirection: "向右", axisRule: "不越轴" },
             entryState: { emotion: "虚弱" },
             exitState: { emotion: "警觉" },
@@ -621,6 +632,6 @@ describe("review completion input", () => {
             continuity: { shotSize: "中景", cameraAngle: "平视", composition: "左侧留白", characterBlocking: "靠床", gazeDirection: "向右", actionStart: "抬头", actionEnd: "停住", screenDirection: "向右", axisRule: "不越轴" },
         };
 
-        expect(reviewCompletionFilledCount(partial, ["performancePlan", "lightingPlan", "continuity", "entryState"])).toBe(3);
+        expect(reviewCompletionFilledCount(partial, ["performancePlan", "lightingPlan", "continuity", "entryState"])).toBe(2);
     });
 });

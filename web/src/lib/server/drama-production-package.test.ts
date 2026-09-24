@@ -838,6 +838,40 @@ describe("production package boundary", () => {
         expect(shot.videoPrompt).toBe("生成15秒9:16竖屏电影级视频。角色抬手后停住");
     });
 
+    it("uses the canonical execution contract for strict package imports", () => {
+        const source = structuredClone(productionPackage);
+        for (const shot of source.episodes[0].shots) {
+            shot.videoPrompt = canonicalVideoPrompt("### 镜头 01-帧01", "### 镜头 02-帧02");
+            shot.lightingPlan = completeLightingPlan();
+        }
+
+        expect(() => previewDramaProductionPackage(JSON.stringify(source), "package.json", undefined, { enforceExecutionContract: true })).toThrow("小墨式");
+    });
+
+    it("requires the same per-utterance speechRate used by generation preflight", () => {
+        const source = structuredClone(productionPackage);
+        for (const shot of source.episodes[0].shots) {
+            shot.videoPrompt = canonicalVideoPrompt("### 镜头 01", "### 镜头 02");
+            shot.lightingPlan = completeLightingPlan();
+        }
+        const shot = source.episodes[0].shots[0];
+        shot.utterances = [{ id: "D01", order: 1, type: "dialogue", speaker: "Karin", text: "先说", startSecond: 1, endSecond: 4, speechRateCharsPerSecond: 5 }];
+
+        expect(() => previewDramaProductionPackage(JSON.stringify(source), "package.json", undefined, { enforceExecutionContract: true })).toThrow("speechRate");
+    });
+
+    it("rejects legacy lighting fields instead of importing an incomplete canonical plan", () => {
+        const source = structuredClone(productionPackage);
+        for (const shot of source.episodes[0].shots) {
+            shot.videoPrompt = canonicalVideoPrompt("### 镜头 01", "### 镜头 02");
+            shot.lightingPlan = completeLightingPlan();
+        }
+        const shot = source.episodes[0].shots[0];
+        shot.lightingPlan = { source: "左侧窗光", direction: "左向右", quality: "柔和", materialResponse: "自然", continuity: "延续" } as never;
+
+        expect(() => previewDramaProductionPackage(JSON.stringify(source), "package.json", undefined, { enforceExecutionContract: true })).toThrow("lightingPlan");
+    });
+
     it("imports standalone Codex metadata without rewriting authored videoPrompt text", () => {
         const source = structuredClone(productionPackage);
         const authoredVideoPrompt = "  ### 镜头 01 | 0.0—7.5秒\n画面内容：萧炎因木案受力抬眼，指节压出白痕，案面轻响。  \n### 镜头 02 | 7.5—15.0秒\n画面内容：萧炎肩背抬起，视线锁定前方，桌沿留下受力声。\n";
@@ -1400,6 +1434,36 @@ describe("production package boundary", () => {
         expect(applied.productionBible).toMatchObject({ targetPlatform: "人工平台", visualStyle: "人工风格", continuityMode: "balanced" });
     });
 });
+
+function canonicalVideoPrompt(firstHeader: string, secondHeader: string) {
+    const card = (header: string, timeRange: string, visual: string) =>
+        [
+            `${header} | ${timeRange} | 中景 | 50mm | 入口侧45度平视 | 缓慢推近4厘米 | 人物镜头`,
+            "场景：马车内。",
+            `画面内容：Karin${visual}，视线停在前方，衣料随着呼吸轻微起伏。`,
+            "光影：冷白窗光落在脸部和手背，阴影侧保留细节。",
+            "色调：冷灰蓝，肤色自然。",
+            "台词：无",
+            "人声：短促吸气。",
+            "音效：车轮与衣料轻响。",
+        ].join("\n");
+    return [card(firstHeader, "0.0—7.5秒", "抬眼"), card(secondHeader, "7.5—15.0秒", "收住肩背")].join("\n");
+}
+
+function completeLightingPlan() {
+    return {
+        palette: "冷灰蓝",
+        colorTemperature: "4200K",
+        keyLight: "左侧窗光",
+        fillLight: "低强度正面补光",
+        rimLight: "背侧微弱轮廓光",
+        contrast: "中等反差",
+        materialResponse: "木石与衣料保留自然反射",
+        skinToneProtection: "保留自然肤色",
+        inheritFromPrevious: "无",
+        transitionToNext: "沿用冷灰蓝主光",
+    };
+}
 
 function shot(code: string, order: number, timecode: string, characterCodes: string[], videoPrompt: string): DramaProductionPackageV1["episodes"][number]["shots"][number] {
     return {
