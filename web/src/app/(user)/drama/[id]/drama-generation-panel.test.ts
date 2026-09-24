@@ -64,6 +64,8 @@ describe("Drama generation production workspace", () => {
         expect(source).toContain("镜头\\d+");
         expect(source).toContain('width: "min(760px, calc(100vw - 24px))"');
         expect(source).toContain("实际引用资产");
+        expect(source).toContain('["本镜原文锚点", compactShotSourceEvidence(shot)]');
+        expect(source).not.toContain('["原文依据", shot.sourceText]');
         expect(source).toContain("data-drama-shot-reference-assets");
         expect(source).toContain("引用资产图片");
         expect(source).toContain("data-drama-shot-supplier-prompt");

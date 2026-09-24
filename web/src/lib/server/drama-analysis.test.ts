@@ -164,6 +164,27 @@ describe("drama analysis contracts", () => {
         expect(result.shots[0]).not.toHaveProperty("imagePrompt");
     });
 
+    it("narrows duplicated full-script source text to each shot's continuous source span", () => {
+        const script = "萧炎压住怒意说：“你应该知道退婚会让父亲难堪。”\n纳兰嫣然抬眼回答：“我可以暂时收回要求，但你要答应一个约定。”";
+        const result = normalizeDramaContentAnalysis(
+            {
+                episode: {},
+                characters: [],
+                scenes: [],
+                props: [],
+                clues: [],
+                shots: [
+                    { title: "萧炎质问", description: "萧炎压住怒意", sourceText: script, dialogue: "你应该知道退婚会让父亲难堪。", utterances: [], duration: 5, characterNames: [], sceneName: "大厅", propNames: [], clueNames: [] },
+                    { title: "纳兰提出约定", description: "纳兰嫣然抬眼", sourceText: script, dialogue: "我可以暂时收回要求，但你要答应一个约定。", utterances: [], duration: 5, characterNames: [], sceneName: "大厅", propNames: [], clueNames: [] },
+                ],
+            },
+            5,
+            script,
+        );
+
+        expect(result.shots.map((shot) => shot.sourceText)).toEqual(["萧炎压住怒意说：“你应该知道退婚会让父亲难堪。”", "纳兰嫣然抬眼回答：“我可以暂时收回要求，但你要答应一个约定。”"]);
+    });
+
     it("keeps character-only appearance fields out of scene profiles", () => {
         const result = normalizeDramaContentAnalysis(
             {

@@ -23,9 +23,10 @@ import { isGenericDramaDetail, validateDramaFrameTiming, validateDramaPerformanc
 
 export function normalizeDramaContentAnalysis(value: unknown, defaultVideoSeconds: number, sourceScript = ""): DramaContentAnalysis {
     const source = object(value);
-    const shots = array(source.shots).flatMap((item, index) => {
-        const shot = object(item);
-        const sourceText = text(shot.sourceText);
+    const rawShots = array(source.shots).map((item) => object(item));
+    const sourceTexts = normalizeDramaShotSourceTexts(rawShots, sourceScript);
+    const shots = rawShots.flatMap((shot, index) => {
+        const sourceText = sourceTexts[index] || text(shot.sourceText);
         const description = text(shot.description) || sourceText;
         if (!sourceText || !description) return [];
         const modelUtterances = array(shot.utterances).flatMap((value, utteranceIndex) => {
@@ -81,6 +82,54 @@ export function normalizeDramaContentAnalysis(value: unknown, defaultVideoSecond
         clues: normalizeClues(source.clues),
         shots: restoreMissingDialogueCoverage(shots, sourceScript),
     };
+}
+
+function normalizeDramaShotSourceTexts(shots: ReadonlyArray<Record<string, unknown>>, sourceScript: string) {
+    const script = sourceScript.trim();
+    const rawTexts = shots.map((shot) => text(shot.sourceText));
+    if (!script || shots.length < 2) return rawTexts;
+
+    const rawCounts = rawTexts.filter(Boolean).reduce((counts, value) => counts.set(value, (counts.get(value) || 0) + 1), new Map<string, number>());
+    const duplicateValues = new Set([...rawCounts.entries()].filter(([, count]) => count > 1).map(([value]) => value));
+    const positions: Array<{ start: number; length: number } | undefined> = [];
+    let cursor = 0;
+
+    for (const [index, shot] of shots.entries()) {
+        const candidates = dramaShotSourceCandidates(shot).filter((candidate) => !(candidate === rawTexts[index] && duplicateValues.has(candidate)));
+        const match = candidates.map((candidate) => ({ candidate, anchor: findSourceAnchor(script, candidate, cursor) })).find((item) => item.anchor);
+        const anchor = match?.anchor;
+        positions.push(anchor ? { ...anchor, start: match?.candidate === rawTexts[index] ? anchor.start : lineStart(script, anchor.start) } : undefined);
+        if (anchor) cursor = anchor.start + Math.max(1, anchor.length);
+    }
+
+    return shots.map((shot, index) => {
+        const anchor = positions[index];
+        if (!anchor) return rawTexts[index];
+        const next = positions.slice(index + 1).find((candidate) => candidate && candidate.start > anchor.start);
+        const raw = rawTexts[index];
+        const rawAnchor = raw && !duplicateValues.has(raw) ? findSourceAnchor(script, raw, anchor.start) : undefined;
+        const end = next?.start || (rawAnchor?.start === anchor.start ? rawAnchor.start + rawAnchor.length : script.length);
+        return script.slice(anchor.start, Math.max(anchor.start, end)).trim() || raw;
+    });
+}
+
+function dramaShotSourceCandidates(shot: Record<string, unknown>) {
+    const utterances = array(shot.utterances).map((item) => text(object(item).text));
+    const values = [text(shot.sourceText), ...utterances, text(shot.dialogue), text(shot.narration)];
+    return values
+        .flatMap((value, index) => (index === 0 ? [value] : [value, value.replace(/^[^：:\n]{1,30}[：:]\s*/u, "")]))
+        .map((value) => value.trim())
+        .filter((value, index, values) => value.length >= 8 && values.indexOf(value) === index);
+}
+
+function findSourceAnchor(script: string, candidate: string, from: number) {
+    if (!candidate) return undefined;
+    const start = script.indexOf(candidate, from);
+    return start >= 0 ? { start, length: candidate.length } : undefined;
+}
+
+function lineStart(script: string, position: number) {
+    return script.lastIndexOf("\n", Math.max(0, position - 1)) + 1;
 }
 
 export function validateDramaContentAnalysisTiming(value: DramaContentAnalysis) {

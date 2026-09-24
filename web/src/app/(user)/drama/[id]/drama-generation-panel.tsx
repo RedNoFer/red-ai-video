@@ -1338,7 +1338,7 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
         ["章节文案", shot.description || episode.outline || episode.script],
         ["镜头事实", shot.shotBoundary || shot.sourceText],
         ["对白/旁白", [shot.dialogue, shot.narration].filter(Boolean).join("\n")],
-        ["原文依据", shot.sourceText],
+        ["本镜原文锚点", compactShotSourceEvidence(shot)],
         ["实际引用资产", assets.length ? assets.join("、") : "无显式资产引用"],
         ["连续性来源", continuitySource ? `继承 ${continuitySource.title || `镜头 ${continuitySource.order}`} 的实际尾帧${continuityStartEvidence(continuitySource) ? "，已人工验收" : "，等待上镜尾帧验收"}` : "未继承上一镜实际尾帧"],
         ["模型与方式", `${modelText}；${dramaShotVideoMode(project, shot) === "storyboard" ? "分镜驱动" : "直接生成"}；${shot.storyboardFrameMode === "first_last" ? "首尾帧，起止约束不代表质量保证" : "单帧"}`],
@@ -1504,6 +1504,17 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
             </div>
         </div>
     );
+}
+
+function compactShotSourceEvidence(shot: DramaShot) {
+    const utteranceText = shot.utterances
+        .filter((item) => item.type === "dialogue" || item.type === "voiceover")
+        .map((item) => item.text.trim())
+        .filter(Boolean)
+        .join(" / ");
+    const value = utteranceText || shot.description || shot.narration || shot.sourceText;
+    const normalized = value.replace(/\s+/gu, " ").trim();
+    return normalized.length > 120 ? `${normalized.slice(0, 120)}…` : normalized;
 }
 
 type ShotReferenceAsset = { id: string; label: string; url: string; width?: number; height?: number };
