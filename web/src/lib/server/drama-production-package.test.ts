@@ -1296,6 +1296,36 @@ describe("production package boundary", () => {
         expect(applied.productionBible?.colorScript).toBe("冷蓝灰与旧银");
     });
 
+    it("can apply a recompiled locked package when the legacy project plan lacks artStyle", () => {
+        const imported = structuredClone(productionPackage);
+        imported.project.productionBible.productionPlan = {
+            ...defaultDramaProductionPlan("package"),
+            lockedAt: "2026-09-08T00:00:00.000Z",
+            visual: { visualStyle: "历史制作包风格", artStyle: "历史制作包画风", source: "agent" },
+        };
+        const currentStyle = "西方写实 CG 电影质感，冷蓝灰与旧银，真实材质和哥特空间结构";
+        const current = project();
+        current.style = currentStyle;
+        current.productionBible = {
+            ...current.productionBible!,
+            visualStyle: currentStyle,
+            productionPlan: {
+                ...defaultDramaProductionPlan("manual"),
+                lockedAt: "2026-09-09T00:00:00.000Z",
+                visual: { visualStyle: "", artStyle: "", source: "agent" },
+            },
+        };
+
+        const preview = previewDramaProductionPackage(JSON.stringify(imported), "locked-package.json", current, { allowImportWarnings: true });
+        const applied = applyDramaProductionPackage(current, preview.package, preview.sourceHash, JSON.stringify(imported), "locked-package.json", { allowImportWarnings: true });
+
+        expect(applied.productionBible?.productionPlan).toMatchObject({
+            lockedAt: "2026-09-08T00:00:00.000Z",
+            visual: { visualStyle: currentStyle, artStyle: currentStyle },
+        });
+        expect(applied.episodes[0].shots[0].videoPrompt).toContain(currentStyle);
+    });
+
     it("round-trips a complete visual contract from a generated package into project settings", () => {
         const visualStyle = "东方写实摄影";
         const artStyle = "克制电影美术，真实木石与湿润反光";
@@ -1322,10 +1352,10 @@ describe("production package boundary", () => {
         expect(applied.productionBible).toMatchObject({
             visualStyle: current.style,
             globalNegativePrompt: "",
-            productionPlan: { visual: { visualStyle: current.style, artStyle: "" } },
+            productionPlan: { visual: { visualStyle: current.style, artStyle: current.style } },
         });
         expect(applied.productionBible?.productionPlan?.visual.visualDirection).toBeUndefined();
-        expect(dramaVisualDirection(applied.productionBible!.productionPlan!)).toBe(`视觉风格：${current.style}`);
+        expect(dramaVisualDirection(applied.productionBible!.productionPlan!)).toBe(current.style);
     });
 
     it("maps legacy visualStyle without fabricating a missing visual contract", () => {

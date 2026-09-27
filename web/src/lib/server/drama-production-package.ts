@@ -783,7 +783,10 @@ function recompileProductionPackageForProject(value: DramaProductionPackageV1, p
     const currentPlan = project.productionBible?.productionPlan;
     const currentVisual = {
         visualStyle: styleContract.name,
-        artStyle: styleContract.artStyle || "",
+        // A legacy project may have a locked plan without an artStyle. Keep
+        // the active project's visual contract executable without importing
+        // the package's historical art direction.
+        artStyle: styleContract.artStyle || (packagePlan.lockedAt ? styleContract.name : ""),
         visualDirection: currentPlan?.visual?.visualDirection?.trim() || "",
         source: "manual" as const,
     };

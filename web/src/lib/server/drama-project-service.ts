@@ -1265,10 +1265,16 @@ export async function applyDramaProductionPackageForUser(userId: string, id: str
     const current = await getDramaProjectForUser(userId, id);
     const preview = previewDramaProductionPackageForUser(input, {}, current);
     if (cleanText(input.sourceHash) !== preview.sourceHash) throw new DramaProjectServiceError("制作包内容已变化，请重新预览", 409);
-    const project = applyDramaProductionPackage(current, preview.package, preview.sourceHash, cleanText(input.source), cleanText(input.fileName) || "production-package.md", {
-        allowImportWarnings: true,
-        ...(preview.package.authoring?.authoringMode === "codex-standalone" ? { validatedStandalonePackage: true } : {}),
-    });
+    let project: Awaited<ReturnType<typeof applyDramaProductionPackage>>;
+    try {
+        project = applyDramaProductionPackage(current, preview.package, preview.sourceHash, cleanText(input.source), cleanText(input.fileName) || "production-package.md", {
+            allowImportWarnings: true,
+            ...(preview.package.authoring?.authoringMode === "codex-standalone" ? { validatedStandalonePackage: true } : {}),
+        });
+    } catch (error) {
+        if (error instanceof DramaProductionPackageError) throw new DramaProjectServiceError(error.message, 400);
+        throw error;
+    }
     project.updatedAt = nextTimestamp(current.updatedAt);
     await createDramaProjectVersion(userId, current.id, "完整制作包导入前", current);
     try {
@@ -1302,9 +1308,15 @@ export async function applyDramaEpisodeProductionPackageForUser(userId: string, 
         throw new DramaProjectServiceError("制作包内容与执行结果不一致，请重新加载最新 Agent 结果", 409);
     if (preview.package.episodes.length !== 1) throw new DramaProjectServiceError("剧本 Agent 制作包只能包含当前集", 400);
     const scoped = { ...current, episodes: [target], activeEpisodeId: target.id };
-    const applied = applyDramaProductionPackage(scoped, preview.package, preview.sourceHash, cleanText(input.source), cleanText(input.fileName) || "剧本 Agent 制作包.md", {
-        ...(isStandalone ? { validatedStandalonePackage: true } : {}),
-    });
+    let applied: Awaited<ReturnType<typeof applyDramaProductionPackage>>;
+    try {
+        applied = applyDramaProductionPackage(scoped, preview.package, preview.sourceHash, cleanText(input.source), cleanText(input.fileName) || "剧本 Agent 制作包.md", {
+            ...(isStandalone ? { validatedStandalonePackage: true } : {}),
+        });
+    } catch (error) {
+        if (error instanceof DramaProductionPackageError) throw new DramaProjectServiceError(error.message, 400);
+        throw error;
+    }
     const nextEpisode = applied.episodes[0];
     if (!nextEpisode) throw new DramaProjectServiceError("制作包没有可回填的当前集", 400);
     const project = { ...current, ...applied, episodes: current.episodes.map((episode) => (episode.id === target.id ? { ...nextEpisode, id: episode.id } : episode)), activeEpisodeId: current.activeEpisodeId, updatedAt: nextTimestamp(current.updatedAt) };
