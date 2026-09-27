@@ -410,7 +410,8 @@ export async function executeDramaScriptRun(run: AgentRun, origin: string, cooki
                 ? `当前使用 Agent 自适应帧数模式，但已锁定“片段层/内部剪辑层分离”：每个 ${requestedShotDuration} 秒逻辑片段必须使用 8-${DRAMA_FRAME_COUNT_RANGE_DEFAULT.max} 个真实帧段，承载 ${DRAMA_DENSE_HARD_CUT_RANGE_30S.min}-${DRAMA_DENSE_HARD_CUT_RANGE_30S.max} 次内部硬切；这不会增加逻辑片段数量，也不会改变每个片段的 ${requestedShotDuration} 秒时长。`
                 : `当前使用 Agent 自适应帧数模式，允许范围为 ${requestedFrameRange?.min || DRAMA_FRAME_COUNT_RANGE_DEFAULT.min}-${requestedFrameRange?.max || DRAMA_FRAME_COUNT_RANGE_DEFAULT.max} 帧。普通逻辑片段按不可合并的真实事件自适应；帧段和内部硬切只属于当前逻辑片段，不得用来新增或删除逻辑片段。`
             : `当前使用用户明确锁定的 ${requestedFramePolicy} 方案：每个镜头必须严格生成 ${requestedFrameCount} 个连续帧段。`;
-    const visualInstruction = "视觉参数必须写入制作包并服从当前输入中的锁定方案与全局视觉合同；不得用历史提示词或旧制作包补齐。";
+    const visualInstruction =
+        "视觉参数必须写入制作包并服从当前输入中的锁定方案与全局视觉合同；全局视觉合同是整套素材世界观、时代表达、服化道、材质、光色、图片帧和视频主题的唯一视觉来源。固定资产只复用身份、轮廓、空间拓扑、剧情用途和稳定编码；旧 supplierPrompt、旧制作包或资产 profile 中与当前合同冲突的风格描述不得照抄，必须按当前合同重释。不得用历史提示词或旧制作包补齐。";
     const globalVisualContract = resolveDramaGlobalVisualContract(project);
     const attachmentInstruction = authoringSources.length
         ? "本轮 authoringSources 已由系统整理完成：系统在缺少用户模板时自动注入唯一的 role=package-template 制作包模板，用户 TXT/小说保留为 role=story-source，参考素材保留原顺序、alias、role、title、contentHash 和可读 textContent。package-template 只拥有格式、字段和章节结构权威，不提供剧情事实；story-source 只提供当前剧情事实，不改变制作包格式；reference 只提供参考素材职责。必须在写作前读取模板和 TXT，不能只读取其中一个；不得把内部路径、contentHash、隐藏执行信息或模板示例事实写入公开制作包。"

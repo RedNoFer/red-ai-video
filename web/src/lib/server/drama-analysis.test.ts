@@ -126,6 +126,49 @@ describe("drama analysis contracts", () => {
         ).toEqual({ shots: [{ shotId: "shot-one", imagePrompt: "静态画面" }] });
     });
 
+    it("restyles direct analysis output from the current visual contract", () => {
+        const visualProject = {
+            style: "西方CG电影级写实幻想，physically based 3D",
+            productionBible: {
+                language: "中文",
+                ratio: "16:9",
+                continuityMode: "strict" as const,
+                visualStyle: "西方CG电影级写实幻想，physically based 3D",
+                colorScript: "冷蓝灰与旧银",
+                productionPlan: {
+                    lockedAt: "analysis-input",
+                    source: "manual",
+                    visual: { visualStyle: "西方CG电影级写实幻想，physically based 3D", artStyle: "电影级PBR写实渲染", source: "manual" },
+                },
+            },
+        };
+        const result = normalizeDramaVideoPromptAnalysis(
+            {
+                shots: [
+                    {
+                        shotId: "shot-one",
+                        videoPrompt: "动态意图：人物抬头\n视觉风格与光色：旧东方古风国漫",
+                        framePlan: {
+                            frames: [{ id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 2, startPrompt: "低头", actionPrompt: "抬头", transitionPrompt: "视线抬起", endPrompt: "抬头完成", imagePrompt: "光色与风格：旧东方古风国漫" }],
+                        },
+                    },
+                ],
+            },
+            ["shot-one"],
+            [],
+            visualProject,
+        );
+
+        expect(result.shots[0].videoPrompt).toContain("项目视觉合同（唯一风格来源）：西方CG电影级写实幻想，physically based 3D");
+        expect(result.shots[0].videoPrompt).not.toContain("旧东方古风国漫");
+        expect(result.shots[0].framePlan.frames[0].imagePrompt).toContain("项目视觉合同（唯一风格来源）：西方CG电影级写实幻想，physically based 3D");
+        expect(result.shots[0].framePlan.frames[0].imagePrompt).not.toContain("旧东方古风国漫");
+
+        const imageResult = normalizeDramaImagePromptAnalysis({ shots: [{ shotId: "shot-one", imagePrompt: "光色与风格：旧东方古风国漫" }] }, ["shot-one"], visualProject);
+        expect(imageResult.shots[0].imagePrompt).toContain("项目视觉合同（唯一风格来源）：西方CG电影级写实幻想，physically based 3D");
+        expect(imageResult.shots[0].imagePrompt).not.toContain("旧东方古风国漫");
+    });
+
     it("keeps content facts separate from visual prompts", () => {
         const result = normalizeDramaContentAnalysis(
             {

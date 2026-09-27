@@ -123,6 +123,24 @@ describe("prompt optimization service", () => {
         expect(systemMessage).toContain("全局视觉风格：东方写实摄影");
         expect(systemMessage).toContain("全局画风规格：克制电影级空间美术");
         expect(systemMessage).toContain("全局负面约束：不要现代灯具");
+        vi.mocked(requestStructuredText).mockResolvedValueOnce({
+            arguments: JSON.stringify({ optimizedPrompt: "画面主体：人物站在空间中\n可见状态：抬眼看向门口\n构图与空间：主体位于画面中央，门口在后景\n光色与风格：旧东方古风国漫" }),
+            headers: new Headers(),
+            protocol: "chat",
+            elapsedMs: 10,
+        });
+        const result = await optimizeCreativePrompt({
+            origin: "http://localhost:3000",
+            cookie: "session=1",
+            userId: "user-one",
+            requestId: "global-style-frame-request",
+            prompt: "画面主体：人物站在空间中\n可见状态：抬眼看向门口\n光色与风格：旧东方古风国漫",
+            mode: "drama-frame",
+            visualContract: { visualStyle: "西方CG电影级写实幻想", artStyle: "physically based 3D", colorScript: "冷蓝灰与旧银", globalNegativePrompt: "不要旧风格材质" },
+        });
+        expect(result).toContain("项目视觉合同（唯一风格来源）：");
+        expect(result).toContain("西方CG电影级写实幻想");
+        expect(result).not.toContain("旧东方古风国漫");
     });
 
     it("uses the dedicated drama asset skill and forces a white-background three-view character sheet", async () => {
@@ -155,7 +173,7 @@ describe("prompt optimization service", () => {
         expect(systemMessage).toContain("男性不女性化");
         expect(systemMessage).toContain("角色五官建模");
         expect(systemMessage).toContain("角色头发建模");
-        expect(systemMessage).toContain("项目主题风格只能使用全局视觉合同或原提示词中明确提供的视觉风格");
+        expect(systemMessage).toContain("项目主题风格只能使用当前全局视觉合同");
         expect(systemMessage).toContain("不得用“高级、绝美、顶级、仙气”等空泛形容词替代具体事实");
         expect(result.optimizedPrompt).toContain("构图与画幅：16:9 横向");
         expect(result.optimizedPrompt).toContain("纯白色无缝背景");
@@ -183,6 +201,7 @@ describe("prompt optimization service", () => {
             requestId: "asset-style-request",
             prompt: "资产类型：角色\n项目视觉风格：VS7 东方玄幻修仙 + 3D 国漫电影质感 + PBR 材质；只应用其中与角色相关的媒介、造型、材质和光色要求\n当前提示词：萧炎",
             mode: "drama-asset",
+            visualContract: { visualStyle: "VS7 东方玄幻修仙 + 3D 国漫电影质感 + PBR 材质", artStyle: "", colorScript: "", globalNegativePrompt: "" },
         });
 
         expect(result.optimizedPrompt).toContain("VS7 东方玄幻修仙 + 3D 国漫电影质感 + PBR 材质");

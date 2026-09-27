@@ -44,7 +44,7 @@ import {
 import { dramaDialogueFragmentSequenceError, dramaDialogueTimingReminder, dramaFrameDialogueTimingReminder, dramaUtteranceTimingIssues, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
 import { resolveDramaStyleContract } from "@/lib/drama-style";
 import { normalizeDramaCharacterProfile } from "@/lib/drama-character-rules";
-import { compileDramaAssetReferencePrompt } from "@/lib/drama-prompt-compiler";
+import { applyDramaStaticVisualContract, applyDramaVideoVisualContract, compileDramaAssetReferencePrompt } from "@/lib/drama-prompt-compiler";
 import { resolveDramaShotDuration } from "@/lib/server/drama-shot-config";
 import {
     dramaTimeRangePattern,
@@ -95,7 +95,7 @@ export type DramaProductionPackageNormalizationOptions = {
 export function buildDramaAssetReuseContext(project: DramaProjectAssetCollection, episode?: Pick<DramaEpisode, "code" | "shots">) {
     const usedIds = new Set((episode?.shots || []).flatMap((shot) => [...(shot.characterIds || []), ...(shot.propIds || []), ...(shot.sceneId ? [shot.sceneId] : []), ...(shot.clueIds || [])]));
     return {
-        rule: "项目固定资产优先复用；已有资产的身份、轮廓、材质、基准图和稳定编码不得重设计。只有当前章节明确新增且完成资产登记时才可增加新资产。",
+        rule: "项目固定资产优先复用；已有资产的身份、轮廓、基准图和稳定编码不得重设计。角色/场景的时代、服化道、材质和渲染表现必须服从当前项目视觉合同；旧资产描述与当前合同冲突时，只保留身份与剧情结构事实并按当前合同重释。只有当前章节明确新增且完成资产登记时才可增加新资产。",
         episodeCode: episode?.code || "",
         characters: catalogAssets(project.characters, "C", usedIds),
         locations: catalogAssets(project.scenes, "S", usedIds),
@@ -177,13 +177,16 @@ function mergeProjectAssetCollection(incoming: DramaProductionPackageAsset[], ex
             ...(asset.backgroundNpcPolicy || current?.backgroundNpcPolicy ? { backgroundNpcPolicy: asset.backgroundNpcPolicy || current?.backgroundNpcPolicy } : {}),
             ...(activeEpisodeCodes?.length || referenced.has(code) ? { activeEpisodeCodes: [...new Set([...(activeEpisodeCodes || []), ...(referenced.has(code) ? episodeCodes : [])])] } : {}),
         } as DramaProductionPackageAsset;
-        if (!merged.supplierPrompt && project && kind) {
+        if (project && kind) {
             merged.supplierPrompt = compileDramaAssetReferencePrompt(project, { id: `package-${code}`, ...merged }, kind);
         }
         return merged;
     });
     const existingKeys = new Set(existingWithCodes.flatMap(({ asset, code }) => [code, normalizeKey(asset.name)]));
-    return [...merged, ...incoming.filter((asset) => !existingKeys.has(asset.code) && !existingKeys.has(normalizeKey(asset.name)))];
+    const additions = incoming
+        .filter((asset) => !existingKeys.has(asset.code) && !existingKeys.has(normalizeKey(asset.name)))
+        .map((asset) => (project && kind ? { ...asset, supplierPrompt: compileDramaAssetReferencePrompt(project, { id: `package-${asset.code}`, ...asset }, kind) } : asset));
+    return [...merged, ...additions];
 }
 
 export function previewDramaProductionPackage(source: string, fileName = "production-package.json", project?: DramaProjectAssetCollection, options: DramaProductionPackageNormalizationOptions = {}): DramaProductionPackagePreview {
@@ -242,14 +245,6 @@ export function previewDramaProductionPackageObject(
 
 export function applyDramaProductionPackage(project: DramaProject, source: DramaProductionPackageV1, sourceHash: string, rawSource?: string, fileName = "package.json", options: DramaProductionPackageNormalizationOptions = {}): DramaProject {
     const productionPackage = normalizeProductionPackage(source, options);
-    const characters = mergeAssets(project.characters, productionPackage.assets.characters, "character");
-    const locations = mergeAssets(project.scenes, productionPackage.assets.locations, "location");
-    const props = mergeAssets(project.props, productionPackage.assets.props, "prop");
-    const clues = mergeAssets(project.clues, productionPackage.assets.clues, "clue");
-    const episodeByCode = new Map(project.episodes.flatMap((episode) => (episode.code ? [[episode.code, episode] as const] : [])));
-    const episodes = productionPackage.episodes.map((episodePackage, index) =>
-        mergeEpisode(episodeByCode.get(episodePackage.code) || (episodePackage.code ? undefined : project.episodes[index]), episodePackage, characters.ids, locations.ids, props.ids, clues.ids, project.defaultVideoMode),
-    );
     const projectPatch = productionPackage.project;
     const sourceAsset = {
         id: `source-package-${sourceHash.slice(0, 16)}`,
@@ -269,6 +264,15 @@ export function applyDramaProductionPackage(project: DramaProject, source: Drama
               return { ...bibleWithoutColorScript, visualStyle: styleContract.name, ...(styleContract.colorScript ? { colorScript: styleContract.colorScript } : {}) };
           })()
         : undefined;
+    const assetPromptProject = { ...project, style: styleContract.name, productionBible: synchronizedBible || project.productionBible };
+    const characters = mergeAssets(assetPromptProject.characters, productionPackage.assets.characters, "character", assetPromptProject, "角色");
+    const locations = mergeAssets(assetPromptProject.scenes, productionPackage.assets.locations, "location", assetPromptProject, "场景");
+    const props = mergeAssets(assetPromptProject.props, productionPackage.assets.props, "prop", assetPromptProject, "道具");
+    const clues = mergeAssets(assetPromptProject.clues, productionPackage.assets.clues, "clue");
+    const episodeByCode = new Map(project.episodes.flatMap((episode) => (episode.code ? [[episode.code, episode] as const] : [])));
+    const episodes = productionPackage.episodes.map((episodePackage, index) =>
+        mergeEpisode(episodeByCode.get(episodePackage.code) || (episodePackage.code ? undefined : project.episodes[index]), episodePackage, characters.ids, locations.ids, props.ids, clues.ids, project.defaultVideoMode),
+    );
     return {
         ...project,
         title: preferred(project.title, project.fieldOrigins, "title", projectPatch.title),
@@ -428,7 +432,7 @@ function remapContinuityState(state: DramaShot["entryState"], characterIds: Map<
     };
 }
 
-function mergeAssets<T extends DramaNamedAsset>(existing: T[], incoming: DramaProductionPackageAsset[], prefix: string) {
+function mergeAssets<T extends DramaNamedAsset>(existing: T[], incoming: DramaProductionPackageAsset[], prefix: string, project?: DramaProjectAssetCollection, kind?: "角色" | "场景" | "道具") {
     incoming = dedupePackageAssets(incoming);
     const byCode = new Map(existing.flatMap((asset) => (asset.code ? [[asset.code, asset] as const] : [])));
     const byName = new Map(existing.map((asset) => [normalizeKey(asset.name), asset]));
@@ -442,6 +446,7 @@ function mergeAssets<T extends DramaNamedAsset>(existing: T[], incoming: DramaPr
             fieldOrigins: mergeOrigins(current?.fieldOrigins, Object.keys(asset)),
         } as unknown as T;
         const result = mergeManualFields(current, next);
+        if (project && kind) result.supplierPrompt = compileDramaAssetReferencePrompt(project, { ...result, id: result.id }, kind);
         ids.set(asset.code, result.id);
         return result;
     });
@@ -705,6 +710,23 @@ function normalizeProductionPackage(value: unknown, options: DramaProductionPack
         ...(colorScript ? { colorScript } : {}),
         ...(normalizeDialogueTimingPolicy(bible.dialogueTiming) ? { dialogueTiming: normalizeDialogueTimingPolicy(bible.dialogueTiming) } : {}),
     };
+    const packagePromptProject = {
+        title: text(project.title) || "未命名短剧",
+        style: styleContract.name,
+        ratio: text(project.ratio) || "9:16",
+        productionBible: {
+            targetPlatform: optionalText(bible.targetPlatform),
+            language: text(bible.language) || "中文",
+            ratio: text(bible.ratio) || text(project.ratio) || "9:16",
+            continuityMode: bible.continuityMode === "balanced" ? ("balanced" as const) : ("strict" as const),
+            ...normalizedBible,
+            productionPlan,
+        },
+    };
+    const currentStyleAssets = restylePackageAssets(normalizedAssets, packagePromptProject, normalizationOptions.standaloneImport === true);
+    const currentStyleEpisodes = restylePackageEpisodes(synchronizedEpisodes, packagePromptProject, normalizationOptions.standaloneImport === true);
+    const normalizedArchive = normalizeProductionArchive(input.archive);
+    const currentStyleArchive = restylePackageArchive(normalizedArchive, packagePromptProject, normalizationOptions.standaloneImport === true);
     const authoring = normalizePackageAuthoring(input.authoring, options);
     const result: DramaProductionPackageV1 = {
         schemaVersion: 1,
@@ -729,17 +751,53 @@ function normalizeProductionPackage(value: unknown, options: DramaProductionPack
                 productionPlan,
             },
         },
-        assets: normalizedAssets,
-        episodes: synchronizedEpisodes,
+        assets: currentStyleAssets,
+        episodes: currentStyleEpisodes,
         seriesBible: normalizeSeriesBible(input.seriesBible),
-        archive: normalizeProductionArchive(input.archive),
+        archive: currentStyleArchive,
         ...(authoring ? { authoring } : {}),
     };
     if (options.requireAuthoringQuality) validateStrictAuthoringQuality(result, authoring, options);
     validateProductionPackageCompleteness(result, normalizationOptions);
     if (normalizationOptions.enforceExecutionContract) validateProductionPackageExecutionContract(result);
-    if (!normalizationOptions.standaloneImport) validateSplitShotFramePlans(synchronizedEpisodes, options.allowImportWarnings);
+    if (!normalizationOptions.standaloneImport) validateSplitShotFramePlans(currentStyleEpisodes, options.allowImportWarnings);
     return result;
+}
+
+function restylePackageAssets(assets: DramaProductionPackageV1["assets"], project: Pick<DramaProject, "title" | "style" | "ratio" | "productionBible">, preserveAuthoredPrompts: boolean) {
+    if (preserveAuthoredPrompts) return assets;
+    return {
+        characters: assets.characters.map((asset) => ({ ...asset, supplierPrompt: compileDramaAssetReferencePrompt(project, { id: `package-${asset.code}`, ...asset }, "角色") })),
+        locations: assets.locations.map((asset) => ({ ...asset, supplierPrompt: compileDramaAssetReferencePrompt(project, { id: `package-${asset.code}`, ...asset }, "场景") })),
+        props: assets.props.map((asset) => ({ ...asset, supplierPrompt: compileDramaAssetReferencePrompt(project, { id: `package-${asset.code}`, ...asset }, "道具") })),
+        clues: assets.clues,
+    };
+}
+
+function restylePackageEpisodes(episodes: DramaProductionPackageEpisode[], project: Pick<DramaProject, "title" | "style" | "ratio" | "productionBible">, preserveAuthoredPrompts: boolean) {
+    if (preserveAuthoredPrompts) return episodes;
+    return episodes.map((episode) => ({
+        ...episode,
+        shots: episode.shots.map((shot) => ({
+            ...shot,
+            imagePrompt: applyDramaStaticVisualContract(project, shot.imagePrompt),
+            ...(shot.startFramePrompt ? { startFramePrompt: applyDramaStaticVisualContract(project, shot.startFramePrompt) } : {}),
+            ...(shot.endFramePrompt ? { endFramePrompt: applyDramaStaticVisualContract(project, shot.endFramePrompt) } : {}),
+            videoPrompt: applyDramaVideoVisualContract(project, shot.videoPrompt),
+            framePlan: { ...shot.framePlan, frames: shot.framePlan.frames.map((frame) => ({ ...frame, imagePrompt: applyDramaStaticVisualContract(project, frame.imagePrompt) })) },
+        })),
+    }));
+}
+
+function restylePackageArchive(archive: DramaProductionPackageV1["archive"], project: Pick<DramaProject, "title" | "style" | "ratio" | "productionBible">, preserveAuthoredPrompts: boolean) {
+    if (!archive || preserveAuthoredPrompts) return archive;
+    return {
+        ...archive,
+        promptAssets: archive.promptAssets.map((asset) => ({
+            ...asset,
+            prompt: asset.category === "storyboard" ? applyDramaVideoVisualContract(project, asset.prompt) : applyDramaStaticVisualContract(project, asset.prompt),
+        })),
+    };
 }
 
 function validateProductionPackageExecutionContract(value: DramaProductionPackageV1) {

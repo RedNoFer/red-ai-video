@@ -79,7 +79,8 @@ describe("drama production run planning", () => {
         ]);
         expect(videos.map((step) => step.duration)).toEqual([4, 4]);
         expect(videos[1].dependsOn).toContain(videos[0].id);
-        expect(videos[0].prompt).toBe("视频");
+        expect(videos[0].prompt).toContain("视频");
+        expect(videos[0].prompt).toContain("项目视觉合同（唯一风格来源）：写实");
     });
 
     it("keeps every ordered keyframe while retaining fixed assets", () => {
@@ -352,7 +353,8 @@ describe("drama production run planning", () => {
             { alias: "@图片1", frameId: "f1" },
             { alias: "@图片2", frameId: "f2" },
         ]);
-        expect(refreshed.prompt).toBe("视频");
+        expect(refreshed.prompt).toContain("视频");
+        expect(refreshed.prompt).toContain("项目视觉合同（唯一风格来源）：写实");
     });
 
     it("allows video steps to use generated frames that are still pending inspection", () => {

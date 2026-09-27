@@ -120,7 +120,7 @@ describe("drama asset generation batches", () => {
         } as never;
         const prompt = compileDramaAssetBatchItemPrompt(project, { kind: "scenes", assetId: "scene-one", outputType: "reference_image", prompt: "旧版 VS14，中性浅灰背景" });
 
-        expect(prompt).toContain("光色与风格：暗黑学院史诗奇幻");
+        expect(prompt).toContain("项目视觉风格：暗黑学院史诗奇幻");
         expect(prompt).not.toContain("VS14");
         expect(prompt).not.toContain("中性浅灰背景");
     });

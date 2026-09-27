@@ -29,6 +29,20 @@ describe("drama visual style contract", () => {
         expect(resolveDramaColorScript(project)).toBe("");
     });
 
+    it("does not let a stale production-plan style override the current project style", () => {
+        const currentStyle = "西方CG电影级写实幻想，physically based 3D";
+        const resolved = resolveDramaStyleContract({
+            style: currentStyle,
+            productionBible: {
+                visualStyle: currentStyle,
+                productionPlan: { visual: { visualStyle: "旧东方古风国漫", artStyle: "旧版国漫渲染" } },
+            },
+        });
+
+        expect(resolved).toMatchObject({ source: "custom", name: currentStyle, visualDescription: currentStyle });
+        expect(resolved.artStyle).toBeUndefined();
+    });
+
     it("uses a custom bible style when the top-level style is the stale built-in default", () => {
         expect(resolveDramaStyleContract({ style: DRAMA_STYLE_NAME, productionBible: { visualStyle: "其他风格" } })).toMatchObject({ source: "custom", name: "其他风格", visualDescription: "其他风格" });
     });

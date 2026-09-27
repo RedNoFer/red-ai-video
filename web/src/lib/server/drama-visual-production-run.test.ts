@@ -88,9 +88,10 @@ describe("drama director visual plan", () => {
         expect(start.referenceShotId).toBe("shot-one");
         expect(start.referenceImageUrls).toEqual(["/api/reference-assets/shot-one-tail.png"]);
         expect(start.status).toBe("blocked");
-        expect(start.prompt).toBe("雨夜中景");
+        expect(start.prompt).toContain("雨夜中景");
+        expect(start.prompt).toContain("项目视觉合同（唯一风格来源）：写实");
         expect(start.prompt).not.toContain("三层空间：");
-        expect(compileDramaVisualStepPrompt(project, project.episodes[0], start)).toBe("雨夜中景");
+        expect(compileDramaVisualStepPrompt(project, project.episodes[0], start)).toContain("项目视觉合同（唯一风格来源）：写实");
     });
 
     it("compiles the next storyboard prompt from its own entry state instead of the previous prompt text", () => {
@@ -127,7 +128,8 @@ describe("drama director visual plan", () => {
 
         const run = buildDramaVisualProductionRun(project, project.episodes[0], { imageModel: "image-pro", shotIds: ["shot-two"] });
 
-        expect(run.steps.find((step) => step.type === "start_frame")?.prompt).toBe("黑湖、倒塔、四手与裂剑，动作起始状态");
+        expect(run.steps.find((step) => step.type === "start_frame")?.prompt).toContain("黑湖、倒塔、四手与裂剑，动作起始状态");
+        expect(run.steps.find((step) => step.type === "start_frame")?.prompt).toContain("项目视觉合同（唯一风格来源）：写实");
         expect(run.steps.find((step) => step.type === "start_frame")?.prompt).not.toContain("Karin在马车中惊醒，手扣断剑，呼吸急促");
     });
 
@@ -162,8 +164,9 @@ describe("drama director visual plan", () => {
         expect(frames[1].dependsOn).toEqual(["asset-scene-one", "asset-character-one"]);
         expect(frames[1].referenceImageUrls).toBeUndefined();
         expect(frames[0].prompt).not.toMatch(/P01-F01|0-2s/u);
-        expect(frames[0].prompt).toBe("两人在雨夜对视");
-        expect(frames[1].prompt).toBe("两人缩短距离");
+        expect(frames[0].prompt).toContain("两人在雨夜对视");
+        expect(frames[1].prompt).toContain("两人缩短距离");
+        expect(frames.every((frame) => frame.prompt?.includes("项目视觉合同（唯一风格来源）：写实"))).toBe(true);
     });
 
     it("binds each storyboard frame to the scene visible in that frame", () => {
@@ -270,7 +273,8 @@ describe("drama director visual plan", () => {
 
         const prompt = compileDramaVisualStepPrompt(project, project.episodes[0], step);
 
-        expect(prompt).toBe("人物抬头并握紧剑柄");
+        expect(prompt).toContain("人物抬头并握紧剑柄");
+        expect(prompt).toContain("项目视觉合同（唯一风格来源）：写实");
         expect(prompt).not.toContain("上一帧");
         expect(prompt).not.toContain("当前帧变化优先级最高");
     });
@@ -419,8 +423,9 @@ describe("drama director visual plan", () => {
         const run = buildDramaVisualProductionRun(project, project.episodes[0], { imageModel: "image-pro" });
         const framePrompts = run.steps.filter((step) => step.type === "start_frame" || step.type === "end_frame").map((step) => step.prompt || "");
 
-        expect(framePrompts).toEqual(["雨夜中景", "雨夜中景"]);
-        expect(framePrompts.join("\n")).not.toContain("VS14 中世纪史诗学院奇幻");
+        expect(framePrompts).toHaveLength(2);
+        expect(framePrompts.every((prompt) => prompt.includes("雨夜中景"))).toBe(true);
+        expect(framePrompts.every((prompt) => prompt.includes("项目视觉合同（唯一风格来源）：VS14 中世纪史诗学院奇幻"))).toBe(true);
         expect(framePrompts.join("\n")).not.toContain("中性浅灰背景");
     });
 
@@ -431,8 +436,10 @@ describe("drama director visual plan", () => {
 
         const prompt = compileDramaVisualStepPrompt(project, project.episodes[0], step);
 
-        expect(prompt).toBe("雨夜中景");
-        expect(prompt).not.toContain("VS14 中世纪史诗学院奇幻");
+        expect(prompt).toContain("雨夜中景");
+        expect(prompt).toContain("项目视觉合同（唯一风格来源）：VS14 中世纪史诗学院奇幻");
+        expect(prompt).not.toContain("旧版 VS14");
+        expect(prompt).not.toContain("中性浅灰背景");
     });
 });
 

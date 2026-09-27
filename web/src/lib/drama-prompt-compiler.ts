@@ -21,6 +21,8 @@ export type CompiledDramaPrompts = {
     videoPrompt: string;
 };
 
+export type DramaVisualContractProject = Parameters<typeof resolveDramaStyleContract>[0];
+
 /** Server-derived contract shared by video and keyframe generation. */
 export type DerivedShotPromptContract = {
     references: DramaReferenceManifestItem[];
@@ -176,12 +178,11 @@ export function appendDramaImageReferenceBindings(prompt: string, references: Ar
 }
 
 export function compileDramaShotPrompts(project: DramaProject, episode: DramaEpisode, shot: DramaShot): CompiledDramaPrompts {
-    void project;
     void episode;
-    const imagePrompt = formatPromptFieldLines(shot.imagePrompt || "", "static");
-    const startFramePrompt = formatPromptFieldLines(shot.startFramePrompt || shot.imagePrompt || "", "static");
-    const endFramePrompt = formatPromptFieldLines(shot.endFramePrompt || shot.imagePrompt || "", "static");
-    const videoPrompt = shot.executionVideoPrompt?.trim() || shot.videoPrompt?.trim() || "";
+    const imagePrompt = applyDramaStaticVisualContract(project, shot.imagePrompt || "");
+    const startFramePrompt = applyDramaStaticVisualContract(project, shot.startFramePrompt || shot.imagePrompt || "");
+    const endFramePrompt = applyDramaStaticVisualContract(project, shot.endFramePrompt || shot.imagePrompt || "");
+    const videoPrompt = applyDramaVideoVisualContract(project, shot.executionVideoPrompt?.trim() || shot.videoPrompt?.trim() || "");
     return {
         imagePrompt,
         startFramePrompt,
@@ -272,10 +273,52 @@ function sceneMatchTerms(value: string) {
 }
 
 export function compileDramaFrameSupplierPrompt(project: DramaProject, episode: DramaEpisode, shot: DramaShot, beat?: DramaFrameBeat, phase: "start" | "end" | "keyframe" = "keyframe") {
-    void project;
     void episode;
     const source = phase === "start" ? shot.startFramePrompt || shot.imagePrompt : phase === "end" ? shot.endFramePrompt || shot.imagePrompt : beat?.imagePrompt || shot.imagePrompt;
-    return formatPromptFieldLines(source || "", "static");
+    return applyDramaStaticVisualContract(project, source || "");
+}
+
+export function applyDramaStaticVisualContract(project: DramaVisualContractProject, source: string) {
+    const prompt = formatPromptFieldLines(source, "static");
+    const visualContract = currentVisualContractText(project);
+    if (!prompt || !visualContract) return prompt;
+    const lines = prompt.split("\n");
+    let replaced = false;
+    const next = lines.map((line) => {
+        if (!/^光色与风格[：:]/u.test(line.trim())) return line;
+        replaced = true;
+        return `光色与风格：项目视觉合同（唯一风格来源）：${visualContract}`;
+    });
+    return replaced ? next.join("\n") : `${prompt}\n光色与风格：项目视觉合同（唯一风格来源）：${visualContract}`;
+}
+
+export function applyDramaVideoVisualContract(project: DramaVisualContractProject, source: string) {
+    const visualContract = currentVisualContractText(project);
+    if (!visualContract) return source.trim();
+    const prompt = formatPromptFieldLines(sanitizeDramaVisualPrompt(source), "video");
+    if (!prompt) return prompt;
+    const lines = prompt.split("\n");
+    let replaced = false;
+    const next = lines.map((line) => {
+        if (!/^(?:视觉风格与光色|色调)[：:]/u.test(line.trim())) return line;
+        replaced = true;
+        const label = line.trim().startsWith("色调") ? "色调" : "视觉风格与光色";
+        return `${label}：项目视觉合同（唯一风格来源）：${visualContract}`;
+    });
+    return replaced ? next.join("\n") : `当前项目视觉合同（唯一风格来源）：${visualContract}\n${prompt}`;
+}
+
+function currentVisualContractText(project: DramaVisualContractProject) {
+    const styleContract = resolveDramaStyleContract(project);
+    if (styleContract.source !== "custom") return "";
+    return [
+        styleContract.visualDescription,
+        styleContract.artStyle ? `画风规格：${styleContract.artStyle}` : "",
+        styleContract.colorScript ? `色彩脚本：${styleContract.colorScript}` : "",
+        styleContract.globalNegativePrompt ? `全局负面约束：${styleContract.globalNegativePrompt}` : "",
+    ]
+        .filter(Boolean)
+        .join("；");
 }
 
 export function compileDramaDialogueAudioInstructions(shot: DramaShot) {
@@ -327,11 +370,6 @@ function lightingLines(shot: DramaShot) {
 }
 
 export function compileDramaAssetReferencePrompt(project: Pick<DramaProject, "title" | "style" | "ratio" | "productionBible">, asset: DramaNamedAsset, kind: "角色" | "场景" | "道具") {
-    const savedSupplierPrompt = asset.supplierPrompt?.trim() || "";
-    // A legacy one-line override must not bypass the fixed asset contract. It
-    // remains stored for editing, while generation falls back to the durable
-    // profile and recompiles the six public sections below.
-    if (hasDramaAssetPromptQuality(savedSupplierPrompt, kind) && (kind !== "场景" || (savedSupplierPrompt.includes("全景") && savedSupplierPrompt.includes("高清")))) return formatDramaAssetPrompt(savedSupplierPrompt);
     const styleContract = resolveDramaStyleContract(project);
     const profile = asset.profile;
     const description = kind === "道具" ? sanitizeDramaPropFacts(asset.description) : sanitizeDramaVisualPrompt(asset.description);
@@ -344,7 +382,14 @@ export function compileDramaAssetReferencePrompt(project: Pick<DramaProject, "ti
             ? [sanitizeDramaPropFacts(profile?.consistencyRules), ...(profile?.spatialRules || []).map(sanitizeDramaPropFacts), ...(profile?.stateRules || []).map(sanitizeDramaPropFacts)]
             : [profile?.consistencyRules, ...(profile?.spatialRules || []), ...(profile?.stateRules || [])],
     );
-    const globalStyle = [styleContract.visualDescription, styleContract.artStyle ? `全局画风规格：${styleContract.artStyle}` : "", styleContract.colorScript ? `全局色彩脚本：${styleContract.colorScript}` : ""].filter(Boolean).join("；");
+    const globalStyle = [
+        `项目视觉风格：${styleContract.visualDescription}`,
+        "当前项目视觉合同是唯一主题、时代、造型、材质与渲染风格来源；资产历史提示词中与当前合同冲突的风格措辞不得执行，只保留身份、轮廓、空间拓扑和剧情用途事实",
+        styleContract.artStyle ? `全局画风规格：${styleContract.artStyle}` : "",
+        styleContract.colorScript ? `全局色彩脚本：${styleContract.colorScript}` : "",
+    ]
+        .filter(Boolean)
+        .join("；");
     const sceneQuality = kind === "场景" ? "高清完整单视角全景建立图；建筑透视稳定，墙体、门窗、地面和桌椅等直线结构不弯折；入口、出口、主要陈设、材质、光向和轴线清晰可读，背景细节不使用模糊虚化遮蔽" : "";
     const forbidden = joinAssetPromptConstraints([
         ...(profile?.forbiddenChanges || []).filter((value) => kind !== "场景" || !/(?:拼版|多视角|分格)/u.test(value)),
@@ -357,8 +402,7 @@ export function compileDramaAssetReferencePrompt(project: Pick<DramaProject, "ti
             : kind === "场景"
               ? `${project.ratio || "9:16"} 画幅，一张高清、完整、无人物、无文字的单视角场景全景建立图；完整呈现入口、出口、门窗、主要陈设、地面材质、光源方向、空间轴线、通道和人物动作所需的支撑面，不生成九宫格、分格或360°贴图。`
               : "纯白色无缝背景，单一道具主体完整入画，静置展示并保留极轻接触阴影；只展示道具本体、完整轮廓和关键材质细节，不出现展示台、项目桌面、人物、手部、持有人、剧情场景或其他道具。";
-    const characterStyle = styleContract.source === "custom" ? `项目视觉风格：${styleContract.visualDescription}` : "";
-    const characterLightingStyle = [characterStyle, DRAMA_CHARACTER_RENDER_STYLE, DRAMA_CHARACTER_STUDIO_LIGHT_RULES, DRAMA_CHARACTER_SUPPLIER_QUALITY_RULES, colorPalette ? `角色固有色彩：${colorPalette}` : ""].filter(Boolean).join("；");
+    const characterLightingStyle = [DRAMA_CHARACTER_RENDER_STYLE, DRAMA_CHARACTER_STUDIO_LIGHT_RULES, DRAMA_CHARACTER_SUPPLIER_QUALITY_RULES, colorPalette ? `角色固有色彩：${colorPalette}` : ""].filter(Boolean).join("；");
     return compact([
         `主体与资产类型：${kind}「${asset.name}」`,
         `身份/结构锚点：${joinAssetPromptFacts([description, visualIdentity]) || "沿用当前资产已确认设定"}`,

@@ -333,16 +333,18 @@ describe("production package boundary", () => {
         ]);
     });
 
-    it("round-trips a saved supplier prompt with a package asset", () => {
+    it("recompiles a saved supplier prompt with the current package contract", () => {
         const source = structuredClone(productionPackage);
         const savedPrompt = "主体与资产类型：角色「Karin」\n构图与画幅：四视图，左侧面部特写、正面、侧面、背面。\n负面约束：无额外人物。";
         source.assets.characters[0].supplierPrompt = savedPrompt;
 
         const preview = previewDramaProductionPackage(JSON.stringify(source), "package.json");
-        expect(preview.package.assets.characters[0].supplierPrompt).toBe(savedPrompt);
+        expect(preview.package.assets.characters[0].supplierPrompt).not.toBe(savedPrompt);
+        expect(preview.package.assets.characters[0].supplierPrompt).toContain("四视图");
 
         const applied = applyDramaProductionPackage(project(), preview.package, "hash-supplier-prompt");
-        expect(applied.characters.find((item) => item.name === "Karin")?.supplierPrompt).toBe(savedPrompt);
+        expect(applied.characters.find((item) => item.name === "Karin")?.supplierPrompt).toContain("四视图");
+        expect(applied.characters.find((item) => item.name === "Karin")?.supplierPrompt).not.toBe(savedPrompt);
     });
 
     it("keeps a project asset supplier prompt when merging a package without one", () => {
@@ -351,19 +353,22 @@ describe("production package boundary", () => {
 
         const merged = mergeProjectAssetsIntoProductionPackage(productionPackage, current);
 
-        expect(merged.assets.characters.find((item) => item.name === "Karin")?.supplierPrompt).toBe("项目已确认提示词");
+        expect(merged.assets.characters.find((item) => item.name === "Karin")?.supplierPrompt).toContain("四视图");
+        expect(merged.assets.characters.find((item) => item.name === "Karin")?.supplierPrompt).not.toBe("项目已确认提示词");
     });
 
-    it("round-trips a saved supplier prompt with a package asset", () => {
+    it("recompiles a second saved supplier prompt with the current package contract", () => {
         const source = structuredClone(productionPackage);
         const savedPrompt = "主体与资产类型：角色「Karin」\n身份/结构锚点：手工确认的脸型、发束和服装。\n负面约束：无额外人物。";
         source.assets.characters[0].supplierPrompt = savedPrompt;
 
         const preview = previewDramaProductionPackage(JSON.stringify(source), "package.json");
-        expect(preview.package.assets.characters[0].supplierPrompt).toBe(savedPrompt);
+        expect(preview.package.assets.characters[0].supplierPrompt).not.toBe(savedPrompt);
+        expect(preview.package.assets.characters[0].supplierPrompt).toContain("四视图");
 
         const applied = applyDramaProductionPackage(project(), preview.package, "hash-supplier-prompt");
-        expect(applied.characters.find((item) => item.name === "Karin")?.supplierPrompt).toBe(savedPrompt);
+        expect(applied.characters.find((item) => item.name === "Karin")?.supplierPrompt).toContain("四视图");
+        expect(applied.characters.find((item) => item.name === "Karin")?.supplierPrompt).not.toBe(savedPrompt);
     });
 
     it("keeps a project asset supplier prompt when merging a package without one", () => {
@@ -372,7 +377,46 @@ describe("production package boundary", () => {
 
         const merged = mergeProjectAssetsIntoProductionPackage(productionPackage, current);
 
-        expect(merged.assets.characters.find((item) => item.name === "Karin")?.supplierPrompt).toBe("项目已确认提示词");
+        expect(merged.assets.characters.find((item) => item.name === "Karin")?.supplierPrompt).toContain("四视图");
+        expect(merged.assets.characters.find((item) => item.name === "Karin")?.supplierPrompt).not.toBe("项目已确认提示词");
+    });
+
+    it("restyles package assets, video prompts and frame prompts from the current visual contract", () => {
+        const source = structuredClone(productionPackage);
+        const westernCg = "西方CG电影级写实幻想，physically based 3D，冷蓝灰与旧银";
+        source.project.style = westernCg;
+        source.project.productionBible.visualStyle = westernCg;
+        source.assets.characters[0].supplierPrompt = "主体与资产类型：角色\n光色与风格：旧东方古风国漫";
+        source.assets.locations[0].supplierPrompt = "主体与资产类型：场景\n光色与风格：旧东方古风国漫";
+        source.episodes[0].shots[0].imagePrompt += "\n光色与风格：旧东方古风国漫";
+        source.episodes[0].shots[0].videoPrompt += "\n色调：旧东方古风国漫";
+        source.episodes[0].shots[0].framePlan.frames[0].imagePrompt += "\n光色与风格：旧东方古风国漫";
+        source.archive = {
+            formatVersion: "vozeb-drama-production-package-v1",
+            sections: [],
+            promptAssets: [
+                { code: "K01", category: "keyframe", title: "旧静态帧", prompt: "画面主体：Karin\n光色与风格：旧东方古风国漫", shotCodes: ["SH01"] },
+                { code: "V01", category: "storyboard", title: "旧视频帧", prompt: "### 镜头 1\n色调：旧东方古风国漫", shotCodes: ["SH01"] },
+            ],
+            dialogueDirections: [],
+            voiceDirections: [],
+            silenceDirections: [],
+            referencePlan: [],
+            generationOrder: [],
+            qcReport: "",
+        };
+
+        const normalized = previewDramaProductionPackage(JSON.stringify(source), "western-cg-package.json").package;
+        const shot = normalized.episodes[0].shots[0];
+        const archivePrompts = normalized.archive?.promptAssets.map((asset) => asset.prompt).join("\n") || "";
+
+        expect(normalized.assets.characters[0].supplierPrompt).toContain(westernCg);
+        expect(normalized.assets.locations[0].supplierPrompt).toContain(westernCg);
+        expect(shot.imagePrompt).toContain(westernCg);
+        expect(shot.videoPrompt).toContain(westernCg);
+        expect(shot.framePlan.frames[0].imagePrompt).toContain(westernCg);
+        expect(archivePrompts).toContain(westernCg);
+        expect(JSON.stringify(normalized)).not.toContain("旧东方古风国漫");
     });
 
     it("preserves Agent video prompt text while normalizing static fields", () => {

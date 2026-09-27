@@ -3,7 +3,7 @@ import type { DramaAssetProfile } from "@/lib/drama-project-contract";
 /** Shared role-quality contract for package import, prompt compilation and optimization. */
 export const DRAMA_CHARACTER_PROFILE_CONTRACT = [
     "visualIdentity 只描述身份与可见识别：设定年龄感和性别、脸型、眉眼鼻唇、肤色、发际线、发型和已确认的显著标记；没有事实时不要编造极端身高、族裔或新剧情。",
-    "styling 只描述发型结构、服装层次、腰封/鞋靴、固定配饰、材质和穿着逻辑；不要把镜头、剧情动作或内部审核规则写入服装字段。",
+    "styling 只描述发型结构、服装层次、腰部结构、鞋靴、固定配饰、材质和穿着逻辑；不要把镜头、剧情动作或内部审核规则写入服装字段。",
     "colorPalette 只保留 2–4 个角色固有主色与少量强调色，跨镜头保持稳定；环境光色不写入角色固有色。",
     "consistencyRules 必须锁定年龄感、性别表达、脸型与五官、发际线和发束、体态比例、服装层次、固定配饰、固有色和显著标记，并明确身份特写、正面全身、严格左侧面全身、背面全身四个视图的职责；只允许用户明确要求的单项变化。",
 ].join("\n");
@@ -20,7 +20,7 @@ export const DRAMA_CHARACTER_FACE_MODELING_RULES =
 export const DRAMA_CHARACTER_HAIR_MODELING_RULES =
     "头发按发际线、分区、根部体积、主发束、碎发和尾端层次建模；身份特写与正面视图清楚展示发际线和脸周发束，侧面与背面展示束发位置、方向和长度；四个视图保持同一发型结构，发丝有粗细变化、明确走向和自然高光，避免一团黑、贴头皮、塑料丝带或随机换发型。";
 
-export const DRAMA_CHARACTER_WARDROBE_MATERIAL_RULES = "服装按真实裁剪逻辑分层，内层、外袍、腰封、袖口、下摆和鞋靴结构清楚；丝绸、锦缎、皮革、金属、玉石和薄纱分别呈现不同反射与粗糙度，刺绣和纹样贴合衣料，不出现廉价塑料质感。";
+export const DRAMA_CHARACTER_WARDROBE_MATERIAL_RULES = "服装按真实裁剪逻辑分层，内层、主体服装、腰部结构、袖口、下摆和鞋靴结构清楚；布料、皮革、金属、硬质配件和其他已确认材质分别呈现不同反射与粗糙度，表面细节贴合对应材质，不出现廉价塑料质感。";
 
 export const DRAMA_CHARACTER_STUDIO_LIGHT_RULES = "柔和大面积棚拍主光，轻微冷暖轮廓光，面部和服装细节均匀可见；阴影保留接触关系，金属高光不过曝，使用干净的纯白或浅灰背景。";
 

@@ -106,6 +106,48 @@ describe("drama prompt compiler", () => {
         expect(compileDramaAssetReferencePrompt(project, scene, "场景")).toContain("九宫格");
     });
 
+    it("recompiles a saved asset prompt from the current project visual contract", () => {
+        const project = createProject();
+        const westernCg = "西方CG电影级写实幻想， physically based 3D 材质，冷蓝灰与旧银，真实空间透视";
+        project.style = westernCg;
+        project.productionBible = { ...project.productionBible!, visualStyle: westernCg };
+        project.characters[0] = {
+            ...project.characters[0],
+            supplierPrompt: [
+                "主体与资产类型：角色「女主」",
+                "身份/结构锚点：东方古风少年角色，脸型、五官和年龄感固定",
+                "可见状态与材质：黑发束起，锦缎长袍，玉石配饰；自然骨骼、五官、头发、服装",
+                "构图与画幅：16:9 横向，纯白色无缝背景四视图，身份特写、正面、严格左侧面、背面",
+                "光色与风格：东方古风国漫电影质感",
+                "负面约束：无文字",
+            ].join("\n"),
+        };
+
+        const prompt = compileDramaAssetReferencePrompt(project, project.characters[0], "角色");
+
+        expect(prompt).toContain(`项目视觉风格：${westernCg}`);
+        expect(prompt).not.toContain("东方古风国漫电影质感");
+        expect(prompt).not.toContain("锦缎长袍");
+    });
+
+    it("recompiles video and static-frame style sections from the current project contract", () => {
+        const project = createProject();
+        const westernCg = "西方CG电影级写实幻想，physically based 3D，冷蓝灰与旧银";
+        project.style = westernCg;
+        project.productionBible = { ...project.productionBible!, visualStyle: westernCg };
+        const shot = project.episodes[0].shots[0];
+        shot.imagePrompt = "画面主体：女主站在门边\n可见状态：抬头看向门口\n光色与风格：旧东方古风国漫";
+        shot.videoPrompt = "动态意图：女主抬头看向门口\n视觉风格与光色：旧东方古风国漫";
+
+        const prompts = compileDramaShotExecutionPrompts(project, project.episodes[0], shot);
+        const framePrompt = compileDramaFrameSupplierPrompt(project, project.episodes[0], shot);
+
+        expect(prompts.videoPrompt).toContain(`项目视觉合同（唯一风格来源）：${westernCg}`);
+        expect(prompts.videoPrompt).not.toContain("旧东方古风国漫");
+        expect(framePrompt).toContain(`项目视觉合同（唯一风格来源）：${westernCg}`);
+        expect(framePrompt).not.toContain("旧东方古风国漫");
+    });
+
     it("applies the locked global art style and negative prompt to scene generation", () => {
         const project = createProject();
         project.style = DRAMA_STYLE_NAME;
@@ -628,13 +670,16 @@ describe("drama prompt compiler", () => {
         expect(prompt).not.toContain("用途：");
     });
 
-    it("uses a saved supplier prompt for downstream asset generation", () => {
+    it("does not use a saved supplier prompt as the downstream asset source", () => {
         const project = createProject();
         const savedPrompt =
             "主体与资产类型：角色「Karin」\n身份/结构锚点：已确认脸型与发束\n一致性锁定：锁定五官、头身比和服装层次\n可见状态与材质：墨青长袍与旧金腰封；按设定保持自然骨骼比例；五官按设定年龄和性别的真实骨骼塑形；头发按发际线、分区、根部体积和主发束建模；服装按真实裁剪逻辑分层\n构图与画幅：16:9 横向，纯白色无缝背景四视图，身份特写、正面全身、严格左侧面全身、背面全身\n光色与风格：高精度人物细节；角色固有色彩：墨青、旧金\n负面约束：无额外人物、无文字。";
         project.characters[0] = { ...project.characters[0], supplierPrompt: savedPrompt };
 
-        expect(compileDramaAssetReferencePrompt(project, project.characters[0], "角色")).toBe(savedPrompt.replace("。\n", "\n"));
+        const prompt = compileDramaAssetReferencePrompt(project, project.characters[0], "角色");
+        expect(prompt).not.toBe(savedPrompt.replace("。\n", "\n"));
+        expect(prompt).toContain("主体与资产类型：角色「女主」");
+        expect(prompt).not.toContain("墨青长袍");
     });
 
     it("does not let a legacy one-line supplier override bypass the structured asset contract", () => {
@@ -815,16 +860,15 @@ describe("drama prompt compiler", () => {
         expect(prompt).not.toContain("中性浅灰背景");
     });
 
-    it("does not inject the project visual style into the saved shot static prompt", () => {
+    it("applies the current project visual style to saved shot prompts", () => {
         const project = createProject();
         project.style = "现实悬疑电影感，冷蓝灰低饱和，手持摄影";
         project.productionBible = { ...project.productionBible!, visualStyle: project.style, colorScript: "冷蓝灰、低饱和" };
 
         const prompt = compileDramaShotExecutionPrompts(project, project.episodes[0], project.episodes[0].shots[0]);
 
-        expect(prompt.imagePrompt).toBe("冷色天台");
-        expect(prompt.videoPrompt).toBe(project.episodes[0].shots[0].videoPrompt);
-        expect(prompt.imagePrompt).not.toContain(project.style);
+        expect(prompt.imagePrompt).toContain(`项目视觉合同（唯一风格来源）：${project.style}`);
+        expect(prompt.videoPrompt).toContain(`项目视觉合同（唯一风格来源）：${project.style}`);
     });
 
     it("uses the configured VS7 style for character assets without a hardcoded theme", () => {
@@ -868,9 +912,9 @@ describe("drama prompt compiler", () => {
 
         const prompts = compileDramaShotExecutionPrompts(project, project.episodes[0], project.episodes[0].shots[0]);
 
-        expect(prompts.imagePrompt).toBe("冷色天台");
-        expect(prompts.videoPrompt).toBe("旧版 VS14 视频，保持中性灰背景");
-        expect(prompts.videoPrompt).toContain("VS14");
+        expect(prompts.imagePrompt).toContain("项目视觉合同（唯一风格来源）：冷色悬疑电影感，低饱和手持摄影");
+        expect(prompts.videoPrompt).not.toContain("VS14");
+        expect(prompts.videoPrompt).not.toContain("中性灰背景");
         expect(prompts.videoPrompt).not.toContain("统一视觉风格（最高级风格约束）");
     });
 

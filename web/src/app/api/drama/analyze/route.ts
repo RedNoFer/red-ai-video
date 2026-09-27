@@ -109,7 +109,33 @@ export async function POST(request: Request) {
             ? "输入 shots.utterances 已提供对白原文、时间边界、停顿和语速；必须逐句计算 availableSpeechSeconds=endSecond-startSecond 与 requiredSpeechSeconds=可发音字数/speechRateCharsPerSecond，pauseBeforeSeconds/pauseAfterSeconds 另行检查是否越过镜头边界。任何单句 availableSpeechSeconds 小于 requiredSpeechSeconds 都必须重排 framePlan 和公开镜头卡，不能用整镜总时长或十字兼容容差掩盖，也不能异常加速。"
             : "";
         const schemaInstruction = buildDramaAnalyzeSchemaInstruction(phase, tool.parameters);
-        const inputProject = (input as { project?: { visualContract?: Record<string, string> } }).project;
+        const inputProject = (input as { project?: { style?: string; visualContract?: Record<string, string> } }).project;
+        const visualProject = inputProject
+            ? {
+                  style: inputProject.visualContract?.visualStyle?.trim() || inputProject.style?.trim() || "",
+                  productionBible: {
+                      language: "中文",
+                      ratio: "9:16",
+                      continuityMode: "strict" as const,
+                      visualStyle: inputProject.visualContract?.visualStyle?.trim() || inputProject.style?.trim() || "",
+                      colorScript: inputProject.visualContract?.colorScript?.trim() || "",
+                      globalNegativePrompt: inputProject.visualContract?.globalNegativePrompt?.trim() || "",
+                      ...(inputProject.visualContract?.visualStyle?.trim() || inputProject.visualContract?.artStyle?.trim()
+                          ? {
+                                productionPlan: {
+                                    lockedAt: "analysis-input",
+                                    source: "manual",
+                                    visual: {
+                                        visualStyle: inputProject.visualContract?.visualStyle?.trim() || "",
+                                        artStyle: inputProject.visualContract?.artStyle?.trim() || "",
+                                        source: "manual",
+                                    },
+                                },
+                            }
+                          : {}),
+                  },
+              }
+            : undefined;
         const hasGlobalVisualContract = Object.values(inputProject?.visualContract || {}).some((value) => Boolean(value?.trim()));
         const globalVisualInstruction = hasGlobalVisualContract ? "\n必须严格遵循输入 project.visualContract，不得自选、替换或重复抄写该合同。\n" : "";
         const hasVideoReferences = phase === "video_prompt" && Array.isArray(videoPromptInput?.payload.referenceMaterials) && videoPromptInput.payload.referenceMaterials.length > 0;
@@ -157,11 +183,11 @@ export async function POST(request: Request) {
                     if (phase === "video_prompt") videoPromptCandidate = previewDramaVideoPromptOutput(parsed, videoPromptInput!.shotIds);
                     const data =
                         phase === "visual"
-                            ? normalizeDramaVisualAnalysis(parsed, visualInput!.shotIds, visualInput!.payload.shots)
+                            ? normalizeDramaVisualAnalysis(parsed, visualInput!.shotIds, visualInput!.payload.shots, visualProject)
                             : phase === "video_prompt"
-                              ? normalizeDramaVideoPromptAnalysis(parsed, videoPromptInput!.shotIds, videoPromptInput!.payload.shots)
+                              ? normalizeDramaVideoPromptAnalysis(parsed, videoPromptInput!.shotIds, videoPromptInput!.payload.shots, visualProject)
                               : phase === "image_prompt"
-                                ? normalizeDramaImagePromptAnalysis(parsed, imagePromptInput!.shotIds)
+                                ? normalizeDramaImagePromptAnalysis(parsed, imagePromptInput!.shotIds, visualProject)
                                 : phase === "review_completion"
                                   ? normalizeDramaReviewCompletion(parsed, reviewCompletionInput!.shotIds)
                                   : normalizeDramaContentAnalysis(parsed, settings.generationDefaults.videoSeconds, script);

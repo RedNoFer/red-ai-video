@@ -48,14 +48,20 @@ export function normalizeDramaStyleName(value: unknown) {
 
 export function resolveDramaStyleContract(project: {
     style?: string;
-    productionBible?: { visualStyle?: string; colorScript?: string; globalNegativePrompt?: string; productionPlan?: { visual?: { visualStyle?: string; artStyle?: string } } };
+    productionBible?: { visualStyle?: string; colorScript?: string; globalNegativePrompt?: string; productionPlan?: { lockedAt?: string; source?: string; visual?: { visualStyle?: string; artStyle?: string; source?: string } } };
 }): ResolvedDramaStyle {
     const projectStyle = project.style?.trim() || "";
     const bibleStyle = project.productionBible?.visualStyle?.trim() || "";
-    const plannedStyle = project.productionBible?.productionPlan?.visual?.visualStyle?.trim() || "";
-    const artStyle = project.productionBible?.productionPlan?.visual?.artStyle?.trim() || "";
-    // A stale built-in value must not mask a user-defined Bible style.
-    const style = [plannedStyle, projectStyle, bibleStyle].find((value) => value && !isBuiltInDramaStyle(value)) || plannedStyle || projectStyle || bibleStyle;
+    const productionPlan = project.productionBible?.productionPlan;
+    const plannedStyle = productionPlan?.visual?.visualStyle?.trim() || "";
+    const planIsExplicit = Boolean(plannedStyle && (productionPlan?.lockedAt || productionPlan?.source === "manual" || productionPlan?.visual?.source === "manual"));
+    // A manually locked production plan is an explicit current setting. An
+    // unmarked plan is only a fallback and must not resurrect stale style
+    // text over the current project style.
+    const styleCandidates = planIsExplicit ? [plannedStyle, projectStyle, bibleStyle] : [projectStyle, plannedStyle, bibleStyle];
+    const style = styleCandidates.find((value) => value && !isBuiltInDramaStyle(value)) || styleCandidates.find(Boolean) || "";
+    const planProvidesStyle = Boolean(plannedStyle && style === plannedStyle);
+    const artStyle = planProvidesStyle ? productionPlan?.visual?.artStyle?.trim() || "" : "";
     const isDefault = !style || isBuiltInDramaStyle(style);
     const configuredColorScript = project.productionBible?.colorScript?.trim();
     const colorScript = isDefault ? configuredColorScript || DRAMA_STYLE_COLOR_SCRIPT : configuredColorScript && !isDefaultDramaColorScript(configuredColorScript) ? configuredColorScript : undefined;

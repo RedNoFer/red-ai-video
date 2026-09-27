@@ -15,6 +15,7 @@ import type {
     DramaUtterance,
     DramaVisualAnalysis,
 } from "@/lib/drama-project-contract";
+import { applyDramaStaticVisualContract, applyDramaVideoVisualContract, type DramaVisualContractProject } from "@/lib/drama-prompt-compiler";
 import { formatPromptFieldLines, normalizeDramaFrameBeats, validateDramaFramePlanVisuals } from "@/lib/drama-frame-sequence";
 import { dramaDialogueTimingReminder, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
 import { resolveDramaShotDuration } from "@/lib/server/drama-shot-config";
@@ -139,7 +140,7 @@ export function validateDramaContentAnalysisTiming(value: DramaContentAnalysis) 
     });
 }
 
-export function normalizeDramaVisualAnalysis(value: unknown, shotIds: string[], sourceShots: ReadonlyArray<{ id: string; framePlan?: unknown }> = []): DramaVisualAnalysis {
+export function normalizeDramaVisualAnalysis(value: unknown, shotIds: string[], sourceShots: ReadonlyArray<{ id: string; framePlan?: unknown }> = [], visualProject?: DramaVisualContractProject): DramaVisualAnalysis {
     const allowed = new Set(shotIds);
     const seen = new Set<string>();
     const sourceFramePlans = new Map(sourceShots.map((shot) => [shot.id, shot.framePlan]));
@@ -151,20 +152,26 @@ export function normalizeDramaVisualAnalysis(value: unknown, shotIds: string[], 
         const framePlan = normalizeVisualFramePlan(shot.framePlan, sourceFramePlans.get(shotId));
         if (!allowed.has(shotId) || seen.has(shotId) || !imagePrompt || !videoPrompt || !framePlan) return [];
         seen.add(shotId);
+        const styledFramePlan = visualProject
+            ? {
+                  ...framePlan,
+                  frames: framePlan.frames.map((frame) => ({ ...frame, imagePrompt: applyDramaStaticVisualContract(visualProject, frame.imagePrompt) })),
+              }
+            : framePlan;
         return [
             {
                 shotId,
-                imagePrompt,
-                videoPrompt,
+                imagePrompt: visualProject ? applyDramaStaticVisualContract(visualProject, imagePrompt) : imagePrompt,
+                videoPrompt: visualProject ? applyDramaVideoVisualContract(visualProject, videoPrompt) : videoPrompt,
                 cameraMotion: text(shot.cameraMotion),
-                startFramePrompt: text(shot.startFramePrompt) || imagePrompt,
-                endFramePrompt: text(shot.endFramePrompt) || imagePrompt,
+                startFramePrompt: visualProject ? applyDramaStaticVisualContract(visualProject, text(shot.startFramePrompt) || imagePrompt) : text(shot.startFramePrompt) || imagePrompt,
+                endFramePrompt: visualProject ? applyDramaStaticVisualContract(visualProject, text(shot.endFramePrompt) || imagePrompt) : text(shot.endFramePrompt) || imagePrompt,
                 negativePrompt: text(shot.negativePrompt),
                 continuity: normalizeContinuity(shot.continuity),
                 performancePlan: normalizePerformancePlan(shot.performancePlan),
                 dialoguePerformance: normalizeDialoguePerformance(shot.dialoguePerformance),
                 lightingPlan: normalizeLightingPlan(shot.lightingPlan),
-                framePlan,
+                framePlan: styledFramePlan,
             },
         ];
     });
@@ -316,7 +323,12 @@ function normalizeReferenceCount(value: unknown) {
     return { min: Math.min(30, min), max: Math.min(30, max) };
 }
 
-export function normalizeDramaVideoPromptAnalysis(value: unknown, shotIds: string[], sourceShots: ReadonlyArray<{ id: string; framePlan?: unknown }> = []): import("@/lib/drama-project-contract").DramaVideoPromptAnalysis {
+export function normalizeDramaVideoPromptAnalysis(
+    value: unknown,
+    shotIds: string[],
+    sourceShots: ReadonlyArray<{ id: string; framePlan?: unknown }> = [],
+    visualProject?: DramaVisualContractProject,
+): import("@/lib/drama-project-contract").DramaVideoPromptAnalysis {
     const allowed = new Set(shotIds);
     const seen = new Set<string>();
     const sourcePlans = new Map(sourceShots.map((shot) => [shot.id, object(shot.framePlan)]));
@@ -356,12 +368,20 @@ export function normalizeDramaVideoPromptAnalysis(value: unknown, shotIds: strin
             ];
         });
         if (!frames.length) return [];
-        return [{ shotId, videoPrompt, framePlan: { frames } }];
+        return [
+            {
+                shotId,
+                videoPrompt: visualProject ? applyDramaVideoVisualContract(visualProject, videoPrompt) : videoPrompt,
+                framePlan: {
+                    frames: visualProject ? frames.map((frame) => ({ ...frame, imagePrompt: applyDramaStaticVisualContract(visualProject, frame.imagePrompt) })) : frames,
+                },
+            },
+        ];
     });
     return { shots };
 }
 
-export function normalizeDramaImagePromptAnalysis(value: unknown, shotIds: string[]) {
+export function normalizeDramaImagePromptAnalysis(value: unknown, shotIds: string[], visualProject?: DramaVisualContractProject) {
     const allowed = new Set(shotIds);
     const seen = new Set<string>();
     const shots = array(object(value).shots).flatMap((item) => {
@@ -370,7 +390,7 @@ export function normalizeDramaImagePromptAnalysis(value: unknown, shotIds: strin
         const imagePrompt = formatPromptFieldLines(text(shot.imagePrompt), "static");
         if (!allowed.has(shotId) || seen.has(shotId) || !imagePrompt) return [];
         seen.add(shotId);
-        return [{ shotId, imagePrompt }];
+        return [{ shotId, imagePrompt: visualProject ? applyDramaStaticVisualContract(visualProject, imagePrompt) : imagePrompt }];
     });
     return { shots };
 }
