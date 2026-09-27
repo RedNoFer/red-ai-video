@@ -126,6 +126,7 @@ describe("drama prompt compiler", () => {
         const prompt = compileDramaAssetReferencePrompt(project, project.characters[0], "角色");
 
         expect(prompt).toContain(`项目视觉风格：${westernCg}`);
+        expect(prompt).toContain("视觉重设计规则：历史资产中的服装、配饰、时代工艺、材质和配色只作为来源记录");
         expect(prompt).not.toContain("东方古风国漫电影质感");
         expect(prompt).not.toContain("锦缎长袍");
     });

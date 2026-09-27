@@ -132,7 +132,10 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
         }
         const latestRefinement = asset.refinementHistory?.at(-1)?.proposal;
         setRefinementProposal(latestRefinement);
-        setSupplierPromptOverride(asset.supplierPrompt?.trim() || undefined);
+        // A persisted supplierPrompt may be an authored prompt from an older
+        // visual contract. It is display/history data, not a current override.
+        // The first generation after opening must use the current compiler.
+        setSupplierPromptOverride(undefined);
         setDraft({
             name: asset.name,
             description: asset.description,
@@ -229,7 +232,9 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
             };
             const savedProject = await saveAssetNow(project.id, kind, asset.id, { ...patch, markShotsStale: false });
             replaceProject(savedProject);
-            setSupplierPromptOverride(prompt || undefined);
+            // The saved text is retained for audit/history, while subsequent
+            // generation is recompiled from the current asset facts and style.
+            setSupplierPromptOverride(undefined);
             if (fields) {
                 setDraft((current) => ({ ...current, description: fields!.description, profile: { ...current.profile, ...profilePatch } }));
             }
@@ -625,7 +630,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                 message.warning(`暂不能生成：${preflight.errors.join("；")}`);
                 return;
             }
-            const prompt = activeProposal ? compileDramaAssetRefinementPrompt(project, asset, assetKind, activeProposal, refinementPrompt) : supplierPromptOverride?.trim() || supplierPrompt;
+            const prompt = activeProposal ? compileDramaAssetRefinementPrompt(project, asset, assetKind, activeProposal, refinementPrompt) : supplierPromptOverride?.trim() || automaticSupplierPrompt;
             const imageModel = config.imageModel || config.imageModels[0] || "";
             if (!imageModel) throw new Error("后台尚未配置可用的图片模型，请先在管理后台配置图片渠道");
             const imageConfig = {

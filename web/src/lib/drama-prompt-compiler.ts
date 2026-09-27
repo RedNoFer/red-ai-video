@@ -385,6 +385,7 @@ export function compileDramaAssetReferencePrompt(project: Pick<DramaProject, "ti
     const globalStyle = [
         `项目视觉风格：${styleContract.visualDescription}`,
         "当前项目视觉合同是唯一主题、时代、造型、材质与渲染风格来源；资产历史提示词中与当前合同冲突的风格措辞不得执行，只保留身份、轮廓、空间拓扑和剧情用途事实",
+        "视觉重设计规则：历史资产中的服装、配饰、时代工艺、材质和配色只作为来源记录，必须按当前项目视觉合同重新设计；固定保留年龄感、脸型、五官、发型、体态、剧情用途和已确认的非风格身份事实",
         styleContract.artStyle ? `全局画风规格：${styleContract.artStyle}` : "",
         styleContract.colorScript ? `全局色彩脚本：${styleContract.colorScript}` : "",
     ]

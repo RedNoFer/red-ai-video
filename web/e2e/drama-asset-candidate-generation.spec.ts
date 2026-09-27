@@ -70,7 +70,8 @@ test("编辑角色视觉设定后保存并恢复全部字段", async ({ page, re
         await expect(reopened.getByRole("textbox").nth(4)).toHaveValue(fields.colorPalette);
         await expect.poll(() => reopened.getByRole("textbox").nth(5).inputValue()).toContain(fields.consistencyRules);
         await reopened.getByText("实际供应商提示词（可编辑）").click();
-        await expect(reopened.getByLabel("供应商提示词")).toHaveValue(savedSupplierPrompt);
+        await expect(reopened.getByLabel("供应商提示词")).not.toHaveValue(savedSupplierPrompt);
+        await expect(reopened.getByLabel("供应商提示词")).toHaveValue(/项目视觉风格：/);
     } finally {
         const deleted = await request.delete(`/api/drama/projects/${project.id}`);
         expect(deleted.ok(), await deleted.text()).toBe(true);
@@ -202,6 +203,8 @@ test("生成候选通过真实图片任务链路完成", async ({ page, request 
     expect(submittedPrompts[0]).toContain("主体与资产类型：角色");
     expect(submittedPrompts[0]).toContain("用户编辑后的黑发青年");
     expect(submittedPrompts[0]).not.toContain("资产图片 Skill 规则");
+    expect(submittedPrompts[1]).toContain("视觉重设计规则：历史资产中的服装、配饰、时代工艺、材质和配色只作为来源记录");
+    expect(submittedPrompts[1]).not.toContain("用户编辑后的黑发青年");
     expect(submittedSizes[0]).toBe("16:9");
 });
 
