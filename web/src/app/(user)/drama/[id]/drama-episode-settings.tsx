@@ -4,7 +4,16 @@ import { useEffect, useState } from "react";
 import { App, Button, Input, Select } from "antd";
 import { Save } from "lucide-react";
 
-import { applyDramaVisualDirection, defaultDramaProductionPlan, dramaVisualDirection, DRAMA_INTERNAL_CUT_POLICY_OPTIONS, DRAMA_SCRIPT_SHOT_DURATION_OPTIONS, DRAMA_VIDEO_RESOLUTION_OPTIONS, normalizeDramaProductionPlan } from "@/lib/drama-production-plan";
+import {
+    applyDramaVisualDirection,
+    defaultDramaProductionPlan,
+    dramaProjectVisualDirection,
+    dramaVisualDirection,
+    DRAMA_INTERNAL_CUT_POLICY_OPTIONS,
+    DRAMA_SCRIPT_SHOT_DURATION_OPTIONS,
+    DRAMA_VIDEO_RESOLUTION_OPTIONS,
+    normalizeDramaProductionPlan,
+} from "@/lib/drama-production-plan";
 import type { DramaProductionPlan } from "@/lib/drama-project-contract";
 import { saveDramaEpisodeSettings } from "@/services/api/drama-projects";
 import type { DramaEpisode, DramaProject } from "../types";
@@ -17,6 +26,7 @@ export function DramaEpisodeSettings({ project, episode, embedded = false }: { p
     const [savedLockAt, setSavedLockAt] = useState<string>();
     const [titleDraft, setTitleDraft] = useState(episode.title);
     const [summaryDraft, setSummaryDraft] = useState(project.summary);
+    const [visualDraft, setVisualDraft] = useState(() => dramaProjectVisualDirection(project));
     const paragraphCount = episode.script.trim() ? episode.script.split(/\n+/).filter(Boolean).length : 0;
     const characterCount = new Set(episode.shots.flatMap((shot) => shot.characterIds)).size;
     const duration = episode.shots.reduce((total, shot) => total + (Number.isFinite(shot.duration) ? shot.duration : 0), 0);
@@ -26,13 +36,15 @@ export function DramaEpisodeSettings({ project, episode, embedded = false }: { p
         setPlanDraft(normalizeDramaProductionPlan(project.productionBible?.productionPlan, defaultDramaProductionPlan("new-project"))!);
         setTitleDraft(episode.title);
         setSummaryDraft(project.summary);
+        setVisualDraft(dramaProjectVisualDirection(project));
         setSavedLockAt(undefined);
     }, [episode.id, episode.title, project.id, project.productionBible?.productionPlan, project.style, project.summary]);
 
     const saveSettings = async () => {
+        const nextPlan = applyDramaVisualDirection(planDraft, visualDraft || dramaVisualDirection(planDraft));
         const savedPlan = {
-            ...planDraft,
-            visual: { ...planDraft.visual, source: planDraft.visual.visualStyle.trim() && planDraft.visual.artStyle.trim() ? ("manual" as const) : ("agent" as const) },
+            ...nextPlan,
+            visual: { ...nextPlan.visual, source: nextPlan.visual.visualStyle.trim() && nextPlan.visual.artStyle.trim() ? ("manual" as const) : ("agent" as const) },
             lockedAt: new Date().toISOString(),
             source: "manual" as const,
         };
@@ -71,12 +83,15 @@ export function DramaEpisodeSettings({ project, episode, embedded = false }: { p
                             <span className="text-[11px] text-muted-foreground">视觉方案</span>
                             <Input.TextArea
                                 size="small"
-                                value={dramaVisualDirection(planDraft)}
+                                value={visualDraft || dramaVisualDirection(planDraft)}
                                 placeholder="请输入统一的视觉风格、画风、色彩、材质、光线和负面约束；也可以留空由 Agent 建议"
                                 className="resize-y"
                                 rows={5}
                                 data-testid="drama-episode-visual-direction"
-                                onChange={(event) => setPlanDraft((current) => applyDramaVisualDirection(current, event.target.value))}
+                                onChange={(event) => {
+                                    setVisualDraft(event.target.value);
+                                    setPlanDraft((current) => applyDramaVisualDirection(current, event.target.value));
+                                }}
                             />
                         </label>
                         <label className="block space-y-1">

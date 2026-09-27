@@ -43,6 +43,31 @@ describe("drama visual style contract", () => {
         expect(resolved.artStyle).toBeUndefined();
     });
 
+    it("does not let a locked short visual summary replace the complete project contract", () => {
+        const completeStyle =
+            "写实3D动画电影质感的冷调哥特式暗黑西幻风格；高精度角色、真人比例、自然表情与真实皮肤毛发材质；中世纪古堡和哥特教堂空间；蓝灰、炭黑、旧银低饱和冷色，冷窗光、低调高反差、薄雾体积光和柔和景深；动作遵循真实重量、惯性与空间关系。";
+        const resolved = resolveDramaStyleContract({
+            style: completeStyle,
+            productionBible: {
+                visualStyle: completeStyle,
+                productionPlan: {
+                    lockedAt: "2026-09-27T00:00:00.000Z",
+                    source: "manual",
+                    visual: {
+                        visualStyle: "冷调哥特暗黑西幻",
+                        artStyle: "高精度3D动画",
+                        visualDirection: "冷调哥特暗黑西幻；16:9横向关系构图；人物、手部、道具始终可辨",
+                        source: "manual",
+                    },
+                },
+            },
+        });
+
+        expect(resolved.name).toBe(completeStyle);
+        expect(resolved.visualDescription).toBe(completeStyle);
+        expect(resolved.artStyle).toBeUndefined();
+    });
+
     it("uses a custom bible style when the top-level style is the stale built-in default", () => {
         expect(resolveDramaStyleContract({ style: DRAMA_STYLE_NAME, productionBible: { visualStyle: "其他风格" } })).toMatchObject({ source: "custom", name: "其他风格", visualDescription: "其他风格" });
     });
@@ -95,5 +120,14 @@ describe("drama visual style contract", () => {
         expect(sanitized).not.toContain("VS14");
         expect(sanitized).not.toContain("中性浅灰背景");
         expect(sanitized).not.toContain("多视角设定板");
+    });
+
+    it("derives one stable fingerprint from the complete visual contract", () => {
+        const project = { style: "西方写实 CG 电影质感", productionBible: { colorScript: "冷蓝灰与旧银", globalNegativePrompt: "禁止塑料感" } };
+        const first = resolveDramaGlobalVisualContract(project);
+        const second = resolveDramaGlobalVisualContract(structuredClone(project));
+
+        expect(first.fingerprint).toMatch(/^visual-[0-9a-f]+$/u);
+        expect(second.fingerprint).toBe(first.fingerprint);
     });
 });

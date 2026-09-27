@@ -24,7 +24,16 @@ import { CREATIVE_UPLOAD_MAX_BYTES, isCreativeTextFile } from "@/lib/creative-up
 import { applyDramaEpisodeProductionPackage, saveDramaProductionPlan } from "@/services/api/drama-projects";
 import { useDramaStore } from "../stores/use-drama-store";
 import { useCreativeAgentOptions } from "@/hooks/use-creative-agent-options";
-import { applyDramaVisualDirection, defaultDramaProductionPlan, dramaVisualDirection, DRAMA_INTERNAL_CUT_POLICY_OPTIONS, DRAMA_SCRIPT_SHOT_DURATION_OPTIONS, DRAMA_VIDEO_RESOLUTION_OPTIONS, normalizeDramaProductionPlan } from "@/lib/drama-production-plan";
+import {
+    applyDramaVisualDirection,
+    defaultDramaProductionPlan,
+    dramaProjectVisualDirection,
+    dramaVisualDirection,
+    DRAMA_INTERNAL_CUT_POLICY_OPTIONS,
+    DRAMA_SCRIPT_SHOT_DURATION_OPTIONS,
+    DRAMA_VIDEO_RESOLUTION_OPTIONS,
+    normalizeDramaProductionPlan,
+} from "@/lib/drama-production-plan";
 import type { DramaProductionPlan } from "@/lib/drama-project-contract";
 
 type Props = { project: DramaProject; episode: DramaEpisode; open: boolean; onOpenChange: (open: boolean) => void };
@@ -43,6 +52,7 @@ export function DramaScriptAgentPanel({ project, episode, open, onOpenChange }: 
     const [applying, setApplying] = useState(false);
     const [planOpen, setPlanOpen] = useState(false);
     const [planDraft, setPlanDraft] = useState<DramaProductionPlan>(() => normalizeDramaProductionPlan(project.productionBible?.productionPlan, defaultDramaProductionPlan("new-project"))!);
+    const [visualDraft, setVisualDraft] = useState(() => dramaProjectVisualDirection(project));
     const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
     const [activeRunId, setActiveRunId] = useState<string>();
     const [activeAssistantMessageId, setActiveAssistantMessageId] = useState<string>();
@@ -58,6 +68,7 @@ export function DramaScriptAgentPanel({ project, episode, open, onOpenChange }: 
     const { skills, skillsLoading } = useCreativeAgentOptions("drama", ["video"]);
     useEffect(() => {
         setPlanDraft(normalizeDramaProductionPlan(project.productionBible?.productionPlan, defaultDramaProductionPlan("new-project"))!);
+        setVisualDraft(dramaProjectVisualDirection(project));
     }, [project.id, project.productionBible?.productionPlan]);
     useEffect(() => {
         attachmentsRef.current = attachments;
@@ -274,7 +285,7 @@ export function DramaScriptAgentPanel({ project, episode, open, onOpenChange }: 
         }
     };
     const persistPlanDraft = async () => {
-        const next = applyDramaVisualDirection(normalizeDramaProductionPlan(planDraft, defaultDramaProductionPlan("new-project"))!, dramaVisualDirection(planDraft));
+        const next = applyDramaVisualDirection(normalizeDramaProductionPlan(planDraft, defaultDramaProductionPlan("new-project"))!, visualDraft || dramaVisualDirection(planDraft));
         const lockedPlan = {
             ...next,
             visual: { ...next.visual, source: next.visual.visualStyle.trim() && next.visual.artStyle.trim() ? ("manual" as const) : ("agent" as const) },
@@ -488,7 +499,7 @@ export function DramaScriptAgentPanel({ project, episode, open, onOpenChange }: 
                         </div>
                         {packageData.preview.package.project.productionBible?.productionPlan ? (
                             <div className="grid gap-2 rounded-md border border-border bg-muted/20 px-3 py-2 text-xs sm:grid-cols-[minmax(0,1fr)_auto]">
-                                <span className="whitespace-pre-wrap break-words">视觉方案：{dramaVisualDirection(packageData.preview.package.project.productionBible.productionPlan)}</span>
+                                <span className="whitespace-pre-wrap break-words">视觉方案：{dramaProjectVisualDirection(packageData.preview.package.project)}</span>
                                 <span className="whitespace-nowrap">
                                     每镜：{packageData.preview.package.project.productionBible.productionPlan.video.shotDuration || 15} 秒 ·{" "}
                                     {packageData.preview.package.project.productionBible.productionPlan.video.framePolicy === "fixed-4"
@@ -501,7 +512,7 @@ export function DramaScriptAgentPanel({ project, episode, open, onOpenChange }: 
                         ) : null}
                         {packageData.preview.warnings.length ? (
                             <div className="rounded-md border border-amber-300/70 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-700/70 dark:bg-amber-950/30 dark:text-amber-200" data-testid="drama-package-warnings">
-                                <div className="font-medium">质量提醒（确认后仍保留 Agent 原文，不会自动改写）</div>
+                                <div className="font-medium">质量提醒（历史来源保留用于追溯，执行内容已按当前视觉合同重新编译）</div>
                                 <ul className="mt-1 list-disc space-y-0.5 pl-4">
                                     {packageData.preview.warnings.map((warning) => (
                                         <li key={warning}>{warning}</li>
@@ -570,12 +581,15 @@ export function DramaScriptAgentPanel({ project, episode, open, onOpenChange }: 
                         <label className="block space-y-1 sm:col-span-2">
                             <span className="text-xs font-medium">视觉方案</span>
                             <Input.TextArea
-                                value={dramaVisualDirection(planDraft)}
+                                value={visualDraft || dramaVisualDirection(planDraft)}
                                 placeholder="请输入统一的视觉风格、画风、色彩、材质、光线和负面约束；也可以留空由 Agent 建议"
                                 className="resize-y"
                                 rows={5}
                                 data-testid="drama-global-visual-direction"
-                                onChange={(event) => setPlanDraft((current) => applyDramaVisualDirection(current, event.target.value))}
+                                onChange={(event) => {
+                                    setVisualDraft(event.target.value);
+                                    setPlanDraft((current) => applyDramaVisualDirection(current, event.target.value));
+                                }}
                             />
                             <span className="text-[11px] leading-5 text-muted-foreground">视觉方案会同时作为项目全局风格和制作包的视觉依据。</span>
                         </label>

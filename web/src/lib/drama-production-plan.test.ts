@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import {
     applyDramaVisualDirection,
+    canonicalizeDramaProductionPlanVisual,
     defaultDramaProductionPlan,
     dramaReferenceImageBudget,
+    dramaProjectVisualDirection,
     dramaVisualDirection,
     normalizeDramaProductionPlan,
     resolveDramaFrameCountPreference,
@@ -126,6 +128,46 @@ describe("drama production plan", () => {
         expect(plan.visual).toMatchObject({ visualStyle: "东方写实摄影", artStyle: "克制电影级空间美术，真实材质", visualDirection: "视觉风格：东方写实摄影\n画风：克制电影级空间美术，真实材质", source: "manual" });
         expect(dramaVisualDirection(plan)).toBe("视觉风格：东方写实摄影\n画风：克制电影级空间美术，真实材质");
         expect(normalizeDramaProductionPlan(plan)?.visual.visualDirection).toBe(plan.visual.visualDirection);
+    });
+
+    it("does not render the non-authoritative visualDirection summary", () => {
+        const plan = normalizeDramaProductionPlan({
+            visual: {
+                visualStyle: "完整西方 CG 视觉合同：冷蓝灰、真实材质和哥特空间",
+                artStyle: "写实 3D 电影渲染",
+                visualDirection: "旧短摘要：中式古风",
+                source: "manual",
+            },
+        })!;
+
+        expect(dramaVisualDirection(plan)).toBe("视觉风格：完整西方 CG 视觉合同：冷蓝灰、真实材质和哥特空间\n画风：写实 3D 电影渲染");
+    });
+
+    it("canonicalizes a saved plan to the current project contract", () => {
+        const plan = normalizeDramaProductionPlan({
+            lockedAt: "2026-09-27T00:00:00.000Z",
+            visual: { visualStyle: "旧短摘要", artStyle: "旧画风", visualDirection: "旧视觉方案", source: "manual" },
+        })!;
+        const canonical = canonicalizeDramaProductionPlanVisual(plan, { style: "完整西方 CG 视觉合同；冷蓝灰与真实材质" });
+
+        expect(canonical.visual).toMatchObject({ visualStyle: "完整西方 CG 视觉合同；冷蓝灰与真实材质", artStyle: "" });
+        expect(canonical.visual.visualDirection).toBeUndefined();
+    });
+
+    it("shows a complete aligned direction but never a stale short summary", () => {
+        const completeStyle = "完整西方 CG 视觉合同；冷蓝灰与真实材质";
+        const stale = dramaProjectVisualDirection({
+            style: completeStyle,
+            productionBible: { visualStyle: completeStyle, productionPlan: { visual: { visualStyle: "旧短摘要", visualDirection: "旧短摘要；16:9", artStyle: "旧画风" } } },
+        });
+        const aligned = dramaProjectVisualDirection({
+            style: completeStyle,
+            productionBible: { visualStyle: completeStyle, productionPlan: { visual: { visualStyle: completeStyle, visualDirection: `视觉风格：${completeStyle}\n材质：真实材质`, artStyle: "写实 3D" } } },
+        });
+
+        expect(stale).toContain(completeStyle);
+        expect(stale).not.toContain("旧短摘要");
+        expect(aligned).toContain("材质：真实材质");
     });
 
     it("lets an explicit empty visual direction switch back to Agent suggestions", () => {

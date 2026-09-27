@@ -1296,6 +1296,34 @@ describe("production package boundary", () => {
         expect(applied.productionBible?.colorScript).toBe("冷蓝灰与旧银");
     });
 
+    it("replaces a locked short plan summary with the complete project contract during import", () => {
+        const completeStyle = "写实3D动画电影质感的冷调哥特式暗黑西幻风格；高精度角色、真人比例、自然表情与真实皮肤毛发材质；蓝灰、炭黑、旧银低饱和冷色，冷窗光和薄雾体积光。";
+        const historicalStyle = "冷调哥特暗黑西幻";
+        const source = structuredClone(productionPackage);
+        source.project.style = completeStyle;
+        source.project.productionBible.visualStyle = completeStyle;
+        source.project.productionBible.productionPlan = {
+            ...defaultDramaProductionPlan("package"),
+            lockedAt: "2026-09-27T00:00:00.000Z",
+            source: "manual",
+            visual: { visualStyle: historicalStyle, artStyle: "旧版中式3D画风", visualDirection: `${historicalStyle}；16:9横向关系构图`, source: "manual" },
+        };
+        const current = project();
+        current.style = completeStyle;
+        current.productionBible = { ...(current.productionBible || { language: "中文", ratio: "9:16", continuityMode: "strict" as const }), visualStyle: completeStyle };
+
+        const preview = previewDramaProductionPackage(JSON.stringify(source), "historical-summary-package.json", current, { allowImportWarnings: true });
+        const plan = preview.package.project.productionBible.productionPlan!;
+
+        expect(plan.visual.visualStyle).toBe(completeStyle);
+        expect(plan.visual.visualStyle).not.toBe(historicalStyle);
+        expect(plan.visual.artStyle).toBe(completeStyle);
+        expect(preview.importWarnings).toEqual(expect.arrayContaining([expect.stringContaining("生产方案摘要与完整视觉合同不一致")]));
+        expect(preview.package.assets.characters[0].supplierPrompt).toContain(completeStyle);
+        expect(preview.package.assets.characters[0].supplierPrompt).not.toContain("旧版中式3D画风");
+        expect(preview.package.episodes[0].shots[0].videoPrompt).toContain(completeStyle);
+    });
+
     it("adopts a concrete package visual contract when the target project only has the default placeholder", () => {
         const importedStyle = "西方写实 CG 电影质感，冷蓝灰与旧银，真实材质和哥特空间结构";
         const importedArtStyle = "physically based 3D，电影级真实材质与自然比例";

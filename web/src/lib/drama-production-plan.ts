@@ -1,4 +1,5 @@
 import type { DramaProductionPlan, DramaProductionBible, DramaReferenceManifestRole } from "@/lib/drama-project-contract";
+import { resolveDramaGlobalVisualContract, resolveDramaStyleContract } from "@/lib/drama-style";
 
 export const DRAMA_PRODUCTION_PLAN_VERSION = "drama-production-plan-v1" as const;
 export const DEFAULT_DRAMA_SKILL = { id: "drama-video-director", name: "短剧视频导演", version: "1.12.0" } as const;
@@ -154,15 +155,47 @@ function normalizeFrameCountRange(value: unknown, fallback: { min: number; max: 
 }
 
 export function dramaVisualDirection(plan: DramaProductionPlan) {
-    if (plan.visual.visualDirection?.trim()) return plan.visual.visualDirection.trim();
     if (plan.visual.visualStyle.trim() === plan.visual.artStyle.trim()) return plan.visual.visualStyle.trim();
     return [plan.visual.visualStyle.trim() ? `视觉风格：${plan.visual.visualStyle.trim()}` : "", plan.visual.artStyle.trim() ? `画风：${plan.visual.artStyle.trim()}` : ""].filter(Boolean).join("\n");
+}
+
+export function dramaProjectVisualDirection(project: Parameters<typeof resolveDramaGlobalVisualContract>[0]) {
+    const contract = resolveDramaGlobalVisualContract(project);
+    const historicalDirection = project.productionBible?.productionPlan?.visual?.visualDirection?.trim() || "";
+    if (historicalDirection && historicalDirection.includes(contract.visualStyle)) return historicalDirection;
+    return [
+        contract.visualStyle ? `视觉风格：${contract.visualStyle}` : "",
+        contract.artStyle ? `画风：${contract.artStyle}` : "",
+        contract.colorScript ? `色彩：${contract.colorScript}` : "",
+        contract.globalNegativePrompt ? `负面约束：${contract.globalNegativePrompt}` : "",
+    ]
+        .filter(Boolean)
+        .join("\n");
+}
+
+export function canonicalizeDramaProductionPlanVisual(plan: DramaProductionPlan, project: Parameters<typeof resolveDramaGlobalVisualContract>[0]) {
+    const resolved = resolveDramaStyleContract(project);
+    const contract = resolveDramaGlobalVisualContract(project);
+    const canonicalStyle = resolved.source === "default" ? resolved.name : contract.visualStyle;
+    const aligned = plan.visual.visualStyle.trim() === canonicalStyle.trim();
+    const visualDirection = plan.visual.visualDirection?.trim() || "";
+    const { visualDirection: _historicalDirection, ...visualWithoutDirection } = plan.visual;
+    return {
+        ...plan,
+        visual: {
+            ...visualWithoutDirection,
+            visualStyle: canonicalStyle,
+            artStyle: contract.artStyle || (aligned ? plan.visual.artStyle.trim() : ""),
+            ...(visualDirection && visualDirection.includes(canonicalStyle) ? { visualDirection } : {}),
+        },
+    };
 }
 
 export function applyDramaVisualDirection(plan: DramaProductionPlan, value: string): DramaProductionPlan {
     const direction = value.trim();
     const visualStyle = direction.match(/(?:^|\n)视觉风格\s*[：:]\s*([^\n]+)/u)?.[1]?.trim() || direction;
-    const artStyle = direction.match(/(?:^|\n)画风\s*[：:]\s*([^\n]+)/u)?.[1]?.trim() || direction;
+    const explicitArtStyle = direction.match(/(?:^|\n)画风\s*[：:]\s*([^\n]+)/u)?.[1]?.trim() || "";
+    const artStyle = explicitArtStyle || (visualStyle === plan.visual.visualStyle.trim() ? plan.visual.artStyle : "");
     return { ...plan, visual: { ...plan.visual, visualStyle, artStyle, visualDirection: direction, source: visualStyle && artStyle ? "manual" : "agent" } };
 }
 

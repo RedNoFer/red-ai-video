@@ -49,7 +49,7 @@ import { createFrameEvidence, decideActualEndFrame, invalidateFrameEvidence, rep
 import { DRAMA_STYLE_NAME, normalizeDramaStyleName, resolveDramaStyleContract } from "@/lib/drama-style";
 import { normalizeDramaImageSize } from "@/lib/drama-image-size";
 import { deleteDramaFrameBeat, formatPromptFieldLines, normalizeDramaFrameBeats, updateDramaFrameBeat } from "@/lib/drama-frame-sequence";
-import { defaultDramaProductionPlan, dramaReferenceImageBudget, normalizeDramaProductionPlan } from "@/lib/drama-production-plan";
+import { canonicalizeDramaProductionPlanVisual, defaultDramaProductionPlan, dramaReferenceImageBudget, normalizeDramaProductionPlan } from "@/lib/drama-production-plan";
 import { resolveDramaShotDuration } from "@/lib/server/drama-shot-config";
 import { dramaDialogueFragmentSequenceError } from "@/lib/drama-dialogue-timing";
 import { TEXT_MODEL_REQUEST_TIMEOUT_MS } from "@/lib/server/model-request-policy";
@@ -725,7 +725,8 @@ export async function updateDramaProjectForUser(userId: string, id: string, valu
                   if (!currentBible) return currentBible;
                   const styleContract = resolveDramaStyleContract({ style: requestedStyle, productionBible: currentBible });
                   const { colorScript: _oldColorScript, ...bibleWithoutColorScript } = currentBible;
-                  return { ...bibleWithoutColorScript, visualStyle: styleContract.name, ...(styleContract.colorScript ? { colorScript: styleContract.colorScript } : {}) };
+                  const canonicalPlan = incomingPlan ? canonicalizeDramaProductionPlanVisual(incomingPlan, { style: requestedStyle, productionBible: currentBible }) : incomingPlan;
+                  return { ...bibleWithoutColorScript, visualStyle: styleContract.name, ...(styleContract.colorScript ? { colorScript: styleContract.colorScript } : {}), ...(canonicalPlan ? { productionPlan: canonicalPlan } : {}) };
               })(),
               updatedAt: nextTimestamp(current.updatedAt),
           }
@@ -785,7 +786,8 @@ export async function saveDramaEpisodeSettingsForUser(userId: string, id: string
               };
               const styleContract = resolveDramaStyleContract({ style: current.style, productionBible: nextBible });
               const { colorScript: _oldColorScript, ...bibleWithoutColorScript } = nextBible;
-              return { ...bibleWithoutColorScript, visualStyle: styleContract.name, ...(styleContract.colorScript ? { colorScript: styleContract.colorScript } : {}) };
+              const canonicalPlan = canonicalizeDramaProductionPlanVisual(nextPlan, { style: current.style, productionBible: nextBible });
+              return { ...bibleWithoutColorScript, visualStyle: styleContract.name, ...(styleContract.colorScript ? { colorScript: styleContract.colorScript } : {}), productionPlan: canonicalPlan };
           })()
         : current.productionBible;
     const nextStyle = nextPlan ? resolveDramaStyleContract({ style: current.style, productionBible }).name : current.style;

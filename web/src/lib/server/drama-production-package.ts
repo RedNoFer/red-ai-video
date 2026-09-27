@@ -702,11 +702,12 @@ function normalizeProductionPackage(value: unknown, options: DramaProductionPack
     // Validate the caller's raw plan before normalization can apply defaults or
     // coerce an invalid value into a seemingly valid runtime plan.
     validateRawProductionPlan(bible);
-    const productionPlan = normalizePackageProductionPlan(bible);
+    const rawProductionPlan = normalizePackageProductionPlan(bible);
     const styleContract = resolveDramaStyleContract({
         style: text(project.style),
-        productionBible: { visualStyle: text(bible.visualStyle), colorScript: optionalText(bible.colorScript), productionPlan },
+        productionBible: { visualStyle: text(bible.visualStyle), colorScript: optionalText(bible.colorScript), productionPlan: rawProductionPlan },
     });
+    const productionPlan = canonicalizePackageProductionPlan(rawProductionPlan, styleContract, options.importWarnings);
     const { colorScript: _rawColorScript, ...bibleWithoutColorScript } = bible;
     const colorScript = optionalText(bible.colorScript);
     const productionLock = normalizeProductionLock(project.productionLock);
@@ -786,23 +787,24 @@ function recompileProductionPackageForProject(value: DramaProductionPackageV1, p
     const usesPackageVisualContract = currentStyleContract.source !== "custom" && styleContract.source === "custom";
     const packagePlan = value.project.productionBible.productionPlan || defaultDramaProductionPlan("package");
     const currentPlan = usesPackageVisualContract ? packagePlan : project.productionBible?.productionPlan;
+    const alignedPlan = currentPlan?.visual?.visualStyle?.trim() === styleContract.name;
+    const currentVisualDirection = currentPlan?.visual?.visualDirection?.trim() || "";
     const currentVisual = {
         visualStyle: styleContract.name,
         // A legacy project may have a locked plan without an artStyle. Keep
         // the active project's visual contract executable without importing
         // the package's historical art direction.
-        artStyle: styleContract.artStyle || (packagePlan.lockedAt ? styleContract.name : ""),
-        visualDirection: currentPlan?.visual?.visualDirection?.trim() || "",
+        artStyle: styleContract.artStyle || (alignedPlan ? currentPlan?.visual?.artStyle?.trim() || "" : packagePlan.lockedAt ? styleContract.name : ""),
+        ...(currentVisualDirection && currentVisualDirection.includes(styleContract.name) ? { visualDirection: currentVisualDirection } : {}),
         source: "manual" as const,
     };
-    const productionPlan =
-        normalizeDramaProductionPlan(
-            {
-                ...packagePlan,
-                visual: currentVisual,
-            },
-            packagePlan,
-        ) || packagePlan;
+    const productionPlan = normalizeDramaProductionPlan(
+        {
+            ...packagePlan,
+            visual: currentVisual,
+        },
+        { ...packagePlan, visual: { ...packagePlan.visual, visualDirection: undefined } },
+    ) || { ...packagePlan, visual: { ...packagePlan.visual, visualDirection: undefined } };
     const visualBible = usesPackageVisualContract ? value.project.productionBible : { ...value.project.productionBible, ...(project.productionBible || {}) };
     const compilerProject = {
         title: project.title,
@@ -1181,6 +1183,26 @@ function normalizePackageProductionPlan(bible: Record<string, unknown>) {
         source: "agent",
     };
     return normalizeDramaProductionPlan(bible.productionPlan, fallback);
+}
+
+function canonicalizePackageProductionPlan(plan: ReturnType<typeof normalizePackageProductionPlan>, styleContract: ReturnType<typeof resolveDramaStyleContract>, importWarnings?: string[]) {
+    if (!plan) return undefined;
+    const historicalVisualStyle = plan.visual.visualStyle.trim();
+    const historicalVisualDirection = plan.visual.visualDirection?.trim() || "";
+    const conflictsWithContract = Boolean((historicalVisualStyle && historicalVisualStyle !== styleContract.name) || (historicalVisualDirection && !historicalVisualDirection.includes(styleContract.name)));
+    if (conflictsWithContract) importWarnings?.push("生产方案摘要与完整视觉合同不一致，已按完整视觉合同处理；历史摘要仅保留为来源记录。");
+    const artStyle = styleContract.artStyle || (historicalVisualStyle === styleContract.name ? plan.visual.artStyle : plan.lockedAt ? styleContract.name : "");
+    return normalizeDramaProductionPlan(
+        {
+            ...plan,
+            visual: {
+                ...plan.visual,
+                visualStyle: styleContract.name,
+                artStyle,
+            },
+        },
+        plan,
+    );
 }
 
 function validateProductionPackageCompleteness(value: Record<string, unknown>, options: DramaProductionPackageNormalizationOptions = {}) {

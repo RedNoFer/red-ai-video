@@ -2,7 +2,7 @@
 
 > 制作包格式：`vozeb-drama-production-package-v1`
 >
-> 模板版本：由 `pnpm compile:skills` 自动生成；唯一制作包契约：`vozeb-drama-production-package-v1@1.0.0`（契约 hash：`77541e4dc34e638a56a3273bab74ee1d1911933c2c84792cbad60d2e31144107`，规范源 hash：`abfc0ce656e01fd4baca3bc9e7f03ed5be94e3be5fff23661b0e87256a33f85d`）。导演 Skill：`drama-video-director@1.12.0`（hash：`856e6076d9bb74309a7d4d26fdac42b052c2e25b2ca0fca6a1726d9b0ba1b2aa`）；模板自检规则、Seedance Skill 和来源版本由同一编译清单绑定。
+> 模板版本：由 `pnpm compile:skills` 自动生成；唯一制作包契约：`vozeb-drama-production-package-v1@1.0.0`（契约 hash：`77541e4dc34e638a56a3273bab74ee1d1911933c2c84792cbad60d2e31144107`，规范源 hash：`abfc0ce656e01fd4baca3bc9e7f03ed5be94e3be5fff23661b0e87256a33f85d`）。导演 Skill：`drama-video-director@1.12.0`（hash：`e8727a512f7565c27f1aadeee5bfb01d4135bf404b0daa7e4e1c4b4e958020ef`）；模板自检规则、Seedance Skill 和来源版本由同一编译清单绑定。
 >
 > 使用约定：本模板是当前 v1 制作包的结构、自检规则和最终交付格式。独立 Codex 必须直接生成完整 13 章 Markdown，并在“规范对象”代码块中嵌入唯一标准 JSON；JSON 与正文由 Codex 同一轮生成，服务端不负责章节投影或视频提示词重写。不要把历史制作包、旧 generationPrompt 或旧分镜正文当作新包模板。
 >
@@ -119,7 +119,7 @@ targetDuration = logicalShotCount × shotDuration
 
 - 制作包契约：`vozeb-drama-production-package-v1@1.0.0`，契约 hash：`77541e4dc34e638a56a3273bab74ee1d1911933c2c84792cbad60d2e31144107`。
 - 规范源 hash：`abfc0ce656e01fd4baca3bc9e7f03ed5be94e3be5fff23661b0e87256a33f85d`；编译规则 hash：`e822f493b3bb4fd9c6541b30184e397da67b08178b7c13d225895feb3872c994`。
-- 主导演 Skill：`drama-video-director@1.12.0`，hash：`856e6076d9bb74309a7d4d26fdac42b052c2e25b2ca0fca6a1726d9b0ba1b2aa`。
+- 主导演 Skill：`drama-video-director@1.12.0`，hash：`e8727a512f7565c27f1aadeee5bfb01d4135bf404b0daa7e4e1c4b4e958020ef`。
 - 视频提示词公开格式：小墨个人分镜 Skill 6.3，来源标识 `storyboard-director@6.3.0`。
 - 每个逻辑片段的完整 `videoPrompt`（包含全部公开帧卡、台词、人声、音效和剪辑承接）必须控制在 4500 个 Unicode 字符以内；超限只能压缩重复的全局场景/风格描述，不能删除主体、触发、动作、可见结果、声音锚点、连续性或硬切事件。
 - 公开视频卡使用自然语言，不得出现 `palette=...`、`saturation=...`、`film_stock=...`、`grain=...`、`halation=...` 等未声明伪参数串，也不得出现 `undefined`、`null`、`NaN`、`[object Object]`；光色、材质、胶片感如确有作用，只用自然语言写入 `productionBible` 或当前帧新增作用。

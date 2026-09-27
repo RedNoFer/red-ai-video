@@ -32,6 +32,8 @@ export type DramaGlobalVisualContract = {
     artStyle: string;
     colorScript: string;
     globalNegativePrompt: string;
+    /** Internal equality key; never render this in a provider prompt. */
+    fingerprint?: string;
 };
 
 export function isLegacyDramaStyle(value: unknown) {
@@ -48,19 +50,21 @@ export function normalizeDramaStyleName(value: unknown) {
 
 export function resolveDramaStyleContract(project: {
     style?: string;
-    productionBible?: { visualStyle?: string; colorScript?: string; globalNegativePrompt?: string; productionPlan?: { lockedAt?: string; source?: string; visual?: { visualStyle?: string; artStyle?: string; source?: string } } };
+    productionBible?: { visualStyle?: string; colorScript?: string; globalNegativePrompt?: string; productionPlan?: { lockedAt?: string; source?: string; visual?: { visualStyle?: string; artStyle?: string; visualDirection?: string; source?: string } } };
 }): ResolvedDramaStyle {
     const projectStyle = project.style?.trim() || "";
     const bibleStyle = project.productionBible?.visualStyle?.trim() || "";
     const productionPlan = project.productionBible?.productionPlan;
     const plannedStyle = productionPlan?.visual?.visualStyle?.trim() || "";
     const planIsExplicit = Boolean(plannedStyle && (productionPlan?.lockedAt || productionPlan?.source === "manual" || productionPlan?.visual?.source === "manual"));
-    // A manually locked production plan is an explicit current setting. An
-    // unmarked plan is only a fallback and must not resurrect stale style
-    // text over the current project style.
-    const styleCandidates = planIsExplicit ? [plannedStyle, projectStyle, bibleStyle] : [projectStyle, plannedStyle, bibleStyle];
-    const style = styleCandidates.find((value) => value && !isBuiltInDramaStyle(value)) || styleCandidates.find(Boolean) || "";
-    const planProvidesStyle = Boolean(plannedStyle && style === plannedStyle);
+    // The complete project/Bible contract is authoritative. A locked plan is
+    // still allowed to supply an artStyle when it is aligned with that
+    // contract, but a short historical summary can never replace it.
+    const customProjectStyle = projectStyle && !isBuiltInDramaStyle(projectStyle) ? projectStyle : "";
+    const customBibleStyle = bibleStyle && !isBuiltInDramaStyle(bibleStyle) ? bibleStyle : "";
+    const customPlannedStyle = plannedStyle && !isBuiltInDramaStyle(plannedStyle) ? plannedStyle : "";
+    const style = customProjectStyle || customBibleStyle || customPlannedStyle || projectStyle || bibleStyle || plannedStyle || "";
+    const planProvidesStyle = Boolean(plannedStyle && plannedStyle === style && ((!customProjectStyle && !customBibleStyle) || planIsExplicit || plannedStyle === projectStyle || plannedStyle === bibleStyle));
     const artStyle = planProvidesStyle ? productionPlan?.visual?.artStyle?.trim() || "" : "";
     const isDefault = !style || isBuiltInDramaStyle(style);
     const configuredColorScript = project.productionBible?.colorScript?.trim();
@@ -97,12 +101,20 @@ export function resolveDramaVisualStyle(project: { style?: string; productionBib
 
 export function resolveDramaGlobalVisualContract(project: Parameters<typeof resolveDramaStyleContract>[0]): DramaGlobalVisualContract {
     const resolved = resolveDramaStyleContract(project);
-    return {
+    const contract = {
         visualStyle: resolved.visualDescription,
         artStyle: resolved.artStyle || "",
         colorScript: resolved.colorScript || "",
         globalNegativePrompt: resolved.globalNegativePrompt || "",
     };
+    return { ...contract, fingerprint: dramaVisualContractFingerprint(contract) };
+}
+
+export function dramaVisualContractFingerprint(contract: Pick<DramaGlobalVisualContract, "visualStyle" | "artStyle" | "colorScript" | "globalNegativePrompt">) {
+    const canonical = [contract.visualStyle, contract.artStyle, contract.colorScript, contract.globalNegativePrompt].map((value) => value.trim()).join("\u001f");
+    let hash = 2166136261;
+    for (const character of canonical) hash = Math.imul(hash ^ character.charCodeAt(0), 16777619);
+    return `visual-${(hash >>> 0).toString(16)}`;
 }
 
 export function formatDramaGlobalVisualContract(contract: Partial<DramaGlobalVisualContract> | undefined) {
