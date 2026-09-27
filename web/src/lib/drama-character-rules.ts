@@ -3,13 +3,13 @@ import type { DramaAssetProfile } from "@/lib/drama-project-contract";
 /** Shared role-quality contract for package import, prompt compilation and optimization. */
 export const DRAMA_CHARACTER_PROFILE_CONTRACT = [
     "visualIdentity 只描述身份与可见识别：设定年龄感和性别、脸型、眉眼鼻唇、肤色、发际线、发型和已确认的显著标记；没有事实时不要编造极端身高、族裔或新剧情。",
-    "styling 只描述发型结构、服装层次、腰部结构、鞋靴、固定配饰、材质和穿着逻辑；不要把镜头、剧情动作或内部审核规则写入服装字段。",
-    "colorPalette 只保留 2–4 个角色固有主色与少量强调色，跨镜头保持稳定；环境光色不写入角色固有色。",
-    "consistencyRules 必须锁定年龄感、性别表达、脸型与五官、发际线和发束、体态比例、服装层次、固定配饰、固有色和显著标记，并明确身份特写、正面全身、严格左侧面全身、背面全身四个视图的职责；只允许用户明确要求的单项变化。",
+    "styling 只描述当前项目视觉合同下的发型结构、服装层次、腰部结构、鞋靴、固定配饰、材质和穿着逻辑；历史资产中的造型不能覆盖当前合同，也不要把镜头、剧情动作或内部审核规则写入服装字段。",
+    "colorPalette 只描述当前项目视觉合同重新设计后的角色固有主色与少量强调色，跨镜头保持稳定；环境光色不写入角色固有色。",
+    "consistencyRules 必须锁定年龄感、性别表达、脸型与五官、发际线和发束、体态比例，以及当前项目视觉合同下统一设计的服装层次、固定配饰、固有色和显著标记，并明确身份特写、正面全身、严格左侧面全身、背面全身四个视图的职责；只允许用户明确要求的单项变化。",
 ].join("\n");
 
 export const DRAMA_CHARACTER_SUPPLIER_QUALITY_RULES =
-    "按设定年龄和性别保持自然骨骼与身材比例；男性不女性化，女性不幼态化或过度性感；四视图必须是同一身份：身份特写锁定五官，正面、严格左侧面、背面锁定体态、服装结构和固有色；后三个全身视图的双手、手指、双腿和鞋靴完整，避免僵硬姿态、脸部变形和肢体畸形。";
+    "按设定年龄和性别保持自然骨骼与身材比例；男性不女性化，女性不幼态化或过度性感；四视图必须是同一身份：身份特写锁定五官，正面、严格左侧面、背面锁定体态，以及当前项目视觉合同下统一设计的服装结构和固有色；后三个全身视图的双手、手指、双腿和鞋靴完整，避免僵硬姿态、脸部变形和肢体畸形。";
 
 /** Concrete supplier-facing rendering guidance; it must not define a project's theme. */
 export const DRAMA_CHARACTER_RENDER_STYLE = "高精度人物细节与清晰轮廓边缘。";
@@ -36,7 +36,7 @@ export const DRAMA_CHARACTER_NEGATIVE_RULES = [
     "性别表达漂移",
     "大头娃娃",
     "身体短粗",
-    "服装结构变化",
+    "四视图之间服装结构漂移",
     "额外配饰",
     "塑料皮肤",
     "脸部变形",
@@ -49,7 +49,7 @@ export const DRAMA_CHARACTER_NEGATIVE_RULES = [
 ].join("、");
 
 export const DRAMA_CHARACTER_DEFAULT_CONSISTENCY =
-    "按设定年龄和性别保持自然骨骼与身材比例；锁定脸型、五官、发际线、发束、体态、服装层次、固定配饰、固有色和显著标记；身份特写、正面、严格左侧面、背面必须是同一角色，不因视图重设计；身份特写只负责精确锁定五官与脸部识别，不替代后三个全身视图。";
+    "按设定年龄和性别保持自然骨骼与身材比例；锁定脸型、五官、发际线、发束、体态和显著标记；服装层次、固定配饰与固有色按当前项目视觉合同统一设计并跨视图保持一致；身份特写、正面、严格左侧面、背面必须是同一角色，不因视图重设计；身份特写只负责精确锁定五官与脸部识别，不替代后三个全身视图。";
 
 export function normalizeDramaCharacterProfile(profile: DramaAssetProfile | undefined, description: string, name: string): DramaAssetProfile {
     const current = profile || { visualIdentity: "", styling: "", colorPalette: "", consistencyRules: "" };

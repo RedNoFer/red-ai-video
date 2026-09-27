@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { getCurrentUser } from "@/lib/auth/session";
 import { readJsonBodyResult } from "@/lib/auth/request";
-import { applyDramaProductionPackageForUser, DramaProjectServiceError, previewDramaProductionPackageForUser } from "@/lib/server/drama-project-service";
+import { applyDramaProductionPackageForUser, DramaProjectServiceError, getDramaProjectForUser, previewDramaProductionPackageForUser } from "@/lib/server/drama-project-service";
 
 type Context = { params: Promise<{ id: string }> };
 
@@ -17,7 +17,8 @@ export async function POST(request: Request, context: Context) {
             const project = await applyDramaProductionPackageForUser(user.id, (await context.params).id, input);
             return NextResponse.json({ code: 0, data: { project }, msg: "完整制作包已导入" });
         }
-        const preview = previewDramaProductionPackageForUser(input);
+        const project = await getDramaProjectForUser(user.id, (await context.params).id);
+        const preview = previewDramaProductionPackageForUser(input, {}, project);
         return NextResponse.json({ code: 0, data: { preview }, msg: "制作包预览已生成" });
     } catch (error) {
         if (error instanceof DramaProjectServiceError) return NextResponse.json({ code: error.status, data: null, msg: error.message }, { status: error.status });

@@ -78,10 +78,12 @@ export type DramaProductionPackageNormalizationOptions = {
     allowImportWarnings?: boolean;
     /** Enforce the current authoring continuity contract before state synchronization. */
     strictContinuity?: boolean;
-    /** Keep standalone Codex videoPrompt bytes unchanged during import normalization. */
+    /** Keep standalone Codex videoPrompt bytes unchanged only for source-only previews without a target project. */
     preserveAuthoredVideoPrompt?: boolean;
     /** Internal boundary: standalone imports perform structural safety checks only. */
     standaloneImport?: boolean;
+    /** The package was already validated by the project-scoped preview path. */
+    validatedStandalonePackage?: boolean;
     importWarnings?: string[];
     authoringSources?: import("@/lib/drama-project-contract").DramaAuthoringSourceSnapshot[];
     targetNarrativeChapter?: number | string;
@@ -219,7 +221,7 @@ export function previewDramaProductionPackageObject(
     const packageWithProjectAssets = project ? mergeProjectAssetsIntoProductionPackage(parsed as DramaProductionPackageV1, project) : parsed;
     const importWarnings: string[] = [];
     const normalizedPackage = normalizeProductionPackage(packageWithProjectAssets, { ...options, importWarnings });
-    const productionPackage = normalizedPackage;
+    const productionPackage = project ? recompileProductionPackageForProject(normalizedPackage, project, importWarnings) : normalizedPackage;
     const allWarnings = [...new Set([...importWarnings, ...collectWarnings(productionPackage)])];
     return {
         package: productionPackage,
@@ -244,7 +246,8 @@ export function previewDramaProductionPackageObject(
 }
 
 export function applyDramaProductionPackage(project: DramaProject, source: DramaProductionPackageV1, sourceHash: string, rawSource?: string, fileName = "package.json", options: DramaProductionPackageNormalizationOptions = {}): DramaProject {
-    const productionPackage = normalizeProductionPackage(source, options);
+    const normalizedPackage = normalizeProductionPackage(source, options);
+    const productionPackage = recompileProductionPackageForProject(normalizedPackage, project);
     const projectPatch = productionPackage.project;
     const sourceAsset = {
         id: `source-package-${sourceHash.slice(0, 16)}`,
@@ -629,7 +632,7 @@ function normalizeProductionPackage(value: unknown, options: DramaProductionPack
     const input = object(value);
     if (Number(input.schemaVersion) !== 1) throw new DramaProductionPackageError("仅支持 schemaVersion 1 的制作包");
     const rawAuthoring = object(input.authoring);
-    if (rawAuthoring.source === "codex-standalone") validateStandalonePackageShape(input);
+    if (rawAuthoring.source === "codex-standalone" && !options.validatedStandalonePackage) validateStandalonePackageShape(input);
     const normalizationOptions = rawAuthoring.source === "codex-standalone" ? { ...options, preserveAuthoredVideoPrompt: true, standaloneImport: true } : options;
     if (options.requireContentQuality || options.requireAuthoringQuality) validateRawAgentPackageDraft(input);
     const project = object(input.project);
@@ -774,6 +777,59 @@ function restylePackageAssets(assets: DramaProductionPackageV1["assets"], projec
     };
 }
 
+function recompileProductionPackageForProject(value: DramaProductionPackageV1, project: DramaProjectAssetCollection, importWarnings?: string[]) {
+    const styleContract = resolveDramaStyleContract(project);
+    const packagePlan = value.project.productionBible.productionPlan || defaultDramaProductionPlan("package");
+    const currentPlan = project.productionBible?.productionPlan;
+    const currentVisual = {
+        visualStyle: styleContract.name,
+        artStyle: styleContract.artStyle || "",
+        visualDirection: currentPlan?.visual?.visualDirection?.trim() || "",
+        source: "manual" as const,
+    };
+    const productionPlan =
+        normalizeDramaProductionPlan(
+            {
+                ...packagePlan,
+                visual: currentVisual,
+            },
+            packagePlan,
+        ) || packagePlan;
+    const compilerProject = {
+        title: project.title,
+        style: styleContract.name,
+        ratio: project.ratio,
+        productionBible: {
+            ...value.project.productionBible,
+            ...(project.productionBible || {}),
+            visualStyle: styleContract.name,
+            colorScript: styleContract.colorScript || "",
+            globalNegativePrompt: project.productionBible?.globalNegativePrompt || "",
+            productionPlan,
+        },
+    };
+    const wasRecompiled = JSON.stringify(value.assets) !== JSON.stringify(restylePackageAssets(value.assets, compilerProject, false)) || JSON.stringify(value.episodes) !== JSON.stringify(restylePackageEpisodes(value.episodes, compilerProject, false));
+    if (wasRecompiled) importWarnings?.push("已按当前项目视觉合同重新编译角色、场景、道具、静态帧和视频提示词；制作包历史风格仅保留为来源记录。");
+    return {
+        ...value,
+        project: {
+            ...value.project,
+            style: styleContract.name,
+            ratio: project.ratio || value.project.ratio,
+            productionBible: {
+                ...value.project.productionBible,
+                visualStyle: styleContract.name,
+                colorScript: styleContract.colorScript || "",
+                globalNegativePrompt: project.productionBible?.globalNegativePrompt || "",
+                productionPlan,
+            },
+        },
+        assets: restylePackageAssets(value.assets, compilerProject, false),
+        episodes: restylePackageEpisodes(value.episodes, compilerProject, false),
+        archive: restylePackageArchive(value.archive, compilerProject, false),
+    };
+}
+
 function restylePackageEpisodes(episodes: DramaProductionPackageEpisode[], project: Pick<DramaProject, "title" | "style" | "ratio" | "productionBible">, preserveAuthoredPrompts: boolean) {
     if (preserveAuthoredPrompts) return episodes;
     return episodes.map((episode) => ({
@@ -784,7 +840,15 @@ function restylePackageEpisodes(episodes: DramaProductionPackageEpisode[], proje
             ...(shot.startFramePrompt ? { startFramePrompt: applyDramaStaticVisualContract(project, shot.startFramePrompt) } : {}),
             ...(shot.endFramePrompt ? { endFramePrompt: applyDramaStaticVisualContract(project, shot.endFramePrompt) } : {}),
             videoPrompt: applyDramaVideoVisualContract(project, shot.videoPrompt),
-            framePlan: { ...shot.framePlan, frames: shot.framePlan.frames.map((frame) => ({ ...frame, imagePrompt: applyDramaStaticVisualContract(project, frame.imagePrompt) })) },
+            framePlan: {
+                ...shot.framePlan,
+                frames: shot.framePlan.frames.map((frame) => ({
+                    ...frame,
+                    ...(frame.startPrompt ? { startPrompt: applyDramaStaticVisualContract(project, frame.startPrompt) } : {}),
+                    ...(frame.endPrompt ? { endPrompt: applyDramaStaticVisualContract(project, frame.endPrompt) } : {}),
+                    imagePrompt: applyDramaStaticVisualContract(project, frame.imagePrompt),
+                })),
+            },
         })),
     }));
 }

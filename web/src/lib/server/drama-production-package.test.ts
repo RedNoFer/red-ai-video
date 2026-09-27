@@ -964,6 +964,18 @@ describe("production package boundary", () => {
         expect(preview.package.authoring?.materials[0]).toMatchObject({ alias: "@模板", role: "package-template", type: "markdown" });
         expect(preview.package.authoring?.directorSkill).toBeUndefined();
         expect(preview.package.authoring?.seedanceSkill).toBeUndefined();
+
+        const targetProject = project();
+        targetProject.style = "西方写实 CG 电影质感，冷蓝灰与旧银，真实材质";
+        targetProject.productionBible = { ...targetProject.productionBible!, visualStyle: targetProject.style, colorScript: "冷蓝灰与旧银" };
+        const effectivePreview = previewDramaProductionPackage(JSON.stringify(source), "codex-standalone.md", targetProject, { allowImportWarnings: false, preserveAuthoredVideoPrompt: true });
+        expect(effectivePreview.package.episodes[0].shots[0].videoPrompt).not.toBe(authoredVideoPrompt);
+        expect(effectivePreview.package.episodes[0].shots[0].videoPrompt).toContain(targetProject.style);
+        expect(effectivePreview.warnings).toContain("已按当前项目视觉合同重新编译角色、场景、道具、静态帧和视频提示词；制作包历史风格仅保留为来源记录。");
+
+        const applied = applyDramaProductionPackage(targetProject, effectivePreview.package, "hash-standalone-style", JSON.stringify(source), "codex-standalone.md", { validatedStandalonePackage: true });
+        expect(applied.sourceAssets?.at(-1)?.textContent).toBe(JSON.stringify(source));
+        expect(applied.episodes[0].shots[0].videoPrompt).toContain(targetProject.style);
     });
 
     it("rejects non-contract episode and shot aliases before normalization", () => {
@@ -1267,17 +1279,21 @@ describe("production package boundary", () => {
         expect(second.productionArchive).toEqual(productionPackage.archive);
     });
 
-    it("preserves an imported package visual style instead of replacing it with the app default", () => {
-        const importedStyle = "VS14 中世纪史诗的学院奇幻变体；宏大空间与克制人物近景并重，不使用现代元素或科幻 UI。";
+    it("uses the current project visual contract instead of an imported package style", () => {
+        const importedStyle = "旧制作包视觉风格；历史时代、服化道与渲染只属于来源记录。";
+        const currentStyle = "西方写实 CG 电影质感，冷蓝灰与旧银，真实材质和哥特空间结构";
         const imported = structuredClone(productionPackage);
         imported.project.style = importedStyle;
         imported.project.productionBible.visualStyle = importedStyle;
+        const current = project();
+        current.style = currentStyle;
+        current.productionBible = { ...current.productionBible!, visualStyle: currentStyle, colorScript: "冷蓝灰与旧银" };
 
-        const applied = applyDramaProductionPackage(project(), imported, "hash-custom-style");
+        const applied = applyDramaProductionPackage(current, imported, "hash-custom-style");
 
-        expect(applied.style).toBe(importedStyle);
-        expect(applied.productionBible?.visualStyle).toBe(importedStyle);
-        expect(applied.productionBible?.colorScript).toBeUndefined();
+        expect(applied.style).toBe(currentStyle);
+        expect(applied.productionBible?.visualStyle).toBe(currentStyle);
+        expect(applied.productionBible?.colorScript).toBe("冷蓝灰与旧银");
     });
 
     it("round-trips a complete visual contract from a generated package into project settings", () => {
@@ -1297,11 +1313,19 @@ describe("production package boundary", () => {
 
         const generated = previewDramaProductionPackage(JSON.stringify(source), "generated-package.json").package;
         const exported = previewDramaProductionPackage(serializeDramaProductionPackageMarkdown(generated), "generated-package.md").package;
-        const applied = applyDramaProductionPackage(project(), exported, "hash-complete-visual-contract");
+        const current = project();
+        current.style = "当前项目视觉合同：西方写实 CG，冷蓝灰与旧银";
+        current.productionBible = { ...current.productionBible!, visualStyle: current.style };
+        const applied = applyDramaProductionPackage(current, exported, "hash-complete-visual-contract");
 
         expect(exported.project.productionBible).toMatchObject({ colorScript: "冷灰蓝与暗金", globalNegativePrompt: "禁止动漫质感、塑料皮肤和无依据的现代元素", productionPlan: { visual: { visualStyle, artStyle, visualDirection } } });
-        expect(applied.productionBible).toMatchObject({ visualStyle, colorScript: "冷灰蓝与暗金", globalNegativePrompt: "禁止动漫质感、塑料皮肤和无依据的现代元素", productionPlan: { visual: { visualStyle, artStyle, visualDirection } } });
-        expect(dramaVisualDirection(applied.productionBible!.productionPlan!)).toBe(visualDirection);
+        expect(applied.productionBible).toMatchObject({
+            visualStyle: current.style,
+            globalNegativePrompt: "",
+            productionPlan: { visual: { visualStyle: current.style, artStyle: "" } },
+        });
+        expect(applied.productionBible?.productionPlan?.visual.visualDirection).toBeUndefined();
+        expect(dramaVisualDirection(applied.productionBible!.productionPlan!)).toBe(`视觉风格：${current.style}`);
     });
 
     it("maps legacy visualStyle without fabricating a missing visual contract", () => {
@@ -1317,8 +1341,8 @@ describe("production package boundary", () => {
         const preview = previewDramaProductionPackage(JSON.stringify(legacy), "legacy-package.json").package;
         const applied = applyDramaProductionPackage(project(), preview, "hash-legacy-visual-style");
 
-        expect(applied.productionBible?.productionPlan?.visual).toMatchObject({ visualStyle: legacyStyle, artStyle: "" });
-        expect(dramaVisualDirection(applied.productionBible!.productionPlan!)).toBe(`视觉风格：${legacyStyle}`);
+        expect(applied.productionBible?.productionPlan?.visual).toMatchObject({ visualStyle: DRAMA_STYLE_NAME, artStyle: "" });
+        expect(dramaVisualDirection(applied.productionBible!.productionPlan!)).toBe(`视觉风格：${DRAMA_STYLE_NAME}`);
 
         legacy.project.style = "";
         legacy.project.productionBible.visualStyle = "";
@@ -1327,8 +1351,8 @@ describe("production package boundary", () => {
             visual: { visualStyle: "", artStyle: "", source: "agent" },
         };
         const withoutVisualField = applyDramaProductionPackage(project(), previewDramaProductionPackage(JSON.stringify(legacy), "legacy-empty-package.json").package, "hash-legacy-empty-visual-style");
-        expect(withoutVisualField.productionBible?.productionPlan?.visual).toMatchObject({ visualStyle: "", artStyle: "" });
-        expect(dramaVisualDirection(withoutVisualField.productionBible!.productionPlan!)).toBe("");
+        expect(withoutVisualField.productionBible?.productionPlan?.visual).toMatchObject({ visualStyle: DRAMA_STYLE_NAME, artStyle: "" });
+        expect(dramaVisualDirection(withoutVisualField.productionBible!.productionPlan!)).toBe(`视觉风格：${DRAMA_STYLE_NAME}`);
     });
 
     it("does not persist a frame supplierPrompt or use it as a static source", () => {

@@ -92,14 +92,25 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
     const primary = asset ? approvedAssetReference(asset) : undefined;
     const sceneBoard = asset && kind === "scenes" ? dramaSceneBoardReference(asset, references) : undefined;
     const draftProfileHasValues = Object.values(draft.profile).some((value) => typeof value === "string" && value.trim());
-    const automaticSupplierPrompt =
-        asset && kind !== "clues"
-            ? compileDramaAssetReferencePrompt(
-                  project,
-                  { ...asset, name: draft.name.trim() || asset.name, description: draft.description.trim() || asset.description, profile: draftProfileHasValues ? draft.profile : asset.profile, supplierPrompt: undefined },
-                  kind === "characters" ? "角色" : kind === "scenes" ? "场景" : "道具",
-              )
-            : "";
+    const draftPromptAsset = asset ? { ...asset, name: draft.name.trim() || asset.name, description: draft.description.trim() || asset.description, profile: draftProfileHasValues ? draft.profile : asset.profile, supplierPrompt: undefined } : undefined;
+    const editedPromptFields = supplierPromptOverride?.trim()
+        ? dramaAssetPromptFields(supplierPromptOverride, {
+              description: draft.description.trim() || asset?.description || "",
+              visualIdentity: draft.profile.visualIdentity,
+              styling: draft.profile.styling,
+              colorPalette: draft.profile.colorPalette,
+              consistencyRules: draft.profile.consistencyRules,
+          })
+        : undefined;
+    const promptAsset =
+        draftPromptAsset && editedPromptFields
+            ? {
+                  ...draftPromptAsset,
+                  description: editedPromptFields.description || draftPromptAsset.description,
+                  profile: { ...draftPromptAsset.profile, ...editedPromptFields },
+              }
+            : draftPromptAsset;
+    const automaticSupplierPrompt = promptAsset && kind !== "clues" ? compileDramaAssetReferencePrompt(project, promptAsset, kind === "characters" ? "角色" : kind === "scenes" ? "场景" : "道具") : "";
     const supplierPrompt = resolveDramaSupplierPrompt(supplierPromptOverride, automaticSupplierPrompt);
     const cloneAvailable = config.channels.some((channel) =>
         Object.values(channel.advancedConfig?.modelConfigs || {}).some(
@@ -238,7 +249,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
             if (fields) {
                 setDraft((current) => ({ ...current, description: fields!.description, profile: { ...current.profile, ...profilePatch } }));
             }
-            message.success(prompt ? (fields ? "提示词已结构化保存，设定文案已同步" : "供应商提示词已保存，后续生图将优先使用这份提示词") : "已恢复自动提示词");
+            message.success(prompt ? (fields ? "提示词已结构化保存，设定文案已同步；后续生图将按当前视觉合同重新编译" : "提示词已保留为来源记录，后续生图将按当前视觉合同重新编译") : "已恢复自动提示词");
         } catch (error) {
             message.error(error instanceof Error ? error.message : "供应商提示词保存失败");
         } finally {
@@ -487,14 +498,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
     };
 
     const persistGeneratedReference = useCallback(
-        async (
-            task: ImageGenerationTask & { generationStage?: "initial" | "refinement" },
-            imageConfig: typeof config,
-            prompt: string,
-            generationStage: "initial" | "refinement",
-            activeProposal?: DramaAssetRefinementProposal,
-            assetSupplierPrompt?: string,
-        ) => {
+        async (task: ImageGenerationTask & { generationStage?: "initial" | "refinement" }, imageConfig: typeof config, prompt: string, generationStage: "initial" | "refinement", activeProposal?: DramaAssetRefinementProposal) => {
             const project = projectRef.current;
             const projectId = project.id;
             const assetId = asset?.id;
@@ -532,7 +536,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
             const latestAsset = latestProject[kind].find((item) => item.id === assetId);
             const latestReferences = latestAsset ? dramaAssetReferences(latestAsset) : [];
             const mergedReferences = mergeGeneratedReferenceReviews(latestReferences, reviewedReferences);
-            const propSupplierPrompt = kind === "props" ? assetSupplierPrompt?.trim() || (generationStage === "initial" ? prompt : compileDramaAssetReferencePrompt(project, { ...currentAsset, supplierPrompt: undefined }, "道具")) : undefined;
+            const propSupplierPrompt = kind === "props" ? compileDramaAssetReferencePrompt(project, { ...currentAsset, supplierPrompt: undefined }, "道具") : undefined;
             replaceProject(latestProject);
             updateAsset(
                 projectId,
@@ -589,8 +593,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                             .getState()
                             .projects.find((item) => item.id === currentProject.id)
                             ?.[kind].find((item) => item.id === asset.id) || asset;
-                    const prompt = task.prompt.trim() || compileDramaAssetReferencePrompt(currentProject, currentAsset, assetKind);
-                    const assetSupplierPrompt = kind === "props" ? compileDramaAssetReferencePrompt(currentProject, { ...currentAsset, supplierPrompt: task.prompt }, "道具") : undefined;
+                    const prompt = compileDramaAssetReferencePrompt(currentProject, { ...currentAsset, supplierPrompt: undefined }, assetKind);
                     const imageModel = config.imageModel || config.imageModels[0] || task.model;
                     if (!imageModel) throw new Error("后台尚未配置可用的图片模型，请先在管理后台配置图片渠道");
                     const imageConfig = {
@@ -601,7 +604,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                         ...(kind === "scenes" ? { quality: "high" } : {}),
                         count: "1",
                     };
-                    await persistGeneratedReference(task, imageConfig, prompt, task.generationStage || "initial", undefined, assetSupplierPrompt);
+                    await persistGeneratedReference(task, imageConfig, prompt, task.generationStage || "initial");
                 } catch (error) {
                     if (!disposed) message.error(error instanceof Error ? error.message : "候选图生成失败");
                 } finally {
@@ -625,12 +628,12 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
         try {
             const activeProposal = proposalOverride || refinementProposal;
             const assetKind = kind === "characters" ? "角色" : kind === "scenes" ? "场景" : "道具";
-            const preflight = preflightDramaAssetGeneration(project, asset, assetKind);
+            const preflight = preflightDramaAssetGeneration(project, draftPromptAsset || asset, assetKind);
             if (!preflight.ok) {
                 message.warning(`暂不能生成：${preflight.errors.join("；")}`);
                 return;
             }
-            const prompt = activeProposal ? compileDramaAssetRefinementPrompt(project, asset, assetKind, activeProposal, refinementPrompt) : supplierPromptOverride?.trim() || automaticSupplierPrompt;
+            const prompt = activeProposal ? compileDramaAssetRefinementPrompt(project, draftPromptAsset || asset, assetKind, activeProposal, refinementPrompt) : automaticSupplierPrompt;
             const imageModel = config.imageModel || config.imageModels[0] || "";
             if (!imageModel) throw new Error("后台尚未配置可用的图片模型，请先在管理后台配置图片渠道");
             const imageConfig = {

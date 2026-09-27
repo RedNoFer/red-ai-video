@@ -23,6 +23,13 @@ export type CompiledDramaPrompts = {
 
 export type DramaVisualContractProject = Parameters<typeof resolveDramaStyleContract>[0];
 
+export type DramaAssetVisualProjection = {
+    identityFacts: string;
+    consistencyFacts: string;
+    spatialFacts: string;
+    identityAnchors: string[];
+};
+
 /** Server-derived contract shared by video and keyframe generation. */
 export type DerivedShotPromptContract = {
     references: DramaReferenceManifestItem[];
@@ -279,8 +286,8 @@ export function compileDramaFrameSupplierPrompt(project: DramaProject, episode: 
 }
 
 export function applyDramaStaticVisualContract(project: DramaVisualContractProject, source: string) {
-    const prompt = formatPromptFieldLines(source, "static");
     const visualContract = currentVisualContractText(project);
+    const prompt = formatPromptFieldLines(visualContract ? stripHistoricalAssetStyleFacts(source) : source, "static");
     if (!prompt || !visualContract) return prompt;
     const lines = prompt.split("\n");
     let replaced = false;
@@ -295,7 +302,7 @@ export function applyDramaStaticVisualContract(project: DramaVisualContractProje
 export function applyDramaVideoVisualContract(project: DramaVisualContractProject, source: string) {
     const visualContract = currentVisualContractText(project);
     if (!visualContract) return source.trim();
-    const prompt = formatPromptFieldLines(sanitizeDramaVisualPrompt(source), "video");
+    const prompt = formatPromptFieldLines(stripHistoricalAssetStyleFacts(sanitizeDramaVisualPrompt(source)), "video");
     if (!prompt) return prompt;
     const lines = prompt.split("\n");
     let replaced = false;
@@ -319,6 +326,25 @@ function currentVisualContractText(project: DramaVisualContractProject) {
     ]
         .filter(Boolean)
         .join("；");
+}
+
+function stripHistoricalAssetStyleFacts(value: string) {
+    return value
+        .split(/\r?\n/u)
+        .map((line) => {
+            const separator = line.search(/[：:]/u);
+            const label = separator >= 0 ? line.slice(0, separator + 1) : "";
+            const body = separator >= 0 ? line.slice(separator + 1) : line;
+            const allFacts = body
+                .split(/[；;。\n，,、]+/u)
+                .map((item) => item.trim())
+                .filter(Boolean);
+            const facts = allFacts.filter((item) => !assetStyleFactPattern.test(item));
+            if (facts.length === allFacts.length) return line;
+            return facts.length ? `${label}${facts.join("；")}` : "";
+        })
+        .filter(Boolean)
+        .join("\n");
 }
 
 export function compileDramaDialogueAudioInstructions(shot: DramaShot) {
@@ -369,23 +395,64 @@ function lightingLines(shot: DramaShot) {
         : "";
 }
 
+export function projectDramaAssetVisualFacts(asset: Pick<DramaNamedAsset, "description" | "profile">, kind: "角色" | "场景" | "道具" | "线索"): DramaAssetVisualProjection {
+    const profile = asset.profile;
+    const identitySources = [asset.description, profile?.visualIdentity, ...(profile?.identityAnchors || [])];
+    const spatialSources = [...(profile?.spatialRules || []), ...(profile?.stateRules || [])];
+    const consistencySources = [profile?.consistencyRules, ...spatialSources];
+    const isScene = kind === "场景";
+    const projectFacts = (values: Array<string | undefined>, stylePattern = assetStyleFactPattern) =>
+        Array.from(
+            new Set(
+                values
+                    .flatMap((value) => splitDramaAssetFacts(value || ""))
+                    .filter((value) => value && !stylePattern.test(value) && !((kind === "道具" || kind === "线索") && hasDramaPropNarrative(value)))
+                    .map((value) => sanitizeDramaVisualPrompt(value))
+                    .filter(Boolean),
+            ),
+        ).join("；");
+    const identityFacts = projectFacts(identitySources, isScene ? sceneStyleFactPattern : assetStyleFactPattern);
+    const consistencyFacts = projectFacts(consistencySources, isScene ? sceneStyleFactPattern : assetStyleFactPattern);
+    const spatialFacts = projectFacts(spatialSources, sceneStyleFactPattern);
+    const identityPattern = isScene ? sceneStyleFactPattern : assetStyleFactPattern;
+    return {
+        identityFacts,
+        consistencyFacts,
+        spatialFacts,
+        identityAnchors: Array.from(
+            new Set(
+                identitySources
+                    .flatMap((value) => splitDramaAssetFacts(value || ""))
+                    .filter((value) => value && !identityPattern.test(value) && !((kind === "道具" || kind === "线索") && hasDramaPropNarrative(value)))
+                    .map((value) => sanitizeDramaVisualPrompt(value))
+                    .filter(Boolean),
+            ),
+        ),
+    };
+}
+
+const assetStyleFactPattern = /服装|服饰|衣着|穿着|长袍|袍|斗篷|披风|外套|制服|盔甲|铠甲|护腕|护甲|腰封|腰带|鞋靴|鞋子|靴子|手套|配饰|饰品|首饰|挂件|纹样|刺绣|面料|材质|丝绸|锦缎|皮革|金属|玉石|色彩|配色|固有色|主色|颜色|时代|工艺|风格|渲染|光色|灯光/u;
+const sceneStyleFactPattern = /建筑(?:语言|样式|装饰)?|空间(?:语言|样式)?|时代|年代|工艺|风格|画风|视觉|渲染|材质|色调|配色|光色|灯光/u;
+
+function splitDramaAssetFacts(value: string) {
+    return value
+        .split(/[；;。\n，,、]+/u)
+        .map((item) => item.replace(/^(?:原文事实|导演建议|剧情事实|镜头事实|一致性锁定)[：:]\s*/u, "").trim())
+        .filter(Boolean);
+}
+
 export function compileDramaAssetReferencePrompt(project: Pick<DramaProject, "title" | "style" | "ratio" | "productionBible">, asset: DramaNamedAsset, kind: "角色" | "场景" | "道具") {
     const styleContract = resolveDramaStyleContract(project);
     const profile = asset.profile;
-    const description = kind === "道具" ? sanitizeDramaPropFacts(asset.description) : sanitizeDramaVisualPrompt(asset.description);
-    const visualIdentity = joinAssetPromptFacts(kind === "道具" ? [sanitizeDramaPropFacts(profile?.visualIdentity), ...(profile?.identityAnchors || []).map(sanitizeDramaPropFacts)] : [profile?.visualIdentity, ...(profile?.identityAnchors || [])]);
-    const styling = kind === "道具" ? sanitizeDramaPropFacts(profile?.styling) : sanitizeDramaVisualPrompt(profile?.styling || "");
-    const stylingForPrompt = description.length >= styling.length && styling && description.includes(styling) ? "" : styling;
-    const colorPalette = kind === "道具" ? sanitizeDramaPropFacts(profile?.colorPalette) : sanitizeDramaVisualPrompt(profile?.colorPalette || "");
-    const consistency = joinAssetPromptFacts(
-        kind === "道具"
-            ? [sanitizeDramaPropFacts(profile?.consistencyRules), ...(profile?.spatialRules || []).map(sanitizeDramaPropFacts), ...(profile?.stateRules || []).map(sanitizeDramaPropFacts)]
-            : [profile?.consistencyRules, ...(profile?.spatialRules || []), ...(profile?.stateRules || [])],
-    );
+    const projection = projectDramaAssetVisualFacts(asset, kind);
+    const description = projection.identityFacts;
+    const visualIdentity = joinAssetPromptFacts(projection.identityAnchors);
+    const consistency = projection.consistencyFacts;
     const globalStyle = [
         `项目视觉风格：${styleContract.visualDescription}`,
         "当前项目视觉合同是唯一主题、时代、造型、材质与渲染风格来源；资产历史提示词中与当前合同冲突的风格措辞不得执行，只保留身份、轮廓、空间拓扑和剧情用途事实",
         "视觉重设计规则：历史资产中的服装、配饰、时代工艺、材质和配色只作为来源记录，必须按当前项目视觉合同重新设计；固定保留年龄感、脸型、五官、发型、体态、剧情用途和已确认的非风格身份事实",
+        "角色或资产名称只用于身份索引，不得触发原作、地域、时代或默认画风联想；当前项目视觉合同覆盖任何历史默认风格",
         styleContract.artStyle ? `全局画风规格：${styleContract.artStyle}` : "",
         styleContract.colorScript ? `全局色彩脚本：${styleContract.colorScript}` : "",
     ]
@@ -393,7 +460,7 @@ export function compileDramaAssetReferencePrompt(project: Pick<DramaProject, "ti
         .join("；");
     const sceneQuality = kind === "场景" ? "高清完整单视角全景建立图；建筑透视稳定，墙体、门窗、地面和桌椅等直线结构不弯折；入口、出口、主要陈设、材质、光向和轴线清晰可读，背景细节不使用模糊虚化遮蔽" : "";
     const forbidden = joinAssetPromptConstraints([
-        ...(profile?.forbiddenChanges || []).filter((value) => kind !== "场景" || !/(?:拼版|多视角|分格)/u.test(value)),
+        ...(profile?.forbiddenChanges || []).filter((value) => !assetStyleFactPattern.test(value) && (kind !== "场景" || !/(?:拼版|多视角|分格)/u.test(value))),
         kind === "角色" ? DRAMA_CHARACTER_NEGATIVE_RULES : kind === "场景" ? "人物、不同地点、方向标签、文字、水印、logo" : "人物、手部、持有人、人物动作、书写过程、额外主体、拼版、多视角、文字、水印、logo",
         styleContract.globalNegativePrompt || "",
     ]);
@@ -403,14 +470,20 @@ export function compileDramaAssetReferencePrompt(project: Pick<DramaProject, "ti
             : kind === "场景"
               ? `${project.ratio || "9:16"} 画幅，一张高清、完整、无人物、无文字的单视角场景全景建立图；完整呈现入口、出口、门窗、主要陈设、地面材质、光源方向、空间轴线、通道和人物动作所需的支撑面，不生成九宫格、分格或360°贴图。`
               : "纯白色无缝背景，单一道具主体完整入画，静置展示并保留极轻接触阴影；只展示道具本体、完整轮廓和关键材质细节，不出现展示台、项目桌面、人物、手部、持有人、剧情场景或其他道具。";
-    const characterLightingStyle = [DRAMA_CHARACTER_RENDER_STYLE, DRAMA_CHARACTER_STUDIO_LIGHT_RULES, DRAMA_CHARACTER_SUPPLIER_QUALITY_RULES, colorPalette ? `角色固有色彩：${colorPalette}` : ""].filter(Boolean).join("；");
+    const characterLightingStyle = [DRAMA_CHARACTER_RENDER_STYLE, DRAMA_CHARACTER_STUDIO_LIGHT_RULES, DRAMA_CHARACTER_SUPPLIER_QUALITY_RULES].filter(Boolean).join("；");
+    const currentDesign =
+        kind === "角色"
+            ? "服装、配饰、材质与角色固有色按当前项目视觉合同重新设计，并在四个视图与后续镜头之间保持同一套当前设计"
+            : kind === "场景"
+              ? "建筑语言、陈设样式、材质、色彩与光线按当前项目视觉合同重新设计；只保留入口、出口、门窗、固定陈设和空间轴线等拓扑事实"
+              : "道具的造型语言、材质、工艺、色彩与渲染按当前项目视觉合同重新设计；只保留结构轮廓、功能和剧情识别事实";
     return compact([
         `主体与资产类型：${kind}「${asset.name}」`,
         `身份/结构锚点：${joinAssetPromptFacts([description, visualIdentity]) || "沿用当前资产已确认设定"}`,
         consistency ? `一致性锁定：${consistency}` : "",
-        `可见状态与材质：${stylingForPrompt || (kind === "道具" ? "道具本体静置展示，结构轮廓与关键材质细节清晰可见" : "按身份设定中的服装、材质和关键配件呈现")}${kind === "角色" ? `；${DRAMA_CHARACTER_FACE_MODELING_RULES}；${DRAMA_CHARACTER_HAIR_MODELING_RULES}；${DRAMA_CHARACTER_WARDROBE_MATERIAL_RULES}` : sceneQuality ? `；${sceneQuality}` : ""}`,
+        `可见状态与材质：${currentDesign}${kind === "角色" ? `；${DRAMA_CHARACTER_FACE_MODELING_RULES}；${DRAMA_CHARACTER_HAIR_MODELING_RULES}；${DRAMA_CHARACTER_WARDROBE_MATERIAL_RULES}` : sceneQuality ? `；${sceneQuality}` : "；结构轮廓、功能和关键识别细节清晰可见"}`,
         `构图与画幅：${layout}`,
-        `光色与风格：${kind === "角色" ? `${characterLightingStyle}；${globalStyle}` : `${globalStyle}${colorPalette ? `；固定色彩：${colorPalette}` : ""}`}`,
+        `光色与风格：${kind === "角色" ? `${characterLightingStyle}；${globalStyle}` : globalStyle}`,
         `负面约束：${forbidden}`,
     ]).join("\n");
 }
@@ -429,7 +502,7 @@ export function compileDramaAssetConstraints(project: Pick<DramaProject, "ratio"
               ? `只输出一张完整、独立的 ${project.ratio || "9:16"} 高清单视角场景全景建立图；不生成九宫格、分格、第二地点或第二张候选图。`
               : "只输出一张完整、独立的纯白无缝背景单一道具设定图，不要拼版、联系表、多视角、分格模块、展示台或环境场景。",
         kind === "角色"
-            ? `角色基准图必须固定为纯白色无缝背景四视图：${DRAMA_CHARACTER_TURNAROUND_LAYOUT}；身份特写与后三个全身视图严格保持同一脸型、五官、发际线、发型、服装、体态、关键识别配件和固有色。只允许这四个视图，不得新增任何人物、四分之三视图、主立绘、表情组、手部或道具拆解、额外角度、边框、网格、说明文字或水印。`
+            ? `角色基准图必须固定为纯白色无缝背景四视图：${DRAMA_CHARACTER_TURNAROUND_LAYOUT}；身份特写与后三个全身视图严格保持同一脸型、五官、发际线、发型和体态；服装、固定配饰、材质与固有色按当前项目视觉合同统一设计并跨视图保持一致。只允许这四个视图，不得新增任何人物、四分之三视图、主立绘、表情组、手部或道具拆解、额外角度、边框、网格、说明文字或水印。`
             : kind === "场景"
               ? "单张全景图展示同一无人物场景的完整空间状态：保持入口、出口、门窗、固定物件位置、材质、光色、空间拓扑和180度轴线清晰一致，所有背景结构与人物可用支撑面都必须可辨。"
               : "单一道具主体完整可见，置于纯白无缝背景中静置展示，允许极轻接触阴影；结构轮廓、边缘、材质、磨损和关键识别细节清晰，不出现展示台、项目桌面、人物、手部、持有人、剧情场景或其他道具。",
@@ -437,7 +510,9 @@ export function compileDramaAssetConstraints(project: Pick<DramaProject, "ratio"
             ? "负面构图词：额外人物、额外视图、四分之三视图、主立绘、表情组、手部特写、道具拆解、场景背景、灰色背景、网格、边框、文字、水印、logo、无头、无脸、缺失头部、裁掉头部、裁脸、画面外人头、后三个全身视图被裁成半身或胸像、身份特写替代全身视图、只画服装。"
             : "",
         "不得添加设定中没有出现的主体、装饰或剧情信息，不添加文字、水印、logo、边框。",
-        `严格保留${kind}的身份、轮廓、年龄感、色彩和一致性规则，不得擅自改写。`,
+        kind === "角色"
+            ? "严格保留角色身份、轮廓、年龄感、脸型、五官、发际线、发束和体态；服装、配饰、材质与色彩只在当前项目视觉合同内保持跨视图一致。"
+            : `严格保留${kind}的身份、轮廓、功能、空间或结构事实；造型、材质、色彩和渲染只在当前项目视觉合同内保持一致。`,
         kind === "角色"
             ? "禁止把中文说明、角色关系表、参数表或海报排版画进图片；四视图只表示同一角色，身份特写只负责五官识别，后三个视图负责全身比例与服装结构，不添加任何文字或其他模块。"
             : kind === "场景"

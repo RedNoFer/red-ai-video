@@ -157,7 +157,7 @@ describe("drama asset image results", () => {
         expect(editor).toContain("dataUrl: storedReferenceUrl");
         expect(editor).toContain("const existingReferenceUrl");
         expect(editor).toContain("referenceOverride || (activeProposal ? primary : undefined)");
-        expect(editor).toContain("supplierPromptOverride?.trim() ||");
+        expect(editor).toContain("const editedPromptFields = supplierPromptOverride?.trim()");
         expect(editor).toContain("data-drama-primary-preview");
         expect(editor).toContain("!object-contain");
         expect(editor).toContain("aspectRatio: primary?.width && primary?.height");

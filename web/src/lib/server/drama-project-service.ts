@@ -1235,26 +1235,26 @@ export async function updateDramaAssetForUser(userId: string, id: string, kind: 
     }
 }
 
-export function previewDramaProductionPackageForUser(value: unknown, options: DramaProductionPackageNormalizationOptions = {}) {
+export function previewDramaProductionPackageForUser(value: unknown, options: DramaProductionPackageNormalizationOptions = {}, project?: Pick<DramaProject, "title" | "style" | "ratio" | "productionBible" | "characters" | "scenes" | "props" | "clues">) {
     const input = object(value);
     const source = cleanText(input.source);
     const fileName = cleanText(input.fileName) || "production-package.md";
     try {
-        return previewDramaProductionPackage(source, fileName, undefined, { allowImportWarnings: true, enforceExecutionContract: true, ...options });
+        return previewDramaProductionPackage(source, fileName, project, { allowImportWarnings: true, enforceExecutionContract: true, ...options });
     } catch (error) {
         if (error instanceof DramaProductionPackageError) throw new DramaProjectServiceError(error.message, 400);
         throw error;
     }
 }
 
-export function previewDramaScriptProductionPackageForUser(value: unknown) {
-    const standalonePreview = previewDramaProductionPackageForUser(value, { allowImportWarnings: false, preserveAuthoredVideoPrompt: true });
+export function previewDramaScriptProductionPackageForUser(value: unknown, project?: Pick<DramaProject, "title" | "style" | "ratio" | "productionBible" | "characters" | "scenes" | "props" | "clues">) {
+    const standalonePreview = previewDramaProductionPackageForUser(value, { allowImportWarnings: false, preserveAuthoredVideoPrompt: true }, project);
     if (standalonePreview.package.authoring?.authoringMode === "codex-standalone") {
         if (standalonePreview.package.authoring.canonicalSource !== "markdown-with-embedded-json" || standalonePreview.package.authoring.qualityGateStatus !== "passed")
             throw new DramaProjectServiceError("独立 Codex 制作包必须在第十三章/QC 元数据中标记 qualityGateStatus=passed", 400);
         return standalonePreview;
     }
-    const preview = previewDramaProductionPackageForUser(value, { allowImportWarnings: false, validateVideoPrompt: true, requireCameraPlan: true, requireContentQuality: true, requireAgentAuthoring: true, requireAuthoringQuality: true });
+    const preview = previewDramaProductionPackageForUser(value, { allowImportWarnings: false, validateVideoPrompt: true, requireCameraPlan: true, requireContentQuality: true, requireAgentAuthoring: true, requireAuthoringQuality: true }, project);
     const plan = preview.package.project.productionBible?.productionPlan;
     if (!plan?.lockedAt || !plan.visual.visualStyle.trim() || !plan.visual.artStyle.trim()) throw new DramaProjectServiceError("剧本 Agent 制作包必须包含已锁定且具体的视觉风格和画风", 400);
     return preview;
@@ -1263,9 +1263,12 @@ export function previewDramaScriptProductionPackageForUser(value: unknown) {
 export async function applyDramaProductionPackageForUser(userId: string, id: string, value: unknown) {
     const input = object(value);
     const current = await getDramaProjectForUser(userId, id);
-    const preview = previewDramaProductionPackageForUser(input);
+    const preview = previewDramaProductionPackageForUser(input, {}, current);
     if (cleanText(input.sourceHash) !== preview.sourceHash) throw new DramaProjectServiceError("制作包内容已变化，请重新预览", 409);
-    const project = applyDramaProductionPackage(current, preview.package, preview.sourceHash, cleanText(input.source), cleanText(input.fileName) || "production-package.md", { allowImportWarnings: true });
+    const project = applyDramaProductionPackage(current, preview.package, preview.sourceHash, cleanText(input.source), cleanText(input.fileName) || "production-package.md", {
+        allowImportWarnings: true,
+        ...(preview.package.authoring?.authoringMode === "codex-standalone" ? { validatedStandalonePackage: true } : {}),
+    });
     project.updatedAt = nextTimestamp(current.updatedAt);
     await createDramaProjectVersion(userId, current.id, "完整制作包导入前", current);
     try {
@@ -1283,7 +1286,7 @@ export async function applyDramaEpisodeProductionPackageForUser(userId: string, 
     const episodeId = cleanText(episodeIdValue);
     const target = current.episodes.find((episode) => episode.id === episodeId);
     if (!target) throw new DramaProjectServiceError("短剧剧集不存在", 404);
-    const preview = previewDramaScriptProductionPackageForUser(input);
+    const preview = previewDramaScriptProductionPackageForUser(input, current);
     const isStandalone = preview.package.authoring?.authoringMode === "codex-standalone";
     let authoringRun: Awaited<ReturnType<typeof getAgentRun>> | undefined;
     if (!isStandalone) {
@@ -1299,7 +1302,9 @@ export async function applyDramaEpisodeProductionPackageForUser(userId: string, 
         throw new DramaProjectServiceError("制作包内容与执行结果不一致，请重新加载最新 Agent 结果", 409);
     if (preview.package.episodes.length !== 1) throw new DramaProjectServiceError("剧本 Agent 制作包只能包含当前集", 400);
     const scoped = { ...current, episodes: [target], activeEpisodeId: target.id };
-    const applied = applyDramaProductionPackage(scoped, preview.package, preview.sourceHash, cleanText(input.source), cleanText(input.fileName) || "剧本 Agent 制作包.md");
+    const applied = applyDramaProductionPackage(scoped, preview.package, preview.sourceHash, cleanText(input.source), cleanText(input.fileName) || "剧本 Agent 制作包.md", {
+        ...(isStandalone ? { validatedStandalonePackage: true } : {}),
+    });
     const nextEpisode = applied.episodes[0];
     if (!nextEpisode) throw new DramaProjectServiceError("制作包没有可回填的当前集", 400);
     const project = { ...current, ...applied, episodes: current.episodes.map((episode) => (episode.id === target.id ? { ...nextEpisode, id: episode.id } : episode)), activeEpisodeId: current.activeEpisodeId, updatedAt: nextTimestamp(current.updatedAt) };

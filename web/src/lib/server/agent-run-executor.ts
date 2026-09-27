@@ -37,6 +37,7 @@ import { DRAMA_PACKAGE_DIRECTOR_RULES, DRAMA_VIDEO_DIRECTOR_SKILL, SEEDANCE_25_D
 import type { DramaAuthoringAudit, DramaAuthoringDraft, DramaAuthoringPackageDraft, DramaAuthoringProvider, DramaAuthoringSourceSnapshot, DramaEpisode, DramaNamedAsset, DramaProductionLock, DramaProject } from "@/lib/drama-project-contract";
 import { resolveSeedance25VideoPromptReferences } from "@/lib/server/agent-skills/seedance-25";
 import { resolveDramaGlobalVisualContract } from "@/lib/drama-style";
+import { projectDramaAssetVisualFacts } from "@/lib/drama-prompt-compiler";
 import { formatDramaCompositionContract, resolveDramaCompositionProfile } from "@/lib/drama-composition";
 import { DRAMA_DIALOGUE_TIMING_RULES } from "@/lib/drama-dialogue-timing";
 import { DramaAuthoringQualityGateError, validateDramaAuthoringQuality } from "@/lib/server/drama-production-package-quality";
@@ -823,10 +824,10 @@ export function buildDramaPackageAuthoringInput(input: {
             : {}),
     };
     const assetCatalog = {
-        characters: authoringAssetCatalog(input.assetReuseContext.characters),
-        scenes: authoringAssetCatalog(input.assetReuseContext.locations),
-        props: authoringAssetCatalog(input.assetReuseContext.props),
-        clues: authoringAssetCatalog(input.assetReuseContext.clues),
+        characters: authoringAssetCatalog(input.assetReuseContext.characters, "角色"),
+        scenes: authoringAssetCatalog(input.assetReuseContext.locations, "场景"),
+        props: authoringAssetCatalog(input.assetReuseContext.props, "道具"),
+        clues: authoringAssetCatalog(input.assetReuseContext.clues, "线索"),
     };
     return {
         request: input.runPrompt,
@@ -911,13 +912,14 @@ function hashDramaAuthoringMaterial(value: { title?: unknown; type?: unknown; te
 
 type DramaAuthoringAsset = Pick<DramaNamedAsset, "code" | "name" | "description" | "activeEpisodeCodes" | "profile" | "backgroundNpcPolicy">;
 
-function authoringAssetCatalog(items: readonly DramaAuthoringAsset[]) {
+function authoringAssetCatalog(items: readonly DramaAuthoringAsset[], kind: "角色" | "场景" | "道具" | "线索") {
     return items.map((asset) => {
-        const profile = asset.profile ? authoringAssetProfile(asset.profile) : undefined;
+        const projection = projectDramaAssetVisualFacts(asset, kind);
+        const profile = asset.profile ? authoringAssetProfile(asset.profile, projection) : undefined;
         return {
             ...(asset.code ? { code: asset.code } : {}),
             name: asset.name,
-            description: asset.description,
+            description: projection.identityFacts,
             ...(asset.activeEpisodeCodes?.length ? { activeEpisodeCodes: asset.activeEpisodeCodes } : {}),
             ...(profile && Object.keys(profile).length ? { profile } : {}),
             ...(asset.backgroundNpcPolicy ? { backgroundNpcPolicy: asset.backgroundNpcPolicy } : {}),
@@ -925,9 +927,16 @@ function authoringAssetCatalog(items: readonly DramaAuthoringAsset[]) {
     });
 }
 
-function authoringAssetProfile(profile: NonNullable<DramaNamedAsset["profile"]>) {
-    const { designPrompt: _designPrompt, ...facts } = profile;
-    return facts;
+function authoringAssetProfile(profile: NonNullable<DramaNamedAsset["profile"]>, projection: ReturnType<typeof projectDramaAssetVisualFacts>) {
+    void profile;
+    return {
+        visualIdentity: projection.identityFacts,
+        styling: "",
+        colorPalette: "",
+        consistencyRules: projection.consistencyFacts,
+        identityAnchors: projection.identityAnchors,
+        ...(projection.spatialFacts ? { spatialRules: [projection.spatialFacts] } : {}),
+    };
 }
 
 function composeDramaAuthoringRules(...rules: string[]) {

@@ -137,16 +137,19 @@ describe("drama prompt compiler", () => {
         project.style = westernCg;
         project.productionBible = { ...project.productionBible!, visualStyle: westernCg };
         const shot = project.episodes[0].shots[0];
-        shot.imagePrompt = "画面主体：女主站在门边\n可见状态：抬头看向门口\n光色与风格：旧东方古风国漫";
-        shot.videoPrompt = "动态意图：女主抬头看向门口\n视觉风格与光色：旧东方古风国漫";
+        shot.imagePrompt = "画面主体：女主穿着黑灰窄袖长袍，黑发束起，站在门边\n可见状态：抬头看向门口\n光色与风格：旧东方古风国漫";
+        shot.videoPrompt = "动态意图：女主抬头看向门口，旧银护腕反光\n视觉风格与光色：旧东方古风国漫";
 
         const prompts = compileDramaShotExecutionPrompts(project, project.episodes[0], shot);
         const framePrompt = compileDramaFrameSupplierPrompt(project, project.episodes[0], shot);
 
         expect(prompts.videoPrompt).toContain(`项目视觉合同（唯一风格来源）：${westernCg}`);
         expect(prompts.videoPrompt).not.toContain("旧东方古风国漫");
+        expect(prompts.videoPrompt).not.toContain("旧银护腕");
         expect(framePrompt).toContain(`项目视觉合同（唯一风格来源）：${westernCg}`);
         expect(framePrompt).not.toContain("旧东方古风国漫");
+        expect(framePrompt).not.toContain("黑灰窄袖长袍");
+        expect(framePrompt).toContain("黑发束起");
     });
 
     it("applies the locked global art style and negative prompt to scene generation", () => {
@@ -633,7 +636,8 @@ describe("drama prompt compiler", () => {
         expect(prompt).toContain("五官按设定年龄和性别的真实骨骼塑形");
         expect(prompt).toContain("头发按发际线、分区、根部体积、主发束");
         expect(prompt).toContain("服装按真实裁剪逻辑分层");
-        expect(prompt).toContain("角色固有色彩：红黑");
+        expect(prompt).toContain("全局色彩脚本：暮色金紫主调");
+        expect(prompt).not.toContain("角色固有色彩：红黑");
         expect(prompt).toContain("纯白色无缝背景");
         expect(prompt).toContain("身份特写、正面全身立姿、严格左侧面全身立姿、背面全身立姿");
         expect(prompt).toContain("四视图");
@@ -661,7 +665,8 @@ describe("drama prompt compiler", () => {
         const prompt = compileDramaAssetReferencePrompt(project, project.characters[0], "角色");
 
         expect(prompt).toContain("清晰眉骨");
-        expect(prompt).toContain("墨青窄袖长袍");
+        expect(prompt).toContain("服装、配饰、材质与角色固有色按当前项目视觉合同重新设计");
+        expect(prompt).not.toContain("墨青窄袖长袍");
         expect(prompt).toContain("自然骨骼与身材比例");
         expect(prompt).toContain("男性不女性化");
         expect(prompt).toContain("严格左侧面");
@@ -855,7 +860,8 @@ describe("drama prompt compiler", () => {
         const prompt = compileDramaAssetReferencePrompt(project, project.characters[0], "角色");
 
         expect(prompt).toContain(`项目视觉风格：${project.style}`);
-        expect(prompt).toContain("角色固有色彩：红黑");
+        expect(prompt).toContain("全局色彩脚本：深蓝灰、旧银、墨绿、少量暖金");
+        expect(prompt).not.toContain("角色固有色彩：红黑");
         expect(prompt).toContain("短发");
         expect(prompt).not.toContain("六模块");
         expect(prompt).not.toContain("中性浅灰背景");
@@ -884,6 +890,40 @@ describe("drama prompt compiler", () => {
         expect(prompt).toContain("高精度人物细节");
         expect(prompt).not.toContain("暗黑学院");
         expect(prompt).not.toContain("哥特魔法学院");
+    });
+
+    it("uses the project contract instead of a character name or historical costume facts", () => {
+        const project = createProject();
+        const asset = {
+            ...project.characters[0],
+            name: "萧炎",
+            description: "少年，黑发束起，黑灰窄袖长袍与旧银护腕；冷肃反击，承担父亲名声",
+            profile: {
+                visualIdentity: "少年男性，脸型清晰，五官明确，黑发束起，年龄感固定",
+                styling: "黑灰窄袖长袍与旧银护腕",
+                colorPalette: "炭黑、旧银",
+                consistencyRules: "固定脸型、五官、发际线、发束、体态和服装",
+            },
+        };
+        const westernCg = "西方写实 CG 电影质感，真实比例，PBR 材质，冷蓝灰与旧银";
+        project.style = westernCg;
+        project.productionBible = { ...project.productionBible!, visualStyle: westernCg, colorScript: "冷蓝灰、炭黑、旧银" };
+
+        const westernPrompt = compileDramaAssetReferencePrompt(project, asset, "角色");
+        expect(westernPrompt).toContain(`项目视觉风格：${westernCg}`);
+        expect(westernPrompt).toContain("少年男性");
+        expect(westernPrompt).toContain("黑发束起");
+        expect(westernPrompt).not.toContain("黑灰窄袖长袍");
+        expect(westernPrompt).not.toContain("旧银护腕");
+
+        const scienceFictionCg = "硬表面科幻写实 CG，工业光学材质，冷白与电蓝，高品质游戏过场动画";
+        project.style = scienceFictionCg;
+        project.productionBible = { ...project.productionBible!, visualStyle: scienceFictionCg, colorScript: "冷白、电蓝、石墨黑" };
+        const scienceFictionPrompt = compileDramaAssetReferencePrompt(project, asset, "角色");
+        expect(scienceFictionPrompt).toContain(`项目视觉风格：${scienceFictionCg}`);
+        expect(scienceFictionPrompt).not.toContain(westernCg);
+        expect(scienceFictionPrompt).not.toContain("黑灰窄袖长袍");
+        expect(scienceFictionPrompt).not.toContain("旧银护腕");
     });
 
     it("recompiles cached refinement proposals with the current project style", () => {
