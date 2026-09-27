@@ -1296,6 +1296,32 @@ describe("production package boundary", () => {
         expect(applied.productionBible?.colorScript).toBe("冷蓝灰与旧银");
     });
 
+    it("adopts a concrete package visual contract when the target project only has the default placeholder", () => {
+        const importedStyle = "西方写实 CG 电影质感，冷蓝灰与旧银，真实材质和哥特空间结构";
+        const importedArtStyle = "physically based 3D，电影级真实材质与自然比例";
+        const imported = structuredClone(productionPackage);
+        imported.project.style = importedStyle;
+        imported.project.productionBible.visualStyle = importedStyle;
+        imported.project.productionBible.colorScript = "冷蓝灰与旧银";
+        imported.project.productionBible.productionPlan = {
+            ...defaultDramaProductionPlan("package"),
+            lockedAt: "2026-09-10T00:00:00.000Z",
+            visual: { visualStyle: importedStyle, artStyle: importedArtStyle, source: "manual" },
+        };
+
+        const current = project();
+        const preview = previewDramaProductionPackage(JSON.stringify(imported), "western-cg-package.json", current, { allowImportWarnings: true });
+        const applied = applyDramaProductionPackage(current, preview.package, preview.sourceHash, undefined, "western-cg-package.json", { allowImportWarnings: true });
+
+        expect(preview.package.project).toMatchObject({
+            style: importedStyle,
+            productionBible: { visualStyle: importedStyle, colorScript: "冷蓝灰与旧银", productionPlan: { visual: { visualStyle: importedStyle, artStyle: importedArtStyle } } },
+        });
+        expect(preview.package.assets.characters[0].supplierPrompt).toContain(importedStyle);
+        expect(applied.style).toBe(importedStyle);
+        expect(applied.productionBible).toMatchObject({ visualStyle: importedStyle, colorScript: "冷蓝灰与旧银" });
+    });
+
     it("can apply a recompiled locked package when the legacy project plan lacks artStyle", () => {
         const imported = structuredClone(productionPackage);
         imported.project.productionBible.productionPlan = {

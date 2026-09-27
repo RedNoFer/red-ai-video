@@ -42,7 +42,7 @@ import {
     warnDramaFrameVisualContent,
 } from "@/lib/drama-frame-sequence";
 import { dramaDialogueFragmentSequenceError, dramaDialogueTimingReminder, dramaFrameDialogueTimingReminder, dramaUtteranceTimingIssues, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
-import { resolveDramaStyleContract } from "@/lib/drama-style";
+import { resolveDramaStyleContract, resolveDramaStyleContractWithFallback } from "@/lib/drama-style";
 import { normalizeDramaCharacterProfile } from "@/lib/drama-character-rules";
 import { applyDramaStaticVisualContract, applyDramaVideoVisualContract, compileDramaAssetReferencePrompt } from "@/lib/drama-prompt-compiler";
 import { resolveDramaShotDuration } from "@/lib/server/drama-shot-config";
@@ -257,8 +257,11 @@ export function applyDramaProductionPackage(project: DramaProject, source: Drama
         sourceHash,
     };
     const sourceAssets = [...(project.sourceAssets || []).filter((asset) => asset.id !== sourceAsset.id), sourceAsset];
-    const productionBible = project.fieldOrigins?.productionBible === "manual" ? project.productionBible : projectPatch.productionBible;
-    const preferredStyle = preferred(project.style, project.fieldOrigins, "style", projectPatch.style);
+    const currentStyleContract = resolveDramaStyleContract(project);
+    const packageStyleContract = resolveDramaStyleContract(projectPatch);
+    const usesPackageVisualContract = currentStyleContract.source !== "custom" && packageStyleContract.source === "custom";
+    const productionBible = usesPackageVisualContract ? projectPatch.productionBible : project.fieldOrigins?.productionBible === "manual" ? project.productionBible : projectPatch.productionBible;
+    const preferredStyle = usesPackageVisualContract ? projectPatch.style : preferred(project.style, project.fieldOrigins, "style", projectPatch.style);
     const nextStyle = project.fieldOrigins?.productionBible === "manual" && project.fieldOrigins?.style !== "manual" ? productionBible?.visualStyle || preferredStyle : preferredStyle;
     const styleContract = resolveDramaStyleContract({ style: nextStyle, productionBible });
     const synchronizedBible = productionBible
@@ -778,9 +781,11 @@ function restylePackageAssets(assets: DramaProductionPackageV1["assets"], projec
 }
 
 function recompileProductionPackageForProject(value: DramaProductionPackageV1, project: DramaProjectAssetCollection, importWarnings?: string[]) {
-    const styleContract = resolveDramaStyleContract(project);
+    const styleContract = resolveDramaStyleContractWithFallback(project, value.project);
+    const currentStyleContract = resolveDramaStyleContract(project);
+    const usesPackageVisualContract = currentStyleContract.source !== "custom" && styleContract.source === "custom";
     const packagePlan = value.project.productionBible.productionPlan || defaultDramaProductionPlan("package");
-    const currentPlan = project.productionBible?.productionPlan;
+    const currentPlan = usesPackageVisualContract ? packagePlan : project.productionBible?.productionPlan;
     const currentVisual = {
         visualStyle: styleContract.name,
         // A legacy project may have a locked plan without an artStyle. Keep
@@ -798,16 +803,16 @@ function recompileProductionPackageForProject(value: DramaProductionPackageV1, p
             },
             packagePlan,
         ) || packagePlan;
+    const visualBible = usesPackageVisualContract ? value.project.productionBible : { ...value.project.productionBible, ...(project.productionBible || {}) };
     const compilerProject = {
         title: project.title,
         style: styleContract.name,
         ratio: project.ratio,
         productionBible: {
-            ...value.project.productionBible,
-            ...(project.productionBible || {}),
+            ...visualBible,
             visualStyle: styleContract.name,
             colorScript: styleContract.colorScript || "",
-            globalNegativePrompt: project.productionBible?.globalNegativePrompt || "",
+            globalNegativePrompt: styleContract.globalNegativePrompt || "",
             productionPlan,
         },
     };
@@ -823,7 +828,7 @@ function recompileProductionPackageForProject(value: DramaProductionPackageV1, p
                 ...value.project.productionBible,
                 visualStyle: styleContract.name,
                 colorScript: styleContract.colorScript || "",
-                globalNegativePrompt: project.productionBible?.globalNegativePrompt || "",
+                globalNegativePrompt: styleContract.globalNegativePrompt || "",
                 productionPlan,
             },
         },

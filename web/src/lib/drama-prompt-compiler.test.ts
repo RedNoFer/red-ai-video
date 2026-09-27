@@ -106,6 +106,37 @@ describe("drama prompt compiler", () => {
         expect(compileDramaAssetReferencePrompt(project, scene, "场景")).toContain("九宫格");
     });
 
+    it("removes structured historical sections and duplicate identity facts from role prompts", () => {
+        const project = createProject();
+        const asset = {
+            ...project.characters[0],
+            name: "萧炎",
+            description: [
+                "主体与资产类型：角色「萧炎」",
+                "身份/结构锚点：少年；黑发束起；脸型、五官和年龄感固定",
+                "一致性锁定：少年；黑发束起；脸型、五官和年龄感固定",
+                "可见状态与材质：服装、配饰与材质按当前项目视觉合同重新设计",
+                "构图与画幅：16:9横向、纯白背景、四个视图",
+                "光色与风格：东方古风国漫电影质感",
+                "负面约束：额外人物、文字、水印",
+            ].join("\n"),
+            profile: {
+                visualIdentity: "少年；黑发束起；脸型、五官和年龄感固定",
+                styling: project.characters[0].profile?.styling || "",
+                colorPalette: project.characters[0].profile?.colorPalette || "",
+                consistencyRules: project.characters[0].profile?.consistencyRules || "",
+                identityAnchors: ["少年；黑发束起；脸型、五官和年龄感固定"],
+            },
+        };
+
+        const prompt = compileDramaAssetReferencePrompt(project, asset, "角色");
+
+        expect(prompt.match(/黑发束起/gu)).toHaveLength(1);
+        expect(prompt).not.toContain("东方古风国漫电影质感");
+        expect(prompt.match(/主体与资产类型：角色「萧炎」/gu)).toHaveLength(1);
+        expect(prompt).not.toContain("负面约束：额外人物、文字、水印");
+    });
+
     it("recompiles a saved asset prompt from the current project visual contract", () => {
         const project = createProject();
         const westernCg = "西方CG电影级写实幻想， physically based 3D 材质，冷蓝灰与旧银，真实空间透视";

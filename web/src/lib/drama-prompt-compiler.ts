@@ -410,24 +410,17 @@ export function projectDramaAssetVisualFacts(asset: Pick<DramaNamedAsset, "descr
                     .map((value) => sanitizeDramaVisualPrompt(value))
                     .filter(Boolean),
             ),
-        ).join("；");
-    const identityFacts = projectFacts(identitySources, isScene ? sceneStyleFactPattern : assetStyleFactPattern);
-    const consistencyFacts = projectFacts(consistencySources, isScene ? sceneStyleFactPattern : assetStyleFactPattern);
-    const spatialFacts = projectFacts(spatialSources, sceneStyleFactPattern);
+        );
     const identityPattern = isScene ? sceneStyleFactPattern : assetStyleFactPattern;
+    const identityFactList = projectFacts(identitySources, identityPattern);
+    const identityFactKeys = new Set(identityFactList.map(promptFactKey));
+    const consistencyFactList = projectFacts(consistencySources, identityPattern).filter((value) => !identityFactKeys.has(promptFactKey(value)));
+    const spatialFacts = projectFacts(spatialSources, sceneStyleFactPattern);
     return {
-        identityFacts,
-        consistencyFacts,
-        spatialFacts,
-        identityAnchors: Array.from(
-            new Set(
-                identitySources
-                    .flatMap((value) => splitDramaAssetFacts(value || ""))
-                    .filter((value) => value && !identityPattern.test(value) && !((kind === "道具" || kind === "线索") && hasDramaPropNarrative(value)))
-                    .map((value) => sanitizeDramaVisualPrompt(value))
-                    .filter(Boolean),
-            ),
-        ),
+        identityFacts: identityFactList.join("；"),
+        consistencyFacts: consistencyFactList.join("；"),
+        spatialFacts: spatialFacts.join("；"),
+        identityAnchors: identityFactList,
     };
 }
 
@@ -437,8 +430,17 @@ const sceneStyleFactPattern = /建筑(?:语言|样式|装饰)?|空间(?:语言|�
 function splitDramaAssetFacts(value: string) {
     return value
         .split(/[；;。\n，,、]+/u)
-        .map((item) => item.replace(/^(?:原文事实|导演建议|剧情事实|镜头事实|一致性锁定)[：:]\s*/u, "").trim())
+        .map((item) => {
+            const match = item.match(/^(主体与资产类型|身份\/结构锚点|一致性锁定|可见状态与材质|构图与画幅|光色与风格|负面约束|原文事实|导演建议|剧情事实|镜头事实)[：:]\s*(.*)$/u);
+            if (!match) return item.trim();
+            if (["主体与资产类型", "构图与画幅", "光色与风格", "负面约束"].includes(match[1])) return "";
+            return match[2].trim();
+        })
         .filter(Boolean);
+}
+
+function promptFactKey(value: string) {
+    return value.replace(/[\s，,；;。！？!?:：、]+/gu, "");
 }
 
 export function compileDramaAssetReferencePrompt(project: Pick<DramaProject, "title" | "style" | "ratio" | "productionBible">, asset: DramaNamedAsset, kind: "角色" | "场景" | "道具") {
@@ -446,7 +448,6 @@ export function compileDramaAssetReferencePrompt(project: Pick<DramaProject, "ti
     const profile = asset.profile;
     const projection = projectDramaAssetVisualFacts(asset, kind);
     const description = projection.identityFacts;
-    const visualIdentity = joinAssetPromptFacts(projection.identityAnchors);
     const consistency = projection.consistencyFacts;
     const globalStyle = [
         `项目视觉风格：${styleContract.visualDescription}`,
@@ -479,7 +480,7 @@ export function compileDramaAssetReferencePrompt(project: Pick<DramaProject, "ti
               : "道具的造型语言、材质、工艺、色彩与渲染按当前项目视觉合同重新设计；只保留结构轮廓、功能和剧情识别事实";
     return compact([
         `主体与资产类型：${kind}「${asset.name}」`,
-        `身份/结构锚点：${joinAssetPromptFacts([description, visualIdentity]) || "沿用当前资产已确认设定"}`,
+        `身份/结构锚点：${description || "沿用当前资产已确认设定"}`,
         consistency ? `一致性锁定：${consistency}` : "",
         `可见状态与材质：${currentDesign}${kind === "角色" ? `；${DRAMA_CHARACTER_FACE_MODELING_RULES}；${DRAMA_CHARACTER_HAIR_MODELING_RULES}；${DRAMA_CHARACTER_WARDROBE_MATERIAL_RULES}` : sceneQuality ? `；${sceneQuality}` : "；结构轮廓、功能和关键识别细节清晰可见"}`,
         `构图与画幅：${layout}`,

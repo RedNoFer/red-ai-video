@@ -78,6 +78,19 @@ export function resolveDramaStyleContract(project: {
     };
 }
 
+export function resolveDramaStyleContractWithFallback(project: Parameters<typeof resolveDramaStyleContract>[0], fallback?: Parameters<typeof resolveDramaStyleContract>[0]) {
+    const current = resolveDramaStyleContract(project);
+    if (current.source === "custom" || !fallback) return current;
+    const fallbackContract = resolveDramaStyleContract(fallback);
+    return hasConcreteDramaStyleContract(fallback) ? fallbackContract : current;
+}
+
+export function hasConcreteDramaStyleContract(project: Parameters<typeof resolveDramaStyleContract>[0]) {
+    const resolved = resolveDramaStyleContract(project);
+    const plan = project.productionBible?.productionPlan;
+    return resolved.source === "custom" && Boolean(resolved.artStyle || plan?.lockedAt || plan?.source === "manual" || plan?.visual?.source === "manual");
+}
+
 export function resolveDramaVisualStyle(project: { style?: string; productionBible?: { visualStyle?: string } }) {
     return resolveDramaStyleContract(project).visualDescription;
 }
