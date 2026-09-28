@@ -72,7 +72,9 @@ export async function GET(request: Request, context: Context) {
         const resolved = await Promise.all(
             batch.items.map(async (item) => {
                 const asset = item.outputType === "reference_image" ? project[item.kind].find((candidate) => candidate.id === item.assetId) : undefined;
-                const needsReferenceRepair = item.status === "success" && Boolean(item.generationTaskId && item.candidateReferenceId && !asset?.references?.some((reference) => reference.id === item.candidateReferenceId));
+                const needsReferenceRepair =
+                    item.status === "success" &&
+                    Boolean(item.generationTaskId && item.candidateReferenceId && !asset?.references?.some((reference) => reference.id === item.candidateReferenceId) && !asset?.deletedReferenceIds?.includes(item.candidateReferenceId));
                 if (!item.generationTaskId || item.status === "error" || item.status === "cancelled" || (item.status === "success" && !needsReferenceRepair)) return { item, task: undefined };
                 return { item, task: item.outputType === "character_voice" ? await getAudioTask(item.generationTaskId) : await getImageTask(item.generationTaskId) };
             }),

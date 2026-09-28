@@ -2487,6 +2487,39 @@ describe("drama project service updates", () => {
         );
     });
 
+    it("does not restore a generated reference after the user explicitly deleted it", async () => {
+        const current = project("2026-07-19T08:00:02.000Z", "项目");
+        current.characters = [
+            {
+                id: "character-one",
+                name: "角色一",
+                description: "角色",
+                references: [],
+                deletedReferenceIds: ["reference-deleted-image-task-0"],
+            },
+        ];
+        mocks.getDramaProject.mockResolvedValue(current);
+        mocks.queryStoredGenerationTasks.mockResolvedValue([
+            {
+                id: "deleted-image-task",
+                userId: "user-one",
+                projectId: current.id,
+                assetKind: "characters",
+                assetId: "character-one",
+                status: "success",
+                createdAt: Date.parse("2026-07-19T08:00:01.000Z"),
+                prompt: "角色基准图",
+                generationStage: "initial",
+                result: { serverUrl: "/api/generation-log-assets/permanent/deleted.png", width: 1536, height: 1024 },
+            },
+        ]);
+
+        const recovered = await getDramaProjectForUser("user-one", current.id);
+
+        expect(recovered.characters[0].references).toEqual([]);
+        expect(mocks.updateDramaProject).not.toHaveBeenCalled();
+    });
+
     it("repairs legacy generated asset URLs by matching the retained task result", async () => {
         const current = project("2026-07-19T08:00:02.000Z", "项目");
         current.characters = [

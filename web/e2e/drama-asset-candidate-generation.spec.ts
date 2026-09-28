@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 import { applyChannelProtocol } from "../src/lib/channel-protocol-registry";
 import type { DramaProject } from "../src/lib/drama-project-contract";
-import { e2eSettingsPatch, protocolFixtureState, resetProtocolFixture } from "./support";
+import { e2eSettingsPatch, pollTask, protocolFixtureState, resetProtocolFixture } from "./support";
 
 const REFERENCE_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAEUlEQVR4nGPQq/3/H4QZYAwAWewKpRUlAtEAAAAASUVORK5CYII=";
 
@@ -206,6 +206,74 @@ test("生成候选通过真实图片任务链路完成", async ({ page, request 
     expect(submittedPrompts[1]).toContain("视觉重设计规则：历史资产中的服装、配饰、时代工艺、材质和配色只作为来源记录");
     expect(submittedPrompts[1]).not.toContain("用户编辑后的黑发青年");
     expect(submittedSizes[0]).toBe("16:9");
+});
+
+test("删除角色候选后刷新不会被历史生图任务恢复", async ({ page, request }) => {
+    await resetProtocolFixture(request);
+    const settings = await request.patch("/api/admin/settings", { data: sub2ApiImageSettingsPatch() });
+    expect(settings.ok(), await settings.text()).toBe(true);
+
+    const created = await request.post("/api/drama/projects", { data: { title: `E2E 删除角色候选 ${Date.now()}`, ratio: "9:16" } });
+    expect(created.ok(), await created.text()).toBe(true);
+    const project = ((await created.json()) as { data: { project: DramaProject } }).data.project;
+    const characterId = "character-delete-candidate-e2e";
+    const saved = await request.patch(`/api/drama/projects/${project.id}`, {
+        data: {
+            ...project,
+            characters: [{ id: characterId, name: "删除测试角色", description: "用于验证候选删除不会恢复", profile: { visualIdentity: "固定黑发" }, references: [] }],
+        },
+    });
+    expect(saved.ok(), await saved.text()).toBe(true);
+
+    try {
+        const createdTask = await request.post("/api/image-tasks", {
+            data: {
+                kind: "generation",
+                config: { model: "e2e-image", quality: "standard", size: "64x64", count: "1" },
+                prompt: "删除测试角色基准图",
+                source: "drama",
+                context: { surface: "drama", projectId: project.id, assetKind: "characters", assetId: characterId, generationStage: "initial" },
+            },
+        });
+        expect(createdTask.ok(), await createdTask.text()).toBe(true);
+        const task = ((await createdTask.json()) as { task: { id: string } }).task;
+        const completedTask = await pollTask(request, `/api/image-tasks/${task.id}`);
+        expect(completedTask).toMatchObject({ status: "success" });
+
+        const hydrated = await request.get(`/api/drama/projects/${project.id}`);
+        expect(hydrated.ok(), await hydrated.text()).toBe(true);
+        const hydratedProject = ((await hydrated.json()) as { data: { project: DramaProject } }).data.project;
+        expect(hydratedProject.characters.find((item) => item.id === characterId)?.references).toHaveLength(1);
+
+        await page.goto(`/drama/${project.id}`, { waitUntil: "domcontentloaded" });
+        await page.getByRole("button", { name: "打开项目资产" }).click();
+        await page.locator("[data-drama-assets-library] article").filter({ hasText: "删除测试角色" }).getByRole("button", { name: "编辑角色：删除测试角色" }).last().click();
+        const drawer = page.getByRole("dialog", { name: "编辑角色" });
+        const referenceDelete = drawer.getByRole("button", { name: /删除参考图：/ });
+        await expect(referenceDelete).toHaveCount(1);
+        await referenceDelete.click();
+        await page.getByRole("tooltip").getByRole("button", { name: "删 除", exact: true }).click();
+        await expect(drawer.getByRole("button", { name: /删除参考图：/ })).toHaveCount(0);
+        await expect
+            .poll(
+                async () => {
+                    const response = await request.get(`/api/drama/projects/${project.id}`);
+                    expect(response.ok(), await response.text()).toBe(true);
+                    const current = ((await response.json()) as { data: { project: DramaProject } }).data.project;
+                    return current.characters.find((item) => item.id === characterId)?.references?.length || 0;
+                },
+                { timeout: 10_000 },
+            )
+            .toBe(0);
+
+        await page.reload({ waitUntil: "domcontentloaded" });
+        await page.getByRole("button", { name: "打开项目资产" }).click();
+        await page.locator("[data-drama-assets-library] article").filter({ hasText: "删除测试角色" }).getByRole("button", { name: "编辑角色：删除测试角色" }).last().click();
+        await expect(page.getByRole("dialog", { name: "编辑角色" }).getByRole("button", { name: /删除参考图：/ })).toHaveCount(0);
+    } finally {
+        const deleted = await request.delete(`/api/drama/projects/${project.id}`);
+        expect(deleted.ok(), await deleted.text()).toBe(true);
+    }
 });
 
 test("资产生图在编辑器重开期间保持任务锁定", async ({ page, request }) => {

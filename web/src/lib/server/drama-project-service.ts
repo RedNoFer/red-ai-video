@@ -563,8 +563,11 @@ async function recoverStaleGeneratedAssetReferences(userId: string, project: Dra
         if (!asset || !task.result) continue;
         const results = task.result.results?.length ? task.result.results : [task.result];
         const existing = asset.references || [];
+        const deletedReferenceIds = new Set(asset.deletedReferenceIds || []);
         const promptVersion = existing.reduce((max, reference) => Math.max(max, reference.promptVersion || 0), 0);
         for (const [index, result] of results.entries()) {
+            const referenceId = `reference-${task.id}-${index}`;
+            if (deletedReferenceIds.has(referenceId)) continue;
             const stored = await persistDramaGeneratedImageReference(result, {
                 ownerUserId: userId,
                 projectId: project.id,
@@ -572,7 +575,6 @@ async function recoverStaleGeneratedAssetReferences(userId: string, project: Dra
                 originalName: `${asset.name}.png`,
             });
             if (!stored) continue;
-            const referenceId = `reference-${task.id}-${index}`;
             if (existing.some((reference) => reference.id === referenceId || reference.url === stored.url || (stored.remoteUrl && reference.remoteUrl === stored.remoteUrl))) continue;
             const key = `${task.assetKind}:${task.assetId}`;
             const additions = generatedReferences.get(key) || [];
@@ -3888,6 +3890,7 @@ function normalizeNamedAssets(value: unknown, prefix: string, character = false)
             const references = normalizeAssetReferences(input.references, id, input.referenceImageUrl, input.referenceStorageKey);
             const primaryReferenceId = references.some((reference) => reference.id === input.primaryReferenceId && reference.status === "approved") ? String(input.primaryReferenceId) : undefined;
             const primaryReference = references.find((reference) => reference.id === primaryReferenceId);
+            const deletedReferenceIds = ids(input.deletedReferenceIds);
             const baseProfile = normalizeAssetProfile(input.profile, `${cleanText(input.description)}\n${cleanText(object(input.profile).designPrompt)}`, cleanText(input.name), prefix === "scene");
             return {
                 id,
@@ -3899,6 +3902,7 @@ function normalizeNamedAssets(value: unknown, prefix: string, character = false)
                 activeEpisodeCodes: ids(input.activeEpisodeCodes),
                 profile: character ? normalizeDramaCharacterProfile(baseProfile, cleanText(input.description), cleanText(input.name)) : baseProfile,
                 references,
+                ...(deletedReferenceIds.length ? { deletedReferenceIds } : {}),
                 primaryReferenceId,
                 referenceImageUrl: primaryReference?.url,
                 referenceStorageKey: primaryReference?.storageKey,
@@ -3951,6 +3955,7 @@ function normalizeClues(value: unknown) {
         const references = normalizeAssetReferences(input.references, id, input.referenceImageUrl, input.referenceStorageKey);
         const primaryReferenceId = references.some((reference) => reference.id === input.primaryReferenceId && reference.status === "approved") ? String(input.primaryReferenceId) : undefined;
         const primaryReference = references.find((reference) => reference.id === primaryReferenceId);
+        const deletedReferenceIds = ids(input.deletedReferenceIds);
         return [
             {
                 id,
@@ -3961,6 +3966,7 @@ function normalizeClues(value: unknown) {
                 activeEpisodeCodes: ids(input.activeEpisodeCodes),
                 profile: normalizeAssetProfile(input.profile),
                 references,
+                ...(deletedReferenceIds.length ? { deletedReferenceIds } : {}),
                 primaryReferenceId,
                 payoff: cleanText(input.payoff),
                 referenceImageUrl: primaryReference?.url,

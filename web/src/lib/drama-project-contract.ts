@@ -284,6 +284,8 @@ export type DramaNamedAsset = {
     activeEpisodeCodes?: string[];
     profile?: DramaAssetProfile;
     references?: DramaAssetReference[];
+    /** Reference IDs that a user explicitly removed and recovery must not recreate. */
+    deletedReferenceIds?: string[];
     primaryReferenceId?: string;
     referenceImageUrl?: string;
     referenceStorageKey?: string;

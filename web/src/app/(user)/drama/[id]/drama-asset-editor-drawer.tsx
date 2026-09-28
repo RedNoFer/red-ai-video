@@ -456,12 +456,14 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
         if (!asset) return;
         const nextReferences = references.filter((reference) => reference.id !== referenceId);
         const nextPrimary = asset.primaryReferenceId === referenceId ? nextReferences[0] : nextReferences.find((reference) => reference.id === asset.primaryReferenceId);
+        const deletedReferenceIds = [...new Set([...(asset.deletedReferenceIds || []), referenceId])];
         updateAsset(
             project.id,
             kind,
             asset.id,
             {
                 references: nextReferences,
+                deletedReferenceIds,
                 primaryReferenceId: nextPrimary?.id,
                 referenceImageUrl: nextPrimary?.url,
                 referenceStorageKey: nextPrimary?.storageKey,
