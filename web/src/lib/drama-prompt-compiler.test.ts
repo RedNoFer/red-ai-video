@@ -99,6 +99,22 @@ describe("drama prompt compiler", () => {
         }
     });
 
+    it("keeps scene topology but removes story context from scene modeling prompts", () => {
+        const project = createProject();
+        const scene = {
+            ...project.scenes[0],
+            description: "故事背景：萧炎在议事大厅与父亲对峙；长案、主位、高窗和入口保持固定",
+            profile: { ...project.scenes[0].profile!, visualIdentity: "议事大厅；长案、主位、高窗和入口" },
+        };
+
+        const prompt = compileDramaAssetReferencePrompt(project, scene, "场景");
+
+        expect(prompt).toContain("长案");
+        expect(prompt).toContain("主位");
+        expect(prompt).not.toContain("故事背景");
+        expect(prompt).not.toContain("父亲对峙");
+    });
+
     it("does not let a legacy structured scene prompt bypass the nine-view contract", () => {
         const project = createProject();
         const scene = { ...project.scenes[0], supplierPrompt: "主体与资产类型：场景\n身份/结构锚点：旧空间\n可见状态与材质：旧材质\n构图与画幅：9:16 单一场景\n光色与风格：旧风格\n负面约束：无文字" };
@@ -812,6 +828,44 @@ describe("drama prompt compiler", () => {
                 "角色",
             ),
         ).toBe(false);
+    });
+
+    it("rejects narrative contamination in any role modeling section", () => {
+        expect(
+            hasDramaAssetPromptQuality(
+                "主体与资产类型：角色\n身份/结构锚点：少年；黑发束起\n一致性锁定：锁定五官和头身比；以血手契约承担父亲名声\n可见状态与材质：自然骨骼比例；服装按真实裁剪逻辑分层；议事大厅冷光\n构图与画幅：16:9纯白色四视图，身份特写、正面全身、严格左侧面全身、背面全身\n光色与风格：高精度人物细节\n负面约束：无额外人物",
+                "角色",
+            ),
+        ).toBe(false);
+    });
+
+    it("does not carry an asset supplier prompt into a video prompt", () => {
+        const project = createProject();
+        const westernCg = "西方CG电影级写实幻想，physically based 3D，冷蓝灰与旧银";
+        project.style = westernCg;
+        project.productionBible = { ...project.productionBible!, visualStyle: westernCg };
+        const shot = project.episodes[0].shots[0];
+        shot.videoPrompt = [
+            "主体与资产类型：角色「萧炎」",
+            "身份/结构锚点：少年；黑发束起；由被审判的沉默转成冷肃反击",
+            "一致性锁定：锁定五官、发束和四视图身份",
+            "可见状态与材质：服装按真实裁剪逻辑分层",
+            "构图与画幅：16:9纯白四视图",
+            "光色与风格：旧东方古风国漫",
+            "负面约束：无文字",
+            "动态意图：萧炎抬头锁定门口",
+            "单一主运镜：固定机位",
+        ].join("\n");
+
+        const prompt = compileDramaShotExecutionPrompts(project, project.episodes[0], shot).videoPrompt;
+
+        expect(prompt).toContain("动态意图：萧炎抬头锁定门口");
+        expect(prompt).toContain("单一主运镜：固定机位");
+        expect(prompt).toContain(`项目视觉合同（唯一风格来源）：${westernCg}`);
+        expect(prompt).not.toContain("主体与资产类型：");
+        expect(prompt).not.toContain("身份/结构锚点：");
+        expect(prompt).not.toContain("被审判");
+        expect(prompt).not.toContain("旧东方古风国漫");
     });
 
     it("requires identity and spatial clarity for reference anchors", () => {

@@ -109,12 +109,34 @@ export function normalizeDramaCharacterProfile(profile: DramaAssetProfile | unde
     const currentIdentityFacts = normalizeCharacterIdentityAnchor(currentVisualIdentity, name);
     const rawVisualIdentity = currentIdentityFacts || extractDramaCharacterVisualFacts(description);
     const visualIdentity = rawVisualIdentity.startsWith(identityPrefix) ? rawVisualIdentity : [identityPrefix, rawVisualIdentity].filter(Boolean).join("；");
-    const styling = current.styling.trim() || `${name}的发型、服装、固定配饰、鞋靴与材质按描述固定`;
-    const colorPalette = current.colorPalette.trim() || "按角色固有色保持跨镜头一致";
+    const styling = normalizeCharacterStaticClauses(current.styling) || `${name}的发型、服装、固定配饰、鞋靴与材质按描述固定`;
+    const colorPalette = normalizeCharacterColorPalette(current.colorPalette) || "按角色固有色保持跨镜头一致";
     const consistencyRules = appendUniqueClauses(extractDramaCharacterContinuityFacts(current.consistencyRules), DRAMA_CHARACTER_DEFAULT_CONSISTENCY);
     const identityAnchors = Array.from(new Set([...(current.identityAnchors || []).map((value) => normalizeCharacterIdentityAnchor(value, name)), visualIdentity].map((value) => value.trim()).filter(Boolean)));
     const forbiddenChanges = Array.from(new Set([...(current.forbiddenChanges || []), ...DRAMA_CHARACTER_NEGATIVE_RULES.split("、")].map((value) => value.trim()).filter(Boolean)));
     return { ...current, visualIdentity, styling, colorPalette, consistencyRules, identityAnchors, forbiddenChanges };
+}
+
+function normalizeCharacterStaticClauses(value: string) {
+    if (!CHARACTER_NARRATIVE_FACT_PATTERN.test(value)) return value.trim();
+    return appendUniqueClauses(
+        value
+            .split(/[；;。\n]+/u)
+            .map((item) => item.trim())
+            .filter((item) => item && !CHARACTER_NARRATIVE_FACT_PATTERN.test(item))
+            .join("；"),
+        "",
+    );
+}
+
+function normalizeCharacterColorPalette(value: string) {
+    if (value.trim() === DRAMA_CHARACTER_CURRENT_COLOR_RULE) return value.trim();
+    if (!CHARACTER_NARRATIVE_FACT_PATTERN.test(value) && !/(?:光|灯|环境|背景|场景|大厅|建筑|空间)/u.test(value)) return value.trim();
+    return value
+        .split(/[；;。\n，,、]+/u)
+        .map((item) => item.trim())
+        .filter((item) => item && !CHARACTER_NARRATIVE_FACT_PATTERN.test(item) && !/(?:光|灯|环境|背景|场景|大厅|建筑|空间)/u.test(item))
+        .join("、");
 }
 
 function normalizeCharacterIdentityAnchor(value: string, name: string) {

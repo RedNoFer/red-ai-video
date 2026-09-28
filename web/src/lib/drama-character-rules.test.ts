@@ -31,4 +31,26 @@ describe("drama character quality contract", () => {
         expect(profile.visualIdentity).not.toContain("血手契约");
         expect(profile.visualIdentity).not.toContain("父亲名声");
     });
+
+    it("cleans narrative clauses from persisted visual settings on reload", () => {
+        const profile = normalizeDramaCharacterProfile(
+            {
+                visualIdentity: "少年；黑发束起；由被审判的沉默转成冷肃反击",
+                styling: "黑灰窄袖长袍；旧银护腕；以血手契约承担父亲名声",
+                colorPalette: "炭黑、旧银；议事大厅冷光",
+                consistencyRules: "固定脸型、五官、发束和体态；再以血手契约承担父亲名声；身份特写、正面、严格左侧面、背面保持同一角色",
+            },
+            "萧炎的脸型和年龄感按剧情身份固定；少年；黑发束起；由被审判的沉默转成冷肃反击",
+            "萧炎",
+        );
+
+        expect(profile.visualIdentity).toContain("少年");
+        expect(profile.visualIdentity).not.toContain("被审判");
+        expect(profile.styling).toContain("黑灰窄袖长袍");
+        expect(profile.styling).not.toContain("血手契约");
+        expect(profile.colorPalette).toBe("炭黑、旧银");
+        expect(profile.colorPalette).not.toContain("大厅");
+        expect(profile.consistencyRules).toContain("固定脸型");
+        expect(profile.consistencyRules).not.toContain("血手契约");
+    });
 });

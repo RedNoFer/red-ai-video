@@ -111,6 +111,7 @@ import {
     getDramaProductionPreflightForUser,
     mergeDramaShotMediaReferences,
     normalizeProject,
+    recoverContaminatedDramaCharacterProfiles,
     recoverInvalidDramaEpisodes,
     recoverStaleDramaBoundaryFrames,
     resolveDramaVisualReferenceUrl,
@@ -450,6 +451,37 @@ describe("drama project service updates", () => {
         expect(recovered.episodes[0].id).toBe("episode-one");
         expect(mocks.updateDramaProject).toHaveBeenCalledWith("user-one", expect.objectContaining({ episodes: [expect.objectContaining({ id: "episode-one" })] }), current.updatedAt);
         expect(recoverInvalidDramaEpisodes(malformed)?.episodes).toHaveLength(1);
+    });
+
+    it("repairs narrative contamination in character visual settings when a project is opened", async () => {
+        const current = project("2026-07-19T08:00:00.000Z", "项目");
+        current.characters = [
+            {
+                id: "character-one",
+                name: "萧炎",
+                description: "少年；黑发束起；由被审判的沉默转成冷肃反击",
+                profile: {
+                    visualIdentity: "萧炎的脸型、五官、发型和年龄感按剧情身份固定；少年；由被审判的沉默转成冷肃反击",
+                    styling: "黑灰窄袖长袍；旧银护腕；再以血手契约承担父亲名声",
+                    colorPalette: "炭黑、旧银；议事大厅冷光",
+                    consistencyRules: "固定脸型、五官、发束和体态；再以血手契约承担父亲名声",
+                },
+            },
+        ];
+        mocks.getDramaProject.mockResolvedValue(current);
+
+        const recovered = await getDramaProjectForUser("user-one", current.id);
+
+        expect(recovered.characters[0].profile).toMatchObject({
+            visualIdentity: expect.stringContaining("少年"),
+            styling: expect.stringContaining("黑灰窄袖长袍"),
+            colorPalette: "炭黑、旧银",
+        });
+        expect(recovered.characters[0].profile?.visualIdentity).not.toContain("被审判");
+        expect(recovered.characters[0].profile?.styling).not.toContain("血手契约");
+        expect(recovered.characters[0].profile?.consistencyRules).not.toContain("血手契约");
+        expect(mocks.updateDramaProject).toHaveBeenCalledWith("user-one", expect.objectContaining({ characters: [expect.objectContaining({ id: "character-one" })] }), current.updatedAt);
+        expect(recoverContaminatedDramaCharacterProfiles(current)?.characters[0].profile?.colorPalette).toBe("炭黑、旧银");
     });
 
     it("normalizes legacy reference modes across the project, production plan, and shots", () => {

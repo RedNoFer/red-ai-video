@@ -156,8 +156,9 @@ export async function getDramaProjectForUser(userId: string, id: string) {
     const frameEvidenceRecovered = recoverLegacyStoryboardFrameEvidence(boundaryRecovered || styleRecovered || episodesRecovered || project);
     const reviewRecovered = recoverStaleReviewCompletionTask(frameEvidenceRecovered || boundaryRecovered || styleRecovered || episodesRecovered || project);
     const profileRecovered = recoverGenericDramaAssetProfiles(reviewRecovered || frameEvidenceRecovered || boundaryRecovered || styleRecovered || episodesRecovered || project);
-    const assetRecovered = await recoverStaleGeneratedAssetReferences(userId, profileRecovered || reviewRecovered || frameEvidenceRecovered || boundaryRecovered || styleRecovered || episodesRecovered || project);
-    const recovered = assetRecovered || profileRecovered || reviewRecovered || frameEvidenceRecovered || boundaryRecovered || styleRecovered || episodesRecovered;
+    const characterProfileRecovered = recoverContaminatedDramaCharacterProfiles(profileRecovered || reviewRecovered || frameEvidenceRecovered || boundaryRecovered || styleRecovered || episodesRecovered || project);
+    const assetRecovered = await recoverStaleGeneratedAssetReferences(userId, characterProfileRecovered || profileRecovered || reviewRecovered || frameEvidenceRecovered || boundaryRecovered || styleRecovered || episodesRecovered || project);
+    const recovered = assetRecovered || characterProfileRecovered || profileRecovered || reviewRecovered || frameEvidenceRecovered || boundaryRecovered || styleRecovered || episodesRecovered;
     if (!recovered) return project;
     try {
         return await updateDramaProject(userId, recovered, project.updatedAt);
@@ -4046,6 +4047,18 @@ function recoverGenericDramaAssetProfiles(project: DramaProject) {
     const props = project.props.map(repair);
     const clues = project.clues.map(repair);
     return changed ? { ...project, characters, scenes, props, clues, updatedAt: nextTimestamp(project.updatedAt) } : null;
+}
+
+export function recoverContaminatedDramaCharacterProfiles(project: DramaProject) {
+    let changed = false;
+    const characters = project.characters.map((character) => {
+        if (!character.profile) return character;
+        const profile = normalizeDramaCharacterProfile(character.profile, character.description, character.name);
+        if (JSON.stringify(profile) === JSON.stringify(character.profile || {})) return character;
+        changed = true;
+        return { ...character, profile };
+    });
+    return changed ? { ...project, characters, updatedAt: nextTimestamp(project.updatedAt) } : null;
 }
 
 function normalizeAssetReferences(value: unknown, assetId: string, legacyUrl: unknown, legacyStorageKey: unknown): DramaAssetReference[] {

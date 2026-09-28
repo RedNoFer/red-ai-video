@@ -92,11 +92,11 @@ export function hasDramaAssetPromptQuality(value: string | undefined, kind: "角
     const required = kind === "角色" ? ["自然骨骼", "五官", "头发", "服装", "纯白色", "四视图", "身份特写", "严格左侧面", "负面约束"] : kind === "道具" ? ["主体", "材质", "构图", "纯白", "单一道具", "负面约束"] : ["主体", "材质", "构图", "负面约束"];
     if (!required.every((term) => prompt.includes(term))) return false;
     if (kind === "角色") {
-        const identityLines = prompt
+        const roleModelLines = prompt
             .split(/\r?\n/u)
             .map((line) => line.trim())
-            .filter((line) => /^(?:身份\/结构锚点|一致性锁定)[：:]/u.test(line));
-        if (identityLines.some((line) => isCharacterNarrativeFact(line))) return false;
+            .filter((line) => /^(?:身份\/结构锚点|一致性锁定|可见状态与材质)[：:]/u.test(line));
+        if (roleModelLines.some((line) => isCharacterNarrativeFact(line))) return false;
     }
     if (kind !== "道具") return true;
     const visibleLines = prompt
@@ -322,7 +322,7 @@ export function applyDramaStaticVisualContract(project: DramaVisualContractProje
 export function applyDramaVideoVisualContract(project: DramaVisualContractProject, source: string) {
     const visualContract = currentVisualContractText(project);
     if (!visualContract) return source.trim();
-    const prompt = formatPromptFieldLines(stripHistoricalAssetStyleFacts(sanitizeDramaVisualPrompt(source)), "video");
+    const prompt = formatPromptFieldLines(stripHistoricalAssetStyleFacts(stripDramaAssetReferenceSections(sanitizeDramaVisualPrompt(source))), "video");
     if (!prompt) return prompt;
     const lines = prompt.split("\n");
     let replaced = false;
@@ -333,6 +333,16 @@ export function applyDramaVideoVisualContract(project: DramaVisualContractProjec
         return `${label}：项目视觉合同（唯一风格来源）：${visualContract}`;
     });
     return replaced ? next.join("\n") : `当前项目视觉合同（唯一风格来源）：${visualContract}\n${prompt}`;
+}
+
+export function stripDramaAssetReferenceSections(value: string) {
+    const labels = ["主体与资产类型", "身份/结构锚点", "一致性锁定", "可见状态与材质", "构图与画幅", "光色与风格", "负面约束"].join("|");
+    const normalized = formatDramaAssetPrompt(value).replace(new RegExp(`[\\s,，;；。]+(?=(?:${labels})[：:])`, "gu"), "\n");
+    return normalized
+        .split(/\r?\n/u)
+        .filter((line) => !/^(?:主体与资产类型|身份\/结构锚点|一致性锁定|可见状态与材质|构图与画幅|光色与风格|负面约束)[：:]/u.test(line.trim()))
+        .join("\n")
+        .trim();
 }
 
 function currentVisualContractText(project: DramaVisualContractProject) {
@@ -426,7 +436,7 @@ export function projectDramaAssetVisualFacts(asset: Pick<DramaNamedAsset, "descr
             new Set(
                 values
                     .flatMap((value) => splitDramaAssetFacts(value || ""))
-                    .filter((value) => value && !stylePattern.test(value) && !((kind === "道具" || kind === "线索") && hasDramaPropNarrative(value)))
+                    .filter((value) => value && !stylePattern.test(value) && !hasDramaAssetNarrative(value) && !((kind === "道具" || kind === "线索") && hasDramaPropNarrative(value)))
                     .map((value) => sanitizeDramaVisualPrompt(value))
                     .filter(Boolean),
             ),
@@ -690,6 +700,10 @@ function sanitizeDramaPropFacts(value?: string) {
 
 function hasDramaPropNarrative(value: string) {
     return /(?:原文事实|导演建议|剧情事实|镜头事实|时间段动作|动作与触发|可见表演|表演状态|奋笔|落笔|握笔|持握|拿起|挥动|走向|跑向|坐下|站起|转身|抬头|低头|看向|对着)/u.test(value);
+}
+
+function hasDramaAssetNarrative(value: string) {
+    return /(?:故事|剧情|小说|原文|章节|对白|台词|审判|反击|契约|父亲|母亲|名声|承诺|婚约|誓言|承担|宿命|情绪弧线|由[^；。]+(?:转成|转为|变成)|再以|随后|然后|最终|因为|因此)/u.test(value);
 }
 
 function joinAssetPromptConstraints(values: Array<string | undefined>) {

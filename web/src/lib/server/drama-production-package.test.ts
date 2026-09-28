@@ -423,7 +423,7 @@ describe("production package boundary", () => {
         source.assets.characters[0].supplierPrompt = "主体与资产类型：角色\n光色与风格：旧东方古风国漫";
         source.assets.locations[0].supplierPrompt = "主体与资产类型：场景\n光色与风格：旧东方古风国漫";
         source.episodes[0].shots[0].imagePrompt += "\n光色与风格：旧东方古风国漫";
-        source.episodes[0].shots[0].videoPrompt += "\n色调：旧东方古风国漫";
+        source.episodes[0].shots[0].videoPrompt += "\n色调：旧东方古风国漫\n主体与资产类型：角色\n身份/结构锚点：故事背景与角色关系";
         source.episodes[0].shots[0].framePlan.frames[0].imagePrompt += "\n光色与风格：旧东方古风国漫";
         source.archive = {
             formatVersion: "vozeb-drama-production-package-v1",
@@ -448,6 +448,8 @@ describe("production package boundary", () => {
         expect(normalized.assets.locations[0].supplierPrompt).toContain(westernCg);
         expect(shot.imagePrompt).toContain(westernCg);
         expect(shot.videoPrompt).toContain(westernCg);
+        expect(shot.videoPrompt).not.toContain("主体与资产类型");
+        expect(shot.videoPrompt).not.toContain("故事背景与角色关系");
         expect(shot.framePlan.frames[0].imagePrompt).toContain(westernCg);
         expect(archivePrompts).toContain(westernCg);
         expect(JSON.stringify(normalized)).not.toContain("旧东方古风国漫");

@@ -44,7 +44,7 @@ import {
 import { dramaDialogueFragmentSequenceError, dramaDialogueTimingReminder, dramaFrameDialogueTimingReminder, dramaUtteranceTimingIssues, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
 import { resolveDramaStyleContract, resolveDramaStyleContractWithFallback } from "@/lib/drama-style";
 import { DRAMA_CHARACTER_CURRENT_COLOR_RULE, DRAMA_CHARACTER_CURRENT_DESIGN_RULE, normalizeDramaCharacterProfile } from "@/lib/drama-character-rules";
-import { applyDramaStaticVisualContract, applyDramaVideoVisualContract, compileDramaAssetReferencePrompt, projectDramaCharacterModelFacts } from "@/lib/drama-prompt-compiler";
+import { applyDramaStaticVisualContract, applyDramaVideoVisualContract, compileDramaAssetReferencePrompt, projectDramaCharacterModelFacts, stripDramaAssetReferenceSections } from "@/lib/drama-prompt-compiler";
 import { resolveDramaShotDuration } from "@/lib/server/drama-shot-config";
 import {
     dramaTimeRangePattern,
@@ -1791,7 +1791,7 @@ function normalizePackageShot(value: unknown, index: number, options: DramaProdu
 }
 
 function normalizePackageVideoPrompt(value: string) {
-    const prompt = value.trim();
+    const prompt = stripDramaAssetReferenceSections(value).trim();
     if (!prompt) throw new DramaProductionPackageError("镜头缺少 Agent 提供的视频提示词");
     return prompt;
 }
@@ -1828,6 +1828,7 @@ function validateStrictPackageVideoPrompt(
         if (cameraError) throw new DramaProductionPackageError(label + "的 Agent videoPrompt 摄影契约无效：" + cameraError);
     }
     if (/(?:^|\\n)\\s*(?:触发|主体动作与反应)\\s*[：:]/u.test(prompt)) throw new DramaProductionPackageError(`${label}的 Agent videoPrompt 仍使用旧的顶层动作字段`);
+    if (/(?:主体与资产类型|身份\/结构锚点|一致性锁定|可见状态与材质|构图与画幅|光色与风格|负面约束)[：:]/u.test(prompt)) throw new DramaProductionPackageError(`${label}的 Agent videoPrompt 不能混入角色、场景或道具建模提示词分段`);
     if (/(?:https?:\/\/|data:image\/|assetId|内部 ID|参考图职责|prompt-authoring-only|seedance-director|seedance-25-director)/iu.test(prompt)) throw new DramaProductionPackageError(`${label}的 Agent videoPrompt 包含内部执行信息`);
     if (!hasConcreteDramaCameraDirection(prompt)) throw new DramaProductionPackageError(`${label}的 Agent videoPrompt 缺少具体主运镜或机位语言`);
     const previousDialogueFragmentsByUtterance = new Map<string, string[]>();
