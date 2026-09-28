@@ -64,6 +64,10 @@ const CHARACTER_NARRATIVE_FACT_PATTERN =
 const CHARACTER_STYLING_FACT_PATTERN = /服装|服饰|衣着|穿着|长袍|袍|斗篷|披风|外套|制服|盔甲|铠甲|护腕|护甲|腰封|腰带|鞋靴|鞋子|靴子|手套|配饰|饰品|首饰|挂件|纹样|刺绣|面料|材质|皮革|金属|玉石|色彩|配色|固有色|主色|颜色|时代|工艺|风格|渲染|光色|灯光/u;
 const CHARACTER_CONTINUITY_FACT_PATTERN = /自然骨骼|身材比例|体态|脸型|五官|发际线|显著标记|同一角色|同一身份|身份特写|正面|左侧面|背面|四视图|头身比|保持|锁定|固定|不因视图重设计/u;
 
+export function hasDramaCharacterNarrativeFact(value: string) {
+    return CHARACTER_NARRATIVE_FACT_PATTERN.test(value);
+}
+
 /** Extract only visible character identity facts from legacy free-form text. */
 export function extractDramaCharacterVisualFacts(value: string) {
     return Array.from(
@@ -111,7 +115,13 @@ export function normalizeDramaCharacterProfile(profile: DramaAssetProfile | unde
     const visualIdentity = rawVisualIdentity.startsWith(identityPrefix) ? rawVisualIdentity : [identityPrefix, rawVisualIdentity].filter(Boolean).join("；");
     const styling = normalizeCharacterStaticClauses(current.styling) || `${name}的发型、服装、固定配饰、鞋靴与材质按描述固定`;
     const colorPalette = normalizeCharacterColorPalette(current.colorPalette) || "按角色固有色保持跨镜头一致";
-    const consistencyRules = appendUniqueClauses(extractDramaCharacterContinuityFacts(current.consistencyRules), DRAMA_CHARACTER_DEFAULT_CONSISTENCY);
+    const rawConsistency = current.consistencyRules.trim();
+    const authoredNonNarrativeConsistency = rawConsistency
+        .split(/[；;。\n]+/u)
+        .map((item) => item.trim())
+        .filter((item) => item && !hasDramaCharacterNarrativeFact(item))
+        .join("；");
+    const consistencyRules = appendUniqueClauses(extractDramaCharacterContinuityFacts(rawConsistency), [authoredNonNarrativeConsistency, DRAMA_CHARACTER_DEFAULT_CONSISTENCY].filter(Boolean).join("；"));
     const identityAnchors = Array.from(new Set([...(current.identityAnchors || []).map((value) => normalizeCharacterIdentityAnchor(value, name)), visualIdentity].map((value) => value.trim()).filter(Boolean)));
     const forbiddenChanges = Array.from(new Set([...(current.forbiddenChanges || []), ...DRAMA_CHARACTER_NEGATIVE_RULES.split("、")].map((value) => value.trim()).filter(Boolean)));
     return { ...current, visualIdentity, styling, colorPalette, consistencyRules, identityAnchors, forbiddenChanges };

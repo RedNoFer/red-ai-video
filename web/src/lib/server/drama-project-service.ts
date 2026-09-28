@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { nanoid } from "nanoid";
 import { assertUniqueDramaVoices, normalizeDramaVoiceProfile } from "@/lib/drama-voice";
-import { normalizeDramaCharacterProfile } from "@/lib/drama-character-rules";
+import { hasDramaCharacterNarrativeFact, normalizeDramaCharacterProfile } from "@/lib/drama-character-rules";
 
 import { getAuthSettings } from "@/lib/auth/store";
 import { fetchInternalApi } from "@/lib/server/internal-origin";
@@ -4053,6 +4053,8 @@ export function recoverContaminatedDramaCharacterProfiles(project: DramaProject)
     let changed = false;
     const characters = project.characters.map((character) => {
         if (!character.profile) return character;
+        const profileSource = [character.profile.visualIdentity, character.profile.styling, character.profile.colorPalette, character.profile.consistencyRules, ...(character.profile.identityAnchors || [])].filter(Boolean).join("；");
+        if (!hasDramaCharacterNarrativeFact(profileSource)) return character;
         const profile = normalizeDramaCharacterProfile(character.profile, character.description, character.name);
         if (JSON.stringify(profile) === JSON.stringify(character.profile || {})) return character;
         changed = true;

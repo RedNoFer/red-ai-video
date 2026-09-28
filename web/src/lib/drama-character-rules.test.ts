@@ -53,4 +53,19 @@ describe("drama character quality contract", () => {
         expect(profile.consistencyRules).toContain("固定脸型");
         expect(profile.consistencyRules).not.toContain("血手契约");
     });
+
+    it("preserves a user-authored non-narrative continuity rule", () => {
+        const profile = normalizeDramaCharacterProfile(
+            {
+                visualIdentity: "清晰眉骨；黑发高束",
+                styling: "墨青长袍；黑色短靴",
+                colorPalette: "墨青、暗灰、暖金",
+                consistencyRules: "锁定脸部、发束、服装层次和左手伤痕",
+            },
+            "原始身份",
+            "保存测试角色",
+        );
+
+        expect(profile.consistencyRules).toContain("锁定脸部、发束、服装层次和左手伤痕");
+    });
 });

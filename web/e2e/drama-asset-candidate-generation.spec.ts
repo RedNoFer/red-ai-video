@@ -203,7 +203,8 @@ test("生成候选通过真实图片任务链路完成", async ({ page, request 
     expect(submittedPrompts[0]).toContain("主体与资产类型：角色");
     expect(submittedPrompts[0]).toContain("用户编辑后的黑发青年");
     expect(submittedPrompts[0]).not.toContain("资产图片 Skill 规则");
-    expect(submittedPrompts[1]).toContain("视觉重设计规则：历史资产中的服装、配饰、时代工艺、材质和配色只作为来源记录");
+    expect(submittedPrompts[1]).toContain("项目视觉风格：");
+    expect(submittedPrompts[1]).not.toContain("视觉重设计规则：历史资产中的服装、配饰、时代工艺、材质和配色只作为来源记录");
     expect(submittedPrompts[1]).not.toContain("用户编辑后的黑发青年");
     expect(submittedSizes[0]).toBe("16:9");
 });
