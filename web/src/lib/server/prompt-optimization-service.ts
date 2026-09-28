@@ -5,8 +5,11 @@ import { formatPromptFieldLines, validateDramaFrameVisualContent } from "@/lib/d
 import { validateDramaVideoPromptCardLayout } from "@/lib/drama-prompt-quality";
 import { DRAMA_ASSET_IMAGE_SKILL } from "@/lib/drama-image-skill";
 import {
+    DRAMA_CHARACTER_BODY_MODELING_RULES,
+    DRAMA_CHARACTER_CURRENT_COLOR_RULE,
     DRAMA_CHARACTER_DEFAULT_CONSISTENCY,
     DRAMA_CHARACTER_FACE_MODELING_RULES,
+    DRAMA_CHARACTER_CURRENT_DESIGN_RULE,
     DRAMA_CHARACTER_HAIR_MODELING_RULES,
     DRAMA_CHARACTER_NEGATIVE_RULES,
     DRAMA_CHARACTER_PROFILE_CONTRACT,
@@ -184,8 +187,8 @@ function sanitizeDramaAssetOptimizationFields(sourcePrompt: string, fields: Dram
     return {
         ...fields,
         visualIdentity: projection.identityFacts || fields.visualIdentity,
-        styling: projection.stylingFacts || fields.styling,
-        colorPalette: projection.colorPalette || fields.colorPalette,
+        styling: DRAMA_CHARACTER_CURRENT_DESIGN_RULE,
+        colorPalette: DRAMA_CHARACTER_CURRENT_COLOR_RULE,
         consistencyRules: [projection.consistencyFacts, DRAMA_CHARACTER_DEFAULT_CONSISTENCY].filter(Boolean).join("；"),
     };
 }
@@ -206,16 +209,17 @@ function enforceDramaAssetPromptContract(sourcePrompt: string, prompt: string, f
     const globalVisual = formatDramaGlobalVisualContract(visualContract);
     const characterVisual = visualContract ? formatDramaCharacterVisualContract({ visualDescription: visualContract.visualStyle, artStyle: visualContract.artStyle, colorScript: visualContract.colorScript }) : "";
     const effectiveGlobalVisual = kind === "角色" ? characterVisual : globalVisual;
+    const characterModelingVisual = [DRAMA_CHARACTER_CURRENT_DESIGN_RULE, DRAMA_CHARACTER_BODY_MODELING_RULES, DRAMA_CHARACTER_FACE_MODELING_RULES, DRAMA_CHARACTER_HAIR_MODELING_RULES, DRAMA_CHARACTER_WARDROBE_MATERIAL_RULES].join("；");
     const defaults = [
         `主体与资产类型：${kind || "角色、场景或道具"}设定图`,
         `身份/结构锚点：${fields.visualIdentity || fields.description || "严格沿用当前资产身份与结构锚点"}`,
-        `可见状态与材质：${fields.styling || "按当前资产造型、材质和可见状态呈现"}`,
+        `可见状态与材质：${kind === "角色" ? characterModelingVisual : fields.styling || "按当前资产造型、材质和可见状态呈现"}`,
         kind === "角色"
             ? `构图与画幅：${DRAMA_CHARACTER_TURNAROUND_SIZE} 横向，一张纯白色无缝背景${DRAMA_CHARACTER_TURNAROUND_LABEL}；${DRAMA_CHARACTER_TURNAROUND_LAYOUT}。`
             : kind === "场景"
               ? "构图与画幅：当前项目画幅的一张高清完整单视角场景全景建立图；入口、出口、门窗、陈设、通道、支撑面、材质、光向和空间轴线清晰可读，不生成九宫格或分格。"
               : "构图与画幅：纯白无缝背景，一张完整、独立的单一道具主体基准图，完整轮廓和关键材质清晰可见。",
-        `光色与风格：${kind === "角色" ? [effectiveGlobalVisual, DRAMA_CHARACTER_RENDER_STYLE, DRAMA_CHARACTER_STUDIO_LIGHT_RULES, DRAMA_CHARACTER_SUPPLIER_QUALITY_RULES].filter(Boolean).join("；") : effectiveGlobalVisual || "严格沿用当前项目视觉风格与资产固有色彩，不新增环境或剧情元素。"}`,
+        `光色与风格：${kind === "角色" ? [effectiveGlobalVisual, DRAMA_CHARACTER_RENDER_STYLE, DRAMA_CHARACTER_STUDIO_LIGHT_RULES].filter(Boolean).join("；") : effectiveGlobalVisual || "严格沿用当前项目视觉风格与资产固有色彩，不新增环境或剧情元素。"}`,
         kind === "角色"
             ? `负面约束：${DRAMA_CHARACTER_NEGATIVE_RULES}。`
             : kind === "场景"
@@ -243,10 +247,8 @@ function enforceDramaAssetPromptContract(sourcePrompt: string, prompt: string, f
             return `${label}：${roleProjection.identityFacts || fields.visualIdentity || existing}`;
         }
         if (kind !== "角色" || label !== "可见状态与材质") return `${label}：${existing}`;
-        const roleProjection = projectOptimizedCharacterModelFacts(fields);
-        const safeStyling = roleProjection.stylingFacts || fields.styling || existing;
         const quality = [DRAMA_CHARACTER_FACE_MODELING_RULES, DRAMA_CHARACTER_HAIR_MODELING_RULES, DRAMA_CHARACTER_WARDROBE_MATERIAL_RULES].filter((rule) => !existing.includes(rule.slice(0, 8))).join("；");
-        return `${label}：${safeStyling}${quality ? `；${quality}` : ""}`;
+        return `${label}：${DRAMA_CHARACTER_CURRENT_DESIGN_RULE}${DRAMA_CHARACTER_BODY_MODELING_RULES ? `；${DRAMA_CHARACTER_BODY_MODELING_RULES}` : ""}${quality ? `；${quality}` : ""}`;
     });
     return canonical.join("\n");
 }

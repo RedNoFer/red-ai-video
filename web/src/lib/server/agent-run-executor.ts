@@ -37,6 +37,7 @@ import { DRAMA_PACKAGE_DIRECTOR_RULES, DRAMA_VIDEO_DIRECTOR_SKILL, SEEDANCE_25_D
 import type { DramaAuthoringAudit, DramaAuthoringDraft, DramaAuthoringPackageDraft, DramaAuthoringProvider, DramaAuthoringSourceSnapshot, DramaEpisode, DramaNamedAsset, DramaProductionLock, DramaProject } from "@/lib/drama-project-contract";
 import { resolveSeedance25VideoPromptReferences } from "@/lib/server/agent-skills/seedance-25";
 import { resolveDramaGlobalVisualContract } from "@/lib/drama-style";
+import { DRAMA_CHARACTER_CURRENT_COLOR_RULE, DRAMA_CHARACTER_CURRENT_DESIGN_RULE } from "@/lib/drama-character-rules";
 import { projectDramaAssetVisualFacts, projectDramaCharacterModelFacts } from "@/lib/drama-prompt-compiler";
 import { formatDramaCompositionContract, resolveDramaCompositionProfile } from "@/lib/drama-composition";
 import { DRAMA_DIALOGUE_TIMING_RULES } from "@/lib/drama-dialogue-timing";
@@ -925,8 +926,8 @@ function authoringAssetCatalog(items: readonly DramaAuthoringAsset[], kind: "角
                     ? {
                           profile: {
                               visualIdentity: projection.identityFacts,
-                              styling: projection.stylingFacts,
-                              colorPalette: projection.colorPalette,
+                              styling: DRAMA_CHARACTER_CURRENT_DESIGN_RULE,
+                              colorPalette: DRAMA_CHARACTER_CURRENT_COLOR_RULE,
                               consistencyRules: projection.consistencyFacts,
                               identityAnchors: projection.identityAnchors,
                           },

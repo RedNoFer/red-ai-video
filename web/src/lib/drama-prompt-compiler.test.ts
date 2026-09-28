@@ -195,6 +195,40 @@ describe("drama prompt compiler", () => {
         expect(prompt).not.toContain("角色或资产名称只用于身份索引");
     });
 
+    it("separates historical wardrobe from character continuity and removes repeated quality rules", () => {
+        const project = createProject();
+        const westernCg = "写实3D动画电影质感的冷调哥特式暗黑西幻风格；中世纪古堡与哥特教堂式议事大厅；蓝灰、炭黑、旧银低饱和冷色";
+        project.style = westernCg;
+        project.productionBible = { ...project.productionBible!, visualStyle: westernCg, colorScript: "蓝灰、炭黑、旧银" };
+        const asset = {
+            ...project.characters[0],
+            name: "萧炎",
+            description: "身份/结构锚点：萧炎的脸型、五官、发型和年龄感按当前角色设定固定；少年；黑发束起；少年；黑发束起",
+            profile: {
+                visualIdentity: "少年；黑发束起；少年；黑发束起",
+                styling: "黑灰窄袖长袍与旧银护腕",
+                colorPalette: "炭黑、旧银",
+                consistencyRules:
+                    "少年，黑发束起，黑灰窄袖长袍与旧银护腕；按设定年龄和性别保持自然骨骼与身材比例；锁定脸型、五官、发际线、发束、体态和显著标记；服装层次、固定配饰与固有色按当前项目视觉合同统一设计并跨视图保持一致；身份特写、正面、严格左侧面、背面必须是同一角色，不因镜头重设计",
+            },
+        };
+
+        const prompt = compileDramaAssetReferencePrompt(project, asset, "角色");
+        const identityLine = prompt.split("\n").find((line) => line.startsWith("身份/结构锚点：")) || "";
+        const consistencyLine = prompt.split("\n").find((line) => line.startsWith("一致性锁定：")) || "";
+        const styleLine = prompt.split("\n").find((line) => line.startsWith("光色与风格：")) || "";
+
+        expect(identityLine.match(/少年/gu)).toHaveLength(1);
+        expect(identityLine.match(/黑发束起/gu)).toHaveLength(1);
+        expect(consistencyLine).toContain("自然骨骼与身材比例");
+        expect(consistencyLine).not.toContain("少年");
+        expect(consistencyLine).not.toContain("黑发束起");
+        expect(consistencyLine).not.toContain("黑灰窄袖长袍");
+        expect(consistencyLine).not.toContain("旧银护腕");
+        expect(styleLine).not.toContain("按设定年龄和性别保持自然骨骼");
+        expect(styleLine).not.toContain("四视图必须是同一身份");
+    });
+
     it("recompiles video and static-frame style sections from the current project contract", () => {
         const project = createProject();
         const westernCg = "西方CG电影级写实幻想，physically based 3D，冷蓝灰与旧银";

@@ -3,10 +3,14 @@ import {
     DRAMA_CHARACTER_FACE_MODELING_RULES,
     DRAMA_CHARACTER_HAIR_MODELING_RULES,
     DRAMA_CHARACTER_NEGATIVE_RULES,
+    DRAMA_CHARACTER_BODY_MODELING_RULES,
+    DRAMA_CHARACTER_CURRENT_COLOR_RULE,
+    DRAMA_CHARACTER_CURRENT_DESIGN_RULE,
+    DRAMA_CHARACTER_DEFAULT_CONSISTENCY,
     DRAMA_CHARACTER_RENDER_STYLE,
     DRAMA_CHARACTER_STUDIO_LIGHT_RULES,
-    DRAMA_CHARACTER_SUPPLIER_QUALITY_RULES,
     DRAMA_CHARACTER_WARDROBE_MATERIAL_RULES,
+    extractDramaCharacterContinuityFacts,
     extractDramaCharacterVisualFacts,
 } from "@/lib/drama-character-rules";
 import { resolveDramaStyleContract, sanitizeDramaVisualPrompt } from "@/lib/drama-style";
@@ -454,33 +458,16 @@ export function projectDramaCharacterModelFacts(asset: Pick<DramaNamedAsset, "de
             .flatMap((value) => value.split(/(?:与|和|及)/u))
             .filter((value) => /发际线|发型|头发|发色|发束|碎发|发丝|束发|长发|短发|马尾|辫|刘海|发髻/u.test(value)),
     );
-    const stylingFacts = uniqueCharacterFacts(
-        [asset.description, profile?.styling, profile?.designPrompt]
-            .flatMap((value) => splitCharacterModelFacts(value || ""))
-            .filter((value) => /发型|头发|发色|发束|服装|服饰|衣着|穿着|长袍|斗篷|披风|外套|制服|盔甲|铠甲|护腕|护甲|腰封|腰带|鞋靴|鞋子|靴子|手套|配饰|饰品|首饰|挂件|纹样|刺绣|面料|材质|皮革|金属|玉石/u.test(value)),
-    );
-    const colorPalette = uniqueCharacterFacts(splitCharacterModelFacts(profile?.colorPalette || "").filter((value) => /色|黑|白|灰|棕|蓝|红|绿|金|银|紫|青|褐|黄|橙/u.test(value))).join("；");
-    const consistencyFacts = uniqueCharacterFacts(
-        splitCharacterConsistencyFacts(profile?.consistencyRules || "")
-            .filter((value) => /脸型|五官|年龄|发际线|发束|发型|体态|骨骼|比例|同一角色|同一身份|身份特写|正面|左侧面|背面|四视图|头身比|固定/u.test(value))
-            .filter((value) => !isCharacterNarrativeFact(value)),
-    );
+    const consistencyFacts = extractDramaCharacterContinuityFacts(profile?.consistencyRules || "");
     const mergedIdentityFacts = uniqueCharacterFacts([...identityFacts, ...hairFacts.filter((hairFact) => !hairFact.endsWith("的发型") && !identityFacts.some((identityFact) => identityFact.includes(hairFact)))]);
     const identityText = canonicalizeCharacterProjectionIdentity(mergedIdentityFacts.join("；"), asset.name);
     return {
         identityFacts: identityText,
-        consistencyFacts: consistencyFacts.join("；"),
+        consistencyFacts,
         identityAnchors: identityText ? [identityText] : [],
-        stylingFacts: stylingFacts.join("；"),
-        colorPalette,
+        stylingFacts: "",
+        colorPalette: "",
     };
-}
-
-function splitCharacterConsistencyFacts(value: string) {
-    return value
-        .split(/[；;。\n]+/u)
-        .map((item) => item.trim())
-        .filter(Boolean);
 }
 
 function canonicalizeCharacterProjectionIdentity(value: string, name?: string) {
@@ -501,7 +488,16 @@ function splitCharacterModelFacts(value: string) {
 }
 
 function uniqueCharacterFacts(values: string[]) {
-    return Array.from(new Set(values.map((value) => sanitizeDramaVisualPrompt(value)).filter((value) => value && !isCharacterNarrativeFact(value))));
+    const order: string[] = [];
+    const unique = new Map<string, string>();
+    for (const value of values.flatMap((item) => item.split(/[；;]+/u))) {
+        const clause = sanitizeDramaVisualPrompt(value).trim();
+        if (!clause || isCharacterNarrativeFact(clause)) continue;
+        const key = clause.replace(/\s+/gu, "").replace(/[。.!！]+$/u, "");
+        if (!unique.has(key)) order.push(key);
+        unique.set(key, clause);
+    }
+    return order.map((key) => unique.get(key) || "").filter(Boolean);
 }
 
 function isCharacterNarrativeFact(value: string) {
@@ -532,7 +528,7 @@ export function compileDramaAssetReferencePrompt(project: Pick<DramaProject, "ti
     const profile = asset.profile;
     const projection = kind === "角色" ? projectDramaCharacterModelFacts(asset) : projectDramaAssetVisualFacts(asset, kind);
     const description = projection.identityFacts;
-    const consistency = projection.consistencyFacts;
+    const consistency = kind === "角色" ? projection.consistencyFacts || DRAMA_CHARACTER_DEFAULT_CONSISTENCY : projection.consistencyFacts;
     const globalStyle = [`项目视觉风格：${styleContract.visualDescription}`, styleContract.artStyle ? `全局画风规格：${styleContract.artStyle}` : "", styleContract.colorScript ? `全局色彩脚本：${styleContract.colorScript}` : ""]
         .filter(Boolean)
         .join("；");
@@ -549,11 +545,11 @@ export function compileDramaAssetReferencePrompt(project: Pick<DramaProject, "ti
             : kind === "场景"
               ? `${project.ratio || "9:16"} 画幅，一张高清、完整、无人物、无文字的单视角场景全景建立图；完整呈现入口、出口、门窗、主要陈设、地面材质、光源方向、空间轴线、通道和人物动作所需的支撑面，不生成九宫格、分格或360°贴图。`
               : "纯白色无缝背景，单一道具主体完整入画，静置展示并保留极轻接触阴影；只展示道具本体、完整轮廓和关键材质细节，不出现展示台、项目桌面、人物、手部、持有人、剧情场景或其他道具。";
-    const characterLightingStyle = [DRAMA_CHARACTER_RENDER_STYLE, DRAMA_CHARACTER_STUDIO_LIGHT_RULES, DRAMA_CHARACTER_SUPPLIER_QUALITY_RULES].filter(Boolean).join("；");
+    const characterLightingStyle = [DRAMA_CHARACTER_RENDER_STYLE, DRAMA_CHARACTER_STUDIO_LIGHT_RULES].filter(Boolean).join("；");
     const characterStyleDirection = kind === "角色" ? resolveDramaCharacterStyleDirection(styleContract) : "";
     const currentDesign =
         kind === "角色"
-            ? ["服装、配饰、材质与角色固有色按当前项目视觉合同重新设计，并在四个视图之间保持同一套当前设计", characterStyleDirection].filter(Boolean).join("；")
+            ? [DRAMA_CHARACTER_CURRENT_DESIGN_RULE, characterStyleDirection].filter(Boolean).join("；")
             : kind === "场景"
               ? "建筑语言、陈设样式、材质、色彩与光线按当前项目视觉合同重新设计；只保留入口、出口、门窗、固定陈设和空间轴线等拓扑事实"
               : "道具的造型语言、材质、工艺、色彩与渲染按当前项目视觉合同重新设计；只保留结构轮廓、功能和剧情识别事实";
@@ -561,7 +557,7 @@ export function compileDramaAssetReferencePrompt(project: Pick<DramaProject, "ti
         `主体与资产类型：${kind}「${asset.name}」`,
         `身份/结构锚点：${description || "沿用当前资产已确认设定"}`,
         consistency ? `一致性锁定：${consistency}` : "",
-        `可见状态与材质：${currentDesign}${kind === "角色" ? `；${DRAMA_CHARACTER_FACE_MODELING_RULES}；${DRAMA_CHARACTER_HAIR_MODELING_RULES}；${DRAMA_CHARACTER_WARDROBE_MATERIAL_RULES}` : sceneQuality ? `；${sceneQuality}` : "；结构轮廓、功能和关键识别细节清晰可见"}`,
+        `可见状态与材质：${currentDesign}${kind === "角色" ? `；${DRAMA_CHARACTER_BODY_MODELING_RULES}；${DRAMA_CHARACTER_FACE_MODELING_RULES}；${DRAMA_CHARACTER_HAIR_MODELING_RULES}；${DRAMA_CHARACTER_WARDROBE_MATERIAL_RULES}` : sceneQuality ? `；${sceneQuality}` : "；结构轮廓、功能和关键识别细节清晰可见"}`,
         `构图与画幅：${layout}`,
         `光色与风格：${kind === "角色" ? `${characterLightingStyle}；角色基准板只保留纯白无缝背景，不生成场景背景；${characterStyle}` : globalStyle}`,
         `负面约束：${forbidden}`,

@@ -4,6 +4,7 @@ import { getAuthSettings, refundUserPoints } from "@/lib/auth/store";
 import { resolveLogicalModelCandidates } from "@/lib/server/logical-model-router";
 import { requestStructuredText } from "@/lib/server/text-planning-runtime";
 import { validateDramaVideoPromptCardLayout } from "@/lib/drama-prompt-quality";
+import { DRAMA_CHARACTER_CURRENT_COLOR_RULE, DRAMA_CHARACTER_CURRENT_DESIGN_RULE } from "@/lib/drama-character-rules";
 import { optimizeCreativePrompt } from "./prompt-optimization-service";
 
 const validVideoPrompt = (body: string) =>
@@ -179,8 +180,15 @@ describe("prompt optimization service", () => {
         expect(result.optimizedPrompt).toContain("纯白色无缝背景");
         expect(result.optimizedPrompt).toContain("四视图");
         expect(result.optimizedPrompt).not.toContain("单人全身，9:16");
-        expect(result.fields).toMatchObject({ description: "少年角色", visualIdentity: "固定五官与黑色短发", styling: "黑色短发与深色服装", colorPalette: "黑灰", consistencyRules: expect.stringContaining("四视图保持同一身份与服装结构") });
+        expect(result.fields).toMatchObject({
+            description: "少年角色",
+            visualIdentity: "固定五官与黑色短发",
+            styling: DRAMA_CHARACTER_CURRENT_DESIGN_RULE,
+            colorPalette: DRAMA_CHARACTER_CURRENT_COLOR_RULE,
+            consistencyRules: expect.stringContaining("四视图保持同一身份"),
+        });
         expect(result.fields.consistencyRules).toContain("身份特写");
+        expect(result.fields.consistencyRules).not.toContain("服装结构");
     });
 
     it("retains the configured project style when the model returns a shortened asset prompt", async () => {

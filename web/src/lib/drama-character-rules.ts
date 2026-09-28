@@ -5,11 +5,17 @@ export const DRAMA_CHARACTER_PROFILE_CONTRACT = [
     "visualIdentity 只描述身份与可见识别：设定年龄感和性别、脸型、眉眼鼻唇、肤色、发际线、发型和已确认的显著标记；没有事实时不要编造极端身高、族裔或新剧情。",
     "styling 只描述当前项目视觉合同下的发型结构、服装层次、腰部结构、鞋靴、固定配饰、材质和穿着逻辑；历史资产中的造型不能覆盖当前合同，也不要把镜头、剧情动作或内部审核规则写入服装字段。",
     "colorPalette 只描述当前项目视觉合同重新设计后的角色固有主色与少量强调色，跨镜头保持稳定；环境光色不写入角色固有色。",
-    "consistencyRules 必须锁定年龄感、性别表达、脸型与五官、发际线和发束、体态比例，以及当前项目视觉合同下统一设计的服装层次、固定配饰、固有色和显著标记，并明确身份特写、正面全身、严格左侧面全身、背面全身四个视图的职责；只允许用户明确要求的单项变化。",
+    "consistencyRules 只锁定年龄感、性别表达、脸型与五官、发际线和发束、体态比例、显著标记及四个视图的身份连续性；服装、配饰、材质和固有色只进入 styling，并必须服从当前项目视觉合同；只允许用户明确要求的单项变化。",
 ].join("\n");
 
 export const DRAMA_CHARACTER_SUPPLIER_QUALITY_RULES =
     "按设定年龄和性别保持自然骨骼与身材比例；男性不女性化，女性不幼态化或过度性感；四视图必须是同一身份：身份特写锁定五官，正面、严格左侧面、背面锁定体态，以及当前项目视觉合同下统一设计的服装结构和固有色；后三个全身视图的双手、手指、双腿和鞋靴完整，避免僵硬姿态、脸部变形和肢体畸形。";
+
+export const DRAMA_CHARACTER_BODY_MODELING_RULES = "按设定年龄和性别保持自然骨骼与身材比例；男性不女性化，女性不幼态化或过度性感。";
+
+export const DRAMA_CHARACTER_CURRENT_DESIGN_RULE = "服装、配饰、材质与角色固有色按当前项目视觉合同重新设计，并在四个视图之间保持同一套当前设计。";
+
+export const DRAMA_CHARACTER_CURRENT_COLOR_RULE = "角色固有色按当前项目视觉合同重新设计，并在四个视图与后续镜头之间保持一致。";
 
 /** Concrete supplier-facing rendering guidance; it must not define a project's theme. */
 export const DRAMA_CHARACTER_RENDER_STYLE = "高精度人物细节与清晰轮廓边缘。";
@@ -49,12 +55,14 @@ export const DRAMA_CHARACTER_NEGATIVE_RULES = [
 ].join("、");
 
 export const DRAMA_CHARACTER_DEFAULT_CONSISTENCY =
-    "按设定年龄和性别保持自然骨骼与身材比例；锁定脸型、五官、发际线、发束、体态和显著标记；服装层次、固定配饰与固有色按当前项目视觉合同统一设计并跨视图保持一致；身份特写、正面、严格左侧面、背面必须是同一角色，不因视图重设计；身份特写只负责精确锁定五官与脸部识别，不替代后三个全身视图。";
+    "按设定年龄和性别保持自然骨骼与身材比例；锁定脸型、五官、发际线、发束、体态和显著标记；身份特写、正面、严格左侧面、背面必须是同一角色，不因视图重设计；身份特写只负责精确锁定五官与脸部识别，不替代后三个全身视图。";
 
 const CHARACTER_VISUAL_FACT_PATTERN =
     /少年|少女|儿童|青年|中年|老年|男性|女性|年龄|骨骼|身材|体态|脸型|五官|眉|眼|鼻|唇|下颌|耳|肤色|皮肤|发际线|发型|头发|黑发|白发|灰发|棕发|金发|发色|发束|碎发|发丝|高束|束发|长发|短发|马尾|辫|刘海|发髻|疤|痣|胎记|标记|徽记|比例|对称/u;
 const CHARACTER_NARRATIVE_FACT_PATTERN =
     /(?:故事|剧情|小说|原文|章节|背景|关系|冲突|事件|经历|过去|审判|反击|契约|父亲|母亲|名声|承诺|婚约|誓言|承担|宿命|情绪|弧线|对白|台词|镜头|场景|大厅|古堡|教堂|议事|由[^；。]+(?:转成|转为|变成)|再以|随后|然后|最终|因为|因此)/u;
+const CHARACTER_STYLING_FACT_PATTERN = /服装|服饰|衣着|穿着|长袍|袍|斗篷|披风|外套|制服|盔甲|铠甲|护腕|护甲|腰封|腰带|鞋靴|鞋子|靴子|手套|配饰|饰品|首饰|挂件|纹样|刺绣|面料|材质|皮革|金属|玉石|色彩|配色|固有色|主色|颜色|时代|工艺|风格|渲染|光色|灯光/u;
+const CHARACTER_CONTINUITY_FACT_PATTERN = /自然骨骼|身材比例|体态|脸型|五官|发际线|显著标记|同一角色|同一身份|身份特写|正面|左侧面|背面|四视图|头身比|保持|锁定|固定|不因视图重设计/u;
 
 /** Extract only visible character identity facts from legacy free-form text. */
 export function extractDramaCharacterVisualFacts(value: string) {
@@ -74,6 +82,26 @@ export function extractDramaCharacterVisualFacts(value: string) {
     ).join("；");
 }
 
+/** Extract only cross-view continuity facts; wardrobe and narrative facts stay out. */
+export function extractDramaCharacterContinuityFacts(value: string) {
+    return uniqueCharacterFacts(
+        value
+            .replace(DRAMA_CHARACTER_DEFAULT_CONSISTENCY, "")
+            .split(/[；;。\n，,、]+/u)
+            .map((item) =>
+                item
+                    .replace(/^(?:一致性锁定|固定规则|连续性规则)[：:]\s*/u, "")
+                    .replace(/不随(?:镜头|剧情|故事)重设计/u, "不因视图重设计")
+                    .replace(/(?:与|及|并且?|和)(?:服装|服饰|造型|材质|固定配饰|固有色|鞋靴|配色)[^；。]*/u, "")
+                    .trim(),
+            )
+            .filter((item) => item && CHARACTER_CONTINUITY_FACT_PATTERN.test(item))
+            .filter((item) => !CHARACTER_STYLING_FACT_PATTERN.test(item))
+            .filter((item) => !CHARACTER_NARRATIVE_FACT_PATTERN.test(item))
+            .filter((item) => !/^(?:少年|少女|儿童|青年|中年|老年|男性|女性|黑发|白发|灰发|棕发|金发|发色|发型|头发|发束|碎发|发丝|高束|束发|长发|短发|马尾|辫|刘海|发髻)/u.test(item)),
+    ).join("；");
+}
+
 export function normalizeDramaCharacterProfile(profile: DramaAssetProfile | undefined, description: string, name: string): DramaAssetProfile {
     const current = profile || { visualIdentity: "", styling: "", colorPalette: "", consistencyRules: "" };
     const identityPrefix = `${name}的脸型、五官、发型和年龄感按当前角色设定固定`;
@@ -83,7 +111,7 @@ export function normalizeDramaCharacterProfile(profile: DramaAssetProfile | unde
     const visualIdentity = rawVisualIdentity.startsWith(identityPrefix) ? rawVisualIdentity : [identityPrefix, rawVisualIdentity].filter(Boolean).join("；");
     const styling = current.styling.trim() || `${name}的发型、服装、固定配饰、鞋靴与材质按描述固定`;
     const colorPalette = current.colorPalette.trim() || "按角色固有色保持跨镜头一致";
-    const consistencyRules = appendUniqueClauses(current.consistencyRules, DRAMA_CHARACTER_DEFAULT_CONSISTENCY);
+    const consistencyRules = appendUniqueClauses(extractDramaCharacterContinuityFacts(current.consistencyRules), DRAMA_CHARACTER_DEFAULT_CONSISTENCY);
     const identityAnchors = Array.from(new Set([...(current.identityAnchors || []).map((value) => normalizeCharacterIdentityAnchor(value, name)), visualIdentity].map((value) => value.trim()).filter(Boolean)));
     const forbiddenChanges = Array.from(new Set([...(current.forbiddenChanges || []), ...DRAMA_CHARACTER_NEGATIVE_RULES.split("、")].map((value) => value.trim()).filter(Boolean)));
     return { ...current, visualIdentity, styling, colorPalette, consistencyRules, identityAnchors, forbiddenChanges };
@@ -119,4 +147,17 @@ function appendUniqueClauses(current: string, addition: string) {
         .map((key) => unique.get(key) || "")
         .filter(Boolean)
         .join("；");
+}
+
+function uniqueCharacterFacts(values: string[]) {
+    const order: string[] = [];
+    const unique = new Map<string, string>();
+    for (const value of values.flatMap((item) => item.split(/[；;]+/u))) {
+        const clause = value.trim();
+        if (!clause) continue;
+        const key = clause.replace(/\s+/gu, "").replace(/[。.!！]+$/u, "");
+        if (!unique.has(key)) order.push(key);
+        unique.set(key, clause);
+    }
+    return order.map((key) => unique.get(key) || "").filter(Boolean);
 }

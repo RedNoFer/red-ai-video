@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 
 import type { DramaProductionPackageV1, DramaProject, DramaShot } from "@/lib/drama-project-contract";
+import { DRAMA_CHARACTER_CURRENT_COLOR_RULE, DRAMA_CHARACTER_CURRENT_DESIGN_RULE } from "@/lib/drama-character-rules";
 import { DRAMA_STYLE_COLOR_SCRIPT, DRAMA_STYLE_NAME } from "@/lib/drama-style";
 import { defaultDramaProductionPlan, dramaVisualDirection } from "@/lib/drama-production-plan";
 import { validateDramaContinuityEdges } from "@/lib/drama-continuity-policy";
@@ -265,8 +266,8 @@ describe("production package boundary", () => {
         expect(preview.summary).toEqual({ episodes: 1, storyScenes: 1, shots: 2, characters: 2, locations: 1, duration: 30, archiveSections: 0, promptAssets: 0, performancePlans: 2, lightingPlans: 2, continuityPlans: 2 });
         expect(preview.package.episodes[0].shots[0]).toMatchObject({ code: "SH01", lens: "50mm", sound: { ambience: "车轮声" }, videoPrompt: "梦中惊醒" });
         expect(preview.package.assets.characters.find((item) => item.code === "C02")?.profile).toMatchObject({
-            styling: "Rifa的发型、服装、随身物件与材质按描述固定",
-            colorPalette: "按制作包描述中的固有色保持跨镜头一致",
+            styling: DRAMA_CHARACTER_CURRENT_DESIGN_RULE,
+            colorPalette: DRAMA_CHARACTER_CURRENT_COLOR_RULE,
         });
     });
 
@@ -1207,8 +1208,8 @@ describe("production package boundary", () => {
         const inspector = preview.package.assets.characters.find((item) => item.code === "C05");
         expect(inspector?.profile).toMatchObject({
             visualIdentity: expect.stringContaining("铁灰短发"),
-            styling: expect.stringContaining("制服"),
-            colorPalette: expect.stringContaining("皇家深蓝"),
+            styling: DRAMA_CHARACTER_CURRENT_DESIGN_RULE,
+            colorPalette: DRAMA_CHARACTER_CURRENT_COLOR_RULE,
         });
         expect(inspector?.profile?.styling).not.toContain("按制作包设定保持稳定");
     });

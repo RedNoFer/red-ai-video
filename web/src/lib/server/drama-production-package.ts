@@ -43,7 +43,7 @@ import {
 } from "@/lib/drama-frame-sequence";
 import { dramaDialogueFragmentSequenceError, dramaDialogueTimingReminder, dramaFrameDialogueTimingReminder, dramaUtteranceTimingIssues, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
 import { resolveDramaStyleContract, resolveDramaStyleContractWithFallback } from "@/lib/drama-style";
-import { normalizeDramaCharacterProfile } from "@/lib/drama-character-rules";
+import { DRAMA_CHARACTER_CURRENT_COLOR_RULE, DRAMA_CHARACTER_CURRENT_DESIGN_RULE, normalizeDramaCharacterProfile } from "@/lib/drama-character-rules";
 import { applyDramaStaticVisualContract, applyDramaVideoVisualContract, compileDramaAssetReferencePrompt, projectDramaCharacterModelFacts } from "@/lib/drama-prompt-compiler";
 import { resolveDramaShotDuration } from "@/lib/server/drama-shot-config";
 import {
@@ -2129,8 +2129,8 @@ function normalizePackageAsset(value: unknown, location = false, character = fal
     const visualIdentity = character ? characterModel?.identityFacts || rawVisualIdentity || "" : rawVisualIdentity && !/^不可变为/u.test(rawVisualIdentity) ? rawVisualIdentity : description || `${name}的固定外观与识别特征`;
     const sourceText = [description, text(profile.designPrompt)].filter(Boolean).join("\n");
     const rawStyling = text(profile.styling);
-    const styling = character ? rawStyling || inferAssetStyling(sourceText, name) : rawStyling && !(location && /发型、服装、随身物件与材质按描述固定/u.test(rawStyling)) ? rawStyling : inferAssetStyling(sourceText, name, location);
-    const colorPalette = character ? text(profile.colorPalette) || inferAssetPalette(sourceText) : text(profile.colorPalette) || inferAssetPalette(sourceText);
+    const styling = character ? DRAMA_CHARACTER_CURRENT_DESIGN_RULE : rawStyling && !(location && /发型、服装、随身物件与材质按描述固定/u.test(rawStyling)) ? rawStyling : inferAssetStyling(sourceText, name, location);
+    const colorPalette = character ? DRAMA_CHARACTER_CURRENT_COLOR_RULE : text(profile.colorPalette) || inferAssetPalette(sourceText);
     const rawConsistencyRules = text(profile.consistencyRules);
     const spatialRules = strings(profile.spatialRules);
     const consistencyRules = character
