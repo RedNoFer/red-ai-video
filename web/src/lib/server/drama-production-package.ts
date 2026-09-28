@@ -44,7 +44,7 @@ import {
 import { dramaDialogueFragmentSequenceError, dramaDialogueTimingReminder, dramaFrameDialogueTimingReminder, dramaUtteranceTimingIssues, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
 import { resolveDramaStyleContract, resolveDramaStyleContractWithFallback } from "@/lib/drama-style";
 import { normalizeDramaCharacterProfile } from "@/lib/drama-character-rules";
-import { applyDramaStaticVisualContract, applyDramaVideoVisualContract, compileDramaAssetReferencePrompt } from "@/lib/drama-prompt-compiler";
+import { applyDramaStaticVisualContract, applyDramaVideoVisualContract, compileDramaAssetReferencePrompt, projectDramaCharacterModelFacts } from "@/lib/drama-prompt-compiler";
 import { resolveDramaShotDuration } from "@/lib/server/drama-shot-config";
 import {
     dramaTimeRangePattern,
@@ -2125,26 +2125,28 @@ function normalizePackageAsset(value: unknown, location = false, character = fal
     const name = text(asset.name);
     const description = text(asset.description);
     const rawVisualIdentity = text(profile.visualIdentity);
-    const visualIdentity = rawVisualIdentity && !/^不可变为/u.test(rawVisualIdentity) ? rawVisualIdentity : description || `${name}的固定外观与识别特征`;
+    const characterModel = character ? projectDramaCharacterModelFacts({ name, description, profile: profile as DramaNamedAsset["profile"] }) : undefined;
+    const visualIdentity = character ? characterModel?.identityFacts || rawVisualIdentity || "" : rawVisualIdentity && !/^不可变为/u.test(rawVisualIdentity) ? rawVisualIdentity : description || `${name}的固定外观与识别特征`;
     const sourceText = [description, text(profile.designPrompt)].filter(Boolean).join("\n");
     const rawStyling = text(profile.styling);
-    const styling = rawStyling && !(location && /发型、服装、随身物件与材质按描述固定/u.test(rawStyling)) ? rawStyling : inferAssetStyling(sourceText, name, location);
-    const colorPalette = text(profile.colorPalette) || inferAssetPalette(sourceText);
+    const styling = character ? rawStyling || inferAssetStyling(sourceText, name) : rawStyling && !(location && /发型、服装、随身物件与材质按描述固定/u.test(rawStyling)) ? rawStyling : inferAssetStyling(sourceText, name, location);
+    const colorPalette = character ? text(profile.colorPalette) || inferAssetPalette(sourceText) : text(profile.colorPalette) || inferAssetPalette(sourceText);
     const rawConsistencyRules = text(profile.consistencyRules);
     const spatialRules = strings(profile.spatialRules);
-    const consistencyRules =
-        rawConsistencyRules && !isGenericConsistencyRule(rawConsistencyRules)
-            ? rawConsistencyRules
-            : location
-              ? inferLocationConsistencyRules(name, sourceText, spatialRules, styling, colorPalette)
-              : `固定${name}的外观、服装、配色和动作状态，不随镜头重设计；${visualIdentity}`;
+    const consistencyRules = character
+        ? characterModel?.consistencyFacts || ""
+        : rawConsistencyRules && !isGenericConsistencyRule(rawConsistencyRules)
+          ? rawConsistencyRules
+          : location
+            ? inferLocationConsistencyRules(name, sourceText, spatialRules, styling, colorPalette)
+            : `固定${name}的外观、服装、配色和动作状态，不随镜头重设计；${visualIdentity}`;
     const baseProfile = {
         visualIdentity,
         styling,
         colorPalette,
         consistencyRules,
-        designPrompt: optionalText(profile.designPrompt) || description || undefined,
-        identityAnchors: strings(profile.identityAnchors).length ? strings(profile.identityAnchors) : [visualIdentity],
+        designPrompt: optionalText(profile.designPrompt),
+        identityAnchors: character ? characterModel?.identityAnchors || (visualIdentity ? [visualIdentity] : []) : strings(profile.identityAnchors).length ? strings(profile.identityAnchors) : [visualIdentity],
         spatialRules,
         stateRules: strings(profile.stateRules),
         forbiddenChanges: strings(profile.forbiddenChanges),

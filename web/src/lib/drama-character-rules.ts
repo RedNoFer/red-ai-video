@@ -51,28 +51,72 @@ export const DRAMA_CHARACTER_NEGATIVE_RULES = [
 export const DRAMA_CHARACTER_DEFAULT_CONSISTENCY =
     "按设定年龄和性别保持自然骨骼与身材比例；锁定脸型、五官、发际线、发束、体态和显著标记；服装层次、固定配饰与固有色按当前项目视觉合同统一设计并跨视图保持一致；身份特写、正面、严格左侧面、背面必须是同一角色，不因视图重设计；身份特写只负责精确锁定五官与脸部识别，不替代后三个全身视图。";
 
+const CHARACTER_VISUAL_FACT_PATTERN =
+    /少年|少女|儿童|青年|中年|老年|男性|女性|年龄|骨骼|身材|体态|脸型|五官|眉|眼|鼻|唇|下颌|耳|肤色|皮肤|发际线|发型|头发|黑发|白发|灰发|棕发|金发|发色|发束|碎发|发丝|高束|束发|长发|短发|马尾|辫|刘海|发髻|疤|痣|胎记|标记|徽记|比例|对称/u;
+const CHARACTER_NARRATIVE_FACT_PATTERN =
+    /(?:故事|剧情|小说|原文|章节|背景|关系|冲突|事件|经历|过去|审判|反击|契约|父亲|母亲|名声|承诺|婚约|誓言|承担|宿命|情绪|弧线|对白|台词|镜头|场景|大厅|古堡|教堂|议事|由[^；。]+(?:转成|转为|变成)|再以|随后|然后|最终|因为|因此)/u;
+
+/** Extract only visible character identity facts from legacy free-form text. */
+export function extractDramaCharacterVisualFacts(value: string) {
+    return Array.from(
+        new Set(
+            value
+                .split(/[；;。\n，,、]+/u)
+                .map((item) =>
+                    item
+                        .replace(/^(?:主体与资产类型|身份\/结构锚点|一致性锁定|可见状态与材质|构图与画幅|光色与风格|负面约束)[：:]\s*/u, "")
+                        .replace(/按(?:剧情|故事|原文|描述|当前项目视觉合同)[^；。]*?(?:固定|保持|重新设计)/u, "固定")
+                        .replace(/^[\p{Script=Han}]{1,8}家(?=(?:少年|少女|青年|男性|女性))/u, "")
+                        .trim(),
+                )
+                .filter((item) => item && CHARACTER_VISUAL_FACT_PATTERN.test(item) && !CHARACTER_NARRATIVE_FACT_PATTERN.test(item)),
+        ),
+    ).join("；");
+}
+
 export function normalizeDramaCharacterProfile(profile: DramaAssetProfile | undefined, description: string, name: string): DramaAssetProfile {
     const current = profile || { visualIdentity: "", styling: "", colorPalette: "", consistencyRules: "" };
-    const rawVisualIdentity = current.visualIdentity.trim() || description.trim();
-    const identityPrefix = `${name}的脸型、五官、发型和年龄感按剧情身份固定`;
+    const identityPrefix = `${name}的脸型、五官、发型和年龄感按当前角色设定固定`;
+    const currentVisualIdentity = current.visualIdentity.trim();
+    const currentIdentityFacts = normalizeCharacterIdentityAnchor(currentVisualIdentity, name);
+    const rawVisualIdentity = currentIdentityFacts || extractDramaCharacterVisualFacts(description);
     const visualIdentity = rawVisualIdentity.startsWith(identityPrefix) ? rawVisualIdentity : [identityPrefix, rawVisualIdentity].filter(Boolean).join("；");
     const styling = current.styling.trim() || `${name}的发型、服装、固定配饰、鞋靴与材质按描述固定`;
     const colorPalette = current.colorPalette.trim() || "按角色固有色保持跨镜头一致";
     const consistencyRules = appendUniqueClauses(current.consistencyRules, DRAMA_CHARACTER_DEFAULT_CONSISTENCY);
-    const identityAnchors = Array.from(new Set([...(current.identityAnchors || []), visualIdentity].map((value) => value.trim()).filter(Boolean)));
+    const identityAnchors = Array.from(new Set([...(current.identityAnchors || []).map((value) => normalizeCharacterIdentityAnchor(value, name)), visualIdentity].map((value) => value.trim()).filter(Boolean)));
     const forbiddenChanges = Array.from(new Set([...(current.forbiddenChanges || []), ...DRAMA_CHARACTER_NEGATIVE_RULES.split("、")].map((value) => value.trim()).filter(Boolean)));
     return { ...current, visualIdentity, styling, colorPalette, consistencyRules, identityAnchors, forbiddenChanges };
 }
 
+function normalizeCharacterIdentityAnchor(value: string, name: string) {
+    const identityPrefix = `${name}的脸型、五官、发型和年龄感按当前角色设定固定`;
+    const trimmed = value.trim();
+    if (!trimmed.includes(`${name}的脸型`)) return extractDramaCharacterVisualFacts(trimmed);
+    const facts = extractDramaCharacterVisualFacts(trimmed);
+    const extraFacts = facts
+        .split("；")
+        .map((fact) => fact.trim())
+        .filter((fact) => fact && fact !== `${name}的脸型` && fact !== "五官" && !fact.startsWith("发型和年龄感"));
+    return [identityPrefix, ...extraFacts].filter(Boolean).join("；");
+}
+
 function appendUniqueClauses(current: string, addition: string) {
-    return Array.from(
-        new Set(
-            [current, addition].flatMap((value) =>
-                value
-                    .split(/[；;]/u)
-                    .map((item) => item.trim())
-                    .filter(Boolean),
-            ),
-        ),
-    ).join("；");
+    const clauses = [current, addition].flatMap((value) =>
+        value
+            .split(/[；;]/u)
+            .map((item) => item.trim())
+            .filter(Boolean),
+    );
+    const order: string[] = [];
+    const unique = new Map<string, string>();
+    for (const clause of clauses) {
+        const key = clause.replace(/[。.!！]+$/u, "");
+        if (!unique.has(key)) order.push(key);
+        unique.set(key, clause);
+    }
+    return order
+        .map((key) => unique.get(key) || "")
+        .filter(Boolean)
+        .join("；");
 }

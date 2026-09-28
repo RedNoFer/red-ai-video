@@ -315,6 +315,39 @@ describe("production package boundary", () => {
         expect(rifa.profile?.identityAnchors).toEqual(expect.arrayContaining([expect.stringContaining("Rifa的脸型、五官、发型和年龄感")]));
     });
 
+    it("keeps imported character modeling prompts free of narrative and scene context", () => {
+        const source = structuredClone(productionPackage);
+        const westernCg = "写实3D动画电影质感的冷调西方暗黑奇幻 CG；蓝灰、炭黑、旧银低饱和冷色";
+        source.project.style = westernCg;
+        source.project.productionBible.visualStyle = westernCg;
+        source.assets.characters[0] = {
+            ...source.assets.characters[0],
+            description: "主体与资产类型：角色「Karin」；身份/结构锚点：少年；黑发束起；被审判后转为冷肃反击并以血手契约承担父亲名声；脸型、五官和年龄感固定；场景：萧家议事大厅",
+            profile: {
+                visualIdentity: "少年男性；黑发束起；脸型、五官和年龄感固定；父亲名声与宿命",
+                styling: "黑色短发，服装按当前项目视觉合同重新设计",
+                colorPalette: "炭黑、旧银",
+                consistencyRules: "固定脸型、五官、发际线和体态；不随镜头重设计；身份特写、正面、严格左侧面、背面是同一角色",
+                identityAnchors: ["被审判的沉默", "黑发束起"],
+            },
+        };
+
+        const preview = previewDramaProductionPackage(JSON.stringify(source), "narrative-character-package.json");
+        const character = preview.package.assets.characters[0];
+        const prompt = character.supplierPrompt || "";
+
+        expect(character.description).toContain("被审判后转为冷肃反击");
+        expect(character.profile?.visualIdentity).not.toContain("被审判");
+        expect(character.profile?.visualIdentity).not.toContain("父亲名声");
+        expect(character.profile?.identityAnchors?.join("；")).not.toContain("宿命");
+        expect(prompt).toContain("少年");
+        expect(prompt).toContain("黑发束起");
+        expect(prompt).toContain("西方西幻 CG 角色造型落地");
+        for (const narrative of ["被审判", "冷肃反击", "血手契约", "父亲名声", "萧家议事大厅", "场景："]) {
+            expect(prompt).not.toContain(narrative);
+        }
+    });
+
     it("preserves stable NPC roster slots and world anchors during package normalization", () => {
         const source = structuredClone(productionPackage);
         source.assets.locations[0].backgroundNpcPolicy = {
@@ -1345,7 +1378,9 @@ describe("production package boundary", () => {
             style: importedStyle,
             productionBible: { visualStyle: importedStyle, colorScript: "冷蓝灰与旧银", productionPlan: { visual: { visualStyle: importedStyle, artStyle: importedArtStyle } } },
         });
-        expect(preview.package.assets.characters[0].supplierPrompt).toContain(importedStyle);
+        expect(preview.package.assets.characters[0].supplierPrompt).toContain("项目视觉风格：西方写实 CG 电影质感");
+        expect(preview.package.assets.characters[0].supplierPrompt).toContain("冷蓝灰与旧银");
+        expect(preview.package.assets.characters[0].supplierPrompt).not.toContain("哥特空间结构");
         expect(applied.style).toBe(importedStyle);
         expect(applied.productionBible).toMatchObject({ visualStyle: importedStyle, colorScript: "冷蓝灰与旧银" });
     });

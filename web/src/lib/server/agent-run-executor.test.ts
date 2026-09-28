@@ -131,9 +131,9 @@ describe("executeAgentRun backend settings", () => {
                     id: "character-one",
                     code: "C01",
                     name: "角色一",
-                    description: "当前角色",
+                    description: "少年；黑发束起；被审判后转为冷肃反击并以血手契约承担父亲名声；萧家议事大厅",
                     supplierPrompt: "旧角色供应商提示词",
-                    profile: { visualIdentity: "当前身份", styling: "当前造型", colorPalette: "当前配色", consistencyRules: "当前锁定", designPrompt: "旧资产生成提示词" },
+                    profile: { visualIdentity: "少年；黑发束起；父亲名声与宿命", styling: "当前造型", colorPalette: "当前配色", consistencyRules: "当前锁定", designPrompt: "旧资产生成提示词" },
                     refinementHistory: [{ id: "history-old", request: "旧修改" }],
                     references: [{ id: "ref-one", url: "https://example.com/old.png" }],
                     primaryReferenceId: "ref-one",
@@ -170,6 +170,10 @@ describe("executeAgentRun backend settings", () => {
         expect(serialized).not.toContain("history-old");
         expect(serialized).not.toContain("example.com/old.png");
         expect(serialized).not.toContain("旧生成提示词");
+        expect(input.project.characters[0].description).toContain("少年");
+        expect(input.project.characters[0].description).not.toContain("被审判");
+        expect(input.project.characters[0].description).not.toContain("萧家议事大厅");
+        expect(input.project.characters[0].profile?.visualIdentity).not.toContain("父亲名声");
         expect(serialized).toContain("本轮文章内容");
         expect(serialized.match(/"name":"角色一"/gu)).toHaveLength(1);
         expect(input.project.compositionProfile).toMatchObject({ aspectRatio: "9:16", orientation: "portrait" });

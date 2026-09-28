@@ -208,6 +208,43 @@ describe("prompt optimization service", () => {
         expect(result.optimizedPrompt).not.toContain("暗黑学院");
     });
 
+    it("removes narrative and scene context from optimized character modeling prompts", async () => {
+        vi.mocked(requestStructuredText).mockResolvedValue({
+            arguments: JSON.stringify({
+                optimizedPrompt: "主体与资产类型：角色；身份/结构锚点：少年，被审判后转为冷肃反击并以血手契约承担父亲名声；可见状态与材质：黑发束起与服装；构图与画幅：角色四视图",
+                fields: {
+                    description: "少年；被审判后转为冷肃反击；萧家议事大厅",
+                    visualIdentity: "少年男性；黑发束起；被审判与父亲名声",
+                    styling: "黑发束起；服装按当前项目视觉合同重新设计；战斗时挥动长剑",
+                    colorPalette: "炭黑、旧银",
+                    consistencyRules: "固定脸型、五官和体态；承担父亲名声；不随镜头重设计",
+                },
+            }),
+            headers: new Headers(),
+            protocol: "chat",
+            elapsedMs: 10,
+        });
+
+        const result = await optimizeCreativePrompt({
+            origin: "http://localhost:3000",
+            cookie: "session=1",
+            userId: "user-one",
+            requestId: "asset-narrative-filter-request",
+            prompt: "资产类型：角色\n当前提示词：萧炎角色资产",
+            mode: "drama-asset",
+            visualContract: { visualStyle: "写实3D动画电影质感的冷调西方暗黑奇幻 CG；古堡与哥特教堂场景", artStyle: "高精度3D角色", colorScript: "蓝灰、炭黑、旧银", globalNegativePrompt: "" },
+        });
+
+        expect(result.optimizedPrompt).toContain("黑发束起");
+        expect(result.optimizedPrompt).not.toContain("被审判");
+        expect(result.optimizedPrompt).not.toContain("冷肃反击");
+        expect(result.optimizedPrompt).not.toContain("血手契约");
+        expect(result.optimizedPrompt).not.toContain("萧家议事大厅");
+        expect(result.optimizedPrompt).not.toContain("古堡");
+        expect(result.fields.visualIdentity).not.toContain("父亲名声");
+        expect(result.fields.styling).not.toContain("挥动长剑");
+    });
+
     it("rejects a drama asset response that does not use the complete fixed fields object", async () => {
         vi.mocked(requestStructuredText).mockResolvedValue({
             arguments: JSON.stringify({ optimizedPrompt: "主体与资产类型：角色；身份/结构锚点：固定五官" }),

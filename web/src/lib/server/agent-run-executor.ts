@@ -37,7 +37,7 @@ import { DRAMA_PACKAGE_DIRECTOR_RULES, DRAMA_VIDEO_DIRECTOR_SKILL, SEEDANCE_25_D
 import type { DramaAuthoringAudit, DramaAuthoringDraft, DramaAuthoringPackageDraft, DramaAuthoringProvider, DramaAuthoringSourceSnapshot, DramaEpisode, DramaNamedAsset, DramaProductionLock, DramaProject } from "@/lib/drama-project-contract";
 import { resolveSeedance25VideoPromptReferences } from "@/lib/server/agent-skills/seedance-25";
 import { resolveDramaGlobalVisualContract } from "@/lib/drama-style";
-import { projectDramaAssetVisualFacts } from "@/lib/drama-prompt-compiler";
+import { projectDramaAssetVisualFacts, projectDramaCharacterModelFacts } from "@/lib/drama-prompt-compiler";
 import { formatDramaCompositionContract, resolveDramaCompositionProfile } from "@/lib/drama-composition";
 import { DRAMA_DIALOGUE_TIMING_RULES } from "@/lib/drama-dialogue-timing";
 import { DramaAuthoringQualityGateError, validateDramaAuthoringQuality } from "@/lib/server/drama-production-package-quality";
@@ -914,6 +914,27 @@ type DramaAuthoringAsset = Pick<DramaNamedAsset, "code" | "name" | "description"
 
 function authoringAssetCatalog(items: readonly DramaAuthoringAsset[], kind: "角色" | "场景" | "道具" | "线索") {
     return items.map((asset) => {
+        if (kind === "角色") {
+            const projection = projectDramaCharacterModelFacts(asset);
+            return {
+                ...(asset.code ? { code: asset.code } : {}),
+                name: asset.name,
+                description: projection.identityFacts,
+                ...(asset.activeEpisodeCodes?.length ? { activeEpisodeCodes: asset.activeEpisodeCodes } : {}),
+                ...(asset.profile
+                    ? {
+                          profile: {
+                              visualIdentity: projection.identityFacts,
+                              styling: projection.stylingFacts,
+                              colorPalette: projection.colorPalette,
+                              consistencyRules: projection.consistencyFacts,
+                              identityAnchors: projection.identityAnchors,
+                          },
+                      }
+                    : {}),
+                ...(asset.backgroundNpcPolicy ? { backgroundNpcPolicy: asset.backgroundNpcPolicy } : {}),
+            };
+        }
         const projection = projectDramaAssetVisualFacts(asset, kind);
         const profile = asset.profile ? authoringAssetProfile(asset.profile, projection) : undefined;
         return {

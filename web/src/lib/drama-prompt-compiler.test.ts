@@ -156,10 +156,43 @@ describe("drama prompt compiler", () => {
 
         const prompt = compileDramaAssetReferencePrompt(project, project.characters[0], "角色");
 
-        expect(prompt).toContain(`项目视觉风格：${westernCg}`);
-        expect(prompt).toContain("视觉重设计规则：历史资产中的服装、配饰、时代工艺、材质和配色只作为来源记录");
+        expect(prompt).toContain("项目视觉风格：西方CG电影级写实幻想");
+        expect(prompt).toContain("physically based 3D 材质");
+        expect(prompt).toContain("冷蓝灰与旧银");
+        expect(prompt).not.toContain("真实空间透视");
         expect(prompt).not.toContain("东方古风国漫电影质感");
         expect(prompt).not.toContain("锦缎长袍");
+    });
+
+    it("keeps character reference prompts limited to visual modeling facts", () => {
+        const project = createProject();
+        const westernCg = "写实3D动画电影质感的冷调哥特式暗黑西幻风格；中世纪古堡与哥特教堂式萧家议事大厅；蓝灰、炭黑、旧银低饱和冷色";
+        project.style = westernCg;
+        project.productionBible = { ...project.productionBible!, visualStyle: westernCg, colorScript: "蓝灰、炭黑、旧银" };
+        const asset = {
+            ...project.characters[0],
+            name: "萧炎",
+            description:
+                "主体与资产类型：角色「萧炎」；身份/结构锚点：少年；黑发束起；由被审判的沉默转成冷肃反击；再以血手契约承担父亲名声；萧炎的脸型、五官、发型和年龄感按剧情身份固定；一致性锁定：固定萧炎的外观；不随镜头重设计；按设定年龄和性别保持自然骨骼与身材比例；锁定脸型、发际线、发束、体态和显著标记；可见状态与材质：服装、配饰、材质与角色固有色按当前项目视觉合同重新设计",
+            profile: {
+                visualIdentity: "少年男性，脸型清晰，五官明确，黑发束起，年龄感固定",
+                styling: "黑灰窄袖长袍与旧银护腕",
+                colorPalette: "炭黑、旧银",
+                consistencyRules: "固定脸型、五官、发际线、发束、体态和服装；由沉默转为反击并承担父亲名声",
+            },
+        };
+
+        const prompt = compileDramaAssetReferencePrompt(project, asset, "角色");
+
+        expect(prompt).toContain("少年男性");
+        expect(prompt).toContain("黑发束起");
+        expect(prompt).toContain("西方西幻 CG 角色造型落地");
+        for (const narrative of ["被审判", "冷肃反击", "血手契约", "父亲名声", "萧家议事大厅", "古堡", "哥特教堂"]) {
+            expect(prompt).not.toContain(narrative);
+        }
+        expect(prompt).not.toContain("当前项目视觉合同是唯一主题");
+        expect(prompt).not.toContain("视觉重设计规则");
+        expect(prompt).not.toContain("角色或资产名称只用于身份索引");
     });
 
     it("recompiles video and static-frame style sections from the current project contract", () => {
@@ -739,6 +772,12 @@ describe("drama prompt compiler", () => {
                 "角色",
             ),
         ).toBe(true);
+        expect(
+            hasDramaAssetPromptQuality(
+                "主体与资产类型：角色\n身份/结构锚点：少年；被审判后转为冷肃反击并以血手契约承担父亲名声\n一致性锁定：锁定五官和头身比\n可见状态与材质：自然骨骼比例，五官按年龄塑形，头发按发际线和主发束建模，服装按真实裁剪逻辑分层\n构图与画幅：16:9纯白色四视图，身份特写、正面全身、严格左侧面全身、背面全身\n光色与风格：高精度人物细节\n负面约束：无额外人物",
+                "角色",
+            ),
+        ).toBe(false);
     });
 
     it("requires identity and spatial clarity for reference anchors", () => {
@@ -875,8 +914,8 @@ describe("drama prompt compiler", () => {
 
         expect(prompts.imagePrompt).toBe("冷色天台");
         expect(prompts.videoPrompt).not.toContain("最终识别标记");
-        expect(assetPrompt.length).toBeGreaterThan(8000);
-        expect(assetPrompt).toContain("最终识别标记");
+        expect(assetPrompt.length).toBeLessThan(3000);
+        expect(assetPrompt).not.toContain("最终识别标记");
     });
 
     it("preserves an imported project style while ignoring historical asset layout instructions", () => {
@@ -890,7 +929,8 @@ describe("drama prompt compiler", () => {
 
         const prompt = compileDramaAssetReferencePrompt(project, project.characters[0], "角色");
 
-        expect(prompt).toContain(`项目视觉风格：${project.style}`);
+        expect(prompt).toContain("项目视觉风格：VS14 中世纪史诗的学院奇幻变体");
+        expect(prompt).not.toContain("宏大空间与克制人物近景并重");
         expect(prompt).toContain("全局色彩脚本：深蓝灰、旧银、墨绿、少量暖金");
         expect(prompt).not.toContain("角色固有色彩：红黑");
         expect(prompt).toContain("短发");
@@ -942,6 +982,11 @@ describe("drama prompt compiler", () => {
 
         const westernPrompt = compileDramaAssetReferencePrompt(project, asset, "角色");
         expect(westernPrompt).toContain(`项目视觉风格：${westernCg}`);
+        expect(westernPrompt).toContain("西方西幻 CG 角色造型落地");
+        expect(westernPrompt).toContain("西欧中世纪暗黑奇幻");
+        expect(westernPrompt).toContain("禁止由角色名称或历史资产补回汉服");
+        expect(westernPrompt).toContain("角色基准板只保留纯白无缝背景，不生成场景背景");
+        expect(westernPrompt).toContain("场景背景");
         expect(westernPrompt).toContain("少年男性");
         expect(westernPrompt).toContain("黑发束起");
         expect(westernPrompt).not.toContain("黑灰窄袖长袍");
@@ -952,9 +997,29 @@ describe("drama prompt compiler", () => {
         project.productionBible = { ...project.productionBible!, visualStyle: scienceFictionCg, colorScript: "冷白、电蓝、石墨黑" };
         const scienceFictionPrompt = compileDramaAssetReferencePrompt(project, asset, "角色");
         expect(scienceFictionPrompt).toContain(`项目视觉风格：${scienceFictionCg}`);
+        expect(scienceFictionPrompt).not.toContain("西方西幻 CG 角色造型落地");
+        expect(scienceFictionPrompt).not.toContain("汉服、仙侠长袍");
         expect(scienceFictionPrompt).not.toContain(westernCg);
         expect(scienceFictionPrompt).not.toContain("黑灰窄袖长袍");
         expect(scienceFictionPrompt).not.toContain("旧银护腕");
+    });
+
+    it("keeps video-only negatives out of a character reference prompt", () => {
+        const project = createProject();
+        project.style = "西方西幻 CG 电影质感，哥特式中世纪空间";
+        project.productionBible = {
+            ...project.productionBible!,
+            visualStyle: project.style,
+            globalNegativePrompt: "站桩对白、无因果硬切、越过180度轴线、过度运动模糊、塑料皮肤",
+        };
+
+        const prompt = compileDramaAssetReferencePrompt(project, project.characters[0], "角色");
+
+        expect(prompt).not.toContain("站桩对白");
+        expect(prompt).not.toContain("无因果硬切");
+        expect(prompt).not.toContain("越过180度轴线");
+        expect(prompt).toContain("过度运动模糊");
+        expect(prompt).toContain("塑料皮肤");
     });
 
     it("recompiles cached refinement proposals with the current project style", () => {

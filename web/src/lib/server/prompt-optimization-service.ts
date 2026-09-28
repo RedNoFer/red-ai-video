@@ -15,7 +15,7 @@ import {
     DRAMA_CHARACTER_SUPPLIER_QUALITY_RULES,
     DRAMA_CHARACTER_WARDROBE_MATERIAL_RULES,
 } from "@/lib/drama-character-rules";
-import { DRAMA_CHARACTER_TURNAROUND_LABEL, DRAMA_CHARACTER_TURNAROUND_LAYOUT, DRAMA_CHARACTER_TURNAROUND_SIZE } from "@/lib/drama-prompt-compiler";
+import { DRAMA_CHARACTER_TURNAROUND_LABEL, DRAMA_CHARACTER_TURNAROUND_LAYOUT, DRAMA_CHARACTER_TURNAROUND_SIZE, formatDramaCharacterVisualContract, projectDramaCharacterModelFacts } from "@/lib/drama-prompt-compiler";
 import type { CreativeGenerationMode } from "@/lib/creative-runtime-contract";
 import { DRAMA_STATIC_FRAME_DIRECTOR_RULES, DRAMA_VIDEO_PROMPT_DIRECTOR_RULES } from "@/lib/server/agent-skills/creative-shortcuts";
 import { inferSeedance25VideoDuration, resolveSeedance25VideoPromptReferences } from "@/lib/server/agent-skills/seedance-25";
@@ -146,8 +146,9 @@ function parseOptimizedPrompt(value: string, mode: PromptOptimizationMode, sourc
         if (mode !== "drama-asset") return currentVisualPrompt && currentVisualPrompt.length <= CREATE_AGENT_PROMPT_MAX_LENGTH ? currentVisualPrompt : "";
         const fields = normalizeDramaAssetPromptFields(payload.fields, sourcePrompt);
         if (!fields) return "";
-        const normalized = enforceDramaAssetPromptContract(sourcePrompt, prompt, fields, visualContract);
-        return normalized && normalized.length <= CREATE_AGENT_PROMPT_MAX_LENGTH ? { optimizedPrompt: normalized, fields } : "";
+        const safeFields = sanitizeDramaAssetOptimizationFields(sourcePrompt, fields);
+        const normalized = enforceDramaAssetPromptContract(sourcePrompt, prompt, safeFields, visualContract);
+        return normalized && normalized.length <= CREATE_AGENT_PROMPT_MAX_LENGTH ? { optimizedPrompt: normalized, fields: safeFields } : "";
     } catch {
         return "";
     }
@@ -176,6 +177,23 @@ function extractAssetPromptField(prompt: string, label: string) {
     return match?.[1]?.trim() || "";
 }
 
+function sanitizeDramaAssetOptimizationFields(sourcePrompt: string, fields: DramaAssetPromptFields) {
+    const kind = sourcePrompt.match(/资产类型[】：:]\s*(角色|场景|道具)/u)?.[1];
+    if (kind !== "角色") return fields;
+    const projection = projectOptimizedCharacterModelFacts(fields);
+    return {
+        ...fields,
+        visualIdentity: projection.identityFacts || fields.visualIdentity,
+        styling: projection.stylingFacts || fields.styling,
+        colorPalette: projection.colorPalette || fields.colorPalette,
+        consistencyRules: [projection.consistencyFacts, DRAMA_CHARACTER_DEFAULT_CONSISTENCY].filter(Boolean).join("；"),
+    };
+}
+
+function projectOptimizedCharacterModelFacts(fields: DramaAssetPromptFields) {
+    return projectDramaCharacterModelFacts({ description: fields.visualIdentity.trim() ? "" : fields.description, profile: fields });
+}
+
 function enforceDramaAssetPromptContract(sourcePrompt: string, prompt: string, fields: DramaAssetPromptFields, visualContract?: DramaGlobalVisualContract) {
     if (!prompt) return "";
     const kind = sourcePrompt.match(/资产类型[】：:]\s*(角色|场景|道具)/u)?.[1];
@@ -186,6 +204,8 @@ function enforceDramaAssetPromptContract(sourcePrompt: string, prompt: string, f
         .map((line) => line.trim())
         .filter((line) => line && !new RegExp(`^(?:${labels.slice(3).join("|")})[：:]`, "u").test(line));
     const globalVisual = formatDramaGlobalVisualContract(visualContract);
+    const characterVisual = visualContract ? formatDramaCharacterVisualContract({ visualDescription: visualContract.visualStyle, artStyle: visualContract.artStyle, colorScript: visualContract.colorScript }) : "";
+    const effectiveGlobalVisual = kind === "角色" ? characterVisual : globalVisual;
     const defaults = [
         `主体与资产类型：${kind || "角色、场景或道具"}设定图`,
         `身份/结构锚点：${fields.visualIdentity || fields.description || "严格沿用当前资产身份与结构锚点"}`,
@@ -195,7 +215,7 @@ function enforceDramaAssetPromptContract(sourcePrompt: string, prompt: string, f
             : kind === "场景"
               ? "构图与画幅：当前项目画幅的一张高清完整单视角场景全景建立图；入口、出口、门窗、陈设、通道、支撑面、材质、光向和空间轴线清晰可读，不生成九宫格或分格。"
               : "构图与画幅：纯白无缝背景，一张完整、独立的单一道具主体基准图，完整轮廓和关键材质清晰可见。",
-        `光色与风格：${kind === "角色" ? [globalVisual, DRAMA_CHARACTER_RENDER_STYLE, DRAMA_CHARACTER_STUDIO_LIGHT_RULES, DRAMA_CHARACTER_SUPPLIER_QUALITY_RULES].filter(Boolean).join("；") : globalVisual || "严格沿用当前项目视觉风格与资产固有色彩，不新增环境或剧情元素。"}`,
+        `光色与风格：${kind === "角色" ? [effectiveGlobalVisual, DRAMA_CHARACTER_RENDER_STYLE, DRAMA_CHARACTER_STUDIO_LIGHT_RULES, DRAMA_CHARACTER_SUPPLIER_QUALITY_RULES].filter(Boolean).join("；") : effectiveGlobalVisual || "严格沿用当前项目视觉风格与资产固有色彩，不新增环境或剧情元素。"}`,
         kind === "角色"
             ? `负面约束：${DRAMA_CHARACTER_NEGATIVE_RULES}。`
             : kind === "场景"
@@ -218,9 +238,15 @@ function enforceDramaAssetPromptContract(sourcePrompt: string, prompt: string, f
         if (!existing) return line;
         if (kind === "道具" && label === "构图与画幅") return line;
         if (kind === "道具" && label === "负面约束") return line;
-        if (label !== "可见状态与材质" || kind !== "角色") return `${label}：${existing}`;
+        if (kind === "角色" && label === "身份/结构锚点") {
+            const roleProjection = projectOptimizedCharacterModelFacts(fields);
+            return `${label}：${roleProjection.identityFacts || fields.visualIdentity || existing}`;
+        }
+        if (kind !== "角色" || label !== "可见状态与材质") return `${label}：${existing}`;
+        const roleProjection = projectOptimizedCharacterModelFacts(fields);
+        const safeStyling = roleProjection.stylingFacts || fields.styling || existing;
         const quality = [DRAMA_CHARACTER_FACE_MODELING_RULES, DRAMA_CHARACTER_HAIR_MODELING_RULES, DRAMA_CHARACTER_WARDROBE_MATERIAL_RULES].filter((rule) => !existing.includes(rule.slice(0, 8))).join("；");
-        return `${label}：${existing}${quality ? `；${quality}` : ""}`;
+        return `${label}：${safeStyling}${quality ? `；${quality}` : ""}`;
     });
     return canonical.join("\n");
 }
