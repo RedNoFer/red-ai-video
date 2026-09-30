@@ -560,7 +560,8 @@ function validateStandalonePackageShape(input: Record<string, unknown>) {
             fail(path, " 缺少有效对白 ID、说话人、字数、语速或时间窗口");
         const pauseBefore = Number(planItem.pauseBeforeSeconds || 0);
         const pauseAfter = Number(planItem.pauseAfterSeconds || 0);
-        if (requiredSpeechSeconds > availableSpeechSeconds - pauseBefore - pauseAfter + 0.01) fail(path, ` 对白容量不足：requiredSpeechSeconds=${requiredSpeechSeconds}，availableSpeechSeconds=${availableSpeechSeconds}，且必须另留句前/句后停顿`);
+        if (!Number.isFinite(pauseBefore) || pauseBefore < 0 || !Number.isFinite(pauseAfter) || pauseAfter < 0) fail(path, " 句前/句后停顿必须是非负数");
+        if (requiredSpeechSeconds > availableSpeechSeconds + 0.01) fail(path, ` 对白容量不足：requiredSpeechSeconds=${requiredSpeechSeconds}，availableSpeechSeconds=${availableSpeechSeconds}`);
     }
     const narrativeBeatPlan = lock.narrativeBeatPlan as unknown[];
     if (narrativeBeatPlan.length !== logicalShotCount) fail("project.productionLock.narrativeBeatPlan", ` 必须有 ${logicalShotCount} 个独立剧情职责，不能用内部帧段或对白分句翻倍镜头`);

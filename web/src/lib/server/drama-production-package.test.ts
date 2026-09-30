@@ -86,6 +86,76 @@ function readMahadelMarkdownFixture() {
 }
 
 describe("production package boundary", () => {
+    it("does not subtract separate pauses from the utterance speech window twice", () => {
+        const source = structuredClone(productionPackage);
+        for (const shot of source.episodes[0].shots) {
+            shot.framePlan.start = { source: "independent" };
+            for (const frame of shot.framePlan.frames) frame.endPrompt = frame.imagePrompt;
+            shot.videoPrompt = canonicalVideoPrompt("### 镜头 01", "### 镜头 02");
+        }
+        const shot = source.episodes[0].shots[0];
+        shot.dialogue = "C1到C4复测，位置没动。";
+        shot.utterances = [
+            {
+                id: "D01",
+                order: 1,
+                type: "dialogue",
+                speaker: "Karin",
+                text: "C1到C4复测，位置没动。",
+                startSecond: 4,
+                endSecond: 7.04,
+                pauseBeforeSeconds: 1,
+                pauseAfterSeconds: 0.8,
+                speechRate: "沉着清晰",
+                speechRateCharsPerSecond: 4.5,
+            },
+        ];
+        source.project.productionLock = {
+            shotDuration: 15,
+            targetDuration: 30,
+            logicalShotCount: 2,
+            dialogueCapacityPlan: [
+                {
+                    dialogueId: "D01",
+                    speaker: "Karin",
+                    characterCount: 11,
+                    speechRateCharsPerSecond: 4.5,
+                    requiredSpeechSeconds: 2.44,
+                    availableSpeechSeconds: 3.04,
+                    episodeCode: "E01",
+                    shotCode: "SH01",
+                    frameId: "SH01-frame-1",
+                    pauseBeforeSeconds: 1,
+                    pauseAfterSeconds: 0.8,
+                },
+            ],
+            narrativeBeatPlan: [
+                { id: "B01", responsibility: "建立梦醒状态", shotCodes: ["SH01"] },
+                { id: "B02", responsibility: "建立接水结果", shotCodes: ["SH02"] },
+            ],
+            internalCutPolicy: "adaptive",
+            framePolicy: "agent",
+            selfCheckRuleVersion: "test",
+        } as never;
+        source.authoring = {
+            source: "codex-standalone",
+            authoringMode: "codex-standalone",
+            canonicalSource: "markdown-with-embedded-json",
+            qualityGateStatus: "passed",
+            generatedAt: "2026-09-14T00:00:00.000Z",
+            materials: [
+                { alias: "@模板", role: "package-template", type: "markdown", title: "制作包模板" },
+                { alias: "@TXT", role: "story-source", type: "text", title: "当前 TXT" },
+            ],
+            qualityGateReport: {
+                status: "passed",
+                checks: DRAMA_PACKAGE_GATE_CODES.map((code) => ({ code, status: "passed" as const, severity: "warning" as const, scope: code, evidence: "测试证据", sourceRefs: ["test"], fixHint: "" })),
+            },
+        };
+
+        expect(() => previewDramaProductionPackage(JSON.stringify(source), "standalone.json", undefined, { allowImportWarnings: true })).not.toThrow();
+    });
+
     it("records and requires Agent authoring provenance for the formal generation path", () => {
         const authored = attachDramaProductionPackageAuthoring(productionPackage, {
             source: "executeDramaScriptRun",
