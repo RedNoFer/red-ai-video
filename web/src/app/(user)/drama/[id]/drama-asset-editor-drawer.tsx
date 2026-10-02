@@ -143,10 +143,9 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
         }
         const latestRefinement = asset.refinementHistory?.at(-1)?.proposal;
         setRefinementProposal(latestRefinement);
-        // A persisted supplierPrompt may be an authored prompt from an older
-        // visual contract. It is display/history data, not a current override.
-        // The first generation after opening must use the current compiler.
-        setSupplierPromptOverride(undefined);
+        // Restore the persisted prompt for editing. Generation still compiles
+        // from the current asset facts and visual contract below.
+        setSupplierPromptOverride(asset.supplierPrompt?.trim() || undefined);
         setDraft({
             name: asset.name,
             description: asset.description,

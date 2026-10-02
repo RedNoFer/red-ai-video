@@ -69,8 +69,7 @@ test("编辑角色视觉设定后保存并恢复全部字段", async ({ page, re
         await expect(reopened.getByRole("textbox").nth(4)).toHaveValue(fields.colorPalette);
         await expect.poll(() => reopened.getByRole("textbox").nth(5).inputValue()).toContain(fields.consistencyRules);
         await reopened.getByText("实际供应商提示词（可编辑）").click();
-        await expect(reopened.getByLabel("供应商提示词")).not.toHaveValue(savedSupplierPrompt);
-        await expect(reopened.getByLabel("供应商提示词")).toHaveValue(/项目视觉风格：/);
+        await expect(reopened.getByLabel("供应商提示词")).toHaveValue(savedSupplierPrompt);
     } finally {
         const deleted = await request.delete(`/api/drama/projects/${project.id}`);
         expect(deleted.ok(), await deleted.text()).toBe(true);

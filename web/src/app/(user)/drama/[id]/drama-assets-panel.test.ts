@@ -163,6 +163,7 @@ describe("drama asset image results", () => {
         expect(editor).toContain("实际供应商提示词");
         expect(editor).not.toContain("恢复自动提示词");
         expect(editor).toContain("data-drama-supplier-prompt");
+        expect(editor).toContain("setSupplierPromptOverride(asset.supplierPrompt?.trim() || undefined)");
         expect(editor).toContain("mergeGeneratedReferenceReviews");
         expect(editor).toContain("await loadProject(project.id, true)");
         expect(editor).toContain("await saveProjectNow(project.id)");
