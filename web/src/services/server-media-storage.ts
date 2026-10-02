@@ -22,11 +22,11 @@ export async function uploadServerMedia(input: string | Blob, type: ServerMediaT
     if (blob.size > maxBytes) throw new Error(maxBytes === CREATIVE_UPLOAD_MAX_BYTES ? "单个文件不能超过 20MB" : "生成媒体文件过大");
     if (!isCreativeUploadMimeType(blob.type) || !blob.type.startsWith(`${type}/`)) throw new Error(`仅支持${type === "image" ? "图片" : type === "video" ? "视频" : "音频"}格式`);
 
-    const response = await fetch("/api/reference-assets", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type, persistent: true, dataUrl: await blobToDataUrl(blob), originalName: originalName || undefined }),
-    });
+    const formData = new FormData();
+    formData.append("file", blob, originalName || `upload.${extensionForMimeType(blob.type)}`);
+    formData.append("type", type);
+    formData.append("persistent", "true");
+    const response = await fetch("/api/reference-assets", { method: "POST", body: formData });
     const payload = (await response.json().catch(() => ({}))) as { error?: string; url?: string; token?: string; key?: string; bytes?: number; mimeType?: string };
     if (!response.ok || !payload.token) throw new Error(payload.error || "文件保存到服务器失败");
     return {
@@ -120,6 +120,21 @@ async function readExistingServerMedia(reference: ServerMediaReference, type: Se
 
 function defaultMediaMimeType(type: ServerMediaType) {
     return type === "image" ? "image/png" : type === "video" ? "video/mp4" : "audio/mpeg";
+}
+
+function extensionForMimeType(mimeType: string) {
+    if (mimeType === "image/jpeg") return "jpg";
+    if (mimeType === "image/webp") return "webp";
+    if (mimeType === "image/gif") return "gif";
+    if (mimeType === "video/webm") return "webm";
+    if (mimeType === "video/quicktime") return "mov";
+    if (mimeType.startsWith("video/")) return "mp4";
+    if (mimeType === "audio/wav" || mimeType === "audio/x-wav") return "wav";
+    if (mimeType === "audio/ogg" || mimeType === "audio/opus") return "ogg";
+    if (mimeType === "audio/aac") return "aac";
+    if (mimeType === "audio/flac") return "flac";
+    if (mimeType.startsWith("audio/")) return "mp3";
+    return "png";
 }
 
 function dataUrlToBlob(dataUrl: string) {

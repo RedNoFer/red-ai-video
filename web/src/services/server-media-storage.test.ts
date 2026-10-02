@@ -68,6 +68,9 @@ describe("server media storage", () => {
         expect(fetchMock).toHaveBeenCalledOnce();
         expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/reference-assets");
         expect(fetchMock.mock.calls[0]?.[1]?.method).toBe("POST");
+        expect(fetchMock.mock.calls[0]?.[1]?.headers).toBeUndefined();
+        expect(fetchMock.mock.calls[0]?.[1]?.body).toBeInstanceOf(FormData);
+        expect((fetchMock.mock.calls[0]?.[1]?.body as FormData).get("type")).toBe("image");
     });
 
     it("continues to copy an external url into managed storage", async () => {

@@ -207,6 +207,55 @@ test("生成候选通过真实图片任务链路完成", async ({ page, request 
     expect(submittedSizes[0]).toBe("16:9");
 });
 
+test("上传候选后立即确认主基准图不会丢失", async ({ page, request }) => {
+    const created = await request.post("/api/drama/projects", { data: { title: `E2E 上传主基准 ${Date.now()}`, ratio: "9:16" } });
+    expect(created.ok(), await created.text()).toBe(true);
+    const project = ((await created.json()) as { data: { project: DramaProject } }).data.project;
+    const characterId = "character-upload-primary-e2e";
+    const saved = await request.patch(`/api/drama/projects/${project.id}`, {
+        data: {
+            ...project,
+            characters: [{ id: characterId, name: "上传测试角色", description: "用于验证上传候选确认不丢失", profile: { visualIdentity: "固定黑发" }, references: [] }],
+        },
+    });
+    expect(saved.ok(), await saved.text()).toBe(true);
+
+    try {
+        await page.goto(`/drama/${project.id}`, { waitUntil: "domcontentloaded" });
+        await page.getByRole("button", { name: "打开项目资产" }).click();
+        await page.locator("[data-drama-assets-library] article").filter({ hasText: "上传测试角色" }).getByRole("button", { name: "编辑角色：上传测试角色" }).last().click();
+        const drawer = page.getByRole("dialog", { name: "编辑角色" });
+        await drawer.getByRole("button", { name: "上传候选" }).click();
+        await drawer.locator('input[type="file"][accept="image/*"]').setInputFiles({
+            name: "uploaded-primary.png",
+            mimeType: "image/png",
+            buffer: Buffer.from(REFERENCE_DATA_URL.split(",")[1], "base64"),
+        });
+        await expect(drawer.locator('img[alt="uploaded-primary.png"]')).toHaveCount(1);
+
+        await drawer.getByRole("button", { name: "确认主基准" }).click();
+        await expect(drawer.getByRole("button", { name: "已审核基准" })).toBeVisible();
+        await expect(drawer.locator('img[alt="上传测试角色基准图"]')).toHaveCount(1);
+        await expect(drawer.getByText("待补基准图")).toHaveCount(0);
+
+        const readback = await request.get(`/api/drama/projects/${project.id}`);
+        expect(readback.ok(), await readback.text()).toBe(true);
+        const persisted = ((await readback.json()) as { data: { project: DramaProject } }).data.project.characters.find((item) => item.id === characterId);
+        expect(persisted?.primaryReferenceId).toBeTruthy();
+        expect(persisted?.references?.find((item) => item.id === persisted.primaryReferenceId)).toMatchObject({ status: "approved", label: "uploaded-primary.png" });
+
+        await page.reload({ waitUntil: "domcontentloaded" });
+        await page.getByRole("button", { name: "打开项目资产" }).click();
+        await page.locator("[data-drama-assets-library] article").filter({ hasText: "上传测试角色" }).getByRole("button", { name: "编辑角色：上传测试角色" }).last().click();
+        const reopenedDrawer = page.getByRole("dialog", { name: "编辑角色" });
+        await expect(reopenedDrawer.locator('img[alt="上传测试角色基准图"]')).toHaveCount(1);
+        await expect(reopenedDrawer.getByText("待补基准图")).toHaveCount(0);
+    } finally {
+        const deleted = await request.delete(`/api/drama/projects/${project.id}`);
+        expect(deleted.ok(), await deleted.text()).toBe(true);
+    }
+});
+
 test("删除角色候选后刷新不会被历史生图任务恢复", async ({ page, request }) => {
     await resetProtocolFixture(request);
     const settings = await request.patch("/api/admin/settings", { data: sub2ApiImageSettingsPatch() });

@@ -3,12 +3,19 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
     getCurrentUser: vi.fn(),
     writePersistent: vi.fn(),
+    writePersistentBytes: vi.fn(),
     writeTemporary: vi.fn(),
+    writeTemporaryBytes: vi.fn(),
     createSignedUrl: vi.fn(),
 }));
 
 vi.mock("@/lib/auth/session", () => ({ getCurrentUser: mocks.getCurrentUser }));
-vi.mock("@/lib/server/reference-asset-store", () => ({ writePersistentMediaDataUrl: mocks.writePersistent, writeReferenceMediaDataUrl: mocks.writeTemporary }));
+vi.mock("@/lib/server/reference-asset-store", () => ({
+    writePersistentMediaBytes: mocks.writePersistentBytes,
+    writePersistentMediaDataUrl: mocks.writePersistent,
+    writeReferenceMediaBytes: mocks.writeTemporaryBytes,
+    writeReferenceMediaDataUrl: mocks.writeTemporary,
+}));
 vi.mock("@/lib/server/reference-asset-access", () => ({ createSignedReferenceAssetUrl: mocks.createSignedUrl }));
 
 import { POST } from "./route";
@@ -18,6 +25,7 @@ describe("reference asset upload boundary", () => {
         vi.clearAllMocks();
         mocks.getCurrentUser.mockResolvedValue({ id: "user-one" });
         mocks.writePersistent.mockResolvedValue({ token: "permanent/asset.mp4", bytes: 4, mimeType: "video/mp4", storage: "local" });
+        mocks.writePersistentBytes.mockResolvedValue({ token: "permanent/asset.png", bytes: 4, mimeType: "image/png", storage: "local" });
         mocks.createSignedUrl.mockReturnValue("https://drama.example/api/reference-assets/permanent/asset.mp4?expires=1&signature=test");
     });
 
@@ -54,6 +62,23 @@ describe("reference asset upload boundary", () => {
             key: "permanent/asset.png",
             storage: "object",
             upstreamUrl: "https://drama.example/api/reference-assets/permanent/asset.mp4?expires=1&signature=test",
+        });
+    });
+
+    it("accepts multipart uploads without requiring a base64 data url", async () => {
+        const formData = new FormData();
+        formData.append("file", new Blob(["data"], { type: "image/png" }), "candidate.png");
+        formData.append("type", "image");
+        formData.append("persistent", "true");
+
+        const response = await POST(new Request("http://localhost/api/reference-assets", { method: "POST", body: formData }));
+
+        expect(response.status).toBe(200);
+        expect(mocks.writePersistentBytes).toHaveBeenCalledWith(expect.any(Uint8Array), "image", "image/png", {
+            ownerUserId: "user-one",
+            source: "user-upload",
+            originalName: "candidate.png",
+            maxBytes: 20 * 1024 * 1024,
         });
     });
 });

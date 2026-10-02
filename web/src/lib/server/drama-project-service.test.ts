@@ -98,6 +98,7 @@ import {
     createDramaProjectForUser,
     applyDramaVisualStepResult,
     applyDramaVisualStepFailure,
+    approveDramaAssetReferenceForUser,
     compileDramaReferencePrompt,
     compileDramaVideoReferencePrompt,
     createDramaProductionRunForUser,
@@ -3025,6 +3026,30 @@ describe("drama project service updates", () => {
         expect(mocks.updateDramaProjectAssetMutation).toHaveBeenCalledWith(
             "user-one",
             expect.objectContaining({ projectId: current.id, assetKind: "characters", assetId: "character-one", asset: expect.objectContaining({ id: "character-one", description: "更新身份" }) }),
+        );
+    });
+
+    it("approves a candidate through the asset mutation without rewriting the project snapshot", async () => {
+        const current = project("2026-07-19T08:00:01.000Z", "项目");
+        current.characters = [
+            {
+                id: "character-one",
+                name: "主角",
+                description: "身份",
+                profile: { visualIdentity: "外貌" },
+                references: [{ id: "candidate-one", url: "/api/reference-assets/candidate.png", source: "upload", label: "候选", createdAt: "2026-07-19T08:00:00.000Z" }],
+            },
+        ] as never;
+        mocks.getDramaProject.mockResolvedValue(current);
+
+        const saved = await approveDramaAssetReferenceForUser("user-one", current.id, "characters", "character-one", "candidate-one");
+
+        expect(saved.updatedAt).toBe("2026-09-15T00:00:01.000Z");
+        expect(saved.characters[0]).toMatchObject({ primaryReferenceId: "candidate-one", referenceImageUrl: "/api/reference-assets/candidate.png" });
+        expect(mocks.updateDramaProject).not.toHaveBeenCalled();
+        expect(mocks.updateDramaProjectAssetMutation).toHaveBeenCalledWith(
+            "user-one",
+            expect.objectContaining({ projectId: current.id, assetKind: "characters", assetId: "character-one", expectedUpdatedAt: current.updatedAt, asset: expect.objectContaining({ primaryReferenceId: "candidate-one" }) }),
         );
     });
 

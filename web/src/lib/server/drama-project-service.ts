@@ -1166,7 +1166,21 @@ export async function approveDramaAssetReferenceForUser(userId: string, id: stri
         updatedAt: nextTimestamp(current.updatedAt),
     };
     try {
-        return await updateDramaProject(userId, normalizeProject(nextProject, current), current.updatedAt);
+        const normalizedProject = normalizeProject(nextProject, current);
+        const nextAsset = normalizedProject[kind].find((item) => item.id === assetId);
+        if (!nextAsset) throw new DramaProjectServiceError("项目资产不存在，请刷新后重试", 404);
+        const saved = await updateDramaProjectAssetMutation(userId, {
+            projectId: current.id,
+            assetKind: kind,
+            assetId,
+            asset: nextAsset,
+            expectedUpdatedAt: current.updatedAt,
+        });
+        return {
+            ...current,
+            [kind]: current[kind].map((item) => (item.id === assetId ? saved.asset : item)),
+            updatedAt: saved.updatedAt,
+        };
     } catch (error) {
         if (error instanceof DramaProjectStoreError) throw new DramaProjectServiceError(error.message, error.status);
         throw error;
@@ -1183,6 +1197,8 @@ export async function updateDramaAssetForUser(userId: string, id: string, kind: 
     const markShotsStale = input.markShotsStale !== false;
     const incomingProfile = object(input.profile);
     const incomingSupplierPrompt = typeof input.supplierPrompt === "string" ? optionalText(input.supplierPrompt) : undefined;
+    const hasReferencesPatch = Object.prototype.hasOwnProperty.call(input, "references");
+    const incomingReferences = hasReferencesPatch ? normalizeAssetReferences(input.references, asset.id, asset.referenceImageUrl, asset.referenceStorageKey) : undefined;
     const assetKind = kind === "characters" ? "角色" : kind === "scenes" ? "场景" : "道具";
     const synchronizedPromptFields =
         incomingSupplierPrompt && hasDramaAssetPromptQuality(incomingSupplierPrompt, assetKind)
@@ -1198,6 +1214,9 @@ export async function updateDramaAssetForUser(userId: string, id: string, kind: 
         ...(typeof input.name === "string" ? { name: cleanText(input.name) } : {}),
         ...(typeof input.description === "string" ? { description: cleanText(input.description) } : {}),
         ...(typeof input.supplierPrompt === "string" ? { supplierPrompt: incomingSupplierPrompt } : {}),
+        ...(hasReferencesPatch ? { references: incomingReferences } : {}),
+        ...(Object.prototype.hasOwnProperty.call(input, "deletedReferenceIds") ? { deletedReferenceIds: ids(input.deletedReferenceIds) } : {}),
+        ...(Object.prototype.hasOwnProperty.call(input, "primaryReferenceId") ? { primaryReferenceId: optionalText(input.primaryReferenceId) } : {}),
         ...(Object.keys(incomingProfile).length || synchronizedPromptFields
             ? {
                   profile: {

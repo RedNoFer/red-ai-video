@@ -72,6 +72,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
     const handledGenerationTaskIdsRef = useRef(new Set<string>());
     const [draft, setDraft] = useState<AssetDraft>(emptyDraft);
     const [uploading, setUploading] = useState(false);
+    const [savingReferences, setSavingReferences] = useState(false);
     const [generating, setGenerating] = useState(false);
     const [generationStatusLoading, setGenerationStatusLoading] = useState(false);
     const [saving, setSaving] = useState(false);
@@ -290,7 +291,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
     };
 
     const setPrimaryReference = async (reference: DramaAssetReference) => {
-        if (!asset) return;
+        if (!asset || uploading || savingReferences) return;
         try {
             const savedProject = await approveDramaAssetReference(project.id, kind, asset.id, reference.id);
             replaceProject(savedProject);
@@ -411,16 +412,16 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
         message.info("已回填审核建议，你可以继续修改后再生成调整方案");
     };
 
-    const appendReferences = (item: DramaNamedAsset, added: DramaAssetReference[]) => {
-        updateAsset(
-            project.id,
-            kind,
-            item.id,
-            {
-                references: ensureUniqueDramaAssetReferenceIds([...dramaAssetReferences(item), ...added]),
-            },
-            { markShotsStale: false },
-        );
+    const appendReferences = async (item: DramaNamedAsset, added: DramaAssetReference[]) => {
+        const nextReferences = ensureUniqueDramaAssetReferenceIds([...dramaAssetReferences(item), ...added]);
+        updateAsset(project.id, kind, item.id, { references: nextReferences }, { markShotsStale: false });
+        setSavingReferences(true);
+        try {
+            const savedProject = await saveAssetNow(project.id, kind, item.id, { references: nextReferences, markShotsStale: false });
+            replaceProject(savedProject);
+        } finally {
+            setSavingReferences(false);
+        }
     };
 
     const appendSourceReference = (source: NonNullable<DramaProject["sourceAssets"]>[number]) => {
@@ -431,7 +432,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
             message.info("这张来源图片已经在候选中");
             return;
         }
-        appendReferences(asset, [
+        void appendReferences(asset, [
             {
                 id: `reference-${nanoid()}`,
                 url,
@@ -442,8 +443,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                 height: source.height,
                 createdAt: new Date().toISOString(),
             },
-        ]);
-        message.success("来源图片已加入候选，请确认主基准图");
+        ]).then(() => message.success("来源图片已加入候选，请确认主基准图")).catch((error) => message.error(error instanceof Error ? error.message : "来源图片保存失败"));
     };
 
     const removeReference = (referenceId: string) => {
@@ -472,7 +472,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
         setUploading(true);
         try {
             const stored = await uploadImage(file);
-            appendReferences(asset, [
+            await appendReferences(asset, [
                 {
                     id: `reference-${nanoid()}`,
                     url: stored.serverUrl || stored.url,
@@ -1098,7 +1098,8 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                                                         type="button"
                                                         className={`flex min-w-0 flex-1 items-center justify-center gap-1 px-2 text-xs font-medium transition ${isPrimary ? "bg-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
                                                         style={isPrimary ? { color: "var(--background)" } : undefined}
-                                                        onClick={() => setPrimaryReference(reference)}
+                                                        onClick={() => void setPrimaryReference(reference)}
+                                                        disabled={uploading || savingReferences}
                                                         aria-pressed={isPrimary}
                                                     >
                                                         {isPrimary ? <Check className="size-3.5" style={{ color: "var(--background)" }} /> : null}
