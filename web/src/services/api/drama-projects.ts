@@ -228,11 +228,11 @@ export function previewDramaProductionPackage(projectId: string, source: string,
     }).then((data) => data.preview);
 }
 
-export function applyDramaProductionPackage(project: DramaProject, preview: DramaProductionPackagePreview, source: string, fileName: string) {
+export function applyDramaProductionPackage(project: DramaProject, preview: DramaProductionPackagePreview, source: string, fileName: string, episodeImportMode: "replace" | "merge" = "replace") {
     return request<{ project: DramaProject }>(`/api/drama/projects/${encodeURIComponent(project.id)}/production-package`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "apply", source, fileName, sourceHash: preview.sourceHash }),
+        body: JSON.stringify({ action: "apply", source, fileName, sourceHash: preview.sourceHash, episodeImportMode }),
     }).then((data) => data.project);
 }
 

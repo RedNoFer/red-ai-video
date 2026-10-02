@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { App, Button, Input, Modal, Pagination } from "antd";
+import { App, Button, Input, Modal, Pagination, Radio } from "antd";
 import { BookOpenText, Download, FileJson2, FileText, PackageOpen, Search, TriangleAlert, Upload } from "lucide-react";
 
 import type { DramaProductionPackagePreview } from "@/lib/drama-project-contract";
@@ -32,6 +32,7 @@ export function DramaSourceImport({ project, onImported }: { project: DramaProje
     const [packageImportOpen, setPackageImportOpen] = useState(false);
     const [packagePreview, setPackagePreview] = useState<DramaProductionPackagePreview>();
     const [previewingPackage, setPreviewingPackage] = useState(false);
+    const [packageImportMode, setPackageImportMode] = useState<"replace" | "merge">("merge");
     const applyingPackageRef = useRef(false);
     const open = drafts.length > 0;
     const downloadPackage = (format: "json" | "markdown") => {
@@ -127,6 +128,7 @@ export function DramaSourceImport({ project, onImported }: { project: DramaProje
         setPackageFileName("");
         setPackageDraft("");
         setPackagePreview(undefined);
+        setPackageImportMode("merge");
     };
 
     const confirmPackage = async (warningsConfirmed = false) => {
@@ -146,12 +148,13 @@ export function DramaSourceImport({ project, onImported }: { project: DramaProje
         applyingPackageRef.current = true;
         setImporting(true);
         try {
-            const nextProject = await applyDramaProductionPackage(project, packagePreview, packageSource, packageFileName);
+            const nextProject = await applyDramaProductionPackage(project, packagePreview, packageSource, packageFileName, packageImportMode);
             replaceProject(nextProject);
             setPackageSource("");
             setPackageFileName("");
             setPackageDraft("");
             setPackagePreview(undefined);
+            setPackageImportMode("merge");
             onImported();
             message.success(`已导入 ${packagePreview.summary.shots} 个导演镜头，制作参数和连续性关系已保留`);
         } catch (error) {
@@ -330,6 +333,19 @@ export function DramaSourceImport({ project, onImported }: { project: DramaProje
                             <PackageFact label="连续性" value={packagePreview.package.project.productionBible.continuityMode === "strict" ? "连续性优先" : "平衡模式"} />
                             <PackageFact label="字段策略" value="人工编辑 > 制作包 > AI 补全" />
                             <PackageFact label="格式版本" value={packagePreview.package.archive?.formatVersion || "基础制作包 v1"} />
+                        </div>
+                        <div className="rounded-md border border-border bg-muted/20 px-3 py-2.5 text-xs">
+                            <div className="font-medium text-foreground">集数导入方式</div>
+                            <Radio.Group
+                                className="mt-2"
+                                value={packageImportMode}
+                                onChange={(event) => setPackageImportMode(event.target.value)}
+                                options={[
+                                    { label: "按集代码合并/更新（适合 6 个大集包依次导入）", value: "merge" },
+                                    { label: "整体替换当前项目集数", value: "replace" },
+                                ]}
+                            />
+                            <div className="mt-1 text-muted-foreground">合并模式会按 `episodes[].code` 更新同名大集，并保留其他已导入大集。</div>
                         </div>
                         <div className="flex flex-wrap gap-2">
                             <Button size="small" icon={<Download className="size-3.5" />} onClick={() => downloadPackage("json")}>

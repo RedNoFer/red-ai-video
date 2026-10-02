@@ -87,6 +87,8 @@ export type DramaProductionPackageNormalizationOptions = {
     importWarnings?: string[];
     authoringSources?: import("@/lib/drama-project-contract").DramaAuthoringSourceSnapshot[];
     targetNarrativeChapter?: number | string;
+    /** Merge incoming project-level episodes by code instead of replacing the project episode list. */
+    episodeImportMode?: "replace" | "merge";
 };
 
 /**
@@ -276,9 +278,18 @@ export function applyDramaProductionPackage(project: DramaProject, source: Drama
     const props = mergeAssets(assetPromptProject.props, productionPackage.assets.props, "prop", assetPromptProject, "道具");
     const clues = mergeAssets(assetPromptProject.clues, productionPackage.assets.clues, "clue");
     const episodeByCode = new Map(project.episodes.flatMap((episode) => (episode.code ? [[episode.code, episode] as const] : [])));
-    const episodes = productionPackage.episodes.map((episodePackage, index) =>
-        mergeEpisode(episodeByCode.get(episodePackage.code) || (episodePackage.code ? undefined : project.episodes[index]), episodePackage, characters.ids, locations.ids, props.ids, clues.ids, project.defaultVideoMode),
+    const incomingEpisodes = productionPackage.episodes.map((episodePackage, index) =>
+        mergeEpisode(
+            episodeByCode.get(episodePackage.code) || (episodePackage.code ? undefined : project.episodes[index]),
+            episodePackage,
+            characters.ids,
+            locations.ids,
+            props.ids,
+            clues.ids,
+            project.defaultVideoMode,
+        ),
     );
+    const episodes = options.episodeImportMode === "merge" ? mergeProjectEpisodes(project.episodes, incomingEpisodes) : incomingEpisodes;
     return {
         ...project,
         title: preferred(project.title, project.fieldOrigins, "title", projectPatch.title),
@@ -294,10 +305,31 @@ export function applyDramaProductionPackage(project: DramaProject, source: Drama
         scenes: locations.items,
         props: props.items,
         clues: clues.items.map((item) => ({ ...item, payoff: "payoff" in item ? String(item.payoff || "") : "" })),
-        activeEpisodeId: episodes[0]?.id,
+        activeEpisodeId: incomingEpisodes[0]?.id || project.activeEpisodeId || episodes[0]?.id,
         episodes,
         sourceAssets,
     };
+}
+
+function mergeProjectEpisodes(existing: DramaEpisode[], incoming: DramaEpisode[]) {
+    const result = [...existing];
+    const byCode = new Map(result.flatMap((episode, index) => (episode.code ? [[episode.code, index] as const] : [])));
+    incoming.forEach((episode, index) => {
+        const existingIndex = episode.code ? byCode.get(episode.code) : undefined;
+        if (existingIndex !== undefined) {
+            result[existingIndex] = episode;
+            return;
+        }
+        const emptyPlaceholderIndex = index === 0 ? result.findIndex((candidate) => !candidate.code && !candidate.script.trim() && !candidate.shots.length) : -1;
+        if (emptyPlaceholderIndex >= 0) {
+            result[emptyPlaceholderIndex] = episode;
+            if (episode.code) byCode.set(episode.code, emptyPlaceholderIndex);
+            return;
+        }
+        byCode.set(episode.code || `__incoming_${index}`, result.length);
+        result.push(episode);
+    });
+    return result;
 }
 
 export function attachDramaProductionPackageAuthoring<T extends DramaProductionPackageV1>(value: T, authoring: DramaProductionPackageAuthoring): T {
@@ -560,7 +592,8 @@ function validateStandalonePackageShape(input: Record<string, unknown>) {
             fail(path, " 缺少有效对白 ID、说话人、字数、语速或时间窗口");
         const pauseBefore = Number(planItem.pauseBeforeSeconds || 0);
         const pauseAfter = Number(planItem.pauseAfterSeconds || 0);
-        if (requiredSpeechSeconds > availableSpeechSeconds - pauseBefore - pauseAfter + 0.01) fail(path, ` 对白容量不足：requiredSpeechSeconds=${requiredSpeechSeconds}，availableSpeechSeconds=${availableSpeechSeconds}，且必须另留句前/句后停顿`);
+        if (!Number.isFinite(pauseBefore) || pauseBefore < 0 || !Number.isFinite(pauseAfter) || pauseAfter < 0) fail(path, " 句前/句后停顿必须是非负数");
+        if (requiredSpeechSeconds > availableSpeechSeconds + 0.01) fail(path, ` 对白容量不足：requiredSpeechSeconds=${requiredSpeechSeconds}，availableSpeechSeconds=${availableSpeechSeconds}`);
     }
     const narrativeBeatPlan = lock.narrativeBeatPlan as unknown[];
     if (narrativeBeatPlan.length !== logicalShotCount) fail("project.productionLock.narrativeBeatPlan", ` 必须有 ${logicalShotCount} 个独立剧情职责，不能用内部帧段或对白分句翻倍镜头`);
@@ -766,7 +799,11 @@ function normalizeProductionPackage(value: unknown, options: DramaProductionPack
     };
     if (options.requireAuthoringQuality) validateStrictAuthoringQuality(result, authoring, options);
     validateProductionPackageCompleteness(result, normalizationOptions);
-    if (normalizationOptions.enforceExecutionContract) validateProductionPackageExecutionContract(result);
+    if (normalizationOptions.enforceExecutionContract)
+        validateProductionPackageExecutionContract(result, {
+            allowImportWarnings: options.allowImportWarnings,
+            importWarnings: options.importWarnings,
+        });
     if (!normalizationOptions.standaloneImport) validateSplitShotFramePlans(currentStyleEpisodes, options.allowImportWarnings);
     return result;
 }
@@ -874,7 +911,10 @@ function restylePackageArchive(archive: DramaProductionPackageV1["archive"], pro
     };
 }
 
-function validateProductionPackageExecutionContract(value: DramaProductionPackageV1) {
+function validateProductionPackageExecutionContract(
+    value: DramaProductionPackageV1,
+    options: { allowImportWarnings?: boolean; importWarnings?: string[] } = {},
+) {
     const issues: string[] = [];
     for (const episode of value.episodes) {
         for (const shot of episode.shots) {
@@ -891,7 +931,13 @@ function validateProductionPackageExecutionContract(value: DramaProductionPackag
             if (!hasCompleteDramaLightingPlan(shot.lightingPlan)) issues.push(`${label} lightingPlan 必须完整填写当前 canonical 字段`);
         }
     }
-    if (issues.length) throw new DramaProductionPackageError(`制作包执行字段契约未通过：${issues.slice(0, 12).join("；")}`);
+    if (!issues.length) return;
+    const message = `制作包执行字段契约提醒：${issues.slice(0, 12).join("；")}；当前允许继续导入，后续镜头生成前可补齐。`;
+    if (options.allowImportWarnings) {
+        options.importWarnings?.push(message);
+        return;
+    }
+    throw new DramaProductionPackageError(`制作包执行字段契约未通过：${issues.slice(0, 12).join("；")}`);
 }
 
 function validateStrictAuthoringQuality(value: DramaProductionPackageV1, authoring: DramaProductionPackageAuthoring | undefined, options: DramaProductionPackageNormalizationOptions) {

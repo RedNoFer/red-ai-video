@@ -1275,6 +1275,7 @@ export async function applyDramaProductionPackageForUser(userId: string, id: str
         project = applyDramaProductionPackage(current, preview.package, preview.sourceHash, cleanText(input.source), cleanText(input.fileName) || "production-package.md", {
             allowImportWarnings: true,
             ...(preview.package.authoring?.authoringMode === "codex-standalone" ? { validatedStandalonePackage: true } : {}),
+            episodeImportMode: input.episodeImportMode === "merge" ? "merge" : "replace",
         });
     } catch (error) {
         if (error instanceof DramaProductionPackageError) throw new DramaProjectServiceError(error.message, 400);

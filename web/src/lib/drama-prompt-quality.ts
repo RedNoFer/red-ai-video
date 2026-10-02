@@ -17,7 +17,7 @@ const GENERIC_DETAIL_PATTERNS = [
     /^推动当前镜头行动并回应对手或环境$/u,
 ];
 const WEAK_VIDEO_DETAIL_PATTERNS = [/^保持本镜可见反应$/u, /^保持可读的具体反应$/u, /(?:眉眼|表情|呼吸).*(?:随|根据).*(?:变化|推进|触发).*(?:可见变化)/u, /^(?:准备回应|承受(?:压力)?|情绪(?:逐步)?加剧|保持状态|自然反应)$/u];
-const CONCRETE_CAMERA_PATTERN = /固定机位|锁定机位|推(?:进|近|镜)|拉(?:远|镜)|摇镜|横移|跟拍|滑轨|环绕|吊臂|升降|手持|变焦|俯拍|仰拍|平视|低机位|高机位|中景|近景|特写|远景/u;
+const CONCRETE_CAMERA_PATTERN = /固定机位|锁定机位|锁定|推(?:进|近|镜)|短推|拉(?:远|镜)|摇镜|横移|跟拍|跟随(?:移动|视线)|下压|滑轨|环绕|吊臂|升降|手持|变焦|俯拍|仰拍|平视|低机位|高机位|中景|近景|特写|远景/u;
 const OBSERVABLE_DRAMA_DETAIL_PATTERN = /眉|眼|目光|视线|嘴角|下颌|呼吸|肩|背|身体|重心|手|指|掌|站|坐|抬|低|转|握|松|触|器物|容器|纸张|文字|纸|桌|案|地面|水面|光线|影子|门|墙|尘|衣袍|NPC|背景角色|配角|旁观者|人群|开口|说|重音|停顿|语速|语气/u;
 const NPC_SEGMENT_PATTERN = /NPC群像\s*[：:]\s*(\d+)\s*名\s*[；;]\s*分布\s*[：:]\s*前景\s*(\d+)\s*名\s*[、,，]\s*中景\s*(\d+)\s*名\s*[、,，]\s*后景\s*(\d+)\s*名\s*[；;]\s*密度\s*[：:]\s*([^；;\n]+)\s*[；;]\s*反应\s*[：:]\s*([^\n]+)/u;
 const NPC_SLOT_SEGMENT_PATTERN = /NPC(?:连续性|槽位|群像槽位)\s*[：:]\s*可见槽位\s*[：:]\s*([^；;\n]+)\s*[；;]\s*(?:世界锚点|空间锚点|锚点)\s*[：:]\s*([^；;\n]+)\s*[；;]\s*(?:状态变化|可见反应|反应)\s*[：:]\s*([^\n]+)/u;
@@ -27,7 +27,7 @@ const CAMERA_CUT_EVENT_PATTERN = /镜头事件\s*[：:]/u;
 const ACTIVE_CAMERA_CUT_PATTERN = /硬切|镜头切换|Camera\s+cut\s+to|Cut\s+to/iu;
 const VIDEO_CARD_HEADER = /^###\s*镜头\s*(\d+)\s*\|([^\n]+)$/gmu;
 const VIDEO_CARD_FIELDS = ["场景", "画面内容", "光影", "色调", "台词", "人声", "音效"] as const;
-const VIDEO_CARD_CAMERA_TERMS = /平视|俯视|俯拍|仰视|仰拍|正面|侧面|侧[0-9一二三四五六七八九十]+度|过肩|入口侧|低机位|高机位|顶视|跟随视线/u;
+const VIDEO_CARD_CAMERA_TERMS = /平视|俯视|俯拍|仰视|仰拍|正面|侧面|侧[0-9一二三四五六七八九十]+度|过肩|入口侧|低机位|高机位|顶视|顶侧|跟随视线/u;
 const VIDEO_CARD_LENS_TERMS = /\d+(?:\.\d+)?\s*mm|广角|标准焦段|长焦|变形宽银幕/u;
 const DIRECT_DIALOGUE_IN_VISUAL_PATTERN = /(?:对白表演|(?:画外|内心声)?[^；：\n]{0,20}(?:说|道|问|喊|答|继续说|声音落下)\s*[：:]\s*[“"][^”\n]+[”"]|[“"][^”"\n]{2,}[”"])/u;
 const CAUSAL_TRIGGER_PATTERN = /因|因为|由于|听见|看见|发现|面对|遭到|受到|被|在[^。；\n]{0,20}后|话音|声音|风声|对白|说完|回应|接住|触到|压住|握住|拦住|撞上|落下|逼近|传来|为了|当[^。；\n]{0,20}时|承接/u;
@@ -177,7 +177,8 @@ export function validateDramaVideoPromptCardLayout(value: unknown, frames: Reado
         for (const field of VIDEO_CARD_FIELDS) if (!extractVideoCardField(card.raw, field)) errors.push(`${label}${cardLabel}缺少“${field}”字段`);
         if (!card.scene || !card.visual || isGenericDramaDetail(card.visual)) errors.push(`${label}${cardLabel}的画面内容必须写出可见进行中动作，不能使用空泛占位词`);
         if (DIRECT_DIALOGUE_IN_VISUAL_PATTERN.test(card.visual)) errors.push(`${label}${cardLabel}的画面内容不得包含完整对白或说话人台词指令；只写可见口型、呼吸和表演，完整台词只能放在“台词”字段`);
-        if (card.dialogue && card.dialogue !== "无" && !hasQuotedDramaDialogue(card.dialogue)) errors.push(`${label}${cardLabel}的台词必须使用“说话人说：“实际台词””格式`);
+        const normalizedDialogue = card.dialogue.replace(/[。！？!?；;，,]+$/gu, "").trim();
+        if (card.dialogue && normalizedDialogue !== "无" && !hasQuotedDramaDialogue(card.dialogue)) errors.push(`${label}${cardLabel}的台词必须使用“说话人说：“实际台词””格式`);
         if (expectedFrames[index] && !dramaTimeRangePattern(expectedFrames[index].startSecond, expectedFrames[index].endSecond).test(card.timeRange))
             errors.push(`${label}${cardLabel}的时间范围未对应 framePlan 的 ${expectedFrames[index].startSecond}-${expectedFrames[index].endSecond}s`);
     }

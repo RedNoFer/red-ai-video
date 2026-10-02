@@ -86,6 +86,15 @@ function readMahadelMarkdownFixture() {
 }
 
 describe("production package boundary", () => {
+    it("accepts the current standalone Codex production package artifact", () => {
+        const source = readFileSync(new URL("../../../../docs/generated/codex-standalone-零坐标岛-第1集-30s制作包.md", import.meta.url), "utf8");
+        const preview = previewDramaProductionPackage(source, "codex-standalone-零坐标岛-第1集-30s制作包.md", undefined, { allowImportWarnings: true, enforceExecutionContract: true });
+
+        expect(preview.package.authoring?.authoringMode).toBe("codex-standalone");
+        expect(preview.package.episodes).toHaveLength(1);
+        expect(preview.package.project.productionBible.productionPlan?.version).toBe("drama-production-plan-v1");
+    });
+
     it("records and requires Agent authoring provenance for the formal generation path", () => {
         const authored = attachDramaProductionPackageAuthoring(productionPackage, {
             source: "executeDramaScriptRun",
@@ -928,6 +937,18 @@ describe("production package boundary", () => {
         expect(() => previewDramaProductionPackage(JSON.stringify(source), "package.json", undefined, { enforceExecutionContract: true })).toThrow("小墨式");
     });
 
+    it("keeps executable-contract gaps as import warnings when warning-tolerant import is enabled", () => {
+        const source = structuredClone(productionPackage);
+        for (const shot of source.episodes[0].shots) {
+            shot.videoPrompt = canonicalVideoPrompt("### 镜头 01-帧01", "### 镜头 02-帧02");
+            shot.lightingPlan = completeLightingPlan();
+        }
+
+        const preview = previewDramaProductionPackage(JSON.stringify(source), "package.json", undefined, { allowImportWarnings: true, enforceExecutionContract: true });
+
+        expect((preview.importWarnings || []).some((warning) => warning.includes("制作包执行字段契约提醒"))).toBe(true);
+    });
+
     it("requires the same per-utterance speechRate used by generation preflight", () => {
         const source = structuredClone(productionPackage);
         for (const shot of source.episodes[0].shots) {
@@ -1313,6 +1334,27 @@ describe("production package boundary", () => {
         expect(second.sourceAssets?.at(-1)).toMatchObject({ type: "text", title: "制作包 package.json", textContent: "hash-two" });
         expect(second.episodes[0].reviewStatus).toBe("visual_ready");
         expect(second.productionArchive).toEqual(productionPackage.archive);
+    });
+
+    it("merges project-level packages by episode code without dropping earlier packages", () => {
+        const first = applyDramaProductionPackage(project(), productionPackage, "hash-merge-one", undefined, "big-episode-01.json", { episodeImportMode: "merge" });
+        const firstEpisodeId = first.episodes[0].id;
+        const secondPackage = structuredClone(productionPackage);
+        secondPackage.episodes[0].code = "E02";
+        secondPackage.episodes[0].title = "第二大集";
+
+        const merged = applyDramaProductionPackage(first, secondPackage, "hash-merge-two", undefined, "big-episode-02.json", { episodeImportMode: "merge" });
+
+        expect(merged.episodes).toHaveLength(2);
+        expect(merged.episodes[0]).toMatchObject({ code: "E01", id: firstEpisodeId });
+        expect(merged.episodes[1]).toMatchObject({ code: "E02", title: "第二大集" });
+
+        const updatedFirst = structuredClone(productionPackage);
+        updatedFirst.episodes[0].title = "第一大集（修订版）";
+        const updated = applyDramaProductionPackage(merged, updatedFirst, "hash-merge-one-revised", undefined, "big-episode-01-revised.json", { episodeImportMode: "merge" });
+        expect(updated.episodes).toHaveLength(2);
+        expect(updated.episodes[0]).toMatchObject({ code: "E01", id: firstEpisodeId, title: "第一大集（修订版）" });
+        expect(updated.episodes[1].code).toBe("E02");
     });
 
     it("uses the current project visual contract instead of an imported package style", () => {
