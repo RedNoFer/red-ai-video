@@ -10,6 +10,7 @@ import type {
     DramaContentAnalysis,
     DramaEpisode,
     DramaProject,
+    DramaProjectAssetUpdate,
     DramaProjectSummary,
     DramaProductionArchive,
     DramaProp,
@@ -88,7 +89,7 @@ type DramaStore = {
     applyVisualAnalysis: (projectId: string, episodeId: string, analysis: DramaVisualAnalysis) => void;
     applyReviewCompletion: (projectId: string, episodeId: string, analysis: DramaReviewCompletion) => void;
     applyContinuitySuggestion: (projectId: string, episodeId: string, analysis: DramaReviewCompletion) => void;
-    replaceProject: (project: DramaProject) => void;
+    replaceProject: (project: DramaProject | DramaProjectAssetUpdate) => void;
     beginVideoPrompt: (projectId: string, episodeId: string, shotId: string) => boolean;
     finishVideoPrompt: (projectId: string, episodeId: string, shotId: string) => void;
     createVersion: (project: DramaProject, reason: string) => Promise<void>;
@@ -462,8 +463,11 @@ export const useDramaStore = create<DramaStore>((set, get) => ({
         let saved: DramaProject | undefined;
         const operation = (previous ? previous.catch(() => undefined) : Promise.resolve()).then(async () => {
             assertCurrent(session);
-            saved = await saveDramaAsset(projectId, kind, assetId, patch);
+            const update = await saveDramaAsset(projectId, kind, assetId, patch);
             assertCurrent(session);
+            const current = get().projects.find((item) => item.id === projectId);
+            if (!current) throw new Error("短剧项目不存在");
+            saved = { ...current, ...update };
             set((state) => ({
                 projects: state.projects.map((item) => (item.id === projectId ? saved! : item)),
                 summaries: upsertSummary(state.summaries, saved!),
@@ -751,7 +755,13 @@ export const useDramaStore = create<DramaStore>((set, get) => ({
                 ),
             };
         }),
-    replaceProject: (project) => set((state) => ({ projects: state.projects.map((item) => (item.id === project.id ? project : item)), summaries: upsertSummary(state.summaries, project) })),
+    replaceProject: (project) =>
+        set((state) => {
+            const current = state.projects.find((item) => item.id === project.id);
+            if (!current) return state;
+            const merged = { ...current, ...project };
+            return { projects: state.projects.map((item) => (item.id === project.id ? merged : item)), summaries: upsertSummary(state.summaries, merged) };
+        }),
     beginVideoPrompt: (projectId, episodeId, shotId) => {
         const key = dramaVideoPromptRunKey(projectId, episodeId, shotId);
         let started = false;

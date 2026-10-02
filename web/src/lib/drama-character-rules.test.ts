@@ -22,6 +22,13 @@ describe("drama character quality contract", () => {
         expect(second).toEqual(first);
     });
 
+    it("keeps a renamed identity stable on the first save and subsequent reads", () => {
+        const original = normalizeDramaCharacterProfile({ visualIdentity: "固定黑发", styling: "制服", colorPalette: "灰色", consistencyRules: "五官一致" }, "年轻女性", "上传测试角色");
+        const renamed = normalizeDramaCharacterProfile(original, "年轻女性", "保存后的上传测试角色");
+        expect(renamed.visualIdentity).not.toContain("；上传测试角色的脸型");
+        expect(normalizeDramaCharacterProfile(renamed, "年轻女性", "保存后的上传测试角色")).toEqual(renamed);
+    });
+
     it("does not promote narrative description into the character visual identity", () => {
         const profile = normalizeDramaCharacterProfile(undefined, "少年；黑发束起；由被审判的沉默转成冷肃反击；以血手契约承担父亲名声", "萧炎");
 

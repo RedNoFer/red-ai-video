@@ -9,6 +9,7 @@ import type {
     DramaProductionPlan,
     DramaProductionRun,
     DramaProject,
+    DramaProjectAssetUpdate,
     DramaVideoPromptAnalysis,
     DramaProjectSummary,
     DramaProjectVersion,
@@ -121,9 +122,9 @@ export function reviewDramaAssetCandidates(projectId: string, kind: "characters"
 }
 
 export function approveDramaAssetReference(projectId: string, kind: "characters" | "scenes" | "props" | "clues", assetId: string, referenceId: string) {
-    return request<{ project: DramaProject }>(`/api/drama/projects/${encodeURIComponent(projectId)}/assets/${kind}/${encodeURIComponent(assetId)}/primary`, {
+    return request<{ project: DramaProjectAssetUpdate }>(`/api/drama/projects/${encodeURIComponent(projectId)}/assets/${kind}/${encodeURIComponent(assetId)}/primary`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-Drama-Response": "asset-update" },
         body: JSON.stringify({ referenceId }),
     }).then((data) => data.project);
 }
@@ -148,9 +149,9 @@ export function saveDramaProject(project: DramaProject) {
 }
 
 export function saveDramaAsset(projectId: string, kind: "characters" | "scenes" | "props" | "clues", assetId: string, patch: unknown) {
-    return request<{ project: DramaProject }>(`/api/drama/projects/${encodeURIComponent(projectId)}/assets/${kind}/${encodeURIComponent(assetId)}`, {
+    return request<{ project: DramaProjectAssetUpdate }>(`/api/drama/projects/${encodeURIComponent(projectId)}/assets/${kind}/${encodeURIComponent(assetId)}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-Drama-Response": "asset-update" },
         body: JSON.stringify(patch),
     }).then((data) => data.project);
 }

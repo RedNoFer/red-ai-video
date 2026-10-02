@@ -56,7 +56,10 @@ export async function PATCH(request: Request, context: Context) {
     try {
         const { id, kind, assetId } = await context.params;
         const project = await updateDramaAssetForUser(user.id, id, kind, assetId, parsed.data);
-        return NextResponse.json({ code: 0, data: { project }, msg: "资产设定已保存" });
+        const { updatedAt, characters, scenes, props, clues, episodes } = project;
+        const includeShots = !(parsed.data && typeof parsed.data === "object" && "markShotsStale" in parsed.data && parsed.data.markShotsStale === false);
+        const responseProject = request.headers.get("X-Drama-Response") === "asset-update" ? { id, updatedAt, characters, scenes, props, clues, ...(includeShots ? { episodes } : {}) } : project;
+        return NextResponse.json({ code: 0, data: { project: responseProject }, msg: "资产设定已保存" });
     } catch (error) {
         const status = error instanceof DramaProjectServiceError ? error.status : 500;
         return NextResponse.json({ code: status, data: null, msg: error instanceof Error ? error.message : "资产设定保存失败" }, { status });

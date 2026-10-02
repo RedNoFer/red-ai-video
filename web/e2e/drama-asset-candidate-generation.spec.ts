@@ -207,54 +207,86 @@ test("生成候选通过真实图片任务链路完成", async ({ page, request 
     expect(submittedSizes[0]).toBe("16:9");
 });
 
-test("上传候选后立即确认主基准图不会丢失", async ({ page, request }) => {
-    const created = await request.post("/api/drama/projects", { data: { title: `E2E 上传主基准 ${Date.now()}`, ratio: "9:16" } });
-    expect(created.ok(), await created.text()).toBe(true);
-    const project = ((await created.json()) as { data: { project: DramaProject } }).data.project;
-    const characterId = "character-upload-primary-e2e";
-    const saved = await request.patch(`/api/drama/projects/${project.id}`, {
-        data: {
-            ...project,
-            characters: [{ id: characterId, name: "上传测试角色", description: "用于验证上传候选确认不丢失", profile: { visualIdentity: "固定黑发" }, references: [] }],
-        },
-    });
-    expect(saved.ok(), await saved.text()).toBe(true);
+for (const width of [1672, 1440, 390, 430]) {
+    for (const theme of ["light", "dark"]) {
+        test(`上传候选、确认基准、保存设定和刷新保持一致（${width}px/${theme}）`, async ({ page, request }) => {
+            await page.setViewportSize({ width, height: width < 600 ? 932 : 1000 });
+            const created = await request.post("/api/drama/projects", { data: { title: `E2E 上传主基准 ${Date.now()}`, ratio: "9:16" } });
+            expect(created.ok(), await created.text()).toBe(true);
+            const project = ((await created.json()) as { data: { project: DramaProject } }).data.project;
+            const characterId = "character-upload-primary-e2e";
+            const sourceText = "x".repeat(1024 * 1024);
+            const saved = await request.patch(`/api/drama/projects/${project.id}`, {
+                data: {
+                    ...project,
+                    characters: [{ id: characterId, name: "上传测试角色", description: "用于验证上传候选确认不丢失", profile: { visualIdentity: "固定黑发" }, references: [] }],
+                    sourceAssets: [{ id: "source-large", type: "text", title: "大项目来源", textContent: sourceText }],
+                },
+            });
+            expect(saved.ok(), await saved.text()).toBe(true);
 
-    try {
-        await page.goto(`/drama/${project.id}`, { waitUntil: "domcontentloaded" });
-        await page.getByRole("button", { name: "打开项目资产" }).click();
-        await page.locator("[data-drama-assets-library] article").filter({ hasText: "上传测试角色" }).getByRole("button", { name: "编辑角色：上传测试角色" }).last().click();
-        const drawer = page.getByRole("dialog", { name: "编辑角色" });
-        await drawer.getByRole("button", { name: "上传候选" }).click();
-        await drawer.locator('input[type="file"][accept="image/*"]').setInputFiles({
-            name: "uploaded-primary.png",
-            mimeType: "image/png",
-            buffer: Buffer.from(REFERENCE_DATA_URL.split(",")[1], "base64"),
+            try {
+                await page.goto(`/drama/${project.id}`, { waitUntil: "domcontentloaded" });
+                if (theme === "dark") {
+                    await page.getByRole("button", { name: "切换到深色主题" }).click();
+                    await expect(page.locator("html")).toHaveClass(/dark/);
+                }
+                await page.getByRole("button", { name: "打开项目资产" }).click();
+                await page.locator("[data-drama-assets-library] article").filter({ hasText: "上传测试角色" }).getByRole("button", { name: "编辑角色：上传测试角色" }).last().click();
+                const drawer = page.getByRole("dialog", { name: "编辑角色" });
+                const uploadAck = page.waitForResponse((response) => response.url().endsWith(`/assets/characters/${characterId}`) && response.request().method() === "PATCH");
+                await drawer.getByRole("button", { name: "上传候选" }).click();
+                await drawer.locator('input[type="file"][accept="image/*"]').setInputFiles({
+                    name: "uploaded-primary.png",
+                    mimeType: "image/png",
+                    buffer: Buffer.from(REFERENCE_DATA_URL.split(",")[1], "base64"),
+                });
+                await expect(drawer.locator('img[alt="uploaded-primary.png"]')).toHaveCount(1);
+                const uploadReply = await (await uploadAck).json();
+                expect(uploadReply.data.project).not.toHaveProperty("sourceAssets");
+                expect(uploadReply.data.project).not.toHaveProperty("episodes");
+                expect(uploadReply.data.project).not.toHaveProperty("productionArchive");
+
+                await drawer.getByRole("button", { name: "确认主基准" }).click();
+                await expect(drawer.getByRole("button", { name: "已审核基准" })).toBeVisible();
+                await expect(drawer.locator('img[alt="上传测试角色基准图"]')).toHaveCount(1);
+                await expect(drawer.getByText("待补基准图")).toHaveCount(0);
+
+                await drawer.getByRole("textbox").first().fill("保存后的上传测试角色");
+                const saveResponse = page.waitForResponse((response) => response.url().endsWith(`/assets/characters/${characterId}`) && response.request().method() === "PATCH");
+                await drawer.getByRole("button", { name: "保存设定" }).click();
+                const savedSettings = await saveResponse;
+                expect(savedSettings.ok(), await savedSettings.text()).toBe(true);
+                const acknowledged = ((await savedSettings.json()) as { data: { project: DramaProject } }).data.project;
+                await expect(drawer).toHaveCount(0);
+
+                const readback = await request.get(`/api/drama/projects/${project.id}`);
+                expect(readback.ok(), await readback.text()).toBe(true);
+                const persistedProject = ((await readback.json()) as { data: { project: DramaProject } }).data.project;
+                expect(persistedProject.sourceAssets?.[0].textContent).toBe(sourceText);
+                expect(acknowledged.updatedAt).toBe(persistedProject.updatedAt);
+                const persisted = persistedProject.characters.find((item) => item.id === characterId);
+                expect(persisted?.name).toBe("保存后的上传测试角色");
+                expect(persisted?.primaryReferenceId).toBeTruthy();
+                expect(persisted?.references?.find((item) => item.id === persisted.primaryReferenceId)).toMatchObject({ status: "approved", label: "uploaded-primary.png" });
+
+                await page.reload({ waitUntil: "domcontentloaded" });
+                await page.getByRole("button", { name: "打开项目资产" }).click();
+                await page.locator("[data-drama-assets-library] article").filter({ hasText: "保存后的上传测试角色" }).getByRole("button", { name: "编辑角色：保存后的上传测试角色" }).last().click();
+                const reopenedDrawer = page.getByRole("dialog", { name: "编辑角色" });
+                await expect(reopenedDrawer.locator('img[alt="保存后的上传测试角色基准图"]')).toHaveCount(1);
+                await expect(reopenedDrawer.getByText("待补基准图")).toHaveCount(0);
+                await expect(page.getByText("短剧项目已在其他页面更新，请刷新后重试", { exact: true })).toHaveCount(0);
+                const bounds = await reopenedDrawer.evaluate((element) => ({ width: element.getBoundingClientRect().width, scrollWidth: element.scrollWidth, clientWidth: element.clientWidth }));
+                expect(Math.round(bounds.width)).toBeLessThanOrEqual(width);
+                expect(bounds.scrollWidth).toBeLessThanOrEqual(bounds.clientWidth);
+            } finally {
+                const deleted = await request.delete(`/api/drama/projects/${project.id}`);
+                expect(deleted.ok(), await deleted.text()).toBe(true);
+            }
         });
-        await expect(drawer.locator('img[alt="uploaded-primary.png"]')).toHaveCount(1);
-
-        await drawer.getByRole("button", { name: "确认主基准" }).click();
-        await expect(drawer.getByRole("button", { name: "已审核基准" })).toBeVisible();
-        await expect(drawer.locator('img[alt="上传测试角色基准图"]')).toHaveCount(1);
-        await expect(drawer.getByText("待补基准图")).toHaveCount(0);
-
-        const readback = await request.get(`/api/drama/projects/${project.id}`);
-        expect(readback.ok(), await readback.text()).toBe(true);
-        const persisted = ((await readback.json()) as { data: { project: DramaProject } }).data.project.characters.find((item) => item.id === characterId);
-        expect(persisted?.primaryReferenceId).toBeTruthy();
-        expect(persisted?.references?.find((item) => item.id === persisted.primaryReferenceId)).toMatchObject({ status: "approved", label: "uploaded-primary.png" });
-
-        await page.reload({ waitUntil: "domcontentloaded" });
-        await page.getByRole("button", { name: "打开项目资产" }).click();
-        await page.locator("[data-drama-assets-library] article").filter({ hasText: "上传测试角色" }).getByRole("button", { name: "编辑角色：上传测试角色" }).last().click();
-        const reopenedDrawer = page.getByRole("dialog", { name: "编辑角色" });
-        await expect(reopenedDrawer.locator('img[alt="上传测试角色基准图"]')).toHaveCount(1);
-        await expect(reopenedDrawer.getByText("待补基准图")).toHaveCount(0);
-    } finally {
-        const deleted = await request.delete(`/api/drama/projects/${project.id}`);
-        expect(deleted.ok(), await deleted.text()).toBe(true);
     }
-});
+}
 
 test("删除角色候选后刷新不会被历史生图任务恢复", async ({ page, request }) => {
     await resetProtocolFixture(request);

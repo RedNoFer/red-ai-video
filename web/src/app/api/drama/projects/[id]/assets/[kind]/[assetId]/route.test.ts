@@ -72,6 +72,24 @@ describe("PATCH /api/drama/projects/[id]/assets/[kind]/[assetId]", () => {
         expect(mocks.updateDramaAssetForUser).toHaveBeenCalledWith("user-one", "project-one", "characters", "character-one", patch);
         await expect(response.json()).resolves.toMatchObject({ data: { project: { id: "project-one" } } });
     });
+
+    it("omits source text, archives and unchanged shots from candidate upload acknowledgements", async () => {
+        mocks.updateDramaAssetForUser.mockResolvedValue({
+            id: "project-one",
+            updatedAt: "version",
+            characters: [{ id: "character-one" }],
+            scenes: [],
+            props: [],
+            clues: [],
+            sourceAssets: [{ textContent: "x".repeat(5 * 1024 * 1024) }],
+            episodes: [{ shots: ["unchanged"] }],
+            productionArchive: { content: "archive" },
+        });
+        const response = await PATCH(new Request("http://localhost", { method: "PATCH", headers: { "X-Drama-Response": "asset-update" }, body: JSON.stringify({ references: [], markShotsStale: false }) }), context());
+        const body = await response.text();
+        expect(JSON.parse(body).data.project).toEqual({ id: "project-one", updatedAt: "version", characters: [{ id: "character-one" }], scenes: [], props: [], clues: [] });
+        expect(body.length).toBeLessThan(1024);
+    });
 });
 
 function context() {

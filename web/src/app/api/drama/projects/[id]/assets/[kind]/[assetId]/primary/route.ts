@@ -16,7 +16,9 @@ export async function POST(request: Request, context: Context) {
     try {
         const { id, kind, assetId } = await context.params;
         const project = await approveDramaAssetReferenceForUser(user.id, id, kind, assetId, referenceId);
-        return NextResponse.json({ code: 0, data: { project }, msg: "主基准图已保存" });
+        const { updatedAt, characters, scenes, props, clues } = project;
+        const responseProject = request.headers.get("X-Drama-Response") === "asset-update" ? { id, updatedAt, characters, scenes, props, clues } : project;
+        return NextResponse.json({ code: 0, data: { project: responseProject }, msg: "主基准图已保存" });
     } catch (error) {
         const status = error instanceof DramaProjectServiceError ? error.status : 500;
         return NextResponse.json({ code: status, data: null, msg: error instanceof Error ? error.message : "主基准图保存失败" }, { status });

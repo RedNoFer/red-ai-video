@@ -229,7 +229,7 @@ export async function updateDramaProjectAssetMutation(userId: string, mutation: 
 
 async function updatePostgresProjectAssetMutation(userId: string, mutation: DramaProjectAssetMutation): Promise<DramaProjectAssetMutationAck> {
     await ensurePostgresSchema();
-    const result = await postgresQuery<{ updated_at: Date | string }>(
+    const result = await postgresQuery<{ project_updated_at: string }>(
         `WITH versioned AS (SELECT clock_timestamp() AS now), target AS (
              SELECT asset.ord AS asset_ord
              FROM drama_projects AS project
@@ -246,10 +246,10 @@ async function updatePostgresProjectAssetMutation(userId: string, mutation: Dram
          FROM target, versioned
          WHERE project.id = $1 AND project.user_id = $2
            AND ($6::text IS NULL OR project.project_json->>'updatedAt' = $6)
-         RETURNING project.updated_at AS updated_at`,
+         RETURNING project.project_json->>'updatedAt' AS project_updated_at`,
         [mutation.projectId, userId, mutation.assetKind, mutation.assetId, JSON.stringify(mutation.asset), mutation.expectedUpdatedAt || null],
     );
-    if (result.rows[0]) return { ...mutation, updatedAt: timestamp(result.rows[0].updated_at) };
+    if (result.rows[0]) return { ...mutation, updatedAt: result.rows[0].project_updated_at };
 
     const existing = await postgresQuery<{ project_updated_at: string | null; has_asset: boolean }>(
         `SELECT project_json->>'updatedAt' AS project_updated_at,
@@ -271,7 +271,7 @@ async function updatePostgresProjectAssetMutation(userId: string, mutation: Dram
 
 async function updatePostgresProjectShotMutation(userId: string, mutation: DramaProjectShotMutation): Promise<DramaProjectShotMutationAck> {
     await ensurePostgresSchema();
-    const result = await postgresQuery<{ updated_at: Date | string }>(
+    const result = await postgresQuery<{ project_updated_at: string }>(
         `WITH versioned AS (SELECT clock_timestamp() AS now), target AS (
              SELECT episode.ord AS episode_ord, shot.ord AS shot_ord
              FROM drama_projects AS project
@@ -291,11 +291,11 @@ async function updatePostgresProjectShotMutation(userId: string, mutation: Drama
          FROM target, versioned
          WHERE project.id = $1 AND project.user_id = $2
            AND ($6::text IS NULL OR project.project_json->>'updatedAt' = $6)
-         RETURNING project.updated_at AS updated_at`,
+         RETURNING project.project_json->>'updatedAt' AS project_updated_at`,
         [mutation.projectId, userId, mutation.episodeId, mutation.shotId, JSON.stringify(mutation.shot), mutation.expectedUpdatedAt || null],
     );
     if (result.rows[0]) {
-        return { ...mutation, updatedAt: timestamp(result.rows[0].updated_at) };
+        return { ...mutation, updatedAt: result.rows[0].project_updated_at };
     }
 
     const existing = await postgresQuery<{ project_updated_at: string | null; has_episode: boolean; has_shot: boolean }>(

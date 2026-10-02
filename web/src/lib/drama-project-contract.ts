@@ -808,6 +808,8 @@ export type DramaProject = {
     updatedAt: string;
 };
 
+export type DramaProjectAssetUpdate = Pick<DramaProject, "id" | "updatedAt"> & Partial<Pick<DramaProject, "characters" | "scenes" | "props" | "clues" | "episodes">>;
+
 export type DramaProjectSummary = Pick<DramaProject, "id" | "title" | "summary" | "style" | "ratio" | "status" | "createdAt" | "updatedAt"> & {
     episodeCount: number;
     characterCount: number;

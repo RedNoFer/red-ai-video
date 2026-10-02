@@ -16,9 +16,13 @@ export type UploadedImage = {
 };
 
 export async function uploadImage(input: string | Blob): Promise<UploadedImage> {
-    const stored = await uploadServerMedia(input, "image");
-    const meta = await readImageMeta(stored.url);
-    return { ...stored, serverUrl: stored.url, width: meta.width, height: meta.height, mimeType: stored.mimeType || meta.mimeType };
+    const localUrl = input instanceof Blob ? URL.createObjectURL(input) : "";
+    try {
+        const [stored, meta] = await Promise.all([uploadServerMedia(input, "image"), readImageMeta(localUrl || (input as string))]);
+        return { ...stored, serverUrl: stored.url, width: meta.width, height: meta.height, mimeType: stored.mimeType || meta.mimeType };
+    } finally {
+        if (localUrl) URL.revokeObjectURL(localUrl);
+    }
 }
 
 export async function resolveImageUrl(storageKey?: string, fallback = "") {

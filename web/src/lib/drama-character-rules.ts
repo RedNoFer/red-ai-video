@@ -152,6 +152,8 @@ function normalizeCharacterColorPalette(value: string) {
 function normalizeCharacterIdentityAnchor(value: string, name: string) {
     const identityPrefix = `${name}的脸型、五官、发型和年龄感按当前角色设定固定`;
     const trimmed = value.trim();
+    const authoredFacts = trimmed.replace(/^[^；;\n]*的脸型、五官、发型和年龄感按当前角色设定固定[；;]?/u, "");
+    if (authoredFacts !== trimmed) return [identityPrefix, extractDramaCharacterVisualFacts(authoredFacts)].filter(Boolean).join("；");
     if (!trimmed.includes(`${name}的脸型`)) return extractDramaCharacterVisualFacts(trimmed);
     const facts = extractDramaCharacterVisualFacts(trimmed);
     const extraFacts = facts

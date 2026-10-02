@@ -170,7 +170,7 @@ describe("drama project file provider", () => {
 
     it("persists a shot mutation without sending the full project to PostgreSQL", async () => {
         mocks.provider = "postgres";
-        mocks.postgresQuery.mockResolvedValueOnce({ rows: [{ updated_at: "2026-09-15T00:00:01.000Z" }] });
+        mocks.postgresQuery.mockResolvedValueOnce({ rows: [{ project_updated_at: "2026-09-15T00:00:01.000Z" }] });
 
         const shot = { id: "shot-one", title: "当前镜头" } as never;
         await expect(updateDramaProjectShotMutation("user-one", { projectId: "project-one", episodeId: "episode-one", shotId: "shot-one", shot, expectedUpdatedAt: "2026-09-15T00:00:00.000Z" })).resolves.toMatchObject({ projectId: "project-one", shot });
@@ -183,9 +183,21 @@ describe("drama project file provider", () => {
         expect(String(values[4]).length).toBeLessThan(1024);
     });
 
+    it.each(["asset", "shot"])("returns the JSON version, not the trigger timestamp, for a %s mutation", async (kind) => {
+        mocks.provider = "postgres";
+        const version = "2026-10-02T15:45:42.040Z";
+        mocks.postgresQuery.mockResolvedValueOnce({ rows: [{ updated_at: new Date("2026-10-02T15:45:42.000Z"), project_updated_at: version }] });
+        const saved =
+            kind === "asset"
+                ? await updateDramaProjectAssetMutation("user-one", { projectId: "one", assetKind: "characters", assetId: "asset-one", asset: { id: "asset-one" } as never })
+                : await updateDramaProjectShotMutation("user-one", { projectId: "one", episodeId: "episode-one", shotId: "shot-one", shot: { id: "shot-one" } as never });
+        expect(saved.updatedAt).toBe(version);
+        expect(mocks.postgresQuery.mock.calls[0][0]).toContain("RETURNING project.project_json->>'updatedAt' AS project_updated_at");
+    });
+
     it("persists a single asset mutation without sending the full project to PostgreSQL", async () => {
         mocks.provider = "postgres";
-        mocks.postgresQuery.mockResolvedValueOnce({ rows: [{ updated_at: "2026-09-15T00:00:01.000Z" }] });
+        mocks.postgresQuery.mockResolvedValueOnce({ rows: [{ project_updated_at: "2026-09-15T00:00:01.000Z" }] });
 
         const asset = { id: "scene-one", name: "当前场景", description: "更新后的场景" } as never;
         await expect(updateDramaProjectAssetMutation("user-one", { projectId: "project-one", assetKind: "scenes", assetId: "scene-one", asset, expectedUpdatedAt: "2026-09-15T00:00:00.000Z" })).resolves.toMatchObject({

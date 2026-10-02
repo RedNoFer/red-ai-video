@@ -16,33 +16,33 @@ export async function POST(request: Request) {
     const currentUser = await getCurrentUser();
     if (!currentUser) return NextResponse.json({ error: "请先登录" }, { status: 401 });
 
-    const contentType = request.headers.get("content-type") || "";
-    let body: { dataUrl?: unknown; type?: unknown; persistent?: unknown; originalName?: unknown } = {};
-    let file: File | null = null;
-    if (contentType.startsWith("multipart/form-data")) {
-        const formData = await readRequestBodyBytes(request, MAX_UPLOAD_REQUEST_BYTES)
-            .then((bytes) => new Request(request.url, { method: "POST", headers: { "content-type": contentType }, body: bytes }).formData())
-            .catch((error) => {
-                if (error instanceof RequestBodyTooLargeError) throw error;
-                return null;
-            });
-        const formFile = formData?.get("file");
-        if (!formData || !formFile || typeof formFile === "string") return NextResponse.json({ error: "缺少参考素材" }, { status: 400 });
-        file = formFile;
-        body = {
-            type: formData.get("type"),
-            persistent: formData.get("persistent"),
-            originalName: formData.get("originalName") || file.name,
-        };
-    } else {
-        body = await readJsonBody<{ dataUrl?: unknown; type?: unknown; persistent?: unknown; originalName?: unknown }>(request, 28 * 1024 * 1024).catch(() => ({}));
-    }
-    const dataUrl = typeof body.dataUrl === "string" ? body.dataUrl : "";
-    if (!file && !dataUrl) return NextResponse.json({ error: "缺少参考素材" }, { status: 400 });
-    const type = body.type === "video" || body.type === "audio" ? body.type : "image";
-    const persistent = body.persistent === true || body.persistent === "true";
-
     try {
+        const contentType = request.headers.get("content-type") || "";
+        let body: { dataUrl?: unknown; type?: unknown; persistent?: unknown; originalName?: unknown } = {};
+        let file: File | null = null;
+        if (contentType.startsWith("multipart/form-data")) {
+            const formData = await readRequestBodyBytes(request, MAX_UPLOAD_REQUEST_BYTES)
+                .then((bytes) => new Request(request.url, { method: "POST", headers: { "content-type": contentType }, body: bytes }).formData())
+                .catch((error) => {
+                    if (error instanceof RequestBodyTooLargeError) throw error;
+                    return null;
+                });
+            const formFile = formData?.get("file");
+            if (!formData || !formFile || typeof formFile === "string") return NextResponse.json({ error: "缺少参考素材" }, { status: 400 });
+            file = formFile;
+            body = {
+                type: formData.get("type"),
+                persistent: formData.get("persistent"),
+                originalName: formData.get("originalName") || file.name,
+            };
+        } else {
+            body = await readJsonBody<{ dataUrl?: unknown; type?: unknown; persistent?: unknown; originalName?: unknown }>(request, 28 * 1024 * 1024).catch(() => ({}));
+        }
+        const dataUrl = typeof body.dataUrl === "string" ? body.dataUrl : "";
+        if (!file && !dataUrl) return NextResponse.json({ error: "缺少参考素材" }, { status: 400 });
+        const type = body.type === "video" || body.type === "audio" ? body.type : "image";
+        const persistent = body.persistent === true || body.persistent === "true";
+
         const context = {
             ownerUserId: currentUser.id,
             source: "user-upload",

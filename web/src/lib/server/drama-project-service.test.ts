@@ -2998,6 +2998,44 @@ describe("drama project service updates", () => {
         expect(saved).toMatchObject({ ratio: "1080x1920", characters: [{ references: [{ width: 1080, height: 1920 }] }] });
     });
 
+    it("does not rewrite unchanged PostgreSQL profiles just because JSONB reordered their keys", async () => {
+        const original = project("2026-07-19T08:00:01.000Z", "项目");
+        original.characters = [{ id: "character-one", name: "主角", description: "黑发年轻女性，固定灰色制服和黑色长靴，身份外貌保持稳定", references: [] }] as never;
+        const normalized = normalizeProject(original, original);
+        const reordered = JSON.parse(JSON.stringify(normalized, (_key, value) => (value && typeof value === "object" && !Array.isArray(value) ? Object.fromEntries(Object.entries(value).reverse()) : value)));
+        mocks.getDramaProject.mockResolvedValue(reordered);
+
+        await getDramaProjectForUser("user-one", original.id);
+        expect(mocks.updateDramaProject).not.toHaveBeenCalled();
+    });
+
+    it("does not change the acknowledged project on a read immediately after renaming a character", async () => {
+        const original = project("2026-07-19T08:00:01.000Z", "项目");
+        original.characters = [{ id: "character-one", name: "上传测试角色", description: "用于验证上传候选确认不丢失", profile: { visualIdentity: "固定黑发" }, references: [] }] as never;
+        const normalized = normalizeProject(original, original);
+        mocks.getDramaProject.mockResolvedValue(normalized);
+        const saved = await updateDramaAssetForUser("user-one", original.id, "characters", "character-one", { name: "保存后的上传测试角色" });
+        mocks.getDramaProject.mockResolvedValue(JSON.parse(JSON.stringify(saved)));
+        mocks.updateDramaProject.mockClear();
+        await expect(getDramaProjectForUser("user-one", original.id)).resolves.toMatchObject({ updatedAt: saved.updatedAt, characters: JSON.parse(JSON.stringify(saved.characters)) });
+        expect(mocks.updateDramaProject).not.toHaveBeenCalled();
+    });
+
+    it("does not persist unchanged JSONB shots and assets when saving an asset setting", async () => {
+        const original = project("2026-07-19T08:00:01.000Z", "项目");
+        original.characters = [
+            { id: "character-one", name: "主角", description: "黑发", references: [] },
+            { id: "character-two", name: "配角", description: "白发", references: [] },
+        ] as never;
+        const normalized = normalizeProject(original, original);
+        const reordered = JSON.parse(JSON.stringify(normalized, (_key, value) => (value && typeof value === "object" && !Array.isArray(value) ? Object.fromEntries(Object.entries(value).reverse()) : value)));
+        mocks.getDramaProject.mockResolvedValue(reordered);
+
+        await updateDramaAssetForUser("user-one", original.id, "characters", "character-one", { supplierPrompt: "新的供应商提示词" });
+        expect(mocks.updateDramaProjectShotMutation).not.toHaveBeenCalled();
+        expect(mocks.updateDramaProjectAssetMutation).toHaveBeenCalledTimes(1);
+    });
+
     it("updates one asset from the latest project snapshot without replacing other assets", async () => {
         const current = project("2026-07-19T08:00:01.000Z", "项目");
         current.characters = [

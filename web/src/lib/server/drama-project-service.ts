@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 import { nanoid } from "nanoid";
 import { assertUniqueDramaVoices, normalizeDramaVoiceProfile } from "@/lib/drama-voice";
 import { hasDramaCharacterNarrativeFact, normalizeDramaCharacterProfile } from "@/lib/drama-character-rules";
@@ -1659,7 +1660,7 @@ async function persistDramaShotChanges(userId: string, previous: DramaProject, n
         for (const nextShot of episode.shots) {
             const currentEpisode = persisted.episodes.find((item) => item.id === episode.id);
             const currentShot = currentEpisode?.shots.find((item) => item.id === nextShot.id);
-            if (!currentShot || JSON.stringify(currentShot) === JSON.stringify(nextShot)) continue;
+            if (!currentShot || sameJsonValue(currentShot, nextShot)) continue;
             const saved = await updateDramaProjectShotMutation(userId, {
                 projectId: previous.id,
                 episodeId: episode.id,
@@ -1686,7 +1687,7 @@ async function persistDramaVisualProjectChanges(userId: string, previous: DramaP
         const nextAssets = next[assetKind] || [];
         for (const nextAsset of nextAssets) {
             const currentAsset = currentAssets.find((asset) => asset.id === nextAsset.id);
-            if (!currentAsset || JSON.stringify(currentAsset) === JSON.stringify(nextAsset)) continue;
+            if (!currentAsset || sameJsonValue(currentAsset, nextAsset)) continue;
             const saved = await updateDramaProjectAssetMutation(userId, {
                 projectId: previous.id,
                 assetKind,
@@ -1703,6 +1704,10 @@ async function persistDramaVisualProjectChanges(userId: string, previous: DramaP
         }
     }
     return persisted;
+}
+
+function sameJsonValue(left: unknown, right: unknown) {
+    return isDeepStrictEqual(JSON.parse(JSON.stringify(left)), JSON.parse(JSON.stringify(right)));
 }
 
 function releaseOrphanedDramaVisualFrameQueue(project: DramaProject, episodeId: string) {
@@ -1936,7 +1941,7 @@ export function applyDramaVisualStepResult(project: DramaProject, episodeId: str
                   }
                 : asset,
         );
-        if (JSON.stringify(nextAssets) === JSON.stringify(assets)) return project;
+        if (sameJsonValue(nextAssets, assets)) return project;
         return {
             ...project,
             [step.assetKind]: nextAssets,
@@ -2426,7 +2431,7 @@ async function syncDramaProductionRun(userId: string, project: DramaProject, run
         const task = step.taskId ? await getVideoTask(step.taskId) : await getStoredGenerationTaskByRequest<import("@/lib/server/video-task-store").VideoTask>("video", userId, requestId, step.attemptNo || 1);
         if (!task || task.userId !== userId) continue;
         const reconciled = reconcileDramaVideoStepTask(step, task);
-        if (JSON.stringify(reconciled) === JSON.stringify(step)) continue;
+        if (sameJsonValue(reconciled, step)) continue;
         changed = true;
         steps = steps.map((item) => (item.id === step.id ? reconciled : item));
         if (step.shotId)
@@ -4058,7 +4063,7 @@ function recoverGenericDramaAssetProfiles(project: DramaProject) {
             asset.profile?.consistencyRules?.startsWith("固定：不可变为");
         if (!hasGenericProfile && source.length < 20) return asset;
         const profile = normalizeAssetProfile(asset.profile, `${asset.description}\n${asset.profile?.designPrompt || ""}`, asset.name, isScene);
-        if (JSON.stringify(profile) === JSON.stringify(asset.profile || {})) return asset;
+        if (sameJsonValue(profile, asset.profile || {})) return asset;
         changed = true;
         return { ...asset, profile };
     };
@@ -4076,7 +4081,7 @@ export function recoverContaminatedDramaCharacterProfiles(project: DramaProject)
         const profileSource = [character.profile.visualIdentity, character.profile.styling, character.profile.colorPalette, character.profile.consistencyRules, ...(character.profile.identityAnchors || [])].filter(Boolean).join("；");
         if (!hasDramaCharacterNarrativeFact(profileSource)) return character;
         const profile = normalizeDramaCharacterProfile(character.profile, character.description, character.name);
-        if (JSON.stringify(profile) === JSON.stringify(character.profile || {})) return character;
+        if (sameJsonValue(profile, character.profile || {})) return character;
         changed = true;
         return { ...character, profile };
     });

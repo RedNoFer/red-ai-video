@@ -81,4 +81,10 @@ describe("reference asset upload boundary", () => {
             maxBytes: 20 * 1024 * 1024,
         });
     });
+
+    it("returns a controlled 413 when the multipart body exceeds the upload boundary", async () => {
+        const response = await POST(new Request("http://localhost/api/reference-assets", { method: "POST", headers: { "content-type": "multipart/form-data; boundary=test", "content-length": String(21 * 1024 * 1024) }, body: "oversized" }));
+        expect(response.status).toBe(413);
+        expect(mocks.writePersistentBytes).not.toHaveBeenCalled();
+    });
 });

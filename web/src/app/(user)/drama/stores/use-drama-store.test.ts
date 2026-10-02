@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+import type { DramaProject } from "@/lib/drama-project-contract";
 
 import { dramaVideoPromptRunKey, hasActiveDramaVideoPromptRun, useDramaStore } from "./use-drama-store";
 
@@ -25,5 +26,22 @@ describe("drama video prompt run lock", () => {
 
     it("ignores malformed optimization keys when checking active runs", () => {
         expect(hasActiveDramaVideoPromptRun({ broken: { startedAt: Date.now() } }, "project-one", "episode-one")).toBe(false);
+    });
+
+    it("merges compact asset acknowledgements without discarding source text, episodes or archives", () => {
+        const project = {
+            id: "project-one",
+            title: "项目",
+            characters: [{ id: "character-one", name: "旧名" }],
+            scenes: [],
+            props: [],
+            clues: [],
+            episodes: [{ id: "episode-one", shots: [] }],
+            sourceAssets: [{ id: "source-one", textContent: "完整来源" }],
+            productionArchive: { content: "完整制作包" },
+        } as unknown as DramaProject;
+        useDramaStore.setState({ projects: [project] });
+        useDramaStore.getState().replaceProject({ id: project.id, updatedAt: "version", characters: [{ ...project.characters[0], name: "新名" }] });
+        expect(useDramaStore.getState().projects[0]).toEqual({ ...project, updatedAt: "version", characters: [{ ...project.characters[0], name: "新名" }] });
     });
 });
