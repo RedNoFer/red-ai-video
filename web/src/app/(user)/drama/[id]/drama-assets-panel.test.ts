@@ -142,7 +142,6 @@ describe("drama asset image results", () => {
         expect(saveSection).not.toContain("optimizeDramaAssetPrompt");
         expect(saveSection).toContain("markShotsStale: false");
         expect(editor).toContain("resolveDramaSupplierPrompt");
-        expect(editor).toContain("supplierPromptOverride !== undefined");
         expect(editor).toContain('maxWidth: "100vw"');
         expect(editor).toContain("从来源选择");
         expect(editor).toContain("上传候选");
@@ -162,7 +161,7 @@ describe("drama asset image results", () => {
         expect(editor).toContain("!object-contain");
         expect(editor).toContain("aspectRatio: primary?.width && primary?.height");
         expect(editor).toContain("实际供应商提示词");
-        expect(editor).toContain("恢复自动提示词");
+        expect(editor).not.toContain("恢复自动提示词");
         expect(editor).toContain("data-drama-supplier-prompt");
         expect(editor).toContain("mergeGeneratedReferenceReviews");
         expect(editor).toContain("await loadProject(project.id, true)");
@@ -171,6 +170,8 @@ describe("drama asset image results", () => {
         expect(explicitAssetSave).not.toContain("updateAsset(");
         const explicitPromptSave = editor.slice(editor.indexOf("const saveSupplierPrompt"), editor.indexOf("const createVoice"));
         expect(explicitPromptSave).not.toContain("updateAsset(");
+        expect(explicitPromptSave).not.toContain("restoringAutomatic");
+        expect(explicitPromptSave).not.toContain('saveSupplierPrompt("")');
     });
 
     it("keeps the scene reference preview large and opens the original image for zoom", async () => {

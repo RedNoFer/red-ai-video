@@ -1,7 +1,7 @@
 "use client";
 
 import { App, Button, Drawer, Image, Input, InputNumber, Modal, Popconfirm, Popover, Select, Space, Tooltip } from "antd";
-import { Check, FolderInput, ImagePlus, MessageCircle, RotateCcw, Send, Sparkles, Trash2, Upload, Volume2 } from "lucide-react";
+import { Check, FolderInput, ImagePlus, MessageCircle, Send, Sparkles, Trash2, Upload, Volume2 } from "lucide-react";
 import { nanoid } from "nanoid";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -209,15 +209,10 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
         }
     };
 
-    const saveSupplierPrompt = async (nextPrompt?: string) => {
+    const saveSupplierPrompt = async () => {
         if (!asset || kind === "clues" || saving) return;
-        const restoringAutomatic = nextPrompt === "";
-        const prompt = (nextPrompt === undefined ? supplierPrompt : nextPrompt).trim();
-        if (!prompt && !restoringAutomatic) return;
-        if (restoringAutomatic && !asset.supplierPrompt?.trim()) {
-            setSupplierPromptOverride(undefined);
-            return;
-        }
+        const prompt = supplierPrompt.trim();
+        if (!prompt) return;
         setSaving(true);
         try {
             const fields = prompt
@@ -243,13 +238,13 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
             };
             const savedProject = await saveAssetNow(project.id, kind, asset.id, { ...patch, markShotsStale: false });
             replaceProject(savedProject);
-            // The saved text is retained for audit/history, while subsequent
-            // generation is recompiled from the current asset facts and style.
-            setSupplierPromptOverride(undefined);
+            // Keep the saved text visible in the editor. Subsequent generation
+            // still uses the current compiler output, not this display override.
+            setSupplierPromptOverride(prompt);
             if (fields) {
                 setDraft((current) => ({ ...current, description: fields!.description, profile: { ...current.profile, ...profilePatch } }));
             }
-            message.success(prompt ? (fields ? "提示词已结构化保存，设定文案已同步；后续生图将按当前视觉合同重新编译" : "提示词已保留为来源记录，后续生图将按当前视觉合同重新编译") : "已恢复自动提示词");
+            message.success(fields ? "提示词已结构化保存，设定文案已同步；后续生图将按当前视觉合同重新编译" : "提示词已保留为来源记录，后续生图将按当前视觉合同重新编译");
         } catch (error) {
             message.error(error instanceof Error ? error.message : "供应商提示词保存失败");
         } finally {
@@ -1039,13 +1034,6 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                                                     保存提示词
                                                 </Button>
                                             </div>
-                                            {supplierPromptOverride !== undefined ? (
-                                                <div className="flex justify-end">
-                                                    <Button size="small" icon={<RotateCcw className="size-3.5" />} loading={saving} onClick={() => void saveSupplierPrompt("")}>
-                                                        恢复自动提示词
-                                                    </Button>
-                                                </div>
-                                            ) : null}
                                         </div>
                                     </details>
                                 ) : null}
