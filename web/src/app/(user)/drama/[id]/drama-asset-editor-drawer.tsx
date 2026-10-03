@@ -238,8 +238,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
             };
             const savedProject = await saveAssetNow(project.id, kind, asset.id, { ...patch, markShotsStale: false });
             replaceProject(savedProject);
-            // Keep the saved text visible in the editor. Subsequent generation
-            // still uses the current compiler output, not this display override.
+            // Keep the saved text visible in the editor and use it for subsequent generation.
             setSupplierPromptOverride(prompt);
             if (fields) {
                 setDraft((current) => ({ ...current, description: fields!.description, profile: { ...current.profile, ...profilePatch } }));
