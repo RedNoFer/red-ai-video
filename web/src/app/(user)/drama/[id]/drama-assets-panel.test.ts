@@ -142,6 +142,9 @@ describe("drama asset image results", () => {
         expect(saveSection).not.toContain("optimizeDramaAssetPrompt");
         expect(saveSection).toContain("markShotsStale: false");
         expect(editor).toContain("resolveDramaSupplierPrompt");
+        expect(editor).toContain("const prompt = activeProposal ? compileDramaAssetRefinementPrompt");
+        expect(editor).toContain(": supplierPrompt;");
+        expect(editor).toContain("const prompt = task.prompt?.trim() || resolveDramaSupplierPrompt");
         expect(editor).toContain('maxWidth: "100vw"');
         expect(editor).toContain("从来源选择");
         expect(editor).toContain("上传候选");

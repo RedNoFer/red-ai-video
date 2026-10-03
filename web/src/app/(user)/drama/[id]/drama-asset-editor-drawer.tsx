@@ -589,7 +589,8 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                             .getState()
                             .projects.find((item) => item.id === currentProject.id)
                             ?.[kind].find((item) => item.id === asset.id) || asset;
-                    const prompt = compileDramaAssetReferencePrompt(currentProject, { ...currentAsset, supplierPrompt: undefined }, assetKind);
+                    const automaticPrompt = compileDramaAssetReferencePrompt(currentProject, { ...currentAsset, supplierPrompt: undefined }, assetKind);
+                    const prompt = task.prompt?.trim() || resolveDramaSupplierPrompt(currentAsset.supplierPrompt?.trim() || undefined, automaticPrompt);
                     const imageModel = config.imageModel || config.imageModels[0] || task.model;
                     if (!imageModel) throw new Error("后台尚未配置可用的图片模型，请先在管理后台配置图片渠道");
                     const imageConfig = {
@@ -629,7 +630,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                 message.warning(`暂不能生成：${preflight.errors.join("；")}`);
                 return;
             }
-            const prompt = activeProposal ? compileDramaAssetRefinementPrompt(project, draftPromptAsset || asset, assetKind, activeProposal, refinementPrompt) : automaticSupplierPrompt;
+            const prompt = activeProposal ? compileDramaAssetRefinementPrompt(project, draftPromptAsset || asset, assetKind, activeProposal, refinementPrompt) : supplierPrompt;
             const imageModel = config.imageModel || config.imageModels[0] || "";
             if (!imageModel) throw new Error("后台尚未配置可用的图片模型，请先在管理后台配置图片渠道");
             const imageConfig = {
