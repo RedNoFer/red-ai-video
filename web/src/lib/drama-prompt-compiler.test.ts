@@ -13,11 +13,31 @@ import {
     hasDramaAssetPromptQuality,
     hasDramaReferenceAnchorClarity,
     compileDramaShotPrompts,
+    applyDramaVideoVisualContract,
     deriveDramaShotPromptContract,
     preflightDramaAssetGeneration,
 } from "./drama-prompt-compiler";
 
 describe("drama prompt compiler", () => {
+    it("keeps the project visual contract once across all public video cards", () => {
+        const project = createProject();
+        project.style = "冷峻纪实，真实颗粒与哑光皮肤";
+        project.productionBible = { ...project.productionBible!, visualStyle: project.style };
+        const source = [
+            "### 镜头 01 | 0—3秒 | 中景 | 50mm | 侧45度 | 缓推 | 人物镜头",
+            "画面内容：Karin抬手。",
+            "色调：冷灰；左侧窗光。",
+            "### 镜头 02 | 3—7秒 | 近景 | 85mm | 侧面 | 固定 | 人物镜头",
+            "画面内容：Karin的手指停住。",
+            "色调：冷灰；窗光擦过指节。",
+        ].join("\n");
+
+        const compiled = applyDramaVideoVisualContract(project, source);
+        expect(compiled.match(/项目视觉合同（唯一风格来源）/gu)).toHaveLength(1);
+        expect(compiled).toContain("色调：冷灰；左侧窗光。");
+        expect(compiled).toContain("色调：冷灰；窗光擦过指节。");
+        expect(applyDramaVideoVisualContract(project, compiled)).toBe(compiled);
+    });
     it("derives one server-side shot contract for video and keyframe consumers", () => {
         const project = createProject();
         const shot = project.episodes[0].shots[0];

@@ -975,16 +975,29 @@ function checkSimpleStructuralChecks(checks: DramaQualityGateCheck[], value: Dra
         ["entryState", "exitState", "continuity", "continuityEdges", "framePlan.frames[0]"],
         "硬切可以开始新视频片段，但必须逐项继承上一镜出口的角色/道具空间状态；若确实移动，要写清触发、路径、受力、结果，并在下一镜首帧重复站位锁定。",
     );
-    if (value.authoring)
+    if (value.authoring) {
+        const authoring = value.authoring;
+        const standaloneLock = value.project.productionLock;
+        const standaloneMaterials = new Set(authoring.materials.filter((material) => material.contentHash).map((material) => material.role));
+        const standaloneProvenance =
+            authoring.source === "codex-standalone" &&
+            authoring.authoringMode === "codex-standalone" &&
+            authoring.canonicalSource === "markdown-with-embedded-json" &&
+            Boolean(authoring.storyboardSkill?.contentHash && authoring.directorSkill?.contentHash && authoring.seedanceSkill?.contentHash) &&
+            standaloneMaterials.has("package-template") &&
+            standaloneMaterials.has("story-source") &&
+            Boolean(standaloneLock?.storySourceHash && standaloneLock.templateHash && standaloneLock.contractHash && standaloneLock.specHash && standaloneLock.directorSkillHash && standaloneLock.seedanceSkillHash && standaloneLock.authoringSchemaHash);
+        const executionProvenance = authoring.source === "executeDramaScriptRun" && Boolean(authoring.contract?.contentHash && authoring.directorSkill?.contentHash && authoring.seedanceSkill?.contentHash);
         add(
             checks,
             "PROVENANCE",
-            Boolean(value.authoring.source === "executeDramaScriptRun" && value.authoring.contract?.contentHash && value.authoring.directorSkill?.contentHash && value.authoring.seedanceSkill?.contentHash),
+            executionProvenance || standaloneProvenance,
             "来源凭据",
-            "已记录 executeDramaScriptRun、契约和两个 Skill 哈希",
+            standaloneProvenance ? "独立 Codex 来源、TXT/模板/Skill 哈希与 productionLock 均已记录" : "已记录 executeDramaScriptRun、契约和两个 Skill 哈希",
             ["authoring"],
-            "只允许通过 executeDramaScriptRun 完成最终编排，并记录契约、导演 Skill、Seedance Skill 和来源素材哈希。",
+            "记录当前 authoring 来源、TXT/模板、导演 Skill、分镜 Skill、Seedance Skill 与 productionLock 哈希；不得借用旧制作包或伪造运行凭据。",
         );
+    }
 }
 
 function add(checks: DramaQualityGateCheck[], code: string, passed: boolean, scope: string, evidence: string, sourceRefs: string[], fixHint: string, repair?: Pick<DramaQualityGateCheck, "repairScope" | "shotIds" | "frameIds" | "lockedFields">) {

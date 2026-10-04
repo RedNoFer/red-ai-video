@@ -141,17 +141,18 @@ function allocateAssetCodes(items: DramaNamedAsset[], prefix: string) {
 }
 
 /** Keep project-registered assets in a generated package and preserve their facts. */
-export function mergeProjectAssetsIntoProductionPackage<T extends DramaProductionPackageV1>(value: T, project: DramaProjectAssetCollection): T {
-    const assets = value.assets || { characters: [], locations: [], props: [], clues: [] };
-    const episodeCodes = new Set((value.episodes || []).map((episode) => episode.code).filter(Boolean));
+export function mergeProjectAssetsIntoProductionPackage<T extends DramaProductionPackageV1>(value: T, project: DramaProjectAssetCollection, importWarnings?: string[]): T {
+    const aligned = alignPackageAssetCodes(value, project, importWarnings);
+    const assets = aligned.assets || { characters: [], locations: [], props: [], clues: [] };
+    const episodeCodes = new Set((aligned.episodes || []).map((episode) => episode.code).filter(Boolean));
     const referenced = {
-        C: new Set((value.episodes || []).flatMap((episode) => episode.shots.flatMap((shot) => shot.characterCodes))),
-        S: new Set((value.episodes || []).flatMap((episode) => episode.shots.flatMap((shot) => (shot.locationCode ? [shot.locationCode] : [])))),
-        P: new Set((value.episodes || []).flatMap((episode) => episode.shots.flatMap((shot) => shot.propCodes))),
-        L: new Set((value.episodes || []).flatMap((episode) => episode.shots.flatMap((shot) => shot.clueCodes))),
+        C: new Set((aligned.episodes || []).flatMap((episode) => episode.shots.flatMap((shot) => shot.characterCodes))),
+        S: new Set((aligned.episodes || []).flatMap((episode) => episode.shots.flatMap((shot) => (shot.locationCode ? [shot.locationCode] : [])))),
+        P: new Set((aligned.episodes || []).flatMap((episode) => episode.shots.flatMap((shot) => shot.propCodes))),
+        L: new Set((aligned.episodes || []).flatMap((episode) => episode.shots.flatMap((shot) => shot.clueCodes))),
     };
     return {
-        ...value,
+        ...aligned,
         assets: {
             ...assets,
             characters: mergeProjectAssetCollection(assets.characters, project.characters, "C", referenced.C, episodeCodes, project, "角色"),
@@ -159,6 +160,74 @@ export function mergeProjectAssetsIntoProductionPackage<T extends DramaProductio
             props: mergeProjectAssetCollection(assets.props, project.props, "P", referenced.P, episodeCodes, project, "道具"),
             clues: mergeProjectAssetCollection(assets.clues, project.clues, "L", referenced.L, episodeCodes),
         },
+    };
+}
+
+function alignPackageAssetCodes<T extends DramaProductionPackageV1>(value: T, project: DramaProjectAssetCollection, importWarnings?: string[]): T {
+    const mappings = new Map<string, string>();
+    const align = (incoming: DramaProductionPackageAsset[], existing: DramaNamedAsset[], prefix: string) => {
+        const existingCodes = allocateAssetCodes(existing, prefix);
+        const byName = new Map(existing.map((asset, index) => [normalizeKey(asset.name), existingCodes[index]]));
+        const codeOwner = new Map(existing.map((asset, index) => [existingCodes[index], normalizeKey(asset.name)]));
+        const reserved = new Set([...existingCodes, ...incoming.map((asset) => asset.code)]);
+        const assigned = new Set<string>();
+        let next = 1;
+        return incoming.map((asset) => {
+            const name = normalizeKey(asset.name);
+            let code = byName.get(name) || asset.code;
+            if (code === asset.code && codeOwner.has(code) && codeOwner.get(code) !== name) {
+                while (reserved.has(`${prefix}${String(next).padStart(2, "0")}`)) next += 1;
+                code = `${prefix}${String(next).padStart(2, "0")}`;
+                reserved.add(code);
+            }
+            if (assigned.has(code)) throw new DramaProductionPackageError(`制作包${prefix}资产身份重复：${asset.name}（${code}）`);
+            assigned.add(code);
+            if (code !== asset.code) mappings.set(asset.code, code);
+            return { ...asset, code };
+        });
+    };
+    const assets = {
+        characters: align(value.assets.characters, project.characters, "C"),
+        locations: align(value.assets.locations, project.scenes, "S"),
+        props: align(value.assets.props, project.props, "P"),
+        clues: align(value.assets.clues, project.clues, "L"),
+    };
+    if (!mappings.size) return value;
+    importWarnings?.push("已按角色、场景和道具名称对齐当前项目的固定资产编码；镜头、参考图与连续性引用同步更新。");
+    const recode = (code: string) => mappings.get(code) || code;
+    const state = (source: DramaShot["entryState"]) =>
+        source && {
+            ...source,
+            characters: source.characters.map((item) => ({ ...item, assetId: recode(item.assetId), ...(item.holderId ? { holderId: recode(item.holderId) } : {}) })),
+            props: source.props.map((item) => ({ ...item, assetId: recode(item.assetId), ...(item.holderId ? { holderId: recode(item.holderId) } : {}) })),
+        };
+    return {
+        ...value,
+        assets,
+        episodes: value.episodes.map((episode) => ({
+            ...episode,
+            storyScenes: episode.storyScenes.map((scene) => ({ ...scene, locationCode: scene.locationCode ? recode(scene.locationCode) : undefined })),
+            continuityEdges: episode.continuityEdges.map((edge) => ({
+                ...edge,
+                carryCharacterIds: edge.carryCharacterIds.map(recode),
+                carryPropIds: edge.carryPropIds.map(recode),
+            })),
+            shots: episode.shots.map((shot) => ({
+                ...shot,
+                characterCodes: shot.characterCodes.map(recode),
+                propCodes: shot.propCodes.map(recode),
+                clueCodes: shot.clueCodes.map(recode),
+                locationCode: shot.locationCode ? recode(shot.locationCode) : undefined,
+                utterances: shot.utterances.map((item) => ({ ...item, characterId: item.characterId ? recode(item.characterId) : undefined })),
+                entryState: state(shot.entryState),
+                exitState: state(shot.exitState),
+                framePlan: {
+                    ...shot.framePlan,
+                    referenceManifest: shot.framePlan.referenceManifest?.map((item) => ({ ...item, assetId: item.assetId ? recode(item.assetId) : undefined })),
+                },
+            })),
+        })),
+        archive: value.archive && { ...value.archive, referencePlan: value.archive.referencePlan.map((item) => ({ ...item, asset: recode(item.asset) })) },
     };
 }
 
@@ -220,8 +289,8 @@ export function previewDramaProductionPackageObject(
 ): DramaProductionPackagePreview {
     const parsed = object(source);
     if (!Object.keys(parsed).length) throw new DramaProductionPackageError("制作包内容不能为空");
-    const packageWithProjectAssets = project ? mergeProjectAssetsIntoProductionPackage(parsed as DramaProductionPackageV1, project) : parsed;
     const importWarnings: string[] = [];
+    const packageWithProjectAssets = project ? mergeProjectAssetsIntoProductionPackage(parsed as DramaProductionPackageV1, project, importWarnings) : parsed;
     const normalizedPackage = normalizeProductionPackage(packageWithProjectAssets, { ...options, importWarnings });
     const productionPackage = project ? recompileProductionPackageForProject(normalizedPackage, project, importWarnings) : normalizedPackage;
     const allWarnings = [...new Set([...importWarnings, ...collectWarnings(productionPackage)])];
@@ -279,15 +348,7 @@ export function applyDramaProductionPackage(project: DramaProject, source: Drama
     const clues = mergeAssets(assetPromptProject.clues, productionPackage.assets.clues, "clue");
     const episodeByCode = new Map(project.episodes.flatMap((episode) => (episode.code ? [[episode.code, episode] as const] : [])));
     const incomingEpisodes = productionPackage.episodes.map((episodePackage, index) =>
-        mergeEpisode(
-            episodeByCode.get(episodePackage.code) || (episodePackage.code ? undefined : project.episodes[index]),
-            episodePackage,
-            characters.ids,
-            locations.ids,
-            props.ids,
-            clues.ids,
-            project.defaultVideoMode,
-        ),
+        mergeEpisode(episodeByCode.get(episodePackage.code) || (episodePackage.code ? undefined : project.episodes[index]), episodePackage, characters.ids, locations.ids, props.ids, clues.ids, project.defaultVideoMode),
     );
     const episodes = options.episodeImportMode === "merge" ? mergeProjectEpisodes(project.episodes, incomingEpisodes) : incomingEpisodes;
     return {
@@ -360,6 +421,7 @@ function mergeEpisode(
             sceneId: shot.locationCode ? locationIds.get(shot.locationCode) : undefined,
             propIds: shot.propCodes.map((code) => propIds.get(code)).filter((value): value is string => Boolean(value)),
             clueIds: shot.clueCodes.map((code) => clueIds.get(code)).filter((value): value is string => Boolean(value)),
+            utterances: shot.utterances.map((item) => ({ ...item, ...(item.characterId ? { characterId: characterIds.get(item.characterId) || item.characterId } : {}) })),
             entryState: remapContinuityState(shot.entryState, characterIds, propIds),
             exitState: remapContinuityState(shot.exitState, characterIds, propIds),
             storySceneId: undefined,
@@ -525,10 +587,14 @@ function mergeManualFields<T extends { fieldOrigins?: Record<string, DramaFieldO
 }
 
 /** Validate standalone Codex data before compatibility normalization can drop malformed shots. */
-function validateStandalonePackageShape(input: Record<string, unknown>) {
+function validateStandalonePackageShape(input: Record<string, unknown>, options: DramaProductionPackageNormalizationOptions = {}) {
     const has = (value: Record<string, unknown>, key: string) => Object.prototype.hasOwnProperty.call(value, key);
     const fail = (path: string, message: string): never => {
         throw new DramaProductionPackageError(`${path}${message}`);
+    };
+    const qualityWarning = (path: string, message: string) => {
+        if (!options.allowImportWarnings) fail(path, message);
+        options.importWarnings?.push(`${path}${message}；已允许导入，请在镜头生成前查看并处理 QC 提醒`);
     };
     if (!Array.isArray(input.episodes) || !input.episodes.length) fail("episodes", " 必须是非空数组");
     const project = object(input.project);
@@ -541,20 +607,25 @@ function validateStandalonePackageShape(input: Record<string, unknown>) {
 
     const authoring = object(input.authoring);
     if (authoring.authoringMode !== "codex-standalone" || authoring.canonicalSource !== "markdown-with-embedded-json") fail("authoring", " 必须声明 codex-standalone 与 markdown-with-embedded-json");
-    if (authoring.qualityGateStatus !== "passed") fail("authoring.qualityGateStatus", " 必须为 passed；未通过自检的制作包不得导入");
+    if (authoring.qualityGateStatus !== "passed") qualityWarning("authoring.qualityGateStatus", ` 当前为 ${text(authoring.qualityGateStatus) || "缺失"}，建议复核质量门禁`);
     if (!text(authoring.generatedAt)) fail("authoring.generatedAt", " 缺失");
     if (!Array.isArray(authoring.materials)) fail("authoring.materials", " 必须是数组，不能是对象或省略");
     const materials = authoring.materials as unknown[];
     const materialRoles = new Set(materials.map((item) => text(object(item).role)));
     if (!materialRoles.has("package-template") || !materialRoles.has("story-source")) fail("authoring.materials", " 必须同时记录 package-template 与 story-source");
     const report = object(authoring.qualityGateReport);
-    if (!Object.keys(report).length) fail("authoring.qualityGateReport", " 缺失；qualityGateStatus=passed 必须附带完整 QC 报告");
-    if (report.status !== "passed" || !Array.isArray(report.checks)) fail("authoring.qualityGateReport", " 状态或 checks 无效");
-    const reportChecks = report.checks as unknown[];
-    const reportCodes = new Set(reportChecks.map((item) => text(object(item).code)));
-    const missingGateCodes = DRAMA_PACKAGE_GATE_CODES.filter((code) => !reportCodes.has(code));
-    if (missingGateCodes.length) fail("authoring.qualityGateReport.checks", ` 缺少门禁：${missingGateCodes.join("、")}`);
-    if (reportChecks.some((item) => object(item).status === "blocked")) fail("authoring.qualityGateReport.checks", " 仍包含未通过的门禁，不能标记 passed");
+    if (!Object.keys(report).length) qualityWarning("authoring.qualityGateReport", " 缺失，无法查看作者侧 QC 结果");
+    else {
+        if (report.status !== "passed") qualityWarning("authoring.qualityGateReport.status", ` 当前为 ${text(report.status) || "缺失"}`);
+        if (!Array.isArray(report.checks)) qualityWarning("authoring.qualityGateReport.checks", " 缺失或无效，无法确认作者侧 QC 完整性");
+        else {
+            const reportChecks = report.checks as unknown[];
+            const reportCodes = new Set(reportChecks.map((item) => text(object(item).code)));
+            const missingGateCodes = DRAMA_PACKAGE_GATE_CODES.filter((code) => !reportCodes.has(code));
+            if (missingGateCodes.length) qualityWarning("authoring.qualityGateReport.checks", ` 缺少门禁：${missingGateCodes.join("、")}`);
+            if (reportChecks.some((item) => object(item).status === "blocked")) qualityWarning("authoring.qualityGateReport.checks", " 包含未通过的门禁，请查看 QC 提醒");
+        }
+    }
 
     for (const field of ["projectionVersion", "qualityGateRulesHash", "repairPolicyHash", "runId", "workOrderId", "executeDramaScriptRun"]) {
         if (has(authoring, field)) fail(`authoring.${field}`, " 是服务端运行字段，codex-standalone 不得写入");
@@ -593,7 +664,7 @@ function validateStandalonePackageShape(input: Record<string, unknown>) {
         const pauseBefore = Number(planItem.pauseBeforeSeconds || 0);
         const pauseAfter = Number(planItem.pauseAfterSeconds || 0);
         if (!Number.isFinite(pauseBefore) || pauseBefore < 0 || !Number.isFinite(pauseAfter) || pauseAfter < 0) fail(path, " 句前/句后停顿必须是非负数");
-        if (requiredSpeechSeconds > availableSpeechSeconds + 0.01) fail(path, ` 对白容量不足：requiredSpeechSeconds=${requiredSpeechSeconds}，availableSpeechSeconds=${availableSpeechSeconds}`);
+        if (requiredSpeechSeconds > availableSpeechSeconds + 0.01) qualityWarning(path, ` 对白容量不足：requiredSpeechSeconds=${requiredSpeechSeconds}，availableSpeechSeconds=${availableSpeechSeconds}`);
     }
     const narrativeBeatPlan = lock.narrativeBeatPlan as unknown[];
     if (narrativeBeatPlan.length !== logicalShotCount) fail("project.productionLock.narrativeBeatPlan", ` 必须有 ${logicalShotCount} 个独立剧情职责，不能用内部帧段或对白分句翻倍镜头`);
@@ -668,7 +739,7 @@ function normalizeProductionPackage(value: unknown, options: DramaProductionPack
     const input = object(value);
     if (Number(input.schemaVersion) !== 1) throw new DramaProductionPackageError("仅支持 schemaVersion 1 的制作包");
     const rawAuthoring = object(input.authoring);
-    if (rawAuthoring.source === "codex-standalone" && !options.validatedStandalonePackage) validateStandalonePackageShape(input);
+    if (rawAuthoring.source === "codex-standalone" && !options.validatedStandalonePackage) validateStandalonePackageShape(input, options);
     const normalizationOptions = rawAuthoring.source === "codex-standalone" ? { ...options, preserveAuthoredVideoPrompt: true, standaloneImport: true } : options;
     if (options.requireContentQuality || options.requireAuthoringQuality) validateRawAgentPackageDraft(input);
     const project = object(input.project);
@@ -911,10 +982,7 @@ function restylePackageArchive(archive: DramaProductionPackageV1["archive"], pro
     };
 }
 
-function validateProductionPackageExecutionContract(
-    value: DramaProductionPackageV1,
-    options: { allowImportWarnings?: boolean; importWarnings?: string[] } = {},
-) {
+function validateProductionPackageExecutionContract(value: DramaProductionPackageV1, options: { allowImportWarnings?: boolean; importWarnings?: string[] } = {}) {
     const issues: string[] = [];
     for (const episode of value.episodes) {
         for (const shot of episode.shots) {
@@ -981,7 +1049,7 @@ function normalizeProductionLock(value: unknown): DramaProductionLock | undefine
         Array.isArray(input.narrativeBeatPlan) &&
         Boolean(text(input.selfCheckRuleVersion));
     const hashFields = ["storySourceHash", "templateHash", "contractHash", "specHash", "directorSkillHash", "seedanceSkillHash", "authoringSchemaHash", "qualityGateRulesHash", "repairPolicyHash"] as const;
-    if (standaloneLockIsValid && !text(input.projectionVersion) && !text(input.lockedBy)) {
+    if (standaloneLockIsValid && !text(input.projectionVersion)) {
         return {
             shotDuration: shotDuration as 15 | 30,
             targetDuration,
@@ -991,6 +1059,9 @@ function normalizeProductionLock(value: unknown): DramaProductionLock | undefine
             selfCheckRuleVersion: text(input.selfCheckRuleVersion),
             internalCutPolicy: text(input.internalCutPolicy) as DramaProductionLock["internalCutPolicy"],
             framePolicy: text(input.framePolicy) as DramaProductionLock["framePolicy"],
+            ...Object.fromEntries(hashFields.filter((field) => /^[a-f0-9]{64}$/u.test(text(input[field]))).map((field) => [field, text(input[field])])),
+            ...(text(input.lockedAt) ? { lockedAt: text(input.lockedAt) } : {}),
+            ...(text(input.lockedBy) === "codex-current-conversation" ? { lockedBy: "codex-current-conversation" } : {}),
         } as DramaProductionLock;
     }
     if (
@@ -1676,6 +1747,7 @@ function normalizePackageShot(value: unknown, index: number, options: DramaProdu
             order: positiveNumber(utterance.order) || utteranceIndex + 1,
             type,
             speaker: text(utterance.speaker),
+            ...(optionalText(utterance.characterId) ? { characterId: text(utterance.characterId) } : {}),
             text: text(utterance.text),
             ...(finiteNumber(utterance.startSecond) !== undefined ? { startSecond: finiteNumber(utterance.startSecond) } : {}),
             ...(finiteNumber(utterance.endSecond) !== undefined ? { endSecond: finiteNumber(utterance.endSecond) } : {}),
@@ -2278,6 +2350,12 @@ function collectWarnings(value: DramaProductionPackageV1) {
     for (const episode of value.episodes) {
         for (const shot of episode.shots) {
             for (const code of [...shot.characterCodes, ...shot.propCodes, ...shot.clueCodes, ...(shot.locationCode ? [shot.locationCode] : [])]) if (!assetCodes.has(code)) warnings.push(`${episode.code}/${shot.code} 引用了不存在的资产 ${code}`);
+            const visibleText = [shot.imagePrompt, ...(shot.framePlan?.frames || []).map((frame) => frame.imagePrompt), ...shot.videoPrompt.split("\n").filter((line) => /^\s*画面内容[：:]/u.test(line))].join("\n");
+            for (const character of value.assets.characters) {
+                if (character.name && visibleText.includes(character.name) && !shot.characterCodes.includes(character.code)) {
+                    warnings.push(`${episode.code}/${shot.code} 画面出现角色 ${character.name}，但未绑定角色资产 ${character.code}（不阻止导入）`);
+                }
+            }
             const timingReminder = dramaDialogueTimingReminder(shot.duration, shot.utterances as DramaDialogueTimingInput[], shot.dialogue, `${episode.code}/${shot.code}`);
             if (timingReminder) warnings.push(`对白时长提醒（不阻止导入）：${timingReminder.message}`);
             for (const frame of shot.framePlan?.frames || []) {

@@ -267,6 +267,42 @@ describe("production package boundary", () => {
         expect(merged.assets.characters).toEqual(expect.arrayContaining([expect.objectContaining({ code: "C01", name: "A", description: "项目 A" }), expect.objectContaining({ code: "C02", name: "B", description: "项目 B" })]));
     });
 
+    it("keeps character identity when package and project codes are reversed", () => {
+        const current = project();
+        current.characters = [
+            { id: "character-rifa", code: "C01", name: "Rifa", description: "项目 Rifa" },
+            { id: "character-karin", code: "C02", name: "Karin", description: "项目 Karin" },
+        ];
+        const source = structuredClone(productionPackage);
+        source.episodes[0].shots[0].utterances = [{ id: "D01", order: 1, type: "dialogue", speaker: "Karin", characterId: "C01", text: "现在出发" }];
+        const preview = previewDramaProductionPackage(JSON.stringify(source), "package.json", current);
+        const [first, second] = preview.package.episodes[0].shots;
+
+        expect(preview.package.assets.characters.map(({ code, name }) => ({ code, name }))).toEqual([
+            { code: "C01", name: "Rifa" },
+            { code: "C02", name: "Karin" },
+        ]);
+        expect(first.characterCodes).toEqual(["C02"]);
+        expect(first.utterances[0].characterId).toBe("C02");
+        expect(first.entryState?.characters[0].assetId).toBe("C02");
+        expect(first.framePlan.referenceManifest?.find((item) => item.role === "character_anchor")?.assetId).toBe("C02");
+        expect(second.characterCodes).toEqual(["C02", "C01"]);
+        expect(preview.package.episodes[0].continuityEdges[0].carryCharacterIds).toEqual(["C02"]);
+
+        const applied = applyDramaProductionPackage(current, preview.package, "reversed-character-codes");
+        expect(applied.episodes[0].shots[0].characterIds).toEqual(["character-karin"]);
+        expect(applied.episodes[0].shots[0].utterances[0].characterId).toBe("character-karin");
+        expect(applied.episodes[0].shots[1].characterIds).toEqual(["character-karin", "character-rifa"]);
+        expect(applied.episodes[0].shots[0].framePlan?.referenceManifest?.find((item) => item.role === "character_anchor")?.assetId).toBe("character-karin");
+    });
+
+    it("warns when a visible named character is not bound to the shot", () => {
+        const source = structuredClone(productionPackage);
+        source.episodes[0].shots[0].videoPrompt = "### 镜头 01\n画面内容：Rifa伸手拿起罗盘。\n台词：无";
+        const preview = previewDramaProductionPackage(JSON.stringify(source), "package.json", undefined, { allowImportWarnings: true });
+        expect(preview.warnings).toEqual(expect.arrayContaining([expect.stringContaining("SH01 画面出现角色 Rifa，但未绑定角色资产 C02")]));
+    });
+
     it("previews canonical JSON without losing production counts", () => {
         const preview = previewDramaProductionPackage(JSON.stringify(productionPackage), "package.json");
 
@@ -1014,6 +1050,16 @@ describe("production package boundary", () => {
         source.authoring.qualityGateReport!.checks[0] = { ...source.authoring.qualityGateReport!.checks[0], status: "passed", severity: "blocker" };
 
         const preview = previewDramaProductionPackage(JSON.stringify(source), "codex-standalone.md", undefined, { allowImportWarnings: false });
+
+        const qualityBlocked = structuredClone(source);
+        qualityBlocked.authoring!.qualityGateStatus = "blocked";
+        qualityBlocked.authoring!.qualityGateReport!.status = "blocked";
+        qualityBlocked.authoring!.qualityGateReport!.checks[0] = { ...qualityBlocked.authoring!.qualityGateReport!.checks[0], status: "blocked", severity: "blocker" };
+        expect(() => previewDramaProductionPackage(JSON.stringify(qualityBlocked), "codex-standalone.md", undefined, { allowImportWarnings: false })).toThrow("qualityGateStatus");
+        const warningPreview = previewDramaProductionPackage(JSON.stringify(qualityBlocked), "codex-standalone.md", undefined, { allowImportWarnings: true });
+        expect(warningPreview.package.episodes).toHaveLength(1);
+        expect(warningPreview.warnings.join("\n")).toContain("authoring.qualityGateStatus");
+        expect(warningPreview.warnings.join("\n")).toContain("authoring.qualityGateReport.checks");
 
         expect(preview.package.episodes[0].shots[0].videoPrompt).toBe(authoredVideoPrompt);
         expect(preview.package.authoring).toMatchObject({ source: "codex-standalone", authoringMode: "codex-standalone", canonicalSource: "markdown-with-embedded-json", qualityGateStatus: "passed" });

@@ -168,3 +168,36 @@ test("a production package restores its complete visual contract in episode sett
         expect(deleted.ok(), await deleted.text()).toBe(true);
     }
 });
+
+test("a production package with fixable quality warnings can still be imported", async ({ page, request }) => {
+    const created = await request.post("/api/drama/projects", { data: { title: `E2E 提醒式制作包导入 ${randomUUID().slice(0, 8)}` } });
+    expect(created.ok(), await created.text()).toBe(true);
+    const project = ((await created.json()) as { data: { project: DramaProject } }).data.project;
+    const sourcePackage = modernizeLegacySceneFixture(JSON.parse(readFileSync(new URL("../../output/mahadel-episode-01-production-package-v2-multiframe.json", import.meta.url), "utf8")) as DramaProductionPackageV1);
+    const firstShot = sourcePackage.episodes[0].shots[0] as { framePlan?: unknown };
+    delete firstShot.framePlan;
+
+    try {
+        await page.goto(`/drama/${project.id}`, { waitUntil: "networkidle" });
+        await page.getByRole("button", { name: "完整制作包", exact: true }).click();
+        const dialog = page.getByRole("dialog", { name: "导入完整制作包" });
+        await dialog.getByRole("textbox", { name: "粘贴制作包文本" }).fill(JSON.stringify(sourcePackage));
+        await dialog.getByRole("button", { name: "识别并预览" }).click();
+
+        const preview = page.locator("[data-drama-production-package-preview]");
+        await expect(preview.locator("[data-drama-production-package-import-warnings]")).toContainText("允许导入");
+        await expect(page.getByRole("button", { name: "继续导入（有警告）" })).toBeEnabled();
+        await page.getByRole("button", { name: "继续导入（有警告）" }).click();
+        const confirmation = page.getByRole("dialog", { name: "制作包存在识别警告" });
+        await confirmation.getByRole("button", { name: "仍然导入" }).click();
+
+        await expect(page.getByText(/已导入 \d+ 个导演镜头/u)).toBeVisible();
+        const readback = await request.get(`/api/drama/projects/${project.id}`);
+        expect(readback.ok(), await readback.text()).toBe(true);
+        const saved = ((await readback.json()) as { data: { project: DramaProject } }).data.project;
+        expect(saved.episodes.some((episode) => episode.shots.length > 0)).toBe(true);
+    } finally {
+        const deleted = await request.delete(`/api/drama/projects/${project.id}`);
+        expect(deleted.ok(), await deleted.text()).toBe(true);
+    }
+});

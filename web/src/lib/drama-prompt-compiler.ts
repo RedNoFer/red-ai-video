@@ -324,15 +324,12 @@ export function applyDramaVideoVisualContract(project: DramaVisualContractProjec
     if (!visualContract) return source.trim();
     const prompt = formatPromptFieldLines(stripHistoricalAssetStyleFacts(stripDramaAssetReferenceSections(sanitizeDramaVisualPrompt(source))), "video");
     if (!prompt) return prompt;
-    const lines = prompt.split("\n");
-    let replaced = false;
-    const next = lines.map((line) => {
-        if (!/^(?:视觉风格与光色|色调)[：:]/u.test(line.trim())) return line;
-        replaced = true;
-        const label = line.trim().startsWith("色调") ? "色调" : "视觉风格与光色";
-        return `${label}：项目视觉合同（唯一风格来源）：${visualContract}`;
-    });
-    return replaced ? next.join("\n") : `当前项目视觉合同（唯一风格来源）：${visualContract}\n${prompt}`;
+    const next = prompt
+        .split("\n")
+        .filter((line) => !/^(?:当前项目视觉合同（唯一风格来源）|视觉风格与光色)[：:]/u.test(line.trim()))
+        .filter((line) => !/^色调[：:](?:项目视觉合同（唯一风格来源）|.*(?:国漫|仙侠|古风|二次元))/u.test(line.trim()))
+        .join("\n");
+    return `当前项目视觉合同（唯一风格来源）：${visualContract}\n${next}`;
 }
 
 export function stripDramaAssetReferenceSections(value: string) {

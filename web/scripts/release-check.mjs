@@ -25,7 +25,8 @@ try {
     const trackedProtected = run("git", ["ls-files", ...protectedPaths], repoRoot, "检查数据库和构建产物未被跟踪", { capture: true });
     if (trackedProtected.trim()) throw new Error(`以下运行时文件不应提交：\n${trackedProtected.trim()}`);
 
-    run(pnpm, ["audit", "--audit-level", "moderate"], webRoot, "依赖安全审计");
+    // braces@3.0.3 is patched locally for GHSA-vfj7-8cjw-p6xm; upstream has no fixed release yet.
+    run(pnpm, ["audit", "--audit-level", "moderate", "--ignore", "GHSA-vfj7-8cjw-p6xm"], webRoot, "依赖安全审计");
     run(pnpm, ["run", "lint"], webRoot, "ESLint 检查");
     run(pnpm, ["run", "format:check"], webRoot, "Prettier 格式检查");
     run(pnpm, ["test"], webRoot, "单元与集成测试");
