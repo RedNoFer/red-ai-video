@@ -6,7 +6,7 @@ import type { DramaGlobalVisualContract } from "@/lib/drama-style";
 import { refreshUserPointsIfSystem } from "@/services/api/points";
 import { throwIfClientSessionExpired } from "@/services/api/session-expiration";
 
-type PromptOptimizationInput = { requestId: string; prompt: string; mode: "agent" | CreativeGenerationMode | "drama-frame" | "drama-asset"; visualContract?: DramaGlobalVisualContract };
+type PromptOptimizationInput = { requestId: string; prompt: string; mode: "agent" | CreativeGenerationMode | "drama-frame" | "drama-asset"; visualContract?: DramaGlobalVisualContract; projectRatio?: string };
 type AssetPromptOptimizationInput = Omit<PromptOptimizationInput, "mode"> & { mode: "drama-asset" };
 type NonAssetPromptOptimizationInput = Omit<PromptOptimizationInput, "mode"> & { mode: "agent" | CreativeGenerationMode | "drama-frame" };
 export type PromptOptimizationReasonCode =
@@ -85,6 +85,6 @@ export async function getDramaFrameExternalBrief(input: { projectId: string; epi
     return brief;
 }
 
-export function optimizeDramaAssetPrompt(kind: "角色" | "场景" | "道具", prompt: string, requestId = crypto.randomUUID(), visualContract?: DramaGlobalVisualContract) {
-    return optimizePrompt({ requestId, prompt: `【资产类型】${kind}\n【当前提示词】\n${prompt}`, mode: "drama-asset", visualContract });
+export function optimizeDramaAssetPrompt(kind: "角色" | "场景" | "道具", prompt: string, requestId = crypto.randomUUID(), visualContract?: DramaGlobalVisualContract, projectRatio?: string) {
+    return optimizePrompt({ requestId, prompt: `【资产类型】${kind}\n【当前提示词】\n${prompt}`, mode: "drama-asset", visualContract, projectRatio });
 }

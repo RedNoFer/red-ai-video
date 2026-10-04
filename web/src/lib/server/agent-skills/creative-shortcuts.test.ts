@@ -65,7 +65,8 @@ describe("creative shortcut skills", () => {
 
     it("keeps the fixed character-sheet and single-subject asset rules available", () => {
         expect(DRAMA_ASSET_IMAGE_SKILL.promptRules).toContain("纯白色无缝背景的四视图角色基准板");
-        expect(DRAMA_ASSET_IMAGE_SKILL.promptRules).toContain("场景图固定生成一张高清、无人物、无文字的完整单视角全景建立图");
+        expect(DRAMA_ASSET_IMAGE_SKILL.promptRules).toContain("场景图固定生成一张高清、无人物、无文字的完整单视角空间建立图");
+        expect(DRAMA_ASSET_IMAGE_SKILL.promptRules).toContain("画幅必须使用用户提供或当前项目配置的比例");
         expect(DRAMA_ASSET_IMAGE_SKILL.refinementRules).toContain("change / preserve / constraints");
     });
 

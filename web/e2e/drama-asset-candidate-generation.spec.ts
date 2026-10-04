@@ -8,45 +8,48 @@ const REFERENCE_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAA
 
 test.use({ storageState: ".e2e-data/admin-state.json" });
 
-test("9:16 project still presents a realistic 16:9 scene supplier prompt", async ({ page, request }) => {
-    const created = await request.post("/api/drama/projects", { data: { title: `E2E 场景提示词画幅 ${Date.now()}`, ratio: "9:16" } });
-    expect(created.ok(), await created.text()).toBe(true);
-    const project = ((await created.json()) as { data: { project: DramaProject } }).data.project;
-    const sceneId = "scene-prompt-aspect-e2e";
+for (const ratio of ["9:16", "16:9", "1080x1920"] as const) {
+    test(`${ratio} project scene supplier prompt follows the project ratio and preserves scene topology`, async ({ page, request }) => {
+        const created = await request.post("/api/drama/projects", { data: { title: `E2E 场景提示词画幅 ${ratio} ${Date.now()}`, ratio } });
+        expect(created.ok(), await created.text()).toBe(true);
+        const project = ((await created.json()) as { data: { project: DramaProject } }).data.project;
+        const sceneId = "scene-prompt-aspect-e2e";
 
-    try {
-        const saved = await request.patch(`/api/drama/projects/${project.id}`, {
-            data: {
-                ...project,
-                scenes: [
-                    {
-                        id: sceneId,
-                        name: "场景提示词画幅测试",
-                        description: "石质测站，固定入口与长案",
-                        profile: { visualIdentity: "石质空间，入口与长案位置固定", styling: "粗粝石面与旧木长案", colorPalette: "冷灰", consistencyRules: "透视和空间拓扑保持一致" },
-                        references: [],
-                    },
-                ],
-            },
-        });
-        expect(saved.ok(), await saved.text()).toBe(true);
+        try {
+            const saved = await request.patch(`/api/drama/projects/${project.id}`, {
+                data: {
+                    ...project,
+                    scenes: [
+                        {
+                            id: sceneId,
+                            name: "场景提示词画幅测试",
+                            description: "石质测站，固定入口与长案",
+                            profile: { visualIdentity: "石质空间，入口与长案位置固定", styling: "粗粝石面与旧木长案", colorPalette: "冷灰", consistencyRules: "透视和空间拓扑保持一致" },
+                            references: [],
+                        },
+                    ],
+                },
+            });
+            expect(saved.ok(), await saved.text()).toBe(true);
 
-        await page.goto(`/drama/${project.id}`, { waitUntil: "domcontentloaded" });
-        await page.getByRole("button", { name: "打开项目资产" }).click();
-        await page.locator('[aria-label="项目资产分类"] button').filter({ hasText: "场景" }).click();
-        await page.locator("[data-drama-assets-library] article").filter({ hasText: "场景提示词画幅测试" }).getByRole("button", { name: "编辑场景：场景提示词画幅测试" }).last().click();
+            await page.goto(`/drama/${project.id}`, { waitUntil: "domcontentloaded" });
+            await page.getByRole("button", { name: "打开项目资产" }).click();
+            await page.locator('[aria-label="项目资产分类"] button').filter({ hasText: "场景" }).click();
+            await page.locator("[data-drama-assets-library] article").filter({ hasText: "场景提示词画幅测试" }).getByRole("button", { name: "编辑场景：场景提示词画幅测试" }).last().click();
 
-        const drawer = page.getByRole("dialog", { name: "编辑场景" });
-        await drawer.getByText("实际供应商提示词（可编辑）").click();
-        const prompt = drawer.getByLabel("供应商提示词");
-        await expect(prompt).toHaveValue(/16:9 横向画幅/);
-        await expect(prompt).toHaveValue(/真实电影摄影与实物物理质感/);
-        await expect(prompt).not.toHaveValue(/9:16/);
-    } finally {
-        const deleted = await request.delete(`/api/drama/projects/${project.id}`);
-        expect(deleted.ok(), await deleted.text()).toBe(true);
-    }
-});
+            const drawer = page.getByRole("dialog", { name: "编辑场景" });
+            await drawer.getByText("实际供应商提示词（可编辑）").click();
+            const prompt = drawer.getByLabel("供应商提示词");
+            await expect(prompt).toHaveValue(new RegExp(`${ratio} (?:项目成片)?画幅`));
+            await expect(prompt).toHaveValue(/入口、出口|入口与长案位置固定/);
+            const otherRatios = ["9:16", "16:9"].filter((item) => item !== ratio);
+            for (const otherRatio of otherRatios) await expect(prompt).not.toHaveValue(new RegExp(otherRatio));
+        } finally {
+            const deleted = await request.delete(`/api/drama/projects/${project.id}`);
+            expect(deleted.ok(), await deleted.text()).toBe(true);
+        }
+    });
+}
 
 test("编辑角色视觉设定后保存并恢复全部字段", async ({ page, request }) => {
     const created = await request.post("/api/drama/projects", { data: { title: `E2E 角色设定保存 ${Date.now()}`, ratio: "9:16" } });

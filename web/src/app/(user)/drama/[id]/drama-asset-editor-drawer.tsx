@@ -333,7 +333,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
         setOptimizingAssetPrompt(true);
         try {
             const prompt = supplierPrompt;
-            const optimized = await optimizeDramaAssetPrompt(assetKind, prompt, `drama-asset:${project.id}:${asset.id}:${nanoid()}`, resolveDramaGlobalVisualContract(project));
+            const optimized = await optimizeDramaAssetPrompt(assetKind, prompt, `drama-asset:${project.id}:${asset.id}:${nanoid()}`, resolveDramaGlobalVisualContract(project), project.ratio);
             setDraft((current) => ({
                 ...current,
                 description: optimized.fields.description,
@@ -1007,10 +1007,10 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                             <div>
                                 <h3 className="text-sm font-semibold">{kind === "scenes" ? "高清场景全景图候选" : "参考图候选"}</h3>
                                 <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                                    {kind === "scenes" ? "每张候选都是固定16:9横向的高清、无人物、无文字单视角场景全景建立图，不随成片画幅改变；确认后作为后续镜头的场景锚点。" : "候选图不会进入镜头生成，必须明确确认一张主基准图。"}
+                                    {kind === "scenes" ? `每张候选均按本项目 ${project.ratio} 成片画幅生成高清、无人物、无文字的单视角场景全景建立图；确认后作为后续镜头的场景锚点。` : "候选图不会进入镜头生成，必须明确确认一张主基准图。"}
                                 </p>
                                 {kind === "scenes" && asset?.sceneReferenceBoard?.layout === "legacy-3x3" ? (
-                                    <p className="mt-1 text-xs leading-5 text-amber-700 dark:text-amber-300">当前主图是旧版九宫格空间基准图，不能用于生产；请生成并确认一张固定16:9横向的高清场景全景图。</p>
+                                    <p className="mt-1 text-xs leading-5 text-amber-700 dark:text-amber-300">当前主图是旧版九宫格空间基准图，不能用于生产；请按本项目 {project.ratio} 画幅重新生成并确认高清场景全景图。</p>
                                 ) : null}
                                 <div className="mt-2 rounded-lg border border-border bg-muted/25 px-3 py-2 text-xs leading-5 text-muted-foreground">
                                     <span className="font-medium text-foreground">审核标准：</span>

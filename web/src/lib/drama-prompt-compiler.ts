@@ -56,7 +56,6 @@ export type DerivedShotPromptContract = {
 };
 
 export const DRAMA_CHARACTER_TURNAROUND_SIZE = "16:9";
-export const DRAMA_SCENE_REFERENCE_ASPECT_RATIO = "16:9";
 export const DRAMA_CHARACTER_TURNAROUND_LABEL = "四视图角色基准板";
 export const DRAMA_CHARACTER_TURNAROUND_LAYOUT = "身份特写、正面全身立姿、严格左侧面全身立姿、背面全身立姿四个视图，同一角色等距水平排列；身份特写置于同一基准板内，只用于锁定五官、脸型、发际线和脸部识别，后三个视图必须从头顶到鞋靴完整入画";
 
@@ -108,15 +107,30 @@ export function hasDramaAssetPromptQuality(value: string | undefined, kind: "角
     return visibleLines.every((line) => !hasDramaPropNarrative(line)) && !hasPositiveEnvironment && /(?:单一道具主体|只展示道具|道具本体)/u.test(prompt) && /(?:静置|展示)/u.test(prompt);
 }
 
-export function hasDramaReferenceAnchorClarity(value: string | undefined, kind: "角色" | "场景" | "道具") {
+export function hasDramaReferenceAnchorClarity(value: string | undefined, kind: "角色" | "场景" | "道具", projectRatio?: string) {
     const prompt = formatDramaAssetPrompt(value || "");
     if (!hasDramaAssetPromptQuality(prompt, kind)) return false;
     if (kind === "角色") return /身份特写/u.test(prompt) && /四视图|转面/u.test(prompt) && /服装|固定配饰/u.test(prompt);
     if (kind === "场景") {
         const topologyTerms = prompt.match(/长案|主位|入口|高窗|门|窗|通道|墙|桌|座位/gu) || [];
-        return /高清|高精度|1080p|4K/iu.test(prompt) && /16\s*[:：]\s*9/u.test(prompt) && /单视角[^\n]{0,20}全景|全景建立图/u.test(prompt) && new Set(topologyTerms).size >= 2;
+        const composition = prompt.split(/\r?\n/u).find((line) => /^构图与画幅[：:]/u.test(line)) || "";
+        const ratio = composition.match(/(\d+(?:\.\d+)?\s*[:x×]\s*\d+(?:\.\d+)?)/iu)?.[1];
+        return /高清|高精度|1080p|4K/iu.test(prompt) && ratio !== undefined && (!projectRatio || hasSameAspectRatio(ratio, projectRatio)) && /单视角[^\n]{0,36}全景|全景建立图/u.test(prompt) && new Set(topologyTerms).size >= 2;
     }
     return true;
+}
+
+function hasSameAspectRatio(left: string, right: string) {
+    const dimensions = (value: string) => {
+        const [width, height] = value
+            .trim()
+            .split(/\s*[:x×]\s*/iu)
+            .map(Number);
+        return width > 0 && height > 0 ? width / height : 0;
+    };
+    const leftRatio = dimensions(left);
+    const rightRatio = dimensions(right);
+    return leftRatio > 0 && rightRatio > 0 && Math.abs(leftRatio - rightRatio) < 1e-6;
 }
 
 /** Read the editable six-section prompt back into the durable asset fields. */
@@ -551,7 +565,7 @@ export function compileDramaAssetReferencePrompt(project: Pick<DramaProject, "ti
         kind === "角色"
             ? `${DRAMA_CHARACTER_TURNAROUND_SIZE} 横向，纯白色无缝背景；${DRAMA_CHARACTER_TURNAROUND_LAYOUT}。四个视图同一基线、同一身份、同一头身比，身份特写保持清晰五官，后三个视图全身从头顶、完整头部、躯干、双臂、双手、双腿到鞋靴完整入画。`
             : kind === "场景"
-              ? `${DRAMA_SCENE_REFERENCE_ASPECT_RATIO} 横向画幅，一张高清、完整、无人物、无文字的单视角场景全景建立图；场景基准图固定使用16:9全景，不随剧集视频画幅变化；完整呈现入口、出口、门窗、主要陈设、地面材质、光源方向、空间轴线、通道和人物动作所需的支撑面，不生成九宫格、分格或360°贴图。`
+              ? `${project.ratio} 项目成片画幅，一张高清、完整、无人物、无文字的单视角场景全景建立图；构图按该比例组织并与成片画幅一致，不得改成其他比例；完整呈现入口、出口、门窗、主要陈设、地面材质、光源方向、空间轴线、通道和人物动作所需的支撑面，不生成九宫格、分格或360°贴图。`
               : "纯白色无缝背景，单一道具主体完整入画，静置展示并保留极轻接触阴影；只展示道具本体、完整轮廓和关键材质细节，不出现展示台、项目桌面、人物、手部、持有人、剧情场景或其他道具。";
     const characterLightingStyle = [DRAMA_CHARACTER_RENDER_STYLE, DRAMA_CHARACTER_STUDIO_LIGHT_RULES].filter(Boolean).join("；");
     const characterStyleDirection = kind === "角色" ? resolveDramaCharacterStyleDirection(styleContract) : "";
@@ -632,7 +646,7 @@ export function compileDramaAssetConstraints(project: Pick<DramaProject, "ratio"
         kind === "角色"
             ? `只输出一张完整、独立的 ${DRAMA_CHARACTER_TURNAROUND_SIZE} ${DRAMA_CHARACTER_TURNAROUND_LABEL}，不生成第二张候选图或额外版式。`
             : kind === "场景"
-              ? `只输出一张完整、独立的 ${DRAMA_SCENE_REFERENCE_ASPECT_RATIO} 横向高清单视角场景全景建立图；不生成九宫格、分格、第二地点或第二张候选图。`
+              ? `只输出一张完整、独立的 ${project.ratio} 项目成片画幅高清单视角场景全景建立图；不生成九宫格、分格、第二地点或第二张候选图。`
               : "只输出一张完整、独立的纯白无缝背景单一道具设定图，不要拼版、联系表、多视角、分格模块、展示台或环境场景。",
         kind === "角色"
             ? `角色基准图必须固定为纯白色无缝背景四视图：${DRAMA_CHARACTER_TURNAROUND_LAYOUT}；身份特写与后三个全身视图严格保持同一脸型、五官、发际线、发型和体态；服装、固定配饰、材质与固有色按当前项目视觉合同统一设计并跨视图保持一致。只允许这四个视图，不得新增任何人物、四分之三视图、主立绘、表情组、手部或道具拆解、额外角度、边框、网格、说明文字或水印。`
@@ -650,7 +664,7 @@ export function compileDramaAssetConstraints(project: Pick<DramaProject, "ratio"
         kind === "角色"
             ? "禁止把中文说明、角色关系表、参数表或海报排版画进图片；四视图只表示同一角色，身份特写只负责五官识别，后三个视图负责全身比例与服装结构，不添加任何文字或其他模块。"
             : kind === "场景"
-              ? "禁止人物、文字、方向标签、九宫格、分格、边框、水印、logo、海报排版、不同地点和360°贴图；只输出一张完整的16:9横向单视角场景全景图。"
+              ? `禁止人物、文字、方向标签、九宫格、分格、边框、水印、logo、海报排版、不同地点和360°贴图；只输出一张完整的${project.ratio}项目画幅单视角场景全景图。`
               : "禁止把中文说明、角色关系表、参数表、海报排版或多张视图画进图片；设定文字只作为生成约束，不是画面内容；禁止展示台、项目桌面、剧情场景、人物、手部、持有人、书写、持握和动作过程。",
         `禁止：${forbidden.join("；")}`,
     ]);

@@ -100,16 +100,17 @@ describe("drama prompt compiler", () => {
         }
     });
 
-    it("compiles every scene anchor as a realistic 16:9 panorama independent of video ratio", () => {
+    it.each(["9:16", "16:9", "1080x1920"] as const)("compiles scene anchors using the project aspect ratio %s", (ratio) => {
         const project = createProject();
+        project.ratio = ratio;
         const scene = project.scenes[0];
         const prompt = compileDramaAssetReferencePrompt(project, scene, "场景");
         const constraints = preflightDramaAssetGeneration(project, scene, "场景");
 
         expect(prompt).toContain("高清");
         expect(prompt).toContain("单视角场景全景建立图");
-        expect(prompt).toContain("16:9 横向画幅");
-        expect(prompt).not.toContain("9:16");
+        expect(prompt).toContain(`${ratio} 项目成片画幅`);
+        if (ratio !== "1080x1920") expect(prompt).not.toContain(ratio === "9:16" ? "16:9" : "9:16");
         expect(prompt).toContain("真实空间尺度、重量、接触阴影和物理光线");
         expect(prompt).toContain("真实电影摄影与实物物理质感");
         expect(prompt).toContain("不生成九宫格、分格或360°贴图");
@@ -117,8 +118,8 @@ describe("drama prompt compiler", () => {
         expect(prompt).not.toContain("负面约束：额外主体、拼版、多视角");
         expect(constraints.ok).toBe(true);
         if (constraints.ok) {
-            expect(constraints.constraints.join("\n")).toContain("16:9 横向高清单视角场景全景建立图");
-            expect(constraints.constraints.join("\n")).not.toContain("9:16");
+            expect(constraints.constraints.join("\n")).toContain(`${ratio} 项目成片画幅高清单视角场景全景建立图`);
+            if (ratio !== "1080x1920") expect(constraints.constraints.join("\n")).not.toContain(ratio === "9:16" ? "16:9" : "9:16");
             expect(constraints.constraints.join("\n")).toContain("不生成九宫格");
         }
     });
@@ -900,6 +901,41 @@ describe("drama prompt compiler", () => {
         ).toBe(true);
         expect(
             hasDramaReferenceAnchorClarity("主体与资产类型：场景\n身份/结构锚点：萧家议事大厅\n可见状态与材质：木石与长案\n构图与画幅：高清16:9单视角场景全景建立图，长案、主位、高窗、后右入口可辨\n光色与风格：高精度\n负面约束：无人无文字", "场景"),
+        ).toBe(true);
+        expect(
+            hasDramaReferenceAnchorClarity(
+                "主体与资产类型：场景\n身份/结构锚点：萧家议事大厅\n可见状态与材质：木石与长案\n构图与画幅：高清9:16单视角场景全景建立图，长案、主位、高窗、后右入口可辨\n光色与风格：高精度\n负面约束：无人无文字",
+                "场景",
+                "9:16",
+            ),
+        ).toBe(true);
+        expect(
+            hasDramaReferenceAnchorClarity(
+                "主体与资产类型：场景\n身份/结构锚点：萧家议事大厅\n可见状态与材质：木石与长案\n构图与画幅：高清16:9单视角场景全景建立图，长案、主位、高窗、后右入口可辨\n光色与风格：高精度\n负面约束：无人无文字",
+                "场景",
+                "9:16",
+            ),
+        ).toBe(false);
+        expect(
+            hasDramaReferenceAnchorClarity(
+                "主体与资产类型：场景\n身份/结构锚点：萧家议事大厅\n可见状态与材质：木石与长案\n构图与画幅：高清1080x1920单视角场景全景建立图，长案、主位、高窗、后右入口可辨\n光色与风格：高精度\n负面约束：无人无文字",
+                "场景",
+                "9:16",
+            ),
+        ).toBe(true);
+        expect(
+            hasDramaReferenceAnchorClarity(
+                "主体与资产类型：场景\n身份/结构锚点：萧家议事大厅\n可见状态与材质：木石与长案\n构图与画幅：高清1920x1080单视角场景全景建立图，长案、主位、高窗、后右入口可辨\n光色与风格：高精度\n负面约束：无人无文字",
+                "场景",
+                "1080x1920",
+            ),
+        ).toBe(false);
+        expect(
+            hasDramaReferenceAnchorClarity(
+                "主体与资产类型：场景\n身份/结构锚点：萧家议事大厅\n可见状态与材质：木石与长案\n构图与画幅：高清9:16单视角场景全景建立图，长案、主位、高窗、后右入口可辨\n光色与风格：高精度\n负面约束：无人无文字",
+                "场景",
+                "1080x1920",
+            ),
         ).toBe(true);
         expect(hasDramaReferenceAnchorClarity("主体与资产类型：场景\n构图与画幅：三视图", "场景")).toBe(false);
     });

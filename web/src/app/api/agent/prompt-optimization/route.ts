@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { isAuthInputError } from "@/lib/auth/store";
 import { CREATE_AGENT_PROMPT_MAX_LENGTH } from "@/lib/create-agent-prompt";
 import type { CreativeGenerationMode } from "@/lib/creative-runtime-contract";
+import { normalizeDramaImageSize } from "@/lib/drama-image-size";
 import { resolveInternalOrigin } from "@/lib/server/internal-origin";
 import { optimizeCreativePrompt, PromptOptimizationError } from "@/lib/server/prompt-optimization-service";
 import { checkGenerationRateLimit, rateLimitHeaders } from "@/lib/server/security";
@@ -13,7 +14,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 2400;
 
-type PromptOptimizationBody = { requestId?: unknown; prompt?: unknown; mode?: unknown; visualContract?: unknown; correctionDirection?: unknown };
+type PromptOptimizationBody = { requestId?: unknown; prompt?: unknown; mode?: unknown; visualContract?: unknown; correctionDirection?: unknown; projectRatio?: unknown };
 const modes = new Set(["agent", "image", "video", "audio", "drama-frame", "drama-asset"]);
 
 export async function POST(request: Request) {
@@ -44,6 +45,7 @@ export async function POST(request: Request) {
             mode,
             visualContract: normalizeVisualContract(body.visualContract),
             correctionDirection: text(body.correctionDirection, 4000),
+            projectRatio: normalizeDramaImageSize(body.projectRatio) || undefined,
         });
         return NextResponse.json({ code: 0, data: typeof optimizedPrompt === "string" ? { prompt: optimizedPrompt } : { prompt: optimizedPrompt.optimizedPrompt, fields: optimizedPrompt.fields }, msg: "OK" });
     } catch (error) {

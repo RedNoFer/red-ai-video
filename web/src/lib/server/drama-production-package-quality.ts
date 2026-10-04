@@ -665,7 +665,8 @@ function checkVisualClarityWarnings(checks: DramaQualityGateCheck[], value: Dram
         }
         if (shot.locationCode) {
             const asset = value.assets.locations.find((item) => item.code === shot.locationCode);
-            if (asset?.supplierPrompt && !hasDramaReferenceAnchorClarity(asset.supplierPrompt, "场景")) failures.push(`${shot.code} 的场景资产 ${shot.locationCode} 不是高清16:9单视角全景或缺少可读空间拓扑`);
+            if (asset?.supplierPrompt && !hasDramaReferenceAnchorClarity(asset.supplierPrompt, "场景", value.project.ratio))
+                failures.push(`${shot.code} 的场景资产 ${shot.locationCode} 未按项目画幅 ${value.project.ratio} 提供高清单视角全景或缺少可读空间拓扑`);
         }
     }
     add(

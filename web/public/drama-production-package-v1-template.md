@@ -2,7 +2,7 @@
 
 > 制作包格式：`vozeb-drama-production-package-v1`
 >
-> 模板版本：由 `pnpm compile:skills` 自动生成；唯一制作包契约：`vozeb-drama-production-package-v1@1.0.0`（契约 hash：`77541e4dc34e638a56a3273bab74ee1d1911933c2c84792cbad60d2e31144107`，规范源 hash：`32c94bb2f1f3bdd1182188d2cf5fdbc15c6e6a2e64da9b4f53f1ff957eac8f6d`）。导演 Skill：`drama-video-director@1.12.1`（hash：`7eb0b45730e0d5da3fb112d9024294fdf158c7a9fad83a75ce5cd6ec1dfec210`）；模板自检规则、Seedance Skill 和来源版本由同一编译清单绑定。
+> 模板版本：由 `pnpm compile:skills` 自动生成；唯一制作包契约：`vozeb-drama-production-package-v1@1.0.0`（契约 hash：`77541e4dc34e638a56a3273bab74ee1d1911933c2c84792cbad60d2e31144107`，规范源 hash：`e001a50d2a509067feae97cfdfaf3f60b59a53309490caa4a783a0e1992bfa6e`）。导演 Skill：`drama-video-director@1.12.1`（hash：`a5cc9fabfc64b0c397d3fb73670f960134763e2b534814ec99d3cae69e26465a`）；模板自检规则、Seedance Skill 和来源版本由同一编译清单绑定。
 >
 > 使用约定：本模板是当前 v1 制作包的结构、自检规则和最终交付格式。独立 Codex 必须直接生成完整 13 章 Markdown，并在“规范对象”代码块中嵌入唯一标准 JSON；JSON 与正文由 Codex 同一轮生成，服务端不负责章节投影或视频提示词重写。不要把历史制作包、旧 generationPrompt 或旧分镜正文当作新包模板。
 >
@@ -118,8 +118,8 @@ targetDuration = logicalShotCount × shotDuration
 ### 当前绑定版本
 
 - 制作包契约：`vozeb-drama-production-package-v1@1.0.0`，契约 hash：`77541e4dc34e638a56a3273bab74ee1d1911933c2c84792cbad60d2e31144107`。
-- 规范源 hash：`32c94bb2f1f3bdd1182188d2cf5fdbc15c6e6a2e64da9b4f53f1ff957eac8f6d`；编译规则 hash：`e822f493b3bb4fd9c6541b30184e397da67b08178b7c13d225895feb3872c994`。
-- 主导演 Skill：`drama-video-director@1.12.1`，hash：`7eb0b45730e0d5da3fb112d9024294fdf158c7a9fad83a75ce5cd6ec1dfec210`。
+- 规范源 hash：`e001a50d2a509067feae97cfdfaf3f60b59a53309490caa4a783a0e1992bfa6e`；编译规则 hash：`e822f493b3bb4fd9c6541b30184e397da67b08178b7c13d225895feb3872c994`。
+- 主导演 Skill：`drama-video-director@1.12.1`，hash：`a5cc9fabfc64b0c397d3fb73670f960134763e2b534814ec99d3cae69e26465a`。
 - 视频提示词公开格式：小墨个人分镜 Skill 6.3，来源标识 `storyboard-director@6.3.0`。
 - 每个逻辑片段的完整 `videoPrompt`（包含全部公开帧卡、台词、人声、音效和剪辑承接）必须控制在 4500 个 Unicode 字符以内；超限只能压缩重复的全局场景/风格描述，不能删除主体、触发、动作、可见结果、声音锚点、连续性或硬切事件。
 - 公开视频卡使用自然语言，不得出现 `palette=...`、`saturation=...`、`film_stock=...`、`grain=...`、`halation=...` 等未声明伪参数串，也不得出现 `undefined`、`null`、`NaN`、`[object Object]`；光色、材质、胶片感如确有作用，只用自然语言写入 `productionBible` 或当前帧新增作用。
@@ -183,7 +183,7 @@ Codex 必须先做预检，再开始拆镜和写公开视频卡；不能先按�
 | `NPC_ROSTER_CONTINUITY`         | warning | required 群像的数量、槽位、世界锚点、分布和状态在受影响帧段保持一致；风险必须显式记录。                                                                                                                                                                                                                                                                                                                                                                             |
 | `CAMERA_MOTIVATION`             | blocker | 景别、焦段、机位、轴线和主运镜服务于明确的视线、关系、空间、压力或信息揭示；连续镜头只有一条主运镜。                                                                                                                                                                                                                                                                                                                                                                |
 | `CAMERA_EVENT`                  | blocker | 内部切镜声明模式、时间、类型、触发事件、新机位、切后主运镜、信息目的和承接；切点落在真实帧边界；不得隐式 Cut。启用 `dense-30s` 时默认 8—11 帧/7—10 次硬切，少切必须写减切原因；每次硬切还必须在对应公开卡片的 `剪辑承接` 中写出时间、触发、新机位、切后主运镜、新增信息和连续性承接。                                                                                                                                                                               |
-| `VISUAL_CLARITY`                | blocker | 主角、关键 NPC、手部、道具接触面和场景锚点在当前景别可辨；有参考图时角色图须有身份特写和清晰四视图/转面，场景图须为高清 16:9 单视角全景并能读出拓扑。无图片不等于失败，但不得伪造图片绑定。                                                                                                                                                                                                                                                                         |
+| `VISUAL_CLARITY`                | blocker | 主角、关键 NPC、手部、道具接触面和场景锚点在当前景别可辨；有参考图时角色图须有身份特写和清晰四视图/转面，场景图须与项目画幅比例一致、为高清单视角全景并能读出拓扑。无图片不等于失败，但不得伪造图片绑定。                                                                                                                                                                                                                                                           |
 | `TIMELINE`                      | blocker | 每个镜头的帧段从 0 秒开始连续覆盖到镜头结束，无空白、重叠或超界。                                                                                                                                                                                                                                                                                                                                                                                                   |
 | `SHOT_DURATION_POLICY`          | blocker | 若生产方案指定 15 秒或 30 秒，每个逻辑片段严格使用该时长；内部帧段和硬切不改变逻辑片段数量和整集时长。                                                                                                                                                                                                                                                                                                                                                              |
 | `ASSET_BINDING`                 | blocker | 镜头只使用当前正式资产的稳定 code；场景、角色、道具、线索声明与正文和参考绑定一致；没有绑定的对象不得写入公开提示词。                                                                                                                                                                                                                                                                                                                                               |
@@ -350,7 +350,7 @@ imagePrompt
 场景一致性 Prompt。
 ```
 
-场景全景基准图固定为高清 `16:9` 横向、单视角、无人、无文字，不随剧集视频画幅改变；优先呈现可信空间尺度、透视、重量、接触阴影、材质粗糙度和有依据的细微纹理，不把“超写实”当作细节描述，也不虚构磨损或结构。`backgroundNpcPolicy` 只表达场景策略；`required` 场景填写 `countRange`。跨镜头群像可以声明稳定 `roster` 槽位，每个槽位绑定世界空间锚点和稳定变体；背景 NPC 需要出现在镜头时，按槽位及其可见状态写入每个受影响关键帧或视频时间段的群像结果，不进入角色资产编码。
+场景全景基准图必须按用户提供或当前项目配置的画幅比例生成，并与成片比例一致；按该比例重新组织构图，形成高清、单视角、无人、无文字的空间建立图，不得擅自固定为 `16:9`。优先呈现可信空间尺度、透视、重量、接触阴影、材质粗糙度和有依据的细微纹理，不把“超写实”当作细节描述，也不虚构磨损或结构。`backgroundNpcPolicy` 只表达场景策略；`required` 场景填写 `countRange`。跨镜头群像可以声明稳定 `roster` 槽位，每个槽位绑定世界空间锚点和稳定变体；背景 NPC 需要出现在镜头时，按槽位及其可见状态写入每个受影响关键帧或视频时间段的群像结果，不进入角色资产编码。
 
 ## 七、关键视频资产 Prompt
 

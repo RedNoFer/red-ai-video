@@ -191,6 +191,34 @@ describe("prompt optimization service", () => {
         expect(result.fields.consistencyRules).not.toContain("服装结构");
     });
 
+    it("keeps a custom project scene aspect ratio in optimized supplier prompts", async () => {
+        vi.mocked(requestStructuredText).mockResolvedValue({
+            arguments: JSON.stringify({
+                optimizedPrompt: "主体与资产类型：场景设定图\n身份/结构锚点：旧测站入口、主通道与控制台\n可见状态与材质：冷硬金属与潮湿混凝土\n构图与画幅：固定16:9横向全景，门窗与通道清晰\n光色与风格：写实电影摄影\n负面约束：无人、无字",
+                fields: { description: "旧测站", visualIdentity: "入口、主通道与控制台", styling: "冷硬金属与混凝土", colorPalette: "冷灰", consistencyRules: "入口与通道拓扑固定" },
+            }),
+            headers: new Headers(),
+            protocol: "chat",
+            elapsedMs: 10,
+        });
+
+        const result = await optimizeCreativePrompt({
+            origin: "http://localhost:3000",
+            cookie: "session=1",
+            userId: "user-one",
+            requestId: "scene-custom-ratio-request",
+            prompt: "【资产类型】场景\n【当前提示词】旧测站入口",
+            mode: "drama-asset",
+            projectRatio: "1080x1920",
+        });
+
+        expect(typeof result).toBe("object");
+        expect((result as { optimizedPrompt: string }).optimizedPrompt).toContain("1080x1920竖向");
+        expect((result as { optimizedPrompt: string }).optimizedPrompt).not.toContain("16:9");
+        const systemMessage = vi.mocked(requestStructuredText).mock.calls[0]?.[0].messages.find((message) => message.role === "system")?.content || "";
+        expect(systemMessage).toContain("1080x1920项目成片画幅");
+    });
+
     it("retains the configured project style when the model returns a shortened asset prompt", async () => {
         vi.mocked(requestStructuredText).mockResolvedValue({
             arguments: JSON.stringify({
@@ -216,7 +244,7 @@ describe("prompt optimization service", () => {
         expect(result.optimizedPrompt).not.toContain("暗黑学院");
     });
 
-    it("keeps scene reference images 16:9 and adds concrete physical realism guidance", async () => {
+    it("keeps scene reference prompts aligned with the provided project ratio and adds physical realism guidance", async () => {
         vi.mocked(requestStructuredText).mockResolvedValue({
             arguments: JSON.stringify({
                 optimizedPrompt: "主体与资产类型：场景设定图；身份/结构锚点：雨雾测站；可见状态与材质：湿冷岩面",
@@ -241,16 +269,17 @@ describe("prompt optimization service", () => {
             prompt: "资产类型：场景\n基础描述：雨雾测站\n视觉识别：白雾、裸岩、松枝与平石平台",
             mode: "drama-asset",
             visualContract: { visualStyle: "冷峻纪实电影摄影", artStyle: "真实场景与实物材质", colorScript: "冷灰蓝", globalNegativePrompt: "无体积光" },
+            projectRatio: "9:16",
         });
 
         const systemMessage = vi.mocked(requestStructuredText).mock.calls[0]?.[0].messages.find((message) => message.role === "system")?.content || "";
-        expect(systemMessage).toContain("16:9横向高清");
-        expect(systemMessage).toContain("不随剧集视频画幅改变");
-        expect(systemMessage).not.toContain("画幅跟随当前项目画幅");
+        expect(systemMessage).toContain("9:16项目成片画幅");
+        expect(systemMessage).toContain("场景基准图画幅必须与项目成片比例一致");
+        expect(systemMessage).not.toContain("固定为16:9");
         expect(systemMessage).toContain("真实电影摄影与实物物理质感");
         expect(systemMessage).toContain("自然比例、空间透视、重量、接触阴影");
-        expect(result.optimizedPrompt).toContain("构图与画幅：固定16:9横向");
-        expect(result.optimizedPrompt).not.toContain("9:16");
+        expect(result.optimizedPrompt).toContain("构图与画幅：9:16竖向项目成片画幅");
+        expect(result.optimizedPrompt).not.toContain("16:9");
         expect(result.optimizedPrompt).toContain("接触阴影和光线方向可信");
     });
 

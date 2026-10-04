@@ -32,7 +32,7 @@ import { formatDramaCompositionContract } from "@/lib/drama-composition";
 
 type PromptOptimizationMode = "agent" | CreativeGenerationMode | "drama-frame" | "drama-asset";
 type NonAssetPromptOptimizationMode = Exclude<PromptOptimizationMode, "drama-asset">;
-type PromptOptimizationInput = { origin: string; cookie: string; userId: string; requestId: string; prompt: string; visualContract?: DramaGlobalVisualContract; correctionDirection?: string };
+type PromptOptimizationInput = { origin: string; cookie: string; userId: string; requestId: string; prompt: string; visualContract?: DramaGlobalVisualContract; correctionDirection?: string; projectRatio?: string };
 export type PromptOptimizationReasonCode =
     "configuration" | "missing_story_source" | "missing_asset_reference" | "invalid_input" | "unsupported_model_capability" | "unresolved_shot_reference" | "invalid_model_response" | "quality_gate_failed" | "upstream_failure";
 
@@ -65,7 +65,7 @@ export async function optimizeCreativePrompt(input: PromptOptimizationInput & { 
                 cookie: input.cookie,
                 candidate,
                 messages: [
-                    { role: "system", content: promptOptimizationInstruction(input.mode, input.prompt, input.visualContract, input.correctionDirection) },
+                    { role: "system", content: promptOptimizationInstruction(input.mode, input.prompt, input.visualContract, input.correctionDirection, input.projectRatio) },
                     { role: "user", content: input.prompt },
                 ],
                 tool: input.mode === "drama-asset" ? dramaAssetPromptOptimizationTool : promptOptimizationTool,
@@ -77,7 +77,7 @@ export async function optimizeCreativePrompt(input: PromptOptimizationInput & { 
                 },
                 onInvalidResponse: (headers) => refundInvalidResponse(input.userId, model, headers),
             });
-            const optimizedPrompt = parseOptimizedPrompt(call.arguments, input.mode, input.prompt, input.visualContract);
+            const optimizedPrompt = parseOptimizedPrompt(call.arguments, input.mode, input.prompt, input.visualContract, input.projectRatio);
             if (!optimizedPrompt) {
                 await refundInvalidResponse(input.userId, model, call.headers);
                 throw new PromptOptimizationError("默认文本模型没有返回有效提示词", 502, "invalid_model_response");
@@ -104,20 +104,21 @@ function classifyPromptOptimizationFailure(error: unknown): PromptOptimizationRe
     return "upstream_failure";
 }
 
-function promptOptimizationInstruction(mode: PromptOptimizationMode, prompt = "", visualContract?: DramaGlobalVisualContract, correctionDirection = "") {
+function promptOptimizationInstruction(mode: PromptOptimizationMode, prompt = "", visualContract?: DramaGlobalVisualContract, correctionDirection = "", projectRatio?: string) {
     const globalVisualContract = formatDramaGlobalVisualContract(visualContract);
     const globalVisualRule = globalVisualContract ? `\n本项目全局视觉合同（必须保留，不得自行替换）：\n${globalVisualContract}\n` : "";
     if (mode === "drama-frame")
         return `你是 VOZEB PRO 的静态图片帧提示词编辑器。${DRAMA_STATIC_FRAME_DIRECTOR_RULES}\n当前用户消息中的 imagePrompt 是唯一静态画面事实源；服务端上下文、项目历史、旧制作包、actionPrompt、镜头描述、资产档案和相邻帧都不是补写来源。${globalVisualRule}当前项目全局视觉合同是本帧唯一的主题、时代、材质、光色与渲染来源；原 imagePrompt 中与合同冲突的旧风格必须删除或按合同重释，不得继续沿用。${correctionDirection ? `本次用户整改方向：\n${correctionDirection}\n` : ""}只做编辑器式去重：删除重复、内部执行信息、未来动作、对白/声音和明确冲突，不补写缺失段落，不把五类可选语义扩写成固定模板。只返回优化后的公开提示词，不输出解释、Markdown、JSON、ID、URL 或参考绑定。`;
     if (mode === "drama-asset") {
         const kind = prompt.match(/资产类型[】：:]\s*(角色|场景|道具)/u)?.[1] || "角色、场景或道具";
+        const sceneAspect = projectRatio ? `${projectRatio}项目成片画幅` : "用户或当前项目明确指定的成片画幅";
         const layout =
             kind === "角色"
                 ? `角色固定为一张纯白色无缝背景的${DRAMA_CHARACTER_TURNAROUND_LABEL}：${DRAMA_CHARACTER_TURNAROUND_LAYOUT}，同一基线、同一头身比、同一脸部、发型、服装和关键道具。四视图只表示同一个角色；不得添加四分之三视图、主立绘、表情组、手部或道具拆解、额外角度、边框、网格、文字或水印。`
                 : kind === "场景"
-                  ? "场景基准图固定为16:9横向高清、完整、独立、无人、无字的单视角全景，不随剧集视频画幅改变；入口、出口、门窗、固定陈设、通道、支撑面、材质、光向和轴线必须清晰可读；不得生成九宫格、分格或360°贴图。"
+                  ? `场景基准图必须使用${sceneAspect}，按该比例重新组织构图；生成高清、完整、独立、无人、无字的单视角空间建立图，不得擅自改成其他比例；入口、出口、门窗、固定陈设、通道、支撑面、材质、光向和轴线必须清晰可读；不得生成九宫格、分格或360°贴图。`
                   : "道具固定为一张完整、独立的纯白无缝背景单主体基准图，保留完整轮廓、材质和关键识别细节，可有极轻接触阴影；不得添加展示台、项目桌面、剧情场景、人物、手部、拼版、文字或水印。";
-        return `你是 VOZEB PRO 的短剧资产图片提示词编辑器。当前资产类型是“${kind}”。必须调用固定 JSON 工具返回结果，JSON 只能包含 optimizedPrompt 和 fields 两个顶层键；fields 必须完整包含 description、visualIdentity、styling、colorPalette、consistencyRules 五个字符串键，不得缺失、改名或增加键。optimizedPrompt 是可直接提交给图片供应商的中文公开生图提示词，不得包含 JSON、解释、分析、Markdown 标题、内部规则、模型理由、ID 或 URL。${globalVisualRule}\n${DRAMA_ASSET_IMAGE_SKILL.instructions}\n${kind === "角色" ? `角色质量契约：${DRAMA_CHARACTER_PROFILE_CONTRACT}\n角色供应商质量要求：${DRAMA_CHARACTER_SUPPLIER_QUALITY_RULES}\n角色五官建模：${DRAMA_CHARACTER_FACE_MODELING_RULES}\n角色头发建模：${DRAMA_CHARACTER_HAIR_MODELING_RULES}\n角色服装材质：${DRAMA_CHARACTER_WARDROBE_MATERIAL_RULES}\n角色渲染技术：${DRAMA_CHARACTER_RENDER_STYLE}\n角色棚拍光线：${DRAMA_CHARACTER_STUDIO_LIGHT_RULES}\n角色高代价负面项：${DRAMA_CHARACTER_NEGATIVE_RULES}` : ""}\n${layout}\n${kind === "场景" ? "场景硬规则：只生成一张16:9横向高清、无人物、无文字的单视角全景建立图；场景基准图画幅不随剧集视频画幅改变；完整呈现入口、出口、门窗、固定陈设、通道、支撑面、材质、光向和空间轴线；禁止九宫格、分格、方向标签和360°贴图。" : ""}\n${DRAMA_ASSET_REALISM_RULES}\n项目主题风格只能使用当前全局视觉合同；不得从原提示词、历史 supplierPrompt、旧制作包或资产 profile 中继承与合同冲突的题材、时代、服化道、材质或渲染风格。原提示词只提供不冲突的资产身份、结构、空间拓扑、剧情用途和用户明确事实；冲突事实必须按当前合同重释，不新增剧情事实。fields 同步整理当前资产文案，未被用户要求改变且不与合同冲突的事实必须保留。角色资产必须把固定脸部、比例、发型、服装和材质事实写入对应字段，不得用“高级、绝美、顶级、仙气”等空泛形容词替代具体事实。场景资产必须具体写出单张全景图中的空间拓扑、透视、入口出口、固定物件、通道、支撑面和材质细节。optimizedPrompt 按以下顺序逐行组织：主体与资产类型；身份/结构锚点；可见状态与材质；构图与画幅；光色与风格；负面约束。`;
+        return `你是 VOZEB PRO 的短剧资产图片提示词编辑器。当前资产类型是“${kind}”。必须调用固定 JSON 工具返回结果，JSON 只能包含 optimizedPrompt 和 fields 两个顶层键；fields 必须完整包含 description、visualIdentity、styling、colorPalette、consistencyRules 五个字符串键，不得缺失、改名或增加键。optimizedPrompt 是可直接提交给图片供应商的中文公开生图提示词，不得包含 JSON、解释、分析、Markdown 标题、内部规则、模型理由、ID 或 URL。${globalVisualRule}\n${DRAMA_ASSET_IMAGE_SKILL.instructions}\n${kind === "角色" ? `角色质量契约：${DRAMA_CHARACTER_PROFILE_CONTRACT}\n角色供应商质量要求：${DRAMA_CHARACTER_SUPPLIER_QUALITY_RULES}\n角色五官建模：${DRAMA_CHARACTER_FACE_MODELING_RULES}\n角色头发建模：${DRAMA_CHARACTER_HAIR_MODELING_RULES}\n角色服装材质：${DRAMA_CHARACTER_WARDROBE_MATERIAL_RULES}\n角色渲染技术：${DRAMA_CHARACTER_RENDER_STYLE}\n角色棚拍光线：${DRAMA_CHARACTER_STUDIO_LIGHT_RULES}\n角色高代价负面项：${DRAMA_CHARACTER_NEGATIVE_RULES}` : ""}\n${layout}\n${kind === "场景" ? `场景硬规则：场景基准图画幅必须与项目成片比例一致（${sceneAspect}），按该比例重新组织构图；只生成一张高清、无人物、无文字的单视角空间建立图；完整呈现入口、出口、门窗、固定陈设、通道、支撑面、材质、光向和空间轴线；禁止九宫格、分格、方向标签和360°贴图。` : ""}\n${DRAMA_ASSET_REALISM_RULES}\n项目主题风格只能使用当前全局视觉合同；不得从原提示词、历史 supplierPrompt、旧制作包或资产 profile 中继承与合同冲突的题材、时代、服化道、材质或渲染风格。原提示词只提供不冲突的资产身份、结构、空间拓扑、剧情用途和用户明确事实；冲突事实必须按当前合同重释，不新增剧情事实。fields 同步整理当前资产文案，未被用户要求改变且不与合同冲突的事实必须保留。角色资产必须把固定脸部、比例、发型、服装和材质事实写入对应字段，不得用“高级、绝美、顶级、仙气”等空泛形容词替代具体事实。场景资产必须具体写出单张全景图中的空间拓扑、透视、入口出口、固定物件、通道、支撑面和材质细节。optimizedPrompt 按以下顺序逐行组织：主体与资产类型；身份/结构锚点；可见状态与材质；构图与画幅；光色与风格；负面约束。`;
     }
     if (mode === "image")
         return `你是 VOZEB PRO 图片提示词编辑器。把用户原文整理为可直接提交的中文图片提示词：先锁定主体与身份锚点，再写当前要改变的内容、构图、光色材质、用途和约束。图片编辑必须分别写 change、preserve、constraints；change 只包含一个已定位变量，preserve 明确保留身份、构图、光线、材质和文字等未修改事实，constraints 写清比例、尺寸、参考图用途和不可出现内容。${globalVisualRule}多张参考图按角色、场景、道具或构图分配唯一用途，禁止按标题或文本相似度猜测。保留用户原文的主体、品牌、数量、尺寸、比例、文字和否定要求，不新增剧情事实或供应商字段。只返回优化后的公开提示词，不解释修改过程，不输出内部规划、模型选择理由或思维链。`;
@@ -130,7 +131,7 @@ function promptOptimizationInstruction(mode: PromptOptimizationMode, prompt = ""
     return `你是 VOZEB PRO 提示词编辑器。把用户原文改写为清晰、紧凑、可直接发送的中文${target}提示词。保留主体、人名、品牌、数量、尺寸、比例、时长、文字内容、参考素材要求和否定要求；不得改变用户意图，不得虚构事实或添加用户没有要求的复杂设定。只返回优化后的公开提示词，不解释修改过程，不输出内部规划、模型选择理由或思维链。`;
 }
 
-function parseOptimizedPrompt(value: string, mode: PromptOptimizationMode, sourcePrompt = "", visualContract?: DramaGlobalVisualContract): string | DramaAssetPromptOptimization {
+function parseOptimizedPrompt(value: string, mode: PromptOptimizationMode, sourcePrompt = "", visualContract?: DramaGlobalVisualContract, projectRatio?: string): string | DramaAssetPromptOptimization {
     try {
         const payload = JSON.parse(value) as { optimizedPrompt?: unknown; fields?: unknown; [key: string]: unknown };
         if (mode === "drama-asset" && Object.keys(payload).some((key) => key !== "optimizedPrompt" && key !== "fields")) return "";
@@ -150,7 +151,7 @@ function parseOptimizedPrompt(value: string, mode: PromptOptimizationMode, sourc
         const fields = normalizeDramaAssetPromptFields(payload.fields, sourcePrompt);
         if (!fields) return "";
         const safeFields = sanitizeDramaAssetOptimizationFields(sourcePrompt, fields);
-        const normalized = enforceDramaAssetPromptContract(sourcePrompt, prompt, safeFields, visualContract);
+        const normalized = enforceDramaAssetPromptContract(sourcePrompt, prompt, safeFields, visualContract, projectRatio);
         return normalized && normalized.length <= CREATE_AGENT_PROMPT_MAX_LENGTH ? { optimizedPrompt: normalized, fields: safeFields } : "";
     } catch {
         return "";
@@ -197,7 +198,7 @@ function projectOptimizedCharacterModelFacts(fields: DramaAssetPromptFields) {
     return projectDramaCharacterModelFacts({ description: fields.visualIdentity.trim() ? "" : fields.description, profile: fields });
 }
 
-function enforceDramaAssetPromptContract(sourcePrompt: string, prompt: string, fields: DramaAssetPromptFields, visualContract?: DramaGlobalVisualContract) {
+function enforceDramaAssetPromptContract(sourcePrompt: string, prompt: string, fields: DramaAssetPromptFields, visualContract?: DramaGlobalVisualContract, projectRatio?: string) {
     if (!prompt) return "";
     const kind = sourcePrompt.match(/资产类型[】：:]\s*(角色|场景|道具)/u)?.[1];
     const labels = ["主体与资产类型", "身份/结构锚点", "可见状态与材质", "构图与画幅", "光色与风格", "负面约束"];
@@ -209,6 +210,7 @@ function enforceDramaAssetPromptContract(sourcePrompt: string, prompt: string, f
     const globalVisual = formatDramaGlobalVisualContract(visualContract);
     const characterVisual = visualContract ? formatDramaCharacterVisualContract({ visualDescription: visualContract.visualStyle, artStyle: visualContract.artStyle, colorScript: visualContract.colorScript }) : "";
     const effectiveGlobalVisual = kind === "角色" ? characterVisual : globalVisual;
+    const sceneRatio = kind === "场景" ? projectRatio || sourcePrompt.match(/(\d+(?:\.\d+)?\s*[:x×]\s*\d+(?:\.\d+)?)/iu)?.[1] : undefined;
     const characterModelingVisual = [DRAMA_CHARACTER_CURRENT_DESIGN_RULE, DRAMA_CHARACTER_BODY_MODELING_RULES, DRAMA_CHARACTER_FACE_MODELING_RULES, DRAMA_CHARACTER_HAIR_MODELING_RULES, DRAMA_CHARACTER_WARDROBE_MATERIAL_RULES].join("；");
     const defaults = [
         `主体与资产类型：${kind || "角色、场景或道具"}设定图`,
@@ -217,7 +219,7 @@ function enforceDramaAssetPromptContract(sourcePrompt: string, prompt: string, f
         kind === "角色"
             ? `构图与画幅：${DRAMA_CHARACTER_TURNAROUND_SIZE} 横向，一张纯白色无缝背景${DRAMA_CHARACTER_TURNAROUND_LABEL}；${DRAMA_CHARACTER_TURNAROUND_LAYOUT}。`
             : kind === "场景"
-              ? "构图与画幅：固定16:9横向，一张高清完整单视角场景全景建立图，不随剧集视频画幅变化；入口、出口、门窗、陈设、通道、支撑面、材质、光向和空间轴线清晰可读，不生成九宫格或分格。"
+              ? `构图与画幅：${sceneRatio ? `${sceneRatio}项目成片画幅` : "严格沿用用户或当前项目明确指定的画幅"}，按该比例构图的一张高清完整单视角场景全景建立图；入口、出口、门窗、陈设、通道、支撑面、材质、光向和空间轴线清晰可读，不生成九宫格或分格。`
               : "构图与画幅：纯白无缝背景，一张完整、独立的单一道具主体基准图，完整轮廓和关键材质清晰可见。",
         `光色与风格：${[kind === "角色" ? [effectiveGlobalVisual, DRAMA_CHARACTER_RENDER_STYLE, DRAMA_CHARACTER_STUDIO_LIGHT_RULES].filter(Boolean).join("；") : effectiveGlobalVisual || "严格沿用当前项目视觉风格与资产固有色彩，不新增环境或剧情元素。", DRAMA_ASSET_REALISM_RULES].filter(Boolean).join("；")}`,
         kind === "角色"
@@ -242,6 +244,7 @@ function enforceDramaAssetPromptContract(sourcePrompt: string, prompt: string, f
         if (!existing) return line;
         if (kind === "道具" && label === "构图与画幅") return line;
         if (kind === "道具" && label === "负面约束") return line;
+        if (kind === "场景" && label === "构图与画幅") return line;
         if (kind === "角色" && label === "身份/结构锚点") {
             const roleProjection = projectOptimizedCharacterModelFacts(fields);
             return `${label}：${roleProjection.identityFacts || fields.visualIdentity || existing}`;
@@ -250,7 +253,11 @@ function enforceDramaAssetPromptContract(sourcePrompt: string, prompt: string, f
         const quality = [DRAMA_CHARACTER_FACE_MODELING_RULES, DRAMA_CHARACTER_HAIR_MODELING_RULES, DRAMA_CHARACTER_WARDROBE_MATERIAL_RULES].filter((rule) => !existing.includes(rule.slice(0, 8))).join("；");
         return `${label}：${DRAMA_CHARACTER_CURRENT_DESIGN_RULE}${DRAMA_CHARACTER_BODY_MODELING_RULES ? `；${DRAMA_CHARACTER_BODY_MODELING_RULES}` : ""}${quality ? `；${quality}` : ""}`;
     });
-    return canonical.join("\n");
+    const result = canonical.join("\n");
+    if (kind !== "场景" || !sceneRatio) return result;
+    const [width, height] = sceneRatio.split(/\s*[:x×]\s*/iu).map(Number);
+    const orientation = width === height ? "方形" : width > height ? "横向" : "竖向";
+    return result.replace(/\b\d+(?:\.\d+)?\s*[:x×]\s*\d+(?:\.\d+)?(?:\s*(?:横向|竖向|方形))?/giu, `${sceneRatio}${orientation}`).replace(/不随(?:剧集)?(?:视频|成片)画幅(?:改变|变化)/gu, `画幅与项目成片比例 ${sceneRatio} 一致`);
 }
 
 function applyVisualContractToOptimizedPrompt(prompt: string, mode: "drama-frame" | "video", visualContract?: DramaGlobalVisualContract) {
