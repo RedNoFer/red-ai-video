@@ -112,7 +112,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
               }
             : draftPromptAsset;
     const automaticSupplierPrompt = promptAsset && kind !== "clues" ? compileDramaAssetReferencePrompt(project, promptAsset, kind === "characters" ? "角色" : kind === "scenes" ? "场景" : "道具") : "";
-    const supplierPrompt = resolveDramaSupplierPrompt(supplierPromptOverride, automaticSupplierPrompt);
+    const supplierPrompt = resolveDramaSupplierPrompt(supplierPromptOverride, automaticSupplierPrompt, kind === "scenes" ? project.ratio : undefined);
     const cloneAvailable = config.channels.some((channel) =>
         Object.values(channel.advancedConfig?.modelConfigs || {}).some(
             (operation) => operation.audioOperation === "voice-clone" && Boolean(operation.cloneSampleField) && /\{\{\s*(?:clone_sample_url|sample_audio_url|sample_url)\s*\}\}/i.test(operation.requestTemplate || ""),
@@ -591,7 +591,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                             .projects.find((item) => item.id === currentProject.id)
                             ?.[kind].find((item) => item.id === asset.id) || asset;
                     const automaticPrompt = compileDramaAssetReferencePrompt(currentProject, { ...currentAsset, supplierPrompt: undefined }, assetKind);
-                    const prompt = task.prompt?.trim() || resolveDramaSupplierPrompt(currentAsset.supplierPrompt?.trim() || undefined, automaticPrompt);
+                    const prompt = task.prompt?.trim() || resolveDramaSupplierPrompt(currentAsset.supplierPrompt?.trim() || undefined, automaticPrompt, kind === "scenes" ? currentProject.ratio : undefined);
                     const imageModel = config.imageModel || config.imageModels[0] || task.model;
                     if (!imageModel) throw new Error("后台尚未配置可用的图片模型，请先在管理后台配置图片渠道");
                     const imageConfig = {

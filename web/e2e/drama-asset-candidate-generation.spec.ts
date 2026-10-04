@@ -9,7 +9,7 @@ const REFERENCE_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAA
 test.use({ storageState: ".e2e-data/admin-state.json" });
 
 for (const ratio of ["9:16", "16:9", "1080x1920"] as const) {
-    test(`${ratio} project scene supplier prompt follows the project ratio and preserves scene topology`, async ({ page, request }) => {
+    test(`${ratio} project ratio overrides stale persisted scene supplier prompt`, async ({ page, request }) => {
         const created = await request.post("/api/drama/projects", { data: { title: `E2E 场景提示词画幅 ${ratio} ${Date.now()}`, ratio } });
         expect(created.ok(), await created.text()).toBe(true);
         const project = ((await created.json()) as { data: { project: DramaProject } }).data.project;
@@ -25,6 +25,7 @@ for (const ratio of ["9:16", "16:9", "1080x1920"] as const) {
                             name: "场景提示词画幅测试",
                             description: "石质测站，固定入口与长案",
                             profile: { visualIdentity: "石质空间，入口与长案位置固定", styling: "粗粝石面与旧木长案", colorPalette: "冷灰", consistencyRules: "透视和空间拓扑保持一致" },
+                            supplierPrompt: `构图与画幅：${ratio === "9:16" ? "16:9" : "9:16"} 横幅旧提示词；保留供应商手工说明`,
                             references: [],
                         },
                     ],
@@ -40,8 +41,9 @@ for (const ratio of ["9:16", "16:9", "1080x1920"] as const) {
             const drawer = page.getByRole("dialog", { name: "编辑场景" });
             await drawer.getByText("实际供应商提示词（可编辑）").click();
             const prompt = drawer.getByLabel("供应商提示词");
-            await expect(prompt).toHaveValue(new RegExp(`${ratio} (?:项目成片)?画幅`));
-            await expect(prompt).toHaveValue(/入口、出口|入口与长案位置固定/);
+            const orientation = ratio === "16:9" ? "横向" : "竖向";
+            await expect(prompt).toHaveValue(new RegExp(`构图与画幅：${ratio} ${orientation}`));
+            await expect(prompt).toHaveValue(/保留供应商手工说明/);
             const otherRatios = ["9:16", "16:9"].filter((item) => item !== ratio);
             for (const otherRatio of otherRatios) await expect(prompt).not.toHaveValue(new RegExp(otherRatio));
         } finally {
