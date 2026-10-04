@@ -985,6 +985,22 @@ describe("production package boundary", () => {
         expect((preview.importWarnings || []).some((warning) => warning.includes("制作包执行字段契约提醒"))).toBe(true);
     });
 
+    it("keeps vague carry-forward lighting and tone as non-blocking import warnings", () => {
+        const source = structuredClone(productionPackage);
+        for (const [index, shot] of source.episodes[0].shots.entries()) {
+            const prompt = canonicalVideoPrompt("### 镜头 01", "### 镜头 02");
+            shot.videoPrompt = prompt
+                .replaceAll("光影：冷白窗光落在脸部和手背，阴影侧保留细节。", index === 0 ? "光影：承前" : "光影：冷白窗光落在脸部和手背，阴影侧保留细节。")
+                .replaceAll("色调：冷灰蓝，肤色自然。", index === 1 ? "色调：与第一镜头一致" : "色调：冷灰蓝，肤色自然。");
+            shot.lightingPlan = completeLightingPlan();
+        }
+
+        const preview = previewDramaProductionPackage(JSON.stringify(source), "package.json", undefined, { allowImportWarnings: true, enforceExecutionContract: true });
+
+        expect(preview.package.episodes[0].shots).toHaveLength(2);
+        expect(preview.importWarnings).toEqual(expect.arrayContaining([expect.stringContaining("光影不能只写"), expect.stringContaining("色调不能只写")]));
+    });
+
     it("requires the same per-utterance speechRate used by generation preflight", () => {
         const source = structuredClone(productionPackage);
         for (const shot of source.episodes[0].shots) {

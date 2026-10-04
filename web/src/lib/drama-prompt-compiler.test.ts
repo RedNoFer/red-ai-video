@@ -100,7 +100,7 @@ describe("drama prompt compiler", () => {
         }
     });
 
-    it("compiles every scene as a high-definition panorama", () => {
+    it("compiles every scene anchor as a realistic 16:9 panorama independent of video ratio", () => {
         const project = createProject();
         const scene = project.scenes[0];
         const prompt = compileDramaAssetReferencePrompt(project, scene, "场景");
@@ -108,13 +108,17 @@ describe("drama prompt compiler", () => {
 
         expect(prompt).toContain("高清");
         expect(prompt).toContain("单视角场景全景建立图");
-        expect(prompt).toContain("9:16");
+        expect(prompt).toContain("16:9 横向画幅");
+        expect(prompt).not.toContain("9:16");
+        expect(prompt).toContain("真实空间尺度、重量、接触阴影和物理光线");
+        expect(prompt).toContain("真实电影摄影与实物物理质感");
         expect(prompt).toContain("不生成九宫格、分格或360°贴图");
         expect(prompt).toContain("建筑透视稳定");
         expect(prompt).not.toContain("负面约束：额外主体、拼版、多视角");
         expect(constraints.ok).toBe(true);
         if (constraints.ok) {
-            expect(constraints.constraints.join("\n")).toContain("高清单视角场景全景建立图");
+            expect(constraints.constraints.join("\n")).toContain("16:9 横向高清单视角场景全景建立图");
+            expect(constraints.constraints.join("\n")).not.toContain("9:16");
             expect(constraints.constraints.join("\n")).toContain("不生成九宫格");
         }
     });
@@ -168,6 +172,8 @@ describe("drama prompt compiler", () => {
         const prompt = compileDramaAssetReferencePrompt(project, asset, "角色");
 
         expect(prompt.match(/黑发束起/gu)).toHaveLength(1);
+        expect(prompt).toContain("真实电影摄影与实物物理质感");
+        expect(prompt).toContain("皮肤保留自然毛孔、细纹");
         expect(prompt).not.toContain("东方古风国漫电影质感");
         expect(prompt.match(/主体与资产类型：角色「萧炎」/gu)).toHaveLength(1);
         expect(prompt).not.toContain("负面约束：额外人物、文字、水印");

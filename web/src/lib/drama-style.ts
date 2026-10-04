@@ -6,6 +6,9 @@ export const DRAMA_STYLE_VISUAL = "按项目配置的视觉媒介、造型、材
 
 export const DRAMA_STYLE_COLOR_SCRIPT = "用户自定义色彩";
 
+export const DRAMA_ASSET_REALISM_RULES =
+    "在当前题材与项目视觉合同内优先呈现真实电影摄影与实物物理质感：比例、透视、重量、接触阴影和光线方向可信；只呈现有依据的细微纹理、磨损、接缝与不均匀边缘；避免卡通化、塑料皮肤、塑料高光、数字磨皮和无依据的发光效果。";
+
 const LEGACY_DRAMA_STYLE_NAME = "半写实动漫幻想风 · 暗黑学院史诗奇幻";
 const LEGACY_LAYOUT_MARKERS = ["中性浅灰背景", "中性灰背景", "干净中性背景", "六模块纵向全量版", "三视图", "面部五角度", "设定板布局", "联系表", "分格模块", "多视角"];
 

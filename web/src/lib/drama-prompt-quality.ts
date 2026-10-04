@@ -27,6 +27,7 @@ const CAMERA_CUT_EVENT_PATTERN = /镜头事件\s*[：:]/u;
 const ACTIVE_CAMERA_CUT_PATTERN = /硬切|镜头切换|Camera\s+cut\s+to|Cut\s+to/iu;
 const VIDEO_CARD_HEADER = /^###\s*镜头\s*(\d+)\s*\|([^\n]+)$/gmu;
 const VIDEO_CARD_FIELDS = ["场景", "画面内容", "光影", "色调", "台词", "人声", "音效"] as const;
+const VAGUE_LIGHT_COLOR_REFERENCE_PATTERN = /^(?:承前|同上|同前|沿用前镜|与前镜一致|和前镜一致|与首镜一致|和首镜一致|与第一镜(?:头)?一致|和第一镜(?:头)?一致|保持一致|延续前镜)[。；，,\s]*$/u;
 const VIDEO_CARD_CAMERA_TERMS = /平视|俯视|俯拍|仰视|仰拍|正面|侧面|侧[0-9一二三四五六七八九十]+度|过肩|入口侧|低机位|高机位|顶视|顶侧|跟随视线/u;
 const VIDEO_CARD_LENS_TERMS = /\d+(?:\.\d+)?\s*mm|广角|标准焦段|长焦|变形宽银幕/u;
 const DIRECT_DIALOGUE_IN_VISUAL_PATTERN = /(?:对白表演|(?:画外|内心声)?[^；：\n]{0,20}(?:说|道|问|喊|答|继续说|声音落下)\s*[：:]\s*[“"][^”\n]+[”"]|[“"][^”"\n]{2,}[”"])/u;
@@ -175,6 +176,8 @@ export function validateDramaVideoPromptCardLayout(value: unknown, frames: Reado
         if (!card.cameraMotion || !hasConcreteDramaCameraDirection(card.cameraMotion)) errors.push(`${label}${cardLabel}缺少具体主运镜`);
         if (!card.subjectMode || !/人物|非人物|主体|道具|空间|手部|双人|单人/u.test(card.subjectMode)) errors.push(`${label}${cardLabel}缺少人物镜头/非人物镜头主体标识`);
         for (const field of VIDEO_CARD_FIELDS) if (!extractVideoCardField(card.raw, field)) errors.push(`${label}${cardLabel}缺少“${field}”字段`);
+        if (VAGUE_LIGHT_COLOR_REFERENCE_PATTERN.test(card.lighting)) errors.push(`${label}${cardLabel}的光影不能只写“承前/同上”；请写明光源方向、落点和受光材质，可简短注明与首卡一致`);
+        if (VAGUE_LIGHT_COLOR_REFERENCE_PATTERN.test(card.color)) errors.push(`${label}${cardLabel}的色调不能只写“承前/同上”；请写明具体色相、冷暖或饱和度，可简短注明与首卡一致`);
         if (!card.scene || !card.visual || isGenericDramaDetail(card.visual)) errors.push(`${label}${cardLabel}的画面内容必须写出可见进行中动作，不能使用空泛占位词`);
         if (DIRECT_DIALOGUE_IN_VISUAL_PATTERN.test(card.visual)) errors.push(`${label}${cardLabel}的画面内容不得包含完整对白或说话人台词指令；只写可见口型、呼吸和表演，完整台词只能放在“台词”字段`);
         const normalizedDialogue = card.dialogue.replace(/[。！？!?；;，,]+$/gu, "").trim();

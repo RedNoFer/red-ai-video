@@ -126,6 +126,24 @@ describe("drama prompt quality", () => {
         ).toEqual([]);
     });
 
+    it("rejects lighting or tone fields that only point back to another shot", () => {
+        const prompt = [
+            "### 镜头 01 | 0-2秒 | 中近景 | 50mm | 侧45度平视 | 锁定机位 | 人物镜头",
+            "场景：室内长桌对话空间。",
+            "画面内容：萧炎抬眼看向左侧对手，右手指节压紧桌沿。",
+            "光影：承前",
+            "色调：与第一镜头一致",
+            "台词：无",
+            "人声：无",
+            "音效：衣料轻响。",
+        ].join("\n");
+
+        expect(validateDramaVideoPromptCardLayout(prompt, [{ startSecond: 0, endSecond: 2 }], "SH01")).toEqual(expect.arrayContaining([expect.stringContaining("光影不能只写"), expect.stringContaining("色调不能只写")]));
+        expect(
+            validateDramaVideoPromptCardLayout(prompt.replace("光影：承前", "光影：与首卡一致的右侧窗光落在萧炎左颊和桌沿").replace("色调：与第一镜头一致", "色调：与首卡一致的低饱和冷灰蓝，肤色保留自然中性"), [{ startSecond: 0, endSecond: 2 }], "SH01"),
+        ).toEqual([]);
+    });
+
     it("blocks Xiaomo cards that are structurally complete but only describe abstract intent", () => {
         const prompt = [
             "### 镜头 01 | 0-2秒 | 中景 | 50mm | 入口侧45度平视 | 极慢横移 | 人物镜头",

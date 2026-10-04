@@ -216,6 +216,44 @@ describe("prompt optimization service", () => {
         expect(result.optimizedPrompt).not.toContain("暗黑学院");
     });
 
+    it("keeps scene reference images 16:9 and adds concrete physical realism guidance", async () => {
+        vi.mocked(requestStructuredText).mockResolvedValue({
+            arguments: JSON.stringify({
+                optimizedPrompt: "主体与资产类型：场景设定图；身份/结构锚点：雨雾测站；可见状态与材质：湿冷岩面",
+                fields: {
+                    description: "雨雾测站",
+                    visualIdentity: "白雾、裸岩、松枝与平石平台",
+                    styling: "湿冷岩面和旧木门",
+                    colorPalette: "冷灰蓝",
+                    consistencyRules: "入口与测线方向固定",
+                },
+            }),
+            headers: new Headers(),
+            protocol: "chat",
+            elapsedMs: 10,
+        });
+
+        const result = await optimizeCreativePrompt({
+            origin: "http://localhost:3000",
+            cookie: "session=1",
+            userId: "user-one",
+            requestId: "scene-reference-style-request",
+            prompt: "资产类型：场景\n基础描述：雨雾测站\n视觉识别：白雾、裸岩、松枝与平石平台",
+            mode: "drama-asset",
+            visualContract: { visualStyle: "冷峻纪实电影摄影", artStyle: "真实场景与实物材质", colorScript: "冷灰蓝", globalNegativePrompt: "无体积光" },
+        });
+
+        const systemMessage = vi.mocked(requestStructuredText).mock.calls[0]?.[0].messages.find((message) => message.role === "system")?.content || "";
+        expect(systemMessage).toContain("16:9横向高清");
+        expect(systemMessage).toContain("不随剧集视频画幅改变");
+        expect(systemMessage).not.toContain("画幅跟随当前项目画幅");
+        expect(systemMessage).toContain("真实电影摄影与实物物理质感");
+        expect(systemMessage).toContain("自然比例、空间透视、重量、接触阴影");
+        expect(result.optimizedPrompt).toContain("构图与画幅：固定16:9横向");
+        expect(result.optimizedPrompt).not.toContain("9:16");
+        expect(result.optimizedPrompt).toContain("接触阴影和光线方向可信");
+    });
+
     it("removes narrative and scene context from optimized character modeling prompts", async () => {
         vi.mocked(requestStructuredText).mockResolvedValue({
             arguments: JSON.stringify({
