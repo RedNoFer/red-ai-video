@@ -49,6 +49,8 @@ describe("release type-check and build contract", () => {
         expect(standaloneStart).toContain('process.env.NEXT_DIST_DIR?.trim() || ".next"');
         expect(developmentStart).toContain('NEXT_DIST_DIR: runtime.environment.NEXT_DIST_DIR?.trim() || ".next-dev"');
         expect(standaloneStart).toContain("prepareStandaloneAssets");
+        expect(dockerfile.indexOf("COPY web/patches ./patches")).toBeGreaterThan(-1);
+        expect(dockerfile.indexOf("COPY web/patches ./patches")).toBeLessThan(dockerfile.indexOf("pnpm install --frozen-lockfile"));
         expect(dockerfile).toContain("pnpm run typecheck && NEXT_SKIP_BUILD_TYPECHECK=1 pnpm run build");
         expect(dockerfile).not.toContain("ARG NEXT_BUILD_CPUS=1");
         expect(dockerfile).not.toContain("ARG BUILD_NODE_OPTIONS=--max-old-space-size=1536");
