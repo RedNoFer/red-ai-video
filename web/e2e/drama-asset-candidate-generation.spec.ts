@@ -9,11 +9,16 @@ const REFERENCE_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAA
 test.use({ storageState: ".e2e-data/admin-state.json" });
 
 for (const ratio of ["9:16", "16:9", "1080x1920"] as const) {
-    test(`${ratio} project ratio overrides stale persisted scene supplier prompt`, async ({ page, request }) => {
+    test(`scene supplier prompt remains directly editable in a ${ratio} project`, async ({ page, request }) => {
         const created = await request.post("/api/drama/projects", { data: { title: `E2E 场景提示词画幅 ${ratio} ${Date.now()}`, ratio } });
         expect(created.ok(), await created.text()).toBe(true);
         const project = ((await created.json()) as { data: { project: DramaProject } }).data.project;
         const sceneId = "scene-prompt-aspect-e2e";
+        const orientation = ratio === "16:9" ? "横向" : "竖向";
+        const persistedPrompt = `构图与画幅：${ratio} ${orientation}全景；保留供应商手工说明`;
+        const editedRatio = ratio === "16:9" ? "9:16" : "16:9";
+        const editedOrientation = editedRatio === "16:9" ? "横向" : "竖向";
+        const editedPrompt = `构图与画幅：${editedRatio} ${editedOrientation}全景；保留供应商手工说明`;
 
         try {
             const saved = await request.patch(`/api/drama/projects/${project.id}`, {
@@ -25,7 +30,7 @@ for (const ratio of ["9:16", "16:9", "1080x1920"] as const) {
                             name: "场景提示词画幅测试",
                             description: "石质测站，固定入口与长案",
                             profile: { visualIdentity: "石质空间，入口与长案位置固定", styling: "粗粝石面与旧木长案", colorPalette: "冷灰", consistencyRules: "透视和空间拓扑保持一致" },
-                            supplierPrompt: `构图与画幅：${ratio === "9:16" ? "16:9" : "9:16"} 横幅旧提示词；保留供应商手工说明`,
+                            supplierPrompt: persistedPrompt,
                             references: [],
                         },
                     ],
@@ -41,14 +46,17 @@ for (const ratio of ["9:16", "16:9", "1080x1920"] as const) {
             const drawer = page.getByRole("dialog", { name: "编辑场景" });
             await drawer.getByText("实际供应商提示词（可编辑）").click();
             const prompt = drawer.getByLabel("供应商提示词");
-            const orientation = ratio === "16:9" ? "横向" : "竖向";
-            await expect(prompt).toHaveValue(new RegExp(`构图与画幅：${ratio} ${orientation}`));
-            await expect(prompt).toHaveValue(/保留供应商手工说明/);
-            const beforeEdit = await prompt.inputValue();
-            await prompt.fill(beforeEdit);
-            await expect(prompt).toHaveValue(beforeEdit);
-            const otherRatios = ["9:16", "16:9"].filter((item) => item !== ratio);
-            for (const otherRatio of otherRatios) await expect(prompt).not.toHaveValue(new RegExp(otherRatio));
+            await expect(prompt).toHaveValue(persistedPrompt);
+            await prompt.fill(editedPrompt);
+            await expect(prompt).toHaveValue(editedPrompt);
+            const saveResponse = page.waitForResponse((response) => response.request().method() === "PATCH" && response.url().includes(`/api/drama/projects/${project.id}/assets/`));
+            await drawer.getByRole("button", { name: "保存提示词" }).click();
+            expect((await saveResponse).ok()).toBe(true);
+
+            const readback = await request.get(`/api/drama/projects/${project.id}`);
+            expect(readback.ok(), await readback.text()).toBe(true);
+            const savedProject = ((await readback.json()) as { data: { project: DramaProject } }).data.project;
+            expect(savedProject.scenes.find((scene) => scene.id === sceneId)?.supplierPrompt).toBe(editedPrompt);
         } finally {
             const deleted = await request.delete(`/api/drama/projects/${project.id}`);
             expect(deleted.ok(), await deleted.text()).toBe(true);

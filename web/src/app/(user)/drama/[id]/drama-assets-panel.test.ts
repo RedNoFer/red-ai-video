@@ -142,6 +142,7 @@ describe("drama asset image results", () => {
         expect(saveSection).not.toContain("optimizeDramaAssetPrompt");
         expect(saveSection).toContain("markShotsStale: false");
         expect(editor).toContain("resolveDramaSupplierPrompt");
+        expect(editor).toContain("const supplierPrompt = supplierPromptOverride ?? automaticSupplierPrompt;");
         expect(editor).toContain("const prompt = activeProposal ? compileDramaAssetRefinementPrompt");
         expect(editor).toContain(": supplierPrompt;");
         expect(editor).toContain("const prompt = task.prompt?.trim() || resolveDramaSupplierPrompt");
@@ -166,7 +167,7 @@ describe("drama asset image results", () => {
         expect(editor).toContain("实际供应商提示词");
         expect(editor).not.toContain("恢复自动提示词");
         expect(editor).toContain("data-drama-supplier-prompt");
-        expect(editor).toContain("setSupplierPromptOverride(asset.supplierPrompt?.trim() || undefined)");
+        expect(editor).toContain("setSupplierPromptOverride(asset.supplierPrompt || undefined)");
         expect(editor).toContain("mergeGeneratedReferenceReviews");
         expect(editor).toContain("await loadProject(project.id, true)");
         expect(editor).toContain("await saveProjectNow(project.id)");

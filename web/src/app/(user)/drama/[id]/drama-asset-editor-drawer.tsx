@@ -112,7 +112,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
               }
             : draftPromptAsset;
     const automaticSupplierPrompt = promptAsset && kind !== "clues" ? compileDramaAssetReferencePrompt(project, promptAsset, kind === "characters" ? "角色" : kind === "scenes" ? "场景" : "道具") : "";
-    const supplierPrompt = resolveDramaSupplierPrompt(supplierPromptOverride, automaticSupplierPrompt, kind === "scenes" ? project.ratio : undefined);
+    const supplierPrompt = supplierPromptOverride ?? automaticSupplierPrompt;
     const cloneAvailable = config.channels.some((channel) =>
         Object.values(channel.advancedConfig?.modelConfigs || {}).some(
             (operation) => operation.audioOperation === "voice-clone" && Boolean(operation.cloneSampleField) && /\{\{\s*(?:clone_sample_url|sample_audio_url|sample_url)\s*\}\}/i.test(operation.requestTemplate || ""),
@@ -144,9 +144,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
         }
         const latestRefinement = asset.refinementHistory?.at(-1)?.proposal;
         setRefinementProposal(latestRefinement);
-        // Restore the persisted prompt for editing. Generation still compiles
-        // from the current asset facts and visual contract below.
-        setSupplierPromptOverride(asset.supplierPrompt?.trim() || undefined);
+        setSupplierPromptOverride(asset.supplierPrompt || undefined);
         setDraft({
             name: asset.name,
             description: asset.description,
@@ -211,8 +209,8 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
 
     const saveSupplierPrompt = async () => {
         if (!asset || kind === "clues" || saving) return;
-        const prompt = supplierPrompt.trim();
-        if (!prompt) return;
+        const prompt = supplierPrompt;
+        if (!prompt.trim()) return;
         setSaving(true);
         try {
             const fields = prompt
