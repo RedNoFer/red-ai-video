@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { App, Button, Empty } from "antd";
+import { App, Button, Empty, Input, Modal } from "antd";
 import { ArrowRight, GitBranch, History } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 
 import { ensureDramaEpisodeCanvas, getLatestDramaProductionRun } from "@/services/api/drama-projects";
 import { resolveDramaGlobalVisualContract } from "@/lib/drama-style";
+import { normalizeDramaImageSize } from "@/lib/drama-image-size";
 import { syncUserPointsFromHeaders } from "@/services/api/points";
 import { createFrameEvidence, latestFrameEvidence, supersedeFrameEvidence } from "@/lib/drama-continuity-policy";
 import { useEffectiveConfig } from "@/stores/use-config-store";
@@ -87,6 +88,9 @@ function DramaProjectEditor({ project }: { project: DramaProject }) {
     const [designing, setDesigning] = useState(false);
     const [completingReview, setCompletingReview] = useState(false);
     const [versionsOpen, setVersionsOpen] = useState(false);
+    const [projectSettingsOpen, setProjectSettingsOpen] = useState(false);
+    const [ratioDraft, setRatioDraft] = useState(project.ratio);
+    const [savingRatio, setSavingRatio] = useState(false);
     const [versions, setVersions] = useState<DramaProjectVersion[]>([]);
     const [versionsLoading, setVersionsLoading] = useState(false);
     const [expandedStoryboardShotId, setExpandedStoryboardShotId] = useState("");
@@ -554,6 +558,10 @@ function DramaProjectEditor({ project }: { project: DramaProject }) {
                     setAgentOpen((open) => !open);
                 }}
                 onOpenVersions={() => void openVersions()}
+                onOpenProjectSettings={() => {
+                    setRatioDraft(project.ratio);
+                    setProjectSettingsOpen(true);
+                }}
             />
             <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden" data-drama-workspace-body>
                 <DramaEpisodeSidebar project={project} episode={episode} open={episodeNavigatorOpen && !assetsOpen} onOpenChange={setEpisodeNavigatorOpen} onStageChange={changeStage} />
@@ -698,6 +706,33 @@ function DramaProjectEditor({ project }: { project: DramaProject }) {
                 onSave={() => void createVersion(project, "手动保存版本").then(() => openVersions())}
                 onRestore={(version) => void restore(version)}
             />
+            <Modal
+                title="项目设置"
+                open={projectSettingsOpen}
+                confirmLoading={savingRatio}
+                onCancel={() => setProjectSettingsOpen(false)}
+                onOk={() => {
+                    const ratio = normalizeDramaImageSize(ratioDraft);
+                    if (!ratio) return void message.warning("请输入 16:9、9:16 或有效的宽x高");
+                    setSavingRatio(true);
+                    void saveProjectNow(project.id, (current) => ({ ...current, ratio }))
+                        .then(() => {
+                            setProjectSettingsOpen(false);
+                            message.success("项目画幅已更新");
+                        })
+                        .catch((error) => message.error(error instanceof Error ? error.message : "项目画幅保存失败"))
+                        .finally(() => setSavingRatio(false));
+                }}
+                okText="保存画幅"
+                width={440}
+                style={{ maxWidth: "calc(100vw - 24px)" }}
+            >
+                <label htmlFor="drama-project-ratio-setting" className="mb-2 block text-sm font-medium">
+                    项目画幅
+                </label>
+                <Input id="drama-project-ratio-setting" value={ratioDraft} onChange={(event) => setRatioDraft(event.target.value)} placeholder="16:9、9:16 或 1920x1080" />
+                <p className="mt-2 text-xs leading-5 text-muted-foreground">保存后，新生成的场景图和视频将采用此画幅；已有图片需要重新生成。</p>
+            </Modal>
         </main>
     ) : (
         <main className="flex h-full min-h-0 flex-col overflow-hidden bg-background text-foreground">

@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { useUserStore } from "@/stores/use-user-store";
 import { CompactEmptyState } from "@/components/compact-empty-state";
 import { cn } from "@/lib/utils";
+import { normalizeDramaImageSize } from "@/lib/drama-image-size";
 
 import { DramaProjectCard } from "./components/drama-project-card";
 import { useDramaStore } from "./stores/use-drama-store";
@@ -26,6 +27,7 @@ export default function DramaPage() {
     const userId = useUserStore((state) => state.user?.id || "");
     const [open, setOpen] = useState(false);
     const [title, setTitle] = useState("");
+    const [ratio, setRatio] = useState("");
     const [creating, setCreating] = useState(false);
     const episodeCount = projects.reduce((total, project) => total + project.episodeCount, 0);
     const pendingCount = projects.reduce((total, project) => total + project.pendingTaskCount, 0);
@@ -36,11 +38,14 @@ export default function DramaPage() {
     }, [hydrate, userId]);
     const create = async () => {
         if (!title.trim()) return message.warning("请输入项目名称");
+        const selectedRatio = normalizeDramaImageSize(ratio);
+        if (!selectedRatio) return message.warning("请选择画幅：16:9、9:16 或输入宽x高");
         setCreating(true);
         try {
-            const id = await createProject({ title: title.trim() });
+            const id = await createProject({ title: title.trim(), ratio: selectedRatio });
             setOpen(false);
             setTitle("");
+            setRatio("");
             router.push(`/drama/${id}`);
         } catch (error) {
             message.error(error instanceof Error ? error.message : "短剧项目创建失败");
@@ -119,6 +124,13 @@ export default function DramaPage() {
                             项目名称
                         </label>
                         <Input id="drama-project-title" className="!h-9" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="例如：月影长安" />
+                    </div>
+                    <div className="grid gap-1.5">
+                        <label htmlFor="drama-project-ratio" className="text-sm font-medium leading-5">
+                            项目画幅
+                        </label>
+                        <Input id="drama-project-ratio" className="!h-9" value={ratio} onChange={(event) => setRatio(event.target.value)} placeholder="16:9、9:16 或 1920x1080" aria-required="true" />
+                        <span className="text-xs text-muted-foreground">场景图与视频生成使用此画幅。</span>
                     </div>
                 </div>
             </Modal>

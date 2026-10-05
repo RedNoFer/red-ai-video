@@ -143,7 +143,8 @@ describe("drama asset image results", () => {
         expect(saveSection).toContain("markShotsStale: false");
         expect(editor).toContain("resolveDramaSupplierPrompt");
         expect(editor).toContain("const supplierPrompt = supplierPromptOverride ?? automaticSupplierPrompt;");
-        expect(editor).toContain("const prompt = activeProposal ? compileDramaAssetRefinementPrompt");
+        expect(editor).toContain("const prompt = activeProposal");
+        expect(editor).toContain("? resolveDramaSupplierPrompt(supplierPrompt, automaticSupplierPrompt, project.ratio)");
         expect(editor).toContain(": supplierPrompt;");
         expect(editor).toContain("const prompt = task.prompt?.trim() || resolveDramaSupplierPrompt");
         expect(editor).toContain('maxWidth: "100vw"');

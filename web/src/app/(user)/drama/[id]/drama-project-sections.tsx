@@ -206,6 +206,7 @@ export function DramaWorkspaceHeader({
     onEpisodeNavigatorOpenChange,
     onToggleAgent,
     onOpenVersions,
+    onOpenProjectSettings,
 }: {
     project: DramaProject;
     episode: DramaEpisode;
@@ -219,6 +220,7 @@ export function DramaWorkspaceHeader({
     onEpisodeNavigatorOpenChange: (open: boolean) => void;
     onToggleAgent: () => void;
     onOpenVersions: () => void;
+    onOpenProjectSettings: () => void;
 }) {
     const router = useRouter();
     const updateProject = useDramaStore((state) => state.updateProject);
@@ -280,6 +282,9 @@ export function DramaWorkspaceHeader({
                 })}
             </nav>
             <div className="col-start-2 row-start-1 flex min-w-0 shrink-0 items-center justify-end gap-1 px-2.5 py-2 sm:px-4 min-[1366px]:col-start-3 min-[1366px]:h-full min-[1366px]:py-0">
+                <Tooltip title="项目设置">
+                    <Button className="!size-9 !min-w-9 !px-0" icon={<Settings2 className="size-4" />} onClick={onOpenProjectSettings} aria-label="打开项目设置" />
+                </Tooltip>
                 <Button
                     className={`!h-9 !shrink-0 !gap-1.5 !px-2.5 ${assetsOpen ? "!border-foreground !bg-foreground !text-background" : "!border-border !bg-background hover:!border-foreground/25 hover:!bg-muted"}`}
                     onClick={assetsOpen ? onCloseAssets : onOpenAssets}

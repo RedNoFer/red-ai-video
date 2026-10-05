@@ -8,6 +8,90 @@ const REFERENCE_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAA
 
 test.use({ storageState: ".e2e-data/admin-state.json" });
 
+test("project ratio can be chosen at creation and changed for an existing project", async ({ page, request }) => {
+    await page.goto("/drama", { waitUntil: "domcontentloaded" });
+    await page.getByRole("button", { name: "新建短剧" }).click();
+    const createDialog = page.getByRole("dialog", { name: "新建短剧项目" });
+    await createDialog.getByLabel("项目名称").fill(`E2E 画幅设置 ${Date.now()}`);
+    await createDialog.getByLabel("项目画幅").fill("9:16");
+    await createDialog.getByRole("button", { name: "创建并进入" }).click();
+    await expect(page).toHaveURL(/\/drama\/drama-/);
+    const projectId = new URL(page.url()).pathname.split("/").at(-1)!;
+
+    try {
+        await page.getByRole("button", { name: "打开项目设置" }).click();
+        const settings = page.getByRole("dialog", { name: "项目设置" });
+        await expect(settings.getByLabel("项目画幅")).toHaveValue("9:16");
+        await settings.getByLabel("项目画幅").fill("16:9");
+        await settings.getByRole("button", { name: "保存画幅" }).click();
+        await expect(settings).toBeHidden();
+
+        const readback = await request.get(`/api/drama/projects/${projectId}`);
+        expect(readback.ok(), await readback.text()).toBe(true);
+        const saved = ((await readback.json()) as { data: { project: DramaProject } }).data.project;
+        expect(saved.ratio).toBe("16:9");
+        expect(saved.productionBible?.ratio).toBe("16:9");
+        expect(saved.productionBible?.productionPlan?.video.ratio).toBe("16:9");
+
+        const imageSettings = await request.patch("/api/admin/settings", { data: sub2ApiImageSettingsPatch() });
+        expect(imageSettings.ok(), await imageSettings.text()).toBe(true);
+        const scene = {
+            id: "scene-aspect-ratio-e2e",
+            name: "画幅测试场景",
+            description: "冷灰色旧测站，入口和长案位置固定",
+            profile: { visualIdentity: "单视角测站全景", styling: "石墙和旧木长案", colorPalette: "冷灰", consistencyRules: "入口与长案固定" },
+            supplierPrompt: "构图与画幅：9:16 竖向单视角场景全景，石墙、旧木长案，无人物、无文字。",
+            references: [],
+        };
+        const sceneSave = await request.patch(`/api/drama/projects/${projectId}`, { data: { ...saved, scenes: [scene] } });
+        expect(sceneSave.ok(), await sceneSave.text()).toBe(true);
+        await page.reload({ waitUntil: "domcontentloaded" });
+        await page.getByRole("button", { name: "打开项目资产" }).click();
+        await page.locator('[aria-label="项目资产分类"] button').filter({ hasText: "场景" }).click();
+        await page.locator("[data-drama-assets-library] article").filter({ hasText: "画幅测试场景" }).getByRole("button", { name: "编辑场景：画幅测试场景" }).last().click();
+        const sceneDrawer = page.getByRole("dialog", { name: "编辑场景" });
+        await expect(sceneDrawer.getByText(/每张候选均按本项目 16:9 成片画幅/)).toBeVisible();
+        await sceneDrawer.getByText("实际供应商提示词（可编辑）").click();
+        await expect(sceneDrawer.getByLabel("供应商提示词")).toHaveValue(scene.supplierPrompt);
+        const submittedSizes: string[] = [];
+        const submittedPrompts: string[] = [];
+        await page.route(/\/api\/image-tasks$/, (route) => {
+            if (route.request().method() === "POST") {
+                const submitted = route.request().postDataJSON() as { config: { size: string }; prompt: string };
+                submittedSizes.push(submitted.config.size);
+                submittedPrompts.push(submitted.prompt);
+            }
+            return route.fulfill({ status: 400, json: { code: 400, data: null, msg: "E2E 已拦截上游任务" } });
+        });
+        await sceneDrawer.getByRole("button", { name: "生成候选" }).click();
+        await expect.poll(() => submittedSizes).toContain("16:9");
+        expect(submittedPrompts[0]).toContain("16:9 横向");
+        expect(submittedPrompts[0]).not.toContain("9:16");
+        await sceneDrawer.getByRole("button", { name: /取.*消/ }).click();
+
+        for (const width of [1672, 1440, 430, 390]) {
+            await page.setViewportSize({ width, height: 844 });
+            for (const dark of [false, true]) {
+                await page.evaluate((enabled) => document.documentElement.classList.toggle("dark", enabled), dark);
+                await page.getByRole("button", { name: "打开项目设置" }).click();
+                await expect(page.getByRole("dialog", { name: "项目设置" }).getByLabel("项目画幅")).toHaveValue("16:9");
+                const bounds = await page.getByRole("dialog", { name: "项目设置" }).boundingBox();
+                expect(bounds).not.toBeNull();
+                expect(bounds!.x).toBeGreaterThanOrEqual(0);
+                expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width);
+                await page
+                    .getByRole("dialog", { name: "项目设置" })
+                    .getByRole("button", { name: /取.*消/ })
+                    .click();
+                expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+            }
+        }
+    } finally {
+        const deleted = await request.delete(`/api/drama/projects/${projectId}`);
+        expect(deleted.ok(), await deleted.text()).toBe(true);
+    }
+});
+
 for (const ratio of ["9:16", "16:9", "1080x1920"] as const) {
     test(`scene supplier prompt remains directly editable in a ${ratio} project`, async ({ page, request }) => {
         const created = await request.post("/api/drama/projects", { data: { title: `E2E 场景提示词画幅 ${ratio} ${Date.now()}`, ratio } });

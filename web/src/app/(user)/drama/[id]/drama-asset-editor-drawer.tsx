@@ -629,7 +629,11 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                 message.warning(`暂不能生成：${preflight.errors.join("；")}`);
                 return;
             }
-            const prompt = activeProposal ? compileDramaAssetRefinementPrompt(project, draftPromptAsset || asset, assetKind, activeProposal, refinementPrompt) : supplierPrompt;
+            const prompt = activeProposal
+                ? compileDramaAssetRefinementPrompt(project, draftPromptAsset || asset, assetKind, activeProposal, refinementPrompt)
+                : kind === "scenes"
+                  ? resolveDramaSupplierPrompt(supplierPrompt, automaticSupplierPrompt, project.ratio)
+                  : supplierPrompt;
             const imageModel = config.imageModel || config.imageModels[0] || "";
             if (!imageModel) throw new Error("后台尚未配置可用的图片模型，请先在管理后台配置图片渠道");
             const imageConfig = {

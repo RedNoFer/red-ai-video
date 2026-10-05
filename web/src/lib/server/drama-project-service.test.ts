@@ -2722,6 +2722,19 @@ describe("drama project service updates", () => {
         expect(saved.productionBible?.colorScript).toBeUndefined();
     });
 
+    it("keeps episode settings video ratio aligned with the saved project ratio", async () => {
+        const current = project("2026-07-19T08:00:01.000Z", "横屏项目");
+        current.ratio = "16:9";
+        current.productionBible = { ...current.productionBible!, ratio: "16:9" };
+        mocks.getDramaProject.mockResolvedValue(current);
+        mocks.updateDramaProject.mockImplementation(async (_userId: string, value: DramaProject) => value);
+
+        const saved = await saveDramaEpisodeSettingsForUser("user-one", current.id, "episode-one", { productionPlan: defaultDramaProductionPlan("manual") });
+
+        expect(saved.productionBible?.ratio).toBe("16:9");
+        expect(saved.productionBible?.productionPlan?.video.ratio).toBe("16:9");
+    });
+
     it("applies a stale lock request to the latest project without overwriting other fields", async () => {
         const current = { ...project("2026-07-19T08:00:05.000Z", "最新标题"), summary: "保留服务端摘要" };
         mocks.getDramaProject.mockResolvedValue(current);
@@ -3197,6 +3210,30 @@ describe("drama project service updates", () => {
         expect(created).toMatchObject({ title: "只填名称", summary: "", ratio: "9:16", style: DRAMA_STYLE_NAME, productionBible: { visualStyle: DRAMA_STYLE_NAME, ratio: "9:16" } });
         expect(created.episodes[0]).toMatchObject({ title: "第 1 集", script: "" });
         expect(mocks.createDramaProject).toHaveBeenCalledWith("user-one", expect.objectContaining({ summary: "", ratio: "9:16", style: DRAMA_STYLE_NAME }));
+    });
+
+    it("keeps the chosen project, bible, and video plan ratios aligned", async () => {
+        mocks.createDramaProject.mockImplementation(async (_userId: string, value: DramaProject) => value);
+        const created = await createDramaProjectForUser("user-one", { title: "横屏短剧", ratio: "16:9" });
+        expect(created.ratio).toBe("16:9");
+        expect(created.productionBible?.ratio).toBe("16:9");
+        expect(created.productionBible?.productionPlan?.video.ratio).toBe("16:9");
+
+        const current = project("2026-07-19T08:00:02.000Z", "旧项目");
+        current.productionBible = { ...current.productionBible!, ratio: "9:16", productionPlan: defaultDramaProductionPlan("manual") };
+        const updated = normalizeProject({ ...current, ratio: "16:9" }, current);
+        expect(updated.ratio).toBe("16:9");
+        expect(updated.productionBible?.ratio).toBe("16:9");
+        expect(updated.productionBible?.productionPlan?.video.ratio).toBe("16:9");
+
+        current.productionBible = { ...current.productionBible!, productionPlan: { ...current.productionBible!.productionPlan!, lockedAt: "2026-07-19T08:00:01.000Z" } };
+        mocks.getDramaProject.mockResolvedValue(current);
+        mocks.updateDramaProject.mockImplementation(async (_userId: string, value: DramaProject) => value);
+        const persisted = await updateDramaProjectForUser("user-one", current.id, { ...current, ratio: "16:9", updatedAt: "2026-07-19T08:00:03.000Z" });
+        expect(persisted.ratio).toBe("16:9");
+        expect(persisted.productionBible?.ratio).toBe("16:9");
+        expect(persisted.productionBible?.productionPlan?.video.ratio).toBe("16:9");
+        expect(persisted.productionBible?.productionPlan?.lockedAt).toBe("2026-07-19T08:00:01.000Z");
     });
 
     it("reuses a handoff project without listing every project snapshot", async () => {

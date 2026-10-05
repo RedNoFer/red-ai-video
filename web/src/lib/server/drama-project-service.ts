@@ -674,7 +674,7 @@ export async function createDramaProjectForUser(userId: string, value: unknown) 
             globalNegativePrompt: "无字幕、无水印、无logo、无现代元素、无角色身份漂移",
             subtitleSafeArea: "角色头顶与画面底部保留安全区",
             continuityMode: "strict",
-            productionPlan: defaultDramaProductionPlan("new-project"),
+            productionPlan: { ...defaultDramaProductionPlan("new-project"), video: { ...defaultDramaProductionPlan("new-project").video, ratio: input.ratio } },
         },
         seriesBible: {
             version: "series-bible-v1",
@@ -714,7 +714,9 @@ export async function updateDramaProjectForUser(userId: string, id: string, valu
     const currentPlan = normalizeDramaProductionPlan(current.productionBible?.productionPlan);
     const incomingProductionBible = object(input.productionBible);
     const incomingPlan = normalizeDramaProductionPlan(incomingProductionBible.productionPlan, currentPlan);
-    const lockRequested = Boolean(object(incomingProductionBible.productionPlan).lockedAt);
+    if (incomingPlan) incomingPlan.video.ratio = current.ratio;
+    const incomingLockedAt = cleanText(object(incomingProductionBible.productionPlan).lockedAt);
+    const lockRequested = Boolean(incomingLockedAt && incomingLockedAt !== currentPlan?.lockedAt);
     const requestedStyle = normalizeDramaStyleName(cleanText(input.style) || current.style || cleanText(incomingProductionBible.visualStyle));
     if (!lockRequested && incomingUpdatedAt && incomingUpdatedAt < parseTimestamp(current.updatedAt)) {
         return current;
@@ -725,7 +727,7 @@ export async function updateDramaProjectForUser(userId: string, id: string, valu
               defaultVideoMode: videoMode(input.defaultVideoMode),
               style: requestedStyle,
               productionBible: (() => {
-                  const currentBible = current.productionBible ? { ...current.productionBible, productionPlan: incomingPlan } : normalizeProductionBible(incomingProductionBible, current.ratio, requestedStyle);
+                  const currentBible = current.productionBible ? { ...current.productionBible, ratio: current.ratio, productionPlan: incomingPlan } : normalizeProductionBible(incomingProductionBible, current.ratio, requestedStyle);
                   if (!currentBible) return currentBible;
                   const styleContract = resolveDramaStyleContract({ style: requestedStyle, productionBible: currentBible });
                   const { colorScript: _oldColorScript, ...bibleWithoutColorScript } = currentBible;
@@ -738,7 +740,7 @@ export async function updateDramaProjectForUser(userId: string, id: string, valu
     if (currentPlan?.lockedAt && !lockRequested) {
         project = {
             ...project,
-            productionBible: project.productionBible ? { ...project.productionBible, productionPlan: currentPlan } : project.productionBible,
+            productionBible: project.productionBible ? { ...project.productionBible, productionPlan: { ...currentPlan, video: { ...currentPlan.video, ratio: project.ratio } } } : project.productionBible,
         };
     }
     const size = Buffer.byteLength(JSON.stringify(project));
@@ -773,6 +775,7 @@ export async function saveDramaEpisodeSettingsForUser(userId: string, id: string
     const nextPlan = incomingPlan
         ? {
               ...incomingPlan,
+              video: { ...incomingPlan.video, ratio: current.ratio },
               visual: { ...incomingPlan.visual, source: incomingPlan.visual.visualStyle.trim() && incomingPlan.visual.artStyle.trim() ? ("manual" as const) : ("agent" as const) },
               lockedAt: new Date().toISOString(),
               source: "manual" as const,
@@ -783,7 +786,7 @@ export async function saveDramaEpisodeSettingsForUser(userId: string, id: string
               const nextBible: DramaProductionBible = {
                   ...(current.productionBible || {}),
                   language: current.productionBible?.language || "zh-CN",
-                  ratio: current.productionBible?.ratio || current.ratio,
+                  ratio: current.ratio,
                   continuityMode: current.productionBible?.continuityMode || "strict",
                   visualStyle: current.productionBible?.visualStyle || current.style,
                   productionPlan: nextPlan,
@@ -4293,7 +4296,7 @@ function normalizeProductionBible(value: unknown, ratio: string, style: unknown)
     return {
         targetPlatform: optionalText(input.targetPlatform),
         language: cleanText(input.language) || "中文",
-        ratio: normalizeDramaImageSize(input.ratio) || ratio,
+        ratio,
         targetDuration: optionalPositiveInteger(input.targetDuration),
         visualStyle: resolved.name,
         ...(resolved.colorScript ? { colorScript: resolved.colorScript } : {}),
@@ -4301,7 +4304,10 @@ function normalizeProductionBible(value: unknown, ratio: string, style: unknown)
         globalNegativePrompt: optionalText(input.globalNegativePrompt),
         subtitleSafeArea: optionalText(input.subtitleSafeArea),
         continuityMode: input.continuityMode === "balanced" ? "balanced" : "strict",
-        productionPlan: normalizeDramaProductionPlan(input.productionPlan),
+        productionPlan: (() => {
+            const plan = normalizeDramaProductionPlan(input.productionPlan);
+            return plan ? { ...plan, video: { ...plan.video, ratio } } : undefined;
+        })(),
     };
 }
 
