@@ -44,6 +44,9 @@ for (const ratio of ["9:16", "16:9", "1080x1920"] as const) {
             const orientation = ratio === "16:9" ? "横向" : "竖向";
             await expect(prompt).toHaveValue(new RegExp(`构图与画幅：${ratio} ${orientation}`));
             await expect(prompt).toHaveValue(/保留供应商手工说明/);
+            const beforeEdit = await prompt.inputValue();
+            await prompt.fill(beforeEdit);
+            await expect(prompt).toHaveValue(beforeEdit);
             const otherRatios = ["9:16", "16:9"].filter((item) => item !== ratio);
             for (const otherRatio of otherRatios) await expect(prompt).not.toHaveValue(new RegExp(otherRatio));
         } finally {

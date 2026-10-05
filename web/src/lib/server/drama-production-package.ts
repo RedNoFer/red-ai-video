@@ -341,7 +341,7 @@ export function applyDramaProductionPackage(project: DramaProject, source: Drama
               return { ...bibleWithoutColorScript, visualStyle: styleContract.name, ...(styleContract.colorScript ? { colorScript: styleContract.colorScript } : {}) };
           })()
         : undefined;
-    const assetPromptProject = { ...project, style: styleContract.name, productionBible: synchronizedBible || project.productionBible };
+    const assetPromptProject = { ...project, style: styleContract.name, ratio: projectPatch.ratio, productionBible: synchronizedBible || project.productionBible };
     const characters = mergeAssets(assetPromptProject.characters, productionPackage.assets.characters, "character", assetPromptProject, "角色");
     const locations = mergeAssets(assetPromptProject.scenes, productionPackage.assets.locations, "location", assetPromptProject, "场景");
     const props = mergeAssets(assetPromptProject.props, productionPackage.assets.props, "prop", assetPromptProject, "道具");
@@ -356,12 +356,12 @@ export function applyDramaProductionPackage(project: DramaProject, source: Drama
         title: preferred(project.title, project.fieldOrigins, "title", projectPatch.title),
         summary: preferred(project.summary, project.fieldOrigins, "summary", projectPatch.summary),
         style: styleContract.name,
-        ratio: preferred(project.ratio, project.fieldOrigins, "ratio", projectPatch.ratio),
+        ratio: projectPatch.ratio,
         productionLock: productionPackage.project.productionLock || project.productionLock,
         productionBible: synchronizedBible,
         seriesBible: productionPackage.seriesBible || project.seriesBible,
         productionArchive: productionPackage.archive,
-        fieldOrigins: { ...packageOrigins(["title", "summary", "style", "ratio", "productionBible"]), ...project.fieldOrigins },
+        fieldOrigins: { ...packageOrigins(["title", "summary", "style", "ratio", "productionBible"]), ...project.fieldOrigins, ratio: "package" },
         characters: characters.items,
         scenes: locations.items,
         props: props.items,
@@ -744,6 +744,7 @@ function normalizeProductionPackage(value: unknown, options: DramaProductionPack
     if (options.requireContentQuality || options.requireAuthoringQuality) validateRawAgentPackageDraft(input);
     const project = object(input.project);
     const bible = object(project.productionBible);
+    const packageRatio = text(project.ratio) || text(bible.ratio) || "9:16";
     const assets = object(input.assets);
     const backgroundNpcPolicyByLocationCode = new Map(
         array(assets.locations).flatMap((asset) => {
@@ -811,12 +812,14 @@ function normalizeProductionPackage(value: unknown, options: DramaProductionPack
         style: text(project.style),
         productionBible: { visualStyle: text(bible.visualStyle), colorScript: optionalText(bible.colorScript), productionPlan: rawProductionPlan },
     });
-    const productionPlan = canonicalizePackageProductionPlan(rawProductionPlan, styleContract, options.importWarnings);
+    const canonicalPlan = canonicalizePackageProductionPlan(rawProductionPlan, styleContract, options.importWarnings);
+    const productionPlan = canonicalPlan ? { ...canonicalPlan, video: { ...canonicalPlan.video, ratio: packageRatio } } : undefined;
     const { colorScript: _rawColorScript, ...bibleWithoutColorScript } = bible;
     const colorScript = optionalText(bible.colorScript);
     const productionLock = normalizeProductionLock(project.productionLock);
     const normalizedBible = {
         ...bibleWithoutColorScript,
+        ratio: packageRatio,
         visualStyle: styleContract.name,
         ...(colorScript ? { colorScript } : {}),
         ...(normalizeDialogueTimingPolicy(bible.dialogueTiming) ? { dialogueTiming: normalizeDialogueTimingPolicy(bible.dialogueTiming) } : {}),
@@ -824,13 +827,13 @@ function normalizeProductionPackage(value: unknown, options: DramaProductionPack
     const packagePromptProject = {
         title: text(project.title) || "未命名短剧",
         style: styleContract.name,
-        ratio: text(project.ratio) || "9:16",
+        ratio: packageRatio,
         productionBible: {
             targetPlatform: optionalText(bible.targetPlatform),
             language: text(bible.language) || "中文",
-            ratio: text(bible.ratio) || text(project.ratio) || "9:16",
             continuityMode: bible.continuityMode === "balanced" ? ("balanced" as const) : ("strict" as const),
             ...normalizedBible,
+            ratio: packageRatio,
             productionPlan,
         },
     };
@@ -845,12 +848,12 @@ function normalizeProductionPackage(value: unknown, options: DramaProductionPack
             title: text(project.title) || "未命名短剧",
             summary: text(project.summary),
             style: styleContract.name,
-            ratio: text(project.ratio) || "9:16",
+            ratio: packageRatio,
             ...(productionLock ? { productionLock } : {}),
             productionBible: {
                 targetPlatform: optionalText(bible.targetPlatform),
                 language: text(bible.language) || "中文",
-                ratio: text(bible.ratio) || text(project.ratio) || "9:16",
+                ratio: packageRatio,
                 targetDuration: derivedTargetDuration > 0 ? derivedTargetDuration : undefined,
                 visualStyle: styleContract.name,
                 ...(colorScript ? { colorScript } : {}),
@@ -890,6 +893,7 @@ function restylePackageAssets(assets: DramaProductionPackageV1["assets"], projec
 }
 
 function recompileProductionPackageForProject(value: DramaProductionPackageV1, project: DramaProjectAssetCollection, importWarnings?: string[]) {
+    const packageRatio = value.project.ratio || value.project.productionBible.ratio || project.ratio;
     const styleContract = resolveDramaStyleContractWithFallback(project, value.project);
     const currentStyleContract = resolveDramaStyleContract(project);
     const usesPackageVisualContract = currentStyleContract.source !== "custom" && styleContract.source === "custom";
@@ -906,20 +910,22 @@ function recompileProductionPackageForProject(value: DramaProductionPackageV1, p
         ...(currentVisualDirection && currentVisualDirection.includes(styleContract.name) ? { visualDirection: currentVisualDirection } : {}),
         source: "manual" as const,
     };
-    const productionPlan = normalizeDramaProductionPlan(
+    const normalizedPlan = normalizeDramaProductionPlan(
         {
             ...packagePlan,
             visual: currentVisual,
         },
         { ...packagePlan, visual: { ...packagePlan.visual, visualDirection: undefined } },
     ) || { ...packagePlan, visual: { ...packagePlan.visual, visualDirection: undefined } };
+    const productionPlan = { ...normalizedPlan, video: { ...normalizedPlan.video, ratio: packageRatio } };
     const visualBible = usesPackageVisualContract ? value.project.productionBible : { ...value.project.productionBible, ...(project.productionBible || {}) };
     const compilerProject = {
         title: project.title,
         style: styleContract.name,
-        ratio: project.ratio,
+        ratio: packageRatio,
         productionBible: {
             ...visualBible,
+            ratio: packageRatio,
             visualStyle: styleContract.name,
             colorScript: styleContract.colorScript || "",
             globalNegativePrompt: styleContract.globalNegativePrompt || "",
@@ -933,9 +939,10 @@ function recompileProductionPackageForProject(value: DramaProductionPackageV1, p
         project: {
             ...value.project,
             style: styleContract.name,
-            ratio: project.ratio || value.project.ratio,
+            ratio: packageRatio,
             productionBible: {
                 ...value.project.productionBible,
+                ratio: packageRatio,
                 visualStyle: styleContract.name,
                 colorScript: styleContract.colorScript || "",
                 globalNegativePrompt: styleContract.globalNegativePrompt || "",

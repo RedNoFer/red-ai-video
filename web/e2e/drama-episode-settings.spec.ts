@@ -130,13 +130,19 @@ test("episode settings save does not create a second project style source", asyn
 });
 
 test("a production package restores its complete visual contract in episode settings", async ({ page, request }) => {
-    const created = await request.post("/api/drama/projects", { data: { title: `E2E 制作包视觉方案 ${randomUUID().slice(0, 8)}` } });
+    const created = await request.post("/api/drama/projects", { data: { title: `E2E 制作包视觉方案 ${randomUUID().slice(0, 8)}`, ratio: "9:16" } });
     expect(created.ok(), await created.text()).toBe(true);
     const project = ((await created.json()) as { data: { project: DramaProject } }).data.project;
     const visualStyle = "东方写实摄影";
     const artStyle = "克制电影美术，真实木石与湿润反光";
     const visualDirection = `视觉风格：${visualStyle}\n画风：${artStyle}\n色彩：冷灰蓝与暗金\n材质：真实木石与湿润反光\n光线：自然侧逆光\n负面约束：禁止动漫质感、塑料皮肤和无依据的现代元素`;
     const sourcePackage = modernizeLegacySceneFixture(JSON.parse(readFileSync(new URL("../../output/mahadel-episode-01-production-package-v2-multiframe.json", import.meta.url), "utf8")) as DramaProductionPackageV1);
+    sourcePackage.project.ratio = "16:9";
+    sourcePackage.project.productionBible.ratio = "16:9";
+    sourcePackage.project.productionBible.productionPlan = {
+        ...sourcePackage.project.productionBible.productionPlan,
+        video: { ...sourcePackage.project.productionBible.productionPlan!.video, ratio: "16:9" },
+    };
     sourcePackage.project.style = visualStyle;
     sourcePackage.project.productionBible.visualStyle = visualStyle;
     sourcePackage.project.productionBible.colorScript = "冷灰蓝与暗金";
@@ -158,7 +164,16 @@ test("a production package restores its complete visual contract in episode sett
         const readback = await request.get(`/api/drama/projects/${project.id}`);
         expect(readback.ok(), await readback.text()).toBe(true);
         const saved = ((await readback.json()) as { data: { project: DramaProject } }).data.project;
-        expect(saved.productionBible).toMatchObject({ visualStyle, colorScript: "冷灰蓝与暗金", globalNegativePrompt: "禁止动漫质感、塑料皮肤和无依据的现代元素", productionPlan: { visual: { visualStyle, artStyle, visualDirection } } });
+        expect(saved).toMatchObject({
+            ratio: "16:9",
+            productionBible: { ratio: "16:9", visualStyle, colorScript: "冷灰蓝与暗金", globalNegativePrompt: "禁止动漫质感、塑料皮肤和无依据的现代元素", productionPlan: { video: { ratio: "16:9" }, visual: { visualStyle, artStyle, visualDirection } } },
+        });
+        expect(saved.scenes.length).toBeGreaterThan(0);
+        for (const scene of saved.scenes) {
+            const composition = scene.supplierPrompt?.split("\n").find((line) => line.startsWith("构图与画幅："));
+            expect(composition).toContain("16:9");
+            expect(composition).not.toContain("9:16");
+        }
 
         await page.goto(`/drama/${project.id}`, { waitUntil: "networkidle" });
         await page.getByRole("button", { name: "打开本集设置" }).click();

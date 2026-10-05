@@ -426,6 +426,27 @@ describe("production package boundary", () => {
         expect(applied.characters.find((item) => item.name === "Karin")?.supplierPrompt).not.toBe(savedPrompt);
     });
 
+    it("uses the package ratio when importing into a project with the default portrait ratio", () => {
+        const source = structuredClone(productionPackage);
+        source.project.ratio = "16:9";
+        source.project.productionBible.ratio = "9:16";
+        source.project.productionBible.productionPlan = {
+            ...source.project.productionBible.productionPlan!,
+            video: { ...source.project.productionBible.productionPlan!.video, ratio: "9:16" },
+        };
+        const target = project();
+
+        const preview = previewDramaProductionPackage(JSON.stringify(source), "package.json", target, { allowImportWarnings: true });
+        const imported = applyDramaProductionPackage(target, preview.package, "hash-package-ratio");
+
+        expect(preview.package.project.ratio).toBe("16:9");
+        expect(preview.package.project.productionBible).toMatchObject({ ratio: "16:9", productionPlan: { video: { ratio: "16:9" } } });
+        expect(preview.package.assets.locations[0].supplierPrompt).toContain("构图与画幅：16:9 项目成片画幅");
+        expect(preview.package.assets.locations[0].supplierPrompt).not.toContain("9:16");
+        expect(imported).toMatchObject({ ratio: "16:9", fieldOrigins: { ratio: "package" }, productionBible: { ratio: "16:9", productionPlan: { video: { ratio: "16:9" } } } });
+        expect(imported.scenes[0].supplierPrompt).toContain("构图与画幅：16:9 项目成片画幅");
+    });
+
     it("keeps a project asset supplier prompt when merging a package without one", () => {
         const current = project();
         current.characters[0] = { ...current.characters[0], supplierPrompt: "项目已确认提示词" };
