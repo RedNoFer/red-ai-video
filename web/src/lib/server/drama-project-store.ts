@@ -22,6 +22,8 @@ export type DramaProjectAssetMutation = {
     expectedUpdatedAt?: string;
 };
 export type DramaProjectAssetMutationAck = { projectId: string; assetKind: DramaProjectAssetMutation["assetKind"]; assetId: string; updatedAt: string; asset: DramaNamedAsset };
+export type DramaProjectRatioMutation = { projectId: string; ratio: string; expectedUpdatedAt: string };
+export type DramaProjectRatioMutationAck = { projectId: string; ratio: string; updatedAt: string };
 
 const FILE_NAME = "drama-projects.json";
 
@@ -168,6 +170,68 @@ export async function updateDramaProject(userId: string, project: DramaProject, 
     }));
     if (!found) throw new DramaProjectStoreError("短剧项目不存在", 404);
     return project;
+}
+
+/** Updates only ratio metadata so large project snapshots never cross the client API boundary. */
+export async function updateDramaProjectRatioMutation(userId: string, mutation: DramaProjectRatioMutation): Promise<DramaProjectRatioMutationAck> {
+    if (getDatabaseProvider() === "postgres") return updatePostgresProjectRatioMutation(userId, mutation);
+
+    let found = false;
+    let ack: DramaProjectRatioMutationAck | null = null;
+    await mutateDatabase((db) => ({
+        ...db,
+        projects: db.projects.map((record) => {
+            if (record.userId !== userId || record.project.id !== mutation.projectId) return record;
+            found = true;
+            const current = record.project;
+            if (current.updatedAt !== mutation.expectedUpdatedAt) throw new DramaProjectStoreError("短剧项目已在其他页面更新，请刷新后重试", 409);
+            const updatedAt = nextProjectVersion(current.updatedAt);
+            const productionPlan = current.productionBible?.productionPlan;
+            const productionBible = current.productionBible
+                ? { ...current.productionBible, ratio: mutation.ratio, ...(productionPlan ? { productionPlan: { ...productionPlan, video: { ...productionPlan.video, ratio: mutation.ratio } } } : {}) }
+                : current.productionBible;
+            ack = { projectId: mutation.projectId, ratio: mutation.ratio, updatedAt };
+            return { ...record, project: { ...current, ratio: mutation.ratio, productionBible, updatedAt } };
+        }),
+    }));
+    if (!found) throw new DramaProjectStoreError("短剧项目不存在", 404);
+    if (!ack) throw new DramaProjectStoreError("短剧项目画幅保存失败", 409);
+    return ack;
+}
+
+async function updatePostgresProjectRatioMutation(userId: string, mutation: DramaProjectRatioMutation): Promise<DramaProjectRatioMutationAck> {
+    await ensurePostgresSchema();
+    const result = await postgresQuery<{ ratio: string; project_updated_at: string }>(
+        `WITH versioned AS (
+             SELECT GREATEST(clock_timestamp(), (project.project_json->>'updatedAt')::timestamptz + INTERVAL '1 millisecond') AS now
+             FROM drama_projects AS project
+             WHERE project.id = $1 AND project.user_id = $2 AND project.project_json->>'updatedAt' = $4
+         )
+         UPDATE drama_projects AS project
+         SET project_json = jsonb_set(
+                 jsonb_set(
+                     jsonb_set(
+                         project.project_json,
+                         '{ratio}', to_jsonb($3::text), true
+                     ),
+                     '{productionBible,ratio}', to_jsonb($3::text), project.project_json ? 'productionBible'
+                 ),
+                 '{productionBible,productionPlan,video,ratio}', to_jsonb($3::text),
+                 project.project_json #> '{productionBible,productionPlan,video}' IS NOT NULL
+             ) || jsonb_build_object('updatedAt', to_jsonb(to_char(versioned.now AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'))),
+             updated_at = versioned.now
+         FROM versioned
+         WHERE project.id = $1 AND project.user_id = $2 AND project.project_json->>'updatedAt' = $4
+         RETURNING project.project_json->>'ratio' AS ratio, project.project_json->>'updatedAt' AS project_updated_at`,
+        [mutation.projectId, userId, mutation.ratio, mutation.expectedUpdatedAt],
+    );
+    const row = result.rows[0];
+    if (row) return { projectId: mutation.projectId, ratio: row.ratio, updatedAt: row.project_updated_at };
+
+    const existing = await postgresQuery<{ project_updated_at: string | null }>("SELECT project_json->>'updatedAt' AS project_updated_at FROM drama_projects WHERE id = $1 AND user_id = $2", [mutation.projectId, userId]);
+    if (!existing.rows[0]) throw new DramaProjectStoreError("短剧项目不存在", 404);
+    if (existing.rows[0].project_updated_at !== mutation.expectedUpdatedAt) throw new DramaProjectStoreError("短剧项目已在其他页面更新，请刷新后重试", 409);
+    throw new DramaProjectStoreError("短剧项目画幅保存失败", 409);
 }
 
 /** Persists a single shot mutation without sending or rewriting the full project from the service layer. */

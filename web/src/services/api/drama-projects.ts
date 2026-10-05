@@ -148,6 +148,14 @@ export function saveDramaProject(project: DramaProject) {
     return request<{ project: DramaProject }>(`/api/drama/projects/${encodeURIComponent(project.id)}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(project) }).then((data) => data.project);
 }
 
+export function updateDramaProjectRatio(projectId: string, ratio: string, expectedUpdatedAt: string) {
+    return request<{ projectId: string; ratio: string; updatedAt: string }>(`/api/drama/projects/${encodeURIComponent(projectId)}/ratio`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ratio, expectedUpdatedAt }),
+    });
+}
+
 export function saveDramaAsset(projectId: string, kind: "characters" | "scenes" | "props" | "clues", assetId: string, patch: unknown) {
     return request<{ project: DramaProjectAssetUpdate }>(`/api/drama/projects/${encodeURIComponent(projectId)}/assets/${kind}/${encodeURIComponent(assetId)}`, {
         method: "PATCH",

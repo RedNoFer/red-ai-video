@@ -16,7 +16,7 @@ vi.mock("@/lib/server/data-adapter", () => ({
     }),
 }));
 
-import { createDramaProject, deleteDramaProject, getDramaProject, listDramaProjectSummaries, updateDramaProject, updateDramaProjectAssetMutation, updateDramaProjectShotMutation } from "./drama-project-store";
+import { createDramaProject, deleteDramaProject, getDramaProject, listDramaProjectSummaries, updateDramaProject, updateDramaProjectAssetMutation, updateDramaProjectRatioMutation, updateDramaProjectShotMutation } from "./drama-project-store";
 
 describe("drama project file provider", () => {
     beforeEach(() => {
@@ -168,6 +168,30 @@ describe("drama project file provider", () => {
         await expect(getDramaProject("one", "user-one")).resolves.toMatchObject({ productionArchive: original.productionArchive, episodes: [{ shots: [shot] }] });
     });
 
+    it("keeps the large archive while changing only the project ratio", async () => {
+        const original = project("one", "大型项目");
+        original.productionBible = { ratio: "9:16", productionPlan: { video: { ratio: "9:16" } } } as never;
+        original.productionArchive = {
+            formatVersion: "vozeb-drama-production-package-v1",
+            sections: [{ code: "EP01", title: "完整制作包", content: "x".repeat(9 * 1024 * 1024) }],
+            promptAssets: [],
+            dialogueDirections: [],
+            voiceDirections: [],
+            silenceDirections: [],
+            referencePlan: [],
+            generationOrder: [],
+            qcReport: "",
+        };
+        await createDramaProject("user-one", original);
+
+        const ack = await updateDramaProjectRatioMutation("user-one", { projectId: original.id, ratio: "16:9", expectedUpdatedAt: original.updatedAt });
+        const persisted = await getDramaProject("one", "user-one");
+
+        expect(ack).toMatchObject({ projectId: "one", ratio: "16:9", updatedAt: persisted?.updatedAt });
+        expect(persisted).toMatchObject({ ratio: "16:9", productionBible: { ratio: "16:9", productionPlan: { video: { ratio: "16:9" } } }, productionArchive: original.productionArchive });
+        await expect(updateDramaProjectRatioMutation("user-one", { projectId: original.id, ratio: "9:16", expectedUpdatedAt: original.updatedAt })).rejects.toMatchObject({ status: 409 });
+    });
+
     it("persists a shot mutation without sending the full project to PostgreSQL", async () => {
         mocks.provider = "postgres";
         mocks.postgresQuery.mockResolvedValueOnce({ rows: [{ project_updated_at: "2026-09-15T00:00:01.000Z" }] });
@@ -212,6 +236,24 @@ describe("drama project file provider", () => {
         expect(statement).not.toContain("SET title =");
         expect(values[4]).toBe(JSON.stringify(asset));
         expect(String(values[4]).length).toBeLessThan(1024);
+    });
+
+    it("updates only ratio fields in PostgreSQL and returns the persisted JSON version", async () => {
+        mocks.provider = "postgres";
+        mocks.postgresQuery.mockResolvedValueOnce({ rows: [{ ratio: "16:9", project_updated_at: "2026-09-15T00:00:01.000Z" }] });
+
+        await expect(updateDramaProjectRatioMutation("user-one", { projectId: "project-one", ratio: "16:9", expectedUpdatedAt: "2026-09-15T00:00:00.000Z" })).resolves.toEqual({
+            projectId: "project-one",
+            ratio: "16:9",
+            updatedAt: "2026-09-15T00:00:01.000Z",
+        });
+
+        const [statement, values] = mocks.postgresQuery.mock.calls[0] as [string, unknown[]];
+        expect(statement).toContain("jsonb_set");
+        expect(statement).toContain("project_json->>'updatedAt' = $4");
+        expect(statement).toContain("RETURNING project.project_json->>'ratio'");
+        expect(statement).not.toContain("RETURNING project_json");
+        expect(values).toEqual(["project-one", "user-one", "16:9", "2026-09-15T00:00:00.000Z"]);
     });
 });
 

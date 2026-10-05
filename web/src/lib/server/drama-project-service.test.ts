@@ -28,6 +28,7 @@ const mocks = vi.hoisted(() => {
         getDramaProject: vi.fn(),
         listDramaProjectSummaries: vi.fn(),
         updateDramaProject: vi.fn(),
+        updateDramaProjectRatioMutation: vi.fn(),
         updateDramaProjectAssetMutation: vi.fn(),
         updateDramaProjectShotMutation: vi.fn(),
         getStoredGenerationTask: vi.fn(),
@@ -71,6 +72,7 @@ vi.mock("@/lib/server/drama-project-store", () => ({
     getDramaProject: mocks.getDramaProject,
     listDramaProjectSummaries: mocks.listDramaProjectSummaries,
     updateDramaProject: mocks.updateDramaProject,
+    updateDramaProjectRatioMutation: mocks.updateDramaProjectRatioMutation,
     updateDramaProjectAssetMutation: mocks.updateDramaProjectAssetMutation,
     updateDramaProjectShotMutation: mocks.updateDramaProjectShotMutation,
 }));
@@ -121,6 +123,7 @@ import {
     restoreDramaProjectVersionForUser,
     updateDramaProductionRunForUser,
     updateDramaProjectForUser,
+    updateDramaProjectRatioForUser,
     deleteDramaStoryboardFrameForUser,
     updateDramaAssetForUser,
     updateDramaShotPromptForUser,
@@ -3234,6 +3237,19 @@ describe("drama project service updates", () => {
         expect(persisted.productionBible?.ratio).toBe("16:9");
         expect(persisted.productionBible?.productionPlan?.video.ratio).toBe("16:9");
         expect(persisted.productionBible?.productionPlan?.lockedAt).toBe("2026-07-19T08:00:01.000Z");
+    });
+
+    it("validates a project ratio and persists it as a compact versioned mutation", async () => {
+        mocks.updateDramaProjectRatioMutation.mockResolvedValue({ projectId: "drama-one", ratio: "16:9", updatedAt: "2026-07-19T08:00:03.000Z" });
+
+        await expect(updateDramaProjectRatioForUser("user-one", "drama-one", { ratio: "16:9", expectedUpdatedAt: "2026-07-19T08:00:02.000Z" })).resolves.toEqual({
+            projectId: "drama-one",
+            ratio: "16:9",
+            updatedAt: "2026-07-19T08:00:03.000Z",
+        });
+        expect(mocks.updateDramaProjectRatioMutation).toHaveBeenCalledWith("user-one", { projectId: "drama-one", ratio: "16:9", expectedUpdatedAt: "2026-07-19T08:00:02.000Z" });
+        await expect(updateDramaProjectRatioForUser("user-one", "drama-one", { ratio: "invalid", expectedUpdatedAt: "2026-07-19T08:00:02.000Z" })).rejects.toMatchObject({ status: 400 });
+        expect(mocks.updateDramaProjectRatioMutation).toHaveBeenCalledTimes(1);
     });
 
     it("reuses a handoff project without listing every project snapshot", async () => {

@@ -71,6 +71,7 @@ function DramaProjectEditor({ project }: { project: DramaProject }) {
     const applyReviewCompletion = useDramaStore((state) => state.applyReviewCompletion);
     const replaceShot = useDramaStore((state) => state.replaceShot);
     const saveProjectNow = useDramaStore((state) => state.saveProjectNow);
+    const saveProjectRatioNow = useDramaStore((state) => state.saveProjectRatioNow);
     const createVersion = useDramaStore((state) => state.createVersion);
     const listVersions = useDramaStore((state) => state.listVersions);
     const restoreVersion = useDramaStore((state) => state.restoreVersion);
@@ -715,7 +716,7 @@ function DramaProjectEditor({ project }: { project: DramaProject }) {
                     const ratio = normalizeDramaImageSize(ratioDraft);
                     if (!ratio) return void message.warning("请输入 16:9、9:16 或有效的宽x高");
                     setSavingRatio(true);
-                    void saveProjectNow(project.id, (current) => ({ ...current, ratio }))
+                    void saveProjectRatioNow(project.id, ratio)
                         .then(() => {
                             setProjectSettingsOpen(false);
                             message.success("项目画幅已更新");

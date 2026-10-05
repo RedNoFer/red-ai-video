@@ -11,6 +11,7 @@ import {
     saveDramaEpisodeSettings,
     saveDramaAsset,
     saveDramaProductionPlan,
+    updateDramaProjectRatio,
     updateDramaShotImagePrompt,
     updateDramaShotPrompt,
     updateDramaShotPromptPatch,
@@ -29,6 +30,18 @@ describe("drama project api", () => {
 
         await expect(listDramaProjectSummaries({ page: 2, pageSize: 12 })).resolves.toMatchObject({ total: 24, page: 2, pageSize: 12 });
         expect(fetchMock).toHaveBeenCalledWith("/api/drama/projects?page=2&pageSize=12", { cache: "no-store" });
+    });
+
+    it("updates a project ratio without sending the full project snapshot", async () => {
+        const ack = { projectId: "project-one", ratio: "16:9", updatedAt: "2026-10-06T00:00:01.000Z" };
+        const fetchMock = vi.fn().mockResolvedValue(Response.json({ code: 0, data: ack, msg: "OK" }));
+        vi.stubGlobal("fetch", fetchMock);
+
+        await expect(updateDramaProjectRatio("project-one", "16:9", "2026-10-06T00:00:00.000Z")).resolves.toEqual(ack);
+        const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+        expect(url).toBe("/api/drama/projects/project-one/ratio");
+        expect(JSON.parse(String(init.body))).toEqual({ ratio: "16:9", expectedUpdatedAt: "2026-10-06T00:00:00.000Z" });
+        expect(String(init.body).length).toBeLessThan(256);
     });
 
     it("applies a production package without a stale project version token", async () => {

@@ -35,6 +35,7 @@ import {
     restoreDramaProjectVersion,
     saveDramaAsset,
     saveDramaProject,
+    updateDramaProjectRatio,
     updateDramaStoryboardFrameGenerationState,
 } from "@/services/api/drama-projects";
 import { useUserStore } from "@/stores/use-user-store";
@@ -77,6 +78,7 @@ type DramaStore = {
     updateShot: (projectId: string, episodeId: string, shotId: string, patch: Partial<DramaShot>) => void;
     replaceShot: (projectId: string, episodeId: string, shotId: string, shot: DramaShot, updatedAt?: string) => void;
     saveProjectNow: (projectId: string, updater?: (project: DramaProject) => DramaProject) => Promise<DramaProject>;
+    saveProjectRatioNow: (projectId: string, ratio: string) => Promise<DramaProject>;
     saveStoryboardFrameGenerationStateNow: (
         projectId: string,
         episodeId: string,
@@ -412,6 +414,43 @@ export const useDramaStore = create<DramaStore>((set, get) => ({
         try {
             await operation;
             if (!saved) throw new Error("短剧项目保存失败");
+            return saved;
+        } finally {
+            if (saveQueues.get(key) === operation) saveQueues.delete(key);
+        }
+    },
+    saveProjectRatioNow: async (projectId, ratio) => {
+        const session = requireSession();
+        clearProjectSave(session, projectId);
+        const key = sessionEpoch.key(session, projectId);
+        const previous = pendingProjectSaves(key);
+        let saved: DramaProject | undefined;
+        const operation = (previous ? previous.catch(() => undefined) : Promise.resolve()).then(async () => {
+            assertCurrent(session);
+            const currentProject = get().projects.find((item) => item.id === projectId);
+            if (!currentProject) throw new Error("短剧项目不存在");
+            const result = await updateDramaProjectRatio(projectId, ratio, currentProject.updatedAt);
+            assertCurrent(session);
+            set((state) => {
+                const latest = state.projects.find((item) => item.id === projectId);
+                if (!latest) return state;
+                const productionPlan = latest.productionBible?.productionPlan;
+                const productionBible = latest.productionBible
+                    ? { ...latest.productionBible, ratio: result.ratio, ...(productionPlan ? { productionPlan: { ...productionPlan, video: { ...productionPlan.video, ratio: result.ratio } } } : {}) }
+                    : latest.productionBible;
+                const unchanged = latest.updatedAt === currentProject.updatedAt;
+                saved = { ...latest, ratio: result.ratio, productionBible, updatedAt: unchanged ? result.updatedAt : latest.updatedAt };
+                return {
+                    projects: state.projects.map((item) => (item.id === projectId ? saved! : item)),
+                    summaries: upsertSummary(state.summaries, saved),
+                    saveStateByProject: unchanged ? { ...state.saveStateByProject, [projectId]: { status: "saved", savedAt: result.updatedAt } } : state.saveStateByProject,
+                };
+            });
+        });
+        saveQueues.set(key, operation);
+        try {
+            await operation;
+            if (!saved) throw new Error("短剧项目画幅保存失败");
             return saved;
         } finally {
             if (saveQueues.get(key) === operation) saveQueues.delete(key);

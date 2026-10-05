@@ -68,6 +68,7 @@ import {
     listDramaProjectSummaries,
     updateDramaProject,
     updateDramaProjectAssetMutation,
+    updateDramaProjectRatioMutation,
     updateDramaProjectShotMutation,
 } from "@/lib/server/drama-project-store";
 import type { DramaProjectShotMutationAck } from "@/lib/server/drama-project-store";
@@ -758,6 +759,20 @@ export async function updateDramaProjectForUser(userId: string, id: string, valu
     project = invalidateChangedDramaFrameEvidence(current, project);
     try {
         return await updateDramaProject(userId, project, current.updatedAt);
+    } catch (error) {
+        if (error instanceof DramaProjectStoreError) throw new DramaProjectServiceError(error.message, error.status);
+        throw error;
+    }
+}
+
+export async function updateDramaProjectRatioForUser(userId: string, id: string, value: unknown) {
+    const input = object(value);
+    const ratio = normalizeDramaImageSize(input.ratio);
+    const expectedUpdatedAt = cleanText(input.expectedUpdatedAt);
+    if (!ratio) throw new DramaProjectServiceError("项目画幅无效", 400);
+    if (!parseTimestamp(expectedUpdatedAt)) throw new DramaProjectServiceError("项目版本缺失，请刷新后重试", 400);
+    try {
+        return await updateDramaProjectRatioMutation(userId, { projectId: cleanText(id), ratio, expectedUpdatedAt });
     } catch (error) {
         if (error instanceof DramaProjectStoreError) throw new DramaProjectServiceError(error.message, error.status);
         throw error;

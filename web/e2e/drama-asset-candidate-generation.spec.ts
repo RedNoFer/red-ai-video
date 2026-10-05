@@ -26,6 +26,13 @@ test("project ratio can be chosen at creation and changed for an existing projec
         await settings.getByRole("button", { name: "保存画幅" }).click();
         await expect(settings).toBeHidden();
 
+        await page.reload({ waitUntil: "domcontentloaded" });
+        await page.getByRole("button", { name: "打开项目设置" }).click();
+        const reloadedSettings = page.getByRole("dialog", { name: "项目设置" });
+        await expect(reloadedSettings.getByLabel("项目画幅")).toHaveValue("16:9");
+        await page.keyboard.press("Escape");
+        await expect(reloadedSettings).toBeHidden();
+
         const readback = await request.get(`/api/drama/projects/${projectId}`);
         expect(readback.ok(), await readback.text()).toBe(true);
         const saved = ((await readback.json()) as { data: { project: DramaProject } }).data.project;
