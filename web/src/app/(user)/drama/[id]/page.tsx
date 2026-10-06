@@ -569,7 +569,7 @@ function DramaProjectEditor({ project }: { project: DramaProject }) {
                 <div className="relative flex min-h-0 min-w-0 flex-1 flex-col" data-drama-production-surface>
                     <div className={`min-h-0 min-w-0 flex-1 ${!assetsOpen && stage === "script" ? "overflow-hidden" : "overflow-y-auto"}`} data-drama-production-scroll>
                         <section
-                            className={`mx-auto flex min-w-0 flex-col px-3 py-3 ${stage === "script" ? "h-full max-w-none overflow-hidden min-[1366px]:px-3 min-[1366px]:pb-3 min-[1366px]:pt-3" : "min-h-full max-w-[1440px] sm:px-5 sm:py-4"}`}
+                            className={`mx-auto flex min-w-0 flex-col px-3 py-3 ${stage === "script" && !assetsOpen ? "h-full max-w-none overflow-hidden min-[1366px]:px-3 min-[1366px]:pb-3 min-[1366px]:pt-3" : stage === "script" ? "min-h-full max-w-none min-[1366px]:px-3 min-[1366px]:pb-3 min-[1366px]:pt-3" : "min-h-full max-w-[1440px] sm:px-5 sm:py-4"}`}
                             data-drama-stage={assetsOpen ? "assets" : stage}
                         >
                             {assetsOpen ? <DramaAssetsPanel project={project} episode={episode} /> : null}

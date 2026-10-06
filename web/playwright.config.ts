@@ -29,7 +29,7 @@ export default defineConfig({
         {
             name: "chromium",
             testMatch: [
-                /(?:admin-channel-api-key|admin-channel-save|all-pages|canvas|commerce|core|creative-video-result|drama-asset-candidate-generation|drama-episode-settings|drama-frame-sequence|drama-review-audio-flow|drama-scene-reference-preview|home|responsive)\.spec\.ts/,
+                /(?:admin-channel-api-key|admin-channel-save|all-pages|canvas|commerce|core|creative-video-result|drama-asset-candidate-generation|drama-assets-scroll|drama-episode-settings|drama-frame-sequence|drama-review-audio-flow|drama-scene-reference-preview|home|responsive)\.spec\.ts/,
             ],
             dependencies: ["setup"],
             use: { ...devices["Desktop Chrome"], storageState },
