@@ -491,13 +491,42 @@ test("creative composer ignores an optimization response after the user sends", 
     }
 });
 
-test("Agent generation inputs apply immediately and reveal video frame slots", async ({ page }, testInfo) => {
+test("Agent generation inputs apply immediately and reveal video frame slots", async ({ page, request }, testInfo) => {
+    const settings = await request.patch("/api/admin/settings", { data: e2eSettingsPatch() });
+    expect(settings.ok(), await settings.text()).toBe(true);
+
     await page.goto("/create", { waitUntil: "domcontentloaded" });
     await waitForCreativeComposerReady(page);
+
+    const composerInputStyles = await page.getByRole("textbox", { name: "输入你的创作想法、脚本或画面要求" }).evaluate((input) => {
+        const styles = getComputedStyle(input);
+        return { borderWidth: styles.borderWidth, outlineStyle: styles.outlineStyle, boxShadow: styles.boxShadow };
+    });
+    expect(composerInputStyles).toMatchObject({ borderWidth: "0px", outlineStyle: "none", boxShadow: "none" });
 
     const preferenceTrigger = page.getByRole("button", { name: "生成参数：生成参数" });
     const preferencePopover = page.locator(".ant-popover").last();
     await openComposerPopover(preferenceTrigger, preferencePopover);
+
+    const sizeGrid = preferencePopover.locator("[data-creative-generation-preferences] .grid-cols-4").first();
+    const sizeGridLayout = await sizeGrid.evaluate((grid) => ({
+        columns: getComputedStyle(grid).gridTemplateColumns.split(" ").length,
+        buttons: Array.from(grid.children, (button) => {
+            const rect = button.getBoundingClientRect();
+            const style = getComputedStyle(button);
+            return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, borderWidth: style.borderWidth };
+        }),
+    }));
+    expect(sizeGridLayout.columns).toBe(4);
+    expect(sizeGridLayout.buttons.every((button) => button.borderWidth === "0px")).toBe(true);
+    expect(sizeGridLayout.buttons.every((button, index, buttons) => index % 4 === 0 || button.left >= buttons[index - 1].right)).toBe(true);
+    const [preferencesBounds, visualViewportBounds] = await Promise.all([
+        preferencePopover.locator("[data-creative-generation-preferences]").boundingBox(),
+        page.evaluate(() => ({ top: window.visualViewport?.offsetTop || 0, height: window.visualViewport?.height || window.innerHeight })),
+    ]);
+    expect(preferencesBounds).not.toBeNull();
+    expect(preferencesBounds!.y).toBeGreaterThanOrEqual(visualViewportBounds.top);
+    expect(preferencesBounds!.y + preferencesBounds!.height).toBeLessThanOrEqual(visualViewportBounds.top + visualViewportBounds.height + 1);
 
     const landscape4kOption = preferencePopover.getByRole("button", { name: "选择图片尺寸 3840x2160", exact: true });
     await expect(landscape4kOption).toBeVisible();

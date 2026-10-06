@@ -300,7 +300,7 @@ function PreferencePanel({
                                         key={ratio.value}
                                         type="button"
                                         className={cn(
-                                            "inline-flex min-w-0 items-center justify-center gap-1 rounded-lg px-1 text-[11px] transition",
+                                            "inline-flex min-w-0 items-center justify-center gap-1 rounded-lg border-0 px-1 text-[11px] transition",
                                             compact ? "h-8" : "h-9",
                                             selectedSize === ratio.value
                                                 ? "bg-[#eaf1f5] font-medium text-[#315d78] dark:bg-[#2a3b46] dark:text-[#a8c8dc]"
