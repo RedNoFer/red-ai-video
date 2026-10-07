@@ -86,8 +86,54 @@ function readMahadelMarkdownFixture() {
 }
 
 describe("production package boundary", () => {
-    it("accepts the current standalone Codex production package artifact", () => {
-        const source = readFileSync(new URL("../../../../docs/generated/codex-standalone-零坐标岛-第1集-30s制作包.md", import.meta.url), "utf8");
+    it("accepts a standalone Codex production package Markdown artifact", () => {
+        const standalone = structuredClone(productionPackage);
+        standalone.project.productionBible.targetDuration = 30;
+        standalone.project.productionBible.productionPlan = {
+            ...standalone.project.productionBible.productionPlan!,
+            frameCountRange: { min: 2, max: 11 },
+            video: { ...standalone.project.productionBible.productionPlan!.video, shotDuration: 15 },
+        };
+        const fixtureHash = "a".repeat(64);
+        standalone.project.productionLock = {
+            shotDuration: 15,
+            targetDuration: 30,
+            logicalShotCount: 2,
+            internalCutPolicy: "adaptive",
+            framePolicy: "agent",
+            storySourceHash: fixtureHash,
+            templateHash: fixtureHash,
+            contractHash: fixtureHash,
+            specHash: fixtureHash,
+            directorSkillHash: fixtureHash,
+            seedanceSkillHash: fixtureHash,
+            authoringSchemaHash: fixtureHash,
+            lockedAt: "2026-09-14T00:00:00.000Z",
+            lockedBy: "codex-current-conversation",
+            dialogueCapacityPlan: [],
+            narrativeBeatPlan: [
+                { id: "BEAT01", responsibility: "梦中惊醒", shotCodes: ["SH01"] },
+                { id: "BEAT02", responsibility: "接住水囊", shotCodes: ["SH02"] },
+            ],
+            selfCheckRuleVersion: "test-v1",
+        } as unknown as NonNullable<DramaProductionPackageV1["project"]["productionLock"]>;
+        standalone.episodes[0].shots.forEach((item, index) => {
+            item.framePlan.start.source = "independent";
+            item.framePlan.frames.forEach((frame) => {
+                frame.endPrompt = `${frame.actionPrompt}结果`;
+            });
+            item.videoPrompt = `### 镜头 ${String(index * 2 + 1).padStart(2, "0")} | 起始帧\n动作：${item.title}\n### 镜头 ${String(index * 2 + 2).padStart(2, "0")} | 结果帧\n动作：${item.title}结果`;
+        });
+        const authored = attachDramaProductionPackageAuthoring(standalone, {
+            source: "codex-standalone",
+            generatedAt: "2026-09-14T00:00:00.000Z",
+            qualityGateStatus: "passed",
+            materials: [
+                { alias: "@模板", role: "package-template", type: "markdown", title: "制作包模板" },
+                { alias: "@原作", role: "story-source", type: "text", title: "小说原文" },
+            ],
+        });
+        const source = serializeDramaProductionPackageMarkdown(authored);
         const preview = previewDramaProductionPackage(source, "codex-standalone-零坐标岛-第1集-30s制作包.md", undefined, { allowImportWarnings: true, enforceExecutionContract: true });
 
         expect(preview.package.authoring?.authoringMode).toBe("codex-standalone");

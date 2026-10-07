@@ -15,7 +15,7 @@ describe("drama script workspace layout", () => {
         ]);
 
         expect(page).toContain('!assetsOpen && stage === "script" ? "overflow-hidden" : "overflow-y-auto"');
-        expect(page).toContain('stage === "script" ? "h-full max-w-none overflow-hidden');
+        expect(page).toContain('stage === "script" && !assetsOpen ? "h-full max-w-none overflow-hidden');
         expect(workspace).toContain("sticky top-0 hidden h-full min-h-0 min-w-0 self-start overflow-hidden");
         expect(editor).toContain("data-drama-script-editor-scroll");
         expect(editor).toContain("scrollSelectionInsideEditor(editor)");
