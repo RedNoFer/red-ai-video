@@ -202,6 +202,7 @@
 - 新建短剧项目必须让用户显式填写画幅，已有项目必须有可维护的项目级画幅入口；场景候选实际生成尺寸取已保存的 `project.ratio`，不能仅靠提示词中的比例文案。修改画幅后须保持 `project.ratio`、`productionBible.ratio` 和 `productionPlan.video.ratio` 一致，并回归创建、修改、刷新读回及场景生成请求尺寸。
 - 项目级画幅等标量设置必须使用带 `expectedUpdatedAt` 的小请求和定向 JSONB mutation，不得经由整份 `project_json` 保存接口；短剧项目可因制作包、剧本、分镜和资产超过通用请求体上限，修改后必须验证数据库回执与独立刷新读回一致，且其余项目数据未丢失。
 - 短剧制作包的角色、场景、道具、线索 code 只在包内有意义；导入现有项目时必须先按规范化名称确认身份，再对齐项目固定 code，并同步重写镜头、首尾状态、对白、参考清单和连续性引用。不得仅凭同号 code 合并不同人物；公开画面/静帧出现未绑定的实名角色须给出逐镜提醒。生成前逐镜核对剧情说话人、可见主体、`characterCodes` 与角色基准图同一身份。
+- 现有项目导入制作包时，资产编码对齐会先于完整归档规范化运行；读取原始 `archive` 的可选数组（尤其 `referencePlan`）必须先做数组守卫，缺省按空数组处理。预览与应用回归必须覆盖“项目资产编码冲突 + 稀疏归档”，不得让缺省字段变成未捕获 500。
 - 短剧公开视频 Prompt 的项目级视觉合同只在整条提示词出现一次；内部镜头卡仅写本段有变化的局部光线、色彩和材质，不逐卡重复全局风格。提交供应商前按实际供应商字数上限验算编译后的完整 Prompt；压缩重复设定不得删对白、动作因果、结果、声音或剪辑承接。
 - 短剧场景全景资产基准图必须使用用户提供或当前项目配置的画幅比例，并与成片比例一致；提示词优先写可信空间尺度、自然比例、物理材质和接触阴影。每张供应商镜头卡都可能被单独提交，光影和色调不得只写“承前/同上/与第一镜头一致”，必须带具体光源方向、落点/受光材质及色相/冷暖/饱和度，可用简短“与首卡一致”补充锚定。
 - 短剧导演 Skill 的唯一源码是项目 .agents/skills/drama-video-director/SKILL.md，Seedance 2.5 适配 Skill 的唯一源码是项目 .agents/skills/seedance-25/SKILL.md 及其 references/；web/src/lib/server/agent-skills/ 下的 generated.ts 只能由 compile:skills 生成，~/.codex/skills/ 只能由 sync:codex-skills 同步。不得把 ~/.codex 旧副本、通用 visual-video-director、ai-video-skill-pack 或历史 seedance-director 规则当作短剧制作包的第二套导演事实源；seedance-director 仅保留为旧 productionPlan 的兼容标识，实际 authoring 必须使用 canonical drama-video-director 加当前 Seedance 2.5 适配层。

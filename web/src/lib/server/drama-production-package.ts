@@ -227,7 +227,7 @@ function alignPackageAssetCodes<T extends DramaProductionPackageV1>(value: T, pr
                 },
             })),
         })),
-        archive: value.archive && { ...value.archive, referencePlan: value.archive.referencePlan.map((item) => ({ ...item, asset: recode(item.asset) })) },
+        archive: value.archive && { ...value.archive, referencePlan: Array.isArray(value.archive.referencePlan) ? value.archive.referencePlan.map((item) => ({ ...item, asset: recode(item.asset) })) : [] },
     };
 }
 

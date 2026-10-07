@@ -267,6 +267,20 @@ describe("production package boundary", () => {
         expect(merged.assets.characters).toEqual(expect.arrayContaining([expect.objectContaining({ code: "C01", name: "A", description: "项目 A" }), expect.objectContaining({ code: "C02", name: "B", description: "项目 B" })]));
     });
 
+    it("previews a sparse archive when project asset codes must be realigned", () => {
+        const current = project();
+        current.characters = [{ id: "character-karin", code: "C02", name: "Karin", description: "已锁定角色" }];
+        const source = { ...structuredClone(productionPackage), archive: { formatVersion: "vozeb-drama-production-package-v1", sections: [] } };
+
+        const preview = previewDramaProductionPackage(JSON.stringify(source), "package.json", current);
+
+        expect(preview.package.archive?.referencePlan).toEqual([]);
+        expect(preview.package.episodes[0].shots[0].characterCodes).toEqual(["C02"]);
+        const applied = applyDramaProductionPackage(current, preview.package, preview.sourceHash);
+        expect(applied.characters.find((character) => character.name === "Karin")?.id).toBe("character-karin");
+        expect(applied.episodes[0].shots[0].characterIds).toContain("character-karin");
+    });
+
     it("keeps character identity when package and project codes are reversed", () => {
         const current = project();
         current.characters = [
