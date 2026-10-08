@@ -52,6 +52,10 @@ describe("drama analysis contracts", () => {
         expect(dramaVideoPromptTool.description).toContain("当前唯一 drama-video-director Skill");
         expect(dramaVideoPromptTool.parameters.properties.shots.items.properties.videoPrompt.description).toContain("当前唯一导演 Skill");
         expect(dramaVideoPromptTool.parameters.properties.shots.items.properties.videoPrompt.description).toContain("画面内容只写屏幕上能看见的进行中动作和结果");
+        expect(dramaVideoPromptTool.parameters.properties.shots.items.properties.videoPrompt.description).toContain("人声字段必须说明对应说话人/旁白原声实际发出、清晰可辨、音量居前");
+        expect(dramaVideoPromptTool.parameters.properties.shots.items.properties.videoPrompt.description).toContain("环境音、动作拟音和音乐在对白/旁白发声窗口压低避让");
+        expect(dramaVisualTool.parameters.properties.shots.items.properties.videoPrompt.description).toContain("原句完整可听并与说话时间同步");
+        expect(dramaVisualTool.parameters.properties.shots.items.properties.videoPrompt.description).toContain("不得盖过、吞没、替代或静音台词");
         expect(dramaVisualTool.parameters.properties.shots.items.properties.framePlan.description).toContain("imagePrompt 仅填写当前冻结画面正文");
         expect(dramaVisualTool.parameters.properties.shots.items.properties.framePlan.description).not.toContain("眉眼、呼吸、手部关系清晰可见");
         expect(dramaVisualTool.parameters.properties.shots.items.properties.framePlan.properties.frames.minItems).toBe(2);

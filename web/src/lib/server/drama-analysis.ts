@@ -22,6 +22,9 @@ import { resolveDramaShotDuration } from "@/lib/server/drama-shot-config";
 import { strictJsonObjectText } from "@/lib/server/structured-model-output";
 import { isGenericDramaDetail, validateDramaFrameTiming, validateDramaPerformanceDetail } from "@/lib/drama-prompt-quality";
 
+const DRAMA_VIDEO_PROMPT_AUDIO_RULES =
+    "有对白或旁白时，台词字段必须逐字写入原句；人声字段必须说明对应说话人/旁白原声实际发出、清晰可辨、音量居前、原句完整可听并与说话时间同步，直接对白还要与可见口型同步。音效字段只描述非语言声音；环境音、动作拟音和音乐在对白/旁白发声窗口压低避让，不得盖过、吞没、替代或静音台词，只能在语音停顿间隙恢复。原文确无对白/旁白时才填写无，不得虚构台词。";
+
 export function normalizeDramaContentAnalysis(value: unknown, defaultVideoSeconds: number, sourceScript = ""): DramaContentAnalysis {
     const source = object(value);
     const rawShots = array(source.shots).map((item) => object(item));
@@ -1311,6 +1314,9 @@ export const dramaVideoPromptTool = {
         },
     },
 };
+
+dramaVisualTool.parameters.properties.shots.items.properties.videoPrompt.description += ` ${DRAMA_VIDEO_PROMPT_AUDIO_RULES}`;
+dramaVideoPromptTool.parameters.properties.shots.items.properties.videoPrompt.description += ` ${DRAMA_VIDEO_PROMPT_AUDIO_RULES}`;
 
 export const dramaImagePromptTool = {
     name: "generate_drama_image_prompts",

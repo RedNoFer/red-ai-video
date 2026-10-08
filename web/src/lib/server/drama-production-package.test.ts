@@ -139,6 +139,21 @@ describe("production package boundary", () => {
         expect(preview.package.authoring?.authoringMode).toBe("codex-standalone");
         expect(preview.package.episodes).toHaveLength(1);
         expect(preview.package.project.productionBible.productionPlan?.version).toBe("drama-production-plan-v1");
+
+        const underCapacity = structuredClone(authored);
+        underCapacity.project.productionLock!.dialogueCapacityPlan = [
+            {
+                dialogueId: "D01",
+                speaker: "Karin",
+                characterCount: 20,
+                speechRateCharsPerSecond: 5,
+                requiredSpeechSeconds: 4,
+                availableSpeechSeconds: 2,
+                episodeCode: "E01",
+                shotCode: "SH01",
+            },
+        ];
+        expect(() => previewDramaProductionPackage(serializeDramaProductionPackageMarkdown(underCapacity), "codex-standalone.md", undefined, { allowImportWarnings: true, enforceExecutionContract: true })).toThrow("对白容量不足");
     });
 
     it("records and requires Agent authoring provenance for the formal generation path", () => {
