@@ -36,6 +36,7 @@ const ACTIVE_CAMERA_CUT_PATTERN = /硬切|镜头切换|Camera\s+cut\s+to|Cut\s+t
 const VIDEO_CARD_HEADER = /^###\s*镜头\s*(\d+)\s*\|([^\n]+)$/gmu;
 const VIDEO_CARD_FIELDS = ["场景", "画面内容", "光影", "色调", "台词", "人声", "音效"] as const;
 const VIDEO_CARD_FIELD_BOUNDARIES = [...VIDEO_CARD_FIELDS, "剪辑承接"] as const;
+const AUDIO_DUCKING_INSTRUCTION = "对白/旁白发声期间压低环境音、动作拟音与音乐，不遮挡台词清晰度；仅在语音停顿间隙再抬升";
 const SPEECH_CLARITY_PATTERN = /(?:对白|旁白|语音|人声).{0,24}原声.{0,24}(?:清晰|可辨|可懂).{0,24}(?:居前|前景|优先).{0,36}(?:原句完整可听|完整可听|实际发声|可听见)/u;
 const SPEECH_DUCKING_PATTERN = /(?:对白|旁白|台词|人声).{0,28}(?:发声期间|发声时|说话期间|说话时|语音窗口).{0,32}(?:压低|避让|降低|减弱|不遮挡|不盖过)/u;
 const SPEECH_MASKING_CONFLICT_PATTERN =
@@ -189,7 +190,9 @@ export function repairDramaVideoPromptAudioHierarchy(prompt: string, label: stri
     const cards = extractDramaVideoPromptCards(prompt);
     if (!cards.length) return { prompt, changed: false };
     let repaired = prompt;
-    for (const [index, card] of cards.entries()) {
+    for (const index of cards.keys()) {
+        repaired = removeDuplicateDramaVideoPromptContinuity(repaired, index);
+        const card = extractDramaVideoPromptCards(repaired)[index];
         const quotes = extractQuotedDramaDialogues(card.dialogue);
         if (isNoDramaSpeech(card.dialogue)) continue;
         const speakers = [...new Set(quotes.map((item) => item.speaker))].join("、");
@@ -202,7 +205,7 @@ export function repairDramaVideoPromptAudioHierarchy(prompt: string, label: stri
         let sound = normalizeLegacySpeechMix(card.sound);
         if (!SPEECH_DUCKING_PATTERN.test(sound)) {
             const soundBed = !sound || /^(?:无|无声|没有)$/u.test(sound.replace(/[。；;，,\s]+/gu, "")) ? "无额外环境音、动作拟音或音乐" : sound.replace(/[。；;，,\s]+$/u, "");
-            sound = `${soundBed}；对白/旁白发声期间压低环境音、动作拟音与音乐，不遮挡台词清晰度；仅在语音停顿间隙再抬升`;
+            sound = `${soundBed}；${AUDIO_DUCKING_INSTRUCTION}`;
         }
         repaired = updateDramaVideoPromptCardField(repaired, index, "人声", voice);
         repaired = updateDramaVideoPromptCardField(repaired, index, "音效", sound);
@@ -234,11 +237,31 @@ function appendAudioInstruction(current: string, instruction: string) {
     return `${existing.replace(/[。；;，,\s]+$/u, "")}；${instruction}`;
 }
 
+function removeDuplicateDramaVideoPromptContinuity(prompt: string, cardIndex: number) {
+    const markers = [...prompt.matchAll(VIDEO_CARD_HEADER)];
+    const marker = markers[cardIndex];
+    if (!marker) return prompt;
+    const start = marker.index ?? 0;
+    const end = markers[cardIndex + 1]?.index ?? prompt.length;
+    const raw = prompt.slice(start, end);
+    const heading = /(?:^|\n)([ \t]*剪辑承接\s*[：:]\s*)/u.exec(raw);
+    if (!heading) return prompt;
+    const contentStart = (heading.index ?? 0) + heading[0].length;
+    const continuity = raw.slice(contentStart);
+    const duplicateHeading = /\s+剪辑承接\s*[：:]/u.exec(continuity);
+    const original = (duplicateHeading ? continuity.slice(0, duplicateHeading.index) : continuity)
+        .replace(new RegExp(`[；;，,\\s]*${escapeRegExp(AUDIO_DUCKING_INSTRUCTION)}[；;，,\\s]*`, "gu"), "")
+        .replace(/[；;，,\s]+$/gu, "")
+        .trim();
+    if (original === continuity.trim()) return prompt;
+    return updateDramaVideoPromptCardField(prompt, cardIndex, "剪辑承接", original);
+}
+
 function isNoDramaSpeech(value: string) {
     return !value.trim() || /^(?:无|无对白|无台词|没有对白|没有台词|静默|沉默)[。；;，,\s]*$/u.test(value.trim());
 }
 
-function updateDramaVideoPromptCardField(prompt: string, cardIndex: number, field: (typeof VIDEO_CARD_FIELDS)[number], value: string) {
+function updateDramaVideoPromptCardField(prompt: string, cardIndex: number, field: (typeof VIDEO_CARD_FIELD_BOUNDARIES)[number], value: string) {
     const markers = [...prompt.matchAll(VIDEO_CARD_HEADER)];
     const marker = markers[cardIndex];
     if (!marker) return prompt;
@@ -249,7 +272,7 @@ function updateDramaVideoPromptCardField(prompt: string, cardIndex: number, fiel
     const expression = new RegExp(`(^|\\n)([ \\t]*${escapeRegExp(field)}\\s*[：:]\\s*)([\\s\\S]*?)(?=\\n\\s*(?:${fieldPattern})\\s*[：:]|$)`, "u");
     const match = expression.exec(raw);
     if (!match) {
-        const fieldIndex = VIDEO_CARD_FIELDS.indexOf(field);
+        const fieldIndex = VIDEO_CARD_FIELD_BOUNDARIES.indexOf(field);
         const nextField = VIDEO_CARD_FIELD_BOUNDARIES.slice(fieldIndex + 1).find((candidate) => new RegExp(`(?:^|\\n)\\s*${escapeRegExp(candidate)}\\s*[：:]`, "u").test(raw));
         const insertionIndex = nextField ? raw.search(new RegExp(`(?:^|\\n)\\s*${escapeRegExp(nextField)}\\s*[：:]`, "u")) : raw.length;
         const prefix = raw.slice(0, insertionIndex).replace(/\n+$/u, "");
@@ -257,7 +280,8 @@ function updateDramaVideoPromptCardField(prompt: string, cardIndex: number, fiel
         const next = `${prefix}\n${field}：${value}${suffix ? `\n${suffix}` : ""}`;
         return `${prompt.slice(0, start)}${next}${prompt.slice(end)}`;
     }
-    const next = raw.replace(expression, (_whole, prefix: string, heading: string) => `${prefix}${heading}${value}`);
+    const trailingLineBreaks = match[3].match(/\n+$/u)?.[0] || "";
+    const next = raw.replace(expression, (_whole, prefix: string, heading: string) => `${prefix}${heading}${value}${trailingLineBreaks}`);
     return next === raw ? prompt : `${prompt.slice(0, start)}${next}${prompt.slice(end)}`;
 }
 
@@ -496,7 +520,7 @@ export function validateDramaFrameCausalChain(actionPrompt: unknown, transitionP
 }
 
 function extractVideoCardField(value: string, field: string) {
-    const fieldPattern = VIDEO_CARD_FIELDS.map(escapeRegExp).join("|");
+    const fieldPattern = VIDEO_CARD_FIELD_BOUNDARIES.map(escapeRegExp).join("|");
     return value.match(new RegExp(`(?:^|\\n)\\s*${escapeRegExp(field)}\\s*[：:]\\s*([\\s\\S]*?)(?=\\n\\s*(?:${fieldPattern})\\s*[：:]|$)`, "u"))?.[1]?.trim() || "";
 }
 

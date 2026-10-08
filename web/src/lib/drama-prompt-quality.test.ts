@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
     isGenericDramaDetail,
     validateDramaCameraPlan,
+    extractDramaVideoPromptCards,
     validateDramaDialogueSegmentDetail,
     validateDramaNpcSegmentDetail,
     validateDramaPerformanceDetail,
@@ -72,6 +73,31 @@ describe("drama prompt quality", () => {
         expect(repaired.prompt).toContain("对白/旁白发声期间压低环境音、动作拟音与音乐");
         expect(repaired.prompt).toContain("剪辑承接：起镜入口状态已锁定。");
         expect(validateDramaVideoPromptAudioHierarchy(repaired.prompt, "SH06")).toEqual([]);
+        expect(repairDramaVideoPromptAudioHierarchy(repaired.prompt, "SH06")).toEqual({ prompt: repaired.prompt, changed: false });
+        expect(extractDramaVideoPromptCards(repaired.prompt)[0]?.sound).not.toContain("剪辑承接");
+    });
+
+    it("cleans continuity text previously appended to sound and stays idempotent", () => {
+        const prompt = [
+            "### 镜头 06 | 17.8-21秒 | 中近景 | 50mm | 泉池右前平视 | 固定机位 | 人物镜头",
+            "场景：山谷泉池。",
+            "画面内容：陆川转回岚音，话末嘴唇合拢，视线停在她脸上。",
+            "光影：背后林下冷天光落在陆川侧脸。",
+            "色调：冷灰。",
+            "台词：陆川说：\u201c我不知道这里是哪儿。\u201d",
+            "人声：末尾气息不稳。",
+            "音效：远水细响。",
+            "剪辑承接：起镜入口状态已锁定。；对白/旁白发声期间压低环境音、动作拟音与音乐，不遮挡台词清晰度；仅在语音停顿间隙再抬升 剪辑承接：起镜入口状态已锁定。；对白/旁白发声期间压低环境音、动作拟音与音乐，不遮挡台词清晰度；仅在语音停顿间隙再抬升",
+        ].join("\n");
+
+        const repaired = repairDramaVideoPromptAudioHierarchy(prompt, "SH06");
+
+        expect(repaired.changed).toBe(true);
+        expect(repaired.prompt.match(/剪辑承接：/gu)).toHaveLength(1);
+        expect(repaired.prompt.match(/对白\/旁白发声期间压低环境音、动作拟音与音乐/gu)).toHaveLength(1);
+        expect(extractDramaVideoPromptCards(repaired.prompt)[0]?.sound).toContain("远水细响");
+        expect(extractDramaVideoPromptCards(repaired.prompt)[0]?.sound).not.toContain("剪辑承接");
+        expect(repairDramaVideoPromptAudioHierarchy(repaired.prompt, "SH06")).toEqual({ prompt: repaired.prompt, changed: false });
     });
 
     it("rewrites a masking sound effect below the spoken line", () => {
