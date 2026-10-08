@@ -464,7 +464,7 @@ describe("video prompt reference instructions", () => {
                 shots: [
                     {
                         shotId: "shot-one",
-                        videoPrompt: makeVideoCard(1, 0, 3, "萧炎低头后抬眼盯住对方，手指收紧并保持肩背克制。", `萧炎说：“${dialogue}”`),
+                        videoPrompt: makeVideoCard(1, 0, 3, "萧炎低头后抬眼盯住对方，手指收紧并保持肩背克制。", `萧炎说：“${fullDialogue}”`),
                         framePlan: {
                             frames: [
                                 {

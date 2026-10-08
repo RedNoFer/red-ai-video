@@ -1538,6 +1538,52 @@ describe("production package boundary", () => {
         expect(second.productionArchive).toEqual(productionPackage.archive);
     });
 
+    it("repairs a manually preserved legacy execution prompt while importing its utterance timeline", () => {
+        const source = structuredClone(productionPackage);
+        const packageShot = source.episodes[0].shots[0];
+        const prompt = [
+            "### 镜头 01 | 0-7.5秒 | 中景 | 50mm | 平视 | 锁定机位 | 人物镜头",
+            "场景：马车内。",
+            "画面内容：Karin抬眼看向前方，右手压住座椅边缘，指节停在皮革接缝处。",
+            "光影：冷白窗光落在脸部和手背。",
+            "色调：冷灰蓝，肤色自然。",
+            "台词：陆川说：\u201c我叫陆川。\u201d",
+            "人声：陆川短促吸气。",
+            "音效：车轮与衣料轻响。",
+            "### 镜头 02 | 7.5-15秒 | 近景 | 85mm | 平视 | 缓慢推近 | 人物镜头",
+            "场景：马车内。",
+            "画面内容：Karin转向同伴，嘴唇收住句尾，肩线停在车窗前。",
+            "光影：冷光沿侧脸和车窗边缘形成窄反光。",
+            "色调：冷灰蓝，肤色自然。",
+            "台词：陆川说：\u201c滑坡把我冲进来的。\u201d",
+            "人声：陆川吐气后收声。",
+            "音效：水滴落入浅水。",
+        ].join("\n");
+        packageShot.videoPrompt = prompt;
+        packageShot.utterances = [{ id: "u1", order: 1, type: "dialogue", speaker: "陆川", text: "我叫陆川。滑坡把我冲进来的。", startSecond: 0, endSecond: 15 }];
+        packageShot.dialogue = "我叫陆川。滑坡把我冲进来的。";
+        packageShot.framePlan.frames = [
+            { ...packageShot.framePlan.frames[0], startSecond: 0, endSecond: 7.5, actionPrompt: "陆川说：\u201c我叫陆川。\u201d" },
+            { ...packageShot.framePlan.frames[1], startSecond: 7.5, endSecond: 15, actionPrompt: "陆川说：\u201c滑坡把我冲进来的。\u201d" },
+        ];
+        const imported = applyDramaProductionPackage(project(), source, "hash-dialogue-import");
+        const shot = imported.episodes[0].shots.find((item) => item.code === packageShot.code)!;
+        const existingWithLegacyPrompt = {
+            ...imported,
+            episodes: imported.episodes.map((episode) => ({
+                ...episode,
+                shots: episode.shots.map((item) => (item.id === shot.id ? { ...item, executionVideoPrompt: prompt.replace(/台词：[^\n]*/gu, "台词：无"), fieldOrigins: { ...item.fieldOrigins, executionVideoPrompt: "manual" as const } } : item)),
+            })),
+        };
+
+        const updated = applyDramaProductionPackage(existingWithLegacyPrompt, source, "hash-dialogue-import-again");
+        const repaired = updated.episodes[0].shots.find((item) => item.id === shot.id)!;
+
+        expect(repaired.executionVideoPrompt).toContain("台词：陆川说：\u201c我叫陆川。\u201d");
+        expect(repaired.executionVideoPrompt).toContain("台词：陆川说：\u201c滑坡把我冲进来的。\u201d");
+        expect(repaired.fieldOrigins?.executionVideoPrompt).toBe("manual");
+    });
+
     it("merges project-level packages by episode code without dropping earlier packages", () => {
         const first = applyDramaProductionPackage(project(), productionPackage, "hash-merge-one", undefined, "big-episode-01.json", { episodeImportMode: "merge" });
         const firstEpisodeId = first.episodes[0].id;

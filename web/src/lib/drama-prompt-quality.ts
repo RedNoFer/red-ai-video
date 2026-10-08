@@ -1,5 +1,13 @@
 import type { DramaDialoguePerformance, DramaPerformancePlan } from "@/lib/drama-project-contract";
-import { dramaFrameDialogueTimingReminder, hasQuotedDramaDialogue, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
+import {
+    dramaFrameDialogueTimingReminder,
+    dramaTimedDialogueCapacityIssues,
+    extractQuotedDramaDialogues,
+    formatDramaDialogueLine,
+    hasQuotedDramaDialogue,
+    normalizeDramaDialogueSequenceText,
+    type DramaDialogueTimingInput,
+} from "@/lib/drama-dialogue-timing";
 
 const GENERIC_DETAIL_PATTERNS = [
     /^表情(?:自然|丰富|到位|稳定)$/u,
@@ -262,6 +270,121 @@ export function validateDramaVideoPromptDialogueTiming(prompt: string, frames: R
         );
         return issue ? [`${label}第 ${index + 1} 个公开镜头卡的台词窗口不足：${issue.message}`] : [];
     });
+}
+
+export function validateDramaVideoPromptUtteranceCoverage(prompt: string, frames: ReadonlyArray<DramaCameraPlanFrame>, utterances: readonly DramaDialogueTimingInput[], label: string) {
+    const spokenUtterances = (Array.isArray(utterances) ? utterances : []).filter((item) => (item.type === "dialogue" || item.type === "voiceover") && item.text?.trim());
+    if (!spokenUtterances.length) return [];
+    const cards = extractDramaVideoPromptCards(prompt);
+    if (!cards.length) return [`${label}有对白/旁白，但公开视频提示词缺少镜头卡，无法核对原句`];
+    return spokenUtterances.flatMap((utterance) => {
+        const source = normalizeDramaDialogueSequenceText(utterance.text || "");
+        if (!source) return [];
+        const start = Number(utterance.startSecond);
+        const end = Number(utterance.endSecond);
+        const timed = Number.isFinite(start) && Number.isFinite(end) && end > start;
+        const cardIndexes = timed && frames.length ? frames.flatMap((frame, index) => (start < frame.endSecond && end > frame.startSecond ? [index] : [])) : cards.map((_, index) => index);
+        let cursor = 0;
+        for (const index of cardIndexes) {
+            const card = cards[index];
+            if (!card) continue;
+            const quotes = extractQuotedDramaDialogues(card.dialogue);
+            for (const quote of quotes) {
+                const expectedSpeaker = utterance.speaker?.replace(/\s+/gu, "").trim();
+                if (expectedSpeaker && !quote.speaker.replace(/\s+/gu, "").includes(expectedSpeaker)) continue;
+                const fragment = normalizeDramaDialogueSequenceText(quote.text);
+                if (fragment && source.slice(cursor).startsWith(fragment)) cursor += fragment.length;
+            }
+            if (cursor >= source.length) break;
+        }
+        return cursor >= source.length ? [] : [`${label}的公开视频镜头卡未完整写入${utterance.type === "voiceover" ? "旁白" : "对白"}原句“${utterance.text?.trim()}”`];
+    });
+}
+
+/** Repairs legacy public cards only from the exact utterance and frame-plan speech fragments. */
+export function repairDramaVideoPromptUtteranceCoverage(prompt: string, frames: ReadonlyArray<DramaCameraPlanFrame & { actionPrompt?: string }>, utterances: readonly DramaDialogueTimingInput[], label: string) {
+    const spokenUtterances = (Array.isArray(utterances) ? utterances : []).filter((item) => (item.type === "dialogue" || item.type === "voiceover") && item.text?.trim());
+    const cards = extractDramaVideoPromptCards(prompt);
+    if (!spokenUtterances.length || !cards.length || cards.length !== frames.length) return { prompt, changed: false };
+    if (!validateDramaVideoPromptUtteranceCoverage(prompt, frames, spokenUtterances, label).length) return { prompt, changed: false };
+    if (cards.some((card, index) => !dramaTimeRangePattern(frames[index].startSecond, frames[index].endSecond).test(card.timeRange))) return { prompt, changed: false };
+
+    const additions = new Map<number, string[]>();
+    for (const utterance of spokenUtterances) {
+        const sourceText = utterance.text?.trim() || "";
+        const source = normalizeDramaDialogueSequenceText(sourceText);
+        if (!source) continue;
+        const start = Number(utterance.startSecond);
+        const end = Number(utterance.endSecond);
+        const timed = Number.isFinite(start) && Number.isFinite(end) && end > start;
+        const indexes = timed ? frames.flatMap((frame, index) => (start < frame.endSecond && end > frame.startSecond ? [index] : [])) : frames.map((_, index) => index);
+        if (!indexes.length) return { prompt, changed: false };
+        let cursor = 0;
+        for (const index of indexes) {
+            const cardQuotes = extractQuotedDramaDialogues(cards[index].dialogue);
+            for (const quote of cardQuotes) {
+                if (!dramaDialogueSpeakerMatches(utterance.speaker, quote.speaker)) continue;
+                const fragment = normalizeDramaDialogueSequenceText(quote.text);
+                if (fragment && source.slice(cursor).startsWith(fragment)) cursor += fragment.length;
+            }
+            for (const quote of extractQuotedDramaDialogues(frames[index].actionPrompt || "")) {
+                if (!dramaDialogueSpeakerMatches(utterance.speaker, quote.speaker)) continue;
+                const fragment = normalizeDramaDialogueSequenceText(quote.text);
+                if (!fragment || !source.slice(cursor).startsWith(fragment)) continue;
+                const exactFragment = originalDramaDialogueFragment(sourceText, cursor, cursor + fragment.length);
+                const line = formatDramaDialogueLine(utterance.speaker || quote.speaker, exactFragment);
+                if (line) additions.set(index, [...(additions.get(index) || []), line]);
+                cursor += fragment.length;
+            }
+        }
+        if (cursor < source.length) {
+            if (indexes.length !== 1 || cursor !== 0 || !timed || dramaTimedDialogueCapacityIssues([utterance], label).length) return { prompt, changed: false };
+            const line = formatDramaDialogueLine(utterance.speaker || "旁白", sourceText);
+            if (!line) return { prompt, changed: false };
+            additions.set(indexes[0], [...(additions.get(indexes[0]) || []), line]);
+        }
+    }
+
+    let repaired = prompt;
+    for (const [index, lines] of additions) repaired = appendDramaVideoPromptCardDialogue(repaired, index, lines);
+    if (repaired === prompt || validateDramaVideoPromptUtteranceCoverage(repaired, frames, spokenUtterances, label).length) return { prompt, changed: false };
+    return { prompt: repaired, changed: true };
+}
+
+function dramaDialogueSpeakerMatches(expected: string | undefined, actual: string) {
+    const left = expected?.replace(/\s+/gu, "").trim();
+    const right = actual.replace(/\s+/gu, "").trim();
+    return !left || right.includes(left) || left.includes(right);
+}
+
+function originalDramaDialogueFragment(value: string, start: number, end: number) {
+    const starts: number[] = [];
+    let offset = 0;
+    for (const character of value) {
+        if (!/[\s\u3000，。；：、,.!?！？“”"「」『』…—-]/u.test(character)) starts.push(offset);
+        offset += character.length;
+    }
+    const startOffset = start === 0 ? 0 : starts[start];
+    const endOffset = end >= starts.length ? value.length : starts[end];
+    return Number.isInteger(startOffset) && Number.isInteger(endOffset) ? value.slice(startOffset, endOffset).trim() : "";
+}
+
+function appendDramaVideoPromptCardDialogue(prompt: string, cardIndex: number, lines: string[]) {
+    const markers = [...prompt.matchAll(VIDEO_CARD_HEADER)];
+    const marker = markers[cardIndex];
+    if (!marker) return prompt;
+    const start = marker.index ?? 0;
+    const end = markers[cardIndex + 1]?.index ?? prompt.length;
+    const raw = prompt.slice(start, end);
+    const fieldPattern = VIDEO_CARD_FIELDS.map(escapeRegExp).join("|");
+    const next = raw.replace(new RegExp(`(^|\\n)([ \\t]*台词\\s*[：:]\\s*)([\\s\\S]*?)(?=\\n\\s*(?:${fieldPattern})\\s*[：:]|$)`, "u"), (_match, prefix: string, heading: string, current: string) => {
+        const existing = current.trim();
+        const uniqueLines = lines.filter((line) => !extractQuotedDramaDialogues(existing).some((quote) => normalizeDramaDialogueSequenceText(quote.text) === normalizeDramaDialogueSequenceText(extractQuotedDramaDialogues(line)[0]?.text || "")));
+        if (!uniqueLines.length) return `${prefix}${heading}${current}`;
+        const dialogue = !existing || /^无[。；，,\s]*$/u.test(existing) ? uniqueLines.join("；") : `${existing}；${uniqueLines.join("；")}`;
+        return `${prefix}${heading}${dialogue}`;
+    });
+    return next === raw ? prompt : `${prompt.slice(0, start)}${next}${prompt.slice(end)}`;
 }
 
 /** Every executable frame must expose a causal beat, not just an action noun. */

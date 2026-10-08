@@ -54,6 +54,7 @@ import { deleteDramaFrameBeat, formatPromptFieldLines, normalizeDramaFrameBeats,
 import { canonicalizeDramaProductionPlanVisual, defaultDramaProductionPlan, dramaReferenceImageBudget, normalizeDramaProductionPlan } from "@/lib/drama-production-plan";
 import { resolveDramaShotDuration } from "@/lib/server/drama-shot-config";
 import { dramaDialogueFragmentSequenceError } from "@/lib/drama-dialogue-timing";
+import { repairDramaVideoPromptUtteranceCoverage, validateDramaVideoPromptCardLayout, validateDramaVideoPromptUtteranceCoverage } from "@/lib/drama-prompt-quality";
 import { TEXT_MODEL_REQUEST_TIMEOUT_MS } from "@/lib/server/model-request-policy";
 import { getAgentRun, listAgentRuns } from "@/lib/server/agent-run-store";
 import { reviewCreativeOutputs } from "@/lib/server/creative-review-service";
@@ -154,14 +155,17 @@ export async function getDramaProjectForUser(userId: string, id: string) {
     const project = await getDramaProject(cleanText(id), userId);
     if (!project) throw new DramaProjectServiceError("短剧项目不存在", 404);
     const episodesRecovered = recoverInvalidDramaEpisodes(project);
-    const styleRecovered = recoverLegacyDramaStyle(episodesRecovered || project);
-    const boundaryRecovered = recoverStaleDramaBoundaryFrames(styleRecovered || episodesRecovered || project);
-    const frameEvidenceRecovered = recoverLegacyStoryboardFrameEvidence(boundaryRecovered || styleRecovered || episodesRecovered || project);
-    const reviewRecovered = recoverStaleReviewCompletionTask(frameEvidenceRecovered || boundaryRecovered || styleRecovered || episodesRecovered || project);
-    const profileRecovered = recoverGenericDramaAssetProfiles(reviewRecovered || frameEvidenceRecovered || boundaryRecovered || styleRecovered || episodesRecovered || project);
-    const characterProfileRecovered = recoverContaminatedDramaCharacterProfiles(profileRecovered || reviewRecovered || frameEvidenceRecovered || boundaryRecovered || styleRecovered || episodesRecovered || project);
-    const assetRecovered = await recoverStaleGeneratedAssetReferences(userId, characterProfileRecovered || profileRecovered || reviewRecovered || frameEvidenceRecovered || boundaryRecovered || styleRecovered || episodesRecovered || project);
-    const recovered = assetRecovered || characterProfileRecovered || profileRecovered || reviewRecovered || frameEvidenceRecovered || boundaryRecovered || styleRecovered || episodesRecovered;
+    const current = episodesRecovered || project;
+    const promptRecovered = recoverStaleDramaExecutionVideoPrompts(current);
+    const currentWithPrompts = promptRecovered || current;
+    const styleRecovered = recoverLegacyDramaStyle(currentWithPrompts);
+    const boundaryRecovered = recoverStaleDramaBoundaryFrames(styleRecovered || currentWithPrompts);
+    const frameEvidenceRecovered = recoverLegacyStoryboardFrameEvidence(boundaryRecovered || styleRecovered || currentWithPrompts);
+    const reviewRecovered = recoverStaleReviewCompletionTask(frameEvidenceRecovered || boundaryRecovered || styleRecovered || currentWithPrompts);
+    const profileRecovered = recoverGenericDramaAssetProfiles(reviewRecovered || frameEvidenceRecovered || boundaryRecovered || styleRecovered || currentWithPrompts);
+    const characterProfileRecovered = recoverContaminatedDramaCharacterProfiles(profileRecovered || reviewRecovered || frameEvidenceRecovered || boundaryRecovered || styleRecovered || currentWithPrompts);
+    const assetRecovered = await recoverStaleGeneratedAssetReferences(userId, characterProfileRecovered || profileRecovered || reviewRecovered || frameEvidenceRecovered || boundaryRecovered || styleRecovered || currentWithPrompts);
+    const recovered = assetRecovered || characterProfileRecovered || profileRecovered || reviewRecovered || frameEvidenceRecovered || boundaryRecovered || styleRecovered || promptRecovered || episodesRecovered;
     if (!recovered) return project;
     try {
         return await updateDramaProject(userId, recovered, project.updatedAt);
@@ -174,6 +178,39 @@ export async function getDramaProjectForUser(userId: string, id: string) {
 export function recoverInvalidDramaEpisodes(project: DramaProject) {
     const episodes = project.episodes.filter((episode) => episode && typeof episode === "object" && Array.isArray(episode.shots));
     return episodes.length === project.episodes.length ? null : { ...project, episodes, updatedAt: nextTimestamp(project.updatedAt) };
+}
+
+function recoverStaleDramaExecutionVideoPrompts(project: DramaProject) {
+    let changed = false;
+    const episodes = project.episodes.map((episode) => ({
+        ...episode,
+        shots: episode.shots.map((shot) => {
+            const frames = shot.framePlan?.frames || [];
+            const utterances = shot.utterances || [];
+            const executionPrompt = shot.executionVideoPrompt?.trim();
+            const sourcePrompt = shot.videoPrompt?.trim();
+            const executionRepair = executionPrompt ? repairDramaVideoPromptUtteranceCoverage(executionPrompt, frames, utterances, shot.code || shot.title) : undefined;
+            const sourceRepair = sourcePrompt ? repairDramaVideoPromptUtteranceCoverage(sourcePrompt, frames, utterances, shot.code || shot.title) : undefined;
+            const nextExecutionPrompt = executionRepair?.prompt || executionPrompt;
+            const nextSourcePrompt = sourceRepair?.prompt || sourcePrompt;
+            const promptErrors = [...validateDramaVideoPromptCardLayout(nextExecutionPrompt, frames, shot.code || shot.title), ...validateDramaVideoPromptUtteranceCoverage(nextExecutionPrompt || "", frames, utterances, shot.code || shot.title)];
+            const sourceErrors = nextSourcePrompt
+                ? [...validateDramaVideoPromptCardLayout(nextSourcePrompt, frames, shot.code || shot.title), ...validateDramaVideoPromptUtteranceCoverage(nextSourcePrompt, frames, utterances, shot.code || shot.title)]
+                : ["基础视频提示词缺失"];
+            const clearExecutionPrompt = Boolean(nextExecutionPrompt && promptErrors.length && !sourceErrors.length);
+            if (!executionRepair?.changed && !sourceRepair?.changed && !clearExecutionPrompt) return shot;
+            changed = true;
+            const fieldOrigins = { ...(shot.fieldOrigins || {}) };
+            if (clearExecutionPrompt) delete fieldOrigins.executionVideoPrompt;
+            return {
+                ...shot,
+                ...(sourceRepair?.changed ? { videoPrompt: sourceRepair.prompt } : {}),
+                executionVideoPrompt: clearExecutionPrompt ? undefined : executionRepair?.changed ? executionRepair.prompt : shot.executionVideoPrompt,
+                fieldOrigins,
+            };
+        }),
+    }));
+    return changed ? { ...project, episodes, updatedAt: nextTimestamp(project.updatedAt) } : null;
 }
 
 export function recoverStaleDramaBoundaryFrames(project: DramaProject) {
@@ -3164,6 +3201,10 @@ export async function updateDramaShotPromptForUser(userId: string, projectId: st
                           const framePlan = hasFramePlanPatch ? normalizeAgentFramePlan(input.framePlan, shot.framePlan, shot.duration) : undefined;
                           if (hasFramePlanPatch && !framePlan) throw new DramaProjectServiceError("Agent 逐帧计划无效，未保存本次提示词", 422);
                           if (framePlan) validateSavedDramaDialogueSequence(framePlan, shot.utterances, `${episode.code || episode.title}/${shot.code || shot.title}`);
+                          if (videoPrompt) {
+                              const coverageErrors = validateDramaVideoPromptUtteranceCoverage(videoPrompt, framePlan?.frames || shot.framePlan?.frames || [], shot.utterances, shot.code || shot.title);
+                              if (coverageErrors.length) throw new DramaProjectServiceError(coverageErrors[0], 422);
+                          }
                           const fieldOrigins = {
                               ...(shot.fieldOrigins || {}),
                               ...(videoPrompt ? { executionVideoPrompt: videoPromptOrigin } : {}),
@@ -3219,6 +3260,10 @@ export async function updateDramaShotPromptPatchForUser(userId: string, projectI
             }
             if (!framePlan) throw new DramaProjectServiceError("逐帧计划无效，未保存本次提示词", 422);
             validateSavedDramaDialogueSequence(framePlan, currentShot.utterances, `${currentEpisode.code || currentEpisode.title}/${currentShot.code || currentShot.title}`);
+        }
+        if (videoPrompt) {
+            const coverageErrors = validateDramaVideoPromptUtteranceCoverage(videoPrompt, framePlan?.frames || [], currentShot.utterances, currentShot.code || currentShot.title);
+            if (coverageErrors.length) throw new DramaProjectServiceError(coverageErrors[0], 422);
         }
         const storyboardFrames = hasStoryboardFramesPatch ? normalizeStoryboardFrames(input.storyboardFrames) : currentShot.storyboardFrames;
         if (hasStoryboardFramesPatch && !storyboardFrames) throw new DramaProjectServiceError("分镜帧状态无效", 400);

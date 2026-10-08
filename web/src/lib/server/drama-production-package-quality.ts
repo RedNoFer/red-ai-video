@@ -10,6 +10,7 @@ import {
     validateDramaFrameTiming,
     validateDramaVideoPromptCardLayout,
     validateDramaVideoPromptDialogueTiming,
+    validateDramaVideoPromptUtteranceCoverage,
     validateDramaVideoPromptSemanticQuality,
 } from "@/lib/drama-prompt-quality";
 import { validateDramaContinuityEdges } from "@/lib/drama-continuity-policy";
@@ -271,7 +272,11 @@ function checkFrameDialogueTiming(checks: DramaQualityGateCheck[], value: DramaP
         episode.shots.flatMap((shot) => {
             const label = `${episode.code}/${shot.code}`;
             const frames = shot.framePlan?.frames || [];
-            return [...validateDramaFrameTiming(frames, shot.utterances as DramaDialogueTimingInput[], label), ...validateDramaVideoPromptDialogueTiming(shot.videoPrompt, frames, shot.utterances as DramaDialogueTimingInput[], label)];
+            return [
+                ...validateDramaFrameTiming(frames, shot.utterances as DramaDialogueTimingInput[], label),
+                ...validateDramaVideoPromptDialogueTiming(shot.videoPrompt, frames, shot.utterances as DramaDialogueTimingInput[], label),
+                ...validateDramaVideoPromptUtteranceCoverage(shot.videoPrompt, frames, shot.utterances as DramaDialogueTimingInput[], label),
+            ];
         }),
     );
     add(

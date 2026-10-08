@@ -55,8 +55,10 @@ import {
     validateDramaCameraPlan,
     validateDramaFrameTiming,
     validateDramaPerformanceDetail,
+    repairDramaVideoPromptUtteranceCoverage,
     validateDramaVideoAuthoringQuality,
     validateDramaVideoPromptCardLayout,
+    validateDramaVideoPromptUtteranceCoverage,
     validateDramaVideoSegmentDetail,
 } from "@/lib/drama-prompt-quality";
 import { DRAMA_VIDEO_DIRECTOR_SKILL } from "@/lib/server/agent-skills/drama-video-director";
@@ -451,11 +453,31 @@ function mergeEpisode(
     const storySceneIds = new Map(storyScenes.flatMap((scene) => (scene.code ? [[scene.code, scene.id] as const] : [])));
     const linkedShots = shots.map((shot) => {
         const packageShot = incoming.shots.find((item) => item.code === shot.code);
-        return {
+        const framePlan = shouldPreserveManualFramePlan(shot.framePlan, shot.fieldOrigins?.framePlan) ? preserveManualFramePlan(shot.framePlan!) : remapFramePlan(packageShot?.framePlan, characterIds, locationIds, propIds, clueIds, shotIds);
+        const repairedBasePrompt = repairDramaVideoPromptUtteranceCoverage(shot.videoPrompt, framePlan?.frames || [], shot.utterances as DramaDialogueTimingInput[], shot.code || shot.title);
+        const linkedShot = {
             ...shot,
-            framePlan: shouldPreserveManualFramePlan(shot.framePlan, shot.fieldOrigins?.framePlan) ? preserveManualFramePlan(shot.framePlan!) : remapFramePlan(packageShot?.framePlan, characterIds, locationIds, propIds, clueIds, shotIds),
+            ...(repairedBasePrompt.changed ? { videoPrompt: repairedBasePrompt.prompt } : {}),
+            framePlan,
             storySceneId: packageShot?.storySceneCode ? storySceneIds.get(packageShot.storySceneCode) : undefined,
         };
+        if (shot.fieldOrigins?.executionVideoPrompt !== "manual" || !shot.executionVideoPrompt?.trim()) return linkedShot;
+        const label = shot.code || shot.title;
+        const repairedExecutionPrompt = repairDramaVideoPromptUtteranceCoverage(shot.executionVideoPrompt, framePlan?.frames || [], shot.utterances as DramaDialogueTimingInput[], label);
+        if (repairedExecutionPrompt.changed) return { ...linkedShot, executionVideoPrompt: repairedExecutionPrompt.prompt };
+        const stalePromptErrors = [
+            ...validateDramaVideoPromptCardLayout(shot.executionVideoPrompt, framePlan?.frames || [], label),
+            ...validateDramaVideoPromptUtteranceCoverage(shot.executionVideoPrompt, framePlan?.frames || [], shot.utterances as DramaDialogueTimingInput[], label),
+        ];
+        if (!stalePromptErrors.length) return linkedShot;
+        const sourcePromptErrors = [
+            ...validateDramaVideoPromptCardLayout(linkedShot.videoPrompt, framePlan?.frames || [], label),
+            ...validateDramaVideoPromptUtteranceCoverage(linkedShot.videoPrompt, framePlan?.frames || [], shot.utterances as DramaDialogueTimingInput[], label),
+        ];
+        if (sourcePromptErrors.length) return linkedShot;
+        const fieldOrigins = { ...linkedShot.fieldOrigins };
+        delete fieldOrigins.executionVideoPrompt;
+        return { ...linkedShot, executionVideoPrompt: undefined, fieldOrigins };
     });
     const continuityEdges = incoming.continuityEdges.flatMap<DramaContinuityEdge>((edge) => {
         const fromShotId = shotIds.get(edge.fromShotCode);

@@ -498,6 +498,62 @@ describe("drama project service updates", () => {
         expect(recoverInvalidDramaEpisodes(malformed)?.episodes).toHaveLength(1);
     });
 
+    it("repairs and persists legacy dialogue cards when an imported project is opened", async () => {
+        const current = project("2026-07-19T08:00:00.000Z", "项目");
+        const prompt = [
+            "### 镜头 01 | 0-2秒 | 中景 | 50mm | 平视 | 锁定机位 | 人物镜头",
+            "场景：北坡岩缝。",
+            "画面内容：陆川抬眼看向岚音，右手压住湿石，指节停在石缝边缘。",
+            "光影：阴天冷光落在陆川脸部和湿石表面。",
+            "色调：冷灰与低饱和黛青。",
+            "台词：无",
+            "人声：陆川吸气。",
+            "音效：湿石滴水声。",
+            "### 镜头 02 | 2-4秒 | 近景 | 85mm | 平视 | 缓慢推近 | 人物镜头",
+            "场景：北坡岩缝。",
+            "画面内容：陆川转向岚音，嘴唇收住句尾，肩线停在岩壁前。",
+            "光影：冷光沿侧脸和岩壁边缘形成窄反光。",
+            "色调：冷灰与低饱和黛青。",
+            "台词：无",
+            "人声：陆川短促吐气。",
+            "音效：水滴落入浅水。",
+        ].join("\n");
+        current.episodes[0].shots = [
+            {
+                id: "shot-one",
+                code: "SH01",
+                title: "遇见岚音",
+                duration: 4,
+                characterIds: [],
+                propIds: [],
+                clueIds: [],
+                utterances: [{ id: "u1", order: 1, type: "dialogue", speaker: "陆川", text: "我叫陆川。滑坡把我冲进来的。", startSecond: 0, endSecond: 4 }],
+                videoPrompt: prompt,
+                executionVideoPrompt: prompt,
+                fieldOrigins: { executionVideoPrompt: "manual" },
+                framePlan: {
+                    frames: [
+                        { id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 2, actionPrompt: "陆川说：\u201c我叫陆川。\u201d" },
+                        { id: "f2", sequenceIndex: 2, startSecond: 2, endSecond: 4, actionPrompt: "陆川说：\u201c滑坡把我冲进来的。\u201d" },
+                    ],
+                },
+            } as never,
+        ];
+        mocks.getDramaProject.mockResolvedValue(current);
+
+        const recovered = await getDramaProjectForUser("user-one", current.id);
+        const recoveredShot = recovered.episodes[0].shots[0];
+
+        expect(recoveredShot.videoPrompt).toContain("台词：陆川说：\u201c我叫陆川。\u201d");
+        expect(recoveredShot.videoPrompt).toContain("台词：陆川说：\u201c滑坡把我冲进来的。\u201d");
+        expect(recoveredShot.executionVideoPrompt).toBe(recoveredShot.videoPrompt);
+        expect(mocks.updateDramaProject).toHaveBeenCalledWith(
+            "user-one",
+            expect.objectContaining({ episodes: [expect.objectContaining({ shots: [expect.objectContaining({ videoPrompt: recoveredShot.videoPrompt, executionVideoPrompt: recoveredShot.executionVideoPrompt })] })] }),
+            current.updatedAt,
+        );
+    });
+
     it("repairs narrative contamination in character visual settings when a project is opened", async () => {
         const current = project("2026-07-19T08:00:00.000Z", "项目");
         current.characters = [

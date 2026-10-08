@@ -11,12 +11,79 @@ import {
     validateDramaVideoAuthoringQuality,
     validateDramaVideoPromptCardLayout,
     validateDramaVideoPromptDialogueTiming,
+    repairDramaVideoPromptUtteranceCoverage,
+    validateDramaVideoPromptUtteranceCoverage,
     validateDramaVideoPromptSemanticQuality,
     validateDramaVideoPromptTemplateLayout,
     validateDramaVideoSegmentDetail,
 } from "./drama-prompt-quality";
 
 describe("drama prompt quality", () => {
+    it("repairs legacy public cards from exact utterance fragments in the frame plan", () => {
+        const frames = [
+            { startSecond: 0, endSecond: 2, actionPrompt: "陆川说：\u201c我叫陆川。\u201d" },
+            { startSecond: 2, endSecond: 4, actionPrompt: "陆川说：\u201c滑坡把我冲进来的。\u201d" },
+        ];
+        const prompt = [
+            "### 镜头 01 | 0-2秒 | 中景 | 50mm | 平视 | 锁定机位 | 人物镜头",
+            "场景：北坡岩缝。",
+            "画面内容：陆川抬眼看向岚音，右手压住湿石，指节停在石缝边缘。",
+            "光影：阴天冷光落在陆川脸部和湿石表面。",
+            "色调：冷灰与低饱和黛青。",
+            "台词：无",
+            "人声：陆川吸气。",
+            "音效：湿石滴水声。",
+            "### 镜头 02 | 2-4秒 | 近景 | 85mm | 平视 | 缓慢推近 | 人物镜头",
+            "场景：北坡岩缝。",
+            "画面内容：陆川转向岚音，嘴唇收住句尾，肩线停在岩壁前。",
+            "光影：冷光沿侧脸和岩壁边缘形成窄反光。",
+            "色调：冷灰与低饱和黛青。",
+            "台词：无",
+            "人声：陆川短促吐气。",
+            "音效：水滴落入浅水。",
+        ].join("\n");
+        const utterances = [{ type: "dialogue", speaker: "陆川", text: "我叫陆川。滑坡把我冲进来的。", startSecond: 0, endSecond: 4 }];
+
+        const repaired = repairDramaVideoPromptUtteranceCoverage(prompt, frames, utterances, "SH01");
+
+        expect(repaired.changed).toBe(true);
+        expect(repaired.prompt).toContain("台词：陆川说：\u201c我叫陆川。\u201d");
+        expect(repaired.prompt).toContain("台词：陆川说：\u201c滑坡把我冲进来的。\u201d");
+        expect(validateDramaVideoPromptUtteranceCoverage(repaired.prompt, frames, utterances, "SH01")).toEqual([]);
+    });
+
+    it("does not guess where to place untimed dialogue across multiple cards", () => {
+        const frames = [
+            { startSecond: 0, endSecond: 2, actionPrompt: "陆川抬眼" },
+            { startSecond: 2, endSecond: 4, actionPrompt: "岚音转身" },
+        ];
+        const prompt = [
+            "### 镜头 01 | 0-2秒 | 中景 | 50mm | 平视 | 锁定机位 | 人物镜头\n场景：岩缝。\n画面内容：陆川抬眼，手指停在湿石边。\n光影：冷光落在脸上。\n色调：冷灰。\n台词：无\n人声：吸气。\n音效：滴水。",
+            "### 镜头 02 | 2-4秒 | 近景 | 85mm | 平视 | 锁定机位 | 人物镜头\n场景：岩缝。\n画面内容：岚音转身看向陆川。\n光影：冷光落在侧脸。\n色调：冷灰。\n台词：无\n人声：无\n音效：水声。",
+        ].join("\n");
+
+        const repaired = repairDramaVideoPromptUtteranceCoverage(prompt, frames, [{ type: "voiceover", speaker: "岚音", text: "你一个人？" }], "SH01");
+
+        expect(repaired).toEqual({ prompt, changed: false });
+    });
+
+    it("repairs untimed dialogue only when frame actions identify its exact card fragments", () => {
+        const frames = [
+            { startSecond: 0, endSecond: 2, actionPrompt: "陆川说：\u201c我叫陆川。\u201d" },
+            { startSecond: 2, endSecond: 4, actionPrompt: "陆川说：\u201c滑坡把我冲进来的。\u201d" },
+        ];
+        const prompt = [
+            "### 镜头 01 | 0-2秒 | 中景 | 50mm | 平视 | 锁定机位 | 人物镜头\n场景：岩缝。\n画面内容：陆川抬眼看向岚音，手指压住湿石。\n光影：冷光落在脸上。\n色调：冷灰。\n台词：无\n人声：吸气。\n音效：滴水。",
+            "### 镜头 02 | 2-4秒 | 近景 | 85mm | 平视 | 锁定机位 | 人物镜头\n场景：岩缝。\n画面内容：陆川转向岚音，嘴唇收住句尾。\n光影：冷光落在侧脸。\n色调：冷灰。\n台词：无\n人声：吐气。\n音效：水声。",
+        ].join("\n");
+        const utterances = [{ type: "dialogue", speaker: "陆川", text: "我叫陆川。滑坡把我冲进来的。" }];
+
+        const repaired = repairDramaVideoPromptUtteranceCoverage(prompt, frames, utterances, "SH01");
+
+        expect(repaired.changed).toBe(true);
+        expect(validateDramaVideoPromptUtteranceCoverage(repaired.prompt, frames, utterances, "SH01")).toEqual([]);
+    });
+
     it("recognizes generic placeholder performance language", () => {
         expect(isGenericDramaDetail("表情自然")).toBe(true);
         expect(isGenericDramaDetail("眉心收紧，右手扣住桌沿，视线停在对方的手上")).toBe(false);

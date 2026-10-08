@@ -12,6 +12,7 @@ import {
     validateDramaFrameTiming,
     validateDramaVideoPromptCardLayout,
     validateDramaVideoSegmentDetail,
+    validateDramaVideoPromptUtteranceCoverage,
 } from "@/lib/drama-prompt-quality";
 import { dramaFrameDialogueTimingReminder } from "@/lib/drama-dialogue-timing";
 
@@ -257,6 +258,7 @@ export function validateDramaVideoPromptOutput(
         const outputFrames = array(object(shot.framePlan).frames).map(object);
         if (!outputFrames.length) return `镜头 ${shotId} 缺少逐帧动作计划；请按当前 Skill 返回 framePlan.frames`;
         if (expectedFrames.length && outputFrames.length !== expectedFrames.length) return `镜头 ${shotId} 的逐帧计划数量不一致：应为 ${expectedFrames.length} 段，实际为 ${outputFrames.length} 段；请按当前 Skill 原样保留时间段`;
+        const promptFrames = (expectedFrames.length ? expectedFrames : outputFrames).map((frame) => ({ startSecond: Number(object(frame).startSecond), endSecond: Number(object(frame).endSecond) }));
         if (options.requireCameraPlan) {
             const cameraError = validateDramaCameraPlan(prompt, (expectedFrames.length ? expectedFrames : outputFrames) as Array<{ startSecond: number; endSecond: number }>);
             if (cameraError) return "镜头 " + shotId + " 的摄影契约无效：" + cameraError + "；请按当前 Skill 重新生成";
@@ -359,6 +361,8 @@ export function validateDramaVideoPromptOutput(
             `镜头 ${shotId}`,
         );
         if (timingErrors.length) return timingErrors.join("；");
+        const utteranceCoverageErrors = validateDramaVideoPromptUtteranceCoverage(prompt, promptFrames, sourceShot?.utterances || [], `镜头 ${shotId}`);
+        if (utteranceCoverageErrors.length) return utteranceCoverageErrors[0];
         const cutDiversityErrors = validateDramaCutInformationDiversity({
             ratio: options.ratio || "",
             prompt,
