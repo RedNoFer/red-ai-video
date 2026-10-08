@@ -808,6 +808,35 @@ export type DramaProject = {
     updatedAt: string;
 };
 
+export type DramaProjectMutationPatch<T extends { id: string }> = {
+    id: string;
+    fields: Partial<Omit<T, "id">>;
+    unset?: Array<keyof Omit<T, "id">>;
+};
+
+export type DramaProjectMutation = {
+    projectId: string;
+    expectedUpdatedAt: string;
+    updatedAt: string;
+    projectPatch?: Partial<
+        Pick<DramaProject, "title" | "summary" | "style" | "ratio" | "status" | "creativeConversationId" | "activeEpisodeId" | "defaultVideoMode" | "productionBible" | "seriesBible" | "productionArchive" | "fieldOrigins" | "sourceAssets">
+    >;
+    projectUnset?: Array<"creativeConversationId" | "activeEpisodeId" | "seriesBible" | "productionBible" | "productionArchive" | "fieldOrigins" | "sourceAssets">;
+    assets?: Partial<Record<"characters" | "scenes" | "props" | "clues", { upsert?: DramaNamedAsset[]; patch?: Array<DramaProjectMutationPatch<DramaNamedAsset>>; remove?: string[] }>>;
+    episodes?: {
+        upsert?: DramaEpisode[];
+        patch?: Array<{
+            id: string;
+            fields: Partial<Omit<DramaEpisode, "id" | "shots">>;
+            unset?: Array<keyof Omit<DramaEpisode, "id" | "shots">>;
+            shots?: { upsert?: DramaShot[]; patch?: Array<DramaProjectMutationPatch<DramaShot>>; remove?: string[] };
+        }>;
+        remove?: string[];
+    };
+};
+
+export type DramaProjectMutationAck = { projectId: string; updatedAt: string };
+
 export type DramaProjectAssetUpdate = Pick<DramaProject, "id" | "updatedAt"> & Partial<Pick<DramaProject, "characters" | "scenes" | "props" | "clues" | "episodes">>;
 
 export type DramaProjectSummary = Pick<DramaProject, "id" | "title" | "summary" | "style" | "ratio" | "status" | "createdAt" | "updatedAt"> & {

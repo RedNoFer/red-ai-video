@@ -10,6 +10,8 @@ import type {
     DramaContentAnalysis,
     DramaEpisode,
     DramaProject,
+    DramaProjectMutation,
+    DramaProjectMutationPatch,
     DramaProjectAssetUpdate,
     DramaProjectSummary,
     DramaProductionArchive,
@@ -18,6 +20,7 @@ import type {
     DramaScene,
     DramaShot,
     DramaNamedAsset,
+    DramaProjectMutationAck,
     DramaVisualAnalysis,
 } from "@/lib/drama-project-contract";
 import { summarizeDramaProject } from "@/lib/drama-project-summary";
@@ -34,7 +37,7 @@ import {
     listDramaProjectVersions,
     restoreDramaProjectVersion,
     saveDramaAsset,
-    saveDramaProject,
+    saveDramaProjectMutation,
     updateDramaProjectRatio,
     updateDramaStoryboardFrameGenerationState,
 } from "@/services/api/drama-projects";
@@ -106,6 +109,7 @@ type DramaAssetKind = "characters" | "scenes" | "props" | "clues";
 const saveTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const saveQueues = new Map<string, Promise<void>>();
 const frameStateSaveQueues = new Map<string, Promise<void>>();
+const pendingProjectBases = new Map<string, DramaProject>();
 const suspendedSaves = new Set<string>();
 const latestProjectTimes = new Map<string, number>();
 const projectRequests = new Map<string, Promise<DramaProject>>();
@@ -244,6 +248,7 @@ export const useDramaStore = create<DramaStore>((set, get) => ({
         const session = requireSession();
         const key = sessionEpoch.key(session, id);
         clearProjectSave(session, id);
+        pendingProjectBases.delete(key);
         await saveQueues.get(key)?.catch(() => undefined);
         await frameStateSaveQueues.get(key)?.catch(() => undefined);
         assertCurrent(session);
@@ -389,39 +394,21 @@ export const useDramaStore = create<DramaStore>((set, get) => ({
         }),
     saveProjectNow: async (projectId, updater) => {
         const session = requireSession();
-        clearProjectSave(session, projectId);
-        const key = sessionEpoch.key(session, projectId);
-        const previous = pendingProjectSaves(key);
-        let saved: DramaProject | undefined;
-        const operation = (previous ? previous.catch(() => undefined) : Promise.resolve()).then(async () => {
-            assertCurrent(session);
-            const currentProject = get().projects.find((item) => item.id === projectId);
-            if (!currentProject) throw new Error("短剧项目不存在");
-            const project = updater ? { ...updater(currentProject), updatedAt: nextUpdatedAt(session, currentProject) } : currentProject;
-            const expectedUpdatedAt = currentProject.updatedAt;
-            saved = await saveDramaProject(project);
-            assertCurrent(session);
-            set((state) => ({
-                projects: state.projects.map((item) => (item.id === saved!.id && (updater ? item.updatedAt === expectedUpdatedAt : item.updatedAt === project.updatedAt) ? saved! : item)),
-                summaries: upsertSummary(state.summaries, saved!),
-                saveStateByProject:
-                    state.projects.find((item) => item.id === project.id)?.updatedAt === (updater ? expectedUpdatedAt : project.updatedAt)
-                        ? { ...state.saveStateByProject, [saved!.id]: { status: "saved", savedAt: saved!.updatedAt } }
-                        : state.saveStateByProject,
-            }));
-        });
-        saveQueues.set(key, operation);
-        try {
-            await operation;
-            if (!saved) throw new Error("短剧项目保存失败");
-            return saved;
-        } finally {
-            if (saveQueues.get(key) === operation) saveQueues.delete(key);
+        if (updater) {
+            const current = get().projects.find((item) => item.id === projectId);
+            if (!current) throw new Error("短剧项目不存在");
+            const next = { ...updater(current), updatedAt: nextUpdatedAt(session, current) };
+            set((state) => ({ projects: state.projects.map((item) => (item.id === projectId ? next : item)), summaries: upsertSummary(state.summaries, next) }));
+            queueSave(session, next, current);
         }
+        await flushQueuedProjectMutation(session, projectId);
+        const saved = get().projects.find((item) => item.id === projectId);
+        if (!saved) throw new Error("短剧项目不存在");
+        return saved;
     },
     saveProjectRatioNow: async (projectId, ratio) => {
         const session = requireSession();
-        clearProjectSave(session, projectId);
+        await flushQueuedProjectMutation(session, projectId);
         const key = sessionEpoch.key(session, projectId);
         const previous = pendingProjectSaves(key);
         let saved: DramaProject | undefined;
@@ -458,7 +445,7 @@ export const useDramaStore = create<DramaStore>((set, get) => ({
     },
     saveStoryboardFrameGenerationStateNow: async (projectId, episodeId, shotId, input) => {
         const session = requireSession();
-        clearProjectSave(session, projectId);
+        await flushQueuedProjectMutation(session, projectId);
         const key = sessionEpoch.key(session, projectId);
         const previous = frameStateSaveQueues.get(key);
         let saved: Awaited<ReturnType<typeof updateDramaStoryboardFrameGenerationState>> | undefined;
@@ -496,7 +483,7 @@ export const useDramaStore = create<DramaStore>((set, get) => ({
     },
     saveAssetNow: async (projectId, kind, assetId, patch) => {
         const session = requireSession();
-        clearProjectSave(session, projectId);
+        await flushQueuedProjectMutation(session, projectId);
         const key = sessionEpoch.key(session, projectId);
         const previous = pendingProjectSaves(key);
         let saved: DramaProject | undefined;
@@ -821,13 +808,16 @@ export const useDramaStore = create<DramaStore>((set, get) => ({
         });
     },
     createVersion: async (project, reason) => {
-        await createDramaProjectVersion(project, reason);
+        const session = requireSession();
+        await flushQueuedProjectMutation(session, project.id);
+        await createDramaProjectVersion(project.id, reason);
     },
     listVersions: (projectId) => listDramaProjectVersions(projectId),
     restoreVersion: async (projectId, versionId) => {
         const session = requireSession();
         const key = sessionEpoch.key(session, projectId);
         clearProjectSave(session, projectId);
+        pendingProjectBases.delete(key);
         suspendedSaves.add(key);
         try {
             await saveQueues.get(key)?.catch(() => undefined);
@@ -857,17 +847,19 @@ function mutateProject(projectId: string, updater: (project: DramaProject) => Dr
     const session = sessionEpoch.capture();
     if (!session.userId) return;
     let nextProject: DramaProject | undefined;
+    let previousProject: DramaProject | undefined;
     useDramaStore.setState((state) => {
         const projects = state.projects.map((project) => {
             if (project.id !== projectId) return project;
             const updated = updater(project);
             if (updated === project) return project;
+            previousProject = project;
             nextProject = { ...updated, updatedAt: nextUpdatedAt(session, project) };
             return nextProject;
         });
         return { projects, summaries: nextProject ? upsertSummary(state.summaries, nextProject) : state.summaries };
     });
-    if (nextProject) queueSave(session, nextProject);
+    if (nextProject && previousProject) queueSave(session, nextProject, previousProject);
 }
 
 function assetReferences(item: DramaNamedAsset): DramaAssetReference[] {
@@ -1042,44 +1034,145 @@ function hasActiveShotTask(shot: DramaShot) {
     return [shot.storyboardStatus, shot.storyboardEndStatus, shot.generationStatus, shot.audioStatus].some((status) => status === "queued" || status === "running");
 }
 
-function queueSave(session: ClientSessionStamp, project: DramaProject) {
+function queueSave(session: ClientSessionStamp, project: DramaProject, base: DramaProject) {
     const key = sessionEpoch.key(session, project.id);
     if (suspendedSaves.has(key)) return;
+    if (!pendingProjectBases.has(key)) pendingProjectBases.set(key, base);
     useDramaStore.setState((state) => ({ saveStateByProject: { ...state.saveStateByProject, [project.id]: { status: "saving", savedAt: state.saveStateByProject[project.id]?.savedAt } } }));
     clearProjectSave(session, project.id);
     saveTimers.set(
         key,
         setTimeout(() => {
-            saveTimers.delete(key);
-            if (!sessionEpoch.isCurrent(session)) return;
-            const previous = pendingProjectSaves(key) || Promise.resolve();
-            const operation = previous.then(async () => {
-                if (!sessionEpoch.isCurrent(session)) return;
-                try {
-                    const saved = await saveDramaProject(project);
-                    if (!sessionEpoch.isCurrent(session)) return;
-                    useDramaStore.setState((state) => ({
-                        projects: state.projects.map((item) => (item.id === saved.id && item.updatedAt === project.updatedAt ? saved : item)),
-                        summaries: upsertSummary(state.summaries, saved),
-                        syncError: undefined,
-                        saveStateByProject: state.projects.find((item) => item.id === project.id)?.updatedAt === project.updatedAt ? { ...state.saveStateByProject, [project.id]: { status: "saved", savedAt: saved.updatedAt } } : state.saveStateByProject,
-                    }));
-                } catch (error) {
-                    if (!sessionEpoch.isCurrent(session)) return;
-                    const latest = useDramaStore.getState().projects.find((item) => item.id === project.id);
-                    if (latest?.updatedAt === project.updatedAt)
-                        useDramaStore.setState((state) => ({
-                            syncError: error instanceof Error ? error.message : "短剧项目保存失败",
-                            saveStateByProject: { ...state.saveStateByProject, [project.id]: { status: "error", savedAt: state.saveStateByProject[project.id]?.savedAt } },
-                        }));
-                }
-            });
-            saveQueues.set(key, operation);
-            void operation.finally(() => {
-                if (saveQueues.get(key) === operation) saveQueues.delete(key);
-            });
+            void flushQueuedProjectMutation(session, project.id).catch(() => undefined);
         }, 250),
     );
+}
+
+async function flushQueuedProjectMutation(session: ClientSessionStamp, projectId: string) {
+    assertCurrent(session);
+    const key = sessionEpoch.key(session, projectId);
+    clearProjectSave(session, projectId);
+    const base = pendingProjectBases.get(key);
+    if (!base) {
+        await pendingProjectSaves(key);
+        return;
+    }
+    pendingProjectBases.delete(key);
+    const project = useDramaStore.getState().projects.find((item) => item.id === projectId);
+    if (!project) return;
+    const mutation = buildDramaProjectMutation(base, project);
+    if (!mutation) return;
+    const previous = pendingProjectSaves(key);
+    const operation = (previous ? previous.catch(() => undefined) : Promise.resolve()).then(async () => {
+        assertCurrent(session);
+        try {
+            const saved: DramaProjectMutationAck = await saveDramaProjectMutation(mutation);
+            assertCurrent(session);
+            latestProjectTimes.set(key, Date.parse(saved.updatedAt) || Date.now());
+            useDramaStore.setState((state) => {
+                const latest = state.projects.find((item) => item.id === projectId);
+                if (!latest) return state;
+                const unchanged = latest.updatedAt === mutation.updatedAt;
+                const updated = unchanged ? { ...latest, updatedAt: saved.updatedAt } : latest;
+                return {
+                    projects: state.projects.map((item) => (item.id === projectId ? updated : item)),
+                    summaries: unchanged ? upsertSummary(state.summaries, updated) : state.summaries,
+                    syncError: undefined,
+                    saveStateByProject: unchanged ? { ...state.saveStateByProject, [projectId]: { status: "saved", savedAt: saved.updatedAt } } : state.saveStateByProject,
+                };
+            });
+        } catch (error) {
+            if (!sessionEpoch.isCurrent(session)) throw error;
+            const latest = useDramaStore.getState().projects.find((item) => item.id === projectId);
+            if (latest?.updatedAt === mutation.updatedAt)
+                useDramaStore.setState((state) => ({
+                    syncError: error instanceof Error ? error.message : "短剧项目变更保存失败",
+                    saveStateByProject: { ...state.saveStateByProject, [projectId]: { status: "error", savedAt: state.saveStateByProject[projectId]?.savedAt } },
+                }));
+            throw error;
+        }
+    });
+    saveQueues.set(key, operation);
+    try {
+        await operation;
+    } finally {
+        if (saveQueues.get(key) === operation) saveQueues.delete(key);
+    }
+}
+
+function buildDramaProjectMutation(before: DramaProject, after: DramaProject): DramaProjectMutation | undefined {
+    const projectFields = ["title", "summary", "style", "ratio", "status", "activeEpisodeId", "defaultVideoMode", "productionBible", "seriesBible", "productionArchive", "fieldOrigins", "sourceAssets"] as const;
+    const projectDelta = diffRecord(before, after, ["id", "updatedAt", "createdAt", "sourceHandoffId", "creativeConversationId", "characters", "scenes", "props", "clues", "episodes"]);
+    const projectPatch = Object.fromEntries(projectFields.flatMap((field) => (Object.prototype.hasOwnProperty.call(projectDelta.fields, field) ? [[field, projectDelta.fields[field]]] : []))) as DramaProjectMutation["projectPatch"];
+    const projectUnset = projectDelta.unset.filter((field) => projectFields.includes(field as (typeof projectFields)[number])) as DramaProjectMutation["projectUnset"];
+    const assets: NonNullable<DramaProjectMutation["assets"]> = {};
+    for (const kind of ["characters", "scenes", "props", "clues"] as const) {
+        const delta = diffEntityCollection(before[kind] as DramaNamedAsset[], after[kind] as DramaNamedAsset[]);
+        if (delta) assets[kind] = delta;
+    }
+    const episodeDelta = diffEntityCollection(before.episodes, after.episodes, (oldEpisode, newEpisode) => {
+        const fields = diffRecord(oldEpisode, newEpisode, ["id", "shots"]);
+        const shots = diffEntityCollection(oldEpisode.shots, newEpisode.shots);
+        return fieldsChanged(fields) || shots ? { id: oldEpisode.id, fields: fields.fields, unset: fields.unset as never, ...(shots ? { shots } : {}) } : undefined;
+    });
+    const episodes = episodeDelta ? { ...episodeDelta, patch: episodeDelta.patch as NonNullable<DramaProjectMutation["episodes"]>["patch"] } : undefined;
+    const hasProjectFields = Object.keys(projectPatch || {}).length > 0 || Boolean(projectUnset?.length);
+    if (!hasProjectFields && !Object.keys(assets).length && !episodes) return undefined;
+    return {
+        projectId: after.id,
+        expectedUpdatedAt: before.updatedAt,
+        updatedAt: after.updatedAt,
+        ...(hasProjectFields ? { projectPatch, ...(projectUnset?.length ? { projectUnset } : {}) } : {}),
+        ...(Object.keys(assets).length ? { assets } : {}),
+        ...(episodes ? { episodes } : {}),
+    };
+}
+
+function diffEntityCollection<T extends { id: string }>(
+    before: T[],
+    after: T[],
+    makePatch = (oldItem: T, newItem: T) => {
+        const delta = diffRecord(oldItem, newItem, ["id"]);
+        return fieldsChanged(delta) ? ({ id: oldItem.id, fields: delta.fields, unset: delta.unset as never } as DramaProjectMutationPatch<T>) : undefined;
+    },
+) {
+    const oldById = new Map(before.map((item) => [item.id, item]));
+    const newById = new Map(after.map((item) => [item.id, item]));
+    const upsert = after.filter((item) => !oldById.has(item.id));
+    const remove = before.filter((item) => !newById.has(item.id)).map((item) => item.id);
+    const patch = after.flatMap((item) => {
+        const previous = oldById.get(item.id);
+        const update = previous ? makePatch(previous, item) : undefined;
+        return update ? [update] : [];
+    });
+    return upsert.length || remove.length || patch.length ? { ...(upsert.length ? { upsert } : {}), ...(patch.length ? { patch } : {}), ...(remove.length ? { remove } : {}) } : undefined;
+}
+
+function diffRecord<T extends object>(before: T, after: T, excluded: string[]) {
+    const fields: Record<string, unknown> = {};
+    const unset: string[] = [];
+    const keys = new Set([...Object.keys(before), ...Object.keys(after)]);
+    for (const key of keys) {
+        if (excluded.includes(key) || sameMutationValue((before as Record<string, unknown>)[key], (after as Record<string, unknown>)[key])) continue;
+        if (!Object.prototype.hasOwnProperty.call(after, key) || (after as Record<string, unknown>)[key] === undefined) unset.push(key);
+        else fields[key] = (after as Record<string, unknown>)[key];
+    }
+    return { fields, unset };
+}
+
+function fieldsChanged(delta: { fields: Record<string, unknown>; unset: string[] }) {
+    return Object.keys(delta.fields).length > 0 || delta.unset.length > 0;
+}
+
+function sameMutationValue(left: unknown, right: unknown): boolean {
+    if (left === right) return true;
+    if (left === undefined || right === undefined || left === null || right === null || typeof left !== "object" || typeof right !== "object") return false;
+    if (Array.isArray(left) || Array.isArray(right)) return Array.isArray(left) && Array.isArray(right) && left.length === right.length && left.every((value, index) => sameMutationValue(value, right[index]));
+    const leftRecord = left as Record<string, unknown>;
+    const rightRecord = right as Record<string, unknown>;
+    const leftKeys = Object.keys(leftRecord).sort();
+    const rightKeys = Object.keys(rightRecord).sort();
+    return leftKeys.length === rightKeys.length && leftKeys.every((key, index) => key === rightKeys[index] && sameMutationValue(leftRecord[key], rightRecord[key]));
 }
 
 function nextUpdatedAt(session: ClientSessionStamp, project: DramaProject) {
@@ -1121,6 +1214,7 @@ function invalidateSession() {
     hydrateRequest = null;
     saveTimers.forEach((timer) => clearTimeout(timer));
     saveTimers.clear();
+    pendingProjectBases.clear();
     suspendedSaves.clear();
     latestProjectTimes.clear();
     projectRequests.clear();

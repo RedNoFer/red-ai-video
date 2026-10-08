@@ -23,6 +23,7 @@ const mocks = vi.hoisted(() => ({
     getDramaProject: vi.fn(),
     createDramaProject: vi.fn(),
     saveDramaProject: vi.fn(),
+    saveDramaProjectMutation: vi.fn(),
     updateDramaStoryboardFrameGenerationState: vi.fn(),
     deleteDramaProject: vi.fn(),
     createDramaProjectVersion: vi.fn(),
@@ -58,6 +59,7 @@ vi.mock("@/services/api/drama-projects", () => ({
     getDramaProject: mocks.getDramaProject,
     createDramaProject: mocks.createDramaProject,
     saveDramaProject: mocks.saveDramaProject,
+    saveDramaProjectMutation: mocks.saveDramaProjectMutation,
     updateDramaStoryboardFrameGenerationState: mocks.updateDramaStoryboardFrameGenerationState,
     deleteDramaProject: mocks.deleteDramaProject,
     createDramaProjectVersion: mocks.createDramaProjectVersion,
@@ -74,6 +76,7 @@ import { useUserStore } from "@/stores/use-user-store";
 describe("client store session isolation", () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        mocks.saveDramaProjectMutation.mockImplementation(async ({ projectId, updatedAt }: { projectId: string; updatedAt: string }) => ({ projectId, updatedAt }));
         useUserStore.getState().setUser(null);
         useAssetStore.getState().reset();
         useCanvasStore.getState().reset();
@@ -426,7 +429,6 @@ describe("client store session isolation", () => {
     it("promotes a legacy reference image when confirming it as the primary asset reference", async () => {
         vi.useFakeTimers();
         try {
-            mocks.saveDramaProject.mockImplementation(async (value: DramaProject) => value);
             useUserStore.getState().setUser(user("user-a"));
             const project = dramaProject("drama-a", "用户 A 短剧");
             project.characters = [{ id: "character-hero", name: "主角", description: "角色设定", referenceImageUrl: "/api/reference-assets/hero.png" }];
@@ -440,7 +442,7 @@ describe("client store session isolation", () => {
             expect(updated.primaryReferenceId).toBe(legacyReferenceId);
             expect(updated.references).toEqual([expect.objectContaining({ id: legacyReferenceId, status: "approved", url: "/api/reference-assets/hero.png" })]);
             expect(updated.referenceImageUrl).toBe("/api/reference-assets/hero.png");
-            expect(mocks.saveDramaProject).toHaveBeenCalledWith(expect.objectContaining({ characters: [expect.objectContaining({ primaryReferenceId: legacyReferenceId })] }));
+            expect(mocks.saveDramaProjectMutation).toHaveBeenCalledWith(expect.objectContaining({ assets: { characters: { patch: [expect.objectContaining({ fields: expect.objectContaining({ primaryReferenceId: legacyReferenceId }) })] } } }));
         } finally {
             vi.useRealTimers();
         }
@@ -449,7 +451,6 @@ describe("client store session isolation", () => {
     it("promotes a generated candidate reference when confirming it as the primary asset reference", async () => {
         vi.useFakeTimers();
         try {
-            mocks.saveDramaProject.mockImplementation(async (value: DramaProject) => value);
             useUserStore.getState().setUser(user("user-a"));
             const project = dramaProject("drama-a", "用户 A 短剧");
             project.characters = [
@@ -473,49 +474,87 @@ describe("client store session isolation", () => {
         }
     });
 
-    it("serializes immediate Drama saves so the latest local primary reference wins", async () => {
-        const firstSave = deferred<DramaProject>();
-        mocks.saveDramaProject.mockReturnValueOnce(firstSave.promise).mockImplementation(async (value: DramaProject) => value);
+    it("serializes sparse Drama saves so the latest local edit wins", async () => {
+        const firstSave = deferred<{ projectId: string; updatedAt: string }>();
+        mocks.saveDramaProjectMutation.mockReturnValueOnce(firstSave.promise);
         useUserStore.getState().setUser(user("user-a"));
         const project = dramaProject("drama-a", "用户 A 短剧");
         useDramaStore.setState({ projects: [project], hydrated: true, hydratedUserId: "user-a" });
 
+        useDramaStore.getState().updateProject(project.id, { title: "先改标题" });
         const first = useDramaStore.getState().saveProjectNow(project.id);
         await Promise.resolve();
-        useDramaStore.getState().updateProject(project.id, { title: "最新主基准状态" });
+        useDramaStore.getState().updateProject(project.id, { summary: "后改摘要" });
         const second = useDramaStore.getState().saveProjectNow(project.id);
 
-        expect(mocks.saveDramaProject).toHaveBeenCalledTimes(1);
-        firstSave.resolve(project);
+        expect(mocks.saveDramaProjectMutation).toHaveBeenCalledTimes(1);
+        const firstMutation = mocks.saveDramaProjectMutation.mock.calls[0][0] as { updatedAt: string };
+        firstSave.resolve({ projectId: project.id, updatedAt: firstMutation.updatedAt });
         await Promise.all([first, second]);
 
-        expect(mocks.saveDramaProject).toHaveBeenLastCalledWith(expect.objectContaining({ title: "最新主基准状态" }));
+        expect(mocks.saveDramaProjectMutation).toHaveBeenLastCalledWith(expect.objectContaining({ expectedUpdatedAt: firstMutation.updatedAt, projectPatch: { summary: "后改摘要" } }));
+        expect(useDramaStore.getState().projects[0]).toMatchObject({ title: "先改标题", summary: "后改摘要" });
     });
 
-    it("submits a frame state patch without waiting for an in-flight full project save", async () => {
-        const fullProjectSave = deferred<DramaProject>();
+    it("autosaves only the changed Drama project fields instead of resubmitting the full project", async () => {
+        vi.useFakeTimers();
+        try {
+            mocks.saveDramaProjectMutation.mockResolvedValue({ projectId: "drama-a", updatedAt: "2026-10-06T00:00:00.001Z" });
+            useUserStore.getState().setUser(user("user-a"));
+            const project = dramaProject("drama-a", "用户 A 短剧");
+            project.productionArchive = {
+                formatVersion: "vozeb-drama-production-package-v1",
+                sections: [{ code: "archive", title: "大型历史归档", content: "x".repeat(100_000) }],
+                promptAssets: [],
+                dialogueDirections: [],
+                voiceDirections: [],
+                silenceDirections: [],
+                referencePlan: [],
+                generationOrder: [],
+                qcReport: "",
+            };
+            useDramaStore.setState({ projects: [project], hydrated: true, hydratedUserId: "user-a" });
+
+            useDramaStore.getState().updateProject(project.id, { title: "仅改项目标题" });
+            await vi.advanceTimersByTimeAsync(250);
+
+            expect(mocks.saveDramaProjectMutation).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    projectId: project.id,
+                    expectedUpdatedAt: project.updatedAt,
+                    projectPatch: { title: "仅改项目标题" },
+                }),
+            );
+            expect(JSON.stringify(mocks.saveDramaProjectMutation.mock.calls[0][0])).not.toContain("大型历史归档");
+            expect(mocks.saveDramaProject).not.toHaveBeenCalled();
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it("saves frame generation state through its scoped endpoint without a project submission", async () => {
         const frameStateSave = deferred<{ projectId: string; episodeId: string; shotId: string; updatedAt: string; shot: DramaProject["episodes"][number]["shots"][number] }>();
-        mocks.saveDramaProject.mockReturnValueOnce(fullProjectSave.promise);
-        mocks.updateDramaStoryboardFrameGenerationState.mockReturnValue(frameStateSave.promise);
+        const frameStateRequestStarted = deferred<void>();
+        mocks.updateDramaStoryboardFrameGenerationState.mockImplementation(() => {
+            frameStateRequestStarted.resolve();
+            return frameStateSave.promise;
+        });
         useUserStore.getState().setUser(user("user-a"));
         const project = dramaProject("drama-a", "用户 A 短剧");
         project.episodes[0].shots = [dramaShot("shot-one")];
         useDramaStore.setState({ projects: [project], hydrated: true, hydratedUserId: "user-a" });
 
-        const fullSave = useDramaStore.getState().saveProjectNow(project.id);
-        await Promise.resolve();
         const frameSave = useDramaStore.getState().saveStoryboardFrameGenerationStateNow(project.id, project.episodes[0].id, project.episodes[0].shots[0].id, { frameType: "all_frames", frameIds: ["frame-one"] });
-        await Promise.resolve();
+        await frameStateRequestStarted.promise;
 
         expect(mocks.updateDramaStoryboardFrameGenerationState).toHaveBeenCalledWith(project.id, project.episodes[0].id, project.episodes[0].shots[0].id, { frameType: "all_frames", frameIds: ["frame-one"] });
 
-        fullProjectSave.resolve(project);
         frameStateSave.resolve({ projectId: project.id, episodeId: project.episodes[0].id, shotId: project.episodes[0].shots[0].id, updatedAt: "2026-09-15T00:00:01.000Z", shot: project.episodes[0].shots[0] });
-        await Promise.all([fullSave, frameSave]);
+        await frameSave;
+        expect(mocks.saveDramaProject).not.toHaveBeenCalled();
     });
 
     it("commits a locked production plan after cancelling a queued autosave", async () => {
-        mocks.saveDramaProject.mockImplementation(async (value: DramaProject) => value);
         useUserStore.getState().setUser(user("user-a"));
         const project = dramaProject("drama-a", "用户 A 短剧");
         useDramaStore.setState({ projects: [project], hydrated: true, hydratedUserId: "user-a" });
@@ -532,14 +571,16 @@ describe("client store session isolation", () => {
             },
         }));
 
-        expect(mocks.saveDramaProject).toHaveBeenCalledTimes(1);
+        expect(mocks.saveDramaProjectMutation).toHaveBeenCalledTimes(1);
+        expect(mocks.saveDramaProjectMutation.mock.calls[0][0]).toEqual(
+            expect.objectContaining({ projectPatch: expect.objectContaining({ productionBible: expect.objectContaining({ productionPlan: expect.objectContaining({ lockedAt: "2026-08-31T00:00:00.000Z" }) }) }) }),
+        );
         expect(saved.productionBible?.productionPlan).toEqual(expect.objectContaining({ lockedAt: "2026-08-31T00:00:00.000Z", source: "manual", video: expect.objectContaining({ resolution: "480p" }) }));
     });
 
     it("keeps the latest locked production plan when a draft edit is immediately followed by lock save", async () => {
         vi.useFakeTimers();
         try {
-            mocks.saveDramaProject.mockImplementation(async (value: DramaProject) => value);
             useUserStore.getState().setUser(user("user-a"));
             const project = dramaProject("drama-a", "用户 A 短剧");
             useDramaStore.setState({ projects: [project], hydrated: true, hydratedUserId: "user-a" });
@@ -568,7 +609,7 @@ describe("client store session isolation", () => {
 
             await vi.advanceTimersByTimeAsync(250);
 
-            expect(mocks.saveDramaProject).toHaveBeenCalledTimes(1);
+            expect(mocks.saveDramaProjectMutation).toHaveBeenCalledTimes(1);
             expect(saved.productionBible?.productionPlan).toEqual(expect.objectContaining({ lockedAt: "2026-08-31T00:00:00.000Z", source: "manual", video: expect.objectContaining({ resolution: "480p" }) }));
             expect(useDramaStore.getState().projects[0].productionBible?.productionPlan).toEqual(expect.objectContaining({ lockedAt: "2026-08-31T00:00:00.000Z", video: expect.objectContaining({ resolution: "480p" }) }));
         } finally {
@@ -668,9 +709,9 @@ describe("client store session isolation", () => {
         try {
             useUserStore.getState().setUser(user("user-a"));
             const project = dramaProject("drama-a", "当前版本");
-            const pendingSave = deferred<DramaProject>();
+            const pendingSave = deferred<{ projectId: string; updatedAt: string }>();
             const restored = { ...project, title: "历史版本", updatedAt: new Date(Date.now() + 1000).toISOString() };
-            mocks.saveDramaProject.mockReturnValueOnce(pendingSave.promise);
+            mocks.saveDramaProjectMutation.mockReturnValueOnce(pendingSave.promise);
             mocks.restoreDramaProjectVersion.mockResolvedValueOnce(restored);
             useDramaStore.setState({ projects: [project], hydrated: true, hydratedUserId: "user-a" });
 
@@ -679,7 +720,8 @@ describe("client store session isolation", () => {
             const restoring = useDramaStore.getState().restoreVersion(project.id, "version-1");
 
             expect(mocks.restoreDramaProjectVersion).not.toHaveBeenCalled();
-            pendingSave.resolve({ ...project, title: "待保存版本" });
+            const pendingMutation = mocks.saveDramaProjectMutation.mock.calls[0][0] as { updatedAt: string };
+            pendingSave.resolve({ projectId: project.id, updatedAt: pendingMutation.updatedAt });
             await restoring;
 
             expect(mocks.restoreDramaProjectVersion).toHaveBeenCalledWith(project.id, "version-1");

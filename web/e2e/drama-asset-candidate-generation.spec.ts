@@ -50,7 +50,14 @@ test("project ratio can be chosen at creation and changed for an existing projec
             supplierPrompt: "构图与画幅：9:16 竖向单视角场景全景，石墙、旧木长案，无人物、无文字。",
             references: [],
         };
-        const sceneSave = await request.patch(`/api/drama/projects/${projectId}`, { data: { ...saved, scenes: [scene] } });
+        const sceneSave = await request.patch(`/api/drama/projects/${projectId}/mutations`, {
+            data: {
+                projectId,
+                expectedUpdatedAt: saved.updatedAt,
+                updatedAt: new Date(Date.parse(saved.updatedAt) + 1).toISOString(),
+                assets: { scenes: { upsert: [scene] } },
+            },
+        });
         expect(sceneSave.ok(), await sceneSave.text()).toBe(true);
         await page.reload({ waitUntil: "domcontentloaded" });
         await page.getByRole("button", { name: "打开项目资产" }).click();
@@ -112,19 +119,25 @@ for (const ratio of ["9:16", "16:9", "1080x1920"] as const) {
         const editedPrompt = `构图与画幅：${editedRatio} ${editedOrientation}全景；保留供应商手工说明`;
 
         try {
-            const saved = await request.patch(`/api/drama/projects/${project.id}`, {
+            const saved = await request.patch(`/api/drama/projects/${project.id}/mutations`, {
                 data: {
-                    ...project,
-                    scenes: [
-                        {
-                            id: sceneId,
-                            name: "场景提示词画幅测试",
-                            description: "石质测站，固定入口与长案",
-                            profile: { visualIdentity: "石质空间，入口与长案位置固定", styling: "粗粝石面与旧木长案", colorPalette: "冷灰", consistencyRules: "透视和空间拓扑保持一致" },
-                            supplierPrompt: persistedPrompt,
-                            references: [],
+                    projectId: project.id,
+                    expectedUpdatedAt: project.updatedAt,
+                    updatedAt: new Date(Date.parse(project.updatedAt) + 1).toISOString(),
+                    assets: {
+                        scenes: {
+                            upsert: [
+                                {
+                                    id: sceneId,
+                                    name: "场景提示词画幅测试",
+                                    description: "石质测站，固定入口与长案",
+                                    profile: { visualIdentity: "石质空间，入口与长案位置固定", styling: "粗粝石面与旧木长案", colorPalette: "冷灰", consistencyRules: "透视和空间拓扑保持一致" },
+                                    supplierPrompt: persistedPrompt,
+                                    references: [],
+                                },
+                            ],
                         },
-                    ],
+                    },
                 },
             });
             expect(saved.ok(), await saved.text()).toBe(true);
@@ -232,18 +245,29 @@ test("生成候选通过真实图片任务链路完成", async ({ page, request 
     expect(created.ok(), await created.text()).toBe(true);
     const project = ((await created.json()) as { data: { project: DramaProject } }).data.project;
     const characterId = "character-real-candidate-e2e";
-    const saved = await request.patch(`/api/drama/projects/${project.id}`, {
+    const saved = await request.patch(`/api/drama/projects/${project.id}/mutations`, {
         data: {
-            ...project,
-            characters: [
-                {
-                    id: characterId,
-                    name: "真实候选角色",
-                    description: "一名需要保持身份一致的暗黑学院青年角色",
-                    profile: { visualIdentity: "黑发青年，黑金学院长袍，完整全身设定图" },
-                    references: [],
+            projectId: project.id,
+            expectedUpdatedAt: project.updatedAt,
+            updatedAt: new Date(Date.parse(project.updatedAt) + 1).toISOString(),
+            assets: {
+                characters: {
+                    upsert: [
+                        {
+                            id: characterId,
+                            name: "真实候选角色",
+                            description: "一名需要保持身份一致的暗黑学院青年角色",
+                            profile: {
+                                visualIdentity: "黑发青年，黑金学院长袍，完整全身设定图",
+                                styling: "黑金学院长袍，保持版型一致",
+                                colorPalette: "黑金",
+                                consistencyRules: "保持同一身份、服装与比例",
+                            },
+                            references: [],
+                        },
+                    ],
                 },
-            ],
+            },
         },
     });
     expect(saved.ok(), await saved.text()).toBe(true);
@@ -251,7 +275,12 @@ test("生成候选通过真实图片任务链路完成", async ({ page, request 
     const pageErrors: string[] = [];
     const submittedPrompts: string[] = [];
     const submittedSizes: string[] = [];
+    const projectPatchBodies: unknown[] = [];
     page.on("pageerror", (error) => pageErrors.push(error.message));
+    page.on("request", (candidate) => {
+        if (candidate.method() !== "PATCH" || new URL(candidate.url()).pathname !== `/api/drama/projects/${project.id}`) return;
+        projectPatchBodies.push(candidate.postDataJSON());
+    });
     await page.route(/\/api\/agent\/prompt-optimization$/, (route) =>
         route.fulfill({
             json: {
@@ -318,6 +347,7 @@ test("生成候选通过真实图片任务链路完成", async ({ page, request 
     await reopenedDrawer.getByRole("button", { name: "生成候选" }).click();
     await expect(page.getByText(/已生成 1 张候选图/)).toBeVisible({ timeout: 90_000 });
     await expect(reopenedDrawer.locator('img[alt="AI 候选图"]')).toHaveCount(1);
+    expect(projectPatchBodies).toEqual([]);
     await expect
         .poll(
             async () => {

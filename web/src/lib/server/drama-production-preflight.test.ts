@@ -89,6 +89,56 @@ describe("drama production preflight", () => {
         expect(codes).toEqual(expect.arrayContaining(["PROMPT_CHARACTER_REFERENCE", "PROMPT_PROP_REFERENCE"]));
     });
 
+    it("identifies which prompt field introduced an unbound character name", () => {
+        const project = fixture();
+        project.characters.push({ id: "character-two", code: "C02", name: "陆川", description: "", activeEpisodeCodes: ["E01"] });
+        project.episodes[0].shots[0].imagePrompt = "陆川角色基准图";
+        project.episodes[0].shots[0].videoPrompt = "罗衡在雨中的测站查看罗盘";
+
+        const issue = preflightDramaProduction(project, project.episodes[0]).issues.find((item) => item.code === "PROMPT_CHARACTER_REFERENCE");
+
+        expect(issue?.message).toContain("静态画面提示词");
+        expect(issue?.message).not.toContain("视频提示词出现角色");
+    });
+
+    it("does not treat characters named only in video dialogue or edit continuity as visible subjects", () => {
+        const project = fixture();
+        project.characters.push({ id: "character-two", code: "C02", name: "罗衡", description: "", activeEpisodeCodes: [] });
+        project.episodes[0].shots[0].videoPrompt = [
+            "段间入口：上一段的罗衡手掌遮住录像画面。",
+            "### 镜头 01 | 0–15秒 | 中景 | 50mm | 平视 | 固定机位 | 人物镜头",
+            "场景：课题组档案室",
+            "画面内容：陆川坐在电脑前，手指按下暂停键，屏幕保持黑帧。",
+            "台词：无",
+            "人声：旧录音中的罗衡说话声从电脑扬声器传出。",
+            "音效：风扇声。",
+            "剪辑承接：接住上一段罗衡的现场影像。",
+        ].join("\n");
+
+        const issues = preflightDramaProduction(project, project.episodes[0]).issues;
+
+        expect(issues.some((issue) => ["INACTIVE_CHARACTER", "PROMPT_CHARACTER_REFERENCE"].includes(issue.code) && issue.assetId === "character-two")).toBe(false);
+    });
+
+    it("does not warn that directly bound assets are missing merely because the optional manifest omits them", () => {
+        const project = fixture();
+        project.episodes[0].shots[0].framePlan!.referenceManifest = [{ alias: "@场景", role: "scene_anchor", purpose: "场景基准", assetId: "scene-one" }];
+
+        const issues = preflightDramaProduction(project, project.episodes[0]).issues;
+
+        expect(issues.some((item) => item.code.startsWith("REFERENCE_MANIFEST_"))).toBe(false);
+    });
+
+    it("does not duplicate a missing asset blocker with a prop-reference warning", () => {
+        const project = fixture();
+        project.episodes[0].shots[0].propIds = ["prop-from-old-project"];
+
+        const issues = preflightDramaProduction(project, project.episodes[0]).issues;
+
+        expect(issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "PROP_REFERENCE", severity: "blocking" })]));
+        expect(issues.some((item) => item.code === "REFERENCE_MANIFEST_PROP" && item.assetId === "prop-from-old-project")).toBe(false);
+    });
+
     it("does not report a currently referenced character as inactive", () => {
         const project = fixture();
         project.characters.push({ id: "character-two", code: "C02", name: "Rifa", description: "", activeEpisodeCodes: [] });
@@ -112,15 +162,52 @@ describe("drama production preflight", () => {
         expect(issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "PERFORMANCE_PLAN_MISSING", severity: "warning" }), expect.objectContaining({ code: "LIGHTING_PLAN_MISSING", severity: "warning" })]));
     });
 
-    it("blocks a reference manifest whose scene or declared assets do not match the shot", () => {
+    it("does not report optional manifest omissions when shot bindings already supply the images", () => {
         const project = fixture();
         project.episodes[0].shots[0].framePlan!.referenceManifest = [
             { alias: "@场景", role: "scene_anchor", purpose: "错误场景", assetId: "scene-wrong" },
             { alias: "@角色", role: "character_anchor", purpose: "角色基准", assetId: "character-one" },
         ];
         const issues = preflightDramaProduction(project, project.episodes[0]).issues;
-        expect(issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "REFERENCE_MANIFEST_SCENE", severity: "warning" })]));
-        expect(issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "REFERENCE_MANIFEST_PROP", severity: "warning", assetId: "prop-one" })]));
+        expect(issues.some((issue) => issue.code.startsWith("REFERENCE_MANIFEST_"))).toBe(false);
+    });
+
+    it("does not infer a required visible reaction from synopsis or continuity prose", () => {
+        const project = fixture();
+        const shot = project.episodes[0].shots[0];
+        project.characters.push({ id: "character-two", code: "C02", name: "陆川", description: "", activeEpisodeCodes: ["E01"] });
+        shot.characterIds.push("character-two");
+        shot.description = "陆川眉心收紧，视线移向旧报告。";
+        shot.videoPrompt = [
+            "### 镜头 01 | 0-7秒 | 道具近景 | 85mm | 俯拍 | 固定机位 | 道具镜头",
+            "场景：档案室。",
+            "画面内容：硬盘停在桌面中央，状态灯亮起。",
+            "光影：左侧窗光落在哑光硬盘外壳。",
+            "色调：冷灰。",
+            "台词：无",
+            "人声：无",
+            "音效：风扇低鸣。",
+        ].join("\n");
+        shot.fieldOrigins = { videoPrompt: "package", framePlan: "package" };
+        shot.framePlan!.frames = [
+            { id: "frame-one", sequenceIndex: 1, startSecond: 0, endSecond: 7, actionPrompt: "硬盘状态灯亮起", imagePrompt: "桌面上的硬盘" },
+            { id: "frame-two", sequenceIndex: 2, startSecond: 7, endSecond: 15, actionPrompt: "状态灯持续闪烁", imagePrompt: "硬盘指示灯近景" },
+        ];
+
+        const issues = preflightDramaProduction(project, project.episodes[0]).issues;
+
+        expect(issues.some((issue) => issue.code === "CUT_INFORMATION_DIVERSITY" && issue.message.includes("陆川"))).toBe(false);
+        expect(issues.some((issue) => issue.code === "COMPOSITION_CONTRACT" && issue.message.includes("陆川"))).toBe(false);
+    });
+
+    it("ignores a character explicitly excluded from visible prompt content", () => {
+        const project = fixture();
+        project.characters.push({ id: "character-two", code: "C02", name: "陆川", description: "", activeEpisodeCodes: [] });
+        project.episodes[0].shots[0].videoPrompt = "### 镜头 01 | 0-15秒 | 全景 | 35mm | 平视 | 固定机位 | 非人物镜头\n场景：雨雾测站。\n画面内容：石面与罗盘留在画面中央，陆川仅为其他场次人物，不入画。";
+
+        const issues = preflightDramaProduction(project, project.episodes[0]).issues;
+
+        expect(issues.some((issue) => issue.code === "PROMPT_CHARACTER_REFERENCE" && issue.assetId === "character-two")).toBe(false);
     });
 
     it("does not treat characters named only inside negative prompt constraints as references", () => {

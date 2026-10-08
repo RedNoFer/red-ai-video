@@ -49,6 +49,7 @@ import { resolveDramaShotDuration } from "@/lib/server/drama-shot-config";
 import {
     dramaTimeRangePattern,
     extractDramaVideoPromptSection,
+    extractDramaVideoPromptCards,
     hasConcreteDramaCameraDirection,
     isGenericDramaDetail,
     validateDramaCameraPlan,
@@ -421,7 +422,7 @@ function mergeEpisode(
             sceneId: shot.locationCode ? locationIds.get(shot.locationCode) : undefined,
             propIds: shot.propCodes.map((code) => propIds.get(code)).filter((value): value is string => Boolean(value)),
             clueIds: shot.clueCodes.map((code) => clueIds.get(code)).filter((value): value is string => Boolean(value)),
-            utterances: shot.utterances.map((item) => ({ ...item, ...(item.characterId ? { characterId: characterIds.get(item.characterId) || item.characterId } : {}) })),
+            utterances: shot.utterances.map((item) => ({ ...item, ...(item.characterId ? { characterId: characterIds.get(item.characterId) } : {}) })),
             entryState: remapContinuityState(shot.entryState, characterIds, propIds),
             exitState: remapContinuityState(shot.exitState, characterIds, propIds),
             storySceneId: undefined,
@@ -511,24 +512,33 @@ function preserveManualFramePlan(framePlan: NonNullable<DramaShot["framePlan"]>)
 
 function remapFramePlan(framePlan: DramaShot["framePlan"], characterIds: Map<string, string>, locationIds: Map<string, string>, propIds: Map<string, string>, clueIds: Map<string, string>, shotIds: Map<string, string>): DramaShot["framePlan"] {
     if (!framePlan?.referenceManifest) return framePlan;
-    const remapAsset = (assetId: string) => characterIds.get(assetId) || locationIds.get(assetId) || propIds.get(assetId) || clueIds.get(assetId) || assetId;
+    const assetsByRole = { character_anchor: characterIds, scene_anchor: locationIds, prop_anchor: propIds };
     return {
         ...framePlan,
-        referenceManifest: framePlan.referenceManifest.map((item) => ({
-            ...item,
-            assetId: item.assetId ? remapAsset(item.assetId) : item.assetId,
-            shotId: item.shotId ? shotIds.get(item.shotId) || item.shotId : item.shotId,
-        })),
+        referenceManifest: framePlan.referenceManifest.flatMap((item) => {
+            if (item.role in assetsByRole) {
+                const assetId = item.assetId ? assetsByRole[item.role as keyof typeof assetsByRole].get(item.assetId) : undefined;
+                return assetId ? [{ ...item, assetId, ...(item.shotId ? { shotId: shotIds.get(item.shotId) } : {}) }] : [];
+            }
+            const { assetId: _unmappedAssetId, ...evidence } = item;
+            return [{ ...evidence, ...(item.shotId ? { shotId: shotIds.get(item.shotId) } : {}) }];
+        }),
     };
 }
 
 function remapContinuityState(state: DramaShot["entryState"], characterIds: Map<string, string>, propIds: Map<string, string>): DramaShot["entryState"] {
     if (!state) return undefined;
-    const remap = (assetId: string) => characterIds.get(assetId) || propIds.get(assetId) || assetId;
+    const remapHolder = (holderId?: string) => (holderId === "environment" ? holderId : holderId ? characterIds.get(holderId) || propIds.get(holderId) : undefined);
     return {
         ...state,
-        characters: state.characters.map((entity) => ({ ...entity, assetId: remap(entity.assetId), holderId: entity.holderId ? remap(entity.holderId) : undefined })),
-        props: state.props.map((entity) => ({ ...entity, assetId: remap(entity.assetId), holderId: entity.holderId ? remap(entity.holderId) : undefined })),
+        characters: state.characters.flatMap((entity) => {
+            const assetId = characterIds.get(entity.assetId);
+            return assetId ? [{ ...entity, assetId, holderId: remapHolder(entity.holderId) }] : [];
+        }),
+        props: state.props.flatMap((entity) => {
+            const assetId = propIds.get(entity.assetId);
+            return assetId ? [{ ...entity, assetId, holderId: remapHolder(entity.holderId) }] : [];
+        }),
     };
 }
 
@@ -781,20 +791,7 @@ function normalizeProductionPackage(value: unknown, options: DramaProductionPack
         ),
     };
     const activeCodes = (items: DramaProductionPackageAsset[], episodeCode: string) => new Set(items.filter((item) => !item.activeEpisodeCodes?.length || item.activeEpisodeCodes.includes(episodeCode)).map((item) => item.code));
-    const normalizedEpisodes = episodes.map((episode) => {
-        const characters = activeCodes(normalizedAssets.characters, episode.code);
-        const props = activeCodes(normalizedAssets.props, episode.code);
-        const clues = activeCodes(normalizedAssets.clues, episode.code);
-        return {
-            ...episode,
-            shots: episode.shots.map((shot) => ({
-                ...shot,
-                characterCodes: shot.characterCodes.filter((code) => characters.has(code)),
-                propCodes: shot.propCodes.filter((code) => props.has(code)),
-                clueCodes: shot.clueCodes.filter((code) => clues.has(code)),
-            })),
-        };
-    });
+    const normalizedEpisodes = episodes.map((episode) => sanitizeImportedEpisodeReferences(episode, normalizedAssets, activeCodes, options));
     const strictContinuity = Boolean(options.strictContinuity || options.requireAuthoringQuality || rawAuthoring.source === "executeDramaScriptRun");
     const continuityIssues = strictContinuity ? validateDramaContinuityEdges(normalizedEpisodes) : [];
     if (continuityIssues.length) {
@@ -878,7 +875,7 @@ function normalizeProductionPackage(value: unknown, options: DramaProductionPack
             allowImportWarnings: options.allowImportWarnings,
             importWarnings: options.importWarnings,
         });
-    if (!normalizationOptions.standaloneImport) validateSplitShotFramePlans(currentStyleEpisodes, options.allowImportWarnings);
+    if (!normalizationOptions.standaloneImport) validateSplitShotFramePlans(currentStyleEpisodes, options);
     return result;
 }
 
@@ -1337,7 +1334,6 @@ function validateProductionPackageCompleteness(value: Record<string, unknown>, o
     const dialogueTiming = normalizeDialogueTimingPolicy(bible.dialogueTiming);
     const standaloneAuthoring = text(object(value.authoring).source) === "codex-standalone";
     if (!plan) throw new DramaProductionPackageError("制作包缺少 productionPlan");
-    const referencesDisabled = plan?.references.minImages === 0 && plan.references.maxImages === 0;
     if (options.requireAgentAuthoring) {
         const authoring = object(value.authoring);
         if (authoring.source !== "executeDramaScriptRun") throw new DramaProductionPackageError("Agent 制作包缺少 authoring provenance，必须由 executeDramaScriptRun 生成");
@@ -1403,7 +1399,11 @@ function validateProductionPackageCompleteness(value: Record<string, unknown>, o
                     }
                 }
             }
-            if (!text(item.locationCode) || !locations.has(text(item.locationCode))) throw new DramaProductionPackageError(`${label}缺少有效场景资产引用`);
+            if (!text(item.locationCode) || !locations.has(text(item.locationCode))) {
+                const message = `${label}缺少有效场景资产引用`;
+                if (!options.allowImportWarnings) throw new DramaProductionPackageError(message);
+                if (!options.importWarnings?.some((warning) => warning.startsWith(`${label}引用的场景资产`))) options.importWarnings?.push(`${message}；已允许导入，生成前请补齐场景绑定`);
+            }
             for (const code of strings(item.characterCodes)) if (!characters.has(code)) throw new DramaProductionPackageError(`${label}引用了不存在的角色资产 ${code}`);
             for (const code of strings(item.propCodes)) if (!props.has(code)) throw new DramaProductionPackageError(`${label}引用了不存在的道具资产 ${code}`);
             if (options.validateVideoPrompt) {
@@ -1413,29 +1413,6 @@ function validateProductionPackageCompleteness(value: Record<string, unknown>, o
             if (!options.standaloneImport && /(?:运镜|焦段|推近|拉远|摇镜|跟拍|滑轨|环绕|吊臂|慢推|慢拉|后拉|时间段|时间轴|动作过程|对白|声音|口型)/u.test(dramaStaticFramePositiveText(text(item.imagePrompt))))
                 throw new DramaProductionPackageError(`${label}的 imagePrompt 必须是单一静态画面，不能包含运镜、时间过程、对白或声音`);
             if (!options.standaloneImport && /(?:本内部镜头只执行|内部 ID|assetId|参考图清单|URL)/u.test(text(item.videoPrompt))) throw new DramaProductionPackageError(`${label}的 videoPrompt 不能包含内部说明、资产 ID、URL 或参考图清单`);
-            if (!options.standaloneImport && !referencesDisabled) {
-                const manifest = array(object(item.framePlan).referenceManifest);
-                const has = (role: string, code: string) => manifest.some((entry) => object(entry).role === role && text(object(entry).assetId) === code);
-                if (!has("scene_anchor", text(item.locationCode))) {
-                    const message = `${label}的 referenceManifest 缺少当前场景锚点`;
-                    if (!options.allowImportWarnings) throw new DramaProductionPackageError(message);
-                    options.importWarnings?.push(`${message}；已允许导入，后续生成前需要补充场景参考绑定`);
-                }
-                for (const code of strings(item.characterCodes)) {
-                    if (!has("character_anchor", code)) {
-                        const message = `${label}的 referenceManifest 缺少角色 ${code} 锚点`;
-                        if (!options.allowImportWarnings) throw new DramaProductionPackageError(message);
-                        options.importWarnings?.push(`${message}；已允许导入，后续生成前需要补充角色参考绑定`);
-                    }
-                }
-                for (const code of strings(item.propCodes)) {
-                    if (!has("prop_anchor", code)) {
-                        const message = `${label}的 referenceManifest 缺少道具 ${code} 锚点`;
-                        if (!options.allowImportWarnings) throw new DramaProductionPackageError(message);
-                        options.importWarnings?.push(`${message}；已允许导入，后续生成前需要补充道具参考绑定`);
-                    }
-                }
-            }
         }
     }
 }
@@ -1450,6 +1427,153 @@ function validateRawProductionPlan(bible: Record<string, unknown>) {
     if (rawInternalCutPolicy !== undefined && !["adaptive", "dense-30s"].includes(String(rawInternalCutPolicy))) throw new DramaProductionPackageError("制作包内部切镜策略无效");
     if (rawFramePolicy !== undefined && !["fixed-4", "fixed-5", "agent"].includes(String(rawFramePolicy))) throw new DramaProductionPackageError("制作包帧数策略无效");
     if (rawFramePolicy === "agent" && rawVideo.frameCount !== undefined) throw new DramaProductionPackageError("Agent 智能切分方案不能携带固定帧数");
+}
+
+function packageReferenceIssue(options: DramaProductionPackageNormalizationOptions, label: string, message: string) {
+    const detail = `${label}${message}`;
+    if (!options.allowImportWarnings) throw new DramaProductionPackageError(detail);
+    options.importWarnings?.push(`${detail}；已允许导入，请在生产前复核并修复引用`);
+}
+
+function sanitizeImportedEpisodeReferences(
+    episode: DramaProductionPackageEpisode,
+    assets: DramaProductionPackageV1["assets"],
+    activeCodes: (items: DramaProductionPackageAsset[], episodeCode: string) => Set<string>,
+    options: DramaProductionPackageNormalizationOptions,
+) {
+    const characters = activeCodes(assets.characters, episode.code);
+    const locations = activeCodes(assets.locations, episode.code);
+    const props = activeCodes(assets.props, episode.code);
+    const clues = activeCodes(assets.clues, episode.code);
+    const allCharacters = new Set(assets.characters.map((asset) => asset.code));
+    const allLocations = new Set(assets.locations.map((asset) => asset.code));
+    const allProps = new Set(assets.props.map((asset) => asset.code));
+    const allClues = new Set(assets.clues.map((asset) => asset.code));
+    const shotCodes = new Set(episode.shots.map((shot) => shot.code));
+    const labelFor = (shot: DramaProductionPackageEpisode["shots"][number]) => `${episode.code}/${shot.code || shot.title}`;
+    const warnInactive = (code: string, all: Set<string>, active: Set<string>, kind: string, label: string) => {
+        if (all.has(code) && !active.has(code)) packageReferenceIssue(options, label, `连续性状态引用的${kind}资产 ${code} 标记为未在本集启用；资产仍有效，已保留绑定`);
+    };
+    const keepCodes = (codes: string[], available: Set<string>, kind: string, label: string) =>
+        codes.filter((code) => {
+            if (available.has(code)) return true;
+            const all = kind.includes("角色") ? allCharacters : kind.includes("道具") ? allProps : kind.includes("线索") ? allClues : allLocations;
+            if (all.has(code)) {
+                packageReferenceIssue(options, label, `引用的${kind}资产 ${code} 标记为未在本集启用；资产仍有效，已保留绑定`);
+                return true;
+            }
+            packageReferenceIssue(options, label, `引用的${kind}资产 ${code} 不存在或未在本集启用`);
+            return false;
+        });
+    const sanitizeState = (state: DramaShot["entryState"], label: string): DramaShot["entryState"] => {
+        if (!state) return state;
+        const holder = (holderId?: string) => {
+            if (!holderId || holderId === "environment") return holderId;
+            if (allCharacters.has(holderId)) {
+                warnInactive(holderId, allCharacters, characters, "角色", label);
+                return holderId;
+            }
+            if (allProps.has(holderId)) {
+                warnInactive(holderId, allProps, props, "道具", label);
+                return holderId;
+            }
+            packageReferenceIssue(options, label, `连续性状态引用了不存在的持有人资产 ${holderId}`);
+            return undefined;
+        };
+        return {
+            ...state,
+            characters: state.characters.flatMap((entity) => {
+                if (!allCharacters.has(entity.assetId)) {
+                    packageReferenceIssue(options, label, `连续性状态引用了不存在或未启用的角色资产 ${entity.assetId}`);
+                    return [];
+                }
+                warnInactive(entity.assetId, allCharacters, characters, "角色", label);
+                return [{ ...entity, holderId: holder(entity.holderId) }];
+            }),
+            props: state.props.flatMap((entity) => {
+                if (!allProps.has(entity.assetId)) {
+                    packageReferenceIssue(options, label, `连续性状态引用了不存在或未启用的道具资产 ${entity.assetId}`);
+                    return [];
+                }
+                warnInactive(entity.assetId, allProps, props, "道具", label);
+                return [{ ...entity, holderId: holder(entity.holderId) }];
+            }),
+        };
+    };
+    const roleAssets = { character_anchor: allCharacters, scene_anchor: allLocations, prop_anchor: allProps };
+    const shots = episode.shots.map((shot) => {
+        const label = labelFor(shot);
+        const locationCode = shot.locationCode && allLocations.has(shot.locationCode) ? shot.locationCode : undefined;
+        if (locationCode && !locations.has(locationCode)) packageReferenceIssue(options, label, `引用的场景资产 ${locationCode} 标记为未在本集启用；资产仍有效，已保留绑定`);
+        if (shot.locationCode && !locationCode) packageReferenceIssue(options, label, `引用的场景资产 ${shot.locationCode} 不存在或未在本集启用`);
+        const utterances = shot.utterances.map((utterance) => {
+            if (!utterance.characterId || allCharacters.has(utterance.characterId)) {
+                if (utterance.characterId && !characters.has(utterance.characterId)) packageReferenceIssue(options, label, `对白角色引用 ${utterance.characterId} 标记为未在本集启用；资产仍有效，已保留`);
+                return utterance;
+            }
+            packageReferenceIssue(options, label, `对白角色引用 ${utterance.characterId} 不存在或未在本集启用`);
+            const { characterId: _staleCharacterId, ...safeUtterance } = utterance;
+            return safeUtterance;
+        });
+        const referenceManifest = shot.framePlan.referenceManifest?.flatMap((item) => {
+            let safeItem = item;
+            if (item.role in roleAssets) {
+                const roleAssetsForItem = roleAssets[item.role as keyof typeof roleAssets];
+                if (item.assetId && roleAssetsForItem.has(item.assetId)) {
+                    const activeRoleAssets = item.role === "character_anchor" ? characters : item.role === "scene_anchor" ? locations : props;
+                    if (!activeRoleAssets.has(item.assetId)) packageReferenceIssue(options, label, `参考图 ${item.alias} 的资产 ${item.assetId} 标记为未在本集启用；资产仍有效，已保留`);
+                } else {
+                    packageReferenceIssue(options, label, `参考图 ${item.alias} 的 ${item.role} 资产引用 ${item.assetId || "为空"} 无效`);
+                    return [];
+                }
+            } else if (item.assetId) {
+                packageReferenceIssue(options, label, `参考图 ${item.alias} 使用了不适用于 ${item.role} 的资产 ID ${item.assetId}`);
+                const { assetId: _wrongRoleAssetId, ...withoutAssetId } = safeItem;
+                safeItem = withoutAssetId;
+            }
+            if (item.shotId && !shotCodes.has(item.shotId)) {
+                packageReferenceIssue(options, label, `参考图 ${item.alias} 引用了不存在的片段 ${item.shotId}`);
+                safeItem = { ...safeItem, shotId: undefined };
+            }
+            if (item.frameEvidenceId) {
+                packageReferenceIssue(options, label, `参考图 ${item.alias} 引用了不会随制作包导入的帧证据 ${item.frameEvidenceId}`);
+                const { frameEvidenceId: _unmappedFrameEvidenceId, ...withoutFrameEvidenceId } = safeItem;
+                safeItem = withoutFrameEvidenceId;
+            }
+            if (!(item.role in roleAssets) && !safeItem.assetId && !safeItem.frameEvidenceId && !safeItem.shotId) {
+                if (!item.assetId && !item.frameEvidenceId && !item.shotId) packageReferenceIssue(options, label, `参考图 ${item.alias} 没有可导入的资产或镜头引用`);
+                return [];
+            }
+            return [safeItem];
+        });
+        if (shot.sourceAssetIds?.length) packageReferenceIssue(options, label, `镜头引用了未随制作包导入的来源素材 ${shot.sourceAssetIds.join("、")}`);
+        return {
+            ...shot,
+            characterCodes: keepCodes(shot.characterCodes, characters, "角色", label),
+            propCodes: keepCodes(shot.propCodes, props, "道具", label),
+            clueCodes: keepCodes(shot.clueCodes, clues, "线索", label),
+            locationCode,
+            utterances,
+            entryState: sanitizeState(shot.entryState, label),
+            exitState: sanitizeState(shot.exitState, label),
+            framePlan: { ...shot.framePlan, ...(referenceManifest ? { referenceManifest } : {}) },
+            sourceAssetIds: [],
+        };
+    });
+    const continuityEdges = episode.continuityEdges.map((edge) => ({
+        ...edge,
+        carryCharacterIds: keepCodes(edge.carryCharacterIds, characters, "连续性角色", `${episode.code}/${edge.fromShotCode}→${edge.toShotCode}`),
+        carryPropIds: keepCodes(edge.carryPropIds, props, "连续性道具", `${episode.code}/${edge.fromShotCode}→${edge.toShotCode}`),
+    }));
+    const storyScenes = episode.storyScenes.map((scene) => {
+        if (!scene.locationCode || allLocations.has(scene.locationCode)) {
+            if (scene.locationCode && !locations.has(scene.locationCode)) packageReferenceIssue(options, `${episode.code}/${scene.code}`, `引用的场景资产 ${scene.locationCode} 标记为未在本集启用；资产仍有效，已保留绑定`);
+            return scene;
+        }
+        packageReferenceIssue(options, `${episode.code}/${scene.code}`, `引用的场景资产 ${scene.locationCode} 不存在或未在本集启用`);
+        return { ...scene, locationCode: undefined };
+    });
+    return { ...episode, shots, continuityEdges, storyScenes };
 }
 
 /**
@@ -2353,16 +2477,36 @@ function inferAssetPalette(source: string) {
 
 function collectWarnings(value: DramaProductionPackageV1) {
     const warnings: string[] = [];
-    const assetCodes = new Set([...value.assets.characters, ...value.assets.locations, ...value.assets.props, ...value.assets.clues].map((asset) => asset.code));
+    const codesByRole = {
+        角色: new Set(value.assets.characters.map((asset) => asset.code)),
+        场景: new Set(value.assets.locations.map((asset) => asset.code)),
+        道具: new Set(value.assets.props.map((asset) => asset.code)),
+        线索: new Set(value.assets.clues.map((asset) => asset.code)),
+    };
     for (const episode of value.episodes) {
         for (const shot of episode.shots) {
-            for (const code of [...shot.characterCodes, ...shot.propCodes, ...shot.clueCodes, ...(shot.locationCode ? [shot.locationCode] : [])]) if (!assetCodes.has(code)) warnings.push(`${episode.code}/${shot.code} 引用了不存在的资产 ${code}`);
-            const visibleText = [shot.imagePrompt, ...(shot.framePlan?.frames || []).map((frame) => frame.imagePrompt), ...shot.videoPrompt.split("\n").filter((line) => /^\s*画面内容[：:]/u.test(line))].join("\n");
+            for (const [kind, codes] of [
+                ["角色", shot.characterCodes],
+                ["场景", shot.locationCode ? [shot.locationCode] : []],
+                ["道具", shot.propCodes],
+                ["线索", shot.clueCodes],
+            ] as const)
+                for (const code of codes) if (!codesByRole[kind].has(code)) warnings.push(`${episode.code}/${shot.code} 引用了不存在的${kind}资产 ${code}`);
+            const cards = extractDramaVideoPromptCards(shot.videoPrompt);
+            const frameVisuals = (shot.framePlan?.frames || []).flatMap((frame) => [frame.actionPrompt, frame.imagePrompt]);
+            const fallbackVisuals = cards.length ? [] : shot.videoPrompt.split("\n").filter((line) => /^\s*画面内容[：:]/u.test(line));
+            const visibleText = [shot.imagePrompt, ...frameVisuals, ...cards.map((card) => card.visual), ...fallbackVisuals].join("\n");
+            const sceneText = [shot.imagePrompt, ...frameVisuals, ...cards.map((card) => card.scene), ...fallbackVisuals].join("\n");
             for (const character of value.assets.characters) {
-                if (character.name && visibleText.includes(character.name) && !shot.characterCodes.includes(character.code)) {
+                if (character.name && hasVisibleNamedCharacter(visibleText, character.name) && !shot.characterCodes.includes(character.code)) {
                     warnings.push(`${episode.code}/${shot.code} 画面出现角色 ${character.name}，但未绑定角色资产 ${character.code}（不阻止导入）`);
                 }
             }
+            for (const prop of value.assets.props)
+                if (prop.name && hasPositiveNamedMention(visibleText, prop.name) && !shot.propCodes.includes(prop.code)) warnings.push(`${episode.code}/${shot.code} 可见画面提到道具 ${prop.name}，但未绑定道具资产 ${prop.code}（不阻止导入）`);
+            for (const location of value.assets.locations)
+                if (location.name && shot.locationCode !== location.code && hasPositiveNamedMention(sceneText, location.name))
+                    warnings.push(`${episode.code}/${shot.code} 可见场景描述出现“${location.name}”，但场景绑定为 ${shot.locationCode || "空"}（不阻止导入）`);
             const timingReminder = dramaDialogueTimingReminder(shot.duration, shot.utterances as DramaDialogueTimingInput[], shot.dialogue, `${episode.code}/${shot.code}`);
             if (timingReminder) warnings.push(`对白时长提醒（不阻止导入）：${timingReminder.message}`);
             for (const frame of shot.framePlan?.frames || []) {
@@ -2380,6 +2524,21 @@ function collectWarnings(value: DramaProductionPackageV1) {
     const frameCounts = value.episodes.flatMap((episode) => episode.shots.map((shot) => shot.framePlan?.frames.length || 0));
     for (const frameWarning of warnDramaFrameCountUniformity(frameCounts, plan?.video.framePolicy)) warnings.push(`全包帧数检查：${frameWarning}`);
     return [...new Set(warnings)];
+}
+
+function hasPositiveNamedMention(value: string, name: string) {
+    return value.split(/[。；\n]/u).some((clause) => clause.includes(name) && !/(?:无|没有|不出现|不入画|非出镜|不包含|禁止|不得|避免|不新增|不生成)/u.test(clause));
+}
+
+function hasVisibleNamedCharacter(value: string, name: string) {
+    const nonVisualContext = /(?:名字|姓名|旧录音|旧声|声音|口述|提及|回想|记忆|当年|资料|记录|记号|照片|画像|旁白|字幕)/u;
+    const visibleAction = /(?:站|坐|蹲|跪|走|跑|转身|抬|举|握|按|看|望|盯|视线|目光|眉|眼|手|指|肩|侧脸|背影|全身|近景|特写|身穿|穿着|入画|出镜)/u;
+    return value.split(/[。；\n]/u).some((clause) => {
+        const position = clause.indexOf(name);
+        if (position < 0 || nonVisualContext.test(clause)) return false;
+        const context = clause.slice(Math.max(0, position - 20), position + name.length + 30);
+        return visibleAction.test(context);
+    });
 }
 
 function preferred(current: string | undefined, origins: Record<string, DramaFieldOrigin> | undefined, field: string, incoming: string) {
@@ -2518,7 +2677,7 @@ function directorState(characterCodes: string[], propCodes: string[], environmen
     };
 }
 
-function validateSplitShotFramePlans(episodes: DramaProductionPackageEpisode[], allowImportWarnings = false) {
+function validateSplitShotFramePlans(episodes: DramaProductionPackageEpisode[], options: DramaProductionPackageNormalizationOptions = {}) {
     for (const episode of episodes) {
         for (let index = 0; index < episode.shots.length; index += 1) {
             const parsed = splitShotTitle(episode.shots[index].title);
@@ -2526,7 +2685,11 @@ function validateSplitShotFramePlans(episodes: DramaProductionPackageEpisode[], 
             const group = episode.shots.slice(index, index + parsed.total);
             if (group.length !== parsed.total || group.some((shot, part) => !sameSplitShotTitle(shot.title, parsed.base, part + 1, parsed.total))) continue;
             const plans = group.map((shot) => JSON.stringify(shot.framePlan.frames.map((frame) => [frame.actionPrompt, frame.imagePrompt])));
-            if (new Set(plans).size !== plans.length && !allowImportWarnings) throw new DramaProductionPackageError(`${parsed.base}的拆分镜头复用了整套逐帧计划，请分别提供每段的独立动作与静态状态`);
+            if (new Set(plans).size !== plans.length) {
+                const message = `${parsed.base}的拆分镜头复用了整套逐帧计划，请分别提供每段的独立动作与静态状态`;
+                if (!options.allowImportWarnings) throw new DramaProductionPackageError(message);
+                options.importWarnings?.push(`${message}；已允许导入，生成前需要分别核对各段内容`);
+            }
             index += parsed.total - 1;
         }
     }

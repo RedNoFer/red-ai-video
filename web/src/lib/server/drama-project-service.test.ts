@@ -121,6 +121,8 @@ import {
     resolveReadableDramaVideoReferenceUrl,
     reconcileDramaVideoStepTask,
     restoreDramaProjectVersionForUser,
+    applyDramaProjectMutationForUser,
+    createDramaProjectVersionForUser,
     updateDramaProductionRunForUser,
     updateDramaProjectForUser,
     updateDramaProjectRatioForUser,
@@ -168,6 +170,45 @@ describe("drama project service updates", () => {
         mocks.getDramaProductionRun.mockResolvedValue(null);
         mocks.updateDramaProductionRun.mockImplementation(async (_userId: string, run: unknown) => run);
         mocks.deleteUserOwnedMediaAssetsPhysically.mockResolvedValue({ deletedFiles: 1, deletedBytes: 12, blocked: [] });
+    });
+
+    it("applies a sparse field mutation on the server without replacing unrelated project data", async () => {
+        const current = project("2026-10-06T00:00:00.000Z", "当前标题");
+        current.productionArchive = {
+            formatVersion: "vozeb-drama-production-package-v1",
+            sections: [{ code: "large", title: "历史归档", content: "x".repeat(100_000) }],
+            promptAssets: [],
+            dialogueDirections: [],
+            voiceDirections: [],
+            silenceDirections: [],
+            referencePlan: [],
+            generationOrder: [],
+            qcReport: "",
+        };
+        mocks.getDramaProject.mockResolvedValue(current);
+        const mutation = {
+            projectId: current.id,
+            expectedUpdatedAt: current.updatedAt,
+            updatedAt: "2026-10-06T00:00:01.000Z",
+            projectPatch: { title: "仅更新标题", ratio: "16:9" },
+        };
+
+        await expect(applyDramaProjectMutationForUser("user-one", current.id, mutation)).resolves.toEqual({ projectId: current.id, updatedAt: mutation.updatedAt });
+
+        const updatedProject = mocks.updateDramaProject.mock.calls[0]?.[1] as DramaProject;
+        expect(mocks.updateDramaProject).toHaveBeenCalledWith("user-one", expect.objectContaining({ title: "仅更新标题" }), current.updatedAt);
+        expect(updatedProject.ratio).toBe("16:9");
+        expect(updatedProject.productionArchive?.sections[0]?.content).toBe("x".repeat(100_000));
+        expect(updatedProject.episodes[0]?.id).toBe(current.episodes[0]?.id);
+    });
+
+    it("creates project versions from the server snapshot without requiring a project payload", async () => {
+        const current = project("2026-10-06T00:00:00.000Z", "服务端当前版本");
+        mocks.getDramaProject.mockResolvedValue(current);
+
+        await createDramaProjectVersionForUser("user-one", current.id, { reason: "手动保存版本" });
+
+        expect(mocks.createDramaProjectVersion).toHaveBeenCalledWith("user-one", current.id, "手动保存版本", current);
     });
 
     it("saves a manual frame plan through the scoped shot mutation", async () => {

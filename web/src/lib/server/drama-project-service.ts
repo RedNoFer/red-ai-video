@@ -32,6 +32,7 @@ import type {
     DramaProductionRun,
     DramaProductionStep,
     DramaProject,
+    DramaProjectMutation,
     DramaReferenceManifestItem,
     DramaSeriesBible,
     DramaShot,
@@ -708,8 +709,9 @@ export async function createDramaProjectForUser(userId: string, value: unknown) 
     }
 }
 
-export async function updateDramaProjectForUser(userId: string, id: string, value: unknown) {
+export async function updateDramaProjectForUser(userId: string, id: string, value: unknown, expectedCurrentUpdatedAt?: string) {
     const current = await getDramaProjectForUser(userId, id);
+    if (expectedCurrentUpdatedAt && current.updatedAt !== expectedCurrentUpdatedAt) throw new DramaProjectServiceError("短剧项目已在其他页面更新，请刷新后重试", 409);
     const input = object(value);
     const incomingUpdatedAt = parseTimestamp(input.updatedAt);
     const currentPlan = normalizeDramaProductionPlan(current.productionBible?.productionPlan);
@@ -763,6 +765,213 @@ export async function updateDramaProjectForUser(userId: string, id: string, valu
         if (error instanceof DramaProjectStoreError) throw new DramaProjectServiceError(error.message, error.status);
         throw error;
     }
+}
+
+export async function applyDramaProjectMutationForUser(userId: string, id: string, value: unknown) {
+    const input = object(value) as Partial<DramaProjectMutation>;
+    if (cleanText(input.projectId) !== cleanText(id)) throw new DramaProjectServiceError("短剧项目变更目标无效", 400);
+    const current = await getDramaProjectForUser(userId, id);
+    const expectedUpdatedAt = cleanText(input.expectedUpdatedAt);
+    const updatedAt = parseTimestamp(input.updatedAt) ? new Date(input.updatedAt!).toISOString() : "";
+    if (!expectedUpdatedAt || !updatedAt) throw new DramaProjectServiceError("项目变更版本缺失，请刷新后重试", 400);
+    if (expectedUpdatedAt !== current.updatedAt) throw new DramaProjectServiceError("短剧项目已在其他页面更新，请刷新后重试", 409);
+    const projectPatch = object(input.projectPatch);
+    const project = applyDramaMutationFields(current, projectPatch, input.projectUnset, [
+        "title",
+        "summary",
+        "style",
+        "ratio",
+        "status",
+        "activeEpisodeId",
+        "defaultVideoMode",
+        "productionBible",
+        "seriesBible",
+        "productionArchive",
+        "fieldOrigins",
+        "sourceAssets",
+    ]);
+    for (const kind of ["characters", "scenes", "props", "clues"] as const) {
+        const changes = input.assets?.[kind];
+        if (changes)
+            (project as unknown as Record<string, unknown>)[kind] = applyDramaEntityCollection(project[kind], changes, [
+                "code",
+                "name",
+                "description",
+                "supplierPrompt",
+                "fieldOrigins",
+                "activeEpisodeCodes",
+                "profile",
+                "references",
+                "deletedReferenceIds",
+                "primaryReferenceId",
+                "referenceImageUrl",
+                "referenceStorageKey",
+                "refinementHistory",
+                "sceneReferenceBoard",
+                "backgroundNpcPolicy",
+                "voiceProfile",
+                "payoff",
+            ]);
+    }
+    if (input.episodes) {
+        const episodes = project.episodes.filter((episode) => !input.episodes?.remove?.includes(episode.id));
+        for (const episode of input.episodes.upsert || []) {
+            const index = episodes.findIndex((item) => item.id === episode.id);
+            if (index < 0) episodes.push(episode);
+            else episodes[index] = episode;
+        }
+        for (const change of input.episodes.patch || []) {
+            const index = episodes.findIndex((episode) => episode.id === change.id);
+            if (index < 0) throw new DramaProjectServiceError("短剧剧集不存在，请刷新后重试", 404);
+            const episode = episodes[index];
+            const updatedEpisode = applyDramaMutationFields(episode, change.fields, change.unset, [
+                "code",
+                "canvasProjectId",
+                "title",
+                "script",
+                "scriptRichContent",
+                "outline",
+                "hook",
+                "nextPreview",
+                "sourceRange",
+                "reviewStatus",
+                "storyScenes",
+                "continuityEdges",
+                "fieldOrigins",
+                "renderTask",
+                "reviewCompletionTask",
+                "visualReview",
+            ]);
+            if (change.shots) updatedEpisode.shots = applyDramaEntityCollection(episode.shots, change.shots, DRAMA_SHOT_MUTATION_FIELDS);
+            episodes[index] = updatedEpisode;
+        }
+        project.episodes = episodes;
+    }
+    const saved = await updateDramaProjectForUser(userId, id, { ...project, updatedAt }, expectedUpdatedAt);
+    return { projectId: saved.id, updatedAt: saved.updatedAt };
+}
+
+const DRAMA_SHOT_MUTATION_FIELDS = [
+    "code",
+    "order",
+    "title",
+    "description",
+    "sourceText",
+    "shotBoundary",
+    "dialogue",
+    "narration",
+    "utterances",
+    "performancePlan",
+    "dialoguePerformance",
+    "lightingPlan",
+    "imagePrompt",
+    "videoPrompt",
+    "executionVideoPrompt",
+    "executionImagePrompt",
+    "cameraMotion",
+    "startFramePrompt",
+    "endFramePrompt",
+    "negativePrompt",
+    "continuity",
+    "storySceneId",
+    "timecode",
+    "dramaticFunction",
+    "lens",
+    "lighting",
+    "colorPalette",
+    "transitionIn",
+    "transitionOut",
+    "performanceNotes",
+    "sound",
+    "entryState",
+    "exitState",
+    "framePlan",
+    "frameEvidence",
+    "fieldOrigins",
+    "sourceAssetIds",
+    "continuityStatus",
+    "continuityError",
+    "actualStartFrameUrl",
+    "actualEndFrameUrl",
+    "actualFrameVideoUrl",
+    "duration",
+    "characterIds",
+    "propIds",
+    "clueIds",
+    "sceneId",
+    "videoMode",
+    "storyboardStatus",
+    "storyboardFrameMode",
+    "storyboardFrames",
+    "storyboardAttempt",
+    "storyboardTaskId",
+    "storyboardError",
+    "storyboardImageUrl",
+    "storyboardImageRemoteUrl",
+    "storyboardImageUrls",
+    "storyboardImageWidth",
+    "storyboardImageHeight",
+    "storyboardImageDeletedAt",
+    "storyboardPrompt",
+    "storyboardEndStatus",
+    "storyboardEndAttempt",
+    "storyboardEndTaskId",
+    "storyboardEndError",
+    "storyboardEndImageUrl",
+    "storyboardEndImageRemoteUrl",
+    "storyboardEndImageUrls",
+    "storyboardEndImageWidth",
+    "storyboardEndImageHeight",
+    "storyboardEndImageDeletedAt",
+    "storyboardEndPrompt",
+    "generationStatus",
+    "generationAttempt",
+    "generationRunId",
+    "generationTaskId",
+    "generationError",
+    "videoUrl",
+    "subtitle",
+    "audioMode",
+    "audioStatus",
+    "audioAttempt",
+    "audioTaskId",
+    "audioError",
+    "audioUrl",
+    "characterId",
+    "voiceIdentityId",
+    "voiceId",
+    "voiceBlueprintVersion",
+    "voiceAssignmentSource",
+];
+
+function applyDramaMutationFields<T extends object>(current: T, fields: Record<string, unknown>, unset: unknown, allowed: string[]): T {
+    const next = { ...current } as T & Record<string, unknown>;
+    const allow = new Set(allowed);
+    for (const [key, value] of Object.entries(fields)) {
+        if (!allow.has(key)) throw new DramaProjectServiceError(`不支持的短剧项目变更字段：${key}`, 400);
+        (next as Record<string, unknown>)[key] = value;
+    }
+    if (Array.isArray(unset))
+        for (const key of unset) {
+            if (typeof key !== "string" || !allow.has(key)) throw new DramaProjectServiceError("短剧项目变更字段无效", 400);
+            delete next[key];
+        }
+    return next;
+}
+
+function applyDramaEntityCollection<T extends { id: string }>(current: T[], changes: { upsert?: T[]; patch?: Array<{ id: string; fields: Record<string, unknown>; unset?: unknown }>; remove?: string[] }, allowed: string[]): T[] {
+    const next = current.filter((item) => !changes.remove?.includes(item.id));
+    for (const item of changes.upsert || []) {
+        const index = next.findIndex((candidate) => candidate.id === item.id);
+        if (index < 0) next.push(item);
+        else next[index] = item;
+    }
+    for (const patch of changes.patch || []) {
+        const index = next.findIndex((item) => item.id === patch.id);
+        if (index < 0) throw new DramaProjectServiceError("短剧项目资产或镜头不存在，请刷新后重试", 404);
+        next[index] = applyDramaMutationFields(next[index], patch.fields, patch.unset, allowed);
+    }
+    return next;
 }
 
 export async function updateDramaProjectRatioForUser(userId: string, id: string, value: unknown) {
@@ -3364,10 +3573,9 @@ export async function listDramaProjectVersionsForUser(userId: string, id: string
 export async function createDramaProjectVersionForUser(userId: string, id: string, value: unknown) {
     const current = await getDramaProjectForUser(userId, cleanText(id));
     const input = object(value);
-    const snapshot = normalizeProject(input.snapshot, current);
-    if (Buffer.byteLength(JSON.stringify(snapshot)) > MAX_PROJECT_BYTES) throw new DramaProjectServiceError("短剧版本数据过大", 413);
     const reason = cleanText(input.reason) || "手动保存版本";
-    return createDramaProjectVersion(userId, current.id, reason, snapshot);
+    if (Buffer.byteLength(JSON.stringify(current)) > MAX_PROJECT_BYTES) throw new DramaProjectServiceError("短剧版本数据过大", 413);
+    return createDramaProjectVersion(userId, current.id, reason, current);
 }
 
 export async function restoreDramaProjectVersionForUser(userId: string, id: string, versionId: string) {

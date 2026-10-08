@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
     getCurrentUser: vi.fn(),
     getDramaProjectForUser: vi.fn(),
+    updateDramaProjectForUser: vi.fn(),
 }));
 
 vi.mock("@/lib/auth/session", () => ({ getCurrentUser: mocks.getCurrentUser }));
@@ -17,10 +18,10 @@ vi.mock("@/lib/server/drama-project-service", () => ({
     },
     deleteDramaProjectForUser: vi.fn(),
     getDramaProjectForUser: mocks.getDramaProjectForUser,
-    updateDramaProjectForUser: vi.fn(),
+    updateDramaProjectForUser: mocks.updateDramaProjectForUser,
 }));
 
-import { GET } from "./route";
+import { GET, PATCH } from "./route";
 
 describe("/api/drama/projects/[id]", () => {
     beforeEach(() => {
@@ -44,6 +45,17 @@ describe("/api/drama/projects/[id]", () => {
         expect(response.status).toBe(200);
         expect(mocks.getDramaProjectForUser).toHaveBeenCalledWith("user-one", "drama-one");
         await expect(response.json()).resolves.toMatchObject({ data: { project: { id: "drama-one", episodes: [{ id: "episode-one" }] } } });
+    });
+
+    it("rejects full project snapshots on the project route", async () => {
+        const response = await PATCH(
+            new Request("http://localhost/api/drama/projects/drama-one", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: "drama-one", episodes: [{ id: "episode-one" }], characters: [] }) }),
+            context("drama-one"),
+        );
+
+        expect(response.status).toBe(400);
+        await expect(response.json()).resolves.toMatchObject({ msg: "不支持提交整份短剧项目；请使用对应的局部变更接口" });
+        expect(mocks.updateDramaProjectForUser).not.toHaveBeenCalled();
     });
 });
 

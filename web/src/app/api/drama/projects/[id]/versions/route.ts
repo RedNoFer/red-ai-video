@@ -11,7 +11,7 @@ export async function GET(_: Request, context: Context) {
 }
 
 export async function POST(request: Request, context: Context) {
-    const parsed = await readJsonBodyResult<unknown>(request, 8 * 1024 * 1024);
+    const parsed = await readJsonBodyResult<unknown>(request);
     if (!parsed.ok) return NextResponse.json({ code: parsed.status, data: null, msg: parsed.message }, { status: parsed.status });
     const body = parsed.data;
     return handle(context, (userId, id) => createDramaProjectVersionForUser(userId, id, body).then((version) => NextResponse.json({ code: 0, data: { version }, msg: "短剧版本已保存" })));

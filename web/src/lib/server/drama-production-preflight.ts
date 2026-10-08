@@ -7,7 +7,7 @@ import { dramaDialogueTimingReminder, dramaTimedDialogueCapacityIssues, dramaUtt
 import { dramaReferenceImageBudget } from "@/lib/drama-production-plan";
 import { dramaShotReferenceSelectionIds, resolveDramaVideoReferenceMode } from "@/lib/drama-video-reference-plan";
 import type { DramaVideoReferenceMode } from "@/lib/drama-project-contract";
-import { validateDramaFrameTiming, validateDramaPerformanceDetail, validateDramaVideoPromptCardLayout, validateDramaVideoPromptDialogueTiming } from "@/lib/drama-prompt-quality";
+import { extractDramaVideoPromptCards, validateDramaFrameTiming, validateDramaPerformanceDetail, validateDramaVideoPromptCardLayout, validateDramaVideoPromptDialogueTiming } from "@/lib/drama-prompt-quality";
 import { validateDramaCharacterWardrobeContinuity, validateDramaCutInformationDiversity, validateDramaPromptComposition, validateDramaReferenceAliasConsistency } from "@/lib/drama-prompt-composition-quality";
 import { auditDramaShotDirectorQuality } from "@/lib/server/agent-skills/drama-video-director";
 
@@ -153,7 +153,8 @@ function checkShot(
             .filter(Boolean)
             .join("\n");
         const subjectNames = project.characters.filter((character) => shot.characterIds.includes(character.id)).map((character) => character.name);
-        const requiredReactionNames = project.characters.filter((character) => shot.characterIds.includes(character.id) && hasCharacterReaction(shotText, character.name)).map((character) => character.name);
+        const visibleReactionText = [visibleVideoReferenceText(videoPrompt || ""), ...shot.framePlan.frames.map((frame) => [frame.actionPrompt, frame.imagePrompt].filter(Boolean).join("\n"))].join("\n");
+        const requiredReactionNames = project.characters.filter((character) => shot.characterIds.includes(character.id) && hasCharacterReaction(visibleReactionText, character.name)).map((character) => character.name);
         const compositionErrors = validateDramaPromptComposition({
             ratio: project.ratio,
             prompt: videoPrompt || "",
@@ -252,13 +253,23 @@ function checkShot(
         if (!source || source.type !== "image") issues.push(blocking("SOURCE_ASSET_REFERENCE", `${label}引用的来源素材不是有效图片`, { shotId: shot.id, assetId: id }));
         else if (!source.serverUrl && !source.remoteUrl) issues.push(blocking("SOURCE_ASSET_URL", `${label}的来源图片“${source.title || id}”缺少可访问地址`, { shotId: shot.id, assetId: id }));
     }
-    const prompt = `${shot.imagePrompt}\n${shot.videoPrompt}`;
-    const referencePrompt = stripNegativeReferenceClauses(prompt);
-    const inactiveCharacters = project.characters.filter((asset) => asset.activeEpisodeCodes && !asset.activeEpisodeCodes.includes(episodeCode) && referencePrompt.includes(asset.name) && !shot.characterIds.includes(asset.id));
+    const promptFields = [
+        { label: "静态画面提示词", text: shot.imagePrompt || "" },
+        { label: "视频提示词", text: visibleVideoReferenceText(videoPrompt || "") },
+    ].map((field) => ({ ...field, referenceText: stripNegativeReferenceClauses(field.text) }));
+    const inactiveCharacters = project.characters.filter(
+        (asset) => asset.activeEpisodeCodes && !asset.activeEpisodeCodes.includes(episodeCode) && promptFields.some((field) => hasVisibleCharacterReference(field.referenceText, asset.name)) && !shot.characterIds.includes(asset.id),
+    );
     for (const asset of inactiveCharacters) issues.push(warning("INACTIVE_CHARACTER", `${label}Prompt中出现未出镜角色“${asset.name}”`, { shotId: shot.id, assetId: asset.id }));
-    for (const asset of project.characters)
-        if (referencePrompt.includes(asset.name) && !shot.characterIds.includes(asset.id)) issues.push(warning("PROMPT_CHARACTER_REFERENCE", `${label}Prompt出现角色“${asset.name}”，但镜头未引用该角色`, { shotId: shot.id, assetId: asset.id }));
-    for (const asset of project.props) if (prompt.includes(asset.name) && !shot.propIds.includes(asset.id)) issues.push(warning("PROMPT_PROP_REFERENCE", `${label}Prompt出现道具“${asset.name}”，但镜头未引用该道具`, { shotId: shot.id, assetId: asset.id }));
+    for (const asset of project.characters) {
+        const fields = promptFields.filter((field) => hasVisibleCharacterReference(field.referenceText, asset.name));
+        if (fields.length && !shot.characterIds.includes(asset.id))
+            issues.push(warning("PROMPT_CHARACTER_REFERENCE", `${label}${fields.map((field) => field.label).join("、")}出现角色“${asset.name}”，但镜头未引用该角色`, { shotId: shot.id, assetId: asset.id }));
+    }
+    for (const asset of project.props) {
+        const fields = promptFields.filter((field) => field.referenceText.includes(asset.name));
+        if (fields.length && !shot.propIds.includes(asset.id)) issues.push(warning("PROMPT_PROP_REFERENCE", `${label}${fields.map((field) => field.label).join("、")}出现道具“${asset.name}”，但镜头未引用该道具`, { shotId: shot.id, assetId: asset.id }));
+    }
     const incoming = edgeByTo.get(shot.id);
     const requiresAcceptedTail = shot.framePlan?.start.source === "previous_accepted_actual_tail" || incoming?.inheritActualEndFrame;
     if (requiresAcceptedTail) {
@@ -273,7 +284,6 @@ function checkShot(
                 : warning("FRAME_PLAN_MISSING", `${label}暂无分镜帧计划，视频仍可依据视频Prompt生成`, { shotId: shot.id, correction: "需要分镜图或后期关键帧时，再补充分镜帧计划" }),
         );
     else {
-        validateReferenceManifest(shot, issues);
         if (!shot.framePlan.end || typeof shot.framePlan.end.required !== "boolean") issues.push(warning("FRAME_PLAN_END", `${label}缺少结束帧要求，暂不影响普通视频生成`, { shotId: shot.id }));
         const orderedFrames = referenceMode === "all_frames";
         if (orderedFrames || shot.fieldOrigins?.framePlan === "package") {
@@ -329,25 +339,32 @@ function checkShot(
     }
 }
 
-function validateReferenceManifest(shot: DramaShot, issues: DramaProductionPreflightIssue[]) {
-    const manifest = shot.framePlan?.referenceManifest;
-    if (!manifest?.length) return;
-    const has = (role: string, assetId: string) => manifest.some((item) => item.role === role && item.assetId === assetId);
-    if (shot.sceneId && !has("scene_anchor", shot.sceneId))
-        issues.push(
-            warning("REFERENCE_MANIFEST_SCENE", `${shot.code || shot.title}的场景图未列入固定参考清单，视频仍可依据提示词生成`, { shotId: shot.id, assetId: shot.sceneId, correction: "需要锁定空间结构时，再将scene_anchor绑定到当前镜头的场景资产" }),
-        );
-    for (const assetId of shot.characterIds)
-        if (!has("character_anchor", assetId))
-            issues.push(warning("REFERENCE_MANIFEST_CHARACTER", `${shot.code || shot.title}未固定引用角色 ${assetId} 的资产图，视频仍可依据提示词生成`, { shotId: shot.id, assetId, correction: "需要锁定角色外观时，再补充character_anchor引用" }));
-    for (const assetId of shot.propIds)
-        if (!has("prop_anchor", assetId))
-            issues.push(warning("REFERENCE_MANIFEST_PROP", `${shot.code || shot.title}未固定引用道具 ${assetId} 的资产图，视频仍可依据提示词生成`, { shotId: shot.id, assetId, correction: "需要锁定道具细节时，再补充prop_anchor引用" }));
-}
-
 /** Names inside explicit negative constraints are exclusions, not shot references. */
 function stripNegativeReferenceClauses(value: string) {
-    return value.replace(/(?:无|没有|不得|禁止|避免|不出现|不展示|不含|不包含)[^。；，,\n]{0,48}/gu, "").replace(/\b(?:no|without|avoid|exclude)\b[^.;,\n]{0,48}/giu, "");
+    return value
+        .split(/(?<=[。；，,\n])/u)
+        .filter((clause) => !/(?:无|没有|不得|禁止|避免|不出现|不展示|不含|不包含|不作为|不绑定|不入画|不显示|不要出现|非出镜)/u.test(clause))
+        .join("")
+        .replace(/\b(?:no|without|avoid|exclude)\b[^.;,\n]{0,48}/giu, "");
+}
+
+function hasVisibleCharacterReference(value: string, name: string) {
+    const visibleAction = /出现在画面|入画|出镜|站|坐|蹲|跪|走|跑|转身|抬|举|握|按|看|望|盯|视线|目光|眉|眼|手|指|肩|侧脸|背影|全身|近景|特写|角色基准|四视图|身穿|穿着|夹克|外套|短发|长发|面部|身形/u;
+    return value.split(/(?<=[。；，,\n])/u).some((clause) => {
+        const position = clause.indexOf(name);
+        if (position < 0) return false;
+        const context = clause.slice(Math.max(0, position - 24), position + name.length + 36);
+        return visibleAction.test(context);
+    });
+}
+
+function visibleVideoReferenceText(value: string) {
+    const cards = extractDramaVideoPromptCards(value);
+    if (cards.length) return cards.map((card) => card.visual).join("\n");
+    return value
+        .split("\n")
+        .filter((line) => !/^\s*(?:段间入口|入口状态|剪辑承接|台词|人声|音效)\s*[：:]/u.test(line))
+        .join("\n");
 }
 
 function hasCharacterReaction(text: string, name: string) {

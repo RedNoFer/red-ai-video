@@ -193,6 +193,64 @@ describe("production package boundary", () => {
         expect(preview.package.episodes[0].shots[0].framePlan.referenceManifest).toBeUndefined();
     });
 
+    it("treats omitted optional reference anchors as a valid minimal reference set", () => {
+        const source = structuredClone(productionPackage);
+        for (const shot of source.episodes[0].shots) delete shot.framePlan.referenceManifest;
+
+        const preview = previewDramaProductionPackage(JSON.stringify(source), "package.json", undefined, { allowImportWarnings: true });
+
+        expect(preview.warnings.some((warning) => warning.includes("referenceManifest 缺少"))).toBe(false);
+        expect(preview.package.episodes[0].shots.every((shot) => !shot.framePlan.referenceManifest?.length)).toBe(true);
+    });
+
+    it("warns and removes stale or wrong-role asset bindings without leaking their IDs into the imported project", () => {
+        const source = structuredClone(productionPackage);
+        const shot = source.episodes[0].shots[0];
+        shot.locationCode = "S99";
+        shot.characterCodes = ["C99"];
+        shot.propCodes = ["P99"];
+        shot.clueCodes = ["L99"];
+        shot.utterances = [{ id: "D01", order: 1, type: "dialogue", speaker: "Karin", characterId: "C99", text: "继续" }];
+        shot.sourceAssetIds = ["source-stale-uuid"];
+        shot.entryState!.characters.push({ assetId: "C99", position: "门边", gaze: "向外", pose: "站立", action: "等待" });
+        source.assets.characters[1].activeEpisodeCodes = ["E02"];
+        shot.entryState!.characters.push({ assetId: "C02", position: "画外", gaze: "向内", pose: "站立", action: "待命" });
+        shot.exitState!.props.push({ assetId: "P99", state: "桌上", holderId: "C99" });
+        shot.framePlan.referenceManifest = [
+            { alias: "@错类型", role: "character_anchor", purpose: "角色图", assetId: "P01" },
+            { alias: "@旧资产", role: "prop_anchor", purpose: "道具图", assetId: "prop-stale-uuid" },
+            { alias: "@旧镜头帧", role: "action_keyframe", purpose: "动作帧", assetId: "prop-stale-uuid", shotId: "SH99", frameEvidenceId: "frame-old" },
+            { alias: "@可用角色", role: "character_anchor", purpose: "角色图", assetId: "C01", shotId: "SH99", frameEvidenceId: "frame-old" },
+        ];
+
+        const preview = previewDramaProductionPackage(JSON.stringify(source), "package.json", undefined, { allowImportWarnings: true });
+        const safeShot = preview.package.episodes[0].shots[0];
+        const applied = applyDramaProductionPackage(project(), preview.package, preview.sourceHash, JSON.stringify(source), "package.json", { allowImportWarnings: true });
+        const appliedShot = applied.episodes[0].shots[0];
+
+        expect(preview.importWarnings?.join("\n")).toContain("引用的场景资产 S99");
+        expect(preview.importWarnings?.join("\n")).toContain("引用的角色资产 C99");
+        expect(preview.importWarnings?.join("\n")).toContain("连续性状态引用的角色资产 C02 标记为未在本集启用");
+        expect(preview.importWarnings?.join("\n")).toContain("character_anchor 资产引用 P01 无效");
+        expect(preview.importWarnings?.join("\n")).toContain("引用了不存在的片段 SH99");
+        expect(preview.importWarnings?.join("\n")).toContain("不会随制作包导入的帧证据 frame-old");
+        expect(preview.importWarnings?.join("\n")).toContain("未随制作包导入的来源素材 source-stale-uuid");
+        expect(safeShot).toMatchObject({ locationCode: undefined, characterCodes: [], propCodes: [], clueCodes: [] });
+        expect(safeShot.utterances[0].characterId).toBeUndefined();
+        expect(safeShot.entryState?.characters.some((item) => item.assetId === "C99")).toBe(false);
+        expect(safeShot.entryState?.characters.some((item) => item.assetId === "C02")).toBe(true);
+        expect(safeShot.exitState?.props.some((item) => item.assetId === "P99")).toBe(false);
+        expect(safeShot.framePlan.referenceManifest?.some((item) => item.alias === "@旧镜头帧")).toBe(false);
+        expect(JSON.stringify(appliedShot)).not.toContain("prop-stale-uuid");
+        expect(JSON.stringify(appliedShot)).not.toContain("SH99");
+        expect(JSON.stringify(appliedShot)).not.toContain("frame-old");
+        expect(appliedShot.sourceAssetIds).toEqual([]);
+        expect(appliedShot.sceneId).toBeUndefined();
+        expect(appliedShot.characterIds).toEqual([]);
+        expect(appliedShot.propIds).toEqual([]);
+        expect(() => previewDramaProductionPackage(JSON.stringify(source), "package.json", undefined, { allowImportWarnings: false })).toThrow("引用的场景资产 S99");
+    });
+
     it("surfaces a dialogue capacity reminder without blocking package import", () => {
         const source = structuredClone(productionPackage);
         const shot = source.episodes[0].shots[0];
@@ -378,7 +436,8 @@ describe("production package boundary", () => {
 
     it("keeps the 30-second package contract complete after import", () => {
         const source = readFileSync(new URL("../../../../output/three-year-pact-standalone-production-package-30s.json", import.meta.url), "utf8");
-        const preview = previewDramaProductionPackage(source, "three-year-pact-standalone-production-package-30s.json");
+        const preview = previewDramaProductionPackage(source, "three-year-pact-standalone-production-package-30s.json", undefined, { allowImportWarnings: true });
+        expect(preview.importWarnings?.some((warning) => warning.includes("C06"))).toBe(true);
         expect(preview.package.project.productionBible.productionPlan?.references.maxImages).toBe(30);
         const shots = preview.package.episodes.flatMap((episode) => episode.shots);
         expect(shots.every((shot) => Boolean(shot.performancePlan?.emotionalObjective.trim()))).toBe(true);

@@ -33,7 +33,6 @@ import { dramaAssetReferences, dramaSceneBoardReference, ensureUniqueDramaAssetR
 import { DramaSceneReferenceBoard } from "./drama-scene-reference-board";
 import { dramaAssetAutoCompletionItems, dramaAssetMissingFields } from "./drama-asset-library-utils";
 import { resolveDramaSupplierPrompt } from "./drama-asset-editor-utils";
-import { getDramaAssetMissingItems } from "@/lib/drama-asset-completion";
 import { dramaGenerationSize } from "./drama-shot-generation-utils";
 
 type AssetDraft = {
@@ -59,7 +58,6 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
     const updateAsset = useDramaStore((state) => state.updateAsset);
     const replaceProject = useDramaStore((state) => state.replaceProject);
     const loadProject = useDramaStore((state) => state.loadProject);
-    const saveProjectNow = useDramaStore((state) => state.saveProjectNow);
     const saveAssetNow = useDramaStore((state) => state.saveAssetNow);
     const liveAsset = useDramaStore((state) => state.projects.find((item) => item.id === project.id)?.[kind].find((item) => item.id === assetId));
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -533,23 +531,17 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
             const mergedReferences = mergeGeneratedReferenceReviews(latestReferences, reviewedReferences);
             const propSupplierPrompt = kind === "props" ? compileDramaAssetReferencePrompt(project, { ...currentAsset, supplierPrompt: undefined }, "道具") : undefined;
             replaceProject(latestProject);
-            updateAsset(
-                projectId,
-                kind,
-                assetId,
-                {
-                    references: mergedReferences,
-                    ...(propSupplierPrompt ? { supplierPrompt: propSupplierPrompt } : {}),
-                },
-                { markShotsStale: false },
-            );
-            const savedProject = await saveProjectNow(project.id);
+            const savedProject = await saveAssetNow(projectId, kind, assetId, {
+                references: mergedReferences,
+                ...(propSupplierPrompt ? { supplierPrompt: propSupplierPrompt } : {}),
+                markShotsStale: false,
+            });
             replaceProject(savedProject);
             message.success(`已生成 ${nextReferences.length} 张候选图${review.status === "passed" ? "，可直接使用" : "，图片已保留，请查看审核建议"}`);
             setRefinementProposal(undefined);
             setSupplierPromptOverride(undefined);
         },
-        [asset?.id, kind, loadProject, message, replaceProject, saveProjectNow, updateAsset],
+        [asset?.id, kind, loadProject, message, replaceProject, saveAssetNow],
     );
 
     useEffect(() => {

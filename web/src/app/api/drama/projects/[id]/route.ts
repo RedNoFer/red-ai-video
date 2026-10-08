@@ -11,9 +11,13 @@ export async function GET(_: Request, context: Context) {
 }
 
 export async function PATCH(request: Request, context: Context) {
-    const parsed = await readJsonBodyResult<unknown>(request, 8 * 1024 * 1024);
+    const parsed = await readJsonBodyResult<unknown>(request);
     if (!parsed.ok) return NextResponse.json({ code: parsed.status, data: null, msg: parsed.message }, { status: parsed.status });
     const body = parsed.data;
+    const patch = body && typeof body === "object" && !Array.isArray(body) ? (body as Record<string, unknown>) : {};
+    if (Object.keys(patch).some((key) => !["defaultVideoMode", "productionBible"].includes(key)) || !patch.productionBible || typeof patch.productionBible !== "object") {
+        return NextResponse.json({ code: 400, data: null, msg: "不支持提交整份短剧项目；请使用对应的局部变更接口" }, { status: 400 });
+    }
     return handle(context, (userId, id) => updateDramaProjectForUser(userId, id, body).then((project) => NextResponse.json({ code: 0, data: { project }, msg: "短剧项目已保存" })));
 }
 

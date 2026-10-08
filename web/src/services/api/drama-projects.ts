@@ -9,6 +9,8 @@ import type {
     DramaProductionPlan,
     DramaProductionRun,
     DramaProject,
+    DramaProjectMutation,
+    DramaProjectMutationAck,
     DramaProjectAssetUpdate,
     DramaVideoPromptAnalysis,
     DramaProjectSummary,
@@ -144,8 +146,12 @@ export function createDramaProject(input: CreateDramaProjectInput) {
     return request<{ project: DramaProject }>("/api/drama/projects", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) }).then((data) => data.project);
 }
 
-export function saveDramaProject(project: DramaProject) {
-    return request<{ project: DramaProject }>(`/api/drama/projects/${encodeURIComponent(project.id)}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(project) }).then((data) => data.project);
+export function saveDramaProjectMutation(mutation: DramaProjectMutation) {
+    return request<DramaProjectMutationAck>(`/api/drama/projects/${encodeURIComponent(mutation.projectId)}/mutations`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(mutation),
+    });
 }
 
 export function updateDramaProjectRatio(projectId: string, ratio: string, expectedUpdatedAt: string) {
@@ -209,11 +215,11 @@ export function deleteDramaAgentConversation(projectId: string, conversationId: 
     return request<{ deleted: boolean; activeConversationId: string; project: DramaProject }>(`/api/drama/projects/${encodeURIComponent(projectId)}/agent-conversations/${encodeURIComponent(conversationId)}`, { method: "DELETE" });
 }
 
-export function createDramaProjectVersion(project: DramaProject, reason: string) {
-    return request<{ version: DramaProjectVersion }>(`/api/drama/projects/${encodeURIComponent(project.id)}/versions`, {
+export function createDramaProjectVersion(projectId: string, reason: string) {
+    return request<{ version: DramaProjectVersion }>(`/api/drama/projects/${encodeURIComponent(projectId)}/versions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reason, snapshot: project }),
+        body: JSON.stringify({ reason }),
     }).then((data) => data.version);
 }
 

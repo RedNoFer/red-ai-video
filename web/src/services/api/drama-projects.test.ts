@@ -10,7 +10,9 @@ import {
     listDramaProjectSummaries,
     saveDramaEpisodeSettings,
     saveDramaAsset,
+    saveDramaProjectMutation,
     saveDramaProductionPlan,
+    createDramaProjectVersion,
     updateDramaProjectRatio,
     updateDramaShotImagePrompt,
     updateDramaShotPrompt,
@@ -42,6 +44,21 @@ describe("drama project api", () => {
         expect(url).toBe("/api/drama/projects/project-one/ratio");
         expect(JSON.parse(String(init.body))).toEqual({ ratio: "16:9", expectedUpdatedAt: "2026-10-06T00:00:00.000Z" });
         expect(String(init.body).length).toBeLessThan(256);
+    });
+
+    it("sends only a project mutation and a version reason, never a project snapshot", async () => {
+        const mutation = { projectId: "project-one", expectedUpdatedAt: "2026-10-06T00:00:00.000Z", updatedAt: "2026-10-06T00:00:01.000Z", projectPatch: { title: "新标题" } };
+        const fetchMock = vi
+            .fn()
+            .mockResolvedValueOnce(Response.json({ code: 0, data: { projectId: "project-one", updatedAt: mutation.updatedAt }, msg: "OK" }))
+            .mockResolvedValueOnce(Response.json({ code: 0, data: { version: { id: "version-one" } }, msg: "OK" }));
+        vi.stubGlobal("fetch", fetchMock);
+
+        await expect(saveDramaProjectMutation(mutation)).resolves.toEqual({ projectId: "project-one", updatedAt: mutation.updatedAt });
+        await createDramaProjectVersion("project-one", "手动保存版本");
+
+        expect(fetchMock).toHaveBeenNthCalledWith(1, "/api/drama/projects/project-one/mutations", expect.objectContaining({ method: "PATCH", body: JSON.stringify(mutation) }));
+        expect(fetchMock).toHaveBeenNthCalledWith(2, "/api/drama/projects/project-one/versions", expect.objectContaining({ method: "POST", body: JSON.stringify({ reason: "手动保存版本" }) }));
     });
 
     it("applies a production package without a stale project version token", async () => {
