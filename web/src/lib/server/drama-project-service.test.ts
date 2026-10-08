@@ -28,6 +28,7 @@ const mocks = vi.hoisted(() => {
         getDramaProject: vi.fn(),
         listDramaProjectSummaries: vi.fn(),
         updateDramaProject: vi.fn(),
+        updateDramaProjectScopedMutation: vi.fn(),
         updateDramaProjectRatioMutation: vi.fn(),
         updateDramaProjectAssetMutation: vi.fn(),
         updateDramaProjectShotMutation: vi.fn(),
@@ -72,6 +73,7 @@ vi.mock("@/lib/server/drama-project-store", () => ({
     getDramaProject: mocks.getDramaProject,
     listDramaProjectSummaries: mocks.listDramaProjectSummaries,
     updateDramaProject: mocks.updateDramaProject,
+    updateDramaProjectScopedMutation: mocks.updateDramaProjectScopedMutation,
     updateDramaProjectRatioMutation: mocks.updateDramaProjectRatioMutation,
     updateDramaProjectAssetMutation: mocks.updateDramaProjectAssetMutation,
     updateDramaProjectShotMutation: mocks.updateDramaProjectShotMutation,
@@ -110,6 +112,7 @@ import {
     decideDramaContinuityFrameForUser,
     DramaProjectServiceError,
     getDramaProjectForUser,
+    repairDramaProjectForUser,
     getLatestDramaProductionRunForUser,
     getDramaProductionPreflightForUser,
     mergeDramaShotMediaReferences,
@@ -141,6 +144,7 @@ describe("drama project service updates", () => {
     beforeEach(() => {
         vi.clearAllMocks();
         mocks.updateDramaProject.mockImplementation(async (_userId: string, value: DramaProject) => value);
+        mocks.updateDramaProjectScopedMutation.mockImplementation(async (_userId: string, _current: DramaProject, value: DramaProject) => ({ projectId: value.id, updatedAt: value.updatedAt }));
         mocks.updateDramaProjectShotMutation.mockImplementation(async (_userId: string, mutation: { projectId: string; episodeId: string; shotId: string; shot: DramaProject["episodes"][number]["shots"][number]; expectedUpdatedAt?: string }) => ({
             ...mutation,
             updatedAt: "2026-09-15T00:00:01.000Z",
@@ -172,6 +176,18 @@ describe("drama project service updates", () => {
         mocks.deleteUserOwnedMediaAssetsPhysically.mockResolvedValue({ deletedFiles: 1, deletedBytes: 12, blocked: [] });
     });
 
+    it("opens a project without repairing or writing it", async () => {
+        const current = project("2026-10-06T00:00:00.000Z", "只读项目");
+        current.episodes[0].shots = [{ id: "shot-one", videoPrompt: "剪辑承接：重复\n剪辑承接：重复" } as never];
+        mocks.getDramaProject.mockResolvedValue(current);
+
+        await expect(getDramaProjectForUser("user-one", current.id)).resolves.toBe(current);
+        expect(mocks.updateDramaProject).not.toHaveBeenCalled();
+        expect(mocks.updateDramaProjectScopedMutation).not.toHaveBeenCalled();
+        expect(mocks.createDramaProjectVersion).not.toHaveBeenCalled();
+        expect(mocks.queryStoredGenerationTasks).not.toHaveBeenCalled();
+    });
+
     it("applies a sparse field mutation on the server without replacing unrelated project data", async () => {
         const current = project("2026-10-06T00:00:00.000Z", "当前标题");
         current.productionArchive = {
@@ -195,8 +211,9 @@ describe("drama project service updates", () => {
 
         await expect(applyDramaProjectMutationForUser("user-one", current.id, mutation)).resolves.toEqual({ projectId: current.id, updatedAt: mutation.updatedAt });
 
-        const updatedProject = mocks.updateDramaProject.mock.calls[0]?.[1] as DramaProject;
-        expect(mocks.updateDramaProject).toHaveBeenCalledWith("user-one", expect.objectContaining({ title: "仅更新标题" }), current.updatedAt);
+        const updatedProject = mocks.updateDramaProjectScopedMutation.mock.calls[0]?.[2] as DramaProject;
+        expect(mocks.updateDramaProjectScopedMutation).toHaveBeenCalledWith("user-one", current, expect.objectContaining({ title: "仅更新标题" }), mutation);
+        expect(mocks.updateDramaProject).not.toHaveBeenCalled();
         expect(updatedProject.ratio).toBe("16:9");
         expect(updatedProject.productionArchive?.sections[0]?.content).toBe("x".repeat(100_000));
         expect(updatedProject.episodes[0]?.id).toBe(current.episodes[0]?.id);
@@ -490,7 +507,7 @@ describe("drama project service updates", () => {
         const malformed = { ...current, episodes: [...current.episodes, null] } as unknown as DramaProject;
         mocks.getDramaProject.mockResolvedValue(malformed);
 
-        const recovered = await getDramaProjectForUser("user-one", malformed.id);
+        const recovered = await repairDramaProjectForUser("user-one", malformed.id);
 
         expect(recovered.episodes).toHaveLength(1);
         expect(recovered.episodes[0].id).toBe("episode-one");
@@ -541,7 +558,7 @@ describe("drama project service updates", () => {
         ];
         mocks.getDramaProject.mockResolvedValue(current);
 
-        const recovered = await getDramaProjectForUser("user-one", current.id);
+        const recovered = await repairDramaProjectForUser("user-one", current.id);
         const recoveredShot = recovered.episodes[0].shots[0];
 
         expect(recoveredShot.videoPrompt).toContain("台词：陆川说：\u201c我叫陆川。\u201d");
@@ -556,6 +573,30 @@ describe("drama project service updates", () => {
             expect.objectContaining({ episodes: [expect.objectContaining({ shots: [expect.objectContaining({ videoPrompt: recoveredShot.videoPrompt, executionVideoPrompt: recoveredShot.executionVideoPrompt })] })] }),
             current.updatedAt,
         );
+    });
+
+    it("backs up a project before removing repeated lines from an inflated video prompt", async () => {
+        const current = project("2026-07-19T08:00:00.000Z", "项目");
+        const repeatedLine = "硬切承接：陆川压住石缝，指节停在剑柄上。";
+        const prompt = ["### 镜头 01 | 0-4秒 | 近景 | 50mm | 平视 | 锁定机位 | 人物镜头", "场景：北坡岩缝。", ...Array.from({ length: 4096 }, () => repeatedLine), "台词：无"].join("\n");
+        current.episodes[0].shots = [{ ...current.episodes[0].shots[0], videoPrompt: prompt, executionVideoPrompt: prompt }];
+        mocks.getDramaProject.mockResolvedValue(current);
+
+        const recovered = await repairDramaProjectForUser("user-one", current.id);
+        const recoveredShot = recovered.episodes[0].shots[0];
+
+        expect(recoveredShot.videoPrompt?.match(/硬切承接：/gu)).toHaveLength(1);
+        expect(recoveredShot.executionVideoPrompt?.match(/硬切承接：/gu)).toHaveLength(1);
+        expect(mocks.createDramaProjectVersion).toHaveBeenCalledWith("user-one", current.id, "镜头提示词重复内容修复前自动快照", current);
+        expect(mocks.updateDramaProject).toHaveBeenCalledWith("user-one", expect.objectContaining({ episodes: [expect.objectContaining({ shots: [expect.objectContaining({ videoPrompt: recoveredShot.videoPrompt })] })] }), current.updatedAt);
+    });
+
+    it("rejects public video prompts above the authoring quality limit before a project save", () => {
+        const current = project("2026-07-19T08:00:00.000Z", "项目");
+        const input = structuredClone(current);
+        input.episodes[0].shots = [{ id: "shot-one", title: "镜头", videoPrompt: "x".repeat(4501) }] as never;
+
+        expect(() => normalizeProject(input, current)).toThrow("超过4500个Unicode字符");
     });
 
     it("repairs narrative contamination in character visual settings when a project is opened", async () => {
@@ -575,7 +616,7 @@ describe("drama project service updates", () => {
         ];
         mocks.getDramaProject.mockResolvedValue(current);
 
-        const recovered = await getDramaProjectForUser("user-one", current.id);
+        const recovered = await repairDramaProjectForUser("user-one", current.id);
 
         expect(recovered.characters[0].profile).toMatchObject({
             visualIdentity: expect.stringContaining("少年"),
@@ -1461,7 +1502,7 @@ describe("drama project service updates", () => {
         ] as never;
 
         mocks.getDramaProject.mockResolvedValue(current);
-        const recovered = await getDramaProjectForUser("user-one", current.id);
+        const recovered = await repairDramaProjectForUser("user-one", current.id);
 
         expect(recovered.episodes[0].shots[0].frameEvidence).toMatchObject([
             { role: "storyboard_start", mediaUrl: "/api/start.png", validity: "candidate" },
@@ -2264,7 +2305,7 @@ describe("drama project service updates", () => {
         mocks.getDramaProject.mockResolvedValue(current);
         mocks.queryStoredGenerationTasks.mockResolvedValue([{ id: "old-start-frame", userId: "user-one", projectId: current.id, shotId: "shot-one", title: "镜头起始帧", status: "success", result: { serverUrl: "/api/generation-log-assets/old.png" } }]);
 
-        const recovered = await getDramaProjectForUser("user-one", current.id);
+        const recovered = await repairDramaProjectForUser("user-one", current.id);
 
         expect(recovered.episodes[0].shots[0].storyboardImageUrl).toBeUndefined();
         expect(mocks.updateDramaProject).not.toHaveBeenCalled();
@@ -2564,20 +2605,20 @@ describe("drama project service updates", () => {
         };
         mocks.getDramaProject.mockResolvedValue(current);
 
-        const recovered = await getDramaProjectForUser("user-one", current.id);
+        const recovered = await repairDramaProjectForUser("user-one", current.id);
 
         expect(recovered.episodes[0].reviewCompletionTask).toMatchObject({ status: "error", error: "补全请求长时间未完成，已自动结束，请重新发起补全。" });
         expect(mocks.updateDramaProject).toHaveBeenCalledWith("user-one", expect.objectContaining({ episodes: [expect.objectContaining({ reviewCompletionTask: expect.objectContaining({ status: "error" }) })] }), current.updatedAt);
     });
 
-    it("materializes a minimal series bible for legacy projects before preflight", async () => {
+    it("uses an in-memory series bible for legacy preflight without saving on GET", async () => {
         const current = project("2026-07-19T08:00:02.000Z", "项目");
         current.characters = [{ id: "karin", name: "Karin", description: "角色" }];
         mocks.getDramaProject.mockResolvedValue(current);
 
         await getDramaProductionPreflightForUser("user-one", current.id, current.episodes[0].id);
 
-        expect(mocks.updateDramaProject).toHaveBeenCalledWith("user-one", expect.objectContaining({ seriesBible: expect.objectContaining({ version: "series-bible-v1" }) }), current.updatedAt);
+        expect(mocks.updateDramaProject).not.toHaveBeenCalled();
     });
 
     it("repairs expired generated asset URLs from the retained image task", async () => {
@@ -2600,7 +2641,7 @@ describe("drama project service updates", () => {
             result: { serverUrl: "/api/generation-log-assets/permanent/karin.png" },
         });
 
-        const recovered = await getDramaProjectForUser("user-one", current.id);
+        const recovered = await repairDramaProjectForUser("user-one", current.id);
 
         expect(recovered.characters[0].references?.[0]).toMatchObject({ url: "/api/generation-log-assets/permanent/karin.png" });
         expect(recovered.characters[0].referenceImageUrl).toBe("/api/generation-log-assets/permanent/karin.png");
@@ -2635,7 +2676,7 @@ describe("drama project service updates", () => {
             },
         ]);
 
-        const recovered = await getDramaProjectForUser("user-one", current.id);
+        const recovered = await repairDramaProjectForUser("user-one", current.id);
 
         expect(recovered.scenes[0].references).toEqual(
             expect.arrayContaining([expect.objectContaining({ id: "reference-historical-image-task-0", url: "/api/generation-log-assets/permanent/recovered.png", generationTaskId: "historical-image-task", status: "candidate" })]),
@@ -2675,7 +2716,7 @@ describe("drama project service updates", () => {
             },
         ]);
 
-        const recovered = await getDramaProjectForUser("user-one", current.id);
+        const recovered = await repairDramaProjectForUser("user-one", current.id);
 
         expect(recovered.characters[0].references).toEqual([]);
         expect(mocks.updateDramaProject).not.toHaveBeenCalled();
@@ -2702,7 +2743,7 @@ describe("drama project service updates", () => {
             },
         ]);
 
-        const recovered = await getDramaProjectForUser("user-one", current.id);
+        const recovered = await repairDramaProjectForUser("user-one", current.id);
 
         expect(recovered.characters[0].references?.[0]).toMatchObject({ url: "/api/generation-log-assets/permanent/karin.png", generationTaskId: "image-task-karin-legacy" });
         expect(recovered.characters[0].referenceImageUrl).toBe("/api/generation-log-assets/permanent/karin.png");
@@ -2728,7 +2769,7 @@ describe("drama project service updates", () => {
             result: { remoteUrl: "https://provider.example/karin.png", serverUrl: "/api/generation-log-assets/permanent/karin.png" },
         });
 
-        const recovered = await getDramaProjectForUser("user-one", current.id);
+        const recovered = await repairDramaProjectForUser("user-one", current.id);
 
         expect(recovered.characters[0].references?.[0]).toMatchObject({ url: "/api/generation-log-assets/permanent/karin.png", remoteUrl: "https://provider.example/karin.png" });
         expect(mocks.updateDramaProject).toHaveBeenCalledWith(
@@ -2758,7 +2799,7 @@ describe("drama project service updates", () => {
             },
         ]);
 
-        const recovered = await getDramaProjectForUser("user-one", current.id);
+        const recovered = await repairDramaProjectForUser("user-one", current.id);
 
         expect(recovered.characters[0].references?.[0]).toMatchObject({ url: "/api/generation-log-assets/permanent/karin.png", remoteUrl: "https://provider.example/karin.png", generationTaskId: "image-task-karin-legacy-local" });
     });
@@ -3016,7 +3057,7 @@ describe("drama project service updates", () => {
         current.productionBible = { ...current.productionBible!, visualStyle: current.style, colorScript: "深蓝灰、旧银、墨绿、少量暖金" };
         mocks.getDramaProject.mockResolvedValue(current);
 
-        const recovered = await getDramaProjectForUser("user-one", current.id);
+        const recovered = await repairDramaProjectForUser("user-one", current.id);
 
         expect(recovered).toMatchObject({ style: current.style, productionBible: { visualStyle: current.style, colorScript: "深蓝灰、旧银、墨绿、少量暖金" } });
         expect(mocks.updateDramaProject).not.toHaveBeenCalled();

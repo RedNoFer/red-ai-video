@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { DramaProject } from "@/lib/drama-project-contract";
 import { initializePostgresSchema, postgresQuery } from "@/lib/server/database";
-import { createDramaProject, getDramaProject, updateDramaProjectAssetMutation, updateDramaProjectRatioMutation, updateDramaProjectShotMutation } from "./drama-project-store";
+import { createDramaProject, getDramaProject, updateDramaProjectAssetMutation, updateDramaProjectRatioMutation, updateDramaProjectScopedMutation, updateDramaProjectShotMutation } from "./drama-project-store";
 
 const postgresDescribe = process.env.VOZEB_PRO_RUN_POSTGRES_INTEGRATION === "1" ? describe : describe.skip;
 
@@ -37,6 +37,42 @@ postgresDescribe("drama project PostgreSQL mutation round-trip", () => {
             await expect(updateDramaProjectRatioMutation(userId, { projectId: project.id, ratio: "9:16", expectedUpdatedAt: asset.updatedAt })).rejects.toMatchObject({ status: 409 });
             await expect(updateDramaProjectAssetMutation(userId, { projectId: project.id, assetKind: "characters", assetId: "character-one", asset: project.characters[0], expectedUpdatedAt: now })).rejects.toMatchObject({ status: 409 });
             expect((await getDramaProject(project.id, userId))?.characters[0].description).toBe("新设定");
+        } finally {
+            await postgresQuery("DELETE FROM users WHERE id = $1", [userId]);
+        }
+    });
+
+    it("saves sparse project and shot edits while preserving the archive and rejecting stale versions", async () => {
+        const userId = `drama-regression-${randomUUID()}`;
+        const now = new Date().toISOString();
+        const project = {
+            id: `drama-${randomUUID()}`,
+            title: "局部保存回归",
+            status: "active",
+            createdAt: now,
+            updatedAt: now,
+            productionArchive: { sections: [{ content: "x".repeat(100_000) }] },
+            episodes: [{ id: "episode-one", shots: [{ id: "shot-one", title: "旧镜头", videoPrompt: "旧提示词" }] }],
+        } as DramaProject;
+        await postgresQuery("INSERT INTO users (id, username, display_name, password_hash) VALUES ($1, $1, '局部保存回归', 'test-only')", [userId]);
+        try {
+            await createDramaProject(userId, project);
+            const next = structuredClone(project);
+            next.title = "新标题";
+            next.episodes[0].shots[0].title = "新镜头";
+            next.updatedAt = new Date(Date.parse(now) + 1000).toISOString();
+            const mutation = {
+                projectId: project.id,
+                expectedUpdatedAt: now,
+                updatedAt: next.updatedAt,
+                projectPatch: { title: next.title },
+                episodes: { patch: [{ id: "episode-one", fields: {}, shots: { patch: [{ id: "shot-one", fields: { title: "新镜头" } }] } }] },
+            };
+            const saved = await updateDramaProjectScopedMutation(userId, project, next, mutation);
+            const persisted = await getDramaProject(project.id, userId);
+            expect(saved.updatedAt).toBe(persisted?.updatedAt);
+            expect(persisted).toMatchObject({ title: "新标题", episodes: [{ shots: [{ title: "新镜头", videoPrompt: "旧提示词" }] }], productionArchive: project.productionArchive });
+            await expect(updateDramaProjectScopedMutation(userId, project, next, mutation)).rejects.toMatchObject({ status: 409 });
         } finally {
             await postgresQuery("DELETE FROM users WHERE id = $1", [userId]);
         }

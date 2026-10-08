@@ -19,9 +19,24 @@ import {
     validateDramaVideoPromptSemanticQuality,
     validateDramaVideoPromptTemplateLayout,
     validateDramaVideoSegmentDetail,
+    repairDramaVideoPromptRepeatedLines,
 } from "./drama-prompt-quality";
 
 describe("drama prompt quality", () => {
+    it("removes exact repeated lines inside an oversized public card without changing its distinct content", () => {
+        const header = "### 镜头 01 | 0-4秒 | 近景 | 50mm | 平视 | 锁定机位 | 人物镜头";
+        const secondHeader = "### 镜头 02 | 4-8秒 | 近景 | 50mm | 平视 | 锁定机位 | 人物镜头";
+        const repeatedCut = "硬切承接：陆川压住石缝，指节停在剑柄上。";
+        const prompt = [header, "场景：北坡岩缝。", ...Array.from({ length: 4096 }, () => repeatedCut), "台词：无", secondHeader, ...Array.from({ length: 4096 }, () => repeatedCut)].join("\n");
+
+        const repaired = repairDramaVideoPromptRepeatedLines(prompt);
+
+        expect(repaired.changed).toBe(true);
+        expect(repaired.prompt.match(/硬切承接：/gu)).toHaveLength(2);
+        expect(repaired.prompt).toContain("场景：北坡岩缝。");
+        expect(repairDramaVideoPromptRepeatedLines(repaired.prompt)).toEqual({ prompt: repaired.prompt, changed: false });
+    });
+
     it("blocks dialogue that has no audible voice priority or sound-effect ducking", () => {
         const prompt = [
             "### 镜头 06 | 17.8-21秒 | 中近景 | 50mm | 泉池右前平视 | 固定机位 | 人物镜头",

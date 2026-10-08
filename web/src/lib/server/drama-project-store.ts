@@ -1,5 +1,6 @@
-import type { DramaNamedAsset, DramaProject, DramaProjectSummary, DramaProjectSummaryPage, DramaShot } from "@/lib/drama-project-contract";
+import type { DramaNamedAsset, DramaProject, DramaProjectMutation, DramaProjectMutationAck, DramaProjectSummary, DramaProjectSummaryPage, DramaShot } from "@/lib/drama-project-contract";
 import { normalizeDramaImageSize } from "@/lib/drama-image-size";
+import { DRAMA_VIDEO_PROMPT_MAX_UNICODE_CHARACTERS } from "@/lib/drama-prompt-quality";
 import { summarizeDramaProject } from "@/lib/drama-project-summary";
 import { readJsonDataFile, writeJsonDataFile } from "@/lib/server/data-adapter";
 import { ensurePostgresSchema, getDatabaseProvider, postgresQuery } from "@/lib/server/database";
@@ -172,6 +173,84 @@ export async function updateDramaProject(userId: string, project: DramaProject, 
     return project;
 }
 
+/** Writes only fields and entities named by a user mutation; the remaining JSON stays in PostgreSQL. */
+export async function updateDramaProjectScopedMutation(userId: string, current: DramaProject, next: DramaProject, mutation: DramaProjectMutation): Promise<DramaProjectMutationAck> {
+    const patches: Array<{ path: string[]; value: unknown }> = [];
+    const add = (path: string[], value: unknown) => patches.push({ path, value });
+    for (const key of [...Object.keys(mutation.projectPatch || {}), ...(mutation.projectUnset || [])]) add([key], next[key as keyof DramaProject]);
+    if (mutation.projectPatch?.ratio || mutation.projectPatch?.style) add(["productionBible"], next.productionBible);
+
+    for (const kind of ["characters", "scenes", "props", "clues"] as const) {
+        const change = mutation.assets?.[kind];
+        if (!change) continue;
+        if (change.upsert?.length || change.remove?.length) {
+            add([kind], next[kind]);
+            continue;
+        }
+        for (const patch of change.patch || []) {
+            const index = current[kind].findIndex((item) => item.id === patch.id);
+            if (index < 0) throw new DramaProjectStoreError("短剧项目资产不存在", 404);
+            const asset = next[kind].find((item) => item.id === patch.id);
+            if (!asset) throw new DramaProjectStoreError("短剧项目资产不存在", 404);
+            add([kind, String(index)], asset);
+        }
+    }
+
+    if (mutation.episodes?.upsert?.length || mutation.episodes?.remove?.length) {
+        add(["episodes"], next.episodes);
+        add(["activeEpisodeId"], next.activeEpisodeId);
+    } else {
+        for (const change of mutation.episodes?.patch || []) {
+            const index = current.episodes.findIndex((episode) => episode.id === change.id);
+            if (index < 0) throw new DramaProjectStoreError("短剧剧集不存在", 404);
+            const episode = next.episodes.find((item) => item.id === change.id);
+            if (!episode) throw new DramaProjectStoreError("短剧剧集不存在", 404);
+            for (const key of [...Object.keys(change.fields || {}), ...(change.unset || [])]) add(["episodes", String(index), key], episode[key as keyof typeof episode]);
+            if (change.shots?.upsert?.length || change.shots?.remove?.length) {
+                add(["episodes", String(index), "shots"], episode.shots);
+                continue;
+            }
+            for (const patch of change.shots?.patch || []) {
+                const shotIndex = current.episodes[index].shots.findIndex((shot) => shot.id === patch.id);
+                if (shotIndex < 0) throw new DramaProjectStoreError("短剧镜头不存在", 404);
+                const shot = episode.shots.find((item) => item.id === patch.id);
+                if (!shot) throw new DramaProjectStoreError("短剧镜头不存在", 404);
+                add(["episodes", String(index), "shots", String(shotIndex)], shot);
+            }
+        }
+    }
+    if (!patches.length) return { projectId: next.id, updatedAt: current.updatedAt };
+    if (getDatabaseProvider() !== "postgres") {
+        await updateDramaProject(userId, next, current.updatedAt);
+        return { projectId: next.id, updatedAt: next.updatedAt };
+    }
+
+    await ensurePostgresSchema();
+    const values: unknown[] = [next.id, userId, current.updatedAt, next.updatedAt, next.title, next.status];
+    let document = "project.project_json";
+    for (const patch of patches) {
+        values.push(patch.path);
+        const pathParameter = values.length;
+        if (patch.value === undefined) document = `(${document} #- $${pathParameter}::text[])`;
+        else {
+            values.push(JSON.stringify(patch.value));
+            document = `jsonb_set(${document}, $${pathParameter}::text[], $${values.length}::jsonb, true)`;
+        }
+    }
+    const saved = await postgresQuery<{ project_updated_at: string }>(
+        `UPDATE drama_projects AS project
+         SET title = $5, status = $6,
+             project_json = jsonb_set(${document}, '{updatedAt}', to_jsonb($4::text), true),
+             updated_at = $4::timestamptz
+         WHERE project.id = $1 AND project.user_id = $2 AND project.project_json->>'updatedAt' = $3
+         RETURNING project.project_json->>'updatedAt' AS project_updated_at`,
+        values,
+    );
+    if (saved.rows[0]) return { projectId: next.id, updatedAt: saved.rows[0].project_updated_at };
+    const existing = await postgresQuery<{ project_updated_at: string }>("SELECT project_json->>'updatedAt' AS project_updated_at FROM drama_projects WHERE id = $1 AND user_id = $2", [next.id, userId]);
+    throw new DramaProjectStoreError(existing.rows[0] ? "短剧项目已在其他页面更新，请刷新后重试" : "短剧项目不存在", existing.rows[0] ? 409 : 404);
+}
+
 /** Updates only ratio metadata so large project snapshots never cross the client API boundary. */
 export async function updateDramaProjectRatioMutation(userId: string, mutation: DramaProjectRatioMutation): Promise<DramaProjectRatioMutationAck> {
     if (getDatabaseProvider() === "postgres") return updatePostgresProjectRatioMutation(userId, mutation);
@@ -236,6 +315,7 @@ async function updatePostgresProjectRatioMutation(userId: string, mutation: Dram
 
 /** Persists a single shot mutation without sending or rewriting the full project from the service layer. */
 export async function updateDramaProjectShotMutation(userId: string, mutation: DramaProjectShotMutation): Promise<DramaProjectShotMutationAck> {
+    if (Array.from(mutation.shot.videoPrompt || "").length > DRAMA_VIDEO_PROMPT_MAX_UNICODE_CHARACTERS) throw new DramaProjectStoreError(`镜头公开视频提示词超过${DRAMA_VIDEO_PROMPT_MAX_UNICODE_CHARACTERS}个Unicode字符`, 413);
     if (getDatabaseProvider() === "postgres") return updatePostgresProjectShotMutation(userId, mutation);
 
     let found = false;

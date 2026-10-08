@@ -4,7 +4,7 @@ import path from "node:path";
 import { parse } from "yaml";
 
 export const composeProfiles = [
-    { file: "docker-compose.yml", embeddedPostgres: true, image: "${VOZEB_PRO_IMAGE:-ghcr.io/csyqlz/vozeb-pro:v0.0.6}", workerOrigin: "http://app:3000" },
+    { file: "docker-compose.yml", embeddedPostgres: true, image: "${VOZEB_PRO_IMAGE:-ghcr.io/csyqlz/vozeb-pro:v0.0.6}", appNodeOptions: "${VOZEB_PRO_APP_NODE_OPTIONS:---max-old-space-size=2048}", workerOrigin: "http://app:3000" },
     { file: "docker-compose.local.yml", embeddedPostgres: true, image: "vozeb-pro:local", workerOrigin: "http://app:3000" },
     { file: "docker-compose.baota.yml", embeddedPostgres: false, hostNetwork: true, image: "${VOZEB_PRO_IMAGE:-ghcr.io/csyqlz/vozeb-pro:v0.0.6}", workerOrigin: "http://127.0.0.1:3000" },
     { file: "docker-compose.external-db.yml", embeddedPostgres: false, image: "${VOZEB_PRO_IMAGE:-ghcr.io/csyqlz/vozeb-pro:v0.0.6}", workerOrigin: "http://app:3000" },
@@ -83,6 +83,7 @@ export function validateComposeContract(source, profile) {
     ensure(!("VOZEB_PRO_INSTALL_TOKEN" in workerEnvironment), "generation-worker 不得获得一次性安装令牌");
     ensure(appEnvironment.VOZEB_PRO_MAINTENANCE_TOKEN === maintenanceToken, "app 未声明强制维护令牌");
     ensure(appEnvironment.VOZEB_PRO_WORKER_TOKEN === workerToken, "app 未声明强制 Worker 令牌");
+    if (profile.appNodeOptions) ensure(appEnvironment.NODE_OPTIONS === profile.appNodeOptions, "app 必须允许配置与项目数据规模相符的 Node 堆内存");
     ensure(workerEnvironment.VOZEB_PRO_WORKER_TOKEN === workerToken, "generation-worker 未声明同一强制 Worker 令牌");
     ensure(!("VOZEB_PRO_MAINTENANCE_TOKEN" in workerEnvironment), "generation-worker 不得获得外部维护令牌");
     ensure(workerEnvironment.VOZEB_PRO_WORKER_API_ORIGIN === profile.workerOrigin, `Worker API 地址必须为 ${profile.workerOrigin}`);

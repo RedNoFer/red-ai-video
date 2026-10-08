@@ -36,6 +36,7 @@ const ACTIVE_CAMERA_CUT_PATTERN = /硬切|镜头切换|Camera\s+cut\s+to|Cut\s+t
 const VIDEO_CARD_HEADER = /^###\s*镜头\s*(\d+)\s*\|([^\n]+)$/gmu;
 const VIDEO_CARD_FIELDS = ["场景", "画面内容", "光影", "色调", "台词", "人声", "音效"] as const;
 const VIDEO_CARD_FIELD_BOUNDARIES = [...VIDEO_CARD_FIELDS, "剪辑承接"] as const;
+export const DRAMA_VIDEO_PROMPT_MAX_UNICODE_CHARACTERS = 4500;
 const AUDIO_DUCKING_INSTRUCTION = "对白/旁白发声期间压低环境音、动作拟音与音乐，不遮挡台词清晰度；仅在语音停顿间隙再抬升";
 const SPEECH_CLARITY_PATTERN = /(?:对白|旁白|语音|人声).{0,24}原声.{0,24}(?:清晰|可辨|可懂).{0,24}(?:居前|前景|优先).{0,36}(?:原句完整可听|完整可听|实际发声|可听见)/u;
 const SPEECH_DUCKING_PATTERN = /(?:对白|旁白|台词|人声).{0,28}(?:发声期间|发声时|说话期间|说话时|语音窗口).{0,32}(?:压低|避让|降低|减弱|不遮挡|不盖过)/u;
@@ -283,6 +284,33 @@ function updateDramaVideoPromptCardField(prompt: string, cardIndex: number, fiel
     const trailingLineBreaks = match[3].match(/\n+$/u)?.[0] || "";
     const next = raw.replace(expression, (_whole, prefix: string, heading: string) => `${prefix}${heading}${value}${trailingLineBreaks}`);
     return next === raw ? prompt : `${prompt.slice(0, start)}${next}${prompt.slice(end)}`;
+}
+
+/** Repairs prompt inflation by keeping one copy of each identical line in each public card. */
+export function repairDramaVideoPromptRepeatedLines(prompt: string) {
+    if (prompt.length <= DRAMA_VIDEO_PROMPT_MAX_UNICODE_CHARACTERS) return { prompt, changed: false };
+    const markers = [...prompt.matchAll(VIDEO_CARD_HEADER)];
+    const sections = markers.length ? markers.map((marker, index) => ({ start: marker.index ?? 0, end: markers[index + 1]?.index ?? prompt.length })) : [{ start: 0, end: prompt.length }];
+    const chunks: string[] = [];
+    let cursor = 0;
+    let changed = false;
+    for (const { start, end } of sections) {
+        chunks.push(prompt.slice(cursor, start));
+        const card = prompt.slice(start, end);
+        const seen = new Set<string>();
+        const lines = card.split("\n").filter((line) => {
+            if (!line.trim() || !seen.has(line)) {
+                if (line.trim()) seen.add(line);
+                return true;
+            }
+            changed = true;
+            return false;
+        });
+        chunks.push(lines.join("\n"));
+        cursor = end;
+    }
+    chunks.push(prompt.slice(cursor));
+    return changed ? { prompt: chunks.join(""), changed: true } : { prompt, changed: false };
 }
 
 export function validateDramaVideoPromptCardLayout(value: unknown, frames: ReadonlyArray<DramaCameraPlanFrame> | number, label: string) {

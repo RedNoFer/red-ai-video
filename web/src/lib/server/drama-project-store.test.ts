@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { DramaProject } from "@/lib/drama-project-contract";
+import { DRAMA_VIDEO_PROMPT_MAX_UNICODE_CHARACTERS } from "@/lib/drama-prompt-quality";
 
 const mocks = vi.hoisted(() => ({ files: new Map<string, unknown>(), provider: "file" as "file" | "postgres", postgresQuery: vi.fn(), ensurePostgresSchema: vi.fn() }));
 
@@ -16,7 +17,17 @@ vi.mock("@/lib/server/data-adapter", () => ({
     }),
 }));
 
-import { createDramaProject, deleteDramaProject, getDramaProject, listDramaProjectSummaries, updateDramaProject, updateDramaProjectAssetMutation, updateDramaProjectRatioMutation, updateDramaProjectShotMutation } from "./drama-project-store";
+import {
+    createDramaProject,
+    deleteDramaProject,
+    getDramaProject,
+    listDramaProjectSummaries,
+    updateDramaProject,
+    updateDramaProjectAssetMutation,
+    updateDramaProjectRatioMutation,
+    updateDramaProjectScopedMutation,
+    updateDramaProjectShotMutation,
+} from "./drama-project-store";
 
 describe("drama project file provider", () => {
     beforeEach(() => {
@@ -168,6 +179,18 @@ describe("drama project file provider", () => {
         await expect(getDramaProject("one", "user-one")).resolves.toMatchObject({ productionArchive: original.productionArchive, episodes: [{ shots: [shot] }] });
     });
 
+    it("rejects oversized public video prompts at the scoped persistence boundary", async () => {
+        await expect(
+            updateDramaProjectShotMutation("user-one", {
+                projectId: "project-one",
+                episodeId: "episode-one",
+                shotId: "shot-one",
+                shot: { id: "shot-one", videoPrompt: "x".repeat(DRAMA_VIDEO_PROMPT_MAX_UNICODE_CHARACTERS + 1) } as never,
+            }),
+        ).rejects.toMatchObject({ status: 413, message: expect.stringContaining("超过4500个Unicode字符") });
+        expect(mocks.postgresQuery).not.toHaveBeenCalled();
+    });
+
     it("keeps the large archive while changing only the project ratio", async () => {
         const original = project("one", "大型项目");
         original.productionBible = { ratio: "9:16", productionPlan: { video: { ratio: "9:16" } } } as never;
@@ -205,6 +228,45 @@ describe("drama project file provider", () => {
         expect(statement).not.toContain("SET title =");
         expect(values[4]).toBe(JSON.stringify(shot));
         expect(String(values[4]).length).toBeLessThan(1024);
+    });
+
+    it("persists routine project fields and shot edits without serializing the project archive", async () => {
+        mocks.provider = "postgres";
+        const current = project("one", "大型项目");
+        current.productionArchive = {
+            formatVersion: "vozeb-drama-production-package-v1",
+            sections: [{ code: "EP01", title: "历史", content: "x".repeat(100_000) }],
+            promptAssets: [],
+            dialogueDirections: [],
+            voiceDirections: [],
+            silenceDirections: [],
+            referencePlan: [],
+            generationOrder: [],
+            qcReport: "",
+        };
+        current.episodes[0].shots = [{ id: "shot-one", title: "旧镜头", videoPrompt: "旧内容" } as never];
+        const next = structuredClone(current);
+        next.title = "已更新";
+        next.episodes[0].shots[0].title = "新镜头";
+        next.updatedAt = new Date(Date.parse(current.updatedAt) + 1000).toISOString();
+        mocks.postgresQuery.mockResolvedValueOnce({ rows: [{ project_updated_at: next.updatedAt }] });
+
+        await expect(
+            updateDramaProjectScopedMutation("user-one", current, next, {
+                projectId: current.id,
+                expectedUpdatedAt: current.updatedAt,
+                updatedAt: next.updatedAt,
+                projectPatch: { title: next.title },
+                episodes: { patch: [{ id: "episode-one", fields: {}, shots: { patch: [{ id: "shot-one", fields: { title: "新镜头" } }] } }] },
+            }),
+        ).resolves.toEqual({ projectId: current.id, updatedAt: next.updatedAt });
+
+        const [statement, values] = mocks.postgresQuery.mock.calls[0] as [string, unknown[]];
+        expect(statement).toContain("project.project_json->>'updatedAt' = $3");
+        expect(statement).toContain("jsonb_set");
+        expect(values).toContainEqual(["episodes", "0", "shots", "0"]);
+        expect(JSON.stringify(values)).not.toContain("x".repeat(1000));
+        expect(values).not.toContain(JSON.stringify(next));
     });
 
     it.each(["asset", "shot"])("returns the JSON version, not the trigger timestamp, for a %s mutation", async (kind) => {

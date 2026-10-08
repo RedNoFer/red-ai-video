@@ -54,7 +54,15 @@ import { deleteDramaFrameBeat, formatPromptFieldLines, normalizeDramaFrameBeats,
 import { canonicalizeDramaProductionPlanVisual, defaultDramaProductionPlan, dramaReferenceImageBudget, normalizeDramaProductionPlan } from "@/lib/drama-production-plan";
 import { resolveDramaShotDuration } from "@/lib/server/drama-shot-config";
 import { dramaDialogueFragmentSequenceError } from "@/lib/drama-dialogue-timing";
-import { repairDramaVideoPromptAudioHierarchy, repairDramaVideoPromptUtteranceCoverage, validateDramaVideoPromptAudioHierarchy, validateDramaVideoPromptCardLayout, validateDramaVideoPromptUtteranceCoverage } from "@/lib/drama-prompt-quality";
+import {
+    DRAMA_VIDEO_PROMPT_MAX_UNICODE_CHARACTERS,
+    repairDramaVideoPromptAudioHierarchy,
+    repairDramaVideoPromptRepeatedLines,
+    repairDramaVideoPromptUtteranceCoverage,
+    validateDramaVideoPromptAudioHierarchy,
+    validateDramaVideoPromptCardLayout,
+    validateDramaVideoPromptUtteranceCoverage,
+} from "@/lib/drama-prompt-quality";
 import { TEXT_MODEL_REQUEST_TIMEOUT_MS } from "@/lib/server/model-request-policy";
 import { getAgentRun, listAgentRuns } from "@/lib/server/agent-run-store";
 import { reviewCreativeOutputs } from "@/lib/server/creative-review-service";
@@ -71,6 +79,7 @@ import {
     updateDramaProject,
     updateDramaProjectAssetMutation,
     updateDramaProjectRatioMutation,
+    updateDramaProjectScopedMutation,
     updateDramaProjectShotMutation,
 } from "@/lib/server/drama-project-store";
 import type { DramaProjectShotMutationAck } from "@/lib/server/drama-project-store";
@@ -154,9 +163,16 @@ export function listDramaProjectSummariesForUser(userId: string, input: { page?:
 export async function getDramaProjectForUser(userId: string, id: string) {
     const project = await getDramaProject(cleanText(id), userId);
     if (!project) throw new DramaProjectServiceError("短剧项目不存在", 404);
+    return project;
+}
+
+/** Legacy repairs are an explicit write operation, never part of a project read. */
+export async function repairDramaProjectForUser(userId: string, id: string) {
+    const project = await getDramaProjectForUser(userId, id);
     const episodesRecovered = recoverInvalidDramaEpisodes(project);
     const current = episodesRecovered || project;
-    const promptRecovered = recoverStaleDramaExecutionVideoPrompts(current);
+    const promptRecovery = recoverStaleDramaExecutionVideoPrompts(current);
+    const promptRecovered = promptRecovery?.project;
     const currentWithPrompts = promptRecovered || current;
     const styleRecovered = recoverLegacyDramaStyle(currentWithPrompts);
     const boundaryRecovered = recoverStaleDramaBoundaryFrames(styleRecovered || currentWithPrompts);
@@ -167,6 +183,7 @@ export async function getDramaProjectForUser(userId: string, id: string) {
     const assetRecovered = await recoverStaleGeneratedAssetReferences(userId, characterProfileRecovered || profileRecovered || reviewRecovered || frameEvidenceRecovered || boundaryRecovered || styleRecovered || currentWithPrompts);
     const recovered = assetRecovered || characterProfileRecovered || profileRecovered || reviewRecovered || frameEvidenceRecovered || boundaryRecovered || styleRecovered || promptRecovered || episodesRecovered;
     if (!recovered) return project;
+    if (promptRecovery?.duplicateLinesChanged) await createDramaProjectVersion(userId, project.id, "镜头提示词重复内容修复前自动快照", project);
     try {
         return await updateDramaProject(userId, recovered, project.updatedAt);
     } catch (error) {
@@ -182,6 +199,7 @@ export function recoverInvalidDramaEpisodes(project: DramaProject) {
 
 function recoverStaleDramaExecutionVideoPrompts(project: DramaProject) {
     let changed = false;
+    let duplicateLinesChanged = false;
     const episodes = project.episodes.map((episode) => ({
         ...episode,
         shots: episode.shots.map((shot) => {
@@ -190,9 +208,11 @@ function recoverStaleDramaExecutionVideoPrompts(project: DramaProject) {
             const executionPrompt = shot.executionVideoPrompt?.trim();
             const sourcePrompt = shot.videoPrompt?.trim();
             const repairPrompt = (prompt: string) => {
-                const dialogue = repairDramaVideoPromptUtteranceCoverage(prompt, frames, utterances, shot.code || shot.title);
+                const repeatedLines = repairDramaVideoPromptRepeatedLines(prompt);
+                duplicateLinesChanged ||= repeatedLines.changed;
+                const dialogue = repairDramaVideoPromptUtteranceCoverage(repeatedLines.prompt, frames, utterances, shot.code || shot.title);
                 const audio = repairDramaVideoPromptAudioHierarchy(dialogue.prompt, shot.code || shot.title);
-                return { prompt: audio.prompt, changed: dialogue.changed || audio.changed };
+                return { prompt: audio.prompt, changed: repeatedLines.changed || dialogue.changed || audio.changed };
             };
             const executionRepair = executionPrompt ? repairPrompt(executionPrompt) : undefined;
             const sourceRepair = sourcePrompt ? repairPrompt(sourcePrompt) : undefined;
@@ -215,7 +235,7 @@ function recoverStaleDramaExecutionVideoPrompts(project: DramaProject) {
             };
         }),
     }));
-    return changed ? { ...project, episodes, updatedAt: nextTimestamp(project.updatedAt) } : null;
+    return changed ? { project: { ...project, episodes, updatedAt: nextTimestamp(project.updatedAt) }, duplicateLinesChanged } : null;
 }
 
 export function recoverStaleDramaBoundaryFrames(project: DramaProject) {
@@ -751,7 +771,7 @@ export async function createDramaProjectForUser(userId: string, value: unknown) 
     }
 }
 
-export async function updateDramaProjectForUser(userId: string, id: string, value: unknown, expectedCurrentUpdatedAt?: string) {
+export async function updateDramaProjectForUser(userId: string, id: string, value: unknown, expectedCurrentUpdatedAt?: string, scopeMutation?: DramaProjectMutation) {
     const current = await getDramaProjectForUser(userId, id);
     if (expectedCurrentUpdatedAt && current.updatedAt !== expectedCurrentUpdatedAt) throw new DramaProjectServiceError("短剧项目已在其他页面更新，请刷新后重试", 409);
     const input = object(value);
@@ -788,9 +808,11 @@ export async function updateDramaProjectForUser(userId: string, id: string, valu
             productionBible: project.productionBible ? { ...project.productionBible, productionPlan: { ...currentPlan, video: { ...currentPlan.video, ratio: project.ratio } } } : project.productionBible,
         };
     }
-    const size = Buffer.byteLength(JSON.stringify(project));
-    const currentSize = Buffer.byteLength(JSON.stringify(current));
-    if (size > MAX_PROJECT_BYTES && currentSize <= MAX_PROJECT_BYTES) throw new DramaProjectServiceError("短剧项目数据过大", 413);
+    if (!scopeMutation) {
+        const size = Buffer.byteLength(JSON.stringify(project));
+        const currentSize = Buffer.byteLength(JSON.stringify(current));
+        if (size > MAX_PROJECT_BYTES && currentSize <= MAX_PROJECT_BYTES) throw new DramaProjectServiceError("短剧项目数据过大", 413);
+    }
     try {
         assertUniqueDramaVoices(project.characters);
     } catch (error) {
@@ -802,6 +824,10 @@ export async function updateDramaProjectForUser(userId: string, id: string, valu
     project = preserveMissingFrameEvidence(current, project);
     project = invalidateChangedDramaFrameEvidence(current, project);
     try {
+        if (scopeMutation) {
+            const ack = await updateDramaProjectScopedMutation(userId, current, project, scopeMutation);
+            return { ...project, updatedAt: ack.updatedAt };
+        }
         return await updateDramaProject(userId, project, current.updatedAt);
     } catch (error) {
         if (error instanceof DramaProjectStoreError) throw new DramaProjectServiceError(error.message, error.status);
@@ -889,7 +915,7 @@ export async function applyDramaProjectMutationForUser(userId: string, id: strin
         }
         project.episodes = episodes;
     }
-    const saved = await updateDramaProjectForUser(userId, id, { ...project, updatedAt }, expectedUpdatedAt);
+    const saved = await updateDramaProjectForUser(userId, id, { ...project, updatedAt }, expectedUpdatedAt, input as DramaProjectMutation);
     return { projectId: saved.id, updatedAt: saved.updatedAt };
 }
 
@@ -2399,7 +2425,8 @@ export function applyDramaVisualStepFailure(project: DramaProject, episodeId: st
 }
 
 export async function getDramaProductionPreflightForUser(userId: string, projectId: string, episodeId: string) {
-    const project = await ensureSeriesBibleForUser(userId, await getDramaProjectForUser(userId, projectId));
+    const current = await getDramaProjectForUser(userId, projectId);
+    const project = recoverMissingSeriesBible(current) || current;
     const episode = project.episodes.find((item) => item.id === cleanText(episodeId));
     if (!episode) throw new DramaProjectServiceError("短剧剧集不存在", 404);
     const latest = await findLatestDramaProductionRun(userId, project.id, episode.id, "production");
@@ -3918,8 +3945,14 @@ function normalizeVisualReview(value: unknown): DramaEpisode["visualReview"] {
     };
 }
 
+function assertDramaVideoPromptLength(value: string) {
+    if (Array.from(value).length > DRAMA_VIDEO_PROMPT_MAX_UNICODE_CHARACTERS) throw new DramaProjectServiceError(`镜头公开视频提示词超过${DRAMA_VIDEO_PROMPT_MAX_UNICODE_CHARACTERS}个Unicode字符，请删除重复内容后重试`, 413);
+}
+
 function normalizeShot(value: unknown, index: number): DramaShot {
     const input = object(value);
+    const videoPrompt = cleanText(input.videoPrompt);
+    assertDramaVideoPromptLength(videoPrompt);
     return {
         id: cleanText(input.id) || `shot-${nanoid()}`,
         code: optionalText(input.code),
@@ -3935,7 +3968,7 @@ function normalizeShot(value: unknown, index: number): DramaShot {
         dialoguePerformance: normalizeDialoguePerformance(input.dialoguePerformance),
         lightingPlan: normalizeLightingPlan(input.lightingPlan),
         imagePrompt: formatPromptFieldLines(cleanText(input.imagePrompt), "static"),
-        videoPrompt: cleanText(input.videoPrompt),
+        videoPrompt,
         executionVideoPrompt: optionalText(input.executionVideoPrompt),
         executionImagePrompt: optionalText(input.executionImagePrompt),
         cameraMotion: cleanText(input.cameraMotion),

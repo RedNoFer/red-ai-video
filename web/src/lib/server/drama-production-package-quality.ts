@@ -5,6 +5,7 @@ import { hasDramaReferenceAnchorClarity } from "@/lib/drama-prompt-compiler";
 import { validateDramaCharacterWardrobeContinuity, validateDramaCutInformationDiversity, validateDramaPromptComposition, validateDramaReferenceAliasConsistency } from "@/lib/drama-prompt-composition-quality";
 import {
     extractDramaVideoPromptCards,
+    DRAMA_VIDEO_PROMPT_MAX_UNICODE_CHARACTERS,
     hasConcreteDramaCameraDirection,
     validateDramaVideoPromptAudioHierarchy,
     validateDramaFrameCausalChain,
@@ -99,7 +100,6 @@ const cinematicPlaceholderPattern = /^(?:入口构图已建立|动作展开|关�
 const denseCutExceptionPattern = /(?:减切原因|减切理由)\s*[：:]\s*(?:(?:静态留白|结果停留|凝视停留|供应商能力限制|供应商限制)[^。\n；;]*)/u;
 const videoPromptPseudoParameterPattern = /(?:palette|saturation|film_stock|grain|halation)\s*=/u;
 const videoPromptRuntimePlaceholderPattern = /undefined|null|NaN|\[object Object\]/u;
-const videoPromptMaxUnicodeCharacters = 4500;
 
 export function validateDramaAuthoringQuality(input: DramaAuthoringQualityInput): DramaQualityGateReport {
     const checks: DramaQualityGateCheck[] = [];
@@ -336,7 +336,7 @@ function checkVideoPromptLength(checks: DramaQualityGateCheck[], value: DramaPro
     const failures = value.episodes.flatMap((episode) =>
         episode.shots.flatMap((shot) => {
             const characterCount = Array.from(shot.videoPrompt || "").length;
-            return characterCount > videoPromptMaxUnicodeCharacters ? [`${episode.code}/${shot.code || shot.title} videoPrompt=${characterCount}个Unicode字符，超过4500上限`] : [];
+            return characterCount > DRAMA_VIDEO_PROMPT_MAX_UNICODE_CHARACTERS ? [`${episode.code}/${shot.code || shot.title} videoPrompt=${characterCount}个Unicode字符，超过${DRAMA_VIDEO_PROMPT_MAX_UNICODE_CHARACTERS}上限`] : [];
         }),
     );
     add(
