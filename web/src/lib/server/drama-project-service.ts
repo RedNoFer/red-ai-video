@@ -54,7 +54,7 @@ import { deleteDramaFrameBeat, formatPromptFieldLines, normalizeDramaFrameBeats,
 import { canonicalizeDramaProductionPlanVisual, defaultDramaProductionPlan, dramaReferenceImageBudget, normalizeDramaProductionPlan } from "@/lib/drama-production-plan";
 import { resolveDramaShotDuration } from "@/lib/server/drama-shot-config";
 import { dramaDialogueFragmentSequenceError } from "@/lib/drama-dialogue-timing";
-import { repairDramaVideoPromptUtteranceCoverage, validateDramaVideoPromptCardLayout, validateDramaVideoPromptUtteranceCoverage } from "@/lib/drama-prompt-quality";
+import { repairDramaVideoPromptAudioHierarchy, repairDramaVideoPromptUtteranceCoverage, validateDramaVideoPromptAudioHierarchy, validateDramaVideoPromptCardLayout, validateDramaVideoPromptUtteranceCoverage } from "@/lib/drama-prompt-quality";
 import { TEXT_MODEL_REQUEST_TIMEOUT_MS } from "@/lib/server/model-request-policy";
 import { getAgentRun, listAgentRuns } from "@/lib/server/agent-run-store";
 import { reviewCreativeOutputs } from "@/lib/server/creative-review-service";
@@ -189,8 +189,13 @@ function recoverStaleDramaExecutionVideoPrompts(project: DramaProject) {
             const utterances = shot.utterances || [];
             const executionPrompt = shot.executionVideoPrompt?.trim();
             const sourcePrompt = shot.videoPrompt?.trim();
-            const executionRepair = executionPrompt ? repairDramaVideoPromptUtteranceCoverage(executionPrompt, frames, utterances, shot.code || shot.title) : undefined;
-            const sourceRepair = sourcePrompt ? repairDramaVideoPromptUtteranceCoverage(sourcePrompt, frames, utterances, shot.code || shot.title) : undefined;
+            const repairPrompt = (prompt: string) => {
+                const dialogue = repairDramaVideoPromptUtteranceCoverage(prompt, frames, utterances, shot.code || shot.title);
+                const audio = repairDramaVideoPromptAudioHierarchy(dialogue.prompt, shot.code || shot.title);
+                return { prompt: audio.prompt, changed: dialogue.changed || audio.changed };
+            };
+            const executionRepair = executionPrompt ? repairPrompt(executionPrompt) : undefined;
+            const sourceRepair = sourcePrompt ? repairPrompt(sourcePrompt) : undefined;
             const nextExecutionPrompt = executionRepair?.prompt || executionPrompt;
             const nextSourcePrompt = sourceRepair?.prompt || sourcePrompt;
             const promptErrors = [...validateDramaVideoPromptCardLayout(nextExecutionPrompt, frames, shot.code || shot.title), ...validateDramaVideoPromptUtteranceCoverage(nextExecutionPrompt || "", frames, utterances, shot.code || shot.title)];
@@ -524,7 +529,7 @@ function recoverMissingSeriesBible(project: DramaProject) {
         worldRules: ["不得编造剧本未明确提供的世界观事实。"],
         unresolvedThreads: [],
         visualMotifs: project.style.trim() ? [project.style.trim()] : [],
-        soundMotifs: ["按当前集声音设计和对白执行。"],
+        soundMotifs: ["对白/旁白清晰居前，非语言音效在发声窗口避让；静默与环境声按剧本执行。"],
     };
     return {
         ...project,
@@ -709,7 +714,7 @@ export async function createDramaProjectForUser(userId: string, value: unknown) 
             ratio: input.ratio,
             visualStyle: styleContract.name,
             ...(styleContract.colorScript ? { colorScript: styleContract.colorScript } : {}),
-            soundBible: "按镜头声音设计表执行，保留对白空间与静默段落",
+            soundBible: "对白/旁白原句实际发声且清晰居前；环境音、动作拟音与音乐在语音窗口压低避让，只在停顿间隙恢复，并保留剧情需要的静默段落",
             globalNegativePrompt: "无字幕、无水印、无logo、无现代元素、无角色身份漂移",
             subtitleSafeArea: "角色头顶与画面底部保留安全区",
             continuityMode: "strict",
@@ -723,7 +728,7 @@ export async function createDramaProjectForUser(userId: string, value: unknown) 
             worldRules: ["不得编造剧本未明确提供的世界观事实。"],
             unresolvedThreads: [],
             visualMotifs: input.style.trim() ? [input.style.trim()] : [],
-            soundMotifs: ["按当前集声音设计和对白执行。"],
+            soundMotifs: ["对白/旁白清晰居前，非语言音效在发声窗口避让；静默与环境声按剧本执行。"],
         },
         status: "active",
         creativeConversationId: conversation.id,
@@ -3201,9 +3206,12 @@ export async function updateDramaShotPromptForUser(userId: string, projectId: st
                           const framePlan = hasFramePlanPatch ? normalizeAgentFramePlan(input.framePlan, shot.framePlan, shot.duration) : undefined;
                           if (hasFramePlanPatch && !framePlan) throw new DramaProjectServiceError("Agent 逐帧计划无效，未保存本次提示词", 422);
                           if (framePlan) validateSavedDramaDialogueSequence(framePlan, shot.utterances, `${episode.code || episode.title}/${shot.code || shot.title}`);
+                          const repairedVideoPrompt = videoPrompt ? repairDramaVideoPromptAudioHierarchy(videoPrompt, shot.code || shot.title).prompt : "";
                           if (videoPrompt) {
                               const coverageErrors = validateDramaVideoPromptUtteranceCoverage(videoPrompt, framePlan?.frames || shot.framePlan?.frames || [], shot.utterances, shot.code || shot.title);
                               if (coverageErrors.length) throw new DramaProjectServiceError(coverageErrors[0], 422);
+                              const audioErrors = validateDramaVideoPromptAudioHierarchy(repairedVideoPrompt, shot.code || shot.title);
+                              if (audioErrors.length) throw new DramaProjectServiceError(audioErrors[0], 422);
                           }
                           const fieldOrigins = {
                               ...(shot.fieldOrigins || {}),
@@ -3213,7 +3221,7 @@ export async function updateDramaShotPromptForUser(userId: string, projectId: st
                           };
                           return {
                               ...shot,
-                              ...(videoPrompt ? { executionVideoPrompt: videoPrompt } : {}),
+                              ...(videoPrompt ? { executionVideoPrompt: repairedVideoPrompt } : {}),
                               ...(imagePrompt ? { imagePrompt: formatPromptFieldLines(imagePrompt, "static"), executionImagePrompt: undefined } : {}),
                               ...(framePlan ? { framePlan } : {}),
                               fieldOrigins,
@@ -3261,9 +3269,12 @@ export async function updateDramaShotPromptPatchForUser(userId: string, projectI
             if (!framePlan) throw new DramaProjectServiceError("逐帧计划无效，未保存本次提示词", 422);
             validateSavedDramaDialogueSequence(framePlan, currentShot.utterances, `${currentEpisode.code || currentEpisode.title}/${currentShot.code || currentShot.title}`);
         }
+        const repairedVideoPrompt = videoPrompt ? repairDramaVideoPromptAudioHierarchy(videoPrompt, currentShot.code || currentShot.title).prompt : "";
         if (videoPrompt) {
             const coverageErrors = validateDramaVideoPromptUtteranceCoverage(videoPrompt, framePlan?.frames || [], currentShot.utterances, currentShot.code || currentShot.title);
             if (coverageErrors.length) throw new DramaProjectServiceError(coverageErrors[0], 422);
+            const audioErrors = validateDramaVideoPromptAudioHierarchy(repairedVideoPrompt, currentShot.code || currentShot.title);
+            if (audioErrors.length) throw new DramaProjectServiceError(audioErrors[0], 422);
         }
         const storyboardFrames = hasStoryboardFramesPatch ? normalizeStoryboardFrames(input.storyboardFrames) : currentShot.storyboardFrames;
         if (hasStoryboardFramesPatch && !storyboardFrames) throw new DramaProjectServiceError("分镜帧状态无效", 400);
@@ -3275,7 +3286,7 @@ export async function updateDramaShotPromptPatchForUser(userId: string, projectI
         };
         const nextShot: DramaShot = {
             ...currentShot,
-            ...(videoPrompt ? { executionVideoPrompt: videoPrompt } : {}),
+            ...(videoPrompt ? { executionVideoPrompt: repairedVideoPrompt } : {}),
             ...(imagePrompt ? { imagePrompt: formatPromptFieldLines(imagePrompt, "static"), executionImagePrompt: undefined } : {}),
             ...(hasFramePlanPatch ? { framePlan, storyboardFrameMode: "all_frames" as const } : {}),
             ...(hasStoryboardFramesPatch ? { storyboardFrames } : {}),

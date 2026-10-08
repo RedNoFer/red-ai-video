@@ -55,6 +55,7 @@ import {
     validateDramaCameraPlan,
     validateDramaFrameTiming,
     validateDramaPerformanceDetail,
+    repairDramaVideoPromptAudioHierarchy,
     repairDramaVideoPromptUtteranceCoverage,
     validateDramaVideoAuthoringQuality,
     validateDramaVideoPromptCardLayout,
@@ -454,17 +455,19 @@ function mergeEpisode(
     const linkedShots = shots.map((shot) => {
         const packageShot = incoming.shots.find((item) => item.code === shot.code);
         const framePlan = shouldPreserveManualFramePlan(shot.framePlan, shot.fieldOrigins?.framePlan) ? preserveManualFramePlan(shot.framePlan!) : remapFramePlan(packageShot?.framePlan, characterIds, locationIds, propIds, clueIds, shotIds);
-        const repairedBasePrompt = repairDramaVideoPromptUtteranceCoverage(shot.videoPrompt, framePlan?.frames || [], shot.utterances as DramaDialogueTimingInput[], shot.code || shot.title);
+        const dialogueRepairedBasePrompt = repairDramaVideoPromptUtteranceCoverage(shot.videoPrompt, framePlan?.frames || [], shot.utterances as DramaDialogueTimingInput[], shot.code || shot.title);
+        const repairedBasePrompt = repairDramaVideoPromptAudioHierarchy(dialogueRepairedBasePrompt.prompt, shot.code || shot.title);
         const linkedShot = {
             ...shot,
-            ...(repairedBasePrompt.changed ? { videoPrompt: repairedBasePrompt.prompt } : {}),
+            ...(dialogueRepairedBasePrompt.changed || repairedBasePrompt.changed ? { videoPrompt: repairedBasePrompt.prompt } : {}),
             framePlan,
             storySceneId: packageShot?.storySceneCode ? storySceneIds.get(packageShot.storySceneCode) : undefined,
         };
         if (shot.fieldOrigins?.executionVideoPrompt !== "manual" || !shot.executionVideoPrompt?.trim()) return linkedShot;
         const label = shot.code || shot.title;
-        const repairedExecutionPrompt = repairDramaVideoPromptUtteranceCoverage(shot.executionVideoPrompt, framePlan?.frames || [], shot.utterances as DramaDialogueTimingInput[], label);
-        if (repairedExecutionPrompt.changed) return { ...linkedShot, executionVideoPrompt: repairedExecutionPrompt.prompt };
+        const dialogueRepairedExecutionPrompt = repairDramaVideoPromptUtteranceCoverage(shot.executionVideoPrompt, framePlan?.frames || [], shot.utterances as DramaDialogueTimingInput[], label);
+        const repairedExecutionPrompt = repairDramaVideoPromptAudioHierarchy(dialogueRepairedExecutionPrompt.prompt, label);
+        if (dialogueRepairedExecutionPrompt.changed || repairedExecutionPrompt.changed) return { ...linkedShot, executionVideoPrompt: repairedExecutionPrompt.prompt };
         const stalePromptErrors = [
             ...validateDramaVideoPromptCardLayout(shot.executionVideoPrompt, framePlan?.frames || [], label),
             ...validateDramaVideoPromptUtteranceCoverage(shot.executionVideoPrompt, framePlan?.frames || [], shot.utterances as DramaDialogueTimingInput[], label),

@@ -103,6 +103,22 @@ describe("drama authoring quality gates", () => {
         expect(blockers(report, "VISUAL_CLARITY")).not.toHaveLength(0);
     });
 
+    it("blocks a spoken line when the audio fields do not protect it from sound effects", () => {
+        const videoPrompt = [
+            "### 镜头 01 | 0-30秒 | 中景 | 50mm | 平视 | 锁定机位 | 人物镜头",
+            "场景：议事大厅。",
+            "画面内容：萧炎抬眼看向纳兰，句尾合唇，手指压住桌沿。",
+            "光影：冷窗光落在脸部和手背。",
+            "色调：冷青白。",
+            "台词：萧炎说：\u201c他是一族之长。\u201d",
+            "人声：末尾气息不稳。",
+            "音效：大厅混响和桌沿轻响。",
+        ].join("\n");
+        const report = validateDramaAuthoringQuality({ package: packageValue({ videoPrompt }), sources: [] });
+
+        expect(blockers(report, "AUDIO_MIXING_HIERARCHY")).not.toHaveLength(0);
+    });
+
     it("blocks a short summary instead of treating it as a literary script", () => {
         const report = validateDramaAuthoringQuality({ package: packageValue({ script: "听着退婚要求，萧炎最终质问萧家颜面。" }), sources: [source("第3章：纳兰嫣然来到萧家议事大厅，提出退婚。")], targetNarrativeChapter: 3 });
         expect(report.status).toBe("blocked");

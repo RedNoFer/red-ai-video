@@ -546,6 +546,10 @@ describe("drama project service updates", () => {
 
         expect(recoveredShot.videoPrompt).toContain("台词：陆川说：\u201c我叫陆川。\u201d");
         expect(recoveredShot.videoPrompt).toContain("台词：陆川说：\u201c滑坡把我冲进来的。\u201d");
+        expect(recoveredShot.videoPrompt).toContain("陆川对白原声清晰可辨、音量居前");
+        expect(recoveredShot.videoPrompt).toContain("对白/旁白发声期间压低环境音、动作拟音与音乐");
+        expect(recoveredShot.videoPrompt).toContain("陆川吸气");
+        expect(recoveredShot.videoPrompt).toContain("湿石滴水声");
         expect(recoveredShot.executionVideoPrompt).toBe(recoveredShot.videoPrompt);
         expect(mocks.updateDramaProject).toHaveBeenCalledWith(
             "user-one",
@@ -1031,6 +1035,30 @@ describe("drama project service updates", () => {
         expect(mocks.queryStoredGenerationTasks).not.toHaveBeenCalled();
         expect(mocks.getStoredGenerationTask).not.toHaveBeenCalled();
         expect(mocks.updateDramaProject).toHaveBeenCalledWith("user-one", expect.objectContaining({ episodes: [expect.objectContaining({ shots: [expect.objectContaining({ executionVideoPrompt: "动态意图：Karin握住断剑。" })] })] }), current.updatedAt);
+    });
+
+    it("adds a speech-first mix to a saved dialogue prompt while preserving breaths and effects", async () => {
+        const current = project("2026-07-19T08:00:00.000Z", "项目");
+        const legacyPrompt = [
+            "### 镜头 01 | 0-4秒 | 近景 | 50mm | 平视 | 锁定机位 | 人物镜头",
+            "场景：北坡岩缝。",
+            "画面内容：陆川张口说完后合拢嘴唇，视线移向岚音。",
+            "光影：阴天冷光落在陆川脸部。",
+            "色调：冷灰。",
+            "台词：陆川说：\u201c我不知道这里是哪儿。\u201d",
+            "人声：末尾气息不稳。",
+            "音效：远水细响。",
+        ].join("\n");
+        current.episodes[0].shots = [{ id: "shot-one", code: "SH01", title: "遇见岚音", duration: 4, characterIds: [], propIds: [], clueIds: [], videoPrompt: legacyPrompt } as never];
+        mocks.getDramaProject.mockResolvedValue(current);
+
+        const saved = await updateDramaShotPromptForUser("user-one", current.id, "episode-one", "shot-one", { executionVideoPrompt: legacyPrompt, executionVideoPromptOrigin: "manual" });
+        const savedPrompt = saved.episodes[0].shots[0].executionVideoPrompt || "";
+
+        expect(savedPrompt).toContain("陆川对白原声清晰可辨、音量居前");
+        expect(savedPrompt).toContain("末尾气息不稳");
+        expect(savedPrompt).toContain("远水细响");
+        expect(savedPrompt).toContain("对白/旁白发声期间压低环境音、动作拟音与音乐");
     });
 
     it("persists the Agent-generated frame plan without rewriting its prompt fields", async () => {

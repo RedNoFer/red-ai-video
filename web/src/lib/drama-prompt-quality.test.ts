@@ -11,7 +11,9 @@ import {
     validateDramaVideoAuthoringQuality,
     validateDramaVideoPromptCardLayout,
     validateDramaVideoPromptDialogueTiming,
+    repairDramaVideoPromptAudioHierarchy,
     repairDramaVideoPromptUtteranceCoverage,
+    validateDramaVideoPromptAudioHierarchy,
     validateDramaVideoPromptUtteranceCoverage,
     validateDramaVideoPromptSemanticQuality,
     validateDramaVideoPromptTemplateLayout,
@@ -19,6 +21,79 @@ import {
 } from "./drama-prompt-quality";
 
 describe("drama prompt quality", () => {
+    it("blocks dialogue that has no audible voice priority or sound-effect ducking", () => {
+        const prompt = [
+            "### 镜头 06 | 17.8-21秒 | 中近景 | 50mm | 泉池右前平视 | 固定机位 | 人物镜头",
+            "场景：山谷泉池。",
+            "画面内容：陆川转回岚音，话末嘴唇合拢，视线停在她脸上。",
+            "光影：背后林下冷天光落在陆川侧脸。",
+            "色调：冷灰。",
+            "台词：陆川说：\u201c我不知道这里是哪儿。\u201d",
+            "人声：末尾气息不稳。",
+            "音效：远水细响。",
+        ].join("\n");
+
+        expect(validateDramaVideoPromptAudioHierarchy(prompt, "SH06")).toEqual(expect.arrayContaining([expect.stringContaining("对白原声必须清晰可辨并位于前景"), expect.stringContaining("环境音/动作音/音乐必须在语音期间避让")]));
+    });
+
+    it("rejects sound effects that explicitly mask spoken dialogue", () => {
+        const prompt = [
+            "### 镜头 01 | 0-4秒 | 近景 | 50mm | 平视 | 固定机位 | 人物镜头",
+            "场景：山谷泉池。",
+            "画面内容：陆川张口说话，句尾合拢嘴唇。",
+            "光影：天光落在脸上。",
+            "色调：冷灰。",
+            "台词：陆川说：\u201c我不知道这里是哪儿。\u201d",
+            "人声：陆川对白原声清晰可辨、音量居前，口型同步。",
+            "音效：雷声盖过陆川台词。",
+        ].join("\n");
+
+        expect(validateDramaVideoPromptAudioHierarchy(prompt, "SH01")).toEqual(expect.arrayContaining([expect.stringContaining("音效描述与对白清晰度冲突")]));
+    });
+
+    it("repairs legacy dialogue cards with explicit voice priority and sound ducking", () => {
+        const prompt = [
+            "### 镜头 06 | 17.8-21秒 | 中近景 | 50mm | 泉池右前平视 | 固定机位 | 人物镜头",
+            "场景：山谷泉池。",
+            "画面内容：陆川转回岚音，话末嘴唇合拢，视线停在她脸上。",
+            "光影：背后林下冷天光落在陆川侧脸。",
+            "色调：冷灰。",
+            "台词：陆川说：\u201c我不知道这里是哪儿。\u201d",
+            "人声：末尾气息不稳。",
+            "音效：远水细响。",
+            "剪辑承接：起镜入口状态已锁定。",
+        ].join("\n");
+
+        const repaired = repairDramaVideoPromptAudioHierarchy(prompt, "SH06");
+
+        expect(repaired.changed).toBe(true);
+        expect(repaired.prompt).toContain("陆川对白原声清晰可辨、音量居前");
+        expect(repaired.prompt).toContain("远水细响");
+        expect(repaired.prompt).toContain("对白/旁白发声期间压低环境音、动作拟音与音乐");
+        expect(repaired.prompt).toContain("剪辑承接：起镜入口状态已锁定。");
+        expect(validateDramaVideoPromptAudioHierarchy(repaired.prompt, "SH06")).toEqual([]);
+    });
+
+    it("rewrites a masking sound effect below the spoken line", () => {
+        const prompt = [
+            "### 镜头 06 | 17.8-21秒 | 中近景 | 50mm | 泉池右前平视 | 固定机位 | 人物镜头",
+            "场景：山谷泉池。",
+            "画面内容：陆川转回岚音，话末嘴唇合拢，视线停在她脸上。",
+            "光影：背后林下冷天光落在陆川侧脸。",
+            "色调：冷灰。",
+            "台词：陆川说：\u201c我不知道这里是哪儿。\u201d",
+            "人声：末尾气息不稳。",
+            "音效：雷声盖过陆川台词。",
+        ].join("\n");
+
+        const repaired = repairDramaVideoPromptAudioHierarchy(prompt, "SH06");
+
+        expect(repaired.changed).toBe(true);
+        expect(repaired.prompt).toContain("雷声保持低于陆川台词");
+        expect(repaired.prompt).toContain("对白/旁白发声期间压低环境音、动作拟音与音乐");
+        expect(validateDramaVideoPromptAudioHierarchy(repaired.prompt, "SH06")).toEqual([]);
+    });
+
     it("repairs legacy public cards from exact utterance fragments in the frame plan", () => {
         const frames = [
             { startSecond: 0, endSecond: 2, actionPrompt: "陆川说：\u201c我叫陆川。\u201d" },
@@ -170,8 +245,8 @@ describe("drama prompt quality", () => {
             "光影：左侧窗光落在萧炎脸部，黑戒边缘出现冷白反光。",
             "色调：冷灰栗色，肤色自然。",
             "台词：萧炎说：“纳兰小姐，你应该知道。”",
-            "人声：开口前半拍吸气。",
-            "音效：衣料轻响和室内底噪。",
+            "人声：萧炎对白原声清晰可辨、音量居前，原句完整可听并按时间同步、与可见口型同步；开口前半拍吸气。",
+            "音效：衣料轻响和室内底噪；对白/旁白发声期间压低环境音、动作拟音与音乐，不遮挡台词清晰度，仅在语音停顿间隙再抬升。",
             "### 镜头 02 | 2-4秒 | 手部近景 | 85mm | 侧30度平视 | 沿桌沿横移8厘米，停在指节受力结果 | 非人物镜头",
             "场景：同一张长桌。",
             "画面内容：萧炎掌根压住桌沿，指节发白，玉粉在接触面旁保持原位。",
@@ -233,8 +308,8 @@ describe("drama prompt quality", () => {
             "光影：高窗冷青白光落在眼睛、下颌和指节。",
             "色调：冷青白、低饱和黛青。",
             "台词：萧炎说：“什么约定？”",
-            "人声：萧炎短促吸气后开口，句尾收住。",
-            "音效：衣料绷紧，长案产生短混响。",
+            "人声：萧炎对白原声清晰可辨、音量居前，原句完整可听并按时间同步、与可见口型同步；短促吸气后开口，句尾收住。",
+            "音效：衣料绷紧，长案产生短混响；对白/旁白发声期间压低环境音、动作拟音与音乐，不遮挡台词清晰度，仅在语音停顿间隙再抬升。",
         ].join("\n");
         expect(validateDramaVideoPromptSemanticQuality(prompt, [{ startSecond: 0, endSecond: 2 }], "SH02")).toEqual([]);
     });
@@ -272,8 +347,8 @@ describe("drama prompt quality", () => {
             "光影：窗光落在眼睛和手背。",
             "色调：冷青白。",
             "台词：萧炎说：“纳兰小姐，你应该知道。”",
-            "人声：开口前轻吸气。",
-            "音效：衣料轻响。",
+            "人声：萧炎对白原声清晰可辨、音量居前，原句完整可听并按时间同步、与可见口型同步；开口前轻吸气。",
+            "音效：衣料轻响；对白/旁白发声期间压低环境音、动作拟音与音乐，不遮挡台词清晰度，仅在语音停顿间隙再抬升。",
         ].join("\n");
         expect(validateDramaVideoPromptCardLayout(prompt, [{ startSecond: 0, endSecond: 2 }], "SH01")).toEqual([]);
         expect(validateDramaVideoPromptCardLayout(prompt.replace("嘴唇开启完成起句，", "萧炎说：“纳兰小姐，你应该知道。”；"), [{ startSecond: 0, endSecond: 2 }], "SH01")).toEqual(

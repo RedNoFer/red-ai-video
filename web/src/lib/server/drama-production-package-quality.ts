@@ -6,6 +6,7 @@ import { validateDramaCharacterWardrobeContinuity, validateDramaCutInformationDi
 import {
     extractDramaVideoPromptCards,
     hasConcreteDramaCameraDirection,
+    validateDramaVideoPromptAudioHierarchy,
     validateDramaFrameCausalChain,
     validateDramaFrameTiming,
     validateDramaVideoPromptCardLayout,
@@ -35,6 +36,7 @@ export class DramaAuthoringQualityGateError extends Error {
 
 const SHOT_REPAIR_GATE_CODES = new Set([
     "VIDEO_PROMPT_LAYOUT",
+    "AUDIO_MIXING_HIERARCHY",
     "VIDEO_PROMPT_SEMANTIC_QUALITY",
     "FRAME_DIALOGUE_TIMING",
     "DIALOGUE_CAPACITY",
@@ -113,6 +115,7 @@ export function validateDramaAuthoringQuality(input: DramaAuthoringQualityInput)
     checkFrameDialogueTiming(checks, input.package);
     checkDialoguePerformanceQuality(checks, input.package);
     checkVideoPromptLayout(checks, input.package);
+    checkAudioMixingHierarchy(checks, input.package);
     checkVideoPromptLength(checks, input.package);
     checkVideoPromptSemanticQuality(checks, input.package, input.authoringAudit);
     checkPlotFacts(checks, input.package, sourceText);
@@ -308,6 +311,24 @@ function checkVideoPromptLayout(checks: DramaQualityGateCheck[], value: DramaPro
         failures.length ? failures.slice(0, 8).join("；") : "每个真实 framePlan 时间段都有完整的小墨式导演镜头卡",
         ["episodes[].shots[].videoPrompt", "episodes[].shots[].framePlan.frames[]"],
         "按小墨式导演成稿补齐：每个真实 framePlan 时间段对应一个镜头卡，标题包含时间、景别、焦段、机位和运镜，正文写具体可见画面与声音；内部起点/动作/衔接/终点继续只在 framePlan 中校验。",
+    );
+}
+
+function checkAudioMixingHierarchy(checks: DramaQualityGateCheck[], value: DramaProductionPackageV1) {
+    const failures = value.episodes.flatMap((episode) => episode.shots.flatMap((shot) => validateDramaVideoPromptAudioHierarchy(shot.videoPrompt, shot.code || shot.title).map((failure) => `${episode.code}/${failure}`)));
+    add(
+        checks,
+        "AUDIO_MIXING_HIERARCHY",
+        !failures.length,
+        "对白与音效混音层级",
+        failures.length ? failures.slice(0, 8).join("；") : "有台词的镜头明确保证对白/旁白完整可听、声音居前，环境音与拟音在说话窗口避让",
+        ["episodes[].shots[].videoPrompt"],
+        "保留台词原句，在人声字段明确原声清晰可辨、音量居前；音效字段说明对白/旁白发声期间压低环境音、动作拟音与音乐，语音停顿间隙才可抬升。",
+        {
+            repairScope: "shot",
+            shotIds: [...new Set(failures.flatMap((failure) => [...failure.matchAll(/\b(SH\d+)\b/gu)].map((match) => match[1])))],
+            lockedFields: ["project", "assets", "episodes[].script", "shots[].duration", "productionPlan", "unfailedShots"],
+        },
     );
 }
 

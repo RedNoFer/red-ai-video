@@ -2,11 +2,11 @@
 
 > 制作包格式：`vozeb-drama-production-package-v1`
 >
-> 模板版本：由 `pnpm compile:skills` 自动生成；唯一制作包契约：`vozeb-drama-production-package-v1@1.0.0`（契约 hash：`77541e4dc34e638a56a3273bab74ee1d1911933c2c84792cbad60d2e31144107`，规范源 hash：`e001a50d2a509067feae97cfdfaf3f60b59a53309490caa4a783a0e1992bfa6e`）。导演 Skill：`drama-video-director@1.12.1`（hash：`a5cc9fabfc64b0c397d3fb73670f960134763e2b534814ec99d3cae69e26465a`）；模板自检规则、Seedance Skill 和来源版本由同一编译清单绑定。
+> 模板版本：由 `pnpm compile:skills` 自动生成；唯一制作包契约：`vozeb-drama-production-package-v1@1.0.0`（契约 hash：`c6a1672d8f33a353753c1953bbcf58b2070861412ce5ca89030d4d8f907822f9`，规范源 hash：`12b6bc587dda454610432f94e08447dfa8b7d845a038874202703ea9cbaacfb3`）。导演 Skill：`drama-video-director@1.12.2`（hash：`87ae577302001b7d1ab3286e6576320465eda838a9f176e163ec6b71bdb100d8`）；模板自检规则、Seedance Skill 和来源版本由同一编译清单绑定。
 >
-> 使用约定：本模板是当前 v1 制作包的结构、自检规则和最终交付格式。独立 Codex 必须直接生成完整 13 章 Markdown，并在“规范对象”代码块中嵌入唯一标准 JSON；JSON 与正文由 Codex 同一轮生成，服务端不负责章节投影或视频提示词重写。不要把历史制作包、旧 generationPrompt 或旧分镜正文当作新包模板。
+> 使用约定：本模板是当前 v1 制作包的结构、自检规则和最终交付格式。独立 Codex 必须直接生成完整 13 章 Markdown，并在“规范对象”代码块中嵌入唯一标准 JSON；JSON 与正文由 Codex 同一轮生成，服务端不负责章节投影或镜头卡重建。读取和导入只允许幂等修复遗漏的准确对白原句与语音混音层级，不替代完整 authoring 自检。不要把历史制作包、旧 generationPrompt 或旧分镜正文当作新包模板。
 >
-> 生成方式：本模板支持外部 Codex 独立生成。外部 Codex 只依据本模板、当前用户请求、当前 TXT/小说、当前正式资产和当前参考素材完成一次 authoring、自检和修正，不需要调用项目内部 `executeDramaScriptRun` 或依赖隐藏硬编码。项目导入时只做 JSON、章节、字段、时间轴、资产和权限等结构安全校验，不重复执行语义门禁；不得从 `framePlan`、旧提示词或模板示例重建、补写或改写外部 Codex 已生成的 `videoPrompt`。
+> 生成方式：本模板支持外部 Codex 独立生成。外部 Codex 只依据本模板、当前用户请求、当前 TXT/小说、当前正式资产和当前参考素材完成一次 authoring、自检和修正，不需要调用项目内部 `executeDramaScriptRun` 或依赖隐藏硬编码。项目导入时检查 JSON、章节、字段、时间轴、资产和权限，不重复执行完整语义门禁，也不从 `framePlan`、旧提示词或模板示例重建镜头卡；读取/导入只允许幂等修复遗漏的对白原句与语音混音层级，保留其他公开提示词和音效细节。
 >
 > 来源优先级：本轮用户请求与本轮自定义模板 > 当前 TXT/小说事实 > 当前正式资产与已验收连续性 > 本模板与当前导演 Skill 的通用规则 > 最小合理导演补全。不得读取历史制作包、历史脚本、旧 generationPrompt 或旧运行记录。没有角色/场景图片不阻断制作包生成；有图片时必须按 alias、职责、顺序和清晰度登记，不能伪造引用。
 >
@@ -74,7 +74,7 @@
 }
 ```
 
-独立 Codex authoring 时，不得把上述示意对象原样返回；必须替换为当前 TXT/剧本真实生成的完整 JSON 和 13 章正文。服务端导入时只解析该 JSON，不得从 JSON 重新投影、补写或改写正文。
+独立 Codex authoring 时，不得把上述示意对象原样返回；必须替换为当前 TXT/剧本真实生成的完整 JSON 和 13 章正文。服务端导入时只解析该 JSON，不从 JSON 重新投影章节正文；仅针对卡片中的对白原句完整性和语音混音层级执行确定性修复。
 
 ### 正式字段锁定与逻辑片段轴
 
@@ -117,9 +117,9 @@ targetDuration = logicalShotCount × shotDuration
 
 ### 当前绑定版本
 
-- 制作包契约：`vozeb-drama-production-package-v1@1.0.0`，契约 hash：`77541e4dc34e638a56a3273bab74ee1d1911933c2c84792cbad60d2e31144107`。
-- 规范源 hash：`e001a50d2a509067feae97cfdfaf3f60b59a53309490caa4a783a0e1992bfa6e`；编译规则 hash：`e822f493b3bb4fd9c6541b30184e397da67b08178b7c13d225895feb3872c994`。
-- 主导演 Skill：`drama-video-director@1.12.1`，hash：`a5cc9fabfc64b0c397d3fb73670f960134763e2b534814ec99d3cae69e26465a`。
+- 制作包契约：`vozeb-drama-production-package-v1@1.0.0`，契约 hash：`c6a1672d8f33a353753c1953bbcf58b2070861412ce5ca89030d4d8f907822f9`。
+- 规范源 hash：`12b6bc587dda454610432f94e08447dfa8b7d845a038874202703ea9cbaacfb3`；编译规则 hash：`15e22065bafe06b7bd6ce273603b27c9654200d10dba28a0f1c8a7a2c879b4ef`。
+- 主导演 Skill：`drama-video-director@1.12.2`，hash：`87ae577302001b7d1ab3286e6576320465eda838a9f176e163ec6b71bdb100d8`。
 - 视频提示词公开格式：小墨个人分镜 Skill 6.3，来源标识 `storyboard-director@6.3.0`。
 - 每个逻辑片段的完整 `videoPrompt`（包含全部公开帧卡、台词、人声、音效和剪辑承接）必须控制在 4500 个 Unicode 字符以内；超限只能压缩重复的全局场景/风格描述，不能删除主体、触发、动作、可见结果、声音锚点、连续性或硬切事件。
 - 公开视频卡使用自然语言，不得出现 `palette=...`、`saturation=...`、`film_stock=...`、`grain=...`、`halation=...` 等未声明伪参数串，也不得出现 `undefined`、`null`、`NaN`、`[object Object]`；光色、材质、胶片感如确有作用，只用自然语言写入 `productionBible` 或当前帧新增作用。
@@ -171,6 +171,7 @@ Codex 必须先做预检，再开始拆镜和写公开视频卡；不能先按�
 | `DIALOGUE_CAPACITY`             | blocker | 逐句口型窗口是硬门禁：`availableSpeechSeconds=endSecond-startSecond` 必须不小于 `requiredSpeechSeconds=可发音字数/speechRateCharsPerSecond`；`pauseBeforeSeconds`/`pauseAfterSeconds` 另行占用句前/句后空间并必须留在镜头边界内。任何单句不足都阻断。10 个可发音字容差只用于整镜总量的兼容提醒，不适用于逐句口型窗口；不得异常加速。                                                                                                                                |
 | `DIALOGUE_SPEAKER_VISUAL_MATCH` | blocker | `台词`、`utterances`、口型主体和画面动作必须属于同一说话人；不允许画面写萧炎开口而台词归纳兰，或把未开口角色写成当前说话人。                                                                                                                                                                                                                                                                                                                                        |
 | `DIALOGUE_PERFORMANCE`          | blocker | 每个对白帧段写说话人、实际台词、语气、停顿、重音和具体说后反应；`画面内容`不得复制完整对白；相邻段不得重复对白游标或表演块。                                                                                                                                                                                                                                                                                                                                        |
+| `AUDIO_MIXING_HIERARCHY`        | blocker | 有台词/旁白的卡片必须明确原声实际发出、清晰可辨、音量居前且原句完整可听，并和对应说话时间/可见口型同步；环境音、动作拟音和音乐必须在语音窗口压低避让，只在停顿间隙恢复，不能盖过、吞没或替代台词。                                                                                                                                                                                                                                                                  |
 | `VIDEO_PROMPT_LAYOUT`           | blocker | 每个真实帧段对应一张镜头卡；标题含时间、景别、焦段、机位、一个主运镜和主体类型；正文含场景、画面内容、光影、色调、台词、人声、音效。`光影`/`色调` 不得只写“承前/同上/与第一镜头一致”，必须写可单独执行的光源方向、落点、材质反应和具体色彩特征；可简短补充“与首卡一致”。禁止 `undefined`、`null`、`NaN`、`[object Object]` 等程序占位值，以及 `palette=.../saturation=.../film_stock=.../grain=.../halation=...` 这类未声明的伪参数串；视觉要求必须用自然语言表达。 |
 | `VIDEO_PROMPT_LENGTH`           | blocker | 每个逻辑片段的完整 `videoPrompt`（包含该片段全部公开帧卡、台词、声音和剪辑承接）最多 4500 个 Unicode 字符；超限必须在当前 Codex 对话内压缩重复全局设定，不得删除主体、触发、动作、结果、声音锚点、连续性或硬切承接。                                                                                                                                                                                                                                                |
 | `VIDEO_PROMPT_SEMANTIC_QUALITY` | blocker | 直接检查公开视频卡片：画面内容必须有明确主体、进行中的可见动作、触发/因果、可见结果和声音锚点；不得出现“准备回应”“保持状态”“社会后果停在三人之间”等抽象占位或未来意图；相邻卡片必须带来可拍摄的信息增量。                                                                                                                                                                                                                                                           |
@@ -302,7 +303,7 @@ Codex 必须在输出第十三章前逐镜抽查上述禁项；命中任一项�
 
 `videoPrompt` 由 Agent 直接生成完整公开内容；`framePlan.frames` 是同一视频内容的结构化镜像，不是服务端重建 `videoPrompt` 的素材。
 
-Codex authoring 不能使用固定脚本或直接复制模板正文冒充生成结果。外部 Codex 必须自行完成规范对象所需字段和门禁自检；项目导入层只做结构安全检查，不能替外部生成补齐或改写公开视频正文。相邻动作差异、情绪递进、NPC 反应变化、运镜动机和镜头事件缺一项都不得标记为可生产。
+Codex authoring 不能使用固定脚本或直接复制模板正文冒充生成结果。外部 Codex 必须自行完成规范对象所需字段和门禁自检；项目导入层不运行完整语义门禁、不重建公开视频正文，只修复准确对白原句和对白优先混音层级。相邻动作差异、情绪递进、NPC 反应变化、运镜动机和镜头事件缺一项都不得标记为可生产。
 
 ### 逐帧字段职责
 
@@ -386,6 +387,8 @@ imagePrompt
 
 含对白镜头必须在规范对象中逐句记录相对镜头的开始、结束、前后停顿和语速，并在 authoring 前完成逐句对白容量表：`availableSpeechSeconds = endSecond - startSecond`；`requiredSpeechSeconds = 可发音字数 / speechRateCharsPerSecond`；`pauseBeforeSeconds` 与 `pauseAfterSeconds` 另行占用句前/句后空间并必须留在镜头边界内。任何一句 `availableSpeechSeconds < requiredSpeechSeconds` 都不得完成正式 authoring、制作包导入或生产前预检，即使整镜总时长仍然足够也不能通过；必须移动帧段边界、拆自然分句/说话人转换/动作反应或增加逻辑片段。10 个可发音字容差只用于整镜总量的兼容提醒，不适用于逐句口型窗口；不得异常加速。公开 `videoPrompt` 的每个实际说话时间段还必须和对应 `framePlan` 时间段相容，台词字段写完整原句，画面内容只写可见口型、呼吸、视线和反应；这些内容不写入静态图片正文。
 
+对白/旁白必须作为可听见的声音实际发出，不能只留下字幕或口型。`人声`写清晰原声、前景音量、说话语气/节奏和呼吸表演；有台词时不能只写吸气、气息不稳或“压低声线”。`音效`只写环境音、动作拟音和音乐；这些声音在对白/旁白实际发声窗口必须压低避让，不得盖过、吞没或替代台词，只能在语音停顿间隙恢复。
+
 ### 沉默设计
 
 - SH01：静默说明。
@@ -396,7 +399,7 @@ imagePrompt
 | ---- | ------ | ---- | ---- |
 | SH01 |        |      |      |
 
-声音字段服务视频和声音执行，不复制到 `imagePrompt`。
+对白/旁白优先于非语言声音：逐镜混音必须让实际原句清晰可辨并处于前景，环境音、动作拟音和音乐在语音窗口压低避让，只在停顿间隙恢复。声音字段服务视频和声音执行，不复制到 `imagePrompt`。
 
 ## 十一、分段视频 Prompt
 
@@ -416,8 +419,8 @@ imagePrompt
 光影：光源方向、落点和材质反应。
 色调：当前项目色调及必要的局部变化。
 台词：萧炎说：“他是一族之长。” / 无
-人声：台词之外的喘息、轻笑、吸气等 / 无
-音效：环境音、动作音、音桥 / 无
+人声：萧炎对白原声清晰可辨、音量居前，原句完整可听并按时间同步、与可见口型同步；台词之外的喘息、轻笑、吸气等 / 无
+音效：环境音、动作音、音桥；对白/旁白发声期间压低环境音、动作拟音与音乐，不遮挡台词清晰度，仅在语音停顿间隙再抬升 / 无
 剪辑承接：除第一张卡外，填写硬切/连续承接的时间、触发事件、新机位、切后主运镜、新增信息和人物/道具/场景/轴线承接；第一张卡填写“起镜：入口状态已锁定”。
 ```
 

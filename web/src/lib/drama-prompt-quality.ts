@@ -35,6 +35,11 @@ const CAMERA_CUT_EVENT_PATTERN = /镜头事件\s*[：:]/u;
 const ACTIVE_CAMERA_CUT_PATTERN = /硬切|镜头切换|Camera\s+cut\s+to|Cut\s+to/iu;
 const VIDEO_CARD_HEADER = /^###\s*镜头\s*(\d+)\s*\|([^\n]+)$/gmu;
 const VIDEO_CARD_FIELDS = ["场景", "画面内容", "光影", "色调", "台词", "人声", "音效"] as const;
+const VIDEO_CARD_FIELD_BOUNDARIES = [...VIDEO_CARD_FIELDS, "剪辑承接"] as const;
+const SPEECH_CLARITY_PATTERN = /(?:对白|旁白|语音|人声).{0,24}原声.{0,24}(?:清晰|可辨|可懂).{0,24}(?:居前|前景|优先).{0,36}(?:原句完整可听|完整可听|实际发声|可听见)/u;
+const SPEECH_DUCKING_PATTERN = /(?:对白|旁白|台词|人声).{0,28}(?:发声期间|发声时|说话期间|说话时|语音窗口).{0,32}(?:压低|避让|降低|减弱|不遮挡|不盖过)/u;
+const SPEECH_MASKING_CONFLICT_PATTERN =
+    /(?:盖过|盖住|压过|压住|淹没|遮盖|遮住|覆盖|盖掉|听不清|不可辨|模糊).{0,12}(?:对白|台词|人声|旁白|语音)|(?:对白|台词|人声|旁白|语音).{0,18}(?:被.{0,12}(?:盖过|盖住|压过|压住|淹没|遮盖|遮住|覆盖|盖掉)|听不清|不可辨|模糊)|(?:音效|环境音|动作音|拟音|音乐|配乐).{0,16}(?:高于|强于|大于|盖过|压过)(?:对白|台词|人声|旁白|语音)/u;
 const VAGUE_LIGHT_COLOR_REFERENCE_PATTERN = /^(?:承前|同上|同前|沿用前镜|与前镜一致|和前镜一致|与首镜一致|和首镜一致|与第一镜(?:头)?一致|和第一镜(?:头)?一致|保持一致|延续前镜)[。；，,\s]*$/u;
 const VIDEO_CARD_CAMERA_TERMS = /平视|俯视|俯拍|仰视|仰拍|正面|侧面|侧[0-9一二三四五六七八九十]+度|过肩|入口侧|低机位|高机位|顶视|顶侧|跟随视线/u;
 const VIDEO_CARD_LENS_TERMS = /\d+(?:\.\d+)?\s*mm|广角|标准焦段|长焦|变形宽银幕/u;
@@ -167,6 +172,95 @@ export function extractDramaVideoPromptCards(value: unknown): DramaVideoPromptCa
     });
 }
 
+export function validateDramaVideoPromptAudioHierarchy(value: unknown, label: string) {
+    return extractDramaVideoPromptCards(value).flatMap((card, index) => {
+        if (isNoDramaSpeech(card.dialogue)) return [];
+        const cardLabel = `${label}第 ${index + 1} 个公开镜头卡`;
+        const errors: string[] = [];
+        if (!SPEECH_CLARITY_PATTERN.test(card.voice)) errors.push(`${cardLabel}对白原声必须清晰可辨并位于前景；人声不能只写呼吸或气息`);
+        if (hasSpeechMaskingConflict(`${card.voice}\n${card.sound}`)) errors.push(`${cardLabel}音效描述与对白清晰度冲突，必须保证任何环境音、拟音或音乐都不盖过台词`);
+        if (!SPEECH_DUCKING_PATTERN.test(card.sound)) errors.push(`${cardLabel}环境音/动作音/音乐必须在语音期间避让，并明确写出不遮挡台词`);
+        return errors;
+    });
+}
+
+/** Adds deterministic speech-first mixing instructions to legacy spoken-voice cards. */
+export function repairDramaVideoPromptAudioHierarchy(prompt: string, label: string) {
+    const cards = extractDramaVideoPromptCards(prompt);
+    if (!cards.length) return { prompt, changed: false };
+    let repaired = prompt;
+    for (const [index, card] of cards.entries()) {
+        const quotes = extractQuotedDramaDialogues(card.dialogue);
+        if (isNoDramaSpeech(card.dialogue)) continue;
+        const speakers = [...new Set(quotes.map((item) => item.speaker))].join("、");
+        const isVoiceover = /旁白|画外音|内心声/u.test(card.dialogue) || quotes.some((item) => /旁白|画外音|内心声/u.test(item.speaker));
+        const voiceLabel = isVoiceover ? "旁白" : "对白";
+        const voicePriority = `${speakers || "本镜"}${voiceLabel}原声清晰可辨、音量居前，原句完整可听并按时间同步${isVoiceover ? "" : "、与可见口型同步"}`;
+        let voice = normalizeLegacySpeechMix(card.voice);
+        if (!SPEECH_CLARITY_PATTERN.test(voice)) voice = appendAudioInstruction(voice, voicePriority);
+
+        let sound = normalizeLegacySpeechMix(card.sound);
+        if (!SPEECH_DUCKING_PATTERN.test(sound)) {
+            const soundBed = !sound || /^(?:无|无声|没有)$/u.test(sound.replace(/[。；;，,\s]+/gu, "")) ? "无额外环境音、动作拟音或音乐" : sound.replace(/[。；;，,\s]+$/u, "");
+            sound = `${soundBed}；对白/旁白发声期间压低环境音、动作拟音与音乐，不遮挡台词清晰度；仅在语音停顿间隙再抬升`;
+        }
+        repaired = updateDramaVideoPromptCardField(repaired, index, "人声", voice);
+        repaired = updateDramaVideoPromptCardField(repaired, index, "音效", sound);
+    }
+    if (repaired === prompt || validateDramaVideoPromptAudioHierarchy(repaired, label).length) return { prompt, changed: false };
+    return { prompt: repaired, changed: true };
+}
+
+function normalizeLegacySpeechMix(value: string) {
+    if (!hasSpeechMaskingConflict(value)) return value.trim();
+    return value
+        .replace(/([^，,；;。！？\n]{1,20}?)(?:盖过|盖住|压过|压住|淹没|遮盖|遮住|覆盖|盖掉)([^，,；;。！？\n]{0,20}(?:对白|台词|人声|旁白|语音))/gu, "$1保持低于$2")
+        .replace(/(对白|台词|人声|旁白|语音)被([^，,；;。！？\n]{1,20}?)(?:盖过|盖住|压过|压住|淹没|遮盖|遮住|覆盖|盖掉)/gu, "$1清晰居前；$2音量降低")
+        .replace(/([^，,；;。！？\n]{1,20}?)(?:高于|强于|大于)(对白|台词|人声|旁白|语音)/gu, "$1保持低于$2")
+        .trim();
+}
+
+function hasSpeechMaskingConflict(value: string) {
+    return [...value.matchAll(new RegExp(SPEECH_MASKING_CONFLICT_PATTERN.source, "gu"))].some((match) => {
+        const start = match.index ?? 0;
+        const context = value.slice(Math.max(0, start - 12), start + match[0].length + 8);
+        return !/(?:不|不能|不得|不应|不会|避免|禁止).{0,8}(?:盖过|盖住|压过|压住|淹没|遮盖|遮住|覆盖|盖掉)/u.test(context);
+    });
+}
+
+function appendAudioInstruction(current: string, instruction: string) {
+    const existing = current.trim();
+    if (!existing || /^(?:无|无声|没有)[。；;，,\s]*$/u.test(existing)) return instruction;
+    return `${existing.replace(/[。；;，,\s]+$/u, "")}；${instruction}`;
+}
+
+function isNoDramaSpeech(value: string) {
+    return !value.trim() || /^(?:无|无对白|无台词|没有对白|没有台词|静默|沉默)[。；;，,\s]*$/u.test(value.trim());
+}
+
+function updateDramaVideoPromptCardField(prompt: string, cardIndex: number, field: (typeof VIDEO_CARD_FIELDS)[number], value: string) {
+    const markers = [...prompt.matchAll(VIDEO_CARD_HEADER)];
+    const marker = markers[cardIndex];
+    if (!marker) return prompt;
+    const start = marker.index ?? 0;
+    const end = markers[cardIndex + 1]?.index ?? prompt.length;
+    const raw = prompt.slice(start, end);
+    const fieldPattern = VIDEO_CARD_FIELD_BOUNDARIES.map(escapeRegExp).join("|");
+    const expression = new RegExp(`(^|\\n)([ \\t]*${escapeRegExp(field)}\\s*[：:]\\s*)([\\s\\S]*?)(?=\\n\\s*(?:${fieldPattern})\\s*[：:]|$)`, "u");
+    const match = expression.exec(raw);
+    if (!match) {
+        const fieldIndex = VIDEO_CARD_FIELDS.indexOf(field);
+        const nextField = VIDEO_CARD_FIELD_BOUNDARIES.slice(fieldIndex + 1).find((candidate) => new RegExp(`(?:^|\\n)\\s*${escapeRegExp(candidate)}\\s*[：:]`, "u").test(raw));
+        const insertionIndex = nextField ? raw.search(new RegExp(`(?:^|\\n)\\s*${escapeRegExp(nextField)}\\s*[：:]`, "u")) : raw.length;
+        const prefix = raw.slice(0, insertionIndex).replace(/\n+$/u, "");
+        const suffix = raw.slice(insertionIndex).replace(/^\n+/u, "");
+        const next = `${prefix}\n${field}：${value}${suffix ? `\n${suffix}` : ""}`;
+        return `${prompt.slice(0, start)}${next}${prompt.slice(end)}`;
+    }
+    const next = raw.replace(expression, (_whole, prefix: string, heading: string) => `${prefix}${heading}${value}`);
+    return next === raw ? prompt : `${prompt.slice(0, start)}${next}${prompt.slice(end)}`;
+}
+
 export function validateDramaVideoPromptCardLayout(value: unknown, frames: ReadonlyArray<DramaCameraPlanFrame> | number, label: string) {
     const text = typeof value === "string" ? value.trim() : "";
     const expectedFrames = typeof frames === "number" ? [] : frames;
@@ -193,6 +287,7 @@ export function validateDramaVideoPromptCardLayout(value: unknown, frames: Reado
         if (expectedFrames[index] && !dramaTimeRangePattern(expectedFrames[index].startSecond, expectedFrames[index].endSecond).test(card.timeRange))
             errors.push(`${label}${cardLabel}的时间范围未对应 framePlan 的 ${expectedFrames[index].startSecond}-${expectedFrames[index].endSecond}s`);
     }
+    errors.push(...validateDramaVideoPromptAudioHierarchy(text, label));
     return errors.map((error) => (error.startsWith(label) ? error : `${label}${error}`));
 }
 

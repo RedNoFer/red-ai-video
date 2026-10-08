@@ -380,6 +380,23 @@ describe("prompt optimization service", () => {
         expect(result).not.toContain("B线钩子");
     });
 
+    it("repairs an optimized spoken card so sound effects cannot mask its dialogue", async () => {
+        const spokenPrompt = validVideoPrompt("萧炎转向纳兰，句尾合唇并抬眼").replace("台词：无", "台词：萧炎说：\u201c他是一族之长。\u201d").replace("人声：短促呼吸。", "人声：末尾气息不稳。").replace("音效：室内底噪和衣料轻响。", "音效：远水细响。");
+        vi.mocked(requestStructuredText).mockResolvedValue({
+            arguments: JSON.stringify({ optimizedPrompt: spokenPrompt }),
+            headers: new Headers(),
+            protocol: "chat",
+            elapsedMs: 10,
+        });
+
+        const result = await optimizeCreativePrompt({ origin: "http://localhost:3000", cookie: "session=1", userId: "user-one", requestId: "video-audio-request", prompt: "萧炎说：他是一族之长。", mode: "video" });
+
+        expect(result).toContain("萧炎对白原声清晰可辨、音量居前");
+        expect(result).toContain("末尾气息不稳");
+        expect(result).toContain("远水细响");
+        expect(result).toContain("对白/旁白发声期间压低环境音、动作拟音与音乐");
+    });
+
     it("rejects a video optimization result that turns dialogue into metadata", async () => {
         vi.mocked(requestStructuredText).mockResolvedValue({
             arguments: JSON.stringify({ optimizedPrompt: validVideoPrompt("对白表演：说话人：萧炎；语气：低声克制；停顿：半拍；重音：一族之长；说后反应：视线压向纳兰。") }),

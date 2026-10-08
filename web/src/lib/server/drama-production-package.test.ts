@@ -1568,6 +1568,10 @@ describe("production package boundary", () => {
         ];
         const imported = applyDramaProductionPackage(project(), source, "hash-dialogue-import");
         const shot = imported.episodes[0].shots.find((item) => item.code === packageShot.code)!;
+        expect(shot.videoPrompt).toContain("陆川对白原声清晰可辨、音量居前");
+        expect(shot.videoPrompt).toContain("对白/旁白发声期间压低环境音、动作拟音与音乐");
+        expect(shot.videoPrompt).toContain("陆川短促吸气");
+        expect(shot.videoPrompt).toContain("车轮与衣料轻响");
         const existingWithLegacyPrompt = {
             ...imported,
             episodes: imported.episodes.map((episode) => ({
@@ -1581,6 +1585,10 @@ describe("production package boundary", () => {
 
         expect(repaired.executionVideoPrompt).toContain("台词：陆川说：\u201c我叫陆川。\u201d");
         expect(repaired.executionVideoPrompt).toContain("台词：陆川说：\u201c滑坡把我冲进来的。\u201d");
+        expect(repaired.executionVideoPrompt).toContain("陆川对白原声清晰可辨、音量居前");
+        expect(repaired.executionVideoPrompt).toContain("对白/旁白发声期间压低环境音、动作拟音与音乐");
+        expect(repaired.executionVideoPrompt).toContain("陆川短促吸气");
+        expect(repaired.executionVideoPrompt).toContain("车轮与衣料轻响");
         expect(repaired.fieldOrigins?.executionVideoPrompt).toBe("manual");
     });
 

@@ -36,7 +36,7 @@ const codexWorkOrderRules = [
     "独立 Codex 只读取本轮用户请求、当前模板、TXT/剧本、当前 Skill、当前正式资产和本轮参考素材；不得读取历史制作包、旧 generationPrompt 或项目内部运行记录。",
     "Codex 必须直接返回完整 13 章 Markdown，并在其中保留唯一 drama-production-package JSON 代码块；第十一章 videoPrompt 和第十三章 QC 由 Codex 直接填写，服务端不投影章节、不重写视频提示词。",
     "Codex 输出前必须完成生成、逐镜自检、失败镜头局部修订和再次自检；未通过 blocker 不得标记 qualityGateStatus=passed。",
-    "项目导入只做 JSON、章节、字段、时间轴、资产和权限等结构安全校验，不调用 executeDramaScriptRun，不运行完整语义质量门禁，不重新序列化原始 Markdown。",
+    "项目导入只做 JSON、章节、字段、时间轴、资产和权限等结构安全校验，不调用 executeDramaScriptRun、不运行完整语义质量门禁或重新序列化原始 Markdown；只允许幂等修复遗漏的准确对白原句和对白优先混音层级。",
     extractSection(packageSpec, "独立 Codex authoring 协议"),
 ]
     .filter(Boolean)

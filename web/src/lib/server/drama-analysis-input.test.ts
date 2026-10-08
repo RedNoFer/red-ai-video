@@ -20,8 +20,8 @@ const makeVideoCard = (index: number, start: number, end: number, visual: string
         "光影：侧方窗光落在脸部、手部和衣纹上，接触面保持可辨。",
         "色调：冷灰中性，肤色和材质自然。",
         `台词：${dialogue}`,
-        "人声：短促呼吸 / 无",
-        "音效：室内底噪和衣料轻响。",
+        `人声：${dialogue === "无" ? "短促呼吸 / 无" : "对白原声清晰可辨、音量居前，原句完整可听并按时间同步、与可见口型同步；短促呼吸"}`,
+        `音效：室内底噪和衣料轻响。${dialogue === "无" ? "" : "对白/旁白发声期间压低环境音、动作拟音与音乐，不遮挡台词清晰度，仅在语音停顿间隙再抬升。"}`,
     ].join("\n");
 
 describe("normalizeDramaVisualInput", () => {

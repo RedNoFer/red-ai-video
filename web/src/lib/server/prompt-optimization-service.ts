@@ -2,7 +2,7 @@ import { getAuthSettings, refundUserPoints } from "@/lib/auth/store";
 import { CREATE_AGENT_PROMPT_MAX_LENGTH } from "@/lib/create-agent-prompt";
 import { hasQuotedDramaDialogue } from "@/lib/drama-dialogue-timing";
 import { formatPromptFieldLines, validateDramaFrameVisualContent } from "@/lib/drama-frame-sequence";
-import { validateDramaVideoPromptCardLayout } from "@/lib/drama-prompt-quality";
+import { repairDramaVideoPromptAudioHierarchy, validateDramaVideoPromptCardLayout } from "@/lib/drama-prompt-quality";
 import { DRAMA_ASSET_IMAGE_SKILL } from "@/lib/drama-image-skill";
 import {
     DRAMA_CHARACTER_BODY_MODELING_RULES,
@@ -137,7 +137,8 @@ function parseOptimizedPrompt(value: string, mode: PromptOptimizationMode, sourc
         if (mode === "drama-asset" && Object.keys(payload).some((key) => key !== "optimizedPrompt" && key !== "fields")) return "";
         const optimized = payload.optimizedPrompt;
         const prompt = typeof optimized === "string" ? (mode === "video" ? optimized.trim() : formatPromptFieldLines(optimized, mode === "drama-frame" ? "static" : "static")) : "";
-        const currentVisualPrompt = mode === "drama-frame" || mode === "video" ? applyVisualContractToOptimizedPrompt(prompt, mode, visualContract) : prompt;
+        const contractedPrompt = mode === "drama-frame" || mode === "video" ? applyVisualContractToOptimizedPrompt(prompt, mode, visualContract) : prompt;
+        const currentVisualPrompt = mode === "video" ? repairDramaVideoPromptAudioHierarchy(contractedPrompt, "视频提示词优化结果").prompt : contractedPrompt;
         if (mode === "drama-frame" && validateDramaFrameVisualContent(currentVisualPrompt)) return "";
         if (mode === "video") {
             if (validateDramaVideoPromptCardLayout(currentVisualPrompt, 1, "视频提示词").length) return "";
