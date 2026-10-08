@@ -32,6 +32,7 @@ export type DramaAnalyzeBody = {
     forceShotIds?: unknown;
     instruction?: unknown;
     referenceMaterials?: unknown;
+    continuityContext?: unknown;
     optimizationIssues?: unknown;
     visualContract?: unknown;
     ratio?: unknown;
@@ -145,8 +146,80 @@ export function normalizeDramaVideoPromptInput(body: DramaAnalyzeBody) {
             instruction: dramaAnalysisText(body.instruction),
             optimizationIssues: normalizeOptimizationIssues(body.optimizationIssues),
             referenceMaterials: normalizeReferenceMaterials(body.referenceMaterials),
+            continuityContext: normalizeVideoContinuityContext(body.continuityContext),
         },
     };
+}
+
+function normalizeVideoContinuityContext(value: unknown) {
+    const input = object(value);
+    return {
+        ...(normalizeVideoContinuityNeighbor(input.previous, "previous") ? { previous: normalizeVideoContinuityNeighbor(input.previous, "previous") } : {}),
+        ...(normalizeVideoContinuityNeighbor(input.next, "next") ? { next: normalizeVideoContinuityNeighbor(input.next, "next") } : {}),
+    };
+}
+
+function normalizeVideoContinuityNeighbor(value: unknown, edge: "previous" | "next") {
+    const input = object(value);
+    const shotId = dramaAnalysisText(input.shotId);
+    if (!shotId) return undefined;
+    const frameKey = edge === "previous" ? "lastFrame" : "firstFrame";
+    const frame = compactVideoFramePlan({ frames: [input[frameKey]] }).frames?.[0];
+    const continuity = normalizeVideoContinuity(input.continuity);
+    const entryState = normalizeVideoContinuityState(input.entryState);
+    const exitState = normalizeVideoContinuityState(input.exitState);
+    return {
+        shotId,
+        title: dramaAnalysisText(input.title),
+        videoPrompt: dramaAnalysisText(input.videoPrompt),
+        ...(Object.keys(continuity).length ? { continuity } : {}),
+        ...(entryState ? { entryState } : {}),
+        ...(exitState ? { exitState } : {}),
+        ...(frame ? { [frameKey]: frame } : {}),
+    };
+}
+
+function normalizeVideoContinuity(value: unknown) {
+    const input = object(value);
+    return Object.fromEntries(
+        ["shotSize", "cameraAngle", "composition", "characterBlocking", "gazeDirection", "actionStart", "actionEnd", "screenDirection", "axisRule", "continuityNotes"].flatMap((field) => {
+            const text = dramaAnalysisText(input[field]);
+            return text ? [[field, text]] : [];
+        }),
+    );
+}
+
+function normalizeVideoContinuityState(value: unknown) {
+    const input = object(value);
+    const entities = (key: "characters" | "props") =>
+        array(input[key]).flatMap((item) => {
+            const entity = object(item);
+            const assetId = dramaAnalysisText(entity.assetId);
+            return assetId
+                ? [
+                      {
+                          assetId,
+                          ...Object.fromEntries(
+                              ["wardrobe", "position", "gaze", "pose", "expression", "action", "state", "holderId"].flatMap((field) => {
+                                  const text = dramaAnalysisText(entity[field]);
+                                  return text ? [[field, text]] : [];
+                              }),
+                          ),
+                      },
+                  ]
+                : [];
+        });
+    const state = {
+        characters: entities("characters"),
+        props: entities("props"),
+        ...Object.fromEntries(
+            ["environment", "lighting", "axis", "screenDirection"].flatMap((field) => {
+                const text = dramaAnalysisText(input[field]);
+                return text ? [[field, text]] : [];
+            }),
+        ),
+    };
+    return state.characters.length || state.props.length || Object.keys(state).length > 2 ? state : undefined;
 }
 
 function normalizeOptimizationIssues(value: unknown) {

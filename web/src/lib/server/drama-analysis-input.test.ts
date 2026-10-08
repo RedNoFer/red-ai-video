@@ -64,6 +64,48 @@ describe("normalizeDramaVisualInput", () => {
 });
 
 describe("video prompt reference instructions", () => {
+    it("keeps only adjacent shot continuity facts for prompt optimization", () => {
+        const result = normalizeDramaVideoPromptInput({
+            phase: "video_prompt",
+            shots: [{ id: "shot-one", videoPrompt: "当前镜头" }],
+            continuityContext: {
+                previous: {
+                    shotId: "shot-before",
+                    title: "前一镜",
+                    videoPrompt: "前镜结尾：陆川手停在鼠标旁。",
+                    exitState: { environment: "档案室", characters: [{ assetId: "lu-chuan", position: "电脑前" }] },
+                    lastFrame: { id: "before-end", endPrompt: "手停在鼠标旁" },
+                    storyboardFrames: [{ mediaUrl: "/private/should-not-pass.png" }],
+                },
+                next: {
+                    shotId: "shot-after",
+                    title: "后续镜",
+                    videoPrompt: "后镜开头：陆川仍坐在电脑前。",
+                    entryState: { environment: "档案室", characters: [{ assetId: "lu-chuan", position: "电脑前" }] },
+                    firstFrame: { id: "after-start", startPrompt: "电脑前保持原站位" },
+                },
+            },
+        });
+
+        expect(result.payload.continuityContext).toMatchObject({
+            previous: {
+                shotId: "shot-before",
+                title: "前一镜",
+                videoPrompt: "前镜结尾：陆川手停在鼠标旁。",
+                exitState: { environment: "档案室", characters: [{ assetId: "lu-chuan", position: "电脑前" }] },
+                lastFrame: { id: "before-end", endPrompt: "手停在鼠标旁" },
+            },
+            next: {
+                shotId: "shot-after",
+                title: "后续镜",
+                videoPrompt: "后镜开头：陆川仍坐在电脑前。",
+                entryState: { environment: "档案室", characters: [{ assetId: "lu-chuan", position: "电脑前" }] },
+                firstFrame: { id: "after-start", startPrompt: "电脑前保持原站位" },
+            },
+        });
+        expect(JSON.stringify(result.payload.continuityContext)).not.toContain("/private/should-not-pass.png");
+    });
+
     it("keeps reference duties as structured prompt context without media URLs", () => {
         const result = normalizeDramaVideoPromptInput({
             phase: "video_prompt",

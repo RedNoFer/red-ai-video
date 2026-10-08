@@ -291,6 +291,27 @@ export function preflightDramaGeneration(projectId: string, episodeId: string, s
 
 export function generateDramaVideoPrompt(input: { project: DramaProject; episode: DramaEpisode; shot: DramaShot; referenceMaterials: unknown[]; optimizationIssues?: DramaProductionPreflightIssue[]; requestId?: string }) {
     const shot = input.shot;
+    const episodeShots = [...(input.episode.shots || [])].sort((left, right) => left.order - right.order);
+    const shotIndex = episodeShots.findIndex((item) => item.id === shot.id);
+    const neighborContext = (item: DramaShot | undefined, edge: "previous" | "next") => {
+        if (!item) return undefined;
+        const frames = item.framePlan?.frames || [];
+        const prompt = item.executionVideoPrompt?.trim() || item.videoPrompt?.trim();
+        return {
+            shotId: item.id,
+            title: item.title,
+            ...(prompt ? { videoPrompt: prompt } : {}),
+            ...(item.continuity ? { continuity: item.continuity } : {}),
+            ...(edge === "previous" && item.exitState ? { exitState: item.exitState } : {}),
+            ...(edge === "next" && item.entryState ? { entryState: item.entryState } : {}),
+            ...(edge === "previous" && frames.length ? { lastFrame: frames[frames.length - 1] } : {}),
+            ...(edge === "next" && frames.length ? { firstFrame: frames[0] } : {}),
+        };
+    };
+    const continuityContext = {
+        previous: neighborContext(shotIndex > 0 ? episodeShots[shotIndex - 1] : undefined, "previous"),
+        next: neighborContext(shotIndex >= 0 ? episodeShots[shotIndex + 1] : undefined, "next"),
+    };
     const episode: Partial<DramaEpisode> = {
         id: input.episode.id,
         code: input.episode.code,
@@ -311,6 +332,7 @@ export function generateDramaVideoPrompt(input: { project: DramaProject; episode
             ratio: input.project.ratio,
             visualContract: resolveDramaGlobalVisualContract(input.project),
             episode,
+            ...(continuityContext.previous || continuityContext.next ? { continuityContext } : {}),
             characters: input.project.characters.filter((item) => characterIds.has(item.id)),
             scenes: input.project.scenes.filter((item) => item.id === shot.sceneId),
             props: input.project.props.filter((item) => propIds.has(item.id)),

@@ -149,6 +149,58 @@ describe("drama project api", () => {
         expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({ phase: "video_prompt", requestId: "prompt-request-one" });
     });
 
+    it("sends adjacent shot continuity as read-only context when optimizing one prompt", async () => {
+        const fetchMock = vi.fn().mockResolvedValue(Response.json({ code: 0, data: { shots: [] }, msg: "OK" }));
+        vi.stubGlobal("fetch", fetchMock);
+
+        await generateDramaVideoPrompt({
+            project: { id: "project-one", summary: "", style: "", characters: [], scenes: [], props: [], clues: [] } as never,
+            episode: {
+                id: "episode-one",
+                shots: [
+                    {
+                        id: "shot-after",
+                        order: 3,
+                        title: "后续片段",
+                        executionVideoPrompt: "陆川仍坐在电脑前，手停在鼠标旁。",
+                        entryState: { environment: "档案室", characters: [{ assetId: "lu-chuan", state: "坐在电脑前，手停在鼠标旁" }] },
+                        framePlan: { frames: [{ id: "after-start", startPrompt: "电脑前保持原站位" }] },
+                    },
+                    {
+                        id: "shot-before",
+                        order: 1,
+                        title: "前一片段",
+                        executionVideoPrompt: "陆川手掌遮满录像画面，动作停在黑场。",
+                        exitState: { environment: "档案室", characters: [{ assetId: "lu-chuan", state: "手掌遮满录像画面" }] },
+                        framePlan: { frames: [{ id: "before-end", endPrompt: "手掌遮满画面" }] },
+                    },
+                    { id: "shot-one", order: 2, title: "当前片段" },
+                ],
+            } as never,
+            shot: { id: "shot-one", title: "当前片段" } as never,
+            referenceMaterials: [],
+        });
+
+        const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+        expect(body.shots).toHaveLength(1);
+        expect(body.continuityContext).toMatchObject({
+            previous: {
+                shotId: "shot-before",
+                title: "前一片段",
+                videoPrompt: "陆川手掌遮满录像画面，动作停在黑场。",
+                exitState: { environment: "档案室", characters: [{ assetId: "lu-chuan", state: "手掌遮满录像画面" }] },
+                lastFrame: { id: "before-end", endPrompt: "手掌遮满画面" },
+            },
+            next: {
+                shotId: "shot-after",
+                title: "后续片段",
+                videoPrompt: "陆川仍坐在电脑前，手停在鼠标旁。",
+                entryState: { environment: "档案室", characters: [{ assetId: "lu-chuan", state: "坐在电脑前，手停在鼠标旁" }] },
+                firstFrame: { id: "after-start", startPrompt: "电脑前保持原站位" },
+            },
+        });
+    });
+
     it("sends only structured reference duties to the drama prompt Agent", async () => {
         const fetchMock = vi.fn().mockResolvedValue(
             Response.json({
