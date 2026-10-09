@@ -138,6 +138,31 @@ describe("video task upstream reconciliation", () => {
         expect(mocks.complete).toHaveBeenCalledWith(task.id, expect.objectContaining({ url: "/api/reference-assets/result.mp4" }), false);
     });
 
+    it("passes model identity when downloading a relative content URL through the system proxy", async () => {
+        const task = videoTask({
+            status: "success",
+            config: {
+                ...videoTask().config,
+                channelId: "yingling-channel",
+                logicalModel: "yingling-video",
+                model: "seedance2.5-30s",
+                baseUrl: "/api/ai/system/yingling-channel",
+                advancedConfig: { protocol: "yinglingapi", queryPath: "/videos/:task_id", resultField: "/videos/:task_id/content" } as NonNullable<VideoTask["config"]["advancedConfig"]>,
+            },
+            upstream: { ...videoTask().upstream, id: "task_yingling" },
+        });
+        mocks.get.mockResolvedValue(task);
+        mocks.complete.mockResolvedValue({ ...task, status: "success", result: { url: "/api/reference-assets/result.mp4", mimeType: "video/mp4" } });
+
+        await persistVideoTaskResult(task, `/v1/videos/${task.upstream.id}/content`, "http://localhost", "session=test");
+
+        const input = mocks.normalize.mock.calls[0]?.[0];
+        const headers = new Headers(input.internalHeaders);
+        expect(input.url).toBe(`${task.config.baseUrl}/v1/videos/${task.upstream.id}/content`);
+        expect(headers.get("x-vozeb-pro-logical-model")).toBe("yingling-video");
+        expect(headers.get("x-vozeb-pro-upstream-model")).toBe("seedance2.5-30s");
+    });
+
     it("does not reuse a stale local result when a new provider URL is available", async () => {
         const task = videoTask({ status: "success", result: { url: "/api/reference-assets/old.mp4", mimeType: "video/mp4" } });
         mocks.get.mockResolvedValue(task);
