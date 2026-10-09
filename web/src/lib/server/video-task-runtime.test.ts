@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
     normalize: vi.fn(),
     refund: vi.fn(),
     register: vi.fn(),
+    syncDramaVideoTask: vi.fn(),
     touch: vi.fn(),
     update: vi.fn(),
     writeLog: vi.fn(),
@@ -18,6 +19,7 @@ vi.mock("@/lib/auth/store", () => ({ refundUserPoints: mocks.refund }));
 vi.mock("@/lib/globalaiopc-catalog", () => ({ resolveGlobalAiOpcPreset: vi.fn(() => undefined) }));
 vi.mock("@/lib/server/internal-origin", () => ({ fetchInternalApi: mocks.fetchInternalApi }));
 vi.mock("@/lib/server/creative-runtime-service", () => ({ registerGenerationTaskAssetsForUser: mocks.register }));
+vi.mock("@/lib/server/drama-project-service", () => ({ syncCompletedDramaVideoTask: mocks.syncDramaVideoTask }));
 vi.mock("@/lib/server/video-result-normalizer", () => ({ normalizeVideoResult: mocks.normalize }));
 vi.mock("@/lib/server/video-task-log", () => ({ writeVideoGenerationLog: mocks.writeLog }));
 vi.mock("@/lib/server/video-task-store", () => ({
@@ -39,6 +41,7 @@ describe("video task upstream reconciliation", () => {
         vi.clearAllMocks();
         mocks.normalize.mockResolvedValue({ url: "/api/reference-assets/result.mp4", mimeType: "video/mp4", durationMs: 5_000 });
         mocks.register.mockResolvedValue(undefined);
+        mocks.syncDramaVideoTask.mockResolvedValue(undefined);
         mocks.update.mockResolvedValue(undefined);
         mocks.writeLog.mockResolvedValue({});
     });
@@ -136,6 +139,17 @@ describe("video task upstream reconciliation", () => {
 
         expect(mocks.normalize).toHaveBeenCalledWith(expect.objectContaining({ url: expect.stringContaining("https%3A%2F%2Fsupplier.example%2Fresult.mp4"), ownerUserId: task.userId }));
         expect(mocks.complete).toHaveBeenCalledWith(task.id, expect.objectContaining({ url: "/api/reference-assets/result.mp4" }), false);
+    });
+
+    it("synchronizes a completed drama video into its exact production run", async () => {
+        const task = videoTask({ source: "drama", projectId: "project-one", runId: "run-older-shot" });
+        mocks.get.mockResolvedValue(task);
+        const completed = { ...task, status: "success" as const, result: { url: "/api/reference-assets/result.mp4", mimeType: "video/mp4" } };
+        mocks.complete.mockResolvedValue(completed);
+
+        await persistVideoTaskResult(task, "https://supplier.example/result.mp4", "http://localhost", "session=test");
+
+        expect(mocks.syncDramaVideoTask).toHaveBeenCalledWith(completed, { origin: "http://localhost", cookie: "session=test" });
     });
 
     it("passes model identity when downloading a relative content URL through the system proxy", async () => {

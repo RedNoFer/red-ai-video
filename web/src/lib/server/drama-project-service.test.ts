@@ -51,6 +51,8 @@ const mocks = vi.hoisted(() => {
         fetchInternalApi: vi.fn(),
         fetchSafeOutbound: vi.fn(),
         reviewCreativeOutputs: vi.fn(),
+        composeDramaVideoSegments: vi.fn(),
+        getVideoTask: vi.fn(),
     };
 });
 
@@ -96,6 +98,8 @@ vi.mock("@/lib/server/drama-production-run-store", () => ({
 vi.mock("@/lib/server/internal-origin", () => ({ fetchInternalApi: mocks.fetchInternalApi }));
 vi.mock("@/lib/server/safe-outbound-fetch", () => ({ fetchSafeOutbound: mocks.fetchSafeOutbound }));
 vi.mock("@/lib/server/creative-review-service", () => ({ reviewCreativeOutputs: mocks.reviewCreativeOutputs }));
+vi.mock("@/lib/server/drama-video-sequence", () => ({ composeDramaVideoSegments: mocks.composeDramaVideoSegments }));
+vi.mock("@/lib/server/video-task-store", () => ({ getVideoTask: mocks.getVideoTask }));
 
 import {
     acceptDramaStoryboardFrameForUser,
@@ -138,6 +142,7 @@ import {
     updateDramaStoryboardFramePromptForUser,
     validateDramaReferenceSelections,
     saveDramaEpisodeSettingsForUser,
+    syncCompletedDramaVideoTask,
 } from "./drama-project-service";
 import { DramaProjectStoreError } from "./drama-project-store";
 
@@ -174,6 +179,8 @@ describe("drama project service updates", () => {
         mocks.findLatestDramaProductionRun.mockResolvedValue(null);
         mocks.getDramaProductionRun.mockResolvedValue(null);
         mocks.updateDramaProductionRun.mockImplementation(async (_userId: string, run: unknown) => run);
+        mocks.getVideoTask.mockImplementation((id: string) => mocks.getStoredGenerationTask("video", id));
+        mocks.composeDramaVideoSegments.mockResolvedValue("/api/reference-assets/composed-result.mp4");
         mocks.deleteUserOwnedMediaAssetsPhysically.mockResolvedValue({ deletedFiles: 1, deletedBytes: 12, blocked: [] });
     });
 
@@ -480,6 +487,78 @@ describe("drama project service updates", () => {
             expect.objectContaining({ episodes: [expect.objectContaining({ shots: [expect.objectContaining({ id: "shot-one", generationStatus: "error", generationError: "video generation timed out", generationTaskId: "video-task-one" })] })] }),
             current.updatedAt,
         );
+    });
+
+    it("persists a completed task by its exact run even when a newer run exists", async () => {
+        const current = project("2026-07-19T08:00:00.000Z", "项目");
+        current.episodes[0].shots = [{ id: "shot-one", title: "镜头一", characterIds: [], propIds: [], clueIds: [], imagePrompt: "画面", videoPrompt: "动作", duration: 5, generationStatus: "running", generationRunId: "run-older" }] as never;
+        const run = {
+            id: "run-older",
+            projectId: current.id,
+            episodeId: "episode-one",
+            status: "running",
+            mode: "strict",
+            parameterSnapshot: { imageModel: "image-default", videoModel: "video-default", ratio: "9:16" },
+            steps: [
+                { id: "video-shot-one", type: "video", shotId: "shot-one", taskId: "task-one", status: "running", dependsOn: [] },
+                { id: "extract-shot-one", type: "extract_frames", shotId: "shot-one", status: "blocked", dependsOn: ["video-shot-one"] },
+            ],
+            blockers: [],
+            confirmedAt: current.updatedAt,
+            createdAt: current.updatedAt,
+            updatedAt: current.updatedAt,
+        } as never;
+        mocks.getDramaProject.mockResolvedValue(current);
+        mocks.getDramaProductionRun.mockResolvedValue(run);
+        mocks.getVideoTask.mockResolvedValue({ id: "task-one", userId: "user-one", status: "success", result: { url: "/api/reference-assets/task-result.mp4" } });
+
+        await syncCompletedDramaVideoTask({ id: "task-one", userId: "user-one", source: "drama", projectId: current.id, runId: "run-older", status: "success" });
+
+        expect(mocks.composeDramaVideoSegments).toHaveBeenCalledWith(expect.objectContaining({ clips: [{ url: "/api/reference-assets/task-result.mp4", duration: 0 }] }));
+        expect(mocks.updateDramaProject).toHaveBeenCalledWith(
+            "user-one",
+            expect.objectContaining({ episodes: [expect.objectContaining({ shots: [expect.objectContaining({ videoUrl: "/api/reference-assets/composed-result.mp4", generationStatus: "success" })] })] }),
+            current.updatedAt,
+        );
+        expect(mocks.updateDramaProductionRun).toHaveBeenCalledWith(
+            "user-one",
+            expect.objectContaining({ id: "run-older", steps: expect.arrayContaining([expect.objectContaining({ id: "video-shot-one", status: "success" }), expect.objectContaining({ id: "extract-shot-one", status: "success" })]) }),
+        );
+        expect(mocks.fetchInternalApi).not.toHaveBeenCalled();
+    });
+
+    it("does not let a late video sync overwrite a newer shot result after a project conflict", async () => {
+        const current = project("2026-07-19T08:00:00.000Z", "项目");
+        current.episodes[0].shots = [{ id: "shot-one", title: "镜头一", characterIds: [], propIds: [], clueIds: [], imagePrompt: "画面", videoPrompt: "动作", duration: 5, generationStatus: "running", generationRunId: "run-older" }] as never;
+        const latest = structuredClone(current);
+        latest.updatedAt = "2026-07-19T08:00:02.000Z";
+        latest.episodes[0].shots[0] = { ...latest.episodes[0].shots[0], generationStatus: "success", generationRunId: undefined, videoUrl: "/newer-result.mp4" };
+        const run = {
+            id: "run-older",
+            projectId: current.id,
+            episodeId: "episode-one",
+            status: "running",
+            mode: "strict",
+            parameterSnapshot: { imageModel: "image-default", videoModel: "video-default", ratio: "9:16" },
+            steps: [
+                { id: "video-shot-one", type: "video", shotId: "shot-one", taskId: "task-one", status: "running", dependsOn: [] },
+                { id: "extract-shot-one", type: "extract_frames", shotId: "shot-one", status: "blocked", dependsOn: ["video-shot-one"] },
+            ],
+            blockers: [],
+            confirmedAt: current.updatedAt,
+            createdAt: current.updatedAt,
+            updatedAt: current.updatedAt,
+        } as never;
+        mocks.getDramaProject.mockResolvedValueOnce(current).mockResolvedValueOnce(latest);
+        mocks.getDramaProductionRun.mockResolvedValue(run);
+        mocks.getVideoTask.mockResolvedValue({ id: "task-one", userId: "user-one", status: "success", result: { url: "/api/reference-assets/task-result.mp4" } });
+        mocks.composeDramaVideoSegments.mockResolvedValue("/older-result.mp4");
+        mocks.updateDramaProject.mockRejectedValueOnce(new DramaProjectStoreError("项目已更新", 409));
+
+        await syncCompletedDramaVideoTask({ id: "task-one", userId: "user-one", source: "drama", projectId: current.id, runId: "run-older", status: "success" });
+
+        expect(mocks.updateDramaProject).toHaveBeenCalledOnce();
+        expect(mocks.updateDramaProductionRun).toHaveBeenCalledWith("user-one", expect.objectContaining({ id: "run-older" }));
     });
 
     it("projects an unknown upstream submission as needs_review instead of running", async () => {

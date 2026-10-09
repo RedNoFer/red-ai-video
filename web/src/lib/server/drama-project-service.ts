@@ -99,13 +99,13 @@ import { resolveDramaVideoReferenceMode, readableShotReference, selectedDramaSho
 import { createDramaProductionRun, findLatestDramaProductionRun, getDramaProductionRun, updateDramaProductionRun } from "@/lib/server/drama-production-run-store";
 import { createCanvasProjectForUser, getCanvasProjectForUser, updateCanvasProjectForUser } from "@/lib/server/canvas-project-service";
 import { resolveLogicalModelCandidates, supportsVideoKeyframeReferences } from "@/lib/server/logical-model-router";
-import { getVideoTask } from "@/lib/server/video-task-store";
+import { getVideoTask, type VideoTask } from "@/lib/server/video-task-store";
 import type { ImageTask } from "@/lib/server/image-task-store";
 
 const MAX_PROJECT_BYTES = 2 * 1024 * 1024;
 const REVIEW_COMPLETION_STALE_MS = TEXT_MODEL_REQUEST_TIMEOUT_MS * 4;
 const dramaImageDispatchLocks = new Map<string, Promise<DramaProductionRun>>();
-const dramaProductionDispatchLocks = new Map<string, Promise<DramaProductionRun>>();
+const dramaProductionDispatchLocks = new Map<string, Promise<unknown>>();
 const dramaVisualSyncLocks = new Map<string, Promise<DramaProductionRun>>();
 const dramaVisualRunCreationLocks = new Map<string, Promise<DramaProductionRun>>();
 const clearDramaGeneratedMediaState = {
@@ -2791,9 +2791,41 @@ async function syncDramaProductionRun(userId: string, project: DramaProject, run
     }
     nextRun = unlockDramaProductionSteps(nextRun);
     if (!changed && nextRun.status === run.status && nextRun.steps.every((step, index) => step.status === run.steps[index]?.status)) return run;
-    if (JSON.stringify(nextProject) !== JSON.stringify(project)) await updateDramaProject(userId, { ...nextProject, updatedAt: nextTimestamp(project.updatedAt) }, project.updatedAt);
+    if (JSON.stringify(nextProject) !== JSON.stringify(project)) {
+        try {
+            await updateDramaProject(userId, { ...nextProject, updatedAt: nextTimestamp(project.updatedAt) }, project.updatedAt);
+        } catch (error) {
+            if (!(error instanceof DramaProjectStoreError) || error.status !== 409) throw error;
+            const latestProject = await getDramaProject(project.id, userId);
+            if (!latestProject) throw error;
+            const rebased = mergeDramaProductionTaskState(latestProject, project, nextProject);
+            if (rebased !== latestProject) await updateDramaProject(userId, rebased, latestProject.updatedAt);
+        }
+    }
     await updateDramaProductionRun(userId, nextRun);
     return nextRun;
+}
+
+export function syncCompletedDramaVideoTask(task: Pick<VideoTask, "id" | "userId" | "source" | "projectId" | "runId" | "status">, transport: { origin?: string; cookie?: string } = {}) {
+    if (task.source !== "drama" || task.status !== "success" || !task.projectId || !task.runId) return Promise.resolve();
+    const key = `${task.userId}:${task.projectId}:${task.runId}`;
+    const previous = dramaProductionDispatchLocks.get(key);
+    const sync = async () => {
+        const [project, run] = await Promise.all([getDramaProject(task.projectId!, task.userId), getDramaProductionRun(task.userId, task.projectId!, task.runId!)]);
+        if (!project || !run || !run.steps.some((step) => step.type === "video")) return;
+        await syncDramaProductionRun(task.userId, project, run, transport);
+    };
+    const operation = previous ? previous.catch(() => undefined).then(sync) : sync();
+    dramaProductionDispatchLocks.set(key, operation);
+    operation.then(
+        () => {
+            if (dramaProductionDispatchLocks.get(key) === operation) dramaProductionDispatchLocks.delete(key);
+        },
+        () => {
+            if (dramaProductionDispatchLocks.get(key) === operation) dramaProductionDispatchLocks.delete(key);
+        },
+    );
+    return operation;
 }
 
 async function dispatchReadyDramaProductionSteps(userId: string, project: DramaProject, run: DramaProductionRun, origin: string, cookie: string) {
@@ -2962,15 +2994,17 @@ function mergeDramaProductionTaskState(latest: DramaProject, base: DramaProject,
             const shots = episode.shots.map((shot) => {
                 const baseShot = baseEpisode.shots.find((item) => item.id === shot.id);
                 const desiredShot = desiredEpisode.shots.find((item) => item.id === shot.id);
-                if (
-                    !baseShot ||
-                    !desiredShot ||
-                    JSON.stringify({ generationStatus: baseShot.generationStatus, generationRunId: baseShot.generationRunId, generationTaskId: baseShot.generationTaskId, generationError: baseShot.generationError }) ===
-                        JSON.stringify({ generationStatus: desiredShot.generationStatus, generationRunId: desiredShot.generationRunId, generationTaskId: desiredShot.generationTaskId, generationError: desiredShot.generationError })
-                )
-                    return shot;
+                if (!baseShot || !desiredShot) return shot;
+                const baseTaskState = { generationStatus: baseShot.generationStatus, generationRunId: baseShot.generationRunId, generationTaskId: baseShot.generationTaskId, generationError: baseShot.generationError };
+                const desiredTaskState = { generationStatus: desiredShot.generationStatus, generationRunId: desiredShot.generationRunId, generationTaskId: desiredShot.generationTaskId, generationError: desiredShot.generationError };
+                const taskStateChanged = JSON.stringify(baseTaskState) !== JSON.stringify(desiredTaskState);
+                const videoChanged = baseShot.videoUrl !== desiredShot.videoUrl;
+                const latestTaskState = { generationStatus: shot.generationStatus, generationRunId: shot.generationRunId, generationTaskId: shot.generationTaskId, generationError: shot.generationError };
+                const applyTaskState = taskStateChanged && JSON.stringify(latestTaskState) === JSON.stringify(baseTaskState);
+                const applyVideo = videoChanged && shot.videoUrl === baseShot.videoUrl;
+                if (!applyTaskState && !applyVideo) return shot;
                 changed = true;
-                return { ...shot, generationStatus: desiredShot.generationStatus, generationRunId: desiredShot.generationRunId, generationTaskId: desiredShot.generationTaskId, generationError: desiredShot.generationError };
+                return { ...shot, ...(applyTaskState ? desiredTaskState : {}), ...(applyVideo ? { videoUrl: desiredShot.videoUrl } : {}) };
             });
             return shots === episode.shots ? episode : { ...episode, shots };
         }),

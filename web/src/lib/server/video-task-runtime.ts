@@ -24,6 +24,7 @@ import { maintenanceWorkerHeaders } from "@/lib/server/maintenance-auth";
 import { systemAiBillingHeaders } from "@/lib/server/system-ai-billing";
 import { refundVideoTask } from "@/lib/server/video-task-refund";
 import { geminiVideoQueryPath, parseGeminiVideoOperation } from "@/lib/server/gemini-video-provider";
+import { syncCompletedDramaVideoTask } from "@/lib/server/drama-project-service";
 
 export type VideoUpstreamStep = { state: "pending"; status: string } | { state: "result_ready"; status: string; resultUrl: string } | { state: "failed"; status: string; error: string };
 
@@ -141,6 +142,7 @@ async function completeVideoTask(task: VideoTask, resultUrl: string, origin: str
     }
     await writeVideoGenerationLog(completed, "success");
     await registerVideoAsset(completed);
+    await syncCompletedDramaVideoTask(completed, { origin, cookie }).catch((error) => console.error("Drama video project synchronization failed", { taskId: completed.id, error }));
     return completed;
 }
 

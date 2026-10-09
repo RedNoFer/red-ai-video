@@ -26,7 +26,9 @@ describe("Drama generation production workspace", () => {
         expect(source).toContain("onAutoFixPreflight");
         expect(source).toContain("让 Agent 自动修复可修复问题");
         expect(source).toContain("前置检查已通过");
-        expect(source).toContain("仍有阻断项");
+        expect(source).toContain("仍有提醒项");
+        expect(source).toContain("可继续生成视频");
+        expect(source).not.toContain("仍有阻断项");
         expect(source).toContain("智能补全参数");
         expect(source).not.toContain("data-drama-generation-empty");
         expect(source).toContain('<section className="mt-2.5"');
@@ -79,7 +81,7 @@ describe("Drama generation production workspace", () => {
         expect(source).toContain('body: JSON.stringify({ action: "refresh" })');
         expect(source).toContain('method: "POST"');
         expect(source).toContain("拉取最新视频");
-        expect(source).toContain("data-drama-shot-preflight-blockers");
+        expect(source).toContain("data-drama-shot-preflight-warnings");
         expect(source).toContain("completeShotReviewAndRefresh");
         expect(source).toContain("去内容审核");
         expect(source).toContain("videoPromptRuns");
@@ -245,6 +247,20 @@ describe("Drama generation production workspace", () => {
         expect(lockProduction).not.toContain("saveProjectNow(project.id)");
         expect(lockProduction).toContain('updateDramaShotPromptPatch(project.id, episode.id, shotId, prompts.videoPrompt || "", prompts.imagePrompt)');
         expect(lockProduction).toContain("createDramaProductionRun(project.id, episode.id, undefined, check");
+    });
+
+    it("reloads the project after a video pull instead of queuing a stale local project save", async () => {
+        const source = await readFile(resolve(process.cwd(), "src/app/(user)/drama/[id]/drama-generation-panel.tsx"), "utf8");
+        const refreshStart = source.indexOf("const refreshVideo = async () =>");
+        const refreshEnd = source.indexOf("\n    return (", refreshStart);
+        const refreshHandler = source.slice(refreshStart, refreshEnd);
+        const successStart = refreshHandler.indexOf('if (payload.task.status === "success"');
+        const successEnd = refreshHandler.indexOf('} else if (payload.task.status === "running")', successStart);
+        const successBranch = refreshHandler.slice(successStart, successEnd);
+
+        expect(successBranch).toContain("await loadProject(project.id, true)");
+        expect(successBranch).not.toContain("updateShot(");
+        expect(successBranch).not.toContain("saveProjectNow(project.id)");
     });
 
     it("shows persistent per-frame progress without blocking the whole storyboard area", async () => {

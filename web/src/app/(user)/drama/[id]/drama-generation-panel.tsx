@@ -967,6 +967,7 @@ function ShotTaskRow({
     const { message } = App.useApp();
     const updateShot = useDramaStore((state) => state.updateShot);
     const saveProjectNow = useDramaStore((state) => state.saveProjectNow);
+    const loadProject = useDramaStore((state) => state.loadProject);
     const queueAudio = useDramaStore((state) => state.queueAudio);
     const beginVideoPrompt = useDramaStore((state) => state.beginVideoPrompt);
     const finishVideoPrompt = useDramaStore((state) => state.finishVideoPrompt);
@@ -1034,16 +1035,9 @@ function ShotTaskRow({
             const payload = (await response.json().catch(() => ({}))) as { task?: { status?: string; result?: { url?: string }; error?: string }; error?: string };
             if (!response.ok || !payload.task) throw new Error(payload.error || "供应商视频状态同步失败");
             if (payload.task.status === "success" && payload.task.result?.url) {
-                updateShot(project.id, episode.id, shot.id, {
-                    generationStatus: "success",
-                    videoUrl: payload.task.result.url,
-                    generationError: undefined,
-                    frameEvidence: supersedeFrameEvidence(shot.frameEvidence, "当前镜头视频已重新同步"),
-                    actualStartFrameUrl: undefined,
-                    actualEndFrameUrl: undefined,
-                    actualFrameVideoUrl: undefined,
-                });
-                await saveProjectNow(project.id);
+                const savedProject = await loadProject(project.id, true);
+                const savedShot = savedProject.episodes.find((item) => item.id === episode.id)?.shots.find((item) => item.id === shot.id);
+                if (savedShot?.generationStatus !== "success" || !savedShot.videoUrl) throw new Error("视频已拉取，但项目镜头结果未保存，请再次拉取");
                 message.success("已拉取供应商最新视频并保存到项目");
             } else if (payload.task.status === "running") {
                 updateShot(project.id, episode.id, shot.id, { generationStatus: "running", generationError: undefined });
