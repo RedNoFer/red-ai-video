@@ -4,11 +4,11 @@ import path from "node:path";
 import { parse } from "yaml";
 
 export const composeProfiles = [
-    { file: "docker-compose.yml", embeddedPostgres: true, image: "${VOZEB_PRO_IMAGE:-ghcr.io/csyqlz/vozeb-pro:v0.0.20}", appNodeOptions: "${VOZEB_PRO_APP_NODE_OPTIONS:---max-old-space-size=2048}", workerOrigin: "http://app:3000" },
+    { file: "docker-compose.yml", embeddedPostgres: true, image: "${VOZEB_PRO_IMAGE:-ghcr.io/rednofer/vozeb-pro:v0.0.21}", appNodeOptions: "${VOZEB_PRO_APP_NODE_OPTIONS:---max-old-space-size=2048}", workerOrigin: "http://app:3000" },
     { file: "docker-compose.local.yml", embeddedPostgres: true, image: "vozeb-pro:local", workerOrigin: "http://app:3000" },
-    { file: "docker-compose.baota.yml", embeddedPostgres: false, hostNetwork: true, image: "${VOZEB_PRO_IMAGE:-ghcr.io/csyqlz/vozeb-pro:v0.0.20}", workerOrigin: "http://127.0.0.1:3000" },
-    { file: "docker-compose.external-db.yml", embeddedPostgres: false, image: "${VOZEB_PRO_IMAGE:-ghcr.io/csyqlz/vozeb-pro:v0.0.20}", workerOrigin: "http://app:3000" },
-    { file: "docker-compose.lowmem.yml", embeddedPostgres: false, image: "${VOZEB_PRO_IMAGE:-ghcr.io/csyqlz/vozeb-pro:v0.0.20}", workerOrigin: "http://app:3000" },
+    { file: "docker-compose.baota.yml", embeddedPostgres: false, hostNetwork: true, image: "${VOZEB_PRO_IMAGE:-ghcr.io/rednofer/vozeb-pro:v0.0.21}", workerOrigin: "http://127.0.0.1:3000" },
+    { file: "docker-compose.external-db.yml", embeddedPostgres: false, image: "${VOZEB_PRO_IMAGE:-ghcr.io/rednofer/vozeb-pro:v0.0.21}", workerOrigin: "http://app:3000" },
+    { file: "docker-compose.lowmem.yml", embeddedPostgres: false, image: "${VOZEB_PRO_IMAGE:-ghcr.io/rednofer/vozeb-pro:v0.0.21}", workerOrigin: "http://app:3000" },
 ];
 
 export const docsComposeProfiles = [
