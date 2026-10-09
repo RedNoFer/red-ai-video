@@ -156,6 +156,22 @@ describe("active protocols through persisted admin settings and the system proxy
         expectProxyRequests(channel, createPath, model, true, operation.queryPath, referenced.id);
     });
 
+    it("preserves all nine Yingling Seedance reference URLs through saved settings and the system proxy", async () => {
+        const definition = registeredChannelProtocolDefinitions.find((item) => item.id === "yinglingapi")!;
+        const model = "seedance2.5-30s";
+        const operation = protocolModelConfig("yinglingapi", "video", model)!;
+        const channel = await configureProxyChannel(definition, "video", model, protocolAdvancedConfig(definition.id, operation, model));
+        const references = Array.from({ length: 9 }, (_, index) => ({ type: "image" as const, url: `https://cdn.example.com/reference-${index + 1}.png` }));
+
+        const upstream = await createUpstream("proxy-user", INTERNAL_ORIGIN, "", channel.config, "animate the reference set", videoParameters(), references, MULTIPLIERS, "yingling-nine-images");
+        await expectVideoResult(channel, upstream);
+        expectProxyRequests(channel, operation.imageToVideoPath || operation.createPath, model, true, operation.queryPath, upstream.id);
+        const body = JSON.parse(fixture.requests.find((request) => request.method === "POST")!.body.toString("utf8"));
+
+        expect(body.images).toEqual(references.map((reference) => reference.url));
+        expect(body.images).toHaveLength(9);
+    });
+
     it.each(AUDIO_PROTOCOLS)("persists and routes $id audio requests and returned media", async (definition) => {
         const model = protocolModel(definition, "audio");
         const operation = protocolOperation(definition, "audio", model);

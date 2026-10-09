@@ -599,6 +599,45 @@ describe("video generation candidate failover", () => {
         expect(body.get("input_reference")).toBeInstanceOf(File);
     });
 
+    it("sends nine Yingling Seedance references as the plugin's JSON images array", async () => {
+        mocks.getAuthSettings.mockResolvedValue(yinglingVideoSettings());
+        mocks.fetchInternalApi.mockResolvedValue(json({ id: "yingling-video-task", status: "queued" }));
+        const references = Array.from({ length: 9 }, (_, index) => ({ type: "image", url: `https://cdn.example.com/reference-${index + 1}.png` }));
+
+        const response = await POST(request({ model: "admin-configured-yingling-video", videoSeconds: "5", size: "9:16", vquality: "720" }, references));
+        const [url, init] = mocks.fetchInternalApi.mock.calls[0] as [string, RequestInit];
+        const body = JSON.parse(String(init.body));
+
+        expect(response.status).toBe(200);
+        expect(url).toContain("/api/ai/system/one/videos");
+        expect(new Headers(init.headers).get("content-type")).toBe("application/json");
+        expect(init.body).not.toBeInstanceOf(FormData);
+        expect(body).toMatchObject({
+            model: "seedance2.5-30s",
+            duration: 5,
+            aspect_ratio: "9:16",
+            resolution: "720p",
+            images: references.map((reference) => reference.url),
+        });
+        expect(body.images).toHaveLength(9);
+    });
+
+    it("marks a local OpenAI multipart reference-count rejection terminal before any provider request", async () => {
+        const openAiChannel = applyChannelProtocol({ ...channels[0], models: [...channels[0].models], advancedConfig: emptyAdvancedConfig() }, "openai");
+        mocks.getAuthSettings.mockResolvedValue({ ...settings, systemChannels: [openAiChannel] });
+        const references = [1, 2].map((index) => ({ type: "image", url: `https://cdn.example.com/openai-reference-${index}.png` }));
+
+        const response = await POST(request({ model: "video" }, references));
+        const result = await response.json();
+
+        expect(response.status).toBe(502);
+        expect(result.error).toContain("OpenAI 视频协议最多支持 1 张参考图");
+        expect(mocks.fetchInternalApi).not.toHaveBeenCalled();
+        expect(mocks.transitionVideoTask).toHaveBeenCalledWith(expect.objectContaining({ id: "local-task" }), expect.objectContaining({ status: "error" }));
+        expect(mocks.scheduleGenerationTask).toHaveBeenLastCalledWith("video", "local-task", expect.objectContaining({ executionPhase: "completed", lastUpstreamStatus: "create_failed" }));
+        expect(mocks.scheduleGenerationTask.mock.calls.some(([, , patch]) => patch.executionPhase === "needs_review")).toBe(false);
+    });
+
     it("persists the Drama project, episode and shot task context", async () => {
         mocks.fetchInternalApi.mockResolvedValue(json({ id: "upstream-drama", status: "queued" }));
         const context = { surface: "drama", projectId: "drama-one", episodeId: "episode-one", shotId: "shot-one", estimatedPoints: 8, attemptNo: 2, clientRequestId: "drama-video:one" };
@@ -1587,6 +1626,23 @@ function newApiVideoSettings() {
             },
         ],
         defaultModels: { videoModel: model },
+    };
+}
+
+function yinglingVideoSettings() {
+    const model = "seedance2.5-30s";
+    const channel = applyChannelProtocol({ ...channels[0], models: [model], advancedConfig: emptyAdvancedConfig() }, "yinglingapi");
+    return {
+        ...settings,
+        systemChannels: [channel],
+        logicalModels: [
+            {
+                ...settings.logicalModels[0],
+                id: "admin-configured-yingling-video",
+                bindings: [{ ...settings.logicalModels[0].bindings[0], upstreamModel: model }],
+            },
+        ],
+        defaultModels: { videoModel: "admin-configured-yingling-video" },
     };
 }
 

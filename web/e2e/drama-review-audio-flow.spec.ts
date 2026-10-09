@@ -88,6 +88,54 @@ test("drama review completion, continuity and audio configuration entry are visi
     await expect(page.getByText("默认能力", { exact: true })).toBeVisible();
 });
 
+test("a video awaiting upstream confirmation is shown as 待确认 instead of 生成中", async ({ page, request }) => {
+    const created = await request.post("/api/drama/projects", { data: { title: "E2E 上游待确认状态", summary: "验证未知提交状态不显示为生成中", ratio: "9:16" } });
+    expect(created.ok(), await created.text()).toBe(true);
+    const project = ((await created.json()) as { data: { project: DramaProject } }).data.project;
+    const episode = project.episodes[0]!;
+    const updatedAt = new Date(Date.parse(project.updatedAt) + 1).toISOString();
+    const saved = await request.patch(`/api/drama/projects/${project.id}/mutations`, {
+        data: {
+            projectId: project.id,
+            expectedUpdatedAt: project.updatedAt,
+            updatedAt,
+            episodes: {
+                patch: [
+                    {
+                        id: episode.id,
+                        fields: {},
+                        shots: {
+                            upsert: [
+                                {
+                                    id: "shot-upstream-needs-review",
+                                    order: 1,
+                                    title: "上游待确认镜头",
+                                    imagePrompt: "档案室内的双人中景",
+                                    videoPrompt: "陆川抬眼观察同事的反应",
+                                    duration: 5,
+                                    characterIds: [],
+                                    propIds: [],
+                                    clueIds: [],
+                                    generationStatus: "needs_review",
+                                    generationTaskId: "video-task-upstream-unknown",
+                                    generationError: "提交结果待确认",
+                                },
+                            ],
+                        },
+                    },
+                ],
+            },
+        },
+    });
+    expect(saved.ok(), await saved.text()).toBe(true);
+
+    await page.goto(`/drama/${project.id}`, { waitUntil: "domcontentloaded" });
+    await page.getByRole("button", { name: "切换到镜头生成" }).click();
+    const shot = page.locator("[data-drama-shot-task]").filter({ hasText: "上游待确认镜头" });
+    await expect(shot.getByText("待确认", { exact: true })).toBeVisible();
+    await expect(shot.getByText("生成中", { exact: true })).toHaveCount(0);
+});
+
 test("管理员可以应用并保存音频逻辑模型路由", async ({ page, request }) => {
     const currentSettingsResponse = await request.get("/api/admin/settings");
     expect(currentSettingsResponse.ok(), await currentSettingsResponse.text()).toBe(true);

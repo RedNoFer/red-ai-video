@@ -133,7 +133,8 @@ describe("provider task config", () => {
         expect(() => assertVideoReferenceRoles({ protocol: "seedance" } as never, frames)).not.toThrow();
         expect(() => assertVideoReferenceRoles({ protocol: "yumeng", requestTemplate: '{"first_image":"{{first_frame}}","last_image":"{{last_frame}}"}' } as never, frames)).not.toThrow();
         expect(() => assertVideoReferenceRoles({ protocol: "openai" } as never, frames)).toThrow("当前视频模型不支持尾帧输入");
-        expect(() => assertVideoReferenceRoles({ protocol: "yinglingapi" } as never, frames)).toThrow("当前视频模型不支持尾帧输入");
+        expect(() => assertVideoReferenceRoles({ protocol: "yinglingapi" } as never, [frames[0]])).toThrow("当前视频模型不支持显式首帧输入");
+        expect(() => assertVideoReferenceRoles({ protocol: "yinglingapi" } as never, [frames[1]])).toThrow("当前视频模型不支持尾帧输入");
         expect(() => assertVideoReferenceRoles({ protocol: "custom", requestTemplate: '{"first":"{{first_frame_url}}","last":"{{last_frame_url}}"}' } as never, frames)).not.toThrow();
         expect(() => assertVideoReferenceRoles({ protocol: "custom", requestTemplate: '{"first":"{{first_frame_url}}"}' } as never, frames)).toThrow("当前视频模型不支持尾帧输入");
     });

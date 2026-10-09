@@ -444,6 +444,13 @@ describe("drama project service updates", () => {
         expect(reconcileDramaVideoStepTask(step, task)).toMatchObject({ id: "video-shot-one", taskId: "video-task-one", status: "running", error: undefined });
     });
 
+    it("keeps a task with an unknown upstream submission in needs_review", () => {
+        const step = { id: "video-shot-one", type: "video", status: "running" } as never;
+        const task = { id: "video-task-one", status: "running", userId: "user-one", executionPhase: "needs_review", reviewReason: "提交结果待确认" } as never;
+
+        expect(reconcileDramaVideoStepTask(step, task)).toMatchObject({ taskId: "video-task-one", status: "needs_review", error: "提交结果待确认" });
+    });
+
     it("projects a reconciled video failure back to the owning shot", async () => {
         const current = project("2026-07-19T08:00:00.000Z", "项目");
         current.episodes[0].shots = [{ id: "shot-one", title: "镜头一", characterIds: [], propIds: [], clueIds: [], imagePrompt: "画面", videoPrompt: "动作", duration: 5, generationStatus: "idle" }] as never;
@@ -472,6 +479,37 @@ describe("drama project service updates", () => {
             expect.objectContaining({ episodes: [expect.objectContaining({ shots: [expect.objectContaining({ id: "shot-one", generationStatus: "error", generationError: "video generation timed out", generationTaskId: "video-task-one" })] })] }),
             current.updatedAt,
         );
+    });
+
+    it("projects an unknown upstream submission as needs_review instead of running", async () => {
+        const current = project("2026-07-19T08:00:03.000Z", "项目");
+        current.episodes[0].shots = [{ id: "shot-one", title: "镜头一", characterIds: [], propIds: [], clueIds: [], imagePrompt: "画面", videoPrompt: "动作", duration: 5, generationStatus: "running" }] as never;
+        const run = {
+            id: "production-run-review",
+            projectId: current.id,
+            episodeId: "episode-one",
+            status: "running",
+            mode: "strict",
+            parameterSnapshot: { imageModel: "image-default", videoModel: "video-default", ratio: "9:16" },
+            steps: [{ id: "video-shot-one", type: "video", shotId: "shot-one", taskId: "video-task-one", status: "running", dependsOn: [] }],
+            blockers: [],
+            confirmedAt: current.updatedAt,
+            createdAt: current.updatedAt,
+            updatedAt: current.updatedAt,
+        } as never;
+        mocks.getDramaProject.mockResolvedValue(current);
+        mocks.findLatestDramaProductionRun.mockResolvedValue(run);
+        mocks.getDramaProductionRun.mockResolvedValue(run);
+        mocks.getStoredGenerationTask.mockResolvedValue({ id: "video-task-one", userId: "user-one", status: "running", executionPhase: "needs_review", reviewReason: "提交结果待确认" });
+
+        await getLatestDramaProductionRunForUser("user-one", current.id, "episode-one");
+
+        expect(mocks.updateDramaProject).toHaveBeenCalledWith(
+            "user-one",
+            expect.objectContaining({ episodes: [expect.objectContaining({ shots: [expect.objectContaining({ id: "shot-one", generationStatus: "needs_review", generationError: "提交结果待确认", generationTaskId: "video-task-one" })] })] }),
+            current.updatedAt,
+        );
+        expect(mocks.updateDramaProductionRun).toHaveBeenCalledWith("user-one", expect.objectContaining({ steps: [expect.objectContaining({ id: "video-shot-one", status: "needs_review" })] }));
     });
 
     it("maps a completed supplier video result to the production step output", () => {
@@ -659,6 +697,15 @@ describe("drama project service updates", () => {
         expect(normalized.defaultVideoMode).toBe("storyboard");
         expect(normalized.productionBible?.productionPlan?.video.mode).toBe("storyboard");
         expect(normalized.episodes[0].shots[0].videoMode).toBe("storyboard");
+    });
+
+    it("preserves needs_review as a distinct persisted shot generation state", () => {
+        const current = project("2026-07-19T08:00:00.000Z", "项目");
+        current.episodes[0].shots = [{ id: "shot-one", title: "镜头", imagePrompt: "画面", videoPrompt: "动作", characterIds: [], propIds: [], clueIds: [], generationStatus: "needs_review" }] as never;
+
+        const normalized = normalizeProject(current, current);
+
+        expect(normalized.episodes[0].shots[0].generationStatus).toBe("needs_review");
     });
 
     it("marks an explicit nine-view board as legacy and anchors it to the approved reference", () => {

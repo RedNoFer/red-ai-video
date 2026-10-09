@@ -155,15 +155,17 @@ export function assertVideoReferenceRoles(config: SystemChannelAdvancedConfig | 
         declaredRoles ||
             (protocol === "seedance" || protocol === "volcengine-video" || protocol === "seedance-special"
                 ? ["reference", "first_frame", "last_frame"]
-                : protocol === "yumeng"
-                  ? templateVideoReferenceRoles(config?.requestTemplate)
-                  : protocol === "newapi-video"
-                    ? ["reference"]
-                    : protocol === "openai" || protocol === "newapi" || protocol === "yinglingapi" || protocol === "sub2api" || protocol === "openai-audio-dialogue"
-                      ? ["reference", "first_frame"]
-                      : protocol === "custom" || protocol === "compatible" || protocol === "auto"
-                        ? templateVideoReferenceRoles(config?.requestTemplate)
-                        : ["reference"]),
+                : protocol === "yinglingapi"
+                  ? ["reference"]
+                  : protocol === "yumeng"
+                    ? templateVideoReferenceRoles(config?.requestTemplate)
+                    : protocol === "newapi-video"
+                      ? ["reference"]
+                      : protocol === "openai" || protocol === "newapi" || protocol === "sub2api" || protocol === "openai-audio-dialogue"
+                        ? ["reference", "first_frame"]
+                        : protocol === "custom" || protocol === "compatible" || protocol === "auto"
+                          ? templateVideoReferenceRoles(config?.requestTemplate)
+                          : ["reference"]),
     );
     if (supportsKeyframes === true && ["seedance", "volcengine-video", "newapi-video", "custom", "compatible", "auto"].includes(protocol)) supported.add("keyframe");
     const unsupported = requestedRoles.find((role) => !supported.has(role));

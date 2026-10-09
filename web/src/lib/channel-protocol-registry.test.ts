@@ -142,7 +142,13 @@ describe("channel protocol registry", () => {
         });
         expect(channelProtocolDefinition("sub2api").operations.image).toMatchObject({ createPath: "/images/generations", editPath: "/images/edits", requestTemplate: expect.stringContaining('"images"') });
         expect(channelProtocolDefinition("newapi").operations).toEqual(channelProtocolDefinition("openai").operations);
-        expect(channelProtocolDefinition("yinglingapi").operations).toEqual(channelProtocolDefinition("openai").operations);
+        expect(channelProtocolDefinition("yinglingapi").operations).toMatchObject({
+            text: channelProtocolDefinition("openai").operations.text,
+            image: channelProtocolDefinition("openai").operations.image,
+            video: { createPath: "/videos", imageToVideoPath: "/videos", queryPath: "/videos/:task_id", requestTemplate: expect.stringContaining('"images":"{{images}}"'), supportsReferenceImage: true },
+            audio: channelProtocolDefinition("openai").operations.audio,
+        });
+        expect(protocolModelConfig("yinglingapi", "video", "seedance2.5-30s")).toMatchObject({ maxReferenceImages: 9, supportsKeyframes: false, videoReferenceModes: ["reference"] });
         expect(channelProtocolDefinition("newapi-video").operations.video).toMatchObject({
             createPath: "/v1/videos",
             imageToVideoPath: "/v1/videos",
@@ -233,6 +239,7 @@ describe("channel protocol registry", () => {
     it("names each provider's ordinary multi-image field without calling it all-frame", () => {
         expect(videoMultiImageFieldName("newapi-video")).toBe("referenceImages");
         expect(videoMultiImageFieldName("buming-seedance")).toBe("images");
+        expect(videoMultiImageFieldName("yinglingapi")).toBe("images");
     });
 
     it("uses standard as the Buming tier default while validating model-specific values", () => {

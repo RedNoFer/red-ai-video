@@ -107,7 +107,7 @@ export const NEW_API_VIDEO_RATIOS = ["16:9", "9:16", "1:1"] as const;
 export const NEW_API_VIDEO_RESOLUTIONS = ["720p", "480p"] as const;
 
 export function videoMultiImageFieldName(protocol: SystemChannelProtocol | undefined) {
-    return protocol === "newapi-video" ? "referenceImages" : protocol === "buming-seedance" ? "images" : "images / references";
+    return protocol === "newapi-video" ? "referenceImages" : protocol === "buming-seedance" || protocol === "yinglingapi" ? "images" : "images / references";
 }
 
 const newApiVideoOperation: ProtocolOperation = {
@@ -127,6 +127,20 @@ const newApiVideoOperation: ProtocolOperation = {
     supportsKeyframes: false,
     videoReferenceModes: ["reference"],
     maxReferenceImages: 9,
+};
+
+const yinglingVideoOperation: ProtocolOperation = {
+    capability: "video",
+    createPath: "/videos",
+    imageToVideoPath: "/videos",
+    queryPath: "/videos/:task_id",
+    requestTemplate: '{"model":"{{model}}","prompt":"{{prompt}}","duration":"{{duration}}","aspect_ratio":"{{aspect_ratio}}","resolution":"{{resolution}}","images":"{{images}}"}',
+    resultField: "/videos/:task_id/content",
+    statusField: "status",
+    referenceRule: "影灵 Zeling 视频插件使用 JSON 请求；普通参考图作为 images URL 数组传入。该字段是普通多参考图，不声明有序关键帧能力。",
+    supportsReferenceImage: true,
+    supportsKeyframes: false,
+    videoReferenceModes: ["reference"],
 };
 
 const vozebRecommendedVideoOperation: ProtocolOperation = {
@@ -434,7 +448,7 @@ export const registeredChannelProtocolDefinitions: ChannelProtocolDefinition[] =
         documentationUrl: "https://docs.newapi.pro/zh/docs/api",
         modelCatalogPaths: ["/v1/models"],
         capabilities: ["text", "image", "video", "audio"],
-        operations: openAiOperations,
+        operations: { ...openAiOperations, video: yinglingVideoOperation },
         strict: true,
     },
     {
@@ -574,6 +588,9 @@ export function protocolCatalogCapability(protocol: SystemChannelProtocol): Logi
 
 export function protocolModelConfig(protocol: SystemChannelProtocol, capability: LogicalModelCapability, model?: string): SystemChannelModelConfig | undefined {
     const definition = channelProtocolDefinition(protocol);
+    if (protocol === "yinglingapi" && capability === "video" && normalizeModelId(model || "") === "seedance2.5-30s") {
+        return { ...yinglingVideoOperation, maxReferenceImages: 9, capability, source: "manual", protocol, apiFormat: definition.apiFormat };
+    }
     if (protocol === "buming-seedance" && capability === "audio" && normalizeModelId(model || "") === "voice-design") {
         return { ...bumingVoiceDesignOperation, capability, source: "manual", protocol, apiFormat: definition.apiFormat };
     }

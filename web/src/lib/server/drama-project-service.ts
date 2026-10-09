@@ -2732,7 +2732,7 @@ async function syncDramaProductionRun(userId: string, project: DramaProject, run
         steps = steps.map((item) => (item.id === step.id ? reconciled : item));
         if (step.shotId)
             nextProject = updateDramaShotInProject(nextProject, run.episodeId, step.shotId, {
-                generationStatus: reconciled.status === "failed" ? "error" : reconciled.status === "cancelled" ? "cancelled" : "running",
+                generationStatus: reconciled.status === "failed" ? "error" : reconciled.status === "cancelled" ? "cancelled" : reconciled.status === "needs_review" ? "needs_review" : "running",
                 generationRunId: run.id,
                 generationTaskId: reconciled.taskId,
                 generationError: reconciled.error,
@@ -3020,7 +3020,8 @@ async function isReadableDramaReferenceImage(url: string) {
     }
 }
 
-export function reconcileDramaVideoStepTask(step: DramaProductionStep, task: import("@/lib/server/video-task-store").VideoTask): DramaProductionStep {
+export function reconcileDramaVideoStepTask(step: DramaProductionStep, task: import("@/lib/server/video-task-store").VideoTask & Partial<import("@/lib/server/generation-task-types").GenerationTaskExecutionState>): DramaProductionStep {
+    if (task.executionPhase === "needs_review") return { ...step, taskId: task.id, status: "needs_review", error: task.reviewReason || task.error || "视频任务提交结果待确认，系统已停止自动重复提交" };
     if (task.status === "running") return { ...step, taskId: task.id, status: "running", error: undefined };
     if (task.status === "success" && task.result?.url) return { ...step, taskId: task.id, status: "success", outputUrls: [task.result.url], outputRemoteUrls: task.result.remoteUrl ? [task.result.remoteUrl] : undefined, error: undefined };
     return { ...step, taskId: task.id, status: task.status === "cancelled" ? "cancelled" : "failed", error: task.error || "视频子段生成失败" };
@@ -4775,7 +4776,7 @@ function continuityStatus(value: unknown): DramaShot["continuityStatus"] {
 }
 
 function taskStatus(value: unknown) {
-    return ["idle", "queued", "running", "success", "error", "cancelled"].includes(String(value)) ? (value as DramaShot["generationStatus"]) : undefined;
+    return ["idle", "queued", "running", "success", "error", "cancelled", "needs_review"].includes(String(value)) ? (value as DramaShot["generationStatus"]) : undefined;
 }
 
 function storyboardFrameStatus(value: unknown): NonNullable<DramaShot["storyboardFrames"]>[number]["status"] {
