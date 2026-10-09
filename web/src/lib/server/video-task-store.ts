@@ -85,5 +85,5 @@ export function touchVideoTask(id: string) {
 }
 
 export function canReconcileVideoTask(task: Pick<VideoTask, "status" | "error">) {
-    return task.status === "running" || (task.status === "error" && /视频生成超时|视频任务长时间未更新/.test(task.error || ""));
+    return task.status === "running" || (task.status === "error" && /视频生成超时|视频任务长时间未更新|视频任务已完成但没有返回视频地址/.test(task.error || ""));
 }
