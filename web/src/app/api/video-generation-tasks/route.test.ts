@@ -92,7 +92,7 @@ describe("video generation candidate failover", () => {
     beforeEach(() => {
         vi.clearAllMocks();
         mocks.fetchInternalApi.mockReset();
-        mocks.fetchSafeOutbound.mockResolvedValue(new Response(null, { status: 200, headers: { "content-type": "image/png" } }));
+        mocks.fetchSafeOutbound.mockResolvedValue(new Response(null, { status: 200, headers: { "content-type": "image/png", "content-length": "1" } }));
         resetChannelRuntimeHealth();
         mocks.getAuthSettings.mockResolvedValue(settings);
         storedTask = undefined;

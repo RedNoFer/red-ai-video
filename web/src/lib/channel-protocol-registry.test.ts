@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { SystemChannelAdvancedConfig, SystemModelChannel } from "@/lib/auth/store";
 import { normalizeSystemChannel } from "@/lib/auth/store-normalizers";
+import { YINGLING_REFERENCE_IMAGE_MAX_BYTES } from "@/lib/yingling-reference-constraints";
 import {
     applyChannelProtocol,
     applyModelProtocol,
@@ -149,6 +150,8 @@ describe("channel protocol registry", () => {
             audio: channelProtocolDefinition("openai").operations.audio,
         });
         expect(protocolModelConfig("yinglingapi", "video", "seedance2.5-30s")).toMatchObject({ maxReferenceImages: 9, supportsKeyframes: false, videoReferenceModes: ["reference"] });
+        expect(protocolModelConfig("yinglingapi", "image", "image-edit-model")).toMatchObject({ maxReferenceImageBytes: YINGLING_REFERENCE_IMAGE_MAX_BYTES });
+        expect(protocolModelConfig("yinglingapi", "video", "seedance2.5-30s")).toMatchObject({ maxReferenceImageBytes: YINGLING_REFERENCE_IMAGE_MAX_BYTES });
         expect(channelProtocolDefinition("newapi-video").operations.video).toMatchObject({
             createPath: "/v1/videos",
             imageToVideoPath: "/v1/videos",

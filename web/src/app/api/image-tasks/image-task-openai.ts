@@ -394,6 +394,9 @@ export async function buildJsonImageEditBodies(
 ) {
     const referenceContext = { ownerUserId: task.userId, taskId: task.id };
     const requestReferenceUrl = async (reference: ImageTaskReference) => {
+        if (task.config.advancedConfig?.maxReferenceImageBytes) {
+            return publicImageReferenceRequestUrl(reference, origin, publicOrigin, referenceContext, task.config.advancedConfig.maxReferenceImageBytes);
+        }
         if (publicUrlReferenceMode) return publicImageReferenceRequestUrl(reference, origin, publicOrigin, referenceContext);
         if (!imageUrlObjectOnlyMode) return jsonImageReferenceRequestUrl(reference, origin);
         return publicImageReferenceRequestUrl(reference, origin, publicOrigin, referenceContext);

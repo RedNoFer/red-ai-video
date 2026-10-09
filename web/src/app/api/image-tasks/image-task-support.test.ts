@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import sharp from "sharp";
 
 vi.mock("@/lib/server/safe-outbound-fetch", () => ({ fetchSafeOutbound: (url: string | URL, init?: RequestInit) => fetch(url, init) }));
 
@@ -7,6 +8,7 @@ import { maintenanceWorkerContext } from "@/lib/server/maintenance-auth";
 import {
     allowsImageProtocolFallback,
     applyDramaAssetImageDefaults,
+    buildImageEditFormData,
     ImageQueryContractError,
     imageRequestAspectRatio,
     imageTaskPollAttempts,
@@ -24,6 +26,7 @@ import {
     taskHeaders,
 } from "./image-task-support";
 import { resolveSub2ApiImageSize } from "./image-task-openai";
+import { YINGLING_REFERENCE_IMAGE_MAX_BYTES } from "@/lib/yingling-reference-constraints";
 
 const config = {
     baseUrl: "/api/ai/system/global-image",
@@ -136,6 +139,42 @@ describe("GlobalAiOpc image task paths", () => {
         await expect(openAiImageTaskPath(openAiConfig, "generation")).resolves.toBe("/images/generations");
         await expect(openAiImageTaskPath(openAiConfig, "edit")).resolves.toBe("/images/edits");
         expect(imageTaskPollUrls(openAiConfig, "https://provider.example/v1/images/generations", "task-one")).toEqual([]);
+    });
+
+    it("compresses oversized Yingling edit references before creating the multipart request", async () => {
+        const width = 2_000;
+        const height = 2_000;
+        const pixels = Buffer.alloc(width * height * 3, 127);
+        const bytes = await sharp(pixels, { raw: { width, height, channels: 3 } })
+            .png({ compressionLevel: 0 })
+            .toBuffer();
+        expect(bytes.length).toBeGreaterThan(YINGLING_REFERENCE_IMAGE_MAX_BYTES);
+        const dataUrl = `data:image/png;base64,${bytes.toString("base64")}`;
+
+        const form = await buildImageEditFormData(
+            {
+                id: "yingling-image-task",
+                userId: "user-one",
+                kind: "edit",
+                config: {
+                    model: "image-edit-model",
+                    apiFormat: "openai",
+                    advancedConfig: { protocol: "yinglingapi", maxReferenceImageBytes: YINGLING_REFERENCE_IMAGE_MAX_BYTES },
+                },
+                prompt: "Keep the subject and revise the background",
+                references: [{ name: "reference.png", type: "image/png", dataUrl }],
+            } as never,
+            undefined,
+            undefined,
+            "http://localhost",
+            "",
+            "url",
+        );
+        const file = form.get("image") as File;
+
+        expect(file.size).toBeLessThanOrEqual(YINGLING_REFERENCE_IMAGE_MAX_BYTES);
+        expect(file.type).toBe("image/jpeg");
+        expect(file.name).toBe("reference.jpg");
     });
 
     it("keeps an OpenAI response with only an id for manual review instead of guessing a task endpoint", async () => {

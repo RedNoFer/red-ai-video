@@ -37,7 +37,11 @@ export async function runCustomImageTask(task: ImageTask, origin: string, public
     const inlineReferences = advanced.protocol === "stable-diffusion" || /\bbase64\b|data:image|\binline\b/i.test(advanced.referenceRule || "");
     const images = (
         await Promise.all(
-            task.references.map((reference, index) => (inlineReferences ? imageReferenceToDataUrl(reference, reference.name || `reference-${index + 1}.png`, origin, cookie) : publicImageReferenceRequestUrl(reference, origin, publicOrigin, context))),
+            task.references.map((reference, index) =>
+                inlineReferences
+                    ? imageReferenceToDataUrl(reference, reference.name || `reference-${index + 1}.png`, origin, cookie, advanced.maxReferenceImageBytes)
+                    : publicImageReferenceRequestUrl(reference, origin, publicOrigin, context, advanced.maxReferenceImageBytes),
+            ),
         )
     ).filter(Boolean);
     const values = {

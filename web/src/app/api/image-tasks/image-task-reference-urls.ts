@@ -5,6 +5,7 @@ import { writeReferenceImageDataUrl } from "@/lib/server/reference-asset-store";
 import { createSignedReferenceAssetUrl, signReferenceAssetInputUrl } from "@/lib/server/reference-asset-access";
 import { resolvePublicRequestOrigin } from "@/lib/server/public-request-origin";
 import { fetchSafeOutbound } from "@/lib/server/safe-outbound-fetch";
+import { publishYinglingReferenceImageUrl } from "@/lib/server/yingling-reference-image";
 
 import { INLINE_IMAGE_TIMEOUT_MS } from "./image-task-types";
 
@@ -18,12 +19,12 @@ export function jsonImageReferenceRequestUrl(reference: ImageTaskReference, orig
     return referenceRequestUrl(reference, origin);
 }
 
-export async function publicImageReferenceRequestUrl(reference: ImageTaskReference, origin: string, publicOrigin: string, context: { ownerUserId: string; taskId: string }) {
+export async function publicImageReferenceRequestUrl(reference: ImageTaskReference, origin: string, publicOrigin: string, context: { ownerUserId: string; taskId: string }, maxBytes?: number) {
     const requestCandidates = referenceRequestUrlCandidates(reference, origin);
     const localCandidate = requestCandidates.find((value) => /\/api\/(?:reference-assets|generation-log-assets)\//.test(value));
     const providerCandidates = requestCandidates.filter((value) => isExternalPublicMediaUrl(value) && !/\/api\/(?:reference-assets|generation-log-assets)\//.test(value));
     for (const remoteUrl of providerCandidates) {
-        if (await isReachableProviderImage(remoteUrl)) return remoteUrl;
+        if (await isReachableProviderImage(remoteUrl)) return finalizeProviderImageUrl(remoteUrl, maxBytes, publicOrigin, context);
     }
 
     if (localCandidate) {
@@ -32,21 +33,21 @@ export async function publicImageReferenceRequestUrl(reference: ImageTaskReferen
         // signed URL must still be verified before paid submission.
         if (process.env.VOZEB_PRO_E2E === "1") {
             try {
-                return new URL(new URL(localCandidate).pathname, origin).toString();
+                return finalizeProviderImageUrl(new URL(new URL(localCandidate).pathname, origin).toString(), maxBytes, publicOrigin, context);
             } catch {
                 throw new Error("本地参考图地址无效，请重新上传参考图");
             }
         }
         if (hasUsableProviderReadSignature(localCandidate)) {
             const providerUrl = imagePreviewUrl(localCandidate);
-            if (await isReachableProviderImage(providerUrl)) return providerUrl;
+            if (await isReachableProviderImage(providerUrl)) return finalizeProviderImageUrl(providerUrl, maxBytes, publicOrigin, context);
             throw new Error("本地参考图公网地址不可访问，请检查 NEXT_PUBLIC_SITE_URL 后重试");
         }
         if (isExternalPublicOrigin(publicOrigin)) {
             const signedUrl = signReferenceAssetInputUrl(localCandidate, publicOrigin);
             if (signedUrl !== localCandidate) {
                 const providerUrl = imagePreviewUrl(signedUrl);
-                if (await isReachableProviderImage(providerUrl)) return providerUrl;
+                if (await isReachableProviderImage(providerUrl)) return finalizeProviderImageUrl(providerUrl, maxBytes, publicOrigin, context);
                 throw new Error("本地参考图公网地址不可访问，请检查 NEXT_PUBLIC_SITE_URL 后重试");
             }
             throw new Error("站内参考素材签名不可用，请配置 VOZEB_PRO_ENCRYPTION_KEY");
@@ -59,10 +60,15 @@ export async function publicImageReferenceRequestUrl(reference: ImageTaskReferen
     const dataUrl = (reference.dataUrl || "").trim();
     if (!/^data:image\//i.test(dataUrl)) throw new Error("\u53c2\u8003\u56fe\u9700\u8981\u516c\u7f51\u56fe\u7247 URL\uff0c\u8bf7\u91cd\u65b0\u4e0a\u4f20\u53c2\u8003\u56fe");
     if (!isExternalPublicOrigin(publicOrigin)) throw new Error("参考图需要公网图片 URL；本地开发 localhost 不能直接提交给上游，请部署后配置 NEXT_PUBLIC_SITE_URL");
+    if (maxBytes) return publishYinglingReferenceImageUrl(dataUrl, maxBytes, { ...context, publicOrigin });
     const asset = await writeReferenceImageDataUrl(dataUrl, { ownerUserId: context.ownerUserId, source: "image-task-reference", taskId: context.taskId });
     const signedUrl = createSignedReferenceAssetUrl(asset.token, publicOrigin);
     if (!signedUrl) throw new Error("站内参考素材签名不可用，请配置 VOZEB_PRO_ENCRYPTION_KEY");
-    return signedUrl;
+    return finalizeProviderImageUrl(signedUrl, maxBytes, publicOrigin, context);
+}
+
+async function finalizeProviderImageUrl(url: string, maxBytes: number | undefined, publicOrigin: string, context: { ownerUserId: string; taskId: string }) {
+    return maxBytes ? publishYinglingReferenceImageUrl(url, maxBytes, { ...context, publicOrigin }) : url;
 }
 
 async function isReachableProviderImage(url: string) {

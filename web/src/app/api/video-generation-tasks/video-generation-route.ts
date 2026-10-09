@@ -46,6 +46,8 @@ import { normalizeVideoGenerationReferences, regularVideoReferences, videoFrameR
 import { dramaReferenceImageBudget } from "@/lib/drama-production-plan";
 import { assertYumengVideoReferences, buildYumengVideoRequest } from "@/lib/yumeng-model-center";
 import { createVideoProviderRequestSnapshot } from "@/lib/server/video-provider-request-snapshot";
+import { publishYinglingInlineVideoReferenceImages, publishYinglingVideoReferenceImages } from "@/lib/server/yingling-reference-image";
+import { YINGLING_REFERENCE_IMAGE_MAX_BYTES } from "@/lib/yingling-reference-constraints";
 
 const CREATE_PATHS = ["/video/generations", "/videos/generations", "/videos/videos", "/videos"];
 type CreateVideoTaskBody = { config?: Record<string, unknown>; prompt?: string; references?: VideoGenerationReference[]; source?: string; context?: GenerationTaskContext };
@@ -166,10 +168,13 @@ export async function POST(request: Request) {
                     aspectRatio: normalizeVideoAspectRatio(parameters.size),
                 });
                 const globalPreset = globalAiOpcVideoPreset(channel.advancedConfig, channel.model);
+                const yinglingImageMaxBytes = channel.advancedConfig?.protocol === "yinglingapi" ? channel.advancedConfig.maxReferenceImageBytes || YINGLING_REFERENCE_IMAGE_MAX_BYTES : undefined;
+                if (yinglingImageMaxBytes) candidateReferences = await publishYinglingInlineVideoReferenceImages(candidateReferences, yinglingImageMaxBytes, { ownerUserId: user.id, publicOrigin });
                 if (geminiVideo) {
                     assertGeminiVideoReferences(candidateReferences);
                 } else {
                     if (requiresProviderReadableReferenceUrls(channel.advancedConfig, Boolean(globalPreset))) candidateReferences = await resolveProviderReadableReferenceMedia(candidateReferences);
+                    if (yinglingImageMaxBytes) candidateReferences = await publishYinglingVideoReferenceImages(candidateReferences, yinglingImageMaxBytes, { ownerUserId: user.id, publicOrigin });
                     if (channel.advancedConfig?.protocol === "newapi-video") assertNewApiVideoContract(parameters, candidateReferences);
                     assertReferenceCapabilities(
                         globalPreset

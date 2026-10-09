@@ -27,6 +27,7 @@ import { resolveModelPollingAttempts, resolveModelRequestTimeoutMs } from "@/lib
 import { systemAiBillingHeaders } from "@/lib/server/system-ai-billing";
 import { maintenanceWorkerContextHeaders } from "@/lib/server/maintenance-auth";
 import { fetchSafeOutbound } from "@/lib/server/safe-outbound-fetch";
+import { compressYinglingReferenceImageBytes, imageFileNameForMimeType } from "@/lib/server/yingling-reference-image";
 import { GenerationSubmissionSafeFailure, GenerationSubmissionUncertainError, generationSubmissionResponseError, generationSubmissionUncertainError } from "@/lib/server/generation-submission-error";
 
 import {
@@ -108,6 +109,7 @@ export function sanitizeAdvancedConfig(config?: ImageTaskConfig["advancedConfig"
         supportsReferenceImage: Boolean(config.supportsReferenceImage),
         supportsReferenceVideo: Boolean(config.supportsReferenceVideo),
         supportsReferenceAudio: Boolean(config.supportsReferenceAudio),
+        maxReferenceImageBytes: config.maxReferenceImageBytes,
     };
 }
 
@@ -746,17 +748,18 @@ export async function buildImageEditFormData(task: ImageTask, quality: string | 
     }
     if (quality) formData.set("quality", quality);
     if (requestSize) formData.set("size", requestSize);
-    const referenceFiles = await Promise.all(task.references.map((reference, index) => imageReferenceToFile(reference, reference.name || `reference-${index + 1}.png`, origin, cookie)));
+    const maxReferenceImageBytes = task.config.advancedConfig?.maxReferenceImageBytes;
+    const referenceFiles = await Promise.all(task.references.map((reference, index) => imageReferenceToFile(reference, reference.name || `reference-${index + 1}.png`, origin, cookie, maxReferenceImageBytes)));
     referenceFiles.forEach((file) => formData.append("image", file));
-    if (task.mask) formData.set("mask", await imageReferenceToFile(task.mask, task.mask.name || "mask.png", origin, cookie));
+    if (task.mask) formData.set("mask", await imageReferenceToFile(task.mask, task.mask.name || "mask.png", origin, cookie, maxReferenceImageBytes));
     return formData;
 }
 
-export async function imageReferenceToFile(reference: ImageTaskReference, name: string, origin: string, cookie: string) {
+export async function imageReferenceToFile(reference: ImageTaskReference, name: string, origin: string, cookie: string, maxBytes?: number) {
     let lastError: unknown;
     for (const value of rawReferenceRequestUrlCandidates(reference)) {
         try {
-            if (/^data:image\//i.test(value)) return dataUrlToFile(value, name, reference.type);
+            if (/^data:image\//i.test(value)) return prepareProviderReferenceFile(dataUrlToFile(value, name, reference.type), maxBytes);
             if (/^blob:/i.test(value)) throw new Error("参考图已失效，请重新上传");
             const fetchUrl = value.startsWith("/") ? `${origin}${value}` : value;
             if (!isRemoteMediaUrl(fetchUrl)) throw new Error("参考图地址无效，请重新上传参考图");
@@ -775,7 +778,7 @@ export async function imageReferenceToFile(reference: ImageTaskReference, name: 
             if (bytes.length > MAX_INLINE_IMAGE_BYTES) throw new Error("参考图过大，请压缩后重试");
             const mimeType = response.headers.get("content-type")?.split(";", 1)[0] || reference.type || "image/png";
             if (!mimeType.startsWith("image/")) throw new Error("参考图不是有效图片");
-            return new File([bytes], name, { type: mimeType });
+            return prepareProviderReferenceFile(new File([bytes], name, { type: mimeType }), maxBytes);
         } catch (error) {
             lastError = error;
         }
@@ -800,11 +803,19 @@ function isLoopbackUrl(value: string) {
     }
 }
 
-export async function imageReferenceToDataUrl(reference: ImageTaskReference, name: string, origin: string, cookie: string) {
+export async function imageReferenceToDataUrl(reference: ImageTaskReference, name: string, origin: string, cookie: string, maxBytes?: number) {
     const inline = rawReferenceRequestUrlCandidates(reference).find((value) => /^data:image\//i.test(value));
-    if (inline) return inline;
-    const file = await imageReferenceToFile(reference, name, origin, cookie);
+    const file = inline ? await prepareProviderReferenceFile(dataUrlToFile(inline, name, reference.type), maxBytes) : await imageReferenceToFile(reference, name, origin, cookie, maxBytes);
     return `data:${file.type || reference.type || "image/png"};base64,${Buffer.from(await file.arrayBuffer()).toString("base64")}`;
+}
+
+async function prepareProviderReferenceFile(file: File, maxBytes?: number) {
+    if (!maxBytes || file.size <= maxBytes) return file;
+    const compressed = await compressYinglingReferenceImageBytes(Buffer.from(await file.arrayBuffer()), file.type, maxBytes);
+    if (!compressed.changed || compressed.bytes.length > maxBytes) throw new Error("影灵渠道参考图压缩后仍超过 9MB，请重新选择更小的图片");
+    const bytes = new Uint8Array(compressed.bytes.byteLength);
+    bytes.set(compressed.bytes);
+    return new File([bytes], imageFileNameForMimeType(file.name, compressed.mimeType), { type: compressed.mimeType });
 }
 
 export function dataUrlToFile(dataUrl: string, name: string, fallbackType?: string) {
