@@ -413,7 +413,7 @@ export function DramaGenerationPanel({
             basePrompt: compileDramaShotExecutionPrompts(project, episode, shot).videoPrompt,
         }));
         const selectionState: { selections: Record<string, string[]>; referenceModes: Record<string, DramaVideoReferenceMode>; invalid: boolean } = {
-            selections: Object.fromEntries(promptRows.map((row) => [row.shot.id, row.references.filter((reference) => reference.required || reference.recommended).map((reference) => reference.id)])),
+            selections: Object.fromEntries(promptRows.map((row) => [row.shot.id, row.references.map((reference) => reference.id)])),
             referenceModes: Object.fromEntries(promptRows.map((row) => [row.shot.id, "reference" as const])),
             invalid: false,
         };
@@ -1562,7 +1562,7 @@ function ProductionPromptPreview({
                 <span>清晰度：{project.productionBible?.productionPlan?.video.resolution || "按后台默认"}</span>
                 <span>画幅：{project.ratio}</span>
                 <span>时长：{rows.map((row) => `${row.shot.duration}s`).join("、")}</span>
-                <span>默认选择可用角色图和场景图；道具、关键帧和其他素材均可选</span>
+                <span>默认勾选本镜头全部可用引用图片；超过数量上限时可取消部分图片</span>
             </div>
             {rows.map(({ shot, basePrompt, references }) => {
                 const selectedIds = selections[shot.id] || [];

@@ -4,6 +4,7 @@ import type { DramaProject } from "@/lib/drama-project-contract";
 import { createFrameEvidence } from "@/lib/drama-continuity-policy";
 import { DRAMA_STYLE_COLOR_SCRIPT, DRAMA_STYLE_NAME } from "@/lib/drama-style";
 import { defaultDramaProductionPlan } from "@/lib/drama-production-plan";
+import { preflightDramaProduction } from "@/lib/server/drama-production-preflight";
 
 const mocks = vi.hoisted(() => {
     class MockDramaProjectStoreError extends Error {
@@ -3065,6 +3066,8 @@ describe("drama project service updates", () => {
                 },
             } as never,
         ];
+        current.episodes[0].shots[0].framePlan!.frames[0].imagePrompt = "静态关键帧：动作状态 1\n可见状态：主体站在档案室桌边\n景别：近景";
+        expect(preflightDramaProduction(current, current.episodes[0], ["shot-one"]).issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "COMPOSITION_CONTRACT", severity: "warning" })]));
         current.scenes = [
             { id: "scene-one", name: "场景", references: [{ id: "scene-ref", status: "approved", url: "https://cdn.example.com/scene.png" }], primaryReferenceId: "scene-ref", sceneReferenceBoard: { layout: "panorama", referenceId: "scene-ref" } },
         ] as never;

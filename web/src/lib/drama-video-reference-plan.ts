@@ -11,8 +11,7 @@ export function dramaShotReferenceAssetIds(project: DramaProject, shot: DramaSho
 }
 
 export function defaultDramaShotReferenceAssetIds(project: DramaProject, shot: DramaShot) {
-    const available = new Set(dramaShotReferenceAssetIds(project, shot));
-    return [shot.sceneId, ...shot.characterIds].filter((id): id is string => Boolean(id && available.has(id)));
+    return dramaShotReferenceAssetIds(project, shot);
 }
 
 export function selectedDramaShotReferenceAssetIds(project: DramaProject, shot: DramaShot, selections?: Record<string, string[]>) {

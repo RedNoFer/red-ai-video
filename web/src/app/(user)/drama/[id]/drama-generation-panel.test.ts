@@ -175,6 +175,13 @@ describe("Drama generation production workspace", () => {
         expect(source).toContain("return selected.length > dramaReferenceImageBudget(row.shot.duration)");
     });
 
+    it("checks every available shot reference by default", async () => {
+        const source = await readFile(resolve(process.cwd(), "src/app/(user)/drama/[id]/drama-generation-panel.tsx"), "utf8");
+
+        expect(source).toContain("row.references.map((reference) => reference.id)");
+        expect(source).not.toContain("reference.required || reference.recommended");
+    });
+
     it("uses the locked episode resolution and does not expose a client video-model selector", async () => {
         const [generationSource, settingsSource, scriptSource, frameEditorSource] = await Promise.all([
             readFile(resolve(process.cwd(), "src/app/(user)/drama/[id]/drama-generation-panel.tsx"), "utf8"),

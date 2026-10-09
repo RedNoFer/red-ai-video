@@ -170,9 +170,9 @@ function checkShot(
             label,
         });
         if (compositionErrors.length) {
-            issues.push(blocking("COMPOSITION_CONTRACT", `${label}${compositionErrors.join("；")}`, { shotId: shot.id, correction: "按当前画幅重写每个时间段的主要主体、可见范围、防裁脸和防遮挡安全区" }));
+            issues.push(warning("COMPOSITION_CONTRACT", `${label}${compositionErrors.join("；")}`, { shotId: shot.id, correction: "按当前画幅补充每个时间段的主要主体、可见范围、防裁脸和防遮挡安全区；此项不阻止视频生成" }));
             const subjectErrors = compositionErrors.filter((error) => /未明确本段主要主体|未在时间段中写出/u.test(error));
-            if (subjectErrors.length) issues.push(blocking("SUBJECT_COVERAGE", `${label}${subjectErrors.join("；")}`, { shotId: shot.id, correction: "为剧情事实中需要反应的角色、NPC或关键动作安排独立可见主体，不能只作为背景描述" }));
+            if (subjectErrors.length) issues.push(warning("SUBJECT_COVERAGE", `${label}${subjectErrors.join("；")}`, { shotId: shot.id, correction: "为剧情事实中需要反应的角色、NPC或关键动作安排独立可见主体，不能只作为背景描述；此项不阻止视频生成" }));
         }
         const cutErrors = validateDramaCutInformationDiversity({
             ratio: project.ratio,

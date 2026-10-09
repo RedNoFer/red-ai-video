@@ -200,6 +200,27 @@ describe("drama production preflight", () => {
         expect(issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "PERFORMANCE_PLAN_MISSING", severity: "warning" }), expect.objectContaining({ code: "LIGHTING_PLAN_MISSING", severity: "warning" })]));
     });
 
+    it("keeps framing safety guidance from blocking an otherwise executable video request", () => {
+        const project = fixture();
+        const shot = project.episodes[0].shots[0];
+        shot.videoPrompt = [
+            "### 镜头 01 | 0-15秒 | 近景 | 50mm | 正面平视 | 固定机位 | 人物镜头",
+            "场景：城门外石阶。",
+            "画面内容：Karin站在石阶旁，右手握紧断剑。",
+            "光影：左上冷光落在脸侧与湿石纹理上。",
+            "色调：冷灰蓝，肤色自然中性。",
+            "台词：无",
+            "人声：Karin屏息后缓慢呼气。",
+            "音效：风掠过城门，衣料轻响。",
+        ].join("\n");
+        shot.framePlan!.frames = [{ id: "frame-one", sequenceIndex: 1, startSecond: 0, endSecond: 15, actionPrompt: "Karin握紧断剑", imagePrompt: "Karin站在石阶旁的近景" }];
+
+        const issue = preflightDramaProduction(project, project.episodes[0]).issues.find((item) => item.code === "COMPOSITION_CONTRACT");
+
+        expect(issue?.message).toContain("未声明完整头顶");
+        expect(issue?.severity).toBe("warning");
+    });
+
     it("does not report optional manifest omissions when shot bindings already supply the images", () => {
         const project = fixture();
         project.episodes[0].shots[0].framePlan!.referenceManifest = [

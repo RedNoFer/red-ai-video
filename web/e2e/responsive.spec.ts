@@ -1338,8 +1338,9 @@ test("drama shot generation previews prompt before confirmation", async ({ page 
     await expect(previewDialog.getByText("动态意图：", { exact: false })).toBeVisible();
     await expect(previewDialog.getByText("时间段动作：", { exact: false })).toBeVisible();
     await expect(previewDialog.getByText("实际参考图绑定（编号与本次请求图片数组完全一致）", { exact: false })).toBeVisible();
+    await expect(previewDialog.getByText("默认勾选本镜头全部可用引用图片", { exact: false })).toBeVisible();
     await expect(previewDialog.getByText("关键帧为可选细节参考；未选择时按视频提示词和所选资产图生成", { exact: false })).toBeVisible();
-    await expect(previewDialog.getByText("@图片1：场景 · 黑湖", { exact: false })).toBeVisible();
+    await expect(previewDialog.getByText("@图片3：场景 · 黑湖", { exact: false })).toBeVisible();
     const referenceGallery = previewDialog.locator("[data-drama-prompt-reference-gallery]");
     await expect(referenceGallery).toBeVisible();
     await expect(referenceGallery.getByRole("img")).toHaveCount(5);
@@ -1348,6 +1349,9 @@ test("drama shot generation previews prompt before confirmation", async ({ page 
     await expect(referenceGallery.getByRole("img", { name: "分镜帧 1" })).toBeVisible();
     await expect(referenceGallery.getByRole("img", { name: "角色 · Karin" })).toBeVisible();
     await expect(referenceGallery.getByRole("img", { name: "道具 · 断剑" })).toBeVisible();
+    const referenceItems = referenceGallery.locator("[data-drama-prompt-reference-item]");
+    await expect(referenceItems).toHaveCount(5);
+    for (const item of await referenceItems.all()) await expect(item.getByRole("checkbox")).toBeChecked();
     await expect(previewDialog.getByRole("checkbox", { name: "黑湖记忆 1/1启用按序关键帧驱动" })).not.toBeChecked();
 
     const strictMode = previewDialog.getByRole("checkbox", { name: "黑湖记忆 1/1启用按序关键帧驱动" });

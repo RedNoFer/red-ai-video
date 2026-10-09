@@ -25,9 +25,9 @@ describe("drama video reference plan", () => {
         },
     } as unknown as DramaShot;
 
-    it("defaults to readable scene and character images only", () => {
-        expect(defaultDramaShotReferenceAssetIds(project, shot)).toEqual(["scene-one", "character-one"]);
-        expect(selectedDramaShotReferenceAssetIds(project, shot)).toEqual(["scene-one", "character-one"]);
+    it("defaults to every readable image already referenced by the shot", () => {
+        expect(defaultDramaShotReferenceAssetIds(project, shot)).toEqual(["scene-one", "character-one", "prop-one"]);
+        expect(selectedDramaShotReferenceAssetIds(project, shot)).toEqual(["scene-one", "character-one", "prop-one"]);
     });
 
     it("keeps explicit empty asset choices empty and treats frames as ordinary refs", () => {
@@ -48,6 +48,6 @@ describe("drama video reference plan", () => {
             ],
         } as unknown as DramaProject;
 
-        expect(defaultDramaShotReferenceAssetIds(recovered, shot)).toEqual(["scene-one", "character-one"]);
+        expect(defaultDramaShotReferenceAssetIds(recovered, shot)).toEqual(["scene-one", "character-one", "prop-one"]);
     });
 });
