@@ -167,6 +167,7 @@ async function queryVideoUpstream(task: VideoTask, origin: string, cookie: strin
     const createPath = task.upstream.pollPath || "/video/generations";
     const preset = globalAiOpcPreset(task);
     const seedanceSpecial = task.config.advancedConfig?.protocol === "seedance-special";
+    const yinglingApi = task.config.advancedConfig?.protocol === "yinglingapi";
     const paths = preset?.queryPath
         ? [preset.queryPath.replace(/:(?:task_id|taskId|id)\b/g, encodeURIComponent(task.upstream.id))]
         : providerQueryPaths(task.config.advancedConfig, task.upstream.id, [
@@ -178,11 +179,18 @@ async function queryVideoUpstream(task: VideoTask, origin: string, cookie: strin
           ]);
     let lastError = "";
     for (const path of paths) {
-        const response = await fetchInternalApi(`${origin}${task.config.baseUrl.replace(/\/+$/, "")}${path.startsWith("/") ? path : `/${path}`}`, {
-            headers: videoProxyHeaders(task, cookie, workerUserId),
-            cache: "no-store",
-            signal: AbortSignal.timeout(Math.min(resolveModelRequestTimeoutMs(task.config, "video"), 60_000)),
-        });
+        let response: Response;
+        try {
+            response = await fetchInternalApi(`${origin}${task.config.baseUrl.replace(/\/+$/, "")}${path.startsWith("/") ? path : `/${path}`}`, {
+                headers: videoProxyHeaders(task, cookie, workerUserId),
+                cache: "no-store",
+                signal: AbortSignal.timeout(Math.min(resolveModelRequestTimeoutMs(task.config, "video"), 60_000)),
+            });
+        } catch (error) {
+            if (!seedanceSpecial && !yinglingApi) throw error;
+            lastError = error instanceof Error ? error.message : "视频任务查询失败";
+            continue;
+        }
         if (seedanceSpecial && videoContentReady(response)) {
             await response.body?.cancel().catch(() => undefined);
             return { status: "completed", video_url: path };
@@ -195,11 +203,11 @@ async function queryVideoUpstream(task: VideoTask, origin: string, cookie: strin
         try {
             return parseVideoProviderJson(text);
         } catch (error) {
-            if (!seedanceSpecial) throw error;
+            if (!seedanceSpecial && !yinglingApi) throw error;
             lastError = "视频查询接口返回了非 JSON 内容";
         }
     }
-    const contentPath = seedanceSpecial ? await readyVideoContentPath(task, origin, cookie, workerUserId) : "";
+    const contentPath = seedanceSpecial || yinglingApi ? await readyVideoContentPath(task, origin, cookie, workerUserId) : "";
     if (contentPath) return { status: "completed", video_url: contentPath };
     throw new Error(lastError || "视频任务查询失败");
 }
@@ -212,7 +220,6 @@ async function readyVideoContentPath(task: VideoTask, origin: string, cookie: st
         const headers = videoProxyHeaders(task, cookie, workerUserId);
         const head = await fetchInternalApi(url, { method: "HEAD", headers, cache: "no-store", signal: AbortSignal.timeout(60_000) }).catch(() => null);
         if (head && videoContentReady(head)) return path;
-        if (head && ![405, 501].includes(head.status)) continue;
         const rangeHeaders = new Headers(headers);
         rangeHeaders.set("range", "bytes=0-0");
         const probe = await fetchInternalApi(url, { headers: rangeHeaders, cache: "no-store", signal: AbortSignal.timeout(60_000) }).catch(() => null);

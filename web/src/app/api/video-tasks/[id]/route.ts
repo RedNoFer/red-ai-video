@@ -2,6 +2,7 @@ import { after, NextResponse } from "next/server";
 
 import { getCurrentUser } from "@/lib/auth/session";
 import { readJsonBodyResult } from "@/lib/auth/request";
+import { toSafeGenerationErrorMessage } from "@/lib/server/generation-errors";
 import { canReconcileVideoTask, getVideoTask, transitionVideoTask } from "@/lib/server/video-task-store";
 import { resolveInternalOrigin } from "@/lib/server/internal-origin";
 import { pointsResponseHeaders } from "@/lib/server/points-response";
@@ -87,7 +88,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         const responseTask = refreshed || (await getVideoTask(task.id)) || task;
         return NextResponse.json({ task: publicTask(responseTask), refreshed: responseTask !== task }, { headers: pointsResponseHeaders(await getCurrentUser(request)) });
     } catch (error) {
-        return NextResponse.json({ error: error instanceof Error ? error.message : "供应商视频状态同步失败" }, { status: 502 });
+        const message = toSafeGenerationErrorMessage(error, "供应商视频状态同步失败");
+        console.warn("Video task refresh failed", { taskId: id, protocol: task.config.advancedConfig?.protocol, error: message });
+        return NextResponse.json({ error: message }, { status: 502 });
     }
 }
 
