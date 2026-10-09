@@ -1763,14 +1763,6 @@ export async function createDramaProductionRunForUser(userId: string, projectId:
     }
     const executionPlan = parameters.productionPlan ? { ...parameters.productionPlan, video: { ...parameters.productionPlan.video, model: videoCandidate.logicalModelId, channelId: videoCandidate.channelId } } : undefined;
     validateDramaReferenceSelections(project, episode, productionShots, referenceSelections, referenceModes);
-    const preflight = preflightDramaProduction(project, episode, checkedShotIds.length ? checkedShotIds : undefined, referenceSelections, referenceModes);
-    if (preflight.status === "blocked") {
-        const detail = preflight.issues
-            .slice(0, 8)
-            .map((issue) => issue.message)
-            .join("；");
-        throw new DramaProjectServiceError(`导演前置检查未通过：${detail}`, 409);
-    }
     const selectedShotIds = new Set(checkedShotIds);
     const scopedEpisode = selectedShotIds.size
         ? {

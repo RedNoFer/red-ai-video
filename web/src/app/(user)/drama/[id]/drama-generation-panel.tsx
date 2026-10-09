@@ -439,8 +439,7 @@ export function DramaGenerationPanel({
         try {
             const check = await preflightDramaGeneration(project.id, episode.id, shotIds, `drama-preflight:${project.id}:${episode.id}:${shotIds.join(",")}:${project.updatedAt}`);
             setPreflight(check);
-            if (check.status === "blocked") message.error("导演前置检查未通过，请先处理阻断项");
-            else if (check.status === "needs_confirmation") message.warning("生成前检查发现可确认风险，请查看下方详情");
+            if (check.issues.length) message.warning("生成前检查发现提醒项，仍可继续生成视频");
             else message.success("生成前检查已通过");
         } catch (error) {
             message.error(error instanceof Error ? error.message : "生成前预检失败");
@@ -460,10 +459,7 @@ export function DramaGenerationPanel({
         try {
             const check = await preflightDramaGeneration(project.id, episode.id, [shotId], `drama-preflight:${project.id}:${episode.id}:${shotId}:${Date.now()}`);
             setPreflight((current) => ({ ...(current || check), ...check }));
-            if (check.status === "blocked") {
-                message.error("镜头补全已返回，但前置检查仍有阻断项，请展开详情查看具体缺失字段");
-                return false;
-            }
+            if (check.issues.length) message.warning("镜头补全已返回，仍有提醒项；可以继续生成视频");
             return true;
         } catch (error) {
             message.error(error instanceof Error ? error.message : "镜头补全后检查失败");
@@ -647,7 +643,7 @@ export function DramaGenerationPanel({
                         <h3 id="drama-preflight-title" className="shrink-0 text-sm font-semibold">
                             生成前检查
                         </h3>
-                        <p className="truncate text-xs text-muted-foreground">阻塞项会说明原因，并带你回到真正需要处理的位置。</p>
+                        <p className="truncate text-xs text-muted-foreground">导演与镜头质量检查只作提醒，不会阻止视频生成。</p>
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
                         <Button size="small" icon={<ScanSearch className="size-3.5" />} loading={preflighting} disabled={!readiness.totalShots} onClick={() => void checkProduction()}>
@@ -662,10 +658,10 @@ export function DramaGenerationPanel({
                     ))}
                 </div>
                 {preflight?.status === "blocked" ? (
-                    <div className="mt-2 rounded-xl border border-amber-300/70 bg-amber-50/70 p-3 text-xs text-amber-950 dark:border-amber-700/60 dark:bg-amber-950/25 dark:text-amber-100" data-drama-director-blockers>
+                    <div className="mt-2 rounded-xl border border-sky-300/70 bg-sky-50/70 p-3 text-xs text-sky-950 dark:border-sky-700/60 dark:bg-sky-950/25 dark:text-sky-100" data-drama-director-warnings>
                         <div className="flex items-center gap-2 font-semibold">
                             <CircleAlert className="size-4" />
-                            导演前置检查阻断生产
+                            生成前提醒，可继续生成视频
                         </div>
                         <ul className="mt-2 space-y-1 pl-5">
                             {preflight.issues.slice(0, 8).map((issue, index) => (
@@ -689,9 +685,8 @@ export function DramaGenerationPanel({
                                         if (changed) {
                                             const refreshed = await preflightDramaGeneration(project.id, episode.id, preflight.checkedShotIds || [], `drama-preflight:auto-fix:${project.id}:${episode.id}:${Date.now()}`);
                                             setPreflight(refreshed);
-                                            if (refreshed.status === "blocked") message.error("Agent 已补全可修复字段，但前置检查仍有阻断项，请展开详情查看剩余问题");
-                                            else if (refreshed.status === "passed") message.success("Agent 已补全镜头参数，前置检查已通过");
-                                            else message.info("Agent 已补全镜头参数，请确认剩余提示项后继续");
+                                            if (refreshed.issues.length) message.info("Agent 已补全镜头参数，剩余检查项仅作提醒，可继续生成视频");
+                                            else message.success("Agent 已补全镜头参数，前置检查已通过");
                                         }
                                     } finally {
                                         setAutoFixing(false);
@@ -708,17 +703,14 @@ export function DramaGenerationPanel({
                     <div className="mt-2 rounded-xl border border-sky-300/70 bg-sky-50/70 p-3 text-xs text-sky-950 dark:border-sky-700/60 dark:bg-sky-950/25 dark:text-sky-100" data-drama-director-warnings>
                         <div className="flex items-center gap-2 font-semibold">
                             <CircleAlert className="size-4" />
-                            生成前发现可确认风险
+                            生成前提醒，不影响视频生成
                         </div>
                         <ul className="mt-2 space-y-1 pl-5">
-                            {preflight.issues
-                                .filter((issue) => issue.severity === "warning")
-                                .slice(0, 6)
-                                .map((issue, index) => (
-                                    <li key={`${issue.code}-${issue.shotId || "general"}-${issue.assetId || "none"}-${index}`} className="list-disc">
-                                        {issue.message}
-                                    </li>
-                                ))}
+                            {preflight.issues.slice(0, 6).map((issue, index) => (
+                                <li key={`${issue.code}-${issue.shotId || "general"}-${issue.assetId || "none"}-${index}`} className="list-disc">
+                                    {issue.message}
+                                </li>
+                            ))}
                         </ul>
                     </div>
                 ) : null}
@@ -1092,7 +1084,7 @@ function ShotTaskRow({
                 </div>
 
                 <ShotErrors shot={shot} />
-                {preflightIssues.length ? <ShotPreflightBlockers issues={preflightIssues} onMaintain={onMaintain} /> : null}
+                {preflightIssues.length ? <ShotPreflightWarnings issues={preflightIssues} onMaintain={onMaintain} /> : null}
                 {detailsOpen ? <ShotExecutionDetails project={project} episode={episode} shot={shot} productionRun={productionRun} onPreview={onPreview} /> : null}
 
                 {startFrames.length || endFrames.length || shot.videoUrl ? (
@@ -1193,20 +1185,18 @@ function ShotErrors({ shot }: { shot: DramaShot }) {
     ) : null;
 }
 
-function ShotPreflightBlockers({ issues, onMaintain }: { issues: DramaProductionPreflight["issues"]; onMaintain: (action: "assets" | "storyboard" | "review") => void }) {
-    const blockingIssues = issues.filter((issue) => issue.severity === "blocking");
-    const optionalIssues = issues.filter((issue) => issue.severity !== "blocking");
+function ShotPreflightWarnings({ issues, onMaintain }: { issues: DramaProductionPreflight["issues"]; onMaintain: (action: "assets" | "storyboard" | "review") => void }) {
     const action = (issue: DramaProductionPreflight["issues"][number]) => {
         if (["CHARACTER_ANCHOR", "LOCATION_ANCHOR", "PROP_ANCHOR", "CHARACTER_REFERENCE", "LOCATION_REFERENCE", "PROP_REFERENCE", "CLUE_REFERENCE"].includes(issue.code)) return "assets" as const;
         if (["PROMPT_MISSING", "VIDEO_PROMPT_MISSING", "FRAMING_UNCLEAR", "NEGATIVE_TEXT_MISSING"].includes(issue.code)) return "storyboard" as const;
         return "review" as const;
     };
-    const renderIssues = (title: string, current: DramaProductionPreflight["issues"], tone: "blocking" | "optional") =>
+    const renderIssues = (current: DramaProductionPreflight["issues"]) =>
         current.length ? (
             <div className="space-y-1.5">
-                <div className="font-medium">{title}</div>
+                <div className="font-medium">生成提醒</div>
                 {current.slice(0, 6).map((issue) => (
-                    <div key={`${tone}-${issue.code}-${issue.assetId || "none"}`} className="flex items-start justify-between gap-2">
+                    <div key={`warning-${issue.code}-${issue.assetId || "none"}`} className="flex items-start justify-between gap-2">
                         <span className="min-w-0 flex-1 leading-5">{issue.message}</span>
                         <Button type="link" size="small" className="!h-auto !shrink-0 !p-0 !text-xs !text-amber-800 dark:!text-amber-200" onClick={() => onMaintain(action(issue))}>
                             {action(issue) === "assets" ? "去项目资产" : action(issue) === "storyboard" ? "去分镜" : "去内容审核"}
@@ -1217,16 +1207,12 @@ function ShotPreflightBlockers({ issues, onMaintain }: { issues: DramaProduction
             </div>
         ) : null;
     return (
-        <div
-            className={`ml-11 mt-2 space-y-2 rounded-md border p-2.5 text-xs text-amber-950 dark:text-amber-100 ${blockingIssues.length ? "border-amber-300/70 bg-amber-50/70 dark:border-amber-700/60 dark:bg-amber-950/25" : "border-sky-300/70 bg-sky-50/70 dark:border-sky-700/60 dark:bg-sky-950/25"}`}
-            data-drama-shot-preflight-blockers
-        >
+        <div className="ml-11 mt-2 space-y-2 rounded-md border border-sky-300/70 bg-sky-50/70 p-2.5 text-xs text-sky-950 dark:border-sky-700/60 dark:bg-sky-950/25 dark:text-sky-100" data-drama-shot-preflight-warnings>
             <div className="flex items-center gap-1.5 font-semibold">
                 <CircleAlert className="size-3.5" />
-                {blockingIssues.length ? `该镜头仍有 ${blockingIssues.length} 项无法提交的问题` : `该镜头有 ${optionalIssues.length} 项可选优化`}
+                该镜头有 {issues.length} 项提醒，可继续生成视频
             </div>
-            {renderIssues("无法提交", blockingIssues, "blocking")}
-            {renderIssues("可选优化，不影响视频生成", optionalIssues, "optional")}
+            {renderIssues(issues)}
         </div>
     );
 }

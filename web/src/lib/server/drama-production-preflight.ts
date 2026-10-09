@@ -15,7 +15,7 @@ import { auditDramaShotDirectorQuality } from "@/lib/server/agent-skills/drama-v
 const blocking = (code: string, message: string, extra: Partial<DramaProductionPreflightIssue> = {}): DramaProductionPreflightIssue => ({ code, severity: "blocking", message, ...extra });
 const warning = (code: string, message: string, extra: Partial<DramaProductionPreflightIssue> = {}): DramaProductionPreflightIssue => ({ code, severity: "warning", message, ...extra });
 
-/** Only checks required to construct an executable request stay blocking; workflow and prompt-quality findings remain actionable warnings. */
+/** Director and production-quality findings are advisory; request construction validates actual execution requirements. */
 export function preflightDramaProduction(project: DramaProject, episode: DramaEpisode, shotIds?: string[], referenceSelections?: Record<string, string[]>, referenceModes?: Record<string, DramaVideoReferenceMode>): DramaProductionPreflight {
     const issues: DramaProductionPreflightIssue[] = [];
     const selected = new Set(shotIds?.length ? shotIds : episode.shots.map((shot) => shot.id));
@@ -81,7 +81,8 @@ export function preflightDramaProduction(project: DramaProject, episode: DramaEp
         }
         compareContinuityStates(from, to, edge, issues);
     }
-    return { status: issues.some((issue) => issue.severity === "blocking") ? "blocked" : issues.length ? "needs_confirmation" : "passed", issues, checkedShotIds: episode.shots.filter((shot) => selected.has(shot.id)).map((shot) => shot.id) };
+    const reminders = issues.map((issue) => ({ ...issue, severity: "warning" as const }));
+    return { status: reminders.length ? "needs_confirmation" : "passed", issues: reminders, checkedShotIds: episode.shots.filter((shot) => selected.has(shot.id)).map((shot) => shot.id) };
 }
 
 function compareContinuityStates(from: DramaShot, to: DramaShot, edge: NonNullable<DramaEpisode["continuityEdges"]>[number], issues: DramaProductionPreflightIssue[]) {

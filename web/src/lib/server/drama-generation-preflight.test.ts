@@ -11,10 +11,11 @@ import type { DramaEpisode, DramaProject } from "@/lib/drama-project-contract";
 describe("drama generation preflight", () => {
     beforeEach(() => vi.resetAllMocks());
 
-    it("does not call the model when deterministic checks block generation", async () => {
+    it("keeps deterministic preflight findings as reminders when no text model is available", async () => {
         const project = fixture();
         const result = await preflightDramaGeneration({ origin: "http://localhost", cookie: "", userId: "user", requestId: "request", project, episode: project.episodes[0] });
-        expect(result.status).toBe("blocked");
+        expect(result.status).toBe("needs_confirmation");
+        expect(result.issues.every((issue) => issue.severity === "warning")).toBe(true);
         expect(mocks.requestStructuredText).not.toHaveBeenCalled();
     });
 

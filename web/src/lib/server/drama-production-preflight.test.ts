@@ -11,11 +11,12 @@ describe("drama production preflight", () => {
         expect(preflightDramaProduction(project, project.episodes[0]).issues).not.toEqual(expect.arrayContaining([expect.objectContaining({ code: "RATIO" })]));
     });
 
-    it("blocks paid production before canon assets and executable continuity are ready", () => {
+    it("keeps director and continuity findings as reminders so video generation can continue", () => {
         const project = fixture();
         const result = preflightDramaProduction(project, project.episodes[0]);
-        expect(result.status).toBe("blocked");
+        expect(result.status).toBe("needs_confirmation");
         expect(result.issues.map((issue) => issue.code)).toEqual(expect.arrayContaining(["SERIES_BIBLE", "CHARACTER_ANCHOR", "CHARACTER_STATE"]));
+        expect(result.issues.every((issue) => issue.severity === "warning")).toBe(true);
     });
 
     it("passes a short shot with locked references and complete states", () => {
@@ -61,7 +62,7 @@ describe("drama production preflight", () => {
         expect(result.issues.filter((issue) => issue.severity === "blocking")).toEqual([]);
     });
 
-    it("blocks manual prompts that depend on a different clip or prior prompt", () => {
+    it("warns when manual prompts depend on a different clip or prior prompt", () => {
         const project = fixture();
         const shot = project.episodes[0].shots[0];
         shot.videoPrompt = [
@@ -79,7 +80,7 @@ describe("drama production preflight", () => {
 
         const issue = preflightDramaProduction(project, project.episodes[0]).issues.find((item) => item.code === "VIDEO_PROMPT_LAYOUT");
 
-        expect(issue?.severity).toBe("blocking");
+        expect(issue?.severity).toBe("warning");
         expect(issue?.message).toContain("不得引用其他镜头/视频、项目或上下文");
     });
 
@@ -118,7 +119,7 @@ describe("drama production preflight", () => {
         expect(preflightDramaProduction(project, project.episodes[0]).issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "PRODUCTION_PLAN_UNCONFIRMED", severity: "warning" })]));
     });
 
-    it("blocks names introduced by prompts without shot references", () => {
+    it("warns when prompts mention names without shot references", () => {
         const project = fixture();
         project.characters.push({ id: "character-two", code: "C02", name: "Rifa", description: "", activeEpisodeCodes: ["E01"] });
         project.props.push({ id: "prop-two", code: "P02", name: "银戒", description: "" });
@@ -167,13 +168,13 @@ describe("drama production preflight", () => {
         expect(issues.some((item) => item.code.startsWith("REFERENCE_MANIFEST_"))).toBe(false);
     });
 
-    it("does not duplicate a missing asset blocker with a prop-reference warning", () => {
+    it("does not duplicate a missing asset warning with a prop-reference warning", () => {
         const project = fixture();
         project.episodes[0].shots[0].propIds = ["prop-from-old-project"];
 
         const issues = preflightDramaProduction(project, project.episodes[0]).issues;
 
-        expect(issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "PROP_REFERENCE", severity: "blocking" })]));
+        expect(issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "PROP_REFERENCE", severity: "warning" })]));
         expect(issues.some((item) => item.code === "REFERENCE_MANIFEST_PROP" && item.assetId === "prop-from-old-project")).toBe(false);
     });
 
@@ -300,12 +301,12 @@ describe("drama production preflight", () => {
         expect(codes).not.toContain("REFERENCE_MANIFEST_COUNT");
     });
 
-    it("blocks static frame content without required visible facts", () => {
+    it("warns when static frame content lacks visible facts", () => {
         const project = fixture();
         project.episodes[0].shots[0].storyboardFrameMode = "all_frames";
         project.episodes[0].shots[0].framePlan!.frames[0].imagePrompt = "静态关键帧：待补全";
         const result = preflightDramaProduction(project, project.episodes[0], undefined, undefined, { [project.episodes[0].shots[0].id]: "all_frames" });
-        expect(result.issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "FRAME_VISUAL_CONTENT", severity: "blocking" })]));
+        expect(result.issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "FRAME_VISUAL_CONTENT", severity: "warning" })]));
     });
 
     it("reports director quality gaps as warnings rather than paid-production blockers", () => {
@@ -317,17 +318,17 @@ describe("drama production preflight", () => {
         expect(result.issues.some((issue) => issue.code.startsWith("DIRECTOR_") && issue.severity === "blocking")).toBe(false);
     });
 
-    it("blocks dialogue that cannot fit at natural speaking speed", () => {
+    it("warns when dialogue cannot fit at natural speaking speed", () => {
         const project = fixture();
         const shot = project.episodes[0].shots[0];
         shot.dialogue = "甲".repeat(39);
         shot.utterances = [{ id: "dialogue-one", order: 1, type: "dialogue", speaker: "Karin", text: shot.dialogue }];
         shot.duration = 5;
 
-        expect(preflightDramaProduction(project, project.episodes[0]).issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "DIALOGUE_TIMING", severity: "blocking" })]));
+        expect(preflightDramaProduction(project, project.episodes[0]).issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "DIALOGUE_TIMING", severity: "warning" })]));
     });
 
-    it("blocks an individually overpacked utterance even when the shot total is otherwise long enough", () => {
+    it("warns about an overpacked utterance even when the shot total is otherwise long enough", () => {
         const project = fixture();
         const shot = project.episodes[0].shots[0];
         const text = "甲".repeat(25);
@@ -335,7 +336,7 @@ describe("drama production preflight", () => {
         shot.utterances = [{ id: "dialogue-one", order: 1, type: "dialogue", speaker: "Karin", text, startSecond: 1, endSecond: 5 }];
         shot.duration = 15;
 
-        expect(preflightDramaProduction(project, project.episodes[0]).issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "DIALOGUE_CAPACITY", severity: "blocking" })]));
+        expect(preflightDramaProduction(project, project.episodes[0]).issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "DIALOGUE_CAPACITY", severity: "warning" })]));
     });
 
     it("warns before submit when frame images plus fixed assets exceed the shot budget", () => {
@@ -378,7 +379,7 @@ describe("drama production preflight", () => {
         expect(preflightDramaProduction(project, project.episodes[0], undefined, undefined, { [shot.id]: "all_frames" }).issues.some((issue) => issue.code === "REFERENCE_IMAGE_BUDGET")).toBe(false);
     });
 
-    it("blocks a multi-frame shot whose camera plan never changes", () => {
+    it("warns about a multi-frame shot whose camera plan never changes", () => {
         const project = fixture();
         const shot = project.episodes[0].shots[0];
         shot.storyboardFrameMode = "all_frames";
@@ -404,7 +405,7 @@ describe("drama production preflight", () => {
         expect(preflightDramaProduction(project, project.episodes[0]).issues).not.toEqual(expect.arrayContaining([expect.objectContaining({ code: "FRAME_CAMERA_DUPLICATE", shotId: shot.id })]));
     });
 
-    it("blocks a legacy scene board before paid production", () => {
+    it("warns about a legacy scene board before production", () => {
         const project = fixture();
         project.scenes[0].sceneReferenceBoard = { layout: "legacy-3x3", referenceId: "scene-ref" };
 
@@ -424,7 +425,7 @@ describe("drama production preflight", () => {
         const result = preflightDramaProduction(project, project.episodes[0], undefined, undefined, { [shot.id]: "all_frames" });
 
         expect(result.issues.some((issue) => issue.code === "FRAME_ASSET_NOT_ACCEPTED")).toBe(false);
-        expect(result.issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "FRAME_ASSET_NOT_READY", shotId: shot.id, severity: "blocking" })]));
+        expect(result.issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "FRAME_ASSET_NOT_READY", shotId: shot.id, severity: "warning" })]));
     });
 
     it("requires at least two ordered frames for all-frames mode", () => {
@@ -434,10 +435,10 @@ describe("drama production preflight", () => {
         shot.framePlan!.frames = [{ id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 15, actionPrompt: "抬头", imagePrompt: "人物抬头，手握断剑" }];
         shot.storyboardFrames = [{ id: "f1", sequenceIndex: 1, mediaUrl: "/f1.png", source: "generated", status: "success", continuityStatus: "passed" }];
 
-        expect(preflightDramaProduction(project, project.episodes[0], undefined, undefined, { [shot.id]: "all_frames" }).issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "FRAME_COUNT_MIN", severity: "blocking" })]));
+        expect(preflightDramaProduction(project, project.episodes[0], undefined, undefined, { [shot.id]: "all_frames" }).issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "FRAME_COUNT_MIN", severity: "warning" })]));
     });
 
-    it("blocks video instructions mixed into static frame content", () => {
+    it("warns about video instructions mixed into static frame content", () => {
         const project = fixture();
         const shot = project.episodes[0].shots[0];
         shot.storyboardFrameMode = "all_frames";
@@ -453,7 +454,7 @@ describe("drama production preflight", () => {
 
         const result = preflightDramaProduction(project, project.episodes[0], undefined, undefined, { [shot.id]: "all_frames" });
 
-        expect(result.issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "FRAME_VISUAL_CONTENT", severity: "blocking" })]));
+        expect(result.issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "FRAME_VISUAL_CONTENT", severity: "warning" })]));
     });
 
     it("warns when adjacent carried states conflict", () => {

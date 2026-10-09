@@ -35,6 +35,8 @@
 
 ## 后端规范
 
+- 短剧镜头的导演、构图、机位、镜头卡、连续性和对白节奏等生成前质量检查只能显示提醒，不得阻止用户提交视频生成；生产服务不得仅因这些检查返回 409 或拒绝创建视频任务。只有渠道/模型未配置、所选供应商能力不支持、必需素材缺失或不可读、请求无法构造等真实执行条件才允许阻止提交，并返回具体错误。
+
 - VOZEB PRO 正式 SSH 部署目标固定为 `root@76.13.209.117:22`，项目根目录为 `/opt/vozeb-pro`，Docker Compose 项目名为 `vozeb-pro`；发布只允许创建新的 `/opt/vozeb-pro/releases/<full-commit>`，并更新该 Compose 项目的 `app` 与 `generation-worker`。不得把 `198.200.50.8`、`204.77.130.125` 或其他服务器当作本项目正式部署目标，不得把 SSH 密码写入仓库。PostgreSQL 容器、命名数据卷、Nginx 配置和其他 Compose 项目均为部署边界外；切换前必须保留旧 release，切换后验证 `/api/health/live`、`/api/health/ready` 和 Worker 心跳。
 
 - 本机正式上线连接优先使用 `~/.ssh/config` 中的 `vozeb-pro-production` 别名；SSH 密码、私钥口令和其他凭据只能由系统钥匙串/密码管理器或本轮临时输入提供，禁止写入项目文件、环境模板、脚本或 Git。
