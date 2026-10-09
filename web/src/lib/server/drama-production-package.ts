@@ -756,7 +756,7 @@ function validateStandalonePackageShape(input: Record<string, unknown>, options:
             if (publicCardCount !== frames.length) fail(`${path}.videoPrompt`, ` 必须与 framePlan.frames 一一对应；当前 ${publicCardCount} 张公开卡/${frames.length} 个帧段`);
             if (shotDuration === 30 && text(video.internalCutPolicy) === "dense-30s") {
                 if (frames.length < 8 || frames.length > 11) fail(`${path}.framePlan.frames`, " dense-30s 必须在每个 30 秒逻辑片段内使用 8—11 个帧段");
-                const hardCuts = (text(shot.videoPrompt).match(/(?:剪辑承接|镜头事件)[^\n]{0,240}硬切/gu) || []).length;
+                const hardCuts = (text(shot.videoPrompt).match(/(?:镜头变化|剪辑承接|镜头事件)[^\n]{0,240}硬切/gu) || []).length;
                 if (hardCuts < 7 || hardCuts > 10) fail(`${path}.videoPrompt`, ` dense-30s 必须公开表达 7—10 次硬切，当前检测到 ${hardCuts} 次`);
             }
             totalShots += 1;

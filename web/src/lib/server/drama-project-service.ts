@@ -735,7 +735,7 @@ export async function createDramaProjectForUser(userId: string, value: unknown) 
             visualStyle: styleContract.name,
             ...(styleContract.colorScript ? { colorScript: styleContract.colorScript } : {}),
             soundBible: "对白/旁白原句实际发声且清晰居前；环境音、动作拟音与音乐在语音窗口压低避让，只在停顿间隙恢复，并保留剧情需要的静默段落",
-            globalNegativePrompt: "无字幕、无水印、无logo、无现代元素、无角色身份漂移",
+            globalNegativePrompt: "不叠加后期文字、图形说明或水印，不出现logo、现代元素或角色身份漂移",
             subtitleSafeArea: "角色头顶与画面底部保留安全区",
             continuityMode: "strict",
             productionPlan: { ...defaultDramaProductionPlan("new-project"), video: { ...defaultDramaProductionPlan("new-project").video, ratio: input.ratio } },

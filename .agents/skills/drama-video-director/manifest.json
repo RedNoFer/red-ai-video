@@ -2,7 +2,7 @@
   "id": "drama-video-director",
   "name": "短剧视频导演",
   "sourceVersion": "1.12.2",
-  "sourceContentHash": "87ae577302001b7d1ab3286e6576320465eda838a9f176e163ec6b71bdb100d8",
+  "sourceContentHash": "67a8e2331ea458e1dde025e5a1e98ffb90f9fee55d523a8f70cffcf3014d283f",
   "runtimeModule": "web/src/lib/server/agent-skills/drama-video-director.generated.ts",
   "execution": "planning-only; provider submission remains in VOZEB PRO task runtime"
 }

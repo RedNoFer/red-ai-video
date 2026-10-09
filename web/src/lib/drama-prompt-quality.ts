@@ -35,7 +35,7 @@ const CAMERA_CUT_EVENT_PATTERN = /镜头事件\s*[：:]/u;
 const ACTIVE_CAMERA_CUT_PATTERN = /硬切|镜头切换|Camera\s+cut\s+to|Cut\s+to/iu;
 const VIDEO_CARD_HEADER = /^###\s*镜头\s*(\d+)\s*\|([^\n]+)$/gmu;
 const VIDEO_CARD_FIELDS = ["场景", "画面内容", "光影", "色调", "台词", "人声", "音效"] as const;
-const VIDEO_CARD_FIELD_BOUNDARIES = [...VIDEO_CARD_FIELDS, "剪辑承接"] as const;
+const VIDEO_CARD_FIELD_BOUNDARIES = [...VIDEO_CARD_FIELDS, "镜头变化", "剪辑承接"] as const;
 export const DRAMA_VIDEO_PROMPT_MAX_UNICODE_CHARACTERS = 4500;
 const AUDIO_DUCKING_INSTRUCTION = "对白/旁白发声期间压低环境音、动作拟音与音乐，不遮挡台词清晰度；仅在语音停顿间隙再抬升";
 const SPEECH_CLARITY_PATTERN = /(?:对白|旁白|语音|人声).{0,24}原声.{0,24}(?:清晰|可辨|可懂).{0,24}(?:居前|前景|优先).{0,36}(?:原句完整可听|完整可听|实际发声|可听见)/u;
@@ -72,6 +72,7 @@ export type DramaVideoPromptCard = {
     dialogue: string;
     voice: string;
     sound: string;
+    cameraChanges: string;
     raw: string;
 };
 
@@ -169,6 +170,7 @@ export function extractDramaVideoPromptCards(value: unknown): DramaVideoPromptCa
             dialogue: field("台词"),
             voice: field("人声"),
             sound: field("音效"),
+            cameraChanges: field("镜头变化") || field("剪辑承接"),
             raw,
         };
     });
@@ -245,17 +247,34 @@ function removeDuplicateDramaVideoPromptContinuity(prompt: string, cardIndex: nu
     const start = marker.index ?? 0;
     const end = markers[cardIndex + 1]?.index ?? prompt.length;
     const raw = prompt.slice(start, end);
-    const heading = /(?:^|\n)([ \t]*剪辑承接\s*[：:]\s*)/u.exec(raw);
+    const heading = /(?:^|\n)([ \t]*(?:镜头变化|剪辑承接)\s*[：:]\s*)/u.exec(raw);
     if (!heading) return prompt;
     const contentStart = (heading.index ?? 0) + heading[0].length;
     const continuity = raw.slice(contentStart);
-    const duplicateHeading = /\s+剪辑承接\s*[：:]/u.exec(continuity);
+    const duplicateHeading = /\s+(?:镜头变化|剪辑承接)\s*[：:]/u.exec(continuity);
     const original = (duplicateHeading ? continuity.slice(0, duplicateHeading.index) : continuity)
         .replace(new RegExp(`[；;，,\\s]*${escapeRegExp(AUDIO_DUCKING_INSTRUCTION)}[；;，,\\s]*`, "gu"), "")
         .replace(/[；;，,\s]+$/gu, "")
         .trim();
     if (original === continuity.trim()) return prompt;
-    return updateDramaVideoPromptCardField(prompt, cardIndex, "剪辑承接", original);
+    const field = heading[1].includes("镜头变化") ? "镜头变化" : "剪辑承接";
+    return updateDramaVideoPromptCardField(prompt, cardIndex, field, original);
+}
+
+function validateDramaVideoPromptIndependence(prompt: string, label: string) {
+    const publicBody = prompt.replace(/(^|\n)([ \t]*台词\s*[：:]\s*)[\s\S]*?(?=\n\s*(?:场景|画面内容|光影|色调|人声|音效|镜头变化|剪辑承接)\s*[：:]|$)/gmu, "$1$2");
+    const errors: string[] = [];
+    if (
+        /\bSH[-_ ]?\d+\b|(?:上一条视频|下一条视频|上一个视频|下一个视频|上一镜|下一镜|上个镜头|下个镜头|前一镜|后续镜头|上一片段|下一片段|跨镜头|跨片段|承接上一镜|历史提示词|旧提示词|上一个提示词|上下文|context|项目(?:编号|ID|参数|视觉合同)|(?:asset|project|episode|shot|conversation)Id|@图片\s*\d+|https?:\/\/|\bsubtitle\b|\bcaptions?\b)/iu.test(
+            publicBody,
+        )
+    ) {
+        errors.push(`${label}公开视频提示词不得引用其他镜头/视频、项目或上下文；SH 编号、内部 ID、素材 alias、URL 和历史提示词只能留在制作包结构字段`);
+    }
+    if (/(?:字幕|台词转写|画面文字叠加|文字叠加|对白字卡)/u.test(publicBody)) {
+        errors.push(`${label}公开视频提示词不得包含字幕、台词转写或画面文字叠加内容；对白只写在“台词”字段`);
+    }
+    return errors;
 }
 
 function isNoDramaSpeech(value: string) {
@@ -320,6 +339,7 @@ export function validateDramaVideoPromptCardLayout(value: unknown, frames: Reado
     const cards = extractDramaVideoPromptCards(text);
     const errors: string[] = [];
     if (!cards.length) errors.push("缺少小墨式“### 镜头”公开镜头卡");
+    errors.push(...validateDramaVideoPromptIndependence(text, label));
     if (frameCount > 0 && cards.length !== frameCount) errors.push(`公开镜头卡写出 ${cards.length} 个镜头，必须与 ${frameCount} 个 framePlan 时间段一一对应`);
     for (const [index, card] of cards.entries()) {
         const cardLabel = `第 ${index + 1} 个镜头卡`;

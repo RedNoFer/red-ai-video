@@ -3009,7 +3009,25 @@ describe("drama project service updates", () => {
                 propIds: [],
                 clueIds: [],
                 imagePrompt: "画面",
-                videoPrompt: "动作",
+                videoPrompt: [
+                    [0, 4],
+                    [4, 8],
+                    [8, 12],
+                    [12, 15],
+                ]
+                    .map(([start, end], index) =>
+                        [
+                            `### 镜头 ${String(index + 1).padStart(2, "0")} | ${start}-${end}秒 | 中景 | 35mm | 平视 | 固定机位 | 单人镜头`,
+                            "场景：档案室桌边。",
+                            `画面内容：前景门框遮住画面一角，中景主体因听见门后响动而${["抬眼", "转头", "前倾", "站稳"][index]}，背景留出门后空间；右手压住桌沿，指节${["收紧", "停住", "松开", "落定"][index]}。`,
+                            "光影：左侧冷光落在脸侧和手背。",
+                            "色调：冷灰蓝，肤色自然。",
+                            "台词：无",
+                            "人声：主体短促吸气后缓慢呼气。",
+                            "音效：门后传来轻响，衣料摩擦声贴近。",
+                        ].join("\n"),
+                    )
+                    .join("\n"),
                 negativePrompt: "禁止文字、水印和 Logo",
                 cameraMotion: "固定",
                 duration: 15,
@@ -3028,6 +3046,7 @@ describe("drama project service updates", () => {
                 },
                 lightingPlan: { palette: "冷灰", colorTemperature: "冷色", keyLight: "左侧", fillLight: "正面", rimLight: "背侧", contrast: "中", materialResponse: "自然", skinToneProtection: "自然", inheritFromPrevious: "无", transitionToNext: "平稳" },
                 continuity: { shotSize: "中景", cameraAngle: "平视", composition: "居中", characterBlocking: "中央", gazeDirection: "向前", actionStart: "站立", actionEnd: "站稳", screenDirection: "向前", axisRule: "180度", continuityNotes: "连续" },
+                lens: "35mm",
                 entryState: { environment: "场景", lighting: "冷光", characters: [], props: [] },
                 exitState: { environment: "场景", lighting: "冷光", characters: [], props: [] },
                 storyboardFrameMode: "all_frames",
@@ -3040,7 +3059,7 @@ describe("drama project service updates", () => {
                         sequenceIndex,
                         startSecond: (sequenceIndex - 1) * 4,
                         endSecond: sequenceIndex === 4 ? 15 : sequenceIndex * 4,
-                        imagePrompt: `静态关键帧：动作状态 ${sequenceIndex}\n可见状态：主体完成第${sequenceIndex}个可见结果\n可见表演状态：眉眼和手部呈现第${sequenceIndex}个反应\n景别：${sequenceIndex % 2 ? "中远景" : "中近景"}\n机位与构图：${sequenceIndex === 1 ? "平视关系构图" : sequenceIndex === 2 ? "侧前方动作构图" : sequenceIndex === 3 ? "略高观察构图" : "低机位结果构图"}\n站位与视线：主体位于场景中央，视线朝向当前目标\n三层空间：前景有门框，中景承载主体，背景保留场景结构\n光色与风格：冷暖对照，背景细节清晰\n负面约束：无文字、无水印、无 Logo`,
+                        imagePrompt: `静态关键帧：动作状态 ${sequenceIndex}\n可见状态：主体完成第${sequenceIndex}个可见结果\n可见表演状态：眉眼和手部呈现第${sequenceIndex}个反应\n景别：中景\n机位与构图：${sequenceIndex === 1 ? "平视关系构图" : sequenceIndex === 2 ? "侧前方动作构图" : sequenceIndex === 3 ? "略高观察构图" : "低机位结果构图"}\n站位与视线：主体位于场景中央，视线朝向当前目标\n三层空间：前景有门框，中景承载主体，背景保留场景结构\n光色与风格：冷暖对照，背景细节清晰\n负面约束：无文字、无水印、无 Logo`,
                         actionPrompt: `动作状态 ${sequenceIndex}`,
                     })),
                 },

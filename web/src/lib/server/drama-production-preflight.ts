@@ -9,6 +9,7 @@ import { dramaShotReferenceSelectionIds, resolveDramaVideoReferenceMode } from "
 import type { DramaVideoReferenceMode } from "@/lib/drama-project-contract";
 import { extractDramaVideoPromptCards, validateDramaFrameTiming, validateDramaPerformanceDetail, validateDramaVideoPromptCardLayout, validateDramaVideoPromptDialogueTiming, validateDramaVideoPromptUtteranceCoverage } from "@/lib/drama-prompt-quality";
 import { validateDramaCharacterWardrobeContinuity, validateDramaCutInformationDiversity, validateDramaPromptComposition, validateDramaReferenceAliasConsistency } from "@/lib/drama-prompt-composition-quality";
+import { compileDramaShotPrompts } from "@/lib/drama-prompt-compiler";
 import { auditDramaShotDirectorQuality } from "@/lib/server/agent-skills/drama-video-director";
 
 const blocking = (code: string, message: string, extra: Partial<DramaProductionPreflightIssue> = {}): DramaProductionPreflightIssue => ({ code, severity: "blocking", message, ...extra });
@@ -43,6 +44,7 @@ export function preflightDramaProduction(project: DramaProject, episode: DramaEp
         if (selected.has(shot.id))
             checkShot(
                 shot,
+                episode,
                 episode.code || episode.id,
                 project,
                 characters,
@@ -108,6 +110,7 @@ function compareContinuityStates(from: DramaShot, to: DramaShot, edge: NonNullab
 
 function checkShot(
     shot: DramaShot,
+    episode: DramaEpisode,
     episodeCode: string,
     project: DramaProject,
     characters: Map<string, DramaProject["characters"][number]>,
@@ -135,9 +138,9 @@ function checkShot(
     if (!performance?.emotionalObjective || !performance.emotionalArc || !performance.speechStyle || !performance.pace || !performance.breath || !beats?.start.facialAction || !beats.middle.facialAction || !beats.end.facialAction)
         issues.push(warning("PERFORMANCE_PLAN_MISSING", `${label}缺少完整人物表演规划`, { shotId: shot.id }));
     const dialogueCount = shot.utterances.filter((item) => item.type === "dialogue").length || (shot.dialogue.trim() ? 1 : 0);
-    const generatedPromptOrigin = shot.fieldOrigins?.videoPrompt === "package" || shot.fieldOrigins?.executionVideoPrompt === "ai";
-    if (generatedPromptOrigin && shot.framePlan?.frames.length) {
-        const layoutErrors = validateDramaVideoPromptCardLayout(videoPrompt || "", shot.framePlan.frames, label);
+    if (shot.framePlan?.frames.length) {
+        const compiledVideoPrompt = compileDramaShotPrompts(project, episode, shot).videoPrompt;
+        const layoutErrors = validateDramaVideoPromptCardLayout(compiledVideoPrompt, shot.framePlan.frames, label);
         if (layoutErrors.length) issues.push(blocking("VIDEO_PROMPT_LAYOUT", layoutErrors[0], { shotId: shot.id, correction: "重新优化或生成视频提示词，按小墨式导演镜头卡逐帧补齐时间、景别、焦段、机位、运镜和可见画面" }));
         const timingErrors = validateDramaFrameTiming(shot.framePlan.frames, shot.utterances as DramaDialogueTimingInput[], label);
         if (timingErrors.length) issues.push(blocking("FRAME_DIALOGUE_TIMING", timingErrors[0], { shotId: shot.id, correction: "按对白自然开口、收句、停顿和反应重新分配帧段，禁止机械等长" }));

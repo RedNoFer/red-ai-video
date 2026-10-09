@@ -28,7 +28,23 @@ describe("drama production preflight", () => {
         project.scenes[0].primaryReferenceId = reference.id;
         project.props[0].references = [reference];
         project.props[0].primaryReferenceId = reference.id;
-        project.episodes[0].shots[0].duration = 6;
+        const shot = project.episodes[0].shots[0];
+        shot.duration = 6;
+        shot.videoPrompt = [
+            "### 镜头 01 | 0-6秒 | 中景 | 50mm | 城门外平视 | 固定机位 | 单人镜头",
+            "场景：城门外石阶。",
+            "画面内容：角色站在石阶左侧，抬眼看向门缝，右手握紧断剑，湿石上留下脚印。",
+            "光影：左上冷光落在脸侧与湿石纹理上。",
+            "色调：冷灰蓝，肤色自然中性。",
+            "台词：无",
+            "人声：角色屏息后缓慢呼气。",
+            "音效：风掠过城门，衣料轻响。",
+            "镜头变化：单条镜头持续固定，抬眼后停在握剑手部的受力结果。",
+        ].join("\n");
+        shot.framePlan = {
+            ...shot.framePlan!,
+            frames: [{ id: "frame-one", sequenceIndex: 1, startSecond: 0, endSecond: 6, actionPrompt: "角色抬眼并握紧断剑", imagePrompt: "角色站在城门石阶" }],
+        };
         const state = {
             characters: [{ assetId: "character-one", position: "画面左侧", gaze: "向右", pose: "站立", action: "静止" }],
             props: [{ assetId: "prop-one", state: "入鞘", holderId: "character-one" }],
@@ -43,6 +59,28 @@ describe("drama production preflight", () => {
         const result = preflightDramaProduction(project, project.episodes[0]);
         expect(result.status).toBe("needs_confirmation");
         expect(result.issues.filter((issue) => issue.severity === "blocking")).toEqual([]);
+    });
+
+    it("blocks manual prompts that depend on a different clip or prior prompt", () => {
+        const project = fixture();
+        const shot = project.episodes[0].shots[0];
+        shot.videoPrompt = [
+            "### 镜头 01 | 0-15秒 | 中景 | 50mm | 城门外平视 | 固定机位 | 单人镜头",
+            "场景：城门外石阶。",
+            "画面内容：角色抬眼看向门缝，右手握紧断剑，湿石上留下脚印。",
+            "光影：左上冷光落在脸侧与湿石纹理上。",
+            "色调：冷灰蓝，肤色自然中性。",
+            "台词：无",
+            "人声：角色屏息后缓慢呼气。",
+            "音效：风掠过城门，衣料轻响。",
+            "镜头变化：回答留到SH18；沿用上一个提示词的上下文。",
+        ].join("\n");
+        shot.fieldOrigins = { videoPrompt: "manual", framePlan: "package" };
+
+        const issue = preflightDramaProduction(project, project.episodes[0]).issues.find((item) => item.code === "VIDEO_PROMPT_LAYOUT");
+
+        expect(issue?.severity).toBe("blocking");
+        expect(issue?.message).toContain("不得引用其他镜头/视频、项目或上下文");
     });
 
     it("allows prompt-first video generation without storyboard or baseline images", () => {

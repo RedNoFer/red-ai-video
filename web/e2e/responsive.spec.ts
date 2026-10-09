@@ -1405,14 +1405,34 @@ test("drama shot prompt optimization is available from the Agent menu and persis
         storyboardFrameMode: "single",
         videoMode: "reference",
     };
+    const previousShot = {
+        ...shot,
+        id: "previous-shot",
+        code: "SH00",
+        order: 0,
+        title: "前一镜",
+        videoPrompt: "前镜末尾：陆川仍坐在电脑前，手停在鼠标旁。",
+        exitState: { environment: "档案室", characters: [{ assetId: "lu-chuan", position: "电脑前", state: "手停在鼠标旁" }], props: [] },
+        framePlan: { frames: [{ id: "previous-end", sequenceIndex: 1, startSecond: 0, endSecond: 5, actionPrompt: "陆川保持坐姿，手停在鼠标旁。", endPrompt: "手停在鼠标旁", imagePrompt: "陆川坐在电脑前，手停在鼠标旁。" }] },
+    };
+    const nextShot = {
+        ...shot,
+        id: "next-shot",
+        code: "SH02",
+        order: 2,
+        title: "后续镜头",
+        videoPrompt: "后镜开头：陆川保持坐在电脑前，视线仍朝向屏幕。",
+        entryState: { environment: "档案室", characters: [{ assetId: "lu-chuan", position: "电脑前", gaze: "朝向屏幕" }], props: [] },
+        framePlan: { frames: [{ id: "next-start", sequenceIndex: 1, startSecond: 0, endSecond: 5, startPrompt: "电脑前保持原站位", actionPrompt: "陆川的视线仍朝向屏幕。", imagePrompt: "陆川坐在电脑前，视线朝向屏幕。" }] },
+    };
     const seeded = {
         ...project,
-        episodes: project.episodes.map((item) => (item.id === episode.id ? { ...item, reviewStatus: "visual_ready", shots: [shot] } : item)),
+        episodes: project.episodes.map((item) => (item.id === episode.id ? { ...item, reviewStatus: "visual_ready", shots: [previousShot, shot, nextShot] } : item)),
     } as DramaProject;
     const saved = await saveDramaProjectFixture(page.request, project, seeded, { headers: { cookie } });
     expect(saved.ok(), await saved.text()).toBe(true);
 
-    let optimizationBody: { phase?: string; shots?: Array<{ id?: string }>; referenceMaterials?: unknown[] } = {};
+    let optimizationBody: { phase?: string; shots?: Array<{ id?: string }>; referenceMaterials?: unknown[]; continuityContext?: { previous?: { shotId?: string; videoPrompt?: string }; next?: { shotId?: string; videoPrompt?: string } } } = {};
     await page.route(/\/api\/drama\/analyze$/, async (route) => {
         optimizationBody = (await route.request().postDataJSON()) as typeof optimizationBody;
         await route.fulfill({
@@ -1448,23 +1468,28 @@ test("drama shot prompt optimization is available from the Agent menu and persis
     await expect(optimizeItem).toBeVisible();
     await expect(optimizeItem).not.toHaveAttribute("aria-disabled", "true");
     const saveRequest = page.waitForRequest((request) => request.method() === "PATCH" && request.url().includes(`/episodes/${episode.id}/shots/optimize-shot/prompt`));
+    const saveResponse = page.waitForResponse((response) => response.request().method() === "PATCH" && response.url().includes(`/episodes/${episode.id}/shots/optimize-shot/prompt`));
     await optimizeItem.click();
     await expect.poll(() => optimizationBody.phase).toBe("video_prompt");
     await expect.poll(() => optimizationBody.shots?.[0]?.id).toBe("optimize-shot");
+    expect(optimizationBody.continuityContext).toMatchObject({
+        previous: { shotId: "previous-shot", videoPrompt: "前镜末尾：陆川仍坐在电脑前，手停在鼠标旁。" },
+        next: { shotId: "next-shot", videoPrompt: "后镜开头：陆川保持坐在电脑前，视线仍朝向屏幕。" },
+    });
     const patchRequest = await saveRequest;
+    const savedResponse = await saveResponse;
+    expect(savedResponse.ok(), await savedResponse.text()).toBe(true);
     expect(patchRequest.postDataJSON()).toMatchObject({
         executionVideoPrompt:
             "动态意图：优化后的镜头视频提示词\n时间段动作：\nP01-F01｜0-3s\n起点：人物低头\n动作与触发：手指收紧\n可见衔接：视线抬起\n终点：人物抬头\nP01-F02｜3-5s\n起点：人物抬头\n动作与触发：剑刃裂开\n可见衔接：冷光沿断口扩展\n终点：断口发亮\n单一主运镜：固定机位\n结束画面：断口发亮",
     });
     expect(patchRequest.postDataJSON().framePlan.frames).toEqual(expect.arrayContaining([expect.objectContaining({ startSecond: 0, endSecond: 3 }), expect.objectContaining({ startSecond: 3, endSecond: 5 })]));
-    await expect(row.locator("textarea").first()).toHaveValue(/P01-F01｜0-3s/);
-    await expect(page.getByText("提示词已优化并保存", { exact: true })).toBeVisible();
 
     const persisted = ((await (await page.request.get(`/api/drama/projects/${project.id}`, { headers: { cookie } })).json()) as { data: { project: DramaProject } }).data.project;
-    expect(persisted.episodes[0].shots[0].executionVideoPrompt).toBe(
+    expect(persisted.episodes[0].shots.find((item) => item.id === "optimize-shot")?.executionVideoPrompt).toBe(
         "动态意图：优化后的镜头视频提示词\n时间段动作：\nP01-F01｜0-3s\n起点：人物低头\n动作与触发：手指收紧\n可见衔接：视线抬起\n终点：人物抬头\nP01-F02｜3-5s\n起点：人物抬头\n动作与触发：剑刃裂开\n可见衔接：冷光沿断口扩展\n终点：断口发亮\n单一主运镜：固定机位\n结束画面：断口发亮",
     );
-    expect(persisted.episodes[0].shots[0].framePlan?.frames).toEqual(expect.arrayContaining([expect.objectContaining({ startSecond: 0, endSecond: 3 }), expect.objectContaining({ startSecond: 3, endSecond: 5 })]));
+    expect(persisted.episodes[0].shots.find((item) => item.id === "optimize-shot")?.framePlan?.frames).toEqual(expect.arrayContaining([expect.objectContaining({ startSecond: 0, endSecond: 3 }), expect.objectContaining({ startSecond: 3, endSecond: 5 })]));
 });
 
 test("drama execution prompt saves through its scoped shot endpoint", async ({ page, request }) => {

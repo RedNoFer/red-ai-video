@@ -21,6 +21,9 @@ data/
 .DS_Store
 .idea
 .codex/
+!.codex/
+.codex/*
+!.codex/hooks.json
 .trellis/
 .agents/
 !.agents/

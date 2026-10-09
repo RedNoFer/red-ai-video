@@ -32,7 +32,9 @@
         ".next-dev/types/**/*.ts",
         ".next-dev/dev/types/**/*.ts",
         ".next-production/types/**/*.ts",
-        ".next-production/dev/types/**/*.ts"
+        ".next-production/dev/types/**/*.ts",
+        ".next-drama-assets-e2e/types/**/*.ts",
+        ".next-drama-assets-e2e/dev/types/**/*.ts"
     ],
     "exclude": ["node_modules"]
 }

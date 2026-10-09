@@ -19,7 +19,7 @@ import {
 } from "./drama-prompt-compiler";
 
 describe("drama prompt compiler", () => {
-    it("keeps the project visual contract once across all public video cards", () => {
+    it("renders the visual style as natural standalone prompt text without project metadata", () => {
         const project = createProject();
         project.style = "冷峻纪实，真实颗粒与哑光皮肤";
         project.productionBible = { ...project.productionBible!, visualStyle: project.style };
@@ -33,7 +33,8 @@ describe("drama prompt compiler", () => {
         ].join("\n");
 
         const compiled = applyDramaVideoVisualContract(project, source);
-        expect(compiled.match(/项目视觉合同（唯一风格来源）/gu)).toHaveLength(1);
+        expect(compiled.match(/视觉质感采用：/gu)).toHaveLength(1);
+        expect(compiled).not.toContain("项目视觉合同");
         expect(compiled).toContain("色调：冷灰；左侧窗光。");
         expect(compiled).toContain("色调：冷灰；窗光擦过指节。");
         expect(applyDramaVideoVisualContract(project, compiled)).toBe(compiled);
@@ -284,7 +285,7 @@ describe("drama prompt compiler", () => {
         const prompts = compileDramaShotExecutionPrompts(project, project.episodes[0], shot);
         const framePrompt = compileDramaFrameSupplierPrompt(project, project.episodes[0], shot);
 
-        expect(prompts.videoPrompt).toContain(`项目视觉合同（唯一风格来源）：${westernCg}`);
+        expect(prompts.videoPrompt).toContain(`视觉质感采用：${westernCg}`);
         expect(prompts.videoPrompt).not.toContain("旧东方古风国漫");
         expect(prompts.videoPrompt).not.toContain("旧银护腕");
         expect(framePrompt).toContain(`项目视觉合同（唯一风格来源）：${westernCg}`);
@@ -888,7 +889,7 @@ describe("drama prompt compiler", () => {
 
         expect(prompt).toContain("动态意图：萧炎抬头锁定门口");
         expect(prompt).toContain("单一主运镜：固定机位");
-        expect(prompt).toContain(`项目视觉合同（唯一风格来源）：${westernCg}`);
+        expect(prompt).toContain(`视觉质感采用：${westernCg}`);
         expect(prompt).not.toContain("主体与资产类型：");
         expect(prompt).not.toContain("身份/结构锚点：");
         expect(prompt).not.toContain("被审判");
@@ -1096,7 +1097,7 @@ describe("drama prompt compiler", () => {
         const prompt = compileDramaShotExecutionPrompts(project, project.episodes[0], project.episodes[0].shots[0]);
 
         expect(prompt.imagePrompt).toContain(`项目视觉合同（唯一风格来源）：${project.style}`);
-        expect(prompt.videoPrompt).toContain(`项目视觉合同（唯一风格来源）：${project.style}`);
+        expect(prompt.videoPrompt).toContain(`视觉质感采用：${project.style}`);
     });
 
     it("uses the configured VS7 style for character assets without a hardcoded theme", () => {

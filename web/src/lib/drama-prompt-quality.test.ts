@@ -327,6 +327,22 @@ describe("drama prompt quality", () => {
         ).toEqual([]);
     });
 
+    it("blocks cross-clip context and subtitle text outside dialogue fields", () => {
+        const prompt = [
+            "### 镜头 01 | 0-2秒 | 中近景 | 50mm | 侧45度平视 | 固定机位 | 人物镜头",
+            "场景：山谷泉池边。",
+            "画面内容：陆川转头看向林缘，指尖松开湿衣料，水珠落回石面。",
+            "光影：左侧天光落在陆川脸颊与湿石上。",
+            "色调：冷灰绿，肤色自然。",
+            "台词：陆川说：“我不知道这里有没有字幕。”",
+            "人声：陆川对白原声清晰可辨、音量居前，原句完整可听并与可见口型同步。",
+            "音效：水珠落石；语音期间压低环境音。",
+            "镜头变化：回答留到SH18；上下文参数沿用上一镜。",
+        ].join("\n");
+
+        expect(validateDramaVideoPromptCardLayout(prompt, [{ startSecond: 0, endSecond: 2 }], "SH01")).toEqual(expect.arrayContaining([expect.stringContaining("不得引用其他镜头/视频、项目或上下文")]));
+    });
+
     it("blocks Xiaomo cards that are structurally complete but only describe abstract intent", () => {
         const prompt = [
             "### 镜头 01 | 0-2秒 | 中景 | 50mm | 入口侧45度平视 | 极慢横移 | 人物镜头",
