@@ -6,10 +6,12 @@ const mocks = vi.hoisted(() => ({
     canAccess: vi.fn(),
     registration: vi.fn(),
     stream: vi.fn(),
+    isBufferedVariant: vi.fn(),
     disposition: vi.fn(),
     rate: vi.fn(),
     externalRead: vi.fn(),
     acquire: vi.fn(),
+    acquireWaiting: vi.fn(),
     wrap: vi.fn(),
     head: vi.fn(),
     release: vi.fn(),
@@ -21,10 +23,11 @@ vi.mock("@/lib/server/generation-log-store", () => ({ canAccessGenerationAsset: 
 vi.mock("@/lib/server/local-media-registry", () => ({ getLocalMediaRegistration: mocks.registration }));
 vi.mock("@/lib/server/local-media-response", () => ({
     createLocalMediaResponse: mocks.stream,
+    isBufferedImageVariantResponse: mocks.isBufferedVariant,
     createMediaHeadResponse: mocks.head,
     mediaContentDisposition: mocks.disposition,
 }));
-vi.mock("@/lib/server/media-concurrency", () => ({ acquireMediaConcurrency: mocks.acquire, withMediaConcurrency: mocks.wrap }));
+vi.mock("@/lib/server/media-concurrency", () => ({ acquireMediaConcurrency: mocks.acquire, acquireMediaConcurrencyWhenAvailable: mocks.acquireWaiting, withMediaConcurrency: mocks.wrap }));
 vi.mock("@/lib/server/security", () => ({ checkLocalMediaRateLimit: mocks.rate, rateLimitHeaders: vi.fn(() => ({ "Retry-After": "60" })) }));
 vi.mock("@/lib/server/object-storage-service", () => ({ createExternalMediaReadUrl: mocks.externalRead }));
 
@@ -42,9 +45,11 @@ describe("generation log asset access", () => {
         mocks.registration.mockResolvedValue({ originalName: "uploaded-file.png", mimeType: "image/png" });
         mocks.rate.mockResolvedValue({ allowed: true, remaining: 239, resetAt: Date.now() + 60_000 });
         mocks.stream.mockResolvedValue(new Response("image"));
+        mocks.isBufferedVariant.mockReturnValue(false);
         mocks.disposition.mockReturnValue('inline; filename="uploaded-file.png"');
         mocks.externalRead.mockResolvedValue("https://storage.example/signed");
         mocks.acquire.mockReturnValue({ release: mocks.release });
+        mocks.acquireWaiting.mockResolvedValue({ release: mocks.release });
         mocks.wrap.mockImplementation((response: Response) => response);
         mocks.head.mockReturnValue(new Response(null, { status: 200, headers: { "Content-Type": "image/png", "Content-Length": "5" } }));
     });
@@ -58,6 +63,7 @@ describe("generation log asset access", () => {
         expect(response.headers.get("x-robots-tag")).toBe("noindex, nofollow, noarchive");
         expect(response.headers.get("cross-origin-resource-policy")).toBe("same-site");
         expect(mocks.stream).not.toHaveBeenCalled();
+        expect(mocks.acquire).not.toHaveBeenCalled();
     });
 
     it("answers object-backed HEAD without signing a GET redirect", async () => {
@@ -68,11 +74,11 @@ describe("generation log asset access", () => {
         expect(mocks.externalRead).not.toHaveBeenCalled();
     });
 
-    it("rejects excess concurrent reads before opening the file", async () => {
-        mocks.acquire.mockReturnValue(null);
+    it("waits for local media capacity before streaming the asset", async () => {
         const response = await GET(new Request("http://localhost/api/generation-log-assets/permanent/2026/07/20/images/file.png"), context);
-        expect(response.status).toBe(429);
-        expect(mocks.stream).not.toHaveBeenCalled();
+        expect(response.status).toBe(200);
+        expect(mocks.acquireWaiting).toHaveBeenCalledWith("local", "user:owner");
+        expect(mocks.stream).toHaveBeenCalled();
     });
 
     it("hides assets from another user", async () => {
@@ -96,6 +102,16 @@ describe("generation log asset access", () => {
         expect(mocks.canAccess).toHaveBeenCalledWith("owner", "user", "/api/generation-log-assets/permanent/2026/07/20/images/file.png");
         expect(mocks.disposition).toHaveBeenCalledWith("inline", "uploaded-file.png", "image/png", "");
         expect(mocks.stream).toHaveBeenCalled();
+        expect(mocks.wrap).toHaveBeenCalled();
+    });
+
+    it("releases the permit after creating a buffered WebP variant", async () => {
+        mocks.stream.mockResolvedValue(new Response("webp", { headers: { "Content-Type": "image/webp", Vary: "Accept" } }));
+        mocks.isBufferedVariant.mockReturnValue(true);
+        const response = await GET(new Request("http://localhost/api/generation-log-assets/permanent/2026/07/20/images/file.png?format=webp&width=960"), context);
+        expect(response.headers.get("content-type")).toBe("image/webp");
+        expect(mocks.release).toHaveBeenCalledOnce();
+        expect(mocks.wrap).not.toHaveBeenCalled();
     });
 
     it("allows a short-lived signed provider read without a browser session", async () => {

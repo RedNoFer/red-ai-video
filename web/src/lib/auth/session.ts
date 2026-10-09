@@ -5,6 +5,8 @@ import { deleteSession, getPublicUsersByIds, getUserBySession, sessionMaxAgeSeco
 import { authorizedWorkerUserId } from "@/lib/server/maintenance-auth";
 import { getTrustedProxyHops } from "@/lib/server/trusted-proxy";
 import { parseSessionCookie } from "./store-normalizers";
+import { resolveChannelCapabilityConfig } from "@/lib/channel-protocol-registry";
+import { normalizeModelId } from "@/lib/model-capability";
 
 const SESSION_COOKIE_NAME = "vozeb_pro_session";
 
@@ -105,6 +107,18 @@ export function serializeCurrentUser(user: CurrentUser) {
 }
 
 export function serializePublicSettings(settings: AuthSettings) {
+    const supportsVoiceClone = settings.logicalModels.some(
+        (model) =>
+            model.enabled &&
+            model.capability === "audio" &&
+            model.bindings.some((binding) => {
+                if (!binding.enabled) return false;
+                const channel = settings.systemChannels.find((item) => item.id === binding.channelId && item.enabled && item.apiKey);
+                if (!channel || !channel.models.some((item) => normalizeModelId(item) === normalizeModelId(binding.upstreamModel))) return false;
+                const operation = resolveChannelCapabilityConfig(channel.advancedConfig, binding.upstreamModel, "audio");
+                return operation?.audioOperation === "voice-clone" && Boolean(operation.cloneSampleField) && /\{\{\s*(?:clone_sample_url|sample_audio_url|sample_url)\s*\}\}/i.test(operation.requestTemplate || "");
+            }),
+    );
     return {
         site: {
             title: settings.site.title,
@@ -139,6 +153,7 @@ export function serializePublicSettings(settings: AuthSettings) {
             audioFormat: settings.generationDefaults.audioFormat,
         },
         defaultModels: { ...settings.defaultModels },
+        supportsVoiceClone,
         logicalModels: settings.logicalModels
             .filter((model) => model.enabled)
             .map((model) => ({

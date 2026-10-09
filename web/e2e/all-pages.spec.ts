@@ -14,6 +14,8 @@ const FILE_PROVIDER_LIMITATIONS = new Map([
     ["/api/notifications/interactions", 409],
     ["/api/admin/referrals", 501],
     ["/api/admin/billing/summary", 501],
+    ["/api/admin/billing/products", 501],
+    ["/api/admin/billing/orders", 501],
 ]);
 
 type RouteCase = { path: string; expectedPath?: RegExp; expectedStatus?: number; readyHeading?: string; readyText?: string };

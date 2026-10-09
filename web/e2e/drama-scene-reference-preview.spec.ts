@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 import type { DramaProject } from "../src/lib/drama-project-contract";
+import { saveDramaProjectFixture } from "./support";
 
 const REFERENCE_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAEUlEQVR4nGPQq/3/H4QZYAwAWewKpRUlAtEAAAAASUVORK5CYII=";
 
@@ -18,32 +19,30 @@ test("场景参考图弹窗在桌面和窄屏保持可用尺寸并支持放大�
     const referenceId = "scene-preview-reference-e2e";
 
     try {
-        const saved = await request.patch(`/api/drama/projects/${project.id}`, {
-            data: {
-                ...project,
-                scenes: [
-                    {
-                        id: "scene-preview-e2e",
-                        name: "弹窗尺寸测试场景",
-                        description: "用于验证场景基准图弹窗尺寸和原图放大入口",
-                        references: [
-                            {
-                                id: referenceId,
-                                url: uploadedAsset.url,
-                                storageKey: uploadedAsset.key,
-                                source: "library",
-                                label: "弹窗测试场景图",
-                                width: 3840,
-                                height: 2160,
-                                status: "approved",
-                                createdAt: new Date().toISOString(),
-                            },
-                        ],
-                        primaryReferenceId: referenceId,
-                        sceneReferenceBoard: { layout: "panorama", referenceId },
-                    },
-                ],
-            },
+        const saved = await saveDramaProjectFixture(request, project, {
+            ...project,
+            scenes: [
+                {
+                    id: "scene-preview-e2e",
+                    name: "弹窗尺寸测试场景",
+                    description: "用于验证场景基准图弹窗尺寸和原图放大入口",
+                    references: [
+                        {
+                            id: referenceId,
+                            url: uploadedAsset.url,
+                            storageKey: uploadedAsset.key,
+                            source: "library",
+                            label: "弹窗测试场景图",
+                            width: 3840,
+                            height: 2160,
+                            status: "approved",
+                            createdAt: new Date().toISOString(),
+                        },
+                    ],
+                    primaryReferenceId: referenceId,
+                    sceneReferenceBoard: { layout: "panorama", referenceId },
+                },
+            ],
         });
         expect(saved.ok(), await saved.text()).toBe(true);
 

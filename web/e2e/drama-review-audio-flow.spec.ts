@@ -3,6 +3,7 @@ import type { DramaProject } from "../src/lib/drama-project-contract";
 import { applyChannelProtocol } from "../src/lib/channel-protocol-registry";
 
 import { expectNoHorizontalOverflow } from "./responsive-helpers";
+import { saveDramaProjectFixture } from "./support";
 
 test.use({ storageState: ".e2e-data/admin-state.json" });
 
@@ -61,16 +62,18 @@ test("drama review completion, continuity and audio configuration entry are visi
             },
         ],
     };
-    const saved = await request.patch(`/api/drama/projects/${project.id}`, { data: seededProject });
+    const saved = await saveDramaProjectFixture(request, project, seededProject);
     expect(saved.ok(), await saved.text()).toBe(true);
-    const savedProject = ((await saved.json()) as { data: { project: DramaProject } }).data.project;
+    const refreshed = await request.get(`/api/drama/projects/${project.id}`);
+    expect(refreshed.ok(), await refreshed.text()).toBe(true);
+    const savedProject = ((await refreshed.json()) as { data: { project: DramaProject } }).data.project;
     expect(savedProject.episodes[0]?.shots).toHaveLength(1);
 
     await page.goto(`/drama/${project.id}`, { waitUntil: "domcontentloaded" });
     await expect(page.locator("[data-drama-workspace]")).toBeVisible();
     await page.getByRole("button", { name: "切换到内容审核" }).click();
     await expect(page.getByRole("heading", { name: "内容审核" })).toBeVisible();
-    await expect(page.getByRole("button", { name: /AI 补全缺失项/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: "确认内容并生成视觉方案" })).toBeVisible();
 
     await page.getByText("连续性", { exact: true }).click();
     await expect(page.getByText("计划状态：", { exact: false }).first()).toBeVisible();
@@ -191,20 +194,18 @@ test("项目资产基准图使用可访问的本地媒体 URL", async ({ page, r
     const created = await request.post("/api/drama/projects", { data: { title: "E2E 本地角色素材", summary: "验证基准图可访问", ratio: "9:16" } });
     expect(created.ok(), await created.text()).toBe(true);
     const project = ((await created.json()) as { data: { project: DramaProject } }).data.project;
-    const saved = await request.patch(`/api/drama/projects/${project.id}`, {
-        data: {
-            ...project,
-            characters: [
-                {
-                    id: "character-image-e2e",
-                    name: "本地角色",
-                    description: "用于验证本地基准图",
-                    profile: { visualIdentity: "测试角色" },
-                    references: [{ id: "character-image-e2e-ref", url: uploadedAsset.url, source: "upload", status: "approved", label: "基准图", createdAt: new Date().toISOString() }],
-                    primaryReferenceId: "character-image-e2e-ref",
-                },
-            ],
-        },
+    const saved = await saveDramaProjectFixture(request, project, {
+        ...project,
+        characters: [
+            {
+                id: "character-image-e2e",
+                name: "本地角色",
+                description: "用于验证本地基准图",
+                profile: { visualIdentity: "测试角色" },
+                references: [{ id: "character-image-e2e-ref", url: uploadedAsset.url, source: "upload", status: "approved", label: "基准图", createdAt: new Date().toISOString() }],
+                primaryReferenceId: "character-image-e2e-ref",
+            },
+        ],
     });
     expect(saved.ok(), await saved.text()).toBe(true);
 
@@ -215,7 +216,7 @@ test("项目资产基准图使用可访问的本地媒体 URL", async ({ page, r
     await expect.poll(async () => image.evaluate((element) => ({ naturalWidth: (element as HTMLImageElement).naturalWidth, complete: (element as HTMLImageElement).complete }))).toMatchObject({ complete: true, naturalWidth: 1 });
 });
 
-test("Voice Design 生成独立 voice_id 并可播放本地试听音频", async ({ page, request }) => {
+test("Voice Clone 生成独立 voice_id 并可播放本地试听音频", async ({ page, request }) => {
     const sessionResponse = await request.get("/api/auth/session");
     expect(sessionResponse.ok(), await sessionResponse.text()).toBe(true);
     const session = (await sessionResponse.json()) as { user?: { id?: string } };
@@ -229,32 +230,57 @@ test("Voice Design 生成独立 voice_id 并可播放本地试听音频", async 
     const fixtureChannel = applyChannelProtocol(
         {
             id: "e2e-audio-fixture",
-            name: "E2E Voice Design 夹具",
+            name: "E2E Voice Clone 夹具",
             baseUrl: "http://127.0.0.1:4010",
             apiKey: "fixture-key",
             apiFormat: "openai",
-            models: [],
+            models: ["voice-design"],
             enabled: true,
+            advancedConfig: {
+                protocol: "custom",
+                authMode: "bearer",
+                modelCatalogPaths: [],
+                modelCapabilities: { "voice-design": "audio" },
+                modelConfigs: {
+                    "voice-design": {
+                        capability: "audio",
+                        source: "manual",
+                        protocol: "custom",
+                        apiFormat: "openai",
+                        createPath: "/media/generate",
+                        requestTemplate: '{"model":"{{model}}","prompt":"{{prompt}}","sample_url":"{{clone_sample_url}}"}',
+                        resultField: "trial_audio",
+                        voiceIdField: "voice_id",
+                        previewAudioField: "trial_audio",
+                        audioOperation: "voice-clone",
+                        cloneSampleField: "sample_url",
+                    },
+                },
+            },
         },
-        "buming-seedance",
+        "custom",
     );
     const settingsResponse = await request.patch("/api/admin/settings", {
         data: {
             systemChannels: [fixtureChannel],
             logicalModels: [
                 {
-                    id: "voice-design",
-                    name: "Voice Design",
+                    id: "voice-clone",
+                    name: "Voice Clone",
                     capability: "audio",
                     enabled: true,
                     bindings: [{ id: "e2e-audio-binding", channelId: fixtureChannel.id, upstreamModel: "voice-design", enabled: true, priority: 1 }],
                 },
             ],
-            defaultModels: { ...(currentSettings.defaultModels as Record<string, string>), audioModel: "voice-design", voiceDesignModel: "voice-design" },
+            defaultModels: { ...(currentSettings.defaultModels as Record<string, string>), audioModel: "voice-clone", voiceCloneModel: "voice-clone" },
         },
     });
     expect(settingsResponse.ok(), await settingsResponse.text()).toBe(true);
-
+    const publicSessionResponse = await request.get("/api/auth/session");
+    expect(publicSessionResponse.ok(), await publicSessionResponse.text()).toBe(true);
+    const publicSession = (await publicSessionResponse.json()) as { settings?: { supportsVoiceClone?: boolean; systemChannels?: Array<Record<string, unknown>> } };
+    expect(publicSession.settings?.supportsVoiceClone, JSON.stringify(publicSession)).toBe(true);
+    expect(publicSession.settings?.systemChannels?.[0]).not.toHaveProperty("advancedConfig");
     const created = await request.post("/api/drama/projects", { data: { title: "E2E 角色试听", summary: "验证角色音色完整链路", ratio: "9:16" } });
     expect(created.ok(), await created.text()).toBe(true);
     const project = ((await created.json()) as { data: { project: DramaProject } }).data.project;
@@ -265,16 +291,24 @@ test("Voice Design 生成独立 voice_id 并可播放本地试听音频", async 
         profile: { visualIdentity: "年轻男性" },
         references: [],
     };
-    const saved = await request.patch(`/api/drama/projects/${project.id}`, { data: { ...project, characters: [character] } });
+    const saved = await saveDramaProjectFixture(request, project, { ...project, characters: [character] });
     expect(saved.ok(), await saved.text()).toBe(true);
 
     await page.goto(`/drama/${project.id}`, { waitUntil: "domcontentloaded" });
     await page.getByRole("button", { name: "打开项目资产" }).click();
-    await page.getByRole("button", { name: "编辑角色：Karin" }).click();
+    await page.getByRole("button", { name: "编辑角色：Karin" }).last().click();
     await expect(page.getByText("编辑角色", { exact: true })).toBeVisible();
+    await page.locator('input[type="file"][accept*="audio/wav"]').setInputFiles({
+        name: "karin-voice-sample.wav",
+        mimeType: "audio/wav",
+        buffer: Buffer.from("UklGRiYAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQIAAAAAAA==", "base64"),
+    });
+    await expect(page.getByText("Clone 音频样本已上传", { exact: true })).toBeVisible();
 
     const creationResponsePromise = page.waitForResponse((response) => response.url().includes(`/voice-creation`) && response.request().method() === "POST");
-    await page.getByRole("button", { name: "生成新声纹" }).click();
+    const createVoiceButton = page.getByRole("button", { name: "生成新声纹" });
+    await expect(createVoiceButton).toBeEnabled();
+    await createVoiceButton.click();
     const creationResponse = await creationResponsePromise;
     expect(creationResponse.ok(), await creationResponse.text()).toBe(true);
     const creationPayload = (await creationResponse.json()) as { data: { task: { id?: string } } };
@@ -291,8 +325,8 @@ test("Voice Design 生成独立 voice_id 并可播放本地试听音频", async 
 
     await page.getByRole("button", { name: "刷新声纹状态" }).click();
     await expect(page.getByRole("button", { name: "播放试听" })).toBeVisible();
-    const audio = page.locator("audio");
-    await expect(audio).toHaveCount(1);
+    await expect(page.locator("audio")).toHaveCount(2);
+    const audio = page.locator("audio").last();
     await expect.poll(async () => audio.evaluate((element) => ({ readyState: element.readyState, duration: element.duration, error: element.error?.code || 0 }))).toMatchObject({ readyState: 4, error: 0 });
     await expect.poll(async () => audio.evaluate((element) => element.duration)).toBeGreaterThan(0);
     const audioUrl = await audio.getAttribute("src");
@@ -327,8 +361,10 @@ test("已完成镜头可以手动拉取供应商最新视频", async ({ page, re
         generationTaskId: "e2e-refresh-video-task",
         videoUrl: "https://example.com/old-video.mp4",
     };
-    const saved = await request.patch(`/api/drama/projects/${project.id}`, {
-        data: { ...project, activeEpisodeId: episode.id, episodes: project.episodes.map((item) => (item.id === episode.id ? { ...item, reviewStatus: "visual_ready", shots: [shot] } : item)) },
+    const saved = await saveDramaProjectFixture(request, project, {
+        ...project,
+        activeEpisodeId: episode.id,
+        episodes: project.episodes.map((item) => (item.id === episode.id ? { ...item, reviewStatus: "visual_ready", shots: [shot] } : item)),
     });
     expect(saved.ok(), await saved.text()).toBe(true);
 

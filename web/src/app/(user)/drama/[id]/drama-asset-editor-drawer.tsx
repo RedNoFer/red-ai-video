@@ -111,11 +111,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
             : draftPromptAsset;
     const automaticSupplierPrompt = promptAsset && kind !== "clues" ? compileDramaAssetReferencePrompt(project, promptAsset, kind === "characters" ? "角色" : kind === "scenes" ? "场景" : "道具") : "";
     const supplierPrompt = supplierPromptOverride ?? automaticSupplierPrompt;
-    const cloneAvailable = config.channels.some((channel) =>
-        Object.values(channel.advancedConfig?.modelConfigs || {}).some(
-            (operation) => operation.audioOperation === "voice-clone" && Boolean(operation.cloneSampleField) && /\{\{\s*(?:clone_sample_url|sample_audio_url|sample_url)\s*\}\}/i.test(operation.requestTemplate || ""),
-        ),
-    );
+    const cloneAvailable = config.supportsVoiceClone;
     const voicePreviewStatus = draft.voiceProfile.previewStatus === "success" ? "试听已完成" : draft.voiceProfile.previewStatus === "error" ? "试听生成失败" : ["queued", "running"].includes(draft.voiceProfile.previewStatus || "") ? "试听生成中" : "";
     const voiceCreationActive = creatingVoice || ["queued", "running"].includes(draft.voiceProfile.creationStatus || "");
     const voicePreviewActive = syncingVoicePreview || ["queued", "running"].includes(draft.voiceProfile.previewStatus || "");

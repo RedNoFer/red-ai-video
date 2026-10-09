@@ -7,6 +7,8 @@ type MediaConcurrencyPermit = {
     setExpiryHandler: (handler: () => void | Promise<void>) => void;
 };
 
+type MediaConcurrencyWaiter = { canAcquire: () => boolean; wake: () => void };
+
 const LIMITS: Record<MediaConcurrencyScope, { total: number; perIdentity: number; leaseMs: number }> = {
     local: { total: 64, perIdentity: 8, leaseMs: 10 * 60 * 1000 },
     proxy: { total: 32, perIdentity: 4, leaseMs: 10 * 60 * 1000 },
@@ -14,10 +16,10 @@ const LIMITS: Record<MediaConcurrencyScope, { total: number; perIdentity: number
 };
 
 const globalMediaConcurrencyStore = globalThis as typeof globalThis & {
-    __vozebProMediaConcurrency?: { totals: Map<string, number>; identities: Map<string, number> };
+    __vozebProMediaConcurrency?: { totals: Map<string, number>; identities: Map<string, number>; waiters: Map<MediaConcurrencyScope, Set<MediaConcurrencyWaiter>> };
 };
 
-const counters = (globalMediaConcurrencyStore.__vozebProMediaConcurrency ??= { totals: new Map(), identities: new Map() });
+const counters = (globalMediaConcurrencyStore.__vozebProMediaConcurrency ??= { totals: new Map(), identities: new Map(), waiters: new Map() });
 
 export function acquireMediaConcurrency(scope: MediaConcurrencyScope, identity: string, overrides?: { total?: number; perIdentity?: number; leaseMs?: number }): MediaConcurrencyPermit | null {
     const defaults = LIMITS[scope];
@@ -39,6 +41,11 @@ export function acquireMediaConcurrency(scope: MediaConcurrencyScope, identity: 
         clearTimeout(timer);
         decrement(counters.totals, totalKey);
         decrement(counters.identities, identityKey);
+        for (const waiter of counters.waiters.get(scope) || new Set<MediaConcurrencyWaiter>()) {
+            if (!waiter.canAcquire()) continue;
+            waiter.wake();
+            break;
+        }
     };
     const timer = setTimeout(
         () => {
@@ -58,6 +65,14 @@ export function acquireMediaConcurrency(scope: MediaConcurrencyScope, identity: 
             else expiryHandler = handler;
         },
     };
+}
+
+export async function acquireMediaConcurrencyWhenAvailable(scope: MediaConcurrencyScope, identity: string, overrides?: { total?: number; perIdentity?: number; leaseMs?: number }) {
+    for (;;) {
+        const permit = acquireMediaConcurrency(scope, identity, overrides);
+        if (permit) return permit;
+        await waitForCapacity(scope, identity, overrides);
+    }
 }
 
 export function withMediaConcurrency(response: Response, permit: MediaConcurrencyPermit) {
@@ -93,6 +108,30 @@ export function withMediaConcurrency(response: Response, permit: MediaConcurrenc
 
 function positiveInteger(value: number | undefined, fallback: number) {
     return Number.isInteger(value) && Number(value) > 0 ? Number(value) : fallback;
+}
+
+function waitForCapacity(scope: MediaConcurrencyScope, identity: string, overrides?: { total?: number; perIdentity?: number; leaseMs?: number }) {
+    return new Promise<void>((resolve) => {
+        const waiters = counters.waiters.get(scope) || new Set<MediaConcurrencyWaiter>();
+        const waiter: MediaConcurrencyWaiter = {
+            canAcquire: () => hasCapacity(scope, identity, overrides),
+            wake: () => {
+                waiters.delete(waiter);
+                resolve();
+            },
+        };
+        waiters.add(waiter);
+        counters.waiters.set(scope, waiters);
+        if (waiter.canAcquire()) waiter.wake();
+    });
+}
+
+function hasCapacity(scope: MediaConcurrencyScope, identity: string, overrides?: { total?: number; perIdentity?: number; leaseMs?: number }) {
+    const defaults = LIMITS[scope];
+    const totalLimit = positiveInteger(overrides?.total, defaults.total);
+    const identityLimit = positiveInteger(overrides?.perIdentity, defaults.perIdentity);
+    const identityKey = `${scope}:${createHash("sha256").update(identity).digest("base64url")}`;
+    return (counters.totals.get(scope) || 0) < totalLimit && (counters.identities.get(identityKey) || 0) < identityLimit;
 }
 
 function decrement(map: Map<string, number>, key: string) {

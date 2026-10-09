@@ -75,6 +75,17 @@ export function createMediaHeadResponse(mimeType: string, bytes: number, headers
     });
 }
 
+export function isBufferedImageVariantResponse(response: Response) {
+    return (
+        response.headers.get("content-type") === "image/webp" &&
+        response.headers
+            .get("vary")
+            ?.toLowerCase()
+            .split(/\s*,\s*/)
+            .includes("accept") === true
+    );
+}
+
 export type MediaImageVariant = { format: "webp"; width: number };
 
 async function createImageVariantResponse(request: Request, filePath: string, info: { size: number; mtimeMs: number }, variant: MediaImageVariant, headers: Record<string, string>) {

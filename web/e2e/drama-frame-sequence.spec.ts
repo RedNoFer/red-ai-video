@@ -3,6 +3,7 @@ import { expect, test } from "@playwright/test";
 import { createFrameEvidence } from "../src/lib/drama-continuity-policy";
 import type { DramaProject } from "../src/lib/drama-project-contract";
 import { expectNoHorizontalOverflow } from "./responsive-helpers";
+import { saveDramaProjectFixture } from "./support";
 
 test.use({ storageState: ".e2e-data/admin-state.json" });
 
@@ -74,7 +75,7 @@ test("drama all-frame editor keeps one beat per row across desktop, mobile and d
             },
         ],
     };
-    const saved = await request.patch(`/api/drama/projects/${project.id}`, { data: seeded });
+    const saved = await saveDramaProjectFixture(request, project, seeded);
     expect(saved.ok(), await saved.text()).toBe(true);
 
     await page.setViewportSize({ width: 1672, height: 960 });
@@ -197,7 +198,7 @@ test("drama frame prompt lets users maintain asset references before optimizatio
             },
         ],
     };
-    const saved = await request.patch(`/api/drama/projects/${project.id}`, { data: seeded });
+    const saved = await saveDramaProjectFixture(request, project, seeded);
     expect(saved.ok(), await saved.text()).toBe(true);
 
     let optimizationPrompt = "";

@@ -34,7 +34,7 @@ describe("serializePublicSettings", () => {
                 baseUrl: "https://internal-provider.example/v1",
                 apiKey: "provider-secret",
                 apiFormat: "openai",
-                models: ["vendor-image"],
+                models: ["vendor-image", "voice-design"],
                 enabled: true,
                 advancedConfig: {
                     protocol: "custom",
@@ -54,6 +54,19 @@ describe("serializePublicSettings", () => {
                     supportsReferenceVideo: false,
                     supportsReferenceAudio: false,
                     modelCatalogPaths: ["/private/models"],
+                    modelCapabilities: { "voice-design": "audio" },
+                    modelConfigs: {
+                        "voice-design": {
+                            capability: "audio",
+                            protocol: "custom",
+                            createPath: "/private/voice-clone",
+                            requestTemplate: '{"sample_url":"{{clone_sample_url}}"}',
+                            audioOperation: "voice-clone",
+                            cloneSampleField: "sample_url",
+                            voiceIdField: "voice_id",
+                            previewAudioField: "trial_audio",
+                        },
+                    },
                 },
             },
         ];
@@ -75,6 +88,13 @@ describe("serializePublicSettings", () => {
                     },
                 ],
             },
+            {
+                id: "voice-clone",
+                name: "声纹克隆",
+                capability: "audio",
+                enabled: true,
+                bindings: [{ id: "binding-voice", channelId: "channel-one", upstreamModel: "voice-design", enabled: true, priority: 1 }],
+            },
         ];
         settings.site.socials = {
             email: { enabled: true, label: "邮箱", url: "mailto:owner@example.com" },
@@ -93,7 +113,7 @@ describe("serializePublicSettings", () => {
                 baseUrl: "/api/ai/system/channel-one",
                 apiKey: "system",
                 apiFormat: "openai",
-                models: ["vendor-image"],
+                models: ["vendor-image", "voice-design"],
                 enabled: true,
                 hasApiKey: true,
             },
@@ -104,6 +124,9 @@ describe("serializePublicSettings", () => {
         expect(serialized).not.toContain("smtp.internal");
         expect(serialized).not.toContain("mail-secret");
         expect(serialized).not.toContain("private/create");
+        expect(serialized).not.toContain("private/voice-clone");
+        expect(serialized).not.toContain("clone_sample_url");
+        expect(result.supportsVoiceClone).toBe(true);
         expect(serialized).not.toContain("完整指令");
         expect(result).not.toHaveProperty("mail");
         expect(result).not.toHaveProperty("agentSkills");

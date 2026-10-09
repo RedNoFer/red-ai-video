@@ -118,6 +118,7 @@ export type AiConfig = {
     videoModel: string;
     textModel: string;
     audioModel: string;
+    supportsVoiceClone: boolean;
     audioVoice: string;
     audioFormat: string;
     audioSpeed: string;
@@ -177,6 +178,7 @@ export type PublicSystemSettings = {
         textModel?: string;
         audioModel?: string;
     };
+    supportsVoiceClone?: boolean;
     systemChannels?: Array<ModelChannel & { enabled?: boolean; hasApiKey?: boolean }>;
     logicalModels?: LogicalModel[];
 };
@@ -198,6 +200,7 @@ export const defaultConfig: AiConfig = {
     videoModel: "",
     textModel: "",
     audioModel: "",
+    supportsVoiceClone: false,
     audioVoice: "alloy",
     audioFormat: "mp3",
     audioSpeed: "1",
@@ -311,6 +314,7 @@ export function applyPublicSystemSettings(config: AiConfig, settings?: PublicSys
         videoModel,
         textModel,
         audioModel,
+        supportsVoiceClone: Boolean(settings?.supportsVoiceClone),
         model: imageModel || textModel || videoModel || audioModel || "",
         systemPrompt: "",
         audioInstructions: "",

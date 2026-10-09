@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 import { applyChannelProtocol } from "../src/lib/channel-protocol-registry";
 import type { DramaProject } from "../src/lib/drama-project-contract";
-import { e2eSettingsPatch, pollTask, protocolFixtureState, resetProtocolFixture } from "./support";
+import { e2eSettingsPatch, pollTask, protocolFixtureState, resetProtocolFixture, saveDramaProjectFixture } from "./support";
 
 const REFERENCE_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAEUlEQVR4nGPQq/3/H4QZYAwAWewKpRUlAtEAAAAASUVORK5CYII=";
 
@@ -175,11 +175,9 @@ test("编辑角色视觉设定后保存并恢复全部字段", async ({ page, re
     const characterId = "character-settings-save-e2e";
 
     try {
-        const saved = await request.patch(`/api/drama/projects/${project.id}`, {
-            data: {
-                ...project,
-                characters: [{ id: characterId, name: "保存测试角色", description: "原始身份", profile: { visualIdentity: "原始外貌", styling: "原始造型", colorPalette: "原始配色", consistencyRules: "原始规则" }, references: [] }],
-            },
+        const saved = await saveDramaProjectFixture(request, project, {
+            ...project,
+            characters: [{ id: characterId, name: "保存测试角色", description: "原始身份", profile: { visualIdentity: "原始外貌", styling: "原始造型", colorPalette: "原始配色", consistencyRules: "原始规则" }, references: [] }],
         });
         expect(saved.ok(), await saved.text()).toBe(true);
 
@@ -393,12 +391,10 @@ for (const width of [1672, 1440, 390, 430]) {
             const project = ((await created.json()) as { data: { project: DramaProject } }).data.project;
             const characterId = "character-upload-primary-e2e";
             const sourceText = "x".repeat(1024 * 1024);
-            const saved = await request.patch(`/api/drama/projects/${project.id}`, {
-                data: {
-                    ...project,
-                    characters: [{ id: characterId, name: "上传测试角色", description: "用于验证上传候选确认不丢失", profile: { visualIdentity: "固定黑发" }, references: [] }],
-                    sourceAssets: [{ id: "source-large", type: "text", title: "大项目来源", textContent: sourceText }],
-                },
+            const saved = await saveDramaProjectFixture(request, project, {
+                ...project,
+                characters: [{ id: characterId, name: "上传测试角色", description: "用于验证上传候选确认不丢失", profile: { visualIdentity: "固定黑发" }, references: [] }],
+                sourceAssets: [{ id: "source-large", type: "text", title: "大项目来源", textContent: sourceText }],
             });
             expect(saved.ok(), await saved.text()).toBe(true);
 
@@ -474,11 +470,9 @@ test("删除角色候选后刷新不会被历史生图任务恢复", async ({ pa
     expect(created.ok(), await created.text()).toBe(true);
     const project = ((await created.json()) as { data: { project: DramaProject } }).data.project;
     const characterId = "character-delete-candidate-e2e";
-    const saved = await request.patch(`/api/drama/projects/${project.id}`, {
-        data: {
-            ...project,
-            characters: [{ id: characterId, name: "删除测试角色", description: "用于验证候选删除不会恢复", profile: { visualIdentity: "固定黑发" }, references: [] }],
-        },
+    const saved = await saveDramaProjectFixture(request, project, {
+        ...project,
+        characters: [{ id: characterId, name: "删除测试角色", description: "用于验证候选删除不会恢复", profile: { visualIdentity: "固定黑发" }, references: [] }],
     });
     expect(saved.ok(), await saved.text()).toBe(true);
 
@@ -538,11 +532,9 @@ test("资产生图在编辑器重开期间保持任务锁定", async ({ page, re
     expect(created.ok(), await created.text()).toBe(true);
     const project = ((await created.json()) as { data: { project: DramaProject } }).data.project;
     const propId = "prop-generation-recovery-lock-e2e";
-    const saved = await request.patch(`/api/drama/projects/${project.id}`, {
-        data: {
-            ...project,
-            props: [{ id: propId, name: "恢复锁定道具", description: "用于验证编辑器重开后仍不能重复提交", profile: { visualIdentity: "固定黑色金属道具" }, references: [] }],
-        },
+    const saved = await saveDramaProjectFixture(request, project, {
+        ...project,
+        props: [{ id: propId, name: "恢复锁定道具", description: "用于验证编辑器重开后仍不能重复提交", profile: { visualIdentity: "固定黑色金属道具" }, references: [] }],
     });
     expect(saved.ok(), await saved.text()).toBe(true);
 
@@ -627,54 +619,52 @@ test("生成调整候选通过历史方案链路完成", async ({ page, request 
     expect(uploaded.ok(), await uploaded.text()).toBe(true);
     const uploadedAsset = (await uploaded.json()) as { url: string; key?: string };
     expect(uploadedAsset.url).toContain("/api/reference-assets/");
-    const saved = await request.patch(`/api/drama/projects/${project.id}`, {
-        data: {
-            ...project,
-            characters: [
-                {
-                    id: "character-refinement-candidate-e2e",
-                    name: "历史方案角色",
-                    description: "一名需要按历史调整方案重新生成的暗黑学院青年角色",
-                    profile: { visualIdentity: "黑发青年，黑金学院长袍，完整全身设定图" },
-                    references: [
-                        {
-                            id: "reference-refinement-e2e",
-                            url: uploadedAsset.url,
-                            storageKey: uploadedAsset.key,
-                            source: "library",
-                            status: "approved",
-                            label: "主基准图",
-                            createdAt: new Date().toISOString(),
-                        },
-                    ],
-                    primaryReferenceId: "reference-refinement-e2e",
-                    refinementHistory: [
-                        {
-                            id: "refinement-e2e",
-                            request: "强化面部美感并保留全身构图",
+    const saved = await saveDramaProjectFixture(request, project, {
+        ...project,
+        characters: [
+            {
+                id: "character-refinement-candidate-e2e",
+                name: "历史方案角色",
+                description: "一名需要按历史调整方案重新生成的暗黑学院青年角色",
+                profile: { visualIdentity: "黑发青年，黑金学院长袍，完整全身设定图" },
+                references: [
+                    {
+                        id: "reference-refinement-e2e",
+                        url: uploadedAsset.url,
+                        storageKey: uploadedAsset.key,
+                        source: "library",
+                        status: "approved",
+                        label: "主基准图",
+                        createdAt: new Date().toISOString(),
+                    },
+                ],
+                primaryReferenceId: "reference-refinement-e2e",
+                refinementHistory: [
+                    {
+                        id: "refinement-e2e",
+                        request: "强化面部美感并保留全身构图",
+                        reply: "已生成调整方案",
+                        createdAt: new Date().toISOString(),
+                        proposal: {
                             reply: "已生成调整方案",
-                            createdAt: new Date().toISOString(),
-                            proposal: {
-                                reply: "已生成调整方案",
-                                changes: [
-                                    {
-                                        field: "styling",
-                                        before: "",
-                                        after: "半写实动漫幻想风的黑金学院长袍",
-                                        reason: "统一章节视觉风格",
-                                    },
-                                ],
-                                updatedDescription: "一名需要按历史调整方案重新生成的暗黑学院青年角色",
-                                updatedProfile: { visualIdentity: "黑发青年，黑金学院长袍，完整全身设定图", styling: "半写实动漫幻想风" },
-                                compiledPrompt: "用户调整要求：强化面部美感并保留全身构图\n服装与造型：半写实动漫幻想风的黑金学院长袍",
-                                negativePrompt: "避免拼版、文字和水印",
-                                preservedRules: ["完整全身构图"],
-                            },
+                            changes: [
+                                {
+                                    field: "styling",
+                                    before: "",
+                                    after: "半写实动漫幻想风的黑金学院长袍",
+                                    reason: "统一章节视觉风格",
+                                },
+                            ],
+                            updatedDescription: "一名需要按历史调整方案重新生成的暗黑学院青年角色",
+                            updatedProfile: { visualIdentity: "黑发青年，黑金学院长袍，完整全身设定图", styling: "半写实动漫幻想风" },
+                            compiledPrompt: "用户调整要求：强化面部美感并保留全身构图\n服装与造型：半写实动漫幻想风的黑金学院长袍",
+                            negativePrompt: "避免拼版、文字和水印",
+                            preservedRules: ["完整全身构图"],
                         },
-                    ],
-                },
-            ],
-        },
+                    },
+                ],
+            },
+        ],
     });
     expect(saved.ok(), await saved.text()).toBe(true);
 
@@ -702,19 +692,17 @@ test("批量完成后将基准图写入项目资产列表", async ({ page, reque
     expect(created.ok(), await created.text()).toBe(true);
     const project = ((await created.json()) as { data: { project: DramaProject } }).data.project;
     const sceneId = "scene-batch-reference-e2e";
-    const saved = await request.patch(`/api/drama/projects/${project.id}`, {
-        data: {
-            ...project,
-            scenes: [
-                {
-                    id: sceneId,
-                    name: "批量基准场景",
-                    description: "用于验证批量生成完成后列表能够显示真实基准图",
-                    profile: { visualIdentity: "完整场景空间结构与固定入口", styling: "半写实动漫幻想风", colorPalette: "冷蓝灰", consistencyRules: "入口和空间结构保持一致" },
-                    references: [],
-                },
-            ],
-        },
+    const saved = await saveDramaProjectFixture(request, project, {
+        ...project,
+        scenes: [
+            {
+                id: sceneId,
+                name: "批量基准场景",
+                description: "用于验证批量生成完成后列表能够显示真实基准图",
+                profile: { visualIdentity: "完整场景空间结构与固定入口", styling: "半写实动漫幻想风", colorPalette: "冷蓝灰", consistencyRules: "入口和空间结构保持一致" },
+                references: [],
+            },
+        ],
     });
     expect(saved.ok(), await saved.text()).toBe(true);
 
@@ -746,8 +734,9 @@ test("批量完成后将基准图写入项目资产列表", async ({ page, reque
     expect(scene?.primaryReferenceId).toBeTruthy();
     expect(scene?.references?.find((item) => item.id === scene.primaryReferenceId)).toMatchObject({ status: "approved", url: expect.stringContaining("/api/") });
 
-    const damaged = await request.patch(`/api/drama/projects/${project.id}`, {
-        data: { ...reloadedProject, scenes: reloadedProject.scenes.map((item) => (item.id === sceneId ? { ...item, primaryReferenceId: undefined, referenceImageUrl: undefined, references: [] } : item)) },
+    const damaged = await saveDramaProjectFixture(request, reloadedProject, {
+        ...reloadedProject,
+        scenes: reloadedProject.scenes.map((item) => (item.id === sceneId ? { ...item, primaryReferenceId: undefined, referenceImageUrl: undefined, references: [] } : item)),
     });
     expect(damaged.ok(), await damaged.text()).toBe(true);
 
@@ -775,11 +764,9 @@ test("批量进度取消后可以通过界面重新排队", async ({ page, reque
     expect(created.ok(), await created.text()).toBe(true);
     const project = ((await created.json()) as { data: { project: DramaProject } }).data.project;
     const propId = "prop-batch-cancel-retry-e2e";
-    const saved = await request.patch(`/api/drama/projects/${project.id}`, {
-        data: {
-            ...project,
-            props: [{ id: propId, name: "取消重试道具", description: "用于验证批量任务取消和重新排队", profile: { visualIdentity: "黑色木盒", styling: "旧木质", colorPalette: "黑棕", consistencyRules: "木盒形状保持一致" }, references: [] }],
-        },
+    const saved = await saveDramaProjectFixture(request, project, {
+        ...project,
+        props: [{ id: propId, name: "取消重试道具", description: "用于验证批量任务取消和重新排队", profile: { visualIdentity: "黑色木盒", styling: "旧木质", colorPalette: "黑棕", consistencyRules: "木盒形状保持一致" }, references: [] }],
     });
     expect(saved.ok(), await saved.text()).toBe(true);
 

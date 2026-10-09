@@ -7,10 +7,12 @@ const mocks = vi.hoisted(() => ({
     read: vi.fn(),
     isValidPath: vi.fn(),
     stream: vi.fn(),
+    isBufferedVariant: vi.fn(),
     disposition: vi.fn(),
     rate: vi.fn(),
     externalRead: vi.fn(),
     acquire: vi.fn(),
+    acquireWaiting: vi.fn(),
     wrap: vi.fn(),
     head: vi.fn(),
     release: vi.fn(),
@@ -22,10 +24,11 @@ vi.mock("@/lib/server/local-media-registry", () => ({ getLocalMediaRegistration:
 vi.mock("@/lib/server/reference-asset-store", () => ({ isReferenceAssetPath: mocks.isValidPath, readReferenceAsset: mocks.read }));
 vi.mock("@/lib/server/local-media-response", () => ({
     createLocalMediaResponse: mocks.stream,
+    isBufferedImageVariantResponse: mocks.isBufferedVariant,
     createMediaHeadResponse: mocks.head,
     mediaContentDisposition: mocks.disposition,
 }));
-vi.mock("@/lib/server/media-concurrency", () => ({ acquireMediaConcurrency: mocks.acquire, withMediaConcurrency: mocks.wrap }));
+vi.mock("@/lib/server/media-concurrency", () => ({ acquireMediaConcurrency: mocks.acquire, acquireMediaConcurrencyWhenAvailable: mocks.acquireWaiting, withMediaConcurrency: mocks.wrap }));
 vi.mock("@/lib/server/security", () => ({ checkLocalMediaRateLimit: mocks.rate, rateLimitHeaders: vi.fn(() => ({ "Retry-After": "60" })) }));
 vi.mock("@/lib/server/object-storage-service", () => ({ createExternalMediaReadUrl: mocks.externalRead }));
 
@@ -40,11 +43,13 @@ describe("reference asset access", () => {
         mocks.isValidPath.mockReturnValue(true);
         mocks.read.mockResolvedValue({ filePath: "asset.png", size: 5, mimeType: "image/png", registration: { ownerUserId: "owner" } });
         mocks.stream.mockResolvedValue(new Response("image"));
+        mocks.isBufferedVariant.mockReturnValue(false);
         mocks.registration.mockResolvedValue({ ownerUserId: "owner", mimeType: "image/png" });
         mocks.disposition.mockReturnValue('inline; filename="file.png"');
         mocks.rate.mockResolvedValue({ allowed: true, remaining: 239, resetAt: Date.now() + 60_000 });
         mocks.externalRead.mockResolvedValue("https://storage.example/signed");
         mocks.acquire.mockReturnValue({ release: mocks.release });
+        mocks.acquireWaiting.mockResolvedValue({ release: mocks.release });
         mocks.wrap.mockImplementation((response: Response) => response);
         mocks.head.mockReturnValue(new Response(null, { status: 200, headers: { "Content-Type": "image/png", "Content-Length": "5" } }));
     });
@@ -81,6 +86,16 @@ describe("reference asset access", () => {
         expect((await GET(new Request("http://localhost/api/reference-assets/permanent/2026/07/20/images/file.png"), context)).status).toBe(200);
     });
 
+    it("releases the permit after creating a buffered WebP variant", async () => {
+        mocks.getCurrentUser.mockResolvedValue({ id: "owner", role: "user" });
+        mocks.stream.mockResolvedValue(new Response("webp", { headers: { "Content-Type": "image/webp", Vary: "Accept" } }));
+        mocks.isBufferedVariant.mockReturnValue(true);
+        const response = await GET(new Request("http://localhost/api/reference-assets/permanent/2026/07/20/images/file.png?format=webp&width=960"), context);
+        expect(response.headers.get("content-type")).toBe("image/webp");
+        expect(mocks.release).toHaveBeenCalledOnce();
+        expect(mocks.wrap).not.toHaveBeenCalled();
+    });
+
     it("allows a valid short-lived signature without a login", async () => {
         mocks.verify.mockReturnValue(true);
         mocks.getCurrentUser.mockResolvedValue(null);
@@ -115,6 +130,7 @@ describe("reference asset access", () => {
         expect(response.headers.get("x-robots-tag")).toBe("noindex, nofollow, noarchive");
         expect(response.headers.get("cross-origin-resource-policy")).toBe("same-site");
         expect(mocks.read).not.toHaveBeenCalled();
+        expect(mocks.acquire).not.toHaveBeenCalled();
     });
 
     it("answers object-backed HEAD from registration metadata without creating a GET signature", async () => {
@@ -134,12 +150,12 @@ describe("reference asset access", () => {
         expect(mocks.disposition).toHaveBeenCalledWith("attachment", "generated-video", "video/quicktime", "permanent/2026/07/20/images/file.png");
     });
 
-    it("rejects excess concurrent reads before opening local media", async () => {
+    it("waits for local media capacity before streaming the asset", async () => {
         mocks.getCurrentUser.mockResolvedValue({ id: "owner", role: "user" });
-        mocks.acquire.mockReturnValue(null);
         const response = await GET(new Request("http://localhost/api/reference-assets/permanent/2026/07/20/images/file.png"), context);
-        expect(response.status).toBe(429);
-        expect(mocks.read).not.toHaveBeenCalled();
+        expect(response.status).toBe(200);
+        expect(mocks.acquireWaiting).toHaveBeenCalledWith("local", "user:owner");
+        expect(mocks.read).toHaveBeenCalled();
     });
 
     it("blocks repeated local media access before reading the file", async () => {

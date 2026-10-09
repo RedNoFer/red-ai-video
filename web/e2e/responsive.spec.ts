@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import { billingProductsFixture, expectDialogWithinViewport, expectNoHorizontalOverflow, masonryGalleryFixture, masonryLayoutIsReady, openCreativeHistory, readMasonryLayout } from "./responsive-helpers";
-import { e2eSettingsPatch } from "./support";
+import { e2eSettingsPatch, saveDramaProjectFixture } from "./support";
 import type { DramaProject } from "../src/lib/drama-project-contract";
 
 async function waitForCreativeComposerReady(page: Page) {
@@ -676,7 +676,7 @@ test("creative conversation keeps successful media rounds copy-only", async ({ p
     await expect(round.getByTestId("creative-user-avatar")).toBeVisible();
     await expect(round.getByLabel("本轮创作参数")).toContainText("e2e-image-model");
     await expect(round.getByLabel("本轮创作参数")).toContainText("1:1");
-    await expect(round.getByLabel("本轮创作参数")).toContainText("高画质");
+    await expect(round.getByLabel("本轮创作参数")).toContainText("4K 高清（模型绑定）");
 
     const result = round.getByTestId("creative-media-result");
     const primaryResult = result.getByTestId("creative-primary-result");
@@ -766,7 +766,7 @@ test("creative conversation keeps successful media rounds copy-only", async ({ p
 
     await round.getByRole("button", { name: "查看本轮创作详细信息" }).click();
     const details = page.getByText("本轮创作详情", { exact: true }).locator("..", { hasText: "e2e-image-model" });
-    await expect(details).toContainText("高画质");
+    await expect(details).toContainText("4K 高清（模型绑定）");
     await page.keyboard.press("Escape");
 
     await page.evaluate(() => localStorage.setItem("vozeb-pro:theme_store", JSON.stringify({ state: { theme: "dark" }, version: 0 })));
@@ -1041,7 +1041,7 @@ test("drama asset GPT refinement drawer stays within desktop and mobile viewport
     await createAsset.locator("textarea").first().fill("需要保持身份一致的主角");
     await createAsset.getByRole("button", { name: "创建角色" }).click();
 
-    await page.getByRole("button", { name: "编辑角色：Rifa E2E" }).click();
+    await page.getByRole("button", { name: "编辑角色：Rifa E2E" }).last().click();
     const drawer = page.getByRole("dialog", { name: "编辑角色" });
     await expect(drawer).toBeVisible();
     await expect(drawer.locator("[data-drama-asset-refinement]")).toBeVisible();
@@ -1059,20 +1059,18 @@ test("drama candidate generation does not require the approved baseline image", 
     const project = ((await created.json()) as { data: { project: DramaProject } }).data.project;
     const characterId = "character-no-reference-e2e";
     const referenceId = "reference-approved-e2e";
-    const saved = await request.patch(`/api/drama/projects/${project.id}`, {
-        data: {
-            ...project,
-            characters: [
-                {
-                    id: characterId,
-                    name: "无参考图角色",
-                    description: "用于验证普通候选生成不强制依赖基准图",
-                    profile: { visualIdentity: "短发青年" },
-                    references: [{ id: referenceId, url: "/api/reference-assets/permanent/e2e-approved.png", source: "upload", status: "approved", label: "基准图", createdAt: new Date().toISOString() }],
-                    primaryReferenceId: referenceId,
-                },
-            ],
-        },
+    const saved = await saveDramaProjectFixture(request, project, {
+        ...project,
+        characters: [
+            {
+                id: characterId,
+                name: "无参考图角色",
+                description: "用于验证普通候选生成不强制依赖基准图",
+                profile: { visualIdentity: "短发青年" },
+                references: [{ id: referenceId, url: "/api/reference-assets/permanent/e2e-approved.png", source: "upload", status: "approved", label: "基准图", createdAt: new Date().toISOString() }],
+                primaryReferenceId: referenceId,
+            },
+        ],
     });
     expect(saved.ok(), await saved.text()).toBe(true);
 
@@ -1102,7 +1100,7 @@ test("drama candidate generation does not require the approved baseline image", 
 
     await page.goto(`/drama/${project.id}`, { waitUntil: "domcontentloaded" });
     await page.getByRole("button", { name: "打开项目资产" }).click();
-    await page.getByRole("button", { name: "编辑角色：无参考图角色" }).click();
+    await page.getByRole("button", { name: "编辑角色：无参考图角色" }).last().click();
     const drawer = page.getByRole("dialog", { name: "编辑角色" });
     await drawer.getByRole("button", { name: "生成候选" }).click();
     await expect.poll(() => submittedBody).toBeTruthy();
@@ -1283,7 +1281,7 @@ test("drama shot generation previews prompt before confirmation", async ({ page 
             productionPlan: { ...seededProject.productionBible!.productionPlan!, lockedAt: undefined },
         },
     } as DramaProject;
-    const saved = await page.request.patch(`/api/drama/projects/${project.id}`, { headers: { cookie }, data: unlockedProject });
+    const saved = await saveDramaProjectFixture(page.request, project, unlockedProject, { headers: { cookie } });
     expect(saved.ok(), await saved.text()).toBe(true);
     const locked = await page.request.patch(`/api/drama/projects/${project.id}`, {
         headers: { cookie },
@@ -1411,7 +1409,7 @@ test("drama shot prompt optimization is available from the Agent menu and persis
         ...project,
         episodes: project.episodes.map((item) => (item.id === episode.id ? { ...item, reviewStatus: "visual_ready", shots: [shot] } : item)),
     } as DramaProject;
-    const saved = await page.request.patch(`/api/drama/projects/${project.id}`, { headers: { cookie }, data: seeded });
+    const saved = await saveDramaProjectFixture(page.request, project, seeded, { headers: { cookie } });
     expect(saved.ok(), await saved.text()).toBe(true);
 
     let optimizationBody: { phase?: string; shots?: Array<{ id?: string }>; referenceMaterials?: unknown[] } = {};
@@ -1502,7 +1500,7 @@ test("drama execution prompt saves through its scoped shot endpoint", async ({ p
         ...project,
         episodes: project.episodes.map((item) => (item.id === episode.id ? { ...item, reviewStatus: "visual_ready", shots: [shot] } : item)),
     } as DramaProject;
-    const seedResponse = await request.patch(`/api/drama/projects/${project.id}`, { data: seeded });
+    const seedResponse = await saveDramaProjectFixture(request, project, seeded);
     expect(seedResponse.ok(), await seedResponse.text()).toBe(true);
 
     await page.goto(`/drama/${project.id}`, { waitUntil: "domcontentloaded" });
@@ -1621,6 +1619,7 @@ test("creative workspaces remain usable without horizontal overflow in light and
             await expect(assetDrawer).toBeVisible();
             await expectDialogWithinViewport(assetDrawer);
             await assetDrawer.getByRole("button", { name: /取\s*消/ }).click();
+            await page.getByRole("button", { name: "打开项目资产" }).click();
 
             await page.getByRole("button", { name: "切换到内容审核" }).click();
             await expect(page.getByRole("heading", { name: "内容审核" })).toBeVisible();
@@ -1632,7 +1631,7 @@ test("creative workspaces remain usable without horizontal overflow in light and
             const generationLayout = await page.locator("[data-drama-generation-panel]").evaluate((element) => ({ clientWidth: element.clientWidth, scrollWidth: element.scrollWidth }));
             expect(generationLayout.scrollWidth).toBeLessThanOrEqual(generationLayout.clientWidth + 1);
             const visualPlan = page.locator("[data-drama-visual-plan]");
-            await expect(visualPlan.getByRole("button", { name: "生成本集缺失分镜帧" })).toBeVisible();
+            await expect(visualPlan.getByRole("button", { name: "可选：生成或补充分镜帧" })).toBeVisible();
             await expectNoHorizontalOverflow(page, `${dramaRoute} visual plan`);
 
             if ((page.viewportSize()?.width || 0) < 1366) {

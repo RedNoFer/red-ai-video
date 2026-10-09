@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import sharp from "sharp";
 
-import { createLocalMediaResponse, MAX_MEDIA_RANGE_BYTES, mediaContentDisposition, requestedImageVariant } from "./local-media-response";
+import { createLocalMediaResponse, isBufferedImageVariantResponse, MAX_MEDIA_RANGE_BYTES, mediaContentDisposition, requestedImageVariant } from "./local-media-response";
 
 const directory = resolve(tmpdir(), `vozeb-pro-media-response-${process.pid}-${Date.now()}`);
 const filePath = resolve(directory, "sample.mp4");
@@ -80,7 +80,10 @@ describe("local media response", () => {
         const metadata = await sharp(body).metadata();
         expect(response?.headers.get("content-type")).toBe("image/webp");
         expect(response?.headers.get("content-disposition")).toContain("sample.webp");
+        expect(isBufferedImageVariantResponse(response!)).toBe(true);
         expect(metadata).toMatchObject({ format: "webp", width: 64, height: 32 });
+        const original = await createLocalMediaResponse(new Request("http://localhost/media"), filePath, "video/mp4");
+        expect(isBufferedImageVariantResponse(original!)).toBe(false);
     });
 
     it("normalizes arbitrary preview widths to finite transform variants", () => {

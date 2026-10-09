@@ -178,7 +178,7 @@ export function DramaSourceImport({ project, onImported }: { project: DramaProje
             <Modal
                 title="导入完整制作包"
                 open={packageImportOpen}
-                width={680}
+                width={{ xs: "calc(100vw - 32px)", sm: "calc(100vw - 32px)", md: 680 }}
                 centered
                 destroyOnHidden
                 confirmLoading={previewingPackage}
@@ -220,7 +220,7 @@ export function DramaSourceImport({ project, onImported }: { project: DramaProje
             <Modal
                 title="导入整本剧本"
                 open={open}
-                width={720}
+                width={{ xs: "calc(100vw - 32px)", sm: "calc(100vw - 32px)", md: 720 }}
                 centered
                 destroyOnHidden
                 mask={{ closable: !importing }}
@@ -285,7 +285,7 @@ export function DramaSourceImport({ project, onImported }: { project: DramaProje
             <Modal
                 title="导入完整制作包"
                 open={Boolean(packagePreview)}
-                width={680}
+                width={{ xs: "calc(100vw - 32px)", sm: "calc(100vw - 32px)", md: 680 }}
                 centered
                 destroyOnHidden
                 closable={!importing}

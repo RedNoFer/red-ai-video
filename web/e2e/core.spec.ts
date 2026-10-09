@@ -1,12 +1,14 @@
 import { createHmac, randomUUID } from "node:crypto";
 
 import { expect, test, type APIRequestContext } from "@playwright/test";
-import { E2E_PAYMENT_WEBHOOK_SECRET, pollTask, protocolFixtureState, resetProtocolFixture } from "./support";
+import { E2E_PAYMENT_WEBHOOK_SECRET, e2eSettingsPatch, pollTask, protocolFixtureState, resetProtocolFixture } from "./support";
 
 test.describe.configure({ mode: "serial" });
 
 test.beforeEach(async ({ request }) => {
     await resetProtocolFixture(request);
+    const settings = await request.patch("/api/admin/settings", { data: e2eSettingsPatch() });
+    expect(settings.ok(), await settings.text()).toBe(true);
 });
 
 test("site footer deletions remain deleted after settings and public-session reloads", async ({ request }) => {

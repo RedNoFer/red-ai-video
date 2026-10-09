@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { acquireMediaConcurrency, withMediaConcurrency } from "./media-concurrency";
+import { acquireMediaConcurrency, acquireMediaConcurrencyWhenAvailable, withMediaConcurrency } from "./media-concurrency";
 
 describe("media concurrency", () => {
     it("bounds one identity and releases the permit idempotently", () => {
@@ -21,6 +21,23 @@ describe("media concurrency", () => {
         expect(first).not.toBeNull();
         expect(acquireMediaConcurrency(scope, crypto.randomUUID(), { total: 1, perIdentity: 1 })).toBeNull();
         first?.release();
+    });
+
+    it("waits for an active local read to release capacity instead of rejecting the next read", async () => {
+        const identity = crypto.randomUUID();
+        const active = acquireMediaConcurrency("local", identity, { total: 1, perIdentity: 1 });
+        let acquired = false;
+        const waiting = acquireMediaConcurrencyWhenAvailable("local", identity, { total: 1, perIdentity: 1 }).then((permit) => {
+            acquired = true;
+            return permit;
+        });
+
+        await Promise.resolve();
+        expect(acquired).toBe(false);
+        active?.release();
+        const next = await waiting;
+        expect(acquired).toBe(true);
+        next.release();
     });
 
     it("releases the permit after the response stream finishes or is cancelled", async () => {

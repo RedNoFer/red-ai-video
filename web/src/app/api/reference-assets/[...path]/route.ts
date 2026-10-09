@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 
 import { getCurrentUser } from "@/lib/auth/session";
-import { acquireMediaConcurrency, withMediaConcurrency } from "@/lib/server/media-concurrency";
+import { acquireMediaConcurrencyWhenAvailable, withMediaConcurrency } from "@/lib/server/media-concurrency";
 import { verifyReferenceAssetSignature } from "@/lib/server/reference-asset-access";
-import { createLocalMediaResponse, createMediaHeadResponse, mediaContentDisposition } from "@/lib/server/local-media-response";
+import { createLocalMediaResponse, createMediaHeadResponse, isBufferedImageVariantResponse, mediaContentDisposition } from "@/lib/server/local-media-response";
 import { getLocalMediaRegistration } from "@/lib/server/local-media-registry";
 import { createExternalMediaReadUrl } from "@/lib/server/object-storage-service";
 import { isReferenceAssetPath, readReferenceAsset } from "@/lib/server/reference-asset-store";
@@ -56,19 +56,16 @@ async function serveReferenceAsset(request: Request, context: RouteContext) {
         });
     }
 
-    const permit = acquireMediaConcurrency("local", rateIdentity);
-    if (!permit) return NextResponse.json({ code: 429, data: null, msg: "媒体并发访问过多，请稍后重试" }, { status: 429, headers: { "Retry-After": "2" } });
     if (registration.storageProvider === "object") {
         try {
             const externalUrl = await createExternalMediaReadUrl(request, registration);
-            permit.release();
             return externalUrl ? externalMediaRedirect(externalUrl) : NextResponse.json({ error: "媒体文件不存在或已过期" }, { status: 404 });
         } catch (error) {
-            permit.release();
             console.error("Reference object storage read failed", error);
             return NextResponse.json({ error: "外部存储文件读取失败" }, { status: 502 });
         }
     }
+    const permit = await acquireMediaConcurrencyWhenAvailable("local", rateIdentity);
     try {
         const asset = await readReferenceAsset(storagePath);
         if (!asset) {
@@ -87,6 +84,10 @@ async function serveReferenceAsset(request: Request, context: RouteContext) {
         if (!response) {
             permit.release();
             return NextResponse.json({ error: "媒体文件不存在或已过期" }, { status: 404 });
+        }
+        if (isBufferedImageVariantResponse(response)) {
+            permit.release();
+            return response;
         }
         return withMediaConcurrency(response, permit);
     } catch (error) {

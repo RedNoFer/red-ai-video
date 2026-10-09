@@ -1,4 +1,5 @@
 import type { APIRequestContext } from "@playwright/test";
+import type { DramaProject, DramaProjectMutation } from "../src/lib/drama-project-contract";
 
 export const E2E_ADMIN = {
     username: "e2e_admin",
@@ -118,6 +119,30 @@ export async function pollTask(request: APIRequestContext, path: string, timeout
         await new Promise((resolve) => setTimeout(resolve, 500));
     }
     throw new Error(`${path} did not reach a terminal state: ${JSON.stringify(latest)}`);
+}
+
+export async function saveDramaProjectFixture(request: APIRequestContext, current: DramaProject, next: Partial<DramaProject>, options: { headers?: Record<string, string> } = {}) {
+    const mutation: DramaProjectMutation = {
+        projectId: current.id,
+        expectedUpdatedAt: current.updatedAt,
+        updatedAt: new Date(Date.parse(current.updatedAt) + 1).toISOString(),
+    };
+    const projectFields = ["title", "summary", "style", "ratio", "status", "activeEpisodeId", "defaultVideoMode", "productionBible", "seriesBible", "productionArchive", "fieldOrigins", "sourceAssets"] as const;
+    const projectPatch = Object.fromEntries(projectFields.filter((field) => Object.hasOwn(next, field) && next[field] !== undefined).map((field) => [field, next[field]]));
+    if (Object.keys(projectPatch).length) mutation.projectPatch = projectPatch;
+
+    for (const kind of ["characters", "scenes", "props", "clues"] as const) {
+        const assets = next[kind];
+        if (!assets) continue;
+        const ids = new Set(assets.map((asset) => asset.id));
+        mutation.assets ||= {};
+        mutation.assets[kind] = { upsert: assets, remove: current[kind].filter((asset) => !ids.has(asset.id)).map((asset) => asset.id) };
+    }
+    if (next.episodes) {
+        const ids = new Set(next.episodes.map((episode) => episode.id));
+        mutation.episodes = { upsert: next.episodes, remove: current.episodes.filter((episode) => !ids.has(episode.id)).map((episode) => episode.id) };
+    }
+    return request.patch(`/api/drama/projects/${current.id}/mutations`, { ...options, data: mutation });
 }
 
 export async function resetProtocolFixture(request: APIRequestContext) {

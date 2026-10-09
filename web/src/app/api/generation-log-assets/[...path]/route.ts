@@ -4,9 +4,9 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getServerDataDir } from "@/lib/server/data-dir";
 import { canAccessGenerationAsset } from "@/lib/server/generation-log-store";
-import { createLocalMediaResponse, createMediaHeadResponse, mediaContentDisposition } from "@/lib/server/local-media-response";
+import { createLocalMediaResponse, createMediaHeadResponse, isBufferedImageVariantResponse, mediaContentDisposition } from "@/lib/server/local-media-response";
 import { getLocalMediaRegistration } from "@/lib/server/local-media-registry";
-import { acquireMediaConcurrency, withMediaConcurrency } from "@/lib/server/media-concurrency";
+import { acquireMediaConcurrencyWhenAvailable, withMediaConcurrency } from "@/lib/server/media-concurrency";
 import { createExternalMediaReadUrl } from "@/lib/server/object-storage-service";
 import { verifyGenerationAssetSignature } from "@/lib/server/reference-asset-access";
 import { checkLocalMediaRateLimit, rateLimitHeaders } from "@/lib/server/security";
@@ -53,19 +53,16 @@ async function serveGenerationAsset(request: Request, context: RouteContext) {
             "Content-Disposition": mediaContentDisposition(downloadOriginal ? "attachment" : "inline", registration.originalName || path.at(-1) || "media", registration.mimeType, downloadOriginal ? registration.storageKey || path.join("/") : ""),
         });
     }
-    const permit = acquireMediaConcurrency("local", rateIdentity);
-    if (!permit) return NextResponse.json({ error: "媒体并发访问过多，请稍后重试" }, { status: 429, headers: { "Retry-After": "2" } });
     if (registration?.storageProvider === "object") {
         try {
             const externalUrl = await createExternalMediaReadUrl(request, registration);
-            permit.release();
             return externalUrl ? externalMediaRedirect(externalUrl) : NextResponse.json({ error: "资源不存在" }, { status: 404 });
         } catch (error) {
-            permit.release();
             console.error("Generation object storage read failed", error);
             return NextResponse.json({ error: "外部存储文件读取失败" }, { status: 502 });
         }
     }
+    const permit = await acquireMediaConcurrencyWhenAvailable("local", rateIdentity);
     try {
         const mimeType = registration?.mimeType || contentType(filePath);
         const response = await createLocalMediaResponse(request, filePath, mimeType, {
@@ -75,6 +72,10 @@ async function serveGenerationAsset(request: Request, context: RouteContext) {
         if (!response) {
             permit.release();
             return NextResponse.json({ error: "资源不存在" }, { status: 404 });
+        }
+        if (isBufferedImageVariantResponse(response)) {
+            permit.release();
+            return response;
         }
         return withMediaConcurrency(response, permit);
     } catch (error) {

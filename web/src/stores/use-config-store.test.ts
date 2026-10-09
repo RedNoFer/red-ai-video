@@ -27,6 +27,13 @@ const audioSettings: PublicSystemSettings = {
 };
 
 describe("applyPublicSystemSettings", () => {
+    it("uses the safe server-provided Voice Clone capability flag", () => {
+        const config = applyPublicSystemSettings(defaultConfig, { ...audioSettings, supportsVoiceClone: true });
+
+        expect(config.supportsVoiceClone).toBe(true);
+        expect(config.channels[0]?.advancedConfig).toBeUndefined();
+    });
+
     it("does not reuse a persisted audio model when the administrator has no default", () => {
         const config = applyPublicSystemSettings({ ...defaultConfig, audioModel: "speech-v1" }, audioSettings);
 
