@@ -14,6 +14,7 @@ export type ChannelProtocolDefinition = {
     apiFormat: ApiCallFormat;
     authMode: SystemChannelAuthMode;
     defaultBaseUrl?: string;
+    documentationUrl?: string;
     modelCatalogPaths: string[];
     capabilities: LogicalModelCapability[];
     operations: Partial<Record<LogicalModelCapability, ProtocolOperation>>;
@@ -424,6 +425,19 @@ export const registeredChannelProtocolDefinitions: ChannelProtocolDefinition[] =
         strict: true,
     },
     {
+        id: "yinglingapi",
+        label: "影灵 API",
+        description: "影灵 New API 中转服务，使用 OpenAI 兼容接口；模型目录通过账号令牌读取。",
+        apiFormat: "openai",
+        authMode: "bearer",
+        defaultBaseUrl: "https://yinglingapi.com",
+        documentationUrl: "https://docs.newapi.pro/zh/docs/api",
+        modelCatalogPaths: ["/v1/models"],
+        capabilities: ["text", "image", "video", "audio"],
+        operations: openAiOperations,
+        strict: true,
+    },
+    {
         id: "newapi-video",
         label: "New API 视频（MegabyAI）",
         description: "MegabyAI New API 视频中转协议，使用 /v1/videos 提交和查询异步任务。",
@@ -688,6 +702,7 @@ export function applyChannelProtocol(channel: SystemModelChannel, protocol: Syst
             ...advanced,
             protocol,
             authMode: definition.authMode,
+            documentationUrl: advanced.documentationUrl || definition.documentationUrl,
             modelCatalogPaths: definition.modelCatalogPaths,
             ...primaryAdvanced,
             modelConfigs,

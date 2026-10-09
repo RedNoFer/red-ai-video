@@ -225,6 +225,13 @@ describe("model routing config", () => {
         ).toEqual([]);
     });
 
+    it("accepts documented OpenAI TTS routing on the 影灵 channel preset", () => {
+        const configured = applyChannelProtocol({ ...channel("yingling", ["tts-1"]), baseUrl: "https://yinglingapi.com" }, "yinglingapi");
+        const models: LogicalModel[] = [{ id: "tts-1", name: "tts-1", capability: "audio", enabled: true, bindings: [{ id: "binding", channelId: "yingling", upstreamModel: "tts-1", enabled: true, priority: 1 }] }];
+
+        expect(modelRoutingValidationErrors(models, [configured], { textModel: "", imageModel: "", videoModel: "", audioModel: "tts-1" })).toEqual([]);
+    });
+
     it("keeps an explicit audio model config on a mixed video protocol channel", () => {
         const source = channel("buming", ["gemini-3.1-flash-tts"]);
         source.advancedConfig = {

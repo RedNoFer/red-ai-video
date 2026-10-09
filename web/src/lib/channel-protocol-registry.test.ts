@@ -36,12 +36,37 @@ const channel = {
 describe("channel protocol registry", () => {
     it("exposes only active protocols and keeps SD2 separate from Stable Diffusion", () => {
         const protocols = channelProtocolOptions().map((item) => item.value);
-        expect(protocols).toEqual(["openai", "openai-audio-dialogue", "yumeng", "gemini", "seedance", "stable-diffusion", "volcengine-video", "sub2api", "newapi", "newapi-video", "buming-seedance", "buming-image", "custom", "compatible", "auto"]);
+        expect(protocols).toEqual([
+            "openai",
+            "openai-audio-dialogue",
+            "yumeng",
+            "gemini",
+            "seedance",
+            "stable-diffusion",
+            "volcengine-video",
+            "sub2api",
+            "newapi",
+            "yinglingapi",
+            "newapi-video",
+            "buming-seedance",
+            "buming-image",
+            "custom",
+            "compatible",
+            "auto",
+        ]);
         expect(protocols).not.toEqual(expect.arrayContaining(["vozeb-recommended", "seedance-special", "globalaiopc"]));
         expect(channelProtocolDefinition("openai").modelCatalogPaths).toEqual(["/v1/models"]);
         expect(channelProtocolDefinition("openai-audio-dialogue")).toMatchObject({ capabilities: ["audio"], modelCatalogPaths: ["/v1/models"], operations: { audio: { createPath: "/chat/completions" } } });
         expect(channelProtocolDefinition("sub2api").modelCatalogPaths).toEqual(["/v1/models"]);
         expect(channelProtocolDefinition("newapi").modelCatalogPaths).toEqual(["/v1/models"]);
+        expect(channelProtocolDefinition("yinglingapi")).toMatchObject({
+            label: "影灵 API",
+            defaultBaseUrl: "https://yinglingapi.com",
+            documentationUrl: "https://docs.newapi.pro/zh/docs/api",
+            authMode: "bearer",
+            modelCatalogPaths: ["/v1/models"],
+            capabilities: ["text", "image", "video", "audio"],
+        });
         expect(channelProtocolDefinition("newapi-video")).toMatchObject({
             defaultBaseUrl: "https://newapi.megabyai.cc",
             authMode: "bearer",
@@ -117,6 +142,7 @@ describe("channel protocol registry", () => {
         });
         expect(channelProtocolDefinition("sub2api").operations.image).toMatchObject({ createPath: "/images/generations", editPath: "/images/edits", requestTemplate: expect.stringContaining('"images"') });
         expect(channelProtocolDefinition("newapi").operations).toEqual(channelProtocolDefinition("openai").operations);
+        expect(channelProtocolDefinition("yinglingapi").operations).toEqual(channelProtocolDefinition("openai").operations);
         expect(channelProtocolDefinition("newapi-video").operations.video).toMatchObject({
             createPath: "/v1/videos",
             imageToVideoPath: "/v1/videos",
@@ -182,6 +208,25 @@ describe("channel protocol registry", () => {
             queryPath: "/models/:model/operations/:task_id",
             resultField: "response.generateVideoResponse.generatedSamples[0].video.uri",
             statusField: "done",
+        });
+    });
+
+    it("creates a channel draft with the 影灵 endpoint and keeps its documentation link", () => {
+        const configured = applyChannelProtocol({ ...channel, baseUrl: "" }, "yinglingapi");
+
+        expect(configured).toMatchObject({
+            name: "测试渠道",
+            baseUrl: "https://yinglingapi.com",
+            apiFormat: "openai",
+            advancedConfig: {
+                protocol: "yinglingapi",
+                authMode: "bearer",
+                modelCatalogPaths: ["/v1/models"],
+                documentationUrl: "https://docs.newapi.pro/zh/docs/api",
+            },
+        });
+        expect(normalizeSystemChannel(configured)).toMatchObject({
+            advancedConfig: { protocol: "yinglingapi", documentationUrl: "https://docs.newapi.pro/zh/docs/api" },
         });
     });
 

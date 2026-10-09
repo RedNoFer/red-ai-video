@@ -331,6 +331,7 @@ function inferProtocol(raw: string, endpoint: EndpointMatch | null, requestBody:
     if (source.includes("sub2api") || textContainsUrlHost(source, ["code2alita.com"])) return "sub2api";
     if (source.includes("modalities") && source.includes("audio") && (source.includes("/chat/completions") || source.includes("/responses"))) return "openai-audio-dialogue";
     if (source.includes("megabyai")) return "newapi-video";
+    if (textContainsUrlHost(source, ["yinglingapi.com"])) return "yinglingapi";
     if (/\bnew\s*api\b|new-api|one-api/i.test(source)) return "newapi";
     if (textContainsUrlHost(source, ["globalaiopc.com"]) || source.includes("/videos/videos") || source.includes("referenceimages")) return "custom";
     if (textContainsUrlHost(source, ["ark.cn-beijing.volces.com"])) return "volcengine-video";
@@ -501,6 +502,7 @@ function protocolLabel(protocol: SystemChannelProtocol) {
     if (protocol === "sub2api") return "sub2api";
     if (protocol === "openai-audio-dialogue") return "OpenAI Chat/Responses 音频";
     if (protocol === "newapi") return "New API";
+    if (protocol === "yinglingapi") return "影灵 API";
     if (protocol === "newapi-video") return "New API 视频";
     if (protocol === "vozeb-recommended") return "VOZEB推荐";
     if (protocol === "globalaiopc") return "GlobalAiOpc";

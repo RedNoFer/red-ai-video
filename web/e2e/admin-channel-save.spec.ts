@@ -4,6 +4,17 @@ import { applyChannelProtocol } from "../src/lib/channel-protocol-registry";
 
 test.use({ storageState: ".e2e-data/admin-state.json" });
 
+test("影灵 API 渠道向导预填地址并要求管理员提供账号密钥", async ({ page }) => {
+    await page.goto("/admin?section=channels", { waitUntil: "networkidle" });
+    await page.getByRole("button", { name: "接入新渠道" }).click();
+    await page.getByRole("button", { name: /影灵 API/ }).click();
+    await page.getByRole("button", { name: "开始配置" }).click();
+
+    await expect(page.getByLabel("Base URL")).toHaveValue("https://yinglingapi.com");
+    await expect(page.getByLabel("API Key")).toBeVisible();
+    await expect(page.getByRole("button", { name: "下一步" })).toBeDisabled();
+});
+
 test("管理员保存时会修复旧版 TokenGo Seedance 模板", async ({ page, request }) => {
     const current = await request.get("/api/admin/settings");
     expect(current.ok(), await current.text()).toBe(true);

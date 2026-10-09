@@ -11,6 +11,7 @@ const CHANNEL_PROTOCOLS: SystemChannelProtocol[] = [
     "gemini",
     "sub2api",
     "newapi",
+    "yinglingapi",
     "newapi-video",
     "vozeb-recommended",
     "globalaiopc",

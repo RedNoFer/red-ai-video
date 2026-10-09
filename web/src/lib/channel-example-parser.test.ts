@@ -54,6 +54,14 @@ describe("parseChannelExampleConfig", () => {
         expect(result?.patch.advancedConfig).toMatchObject({ imageToVideoPath: "/videos", queryPath: "/videos/:task_id" });
     });
 
+    it("recognizes the 影灵 API host as its New API-compatible protocol", () => {
+        const channel = { id: "one", name: "测试", baseUrl: "", apiKey: "", apiFormat: "openai", models: [], enabled: false } satisfies SystemModelChannel;
+        const result = parseChannelExampleConfig('curl https://yinglingapi.com/v1/chat/completions -d {"model":"writer-v1","messages":[]}', channel, advanced);
+
+        expect(result?.patch.advancedConfig?.protocol).toBe("yinglingapi");
+        expect(result?.patch.baseUrl).toBe("https://yinglingapi.com/v1");
+    });
+
     it.each([
         ["https://api.code2alita.com/v1/video/generations", "sub2api"],
         ["https://api.globalaiopc.com/v1/video/generations", "custom"],

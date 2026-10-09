@@ -159,7 +159,7 @@ export function assertVideoReferenceRoles(config: SystemChannelAdvancedConfig | 
                   ? templateVideoReferenceRoles(config?.requestTemplate)
                   : protocol === "newapi-video"
                     ? ["reference"]
-                    : protocol === "openai" || protocol === "newapi" || protocol === "sub2api" || protocol === "openai-audio-dialogue"
+                    : protocol === "openai" || protocol === "newapi" || protocol === "yinglingapi" || protocol === "sub2api" || protocol === "openai-audio-dialogue"
                       ? ["reference", "first_frame"]
                       : protocol === "custom" || protocol === "compatible" || protocol === "auto"
                         ? templateVideoReferenceRoles(config?.requestTemplate)

@@ -358,7 +358,7 @@ function audioBindingValidationError(channel: SystemModelChannel, model: string)
 }
 
 function isOpenAiSpeechProtocol(protocol: SystemChannelProtocol | undefined) {
-    return protocol === "openai" || protocol === "sub2api" || protocol === "newapi" || protocol === "compatible";
+    return protocol === "openai" || protocol === "sub2api" || protocol === "newapi" || protocol === "yinglingapi" || protocol === "compatible";
 }
 
 function isOpenAiAudioDialogueProtocol(protocol: SystemChannelProtocol | undefined) {

@@ -15,6 +15,7 @@ export type SystemChannelProtocol =
     | "gemini"
     | "sub2api"
     | "newapi"
+    | "yinglingapi"
     | "newapi-video"
     | "vozeb-recommended"
     | "globalaiopc"

@@ -17,7 +17,7 @@ describe("text planning runtime protocol matrix", () => {
         vi.useRealTimers();
     });
 
-    it.each(["openai", "sub2api", "newapi"] as const)("%s 严格预设直接使用基础 Chat", async (protocol) => {
+    it.each(["openai", "sub2api", "newapi", "yinglingapi"] as const)("%s 严格预设直接使用基础 Chat", async (protocol) => {
         mockedFetch.mockResolvedValue(chatJsonResponse());
 
         const result = await requestStructuredText(requestInput(candidate(protocol, { createPath: "/responses" })));

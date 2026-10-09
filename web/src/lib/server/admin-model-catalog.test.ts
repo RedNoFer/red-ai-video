@@ -86,6 +86,12 @@ describe("admin model catalog", () => {
         ]);
     });
 
+    it("recognizes 影灵 model metadata protocol identifiers", () => {
+        expect(parseModelConfigs({ data: [{ id: "writer-v1", protocol: "yinglingapi", endpoint: "/chat/completions" }] })).toEqual({
+            "writer-v1": { capability: "text", protocol: "yinglingapi", createPath: "/chat/completions", source: "provider" },
+        });
+    });
+
     it("uses a single-capability protocol catalog before model-name inference", () => {
         const payload = { data: [{ id: "opaque-model", object: "model" }] };
 
