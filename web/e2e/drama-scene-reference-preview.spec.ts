@@ -55,10 +55,10 @@ test("场景参考图弹窗在桌面和窄屏保持可用尺寸并支持放大�
         await drawer.getByRole("img", { name: "弹窗测试场景图，点击预览完整基准图", exact: true }).click();
         const modal = page.locator(".ant-modal").filter({ hasText: "弹窗测试场景图" }).last();
         await expect(modal).toBeVisible();
-        const modalBox = await modal.boundingBox();
         const viewport = page.viewportSize();
         expect(viewport).toBeTruthy();
-        expect(modalBox?.width).toBeGreaterThan((viewport?.width || 0) - 48);
+        await expect.poll(async () => (await modal.boundingBox())?.width || 0).toBeGreaterThan((viewport?.width || 0) - 48);
+        const modalBox = await modal.boundingBox();
         expect(modalBox?.width).toBeLessThanOrEqual(viewport?.width || 0);
         await expect(modal.locator(".ant-image img")).toHaveAttribute("src", /format=webp.*width=2048/);
 
