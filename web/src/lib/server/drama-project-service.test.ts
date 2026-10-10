@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
 
 import type { DramaProject } from "@/lib/drama-project-contract";
 import { createFrameEvidence } from "@/lib/drama-continuity-policy";
@@ -98,6 +99,10 @@ vi.mock("@/lib/server/creative-review-service", () => ({ reviewCreativeOutputs: 
 
 import {
     acceptDramaStoryboardFrameForUser,
+    applyDramaProductionPackageForUser,
+    applyDramaEpisodeProductionPackageForUser,
+    previewDramaProductionPackageForUser,
+    previewDramaScriptProductionPackageForUser,
     reviewDramaStoryboardFrameForUser,
     createDramaProjectForUser,
     applyDramaVisualStepResult,
@@ -186,6 +191,89 @@ describe("drama project service updates", () => {
         expect(mocks.updateDramaProjectScopedMutation).not.toHaveBeenCalled();
         expect(mocks.createDramaProjectVersion).not.toHaveBeenCalled();
         expect(mocks.queryStoredGenerationTasks).not.toHaveBeenCalled();
+    });
+
+    it("imports against the latest autosaved project, preserves fixed assets, and reads authored prose without a repair write", async () => {
+        const source = readFileSync(new URL("../../../../docs/drama-production-package-v1-field-example.json", import.meta.url), "utf8");
+        const current = project("2026-10-11T00:00:00.000Z", "导入项目");
+        current.episodes[0].code = "E02";
+        const preview = previewDramaProductionPackageForUser({ source, fileName: "example.json" }, {}, current);
+        const latest = structuredClone(current);
+        latest.updatedAt = "2026-10-11T00:00:01.000Z";
+        latest.characters = [{ id: "fixed-linxue", code: "C01", name: "林雪", description: "人工外套颜色与材质", fieldOrigins: { description: "manual" } }];
+        mocks.getDramaProject.mockResolvedValue(latest);
+        const saved = await applyDramaProductionPackageForUser("user-one", latest.id, { source, fileName: "example.json", sourceHash: preview.sourceHash, episodeImportMode: "merge" });
+        expect(saved.episodes).toHaveLength(2);
+        expect(saved.characters[0]).toMatchObject({ id: "fixed-linxue", description: "人工外套颜色与材质" });
+        const authored = JSON.parse(source).episodes[0].shots[0];
+        expect(saved.episodes.find((episode) => episode.code === "E01")?.shots[0]).toMatchObject({ videoPrompt: authored.videoPrompt, dialogue: authored.dialogue, framePlan: { frames: authored.framePlan.frames } });
+        expect(mocks.createDramaProjectVersion).toHaveBeenCalledWith("user-one", latest.id, "完整制作包导入前", latest);
+        mocks.getDramaProject.mockResolvedValue(saved);
+        const writes = mocks.updateDramaProject.mock.calls.length;
+        expect(await getDramaProjectForUser("user-one", latest.id)).toBe(saved);
+        expect(mocks.updateDramaProject.mock.calls.length).toBe(writes);
+    });
+
+    it("applies a quality-blocked external package to one episode without internal run credentials", async () => {
+        const source = readFileSync(new URL("../../../../docs/drama-production-package-v1-field-example.json", import.meta.url), "utf8");
+        const current = project("2026-10-11T00:00:00.000Z", "单集导入");
+        current.episodes[0].code = "E01";
+        current.episodes.push({ ...structuredClone(current.episodes[0]), id: "episode-two", code: "E02", title: "保留第二集" });
+        const preview = previewDramaScriptProductionPackageForUser({ source, fileName: "example.json" }, current);
+        mocks.getDramaProject.mockResolvedValue(current);
+        const saved = await applyDramaEpisodeProductionPackageForUser("user-one", current.id, "episode-one", { source, fileName: "example.json", sourceHash: preview.sourceHash });
+        expect(saved.episodes.map((episode) => episode.id)).toEqual(["episode-one", "episode-two"]);
+        expect(saved.episodes[0].shots[0].videoPrompt).toBe(JSON.parse(source).episodes[0].shots[0].videoPrompt);
+        expect(saved.episodes[1].title).toBe("保留第二集");
+    });
+
+    it.each(["frame", "dialogue", "entryState"])("marks media stale after a %s edit and retains the media and evidence", async (field) => {
+        const source = readFileSync(new URL("../../../../docs/drama-production-package-v1-field-example.json", import.meta.url), "utf8");
+        const current = project("2026-10-11T00:00:00.000Z", "同帧修订");
+        mocks.getDramaProject.mockResolvedValue(current);
+        const preview = previewDramaProductionPackageForUser({ source, fileName: "example.json" }, {}, current);
+        const imported = await applyDramaProductionPackageForUser("user-one", current.id, { source, fileName: "example.json", sourceHash: preview.sourceHash });
+        const shot = imported.episodes[0].shots[0];
+        shot.storyboardFrames = [{ id: "F01", sequenceIndex: 1, source: "generated", status: "success", mediaUrl: "/api/retained.png", continuityStatus: "passed" }];
+        shot.frameEvidence = [createFrameEvidence({ id: "evidence", role: "storyboard_start", source: "generated", mediaUrl: "/api/retained.png", validity: "accepted" })];
+        const edited = structuredClone(imported);
+        edited.updatedAt = new Date(Date.parse(imported.updatedAt) + 1).toISOString();
+        if (field === "frame") edited.episodes[0].shots[0].framePlan!.frames[0].imagePrompt += "\n修订可见袖口材质。";
+        if (field === "dialogue") edited.episodes[0].shots[0].utterances[0].text = "把信留下，别说话。";
+        if (field === "entryState") edited.episodes[0].shots[0].entryState!.environment = "门外长案，西窗方向不变";
+        mocks.getDramaProject.mockResolvedValue(imported);
+        const saved = await updateDramaProjectForUser("user-one", current.id, edited);
+        expect(saved.episodes[0].shots[0].storyboardFrames?.[0]).toMatchObject({ id: "F01", mediaUrl: "/api/retained.png", status: "stale" });
+        expect(saved.episodes[0].shots[0].frameEvidence?.[0]).toMatchObject({ id: "evidence", mediaUrl: "/api/retained.png", validity: "superseded" });
+    });
+
+    it("retains generated media during package re-import while invalidating evidence for changed author facts", async () => {
+        const source = readFileSync(new URL("../../../../docs/drama-production-package-v1-field-example.json", import.meta.url), "utf8");
+        const current = project("2026-10-11T00:00:00.000Z", "制作包修订");
+        mocks.getDramaProject.mockResolvedValue(current);
+        const first = previewDramaProductionPackageForUser({ source, fileName: "example.json" }, {}, current);
+        const imported = await applyDramaProductionPackageForUser("user-one", current.id, { source, fileName: "example.json", sourceHash: first.sourceHash });
+        const shot = imported.episodes[0].shots[0];
+        shot.storyboardImageUrl = "/api/retained-start.png";
+        shot.storyboardStatus = "success";
+        shot.storyboardFrames = [{ id: "F01", sequenceIndex: 1, source: "generated", status: "success", mediaUrl: "/api/retained.png" }];
+        shot.frameEvidence = [createFrameEvidence({ id: "evidence", role: "storyboard_start", source: "generated", mediaUrl: "/api/retained.png", validity: "accepted" })];
+        shot.executionVideoPrompt = "旧的自动执行提示词";
+        shot.fieldOrigins = { ...shot.fieldOrigins, executionVideoPrompt: "ai" };
+        const changed = JSON.parse(source);
+        changed.episodes[0].shots[0].framePlan.frames[0].imagePrompt += "\n可见袖口材质修订。";
+        const nextSource = JSON.stringify(changed);
+        const next = previewDramaProductionPackageForUser({ source: nextSource, fileName: "example.json" }, {}, imported);
+        mocks.getDramaProject.mockResolvedValue(imported);
+        const saved = await applyDramaProductionPackageForUser("user-one", current.id, { source: nextSource, fileName: "example.json", sourceHash: next.sourceHash });
+        expect(saved.episodes[0].shots[0]).toMatchObject({
+            id: shot.id,
+            storyboardImageUrl: "/api/retained-start.png",
+            storyboardStatus: "stale",
+            storyboardFrames: [{ id: "F01", mediaUrl: "/api/retained.png", status: "stale" }],
+            frameEvidence: [{ id: "evidence", mediaUrl: "/api/retained.png", validity: "superseded" }],
+        });
+        expect(saved.episodes[0].shots[0].executionVideoPrompt).toBeUndefined();
     });
 
     it("applies a sparse field mutation on the server without replacing unrelated project data", async () => {
@@ -2428,7 +2516,7 @@ describe("drama project service updates", () => {
 
         const saved = await updateDramaProjectForUser("user-one", current.id, input);
 
-        expect(saved.episodes[0].shots[0]).toMatchObject({ storyboardStatus: "idle", storyboardImageUrl: undefined, storyboardImageUrls: undefined, storyboardImageRemoteUrl: undefined });
+        expect(saved.episodes[0].shots[0]).toMatchObject({ storyboardStatus: "stale", storyboardImageUrl: "/api/old.png", storyboardImageUrls: ["/api/old.png"], storyboardImageRemoteUrl: "https://provider.example/old.png" });
         expect(saved.episodes[0].shots[0].frameEvidence?.[0]).toMatchObject({ validity: "superseded", invalidReason: "镜头状态、连续性边或引用帧已变化" });
     });
 

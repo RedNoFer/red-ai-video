@@ -37,7 +37,12 @@ export function DramaSourceImport({ project, onImported }: { project: DramaProje
     const open = drafts.length > 0;
     const downloadPackage = (format: "json" | "markdown") => {
         if (!packagePreview) return;
-        const content = format === "json" ? serializeDramaProductionPackageJson(packagePreview.package) : serializeDramaProductionPackageMarkdown(packagePreview.package);
+        const content =
+            format === "markdown" && packagePreview.format === "markdown" && packagePreview.package.authoring?.source === "codex-standalone"
+                ? packageSource
+                : format === "json"
+                  ? serializeDramaProductionPackageJson(packagePreview.package)
+                  : serializeDramaProductionPackageMarkdown(packagePreview.package);
         const url = URL.createObjectURL(new Blob([content], { type: format === "json" ? "application/json;charset=utf-8" : "text/markdown;charset=utf-8" }));
         const anchor = document.createElement("a");
         anchor.href = url;
@@ -137,7 +142,7 @@ export function DramaSourceImport({ project, onImported }: { project: DramaProje
         if (importWarnings.length && !warningsConfirmed) {
             modal.confirm({
                 title: "制作包存在识别警告",
-                content: `制作包存在 ${importWarnings.length} 项兼容性提示，系统会保留可识别内容并允许继续导入；不受当前运行时确认的 authoring 凭据不会被当作正式生成凭据。是否仍要导入？`,
+                content: `制作包存在 ${importWarnings.length} 项质量或一致性提醒，确认后可继续导入。系统会保留作者公开原稿和已有人工字段，不自动补台词、追加声音说明或改写风格。`,
                 okText: "仍然导入",
                 cancelText: "返回检查",
                 centered: true,

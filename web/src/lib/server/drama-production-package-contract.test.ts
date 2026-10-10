@@ -40,6 +40,13 @@ describe("drama production package contract compilation", () => {
         for (const gateCode of DRAMA_PACKAGE_GATE_CODES) expect(template).toContain(`\`${gateCode}\``);
         for (const title of DRAMA_PACKAGE_SECTIONS) expect(template).toContain(title);
     });
+
+    it("publishes the field guide and tested JSON from the same canonical documentation bytes", () => {
+        for (const name of ["drama-production-package-v1-fields.md", "drama-production-package-v1-field-example.json"])
+            expect(readFileSync(new URL(`../../../public/${name}`, import.meta.url), "utf8")).toBe(readFileSync(new URL(`../../../../docs/${name}`, import.meta.url), "utf8"));
+        expect(template).toContain("drama-production-package-v1-fields.md");
+        expect(docs).not.toContain("三视图");
+    });
 });
 
 function section(value: string, heading: string) {

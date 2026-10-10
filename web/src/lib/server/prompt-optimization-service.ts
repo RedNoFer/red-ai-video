@@ -263,8 +263,7 @@ function enforceDramaAssetPromptContract(sourcePrompt: string, prompt: string, f
 
 function applyVisualContractToOptimizedPrompt(prompt: string, mode: "drama-frame" | "video", visualContract?: DramaGlobalVisualContract) {
     if (!prompt || !visualContract || !Object.values(visualContract).some((value) => value.trim())) return prompt;
-    const visual = formatDramaGlobalVisualContract(visualContract);
-    const authority = `项目视觉合同（唯一风格来源）：${visual}`;
+    const authority = formatDramaGlobalVisualContract(visualContract);
     const normalized = formatPromptFieldLines(prompt, mode === "video" ? "video" : "static");
     const lines = normalized.split("\n");
     let replaced = false;

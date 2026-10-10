@@ -89,10 +89,20 @@ export function continuityStateChangeIsIntentional(previous: ContinuityEntity, n
 function validateEpisodeContinuityEdges(episode: DramaProductionPackageEpisode): ContinuityIssue[] {
     const shots = new Map(episode.shots.map((shot) => [shot.code, shot]));
     const issues: ContinuityIssue[] = [];
+    for (let index = 1; index < episode.shots.length; index += 1) {
+        const fromShotCode = episode.shots[index - 1].code;
+        const toShotCode = episode.shots[index].code;
+        if (!episode.continuityEdges.some((edge) => edge.fromShotCode === fromShotCode && edge.toShotCode === toShotCode))
+            issues.push({ episodeCode: episode.code, fromShotCode, toShotCode, message: "缺少相邻片段连接；必须登记连续、换场、跳时或省略及其依据，不能视为已检查通过" });
+    }
     for (const edge of episode.continuityEdges) {
         const from = shots.get(edge.fromShotCode);
         const to = shots.get(edge.toShotCode);
-        if (!from || !to || !from.exitState || !to.entryState) continue;
+        if (!from || !to || !from.exitState || !to.entryState) {
+            issues.push(issue(episode.code, edge, "连续性连接无效或缺少出口/入口状态，尚未完成检查"));
+            continue;
+        }
+        if (edge.transition !== "continuous" && edge.transition !== "hard_cut" && !edge.notes?.trim()) issues.push(issue(episode.code, edge, "非连续转换缺少换场、跳时或省略依据"));
         const firstFrame = to.framePlan?.frames[0];
         const firstFrameText = firstFrame ? [firstFrame.startPrompt, firstFrame.actionPrompt, firstFrame.transitionPrompt, firstFrame.endPrompt, firstFrame.imagePrompt].filter(Boolean).join("\n") : "";
         const previousCharacters = new Map(from.exitState.characters.map((item) => [item.assetId, item]));

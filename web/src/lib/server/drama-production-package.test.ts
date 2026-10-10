@@ -153,7 +153,7 @@ describe("production package boundary", () => {
                 shotCode: "SH01",
             },
         ];
-        expect(() => previewDramaProductionPackage(serializeDramaProductionPackageMarkdown(underCapacity), "codex-standalone.md", undefined, { allowImportWarnings: true, enforceExecutionContract: true })).toThrow("对白容量不足");
+        expect(previewDramaProductionPackage(serializeDramaProductionPackageMarkdown(underCapacity), "codex-standalone.md", undefined, { allowImportWarnings: true, enforceExecutionContract: true }).warnings.join("\n")).toContain("对白容量不足");
     });
 
     it("records and requires Agent authoring provenance for the formal generation path", () => {
@@ -1243,13 +1243,12 @@ describe("production package boundary", () => {
         targetProject.style = "西方写实 CG 电影质感，冷蓝灰与旧银，真实材质";
         targetProject.productionBible = { ...targetProject.productionBible!, visualStyle: targetProject.style, colorScript: "冷蓝灰与旧银" };
         const effectivePreview = previewDramaProductionPackage(JSON.stringify(source), "codex-standalone.md", targetProject, { allowImportWarnings: false, preserveAuthoredVideoPrompt: true });
-        expect(effectivePreview.package.episodes[0].shots[0].videoPrompt).not.toBe(authoredVideoPrompt);
-        expect(effectivePreview.package.episodes[0].shots[0].videoPrompt).toContain(targetProject.style);
-        expect(effectivePreview.warnings).toContain("已按当前项目视觉合同重新编译角色、场景、道具、静态帧和视频提示词；制作包历史风格仅保留为来源记录。");
+        expect(effectivePreview.package.episodes[0].shots[0].videoPrompt).toBe(authoredVideoPrompt);
+        expect(effectivePreview.warnings.join("\n")).toContain("视觉合同不同");
 
         const applied = applyDramaProductionPackage(targetProject, effectivePreview.package, "hash-standalone-style", JSON.stringify(source), "codex-standalone.md", { validatedStandalonePackage: true });
         expect(applied.sourceAssets?.at(-1)?.textContent).toBe(JSON.stringify(source));
-        expect(applied.episodes[0].shots[0].videoPrompt).toContain(targetProject.style);
+        expect(applied.episodes[0].shots[0].videoPrompt).toBe(authoredVideoPrompt);
     });
 
     it("rejects non-contract episode and shot aliases before normalization", () => {

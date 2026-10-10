@@ -1,3 +1,5 @@
+import { normalizeDramaSpeaker } from "@/lib/drama-source-dialogue";
+
 export const DRAMA_DIALOGUE_CHARS_PER_SECOND = 5;
 export const DRAMA_DIALOGUE_TIMING_TOLERANCE_CHARS = 10;
 
@@ -16,7 +18,7 @@ export type DramaDialogueTimingInput = {
     speechRateCharsPerSecond?: number;
 };
 
-const QUOTED_DRAMA_DIALOGUE_PATTERN = /(?:^|[\n；;：:])\s*(?:对白表演\s*[：:]\s*)?([^：:；;\n]{1,32}?)\s*说\s*[：:]\s*“([^”\n]{1,240})”/gu;
+const QUOTED_DRAMA_DIALOGUE_PATTERN = /(?:^|(?<=[\n；;：:”]))\s*(?:对白表演\s*[：:]\s*)?([^：:；;\n“”]+?)\s*说\s*[：:]\s*“([^”]+)”/gu;
 
 export type QuotedDramaDialogue = { speaker: string; text: string };
 
@@ -81,7 +83,7 @@ export function hasQuotedDramaDialogue(value: string, speaker?: string, text?: s
     return extractQuotedDramaDialogues(value).some((match) => {
         const actualSpeaker = match.speaker.replace(/\s+/gu, "");
         const actualText = match.text.replace(/\s+/gu, "");
-        return (!expectedSpeaker || actualSpeaker.includes(expectedSpeaker)) && (!expectedText || actualText.includes(expectedText));
+        return (!expectedSpeaker || normalizeDramaSpeaker(actualSpeaker) === normalizeDramaSpeaker(expectedSpeaker)) && (!expectedText || actualText.includes(expectedText));
     });
 }
 

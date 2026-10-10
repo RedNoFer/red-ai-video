@@ -79,14 +79,10 @@ describe("prompt optimization service", () => {
             arguments: JSON.stringify({
                 optimizedPrompt: [
                     "静态关键帧：Karin站在无波黑湖边，手掌压住断剑",
-                    "可见状态：指节发白，断剑贴在掌心",
-                    "可见表演状态：眉心收紧，视线锁定断口，肩背绷直",
-                    "景别：中远景",
-                    "机位与构图：视线高度平视，主体位于画面右侧，前景有枯枝",
-                    "站位与视线：Karin站在湖岸右侧，身体朝向断剑，视线落向断口",
-                    "三层空间：前景枯枝，中景Karin与断剑，背景倒悬古塔和无波湖面",
-                    "光色与风格：冷白侧光，保留雪地与金属材质纹理",
-                    "负面约束：无字幕、无水印、无logo、无HUD、无额外主体",
+                    "可见状态：Karin站立，指节发白，断剑贴在掌心，视线锁定断口",
+                    "构图与空间：中远景，视线高度平视，主体位于画面右侧，前景枯枝，中景Karin与断剑，背景倒悬古塔和无波湖面",
+                    "光色与风格：旧东方古风国漫",
+                    "针对性约束：无字幕、无水印、无logo、无HUD、无额外主体",
                 ].join("\n"),
             }),
             headers: new Headers(),
@@ -125,7 +121,7 @@ describe("prompt optimization service", () => {
         expect(systemMessage).toContain("全局画风规格：克制电影级空间美术");
         expect(systemMessage).toContain("全局负面约束：不要现代灯具");
         vi.mocked(requestStructuredText).mockResolvedValueOnce({
-            arguments: JSON.stringify({ optimizedPrompt: "画面主体：人物站在空间中\n可见状态：抬眼看向门口\n构图与空间：主体位于画面中央，门口在后景\n光色与风格：旧东方古风国漫" }),
+            arguments: JSON.stringify({ optimizedPrompt: "画面主体：Karin站在城门前\n可见状态：双脚站定，双手垂落，视线落在门口\n构图与空间：主体位于画面中央，门口在后景\n光色与风格：旧东方古风国漫" }),
             headers: new Headers(),
             protocol: "chat",
             elapsedMs: 10,
@@ -139,7 +135,7 @@ describe("prompt optimization service", () => {
             mode: "drama-frame",
             visualContract: { visualStyle: "西方CG电影级写实幻想", artStyle: "physically based 3D", colorScript: "冷蓝灰与旧银", globalNegativePrompt: "不要旧风格材质" },
         });
-        expect(result).toContain("项目视觉合同（唯一风格来源）：");
+        expect(result).not.toContain("东方写实摄影");
         expect(result).toContain("西方CG电影级写实幻想");
         expect(result).not.toContain("旧东方古风国漫");
     });

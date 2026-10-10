@@ -66,10 +66,13 @@ import { DRAMA_VIDEO_DIRECTOR_SKILL } from "@/lib/server/agent-skills/drama-vide
 import { SEEDANCE_25_DIRECTOR_SKILL } from "@/lib/server/agent-skills/seedance-25";
 import { DRAMA_PACKAGE_CONTRACT, DRAMA_PACKAGE_CONTRACT_ID, DRAMA_PACKAGE_CONTRACT_VERSION, DRAMA_PACKAGE_GATE_CODES } from "@/lib/server/drama-production-package-contract";
 import { validateDramaAuthoringQuality } from "@/lib/server/drama-production-package-quality";
+import { reviewDramaPackage } from "@/lib/drama-package-review";
+import { preserveDramaAuthoredText } from "@/lib/drama-authored-text";
+import { dramaDenseHardCutIssues } from "@/lib/drama-prompt-quality";
 
 export class DramaProductionPackageError extends Error {}
 
-type DramaProjectAssetCollection = Pick<DramaProject, "title" | "style" | "ratio" | "productionBible" | "characters" | "scenes" | "props" | "clues">;
+type DramaProjectAssetCollection = Pick<DramaProject, "title" | "style" | "ratio" | "productionBible" | "characters" | "scenes" | "props" | "clues"> & Partial<Pick<DramaProject, "episodes">>;
 
 export type DramaProductionPackageNormalizationOptions = {
     validateVideoPrompt?: boolean;
@@ -82,7 +85,7 @@ export type DramaProductionPackageNormalizationOptions = {
     allowImportWarnings?: boolean;
     /** Enforce the current authoring continuity contract before state synchronization. */
     strictContinuity?: boolean;
-    /** Keep standalone Codex videoPrompt bytes unchanged only for source-only previews without a target project. */
+    /** Keep external author text unchanged, including project-scoped imports. */
     preserveAuthoredVideoPrompt?: boolean;
     /** Internal boundary: standalone imports perform structural safety checks only. */
     standaloneImport?: boolean;
@@ -269,13 +272,25 @@ function mergeProjectAssetCollection(incoming: DramaProductionPackageAsset[], ex
 export function previewDramaProductionPackage(source: string, fileName = "production-package.json", project?: DramaProjectAssetCollection, options: DramaProductionPackageNormalizationOptions = {}): DramaProductionPackagePreview {
     const trimmed = source.trim();
     if (!trimmed) throw new DramaProductionPackageError("制作包内容不能为空");
-    const embedded = trimmed.match(/```(?:json|drama-production-package)[ \t]*\r?\n([\s\S]*?)```/i)?.[1];
+    const packageBlocks = [...trimmed.matchAll(/```drama-production-package[ \t]*\r?\n([\s\S]*?)```/gu)];
+    if (packageBlocks.length > 1) throw new DramaProductionPackageError("制作包只能包含一个 drama-production-package JSON 代码块");
+    const embedded = packageBlocks[0]?.[1] || trimmed.match(/```json[ \t]*\r?\n([\s\S]*?)```/i)?.[1];
     const format = fileName.toLowerCase().endsWith(".json") || trimmed.startsWith("{") ? "json" : "markdown";
     // The serialized Markdown embeds the canonical package object. Prefer it so
     // preview and apply use the same normalized source of truth.
     const parsed = format === "markdown" ? parseObject(embedded || "") || parseObject((embedded || "").replace(/\\u0060/gu, "`")) : parseObject(trimmed);
     if (!parsed) throw new DramaProductionPackageError("Markdown 制作包必须嵌入标准清单 JSON；不会从旧镜头表重建制作包");
-    return previewDramaProductionPackageObject(parsed, project, options, createHash("sha256").update(source).digest("hex"), format);
+    const preview = previewDramaProductionPackageObject(parsed, project, options, createHash("sha256").update(source).digest("hex"), format);
+    if (preview.package.authoring?.source === "codex-standalone" && format === "markdown") {
+        if (packageBlocks.length !== 1) throw new DramaProductionPackageError("独立制作包必须有唯一 drama-production-package JSON 代码块");
+        const report = reviewDramaPackage(preview.package, source);
+        const chapterErrors = report.checks.filter((check) => check.code === "PACKAGE_SCHEMA" && (check.evidence.includes("章节缺失或顺序错误") || check.scope === "章节结构"));
+        if (chapterErrors.length) throw new DramaProductionPackageError(chapterErrors.map((check) => check.evidence).join("；"));
+        const warnings = report.checks.filter((check) => check.status !== "passed").map((check) => `${check.scope}：${check.evidence}；${check.fixHint}`);
+        preview.importWarnings = [...new Set([...(preview.importWarnings || []), ...warnings])];
+        preview.warnings = [...new Set([...preview.warnings, ...warnings])];
+    }
+    return preview;
 }
 
 /**
@@ -297,6 +312,34 @@ export function previewDramaProductionPackageObject(
     const packageWithProjectAssets = project ? mergeProjectAssetsIntoProductionPackage(parsed as DramaProductionPackageV1, project, importWarnings) : parsed;
     const normalizedPackage = normalizeProductionPackage(packageWithProjectAssets, { ...options, importWarnings });
     const productionPackage = project ? recompileProductionPackageForProject(normalizedPackage, project, importWarnings) : normalizedPackage;
+    if (productionPackage.authoring?.source === "codex-standalone")
+        importWarnings.push(
+            ...reviewDramaPackage(productionPackage)
+                .checks.filter((check) => check.status !== "passed")
+                .map((check) => `${check.scope}：${check.evidence}；${check.fixHint}`),
+        );
+    if (project?.episodes && productionPackage.authoring?.source === "codex-standalone")
+        for (const episode of productionPackage.episodes)
+            for (const shot of episode.shots) {
+                const current = project.episodes.find((item) => item.code === episode.code)?.shots.find((item) => item.code === shot.code);
+                if (!current || !Object.values(current.fieldOrigins || {}).includes("manual")) continue;
+                const merged = {
+                    ...shot,
+                    ...Object.fromEntries(
+                        Object.entries(current.fieldOrigins || {})
+                            .filter(([, origin]) => origin === "manual")
+                            .map(([field]) => [field, current[field as keyof DramaShot]]),
+                    ),
+                };
+                const label = `${episode.code}/${shot.code} 人工字段保留后`;
+                const frames = merged.framePlan?.frames || [];
+                const errors = [
+                    ...validateDramaVideoPromptCardLayout(merged.videoPrompt, frames, label),
+                    ...validateDramaFrameTiming(frames, merged.utterances || [], label),
+                    ...validateDramaVideoPromptUtteranceCoverage(merged.executionVideoPrompt || merged.videoPrompt, frames, merged.utterances || [], label),
+                ];
+                importWarnings.push(...errors.map((error) => `${error}；保留人工内容，请作者核对合并后的对白、帧计划和提示词。`));
+            }
     const allWarnings = [...new Set([...importWarnings, ...collectWarnings(productionPackage)])];
     return {
         package: productionPackage,
@@ -323,6 +366,7 @@ export function previewDramaProductionPackageObject(
 export function applyDramaProductionPackage(project: DramaProject, source: DramaProductionPackageV1, sourceHash: string, rawSource?: string, fileName = "package.json", options: DramaProductionPackageNormalizationOptions = {}): DramaProject {
     const normalizedPackage = normalizeProductionPackage(source, options);
     const productionPackage = recompileProductionPackageForProject(normalizedPackage, project);
+    const standalone = productionPackage.authoring?.source === "codex-standalone";
     const projectPatch = productionPackage.project;
     const sourceAsset = {
         id: `source-package-${sourceHash.slice(0, 16)}`,
@@ -346,13 +390,13 @@ export function applyDramaProductionPackage(project: DramaProject, source: Drama
           })()
         : undefined;
     const assetPromptProject = { ...project, style: styleContract.name, ratio: projectPatch.ratio, productionBible: synchronizedBible || project.productionBible };
-    const characters = mergeAssets(assetPromptProject.characters, productionPackage.assets.characters, "character", assetPromptProject, "角色");
-    const locations = mergeAssets(assetPromptProject.scenes, productionPackage.assets.locations, "location", assetPromptProject, "场景");
-    const props = mergeAssets(assetPromptProject.props, productionPackage.assets.props, "prop", assetPromptProject, "道具");
+    const characters = mergeAssets(assetPromptProject.characters, productionPackage.assets.characters, "character", standalone ? undefined : assetPromptProject, "角色");
+    const locations = mergeAssets(assetPromptProject.scenes, productionPackage.assets.locations, "location", standalone ? undefined : assetPromptProject, "场景");
+    const props = mergeAssets(assetPromptProject.props, productionPackage.assets.props, "prop", standalone ? undefined : assetPromptProject, "道具");
     const clues = mergeAssets(assetPromptProject.clues, productionPackage.assets.clues, "clue");
     const episodeByCode = new Map(project.episodes.flatMap((episode) => (episode.code ? [[episode.code, episode] as const] : [])));
     const incomingEpisodes = productionPackage.episodes.map((episodePackage, index) =>
-        mergeEpisode(episodeByCode.get(episodePackage.code) || (episodePackage.code ? undefined : project.episodes[index]), episodePackage, characters.ids, locations.ids, props.ids, clues.ids, project.defaultVideoMode),
+        mergeEpisode(episodeByCode.get(episodePackage.code) || (episodePackage.code ? undefined : project.episodes[index]), episodePackage, characters.ids, locations.ids, props.ids, clues.ids, project.defaultVideoMode, standalone),
     );
     const episodes = options.episodeImportMode === "merge" ? mergeProjectEpisodes(project.episodes, incomingEpisodes) : incomingEpisodes;
     return {
@@ -411,13 +455,16 @@ function mergeEpisode(
     propIds: Map<string, string>,
     clueIds: Map<string, string>,
     defaultVideoMode: DramaProject["defaultVideoMode"],
+    preserveAuthorText = false,
 ): DramaEpisode {
     const id = existing?.id || `episode-${nanoid()}`;
     const existingShotsByCode = new Map((existing?.shots || []).flatMap((shot) => (shot.code ? [[shot.code, shot] as const] : [])));
     const shots = incoming.shots.map((shot, index) => {
         const current = existingShotsByCode.get(shot.code);
         const next: DramaShot = {
+            ...(preserveAuthorText ? current : {}),
             ...shot,
+            ...(preserveAuthorText ? { executionImagePrompt: undefined, executionVideoPrompt: undefined } : {}),
             id: current?.id || `shot-${nanoid()}`,
             code: shot.code,
             order: index + 1,
@@ -455,6 +502,7 @@ function mergeEpisode(
     const linkedShots = shots.map((shot) => {
         const packageShot = incoming.shots.find((item) => item.code === shot.code);
         const framePlan = shouldPreserveManualFramePlan(shot.framePlan, shot.fieldOrigins?.framePlan) ? preserveManualFramePlan(shot.framePlan!) : remapFramePlan(packageShot?.framePlan, characterIds, locationIds, propIds, clueIds, shotIds);
+        if (preserveAuthorText) return { ...shot, framePlan, storySceneId: packageShot?.storySceneCode ? storySceneIds.get(packageShot.storySceneCode) : undefined };
         const dialogueRepairedBasePrompt = repairDramaVideoPromptUtteranceCoverage(shot.videoPrompt, framePlan?.frames || [], shot.utterances as DramaDialogueTimingInput[], shot.code || shot.title);
         const repairedBasePrompt = repairDramaVideoPromptAudioHierarchy(dialogueRepairedBasePrompt.prompt, shot.code || shot.title);
         const linkedShot = {
@@ -641,6 +689,7 @@ function validateStandalonePackageShape(input: Record<string, unknown>, options:
     for (const field of ["characters", "locations", "props", "clues"]) if (!Array.isArray(assets[field])) fail(`assets.${field}`, " 必须是数组");
 
     const authoring = object(input.authoring);
+    if (typeof input.schemaVersion !== "number") fail("schemaVersion", " 必须是数字 1");
     if (authoring.authoringMode !== "codex-standalone" || authoring.canonicalSource !== "markdown-with-embedded-json") fail("authoring", " 必须声明 codex-standalone 与 markdown-with-embedded-json");
     if (authoring.qualityGateStatus !== "passed") qualityWarning("authoring.qualityGateStatus", ` 当前为 ${text(authoring.qualityGateStatus) || "缺失"}，建议复核质量门禁`);
     if (!text(authoring.generatedAt)) fail("authoring.generatedAt", " 缺失");
@@ -699,7 +748,7 @@ function validateStandalonePackageShape(input: Record<string, unknown>, options:
         const pauseBefore = Number(planItem.pauseBeforeSeconds || 0);
         const pauseAfter = Number(planItem.pauseAfterSeconds || 0);
         if (!Number.isFinite(pauseBefore) || pauseBefore < 0 || !Number.isFinite(pauseAfter) || pauseAfter < 0) fail(path, " 句前/句后停顿必须是非负数");
-        if (requiredSpeechSeconds > availableSpeechSeconds + 0.01) fail(path, ` 对白容量不足：requiredSpeechSeconds=${requiredSpeechSeconds}，availableSpeechSeconds=${availableSpeechSeconds}；必须重新分配逐句时间后再导入`);
+        if (requiredSpeechSeconds > availableSpeechSeconds + 0.01) qualityWarning(path, ` 对白容量不足：requiredSpeechSeconds=${requiredSpeechSeconds}，availableSpeechSeconds=${availableSpeechSeconds}；请在作者侧修订`);
     }
     const narrativeBeatPlan = lock.narrativeBeatPlan as unknown[];
     if (narrativeBeatPlan.length !== logicalShotCount) fail("project.productionLock.narrativeBeatPlan", ` 必须有 ${logicalShotCount} 个独立剧情职责，不能用内部帧段或对白分句翻倍镜头`);
@@ -716,6 +765,7 @@ function validateStandalonePackageShape(input: Record<string, unknown>, options:
         if (has(episode, "episodeId")) fail(`episodes[${episodeIndex}].episodeId`, " 是非契约字段；请使用 code，制作包未导入");
         if (!text(episode.code)) fail(`episodes[${episodeIndex}].code`, " 缺失；检测到非契约剧集字段，制作包未导入");
         if (!Array.isArray(episode.shots) || !episode.shots.length) fail(`episodes[${episodeIndex}].shots`, " 必须是非空数组");
+        if (!Array.isArray(episode.continuityEdges)) fail(`episodes[${episodeIndex}].continuityEdges`, " 必须是数组；没有相邻片段时填写 []");
         let previousEnd = 0;
         for (const [shotIndex, shotValue] of (episode.shots as unknown[]).entries()) {
             const shot = object(shotValue);
@@ -723,6 +773,16 @@ function validateStandalonePackageShape(input: Record<string, unknown>, options:
             if (has(shot, "shotId")) fail(`${path}.shotId`, " 是非契约字段；请使用 code，制作包未导入");
             if (has(shot, "shotDuration")) fail(`${path}.shotDuration`, " 是非契约字段；请使用 duration，制作包未导入");
             if (!text(shot.code)) fail(`${path}.code`, " 缺失；请使用当前导入契约字段 code，制作包未导入");
+            if (!Array.isArray(shot.utterances)) fail(`${path}.utterances`, " 必须是对象数组；无对白时填写 []");
+            for (const [index, item] of (shot.utterances as unknown[]).entries()) if (!Object.keys(object(item)).length || typeof object(item).text !== "string") fail(`${path}.utterances[${index}]`, " 必须是含 text 的发声对象，不能直接填写字符串");
+            for (const field of ["entryState", "exitState"]) {
+                if (shot[field] === undefined) {
+                    qualityWarning(`${path}.${field}`, " 缺少状态，无法核对连续性；导入不会补写世界事实");
+                    continue;
+                }
+                const state = object(shot[field]);
+                if (!Object.keys(state).length || !Array.isArray(state.characters) || !Array.isArray(state.props)) fail(`${path}.${field}`, " 必须是含 characters[]/props[] 的状态对象");
+            }
             shotCodes.add(text(shot.code));
             const duration = Number(shot.duration);
             if (duration !== shotDuration) fail(`${path}.duration`, ` 必须等于 ${shotDuration}；内部帧段和硬切不能改变逻辑片段时长`);
@@ -733,6 +793,7 @@ function validateStandalonePackageShape(input: Record<string, unknown>, options:
             if (timecodeStart !== previousEnd) fail(`${path}.timecode`, ` 未与上一逻辑片段连续；期望起点 ${previousEnd}s`);
             previousEnd = timecodeEnd;
             const framePlan = object(shot.framePlan);
+            if (typeof object(framePlan.end).required !== "boolean") fail(`${path}.framePlan.end.required`, " 必须是布尔值");
             const frames = Array.isArray(framePlan.frames) ? (framePlan.frames as unknown[]) : [];
             if (!frames.length) fail(`${path}.framePlan.frames`, " 缺失；内部帧段只能存在于当前逻辑片段内部");
             const startSource = text(object(framePlan.start).source);
@@ -743,6 +804,7 @@ function validateStandalonePackageShape(input: Record<string, unknown>, options:
             for (const [frameIndex, frameValue] of frames.entries()) {
                 const frame = object(frameValue);
                 const framePath = `${path}.framePlan.frames[${frameIndex}]`;
+                if (!text(frame.id) || !Number.isInteger(frame.sequenceIndex)) fail(framePath, " 必须填写字符串 id 和整数 sequenceIndex");
                 if (has(frame, "meta")) fail(`${framePath}.meta`, " 是生成器内部辅助字段，不属于制作包契约；请删除后重新导出");
                 const start = Number(frame.startSecond);
                 const end = Number(frame.endSecond);
@@ -755,9 +817,7 @@ function validateStandalonePackageShape(input: Record<string, unknown>, options:
             const publicCardCount = (text(shot.videoPrompt).match(/^###\s*镜头\s*\d+/gmu) || []).length;
             if (publicCardCount !== frames.length) fail(`${path}.videoPrompt`, ` 必须与 framePlan.frames 一一对应；当前 ${publicCardCount} 张公开卡/${frames.length} 个帧段`);
             if (shotDuration === 30 && text(video.internalCutPolicy) === "dense-30s") {
-                if (frames.length < 8 || frames.length > 11) fail(`${path}.framePlan.frames`, " dense-30s 必须在每个 30 秒逻辑片段内使用 8—11 个帧段");
-                const hardCuts = (text(shot.videoPrompt).match(/(?:镜头变化|剪辑承接|镜头事件)[^\n]{0,240}硬切/gu) || []).length;
-                if (hardCuts < 7 || hardCuts > 10) fail(`${path}.videoPrompt`, ` dense-30s 必须公开表达 7—10 次硬切，当前检测到 ${hardCuts} 次`);
+                for (const issue of dramaDenseHardCutIssues(text(shot.videoPrompt), frames as Array<{ startSecond: number; endSecond: number }>, path)) qualityWarning(`${path}.videoPrompt`, issue);
             }
             totalShots += 1;
             totalDuration += duration;
@@ -790,28 +850,31 @@ function normalizeProductionPackage(value: unknown, options: DramaProductionPack
         }),
     );
     const episodes = array(input.episodes)
-        .map((episode, index) => normalizeEpisodePackage(episode, index, { ...normalizationOptions, backgroundNpcPolicyByLocationCode }))
+        .map((episode, index) => {
+            const normalized = normalizeEpisodePackage(episode, index, { ...normalizationOptions, backgroundNpcPolicyByLocationCode });
+            return normalizationOptions.standaloneImport ? preserveDramaAuthoredText(normalized, object(episode)) : normalized;
+        })
         .filter((episode) => episode.shots.length);
     if (!episodes.length) throw new DramaProductionPackageError("制作包至少需要一个包含镜头的剧集");
     const normalizedAssets = {
         characters: dedupePackageAssets(
             array(assets.characters)
-                .map((asset) => normalizePackageAsset(asset, false, true))
+                .map((asset) => normalizePackageAsset(asset, false, true, normalizationOptions.standaloneImport))
                 .filter(hasCodeAndName),
         ),
         locations: dedupePackageAssets(
             array(assets.locations)
-                .map((asset) => normalizePackageAsset(asset, true))
+                .map((asset) => normalizePackageAsset(asset, true, false, normalizationOptions.standaloneImport))
                 .filter(hasCodeAndName),
         ),
         props: dedupePackageAssets(
             array(assets.props)
-                .map((asset) => normalizePackageAsset(asset))
+                .map((asset) => normalizePackageAsset(asset, false, false, normalizationOptions.standaloneImport))
                 .filter(hasCodeAndName),
         ),
         clues: dedupePackageAssets(
             array(assets.clues)
-                .map((asset) => normalizePackageAsset(asset))
+                .map((asset) => normalizePackageAsset(asset, false, false, normalizationOptions.standaloneImport))
                 .filter(hasCodeAndName),
         ),
     };
@@ -824,7 +887,7 @@ function normalizeProductionPackage(value: unknown, options: DramaProductionPack
         if (!options.allowImportWarnings) throw new DramaProductionPackageError(message);
         options.importWarnings?.push(message);
     }
-    const synchronizedEpisodes = normalizedEpisodes.map(synchronizeContinuityStates);
+    const synchronizedEpisodes = normalizationOptions.standaloneImport ? normalizedEpisodes : normalizedEpisodes.map(synchronizeContinuityStates);
     const derivedTargetDuration = synchronizedEpisodes.reduce((total, episode) => total + episode.shots.reduce((sum, shot) => sum + shot.duration, 0), 0);
     // Validate the caller's raw plan before normalization can apply defaults or
     // coerce an invalid value into a seemingly valid runtime plan.
@@ -915,6 +978,10 @@ function restylePackageAssets(assets: DramaProductionPackageV1["assets"], projec
 }
 
 function recompileProductionPackageForProject(value: DramaProductionPackageV1, project: DramaProjectAssetCollection, importWarnings?: string[]) {
+    if (value.authoring?.source === "codex-standalone") {
+        if (resolveDramaStyleContract(project).name !== resolveDramaStyleContract(value.project).name) importWarnings?.push("制作包与目标项目视觉合同不同；已保留作者原稿，请在作者侧核对风格，不自动重新编译。");
+        return value;
+    }
     const packageRatio = value.project.ratio || value.project.productionBible.ratio || project.ratio;
     const styleContract = resolveDramaStyleContractWithFallback(project, value.project);
     const currentStyleContract = resolveDramaStyleContract(project);
@@ -1861,7 +1928,10 @@ function normalizeEpisodePackage(value: unknown, episodeIndex: number, options: 
             const edge = object(value);
             const fromShotCode = text(edge.fromShotCode);
             const toShotCode = text(edge.toShotCode);
-            if (!shotCodes.has(fromShotCode) || !shotCodes.has(toShotCode)) return [];
+            if (!shotCodes.has(fromShotCode) || !shotCodes.has(toShotCode)) {
+                if (options.standaloneImport) options.importWarnings?.push(`${text(input.code)}/${fromShotCode}→${toShotCode}：连续性无效引用，未完成检查；请在作者侧核对片段 code。`);
+                return [];
+            }
             return [
                 {
                     fromShotCode,
@@ -2002,7 +2072,7 @@ function normalizePackageShot(value: unknown, index: number, options: DramaProdu
     };
     const startFramePrompt = normalizeOptionalStaticPrompt(shot.startFramePrompt, "startFramePrompt");
     const endFramePrompt = normalizeOptionalStaticPrompt(shot.endFramePrompt, "endFramePrompt");
-    return {
+    const normalizedShot: DramaProductionPackageEpisode["shots"][number] = {
         code: text(shot.code),
         order: positiveNumber(shot.order) || index + 1,
         title,
@@ -2048,8 +2118,8 @@ function normalizePackageShot(value: unknown, index: number, options: DramaProdu
         dialoguePerformance,
         lightingPlan,
         sound: normalizeSound(shot.sound),
-        entryState: mergeState(normalizeState(shot.entryState), directorState(characterCodes, propCodes, title, lighting, actionStart)),
-        exitState: mergeState(normalizeState(shot.exitState), directorState(characterCodes, propCodes, title, lighting, actionEnd)),
+        entryState: options.standaloneImport ? normalizeState(shot.entryState) : mergeState(normalizeState(shot.entryState), directorState(characterCodes, propCodes, title, lighting, actionStart)),
+        exitState: options.standaloneImport ? normalizeState(shot.exitState) : mergeState(normalizeState(shot.exitState), directorState(characterCodes, propCodes, title, lighting, actionEnd)),
         framePlan: {
             start: { source: hasValidFramePlan ? (frameStart.source as "independent" | "previous_accepted_actual_tail") : "independent" },
             end: { required: hasValidFramePlan ? Boolean(frameEnd.required) : true },
@@ -2062,6 +2132,7 @@ function normalizePackageShot(value: unknown, index: number, options: DramaProdu
         videoMode: shot.videoMode === "direct" ? "direct" : "storyboard",
         storyboardFrameMode: shot.storyboardFrameMode === "single" ? "single" : shot.storyboardFrameMode === "first_last" ? "first_last" : "all_frames",
     };
+    return options.standaloneImport ? preserveDramaAuthoredText(normalizedShot, shot) : normalizedShot;
 }
 
 function normalizePackageVideoPrompt(value: string) {
@@ -2394,7 +2465,7 @@ function hasContinuityPlan(shot: DramaProductionPackageEpisode["shots"][number])
     );
 }
 
-function normalizePackageAsset(value: unknown, location = false, character = false): DramaProductionPackageAsset {
+function normalizePackageAsset(value: unknown, location = false, character = false, preserveAuthorText = false): DramaProductionPackageAsset {
     const asset = object(value);
     const profile = object(asset.profile);
     const name = text(asset.name);
@@ -2426,7 +2497,7 @@ function normalizePackageAsset(value: unknown, location = false, character = fal
         stateRules: strings(profile.stateRules),
         forbiddenChanges: strings(profile.forbiddenChanges),
     };
-    return {
+    const normalizedAsset: DramaProductionPackageAsset = {
         code: text(asset.code),
         name,
         description,
@@ -2444,6 +2515,7 @@ function normalizePackageAsset(value: unknown, location = false, character = fal
             : {}),
         ...(location && normalizeBackgroundNpcPolicy(asset.backgroundNpcPolicy) ? { backgroundNpcPolicy: normalizeBackgroundNpcPolicy(asset.backgroundNpcPolicy) } : {}),
     };
+    return preserveAuthorText ? preserveDramaAuthoredText(normalizedAsset, asset) : normalizedAsset;
 }
 
 function normalizeBackgroundNpcPolicy(value: unknown): DramaBackgroundNpcPolicy | undefined {

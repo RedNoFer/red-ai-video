@@ -90,6 +90,7 @@ import { collectLocalMediaStorageKeys, localMediaStorageKeyFromValue } from "@/l
 import { signReferenceAssetInputUrl } from "@/lib/server/reference-asset-access";
 import { fetchSafeOutbound } from "@/lib/server/safe-outbound-fetch";
 import { applyDramaProductionPackage, DramaProductionPackageError, previewDramaProductionPackage, type DramaProductionPackageNormalizationOptions } from "@/lib/server/drama-production-package";
+import { preserveDramaAuthoredText } from "@/lib/drama-authored-text";
 import { buildDramaProductionRun, refreshDramaVideoStepReferences, unlockDramaProductionSteps } from "@/lib/server/drama-production-run";
 import { composeDramaVideoSegments } from "@/lib/server/drama-video-sequence";
 import { buildDramaVisualProductionRun, compileDramaFrameBeatPrompt, compileDramaVisualStepPrompt, unlockDramaVisualSteps } from "@/lib/server/drama-visual-production-run";
@@ -416,21 +417,30 @@ function preserveMissingStoryboardFrames(current: DramaProject, next: DramaProje
     return changed ? { ...next, episodes } : next;
 }
 
-function invalidateChangedDramaFrameEvidence(current: DramaProject, next: DramaProject) {
+function invalidateChangedDramaFrameEvidence(current: DramaProject, next: DramaProject, authoredInput?: unknown) {
     const currentEpisodes = new Map(current.episodes.map((episode) => [episode.id, episode]));
     let changed = false;
     const episodes = next.episodes.map((episode) => {
         const previousEpisode = currentEpisodes.get(episode.id);
         if (!previousEpisode) return episode;
         const previousShots = new Map(previousEpisode.shots.map((shot) => [shot.id, shot]));
+        const inputEpisode = array(object(authoredInput).episodes)
+            .map(object)
+            .find((item) => item.id === episode.id);
+        const inputShots = new Map(
+            array(inputEpisode?.shots)
+                .map(object)
+                .map((item) => [item.id, item]),
+        );
         const stale = new Set<string>();
         for (const shot of episode.shots) {
             const previous = previousShots.get(shot.id);
             if (!previous) continue;
-            if (continuityFactsChanged(previous, shot) || frameEvidenceMaterialChanged(previous.frameEvidence, shot.frameEvidence)) stale.add(shot.id);
+            const facts = authoredInput ? { ...previous, ...inputShots.get(shot.id) } : shot;
+            if (continuityFactsChanged(previous, facts) || frameEvidenceMaterialChanged(previous.frameEvidence, shot.frameEvidence)) stale.add(shot.id);
         }
-        const previousEdges = new Map((previousEpisode.continuityEdges || []).map((edge) => [`${edge.fromShotId}:${edge.toShotId}`, JSON.stringify(edge)]));
-        const nextEdges = new Map((episode.continuityEdges || []).map((edge) => [`${edge.fromShotId}:${edge.toShotId}`, JSON.stringify(edge)]));
+        const previousEdges = new Map((previousEpisode.continuityEdges || []).map((edge) => [`${edge.fromShotId}:${edge.toShotId}`, stableSerialize(edge)]));
+        const nextEdges = new Map((episode.continuityEdges || []).map((edge) => [`${edge.fromShotId}:${edge.toShotId}`, stableSerialize(edge)]));
         for (const key of new Set([...previousEdges.keys(), ...nextEdges.keys()])) {
             if (previousEdges.get(key) === nextEdges.get(key)) continue;
             const [fromShotId, toShotId] = key.split(":");
@@ -455,7 +465,9 @@ function invalidateChangedDramaFrameEvidence(current: DramaProject, next: DramaP
                     ? shot
                     : {
                           ...shot,
-                          ...clearLegacyFrameUrls(shot),
+                          storyboardStatus: shot.storyboardImageUrl ? ("stale" as const) : shot.storyboardStatus,
+                          storyboardEndStatus: shot.storyboardEndImageUrl ? ("stale" as const) : shot.storyboardEndStatus,
+                          storyboardFrames: shot.storyboardFrames?.map(staleStoryboardFrame),
                           frameEvidence: supersedeFrameEvidence(shot.frameEvidence, "镜头状态、连续性边或引用帧已变化"),
                           continuityStatus: (shot.id === [...stale][0] ? "stale" : "blocked") as DramaShot["continuityStatus"],
                           continuityError: shot.id === [...stale][0] ? undefined : "上游连续性状态已变化，当前证据不可继续引用。",
@@ -494,8 +506,32 @@ function clearLegacyFrameUrls(shot: DramaShot): Partial<DramaShot> {
 
 function continuityFactsChanged(previous: DramaShot, next: DramaShot) {
     return (
-        JSON.stringify({ entryState: previous.entryState, exitState: previous.exitState, framePlan: previous.framePlan, videoUrl: previous.videoUrl }) !==
-        JSON.stringify({ entryState: next.entryState, exitState: next.exitState, framePlan: next.framePlan, videoUrl: next.videoUrl })
+        stableSerialize({
+            entryState: previous.entryState,
+            exitState: previous.exitState,
+            framePlan: previous.framePlan,
+            videoUrl: previous.videoUrl,
+            videoPrompt: previous.videoPrompt,
+            executionVideoPrompt: previous.executionVideoPrompt,
+            utterances: previous.utterances,
+            dialogue: previous.dialogue,
+            characterIds: previous.characterIds,
+            propIds: previous.propIds,
+            sceneId: previous.sceneId,
+        }) !==
+        stableSerialize({
+            entryState: next.entryState,
+            exitState: next.exitState,
+            framePlan: next.framePlan,
+            videoUrl: next.videoUrl,
+            videoPrompt: next.videoPrompt,
+            executionVideoPrompt: next.executionVideoPrompt,
+            utterances: next.utterances,
+            dialogue: next.dialogue,
+            characterIds: next.characterIds,
+            propIds: next.propIds,
+            sceneId: next.sceneId,
+        })
     );
 }
 
@@ -822,7 +858,7 @@ export async function updateDramaProjectForUser(userId: string, id: string, valu
     if (incomingUpdatedAt && !lockRequested) project.updatedAt = new Date(incomingUpdatedAt).toISOString();
     project = preserveMissingStoryboardFrames(current, project);
     project = preserveMissingFrameEvidence(current, project);
-    project = invalidateChangedDramaFrameEvidence(current, project);
+    project = invalidateChangedDramaFrameEvidence(current, project, value);
     try {
         if (scopeMutation) {
             const ack = await updateDramaProjectScopedMutation(userId, current, project, scopeMutation);
@@ -1555,9 +1591,13 @@ export async function updateDramaAssetForUser(userId: string, id: string, kind: 
     }
 }
 
-export function previewDramaProductionPackageForUser(value: unknown, options: DramaProductionPackageNormalizationOptions = {}, project?: Pick<DramaProject, "title" | "style" | "ratio" | "productionBible" | "characters" | "scenes" | "props" | "clues">) {
+export function previewDramaProductionPackageForUser(
+    value: unknown,
+    options: DramaProductionPackageNormalizationOptions = {},
+    project?: Pick<DramaProject, "title" | "style" | "ratio" | "productionBible" | "characters" | "scenes" | "props" | "clues"> & Partial<Pick<DramaProject, "episodes">>,
+) {
     const input = object(value);
-    const source = cleanText(input.source);
+    const source = typeof input.source === "string" ? input.source : "";
     const fileName = cleanText(input.fileName) || "production-package.md";
     try {
         return previewDramaProductionPackage(source, fileName, project, { allowImportWarnings: true, enforceExecutionContract: true, ...options });
@@ -1568,10 +1608,8 @@ export function previewDramaProductionPackageForUser(value: unknown, options: Dr
 }
 
 export function previewDramaScriptProductionPackageForUser(value: unknown, project?: Pick<DramaProject, "title" | "style" | "ratio" | "productionBible" | "characters" | "scenes" | "props" | "clues">) {
-    const standalonePreview = previewDramaProductionPackageForUser(value, { allowImportWarnings: false, preserveAuthoredVideoPrompt: true }, project);
+    const standalonePreview = previewDramaProductionPackageForUser(value, { allowImportWarnings: true, preserveAuthoredVideoPrompt: true }, project);
     if (standalonePreview.package.authoring?.authoringMode === "codex-standalone") {
-        if (standalonePreview.package.authoring.canonicalSource !== "markdown-with-embedded-json" || standalonePreview.package.authoring.qualityGateStatus !== "passed")
-            throw new DramaProjectServiceError("独立 Codex 制作包必须在第十三章/QC 元数据中标记 qualityGateStatus=passed", 400);
         return standalonePreview;
     }
     const preview = previewDramaProductionPackageForUser(value, { allowImportWarnings: false, validateVideoPrompt: true, requireCameraPlan: true, requireContentQuality: true, requireAgentAuthoring: true, requireAuthoringQuality: true }, project);
@@ -1587,7 +1625,7 @@ export async function applyDramaProductionPackageForUser(userId: string, id: str
     if (cleanText(input.sourceHash) !== preview.sourceHash) throw new DramaProjectServiceError("制作包内容已变化，请重新预览", 409);
     let project: Awaited<ReturnType<typeof applyDramaProductionPackage>>;
     try {
-        project = applyDramaProductionPackage(current, preview.package, preview.sourceHash, cleanText(input.source), cleanText(input.fileName) || "production-package.md", {
+        project = applyDramaProductionPackage(current, preview.package, preview.sourceHash, typeof input.source === "string" ? input.source : "", cleanText(input.fileName) || "production-package.md", {
             allowImportWarnings: true,
             ...(preview.package.authoring?.authoringMode === "codex-standalone" ? { validatedStandalonePackage: true } : {}),
             episodeImportMode: input.episodeImportMode === "merge" ? "merge" : "replace",
@@ -1599,7 +1637,7 @@ export async function applyDramaProductionPackageForUser(userId: string, id: str
     project.updatedAt = nextTimestamp(current.updatedAt);
     await createDramaProjectVersion(userId, current.id, "完整制作包导入前", current);
     try {
-        return await updateDramaProject(userId, discardStaleStoryboardStartFrames(current, normalizeProject(project, current)), current.updatedAt);
+        return await updateDramaProject(userId, invalidateChangedDramaFrameEvidence(current, normalizeProject(project, current), project), current.updatedAt);
     } catch (error) {
         if (error instanceof Error && !(error instanceof DramaProjectStoreError)) throw new DramaProjectServiceError(`制作包应用失败：${error.message}`, 400);
         if (error instanceof DramaProjectStoreError) throw new DramaProjectServiceError(error.message, error.status);
@@ -1631,7 +1669,7 @@ export async function applyDramaEpisodeProductionPackageForUser(userId: string, 
     const scoped = { ...current, episodes: [target], activeEpisodeId: target.id };
     let applied: Awaited<ReturnType<typeof applyDramaProductionPackage>>;
     try {
-        applied = applyDramaProductionPackage(scoped, preview.package, preview.sourceHash, cleanText(input.source), cleanText(input.fileName) || "剧本 Agent 制作包.md", {
+        applied = applyDramaProductionPackage(scoped, preview.package, preview.sourceHash, typeof input.source === "string" ? input.source : "", cleanText(input.fileName) || "剧本 Agent 制作包.md", {
             ...(isStandalone ? { validatedStandalonePackage: true } : {}),
         });
     } catch (error) {
@@ -1643,7 +1681,7 @@ export async function applyDramaEpisodeProductionPackageForUser(userId: string, 
     const project = { ...current, ...applied, episodes: current.episodes.map((episode) => (episode.id === target.id ? { ...nextEpisode, id: episode.id } : episode)), activeEpisodeId: current.activeEpisodeId, updatedAt: nextTimestamp(current.updatedAt) };
     await createDramaProjectVersion(userId, current.id, "剧本 Agent 制作包回填前", current);
     try {
-        return await updateDramaProject(userId, discardStaleStoryboardStartFrames(current, normalizeProject(project, current)), current.updatedAt);
+        return await updateDramaProject(userId, invalidateChangedDramaFrameEvidence(current, normalizeProject(project, current), project), current.updatedAt);
     } catch (error) {
         if (error instanceof Error && !(error instanceof DramaProjectStoreError)) throw new DramaProjectServiceError(`制作包应用失败：${error.message}`, 400);
         if (error instanceof DramaProjectStoreError) throw new DramaProjectServiceError(error.message, error.status);
@@ -3954,7 +3992,7 @@ function normalizeShot(value: unknown, index: number): DramaShot {
     const input = object(value);
     const videoPrompt = cleanText(input.videoPrompt);
     assertDramaVideoPromptLength(videoPrompt);
-    return {
+    const normalizedShot: DramaShot = {
         id: cleanText(input.id) || `shot-${nanoid()}`,
         code: optionalText(input.code),
         order: Math.max(1, Math.floor(Number(input.order) || index + 1)),
@@ -4049,6 +4087,7 @@ function normalizeShot(value: unknown, index: number): DramaShot {
         voiceBlueprintVersion: optionalPositiveInteger(input.voiceBlueprintVersion),
         voiceAssignmentSource: input.voiceAssignmentSource === "manual" || input.voiceAssignmentSource === "gpt" || input.voiceAssignmentSource === "auto" ? input.voiceAssignmentSource : undefined,
     };
+    return Object.values(object(input.fieldOrigins)).some((origin) => origin === "package" || origin === "manual") ? preserveDramaAuthoredText(normalizedShot, input) : normalizedShot;
 }
 
 function normalizeShotFramePlan(value: unknown, duration: number): DramaShotFramePlan | undefined {
@@ -4234,7 +4273,7 @@ function normalizeNamedAssets(value: unknown, prefix: string, character = false)
             const primaryReference = references.find((reference) => reference.id === primaryReferenceId);
             const deletedReferenceIds = ids(input.deletedReferenceIds);
             const baseProfile = normalizeAssetProfile(input.profile, `${cleanText(input.description)}\n${cleanText(object(input.profile).designPrompt)}`, cleanText(input.name), prefix === "scene");
-            return {
+            const normalizedAsset = {
                 id,
                 code: optionalText(input.code),
                 name: cleanText(input.name),
@@ -4253,6 +4292,7 @@ function normalizeNamedAssets(value: unknown, prefix: string, character = false)
                 ...(prefix === "scene" ? { backgroundNpcPolicy: normalizeBackgroundNpcPolicy(input.backgroundNpcPolicy) } : {}),
                 ...(character ? { voiceProfile: normalizeVoiceProfile(input.voiceProfile) } : {}),
             };
+            return Object.values(object(input.fieldOrigins)).some((origin) => origin === "package" || origin === "manual") ? preserveDramaAuthoredText(normalizedAsset, input) : normalizedAsset;
         })
         .filter((item) => item.name);
 }

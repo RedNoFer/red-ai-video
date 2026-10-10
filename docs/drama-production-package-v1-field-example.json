@@ -1,0 +1,308 @@
+{
+    "schemaVersion": 1,
+    "project": {
+        "title": "字段合同示例",
+        "summary": "只说明嵌套类型与可导入结构，未生成媒体。",
+        "style": "写实电影",
+        "ratio": "9:16",
+        "productionBible": {
+            "targetPlatform": "Seedance",
+            "language": "中文",
+            "ratio": "9:16",
+            "targetDuration": 15,
+            "visualStyle": "写实电影",
+            "colorScript": "低饱和暖灰与木棕",
+            "continuityMode": "strict",
+            "productionPlan": {
+                "version": "drama-production-plan-v1",
+                "skills": ["drama-video-director", "seedance-25-director"],
+                "visual": {
+                    "visualStyle": "写实电影",
+                    "artStyle": "",
+                    "source": "agent"
+                },
+                "video": {
+                    "model": "seedance-2-5-special",
+                    "mode": "storyboard",
+                    "ratio": "9:16",
+                    "resolution": "720p",
+                    "durationPolicy": "shot",
+                    "shotDuration": 15,
+                    "internalCutPolicy": "adaptive",
+                    "framePolicy": "agent",
+                    "count": 1,
+                    "audioMode": "native",
+                    "allowExplicitFallback": false
+                },
+                "references": {
+                    "strategy": "adaptive",
+                    "minImages": 3,
+                    "maxImages": 9,
+                    "roles": ["character_anchor", "scene_anchor", "prop_anchor"]
+                },
+                "continuity": {
+                    "mode": "strict",
+                    "requireAcceptedActualTail": true
+                },
+                "frameCountRange": {
+                    "min": 2,
+                    "max": 11
+                },
+                "source": "package"
+            }
+        },
+        "productionLock": {
+            "shotDuration": 15,
+            "targetDuration": 15,
+            "logicalShotCount": 1,
+            "internalCutPolicy": "adaptive",
+            "framePolicy": "agent",
+            "storySourceHash": "5c672fb538a1a02897ad28cef8806b9e9782a1bacc76fe61b84eb8f62ee07919",
+            "templateHash": "5c672fb538a1a02897ad28cef8806b9e9782a1bacc76fe61b84eb8f62ee07919",
+            "directorSkillHash": "5c672fb538a1a02897ad28cef8806b9e9782a1bacc76fe61b84eb8f62ee07919",
+            "seedanceSkillHash": "5c672fb538a1a02897ad28cef8806b9e9782a1bacc76fe61b84eb8f62ee07919",
+            "lockedAt": "2026-10-11T00:00:00.000Z",
+            "lockedBy": "contract-example",
+            "dialogueCapacityPlan": [
+                {
+                    "dialogueId": "D01",
+                    "speaker": "林雪",
+                    "characterCount": 9,
+                    "speechRateCharsPerSecond": 4,
+                    "requiredSpeechSeconds": 2.25,
+                    "availableSpeechSeconds": 3,
+                    "shotCode": "SH01",
+                    "episodeCode": "E01"
+                }
+            ],
+            "narrativeBeatPlan": [
+                {
+                    "id": "BEAT01",
+                    "responsibility": "中止递封，持有人不变",
+                    "shotCodes": ["SH01"]
+                }
+            ],
+            "selfCheckRuleVersion": "contract-example"
+        }
+    },
+    "assets": {
+        "characters": [
+            {
+                "code": "C01",
+                "name": "林雪",
+                "description": "深灰外套，左眉短疤；白底板包含身份特写与正面、严格左侧面、背面全身。"
+            }
+        ],
+        "locations": [
+            {
+                "code": "S01",
+                "name": "长案室内",
+                "description": "西侧窗与木门，长案北侧为初始站位；9:16高清单视角全景。",
+                "sceneReferenceBoard": {
+                    "layout": "panorama"
+                }
+            }
+        ],
+        "props": [
+            {
+                "code": "P01",
+                "name": "信封",
+                "description": "无字米白纸封"
+            }
+        ],
+        "clues": []
+    },
+    "episodes": [
+        {
+            "code": "E01",
+            "title": "交接中止",
+            "script": "林雪：外套颜色没变，别说话。",
+            "outline": "林雪开口提醒，然后收回信封，交接未完成。",
+            "hook": "信封未交出",
+            "nextPreview": "",
+            "sourceRange": "示例全部",
+            "storyScenes": [
+                {
+                    "code": "SC01",
+                    "order": 1,
+                    "title": "长案",
+                    "summary": "林雪开口提醒，然后收回信封，交接未完成。",
+                    "locationCode": "S01",
+                    "timeRange": "0-15s",
+                    "shotCodes": ["SH01"]
+                }
+            ],
+            "shots": [
+                {
+                    "code": "SH01",
+                    "order": 1,
+                    "title": "递封后收回",
+                    "description": "林雪开口提醒，然后收回信封，交接未完成。",
+                    "sourceText": "林雪：外套颜色没变，别说话。",
+                    "shotBoundary": "交接中止的完整节拍",
+                    "dialogue": "林雪说：“外套颜色没变，别说话。”",
+                    "narration": "",
+                    "utterances": [
+                        {
+                            "id": "D01",
+                            "type": "dialogue",
+                            "speaker": "林雪",
+                            "characterId": "C01",
+                            "text": "外套颜色没变，别说话。",
+                            "startSecond": 0,
+                            "endSecond": 3
+                        }
+                    ],
+                    "imagePrompt": "画面主体：林雪与右手中的纸封\n可见状态：林雪嘴唇微启，右手捏住封口\n构图与空间：长案在下方，木门在西侧",
+                    "videoPrompt": "### 镜头 01 | 0—3秒 | 特写 | 50mm | 平视 | 固定机位 | 人物镜头\n场景：长案室内，林雪站在案北侧，西侧木门与窗户。\n画面内容：因对方伸手触纸，林雪嘴唇开合，视线落在来手，信封仍由右手捏住；对白原声在前景；林雪收句闭口，右手持封未松开。\n光影：西侧窗光照亮左颊、纸封和木案。\n色调：低饱和暖灰与木棕。\n台词：林雪说：“外套颜色没变，别说话。”\n人声：林雪对白原声清晰可辨，位于前景；收句后闭口。\n音效：纸张摩擦与室内低位底噪；语音期间避让，不遮挡台词。\n剪辑承接：从持封与开口动作开启。\n\n### 镜头 02 | 3—15秒 | 特写 | 50mm | 平视 | 固定机位 | 非人物手部镜头\n场景：长案室内，林雪站在案北侧，西侧木门与窗户。\n画面内容：因来手继续靠近，林雪右臂沿案面收回信封至胸前；纸封擦过袖口发出轻响；信封停在胸前，来手落空，没有发生交接。\n光影：西侧窗光照亮左颊、纸封和木案。\n色调：低饱和暖灰与木棕。\n台词：无\n人声：无对白，保留呼吸。\n音效：纸张摩擦与室内低位底噪；语音期间避让，不遮挡台词。\n剪辑承接：由收句后的靠近动作触发，显示收回结果与持有人不变。",
+                    "startFramePrompt": "画面主体：林雪与右手中的纸封\n可见状态：林雪嘴唇微启，右手捏住封口\n构图与空间：长案在下方，木门在西侧",
+                    "endFramePrompt": "画面主体：林雪右手与信封\n可见状态：信封停在胸前，右手捏紧封口\n构图与空间：长案中部空出，木门仍在西侧",
+                    "cameraMotion": "固定机位，读出持封与收回结果",
+                    "duration": 15,
+                    "timecode": "0-15s",
+                    "characterCodes": ["C01"],
+                    "locationCode": "S01",
+                    "propCodes": ["P01"],
+                    "clueCodes": [],
+                    "storySceneCode": "SC01",
+                    "dramaticFunction": "中止交接，信封归属不变",
+                    "continuity": {
+                        "shotSize": "特写",
+                        "cameraAngle": "平视",
+                        "composition": "手与信封居中",
+                        "characterBlocking": "长案北侧",
+                        "gazeDirection": "看向信封",
+                        "actionStart": "右手持封递至案中",
+                        "actionEnd": "右手持封收回胸前",
+                        "screenDirection": "向右收回",
+                        "axisRule": "长案南侧不越轴",
+                        "continuityNotes": "没有交接，左右手不交换"
+                    },
+                    "entryState": {
+                        "characters": [
+                            {
+                                "assetId": "C01",
+                                "position": "长案北侧",
+                                "pose": "站立",
+                                "gaze": "看向案中",
+                                "action": "右手持封"
+                            }
+                        ],
+                        "props": [
+                            {
+                                "assetId": "P01",
+                                "holderId": "C01",
+                                "state": "右手捏住封口"
+                            }
+                        ],
+                        "environment": "木门在西侧，长案居中",
+                        "lighting": "西窗柔光照亮案面",
+                        "axis": "摄影机在长案南侧"
+                    },
+                    "exitState": {
+                        "characters": [
+                            {
+                                "assetId": "C01",
+                                "position": "长案北侧",
+                                "pose": "站立",
+                                "gaze": "看向案中",
+                                "action": "右手持封收回胸前"
+                            }
+                        ],
+                        "props": [
+                            {
+                                "assetId": "P01",
+                                "holderId": "C01",
+                                "state": "右手持封停在胸前"
+                            }
+                        ],
+                        "environment": "木门在西侧，长案居中",
+                        "lighting": "西窗柔光照亮案面",
+                        "axis": "摄影机在长案南侧"
+                    },
+                    "framePlan": {
+                        "start": {
+                            "source": "independent"
+                        },
+                        "end": {
+                            "required": true
+                        },
+                        "frames": [
+                            {
+                                "id": "F01",
+                                "sequenceIndex": 1,
+                                "startSecond": 0,
+                                "endSecond": 3,
+                                "startPrompt": "林雪站在案北侧，右手持封停在案中",
+                                "actionPrompt": "因对方伸手触纸，林雪嘴唇开合，视线落在来手，信封仍由右手捏住；对白原声在前景",
+                                "endPrompt": "林雪收句闭口，右手持封未松开",
+                                "imagePrompt": "画面主体：林雪与右手中的纸封\n可见状态：林雪嘴唇微启，右手捏住封口\n构图与空间：长案在下方，木门在西侧"
+                            },
+                            {
+                                "id": "F02",
+                                "sequenceIndex": 2,
+                                "startSecond": 3,
+                                "endSecond": 15,
+                                "startPrompt": "右手仍持封停在案中",
+                                "actionPrompt": "因来手继续靠近，林雪右臂沿案面收回信封至胸前；纸封擦过袖口发出轻响",
+                                "endPrompt": "信封停在胸前，来手落空，没有发生交接",
+                                "imagePrompt": "画面主体：林雪右手与信封\n可见状态：信封停在胸前，右手捏紧封口\n构图与空间：长案中部空出，木门仍在西侧"
+                            }
+                        ],
+                        "referenceManifest": [
+                            {
+                                "alias": "@林雪",
+                                "role": "character_anchor",
+                                "assetId": "C01",
+                                "purpose": "身份与服装基准"
+                            },
+                            {
+                                "alias": "@长案室内",
+                                "role": "scene_anchor",
+                                "assetId": "S01",
+                                "purpose": "空间拓扑基准"
+                            }
+                        ]
+                    },
+                    "performanceNotes": "克制表演，中止交接而非情绪升级；不生成对白字卡。"
+                }
+            ],
+            "continuityEdges": []
+        }
+    ],
+    "authoring": {
+        "source": "codex-standalone",
+        "authoringMode": "codex-standalone",
+        "canonicalSource": "markdown-with-embedded-json",
+        "generatedAt": "2026-10-11T00:00:00.000Z",
+        "qualityGateStatus": "blocked",
+        "materials": [
+            {
+                "alias": "@模板",
+                "role": "package-template",
+                "type": "markdown",
+                "title": "字段合同示例"
+            },
+            {
+                "alias": "@源文",
+                "role": "story-source",
+                "type": "text",
+                "title": "递封片段"
+            }
+        ],
+        "qualityGateReport": {
+            "status": "blocked",
+            "checks": [
+                {
+                    "code": "PACKAGE_SCHEMA",
+                    "status": "blocked",
+                    "severity": "warning",
+                    "scope": "字段合同",
+                    "evidence": "仅说明可导入结构；示例哈希是审计占位，不代表实际来源或全部导演验收。",
+                    "sourceRefs": ["contract-example"],
+                    "fixHint": "实际交稿计算真实哈希，完成导演文本自检。"
+                }
+            ]
+        }
+    }
+}

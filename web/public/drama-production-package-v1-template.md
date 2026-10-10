@@ -2,17 +2,25 @@
 
 > 制作包格式：`vozeb-drama-production-package-v1`
 >
-> 模板版本：由 `pnpm compile:skills` 自动生成；唯一制作包契约：`vozeb-drama-production-package-v1@1.0.0`（契约 hash：`c6a1672d8f33a353753c1953bbcf58b2070861412ce5ca89030d4d8f907822f9`，规范源 hash：`ea42ec919ff7ba3fdb4505ab2b30a30a39de7ad57a528a43f29ba8bd343b6288`）。导演 Skill：`drama-video-director@1.12.2`（hash：`67a8e2331ea458e1dde025e5a1e98ffb90f9fee55d523a8f70cffcf3014d283f`）；模板自检规则、Seedance Skill 和来源版本由同一编译清单绑定。
+> 模板版本：由 `pnpm compile:skills` 自动生成；唯一制作包契约：`vozeb-drama-production-package-v1@1.0.0`（契约 hash：`0f51f89e6f8a365b6d18e8070eba0993619ed33747a422722556ece59782800d`，规范源 hash：`38c0752aea0dfd27bf7ea366172eca7fa8e4c7a00d8d72693585ad9245baab5f`）。导演 Skill：`drama-video-director@1.13.0`（hash：`56604f50c9034689a177ec718123675ee7ad2970f3e78a708a1d1932bed53b37`）；模板自检规则、Seedance Skill 和来源版本由同一编译清单绑定。
 >
-> 使用约定：本模板是当前 v1 制作包的结构、自检规则和最终交付格式。独立 Codex 必须直接生成完整 13 章 Markdown，并在“规范对象”代码块中嵌入唯一标准 JSON；JSON 与正文由 Codex 同一轮生成，服务端不负责章节投影或镜头卡重建。读取和导入只允许幂等修复遗漏的准确对白原句与语音混音层级，不替代完整 authoring 自检。不要把历史制作包、旧 generationPrompt 或旧分镜正文当作新包模板。
+> 使用约定：本模板是当前 v1 制作包的结构、自检规则和最终交付格式。独立 Codex 必须直接生成完整 13 章 Markdown，并在“规范对象”代码块中嵌入唯一标准 JSON；JSON 与正文由 Codex 同一轮生成，服务端不负责章节投影或镜头卡重建。读取和导入保留作者原稿，只读核对并提示缺句、声音冲突或版本差异，不替代完整 authoring 自检。不要把历史制作包、旧 generationPrompt 或旧分镜正文当作新包模板。
 >
-> 生成方式：本模板支持外部 Codex 独立生成。外部 Codex 只依据本模板、当前用户请求、当前 TXT/小说、当前正式资产和当前参考素材完成一次 authoring、自检和修正，不需要调用项目内部 `executeDramaScriptRun` 或依赖隐藏硬编码。项目导入时检查 JSON、章节、字段、时间轴、资产和权限，不重复执行完整语义门禁，也不从 `framePlan`、旧提示词或模板示例重建镜头卡；读取/导入只允许幂等修复遗漏的对白原句与语音混音层级，保留其他公开提示词和音效细节。
+> 生成方式：本模板支持外部 Codex 独立生成。外部 Codex 只依据本模板、当前用户请求、当前 TXT/小说、当前正式资产和当前参考素材完成一次 authoring、自检和修正，不需要调用项目内部 `executeDramaScriptRun` 或依赖隐藏硬编码。项目导入时检查 JSON、章节、字段、时间轴、资产和权限，不重复执行完整语义门禁，也不从 `framePlan`、旧提示词或模板示例重建镜头卡；读取/导入不补台词、不追加声音说明、不重编译公开正文，质量问题定位提醒并允许继续导入。
 >
 > 来源优先级：本轮用户请求与本轮自定义模板 > 当前 TXT/小说事实 > 当前正式资产与已验收连续性 > 本模板与当前导演 Skill 的通用规则 > 最小合理导演补全。不得读取历史制作包、历史脚本、旧 generationPrompt 或旧运行记录。没有角色/场景图片不阻断制作包生成；有图片时必须按 alias、职责、顺序和清晰度登记，不能伪造引用。
 >
 > v1 固定保留 13 个一级章节；独立 Codex 必须直接填写这些章节。规范对象 JSON 与正文必须同时完整提供剧本、场次、镜头、资产、表演、声音、连续性、逐帧计划和 QC 数据。
 >
 > 目标平台：按当前锁定生产方案填写｜语言：按当前项目填写｜画幅：按当前项目填写｜每个逻辑片段时长：按当前方案填写｜整集成片时长：由 TXT/剧本拆解后的逻辑片段数量推导
+
+### 外部交稿的顺序与范围
+
+完整源文及结尾 → 逐句原文、声源与顺序 → 人物目标/知情/触发/选择/结果 → 建筑锚点、路线、左右手、道具归属与轴线 → 容量核算并冻结逻辑轴 → 逐帧信息职责、静态瞬间与摄影选择 → JSON/正文 → 观众顺序审阅与局部修订。只使用当前正式事实，不回灌旧制作包。
+
+长对白切听者时保留原角色的场内画外声源；人物、手部、道具和环境特写按实际主体检查。克制表演不强制情绪升级，所有相邻片段必须登记连续或合法变化依据。声音冲突按声源与窗口核对，原句“别说话”不当作禁声指令。第十三章记录具体证据和实际检查范围；无媒体时只报告文本自检。
+
+可运行 `pnpm --dir web run check:drama-package -- <制作包.md> --source <源文.txt>`；工具只读不改稿。每个公开镜头卡填写“剪辑承接”，说明当前提示词内部的动作、空间、声音与新增信息；禁止跨逻辑片段引用。字段说明与测试过的最小合法镜头见配套 [字段合同与最小镜头示例](drama-production-package-v1-fields.md)，示例不进入本包。结构错误先修，质量问题集中局部修订；项目允许提醒后导入且保留原稿，导入成功不等于 QC 通过。
 
 ## 规范对象（机器导入必填）
 
@@ -74,7 +82,7 @@
 }
 ```
 
-独立 Codex authoring 时，不得把上述示意对象原样返回；必须替换为当前 TXT/剧本真实生成的完整 JSON 和 13 章正文。服务端导入时只解析该 JSON，不从 JSON 重新投影章节正文；仅针对卡片中的对白原句完整性和语音混音层级执行确定性修复。
+独立 Codex authoring 时，不得把上述示意对象原样返回；必须替换为当前 TXT/剧本真实生成的完整 JSON 和 13 章正文。服务端导入时只解析该 JSON，不从 JSON 重新投影章节正文；对白完整性和声音冲突只读检查，缺口由作者修订。
 
 ### 正式字段锁定与逻辑片段轴
 
@@ -117,9 +125,9 @@ targetDuration = logicalShotCount × shotDuration
 
 ### 当前绑定版本
 
-- 制作包契约：`vozeb-drama-production-package-v1@1.0.0`，契约 hash：`c6a1672d8f33a353753c1953bbcf58b2070861412ce5ca89030d4d8f907822f9`。
-- 规范源 hash：`ea42ec919ff7ba3fdb4505ab2b30a30a39de7ad57a528a43f29ba8bd343b6288`；编译规则 hash：`15e22065bafe06b7bd6ce273603b27c9654200d10dba28a0f1c8a7a2c879b4ef`。
-- 主导演 Skill：`drama-video-director@1.12.2`，hash：`67a8e2331ea458e1dde025e5a1e98ffb90f9fee55d523a8f70cffcf3014d283f`。
+- 制作包契约：`vozeb-drama-production-package-v1@1.0.0`，契约 hash：`0f51f89e6f8a365b6d18e8070eba0993619ed33747a422722556ece59782800d`。
+- 规范源 hash：`38c0752aea0dfd27bf7ea366172eca7fa8e4c7a00d8d72693585ad9245baab5f`；编译规则 hash：`15e22065bafe06b7bd6ce273603b27c9654200d10dba28a0f1c8a7a2c879b4ef`。
+- 主导演 Skill：`drama-video-director@1.13.0`，hash：`56604f50c9034689a177ec718123675ee7ad2970f3e78a708a1d1932bed53b37`。
 - 视频提示词公开格式：小墨个人分镜 Skill 6.3，来源标识 `storyboard-director@6.3.0`。
 - 每个逻辑片段的完整 `videoPrompt`（包含全部公开帧卡、台词、人声、音效和本条内部镜头变化）必须控制在 4500 个 Unicode 字符以内；超限只能压缩重复视觉描述，不能删除主体、触发、动作、可见结果、声音锚点或本条内部硬切信息。
 - 公开视频卡使用自然语言，不得出现 `palette=...`、`saturation=...`、`film_stock=...`、`grain=...`、`halation=...` 等未声明伪参数串，也不得出现 `undefined`、`null`、`NaN`、`[object Object]`；光色、材质、胶片感如确有作用，只用自然语言写入 `productionBible` 或当前帧新增作用。
@@ -151,7 +159,7 @@ Codex 必须先做预检，再开始拆镜和写公开视频卡；不能先按�
 → 再自检并输出
 ```
 
-对白容量表至少包含：对白 ID、说话人、可发音字数、`speechRateCharsPerSecond`、`requiredSpeechSeconds`、`availableSpeechSeconds`、逻辑片段、帧段、句前停顿和句后停顿。`requiredSpeechSeconds = 可发音字数 / speechRateCharsPerSecond`，`availableSpeechSeconds = endSecond - startSecond`。单句窗口不足、对白收句落在帧段内部、说话人和当前口型主体不一致、相邻帧重复起句，或对白结束后没有新的动作/反应/道具结果/有目的静默，必须先修复，不能进入正式制作包。
+对白容量表至少包含：对白 ID、说话人、可发音字数、`speechRateCharsPerSecond`、`requiredSpeechSeconds`、`availableSpeechSeconds`、逻辑片段、帧段、句前停顿和句后停顿。`requiredSpeechSeconds = 可发音字数 / speechRateCharsPerSecond`，`availableSpeechSeconds = endSecond - startSecond`。单句窗口不足、对白收句落在帧段内部、可见说话人的口型主体不一致（听者特写允许原说话人继续场内画外对白）、相邻帧重复起句，或对白结束后没有新的动作/反应/道具结果/有目的静默，必须先修复，不能进入正式制作包。
 
 后续镜头默认使用文字状态连续性：
 
@@ -179,7 +187,7 @@ Codex 必须先做预检，再开始拆镜和写公开视频卡；不能先按�
 | `ACTION_DENSITY`                | blocker | 每帧完成“谁做什么 → 触发原因 → 身体/手部/道具受力 → 可见结果 → 声音锚点”；对白结束后的时间必须有剧情职责或有目的的结果停留。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | `ACTION_RESULT`                 | blocker | 每个动作必须写出具体可见结果；不得只写“准备回应”“情绪加剧”“保持疑问”“关系冻结”或其它不可拍摄的意图。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | `ACTION_DIFFERENCE`             | blocker | 相邻帧至少有一项可验收的主体、姿态、视线、表情、重心、手部、道具、环境或摄影信息变化；不得只换形容词。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| `EMOTION_PROGRESSION`           | blocker | 起点、中段、终点的可见表演、压力或关系状态有递进；不得整镜保持同一情绪状态。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `EMOTION_PROGRESSION`           | blocker | 起点、中段、终点的可见表演、压力或关系状态有递进；克制或稳定表演须说明剧情职责与可见阶段证据，不强迫情绪升级。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | `NPC_REACTION_CHANGE`           | blocker | 剧情要求的 NPC/其他角色有独立、具体且随主事件变化的反应；没有事实依据时不得凭空添加 NPC。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | `NPC_ROSTER_CONTINUITY`         | warning | required 群像的数量、槽位、世界锚点、分布和状态在受影响帧段保持一致；风险必须显式记录。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | `CAMERA_MOTIVATION`             | blocker | 景别、焦段、机位、轴线和主运镜服务于明确的视线、关系、空间、压力或信息揭示；连续镜头只有一条主运镜。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
@@ -303,7 +311,7 @@ Codex 必须在输出第十三章前逐镜抽查上述禁项；命中任一项�
 
 `videoPrompt` 由 Agent 直接生成完整公开内容；`framePlan.frames` 是同一视频内容的结构化镜像，不是服务端重建 `videoPrompt` 的素材。
 
-Codex authoring 不能使用固定脚本或直接复制模板正文冒充生成结果。外部 Codex 必须自行完成规范对象所需字段和门禁自检；项目导入层不运行完整语义门禁、不重建公开视频正文，只修复准确对白原句和对白优先混音层级。相邻动作差异、情绪递进、NPC 反应变化、运镜动机和镜头事件缺一项都不得标记为可生产。
+Codex authoring 不能使用固定脚本或直接复制模板正文冒充生成结果。外部 Codex 必须自行完成规范对象所需字段和门禁自检；项目导入层只读检查结构与事实，将质量问题集中提醒并允许导入；不得补写对白、追加混音说明或重建公开视频正文。相邻动作差异、情绪递进、NPC 反应变化、运镜动机和镜头事件缺一项都不得标记为可生产。
 
 ### 逐帧字段职责
 

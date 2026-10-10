@@ -25,6 +25,8 @@ COPY CHANGELOG.md /app/CHANGELOG.md
 COPY .agents/skills /app/.agents/skills
 COPY docs/drama-production-package-v1.md /app/docs/drama-production-package-v1.md
 COPY docs/drama-production-package-v1-template.md /app/docs/drama-production-package-v1-template.md
+COPY docs/drama-production-package-v1-fields.md /app/docs/drama-production-package-v1-fields.md
+COPY docs/drama-production-package-v1-field-example.json /app/docs/drama-production-package-v1-field-example.json
 COPY web ./
 RUN --mount=type=cache,target=/app/web/.next/cache pnpm run typecheck && NEXT_SKIP_BUILD_TYPECHECK=1 pnpm run build
 RUN set -eux; \

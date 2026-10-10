@@ -1,10 +1,11 @@
 import type { DramaAuthoringAudit, DramaAuthoringRepairFailure, DramaAuthoringSourceSnapshot, DramaProductionPackageV1, DramaQualityGateCheck, DramaQualityGateReport } from "@/lib/drama-project-contract";
 import { dramaDialogueFragmentSequenceError, dramaDialogueTimingReminder, dramaTimedDialogueCapacityIssues, dramaUtteranceTimingIssues, hasQuotedDramaDialogue, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
-import { DRAMA_DENSE_HARD_CUT_RANGE_30S, hasDramaDenseCutRule, hasDramaDenseCutRuleInCustomTemplateSources } from "@/lib/drama-production-plan";
+import { hasDramaDenseCutRule, hasDramaDenseCutRuleInCustomTemplateSources } from "@/lib/drama-production-plan";
 import { hasDramaReferenceAnchorClarity } from "@/lib/drama-prompt-compiler";
 import { validateDramaCharacterWardrobeContinuity, validateDramaCutInformationDiversity, validateDramaPromptComposition, validateDramaReferenceAliasConsistency } from "@/lib/drama-prompt-composition-quality";
 import {
     extractDramaVideoPromptCards,
+    dramaDenseHardCutIssues,
     DRAMA_VIDEO_PROMPT_MAX_UNICODE_CHARACTERS,
     hasConcreteDramaCameraDirection,
     validateDramaVideoPromptAudioHierarchy,
@@ -16,6 +17,7 @@ import {
     validateDramaVideoPromptSemanticQuality,
 } from "@/lib/drama-prompt-quality";
 import { validateDramaContinuityEdges } from "@/lib/drama-continuity-policy";
+import { extractDramaSourceDialogues } from "@/lib/drama-source-dialogue";
 import { DRAMA_PACKAGE_GATE_CODES, DRAMA_PACKAGE_SECTIONS } from "@/lib/server/drama-production-package-contract";
 
 export type DramaAuthoringQualityInput = {
@@ -97,7 +99,6 @@ const observableResultPattern = /停在|落在|变为|变得|露出|显出|抬�
 const actionFactPattern = /因为|由于|于是|随后|最终|决定|提出|答应|拒绝|要求|悔婚|退婚|离开|进入|走进|看见|发现|说|喊|跪|拔|抬|转身|交给|拿起|放下|撞|倒|死|活|承认|质问|回应/u;
 const publicSoundAnchorPattern = /人声|呼吸|吸气|吐气|衣料|脚步|碰撞|摩擦|风声|水声|门响|木石|混响|静默|沉默|屏息|余响|底噪|无声/u;
 const cinematicPlaceholderPattern = /^(?:入口构图已建立|动作展开|关键变化|结果状态|动作节点已经成立|主体的眉眼、呼吸、手部和道具接触关系清晰可见|情绪通过身体动作呈现)$/u;
-const denseCutExceptionPattern = /(?:减切原因|减切理由)\s*[：:]\s*(?:(?:静态留白|结果停留|凝视停留|供应商能力限制|供应商限制)[^。\n；;]*)/u;
 const videoPromptPseudoParameterPattern = /(?:palette|saturation|film_stock|grain|halation)\s*=/u;
 const videoPromptRuntimePlaceholderPattern = /undefined|null|NaN|\[object Object\]/u;
 
@@ -440,16 +441,20 @@ function checkLiteraryCompleteness(checks: DramaQualityGateCheck[], value: Drama
 }
 
 function checkDialogueCoverage(checks: DramaQualityGateCheck[], value: DramaProductionPackageV1, sourceText: string) {
-    const lines = extractDialogueLines(sourceText);
-    const episode = value.episodes[0];
-    const literaryText = episode?.script || "";
+    const lines = extractDramaSourceDialogues(
+        sourceText,
+        value.assets.characters.map((character) => character.name),
+    )
+        .filter((line) => line.speaker)
+        .map((line) => line.text);
+    const literaryText = value.episodes.map((episode) => episode.script || "").join("\n");
     const sequenceText = [
-        ...(episode?.shots || []).flatMap((shot) => [shot.dialogue || "", ...(shot.utterances || []).map((utterance) => utterance.text), shot.videoPrompt || ""]),
+        ...value.episodes.flatMap((episode) => episode.shots).flatMap((shot) => [shot.dialogue || "", ...(shot.utterances || []).map((utterance) => utterance.text), shot.videoPrompt || ""]),
         ...(value.archive?.dialogueDirections || []).map((direction) => direction.text),
     ].join("\n");
     const missingLiterary = lines.filter((line) => !containsNormalized(literaryText, line));
     const missingSequence = lines.filter((line) => !containsNormalized(sequenceText, line));
-    const utterances = episode?.shots.flatMap((shot) => shot.utterances || []) || [];
+    const utterances = value.episodes.flatMap((episode) => episode.shots.flatMap((shot) => shot.utterances || []));
     const directions = value.archive?.dialogueDirections || [];
     const missingFormat = utterances.filter((utterance) => utterance.type === "dialogue" && (!utterance.speaker || !hasQuotedDramaDialogue(sequenceText, utterance.speaker, utterance.text)));
     const missingMetadata = lines.filter((line) => {
@@ -465,7 +470,7 @@ function checkDialogueCoverage(checks: DramaQualityGateCheck[], value: DramaProd
         ? `TXT 显式对白 ${lines.length} 句；文学正文缺失 ${missingLiterary.length} 句；台词/镜头序列缺失 ${missingSequence.length} 句；说话人/时间缺失 ${missingMetadata.length} 句；说话格式缺失 ${missingFormat.length} 句`
         : utterances.length
           ? `结构化对白 ${utterances.length} 句；说话格式缺失 ${missingFormat.length} 句`
-          : "TXT 未提取到带引号的显式对白，按无对白素材处理";
+          : "未识别显式对白；源文格式与实际对白范围仍待作者核对，不能声明无对白";
     add(checks, "DIALOGUE_COVERAGE", complete, "对白覆盖率", evidence, ["story-source", "currentEpisode.script", "episodes[].shots[].utterances"], "逐句补回 TXT 原对白，并绑定说话人、镜头、时间和表演信息；不得静默遗漏或无授权改写。");
 }
 
@@ -617,16 +622,17 @@ function checkEmotionProgression(checks: DramaQualityGateCheck[], value: DramaPr
             continue;
         }
         const values = [beats.start, beats.middle, beats.end].map((beat) => [beat.emotion, beat.facialAction, beat.gaze, beat.bodyAction].join("|"));
-        if (values.some((value) => value.length < 8) || new Set(values).size < 3 || values.some((value) => /自然|到位|逐步变化|结果成立|保持状态|情绪加剧/u.test(value))) failed.push(shot.code);
+        const restrained = /克制|稳定表演|情绪不升级|静态留白|结果停留/u.test(`${shot.performanceNotes || ""}\n${shot.performancePlan?.emotionalObjective || ""}`);
+        if (values.some((value) => value.length < 8) || (!restrained && new Set(values).size < 3) || values.some((value) => /自然|到位|逐步变化|结果成立|保持状态|情绪加剧/u.test(value))) failed.push(shot.code);
     }
     add(
         checks,
         "EMOTION_PROGRESSION",
         !failed.length,
         "表演情绪递进",
-        failed.length ? `镜头 ${failed.join(", ")} 的 start/middle/end 不能证明三阶段可见递进` : "每镜表演计划具备不同的起始、中段和结束可见状态",
+        failed.length ? `镜头 ${failed.join(", ")} 的 start/middle/end 缺少可见表演证据或稳定表演的剧情依据` : "每镜表演计划具备可见阶段证据，或明确说明克制、稳定表演的职责",
         ["episodes[].shots[].performancePlan"],
-        "将情绪拆成眉眼、视线、呼吸、嘴角、重心、手部或身体的三阶段变化，不要只更换情绪形容词。",
+        "写出眉眼、视线、呼吸、嘴角、重心、手部或身体的阶段证据；需要稳定表演时说明剧情职责，不强迫情绪升级。",
     );
 }
 
@@ -747,7 +753,6 @@ function checkCameraEvents(checks: DramaQualityGateCheck[], value: DramaProducti
         const denseMaterial = `${productionPlan?.customDirectorRules || ""}\n${prompt}`;
         const denseRuleRequested = hasDramaDenseCutRule(denseMaterial) || customTemplateDenseRule;
         const denseRequested = shot.duration === 30 && (productionPlan?.video?.internalCutPolicy === "dense-30s" || denseRuleRequested);
-        const denseCutException = denseRequested && denseCutExceptionPattern.test(denseMaterial);
         if (shot.duration === 30 && denseRuleRequested && (productionPlan?.video?.internalCutPolicy === "adaptive" || (customTemplateDenseRule && productionPlan?.video?.internalCutPolicy !== "dense-30s")))
             failed.push(`${shot.code}:已声明30秒高密度硬切，但 productionPlan.video.internalCutPolicy 仍为 ${productionPlan?.video?.internalCutPolicy || "未声明"}，不能降级为 adaptive`);
         if (hasCut && !internal && !inferredInternal) failed.push(`${shot.code}:未声明内部切镜`);
@@ -760,18 +765,7 @@ function checkCameraEvents(checks: DramaQualityGateCheck[], value: DramaProducti
                 const match = event.match(/(?:时间|发生时间)\s*[：:]?\s*(\d+(?:\.\d+)?)\s*秒/u);
                 if (match && !starts.has(Number(match[1]).toFixed(3))) failed.push(`${shot.code}:切点未对齐帧边界`);
             }
-            if (denseRequested) {
-                const hardCutCount = events.filter((event) => /类型\s*[：:]\s*硬切/u.test(event)).length;
-                const frameCount = shot.framePlan?.frames.length || 0;
-                const outsideMaximum = hardCutCount > DRAMA_DENSE_HARD_CUT_RANGE_30S.max || frameCount > DRAMA_DENSE_HARD_CUT_RANGE_30S.max + 1;
-                const belowTargetWithoutReason = !denseCutException && (hardCutCount < DRAMA_DENSE_HARD_CUT_RANGE_30S.min || frameCount < DRAMA_DENSE_HARD_CUT_RANGE_30S.min + 1);
-                if (outsideMaximum || belowTargetWithoutReason)
-                    failed.push(
-                        denseCutException
-                            ? `${shot.code}:已记录减切原因，但不得超过10次硬切/11个帧段，当前为${frameCount}帧/${hardCutCount}次硬切`
-                            : `${shot.code}:30秒高密度硬切需用8—11个帧段承载7—10次硬切；若确需少切，必须写明“减切原因：静态留白/结果停留/供应商能力限制”，当前为${frameCount}帧/${hardCutCount}次硬切`,
-                    );
-            }
+            if (denseRequested) failed.push(...dramaDenseHardCutIssues(prompt, shot.framePlan?.frames || [], shot.code));
         }
     }
     add(
@@ -1033,10 +1027,6 @@ function add(checks: DramaQualityGateCheck[], code: string, passed: boolean, sco
 
 function addWarning(checks: DramaQualityGateCheck[], code: string, evidence: string, sourceRefs: string[], fixHint: string) {
     checks.push({ code, severity: "warning", scope: code, evidence: evidence ? `提示：${evidence}` : "提示：未发现风险", sourceRefs, fixHint });
-}
-
-function extractDialogueLines(source: string) {
-    return [...source.matchAll(/[“「『]([^”」』\n]{1,240})[”」』]/gu)].map((match) => match[1].trim()).filter(Boolean);
 }
 
 function extractPlotFacts(source: string) {

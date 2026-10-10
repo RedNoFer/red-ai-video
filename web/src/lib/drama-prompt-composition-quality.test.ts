@@ -25,6 +25,17 @@ describe("drama prompt composition and cut quality gates", () => {
         expect(errors).toEqual([]);
     });
 
+    it("accepts a hand or prop closeup without requiring unrelated face framing", () => {
+        expect(
+            validateDramaPromptComposition({
+                ratio: "9:16",
+                prompt: "手部特写：右手捏住信封，案面支撑清晰可辨；西侧窗光照亮纸纤维。",
+                subjectNames: ["林雪"],
+                frames: [{ actionPrompt: "手部特写显示信封收回，右手持有人不变。", imagePrompt: "信封与指尖清晰，木案在下方。" }],
+            }),
+        ).toEqual([]);
+    });
+
     it("blocks seven cuts that all keep the same character as the information target", () => {
         const prompt = Array.from({ length: 7 }, (_, index) => `镜头事件：${index + 1}秒；新机位：角色甲侧面近景；信息目的：角色甲表情和视线。`).join("\n");
         const errors = validateDramaCutInformationDiversity({

@@ -128,7 +128,7 @@ describe("drama authoring quality gates", () => {
     it("blocks missing TXT dialogue from both literary and timed dialogue coverage", () => {
         const report = validateDramaAuthoringQuality({
             package: packageValue({ script: "场景：议事大厅。萧炎说：“纳兰小姐，你来了。”他抬眼看向对方。萧战按住茶盏。" }),
-            sources: [source("第3章。\n“纳兰小姐，你来了。”\n“我不会退让。”")],
+            sources: [source("第3章。\n萧炎：“纳兰小姐，你来了。”\n萧炎：“我不会退让。”")],
             targetNarrativeChapter: 3,
         });
         expect(blockers(report, "DIALOGUE_COVERAGE")).not.toHaveLength(0);
@@ -329,14 +329,26 @@ describe("drama authoring quality gates", () => {
         expect(blockers(report, "VIDEO_PROMPT_LAYOUT")).not.toHaveLength(0);
     });
 
-    it("allows fewer dense cuts only when a static or provider reason is explicit", () => {
+    it("reports a declared dense-cut exception for revision instead of silently passing it", () => {
         const value = packageValue({
             videoPrompt:
                 "镜头模式：内部切镜（1次）\n单一主运镜：切后锁定机位，重新稳定焦点，为了看清萧战手掌和玉粉。\n减切原因：结果停留，萧战摊开的手掌需要保留静默观察。\n镜头事件：时间：15秒；类型：硬切；触发事件：萧炎说完族长；新机位：85mm主桌手部近景；切后主运镜：锁定机位；信息目的：看清父亲压住怒意的手部结果；承接：萧战手掌、玉粉位置和声音状态不变。",
         });
         value.project.productionBible = { ...(value.project.productionBible || {}), productionPlan: { shotDuration: 30, framePolicy: "agent", customDirectorRules: "当前用户明确要求30秒高密度硬切，目标7—10次" } } as never;
         const report = validateDramaAuthoringQuality({ package: value, sources: [] });
-        expect(blockers(report, "CAMERA_EVENT")).toHaveLength(0);
+        expect(
+            blockers(report, "CAMERA_EVENT")
+                .map((check) => check.evidence)
+                .join("\n"),
+        ).toContain("减切");
+    });
+
+    it("accepts restrained performance with concrete evidence instead of forcing emotional escalation", () => {
+        const value = packageValue({});
+        const shot = value.episodes[0].shots[0];
+        const beat = { emotion: "克制警觉", facialAction: "唇线收紧但眉弓不抬", gaze: "持续盯住持封右手", bodyAction: "重心稳定在案北侧，右手捏住封口" };
+        shot.performancePlan = { ...shot.performancePlan!, emotionalObjective: "克制表演：防止对方接走纸封，情绪不升级", beats: { start: beat, middle: { ...beat }, end: { ...beat } } };
+        expect(blockers(validateDramaAuthoringQuality({ package: value, sources: [] }), "EMOTION_PROGRESSION")).toHaveLength(0);
     });
 
     it("keeps narrative chapter 3 separate from package section 3", () => {

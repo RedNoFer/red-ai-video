@@ -4,15 +4,21 @@ const mocks = vi.hoisted(() => ({ getAuthSettings: vi.fn(), resolveLogicalModelC
 vi.mock("@/lib/auth/store", () => ({ getAuthSettings: mocks.getAuthSettings, refundUserPoints: vi.fn() }));
 vi.mock("@/lib/server/logical-model-router", () => ({ resolveLogicalModelCandidates: mocks.resolveLogicalModelCandidates }));
 vi.mock("@/lib/server/text-planning-runtime", () => ({ rankTextPlanningCandidates: (items: unknown[]) => items, requestStructuredText: mocks.requestStructuredText }));
+vi.mock("@/lib/server/drama-production-preflight", () => ({ preflightDramaProduction: vi.fn() }));
 
 import { preflightDramaGeneration } from "./drama-generation-preflight";
+import { preflightDramaProduction } from "@/lib/server/drama-production-preflight";
 import type { DramaEpisode, DramaProject } from "@/lib/drama-project-contract";
 
 describe("drama generation preflight", () => {
-    beforeEach(() => vi.resetAllMocks());
+    beforeEach(() => {
+        vi.resetAllMocks();
+        vi.mocked(preflightDramaProduction).mockReturnValue({ status: "passed", issues: [], checkedShotIds: [] } as never);
+    });
 
     it("does not call the model when deterministic checks block generation", async () => {
         const project = fixture();
+        vi.mocked(preflightDramaProduction).mockReturnValue({ status: "blocked", issues: [{ code: "TIMELINE_INVALID", severity: "blocking", message: "时间轴错误", shotId: "shot-one" }], checkedShotIds: ["shot-one"] } as never);
         const result = await preflightDramaGeneration({ origin: "http://localhost", cookie: "", userId: "user", requestId: "request", project, episode: project.episodes[0] });
         expect(result.status).toBe("blocked");
         expect(mocks.requestStructuredText).not.toHaveBeenCalled();
@@ -32,6 +38,7 @@ describe("drama generation preflight", () => {
         const state = { characters: [{ assetId: "character-one", position: "左", gaze: "右", pose: "站立", action: "静止" }], props: [{ assetId: "prop-one", state: "入鞘", holderId: "character-one" }], environment: "城门", lighting: "冷光" };
         project.episodes[0].shots[0].entryState = state;
         project.episodes[0].shots[0].exitState = state;
+        vi.mocked(preflightDramaProduction).mockReturnValue({ status: "needs_confirmation", issues: [{ code: "DIRECTOR_CAMERA", severity: "warning", message: "缺少主运镜", shotId: "shot-one" }], checkedShotIds: ["shot-one"] } as never);
         mocks.getAuthSettings.mockResolvedValue({ defaultModels: { textModel: "planner" } });
         mocks.resolveLogicalModelCandidates.mockReturnValue([{ channelId: "channel", upstreamModel: "gpt", channel: { id: "channel" } }]);
         mocks.requestStructuredText.mockResolvedValue({
@@ -51,6 +58,7 @@ describe("drama generation preflight", () => {
     it("does not inherit blockers from shots outside a targeted retry", async () => {
         const project = fixture();
         project.episodes[0].shots.push({ ...project.episodes[0].shots[0], id: "shot-two", title: "未完成镜头", imagePrompt: "", videoPrompt: "" });
+        vi.mocked(preflightDramaProduction).mockReturnValue({ status: "passed", issues: [{ code: "FRAME_PLAN_INVALID", severity: "blocking", message: "时间轴错误", shotId: "shot-two" }], checkedShotIds: ["shot-one", "shot-two"] } as never);
         const result = await preflightDramaGeneration({ origin: "http://localhost", cookie: "", userId: "user", requestId: "request", project, episode: project.episodes[0], shotIds: ["shot-one"] });
         expect(result.issues.every((issue) => issue.shotId !== "shot-two")).toBe(true);
     });
@@ -67,6 +75,7 @@ describe("drama generation preflight", () => {
         const state = { characters: [{ assetId: "character-one", position: "左", gaze: "右", pose: "站立", action: "静止" }], props: [{ assetId: "prop-one", state: "入鞘", holderId: "character-one" }], environment: "城门", lighting: "冷光" };
         project.episodes[0].shots[0].entryState = state;
         project.episodes[0].shots[0].exitState = state;
+        vi.mocked(preflightDramaProduction).mockReturnValue({ status: "needs_confirmation", issues: [{ code: "DIRECTOR_CAMERA", severity: "warning", message: "缺少主运镜", shotId: "shot-one" }], checkedShotIds: ["shot-one"] } as never);
         mocks.getAuthSettings.mockResolvedValue({ defaultModels: { textModel: "planner" } });
         mocks.resolveLogicalModelCandidates.mockReturnValue([{ channelId: "channel", upstreamModel: "gpt", channel: { id: "channel" } }]);
         mocks.requestStructuredText.mockResolvedValue({ arguments: JSON.stringify({ revisions: [] }), headers: new Headers(), protocol: "chat", elapsedMs: 1 });

@@ -89,7 +89,7 @@ describe("creative shortcut skills", () => {
     it("uses the canonical video surface for every video prompt authoring path", () => {
         expect(DRAMA_VIDEO_PROMPT_DIRECTOR_RULES).toContain("9:16");
         expect(DRAMA_VIDEO_PROMPT_DIRECTOR_RULES).toContain("小墨 6.3 简镜头卡");
-        expect(DRAMA_VIDEO_PROMPT_DIRECTOR_RULES).toContain("场景、角色服装、光源和参考图职责");
+        expect(DRAMA_VIDEO_PROMPT_DIRECTOR_RULES).toContain("角色位置、姿态、伤势、服装、道具持有、环境和轴线");
         expect(DRAMA_VIDEO_PROMPT_DIRECTOR_RULES).toContain("内部仍严格生成并校验 `framePlan.frames[]`");
         expect(DRAMA_VIDEO_PROMPT_DIRECTOR_RULES).not.toContain("公开 `videoPrompt` 只使用这八个布局字段");
         expect(DRAMA_VIDEO_PROMPT_DIRECTOR_RULES).not.toContain("阶段节拍：只有多事件");

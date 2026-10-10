@@ -20,6 +20,7 @@ export function serializeDramaProductionPackageMarkdown(value: DramaProductionPa
 }
 
 function withDeterministicVideoSection(value: DramaProductionPackageV1): DramaProductionPackageV1 {
+    if (value.authoring?.source === "codex-standalone") return value;
     const episodes = value.episodes.map((episode) => ({
         ...episode,
         shots: episode.shots.map((shot) => ({
@@ -101,7 +102,7 @@ function fallbackSectionContent(value: DramaProductionPackageV1, index: number) 
     if (index === 9) return episode?.shots.map((shot) => `${shot.code}｜环境音：${shot.sound?.ambience || "无"}｜拟音：${shot.sound?.soundEffects || "无"}｜音乐：${shot.sound?.music || "无"}`).join("\n") || "无";
     if (index === 10) return videoPromptSection(value) || "无";
     if (index === 11) return episode?.shots.map((shot) => `${shot.code}：场景 ${shot.locationCode || "未指定"}；角色 ${shot.characterCodes.join("、") || "无"}；道具 ${shot.propCodes.join("、") || "无"}`).join("\n") || "无";
-    if (index === 12) return value.archive?.qcReport || "已由服务端质量门禁校验；无额外 QC 说明。";
+    if (index === 12) return value.archive?.qcReport || (value.authoring?.source === "codex-standalone" ? "未提供作者 QC 正文；不能声明导演自检或实际媒体验收通过。" : "已由服务端质量门禁校验；无额外 QC 说明。");
     return "无";
 }
 

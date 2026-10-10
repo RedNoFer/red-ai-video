@@ -10,6 +10,11 @@ const codexSkillsRoot = path.join(os.homedir(), ".codex", "skills");
 const checkOnly = process.argv.includes("--check");
 const skills = [
     {
+        id: "drama-asset-image-director",
+        sourceRoot: path.join(repoRoot, ".agents", "skills", "drama-image"),
+        destinationRoot: path.join(codexSkillsRoot, "drama-asset-image-director"),
+    },
+    {
         id: "drama-video-director",
         sourceRoot: path.join(repoRoot, ".agents", "skills", "drama-video-director"),
         destinationRoot: path.join(codexSkillsRoot, "drama-video-director"),

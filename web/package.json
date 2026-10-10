@@ -11,6 +11,7 @@
         "sync:codex-skill": "node scripts/sync-drama-video-director-codex-skill.mjs",
         "sync:codex-skills": "node scripts/sync-drama-video-director-codex-skill.mjs",
         "check:codex-skills": "node scripts/sync-drama-video-director-codex-skill.mjs --check",
+        "check:drama-package": "node scripts/check-drama-package.mjs",
         "compile:skills": "node scripts/compile-all-skills.mjs",
         "predev": "pnpm run compile:skills",
         "build": "node scripts/production-build.mjs",
