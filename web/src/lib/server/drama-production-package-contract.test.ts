@@ -34,7 +34,7 @@ describe("drama production package contract compilation", () => {
         expect(template).toContain("availableSpeechSeconds = endSecond - startSecond");
         expect(template).toContain("不适用于逐句口型窗口");
         expect(template).toContain("默认必须使用 `independent` 并由文字状态锁定连续性");
-        expect(template).toContain("剪辑承接");
+        expect(template).toContain("镜头变化");
         expect(template).toContain("只有全部 blocker 门禁均为 `passed`");
         expect(template).toContain("准备回应");
         for (const gateCode of DRAMA_PACKAGE_GATE_CODES) expect(template).toContain(`\`${gateCode}\``);

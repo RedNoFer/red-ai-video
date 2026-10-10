@@ -62,8 +62,8 @@ describe("Drama generation production workspace", () => {
         expect(source).not.toContain("已提交供应商的执行快照");
         expect(source).not.toContain('["视频执行提示词（当前标准）", supplierVideoPrompt]');
         expect(source).toContain("生成与重试以此执行版为准");
-        expect(source).toContain("formatDramaVideoPromptForDisplay");
-        expect(source).toContain("镜头\\d+");
+        expect(source).toContain("data-drama-frozen-prompt={shot.id}");
+        expect(source).toContain("freezeProductionPrompt({ shot, references, basePrompt }, selectedIds)");
         expect(source).toContain('width: "min(760px, calc(100vw - 24px))"');
         expect(source).toContain("实际引用资产");
         expect(source).toContain('["本镜原文锚点", compactShotSourceEvidence(shot)]');
@@ -238,15 +238,19 @@ describe("Drama generation production workspace", () => {
         expect(frameEditorSource).toContain("data-drama-prompt-references");
     });
 
-    it("does not save the full oversized project before confirming production", async () => {
+    it("previews preflight revisions and freezes one prompt for production", async () => {
         const source = await readFile(resolve(process.cwd(), "src/app/(user)/drama/[id]/drama-generation-panel.tsx"), "utf8");
         const lockStart = source.indexOf("const lockProduction = async");
         const lockEnd = source.indexOf("const optimizeVideoPrompt", lockStart);
         const lockProduction = source.slice(lockStart, lockEnd);
 
         expect(lockProduction).not.toContain("saveProjectNow(project.id)");
-        expect(lockProduction).toContain('updateDramaShotPromptPatch(project.id, episode.id, shotId, prompts.videoPrompt || "", prompts.imagePrompt)');
-        expect(lockProduction).toContain("createDramaProductionRun(project.id, episode.id, undefined, check");
+        expect(lockProduction).not.toContain("updateDramaShotPromptPatch");
+        expect(lockProduction).toContain("frozenPrompts");
+        expect(source).toContain("check.revisedPrompts?.[shot.id]?.videoPrompt");
+        expect(source).toContain("data-drama-frozen-prompt={shot.id}");
+        expect(source).toMatch(/<pre data-drama-frozen-prompt=\{shot\.id\}[\s\S]*?\{prompt\}[\s\S]*?<\/pre>/);
+        expect(source).toContain("await runProductionPreflight(shotIds)");
     });
 
     it("reloads the project after a video pull instead of queuing a stale local project save", async () => {

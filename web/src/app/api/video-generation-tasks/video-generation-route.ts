@@ -22,7 +22,7 @@ import { buildGlobalAiOpcVideoRequest, resolveGlobalAiOpcPreset } from "@/lib/gl
 import { createVideoTask, transitionVideoTask, updateVideoTask, type VideoTask } from "@/lib/server/video-task-store";
 import { toSafeGenerationErrorMessage } from "@/lib/server/generation-errors";
 import { getStoredGenerationTaskByRequest, linkStoredGenerationTask, withGenerationConcurrencyLimit, type GenerationTaskContext } from "@/lib/server/generation-task-store";
-import { normalizeVideoAspectRatio, resolveUpstreamVideoDuration, resolveVideoDuration, resolveVideoGenerationParameters, withVideoReferenceFidelity } from "@/lib/server/video-task-config";
+import { normalizeVideoAspectRatio, resolveUpstreamVideoDuration, resolveVideoDuration, resolveVideoGenerationParameters, resolveVideoProviderPrompt } from "@/lib/server/video-task-config";
 import { parseImageDimensions } from "@/lib/image-size";
 import { signReferenceAssetInputUrl } from "@/lib/server/reference-asset-access";
 import { resolveProviderReadableReferenceMedia } from "@/lib/server/provider-reference-media";
@@ -108,7 +108,7 @@ export async function POST(request: Request) {
         const selectedCandidates = isDramaRun && keyframeCount ? (compatibleDefaultCandidates.length ? compatibleDefaultCandidates : candidates).slice(0, 1) : candidates;
         if (!selectedCandidates.length) return NextResponse.json({ error: "视频任务参数不完整或渠道不支持" }, { status: 400 });
         const channels = selectedCandidates.map(toSystemGenerationChannel);
-        const providerPrompt = withVideoReferenceFidelity(prompt, references);
+        const providerPrompt = resolveVideoProviderPrompt(prompt, references, isDramaRun);
         const origin = resolveInternalOrigin(new URL(request.url).origin);
         const cookie = requestRuntimeCredential(request, user.id);
         const billingRequestId = clean(body.context?.clientRequestId) || clean(request.headers.get("x-vozeb-pro-client-request-id")) || `video-request:${user.id}:${Date.now()}`;
@@ -251,7 +251,7 @@ export async function POST(request: Request) {
             });
             try {
                 const candidateRequestId = index === 0 ? attemptRequestId : `${attemptRequestId}:candidate:${index + 1}`;
-                const upstream = await createUpstream(user.id, origin, cookie, channel, providerPrompt, parameters, candidateReferences, settings.generationPointMultipliers, attemptRequestId, candidateRequestId);
+                const upstream = await createUpstream(user.id, origin, cookie, channel, providerPrompt, parameters, candidateReferences, settings.generationPointMultipliers, attemptRequestId, candidateRequestId, isDramaRun);
                 await updateVideoTask(localTask.id, { config: channel, upstream, requestedDurationSeconds: parameters.videoSeconds === -1 ? undefined : parameters.videoSeconds, attempts });
                 const task = { ...localTask, config: channel, upstream, requestedDurationSeconds: parameters.videoSeconds === -1 ? undefined : parameters.videoSeconds, attempts };
                 const submittedAt = Date.now();
@@ -303,6 +303,7 @@ export async function createUpstream(
     multipliers: Awaited<ReturnType<typeof getAuthSettings>>["generationPointMultipliers"],
     billingRequestId: string,
     candidateRequestId = billingRequestId,
+    preservePrompt = false,
 ) {
     let lastError = "";
     const regularReferences = regularVideoReferences(references);
@@ -321,7 +322,8 @@ export async function createUpstream(
     const dimensions = videoDimensions(raw.size, raw.vquality);
     const generateAudio = raw.videoGenerateAudio !== false && raw.videoGenerateAudio !== "false";
     const bumingContract = bumingSeedance ? resolveBumingSeedanceVideoModelContract(channel.model) : undefined;
-    const providerPrompt = bumingSeedance ? bumingSeedancePrompt(prompt, firstFrame, lastFrame, keyframes.length, bumingImages.length - keyframes.length - Number(Boolean(firstFrame)) - Number(Boolean(lastFrame)), videos.length, audios.length) : prompt;
+    const providerPrompt =
+        bumingSeedance && !preservePrompt ? bumingSeedancePrompt(prompt, firstFrame, lastFrame, keyframes.length, bumingImages.length - keyframes.length - Number(Boolean(firstFrame)) - Number(Boolean(lastFrame)), videos.length, audios.length) : prompt;
     if (isGeminiVideoChannel(channel)) {
         return createGeminiVideoUpstream({ userId, origin, cookie, channel, prompt, raw, references, generateAudio, multipliers, billingRequestId: candidateRequestId });
     }

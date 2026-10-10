@@ -3161,8 +3161,10 @@ describe("drama project service updates", () => {
         const run = await createDramaProductionRunForUser("user-one", current.id, {
             episodeId: current.episodes[0].id,
             preflight: { checkedShotIds: ["shot-one"] },
+            frozenPrompts: { "shot-one": "确认预览中的修订提示词\n实际参考图绑定（编号与本次请求图片数组完全一致）：\n@图片1：场景" },
         });
         expect(run.parameterSnapshot).toMatchObject({ videoModel: "seedance-2.0", videoChannelId: "default-video-channel" });
+        expect(run.steps.find((step) => step.type === "video")?.prompt).toBe("确认预览中的修订提示词\n实际参考图绑定（编号与本次请求图片数组完全一致）：\n@图片1：场景");
         expect(mocks.resolveLogicalModelCandidates).toHaveBeenCalledWith(expect.anything(), "video", "seedance-2.0");
         expect(mocks.createDramaProductionRun).toHaveBeenCalledOnce();
     });
@@ -3183,7 +3185,10 @@ describe("drama project service updates", () => {
         );
         mocks.supportsVideoKeyframeReferences.mockReturnValue(true);
 
-        const run = await createDramaProductionRunForUser("user-one", current.id, { episodeId: current.episodes[0].id });
+        const run = await createDramaProductionRunForUser("user-one", current.id, {
+            episodeId: current.episodes[0].id,
+            frozenPrompts: Object.fromEntries(current.episodes[0].shots.map((shot) => [shot.id, "确认预览冻结提示词"])),
+        });
 
         expect(run.parameterSnapshot).toMatchObject({ videoModel: "backend-default-video", videoChannelId: "backend-video-channel", productionPlan: { video: { model: "backend-default-video", channelId: "backend-video-channel" } } });
         expect(mocks.resolveLogicalModelCandidates).toHaveBeenCalledWith(expect.anything(), "video", "backend-default-video");

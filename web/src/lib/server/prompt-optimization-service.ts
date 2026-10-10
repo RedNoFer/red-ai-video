@@ -143,7 +143,7 @@ function parseOptimizedPrompt(value: string, mode: PromptOptimizationMode, sourc
         if (mode === "video") {
             if (validateDramaVideoPromptCardLayout(currentVisualPrompt, 1, "视频提示词").length) return "";
             const sourceDialogueRequested = /(?:对白表演|对白\s*[：:]|对话\s*[：:]|台词|说话人\s*[：:]|说\s*[：:])/u.test(sourcePrompt);
-            const outputDialogueRequested = /(?:对白表演|对白\s*[：:]|对话\s*[：:]|台词|说话人\s*[：:]|说\s*[：:])/u.test(currentVisualPrompt) && !/(?:^|\n)\s*台词\s*[：:]\s*无\s*$/mu.test(currentVisualPrompt);
+            const outputDialogueRequested = /(?:对白表演|对白\s*[：:]|对话\s*[：:]|台词|说话人\s*[：:]|说\s*[：:])/u.test(currentVisualPrompt) && !/(?:^|\n)[ \t]*台词[：:][ \t]*无[ \t]*(?=\r?\n|$)/u.test(currentVisualPrompt);
             const dialogueRequested = sourceDialogueRequested || outputDialogueRequested;
             const sourceSuppressesDialogue = /(?:无对白|无台词|不要新增对白|禁止新增对白|不添加对白)/u.test(sourcePrompt);
             if (dialogueRequested && !sourceSuppressesDialogue && !hasQuotedDramaDialogue(currentVisualPrompt)) return "";
@@ -265,6 +265,14 @@ function applyVisualContractToOptimizedPrompt(prompt: string, mode: "drama-frame
     if (!prompt || !visualContract || !Object.values(visualContract).some((value) => value.trim())) return prompt;
     const visual = formatDramaGlobalVisualContract(visualContract);
     const authority = `项目视觉合同（唯一风格来源）：${visual}`;
+    const videoStyle = [
+        visualContract.visualStyle ? `采用${visualContract.visualStyle}影像质感` : "",
+        visualContract.artStyle ? `以${visualContract.artStyle}呈现材质` : "",
+        visualContract.colorScript ? `主色调为${visualContract.colorScript}` : "",
+        visualContract.globalNegativePrompt ? `避免${visualContract.globalNegativePrompt.replace(/^(?:不要|禁止|避免|不得)\s*/u, "")}` : "",
+    ]
+        .filter(Boolean)
+        .join("；");
     const normalized = formatPromptFieldLines(prompt, mode === "video" ? "video" : "static");
     const lines = normalized.split("\n");
     let replaced = false;
@@ -277,11 +285,11 @@ function applyVisualContractToOptimizedPrompt(prompt: string, mode: "drama-frame
         if (mode === "video" && /^(?:视觉风格与光色|色调)[：:]/u.test(trimmed)) {
             replaced = true;
             const label = trimmed.startsWith("色调") ? "色调" : "视觉风格与光色";
-            return `${label}：${authority}`;
+            return `${label}：${videoStyle}`;
         }
         return line;
     });
-    return replaced ? next.join("\n") : `${authority}\n${normalized}`;
+    return replaced ? next.join("\n") : mode === "video" ? normalized : `${authority}\n${normalized}`;
 }
 
 async function refundInvalidResponse(userId: string, model: string, headers: Headers) {

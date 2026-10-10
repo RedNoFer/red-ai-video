@@ -1320,7 +1320,9 @@ test("drama shot generation previews prompt before confirmation", async ({ page 
     await page.route("**/api/drama/preflight", async (route) => {
         if (route.request().method() !== "POST") return route.fallback();
         preflightCalls += 1;
-        await route.fulfill({ json: { code: 0, data: { preflight: { status: "passed", issues: [], revisedPrompts: {}, changeSummary: [] } }, msg: "OK" } });
+        await route.fulfill({
+            json: { code: 0, data: { preflight: { status: "passed", issues: [], revisedPrompts: { "shot-one": { videoPrompt: "动态意图：预检修订稿提示词\n时间段动作：角色停住后转向湖心。" } }, changeSummary: ["确认前预览修订稿"] } }, msg: "OK" },
+        });
     });
 
     await page.goto(`/drama/${project.id}`, { waitUntil: "domcontentloaded" });
@@ -1332,11 +1334,12 @@ test("drama shot generation previews prompt before confirmation", async ({ page 
 
     const previewDialog = page.getByRole("dialog", { name: "确认生成 1 个镜头" });
     await expect(previewDialog).toBeVisible();
-    expect(preflightCalls).toBe(0);
+    expect(preflightCalls).toBe(1);
     expect(effectCleanupErrors).toEqual([]);
     await expect(previewDialog.getByText("清晰度：", { exact: false })).toBeVisible();
     await expect(previewDialog.getByText("动态意图：", { exact: false })).toBeVisible();
     await expect(previewDialog.getByText("时间段动作：", { exact: false })).toBeVisible();
+    await expect(previewDialog.locator('[data-drama-frozen-prompt="shot-one"]')).toContainText("预检修订稿提示词");
     await expect(previewDialog.getByText("实际参考图绑定（编号与本次请求图片数组完全一致）", { exact: false })).toBeVisible();
     await expect(previewDialog.getByText("默认勾选本镜头全部可用引用图片", { exact: false })).toBeVisible();
     await expect(previewDialog.getByText("关键帧为可选细节参考；未选择时按视频提示词和所选资产图生成", { exact: false })).toBeVisible();
@@ -1370,12 +1373,14 @@ test("drama shot generation previews prompt before confirmation", async ({ page 
     await expect(previewDialog.getByText("确认后才会创建视频任务并消耗额度", { exact: false })).toBeVisible();
     await expect(generationPanel.getByRole("button", { name: "生成镜头" })).toBeVisible();
     expect(productionRunCreates).toBe(0);
+    const frozenPreviewPrompt = await previewDialog.locator('[data-drama-frozen-prompt="shot-one"]').textContent();
     await previewDialog.getByRole("button", { name: "确认生成" }).click();
     await expect(previewDialog).toBeHidden();
     expect(productionRunCreates).toBe(1);
-    expect(preflightCalls).toBe(0);
+    expect(preflightCalls).toBe(1);
     expect(productionRunBody?.referenceModes).toEqual({ "shot-one": "reference" });
     expect(productionRunBody?.referenceSelections).toEqual({ "shot-one": ["scene-one", "character-one"] });
+    expect((productionRunBody?.frozenPrompts as Record<string, string>)?.["shot-one"]).toBe(frozenPreviewPrompt);
 });
 
 test("drama shot prompt optimization is available from the Agent menu and persists the result", async ({ page }) => {

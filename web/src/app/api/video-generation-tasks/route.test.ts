@@ -638,6 +638,26 @@ describe("video generation candidate failover", () => {
         expect(mocks.scheduleGenerationTask.mock.calls.some(([, , patch]) => patch.executionPhase === "needs_review")).toBe(false);
     });
 
+    it("sends a frozen Drama prompt unchanged through Buming and stores that same prompt on the task", async () => {
+        const bumingChannel = applyChannelProtocol({ ...channels[0], baseUrl: "", models: ["seedance-2-0-official"], advancedConfig: emptyAdvancedConfig() }, "buming-seedance");
+        mocks.getAuthSettings.mockResolvedValue({
+            ...settings,
+            systemChannels: [bumingChannel],
+            logicalModels: [{ ...settings.logicalModels[0], bindings: [{ ...settings.logicalModels[0].bindings[0], channelId: bumingChannel.id, upstreamModel: "seedance-2-0-official" }] }],
+        });
+        mocks.fetchInternalApi.mockResolvedValue(json({ id: "buming-frozen-prompt", state: "queued" }));
+        const frozenPrompt = "预览中冻结的完整提示词\n实际参考图绑定：@图片1";
+
+        const response = await POST(request({ videoSeconds: 5 }, [{ type: "image", url: "https://cdn.example.com/reference.png" }], { surface: "drama", runId: "run-frozen" }, frozenPrompt));
+        const [, init] = mocks.fetchInternalApi.mock.calls[0] as [string, RequestInit];
+        const upstreamBody = JSON.parse(String(init.body));
+
+        expect(response.status).toBe(200);
+        expect(upstreamBody.prompt).toBe(frozenPrompt);
+        expect(mocks.createVideoTask).toHaveBeenCalledWith(expect.objectContaining({ prompt: frozenPrompt }));
+        expect(mocks.updateVideoTask).toHaveBeenCalledWith("local-task", expect.objectContaining({ upstream: expect.objectContaining({ requestSnapshot: expect.objectContaining({ prompt: frozenPrompt }) }) }));
+    });
+
     it("persists the Drama project, episode and shot task context", async () => {
         mocks.fetchInternalApi.mockResolvedValue(json({ id: "upstream-drama", status: "queued" }));
         const context = { surface: "drama", projectId: "drama-one", episodeId: "episode-one", shotId: "shot-one", estimatedPoints: 8, attemptNo: 2, clientRequestId: "drama-video:one" };
@@ -1558,6 +1578,7 @@ function request(
     config: Record<string, unknown> = { model: "video" },
     references: Array<{ type: string; url: string; remoteUrl?: string; serverUrl?: string; durationMs?: number; role?: string; keyframeIndex?: number }> = [],
     context?: Record<string, unknown>,
+    prompt = "A test video",
 ) {
     const clientRequestId = typeof context?.clientRequestId === "string" ? context.clientRequestId : "";
     return new Request("http://localhost/api/video-generation-tasks", {
@@ -1567,7 +1588,7 @@ function request(
             ...(clientRequestId ? { "x-vozeb-pro-client-request-id": clientRequestId } : {}),
             ...(typeof context?.attemptNo === "number" ? { "x-vozeb-pro-attempt-no": String(context.attemptNo) } : {}),
         },
-        body: JSON.stringify({ config, prompt: "A test video", references, context }),
+        body: JSON.stringify({ config, prompt, references, context }),
     });
 }
 

@@ -21,7 +21,6 @@ import {
 } from "@/services/api/drama-projects";
 import { resolveModelRequestConfig, useEffectiveConfig } from "@/stores/use-config-store";
 import { appendDramaImageReferenceBindings, compileDramaShotExecutionPrompts } from "@/lib/drama-prompt-compiler";
-import { formatPromptFieldLines } from "@/lib/drama-frame-sequence";
 import { approvedAssetReference, approvedScenePanoramaReference } from "@/lib/drama-asset-baseline";
 import { dramaReferenceImageBudget } from "@/lib/drama-production-plan";
 import { activeFrameEvidence, continuityStartEvidence, supersedeFrameEvidence } from "@/lib/drama-continuity-policy";
@@ -39,15 +38,16 @@ import { markDramaCanvasSynced } from "../../canvas/[id]/canvas-drama-navigation
 import type { DramaVideoPromptAnalysis, DramaVideoReferenceMode } from "@/lib/drama-project-contract";
 
 const actionButtonClass = "!h-9 !px-3 [&>span:last-child]:whitespace-nowrap";
-const DRAMA_VIDEO_PROMPT_SECTIONS = ["重要剪辑指令", "素材绑定", "故事意图", "故事含义", "空间与连续性", "灯光与画面", "摄影总则", "逐镜头时间线", "硬性禁止"] as const;
+function freezeProductionPrompt(row: ProductionPromptRow, selectedIds: string[]) {
+    const selectedReferences = row.references.filter((reference) => selectedIds.includes(reference.id)).map((reference, index) => ({ ...reference, alias: `@图片${index + 1}` }));
+    return appendDramaImageReferenceBindings(
+        row.basePrompt,
+        selectedReferences.map((reference) => ({ id: reference.id, label: reference.label, binding: reference.purpose })),
+    );
+}
 
-function formatDramaVideoPromptForDisplay(value: string) {
-    const sectionPattern = DRAMA_VIDEO_PROMPT_SECTIONS.join("|");
-    return formatPromptFieldLines(value, "video")
-        .replace(new RegExp(`[ \\t]*(?=【(?:${sectionPattern})】)`, "gu"), "\n")
-        .replace(/[ \t]*(?=镜头\d+[，,:：]\s*(?:时间|起点|终点|画面))/gu, "\n")
-        .replace(/[ \t]*\n[ \t]*/gu, "\n")
-        .trim();
+function freezeProductionPrompts(rows: ProductionPromptRow[], selections: Record<string, string[]>) {
+    return Object.fromEntries(rows.map((row) => [row.shot.id, freezeProductionPrompt(row, selections[row.shot.id] || [])]));
 }
 
 export function DramaGenerationPanel({
@@ -95,6 +95,7 @@ export function DramaGenerationPanel({
     const [autoFixing, setAutoFixing] = useState(false);
     const visualSyncVersion = useRef("");
     const productionSyncVersion = useRef("");
+    const preflightProjectVersion = useRef("");
     const readiness = useMemo(() => summarizeDramaGeneration(project, episode), [episode, project]);
     const productionPlan = project.productionBible?.productionPlan;
     const renderTask = episode.renderTask || null;
@@ -350,14 +351,10 @@ export function DramaGenerationPanel({
         }
     };
 
-    const lockProduction = async (shotIds: string[], check: DramaProductionPreflight, referenceSelections: Record<string, string[]>, referenceModes: Record<string, DramaVideoReferenceMode>) => {
+    const lockProduction = async (check: DramaProductionPreflight, referenceSelections: Record<string, string[]>, referenceModes: Record<string, DramaVideoReferenceMode>, frozenPrompts: Record<string, string>) => {
         setCreatingRun(true);
         try {
-            for (const [shotId, prompts] of Object.entries(check.revisedPrompts || {})) {
-                const saved = await updateDramaShotPromptPatch(project.id, episode.id, shotId, prompts.videoPrompt || "", prompts.imagePrompt);
-                replaceShot(project.id, episode.id, shotId, saved.shot, saved.updatedAt);
-            }
-            const run = await createDramaProductionRun(project.id, episode.id, undefined, check, { referenceSelections, referenceModes });
+            const run = await createDramaProductionRun(project.id, episode.id, undefined, check, { referenceSelections, referenceModes, frozenPrompts });
             setProductionRun(run);
             await loadProject(project.id, true);
             message.success("生产运行已锁定，将按视频提示词、所选参考图和连续性约束执行");
@@ -410,7 +407,7 @@ export function DramaGenerationPanel({
         const promptRows = selectedShots.map((shot) => ({
             shot,
             references: previewVideoReferenceBindings(project, episode, shot),
-            basePrompt: compileDramaShotExecutionPrompts(project, episode, shot).videoPrompt,
+            basePrompt: compileDramaShotExecutionPrompts(project, episode, check.revisedPrompts?.[shot.id]?.videoPrompt ? { ...shot, executionVideoPrompt: check.revisedPrompts[shot.id].videoPrompt } : shot).videoPrompt,
         }));
         const selectionState: { selections: Record<string, string[]>; referenceModes: Record<string, DramaVideoReferenceMode>; invalid: boolean } = {
             selections: Object.fromEntries(promptRows.map((row) => [row.shot.id, row.references.map((reference) => reference.id)])),
@@ -428,29 +425,40 @@ export function DramaGenerationPanel({
                     message.error("请调整参考图选择，或完成按序关键帧驱动所需的完整帧计划");
                     return Promise.reject();
                 }
-                return lockProduction(shotIds, check, selectionState.selections, selectionState.referenceModes);
+                const referenceSelections = Object.fromEntries(promptRows.map((row) => [row.shot.id, row.references.filter((reference) => selectionState.selections[row.shot.id]?.includes(reference.id)).map((reference) => reference.id)]));
+                return lockProduction(check, referenceSelections, selectionState.referenceModes, freezeProductionPrompts(promptRows, referenceSelections));
             },
         });
     };
 
-    const checkProduction = async (shotIds: string[] = episode.shots.map((shot) => shot.id)) => {
-        if (preflighting) return;
+    const runProductionPreflight = async (shotIds: string[]) => {
         setPreflighting(true);
         try {
             const check = await preflightDramaGeneration(project.id, episode.id, shotIds, `drama-preflight:${project.id}:${episode.id}:${shotIds.join(",")}:${project.updatedAt}`);
             setPreflight(check);
+            preflightProjectVersion.current = project.updatedAt;
             if (check.issues.length) message.warning("生成前检查发现提醒项，仍可继续生成视频");
             else message.success("生成前检查已通过");
+            return check;
         } catch (error) {
             message.error(error instanceof Error ? error.message : "生成前预检失败");
+            return null;
         } finally {
             setPreflighting(false);
         }
     };
 
-    const startProduction = (shotIds: string[]) => {
-        if (creatingRun) return;
-        showPromptPreview(shotIds, { status: "passed", issues: [], checkedShotIds: shotIds, changeSummary: [] });
+    const checkProduction = async (shotIds: string[] = episode.shots.map((shot) => shot.id)) => {
+        if (preflighting) return;
+        await runProductionPreflight(shotIds);
+    };
+
+    const startProduction = async (shotIds: string[]) => {
+        if (creatingRun || preflighting) return;
+        const sameCheckedShots = preflight?.checkedShotIds?.length === shotIds.length && shotIds.every((shotId) => preflight.checkedShotIds?.includes(shotId));
+        const check = preflight && preflightProjectVersion.current === project.updatedAt && sameCheckedShots ? preflight : await runProductionPreflight(shotIds);
+        if (!check) return;
+        showPromptPreview(shotIds, check);
     };
 
     const completeShotReviewAndRefresh = async (shotId: string) => {
@@ -1548,10 +1556,7 @@ function ProductionPromptPreview({
                 const selectedIds = selections[shot.id] || [];
                 const selectedReferences = references.filter((reference) => selectedIds.includes(reference.id)).map((reference, index) => ({ ...reference, alias: `@图片${index + 1}` }));
                 const limit = dramaReferenceImageBudget(shot.duration);
-                const prompt = appendDramaImageReferenceBindings(
-                    basePrompt,
-                    selectedReferences.map((reference) => ({ id: reference.id, label: reference.label, binding: reference.purpose })),
-                );
+                const prompt = freezeProductionPrompt({ shot, references, basePrompt }, selectedIds);
                 const allFrames = referenceModes[shot.id] === "all_frames";
                 const frameIds = new Set(shot.framePlan?.frames.map((frame) => frame.id) || []);
                 const frameReferences = references.filter((reference) => reference.kind === "frame");
@@ -1583,7 +1588,9 @@ function ProductionPromptPreview({
                             </Checkbox>
                             <span className="text-muted-foreground">{allFrames ? "要求完整、可用并按时间顺序的计划帧" : "关键帧只是可选细节参考，不参与时间轴门禁"}</span>
                         </div>
-                        <p className="mt-2 whitespace-pre-wrap break-words leading-6 text-muted-foreground">{formatDramaVideoPromptForDisplay(prompt)}</p>
+                        <pre data-drama-frozen-prompt={shot.id} className="mt-2 whitespace-pre-wrap break-words font-sans leading-6 text-muted-foreground">
+                            {prompt}
+                        </pre>
                         {references.length ? (
                             <div className="mt-3 border-t border-border/70 pt-3" data-drama-prompt-reference-gallery>
                                 <div className="flex items-center justify-between gap-2 text-xs">

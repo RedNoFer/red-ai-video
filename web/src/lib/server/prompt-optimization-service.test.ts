@@ -110,7 +110,7 @@ describe("prompt optimization service", () => {
         expect(validateDramaVideoPromptCardLayout(validVideoPrompt("优化后的提示词"), 1, "视频提示词")).toEqual([]);
         vi.mocked(requestStructuredText).mockResolvedValue({ arguments: JSON.stringify({ optimizedPrompt: validVideoPrompt("优化后的提示词") }), headers: new Headers(), protocol: "chat", elapsedMs: 10 });
 
-        await optimizeCreativePrompt({
+        const videoResult = await optimizeCreativePrompt({
             origin: "http://localhost:3000",
             cookie: "session=1",
             userId: "user-one",
@@ -120,6 +120,9 @@ describe("prompt optimization service", () => {
             visualContract: { visualStyle: "东方写实摄影", artStyle: "克制电影级空间美术", colorScript: "冷灰蓝、旧银", globalNegativePrompt: "不要现代灯具" },
         });
 
+        expect(videoResult).toContain("采用东方写实摄影影像质感");
+        expect(videoResult).toContain("避免现代灯具");
+        expect(videoResult).not.toContain("项目视觉合同");
         const systemMessage = vi.mocked(requestStructuredText).mock.calls[0]?.[0].messages.find((message) => message.role === "system")?.content || "";
         expect(systemMessage).toContain("全局视觉风格：东方写实摄影");
         expect(systemMessage).toContain("全局画风规格：克制电影级空间美术");

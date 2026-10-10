@@ -205,10 +205,8 @@ export function refreshDramaVideoStepReferences(project: DramaProject, episode: 
     const previousShot = incoming ? episodeShot(project, episode, incoming.fromShotId) : undefined;
     const continuityTail = step.clipIndex === 1 && previousShot ? continuityStartEvidence(previousShot) : undefined;
     const orderedFrames = continuityTail ? [{ mediaUrl: continuityTail.mediaUrl, remoteUrl: continuityTail.remoteUrl }, ...frameRefs] : frameRefs;
-    const basePrompt = compileDramaShotExecutionPrompts(project, episode, shot).videoPrompt;
     return {
         ...step,
-        prompt: basePrompt,
         referenceImageUrls: orderedFrames.map((frame) => frame.mediaUrl),
         referenceImageRemoteUrls: orderedFrames.map((frame) => frame.remoteUrl),
         referenceManifest: shot.framePlan?.referenceManifest,

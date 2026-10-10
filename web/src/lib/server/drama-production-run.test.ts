@@ -80,7 +80,7 @@ describe("drama production run planning", () => {
         expect(videos.map((step) => step.duration)).toEqual([4, 4]);
         expect(videos[1].dependsOn).toContain(videos[0].id);
         expect(videos[0].prompt).toContain("视频");
-        expect(videos[0].prompt).toContain("项目视觉合同（唯一风格来源）：写实");
+        expect(videos[0].prompt).toContain("视觉质感采用：写实");
     });
 
     it("keeps every ordered keyframe while retaining fixed assets", () => {
@@ -343,6 +343,7 @@ describe("drama production run planning", () => {
         };
         const locked = buildDramaProductionRun(project, { ...project.episodes[0], shots: [shot], continuityEdges: [] }, { imageModel: "image", videoModel: "video", maxReferenceImages: 4, referenceModes: { [shot.id]: "all_frames" } });
         const video = locked.steps.find((step) => step.type === "video")!;
+        video.prompt = "确认预览冻结全文";
         expect(video.referenceImageUrls).toEqual([]);
 
         shot.storyboardFrames = shot.framePlan.frames.map((frame) => ({ id: frame.id, sequenceIndex: frame.sequenceIndex, mediaUrl: `/generated-${frame.id}.png`, source: "generated", status: "success", continuityStatus: "passed" }));
@@ -353,8 +354,7 @@ describe("drama production run planning", () => {
             { alias: "@图片1", frameId: "f1" },
             { alias: "@图片2", frameId: "f2" },
         ]);
-        expect(refreshed.prompt).toContain("视频");
-        expect(refreshed.prompt).toContain("项目视觉合同（唯一风格来源）：写实");
+        expect(refreshed.prompt).toBe("确认预览冻结全文");
     });
 
     it("allows video steps to use generated frames that are still pending inspection", () => {

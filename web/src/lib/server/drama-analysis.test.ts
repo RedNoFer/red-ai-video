@@ -163,7 +163,7 @@ describe("drama analysis contracts", () => {
             visualProject,
         );
 
-        expect(result.shots[0].videoPrompt).toContain("项目视觉合同（唯一风格来源）：西方CG电影级写实幻想，physically based 3D");
+        expect(result.shots[0].videoPrompt).toContain("视觉质感采用：西方CG电影级写实幻想，physically based 3D");
         expect(result.shots[0].videoPrompt).not.toContain("旧东方古风国漫");
         expect(result.shots[0].framePlan.frames[0].imagePrompt).toContain("项目视觉合同（唯一风格来源）：西方CG电影级写实幻想，physically based 3D");
         expect(result.shots[0].framePlan.frames[0].imagePrompt).not.toContain("旧东方古风国漫");

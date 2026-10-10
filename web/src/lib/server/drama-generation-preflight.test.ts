@@ -9,7 +9,10 @@ import { preflightDramaGeneration } from "./drama-generation-preflight";
 import type { DramaEpisode, DramaProject } from "@/lib/drama-project-contract";
 
 describe("drama generation preflight", () => {
-    beforeEach(() => vi.resetAllMocks());
+    beforeEach(() => {
+        vi.resetAllMocks();
+        mocks.getAuthSettings.mockResolvedValue({ defaultModels: { textModel: "" } });
+    });
 
     it("keeps deterministic preflight findings as reminders when no text model is available", async () => {
         const project = fixture();

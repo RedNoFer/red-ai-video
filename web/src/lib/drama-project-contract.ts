@@ -1246,7 +1246,6 @@ export type DramaProductionRun = {
         checkedShotIds: string[];
         issues: DramaProductionPreflightIssue[];
         changeSummary: string[];
-        prompts: Record<string, { sourceImagePrompt: string; sourceVideoPrompt: string; executionImagePrompt: string; executionVideoPrompt: string }>;
     };
     createdAt: string;
     updatedAt: string;

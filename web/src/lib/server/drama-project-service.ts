@@ -1741,8 +1741,12 @@ export async function createDramaProductionRunForUser(userId: string, projectId:
     const submittedPreflight = object(object(value).preflight);
     const submittedReferenceSelections = stringArrayRecord(object(value).referenceSelections);
     const submittedReferenceModes = stringReferenceModeRecord(object(value).referenceModes);
+    const frozenPrompts = stringRecord(object(value).frozenPrompts);
     const checkedShotIds = ids(submittedPreflight.checkedShotIds);
     const productionShots = checkedShotIds.length ? episode.shots.filter((shot) => checkedShotIds.includes(shot.id)) : episode.shots;
+    if (productionShots.some((shot) => !Object.prototype.hasOwnProperty.call(frozenPrompts, shot.id) || !frozenPrompts[shot.id].trim())) {
+        throw new DramaProjectServiceError("确认预览提示词已缺失，请重新打开预览后提交", 409);
+    }
     const referenceModes = Object.fromEntries(productionShots.map((shot) => [shot.id, resolveDramaVideoReferenceMode(submittedReferenceModes[shot.id])])) as Record<string, DramaVideoReferenceMode>;
     const referenceSelections = Object.fromEntries(
         productionShots.map((shot) => {
@@ -1771,17 +1775,22 @@ export async function createDramaProductionRunForUser(userId: string, projectId:
               continuityEdges: (episode.continuityEdges || []).filter((edge) => selectedShotIds.has(edge.toShotId) && (selectedShotIds.has(edge.fromShotId) || edge.inheritActualEndFrame)),
           }
         : episode;
+    const plannedRun = buildDramaProductionRun(project, scopedEpisode, {
+        ...parameters,
+        videoModel: videoCandidate.logicalModelId,
+        videoChannelId: videoCandidate.channelId,
+        productionPlan: executionPlan,
+        minVideoSeconds: videoCandidate.capabilityProfile?.minDurationSeconds,
+        maxVideoSeconds: videoCandidate.capabilityProfile?.maxDurationSeconds,
+        referenceSelections,
+        referenceModes,
+    });
     const run = {
-        ...buildDramaProductionRun(project, scopedEpisode, {
-            ...parameters,
-            videoModel: videoCandidate.logicalModelId,
-            videoChannelId: videoCandidate.channelId,
-            productionPlan: executionPlan,
-            minVideoSeconds: videoCandidate.capabilityProfile?.minDurationSeconds,
-            maxVideoSeconds: videoCandidate.capabilityProfile?.maxDurationSeconds,
-            referenceSelections,
-            referenceModes,
-        }),
+        ...plannedRun,
+        planRevision: createHash("sha256")
+            .update(JSON.stringify({ planRevision: plannedRun.planRevision, frozenPrompts }))
+            .digest("hex"),
+        steps: plannedRun.steps.map((step) => (step.type === "video" && step.shotId ? { ...step, prompt: frozenPrompts[step.shotId] } : step)),
         preflightSnapshot: {
             checkedShotIds,
             issues: array(submittedPreflight.issues).flatMap((item) => {
@@ -1792,14 +1801,6 @@ export async function createDramaProductionRunForUser(userId: string, projectId:
                 return [{ code, message, severity: issue.severity === "blocking" ? ("blocking" as const) : ("warning" as const), shotId: optionalText(issue.shotId), assetId: optionalText(issue.assetId), correction: optionalText(issue.correction) }];
             }),
             changeSummary: array(submittedPreflight.changeSummary).map(cleanText).filter(Boolean),
-            prompts: Object.fromEntries(
-                episode.shots
-                    .filter((shot) => !checkedShotIds.length || checkedShotIds.includes(shot.id))
-                    .map((shot) => [
-                        shot.id,
-                        { sourceImagePrompt: shot.imagePrompt, sourceVideoPrompt: shot.videoPrompt, executionImagePrompt: shot.executionImagePrompt || shot.imagePrompt, executionVideoPrompt: shot.executionVideoPrompt || shot.videoPrompt },
-                    ]),
-            ),
         },
     };
     const latest = await findLatestDramaProductionRun(userId, project.id, episode.id, "production");
@@ -2895,6 +2896,7 @@ async function dispatchReadyDramaProductionSteps(userId: string, project: DramaP
                 continue;
             }
             try {
+                const executionPrompt = step.prompt!;
                 const response = await fetchInternalApi(`${origin}/api/video-generation-tasks`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json", cookie, "X-VOZEB-PRO-Client-Request-Id": requestId, "X-VOZEB-PRO-Attempt-No": String(attemptNo) },
@@ -2907,7 +2909,7 @@ async function dispatchReadyDramaProductionSteps(userId: string, project: DramaP
                             videoSeconds: step.duration,
                             videoGenerateAudio: true,
                         },
-                        prompt: compileDramaVideoReferencePrompt(step.prompt!, references),
+                        prompt: executionPrompt,
                         references,
                         source: "drama",
                         context: { runId: run.id, surface: "drama", projectId: project.id, episodeId: run.episodeId, shotId: step.shotId, clientRequestId: requestId, attemptNo },
@@ -2920,7 +2922,7 @@ async function dispatchReadyDramaProductionSteps(userId: string, project: DramaP
                         ? {
                               ...step,
                               taskId: payload.task.id,
-                              executionPrompt: compileDramaVideoReferencePrompt(step.prompt!, references),
+                              executionPrompt,
                               status: payload.task.needsReview ? "needs_review" : "running",
                               error: payload.task.needsReview ? payload.warning || "视频任务提交结果待审核" : undefined,
                           }
@@ -4852,6 +4854,10 @@ function object(value: unknown) {
 
 function array(value: unknown): unknown[] {
     return Array.isArray(value) ? value : [];
+}
+
+function stringRecord(value: unknown): Record<string, string> {
+    return Object.fromEntries(Object.entries(object(value)).flatMap(([key, entry]) => (key.trim() && typeof entry === "string" && entry.trim() ? [[key.trim(), entry]] : [])));
 }
 
 function stringArrayRecord(value: unknown): Record<string, string[]> {

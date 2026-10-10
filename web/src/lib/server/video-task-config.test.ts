@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { normalizeVideoAspectRatio, normalizeVideoSize, resolveUpstreamVideoDuration, resolveVideoGenerationParameters, withVideoReferenceFidelity } from "./video-task-config";
+import { normalizeVideoAspectRatio, normalizeVideoSize, resolveUpstreamVideoDuration, resolveVideoGenerationParameters, resolveVideoProviderPrompt, withVideoReferenceFidelity } from "./video-task-config";
 
 describe("resolveVideoGenerationParameters", () => {
     const defaults = { imageSize: "9:16", videoQuality: "1080", videoSeconds: 10 };
@@ -62,6 +62,14 @@ describe("resolveVideoGenerationParameters", () => {
         expect(prompt).toContain("让人物自然挥手");
         expect(prompt).toContain("将参考图作为首帧、主体身份、外观和场景的主要依据");
         expect(prompt).toContain("禁止替换主体");
+    });
+
+    it("preserves a frozen Drama prompt unchanged while retaining normal reference guidance elsewhere", () => {
+        const frozenPrompt = "确认预览冻结全文\n实际参考图绑定：@图片1";
+        const references = [{ type: "image" as const, url: "https://cdn.example.com/reference.png" }];
+
+        expect(resolveVideoProviderPrompt(frozenPrompt, references, true)).toBe(frozenPrompt);
+        expect(resolveVideoProviderPrompt(frozenPrompt, references)).toContain("参考素材一致性要求");
     });
 
     it("does not change text-to-video or duplicate the fidelity constraint", () => {
