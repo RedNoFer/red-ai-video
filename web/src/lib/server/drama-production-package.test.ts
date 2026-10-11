@@ -86,6 +86,15 @@ function readMahadelMarkdownFixture() {
 }
 
 describe("production package boundary", () => {
+    it("preserves a character timbre through preview and apply", () => {
+        const source = structuredClone(productionPackage);
+        const timbrePrompt = "年轻成年女性，中高音区，胸腔与口腔共鸣均衡，温润微沙，气息克制，标准普通话。";
+        source.assets.characters[0].voiceProfile = { timbrePrompt, speed: 1, instructions: "" };
+        const preview = previewDramaProductionPackage(JSON.stringify(source), "voice-profile.json");
+        expect(preview.package.assets.characters[0].voiceProfile).toMatchObject({ timbrePrompt, voiceId: "", status: "unassigned" });
+        const applied = applyDramaProductionPackage(project(), preview.package, "voice-profile-hash");
+        expect(applied.characters.find((character) => character.name === "Karin")?.voiceProfile).toMatchObject({ timbrePrompt, voiceId: "", status: "unassigned" });
+    });
     it("accepts a standalone Codex production package Markdown artifact", () => {
         const standalone = structuredClone(productionPackage);
         standalone.project.productionBible.targetDuration = 30;

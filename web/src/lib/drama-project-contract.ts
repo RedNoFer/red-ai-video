@@ -241,6 +241,8 @@ export type DramaVoiceBlueprint = {
 };
 
 export type DramaVoiceProfile = {
+    /** Stable authored voice identity when no confirmed voice audio is available. */
+    timbrePrompt?: string;
     /** @deprecated 仅用于读取旧快照，业务调用必须使用 voiceId。 */
     voice?: string;
     identityType?: DramaVoiceIdentityType;
@@ -941,6 +943,7 @@ export type DramaProductionPackageAsset = {
     fieldOrigins?: Record<string, DramaFieldOrigin>;
     sceneReferenceBoard?: DramaSceneReferenceBoard;
     backgroundNpcPolicy?: DramaBackgroundNpcPolicy;
+    voiceProfile?: DramaVoiceProfile;
 };
 
 export type DramaProductionPackageShot = Omit<DramaShot, "id" | "characterIds" | "propIds" | "clueIds" | "sceneId" | "storySceneId"> & {

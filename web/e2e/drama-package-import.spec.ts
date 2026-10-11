@@ -7,8 +7,11 @@ test("external package warnings permit one preview and preserve author prose aft
     const created = await request.post("/api/drama/projects", { data: { title: `E2E 外部原稿 ${randomUUID().slice(0, 8)}`, ratio: "9:16" } });
     expect(created.ok(), await created.text()).toBe(true);
     const project = ((await created.json()) as { data: { project: DramaProject } }).data.project;
-    const source = readFileSync(new URL("../../docs/drama-production-package-v1-field-example.json", import.meta.url), "utf8");
-    const authored = JSON.parse(source).episodes[0].shots[0];
+    const fixture = JSON.parse(readFileSync(new URL("../../docs/drama-production-package-v1-field-example.json", import.meta.url), "utf8"));
+    const timbrePrompt = "年轻成年女性，中高音区，胸腔与口腔共鸣均衡，温润微沙，气息克制，标准普通话。";
+    fixture.assets.characters[0].voiceProfile = { timbrePrompt, speed: 1, instructions: "" };
+    const source = JSON.stringify(fixture);
+    const authored = fixture.episodes[0].shots[0];
     let previewCount = 0;
     page.on("request", (req) => {
         if (req.url().endsWith("/production-package") && req.postDataJSON()?.action === "preview") previewCount += 1;
@@ -42,6 +45,7 @@ test("external package warnings permit one preview and preserve author prose aft
             expect(imported.dialogue).toBe(authored.dialogue);
             expect(imported.utterances[0].text).toBe("外套颜色没变，别说话。");
             expect(imported.framePlan?.frames).toEqual(authored.framePlan.frames);
+            expect(saved.characters.find((character) => character.name === fixture.assets.characters[0].name)?.voiceProfile?.timbrePrompt).toBe(timbrePrompt);
         }
     } finally {
         expect((await request.delete(`/api/drama/projects/${project.id}`)).ok()).toBe(true);

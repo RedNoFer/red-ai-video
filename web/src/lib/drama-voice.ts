@@ -8,6 +8,7 @@ export function normalizeDramaVoiceProfile(value: unknown): DramaVoiceProfile {
     const input = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
     const voiceId = clean(input.voiceId) || clean(input.voice);
     return {
+        ...(typeof input.timbrePrompt === "string" ? { timbrePrompt: input.timbrePrompt } : {}),
         identityType: input.identityType === "custom" || input.identityType === "parameterized" ? input.identityType : voiceId ? "provider" : "parameterized",
         provider: clean(input.provider),
         model: clean(input.model),

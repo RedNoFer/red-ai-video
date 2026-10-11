@@ -68,6 +68,7 @@ import { DRAMA_PACKAGE_CONTRACT, DRAMA_PACKAGE_CONTRACT_ID, DRAMA_PACKAGE_CONTRA
 import { validateDramaAuthoringQuality } from "@/lib/server/drama-production-package-quality";
 import { reviewDramaPackage } from "@/lib/drama-package-review";
 import { preserveDramaAuthoredText } from "@/lib/drama-authored-text";
+import { normalizeDramaVoiceProfile } from "@/lib/drama-voice";
 import { dramaDenseHardCutIssues } from "@/lib/drama-prompt-quality";
 
 export class DramaProductionPackageError extends Error {}
@@ -2505,6 +2506,7 @@ function normalizePackageAsset(value: unknown, location = false, character = fal
         payoff: optionalText(asset.payoff),
         activeEpisodeCodes: strings(asset.activeEpisodeCodes),
         profile: character ? normalizeDramaCharacterProfile(baseProfile, description, name) : baseProfile,
+        ...(character && Object.keys(object(asset.voiceProfile)).length ? { voiceProfile: normalizeDramaVoiceProfile(asset.voiceProfile) } : {}),
         ...(location
             ? {
                   sceneReferenceBoard: {
