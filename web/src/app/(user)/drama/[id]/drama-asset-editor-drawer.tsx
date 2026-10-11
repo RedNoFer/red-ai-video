@@ -45,7 +45,7 @@ type AssetDraft = {
 };
 
 const emptyProfile = (): DramaAssetProfile => ({ visualIdentity: "", styling: "", colorPalette: "", consistencyRules: "" });
-const emptyVoiceProfile = (): DramaVoiceProfile => ({ voiceId: "", speed: 1, instructions: "", previewStatus: "idle", creationMode: "clone", creationStatus: "idle" });
+const emptyVoiceProfile = (): DramaVoiceProfile => ({ voiceId: "", speed: 1, instructions: "", timbrePrompt: "", previewStatus: "idle", creationMode: "clone", creationStatus: "idle" });
 const emptyDraft = (): AssetDraft => ({ name: "", description: "", payoff: "", profile: emptyProfile(), voiceProfile: emptyVoiceProfile(), backgroundNpcPolicy: { mode: "auto" } });
 
 export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }: { project: DramaProject; kind: DramaAssetKind; assetId?: string; open: boolean; onClose: () => void }) {
@@ -257,7 +257,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                 confirmReplace,
             });
             useDramaStore.getState().replaceProject(result.project);
-            setDraft((current) => ({ ...current, voiceProfile: result.voiceProfile }));
+            setDraft((current) => ({ ...current, voiceProfile: { ...result.voiceProfile, timbrePrompt: current.voiceProfile.timbrePrompt } }));
             if (result.voiceProfile.creationStatus === "success") message.success(`已生成新声纹：${result.voiceProfile.voiceId}`);
             else message.success("新声纹任务已提交");
         } catch (error) {
@@ -811,8 +811,18 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                 <section className="border-t border-border pt-3.5">
                     <div className="mb-2.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                         <h3 className="text-sm font-semibold">角色配音</h3>
-                        <p className="text-xs text-muted-foreground">生成新声纹决定角色身份；配音指令只控制台词的语气、情绪与表演。</p>
+                        <p className="text-xs text-muted-foreground">镜头优先引用角色音频；没有音频时使用固定音色提示词。配音指令控制台词表演。</p>
                     </div>
+                    <label className="mb-3 grid gap-1.5 text-sm">
+                        <span className="font-medium">固定音色提示词</span>
+                        <Input.TextArea
+                            aria-label="固定音色提示词"
+                            autoSize={{ minRows: 2 }}
+                            value={draft.voiceProfile.timbrePrompt || ""}
+                            onChange={(event) => setDraft((current) => ({ ...current, voiceProfile: { ...current.voiceProfile, timbrePrompt: event.target.value } }))}
+                            placeholder="例如：年轻成年女性，中高音区，清亮温润，轻微气声，普通话自然清晰，音色稳定；情绪变化时保持同一声线。"
+                        />
+                    </label>
                     <div className="grid gap-3 sm:grid-cols-[minmax(140px,0.8fr)_110px_minmax(220px,1.2fr)]">
                         <Input value={draft.voiceProfile.voiceId} readOnly placeholder="生成成功后显示 voice_id" />
                         <Space.Compact className="w-full">
@@ -826,12 +836,17 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                             />
                             <span className="inline-flex h-8 shrink-0 items-center rounded-r-md border border-l-0 border-border bg-muted/45 px-2 text-xs text-muted-foreground">倍速</span>
                         </Space.Compact>
-                        <Input value={draft.voiceProfile.instructions} onChange={(event) => setDraft((current) => ({ ...current, voiceProfile: { ...current.voiceProfile, instructions: event.target.value } }))} placeholder="语气、年龄感、情绪等配音指令" />
+                        <Input
+                            aria-label="台词表演指令"
+                            value={draft.voiceProfile.instructions}
+                            onChange={(event) => setDraft((current) => ({ ...current, voiceProfile: { ...current.voiceProfile, instructions: event.target.value } }))}
+                            placeholder="语气、情绪、停顿等台词表演指令"
+                        />
                     </div>
                     <div className="mt-3 grid gap-3">
                         <div className="flex flex-wrap items-center gap-2 text-sm">
-                            <span className="font-medium">Voice Clone</span>
-                            <span className="text-xs text-muted-foreground">上传样本后克隆角色音色</span>
+                            <span className="font-medium">角色配音音频</span>
+                            <span className="text-xs text-muted-foreground">上传后随镜头引用，也可用于克隆声纹；保存设定后生效</span>
                         </div>
                         <div className="flex flex-wrap items-center gap-2">
                             <input
@@ -882,7 +897,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                                         try {
                                             const result = await syncDramaVoiceCreation(project.id, character?.id || "");
                                             useDramaStore.getState().replaceProject(result.project);
-                                            setDraft((current) => ({ ...current, voiceProfile: result.voiceProfile }));
+                                            setDraft((current) => ({ ...current, voiceProfile: { ...result.voiceProfile, timbrePrompt: current.voiceProfile.timbrePrompt } }));
                                             if (result.voiceProfile.creationStatus === "success") message.success("新声纹和试听已就绪");
                                             else if (result.voiceProfile.creationStatus === "error") message.error(result.voiceProfile.creationError || "声纹创建失败");
                                             else message.info("新声纹仍在生成");
@@ -911,7 +926,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                                     try {
                                         const result = draft.voiceProfile.previewStatus === "error" ? await retryDramaVoicePreview(project.id, character?.id || "") : await syncDramaVoicePreview(project.id, character?.id || "");
                                         useDramaStore.getState().replaceProject(result.project);
-                                        setDraft((current) => ({ ...current, voiceProfile: result.voiceProfile }));
+                                        setDraft((current) => ({ ...current, voiceProfile: { ...result.voiceProfile, timbrePrompt: current.voiceProfile.timbrePrompt } }));
                                         if (result.voiceProfile.previewStatus === "error") message.error(`试听失败：${result.voiceProfile.previewError || "上游未返回可播放音频"}`);
                                         else if (result.voiceProfile.previewAudioUrl) message.success("试听音频已就绪");
                                         else message.info("试听任务仍在生成");

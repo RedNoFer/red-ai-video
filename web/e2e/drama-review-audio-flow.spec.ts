@@ -3,7 +3,7 @@ import type { DramaProject } from "../src/lib/drama-project-contract";
 import { applyChannelProtocol } from "../src/lib/channel-protocol-registry";
 
 import { expectNoHorizontalOverflow } from "./responsive-helpers";
-import { saveDramaProjectFixture } from "./support";
+import { E2E_PROTOCOL_ORIGIN, saveDramaProjectFixture } from "./support";
 
 test.use({ storageState: ".e2e-data/admin-state.json" });
 
@@ -143,7 +143,7 @@ test("管理员可以应用并保存音频逻辑模型路由", async ({ page, re
     const currentSettingsResponse = await request.get("/api/admin/settings");
     expect(currentSettingsResponse.ok(), await currentSettingsResponse.text()).toBe(true);
     const currentSettings = ((await currentSettingsResponse.json()) as { settings: Record<string, unknown> }).settings;
-    const fixtureChannel = applyChannelProtocol({ id: "e2e-routing-audio", name: "E2E 路由音频夹具", baseUrl: "http://127.0.0.1:4010/v1", apiKey: "fixture-key", apiFormat: "openai", models: ["mock-audio"], enabled: true }, "openai");
+    const fixtureChannel = applyChannelProtocol({ id: "e2e-routing-audio", name: "E2E 路由音频夹具", baseUrl: `${E2E_PROTOCOL_ORIGIN}/v1`, apiKey: "fixture-key", apiFormat: "openai", models: ["mock-audio"], enabled: true }, "openai");
     const settingsResponse = await request.patch("/api/admin/settings", {
         data: {
             systemChannels: [fixtureChannel],
@@ -231,7 +231,7 @@ test("Voice Clone 生成独立 voice_id 并可播放本地试听音频", async (
         {
             id: "e2e-audio-fixture",
             name: "E2E Voice Clone 夹具",
-            baseUrl: "http://127.0.0.1:4010",
+            baseUrl: E2E_PROTOCOL_ORIGIN,
             apiKey: "fixture-key",
             apiFormat: "openai",
             models: ["voice-design"],

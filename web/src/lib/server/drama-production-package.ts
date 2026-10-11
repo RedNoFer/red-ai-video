@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { nanoid } from "nanoid";
 
 import type {
+    DramaCharacter,
     DramaContinuityEdge,
     DramaContinuityEntityState,
     DramaBackgroundNpcPolicy,
@@ -124,6 +125,7 @@ function catalogAssets(items: DramaNamedAsset[], prefix: string, usedIds: Set<st
         description: asset.description,
         ...(asset.supplierPrompt ? { supplierPrompt: asset.supplierPrompt } : {}),
         profile: asset.profile,
+        ...(prefix === "C" && (asset as DramaCharacter).voiceProfile?.timbrePrompt ? { voiceProfile: { timbrePrompt: (asset as DramaCharacter).voiceProfile!.timbrePrompt } } : {}),
         fixed: true,
         usedInCurrentEpisode: usedIds.has(asset.id),
         activeEpisodeCodes: asset.activeEpisodeCodes || [],
@@ -255,6 +257,9 @@ function mergeProjectAssetCollection(incoming: DramaProductionPackageAsset[], ex
             ...(asset.profile ? { profile: asset.profile } : current?.profile ? { profile: current.profile } : {}),
             ...(asset.sceneReferenceBoard || current?.sceneReferenceBoard ? { sceneReferenceBoard: asset.sceneReferenceBoard || current?.sceneReferenceBoard } : {}),
             ...(asset.backgroundNpcPolicy || current?.backgroundNpcPolicy ? { backgroundNpcPolicy: asset.backgroundNpcPolicy || current?.backgroundNpcPolicy } : {}),
+            ...(kind === "角色" && ((asset as DramaCharacter).voiceProfile?.timbrePrompt || current?.voiceProfile)
+                ? { voiceProfile: { ...current?.voiceProfile, ...((asset as DramaCharacter).voiceProfile?.timbrePrompt ? { timbrePrompt: (asset as DramaCharacter).voiceProfile!.timbrePrompt } : {}) } }
+                : {}),
             ...(activeEpisodeCodes?.length || referenced.has(code) ? { activeEpisodeCodes: [...new Set([...(activeEpisodeCodes || []), ...(referenced.has(code) ? episodeCodes : [])])] } : {}),
         } as DramaProductionPackageAsset;
         if (project && kind) {
@@ -626,6 +631,7 @@ function mergeAssets<T extends DramaNamedAsset>(existing: T[], incoming: DramaPr
             ...current,
             ...asset,
             id: current?.id || `${prefix}-${nanoid()}`,
+            ...(prefix === "character" && asset.voiceProfile ? { voiceProfile: { ...(current as DramaCharacter | undefined)?.voiceProfile, ...asset.voiceProfile } } : {}),
             fieldOrigins: mergeOrigins(current?.fieldOrigins, Object.keys(asset)),
         } as unknown as T;
         const result = mergeManualFields(current, next);
@@ -2467,6 +2473,16 @@ function hasContinuityPlan(shot: DramaProductionPackageEpisode["shots"][number])
 
 function normalizePackageAsset(value: unknown, location = false, character = false, preserveAuthorText = false): DramaProductionPackageAsset {
     const asset = object(value);
+    if (
+        asset.voiceProfile !== undefined &&
+        (!character ||
+            !asset.voiceProfile ||
+            typeof asset.voiceProfile !== "object" ||
+            Array.isArray(asset.voiceProfile) ||
+            Object.keys(object(asset.voiceProfile)).some((key) => key !== "timbrePrompt") ||
+            typeof object(asset.voiceProfile).timbrePrompt !== "string")
+    )
+        throw new DramaProductionPackageError(`assets.${character ? "characters" : "其他资产"}[${text(asset.code)}].voiceProfile 必须是仅含字符串 timbrePrompt 的角色音色对象`);
     const profile = object(asset.profile);
     const name = text(asset.name);
     const description = text(asset.description);
@@ -2501,6 +2517,7 @@ function normalizePackageAsset(value: unknown, location = false, character = fal
         code: text(asset.code),
         name,
         description,
+        ...(character && asset.voiceProfile !== undefined ? { voiceProfile: { timbrePrompt: object(asset.voiceProfile).timbrePrompt as string } } : {}),
         ...(optionalText(asset.supplierPrompt) ? { supplierPrompt: optionalText(asset.supplierPrompt) } : {}),
         payoff: optionalText(asset.payoff),
         activeEpisodeCodes: strings(asset.activeEpisodeCodes),

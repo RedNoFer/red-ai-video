@@ -2,7 +2,7 @@
 
 > 制作包格式：`vozeb-drama-production-package-v1`
 >
-> 模板版本：由 `pnpm compile:skills` 自动生成；唯一制作包契约：`vozeb-drama-production-package-v1@1.0.0`（契约 hash：`0f51f89e6f8a365b6d18e8070eba0993619ed33747a422722556ece59782800d`，规范源 hash：`38c0752aea0dfd27bf7ea366172eca7fa8e4c7a00d8d72693585ad9245baab5f`）。导演 Skill：`drama-video-director@1.13.0`（hash：`56604f50c9034689a177ec718123675ee7ad2970f3e78a708a1d1932bed53b37`）；模板自检规则、Seedance Skill 和来源版本由同一编译清单绑定。
+> 模板版本：由 `pnpm compile:skills` 自动生成；唯一制作包契约：`vozeb-drama-production-package-v1@1.1.0`（契约 hash：`88f14d2a2fa892cbcc8cbb077d2f844524abb4429ff995675fe2e8de9b8c8272`，规范源 hash：`aa6a0b2797aff8b3d0433e93fe77b449183b231ff33f24480bb3680654888257`）。导演 Skill：`drama-video-director@1.14.0`（hash：`df6148ef8a1050698d293cb8b1fb89794b94fdc65c2d1ad9be7c0d8a34a98063`）；模板自检规则、Seedance Skill 和来源版本由同一编译清单绑定。
 >
 > 使用约定：本模板是当前 v1 制作包的结构、自检规则和最终交付格式。独立 Codex 必须直接生成完整 13 章 Markdown，并在“规范对象”代码块中嵌入唯一标准 JSON；JSON 与正文由 Codex 同一轮生成，服务端不负责章节投影或镜头卡重建。读取和导入保留作者原稿，只读核对并提示缺句、声音冲突或版本差异，不替代完整 authoring 自检。不要把历史制作包、旧 generationPrompt 或旧分镜正文当作新包模板。
 >
@@ -125,9 +125,9 @@ targetDuration = logicalShotCount × shotDuration
 
 ### 当前绑定版本
 
-- 制作包契约：`vozeb-drama-production-package-v1@1.0.0`，契约 hash：`0f51f89e6f8a365b6d18e8070eba0993619ed33747a422722556ece59782800d`。
-- 规范源 hash：`38c0752aea0dfd27bf7ea366172eca7fa8e4c7a00d8d72693585ad9245baab5f`；编译规则 hash：`15e22065bafe06b7bd6ce273603b27c9654200d10dba28a0f1c8a7a2c879b4ef`。
-- 主导演 Skill：`drama-video-director@1.13.0`，hash：`56604f50c9034689a177ec718123675ee7ad2970f3e78a708a1d1932bed53b37`。
+- 制作包契约：`vozeb-drama-production-package-v1@1.1.0`，契约 hash：`88f14d2a2fa892cbcc8cbb077d2f844524abb4429ff995675fe2e8de9b8c8272`。
+- 规范源 hash：`aa6a0b2797aff8b3d0433e93fe77b449183b231ff33f24480bb3680654888257`；编译规则 hash：`6d5d916bf6e32bc44aec53e365081c85ef1c61e0cd8a497da23921662b6eb633`。
+- 主导演 Skill：`drama-video-director@1.14.0`，hash：`df6148ef8a1050698d293cb8b1fb89794b94fdc65c2d1ad9be7c0d8a34a98063`。
 - 视频提示词公开格式：小墨个人分镜 Skill 6.3，来源标识 `storyboard-director@6.3.0`。
 - 每个逻辑片段的完整 `videoPrompt`（包含全部公开帧卡、台词、人声、音效和本条内部镜头变化）必须控制在 4500 个 Unicode 字符以内；超限只能压缩重复视觉描述，不能删除主体、触发、动作、可见结果、声音锚点或本条内部硬切信息。
 - 公开视频卡使用自然语言，不得出现 `palette=...`、`saturation=...`、`film_stock=...`、`grain=...`、`halation=...` 等未声明伪参数串，也不得出现 `undefined`、`null`、`NaN`、`[object Object]`；光色、材质、胶片感如确有作用，只用自然语言写入 `productionBible` 或当前帧新增作用。
@@ -344,6 +344,8 @@ imagePrompt
 ## 五、角色一致性资产
 
 ### 5.1 角色名｜C01｜全量角色卡 Prompt
+
+固定音色提示词：依据该角色创作稳定、可区分的声音身份；与 JSON 的 `assets.characters[].voiceProfile.timbrePrompt` 保持原文一致。例：年轻成年女性，中高音区，清亮温润，轻微气声，普通话自然清晰；情绪变化时保持同一声线。示例只说明字段，不直接套用到所有角色。角色已绑定音频时，视频实际提交优先引用音频；没有音频时使用此提示词。台词情绪、停顿和重音另写表演指令，不修改原句或时间窗口。外部 JSON 只填写音色文本，不编造音频地址、声纹或服务器存储键。
 
 ```text
 角色一致性 Prompt。

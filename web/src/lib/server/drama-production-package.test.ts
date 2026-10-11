@@ -2035,6 +2035,39 @@ function shot(code: string, order: number, timecode: string, characterCodes: str
     };
 }
 
+describe("production package character timbre", () => {
+    it("preserves voice text through preview, serialization and apply without changing author prompts", () => {
+        const input = structuredClone(productionPackage);
+        const timbrePrompt = "  年轻女性，清亮温润\n" + "声线稳定。".repeat(50);
+        input.assets.characters[0].voiceProfile = { timbrePrompt };
+        const preview = previewDramaProductionPackage(JSON.stringify(input), "voice.json");
+        expect(preview.package.assets.characters[0].voiceProfile?.timbrePrompt).toBe(timbrePrompt);
+        const applied = applyDramaProductionPackage(project(), preview.package, "voice-hash");
+        expect(applied.characters[0].voiceProfile?.timbrePrompt).toBe(timbrePrompt);
+        expect(JSON.parse(JSON.stringify(applied)).characters[0].voiceProfile.timbrePrompt).toBe(timbrePrompt);
+        expect(applied.episodes[0].shots[0].videoPrompt).toBe(preview.package.episodes[0].shots[0].videoPrompt);
+        expect(serializeDramaProductionPackageMarkdown(preview.package)).toContain("声线稳定。");
+    });
+    it("retains uploaded audio and provider identity while importing a prompt; manual voice settings win", () => {
+        const input = structuredClone(productionPackage);
+        input.assets.characters[0].voiceProfile = { timbrePrompt: "制作包音色" };
+        const existing = project();
+        existing.characters[0].voiceProfile = { speed: 1.1, instructions: "克制", voiceId: "fixed-voice", creationSampleAssetId: "permanent/audio/heroine.wav" };
+        const applied = applyDramaProductionPackage(existing, input, "voice-hash");
+        expect(applied.characters[0].voiceProfile).toMatchObject({ voiceId: "fixed-voice", timbrePrompt: "制作包音色", creationSampleAssetId: "permanent/audio/heroine.wav", speed: 1.1 });
+        existing.characters[0].voiceProfile.timbrePrompt = "人工音色";
+        existing.characters[0].fieldOrigins = { voiceProfile: "manual" };
+        expect(applyDramaProductionPackage(existing, input, "manual-voice-hash").characters[0].voiceProfile?.timbrePrompt).toBe("人工音色");
+    });
+    it("rejects malformed voice text and runtime voice fields instead of silently discarding them", () => {
+        for (const voiceProfile of ["声音", { timbrePrompt: [] }, { timbrePrompt: "音色", previewAudioUrl: "/api/reference-assets/untrusted.wav" }]) {
+            const input = structuredClone(productionPackage);
+            Object.assign(input.assets.characters[0], { voiceProfile });
+            expect(() => previewDramaProductionPackage(JSON.stringify(input), "invalid-voice.json")).toThrow(/voiceProfile/);
+        }
+    });
+});
+
 function project(): DramaProject {
     return {
         id: "project-one",

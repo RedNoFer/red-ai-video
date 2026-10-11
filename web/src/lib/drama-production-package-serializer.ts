@@ -82,7 +82,7 @@ function fallbackSectionContent(value: DramaProductionPackageV1, index: number) 
     if (index === 0) return `项目：${value.project.title}\n类型：${value.project.style}\n当前集：${episode?.title || "未指定"}\n原作章节：${episode?.sourceRange || "未指定"}`;
     if (index === 1) return `原作章节：${episode?.sourceRange || "未指定"}\n\n${episode?.script || "无"}`;
     if (index === 2) return episode?.script || "无";
-    if (index === 4) return value.assets.characters.map((asset) => `${asset.code}｜${asset.name}｜${asset.description}`).join("\n") || "无";
+    if (index === 4) return value.assets.characters.map((asset) => `${asset.code}｜${asset.name}｜${asset.description}${asset.voiceProfile?.timbrePrompt ? `\n固定音色提示词：${asset.voiceProfile.timbrePrompt}` : ""}`).join("\n") || "无";
     if (index === 5) return value.assets.locations.map((asset) => `${asset.code}｜${asset.name}｜${asset.description}`).join("\n") || "无";
     if (index === 6)
         return (

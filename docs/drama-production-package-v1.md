@@ -13,7 +13,7 @@
 ```yaml
 contract:
   id: vozeb-drama-production-package-v1
-  version: 1.0.0
+  version: 1.1.0
   targetNarrativeChapter: 当前 TXT/小说的目标章节标识；它不是制作包一级章节编号
   authoringProviders:
     - codex-standalone
@@ -44,6 +44,10 @@ contract:
         directorSkillHash,
         seedanceSkillHash,
       ]
+  characterVoice:
+    fields: ["assets.characters[].voiceProfile.timbrePrompt"]
+    type: string
+    runtimePriority: uploaded-character-audio > successful-character-audition > timbre-prompt
   finalAuthoringMetadata:
     fields:
       [
@@ -232,6 +236,8 @@ QC JSON 必须区分“结果”和“级别”：`authoring.qualityGateReport.s
 本文件是制作包契约唯一规范源；模板由本文件、当前 Skill 和编译清单生成。模板内嵌规则与服务端校验发生差异时，必须更新本文件并重新编译，不得在生成器中新增只存在于代码里的导演门禁。
 
 ## Agent 运行时规则
+
+角色固定音色使用 `assets.characters[].voiceProfile.timbrePrompt`（字符串），逐角色依据年龄感、音区、共鸣/质感、气声与口音创作可区分且可复用的声音身份，不把当句情绪、语速、台词全文或音频样本正文写成固定音色。第五章角色卡展示同一原文，第九章按台词填写表演指令；第十三章核对角色与声音身份。角色音频及供应商声纹由项目资产绑定，不在外部包中伪造 `voice_id`、音频 URL、任务 ID 或服务器存储键。导入只保存音色字段并保留作者视频正文和已有角色音频；手工音色优先保留。实际视频提交时，所选角色资产与场内/画外说话人采用同一绑定规则：已上传角色样本优先，其次成功的角色试听音频，无音频时采用固定音色提示词。音频只参考该角色的声线，不复述样本、不新增台词或改变对白窗口；当句情绪变化不换声线。音频模式要求视频渠道支持参考音频，不得静默丢弃音频或宣称已引用。无音频且未配置音色时明确提醒，不阻断制作包导入，也不自动创建付费声纹。
 
 - 项目内 Agent 制作包仍由 `executeDramaScriptRun` 组织；独立 Codex 不经过该入口。两条路径都必须依据同一模板和 Skill 自检，但独立 Codex 的正式结果是完整 Markdown，项目服务端不得把独立结果改写成另一份 Markdown。
 - `authoring.materials[]` 只允许三类来源记录：`package-template`、`story-source`、`reference`，每条必须有唯一 `alias`、`title`、`type`（`text`、`markdown`、`image`、`video`、`audio`）；可取得时记录 `contentHash`。`director-skill`、`provider-adapter` 不是素材来源角色，禁止放入 `authoring.materials[]`；实际使用的当前导演 Skill、公开镜头卡格式 Skill 与 Seedance 适配 Skill 可分别记录在 `authoring.directorSkill`、`authoring.storyboardSkill`、`authoring.seedanceSkill`，并在 `productionBible.productionPlan.skills` 写入版本。它们是生成来源记录，不是导入器的 Skill 白名单或版本匹配条件。`package-template` 只规定 13 个一级章节、字段顺序和字段职责；制作包正式生成时由系统自动注入唯一系统模板，用户可以提供同角色的自定义模板覆盖它；`story-source` 只规定当前目标小说章节的剧情事实；`reference` 只规定素材职责。三类 authoring source 必须保留 alias、role、顺序和内容哈希。用户不应因为未重复上传模板而被阻止生成制作包。

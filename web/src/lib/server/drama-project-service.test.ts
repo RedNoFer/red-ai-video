@@ -539,6 +539,56 @@ describe("drama project service updates", () => {
         expect(reconcileDramaVideoStepTask(step, task)).toMatchObject({ taskId: "video-task-one", status: "needs_review", error: "提交结果待确认" });
     });
 
+    it.each([false, true])("submits the character voice source with the actual video request (audio=%s)", async (withAudio) => {
+        const current = project("2026-07-19T08:00:00.000Z", "音色项目");
+        current.characters = [{ id: "heroine", name: "岚音", description: "女主", voiceProfile: { speed: 1, instructions: "克制", timbrePrompt: "清亮温润固定声线", ...(withAudio ? { creationSampleAssetId: "permanent/audio/heroine.wav" } : {}) } }];
+        current.episodes[0].shots = [
+            {
+                id: "shot-voice",
+                title: "女主对白",
+                characterIds: ["heroine"],
+                propIds: [],
+                clueIds: [],
+                imagePrompt: "画面",
+                videoPrompt: "台词：岚音：别说话。",
+                duration: 5,
+                utterances: [{ id: "u1", order: 1, type: "dialogue", characterId: "heroine", speaker: "岚音", text: "别说话。" }],
+            },
+        ] as never;
+        const run = {
+            id: `voice-run-${withAudio}`,
+            projectId: current.id,
+            episodeId: "episode-one",
+            status: "running",
+            mode: "strict",
+            parameterSnapshot: { videoModel: "video-default", ratio: "9:16" },
+            steps: [{ id: "video-voice", type: "video", shotId: "shot-voice", status: "ready", dependsOn: [], prompt: "旧提示词", duration: 5, referenceAssetIds: [] }],
+            confirmedAt: current.updatedAt,
+            createdAt: current.updatedAt,
+            updatedAt: current.updatedAt,
+        } as never;
+        mocks.getDramaProject.mockResolvedValue(current);
+        mocks.findLatestDramaProductionRun.mockResolvedValue(run);
+        mocks.getDramaProductionRun.mockResolvedValue(run);
+        mocks.fetchInternalApi.mockResolvedValue(new Response(JSON.stringify({ task: { id: "video-voice-task" } }), { headers: { "content-type": "application/json" } }));
+        await getLatestDramaProductionRunForUser("user-one", current.id, "episode-one", { origin: "http://localhost:3010", cookie: "session=test" });
+        expect(mocks.fetchInternalApi).toHaveBeenCalledOnce();
+        const body = JSON.parse(String(mocks.fetchInternalApi.mock.calls[0][1].body));
+        expect(body.prompt).toContain("别说话。");
+        expect(body.prompt).not.toContain("旧提示词");
+        if (withAudio) {
+            expect(body.references).toEqual([{ type: "audio", role: "reference", url: "/api/reference-assets/permanent/audio/heroine.wav" }]);
+            expect(body.prompt).toContain("角色「岚音」配音引用 @音频1");
+            expect(body.prompt).not.toContain("清亮温润固定声线");
+        } else {
+            expect(body.references).toEqual([]);
+            expect(body.prompt).toContain("角色「岚音」固定音色提示词：清亮温润固定声线");
+        }
+        const persisted = mocks.updateDramaProductionRun.mock.calls.at(-1)?.[1];
+        expect(persisted.steps[0].executionPrompt).toBe(body.prompt);
+        expect(current.episodes[0].shots[0].videoPrompt).toBe("台词：岚音：别说话。");
+    });
+
     it("projects a reconciled video failure back to the owning shot", async () => {
         const current = project("2026-07-19T08:00:00.000Z", "项目");
         current.episodes[0].shots = [{ id: "shot-one", title: "镜头一", characterIds: [], propIds: [], clueIds: [], imagePrompt: "画面", videoPrompt: "动作", duration: 5, generationStatus: "idle" }] as never;

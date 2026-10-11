@@ -257,6 +257,8 @@ export type DramaVoiceProfile = {
     blueprintVersion?: number;
     speed: number;
     instructions: string;
+    /** 稳定的角色音色；没有角色参考音频时用于视频原生配音。 */
+    timbrePrompt?: string;
     previewStatus?: "idle" | "queued" | "running" | "success" | "error" | "stale";
     previewTaskId?: string;
     previewLogicalModelId?: string;
@@ -934,6 +936,7 @@ export type DramaProductionPackageAsset = {
     code: string;
     name: string;
     description: string;
+    voiceProfile?: Pick<DramaVoiceProfile, "timbrePrompt">;
     supplierPrompt?: string;
     profile?: DramaAssetProfile;
     payoff?: string;
@@ -1063,7 +1066,7 @@ export type DramaQualityGateReport = {
 
 export type DramaProductionPackageContract = {
     id: "vozeb-drama-production-package-v1";
-    version: "1.0.0";
+    version: string;
     contentHash: string;
 };
 

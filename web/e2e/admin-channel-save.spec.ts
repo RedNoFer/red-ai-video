@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 import { applyChannelProtocol } from "../src/lib/channel-protocol-registry";
+import { E2E_PROTOCOL_ORIGIN } from "./support";
 
 test.use({ storageState: ".e2e-data/admin-state.json" });
 
@@ -19,7 +20,7 @@ test("管理员保存时会修复旧版 TokenGo Seedance 模板", async ({ page,
     const current = await request.get("/api/admin/settings");
     expect(current.ok(), await current.text()).toBe(true);
     const settings = (await current.json()) as { settings: { systemChannels: Array<Record<string, unknown>> } };
-    const channel = applyChannelProtocol({ id: "e2e-buming-seedance", name: "E2E 不鸣 Seedance", baseUrl: "http://127.0.0.1:4010/v1", apiKey: "fixture-key", apiFormat: "openai", models: ["seedance-2-0-official"], enabled: true }, "buming-seedance");
+    const channel = applyChannelProtocol({ id: "e2e-buming-seedance", name: "E2E 不鸣 Seedance", baseUrl: `${E2E_PROTOCOL_ORIGIN}/v1`, apiKey: "fixture-key", apiFormat: "openai", models: ["seedance-2-0-official"], enabled: true }, "buming-seedance");
     const prepared = await request.patch("/api/admin/settings", { data: { systemChannels: [...settings.settings.systemChannels, channel] } });
     expect(prepared.ok(), await prepared.text()).toBe(true);
 

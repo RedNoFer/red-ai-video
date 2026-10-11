@@ -22,6 +22,7 @@ export function normalizeDramaVoiceProfile(value: unknown): DramaVoiceProfile {
         blueprintVersion: Number.isSafeInteger(input.blueprintVersion) ? Number(input.blueprintVersion) : undefined,
         speed: Math.max(0.25, Math.min(4, Number(input.speed) || 1)),
         instructions: clean(input.instructions),
+        timbrePrompt: typeof input.timbrePrompt === "string" ? input.timbrePrompt : "",
         previewStatus: input.previewStatus === "queued" || input.previewStatus === "running" || input.previewStatus === "success" || input.previewStatus === "error" || input.previewStatus === "stale" ? input.previewStatus : "idle",
         previewTaskId: clean(input.previewTaskId),
         previewLogicalModelId: clean(input.previewLogicalModelId),

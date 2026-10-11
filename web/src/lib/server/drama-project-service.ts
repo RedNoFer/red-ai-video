@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { nanoid } from "nanoid";
 import { assertUniqueDramaVoices, normalizeDramaVoiceProfile } from "@/lib/drama-voice";
+import { appendDramaCharacterVoiceBindings, dramaShotCharacterVoiceReferences } from "@/lib/drama-character-voice-reference";
 import { hasDramaCharacterNarrativeFact, normalizeDramaCharacterProfile } from "@/lib/drama-character-rules";
 
 import { getAuthSettings } from "@/lib/auth/store";
@@ -2908,6 +2909,9 @@ async function dispatchReadyDramaProductionSteps(userId: string, project: DramaP
                 await updateDramaProductionRun(userId, current);
                 continue;
             }
+            const voices = shot ? dramaShotCharacterVoiceReferences(project, shot, step.referenceAssetIds || []) : [];
+            const voiceReferences = voices.flatMap((voice) => (voice.audio ? [{ type: "audio" as const, role: "reference" as const, url: voice.audio.url }] : []));
+            const executionPrompt = appendDramaCharacterVoiceBindings(compileDramaVideoReferencePrompt(step.prompt!, references), voices);
             try {
                 const response = await fetchInternalApi(`${origin}/api/video-generation-tasks`, {
                     method: "POST",
@@ -2921,8 +2925,8 @@ async function dispatchReadyDramaProductionSteps(userId: string, project: DramaP
                             videoSeconds: step.duration,
                             videoGenerateAudio: true,
                         },
-                        prompt: compileDramaVideoReferencePrompt(step.prompt!, references),
-                        references,
+                        prompt: executionPrompt,
+                        references: [...references, ...voiceReferences],
                         source: "drama",
                         context: { runId: run.id, surface: "drama", projectId: project.id, episodeId: run.episodeId, shotId: step.shotId, clientRequestId: requestId, attemptNo },
                     }),
@@ -2934,7 +2938,7 @@ async function dispatchReadyDramaProductionSteps(userId: string, project: DramaP
                         ? {
                               ...step,
                               taskId: payload.task.id,
-                              executionPrompt: compileDramaVideoReferencePrompt(step.prompt!, references),
+                              executionPrompt,
                               status: payload.task.needsReview ? "needs_review" : "running",
                               error: payload.task.needsReview ? payload.warning || "视频任务提交结果待审核" : undefined,
                           }

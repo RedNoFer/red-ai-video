@@ -17,18 +17,21 @@ postgresDescribe("drama project PostgreSQL mutation round-trip", () => {
         const current = { id: `drama-${randomUUID()}`, title: "原稿回读", ratio: "9:16", status: "active", characters: [], scenes: [], props: [], clues: [], episodes: [], createdAt: now, updatedAt: now } as unknown as DramaProject;
         const source = readFileSync(new URL("../../../../docs/drama-production-package-v1-field-example.json", import.meta.url), "utf8");
         const authored = JSON.parse(source).episodes[0].shots[0];
+        const timbrePrompt = JSON.parse(source).assets.characters[0].voiceProfile.timbrePrompt;
         await postgresQuery("INSERT INTO users (id, username, display_name, password_hash) VALUES ($1, $1, '原稿回读', 'test-only')", [userId]);
         try {
             await createDramaProject(userId, current);
             const preview = previewDramaProductionPackageForUser({ source, fileName: "example.json" }, {}, current);
             const imported = await applyDramaProductionPackageForUser(userId, current.id, { source, fileName: "example.json", sourceHash: preview.sourceHash });
             expect(imported.updatedAt).toBe((await getDramaProjectForUser(userId, current.id)).updatedAt);
+            expect(imported.characters[0].voiceProfile?.timbrePrompt).toBe(timbrePrompt);
             const shot = imported.episodes[0].shots[0];
             const saved = await updateDramaProjectShotMutation(userId, { projectId: current.id, episodeId: imported.episodes[0].id, shotId: shot.id, shot: { ...shot, title: "人工标题" }, expectedUpdatedAt: imported.updatedAt });
             const persisted = await getDramaProjectForUser(userId, current.id);
             expect(saved.updatedAt).toBe(persisted.updatedAt);
             expect(persisted.episodes[0].shots[0]).toMatchObject({ videoPrompt: authored.videoPrompt, dialogue: authored.dialogue, framePlan: { frames: authored.framePlan.frames } });
             expect(persisted.episodes[0].shots[0].utterances[0].text).toBe("外套颜色没变，别说话。");
+            expect(persisted.characters[0].voiceProfile?.timbrePrompt).toBe(timbrePrompt);
             await expect(updateDramaProjectShotMutation(userId, { projectId: current.id, episodeId: imported.episodes[0].id, shotId: shot.id, shot, expectedUpdatedAt: imported.updatedAt })).rejects.toMatchObject({ status: 409 });
             const storedShot = persisted.episodes[0].shots[0];
             await updateDramaProjectShotMutation(userId, {

@@ -1,6 +1,6 @@
 # 制作包 v1 字段合同与导入检查
 
-本说明配合 13 章模板使用，不是第十四章，也不新增制作包字段。JSON 是机器导入对象，正文是作者成稿；两者须来自同一次创作。目标服务器无需安装作者的 Skill 或提供项目内部运行凭据。
+本说明配合 13 章模板使用，不是第十四章，继续使用 v1 制作包格式。JSON 是机器导入对象，正文是作者成稿；两者须来自同一次创作。目标服务器无需安装作者的 Skill 或提供项目内部运行凭据。
 
 [最小可导入镜头示例](drama-production-package-v1-field-example.json) 已用真实解析器验证。它只说明嵌套类型，不是剧情生成器或生产合格样板；示例 QC 保留修订状态，审计哈希是占位值。正式交稿应计算真实哈希、完成完整导演文本自检，保留一次完整修订上限。
 
@@ -33,6 +33,8 @@
 | `authoring.materials[]`                                                           | 文本来源对象数组；必须包含 `package-template` 与 `story-source`，不用提供运行凭据                                                                                                |
 | `authoring.qualityGateReport`                                                     | `{status, checks[]}`，检查项记 `code/status/severity/scope/evidence/sourceRefs/fixHint`；被阻断的检查与总状态必须一致。导入不替作者改成 `passed`                                 |
 | `archive.sections[]`                                                              | 现有章节归档；可稀疏填写，已填写内容必须与实际正文核对，缺项声明范围缺口                                                                                                         |
+
+角色音色字段为 `assets.characters[].voiceProfile: {"timbrePrompt": "固定声音身份描述"}`，只用于角色资产，`timbrePrompt` 必须是字符串。导入、保存、刷新保持文本；已有音频与声纹保留，人工音色优先。没有音频时采用音色文本；上传样本优先于成功试听，两者优先于文本。所选角色和实际场内/画外说话人的声音绑定在生成确认框中展示，并随同一个视频请求提交；音频不复述样本内容，提示词不新增对白或修改时间窗口。外部制作包不得填入运行时 `voiceId/previewAudioUrl/creationSampleAssetId`。
 
 角色资产统一为一张白底板：身份特写＋正面、严格左侧面、背面全身。场景为当前画幅的高清单视角全景，须读出空间拓扑。
 
