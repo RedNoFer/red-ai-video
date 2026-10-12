@@ -2757,10 +2757,10 @@ function collectWarnings(value: DramaProductionPackageV1, scope: DramaProduction
             ] as const)
                 for (const code of codes) if (!codesByRole[kind].has(code)) warnings.push(`${episode.code}/${shot.code} 引用了不存在的${kind}资产 ${code}`);
             const cards = extractDramaVideoPromptCards(shot.videoPrompt);
-            const frameVisuals = (shot.framePlan?.frames || []).flatMap((frame) => [frame.actionPrompt, frame.imagePrompt]);
+            const frameVisuals = scope === "video-only" ? [] : [shot.imagePrompt, ...(shot.framePlan?.frames || []).flatMap((frame) => [frame.actionPrompt, frame.imagePrompt])];
             const fallbackVisuals = cards.length ? [] : shot.videoPrompt.split("\n").filter((line) => /^\s*画面内容[：:]/u.test(line));
-            const visibleText = [shot.imagePrompt, ...frameVisuals, ...cards.map((card) => card.visual), ...fallbackVisuals].join("\n");
-            const sceneText = [shot.imagePrompt, ...frameVisuals, ...cards.map((card) => card.scene), ...fallbackVisuals].join("\n");
+            const visibleText = [...frameVisuals, ...cards.map((card) => card.visual), ...fallbackVisuals].join("\n");
+            const sceneText = [...frameVisuals, ...cards.map((card) => card.scene), ...fallbackVisuals].join("\n");
             for (const character of value.assets.characters) {
                 if (character.name && hasVisibleNamedCharacter(visibleText, character.name) && !shot.characterCodes.includes(character.code)) {
                     warnings.push(`${episode.code}/${shot.code} 画面出现角色 ${character.name}，但未绑定角色资产 ${character.code}（不阻止导入）`);

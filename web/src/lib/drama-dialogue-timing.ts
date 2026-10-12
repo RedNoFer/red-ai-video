@@ -1,9 +1,9 @@
-import { normalizeDramaSpeaker } from "@/lib/drama-source-dialogue";
+import { isDramaVoiceoverSpeaker, normalizeDramaSpeaker } from "@/lib/drama-source-dialogue";
 
 export const DRAMA_DIALOGUE_CHARS_PER_SECOND = 5;
 export const DRAMA_DIALOGUE_TIMING_TOLERANCE_CHARS = 10;
 
-export const DRAMA_DIALOGUE_TIMING_RULES = `对白时长规则：默认按中文对白每秒约 ${DRAMA_DIALOGUE_CHARS_PER_SECOND} 个可发音字估算，不把标点和动作反应当作可压缩空间。制作包必须按逐句记录 startSecond/endSecond（相对当前镜头，只计实际说话口型，不含 pauseBeforeSeconds/pauseAfterSeconds）、pauseBeforeSeconds/pauseAfterSeconds、情绪语速 speechRate 和可复核的 speechRateCharsPerSecond。每句必须先计算 availableSpeechSeconds=endSecond-startSecond，再计算 requiredSpeechSeconds=可发音字数/speechRateCharsPerSecond；availableSpeechSeconds 小于 requiredSpeechSeconds 时，正式 authoring、制作包导入和生产前预检一律阻断，不得把“整镜总时长够”当作单句通过。pauseBeforeSeconds 与 pauseAfterSeconds 另行占用 startSecond 前后空间，必须保持在镜头边界内且不得与其他对白重叠。${DRAMA_DIALOGUE_TIMING_TOLERANCE_CHARS} 个可发音字容差只用于整镜总量的兼容提醒，不适用于逐句口型窗口。不能通过异常加速解决，必须在自然分句、说话人转换、动作反应或逻辑片段边界重新拆解。每个镜头先完成逐句对白容量表，再安排动作节点、表演和画面帧。公开视频中的直接对白必须使用“说话人说：“完整原句””格式，不能只写说话人标签或把台词塞进重音字段；公开镜头卡的台词窗口必须与对应 framePlan 时间段一一相容。同一 utterance 跨多个 framePlan 时间段时必须维护单调对白游标：后段只能从上一段已说内容之后继续，禁止重新起句、重复已说片段或与上一段出现4个及以上可发音字重叠；“继续说”不是跳过对白正文的许可。`;
+export const DRAMA_DIALOGUE_TIMING_RULES = `对白时长规则：默认按中文对白每秒约 ${DRAMA_DIALOGUE_CHARS_PER_SECOND} 个可发音字估算，不把标点和动作反应当作可压缩空间。制作包必须按逐句记录 startSecond/endSecond（相对当前镜头，只计实际说话口型，不含 pauseBeforeSeconds/pauseAfterSeconds）、pauseBeforeSeconds/pauseAfterSeconds、情绪语速 speechRate 和可复核的 speechRateCharsPerSecond。每句必须先计算 availableSpeechSeconds=endSecond-startSecond，再计算 requiredSpeechSeconds=可发音字数/speechRateCharsPerSecond；availableSpeechSeconds 小于 requiredSpeechSeconds 时，正式 authoring、制作包导入和生产前预检一律阻断，不得把“整镜总时长够”当作单句通过。pauseBeforeSeconds 与 pauseAfterSeconds 另行占用 startSecond 前后空间，必须保持在镜头边界内且不得与其他对白重叠。${DRAMA_DIALOGUE_TIMING_TOLERANCE_CHARS} 个可发音字容差只用于整镜总量的兼容提醒，不适用于逐句口型窗口。不能通过异常加速解决，必须在自然分句、说话人转换、动作反应或逻辑片段边界重新拆解。每个镜头先完成逐句对白容量表，再安排动作节点、表演和画面帧。公开视频中的直接对白必须使用“说话人说：“完整原句””格式；心理、记忆和人物介绍旁白分别使用“说话人（心理旁白）：“完整原句””“说话人（记忆旁白）：“完整原句””“说话人（人物介绍旁白）：“完整原句””，归属原说话人，场内人物闭唇、不对口型，不能把旁白标成直接发言。原文回忆中的直接对白仍保留“说话人说”并在人声说明原场内声源。不能只写说话人标签或把原句塞进重音字段；公开镜头卡的台词窗口必须与对应 framePlan 时间段一一相容。同一 utterance 跨多个 framePlan 时间段时必须维护单调对白游标：后段只能从上一段已说内容之后继续，禁止重新起句、重复已说片段或与上一段出现4个及以上可发音字重叠；“继续说”不是跳过对白正文的许可。`;
 
 export type DramaDialogueTimingInput = {
     type?: string;
@@ -18,12 +18,15 @@ export type DramaDialogueTimingInput = {
     speechRateCharsPerSecond?: number;
 };
 
-const QUOTED_DRAMA_DIALOGUE_PATTERN = /(?:^|(?<=[\n；;：:”]))\s*(?:对白表演\s*[：:]\s*)?([^：:；;\n“”]+?)\s*说\s*[：:]\s*“([^”]+)”/gu;
+const QUOTED_DRAMA_DIALOGUE_PATTERN = /(?:^|(?<=[\n；;：:”]))\s*(?:对白表演\s*[：:]\s*)?(?:([^：:；;\n“”]+?)\s*说|([^：:；;\n“”]+?[（(](?:心理旁白|记忆旁白|人物介绍旁白)[）)]))\s*[：:]\s*“([^”]+)”/gu;
 
 export type QuotedDramaDialogue = { speaker: string; text: string };
 
 export function extractQuotedDramaDialogues(value: string): QuotedDramaDialogue[] {
-    return [...value.matchAll(QUOTED_DRAMA_DIALOGUE_PATTERN)].map((match) => ({ speaker: match[1].trim(), text: match[2].trim() })).filter((item) => item.speaker && item.text);
+    return [...value.matchAll(QUOTED_DRAMA_DIALOGUE_PATTERN)]
+        .filter((match) => !match[1] || !isDramaVoiceoverSpeaker(match[1]))
+        .map((match) => ({ speaker: (match[1] || match[2]).trim(), text: match[3].trim() }))
+        .filter((item) => item.speaker && item.text);
 }
 
 export function normalizeDramaDialogueSequenceText(value: string) {
@@ -74,7 +77,7 @@ export function formatDramaDialogueLine(speaker: string, text: string) {
         .trim()
         .replace(/^[“「『"']|[”」』"']$/gu, "")
         .trim();
-    return cleanSpeaker && cleanText ? `${cleanSpeaker}说：“${cleanText}”` : "";
+    return cleanSpeaker && cleanText ? `${cleanSpeaker}${isDramaVoiceoverSpeaker(cleanSpeaker) ? "" : "说"}：“${cleanText}”` : "";
 }
 
 export function hasQuotedDramaDialogue(value: string, speaker?: string, text?: string) {

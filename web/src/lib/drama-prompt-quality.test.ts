@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { normalizeDramaSpeaker } from "@/lib/drama-source-dialogue";
 
 import {
     isGenericDramaDetail,
@@ -23,11 +24,11 @@ import {
 } from "./drama-prompt-quality";
 
 describe("drama prompt quality", () => {
-    it("removes exact repeated lines inside an oversized public card without changing its distinct content", () => {
+    it("removes exact repeated lines only when explicitly requested, independent of prompt length", () => {
         const header = "### 镜头 01 | 0-4秒 | 近景 | 50mm | 平视 | 锁定机位 | 人物镜头";
         const secondHeader = "### 镜头 02 | 4-8秒 | 近景 | 50mm | 平视 | 锁定机位 | 人物镜头";
         const repeatedCut = "硬切承接：陆川压住石缝，指节停在剑柄上。";
-        const prompt = [header, "场景：北坡岩缝。", ...Array.from({ length: 4096 }, () => repeatedCut), "台词：无", secondHeader, ...Array.from({ length: 4096 }, () => repeatedCut)].join("\n");
+        const prompt = [header, "场景：北坡岩缝。", repeatedCut, repeatedCut, "台词：无", secondHeader, repeatedCut, repeatedCut].join("\n");
 
         const repaired = repairDramaVideoPromptRepeatedLines(prompt);
 
@@ -166,6 +167,36 @@ describe("drama prompt quality", () => {
         expect(repaired.prompt).toContain("台词：陆川说：\u201c我叫陆川。\u201d");
         expect(repaired.prompt).toContain("台词：陆川说：\u201c滑坡把我冲进来的。\u201d");
         expect(validateDramaVideoPromptUtteranceCoverage(repaired.prompt, frames, utterances, "SH01")).toEqual([]);
+    });
+
+    it("matches labelled voiceover to its original speaker and exact timed source coverage", () => {
+        const labels = ["心理旁白", "记忆旁白", "人物介绍旁白"];
+        const texts = ["她记得。", "他曾来过。", "齐岚是协调员。"];
+        const frames = labels.map((_, index) => ({ startSecond: index * 2, endSecond: (index + 1) * 2 }));
+        const utterances = texts.map((text, index) => ({ type: "voiceover", speaker: "齐岚", text, ...frames[index] }));
+        const prompt = labels
+            .map((label, index) =>
+                [
+                    `### 镜头 ${index + 1} | ${index * 2}-${(index + 1) * 2}秒 | 近景 | 50mm | 平视 | 锁定机位 | 人物镜头`,
+                    "场景：值班室，齐岚坐在桌边。",
+                    "画面内容：齐岚闭唇，目光从桌面移到门口，双手压在桌沿。",
+                    "光影：左侧窗光落在齐岚侧脸和木桌边缘。",
+                    "色调：低饱和灰蓝与浅棕。",
+                    `台词：齐岚（${label}）：“${texts[index]}”`,
+                    "人声：齐岚旁白原声清晰可辨、音量居前，原句完整可听；场内人物闭唇，不对口型。",
+                    "音效：纸张轻响；旁白发声期间压低环境音、动作拟音与音乐。",
+                ].join("\n"),
+            )
+            .join("\n");
+
+        expect(labels.map((label) => normalizeDramaSpeaker(`齐岚（${label}）`))).toEqual(["齐岚", "齐岚", "齐岚"]);
+        expect(normalizeDramaSpeaker("齐岚（梦境旁白）")).toBe("齐岚（梦境旁白）");
+        expect(validateDramaVideoPromptCardLayout(prompt, frames, "SH01")).toEqual([]);
+        expect(validateDramaVideoPromptUtteranceCoverage(prompt, frames, utterances, "SH01")).toEqual([]);
+        expect(validateDramaVideoPromptUtteranceCoverage(prompt.replace("齐岚（心理旁白）", "陆泊言（心理旁白）"), frames, utterances, "SH01")).toEqual(
+            expect.arrayContaining([expect.stringContaining("未完整写入旁白原句"), expect.stringContaining("错说话人")]),
+        );
+        expect(validateDramaVideoPromptCardLayout(prompt.replace("齐岚（心理旁白）", "齐岚（梦境旁白）"), frames, "SH01")).toEqual(expect.arrayContaining([expect.stringContaining("的台词必须使用")]));
     });
 
     it("does not guess where to place untimed dialogue across multiple cards", () => {

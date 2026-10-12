@@ -1,11 +1,20 @@
 import { describe, expect, it } from "vitest";
 
-import { dramaDialogueFragmentOverlap, dramaDialogueTimingIssue, dramaDialogueTimingReminder, dramaUtteranceTimingIssues, estimateDramaDialogueSeconds, extractQuotedDramaDialogues } from "@/lib/drama-dialogue-timing";
+import { dramaDialogueFragmentOverlap, dramaDialogueTimingIssue, dramaDialogueTimingReminder, dramaUtteranceTimingIssues, estimateDramaDialogueSeconds, extractQuotedDramaDialogues, formatDramaDialogueLine } from "@/lib/drama-dialogue-timing";
 
 describe("drama dialogue timing", () => {
     it("extracts dialogue after inline field labels and detects repeated fragments", () => {
         expect(extractQuotedDramaDialogues("动作与触发：对白表演：萧炎说：“纳兰小姐，你应该知道，在”")).toEqual([{ speaker: "萧炎", text: "纳兰小姐，你应该知道，在" }]);
         expect(dramaDialogueFragmentOverlap("纳兰小姐，你应该知道，在", "纳兰小姐，你应该知道，")).toBeGreaterThanOrEqual(8);
+    });
+
+    it("recognizes only the explicit voiceover labels without turning narration into direct speech", () => {
+        const labels = ["心理旁白", "记忆旁白", "人物介绍旁白"];
+        const lines = labels.map((label) => formatDramaDialogueLine(`齐岚（${label}）`, "她记得。"));
+        expect(lines).toEqual(labels.map((label) => `齐岚（${label}）：“她记得。”`));
+        expect(extractQuotedDramaDialogues(lines.join("；"))).toEqual(labels.map((label) => ({ speaker: `齐岚（${label}）`, text: "她记得。" })));
+        expect(extractQuotedDramaDialogues("陆泊言说：“我记得。”")).toEqual([{ speaker: "陆泊言", text: "我记得。" }]);
+        expect(extractQuotedDramaDialogues("齐岚：“她记得。”；齐岚（梦境旁白）：“她记得。”；齐岚（心理旁白）说：“她记得。”")).toEqual([]);
     });
 
     it("accounts for emotional speech rate and pauses", () => {
