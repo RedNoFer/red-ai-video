@@ -37,7 +37,6 @@ const ACTIVE_CAMERA_CUT_PATTERN = /硬切|镜头切换|Camera\s+cut\s+to|Cut\s+t
 const VIDEO_CARD_HEADER = /^###\s*镜头\s*(\d+)\s*\|([^\n]+)$/gmu;
 const VIDEO_CARD_FIELDS = ["场景", "画面内容", "光影", "色调", "台词", "人声", "音效"] as const;
 const VIDEO_CARD_FIELD_BOUNDARIES = [...VIDEO_CARD_FIELDS, "镜头变化", "剪辑承接"] as const;
-export const DRAMA_VIDEO_PROMPT_MAX_UNICODE_CHARACTERS = 4500;
 const AUDIO_DUCKING_INSTRUCTION = "对白/旁白发声期间压低环境音、动作拟音与音乐，不遮挡台词清晰度；仅在语音停顿间隙再抬升";
 const SPEECH_CLARITY_PATTERN = /(?:对白|旁白|语音|人声).{0,24}原声.{0,24}(?:清晰|可辨|可懂).{0,24}(?:居前|前景|优先)/u;
 const SPEECH_DUCKING_PATTERN = /(?:对白|旁白|台词|人声|语音).{0,28}(?:发声期间|发声时|说话期间|说话时|语音窗口|期间).{0,32}(?:压低|避让|降低|减弱|不遮挡|不盖过)/u;
@@ -55,6 +54,15 @@ const PUBLIC_VIDEO_VISIBLE_ACTION_PATTERN = /抬|低|看|望|移|转|起身|前�
 const PUBLIC_VIDEO_VISIBLE_RESULT_PATTERN = /停在|落在|变为|变得|露出|显出|抬起|垂下|松开|收紧|移向|转向|对准|接住|落下|留下|响起|静止|形成|暴露|显现|被看见|沉默|低头|抬眼|受力|改变|回到|锁住|停住/u;
 /** @deprecated Legacy export retained for compatibility only; it is not a production gate. */
 export const DRAMA_VIDEO_PROMPT_TEMPLATE_SECTIONS = ["重要剪辑指令", "素材绑定", "故事意图", "空间与连续性", "灯光与画面", "摄影总则", "逐镜头时间线", "硬性禁止"] as const;
+/** The production-package contract limits a complete logical-shot prompt. */
+export const DRAMA_VIDEO_PROMPT_MAX_CHARACTERS = 4500;
+/** @deprecated Use DRAMA_VIDEO_PROMPT_MAX_CHARACTERS. */
+export const DRAMA_VIDEO_PROMPT_MAX_UNICODE_CHARACTERS = DRAMA_VIDEO_PROMPT_MAX_CHARACTERS;
+
+export function validateDramaVideoPromptLength(value: string, label = "镜头") {
+    const length = Array.from(value).length;
+    return length > DRAMA_VIDEO_PROMPT_MAX_CHARACTERS ? [`${label} videoPrompt 共 ${length} 个 Unicode 字符，超过 ${DRAMA_VIDEO_PROMPT_MAX_CHARACTERS} 字符限制；请压缩重复设定并保留对白、动作因果、结果、声音与切镜信息`] : [];
+}
 
 export type DramaCameraPlanFrame = Pick<{ startSecond: number; endSecond: number }, "startSecond" | "endSecond">;
 
@@ -335,9 +343,8 @@ function updateDramaVideoPromptCardField(prompt: string, cardIndex: number, fiel
     return next === raw ? prompt : `${prompt.slice(0, start)}${next}${prompt.slice(end)}`;
 }
 
-/** Repairs prompt inflation by keeping one copy of each identical line in each public card. */
+/** Explicitly removes exact duplicate lines when a caller asks for a cleanup. */
 export function repairDramaVideoPromptRepeatedLines(prompt: string) {
-    if (prompt.length <= DRAMA_VIDEO_PROMPT_MAX_UNICODE_CHARACTERS) return { prompt, changed: false };
     const markers = [...prompt.matchAll(VIDEO_CARD_HEADER)];
     const sections = markers.length ? markers.map((marker, index) => ({ start: marker.index ?? 0, end: markers[index + 1]?.index ?? prompt.length })) : [{ start: 0, end: prompt.length }];
     const chunks: string[] = [];
@@ -386,7 +393,7 @@ export function validateDramaVideoPromptCardLayout(value: unknown, frames: Reado
         if (!card.scene || !card.visual || isGenericDramaDetail(card.visual)) errors.push(`${label}${cardLabel}的画面内容必须写出可见进行中动作，不能使用空泛占位词`);
         if (DIRECT_DIALOGUE_IN_VISUAL_PATTERN.test(card.visual)) errors.push(`${label}${cardLabel}的画面内容不得包含完整对白或说话人台词指令；只写可见口型、呼吸和表演，完整台词只能放在“台词”字段`);
         const normalizedDialogue = card.dialogue.replace(/[。！？!?；;，,]+$/gu, "").trim();
-        if (card.dialogue && normalizedDialogue !== "无" && !hasQuotedDramaDialogue(card.dialogue)) errors.push(`${label}${cardLabel}的台词必须使用“说话人说：“实际台词””格式`);
+        if (card.dialogue && normalizedDialogue !== "无" && !hasQuotedDramaDialogue(card.dialogue)) errors.push(`${label}${cardLabel}的台词必须使用“说话人说：“实际台词””或“说话人（心理旁白/记忆旁白/人物介绍旁白）：“实际原句””格式`);
         if (expectedFrames[index] && !dramaTimeRangePattern(expectedFrames[index].startSecond, expectedFrames[index].endSecond).test(card.timeRange))
             errors.push(`${label}${cardLabel}的时间范围未对应 framePlan 的 ${expectedFrames[index].startSecond}-${expectedFrames[index].endSecond}s`);
     }
@@ -504,7 +511,7 @@ export function validateDramaVideoPromptUtteranceCoverage(prompt: string, frames
     });
     for (const [index, card] of cards.entries()) {
         for (const [quoteIndex, quote] of extractQuotedDramaDialogues(card.dialogue).entries()) {
-            if (!used.has(`${index}:${quoteIndex}`)) errors.push(`${label}第 ${index + 1} 个公开镜头卡存在重复、错序、错说话人或无对应窗口的台词：${quote.speaker}说：“${quote.text}”`);
+            if (!used.has(`${index}:${quoteIndex}`)) errors.push(`${label}第 ${index + 1} 个公开镜头卡存在重复、错序、错说话人或无对应窗口的台词：${formatDramaDialogueLine(quote.speaker, quote.text)}`);
         }
     }
     return errors;
@@ -698,7 +705,7 @@ export function validateDramaDialogueSegmentDetail(value: unknown, label: string
     if (!DIALOGUE_SEGMENT_MARKER.test(text) && !hasQuotedDramaDialogue(text)) return [`${label}含对白但缺少“对白表演”或带引号的实际台词`];
     const missing = ["说话人", "语气", "停顿", "重音", "说后反应"].filter((field) => (field === "说话人" ? !new RegExp(`${field}\\s*[：:]`, "u").test(text) && !hasQuotedDramaDialogue(text) : !new RegExp(`${field}\\s*[：:]`, "u").test(text)));
     const errors = missing.length ? [`${label}对白表演缺少${missing.join("、")}`] : [];
-    if (!hasQuotedDramaDialogue(text)) errors.push(`${label}对白必须写成“说话人说：“实际台词””格式，不能只写说话人或把台词塞进重音字段`);
+    if (!hasQuotedDramaDialogue(text)) errors.push(`${label}对白必须写成“说话人说：“实际台词””，旁白必须写成“说话人（心理旁白/记忆旁白/人物介绍旁白）：“实际原句””，不能只写说话人或把原句塞进重音字段`);
     return errors;
 }
 

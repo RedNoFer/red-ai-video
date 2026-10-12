@@ -42,7 +42,7 @@ const codexWorkOrderRules = [
     .filter(Boolean)
     .join("\n");
 if (packageChapterHeadings.length !== 13) throw new Error(`制作包规范必须定义 13 个一级章节，当前为 ${packageChapterHeadings.length} 个`);
-if (gateCodes.length < 1) throw new Error("制作包规范未定义硬门禁代码");
+if (gateCodes.length < 1) throw new Error("制作包规范未定义门禁代码");
 
 const replacements = {
     "{{DRAMA_VIDEO_DIRECTOR_VERSION}}": skillVersion,

@@ -5,8 +5,8 @@ import { hasDramaReferenceAnchorClarity } from "@/lib/drama-prompt-compiler";
 import { validateDramaCharacterWardrobeContinuity, validateDramaCutInformationDiversity, validateDramaPromptComposition, validateDramaReferenceAliasConsistency } from "@/lib/drama-prompt-composition-quality";
 import {
     extractDramaVideoPromptCards,
+    DRAMA_VIDEO_PROMPT_MAX_CHARACTERS,
     dramaDenseHardCutIssues,
-    DRAMA_VIDEO_PROMPT_MAX_UNICODE_CHARACTERS,
     hasConcreteDramaCameraDirection,
     validateDramaVideoPromptAudioHierarchy,
     validateDramaFrameCausalChain,
@@ -334,26 +334,25 @@ function checkAudioMixingHierarchy(checks: DramaQualityGateCheck[], value: Drama
 }
 
 function checkVideoPromptLength(checks: DramaQualityGateCheck[], value: DramaProductionPackageV1) {
-    const failures = value.episodes.flatMap((episode) =>
-        episode.shots.flatMap((shot) => {
-            const characterCount = Array.from(shot.videoPrompt || "").length;
-            return characterCount > DRAMA_VIDEO_PROMPT_MAX_UNICODE_CHARACTERS ? [`${episode.code}/${shot.code || shot.title} videoPrompt=${characterCount}个Unicode字符，超过${DRAMA_VIDEO_PROMPT_MAX_UNICODE_CHARACTERS}上限`] : [];
-        }),
-    );
+    const entries = value.episodes.flatMap((episode) => episode.shots.map((shot) => ({ label: `${episode.code}/${shot.code}`, length: Array.from(shot.videoPrompt || "").length })));
+    const maximum = entries.reduce((current, entry) => Math.max(current, entry.length), 0);
+    const total = entries.reduce((current, entry) => current + entry.length, 0);
+    const overLimit = entries.filter((entry) => entry.length > DRAMA_VIDEO_PROMPT_MAX_CHARACTERS);
     add(
         checks,
         "VIDEO_PROMPT_LENGTH",
-        !failures.length,
+        !overLimit.length,
         "视频提示词长度",
-        failures.length ? failures.join("；") : "每个逻辑片段完整 videoPrompt 均不超过4500个Unicode字符",
+        overLimit.length
+            ? `${overLimit.length} 个逻辑片段超过 ${DRAMA_VIDEO_PROMPT_MAX_CHARACTERS} 个 Unicode 字符：${overLimit
+                  .slice(0, 12)
+                  .map((entry) => `${entry.label}（${entry.length}）`)
+                  .join("、")}${overLimit.length > 12 ? "等" : ""}；全包 ${entries.length} 段，总计 ${total} 字符，单段最大 ${maximum}`
+            : entries.length
+              ? `${entries.length} 个逻辑片段均不超过 ${DRAMA_VIDEO_PROMPT_MAX_CHARACTERS} 个 Unicode 字符；总计 ${total} 字符，单段最大 ${maximum}`
+              : "没有可统计的逻辑片段",
         ["episodes[].shots[].videoPrompt"],
-        "只删除重复的全局场景、光影、色调和材质描述；保留主体、触发、动作、可见结果、声音锚点、对白边界、连续性状态和硬切承接后重新自检。",
-        {
-            repairScope: "shot",
-            shotIds: failures.map((failure) => failure.match(/(?:^|\/)(SH\d+)\b/u)?.[1]).filter((code): code is string => Boolean(code)),
-            frameIds: [],
-            lockedFields: ["project", "assets", "episodes[].script", "shots[].duration", "productionPlan", "unfailedShots"],
-        },
+        "仅压缩重复的全局视觉、光色、材质和格式话术；不得删除主体、触发、动作、可见结果、声音锚点、对白边界、连续性状态或本条内部硬切信息。",
     );
 }
 

@@ -16,6 +16,9 @@ describe("drama video director adapter", () => {
         expect(videoRules).toContain("主体运动、相机运动、环境运动");
         expect(videoRules).toContain("准备/触发 → 接触或受力 → 动作结果 → 反应/恢复");
         expect(videoRules).toContain("actionPrompt` 写发生中的动作、方向、接触和受力");
+        expect(videoRules).toContain("最多 4500 个 Unicode 字符");
+        expect(videoRules).toContain("不得删除主体、触发、动作、可见结果、声音锚点");
+        expect(videoRules).not.toContain("本 Skill 默认长度");
         expect(videoRules).not.toContain("只冻结一个已经发生的瞬间");
     });
 

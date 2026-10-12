@@ -1601,7 +1601,7 @@ export function previewDramaProductionPackageForUser(
     const source = typeof input.source === "string" ? input.source : "";
     const fileName = cleanText(input.fileName) || "production-package.md";
     try {
-        return previewDramaProductionPackage(source, fileName, project, { allowImportWarnings: true, enforceExecutionContract: true, ...options });
+        return previewDramaProductionPackage(source, fileName, project, { allowImportWarnings: true, enforceExecutionContract: true, importValidationScope: "video-only", ...options });
     } catch (error) {
         if (error instanceof DramaProductionPackageError) throw new DramaProjectServiceError(error.message, 400);
         throw error;
@@ -1609,11 +1609,11 @@ export function previewDramaProductionPackageForUser(
 }
 
 export function previewDramaScriptProductionPackageForUser(value: unknown, project?: Pick<DramaProject, "title" | "style" | "ratio" | "productionBible" | "characters" | "scenes" | "props" | "clues">) {
-    const standalonePreview = previewDramaProductionPackageForUser(value, { allowImportWarnings: true, preserveAuthoredVideoPrompt: true }, project);
+    const standalonePreview = previewDramaProductionPackageForUser(value, { allowImportWarnings: true, preserveAuthoredVideoPrompt: true, importValidationScope: "full" }, project);
     if (standalonePreview.package.authoring?.authoringMode === "codex-standalone") {
         return standalonePreview;
     }
-    const preview = previewDramaProductionPackageForUser(value, { allowImportWarnings: false, validateVideoPrompt: true, requireCameraPlan: true, requireContentQuality: true, requireAgentAuthoring: true, requireAuthoringQuality: true }, project);
+    const preview = previewDramaProductionPackageForUser(value, { allowImportWarnings: false, validateVideoPrompt: true, requireCameraPlan: true, requireContentQuality: true, requireAgentAuthoring: true, requireAuthoringQuality: true, importValidationScope: "full" }, project);
     const plan = preview.package.project.productionBible?.productionPlan;
     if (!plan?.lockedAt || !plan.visual.visualStyle.trim() || !plan.visual.artStyle.trim()) throw new DramaProjectServiceError("剧本 Agent 制作包必须包含已锁定且具体的视觉风格和画风", 400);
     return preview;

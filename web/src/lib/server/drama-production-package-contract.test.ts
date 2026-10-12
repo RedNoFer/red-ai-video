@@ -37,6 +37,10 @@ describe("drama production package contract compilation", () => {
         expect(template).toContain("剪辑承接");
         expect(template).toContain("只有全部 blocker 门禁均为 `passed`");
         expect(template).toContain("准备回应");
+        expect(docs).toMatch(/hardGateCodes:[\s\S]*- VIDEO_PROMPT_LENGTH/u);
+        expect(template).toMatch(/`VIDEO_PROMPT_LENGTH`\s*\| blocker/u);
+        expect(template).toContain("必须控制在 4500 个 Unicode 字符以内");
+        expect(template).toContain("超限只能压缩重复视觉");
         for (const gateCode of DRAMA_PACKAGE_GATE_CODES) expect(template).toContain(`\`${gateCode}\``);
         for (const title of DRAMA_PACKAGE_SECTIONS) expect(template).toContain(title);
     });

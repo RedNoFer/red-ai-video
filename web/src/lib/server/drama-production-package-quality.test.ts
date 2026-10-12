@@ -320,12 +320,13 @@ describe("drama authoring quality gates", () => {
         expect(blockers(report, "CAMERA_EVENT")).toHaveLength(0);
     });
 
-    it("blocks an overlong logical-shot video prompt and undeclared pseudo parameters", () => {
+    it("blocks long logical-shot video prompts while still rejecting undeclared pseudo parameters", () => {
         const value = packageValue({
             videoPrompt: `### 镜头 01 | 0-30秒 | 中景 | 50mm | 平视 | 锁定 | 人物镜头\n场景：议事大厅。\n画面内容：萧炎抬眼并压住桌沿，指节发白，纳兰接住视线。\n光影：冷窗光落在手部。\n色调：冷青白。\npalette=冷中性/saturation=low/film_stock=Kodak 500T/grain=barely-visible/halation=none\n台词：无\n人声：短促吸气。\n音效：木案轻响。\n${"重复全局设定".repeat(1000)}`,
         });
         const report = validateDramaAuthoringQuality({ package: value, sources: [] });
-        expect(blockers(report, "VIDEO_PROMPT_LENGTH")).not.toHaveLength(0);
+        expect(blockers(report, "VIDEO_PROMPT_LENGTH")).toHaveLength(1);
+        expect(report.checks.find((check) => check.code === "VIDEO_PROMPT_LENGTH")).toMatchObject({ severity: "blocker", evidence: expect.stringContaining("超过 4500") });
         expect(blockers(report, "VIDEO_PROMPT_LAYOUT")).not.toHaveLength(0);
     });
 
