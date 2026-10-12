@@ -5,6 +5,7 @@ import {
     isGenericDramaDetail,
     validateDramaCameraPlan,
     extractDramaVideoPromptCards,
+    extractDramaVideoPromptSection,
     validateDramaDialogueSegmentDetail,
     validateDramaNpcSegmentDetail,
     validateDramaPerformanceDetail,
@@ -24,6 +25,28 @@ import {
 } from "./drama-prompt-quality";
 
 describe("drama prompt quality", () => {
+    it("extracts decimal timeline ranges, inline shared rules and labelled voiceovers", () => {
+        const prompt = [
+            "【参数】30秒，16:9，有声。",
+            "【公共总规范】站位：齐岚在左侧床沿，右手持手机；冷灰窗光；禁止瞬移与无因重排；对白原声清晰可辨并位于前景，语音期间压低环境音，不遮挡台词。",
+            "【时间轴】",
+            "0.000-3.000秒：近景｜70mm｜侧俯视｜固定机位；画面：齐岚因闹钟抬眼，右手收紧，视线停在手机上；台词：齐岚（心理旁白）：“还是九月九日。”；音效：闹钟和呼吸。",
+            "3.000-30.000秒：中景｜50mm｜平视｜缓慢推近；画面：齐岚因日期未变垂下手，手机落在床沿，左侧站位保持；台词：无；音效：衣料摩擦。",
+            "【收尾】齐岚仍在左侧床沿，手机停在床沿。",
+        ].join("\r\n");
+        const frames = [
+            { startSecond: 0, endSecond: 3 },
+            { startSecond: 3, endSecond: 30 },
+        ];
+        const cards = extractDramaVideoPromptCards(prompt);
+        expect(cards).toHaveLength(2);
+        expect(cards[0]).toMatchObject({ timeRange: "0.000-3.000秒", lens: "70mm", dialogue: "齐岚（心理旁白）：“还是九月九日。”" });
+        expect(extractDramaVideoPromptSection(prompt, "时间轴")).not.toContain("【收尾】");
+        expect(validateDramaVideoPromptCardLayout(prompt, frames, "测试")).toEqual([]);
+        expect(validateDramaVideoPromptUtteranceCoverage(prompt, frames, [{ type: "voiceover", speaker: "齐岚", text: "还是九月九日。", startSecond: 0, endSecond: 3 }], "测试")).toEqual([]);
+        expect(validateDramaVideoPromptCardLayout(prompt.replace("3.000-30.000", "4.000-30.000"), frames, "测试").join("\n")).toContain("时间范围未对应");
+        expect(validateDramaVideoPromptAudioHierarchy(prompt.replace("不遮挡台词", "音乐盖过台词"), "测试").join("\n")).toContain("音效描述与对白清晰度冲突");
+    });
     it("removes exact repeated lines only when explicitly requested, independent of prompt length", () => {
         const header = "### 镜头 01 | 0-4秒 | 近景 | 50mm | 平视 | 锁定机位 | 人物镜头";
         const secondHeader = "### 镜头 02 | 4-8秒 | 近景 | 50mm | 平视 | 锁定机位 | 人物镜头";

@@ -5,51 +5,65 @@ import { E2E_PROTOCOL_ORIGIN, saveDramaProjectFixture } from "./support";
 import { expectNoHorizontalOverflow } from "./responsive-helpers";
 import type { DramaProject } from "../src/lib/drama-project-contract";
 
-test("external package warnings permit one preview and preserve author prose after refresh", async ({ page, request }) => {
-    const created = await request.post("/api/drama/projects", { data: { title: `E2E 外部原稿 ${randomUUID().slice(0, 8)}`, ratio: "9:16" } });
-    expect(created.ok(), await created.text()).toBe(true);
-    const project = ((await created.json()) as { data: { project: DramaProject } }).data.project;
-    const source = readFileSync(new URL("../../docs/drama-production-package-v1-field-example.json", import.meta.url), "utf8");
-    const authored = JSON.parse(source).episodes[0].shots[0];
-    let previewCount = 0;
-    page.on("request", (req) => {
-        if (req.url().endsWith("/production-package") && req.postDataJSON()?.action === "preview") previewCount += 1;
-    });
-    try {
-        await page.goto(`/drama/${project.id}`);
-        await page.getByRole("button", { name: "完整制作包", exact: true }).click();
-        const dialog = page.getByRole("dialog", { name: "导入完整制作包" });
-        await dialog.getByRole("textbox", { name: "粘贴制作包文本" }).fill(source);
-        await dialog.getByRole("button", { name: "识别并预览" }).click();
-        const preview = page.locator("[data-drama-production-package-preview]");
-        await expect(preview.locator("[data-drama-production-package-import-warnings]")).toContainText("允许导入");
-        const apply = page.getByRole("button", { name: "继续导入（有警告）" });
-        await expect(apply).toBeVisible();
-        const box = await apply.boundingBox();
-        expect(box).not.toBeNull();
-        expect(box!.x + box!.width).toBeLessThanOrEqual(page.viewportSize()!.width);
-        await apply.click();
-        const confirmation = page.getByRole("dialog", { name: "制作包存在识别警告" });
-        await expect(confirmation).toContainText("保留作者公开原稿");
-        await confirmation.getByRole("button", { name: "仍然导入" }).click();
-        await expect(page.getByText(/已导入 \d+ 个导演镜头/u)).toBeVisible();
-        expect(previewCount).toBe(1);
-        for (const refresh of [false, true]) {
-            if (refresh) await page.reload();
-            const response = await request.get(`/api/drama/projects/${project.id}`);
-            expect(response.ok(), await response.text()).toBe(true);
-            const saved = ((await response.json()) as { data: { project: DramaProject } }).data.project;
-            const imported = saved.episodes.find((episode) => episode.code === "E01")!.shots[0];
-            expect(imported.videoPrompt).toBe(authored.videoPrompt);
-            expect(imported.dialogue).toBe(authored.dialogue);
-            expect(imported.utterances[0].text).toBe("外套颜色没变，别说话。");
-            expect(imported.framePlan?.frames).toEqual(authored.framePlan.frames);
-            expect(saved.characters[0].voiceProfile?.timbrePrompt).toBe(JSON.parse(source).assets.characters[0].voiceProfile.timbrePrompt);
+for (const layout of ["cards", "timeline"]) {
+    test(`${layout} package warnings permit one preview and preserve author prose after refresh`, async ({ page, request }) => {
+        const created = await request.post("/api/drama/projects", { data: { title: `E2E 外部原稿 ${randomUUID().slice(0, 8)}`, ratio: "9:16" } });
+        expect(created.ok(), await created.text()).toBe(true);
+        const project = ((await created.json()) as { data: { project: DramaProject } }).data.project;
+        let source = readFileSync(new URL("../../docs/drama-production-package-v1-field-example.json", import.meta.url), "utf8");
+        if (layout === "timeline") {
+            const packageInput = JSON.parse(source);
+            packageInput.episodes[0].shots[0].videoPrompt = [
+                "【参数】15秒，9:16，有声。",
+                "【公共总规范】林雪站在长案北侧，右手持封；西窗柔光，暖灰；摄影机在长案南侧；禁止瞬移和无因重排；对白原声清晰可辨并位于前景，语音期间压低环境音，不遮挡台词。",
+                "【时间轴】",
+                "0.000-3.000秒：特写｜50mm｜平视｜固定机位；画面：因来手触纸，林雪嘴唇开合，收句闭口，右手持封未松开；台词：林雪说：“外套颜色没变，别说话。”；音效：纸张摩擦。",
+                "3.000-15.000秒：特写｜50mm｜平视｜固定机位；画面：因来手继续靠近，右臂收回信封，信封停在胸前，持有人不变；台词：无；音效：纸封擦过袖口发出轻响。",
+                "【收尾】林雪仍在长案北侧，信封由右手持于胸前。",
+            ].join("\n");
+            source = JSON.stringify(packageInput);
         }
-    } finally {
-        expect((await request.delete(`/api/drama/projects/${project.id}`)).ok()).toBe(true);
-    }
-});
+        const authored = JSON.parse(source).episodes[0].shots[0];
+        let previewCount = 0;
+        page.on("request", (req) => {
+            if (req.url().endsWith("/production-package") && req.postDataJSON()?.action === "preview") previewCount += 1;
+        });
+        try {
+            await page.goto(`/drama/${project.id}`);
+            await page.getByRole("button", { name: "完整制作包", exact: true }).click();
+            const dialog = page.getByRole("dialog", { name: "导入完整制作包" });
+            await dialog.getByRole("textbox", { name: "粘贴制作包文本" }).fill(source);
+            await dialog.getByRole("button", { name: "识别并预览" }).click();
+            const preview = page.locator("[data-drama-production-package-preview]");
+            await expect(preview.locator("[data-drama-production-package-import-warnings]")).toContainText("允许导入");
+            const apply = page.getByRole("button", { name: "继续导入（有警告）" });
+            await expect(apply).toBeVisible();
+            const box = await apply.boundingBox();
+            expect(box).not.toBeNull();
+            expect(box!.x + box!.width).toBeLessThanOrEqual(page.viewportSize()!.width);
+            await apply.click();
+            const confirmation = page.getByRole("dialog", { name: "制作包存在识别警告" });
+            await expect(confirmation).toContainText("保留作者公开原稿");
+            await confirmation.getByRole("button", { name: "仍然导入" }).click();
+            await expect(page.getByText(/已导入 \d+ 个导演镜头/u)).toBeVisible();
+            expect(previewCount).toBe(1);
+            for (const refresh of [false, true]) {
+                if (refresh) await page.reload();
+                const response = await request.get(`/api/drama/projects/${project.id}`);
+                expect(response.ok(), await response.text()).toBe(true);
+                const saved = ((await response.json()) as { data: { project: DramaProject } }).data.project;
+                const imported = saved.episodes.find((episode) => episode.code === "E01")!.shots[0];
+                expect(imported.videoPrompt).toBe(authored.videoPrompt);
+                expect(imported.dialogue).toBe(authored.dialogue);
+                expect(imported.utterances[0].text).toBe("外套颜色没变，别说话。");
+                expect(imported.framePlan?.frames).toEqual(authored.framePlan.frames);
+                expect(saved.characters[0].voiceProfile?.timbrePrompt).toBe(JSON.parse(source).assets.characters[0].voiceProfile.timbrePrompt);
+            }
+        } finally {
+            expect((await request.delete(`/api/drama/projects/${project.id}`)).ok()).toBe(true);
+        }
+    });
+}
 
 test("character timbre saves and refreshes, then uploaded audio replaces prompt in the video preview", async ({ page, request }) => {
     const created = await request.post("/api/drama/projects", { data: { title: `E2E 角色音色 ${randomUUID().slice(0, 8)}`, ratio: "9:16" } });

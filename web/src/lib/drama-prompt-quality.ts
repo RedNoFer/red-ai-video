@@ -37,6 +37,7 @@ const ACTIVE_CAMERA_CUT_PATTERN = /硬切|镜头切换|Camera\s+cut\s+to|Cut\s+t
 const VIDEO_CARD_HEADER = /^###\s*镜头\s*(\d+)\s*\|([^\n]+)$/gmu;
 const VIDEO_CARD_FIELDS = ["场景", "画面内容", "光影", "色调", "台词", "人声", "音效"] as const;
 const VIDEO_CARD_FIELD_BOUNDARIES = [...VIDEO_CARD_FIELDS, "镜头变化", "剪辑承接"] as const;
+const SEEDANCE_ADAPTER_TIME_RANGE = /^\s*(\d+(?:\.\d+)?)\s*(?:-|至|到|—|–|~)\s*(\d+(?:\.\d+)?)\s*秒\s*[：:]\s*(.+)$/u;
 const AUDIO_DUCKING_INSTRUCTION = "对白/旁白发声期间压低环境音、动作拟音与音乐，不遮挡台词清晰度；仅在语音停顿间隙再抬升";
 const SPEECH_CLARITY_PATTERN = /(?:对白|旁白|语音|人声).{0,24}原声.{0,24}(?:清晰|可辨|可懂).{0,24}(?:居前|前景|优先)/u;
 const SPEECH_DUCKING_PATTERN = /(?:对白|旁白|台词|人声|语音).{0,28}(?:发声期间|发声时|说话期间|说话时|语音窗口|期间).{0,32}(?:压低|避让|降低|减弱|不遮挡|不盖过)/u;
@@ -157,6 +158,7 @@ export function validateDramaVideoPromptTemplateLayout(value: unknown, frameCoun
 
 export function extractDramaVideoPromptCards(value: unknown): DramaVideoPromptCard[] {
     const text = typeof value === "string" ? value.trim() : "";
+    if (isSeedanceAdapterPrompt(text)) return extractSeedanceAdapterCards(text);
     const markers = [...text.matchAll(VIDEO_CARD_HEADER)];
     return markers.map((marker, index) => {
         const start = marker.index ?? 0;
@@ -182,6 +184,50 @@ export function extractDramaVideoPromptCards(value: unknown): DramaVideoPromptCa
             cameraChanges: field("镜头变化") || field("剪辑承接"),
             raw,
         };
+    });
+}
+
+function isSeedanceAdapterPrompt(value: string) {
+    return /(?:^|\n)\s*【参数】/u.test(value) && /(?:^|\n)\s*【公共总规范】/u.test(value) && /(?:^|\n)\s*【时间轴】/u.test(value);
+}
+
+function extractSeedanceAdapterCards(value: string): DramaVideoPromptCard[] {
+    const timeline = extractDramaVideoPromptSection(value, "时间轴");
+    const lines = timeline
+        .split(/\r?\n/u)
+        .map((line) => line.trim())
+        .filter(Boolean);
+    return lines.flatMap((line, index) => {
+        const match = line.match(SEEDANCE_ADAPTER_TIME_RANGE);
+        if (!match) return [];
+        const segment = match[3].trim();
+        const common = extractDramaVideoPromptSection(value, "公共总规范");
+        const cameraMotion = segment.match(/(?:固定机位|锁定机位|缓慢推近|缓慢拉远|推近|拉远|横移|摇镜|跟拍|跟随|手持|环绕|俯拍|仰拍|平视|低机位|高机位|广角|中景|近景|特写|远景)[^；。\n]*/u)?.[0]?.trim() || "";
+        const dialogue =
+            extractQuotedDramaDialogues(segment)
+                .map((item) => `${item.speaker}${/旁白[）)]?$/u.test(item.speaker) ? "" : "说"}：“${item.text}”`)
+                .join("；") || "无";
+        const sound = /(?:声音|人声|音效|对白|台词|旁白|呼吸|喘息|脚步|碰撞|摩擦|风声|水声|门响|静默|沉默)/u.test(segment) ? segment : "无";
+        return [
+            {
+                index: index + 1,
+                timeRange: `${match[1]}-${match[2]}秒`,
+                shotSize: segment.match(/远景|全景|中全景|中景|中近景|近景|特写/u)?.[0] || "",
+                lens: segment.match(/\d+(?:\.\d+)?\s*mm|广角|长焦/u)?.[0] || "",
+                cameraAngle: segment.match(/平视|俯拍|俯视|仰拍|仰视|侧\d+度|过肩|低机位|高机位/u)?.[0] || "",
+                cameraMotion,
+                subjectMode: /道具|手部|空间|场景/u.test(segment) ? "非人物镜头" : "人物镜头",
+                scene: extractDramaVideoPromptSection(value, "公共总规范"),
+                visual: segment,
+                lighting: segment.match(/(?:光线|光影|主光|冷光|暖光)[^；。\n]*/u)?.[0] || "",
+                color: segment.match(/(?:冷青|冷灰|暖橙|低饱和|高饱和|色调|色彩)[^；。\n]*/u)?.[0] || "",
+                dialogue,
+                voice: `${common}\n${sound}`,
+                sound: `${common}\n${sound}`,
+                cameraChanges: segment.match(/(?:硬切|切换|镜头变化)[^；。\n]*/u)?.[0] || segment,
+                raw: line,
+            },
+        ];
     });
 }
 
@@ -373,6 +419,7 @@ export function validateDramaVideoPromptCardLayout(value: unknown, frames: Reado
     const text = typeof value === "string" ? value.trim() : "";
     const expectedFrames = typeof frames === "number" ? [] : frames;
     const frameCount = typeof frames === "number" ? frames : frames.length;
+    if (isSeedanceAdapterPrompt(text)) return validateSeedanceAdapterPromptLayout(text, expectedFrames, frameCount, label);
     const cards = extractDramaVideoPromptCards(text);
     const errors: string[] = [];
     if (!cards.length) errors.push("缺少小墨式“### 镜头”公开镜头卡");
@@ -399,6 +446,32 @@ export function validateDramaVideoPromptCardLayout(value: unknown, frames: Reado
     }
     errors.push(...validateDramaVideoPromptAudioHierarchy(text, label));
     return errors.map((error) => (error.startsWith(label) ? error : `${label}${error}`));
+}
+
+function validateSeedanceAdapterPromptLayout(text: string, expectedFrames: ReadonlyArray<DramaCameraPlanFrame>, frameCount: number, label: string) {
+    const errors: string[] = [];
+    for (const heading of ["参数", "公共总规范", "时间轴", "收尾"]) {
+        if (!extractDramaVideoPromptSection(text, heading)) errors.push(`${label}缺少“【${heading}】”段落`);
+    }
+    errors.push(...validateDramaVideoPromptIndependence(text, label));
+    const cards = extractSeedanceAdapterCards(text);
+    if (!cards.length) errors.push(`${label}【时间轴】缺少“起止秒：主体动作；触发→结果；主运镜；对白/表演；局部声音和光影”时间段`);
+    if (frameCount > 0 && cards.length !== frameCount) errors.push(`${label}【时间轴】写出 ${cards.length} 个时间段，必须与 ${frameCount} 个 framePlan 时间段一一对应`);
+    const common = extractDramaVideoPromptSection(text, "公共总规范");
+    if (!/(?:站位|位置|空间|锚点|支撑|接触|轴线|屏幕方向)/u.test(common)) errors.push(`${label}【公共总规范】缺少人物/道具空间站位、支撑接触或轴线锁定`);
+    if (!/(?:禁止|不得)[\s\S]*(?:闪现|瞬移|穿模|互穿|无因(?:换位|重排))/u.test(common)) errors.push(`${label}【公共总规范】缺少防闪现、穿模和无因重排约束`);
+    for (const [index, card] of cards.entries()) {
+        const cardLabel = `${label}第 ${index + 1} 个时间轴段`;
+        if (expectedFrames[index] && !dramaTimeRangePattern(expectedFrames[index].startSecond, expectedFrames[index].endSecond).test(card.timeRange))
+            errors.push(`${cardLabel}的时间范围未对应 framePlan 的 ${expectedFrames[index].startSecond}-${expectedFrames[index].endSecond}s`);
+        if (!card.visual || !PUBLIC_VIDEO_VISIBLE_ACTION_PATTERN.test(card.visual)) errors.push(`${cardLabel}缺少主体正在发生的可见动作`);
+        if (!card.visual || !PUBLIC_VIDEO_VISIBLE_RESULT_PATTERN.test(card.visual)) errors.push(`${cardLabel}缺少动作触发后的可见结果`);
+        if (!card.cameraMotion || !hasConcreteDramaCameraDirection(card.cameraMotion)) errors.push(`${cardLabel}缺少一个具体主运镜`);
+        if (!card.sound || card.sound === "无") errors.push(`${cardLabel}缺少声音锚点`);
+        if (index > 0 && !/(?:站位|位置|支撑|接触|轴线|承接|保持|到达|停在|落在)/u.test(card.visual)) errors.push(`${cardLabel}缺少当前空间状态或承接事实`);
+    }
+    errors.push(...validateDramaVideoPromptAudioHierarchy(text, label));
+    return errors;
 }
 
 /**
@@ -640,10 +713,10 @@ function videoCardFieldHeadings(value: string) {
 }
 
 export function extractDramaVideoPromptSection(value: string, section: string) {
-    const heading = new RegExp(`(?:^|\\n)\\s*【${escapeRegExp(section)}】(?:\\s*\\n|\\s*$)`, "u").exec(value);
+    const heading = new RegExp(`(?:^|\\n)\\s*【${escapeRegExp(section)}】[ \\t]*(?:[：:][ \\t]*)?`, "u").exec(value);
     if (!heading) return "";
     const start = (heading.index ?? 0) + heading[0].length;
-    const nextHeading = /\n\s*【[^】]+】(?:\s*\n|\s*$)/u.exec(value.slice(start));
+    const nextHeading = /\n\s*【[^】]+】/u.exec(value.slice(start));
     return value.slice(start, nextHeading ? start + (nextHeading.index ?? 0) : value.length).trim();
 }
 

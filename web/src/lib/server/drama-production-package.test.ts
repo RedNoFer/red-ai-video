@@ -86,6 +86,37 @@ function readMahadelMarkdownFixture() {
 }
 
 describe("production package boundary", () => {
+    it("previews and applies a standalone timeline package without rewriting prompts or frames", () => {
+        const source = JSON.parse(readFileSync(new URL("../../../../docs/drama-production-package-v1-field-example.json", import.meta.url), "utf8")) as DramaProductionPackageV1;
+        const item = source.episodes[0].shots[0];
+        const legacyPrompt = item.videoPrompt;
+        item.videoPrompt = [
+            "【参数】15秒，9:16，有声。",
+            "【公共总规范】林雪站在长案北侧，右手持封；西窗柔光照亮左颊和木案，低饱和暖灰；摄影机在长案南侧；禁止瞬移和无因重排。人声：对白原声清晰可辨并位于前景；音效：纸张摩擦，语音期间压低环境音，不遮挡台词。",
+            "【时间轴】",
+            "0.000-3.000秒：特写｜50mm｜平视｜固定机位；画面：因来手触纸，林雪嘴唇开合，收句闭口，右手持封未松开；台词：林雪说：“外套颜色没变，别说话。”",
+            "3.000-15.000秒：特写｜50mm｜平视｜固定机位；画面：因来手继续靠近，右臂收回信封，信封停在胸前，持有人不变；台词：无；音效：纸封擦过袖口发出轻响。",
+            "【收尾】林雪仍在长案北侧，信封由右手持于胸前。",
+        ].join("\n");
+        const options = { allowImportWarnings: true, enforceExecutionContract: true, importValidationScope: "video-only" as const };
+        for (const text of [JSON.stringify(source), serializeDramaProductionPackageMarkdown(source)]) {
+            const preview = previewDramaProductionPackage(text, "timeline-package", undefined, options);
+            expect(preview.package.episodes[0].shots[0].videoPrompt).toBe(item.videoPrompt);
+            const applied = applyDramaProductionPackage(project(), preview.package, preview.sourceHash, text, "timeline-package", options);
+            expect(applied.episodes[0].shots[0].videoPrompt).toBe(item.videoPrompt);
+            expect(applied.episodes[0].shots[0].framePlan?.frames).toEqual(item.framePlan.frames);
+            expect(applied.episodes[0].shots[0].utterances[0].text).toBe(item.utterances[0].text);
+        }
+        const missingSegment = structuredClone(source);
+        missingSegment.episodes[0].shots[0].videoPrompt = item.videoPrompt.replace(/^3\.000-15\.000秒：.*\n/mu, "");
+        expect(() => previewDramaProductionPackage(JSON.stringify(missingSegment), "missing-segment.json", undefined, options)).toThrow(/1.*2 个帧段/u);
+        const gap = structuredClone(source);
+        gap.episodes[0].shots[0].framePlan.frames[1].startSecond = 4;
+        expect(() => previewDramaProductionPackage(JSON.stringify(gap), "gap.json", undefined, options)).toThrow(/不能空白、重叠或超界/u);
+        const sparseLegacy = structuredClone(source);
+        sparseLegacy.episodes[0].shots[0].videoPrompt = legacyPrompt.replace(/^### 镜头 02[^\n]*/mu, "### 镜头 02");
+        expect(() => previewDramaProductionPackage(JSON.stringify(sparseLegacy), "legacy.json", undefined, options)).not.toThrow();
+    });
     it("accepts a standalone Codex production package Markdown artifact", () => {
         const standalone = structuredClone(productionPackage);
         standalone.project.productionBible.targetDuration = 30;
