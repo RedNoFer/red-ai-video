@@ -70,7 +70,6 @@ import { DRAMA_PACKAGE_CONTRACT, DRAMA_PACKAGE_CONTRACT_ID, DRAMA_PACKAGE_CONTRA
 import { validateDramaAuthoringQuality } from "@/lib/server/drama-production-package-quality";
 import { reviewDramaPackage } from "@/lib/drama-package-review";
 import { preserveDramaAuthoredText } from "@/lib/drama-authored-text";
-import { normalizeDramaVoiceProfile } from "@/lib/drama-voice";
 import { dramaDenseHardCutIssues } from "@/lib/drama-prompt-quality";
 
 export class DramaProductionPackageError extends Error {}
@@ -142,13 +141,13 @@ function compactImportWarnings(values: string[], scope: DramaProductionPackageNo
                 ? "对白原句覆盖"
                 : warning.includes("第九章缺少 JSON 已登记原句")
                   ? "台词章节覆盖"
-                : warning.includes("相邻片段与状态覆盖")
-                  ? "跨镜连续性"
-                  : warning.includes("对白时长提醒") || warning.includes("帧段对白时长")
-                    ? "对白自然语速"
-                    : warning.includes("资产") || warning.includes("场景描述出现")
-                      ? "资产绑定"
-                      : normalized;
+                  : warning.includes("相邻片段与状态覆盖")
+                    ? "跨镜连续性"
+                    : warning.includes("对白时长提醒") || warning.includes("帧段对白时长")
+                      ? "对白自然语速"
+                      : warning.includes("资产") || warning.includes("场景描述出现")
+                        ? "资产绑定"
+                        : normalized;
         const current = grouped.get(key);
         if (current) current.count += 1;
         else grouped.set(key, { first: warning, count: 1 });
@@ -345,13 +344,15 @@ export function previewDramaProductionPackage(source: string, fileName = "produc
         packageHeaderPattern.lastIndex = contentEnd + 3;
     }
     if (packageBlocks.length > 1) throw new DramaProductionPackageError("制作包只能包含一个 drama-production-package JSON 代码块");
-    const embedded = packageBlocks[0]?.[1] || (() => {
-        const jsonHeader = /```json[ \t]*\r?\n/iu.exec(trimmed);
-        if (!jsonHeader) return undefined;
-        const contentStart = jsonHeader.index + jsonHeader[0].length;
-        const contentEnd = trimmed.indexOf("```", contentStart);
-        return contentEnd < 0 ? undefined : trimmed.slice(contentStart, contentEnd);
-    })();
+    const embedded =
+        packageBlocks[0]?.[1] ||
+        (() => {
+            const jsonHeader = /```json[ \t]*\r?\n/iu.exec(trimmed);
+            if (!jsonHeader) return undefined;
+            const contentStart = jsonHeader.index + jsonHeader[0].length;
+            const contentEnd = trimmed.indexOf("```", contentStart);
+            return contentEnd < 0 ? undefined : trimmed.slice(contentStart, contentEnd);
+        })();
     const format = fileName.toLowerCase().endsWith(".json") || trimmed.startsWith("{") ? "json" : "markdown";
     // The serialized Markdown embeds the canonical package object. Prefer it so
     // preview and apply use the same normalized source of truth.
@@ -363,9 +364,7 @@ export function previewDramaProductionPackage(source: string, fileName = "produc
         const report = reviewDramaPackage(preview.package, source);
         const chapterErrors = report.checks.filter((check) => check.code === "PACKAGE_SCHEMA" && (check.evidence.includes("章节缺失或顺序错误") || check.scope === "章节结构"));
         if (chapterErrors.length) throw new DramaProductionPackageError(chapterErrors.map((check) => check.evidence).join("；"));
-        const warnings = report.checks
-            .filter((check) => check.status !== "passed" && shouldSurfaceImportCheck(check, options.importValidationScope))
-            .map((check) => `${check.scope}：${check.evidence}；${check.fixHint}`);
+        const warnings = report.checks.filter((check) => check.status !== "passed" && shouldSurfaceImportCheck(check, options.importValidationScope)).map((check) => `${check.scope}：${check.evidence}；${check.fixHint}`);
         preview.importWarnings = compactImportWarnings([...(preview.importWarnings || []), ...warnings], options.importValidationScope);
         preview.warnings = compactImportWarnings([...preview.warnings, ...warnings], options.importValidationScope);
     }
@@ -481,9 +480,7 @@ export function applyDramaProductionPackage(project: DramaProject, source: Drama
     const episodes = options.episodeImportMode === "merge" ? mergeProjectEpisodes(project.episodes, incomingEpisodes) : incomingEpisodes;
     const productionLock = options.episodeImportMode === "merge" ? mergeProductionLocks(project.productionLock, productionPackage.project.productionLock, episodes) : productionPackage.project.productionLock || project.productionLock;
     const productionArchive = options.episodeImportMode === "merge" ? mergeProductionArchives(project.productionArchive, productionPackage.archive) : productionPackage.archive;
-    const mergedProductionBible = synchronizedBible
-        ? { ...synchronizedBible, ...(productionLock ? { targetDuration: productionLock.targetDuration } : {}) }
-        : synchronizedBible;
+    const mergedProductionBible = synchronizedBible ? { ...synchronizedBible, ...(productionLock ? { targetDuration: productionLock.targetDuration } : {}) } : synchronizedBible;
     return {
         ...project,
         title: preferred(project.title, project.fieldOrigins, "title", projectPatch.title),
@@ -2675,7 +2672,6 @@ function normalizePackageAsset(value: unknown, location = false, character = fal
         payoff: optionalText(asset.payoff),
         activeEpisodeCodes: strings(asset.activeEpisodeCodes),
         profile: character ? normalizeDramaCharacterProfile(baseProfile, description, name) : baseProfile,
-        ...(character && Object.keys(object(asset.voiceProfile)).length ? { voiceProfile: normalizeDramaVoiceProfile(asset.voiceProfile) } : {}),
         ...(location
             ? {
                   sceneReferenceBoard: {

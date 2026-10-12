@@ -1613,7 +1613,11 @@ export function previewDramaScriptProductionPackageForUser(value: unknown, proje
     if (standalonePreview.package.authoring?.authoringMode === "codex-standalone") {
         return standalonePreview;
     }
-    const preview = previewDramaProductionPackageForUser(value, { allowImportWarnings: false, validateVideoPrompt: true, requireCameraPlan: true, requireContentQuality: true, requireAgentAuthoring: true, requireAuthoringQuality: true, importValidationScope: "full" }, project);
+    const preview = previewDramaProductionPackageForUser(
+        value,
+        { allowImportWarnings: false, validateVideoPrompt: true, requireCameraPlan: true, requireContentQuality: true, requireAgentAuthoring: true, requireAuthoringQuality: true, importValidationScope: "full" },
+        project,
+    );
     const plan = preview.package.project.productionBible?.productionPlan;
     if (!plan?.lockedAt || !plan.visual.visualStyle.trim() || !plan.visual.artStyle.trim()) throw new DramaProjectServiceError("剧本 Agent 制作包必须包含已锁定且具体的视觉风格和画风", 400);
     return preview;
