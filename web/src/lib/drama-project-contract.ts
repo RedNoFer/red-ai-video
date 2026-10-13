@@ -1234,6 +1234,7 @@ export type DramaProductionRun = {
         audioModel?: string;
         ratio: string;
         maxVideoSeconds?: number;
+        maxReferenceImages?: number;
         imageQuality?: string;
         videoQuality?: string;
         productionPlan?: DramaProductionPlan;
@@ -1266,6 +1267,7 @@ export type DramaProductionPreflightIssue = {
 };
 
 export type DramaProductionPreflight = {
+    maxReferenceImages?: number;
     status: "passed" | "needs_confirmation" | "blocked";
     issues: DramaProductionPreflightIssue[];
     revisedPrompts?: Record<string, { imagePrompt?: string; videoPrompt?: string }>;

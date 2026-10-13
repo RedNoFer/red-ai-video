@@ -588,7 +588,7 @@ export function protocolCatalogCapability(protocol: SystemChannelProtocol): Logi
 
 export function protocolModelConfig(protocol: SystemChannelProtocol, capability: LogicalModelCapability, model?: string): SystemChannelModelConfig | undefined {
     const definition = channelProtocolDefinition(protocol);
-    if (protocol === "yinglingapi" && capability === "video" && normalizeModelId(model || "") === "seedance2.5-30s") {
+    if (protocol === "yinglingapi" && capability === "video" && ["seedance2.5-30s", "dola-seedance2.5-30s"].includes(normalizeModelId(model || ""))) {
         return { ...yinglingVideoOperation, maxReferenceImages: 9, capability, source: "manual", protocol, apiFormat: definition.apiFormat };
     }
     if (protocol === "buming-seedance" && capability === "audio" && normalizeModelId(model || "") === "voice-design") {

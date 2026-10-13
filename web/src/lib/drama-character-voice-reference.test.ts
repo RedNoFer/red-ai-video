@@ -40,6 +40,16 @@ describe("character voice references", () => {
         expect(dramaShotCharacterVoiceReferences(project, shot, ["listener"]).map((voice) => voice.name)).toEqual(["岚音", "陆川"]);
         expect(dramaShotCharacterVoiceReferences(project, { utterances: [] }, []).map((voice) => voice.name)).toEqual([]);
     });
+    it("writes shared dialogue rules once for multiple character voices", () => {
+        const voices = [dramaCharacterVoiceReference(heroine()), dramaCharacterVoiceReference({ ...heroine(), id: "hero", name: "阿泽" })];
+        const prompt = appendDramaCharacterVoiceBindings("当前画面", voices);
+        expect(prompt.match(/不增加对白/gu)).toHaveLength(1);
+        expect(prompt.match(/不改变台词窗口/gu)).toHaveLength(1);
+        expect(prompt).not.toContain("仅用于该角色已有台词");
+        expect(prompt).toContain("角色「岚音」固定音色提示词");
+        expect(prompt).toContain("角色「阿泽」固定音色提示词");
+    });
+
     it("matches a stable voice identity or an exact speaker name", () => {
         const project = { id: "project", characters: [heroine()] };
         expect(dramaShotCharacterVoiceReferences(project, { utterances: [], voiceIdentityId: "project:heroine" }, [])).toHaveLength(1);

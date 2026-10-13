@@ -174,7 +174,7 @@ describe("Drama generation production workspace", () => {
         expect(source).toContain('{reference.required ? "连续性参考" : allFrames && reference.kind === "frame" ? "顺序关键帧"');
         expect(source).toContain('kind: "frame"');
         expect(source).toContain('const allFrames = referenceModes[shot.id] === "all_frames"');
-        expect(source).not.toContain("selectionState.invalid");
+        expect(source).toContain("Boolean(maxReferenceImages && (selections[row.shot.id] || []).length > maxReferenceImages)");
     });
 
     it("uses the locked episode resolution and does not expose a client video-model selector", async () => {

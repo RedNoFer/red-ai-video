@@ -1,3 +1,4 @@
+import { buildVideoReferenceBindings, compileDramaVideoSubmissionPrompt } from "@/lib/drama-video-submission";
 import { describe, expect, it } from "vitest";
 import type { DramaProject, DramaShot } from "@/lib/drama-project-contract";
 import { validateDramaReferenceSelections } from "./drama-project-service";
@@ -46,6 +47,38 @@ describe("manual fixed asset reference selection", () => {
         expect(refreshDramaVideoStepReferences(project, episode, step).referenceBindingsSnapshot).toEqual(step.referenceBindingsSnapshot);
         expect(run.steps.filter((item) => item.type === "asset_anchor").every((item) => item.status === "success")).toBe(true);
         expect(shot.characterIds).toEqual([]);
+    });
+
+    it("labels assets and renumbers the actual selected manifest order", () => {
+        const { project, shot } = fixture();
+        shot.framePlan = {
+            referenceManifest: [
+                { alias: "@图片5", role: "scene_anchor", assetId: "extra-scene", purpose: "项目资产基准图" },
+                { alias: "@图片8", role: "character_anchor", assetId: "extra-character", purpose: "人物固定图" },
+            ],
+        } as never;
+        project.characters[0].voiceProfile = { timbrePrompt: "低沉克制，普通话清晰", speed: 1, instructions: "" };
+        const ids = ["extra-character", "extra-scene"];
+        const bindings = buildVideoReferenceBindings(project, shot, [], ids);
+        const prompt = compileDramaVideoSubmissionPrompt("人物扶住车门。", project, shot, bindings, ids);
+        expect(prompt).toContain("@图片1：场景「车厢」\n@图片2：角色「同伴」");
+        expect(prompt).toContain("低沉克制，普通话清晰");
+        expect(prompt).not.toContain("项目资产基准图");
+        expect(compileDramaVideoSubmissionPrompt(prompt, project, shot, bindings, ids)).toBe(prompt);
+        const selected = buildVideoReferenceBindings(project, shot, [], ["extra-character"]);
+        expect(selected).toMatchObject([{ alias: "@图片1", sourceId: "extra-character" }]);
+        const changed = compileDramaVideoSubmissionPrompt(`${prompt}\n作者补充：保持窗外路灯位置。`, project, shot, selected, ["extra-character"]);
+        expect(changed).toContain("人物扶住车门。\n作者补充：保持窗外路灯位置。\n【参考图片】\n@图片1：角色「同伴」");
+        expect(changed).not.toContain("场景「车厢」");
+    });
+
+    it("accepts nine images and rejects ten before creating a 30-second supplier task", () => {
+        const { project, episode, shot } = fixture();
+        shot.duration = 30;
+        project.characters = Array.from({ length: 10 }, (_, index) => ({ ...project.characters[0], id: `role-${index}` }));
+        const ids = project.characters.map((item) => item.id);
+        expect(() => validateDramaReferenceSelections(project, episode, [shot], { [shot.id]: ids.slice(0, 9) }, 9)).not.toThrow();
+        expect(() => validateDramaReferenceSelections(project, episode, [shot], { [shot.id]: ids }, 9)).toThrow("超过当前模型的 9 张上限");
     });
 
     it.each(["unknown", "extra-character", "extra-scene"])("rejects foreign or unconfirmed reference %s", (id) => {

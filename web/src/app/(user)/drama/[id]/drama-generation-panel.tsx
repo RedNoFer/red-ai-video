@@ -20,12 +20,12 @@ import {
     updateDramaShotPromptPatch,
 } from "@/services/api/drama-projects";
 import { resolveModelRequestConfig, useEffectiveConfig } from "@/stores/use-config-store";
-import { appendDramaImageReferenceBindings, compileDramaShotExecutionPrompts } from "@/lib/drama-prompt-compiler";
-import { appendDramaCharacterVoiceBindings, dramaShotCharacterVoiceReferences } from "@/lib/drama-character-voice-reference";
+import { compileDramaShotExecutionPrompts } from "@/lib/drama-prompt-compiler";
+import { dramaShotCharacterVoiceReferences } from "@/lib/drama-character-voice-reference";
+import { buildVideoReferenceBindings, compileDramaVideoSubmissionPrompt } from "@/lib/drama-video-submission";
 import { formatPromptFieldLines } from "@/lib/drama-frame-sequence";
 import { approvedAssetReference, approvedScenePanoramaReference } from "@/lib/drama-asset-baseline";
 import { dramaProjectFixedReferenceAssets, missingDramaShotFixedReferences } from "@/lib/drama-video-reference-plan";
-import { dramaReferenceImageBudget } from "@/lib/drama-production-plan";
 import { activeFrameEvidence, continuityStartEvidence, supersedeFrameEvidence } from "@/lib/drama-continuity-policy";
 import { dramaVideoPromptRunKey, hasActiveDramaVideoPromptRun, useDramaStore } from "../stores/use-drama-store";
 import { buildSrt } from "../subtitle";
@@ -414,11 +414,20 @@ export function DramaGenerationPanel({
             references: previewVideoReferenceBindings(project, episode, shot),
             basePrompt: compileDramaShotExecutionPrompts(project, episode, shot).videoPrompt,
         }));
-        const selectionState: { selections: Record<string, string[]>; referenceModes: Record<string, DramaVideoReferenceMode>; videoPrompts: Record<string, string> } = {
+        const selectionState: { selections: Record<string, string[]>; referenceModes: Record<string, DramaVideoReferenceMode>; videoPrompts: Record<string, string>; invalid: boolean } = {
             selections: Object.fromEntries(promptRows.map((row) => [row.shot.id, row.references.filter((reference) => reference.required || reference.recommended).map((reference) => reference.id)])),
             referenceModes: Object.fromEntries(promptRows.map((row) => [row.shot.id, "reference" as const])),
             videoPrompts: Object.fromEntries(promptRows.map((row) => [row.shot.id, row.basePrompt])),
+            invalid: false,
         };
+        for (const row of promptRows)
+            selectionState.videoPrompts[row.shot.id] = compileDramaVideoSubmissionPrompt(
+                row.basePrompt,
+                project,
+                row.shot,
+                previewSelectedVideoBindings(project, row, selectionState.selections[row.shot.id], "reference"),
+                selectionState.selections[row.shot.id],
+            );
         const dialog: ReturnType<typeof modal.confirm> = modal.confirm({
             title: `确认生成 ${selectedShots.length} 个镜头`,
             width: "min(760px, calc(100vw - 24px))",
@@ -426,6 +435,7 @@ export function DramaGenerationPanel({
                 <ProductionPromptPreview
                     project={project}
                     rows={promptRows}
+                    maxReferenceImages={check.maxReferenceImages}
                     initialSelections={selectionState.selections}
                     initialReferenceModes={selectionState.referenceModes}
                     initialVideoPrompts={selectionState.videoPrompts}
@@ -439,6 +449,10 @@ export function DramaGenerationPanel({
             okText: "确认生成",
             cancelText: "返回修改",
             onOk: () => {
+                if (selectionState.invalid) {
+                    message.error("请填写视频提示词，或取消超出当前模型上限的参考图");
+                    return Promise.reject();
+                }
                 return lockProduction(shotIds, check, selectionState.selections, selectionState.referenceModes, selectionState.videoPrompts);
             },
         });
@@ -459,9 +473,17 @@ export function DramaGenerationPanel({
         }
     };
 
-    const startProduction = (shotIds: string[]) => {
-        if (creatingRun) return;
-        showPromptPreview(shotIds, { status: "passed", issues: [], checkedShotIds: shotIds, changeSummary: [] });
+    const startProduction = async (shotIds: string[]) => {
+        if (creatingRun || preflighting) return;
+        setPreflighting(true);
+        try {
+            const { preflight: check } = await getLatestDramaProductionRun(project.id, episode.id);
+            showPromptPreview(shotIds, { status: "passed", issues: [], checkedShotIds: shotIds, changeSummary: [], maxReferenceImages: check?.maxReferenceImages });
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : "读取生成配置失败");
+        } finally {
+            setPreflighting(false);
+        }
     };
 
     const completeShotReviewAndRefresh = async (shotId: string) => {
@@ -1489,9 +1511,23 @@ type PromptReferenceBinding = ShotReferenceAsset & {
 };
 type ProductionPromptRow = { shot: DramaShot; references: PromptReferenceBinding[]; basePrompt: string };
 
+function previewSelectedVideoBindings(project: DramaProject, row: ProductionPromptRow, selectedIds: string[], mode: DramaVideoReferenceMode = "reference") {
+    const frames = row.references.filter((reference) => reference.kind !== "asset" && selectedIds.includes(reference.id));
+    const tail = frames.find((reference) => reference.kind === "continuity");
+    return buildVideoReferenceBindings(
+        project,
+        row.shot,
+        frames.map((reference) => ({ mediaUrl: reference.url, ...(reference.kind === "frame" ? { frameId: reference.id } : {}) })),
+        selectedIds.filter((id) => !frames.some((frame) => frame.id === id)),
+        tail?.id.slice("tail-".length),
+        mode,
+    );
+}
+
 function ProductionPromptPreview({
     project,
     rows,
+    maxReferenceImages,
     initialSelections,
     initialReferenceModes,
     initialVideoPrompts,
@@ -1500,10 +1536,11 @@ function ProductionPromptPreview({
 }: {
     project: DramaProject;
     rows: ProductionPromptRow[];
+    maxReferenceImages?: number;
     initialSelections: Record<string, string[]>;
     initialReferenceModes: Record<string, DramaVideoReferenceMode>;
     initialVideoPrompts: Record<string, string>;
-    onChange: (value: { selections: Record<string, string[]>; referenceModes: Record<string, DramaVideoReferenceMode>; videoPrompts: Record<string, string> }) => void;
+    onChange: (value: { selections: Record<string, string[]>; referenceModes: Record<string, DramaVideoReferenceMode>; videoPrompts: Record<string, string>; invalid: boolean }) => void;
     onOpenAssets: () => void;
 }) {
     const [assetPickerShotId, setAssetPickerShotId] = useState<string>();
@@ -1512,9 +1549,20 @@ function ProductionPromptPreview({
     const [selections, setSelections] = useState<Record<string, string[]>>(initialSelections);
     const [referenceModes, setReferenceModes] = useState<Record<string, DramaVideoReferenceMode>>(initialReferenceModes);
     const [videoPrompts, setVideoPrompts] = useState<Record<string, string>>(initialVideoPrompts);
+    const invalid = rows.some((row) => !videoPrompts[row.shot.id]?.trim() || Boolean(maxReferenceImages && (selections[row.shot.id] || []).length > maxReferenceImages));
     useEffect(() => {
-        onChange({ selections, referenceModes, videoPrompts });
-    }, [onChange, referenceModes, selections, videoPrompts]);
+        setVideoPrompts((current) =>
+            Object.fromEntries(
+                rows.map((row) => [
+                    row.shot.id,
+                    compileDramaVideoSubmissionPrompt(current[row.shot.id] || "", project, row.shot, previewSelectedVideoBindings(project, row, selections[row.shot.id] || [], referenceModes[row.shot.id]), selections[row.shot.id] || []),
+                ]),
+            ),
+        );
+    }, [project, referenceModes, rows, selections]);
+    useEffect(() => {
+        onChange({ selections, referenceModes, videoPrompts, invalid });
+    }, [invalid, onChange, referenceModes, selections, videoPrompts]);
     return (
         <div className="max-h-[60vh] overflow-y-auto pr-1 text-sm">
             <div className="mb-3 grid gap-2 rounded-md border border-border bg-muted/20 p-3 text-xs sm:grid-cols-2">
@@ -1529,28 +1577,26 @@ function ProductionPromptPreview({
                     reference && !references.some((item) => item.id === id) ? [{ id, label, url: reference.url, width: reference.width, height: reference.height, alias: "", purpose: label, alt: label, required: false, kind: "asset" }] : [],
                 );
                 const displayedReferences = [...references, ...selectedIds.flatMap((id) => extraReferences.filter((reference) => reference.id === id))];
-                const selectedReferences = displayedReferences.filter((reference) => selectedIds.includes(reference.id)).map((reference, index) => ({ ...reference, alias: `@图片${index + 1}` }));
-                const limit = dramaReferenceImageBudget(shot.duration);
+                const bindings = previewSelectedVideoBindings(project, { shot, references, basePrompt: "" }, selectedIds, referenceModes[shot.id]);
+                const selectedReferences = bindings.flatMap((binding) => {
+                    const reference = displayedReferences.find((item) => item.id === binding.sourceId || item.id === binding.frameId || (item.kind === "continuity" && item.id === `tail-${binding.shotId}`));
+                    return reference ? [{ ...reference, alias: binding.alias }] : [];
+                });
+                const limit = maxReferenceImages;
                 const voices = dramaShotCharacterVoiceReferences(project, shot, selectedIds);
-                const prompt = appendDramaCharacterVoiceBindings(
-                    appendDramaImageReferenceBindings(
-                        "",
-                        selectedReferences.map((reference) => ({ id: reference.id, label: reference.label, binding: reference.purpose })),
-                    ),
-                    voices,
-                );
                 const allFrames = referenceModes[shot.id] === "all_frames";
                 const frameIds = new Set(shot.framePlan?.frames.map((frame) => frame.id) || []);
                 const frameReferences = references.filter((reference) => reference.kind === "frame");
                 const allFramesReady = !allFrames || (frameIds.size >= 2 && frameIds.size === frameReferences.filter((reference) => frameIds.has(reference.id) && reference.orderedReady).length);
                 const allFramesSelected = !allFrames || (frameIds.size >= 2 && frameIds.size === selectedReferences.filter((reference) => frameIds.has(reference.id)).length);
-                const overLimit = selectedReferences.length > limit;
+                const overLimit = Boolean(limit && selectedReferences.length > limit);
                 return (
                     <section key={shot.id} className={`mb-3 rounded-md border p-3 last:mb-0 ${overLimit ? "border-red-500" : "border-border"}`}>
                         <div className="flex flex-wrap items-center justify-between gap-2">
                             <h4 className="font-semibold">{shot.title || `镜头 ${String(shot.order).padStart(2, "0")}`}</h4>
                             <span className={`text-xs ${overLimit ? "text-red-600" : "text-muted-foreground"}`}>
-                                {selectedReferences.length} 张 · 建议不超过 {limit} 张 · {shot.duration} 秒 · {allFrames ? "按序关键帧驱动" : "普通参考模式"}
+                                {selectedReferences.length}
+                                {limit ? `/${limit}` : ""} 张 · {shot.duration} 秒 · {allFrames ? "按序关键帧驱动" : "普通参考模式"}
                             </span>
                         </div>
                         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-border/70 bg-muted/15 px-2.5 py-2 text-xs">
@@ -1578,12 +1624,8 @@ function ProductionPromptPreview({
                                 autoSize={{ minRows: 6, maxRows: 14 }}
                                 onChange={(event) => setVideoPrompts((current) => ({ ...current, [shot.id]: event.target.value }))}
                             />
-                            <p className="text-xs text-muted-foreground">确认生成将使用当前编辑内容，并附带所选图片及配音绑定。</p>
+                            <p className="text-xs text-muted-foreground">此文本框展示完整上游提示词，确认后原样发送；更改引用时同步更新图片编号和音色。</p>
                             {!videoPrompts[shot.id]?.trim() ? <p className="text-xs text-red-600">视频提示词不能为空</p> : null}
-                            <details className="text-xs text-muted-foreground">
-                                <summary className="cursor-pointer">查看本次引用与配音绑定</summary>
-                                <p className="mt-2 whitespace-pre-wrap break-words leading-6">{formatDramaVideoPromptForDisplay(prompt)}</p>
-                            </details>
                         </div>
                         <div className="mt-3 border-t border-border/70 pt-3" data-drama-prompt-reference-gallery>
                             <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
@@ -1601,7 +1643,7 @@ function ProductionPromptPreview({
                                 </Button>
                                 <span className={overLimit || !allFramesReady || !allFramesSelected ? "text-red-600" : "text-muted-foreground"}>
                                     {overLimit
-                                        ? `超出 ${selectedReferences.length - limit} 张`
+                                        ? `超出 ${selectedReferences.length - limit!} 张`
                                         : !allFramesReady
                                           ? "按序模式仍缺少可用计划帧"
                                           : !allFramesSelected
@@ -1609,7 +1651,7 @@ function ProductionPromptPreview({
                                             : allFrames
                                               ? "全量关键帧，顺序固定"
                                               : selectedReferences.length
-                                                ? "按选择顺序作为普通参考图"
+                                                ? "图片编号与提交顺序一致"
                                                 : "未选择图片，仅使用视频提示词"}
                                 </span>
                             </div>

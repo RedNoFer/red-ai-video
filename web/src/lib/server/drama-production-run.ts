@@ -2,11 +2,13 @@ import { createHash } from "node:crypto";
 
 import { nanoid } from "nanoid";
 
-import { approvedAssetReference, approvedScenePanoramaReference, hasApprovedAssetReference, hasApprovedScenePanoramaReference } from "@/lib/drama-asset-baseline";
+import { hasApprovedAssetReference } from "@/lib/drama-asset-baseline";
+import { buildVideoReferenceBindings, compileDramaVideoSubmissionPrompt } from "@/lib/drama-video-submission";
+export { buildVideoReferenceBindings } from "@/lib/drama-video-submission";
 import { continuityStartEvidence } from "@/lib/drama-continuity-policy";
 import { compileDramaShotExecutionPrompts, sanitizeDramaSupplierText } from "@/lib/drama-prompt-compiler";
 import { resolveDramaVideoReferenceMode, selectedDramaShotFrameIds, selectedDramaShotReferenceAssetIds } from "@/lib/drama-video-reference-plan";
-import type { DramaEpisode, DramaProductionPlan, DramaProductionRun, DramaProductionStep, DramaProject, DramaVideoReferenceBinding, DramaVideoReferenceMode } from "@/lib/drama-project-contract";
+import type { DramaEpisode, DramaProductionPlan, DramaProductionRun, DramaProductionStep, DramaProject, DramaVideoReferenceMode } from "@/lib/drama-project-contract";
 
 export type DramaProductionParameterInput = {
     imageModel: string;
@@ -28,6 +30,7 @@ export function buildDramaProductionRun(project: DramaProject, episode: DramaEpi
     const configuredPlan = parameters.productionPlan || project.productionBible?.productionPlan;
     const productionPlan = configuredPlan ? { ...configuredPlan, video: { ...configuredPlan.video, model: parameters.videoModel } } : undefined;
     const steps: DramaProductionStep[] = [];
+    const videoPrompts = { ...parameters.videoPrompts };
     const anchorStepIds = new Map<string, string>();
     const referencedAssetIds = new Set(episode.shots.flatMap((shot) => selectedDramaShotReferenceAssetIds(project, shot, parameters.referenceSelections)));
     for (const assetId of referencedAssetIds) {
@@ -100,6 +103,9 @@ export function buildDramaProductionRun(project: DramaProject, episode: DramaEpi
             const orderedFrames = continuityTail ? [{ mediaUrl: continuityTail.mediaUrl, remoteUrl: continuityTail.remoteUrl }, ...segmentFrames] : segmentFrames;
             const dependencies = [...assetDependencies, ...(index ? [videoStepIds[index - 1]] : [])];
             videoStepIds.push(id);
+            const bindings = buildVideoReferenceBindings(project, shot, orderedFrames, assetIds, incoming?.fromShotId, referenceMode);
+            const prompt = parameters.videoPrompts?.[shot.id] ?? compileDramaVideoSubmissionPrompt(compileDramaShotExecutionPrompts(project, episode, shot).videoPrompt, project, shot, bindings, assetIds);
+            videoPrompts[shot.id] = prompt;
             steps.push({
                 id,
                 shotId: shot.id,
@@ -111,12 +117,12 @@ export function buildDramaProductionRun(project: DramaProject, episode: DramaEpi
                 dependsOn: Array.from(new Set(dependencies)),
                 status: dependencies.every((dependency) => steps.find((step) => step.id === dependency)?.status === "success") ? "ready" : "blocked",
                 title: `${shot.title} · 视频段 ${index + 1}/${videoSegments.length}`,
-                prompt: parameters.videoPrompts?.[shot.id] ?? compileDramaShotExecutionPrompts(project, episode, shot).videoPrompt,
+                prompt,
                 referenceAssetIds: assetIds,
                 referenceImageUrls: orderedFrames.map((frame) => frame.mediaUrl!),
                 referenceImageRemoteUrls: orderedFrames.map((frame) => frame.remoteUrl),
                 referenceManifest: shot.framePlan?.referenceManifest,
-                referenceBindingsSnapshot: buildVideoReferenceBindings(project, shot, orderedFrames, assetIds, incoming?.fromShotId, referenceMode),
+                referenceBindingsSnapshot: bindings,
                 referenceMode,
             });
         }
@@ -138,7 +144,7 @@ export function buildDramaProductionRun(project: DramaProject, episode: DramaEpi
         planRevision,
         status: "ready",
         mode: project.productionBible?.continuityMode || "strict",
-        parameterSnapshot: { ...parameters, ratio: productionPlan?.video.ratio || project.ratio, productionPlan, modelParameters: productionPlan?.video.modelParameters },
+        parameterSnapshot: { ...parameters, videoPrompts, ratio: productionPlan?.video.ratio || project.ratio, productionPlan, modelParameters: productionPlan?.video.modelParameters },
         steps,
         createdAt: now,
         updatedAt: now,
@@ -212,117 +218,6 @@ export function refreshDramaVideoStepReferences(project: DramaProject, episode: 
 
 function episodeShot(project: DramaProject, episode: DramaEpisode, shotId: string) {
     return episode.shots.find((shot) => shot.id === shotId) || project.episodes.flatMap((item) => item.shots).find((shot) => shot.id === shotId);
-}
-
-export function buildVideoReferenceBindings(
-    project: DramaProject,
-    shot: DramaEpisode["shots"][number],
-    frames: Array<{ mediaUrl: string; remoteUrl?: string; frameId?: string; sequenceIndex?: number }>,
-    assetIds: string[],
-    previousShotId?: string,
-    referenceMode: DramaVideoReferenceMode = "reference",
-): DramaVideoReferenceBinding[] {
-    const manifest = shot.framePlan?.referenceManifest || [];
-    const roleFor = (assetId: string): DramaVideoReferenceBinding["role"] => {
-        const role = manifest.find((item) => item.assetId === assetId)?.role;
-        if (role === "character_anchor") return "character_anchor";
-        if (role === "scene_anchor") return "scene_anchor";
-        if (project.scenes.some((asset) => asset.id === assetId)) return "scene_anchor";
-        if (project.characters.some((asset) => asset.id === assetId)) return "character_anchor";
-        return "prop_anchor";
-    };
-    const hasPreviousTail = Boolean(previousShotId && frames[0] && !frames[0].frameId);
-    const frameCandidates: Array<Omit<DramaVideoReferenceBinding, "alias">> = frames.map((frame, index) => {
-        const isPreviousTail = index === 0 && Boolean(previousShotId) && !frame.frameId;
-        const role: DramaVideoReferenceBinding["role"] = isPreviousTail ? "first_frame" : referenceMode === "all_frames" ? "keyframe" : "reference";
-        const assignedKeyframeIndex = role === "keyframe" ? index + 1 - (hasPreviousTail ? 1 : 0) : undefined;
-        return {
-            role,
-            purpose: isPreviousTail ? "上一镜当前视频版本的已人工验收实际尾帧" : referenceMode === "all_frames" ? `顺序帧 ${assignedKeyframeIndex}` : "可选细节参考图",
-            shotId: isPreviousTail ? previousShotId : shot.id,
-            frameId: frame.frameId,
-            url: frame.mediaUrl,
-            remoteUrl: frame.remoteUrl,
-            ...(assignedKeyframeIndex ? { keyframeIndex: assignedKeyframeIndex } : {}),
-        };
-    });
-    const assetCandidates: Array<Omit<DramaVideoReferenceBinding, "alias"> & { assetId: string }> = [];
-    for (const assetId of assetIds) {
-        const asset = [...project.characters, ...project.scenes, ...project.props, ...project.clues].find((item) => item.id === assetId);
-        const source = project.sourceAssets?.find((item) => item.id === assetId && item.type === "image");
-        const isScene = project.scenes.some((asset) => asset.id === assetId);
-        const reference = asset
-            ? isScene
-                ? hasApprovedScenePanoramaReference(asset)
-                    ? assetReference(asset, true)
-                    : undefined
-                : hasApprovedAssetReference(asset)
-                  ? assetReference(asset)
-                  : undefined
-            : source?.serverUrl || source?.remoteUrl
-              ? { url: source.serverUrl || source.remoteUrl!, remoteUrl: source.remoteUrl }
-              : undefined;
-        if (reference?.url) assetCandidates.push({ assetId, role: roleFor(assetId), purpose: manifest.find((item) => item.assetId === assetId)?.purpose || "项目资产基准图", sourceId: assetId, url: reference.url, remoteUrl: reference.remoteUrl });
-    }
-    if (!manifest.length) {
-        return [...frameCandidates.map((candidate, index) => ({ alias: `@图片${index + 1}`, ...candidate })), ...assetCandidates.map((candidate, index) => ({ alias: `@图片${frameCandidates.length + index + 1}`, ...candidate }))];
-    }
-
-    const usedFrames = new Set<number>();
-    const usedAssets = new Set<string>();
-    let keyframeIndex = 0;
-    const bindings: DramaVideoReferenceBinding[] = [];
-    for (const item of manifest) {
-        if (item.assetId && !assetIds.includes(item.assetId)) continue;
-        if (referenceMode === "reference" && item.frameEvidenceId && !frameCandidates.some((frame) => frame.frameId === item.frameEvidenceId)) continue;
-        let candidate: Omit<DramaVideoReferenceBinding, "alias"> | undefined;
-        let frameIndex = -1;
-        if (item.role === "previous_actual_tail") {
-            frameIndex = frameCandidates.findIndex((frame, index) => index === 0 && frame.role === "first_frame");
-        } else if (item.frameEvidenceId) {
-            frameIndex = frameCandidates.findIndex((frame) => frame.frameId === item.frameEvidenceId);
-        } else if (item.assetId) {
-            const asset = assetCandidates.find((entry) => entry.assetId === item.assetId && !usedAssets.has(entry.assetId));
-            if (asset) {
-                candidate = asset;
-                usedAssets.add(asset.assetId);
-            }
-        } else if (item.role === "action_keyframe" || item.role === "composition_keyframe") {
-            frameIndex = frameCandidates.findIndex((_, index) => !usedFrames.has(index));
-        }
-        if (frameIndex >= 0) {
-            if (usedFrames.has(frameIndex)) continue;
-            usedFrames.add(frameIndex);
-            candidate = frameCandidates[frameIndex];
-        }
-        if (!candidate) continue;
-        const role: DramaVideoReferenceBinding["role"] = item.role === "previous_actual_tail" ? "first_frame" : item.role === "action_keyframe" || item.role === "composition_keyframe" ? "keyframe" : item.role;
-        if (role === "keyframe") keyframeIndex += 1;
-        bindings.push({ alias: item.alias, ...candidate, role, purpose: item.purpose || candidate.purpose, ...(role === "keyframe" ? { keyframeIndex } : {}) });
-    }
-    const aliasesUsed = new Set(bindings.map((binding) => binding.alias));
-    let nextAliasIndex = 1;
-    const nextGeneratedAlias = () => {
-        while (aliasesUsed.has(`@图片${nextAliasIndex}`)) nextAliasIndex += 1;
-        const alias = `@图片${nextAliasIndex}`;
-        aliasesUsed.add(alias);
-        nextAliasIndex += 1;
-        return alias;
-    };
-    for (const [index, candidate] of frameCandidates.entries()) {
-        if (usedFrames.has(index)) continue;
-        bindings.push({ alias: nextGeneratedAlias(), ...candidate });
-    }
-    for (const candidate of assetCandidates) {
-        if (usedAssets.has(candidate.assetId)) continue;
-        bindings.push({ alias: nextGeneratedAlias(), ...candidate });
-    }
-    return bindings;
-}
-
-function assetReference(asset: NonNullable<DramaProject["characters"]>[number], scene = false) {
-    const reference = scene ? approvedScenePanoramaReference(asset) : approvedAssetReference(asset);
-    return reference ? { url: reference.url, remoteUrl: reference.remoteUrl } : undefined;
 }
 
 function validFrame(frame: DramaEpisode["shots"][number]["storyboardFrames"] extends Array<infer T> | undefined ? T | undefined : never) {

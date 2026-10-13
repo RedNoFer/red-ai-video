@@ -1,3 +1,4 @@
+import { compileDramaVideoSubmissionPrompt } from "@/lib/drama-video-submission";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 
@@ -555,13 +556,14 @@ describe("drama project service updates", () => {
                 utterances: [{ id: "u1", order: 1, type: "dialogue", characterId: "heroine", speaker: "岚音", text: "别说话。" }],
             },
         ] as never;
+        const fullPrompt = compileDramaVideoSubmissionPrompt(current.episodes[0].shots[0].videoPrompt, current, current.episodes[0].shots[0], [], []);
         const run = {
             id: `voice-run-${withAudio}`,
             projectId: current.id,
             episodeId: "episode-one",
             status: "running",
             mode: "strict",
-            parameterSnapshot: { videoModel: "video-default", ratio: "9:16" },
+            parameterSnapshot: { videoModel: "video-default", ratio: "9:16", videoPrompts: { "shot-voice": fullPrompt } },
             steps: [{ id: "video-voice", type: "video", shotId: "shot-voice", status: "ready", dependsOn: [], prompt: "旧提示词", duration: 5, referenceAssetIds: [] }],
             confirmedAt: current.updatedAt,
             createdAt: current.updatedAt,
@@ -574,6 +576,7 @@ describe("drama project service updates", () => {
         await getLatestDramaProductionRunForUser("user-one", current.id, "episode-one", { origin: "http://localhost:3010", cookie: "session=test" });
         expect(mocks.fetchInternalApi).toHaveBeenCalledOnce();
         const body = JSON.parse(String(mocks.fetchInternalApi.mock.calls[0][1].body));
+        expect(body.prompt).toBe(fullPrompt);
         expect(body.prompt).toContain("别说话。");
         expect(body.prompt).not.toContain("旧提示词");
         if (withAudio) {

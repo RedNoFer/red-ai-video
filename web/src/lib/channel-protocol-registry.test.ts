@@ -149,6 +149,7 @@ describe("channel protocol registry", () => {
             audio: channelProtocolDefinition("openai").operations.audio,
         });
         expect(protocolModelConfig("yinglingapi", "video", "seedance2.5-30s")).toMatchObject({ maxReferenceImages: 9, supportsKeyframes: false, videoReferenceModes: ["reference"] });
+        expect(protocolModelConfig("yinglingapi", "video", "dola-seedance2.5-30s")).toMatchObject({ maxReferenceImages: 9, supportsKeyframes: false, videoReferenceModes: ["reference"] });
         expect(channelProtocolDefinition("newapi-video").operations.video).toMatchObject({
             createPath: "/v1/videos",
             imageToVideoPath: "/v1/videos",

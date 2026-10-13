@@ -403,6 +403,11 @@ describe("model routing config", () => {
         });
     });
 
+    it("enforces the actual Dola Seedance provider image limit despite a larger stored profile", () => {
+        const source = applyChannelProtocol({ ...channel("yingling", ["dola-seedance2.5-30s"]), advancedConfig: {} as never }, "yinglingapi");
+        expect(resolveLogicalModelCapabilityProfile({ capabilityProfile: { maxReferenceImages: 30 } }, "video", source, "dola-seedance2.5-30s")?.maxReferenceImages).toBe(9);
+    });
+
     it("keeps the Buming video tier binding-specific and defaults it to standard", () => {
         const buming = applyChannelProtocol({ ...channel("buming", ["seedance-2-0-official"]), advancedConfig: {} as never }, "buming-seedance");
         const generic = channel("generic", ["seedance-2-0-official"]);

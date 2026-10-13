@@ -1336,10 +1336,8 @@ test("drama shot generation previews prompt before confirmation", async ({ page 
     expect(effectCleanupErrors).toEqual([]);
     await expect(previewDialog.getByText("清晰度：", { exact: false })).toBeVisible();
     await expect(previewDialog.getByRole("textbox", { name: "黑湖记忆 1/1视频提示词" })).toHaveValue(/动态意图：[\s\S]*时间段动作：/u);
-    await previewDialog.getByText("查看本次引用与配音绑定", { exact: true }).click();
-    await expect(previewDialog.getByText("实际参考图绑定（编号与本次请求图片数组完全一致）", { exact: false })).toBeVisible();
+    await expect(previewDialog.getByRole("textbox", { name: "黑湖记忆 1/1视频提示词" })).toHaveValue(/【参考图片】[\s\S]*@图片1：场景「黑湖」/u);
     await expect(previewDialog.getByText("关键帧为可选细节参考；未选择时按视频提示词和所选资产图生成", { exact: false })).toBeVisible();
-    await expect(previewDialog.getByText("@图片1：场景 · 黑湖", { exact: false })).toBeVisible();
     const referenceGallery = previewDialog.locator("[data-drama-prompt-reference-gallery]");
     await expect(referenceGallery).toBeVisible();
     await expect(referenceGallery.getByRole("img")).toHaveCount(5);

@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { nanoid } from "nanoid";
 import { assertUniqueDramaVoices, normalizeDramaVoiceProfile } from "@/lib/drama-voice";
-import { appendDramaCharacterVoiceBindings, dramaShotCharacterVoiceReferences } from "@/lib/drama-character-voice-reference";
+import { dramaShotCharacterVoiceReferences } from "@/lib/drama-character-voice-reference";
 import { hasDramaCharacterNarrativeFact, normalizeDramaCharacterProfile } from "@/lib/drama-character-rules";
 
 import { getAuthSettings } from "@/lib/auth/store";
@@ -1789,7 +1789,7 @@ export async function createDramaProductionRunForUser(userId: string, projectId:
         throw new DramaProjectServiceError(`后台默认视频模型 ${requestedVideoModel} 未声明支持全能帧关键图，请在后台为该模型声明全能帧能力或调整本集帧模式`, 409);
     }
     const executionPlan = parameters.productionPlan ? { ...parameters.productionPlan, video: { ...parameters.productionPlan.video, model: videoCandidate.logicalModelId, channelId: videoCandidate.channelId } } : undefined;
-    validateDramaReferenceSelections(project, episode, productionShots, referenceSelections);
+    validateDramaReferenceSelections(project, episode, productionShots, referenceSelections, videoCandidate.capabilityProfile?.maxReferenceImages);
     const executionEpisode = { ...episode, shots: episode.shots.map((shot) => (videoPrompts[shot.id] !== undefined ? { ...shot, videoPrompt: videoPrompts[shot.id], executionVideoPrompt: videoPrompts[shot.id] } : shot)) };
     const preflight = preflightDramaProduction(project, executionEpisode, checkedShotIds.length ? checkedShotIds : undefined, referenceSelections, referenceModes);
     const selectedShotIds = new Set(checkedShotIds);
@@ -1808,6 +1808,7 @@ export async function createDramaProductionRunForUser(userId: string, projectId:
             productionPlan: executionPlan,
             minVideoSeconds: videoCandidate.capabilityProfile?.minDurationSeconds,
             maxVideoSeconds: videoCandidate.capabilityProfile?.maxDurationSeconds,
+            maxReferenceImages: videoCandidate.capabilityProfile?.maxReferenceImages,
             referenceSelections,
             referenceModes,
             videoPrompts,
@@ -2451,7 +2452,9 @@ export async function getDramaProductionPreflightForUser(userId: string, project
     const episode = project.episodes.find((item) => item.id === cleanText(episodeId));
     if (!episode) throw new DramaProjectServiceError("短剧剧集不存在", 404);
     const latest = await findLatestDramaProductionRun(userId, project.id, episode.id, "production");
-    return preflightDramaProduction(project, episode, undefined, latest?.parameterSnapshot.referenceSelections, latest?.parameterSnapshot.referenceModes);
+    const settings = await getAuthSettings();
+    const candidate = resolveLogicalModelCandidates(settings, "video", settings.defaultModels.videoModel)[0];
+    return { ...preflightDramaProduction(project, episode, undefined, latest?.parameterSnapshot.referenceSelections, latest?.parameterSnapshot.referenceModes), maxReferenceImages: candidate?.capabilityProfile?.maxReferenceImages };
 }
 
 export async function updateDramaProductionRunForUser(userId: string, projectId: string, runId: string, value: unknown) {
@@ -2475,6 +2478,20 @@ export async function updateDramaProductionRunForUser(userId: string, projectId:
         next = { ...run, status: "cancelled", steps: run.steps.map((step) => (["success", "cancelled"].includes(step.status) ? step : { ...step, status: "cancelled" })), updatedAt: new Date().toISOString() };
     } else if (action === "retry") {
         const stepIds = new Set(ids(object(value).stepIds));
+        if (run.scope !== "visual") {
+            const episode = project.episodes.find((item) => item.id === run.episodeId);
+            if (!episode) throw new DramaProjectServiceError("短剧剧集不存在", 404);
+            const settings = await getAuthSettings();
+            const candidate = resolveLogicalModelCandidates(settings, "video", settings.defaultModels.videoModel)[0];
+            const shotIds = new Set(run.steps.filter((step) => stepIds.has(step.id)).map((step) => step.shotId));
+            validateDramaReferenceSelections(
+                project,
+                episode,
+                episode.shots.filter((shot) => shotIds.has(shot.id)),
+                run.parameterSnapshot.referenceSelections || {},
+                candidate?.capabilityProfile?.maxReferenceImages,
+            );
+        }
         next =
             run.scope === "visual"
                 ? unlockDramaVisualSteps({
@@ -2869,7 +2886,7 @@ async function dispatchReadyDramaProductionSteps(userId: string, project: DramaP
             }
             const voices = shot ? dramaShotCharacterVoiceReferences(project, shot, step.referenceAssetIds || []) : [];
             const voiceReferences = voices.flatMap((voice) => (voice.audio ? [{ type: "audio" as const, role: "reference" as const, url: voice.audio.url }] : []));
-            const executionPrompt = appendDramaCharacterVoiceBindings(compileDramaVideoReferencePrompt(step.prompt!, references), voices);
+            const executionPrompt = step.prompt!;
             try {
                 const response = await fetchInternalApi(`${origin}/api/video-generation-tasks`, {
                     method: "POST",
@@ -4844,7 +4861,7 @@ function stringReferenceModeRecord(value: unknown): Record<string, DramaVideoRef
     ) as Record<string, DramaVideoReferenceMode>;
 }
 
-export function validateDramaReferenceSelections(project: DramaProject, episode: DramaEpisode, shots: DramaShot[], selections: Record<string, string[]>) {
+export function validateDramaReferenceSelections(project: DramaProject, episode: DramaEpisode, shots: DramaShot[], selections: Record<string, string[]>, maxReferenceImages?: number) {
     for (const shot of shots) {
         const fixedAssetIds = Array.from(
             new Set(
@@ -4874,6 +4891,8 @@ export function validateDramaReferenceSelections(project: DramaProject, episode:
                 }
             }
         }
+        if (maxReferenceImages && selected && new Set(selected).size > maxReferenceImages)
+            throw new DramaProjectServiceError(`${shot.title}本次引用 ${new Set(selected).size} 张图片，超过当前模型的 ${maxReferenceImages} 张上限；请返回提示词预览取消部分参考图`, 409);
     }
 }
 

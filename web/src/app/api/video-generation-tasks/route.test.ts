@@ -1296,6 +1296,36 @@ describe("video generation candidate failover", () => {
         expect(mocks.fetchInternalApi).toHaveBeenCalledTimes(1);
     });
 
+    it.each([9, 10])("validates %i images for the actual Dola alias before upstream submission", async (count) => {
+        const source = yinglingVideoSettings();
+        source.systemChannels[0].models = ["dola-seedance2.5-30s"];
+        source.logicalModels[0].bindings[0].upstreamModel = "dola-seedance2.5-30s";
+        mocks.getAuthSettings.mockResolvedValue(source);
+        mocks.fetchInternalApi.mockResolvedValue(json({ id: "dola-task", state: "queued" }));
+        const references = Array.from({ length: count }, (_, index) => ({ type: "image", url: `https://cdn.example.com/asset-${index}.png` }));
+        const prompt = "  总体风格：真实电影。\n【参考图片】\n@图片1：角色「阿泽」\n";
+        const response = await POST(request({ videoSeconds: "30" }, references, { surface: "drama", runId: "dola-run" }, prompt));
+        expect(response.status).toBe(count === 9 ? 200 : 400);
+        if (count === 9) {
+            expect(mocks.fetchInternalApi).toHaveBeenCalledOnce();
+            expect(JSON.parse(String(mocks.fetchInternalApi.mock.calls[0][1].body)).prompt).toBe(prompt);
+        } else {
+            expect(mocks.fetchInternalApi).not.toHaveBeenCalled();
+            expect(mocks.createVideoTask).not.toHaveBeenCalled();
+        }
+    });
+
+    it("sends the confirmed complete drama prompt verbatim through the Buming adapter", async () => {
+        const model = "seedance-2-5-special";
+        const source = applyChannelProtocol({ ...channels[0], models: [model], advancedConfig: emptyAdvancedConfig() }, "buming-seedance");
+        mocks.getAuthSettings.mockResolvedValue({ ...settings, systemChannels: [source], logicalModels: [{ ...settings.logicalModels[0], bindings: [{ ...settings.logicalModels[0].bindings[0], upstreamModel: model }] }] });
+        mocks.fetchInternalApi.mockResolvedValue(json({ id: "buming-full-prompt-task", state: "queued" }));
+        const prompt = "总体风格：真人电影。\n【参考图片】\n@图片1：场景「成都零公里」\n【角色音色】\n阿泽：低沉克制。\n";
+        const response = await POST(request({ videoSeconds: "30" }, [{ type: "image", url: "https://cdn.example.com/scene.png" }], { surface: "drama", runId: "full-prompt-run" }, prompt));
+        expect(response.status).toBe(200);
+        expect(JSON.parse(String(mocks.fetchInternalApi.mock.calls[0][1].body)).prompt).toBe(prompt);
+    });
+
     it("does not switch a drama all-frame request to another logical model", async () => {
         const bumingChannel = applyChannelProtocol({ ...channels[1], models: ["seedance-2-0-official"], advancedConfig: emptyAdvancedConfig() }, "buming-seedance");
         mocks.getAuthSettings.mockResolvedValue({
@@ -1558,6 +1588,7 @@ function request(
     config: Record<string, unknown> = { model: "video" },
     references: Array<{ type: string; url: string; remoteUrl?: string; serverUrl?: string; durationMs?: number; role?: string; keyframeIndex?: number }> = [],
     context?: Record<string, unknown>,
+    prompt = "A test video",
 ) {
     const clientRequestId = typeof context?.clientRequestId === "string" ? context.clientRequestId : "";
     return new Request("http://localhost/api/video-generation-tasks", {
@@ -1567,7 +1598,7 @@ function request(
             ...(clientRequestId ? { "x-vozeb-pro-client-request-id": clientRequestId } : {}),
             ...(typeof context?.attemptNo === "number" ? { "x-vozeb-pro-attempt-no": String(context.attemptNo) } : {}),
         },
-        body: JSON.stringify({ config, prompt: "A test video", references, context }),
+        body: JSON.stringify({ config, prompt, references, context }),
     });
 }
 

@@ -251,7 +251,7 @@ export function resolveLogicalModelCapabilityProfile(binding: Pick<LogicalModelB
     const stored = binding.capabilityProfile || {};
     const advanced = channel?.advancedConfig;
     const globalPreset = resolveGlobalAiOpcPreset(advanced, upstreamModel);
-    const modelConfig = resolveChannelModelConfig(advanced, upstreamModel) || advanced?.operationConfigs?.[capability];
+    const modelConfig = resolveChannelCapabilityConfig(advanced, upstreamModel, capability);
     const bumingQualityOptions = advanced?.protocol === "buming-seedance" && capability === "video" ? resolveBumingSeedanceQualityOptions(upstreamModel) : [];
     const strictProtocol = advanced?.protocol ? channelProtocolDefinition(advanced.protocol).strict : false;
     const protocolDefault = (key: "supportsReferenceImage" | "supportsReferenceVideo" | "supportsReferenceAudio" | "supportsKeyframes") => {
@@ -279,7 +279,10 @@ export function resolveLogicalModelCapabilityProfile(binding: Pick<LogicalModelB
         supportsReferenceVideo: providerCapability("supportsReferenceVideo", Boolean(globalPreset?.supportsReferenceVideo ?? modelConfig?.supportsReferenceVideo ?? advanced?.supportsReferenceVideo)),
         supportsReferenceAudio: providerCapability("supportsReferenceAudio", Boolean(globalPreset?.supportsReferenceAudio ?? modelConfig?.supportsReferenceAudio ?? advanced?.supportsReferenceAudio)),
         supportsKeyframes: providerCapability("supportsKeyframes", advanced?.protocol === "buming-seedance" && !isKnownBumingSeedanceVideoModel(upstreamModel) ? true : Boolean(modelConfig?.supportsKeyframes)),
-        maxReferenceImages: positiveInteger(stored.maxReferenceImages) || positiveInteger(modelConfig?.maxReferenceImages),
+        maxReferenceImages:
+            strictProtocol && modelConfig?.maxReferenceImages
+                ? Math.min(positiveInteger(stored.maxReferenceImages) || modelConfig.maxReferenceImages, modelConfig.maxReferenceImages)
+                : positiveInteger(stored.maxReferenceImages) || positiveInteger(modelConfig?.maxReferenceImages),
         aspectRatios: normalizeAspectRatios(stored.aspectRatios),
         minDurationSeconds: positiveNumber(stored.minDurationSeconds),
         maxDurationSeconds: advanced?.protocol === "buming-seedance" ? durationRangeMaximum(modelConfig?.durationRange) || positiveNumber(stored.maxDurationSeconds) : positiveNumber(stored.maxDurationSeconds),

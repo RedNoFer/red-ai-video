@@ -205,7 +205,15 @@ test("shot assets replace secondary checks and manual fixed references reach the
         ...channel,
         advancedConfig: { ...channel.advancedConfig, protocol: "custom", operationConfigs: { ...channel.advancedConfig.operationConfigs, video }, modelConfigs: { ...channel.advancedConfig.modelConfigs, "e2e-video": video } },
     }));
-    expect((await request.patch("/api/admin/settings", { data: { ...settings, systemChannels } })).ok()).toBe(true);
+    const configured = await request.patch("/api/admin/settings", { data: { ...settings, systemChannels } });
+    expect(configured.ok()).toBe(true);
+    const normalized = (await configured.json()).settings;
+    const logicalModels = normalized.logicalModels.map((model: { id: string; bindings: Array<{ capabilityProfile?: Record<string, unknown> }> }) =>
+        model.id === "e2e-video" ? { ...model, bindings: model.bindings.map((binding) => ({ ...binding, capabilityProfile: { ...binding.capabilityProfile, maxReferenceImages: 9 } })) } : model,
+    );
+    const limited = await request.patch("/api/admin/settings", { data: { logicalModels } });
+    expect(limited.ok()).toBe(true);
+    expect((await limited.json()).settings.logicalModels.find((model: { id: string }) => model.id === "e2e-video").bindings[0].capabilityProfile.maxReferenceImages).toBe(9);
     const created = await request.post("/api/drama/projects", { data: { title: `E2E 手动引用 ${randomUUID().slice(0, 8)}`, ratio: "9:16" } });
     expect(created.ok(), await created.text()).toBe(true);
     const empty = (await created.json()).data.project as DramaProject;
@@ -220,6 +228,7 @@ test("shot assets replace secondary checks and manual fixed references reach the
     const role = seeded.characters[0];
     role.references = [{ id: "main-reference", source: "upload", status: "approved", label: "角色基准", url: `${E2E_PROTOCOL_ORIGIN}/media/fixture.png?main`, createdAt: new Date().toISOString() }];
     role.primaryReferenceId = "main-reference";
+    role.voiceProfile = { timbrePrompt: "成年女性中音区，清晰克制", speed: 1, instructions: "" };
     seeded.characters.push({
         ...structuredClone(role),
         id: "manual-character",
@@ -228,6 +237,16 @@ test("shot assets replace secondary checks and manual fixed references reach the
         references: [{ ...role.references[0], id: "manual-character-reference", url: `${E2E_PROTOCOL_ORIGIN}/media/fixture.png?manual-character` }],
         primaryReferenceId: "manual-character-reference",
     });
+    seeded.characters.push(
+        ...Array.from({ length: 5 }, (_, index) => ({
+            ...structuredClone(role),
+            id: `quota-role-${index}`,
+            code: `C${80 + index}`,
+            name: `额度角色${index}`,
+            references: [{ ...role.references[0], id: `quota-image-${index}`, url: `${E2E_PROTOCOL_ORIGIN}/media/fixture.png?quota-${index}` }],
+            primaryReferenceId: `quota-image-${index}`,
+        })),
+    );
     seeded.characters.push({ ...structuredClone(role), id: "missing-character", code: "C98", name: "未生成角色", references: [], primaryReferenceId: undefined });
     const originalScene = seeded.scenes[0];
     seeded.scenes.push({
@@ -288,9 +307,25 @@ test("shot assets replace secondary checks and manual fixed references reach the
         await picker.getByRole("checkbox", { name: "引用固定资产图：角色 · 手动角色" }).check();
         await picker.getByRole("textbox", { name: "搜索固定资产图" }).fill("手动场景");
         await picker.getByRole("checkbox", { name: "引用固定资产图：场景 · 手动场景" }).check();
-        await expect(promptEditor).toHaveValue(editedPrompt);
+        await expect(promptEditor).toHaveValue(new RegExp(`${editedPrompt.split("\n").at(-1)}[\\s\\S]*【参考图片】`, "u"));
+        let completePrompt = await promptEditor.inputValue();
+        expect(completePrompt).toContain("@图片4：角色「手动角色」");
+        expect(completePrompt).toContain("@图片5：场景「手动场景」");
+        expect(completePrompt).not.toContain("项目资产基准图");
+        expect(completePrompt).not.toContain("参考素材一致性要求");
         await expect(dialog.locator("[data-drama-prompt-reference-gallery]").getByRole("img", { name: "角色 · 手动角色" })).toBeVisible();
         await expect(dialog.locator("[data-drama-prompt-reference-gallery]").getByRole("img", { name: "场景 · 手动场景" })).toBeVisible();
+        await picker.getByRole("textbox", { name: "搜索固定资产图" }).fill("额度角色");
+        for (let index = 0; index < 4; index++) await picker.getByRole("checkbox", { name: `引用固定资产图：角色 · 额度角色${index}` }).check();
+        await expect(dialog.getByText("9/9 张", { exact: false })).toBeVisible();
+        await picker.getByRole("checkbox", { name: "引用固定资产图：角色 · 额度角色4" }).check();
+        await expect(dialog.getByText("超出 1 张", { exact: true })).toBeVisible();
+        await dialog.getByRole("button", { name: "确认生成", exact: true }).click();
+        await expect(dialog).toBeVisible();
+        for (let index = 0; index < 5; index++) await picker.getByRole("checkbox", { name: `引用固定资产图：角色 · 额度角色${index}` }).uncheck();
+        await expect(promptEditor).toHaveValue(completePrompt);
+        completePrompt = `  ${completePrompt}\n作者补充：远处车辆经过时保持原人物站位。\n`;
+        await promptEditor.fill(completePrompt);
         const bounds = await dialog.boundingBox();
         expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(page.viewportSize()!.width);
         const grid = await gallery
@@ -310,21 +345,22 @@ test("shot assets replace secondary checks and manual fixed references reach the
         expect(response.ok(), await response.text()).toBe(true);
         const run = (await response.json()).data.run;
         expect(run.parameterSnapshot.referenceSelections[shot.id]).toEqual([role.id, prop.id, clue.id, "manual-character", "manual-scene"]);
-        expect(run.parameterSnapshot.videoPrompts[shot.id]).toBe(editedPrompt);
+        expect(run.parameterSnapshot.videoPrompts[shot.id]).toBe(completePrompt);
         let dispatched = run;
         await expect
             .poll(async () => {
                 dispatched = (await (await request.get(`/api/drama/projects/${seeded.id}/production-runs?episodeId=${episode.id}`)).json()).data.run;
                 return dispatched.steps.find((item: { type: string }) => item.type === "video")?.executionPrompt || "";
             })
-            .toContain(editedPrompt);
+            .toBe(completePrompt);
         const step = dispatched.steps.find((step: { type: string }) => step.type === "video");
-        expect(step.prompt).toBe(editedPrompt);
-        expect(step.executionPrompt, step.error).toContain(editedPrompt);
+        expect(step.prompt).toBe(completePrompt);
+        expect(step.executionPrompt, step.error).toBe(completePrompt);
         expect(step.executionPrompt).not.toContain(shot.videoPrompt);
         const upstream = await (await request.get(`${E2E_PROTOCOL_ORIGIN}/__state`)).json();
         const submission = upstream.requests.find((item: { method: string; prompt?: string }) => item.method === "POST" && item.prompt?.includes(editedPrompt));
         expect(submission).toBeDefined();
+        expect(submission.prompt).toBe(completePrompt);
         expect(submission.images).toEqual(step.referenceBindingsSnapshot.map((binding: { url: string }) => binding.url));
         expect(step.referenceBindingsSnapshot).toEqual(expect.arrayContaining([expect.objectContaining({ sourceId: "manual-character", role: "character_anchor" }), expect.objectContaining({ sourceId: "manual-scene", role: "scene_anchor" })]));
         const fresh = (await (await request.get(`/api/drama/projects/${seeded.id}/production-runs?episodeId=${episode.id}`)).json()).data.run;
