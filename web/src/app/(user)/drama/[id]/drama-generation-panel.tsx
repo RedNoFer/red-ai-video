@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { App, Button, Checkbox, Dropdown, Input, Popconfirm, Progress, Tag, type MenuProps } from "antd";
-import { ArrowRight, Captions, ChevronDown, ChevronUp, CircleAlert, CircleCheck, CircleDashed, Download, Film, GitBranch, LoaderCircle, Pause, Play, RefreshCw, Save, ScanSearch, Send, Sparkles, Volume2 } from "lucide-react";
+import { ArrowRight, Captions, ChevronDown, ChevronUp, CircleAlert, CircleCheck, CircleDashed, Download, Film, GitBranch, LoaderCircle, Pause, Play, Plus, RefreshCw, Save, ScanSearch, Send, Sparkles, Volume2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { mediaDownloadFileName } from "@/lib/media-file";
 import { imagePreviewUrl, originalMediaDownloadUrl } from "@/lib/media-image-url";
@@ -24,6 +24,7 @@ import { appendDramaImageReferenceBindings, compileDramaShotExecutionPrompts } f
 import { appendDramaCharacterVoiceBindings, dramaShotCharacterVoiceReferences } from "@/lib/drama-character-voice-reference";
 import { formatPromptFieldLines } from "@/lib/drama-frame-sequence";
 import { approvedAssetReference, approvedScenePanoramaReference } from "@/lib/drama-asset-baseline";
+import { dramaProjectFixedReferenceAssets, missingDramaShotFixedReferences } from "@/lib/drama-video-reference-plan";
 import { dramaReferenceImageBudget } from "@/lib/drama-production-plan";
 import { activeFrameEvidence, continuityStartEvidence, supersedeFrameEvidence } from "@/lib/drama-continuity-policy";
 import { dramaVideoPromptRunKey, hasActiveDramaVideoPromptRun, useDramaStore } from "../stores/use-drama-store";
@@ -98,6 +99,7 @@ export function DramaGenerationPanel({
     const productionSyncVersion = useRef("");
     const readiness = useMemo(() => summarizeDramaGeneration(project, episode), [episode, project]);
     const productionPlan = project.productionBible?.productionPlan;
+    const missingAssetIssues = preflight?.issues.filter((issue) => ["CHARACTER_REFERENCE", "LOCATION_REFERENCE", "PROP_REFERENCE", "CLUE_REFERENCE"].includes(issue.code)) || [];
     const renderTask = episode.renderTask || null;
     const audioReady = Boolean(config.audioModel.trim());
     const assetCount = project.characters.length + project.scenes.length + project.props.length + project.clues.length;
@@ -351,14 +353,14 @@ export function DramaGenerationPanel({
         }
     };
 
-    const lockProduction = async (shotIds: string[], check: DramaProductionPreflight, referenceSelections: Record<string, string[]>, referenceModes: Record<string, DramaVideoReferenceMode>) => {
+    const lockProduction = async (shotIds: string[], check: DramaProductionPreflight, referenceSelections: Record<string, string[]>, referenceModes: Record<string, DramaVideoReferenceMode>, videoPrompts: Record<string, string>) => {
         setCreatingRun(true);
         try {
             for (const [shotId, prompts] of Object.entries(check.revisedPrompts || {})) {
                 const saved = await updateDramaShotPromptPatch(project.id, episode.id, shotId, prompts.videoPrompt || "", prompts.imagePrompt);
                 replaceShot(project.id, episode.id, shotId, saved.shot, saved.updatedAt);
             }
-            const run = await createDramaProductionRun(project.id, episode.id, undefined, check, { referenceSelections, referenceModes });
+            const run = await createDramaProductionRun(project.id, episode.id, undefined, check, { referenceSelections, referenceModes, videoPrompts });
             setProductionRun(run);
             await loadProject(project.id, true);
             message.success("生产运行已锁定，将按视频提示词、所选参考图和连续性约束执行");
@@ -413,23 +415,37 @@ export function DramaGenerationPanel({
             references: previewVideoReferenceBindings(project, episode, shot),
             basePrompt: compileDramaShotExecutionPrompts(project, episode, shot).videoPrompt,
         }));
-        const selectionState: { selections: Record<string, string[]>; referenceModes: Record<string, DramaVideoReferenceMode>; invalid: boolean } = {
+        const selectionState: { selections: Record<string, string[]>; referenceModes: Record<string, DramaVideoReferenceMode>; videoPrompts: Record<string, string>; invalid: boolean } = {
             selections: Object.fromEntries(promptRows.map((row) => [row.shot.id, row.references.filter((reference) => reference.required || reference.recommended).map((reference) => reference.id)])),
             referenceModes: Object.fromEntries(promptRows.map((row) => [row.shot.id, "reference" as const])),
+            videoPrompts: Object.fromEntries(promptRows.map((row) => [row.shot.id, row.basePrompt])),
             invalid: false,
         };
-        modal.confirm({
+        const dialog: ReturnType<typeof modal.confirm> = modal.confirm({
             title: `确认生成 ${selectedShots.length} 个镜头`,
             width: "min(760px, calc(100vw - 24px))",
-            content: <ProductionPromptPreview project={project} rows={promptRows} initialSelections={selectionState.selections} initialReferenceModes={selectionState.referenceModes} onChange={(value) => Object.assign(selectionState, value)} />,
+            content: (
+                <ProductionPromptPreview
+                    project={project}
+                    rows={promptRows}
+                    initialSelections={selectionState.selections}
+                    initialReferenceModes={selectionState.referenceModes}
+                    initialVideoPrompts={selectionState.videoPrompts}
+                    onChange={(value) => Object.assign(selectionState, value)}
+                    onOpenAssets={() => {
+                        dialog.destroy();
+                        onOpenAssets();
+                    }}
+                />
+            ),
             okText: "确认生成",
             cancelText: "返回修改",
             onOk: () => {
                 if (selectionState.invalid) {
-                    message.error("请调整参考图选择，或完成按序关键帧驱动所需的完整帧计划");
+                    message.error("请填写视频提示词、调整参考图选择，或完成按序关键帧驱动所需的完整帧计划");
                     return Promise.reject();
                 }
-                return lockProduction(shotIds, check, selectionState.selections, selectionState.referenceModes);
+                return lockProduction(shotIds, check, selectionState.selections, selectionState.referenceModes, selectionState.videoPrompts);
             },
         });
     };
@@ -440,9 +456,9 @@ export function DramaGenerationPanel({
         try {
             const check = await preflightDramaGeneration(project.id, episode.id, shotIds, `drama-preflight:${project.id}:${episode.id}:${shotIds.join(",")}:${project.updatedAt}`);
             setPreflight(check);
-            if (check.status === "blocked") message.error("导演前置检查未通过，请先处理阻断项");
-            else if (check.status === "needs_confirmation") message.warning("生成前检查发现可确认风险，请查看下方详情");
-            else message.success("生成前检查已通过");
+            const missing = new Set(episode.shots.filter((shot) => shotIds.includes(shot.id)).flatMap((shot) => missingDramaShotFixedReferences(project, shot).map((item) => item.id)));
+            if (missing.size) message.warning(`还有 ${missing.size} 项引用固定资产图需要生成或确认`);
+            else message.success("引用固定资产图已齐备");
         } catch (error) {
             message.error(error instanceof Error ? error.message : "生成前预检失败");
         } finally {
@@ -662,20 +678,19 @@ export function DramaGenerationPanel({
                         <ReadinessItem key={id} {...item} />
                     ))}
                 </div>
-                {preflight?.status === "blocked" ? (
+                {preflight?.status === "blocked" && missingAssetIssues.length ? (
                     <div className="mt-2 rounded-xl border border-amber-300/70 bg-amber-50/70 p-3 text-xs text-amber-950 dark:border-amber-700/60 dark:bg-amber-950/25 dark:text-amber-100" data-drama-director-blockers>
                         <div className="flex items-center gap-2 font-semibold">
                             <CircleAlert className="size-4" />
-                            导演前置检查阻断生产
+                            固定资产图待补齐
                         </div>
                         <ul className="mt-2 space-y-1 pl-5">
-                            {preflight.issues.slice(0, 8).map((issue, index) => (
+                            {missingAssetIssues.map((issue, index) => (
                                 <li key={`${issue.code}-${issue.shotId || "general"}-${issue.assetId || "none"}-${index}`} className="list-disc">
                                     {issue.message}
                                 </li>
                             ))}
                         </ul>
-                        {preflight.issues.length > 8 ? <p className="mt-2 text-amber-800 dark:text-amber-200">另有 {preflight.issues.length - 8} 项，请补齐资产与连续性状态后重新检查。</p> : null}
                         <div className="mt-3 flex flex-wrap items-center gap-2">
                             <Button
                                 size="small"
@@ -703,24 +718,6 @@ export function DramaGenerationPanel({
                             </Button>
                             <span className="text-amber-800/80 dark:text-amber-200/80">会补全镜头参数；基准图仍需你确认主图。</span>
                         </div>
-                    </div>
-                ) : null}
-                {preflight?.status === "needs_confirmation" ? (
-                    <div className="mt-2 rounded-xl border border-sky-300/70 bg-sky-50/70 p-3 text-xs text-sky-950 dark:border-sky-700/60 dark:bg-sky-950/25 dark:text-sky-100" data-drama-director-warnings>
-                        <div className="flex items-center gap-2 font-semibold">
-                            <CircleAlert className="size-4" />
-                            生成前发现可确认风险
-                        </div>
-                        <ul className="mt-2 space-y-1 pl-5">
-                            {preflight.issues
-                                .filter((issue) => issue.severity === "warning")
-                                .slice(0, 6)
-                                .map((issue, index) => (
-                                    <li key={`${issue.code}-${issue.shotId || "general"}-${issue.assetId || "none"}-${index}`} className="list-disc">
-                                        {issue.message}
-                                    </li>
-                                ))}
-                        </ul>
                     </div>
                 ) : null}
             </section>
@@ -804,7 +801,6 @@ export function DramaGenerationPanel({
                                 onGenerate={() => void startProduction([shot.id])}
                                 onOptimizePrompt={() => optimizeVideoPrompt(shot, preflight?.issues.filter((issue) => issue.shotId === shot.id) || [])}
                                 blocked={readiness.missingPromptShotIds.includes(shot.id) || readiness.missingReferenceShotIds.includes(shot.id)}
-                                preflightIssues={preflight?.issues.filter((issue) => issue.shotId === shot.id) || []}
                                 onMaintain={(action) => {
                                     if (action === "assets") onOpenAssets();
                                     else if (action === "storyboard") onStageChange("storyboard");
@@ -954,7 +950,6 @@ function ShotTaskRow({
     onGenerate,
     onOptimizePrompt,
     blocked,
-    preflightIssues,
     onMaintain,
 }: {
     project: DramaProject;
@@ -970,7 +965,6 @@ function ShotTaskRow({
     onGenerate: () => void;
     onOptimizePrompt: () => Promise<unknown>;
     blocked: boolean;
-    preflightIssues: DramaProductionPreflight["issues"];
     onMaintain: (action: "assets" | "storyboard" | "review") => void;
 }) {
     const { message } = App.useApp();
@@ -1093,7 +1087,7 @@ function ShotTaskRow({
                 </div>
 
                 <ShotErrors shot={shot} />
-                {preflightIssues.length ? <ShotPreflightBlockers issues={preflightIssues} onMaintain={onMaintain} /> : null}
+                <ShotMissingFixedAssets project={project} shot={shot} onOpenAssets={() => onMaintain("assets")} />
                 {detailsOpen ? <ShotExecutionDetails project={project} episode={episode} shot={shot} productionRun={productionRun} onPreview={onPreview} /> : null}
 
                 {startFrames.length || endFrames.length || shot.videoUrl ? (
@@ -1194,40 +1188,25 @@ function ShotErrors({ shot }: { shot: DramaShot }) {
     ) : null;
 }
 
-function ShotPreflightBlockers({ issues, onMaintain }: { issues: DramaProductionPreflight["issues"]; onMaintain: (action: "assets" | "storyboard" | "review") => void }) {
-    const blockingIssues = issues.filter((issue) => issue.severity === "blocking");
-    const optionalIssues = issues.filter((issue) => issue.severity !== "blocking");
-    const action = (issue: DramaProductionPreflight["issues"][number]) => {
-        if (["CHARACTER_ANCHOR", "LOCATION_ANCHOR", "PROP_ANCHOR", "CHARACTER_REFERENCE", "LOCATION_REFERENCE", "PROP_REFERENCE", "CLUE_REFERENCE"].includes(issue.code)) return "assets" as const;
-        if (["PROMPT_MISSING", "VIDEO_PROMPT_MISSING", "FRAMING_UNCLEAR", "NEGATIVE_TEXT_MISSING"].includes(issue.code)) return "storyboard" as const;
-        return "review" as const;
-    };
-    const renderIssues = (title: string, current: DramaProductionPreflight["issues"], tone: "blocking" | "optional") =>
-        current.length ? (
-            <div className="space-y-1.5">
-                <div className="font-medium">{title}</div>
-                {current.slice(0, 6).map((issue) => (
-                    <div key={`${tone}-${issue.code}-${issue.assetId || "none"}`} className="flex items-start justify-between gap-2">
-                        <span className="min-w-0 flex-1 leading-5">{issue.message}</span>
-                        <Button type="link" size="small" className="!h-auto !shrink-0 !p-0 !text-xs !text-amber-800 dark:!text-amber-200" onClick={() => onMaintain(action(issue))}>
-                            {action(issue) === "assets" ? "去项目资产" : action(issue) === "storyboard" ? "去分镜" : "去内容审核"}
-                        </Button>
-                    </div>
-                ))}
-                {current.length > 6 ? <p className="text-amber-800 dark:text-amber-200">另有 {current.length - 6} 项，请先处理上方维护入口。</p> : null}
-            </div>
-        ) : null;
+function ShotMissingFixedAssets({ project, shot, onOpenAssets }: { project: DramaProject; shot: DramaShot; onOpenAssets: () => void }) {
+    const missing = missingDramaShotFixedReferences(project, shot);
+    if (!missing.length) return null;
     return (
-        <div
-            className={`ml-11 mt-2 space-y-2 rounded-md border p-2.5 text-xs text-amber-950 dark:text-amber-100 ${blockingIssues.length ? "border-amber-300/70 bg-amber-50/70 dark:border-amber-700/60 dark:bg-amber-950/25" : "border-sky-300/70 bg-sky-50/70 dark:border-sky-700/60 dark:bg-sky-950/25"}`}
-            data-drama-shot-preflight-blockers
-        >
-            <div className="flex items-center gap-1.5 font-semibold">
-                <CircleAlert className="size-3.5" />
-                {blockingIssues.length ? `该镜头仍有 ${blockingIssues.length} 项无法提交的问题` : `该镜头有 ${optionalIssues.length} 项可选优化`}
+        <div className="ml-11 mt-2 rounded-md border border-border bg-muted/20 p-3 text-xs" data-drama-shot-missing-fixed-assets>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="font-medium">{missing.length} 项引用固定资产图待补齐</span>
+                <Button size="small" onClick={onOpenAssets}>
+                    去生成 / 确认资产图
+                </Button>
             </div>
-            {renderIssues("无法提交", blockingIssues, "blocking")}
-            {renderIssues("可选优化，不影响视频生成", optionalIssues, "optional")}
+            <ul className="mt-2 space-y-1.5 text-muted-foreground">
+                {missing.map(({ id, label, kind, asset }) => (
+                    <li key={id} className="flex flex-wrap justify-between gap-x-3 gap-y-1">
+                        <span>{label}</span>
+                        <span>{kind === "scenes" && approvedAssetReference(asset) ? "需生成单视角全景图" : asset.references?.some((reference) => reference.url && reference.status !== "rejected") ? "待确认主基准图" : "尚未生成"}</span>
+                    </li>
+                ))}
+            </ul>
         </div>
     );
 }
@@ -1535,16 +1514,24 @@ function ProductionPromptPreview({
     rows,
     initialSelections,
     initialReferenceModes,
+    initialVideoPrompts,
     onChange,
+    onOpenAssets,
 }: {
     project: DramaProject;
     rows: ProductionPromptRow[];
     initialSelections: Record<string, string[]>;
     initialReferenceModes: Record<string, DramaVideoReferenceMode>;
-    onChange: (value: { selections: Record<string, string[]>; referenceModes: Record<string, DramaVideoReferenceMode>; invalid: boolean }) => void;
+    initialVideoPrompts: Record<string, string>;
+    onChange: (value: { selections: Record<string, string[]>; referenceModes: Record<string, DramaVideoReferenceMode>; videoPrompts: Record<string, string>; invalid: boolean }) => void;
+    onOpenAssets: () => void;
 }) {
+    const [assetPickerShotId, setAssetPickerShotId] = useState<string>();
+    const [assetSearch, setAssetSearch] = useState("");
+    const fixedAssets = dramaProjectFixedReferenceAssets(project);
     const [selections, setSelections] = useState<Record<string, string[]>>(initialSelections);
     const [referenceModes, setReferenceModes] = useState<Record<string, DramaVideoReferenceMode>>(initialReferenceModes);
+    const [videoPrompts, setVideoPrompts] = useState<Record<string, string>>(initialVideoPrompts);
     const invalid = rows.some((row) => {
         const selected = selections[row.shot.id] || [];
         const frameIds = new Set(row.shot.framePlan?.frames.map((frame) => frame.id) || []);
@@ -1552,27 +1539,31 @@ function ProductionPromptPreview({
         const frameReferences = row.references.filter((reference) => reference.kind === "frame");
         const allFramesReady = !allFrames || (frameIds.size >= 2 && frameIds.size === frameReferences.filter((reference) => frameIds.has(reference.id) && reference.orderedReady).length);
         const allFramesSelected = !allFrames || (frameIds.size >= 2 && frameIds.size === selected.filter((id) => frameIds.has(id)).length);
-        return selected.length > dramaReferenceImageBudget(row.shot.duration) || !allFramesReady || !allFramesSelected;
+        return !videoPrompts[row.shot.id]?.trim() || selected.length > dramaReferenceImageBudget(row.shot.duration) || !allFramesReady || !allFramesSelected;
     });
     useEffect(() => {
-        onChange({ selections, referenceModes, invalid });
-    }, [invalid, onChange, referenceModes, selections]);
+        onChange({ selections, referenceModes, videoPrompts, invalid });
+    }, [invalid, onChange, referenceModes, selections, videoPrompts]);
     return (
         <div className="max-h-[60vh] overflow-y-auto pr-1 text-sm">
             <div className="mb-3 grid gap-2 rounded-md border border-border bg-muted/20 p-3 text-xs sm:grid-cols-2">
                 <span>清晰度：{project.productionBible?.productionPlan?.video.resolution || "按后台默认"}</span>
                 <span>画幅：{project.ratio}</span>
                 <span>时长：{rows.map((row) => `${row.shot.duration}s`).join("、")}</span>
-                <span>默认选择可用角色图和场景图；道具、关键帧和其他素材均可选</span>
+                <span>本镜头可用固定资产图默认全部引用；关键帧和来源素材可选</span>
             </div>
-            {rows.map(({ shot, basePrompt, references }) => {
+            {rows.map(({ shot, references }) => {
                 const selectedIds = selections[shot.id] || [];
-                const selectedReferences = references.filter((reference) => selectedIds.includes(reference.id)).map((reference, index) => ({ ...reference, alias: `@图片${index + 1}` }));
+                const extraReferences: PromptReferenceBinding[] = fixedAssets.flatMap(({ id, label, reference }) =>
+                    reference && !references.some((item) => item.id === id) ? [{ id, label, url: reference.url, width: reference.width, height: reference.height, alias: "", purpose: label, alt: label, required: false, kind: "asset" }] : [],
+                );
+                const displayedReferences = [...references, ...selectedIds.flatMap((id) => extraReferences.filter((reference) => reference.id === id))];
+                const selectedReferences = displayedReferences.filter((reference) => selectedIds.includes(reference.id)).map((reference, index) => ({ ...reference, alias: `@图片${index + 1}` }));
                 const limit = dramaReferenceImageBudget(shot.duration);
                 const voices = dramaShotCharacterVoiceReferences(project, shot, selectedIds);
                 const prompt = appendDramaCharacterVoiceBindings(
                     appendDramaImageReferenceBindings(
-                        basePrompt,
+                        "",
                         selectedReferences.map((reference) => ({ id: reference.id, label: reference.label, binding: reference.purpose })),
                     ),
                     voices,
@@ -1608,55 +1599,110 @@ function ProductionPromptPreview({
                             </Checkbox>
                             <span className="text-muted-foreground">{allFrames ? "要求完整、可用并按时间顺序的计划帧" : "关键帧只是可选细节参考，不参与时间轴门禁"}</span>
                         </div>
-                        <p className="mt-2 whitespace-pre-wrap break-words leading-6 text-muted-foreground">{formatDramaVideoPromptForDisplay(prompt)}</p>
-                        {references.length ? (
-                            <div className="mt-3 border-t border-border/70 pt-3" data-drama-prompt-reference-gallery>
-                                <div className="flex items-center justify-between gap-2 text-xs">
-                                    <span className="font-medium text-foreground">本次实际引用图片</span>
-                                    <span className={overLimit || !allFramesReady || !allFramesSelected ? "text-red-600" : "text-muted-foreground"}>
-                                        {overLimit
-                                            ? `超出 ${selectedReferences.length - limit} 张`
-                                            : !allFramesReady
-                                              ? "按序模式仍缺少可用计划帧"
-                                              : !allFramesSelected
-                                                ? "按序模式必须保留全部计划帧"
-                                                : allFrames
-                                                  ? "全量关键帧，顺序固定"
-                                                  : selectedReferences.length
-                                                    ? "按选择顺序作为普通参考图"
-                                                    : "未选择图片，仅使用视频提示词"}
-                                    </span>
-                                </div>
-                                <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-[repeat(4,minmax(0,1fr))]">
-                                    {references.map((reference) => {
-                                        const checked = selectedIds.includes(reference.id);
-                                        const alias = selectedReferences.find((item) => item.id === reference.id)?.alias;
-                                        return (
-                                            <div key={`${reference.id}-${reference.url}`} className={`min-w-0 overflow-hidden rounded-md border bg-background ${checked ? "border-primary" : "border-border opacity-60"}`} data-drama-prompt-reference-item>
-                                                <div className="relative overflow-hidden bg-muted" style={{ aspectRatio: reference.width && reference.height ? `${reference.width} / ${reference.height}` : "4 / 3" }}>
-                                                    <img className="size-full object-contain" src={imagePreviewUrl(reference.url, 480)} alt={reference.alt} />
-                                                    {alias ? <span className="absolute left-1.5 top-1.5 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-white">{alias}</span> : null}
-                                                </div>
-                                                <div className="space-y-1 px-2 py-1.5 text-[11px] leading-4">
-                                                    <Checkbox
-                                                        checked={checked}
-                                                        disabled={reference.required || (allFrames && reference.kind === "frame")}
-                                                        onChange={(event) =>
-                                                            setSelections((current) => ({
-                                                                ...current,
-                                                                [shot.id]: event.target.checked ? [...(current[shot.id] || []), reference.id] : (current[shot.id] || []).filter((id) => id !== reference.id),
-                                                            }))
-                                                        }
-                                                    >
-                                                        {reference.required ? "连续性必选" : allFrames && reference.kind === "frame" ? "顺序关键帧" : reference.recommended ? (checked ? "推荐引用" : "推荐参考") : "引用此图"}
-                                                    </Checkbox>
-                                                    <div className="truncate font-medium text-foreground">{reference.label}</div>
-                                                    <div className="break-words text-muted-foreground">{reference.purpose}</div>
-                                                </div>
+                        <div className="mt-3 space-y-2">
+                            <div className="font-medium">视频提示词（可编辑）</div>
+                            <Input.TextArea
+                                aria-label={`${shot.title}视频提示词`}
+                                value={videoPrompts[shot.id] || ""}
+                                autoSize={{ minRows: 6, maxRows: 14 }}
+                                onChange={(event) => setVideoPrompts((current) => ({ ...current, [shot.id]: event.target.value }))}
+                            />
+                            <p className="text-xs text-muted-foreground">确认生成将使用当前编辑内容，并附带所选图片及配音绑定。</p>
+                            {!videoPrompts[shot.id]?.trim() ? <p className="text-xs text-red-600">视频提示词不能为空</p> : null}
+                            <details className="text-xs text-muted-foreground">
+                                <summary className="cursor-pointer">查看本次引用与配音绑定</summary>
+                                <p className="mt-2 whitespace-pre-wrap break-words leading-6">{formatDramaVideoPromptForDisplay(prompt)}</p>
+                            </details>
+                        </div>
+                        <div className="mt-3 border-t border-border/70 pt-3" data-drama-prompt-reference-gallery>
+                            <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                                <span className="font-medium text-foreground">本次实际引用图片</span>
+                                <Button
+                                    size="small"
+                                    icon={<Plus className="size-3.5" />}
+                                    aria-label={`${shot.title}添加固定资产图`}
+                                    onClick={() => {
+                                        setAssetPickerShotId((current) => (current === shot.id ? undefined : shot.id));
+                                        setAssetSearch("");
+                                    }}
+                                >
+                                    添加固定资产图
+                                </Button>
+                                <span className={overLimit || !allFramesReady || !allFramesSelected ? "text-red-600" : "text-muted-foreground"}>
+                                    {overLimit
+                                        ? `超出 ${selectedReferences.length - limit} 张`
+                                        : !allFramesReady
+                                          ? "按序模式仍缺少可用计划帧"
+                                          : !allFramesSelected
+                                            ? "按序模式必须保留全部计划帧"
+                                            : allFrames
+                                              ? "全量关键帧，顺序固定"
+                                              : selectedReferences.length
+                                                ? "按选择顺序作为普通参考图"
+                                                : "未选择图片，仅使用视频提示词"}
+                                </span>
+                            </div>
+                            <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-[repeat(4,minmax(0,1fr))]">
+                                {displayedReferences.map((reference) => {
+                                    const checked = selectedIds.includes(reference.id);
+                                    const alias = selectedReferences.find((item) => item.id === reference.id)?.alias;
+                                    return (
+                                        <div key={`${reference.id}-${reference.url}`} className={`min-w-0 overflow-hidden rounded-md border bg-background ${checked ? "border-primary" : "border-border opacity-60"}`} data-drama-prompt-reference-item>
+                                            <div className="relative overflow-hidden bg-muted" style={{ aspectRatio: reference.width && reference.height ? `${reference.width} / ${reference.height}` : "4 / 3" }}>
+                                                <img className="size-full object-contain" src={imagePreviewUrl(reference.url, 480)} alt={reference.alt} />
+                                                {alias ? <span className="absolute left-1.5 top-1.5 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-white">{alias}</span> : null}
                                             </div>
-                                        );
-                                    })}
+                                            <div className="space-y-1 px-2 py-1.5 text-[11px] leading-4">
+                                                <Checkbox
+                                                    checked={checked}
+                                                    disabled={reference.required || (allFrames && reference.kind === "frame")}
+                                                    onChange={(event) =>
+                                                        setSelections((current) => ({
+                                                            ...current,
+                                                            [shot.id]: event.target.checked ? [...(current[shot.id] || []), reference.id] : (current[shot.id] || []).filter((id) => id !== reference.id),
+                                                        }))
+                                                    }
+                                                >
+                                                    {reference.required ? "连续性必选" : allFrames && reference.kind === "frame" ? "顺序关键帧" : reference.recommended ? (checked ? "推荐引用" : "推荐参考") : "引用此图"}
+                                                </Checkbox>
+                                                <div className="truncate font-medium text-foreground">{reference.label}</div>
+                                                <div className="break-words text-muted-foreground">{reference.purpose}</div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                        {assetPickerShotId === shot.id ? (
+                            <div className="mt-3 rounded-md border border-border p-2.5" aria-label="固定资产图选择" data-drama-fixed-asset-picker>
+                                <Input aria-label="搜索固定资产图" placeholder="按资产名称搜索" value={assetSearch} onChange={(event) => setAssetSearch(event.target.value)} allowClear />
+                                <div className="mt-2 grid max-h-64 grid-cols-2 gap-2 overflow-y-auto sm:grid-cols-3">
+                                    {fixedAssets
+                                        .filter((item) => item.label.includes(assetSearch.trim()))
+                                        .map(({ id, label, reference }) => (
+                                            <div key={id} className="min-w-0 rounded-md border border-border p-2">
+                                                {reference ? (
+                                                    <img className="h-20 w-full object-contain" src={imagePreviewUrl(reference.url, 320)} alt={label} />
+                                                ) : (
+                                                    <div className="flex h-20 items-center justify-center bg-muted text-muted-foreground">未就绪</div>
+                                                )}
+                                                <Checkbox
+                                                    aria-label={`引用固定资产图：${label}`}
+                                                    disabled={!reference}
+                                                    checked={selectedIds.includes(id)}
+                                                    onChange={(event) =>
+                                                        setSelections((current) => ({ ...current, [shot.id]: event.target.checked ? Array.from(new Set([...(current[shot.id] || []), id])) : (current[shot.id] || []).filter((value) => value !== id) }))
+                                                    }
+                                                >
+                                                    <span className="break-words text-xs">{label}</span>
+                                                </Checkbox>
+                                            </div>
+                                        ))}
                                 </div>
+                                {!fixedAssets.length ? <p className="mt-2 text-xs text-muted-foreground">项目还没有固定资产。</p> : null}
+                                <Button className="mt-2" size="small" onClick={onOpenAssets}>
+                                    去项目资产生成 / 确认基准图
+                                </Button>
                             </div>
                         ) : null}
                         {voices.length ? (
@@ -1734,7 +1780,7 @@ function previewVideoReferenceBindings(project: DramaProject, episode: DramaEpis
             alt: asset.label,
             required: false,
             kind: "asset",
-            recommended: asset.id === shot.sceneId || shot.characterIds.includes(asset.id),
+            recommended: dramaProjectFixedReferenceAssets(project).some((item) => item.id === asset.id),
         });
     });
     return frameBindings;

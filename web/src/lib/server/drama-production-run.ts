@@ -23,6 +23,7 @@ export type DramaProductionParameterInput = {
     productionPlan?: DramaProductionPlan;
     referenceSelections?: Record<string, string[]>;
     referenceModes?: Record<string, DramaVideoReferenceMode>;
+    videoPrompts?: Record<string, string>;
 };
 
 export function buildDramaProductionRun(project: DramaProject, episode: DramaEpisode, parameters: DramaProductionParameterInput): DramaProductionRun {
@@ -119,7 +120,7 @@ export function buildDramaProductionRun(project: DramaProject, episode: DramaEpi
                 dependsOn: Array.from(new Set(dependencies)),
                 status: dependencies.every((dependency) => steps.find((step) => step.id === dependency)?.status === "success") ? "ready" : "blocked",
                 title: `${shot.title} · 视频段 ${index + 1}/${videoSegments.length}`,
-                prompt: compileDramaShotExecutionPrompts(project, episode, shot).videoPrompt,
+                prompt: parameters.videoPrompts?.[shot.id] ?? compileDramaShotExecutionPrompts(project, episode, shot).videoPrompt,
                 referenceAssetIds: assetIds,
                 referenceImageUrls: orderedFrames.map((frame) => frame.mediaUrl!),
                 referenceImageRemoteUrls: orderedFrames.map((frame) => frame.remoteUrl),
@@ -183,7 +184,7 @@ export function unlockDramaProductionSteps(run: DramaProductionRun) {
     return { ...run, steps, status: failed ? ("needs_review" as const) : active ? ("running" as const) : ("completed" as const), updatedAt: new Date().toISOString() };
 }
 
-export function refreshDramaVideoStepReferences(project: DramaProject, episode: DramaEpisode, step: DramaProductionStep): DramaProductionStep {
+export function refreshDramaVideoStepReferences(project: DramaProject, episode: DramaEpisode, step: DramaProductionStep, submittedPrompt?: string): DramaProductionStep {
     if (step.type !== "video" || !step.shotId) return step;
     const shot = episode.shots.find((item) => item.id === step.shotId);
     if (!shot) return step;
@@ -205,7 +206,7 @@ export function refreshDramaVideoStepReferences(project: DramaProject, episode: 
     const previousShot = incoming ? episodeShot(project, episode, incoming.fromShotId) : undefined;
     const continuityTail = step.clipIndex === 1 && previousShot ? continuityStartEvidence(previousShot) : undefined;
     const orderedFrames = continuityTail ? [{ mediaUrl: continuityTail.mediaUrl, remoteUrl: continuityTail.remoteUrl }, ...frameRefs] : frameRefs;
-    const basePrompt = compileDramaShotExecutionPrompts(project, episode, shot).videoPrompt;
+    const basePrompt = submittedPrompt ?? compileDramaShotExecutionPrompts(project, episode, shot).videoPrompt;
     return {
         ...step,
         prompt: basePrompt,
@@ -234,8 +235,8 @@ export function buildVideoReferenceBindings(
         const role = manifest.find((item) => item.assetId === assetId)?.role;
         if (role === "character_anchor") return "character_anchor";
         if (role === "scene_anchor") return "scene_anchor";
-        if (assetId === shot.sceneId) return "scene_anchor";
-        if (shot.characterIds.includes(assetId)) return "character_anchor";
+        if (project.scenes.some((asset) => asset.id === assetId)) return "scene_anchor";
+        if (project.characters.some((asset) => asset.id === assetId)) return "character_anchor";
         return "prop_anchor";
     };
     const hasPreviousTail = Boolean(previousShotId && frames[0] && !frames[0].frameId);
@@ -257,7 +258,7 @@ export function buildVideoReferenceBindings(
     for (const assetId of assetIds) {
         const asset = [...project.characters, ...project.scenes, ...project.props, ...project.clues].find((item) => item.id === assetId);
         const source = project.sourceAssets?.find((item) => item.id === assetId && item.type === "image");
-        const isScene = assetId === shot.sceneId;
+        const isScene = project.scenes.some((asset) => asset.id === assetId);
         const reference = asset
             ? isScene
                 ? hasApprovedScenePanoramaReference(asset)
@@ -280,6 +281,8 @@ export function buildVideoReferenceBindings(
     let keyframeIndex = 0;
     const bindings: DramaVideoReferenceBinding[] = [];
     for (const item of manifest) {
+        if (item.assetId && !assetIds.includes(item.assetId)) continue;
+        if (referenceMode === "reference" && item.frameEvidenceId && !frameCandidates.some((frame) => frame.frameId === item.frameEvidenceId)) continue;
         let candidate: Omit<DramaVideoReferenceBinding, "alias"> | undefined;
         let frameIndex = -1;
         if (item.role === "previous_actual_tail") {

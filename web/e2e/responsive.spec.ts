@@ -1335,8 +1335,8 @@ test("drama shot generation previews prompt before confirmation", async ({ page 
     expect(preflightCalls).toBe(0);
     expect(effectCleanupErrors).toEqual([]);
     await expect(previewDialog.getByText("清晰度：", { exact: false })).toBeVisible();
-    await expect(previewDialog.getByText("动态意图：", { exact: false })).toBeVisible();
-    await expect(previewDialog.getByText("时间段动作：", { exact: false })).toBeVisible();
+    await expect(previewDialog.getByRole("textbox", { name: "黑湖记忆 1/1视频提示词" })).toHaveValue(/动态意图：[\s\S]*时间段动作：/u);
+    await previewDialog.getByText("查看本次引用与配音绑定", { exact: true }).click();
     await expect(previewDialog.getByText("实际参考图绑定（编号与本次请求图片数组完全一致）", { exact: false })).toBeVisible();
     await expect(previewDialog.getByText("关键帧为可选细节参考；未选择时按视频提示词和所选资产图生成", { exact: false })).toBeVisible();
     await expect(previewDialog.getByText("@图片1：场景 · 黑湖", { exact: false })).toBeVisible();
@@ -1359,8 +1359,8 @@ test("drama shot generation previews prompt before confirmation", async ({ page 
     await frameCheckboxes.nth(0).uncheck();
     await frameCheckboxes.nth(1).uncheck();
     const propReference = referenceGallery.locator("[data-drama-prompt-reference-item]").filter({ hasText: "道具 · 断剑" });
-    await propReference.getByRole("checkbox", { name: "引用此图" }).check();
-    await propReference.getByRole("checkbox", { name: "引用此图" }).uncheck();
+    await expect(propReference.getByRole("checkbox")).toBeChecked();
+    await propReference.getByRole("checkbox").uncheck();
     await expect(previewDialog.getByText("生成15秒", { exact: false })).toHaveCount(0);
     await expect(previewDialog.getByText("角色设定：", { exact: false })).toHaveCount(0);
     await expect(previewDialog.getByText("确认后才会创建视频任务并消耗额度", { exact: false })).toBeVisible();

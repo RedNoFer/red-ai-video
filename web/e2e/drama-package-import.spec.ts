@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
-import { E2E_PROTOCOL_ORIGIN, saveDramaProjectFixture } from "./support";
+import { E2E_PROTOCOL_ORIGIN, e2eSettingsPatch, pollTask, saveDramaProjectFixture } from "./support";
 import { expectNoHorizontalOverflow } from "./responsive-helpers";
 import type { DramaProject } from "../src/lib/drama-project-contract";
 
@@ -186,5 +186,153 @@ test("character timbre saves and refreshes, then uploaded audio replaces prompt 
         expect(billable).toEqual([]);
     } finally {
         expect((await request.delete(`/api/drama/projects/${project.id}`)).ok()).toBe(true);
+    }
+});
+
+test("shot assets replace secondary checks and manual fixed references reach the real run", async ({ page, request }) => {
+    const settings = e2eSettingsPatch();
+    const video = {
+        ...settings.systemChannels[0].advancedConfig.operationConfigs.video,
+        protocol: "custom",
+        createPath: "/custom/videos",
+        imageToVideoPath: "/custom/videos",
+        queryPath: "/custom/results/:task_id",
+        resultField: "data.video_url",
+        statusField: "data.status",
+        requestTemplate: '{"model":"{{model}}","prompt":"{{prompt}}","duration":"{{duration}}","images":"{{images}}"}',
+    };
+    const systemChannels = settings.systemChannels.map((channel) => ({
+        ...channel,
+        advancedConfig: { ...channel.advancedConfig, protocol: "custom", operationConfigs: { ...channel.advancedConfig.operationConfigs, video }, modelConfigs: { ...channel.advancedConfig.modelConfigs, "e2e-video": video } },
+    }));
+    expect((await request.patch("/api/admin/settings", { data: { ...settings, systemChannels } })).ok()).toBe(true);
+    const created = await request.post("/api/drama/projects", { data: { title: `E2E 手动引用 ${randomUUID().slice(0, 8)}`, ratio: "9:16" } });
+    expect(created.ok(), await created.text()).toBe(true);
+    const empty = (await created.json()).data.project as DramaProject;
+    const source = readFileSync(new URL("../../docs/drama-production-package-v1-field-example.json", import.meta.url), "utf8");
+    const endpoint = `/api/drama/projects/${empty.id}/production-package`;
+    const preview = await request.post(endpoint, { data: { action: "preview", source, fileName: "manual.json" } });
+    expect(preview.ok(), await preview.text()).toBe(true);
+    const applied = await request.post(endpoint, { data: { action: "apply", source, fileName: "manual.json", sourceHash: (await preview.json()).data.preview.sourceHash } });
+    expect(applied.ok(), await applied.text()).toBe(true);
+    const imported = (await applied.json()).data.project as DramaProject;
+    const seeded = structuredClone(imported);
+    const role = seeded.characters[0];
+    role.references = [{ id: "main-reference", source: "upload", status: "approved", label: "角色基准", url: `${E2E_PROTOCOL_ORIGIN}/media/fixture.png?main`, createdAt: new Date().toISOString() }];
+    role.primaryReferenceId = "main-reference";
+    seeded.characters.push({
+        ...structuredClone(role),
+        id: "manual-character",
+        code: "C99",
+        name: "手动角色",
+        references: [{ ...role.references[0], id: "manual-character-reference", url: `${E2E_PROTOCOL_ORIGIN}/media/fixture.png?manual-character` }],
+        primaryReferenceId: "manual-character-reference",
+    });
+    seeded.characters.push({ ...structuredClone(role), id: "missing-character", code: "C98", name: "未生成角色", references: [], primaryReferenceId: undefined });
+    const originalScene = seeded.scenes[0];
+    seeded.scenes.push({
+        ...structuredClone(originalScene),
+        id: "manual-scene",
+        code: "S99",
+        name: "手动场景",
+        references: [{ ...role.references[0], id: "manual-scene-reference", url: `${E2E_PROTOCOL_ORIGIN}/media/fixture.png?manual-scene` }],
+        primaryReferenceId: "manual-scene-reference",
+        sceneReferenceBoard: { layout: "panorama", referenceId: "manual-scene-reference" },
+    });
+    const episode = seeded.episodes[0];
+    episode.reviewStatus = "visual_ready";
+    const shot = episode.shots[0];
+    const prop = seeded.props.find((item) => shot.propIds.includes(item.id))!;
+    prop.references = [{ ...role.references[0], id: "prop-reference", url: `${E2E_PROTOCOL_ORIGIN}/media/fixture.png?prop` }];
+    prop.primaryReferenceId = "prop-reference";
+    const clue = { ...structuredClone(prop), id: "bound-clue", code: "CL99", name: "旧钥匙线索", references: [{ ...role.references[0], id: "clue-reference", url: `${E2E_PROTOCOL_ORIGIN}/media/fixture.png?clue` }], primaryReferenceId: "clue-reference" };
+    seeded.clues.push(clue);
+    shot.clueIds.push(clue.id);
+    expect((await saveDramaProjectFixture(request, imported, seeded)).ok()).toBe(true);
+    try {
+        await page.goto(`/drama/${seeded.id}`);
+        await page.getByRole("button", { name: "切换到镜头生成" }).click();
+        const missing = page.locator("[data-drama-shot-missing-fixed-assets]").first();
+        await expect(missing).toContainText(`场景 · ${originalScene.name}`);
+        await expect(missing).toContainText("尚未生成");
+        await expect(page.locator("[data-drama-shot-preflight-blockers]")).toHaveCount(0);
+        await expect(page.getByText("可选优化，不影响视频生成", { exact: true })).toHaveCount(0);
+        await missing.getByRole("button", { name: "去生成 / 确认资产图" }).click();
+        await expect(page.getByRole("button", { name: "编辑角色：手动角色" }).last()).toBeVisible();
+        await page.getByRole("button", { name: "打开项目资产" }).click();
+        await page.locator("[data-drama-generation-panel]").getByRole("button", { name: "生成镜头", exact: true }).first().click();
+        const dialog = page.getByRole("dialog", { name: "确认生成 1 个镜头" });
+        const gallery = dialog.locator("[data-drama-prompt-reference-gallery]");
+        await expect(
+            gallery
+                .locator("[data-drama-prompt-reference-item]")
+                .filter({ hasText: `道具 · ${prop.name}` })
+                .getByRole("checkbox"),
+        ).toBeChecked();
+        await expect(
+            gallery
+                .locator("[data-drama-prompt-reference-item]")
+                .filter({ hasText: `线索 · ${clue.name}` })
+                .getByRole("checkbox"),
+        ).toBeChecked();
+        const promptEditor = dialog.getByRole("textbox", { name: `${shot.title}视频提示词` });
+        await promptEditor.fill("");
+        await expect(dialog.getByText("视频提示词不能为空", { exact: true })).toBeVisible();
+        const editedPrompt = `总体风格：真人实拍，自然窗光。\n0–15秒：人物在窗旁抬起右手，指尖停在旧铜钥匙上。\n音效：衣料轻响。\n${randomUUID()}`;
+        await promptEditor.fill(editedPrompt);
+        await dialog.getByRole("button", { name: `${shot.title}添加固定资产图` }).click();
+        const picker = dialog.locator("[data-drama-fixed-asset-picker]");
+        await picker.getByRole("textbox", { name: "搜索固定资产图" }).fill("未生成角色");
+        await expect(picker.getByRole("checkbox", { name: "引用固定资产图：角色 · 未生成角色" })).toBeDisabled();
+        await picker.getByRole("textbox", { name: "搜索固定资产图" }).fill("手动角色");
+        await picker.getByRole("checkbox", { name: "引用固定资产图：角色 · 手动角色" }).check();
+        await picker.getByRole("textbox", { name: "搜索固定资产图" }).fill("手动场景");
+        await picker.getByRole("checkbox", { name: "引用固定资产图：场景 · 手动场景" }).check();
+        await expect(promptEditor).toHaveValue(editedPrompt);
+        await expect(dialog.locator("[data-drama-prompt-reference-gallery]").getByRole("img", { name: "角色 · 手动角色" })).toBeVisible();
+        await expect(dialog.locator("[data-drama-prompt-reference-gallery]").getByRole("img", { name: "场景 · 手动场景" })).toBeVisible();
+        const bounds = await dialog.boundingBox();
+        expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(page.viewportSize()!.width);
+        const grid = await gallery
+            .locator(".grid")
+            .first()
+            .evaluate((element) => ({
+                display: getComputedStyle(element).display,
+                columns: getComputedStyle(element).gridTemplateColumns.split(" ").length,
+                cells: Array.from(element.children).map((cell) => ({ x: cell.getBoundingClientRect().x, right: cell.getBoundingClientRect().right, width: cell.getBoundingClientRect().width })),
+            }));
+        expect(grid.display).toBe("grid");
+        expect(new Set(grid.cells.slice(0, grid.columns).map((cell) => Math.round(cell.x))).size).toBe(page.viewportSize()!.width < 640 ? 2 : 4);
+        expect(grid.cells.every((cell) => cell.width > 0 && cell.right <= page.viewportSize()!.width)).toBe(true);
+        const responsePromise = page.waitForResponse((response) => response.url().endsWith(`/projects/${seeded.id}/production-runs`) && response.request().method() === "POST");
+        await dialog.getByRole("button", { name: "确认生成", exact: true }).click();
+        const response = await responsePromise;
+        expect(response.ok(), await response.text()).toBe(true);
+        const run = (await response.json()).data.run;
+        expect(run.parameterSnapshot.referenceSelections[shot.id]).toEqual([role.id, prop.id, clue.id, "manual-character", "manual-scene"]);
+        expect(run.parameterSnapshot.videoPrompts[shot.id]).toBe(editedPrompt);
+        let dispatched = run;
+        await expect
+            .poll(async () => {
+                dispatched = (await (await request.get(`/api/drama/projects/${seeded.id}/production-runs?episodeId=${episode.id}`)).json()).data.run;
+                return dispatched.steps.find((item: { type: string }) => item.type === "video")?.executionPrompt || "";
+            })
+            .toContain(editedPrompt);
+        const step = dispatched.steps.find((step: { type: string }) => step.type === "video");
+        expect(step.prompt).toBe(editedPrompt);
+        expect(step.executionPrompt, step.error).toContain(editedPrompt);
+        expect(step.executionPrompt).not.toContain(shot.videoPrompt);
+        const upstream = await (await request.get(`${E2E_PROTOCOL_ORIGIN}/__state`)).json();
+        const submission = upstream.requests.find((item: { method: string; prompt?: string }) => item.method === "POST" && item.prompt?.includes(editedPrompt));
+        expect(submission).toBeDefined();
+        expect(submission.images).toEqual(step.referenceBindingsSnapshot.map((binding: { url: string }) => binding.url));
+        expect(step.referenceBindingsSnapshot).toEqual(expect.arrayContaining([expect.objectContaining({ sourceId: "manual-character", role: "character_anchor" }), expect.objectContaining({ sourceId: "manual-scene", role: "scene_anchor" })]));
+        const fresh = (await (await request.get(`/api/drama/projects/${seeded.id}/production-runs?episodeId=${episode.id}`)).json()).data.run;
+        expect(fresh.parameterSnapshot.referenceSelections).toEqual(run.parameterSnapshot.referenceSelections);
+        expect(fresh.parameterSnapshot.videoPrompts).toEqual(run.parameterSnapshot.videoPrompts);
+        await pollTask(request, `/api/video-tasks/${step.taskId}`);
+    } finally {
+        expect((await request.delete(`/api/drama/projects/${seeded.id}`)).ok()).toBe(true);
+        expect((await request.patch("/api/admin/settings", { data: e2eSettingsPatch() })).ok()).toBe(true);
     }
 });

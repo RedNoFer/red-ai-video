@@ -1240,6 +1240,7 @@ export type DramaProductionRun = {
         modelParameters?: Record<string, unknown>;
         referenceSelections?: Record<string, string[]>;
         referenceModes?: Record<string, DramaVideoReferenceMode>;
+        videoPrompts?: Record<string, string>;
     };
     steps: DramaProductionStep[];
     scope?: "visual";

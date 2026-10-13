@@ -13,6 +13,7 @@ const FILE_PROVIDER_LIMITATIONS = new Map([
     ["/api/public/gallery", 409],
     ["/api/notifications/interactions", 409],
     ["/api/admin/referrals", 501],
+    ["/api/admin/referrals/relationships", 501],
     ["/api/admin/billing/summary", 501],
     ["/api/admin/billing/products", 501],
     ["/api/admin/billing/orders", 501],

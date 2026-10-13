@@ -11,6 +11,24 @@ describe("drama production preflight", () => {
         expect(preflightDramaProduction(project, project.episodes[0]).issues).not.toEqual(expect.arrayContaining([expect.objectContaining({ code: "RATIO" })]));
     });
 
+    it("treats internal frame speech boundaries as advisory for ordinary image references", () => {
+        const project = fixture();
+        const shot = project.episodes[0].shots[0];
+        shot.framePlan = {
+            start: { source: "independent" },
+            end: { required: false },
+            frames: [
+                { id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 7, actionPrompt: "人物因听见门声而抬头", imagePrompt: "人物抬头" },
+                { id: "f2", sequenceIndex: 2, startSecond: 7, endSecond: 15, actionPrompt: "人物因门开启而收住动作", imagePrompt: "人物收住动作" },
+            ],
+        };
+        shot.utterances = [{ id: "speech", order: 1, type: "dialogue", speaker: "主角", text: "开门。", startSecond: 1, endSecond: 3, speechRateCharsPerSecond: 5 }];
+        const normal = preflightDramaProduction(project, project.episodes[0]).issues.find((issue) => issue.code === "FRAME_DIALOGUE_TIMING");
+        expect(normal).toMatchObject({ severity: "warning" });
+        const ordered = preflightDramaProduction(project, project.episodes[0], undefined, undefined, { [shot.id]: "all_frames" }).issues.find((issue) => issue.code === "FRAME_DIALOGUE_TIMING");
+        expect(ordered).toMatchObject({ severity: "blocking" });
+    });
+
     it("blocks paid production before canon assets and executable continuity are ready", () => {
         const project = fixture();
         const result = preflightDramaProduction(project, project.episodes[0]);

@@ -79,9 +79,11 @@ describe("Drama generation production workspace", () => {
         expect(source).toContain('body: JSON.stringify({ action: "refresh" })');
         expect(source).toContain('method: "POST"');
         expect(source).toContain("拉取最新视频");
-        expect(source).toContain("data-drama-shot-preflight-blockers");
+        expect(source).toContain("data-drama-shot-missing-fixed-assets");
+        expect(source).not.toContain("可选优化，不影响视频生成");
+        expect(source).toContain("添加固定资产图");
         expect(source).toContain("completeShotReviewAndRefresh");
-        expect(source).toContain("去内容审核");
+        expect(source).toContain("去生成 / 确认资产图");
         expect(source).toContain("videoPromptRuns");
         expect(source).toContain("beginVideoPrompt");
         expect(source).toContain("finishVideoPrompt");
@@ -172,7 +174,7 @@ describe("Drama generation production workspace", () => {
         expect(source).toContain('{reference.required ? "连续性必选" : allFrames && reference.kind === "frame" ? "顺序关键帧"');
         expect(source).toContain('kind: "frame"');
         expect(source).toContain('const allFrames = referenceModes[row.shot.id] === "all_frames"');
-        expect(source).toContain("return selected.length > dramaReferenceImageBudget(row.shot.duration)");
+        expect(source).toContain("selected.length > dramaReferenceImageBudget(row.shot.duration)");
     });
 
     it("uses the locked episode resolution and does not expose a client video-model selector", async () => {

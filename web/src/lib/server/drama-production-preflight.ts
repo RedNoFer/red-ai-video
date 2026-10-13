@@ -152,7 +152,7 @@ function checkShot(
         const layoutErrors = validateDramaSeedanceVideoPromptLayout(compiledVideoPrompt, shot.framePlan.frames, label);
         if (layoutErrors.length) issues.push(blocking("VIDEO_PROMPT_LAYOUT", layoutErrors[0], { shotId: shot.id, correction: "重新优化或生成视频提示词，按 Seedance 2.5 适配器五层格式补齐参数、公共总规范、连续时间轴、空间站位、动作结果和收尾" }));
         const timingErrors = validateDramaFrameTiming(shot.framePlan.frames, shot.utterances as DramaDialogueTimingInput[], label);
-        if (timingErrors.length) issues.push(blocking("FRAME_DIALOGUE_TIMING", timingErrors[0], { shotId: shot.id, correction: "按对白自然开口、收句、停顿和反应重新分配帧段，禁止机械等长" }));
+        if (timingErrors.length) issues.push((referenceMode === "all_frames" ? blocking : warning)("FRAME_DIALOGUE_TIMING", timingErrors[0], { shotId: shot.id, correction: "按对白自然开口、收句、停顿和反应重新分配帧段，禁止机械等长" }));
         const promptTimingErrors = validateDramaVideoPromptDialogueTiming(videoPrompt || "", shot.framePlan.frames, shot.utterances as DramaDialogueTimingInput[], label);
         if (promptTimingErrors.length) issues.push(blocking("DIALOGUE_CAPACITY", promptTimingErrors[0], { shotId: shot.id, correction: "把公开镜头卡中的台词移动到足够长的 framePlan 时间段；逐句口型窗口不足时必须重切或拆分，不能异常加速" }));
         const shotText = [
@@ -179,7 +179,7 @@ function checkShot(
             label,
         });
         if (compositionErrors.length) {
-            issues.push(blocking("COMPOSITION_CONTRACT", `${label}${compositionErrors.join("；")}`, { shotId: shot.id, correction: "按当前画幅重写每个时间段的主要主体、可见范围、防裁脸和防遮挡安全区" }));
+            issues.push(warning("COMPOSITION_CONTRACT", `${label}${compositionErrors.join("；")}`, { shotId: shot.id, correction: "按当前画幅重写每个时间段的主要主体、可见范围、防裁脸和防遮挡安全区" }));
             const subjectErrors = compositionErrors.filter((error) => /未明确本段主要主体|未在时间段中写出/u.test(error));
             if (subjectErrors.length) issues.push(blocking("SUBJECT_COVERAGE", `${label}${subjectErrors.join("；")}`, { shotId: shot.id, correction: "为剧情事实中需要反应的角色、NPC或关键动作安排独立可见主体，不能只作为背景描述" }));
         }

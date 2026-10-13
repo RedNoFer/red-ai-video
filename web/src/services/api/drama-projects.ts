@@ -426,6 +426,7 @@ export function createDramaProductionRun(
         shotSnapshot?: DramaShot;
         referenceSelections?: Record<string, string[]>;
         referenceModes?: Record<string, DramaVideoReferenceMode>;
+        videoPrompts?: Record<string, string>;
     } = {},
 ) {
     const compactPreflight = preflight
@@ -456,6 +457,7 @@ export function createDramaProductionRun(
             ...(options.shotSnapshot ? { shotSnapshot: options.shotSnapshot } : {}),
             ...(options.referenceSelections ? { referenceSelections: options.referenceSelections } : {}),
             ...(options.referenceModes ? { referenceModes: options.referenceModes } : {}),
+            ...(options.videoPrompts ? { videoPrompts: options.videoPrompts } : {}),
         }),
     }).then((data) => data.run);
 }

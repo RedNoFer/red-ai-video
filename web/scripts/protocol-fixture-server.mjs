@@ -68,6 +68,7 @@ async function handleFixtureRequest({ request, response, url, body, tasks, reque
                     contentType: item.contentType,
                     bodyBytes: item.body.byteLength,
                     model: requestedModel(item.body, item.contentType),
+                    ...(String(item.contentType).includes("application/json") ? { prompt: jsonBody(item.body).prompt, images: jsonBody(item.body).images } : {}),
                 })),
             tasks: Array.from(tasks.entries()).map(([id, task]) => ({ id, ...task })),
         });
@@ -263,7 +264,7 @@ async function handleFixtureRequest({ request, response, url, body, tasks, reque
         const bytes = options.videoPath ? await readFile(options.videoPath) : FALLBACK_MP4;
         return sendBytes(response, 200, "video/mp4", bytes);
     }
-    if (request.method === "GET" && path === "/media/fixture.png") return sendBytes(response, 200, "image/png", await fixtureImage(options));
+    if (["GET", "HEAD"].includes(request.method) && path === "/media/fixture.png") return sendBytes(response, 200, "image/png", await fixtureImage(options));
 
     if (request.method === "POST" && path === "/audio/speech") {
         const model = requestedModel(body, request.headers["content-type"] || "");

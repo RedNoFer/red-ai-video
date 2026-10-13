@@ -82,6 +82,7 @@ import { deleteUserLocalMediaAssets, deleteUserOwnedMediaAssetsPhysically } from
 import { collectLocalMediaStorageKeys, localMediaStorageKeyFromValue } from "@/lib/server/local-media-references";
 import { signReferenceAssetInputUrl } from "@/lib/server/reference-asset-access";
 import { fetchSafeOutbound } from "@/lib/server/safe-outbound-fetch";
+import { privateUpstreamHostAllowed } from "@/lib/server/outbound-url-security";
 import { applyDramaProductionPackage, DramaProductionPackageError, previewDramaProductionPackage, type DramaProductionPackageNormalizationOptions } from "@/lib/server/drama-production-package";
 import { preserveDramaAuthoredText } from "@/lib/drama-authored-text";
 import { buildDramaProductionRun, refreshDramaVideoStepReferences, unlockDramaProductionSteps } from "@/lib/server/drama-production-run";
@@ -89,7 +90,7 @@ import { composeDramaVideoSegments } from "@/lib/server/drama-video-sequence";
 import { buildDramaVisualProductionRun, compileDramaFrameBeatPrompt, compileDramaVisualStepPrompt, unlockDramaVisualSteps } from "@/lib/server/drama-visual-production-run";
 import { preflightDramaProduction } from "@/lib/server/drama-production-preflight";
 import { preflightDramaGeneration } from "@/lib/server/drama-generation-preflight";
-import { resolveDramaVideoReferenceMode, readableShotReference, selectedDramaShotFrameIds, selectedDramaShotReferenceAssetIds } from "@/lib/drama-video-reference-plan";
+import { dramaProjectFixedReferenceAssets, resolveDramaVideoReferenceMode, readableShotReference, selectedDramaShotFrameIds, selectedDramaShotReferenceAssetIds } from "@/lib/drama-video-reference-plan";
 import { createDramaProductionRun, findLatestDramaProductionRun, getDramaProductionRun, updateDramaProductionRun } from "@/lib/server/drama-production-run-store";
 import { createCanvasProjectForUser, getCanvasProjectForUser, updateCanvasProjectForUser } from "@/lib/server/canvas-project-service";
 import { resolveLogicalModelCandidates, supportsVideoKeyframeReferences } from "@/lib/server/logical-model-router";
@@ -1766,6 +1767,12 @@ export async function createDramaProductionRunForUser(userId: string, projectId:
     const submittedReferenceModes = stringReferenceModeRecord(object(value).referenceModes);
     const checkedShotIds = ids(submittedPreflight.checkedShotIds);
     const productionShots = checkedShotIds.length ? episode.shots.filter((shot) => checkedShotIds.includes(shot.id)) : episode.shots;
+    const videoPrompts = Object.fromEntries(
+        Object.entries(object(object(value).videoPrompts)).map(([shotId, prompt]) => {
+            if (!productionShots.some((shot) => shot.id === shotId) || typeof prompt !== "string" || !prompt.trim()) throw new DramaProjectServiceError("镜头提示词不能为空，且只能编辑本次生成的镜头", 400);
+            return [shotId, prompt];
+        }),
+    );
     const referenceModes = Object.fromEntries(productionShots.map((shot) => [shot.id, resolveDramaVideoReferenceMode(submittedReferenceModes[shot.id])])) as Record<string, DramaVideoReferenceMode>;
     const referenceSelections = Object.fromEntries(
         productionShots.map((shot) => {
@@ -1786,13 +1793,15 @@ export async function createDramaProductionRunForUser(userId: string, projectId:
     }
     const executionPlan = parameters.productionPlan ? { ...parameters.productionPlan, video: { ...parameters.productionPlan.video, model: videoCandidate.logicalModelId, channelId: videoCandidate.channelId } } : undefined;
     validateDramaReferenceSelections(project, episode, productionShots, referenceSelections, referenceModes);
-    const preflight = preflightDramaProduction(project, episode, checkedShotIds.length ? checkedShotIds : undefined, referenceSelections, referenceModes);
-    if (preflight.status === "blocked") {
-        const detail = preflight.issues
+    const executionEpisode = { ...episode, shots: episode.shots.map((shot) => (videoPrompts[shot.id] !== undefined ? { ...shot, videoPrompt: videoPrompts[shot.id], executionVideoPrompt: videoPrompts[shot.id] } : shot)) };
+    const preflight = preflightDramaProduction(project, executionEpisode, checkedShotIds.length ? checkedShotIds : undefined, referenceSelections, referenceModes);
+    const blockingIssues = dramaSubmissionBlockingIssues(preflight, referenceModes);
+    if (blockingIssues.length) {
+        const detail = blockingIssues
             .slice(0, 8)
             .map((issue) => issue.message)
             .join("；");
-        throw new DramaProjectServiceError(`导演前置检查未通过：${detail}`, 409);
+        throw new DramaProjectServiceError(`生成条件尚未就绪：${detail}`, 409);
     }
     const selectedShotIds = new Set(checkedShotIds);
     const scopedEpisode = selectedShotIds.size
@@ -1812,6 +1821,7 @@ export async function createDramaProductionRunForUser(userId: string, projectId:
             maxVideoSeconds: videoCandidate.capabilityProfile?.maxDurationSeconds,
             referenceSelections,
             referenceModes,
+            videoPrompts,
         }),
         preflightSnapshot: {
             checkedShotIds,
@@ -1828,7 +1838,12 @@ export async function createDramaProductionRunForUser(userId: string, projectId:
                     .filter((shot) => !checkedShotIds.length || checkedShotIds.includes(shot.id))
                     .map((shot) => [
                         shot.id,
-                        { sourceImagePrompt: shot.imagePrompt, sourceVideoPrompt: shot.videoPrompt, executionImagePrompt: shot.executionImagePrompt || shot.imagePrompt, executionVideoPrompt: shot.executionVideoPrompt || shot.videoPrompt },
+                        {
+                            sourceImagePrompt: shot.imagePrompt,
+                            sourceVideoPrompt: shot.videoPrompt,
+                            executionImagePrompt: shot.executionImagePrompt || shot.imagePrompt,
+                            executionVideoPrompt: videoPrompts[shot.id] ?? shot.executionVideoPrompt ?? shot.videoPrompt,
+                        },
                     ]),
             ),
         },
@@ -2481,20 +2496,21 @@ export async function updateDramaProductionRunForUser(userId: string, projectId:
             const shotIds = Array.from(new Set(run.steps.filter((step) => stepIds.has(step.id) && step.shotId).map((step) => step.shotId!)));
             const episode = project.episodes.find((item) => item.id === run.episodeId);
             if (!episode) throw new DramaProjectServiceError("短剧剧集不存在", 404);
-            const check = await preflightDramaGeneration({
-                origin: cleanText(input.origin),
-                cookie: cleanText(input.cookie),
-                userId,
-                requestId: `drama-run-retry:${run.id}:${Array.from(stepIds).sort().join(",")}`,
+            const referenceSelections = run.parameterSnapshot.referenceSelections || {};
+            const referenceModes = run.parameterSnapshot.referenceModes || {};
+            const executionEpisode = { ...episode, shots: episode.shots.map((shot) => ({ ...shot, executionVideoPrompt: run.parameterSnapshot.videoPrompts?.[shot.id] ?? shot.executionVideoPrompt })) };
+            validateDramaReferenceSelections(
                 project,
                 episode,
-                shotIds,
-                referenceSelections: run.parameterSnapshot.referenceSelections,
-                referenceModes: run.parameterSnapshot.referenceModes,
-            });
-            if (check.status === "blocked")
+                episode.shots.filter((shot) => shotIds.includes(shot.id)),
+                referenceSelections,
+                referenceModes,
+            );
+            const check = preflightDramaProduction(project, executionEpisode, shotIds, referenceSelections, referenceModes);
+            const blockingIssues = dramaSubmissionBlockingIssues(check, referenceModes);
+            if (blockingIssues.length)
                 throw new DramaProjectServiceError(
-                    `重试前检查未通过：${check.issues
+                    `重试前检查未通过：${blockingIssues
                         .slice(0, 6)
                         .map((issue) => issue.message)
                         .join("；")}`,
@@ -2844,7 +2860,7 @@ async function dispatchReadyDramaProductionSteps(userId: string, project: DramaP
         let step = current.steps.find((item) => item.id === candidate.id)!;
         if (step.type !== "video" || step.status !== "ready" || step.taskId || !step.prompt) continue;
         const episode = project.episodes.find((item) => item.id === run.episodeId);
-        const refreshedStep = episode ? refreshDramaVideoStepReferences(project, episode, step) : step;
+        const refreshedStep = episode ? refreshDramaVideoStepReferences(project, episode, step, run.parameterSnapshot.videoPrompts?.[step.shotId!]) : step;
         if (JSON.stringify(refreshedStep) !== JSON.stringify(step)) {
             current = { ...current, steps: current.steps.map((item) => (item.id === step.id ? refreshedStep : item)), updatedAt: new Date().toISOString() };
             step = refreshedStep;
@@ -3155,6 +3171,7 @@ function externalDramaOrigin(value: string) {
 
 function isExternalDramaHost(hostname: string) {
     const host = hostname.toLowerCase();
+    if (privateUpstreamHostAllowed(host)) return true;
     if (!host || host === "localhost" || host.endsWith(".localhost") || host === "::1") return false;
     const parts = host.split(".").map((part) => Number(part));
     if (parts.length === 4 && parts.every((part) => Number.isInteger(part) && part >= 0 && part <= 255)) {
@@ -4877,9 +4894,27 @@ function sameDramaVideoPlanExceptModel(left: DramaProductionPlan, right: DramaPr
     );
 }
 
+function dramaSubmissionBlockingIssues(check: ReturnType<typeof preflightDramaProduction>, referenceModes: Record<string, DramaVideoReferenceMode>) {
+    const strict = Object.values(referenceModes).includes("all_frames");
+    return check.issues.filter((issue) => issue.severity === "blocking" && ((issue.shotId ? referenceModes[issue.shotId] === "all_frames" : strict) || ["VIDEO_PROMPT_MISSING", "DURATION", "TAIL_REFERENCE", "TAIL_ACCEPTANCE"].includes(issue.code)));
+}
+
 export function validateDramaReferenceSelections(project: DramaProject, episode: DramaEpisode, shots: DramaShot[], selections: Record<string, string[]>, referenceModes: Record<string, DramaVideoReferenceMode> = {}) {
     for (const shot of shots) {
-        const fixedAssetIds = Array.from(new Set([shot.sceneId, ...shot.characterIds, ...shot.propIds, ...shot.clueIds, ...(shot.sourceAssetIds || [])].filter((id): id is string => Boolean(id))));
+        const fixedAssetIds = Array.from(
+            new Set(
+                [
+                    shot.sceneId,
+                    ...shot.characterIds,
+                    ...shot.propIds,
+                    ...shot.clueIds,
+                    ...(shot.sourceAssetIds || []),
+                    ...dramaProjectFixedReferenceAssets(project)
+                        .filter((item) => item.reference)
+                        .map((item) => item.id),
+                ].filter((id): id is string => Boolean(id)),
+            ),
+        );
         const frameIds = shot.framePlan?.frames.map((frame) => frame.id) || [];
         const selected = selections[shot.id];
         if (selected) {

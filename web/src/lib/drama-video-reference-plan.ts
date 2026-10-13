@@ -5,18 +5,39 @@ export function resolveDramaVideoReferenceMode(value: unknown): DramaVideoRefere
     return value === "all_frames" ? "all_frames" : "reference";
 }
 
+export function dramaProjectFixedReferenceAssets(project: DramaProject) {
+    return (
+        [
+            ["scenes", "场景"],
+            ["characters", "角色"],
+            ["props", "道具"],
+            ["clues", "线索"],
+        ] as const
+    ).flatMap(([kind, label]) => (project[kind] || []).map((asset) => ({ id: asset.id, kind, asset, label: `${label} · ${asset.name}`, reference: kind === "scenes" ? approvedScenePanoramaReference(asset) : approvedAssetReference(asset) })));
+}
+
+export function missingDramaShotFixedReferences(project: DramaProject, shot: DramaShot) {
+    const ids = new Set([shot.sceneId, ...shot.characterIds, ...shot.propIds, ...shot.clueIds, ...(shot.framePlan?.referenceManifest || []).map((item) => item.assetId)]);
+    return dramaProjectFixedReferenceAssets(project).filter((item) => ids.has(item.id) && !item.reference);
+}
+
 export function dramaShotReferenceAssetIds(project: DramaProject, shot: DramaShot) {
     const declared = [shot.sceneId, ...shot.characterIds, ...shot.propIds, ...shot.clueIds, ...(shot.sourceAssetIds || [])].filter((id): id is string => Boolean(id));
     return declared.filter((id) => Boolean(readableShotReference(project, shot, id)));
 }
 
 export function defaultDramaShotReferenceAssetIds(project: DramaProject, shot: DramaShot) {
-    const available = new Set(dramaShotReferenceAssetIds(project, shot));
-    return [shot.sceneId, ...shot.characterIds].filter((id): id is string => Boolean(id && available.has(id)));
+    const fixedIds = new Set(dramaProjectFixedReferenceAssets(project).map((item) => item.id));
+    return dramaShotReferenceAssetIds(project, shot).filter((id) => fixedIds.has(id));
 }
 
 export function selectedDramaShotReferenceAssetIds(project: DramaProject, shot: DramaShot, selections?: Record<string, string[]>) {
-    const available = dramaShotReferenceAssetIds(project, shot);
+    const available = [
+        ...dramaProjectFixedReferenceAssets(project)
+            .filter((item) => item.reference)
+            .map((item) => item.id),
+        ...dramaShotReferenceAssetIds(project, shot),
+    ];
     const selected = selections?.[shot.id];
     if (!selected) return defaultDramaShotReferenceAssetIds(project, shot);
     const availableIds = new Set(available);
@@ -36,11 +57,11 @@ export function dramaShotReferenceSelectionIds(project: DramaProject, shot: Dram
     return [...selectedDramaShotReferenceAssetIds(project, shot, selections), ...selectedDramaShotFrameIds(shot, mode, selections)];
 }
 
-export function readableShotReference(project: DramaProject, shot: DramaShot, id: string) {
+export function readableShotReference(project: DramaProject, _shot: DramaShot, id: string) {
     const source = project.sourceAssets?.find((asset) => asset.id === id);
     if (source) return source.type === "image" && (source.serverUrl || source.remoteUrl) ? { url: source.serverUrl || source.remoteUrl, remoteUrl: source.remoteUrl } : undefined;
     const asset = [...(project.characters || []), ...(project.scenes || []), ...(project.props || []), ...(project.clues || [])].find((item) => item.id === id);
     if (!asset) return undefined;
-    const reference = id === shot.sceneId ? approvedScenePanoramaReference(asset) : approvedAssetReference(asset);
+    const reference = project.scenes.some((scene) => scene.id === id) ? approvedScenePanoramaReference(asset) : approvedAssetReference(asset);
     return reference?.url ? { url: reference.url, remoteUrl: reference.remoteUrl } : undefined;
 }

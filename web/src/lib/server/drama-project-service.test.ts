@@ -3219,10 +3219,18 @@ describe("drama project service updates", () => {
         );
         mocks.supportsVideoKeyframeReferences.mockReturnValue(true);
 
-        const run = await createDramaProductionRunForUser("user-one", current.id, { episodeId: current.episodes[0].id });
+        current.episodes[0].shots = [{ id: "shot-one", title: "镜头", duration: 15, characterIds: [], propIds: [], clueIds: [], utterances: [], dialogue: "", narration: "", imagePrompt: "画面", videoPrompt: "旧动作" } as never];
+        const edited = "自然摄影，人物抬手停在窗前。";
+        const run = await createDramaProductionRunForUser("user-one", current.id, { episodeId: current.episodes[0].id, videoPrompts: { "shot-one": edited } });
 
         expect(run.parameterSnapshot).toMatchObject({ videoModel: "backend-default-video", videoChannelId: "backend-video-channel", productionPlan: { video: { model: "backend-default-video", channelId: "backend-video-channel" } } });
         expect(mocks.resolveLogicalModelCandidates).toHaveBeenCalledWith(expect.anything(), "video", "backend-default-video");
+        expect(run.parameterSnapshot.videoPrompts).toEqual({ "shot-one": edited });
+        expect(run.steps.find((step) => step.type === "video")?.prompt).toBe(edited);
+        expect(run.preflightSnapshot?.prompts["shot-one"].executionVideoPrompt).toBe(edited);
+        expect(current.episodes[0].shots[0].videoPrompt).toBe("旧动作");
+        await expect(createDramaProductionRunForUser("user-one", current.id, { episodeId: current.episodes[0].id, videoPrompts: { "shot-one": "  " } })).rejects.toMatchObject({ status: 400 });
+        await expect(createDramaProductionRunForUser("user-one", current.id, { episodeId: current.episodes[0].id, videoPrompts: { foreign: edited } })).rejects.toMatchObject({ status: 400 });
     });
 
     it("allows settings updates for a project that already exceeds the snapshot size guard", async () => {
@@ -3797,6 +3805,16 @@ describe("drama visual reference URL resolution", () => {
     it("does not submit local-only references from a localhost deployment", () => {
         vi.stubEnv("NEXT_PUBLIC_SITE_URL", "http://localhost:3010");
         expect(resolveDramaVisualReferenceUrl("/api/reference-assets/permanent/local.png", "http://localhost:3010")).toBe("");
+    });
+
+    it("allows only explicitly configured private upstreams for local TCP reference fixtures", async () => {
+        const url = "http://127.0.0.1:4010/media/fixture.png";
+        await expect(resolveReadableDramaVideoReferenceUrl(url, undefined, "http://localhost:3010")).rejects.toThrow("公网地址不可访问");
+        vi.stubEnv("VOZEB_PRO_ALLOW_PRIVATE_UPSTREAMS", "1");
+        vi.stubEnv("VOZEB_PRO_PRIVATE_UPSTREAM_HOSTS", "127.0.0.1");
+        mocks.fetchSafeOutbound.mockResolvedValue(new Response(null, { status: 200, headers: { "content-type": "image/png" } }));
+        await expect(resolveReadableDramaVideoReferenceUrl(url, undefined, "http://localhost:3010")).resolves.toBe(url);
+        await expect(resolveReadableDramaVideoReferenceUrl("http://127.0.0.2:4010/media/fixture.png", undefined, "http://localhost:3010")).rejects.toThrow("公网地址不可访问");
     });
 
     it("signs local references when an external site origin is configured", () => {

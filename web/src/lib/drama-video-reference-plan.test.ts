@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import type { DramaProject, DramaShot } from "./drama-project-contract";
-import { defaultDramaShotReferenceAssetIds, selectedDramaShotFrameIds, selectedDramaShotReferenceAssetIds } from "./drama-video-reference-plan";
+import { defaultDramaShotReferenceAssetIds, missingDramaShotFixedReferences, selectedDramaShotFrameIds, selectedDramaShotReferenceAssetIds } from "./drama-video-reference-plan";
 
 describe("drama video reference plan", () => {
     const project = {
         characters: [{ id: "character-one", name: "角色", primaryReferenceId: "character-ref", references: [{ id: "character-ref", url: "/character.png", status: "approved" }] }],
         scenes: [{ id: "scene-one", name: "场景", references: [{ id: "scene-ref", url: "/scene.png", status: "approved" }], primaryReferenceId: "scene-ref", sceneReferenceBoard: { layout: "panorama", referenceId: "scene-ref" } }],
         props: [{ id: "prop-one", name: "道具", primaryReferenceId: "prop-ref", references: [{ id: "prop-ref", url: "/prop.png", status: "approved" }] }],
-        clues: [],
+        clues: [{ id: "clue-one", name: "线索", primaryReferenceId: "clue-ref", references: [{ id: "clue-ref", url: "/clue.png", status: "approved" }] }],
         sourceAssets: [],
     } as unknown as DramaProject;
     const shot = {
@@ -16,7 +16,7 @@ describe("drama video reference plan", () => {
         sceneId: "scene-one",
         characterIds: ["character-one"],
         propIds: ["prop-one"],
-        clueIds: [],
+        clueIds: ["clue-one"],
         framePlan: {
             frames: [
                 { id: "frame-one", sequenceIndex: 1 },
@@ -25,9 +25,28 @@ describe("drama video reference plan", () => {
         },
     } as unknown as DramaShot;
 
-    it("defaults to readable scene and character images only", () => {
-        expect(defaultDramaShotReferenceAssetIds(project, shot)).toEqual(["scene-one", "character-one"]);
-        expect(selectedDramaShotReferenceAssetIds(project, shot)).toEqual(["scene-one", "character-one"]);
+    it("defaults to all readable fixed assets bound to the shot including props and clues", () => {
+        expect(defaultDramaShotReferenceAssetIds(project, shot)).toEqual(["scene-one", "character-one", "prop-one", "clue-one"]);
+        expect(selectedDramaShotReferenceAssetIds(project, shot)).toEqual(["scene-one", "character-one", "prop-one", "clue-one"]);
+    });
+
+    it("reports only bound assets without a usable confirmed baseline", () => {
+        const incomplete = structuredClone(project);
+        incomplete.characters[0].primaryReferenceId = undefined;
+        incomplete.scenes[0].sceneReferenceBoard = { layout: "legacy-3x3" };
+        incomplete.scenes[0].description = "九宫格场景";
+        incomplete.props.push({ id: "unused", name: "未引用道具", description: "" });
+        expect(missingDramaShotFixedReferences(incomplete, shot).map((item) => item.id)).toEqual(["scene-one", "character-one"]);
+        expect(missingDramaShotFixedReferences(project, shot)).toEqual([]);
+    });
+
+    it("accepts explicitly selected approved project assets without adding them to defaults", () => {
+        const extra = structuredClone(project);
+        extra.characters.push({ ...extra.characters[0], id: "manual-role", name: "另一角色" });
+        expect(defaultDramaShotReferenceAssetIds(extra, shot)).toEqual(["scene-one", "character-one", "prop-one", "clue-one"]);
+        expect(selectedDramaShotReferenceAssetIds(extra, shot, { [shot.id]: ["manual-role", "unknown", "manual-role"] })).toEqual(["manual-role"]);
+        extra.characters[1].primaryReferenceId = undefined;
+        expect(selectedDramaShotReferenceAssetIds(extra, shot, { [shot.id]: ["manual-role"] })).toEqual([]);
     });
 
     it("keeps explicit empty asset choices empty and treats frames as ordinary refs", () => {
@@ -48,6 +67,6 @@ describe("drama video reference plan", () => {
             ],
         } as unknown as DramaProject;
 
-        expect(defaultDramaShotReferenceAssetIds(recovered, shot)).toEqual(["scene-one", "character-one"]);
+        expect(defaultDramaShotReferenceAssetIds(recovered, shot)).toEqual(["scene-one", "character-one", "prop-one", "clue-one"]);
     });
 });
