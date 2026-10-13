@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { DramaAssetGenerationBatch } from "@/lib/drama-project-contract";
+import { getDramaProjectForUser } from "./drama-project-service";
 import {
     compileDramaAssetBatchItemPrompt,
     createDramaAssetGenerationBatchForUser,
@@ -50,6 +51,15 @@ vi.mock("./generation-task-recovery-service", () => ({ runGenerationTaskRecovery
 vi.mock("./maintenance-auth", () => ({ maintenanceWorkerHeaders: vi.fn(() => ({ authorization: "Bearer worker", "x-vozeb-pro-worker-user-id": "user-one" })), maintenanceWorkerContext: vi.fn(() => "worker-context:user-one") }));
 
 describe("drama asset generation batches", () => {
+    it("uses saved author prose in both the queued item and its actual image submission", async () => {
+        const project = structuredClone(await getDramaProjectForUser("user-one", "project-one"));
+        const authored = "\n角色原稿：窄长脸、短黑发；炭黑防风外套、直筒长裤、登山鞋。\r\n保留原文标点与空白。\n";
+        project.characters[0].supplierPrompt = authored;
+        vi.mocked(getDramaProjectForUser).mockResolvedValueOnce(project);
+        const batch = await createDramaAssetGenerationBatchForUser("user-one", "project-one", [{ kind: "characters", assetId: "rifa" }]);
+        expect(batch.items[0].prompt).toBe(authored);
+        expect(compileDramaAssetBatchItemPrompt(project, { ...batch.items[0], prompt: "旧的通用编译结果" })).toBe(authored);
+    });
     it("uses a new billing identity for each explicit retry attempt", () => {
         expect(dramaAssetCompletionRequestId("batch-one", "item-one", 1)).not.toBe(dramaAssetCompletionRequestId("batch-one", "item-one", 2));
     });

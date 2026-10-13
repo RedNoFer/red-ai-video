@@ -11,6 +11,16 @@ for (const layout of ["cards", "timeline"]) {
         expect(created.ok(), await created.text()).toBe(true);
         const project = ((await created.json()) as { data: { project: DramaProject } }).data.project;
         let source = readFileSync(new URL("../../docs/drama-production-package-v1-field-example.json", import.meta.url), "utf8");
+        const example = JSON.parse(source);
+        const characterAsset = example.assets.characters[0];
+        characterAsset.profile = { visualIdentity: "成年女性；长脸、杏眼、低束黑发", styling: "墨灰短夹克、耐磨长裤、低帮户外鞋", colorPalette: "墨灰、黑", consistencyRules: "脸型和低束发固定" };
+        characterAsset.supplierPrompt =
+            "主体与资产类型：角色\n身份/结构锚点：成年女性，长脸、杏眼、低束黑发\n可见状态与材质：墨灰短夹克、耐磨长裤、低帮户外鞋\n构图与画幅：纯白色背景四视图，身份特写、正面、严格左侧面、背面全身\n光色与风格：自然骨骼，五官与头发清晰，真实织物材质，柔和棚光\n负面约束：换脸、额外人物、文字";
+        const sceneAsset = example.assets.locations[0];
+        sceneAsset.description = "后左门、右窗、中央木桌，桌旁留出通道";
+        sceneAsset.profile = { visualIdentity: sceneAsset.description, styling: "旧木地板、石墙、湿玻璃", colorPalette: "木褐、石灰", consistencyRules: "门窗桌位置固定" };
+        sceneAsset.supplierPrompt = "主体与资产类型：场景\n身份/结构锚点：后左门、右窗、中央木桌\n可见状态与材质：旧木地板、石墙、湿玻璃\n构图与画幅：9:16高清单视角全景，通道完整\n光色与风格：右窗自然光\n负面约束：人物、分格、字幕";
+        source = JSON.stringify(example);
         if (layout === "timeline") {
             const packageInput = JSON.parse(source);
             packageInput.episodes[0].shots[0].videoPrompt = [
@@ -23,6 +33,10 @@ for (const layout of ["cards", "timeline"]) {
             ].join("\n");
             source = JSON.stringify(packageInput);
         }
+        const seededProject = structuredClone(project);
+        seededProject.characters = [{ id: "retained-asset", code: characterAsset.code, name: characterAsset.name, description: "原文角色与功能事实。", supplierPrompt: "旧通用约束" }];
+        seededProject.scenes = [{ id: "retained-location", code: sceneAsset.code, name: sceneAsset.name, description: "入口、出口、地面支撑", supplierPrompt: "旧通用场景约束" }];
+        expect((await saveDramaProjectFixture(request, project, seededProject)).ok()).toBe(true);
         const authored = JSON.parse(source).episodes[0].shots[0];
         let previewCount = 0;
         page.on("request", (req) => {
@@ -58,7 +72,26 @@ for (const layout of ["cards", "timeline"]) {
                 expect(imported.utterances[0].text).toBe("外套颜色没变，别说话。");
                 expect(imported.framePlan?.frames).toEqual(authored.framePlan.frames);
                 expect(saved.characters[0].voiceProfile?.timbrePrompt).toBe(JSON.parse(source).assets.characters[0].voiceProfile.timbrePrompt);
+                expect(saved.characters[0]).toMatchObject({ id: "retained-asset", profile: characterAsset.profile, supplierPrompt: characterAsset.supplierPrompt });
+                expect(saved.scenes[0]).toMatchObject({ id: "retained-location", description: sceneAsset.description, profile: sceneAsset.profile, supplierPrompt: sceneAsset.supplierPrompt });
             }
+            await page.getByRole("button", { name: "打开项目资产" }).click();
+            await page
+                .getByRole("button", { name: `编辑角色：${characterAsset.name}` })
+                .last()
+                .click();
+            let drawer = page.getByRole("dialog", { name: "编辑角色" });
+            await drawer.getByText("实际供应商提示词（可编辑）").click();
+            await expect(drawer.getByRole("textbox", { name: "供应商提示词" })).toHaveValue(characterAsset.supplierPrompt);
+            await drawer.getByRole("button", { name: "关闭", exact: true }).click();
+            await page.locator('[aria-label="项目资产分类"] button').filter({ hasText: "场景" }).click();
+            await page
+                .getByRole("button", { name: `编辑场景：${sceneAsset.name}` })
+                .last()
+                .click();
+            drawer = page.getByRole("dialog", { name: "编辑场景" });
+            await drawer.getByText("实际供应商提示词（可编辑）").click();
+            await expect(drawer.getByRole("textbox", { name: "供应商提示词" })).toHaveValue(sceneAsset.supplierPrompt);
         } finally {
             expect((await request.delete(`/api/drama/projects/${project.id}`)).ok()).toBe(true);
         }

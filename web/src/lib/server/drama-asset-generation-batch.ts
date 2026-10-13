@@ -1,7 +1,7 @@
 import { nanoid } from "nanoid";
 
 import type { DramaAssetGenerationBatch, DramaAssetGenerationBatchItem, DramaNamedAsset, DramaProject } from "@/lib/drama-project-contract";
-import { compileDramaAssetReferencePrompt, DRAMA_CHARACTER_TURNAROUND_SIZE } from "@/lib/drama-prompt-compiler";
+import { resolveDramaAssetReferencePrompt, DRAMA_CHARACTER_TURNAROUND_SIZE } from "@/lib/drama-prompt-compiler";
 import { getDramaAssetMissingItems } from "@/lib/drama-asset-completion";
 import { createDramaAssetGenerationBatch, getDramaAssetGenerationBatch, listActiveDramaAssetGenerationBatches, listDramaAssetGenerationBatches, mutateDramaAssetGenerationBatch } from "@/lib/server/drama-asset-generation-batch-store";
 import { getDramaProjectForUser } from "@/lib/server/drama-project-service";
@@ -56,7 +56,7 @@ export async function createDramaAssetGenerationBatchForUser(userId: string, pro
         outputType: "reference_image",
         assetId: asset.id,
         assetName: asset.name,
-        prompt: compileDramaAssetReferencePrompt(project, asset, kind === "characters" ? "角色" : kind === "scenes" ? "场景" : "道具"),
+        prompt: resolveDramaAssetReferencePrompt(project, asset, kind === "characters" ? "角色" : kind === "scenes" ? "场景" : "道具"),
         status: "queued",
         attempt: 0,
         missingItems: getDramaAssetMissingItems(asset, kind),
@@ -86,7 +86,7 @@ export function compileDramaAssetBatchItemPrompt(project: Pick<DramaProject, "ti
     const assets = item.kind === "characters" ? project.characters : item.kind === "scenes" ? project.scenes : project.props;
     const asset = assets.find((candidate) => candidate.id === item.assetId);
     if (!asset) throw new DramaAssetGenerationBatchError("批量生成资产不存在", 404);
-    return compileDramaAssetReferencePrompt(project, asset, item.kind === "characters" ? "角色" : item.kind === "scenes" ? "场景" : "道具");
+    return resolveDramaAssetReferencePrompt(project, asset, item.kind === "characters" ? "角色" : item.kind === "scenes" ? "场景" : "道具");
 }
 
 export async function listDramaAssetGenerationBatchesForUser(userId: string, projectId: string) {

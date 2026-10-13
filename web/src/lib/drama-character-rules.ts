@@ -58,7 +58,7 @@ export const DRAMA_CHARACTER_DEFAULT_CONSISTENCY =
     "按设定年龄和性别保持自然骨骼与身材比例；锁定脸型、五官、发际线、发束、体态和显著标记；身份特写、正面、严格左侧面、背面必须是同一角色，不因视图重设计；身份特写只负责精确锁定五官与脸部识别，不替代后三个全身视图。";
 
 const CHARACTER_VISUAL_FACT_PATTERN =
-    /少年|少女|儿童|青年|中年|老年|男性|女性|年龄|骨骼|身材|体态|脸型|五官|眉|眼|鼻|唇|下颌|耳|肤色|皮肤|发际线|发型|头发|黑发|白发|灰发|棕发|金发|发色|发束|碎发|发丝|高束|束发|长发|短发|马尾|辫|刘海|发髻|疤|痣|胎记|标记|徽记|比例|对称/u;
+    /少年|少女|儿童|青年|中年|老年|男性|女性|年龄|骨骼|身材|体态|脸|五官|眉|眼|鼻|唇|下颌|耳|肤色|皮肤|发际线|发型|头发|黑发|白发|灰发|棕发|金发|发色|发束|碎发|发丝|高束|束发|长发|短发|马尾|辫|刘海|发髻|疤|痣|胎记|标记|徽记|比例|对称|轮廓|人形|投影|匿名/u;
 const CHARACTER_NARRATIVE_FACT_PATTERN =
     /(?:故事|剧情|小说|原文|章节|背景|关系|冲突|事件|经历|过去|审判|反击|契约|父亲|母亲|名声|承诺|婚约|誓言|承担|宿命|情绪|弧线|对白|台词|镜头|场景|大厅|古堡|教堂|议事|由[^；。]+(?:转成|转为|变成)|再以|随后|然后|最终|因为|因此)/u;
 const CHARACTER_STYLING_FACT_PATTERN = /服装|服饰|衣着|穿着|长袍|袍|斗篷|披风|外套|制服|盔甲|铠甲|护腕|护甲|腰封|腰带|鞋靴|鞋子|靴子|手套|配饰|饰品|首饰|挂件|纹样|刺绣|面料|材质|皮革|金属|玉石|色彩|配色|固有色|主色|颜色|时代|工艺|风格|渲染|光色|灯光/u;
@@ -112,7 +112,7 @@ export function normalizeDramaCharacterProfile(profile: DramaAssetProfile | unde
     const currentVisualIdentity = current.visualIdentity.trim();
     const currentIdentityFacts = normalizeCharacterIdentityAnchor(currentVisualIdentity, name);
     const rawVisualIdentity = currentIdentityFacts || extractDramaCharacterVisualFacts(description);
-    const visualIdentity = rawVisualIdentity.startsWith(identityPrefix) ? rawVisualIdentity : [identityPrefix, rawVisualIdentity].filter(Boolean).join("；");
+    const visualIdentity = currentVisualIdentity ? rawVisualIdentity : [identityPrefix, rawVisualIdentity].filter(Boolean).join("；");
     const styling = normalizeCharacterStaticClauses(current.styling) || `${name}的发型、服装、固定配饰、鞋靴与材质按描述固定`;
     const colorPalette = normalizeCharacterColorPalette(current.colorPalette) || "按角色固有色保持跨镜头一致";
     const rawConsistency = current.consistencyRules.trim();
@@ -121,9 +121,9 @@ export function normalizeDramaCharacterProfile(profile: DramaAssetProfile | unde
         .map((item) => item.trim())
         .filter((item) => item && !hasDramaCharacterNarrativeFact(item))
         .join("；");
-    const consistencyRules = appendUniqueClauses(extractDramaCharacterContinuityFacts(rawConsistency), [authoredNonNarrativeConsistency, DRAMA_CHARACTER_DEFAULT_CONSISTENCY].filter(Boolean).join("；"));
+    const consistencyRules = authoredNonNarrativeConsistency || DRAMA_CHARACTER_DEFAULT_CONSISTENCY;
     const identityAnchors = Array.from(new Set([...(current.identityAnchors || []).map((value) => normalizeCharacterIdentityAnchor(value, name)), visualIdentity].map((value) => value.trim()).filter(Boolean)));
-    const forbiddenChanges = Array.from(new Set([...(current.forbiddenChanges || []), ...DRAMA_CHARACTER_NEGATIVE_RULES.split("、")].map((value) => value.trim()).filter(Boolean)));
+    const forbiddenChanges = Array.from(new Set((current.forbiddenChanges || (profile ? [] : DRAMA_CHARACTER_NEGATIVE_RULES.split("、"))).map((value) => value.trim()).filter(Boolean)));
     return { ...current, visualIdentity, styling, colorPalette, consistencyRules, identityAnchors, forbiddenChanges };
 }
 
@@ -154,7 +154,7 @@ function normalizeCharacterIdentityAnchor(value: string, name: string) {
     const trimmed = value.trim();
     const authoredFacts = trimmed.replace(/^[^；;\n]*的脸型、五官、发型和年龄感按当前角色设定固定[；;]?/u, "");
     if (authoredFacts !== trimmed) return [identityPrefix, extractDramaCharacterVisualFacts(authoredFacts)].filter(Boolean).join("；");
-    if (!trimmed.includes(`${name}的脸型`)) return extractDramaCharacterVisualFacts(trimmed);
+    if (!trimmed.includes(`${name}的脸型`)) return normalizeCharacterStaticClauses(trimmed);
     const facts = extractDramaCharacterVisualFacts(trimmed);
     const extraFacts = facts
         .split("；")

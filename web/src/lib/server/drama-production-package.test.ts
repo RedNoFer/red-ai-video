@@ -86,6 +86,46 @@ function readMahadelMarkdownFixture() {
 }
 
 describe("production package boundary", () => {
+    it("preserves standalone asset facts and prompts over old generic fields while retaining reference identity", () => {
+        const source = JSON.parse(readFileSync(new URL("../../../../docs/drama-production-package-v1-field-example.json", import.meta.url), "utf8")) as DramaProductionPackageV1;
+        for (const field of ["visualIdentity", "styling", "imagePrompt"]) {
+            const malformed = structuredClone(source);
+            Object.assign(malformed.assets.characters[0], { [field]: "不会被读取的细节" });
+            expect(() => previewDramaProductionPackage(JSON.stringify(malformed), "asset-alias.json")).toThrow(`assets.characters[0].${field}`);
+        }
+        const character = source.assets.characters[0];
+        character.profile = { visualIdentity: "成年女性；长脸、杏眼、低束黑发", styling: "墨灰短夹克、耐磨长裤与户外鞋", colorPalette: "墨灰、黑", consistencyRules: "脸型与低束发固定" };
+        character.supplierPrompt = "主体与资产类型：角色\n身份/结构锚点：长脸、杏眼、低束黑发\n可见状态与材质：墨灰短夹克、耐磨长裤与户外鞋\n构图与画幅：白底四视图\n光色与风格：柔和棚光\n负面约束：换脸、额外视图";
+        const scene = source.assets.locations[0];
+        scene.description = "后左门、右窗、中央木桌，旧木地板";
+        scene.profile = { visualIdentity: scene.description, styling: "石墙、旧木地板与湿玻璃", colorPalette: "木褐、石灰", consistencyRules: "桌门之间留通道" };
+        scene.supplierPrompt = "主体与资产类型：场景\n身份/结构锚点：后左门、右窗、中央木桌\n可见状态与材质：石墙、旧木地板与湿玻璃\n构图与画幅：单视角全景\n光色与风格：右窗自然光\n负面约束：人物、拼版";
+        const target = project();
+        target.characters = [
+            {
+                id: "retained-character",
+                code: character.code,
+                name: character.name,
+                description: "原文角色与功能事实。",
+                profile: { visualIdentity: "五官固定", styling: "按视觉合同重新设计", colorPalette: "按角色固有色", consistencyRules: "同一身份" },
+                supplierPrompt: "旧通用约束",
+                primaryReferenceId: "approved-reference",
+            },
+        ];
+        target.scenes = [{ id: "retained-scene", code: scene.code, name: scene.name, description: "入口、出口、地面支撑", supplierPrompt: "旧通用场景约束" }];
+        const preview = previewDramaProductionPackage(JSON.stringify(source), "asset-facts.json", target, { allowImportWarnings: true });
+        expect(preview.package.assets.characters[0].profile).toMatchObject(character.profile);
+        expect(preview.package.assets.characters[0].supplierPrompt).toBe(character.supplierPrompt);
+        expect(preview.package.assets.locations[0].description).toBe(scene.description);
+        const applied = applyDramaProductionPackage(target, preview.package, preview.sourceHash, JSON.stringify(source), "asset-facts.json", { allowImportWarnings: true });
+        expect(applied.characters[0]).toMatchObject({ id: "retained-character", primaryReferenceId: "approved-reference", profile: character.profile, supplierPrompt: character.supplierPrompt });
+        expect(applied.scenes[0]).toMatchObject({ id: "retained-scene", profile: scene.profile, supplierPrompt: scene.supplierPrompt });
+        const manual = structuredClone(target);
+        manual.characters[0].fieldOrigins = { profile: "manual", supplierPrompt: "manual" };
+        const protectedProject = applyDramaProductionPackage(manual, preview.package, preview.sourceHash, undefined, "asset-facts.json", { allowImportWarnings: true });
+        expect(protectedProject.characters[0].profile).toEqual(manual.characters[0].profile);
+        expect(protectedProject.characters[0].supplierPrompt).toBe("旧通用约束");
+    });
     it("previews and applies a standalone timeline package without rewriting prompts or frames", () => {
         const source = JSON.parse(readFileSync(new URL("../../../../docs/drama-production-package-v1-field-example.json", import.meta.url), "utf8")) as DramaProductionPackageV1;
         const item = source.episodes[0].shots[0];
@@ -521,9 +561,9 @@ describe("production package boundary", () => {
 
         expect(karin.profile?.consistencyRules).toContain("自然骨骼与身材比例");
         expect(karin.profile?.consistencyRules).toContain("身份特写、正面、严格左侧面、背面");
-        expect(karin.profile?.forbiddenChanges).toEqual(expect.arrayContaining(["换脸", "大头娃娃", "塑料皮肤", "手指畸形"]));
-        expect(rifa.profile?.visualIdentity).toContain("Rifa的脸型、五官、发型和年龄感");
-        expect(rifa.profile?.identityAnchors).toEqual(expect.arrayContaining([expect.stringContaining("Rifa的脸型、五官、发型和年龄感")]));
+        expect(karin.profile?.forbiddenChanges).toEqual([]);
+        expect(rifa.profile?.visualIdentity).toBe("琥珀色眼睛");
+        expect(rifa.profile?.identityAnchors).toEqual(["琥珀色眼睛"]);
     });
 
     it("keeps imported character modeling prompts free of narrative and scene context", () => {
@@ -553,7 +593,7 @@ describe("production package boundary", () => {
         expect(character.profile?.identityAnchors?.join("；")).not.toContain("宿命");
         expect(prompt).toContain("少年");
         expect(prompt).toContain("黑发束起");
-        expect(prompt).toContain("西方西幻 CG 角色造型落地");
+        expect(prompt).toContain("项目视觉风格：写实3D动画电影质感的冷调西方暗黑奇幻 CG");
         for (const narrative of ["被审判", "冷肃反击", "血手契约", "父亲名声", "萧家议事大厅", "场景："]) {
             expect(prompt).not.toContain(narrative);
         }

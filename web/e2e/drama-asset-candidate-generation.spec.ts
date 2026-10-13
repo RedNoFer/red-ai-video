@@ -692,6 +692,7 @@ test("批量完成后将基准图写入项目资产列表", async ({ page, reque
     expect(created.ok(), await created.text()).toBe(true);
     const project = ((await created.json()) as { data: { project: DramaProject } }).data.project;
     const sceneId = "scene-batch-reference-e2e";
+    const authoredPrompt = "主体与资产类型：场景「批量基准场景」\n身份/结构锚点：后左入口、右侧高窗、中央木桌\n可见状态与材质：旧木地板、石墙、湿玻璃\n构图与画幅：9:16高清单视角完整全景\n光色与风格：右窗自然光，木褐与石灰\n负面约束：人物、拼版、字幕";
     const saved = await saveDramaProjectFixture(request, project, {
         ...project,
         scenes: [
@@ -699,6 +700,7 @@ test("批量完成后将基准图写入项目资产列表", async ({ page, reque
                 id: sceneId,
                 name: "批量基准场景",
                 description: "用于验证批量生成完成后列表能够显示真实基准图",
+                supplierPrompt: authoredPrompt,
                 profile: { visualIdentity: "完整场景空间结构与固定入口", styling: "半写实动漫幻想风", colorPalette: "冷蓝灰", consistencyRules: "入口和空间结构保持一致" },
                 references: [],
             },
@@ -710,7 +712,8 @@ test("批量完成后将基准图写入项目资产列表", async ({ page, reque
         data: { assets: [{ kind: "scenes", assetId: sceneId }], config: { ...e2eSettingsPatch(), model: "e2e-image", imageModel: "e2e-image", count: "1", completeSettings: false, generateVoice: false } },
     });
     expect(submitted.ok(), await submitted.text()).toBe(true);
-    const batch = ((await submitted.json()) as { data: { batch: { id: string } } }).data.batch;
+    const batch = ((await submitted.json()) as { data: { batch: { id: string; items: Array<{ prompt: string }> } } }).data.batch;
+    expect(batch.items[0].prompt).toBe(authoredPrompt);
 
     await page.goto(`/drama/${project.id}`, { waitUntil: "domcontentloaded" });
     await page.getByRole("button", { name: "打开项目资产" }).click();

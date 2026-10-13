@@ -208,6 +208,7 @@ function allocateAssetCodes(items: DramaNamedAsset[], prefix: string) {
 /** Keep project-registered assets in a generated package and preserve their facts. */
 export function mergeProjectAssetsIntoProductionPackage<T extends DramaProductionPackageV1>(value: T, project: DramaProjectAssetCollection, importWarnings?: string[]): T {
     const aligned = alignPackageAssetCodes(value, project, importWarnings);
+    if (aligned.authoring?.source === "codex-standalone") return aligned;
     const assets = aligned.assets || { characters: [], locations: [], props: [], clues: [] };
     const episodeCodes = new Set((aligned.episodes || []).map((episode) => episode.code).filter(Boolean));
     const referenced = {
@@ -836,7 +837,14 @@ function validateStandalonePackageShape(input: Record<string, unknown>, options:
     const video = object(plan.video);
     for (const field of ["version", "skills", "visual", "video", "references", "continuity", "frameCountRange", "source"]) if (!has(plan, field)) fail(`project.productionBible.productionPlan.${field}`, " 缺失；独立制作包必须携带完整 productionPlan");
     const assets = object(input.assets);
-    for (const field of ["characters", "locations", "props", "clues"]) if (!Array.isArray(assets[field])) fail(`assets.${field}`, " 必须是数组");
+    for (const field of ["characters", "locations", "props", "clues"]) {
+        if (!Array.isArray(assets[field])) fail(`assets.${field}`, " 必须是数组");
+        for (const [index, value] of (assets[field] as unknown[]).entries()) {
+            const asset = object(value);
+            for (const key of ["visualIdentity", "styling", "colorPalette", "consistencyRules"]) if (has(asset, key)) fail(`assets.${field}[${index}].${key}`, ` 是错误字段层级；请使用 profile.${key}，避免具体设定丢失`);
+            if (has(asset, "imagePrompt")) fail(`assets.${field}[${index}].imagePrompt`, " 是非契约资产字段；完整图片提示词请使用 supplierPrompt");
+        }
+    }
 
     const authoring = object(input.authoring);
     if (typeof input.schemaVersion !== "number") fail("schemaVersion", " 必须是数字 1");
@@ -2641,8 +2649,8 @@ function normalizePackageAsset(value: unknown, location = false, character = fal
     const visualIdentity = character ? characterModel?.identityFacts || rawVisualIdentity || "" : rawVisualIdentity && !/^不可变为/u.test(rawVisualIdentity) ? rawVisualIdentity : description || `${name}的固定外观与识别特征`;
     const sourceText = [description, text(profile.designPrompt)].filter(Boolean).join("\n");
     const rawStyling = text(profile.styling);
-    const styling = character ? DRAMA_CHARACTER_CURRENT_DESIGN_RULE : rawStyling && !(location && /发型、服装、随身物件与材质按描述固定/u.test(rawStyling)) ? rawStyling : inferAssetStyling(sourceText, name, location);
-    const colorPalette = character ? DRAMA_CHARACTER_CURRENT_COLOR_RULE : text(profile.colorPalette) || inferAssetPalette(sourceText);
+    const styling = rawStyling && !(location && /发型、服装、随身物件与材质按描述固定/u.test(rawStyling)) ? rawStyling : character ? DRAMA_CHARACTER_CURRENT_DESIGN_RULE : inferAssetStyling(sourceText, name, location);
+    const colorPalette = text(profile.colorPalette) || (character ? DRAMA_CHARACTER_CURRENT_COLOR_RULE : inferAssetPalette(sourceText));
     const rawConsistencyRules = text(profile.consistencyRules);
     const spatialRules = strings(profile.spatialRules);
     const consistencyRules = character

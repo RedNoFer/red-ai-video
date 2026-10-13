@@ -6,7 +6,7 @@ import { refineDramaAssetWithModel } from "./drama-asset-refinement-service";
 import { getDramaProjectForUser, updateDramaProjectForUser } from "./drama-project-service";
 import { fetchInternalApi } from "./internal-origin";
 import { approvedAssetReference } from "@/lib/drama-asset-baseline";
-import { compileDramaAssetReferencePrompt, DRAMA_CHARACTER_TURNAROUND_SIZE } from "@/lib/drama-prompt-compiler";
+import { resolveDramaAssetReferencePrompt, DRAMA_CHARACTER_TURNAROUND_SIZE } from "@/lib/drama-prompt-compiler";
 import { createDramaVoiceCreationTask } from "./drama-voice-creation";
 
 export async function completeDramaAsset(input: {
@@ -116,7 +116,7 @@ export async function completeDramaAsset(input: {
             headers: { "Content-Type": "application/json", cookie: input.cookie, "X-VOZEB-PRO-Client-Request-Id": `${input.requestId}:reference` },
             body: JSON.stringify({
                 config: input.kind === "characters" ? { ...config, count: "1", size: DRAMA_CHARACTER_TURNAROUND_SIZE } : input.kind === "scenes" ? { ...config, count: "1", size: project.ratio, quality: "high" } : config,
-                prompt: compileDramaAssetReferencePrompt(project, current, input.kind === "characters" ? "角色" : input.kind === "scenes" ? "场景" : "道具"),
+                prompt: resolveDramaAssetReferencePrompt(project, current, input.kind === "characters" ? "角色" : input.kind === "scenes" ? "场景" : "道具"),
                 references: [],
                 source: "drama",
                 title: `${project.title} · ${current.name}智能补全`,
