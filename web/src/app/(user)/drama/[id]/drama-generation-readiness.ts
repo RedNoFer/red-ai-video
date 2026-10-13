@@ -36,7 +36,7 @@ export function summarizeDramaGeneration(project: DramaProject, episode: DramaEp
     let completedAudioCount = 0;
 
     for (const shot of episode.shots) {
-        const active = [shot.storyboardStatus, shot.storyboardEndStatus, shot.generationStatus, shot.audioStatus].some((status) => ACTIVE_TASK_STATUSES.has(status || ""));
+        const active = ACTIVE_TASK_STATUSES.has(shot.generationStatus || "");
         const failed = [shot.storyboardStatus, shot.storyboardEndStatus, shot.generationStatus, shot.audioStatus].some((status) => status === "error");
         const missingPrompt = !(shot.executionVideoPrompt?.trim() || shot.videoPrompt.trim());
         const missingReference = false;
@@ -62,9 +62,8 @@ export function summarizeDramaGeneration(project: DramaProject, episode: DramaEp
         }
     }
 
-    const blockedShotIds = new Set([...missingPromptShotIds, ...missingReferenceShotIds]);
     const activeIds = new Set(activeShotIds);
-    const queueableShotIds = incompleteShotIds.filter((shotId) => !blockedShotIds.has(shotId) && !activeIds.has(shotId));
+    const queueableShotIds = incompleteShotIds.filter((shotId) => !activeIds.has(shotId));
 
     return {
         totalShots: episode.shots.length,

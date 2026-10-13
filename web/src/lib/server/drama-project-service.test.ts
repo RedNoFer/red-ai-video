@@ -3114,6 +3114,43 @@ describe("drama project service updates", () => {
         expect(saved.productionBible?.productionPlan).toMatchObject({ lockedAt: lockedPlan.lockedAt, video: { resolution: "480p" } });
     });
 
+    it("creates a video run from an unreviewed shot without a locked plan or canon, keeping quality findings advisory", async () => {
+        const current = project("2026-07-19T08:00:01.000Z", "项目");
+        current.episodes[0].shots = [
+            {
+                id: "shot-one",
+                order: 1,
+                title: "未审核镜头",
+                description: "人物抬头",
+                sourceText: "人物抬头",
+                shotBoundary: "",
+                dialogue: "别走。",
+                narration: "",
+                utterances: [],
+                imagePrompt: "",
+                videoPrompt: "人物近景抬头，低声说别走。",
+                cameraMotion: "",
+                duration: 15,
+                characterIds: [],
+                propIds: [],
+                clueIds: [],
+            },
+        ];
+        mocks.getDramaProject.mockResolvedValue(current);
+        mocks.getAuthSettings.mockResolvedValue({ defaultModels: { imageModel: "image", videoModel: "video", audioModel: "" }, generationDefaults: { imageQuality: "standard", videoQuality: "720" } });
+        mocks.resolveLogicalModelCandidates.mockReturnValue([{ logicalModelId: "video", channelId: "video-channel" }]);
+        const run = await createDramaProductionRunForUser("user-one", current.id, { episodeId: current.episodes[0].id });
+        expect(run.steps.find((step) => step.type === "video")).toMatchObject({ status: "ready", prompt: expect.stringContaining("人物近景抬头") });
+        expect(run.preflightSnapshot?.issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: "PERFORMANCE_PLAN_MISSING", severity: "warning" })]));
+        expect(run.preflightSnapshot?.issues.every((issue) => issue.severity === "warning")).toBe(true);
+        expect(mocks.createDramaProductionRun).toHaveBeenCalledOnce();
+        const video = run.steps.find((step) => step.type === "video")!;
+        mocks.getDramaProductionRun.mockResolvedValue({ ...run, steps: run.steps.map((step) => (step.id === video.id ? { ...step, status: "failed", taskId: "failed-task" } : step)) });
+        const retried = await updateDramaProductionRunForUser("user-one", current.id, run.id, { action: "retry", stepIds: [video.id] });
+        expect(retried.steps.find((step) => step.id === video.id)).toMatchObject({ status: "ready", attemptNo: 2 });
+        expect(retried.steps.find((step) => step.id === video.id)?.taskId).toBeUndefined();
+    });
+
     it("allows video production when the plan has advisory preflight findings", async () => {
         const plan = { ...defaultDramaProductionPlan("manual"), video: { ...defaultDramaProductionPlan("manual").video, model: "selected-video" } };
         const current = project("2026-07-19T08:00:01.000Z", "项目");

@@ -5,7 +5,7 @@ import { createFrameEvidence } from "@/lib/drama-continuity-policy";
 import { buildDramaProductionRun, invalidateDramaProductionRunFromShot, refreshDramaVideoStepReferences } from "@/lib/server/drama-production-run";
 
 describe("drama production run planning", () => {
-    it("locks parameters and gates the next continuous shot on previous continuity QC", () => {
+    it("preserves parameters while allowing continuous shots before prior QC", () => {
         const project = fixture();
         project.productionBible = {
             language: "中文",
@@ -28,7 +28,8 @@ describe("drama production run planning", () => {
         const secondVideo = run.steps.find((step) => step.shotId === "shot-two" && step.type === "video")!;
 
         expect(run).toMatchObject({ mode: "strict", parameterSnapshot: { imageModel: "image-one", videoModel: "video-one", ratio: "9:16", productionPlan: { video: { resolution: "480p" } } } });
-        expect(secondVideo.dependsOn).toContain(firstQc.id);
+        expect(secondVideo.dependsOn).not.toContain(firstQc.id);
+        expect(secondVideo.status).toBe("ready");
         expect(secondVideo.referenceBindingsSnapshot).toEqual([]);
         expect(run.steps.some((step) => step.shotId === "shot-two" && ["start_frame", "end_frame", "keyframe"].includes(step.type))).toBe(false);
     });
@@ -77,7 +78,7 @@ describe("drama production run planning", () => {
             ["/f1.png", "/f2.png", "/f3.png"],
             ["/f3.png", "/f4.png"],
         ]);
-        expect(videos.map((step) => step.duration)).toEqual([4, 4]);
+        expect(videos.map((step) => step.duration)).toEqual([5, 3]);
         expect(videos[1].dependsOn).toContain(videos[0].id);
         expect(videos[0].prompt).toContain("视频");
         expect(videos[0].prompt).toContain("视觉质感采用：写实");
@@ -107,7 +108,7 @@ describe("drama production run planning", () => {
         expect(video.prompt).not.toContain("P01-F02");
     });
 
-    it("keeps every all-frames node as a blocking dependency even when only some references are selected", () => {
+    it("uses selected frames without making unreviewed frames blocking dependencies", () => {
         const project = fixture();
         const shot = project.episodes[0].shots[0];
         shot.storyboardFrameMode = "all_frames";
@@ -132,8 +133,9 @@ describe("drama production run planning", () => {
         const video = run.steps.find((step) => step.type === "video");
 
         expect(run.steps.filter((step) => step.type === "keyframe")).toHaveLength(3);
-        expect(video?.dependsOn).toEqual(expect.arrayContaining(["frame-shot-one-f1", "frame-shot-one-f2", "frame-shot-one-f3"]));
-        expect(video?.status).toBe("blocked");
+        expect(video?.dependsOn).toEqual([]);
+        expect(video?.referenceImageUrls).toEqual(["/f1.png", "/f3.png"]);
+        expect(video?.status).toBe("ready");
     });
 
     it("applies deselected optional asset references to the video step", () => {
@@ -382,8 +384,8 @@ describe("drama production run planning", () => {
 
         const run = buildDramaProductionRun(project, { ...project.episodes[0], shots: [shot], continuityEdges: [] }, { imageModel: "image", videoModel: "video", maxReferenceImages: 4, referenceModes: { [shot.id]: "all_frames" } });
 
-        expect(run.steps.filter((step) => step.type === "keyframe")).toEqual(expect.arrayContaining([expect.objectContaining({ status: "blocked" })]));
-        expect(run.steps.find((step) => step.type === "video")).toMatchObject({ status: "blocked", referenceImageUrls: ["/f1.png", "/f2.png"] });
+        expect(run.steps.filter((step) => step.type === "keyframe")).toEqual(expect.arrayContaining([expect.objectContaining({ status: "success" })]));
+        expect(run.steps.find((step) => step.type === "video")).toMatchObject({ status: "ready", referenceImageUrls: ["/f1.png", "/f2.png"] });
     });
 
     it("blocks before submission when assets leave room for fewer than two frame anchors", () => {

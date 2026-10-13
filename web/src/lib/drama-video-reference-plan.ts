@@ -46,7 +46,7 @@ export function selectedDramaShotReferenceAssetIds(project: DramaProject, shot: 
 
 export function selectedDramaShotFrameIds(shot: DramaShot, mode: DramaVideoReferenceMode, selections?: Record<string, string[]>) {
     const frameIds = (shot.framePlan?.frames || []).map((frame) => frame.id);
-    if (mode === "all_frames") return frameIds;
+    if (mode === "all_frames" && !selections?.[shot.id]) return frameIds;
     const selected = selections?.[shot.id];
     if (!selected) return [];
     const selectedIds = new Set(selected);

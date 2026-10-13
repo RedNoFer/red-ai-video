@@ -45,7 +45,7 @@ export async function preflightDramaGeneration(input: DramaGenerationPreflightIn
     const selected = new Set(input.shotIds?.length ? input.shotIds : input.episode.shots.map((shot) => shot.id));
     const base = preflightDramaProduction(input.project, input.episode, [...selected], input.referenceSelections, input.referenceModes);
     const issues = [
-        ...base.issues.filter((issue) => !issue.shotId || selected.has(issue.shotId)),
+        ...base.issues.filter((issue) => !issue.shotId || selected.has(issue.shotId)).map((issue) => ({ ...issue, severity: "warning" as const })),
         ...input.episode.shots
             .filter((shot) => selected.has(shot.id) && shot.continuityError)
             .map((shot) => ({ code: "PRIOR_CONTINUITY_REVIEW", severity: "warning" as const, message: `${shot.title}上次连续性检查：${shot.continuityError}`, shotId: shot.id, correction: "将上次复盘问题纳入本次提示词修订" })),
@@ -53,9 +53,9 @@ export async function preflightDramaGeneration(input: DramaGenerationPreflightIn
             .filter((issue) => issue.taskId && selected.has(issue.taskId))
             .map((issue) => ({ code: "PRIOR_VISUAL_REVIEW", severity: "warning" as const, message: issue.message, shotId: issue.taskId, correction: issue.correction })),
     ];
-    const status = issues.some((issue) => issue.severity === "blocking") ? "blocked" : issues.length ? "needs_confirmation" : "passed";
+    const status = issues.length ? "needs_confirmation" : "passed";
     const result: DramaProductionPreflight = { ...base, status, issues, checkedShotIds: [...selected] };
-    if (result.status === "blocked" || !issues.some((issue) => issue.severity === "warning")) return result;
+    if (!issues.length) return result;
     const modelIssues = issues.filter((issue) => !NON_BLOCKING_VISUAL_ISSUES.has(issue.code));
     if (!modelIssues.length) return result;
 

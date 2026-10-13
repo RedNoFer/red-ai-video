@@ -99,7 +99,6 @@ export function DramaGenerationPanel({
     const productionSyncVersion = useRef("");
     const readiness = useMemo(() => summarizeDramaGeneration(project, episode), [episode, project]);
     const productionPlan = project.productionBible?.productionPlan;
-    const missingAssetIssues = preflight?.issues.filter((issue) => ["CHARACTER_REFERENCE", "LOCATION_REFERENCE", "PROP_REFERENCE", "CLUE_REFERENCE"].includes(issue.code)) || [];
     const renderTask = episode.renderTask || null;
     const audioReady = Boolean(config.audioModel.trim());
     const assetCount = project.characters.length + project.scenes.length + project.props.length + project.clues.length;
@@ -415,11 +414,10 @@ export function DramaGenerationPanel({
             references: previewVideoReferenceBindings(project, episode, shot),
             basePrompt: compileDramaShotExecutionPrompts(project, episode, shot).videoPrompt,
         }));
-        const selectionState: { selections: Record<string, string[]>; referenceModes: Record<string, DramaVideoReferenceMode>; videoPrompts: Record<string, string>; invalid: boolean } = {
+        const selectionState: { selections: Record<string, string[]>; referenceModes: Record<string, DramaVideoReferenceMode>; videoPrompts: Record<string, string> } = {
             selections: Object.fromEntries(promptRows.map((row) => [row.shot.id, row.references.filter((reference) => reference.required || reference.recommended).map((reference) => reference.id)])),
             referenceModes: Object.fromEntries(promptRows.map((row) => [row.shot.id, "reference" as const])),
             videoPrompts: Object.fromEntries(promptRows.map((row) => [row.shot.id, row.basePrompt])),
-            invalid: false,
         };
         const dialog: ReturnType<typeof modal.confirm> = modal.confirm({
             title: `确认生成 ${selectedShots.length} 个镜头`,
@@ -441,10 +439,6 @@ export function DramaGenerationPanel({
             okText: "确认生成",
             cancelText: "返回修改",
             onOk: () => {
-                if (selectionState.invalid) {
-                    message.error("请填写视频提示词、调整参考图选择，或完成按序关键帧驱动所需的完整帧计划");
-                    return Promise.reject();
-                }
                 return lockProduction(shotIds, check, selectionState.selections, selectionState.referenceModes, selectionState.videoPrompts);
             },
         });
@@ -456,9 +450,8 @@ export function DramaGenerationPanel({
         try {
             const check = await preflightDramaGeneration(project.id, episode.id, shotIds, `drama-preflight:${project.id}:${episode.id}:${shotIds.join(",")}:${project.updatedAt}`);
             setPreflight(check);
-            const missing = new Set(episode.shots.filter((shot) => shotIds.includes(shot.id)).flatMap((shot) => missingDramaShotFixedReferences(project, shot).map((item) => item.id)));
-            if (missing.size) message.warning(`还有 ${missing.size} 项引用固定资产图需要生成或确认`);
-            else message.success("引用固定资产图已齐备");
+            if (check.issues.length) message.info("生成建议已更新，不影响视频提交");
+            else message.success("生成前检查已通过");
         } catch (error) {
             message.error(error instanceof Error ? error.message : "生成前预检失败");
         } finally {
@@ -477,10 +470,6 @@ export function DramaGenerationPanel({
         try {
             const check = await preflightDramaGeneration(project.id, episode.id, [shotId], `drama-preflight:${project.id}:${episode.id}:${shotId}:${Date.now()}`);
             setPreflight((current) => ({ ...(current || check), ...check }));
-            if (check.status === "blocked") {
-                message.error("镜头补全已返回，但前置检查仍有阻断项，请展开详情查看具体缺失字段");
-                return false;
-            }
             return true;
         } catch (error) {
             message.error(error instanceof Error ? error.message : "镜头补全后检查失败");
@@ -543,7 +532,7 @@ export function DramaGenerationPanel({
             id: "review",
             title: "内容审核",
             detail: episode.reviewStatus === "visual_ready" ? `${readiness.totalShots} 个镜头已确认并生成视觉方案` : readiness.totalShots ? "镜头内容尚未完成确认或视觉方案未生成" : "还没有可审核的镜头结构",
-            tone: episode.reviewStatus === "visual_ready" ? ("done" as const) : ("blocked" as const),
+            tone: episode.reviewStatus === "visual_ready" ? ("done" as const) : ("optional" as const),
             action: () => onStageChange(readiness.totalShots ? "review" : "script"),
             actionLabel: readiness.totalShots ? "去审核" : "去写剧本",
         },
@@ -557,7 +546,7 @@ export function DramaGenerationPanel({
                   : assetCount
                     ? `已登记 ${assetCount} 项资产，可按需作为视频参考图`
                     : "暂无资产图，仍可仅依据视频提示词生成",
-            tone: readiness.missingReferenceShotIds.length ? ("blocked" as const) : ("optional" as const),
+            tone: "optional" as const,
             action: onOpenAssets,
             actionLabel: readiness.missingBaselineShotIds.length ? "补充参考图" : "查看资产",
         },
@@ -565,7 +554,7 @@ export function DramaGenerationPanel({
             id: "storyboard",
             title: "分镜配置",
             detail: readiness.missingPromptShotIds.length ? `${readiness.missingPromptShotIds.length} 个镜头缺少视频提示词` : readiness.totalShots ? `${readiness.totalShots} 个镜头视频提示词与生成参数已就绪` : "等待内容审核生成镜头",
-            tone: readiness.missingPromptShotIds.length || !readiness.totalShots ? ("blocked" as const) : ("done" as const),
+            tone: readiness.missingPromptShotIds.length || !readiness.totalShots ? ("optional" as const) : ("done" as const),
             action: () => onStageChange("storyboard"),
             actionLabel: "打开分镜",
         },
@@ -664,7 +653,7 @@ export function DramaGenerationPanel({
                         <h3 id="drama-preflight-title" className="shrink-0 text-sm font-semibold">
                             生成前检查
                         </h3>
-                        <p className="truncate text-xs text-muted-foreground">阻塞项会说明原因，并带你回到真正需要处理的位置。</p>
+                        <p className="truncate text-xs text-muted-foreground">检查结果仅供优化参考，不影响视频提交。</p>
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
                         <Button size="small" icon={<ScanSearch className="size-3.5" />} loading={preflighting} disabled={!readiness.totalShots} onClick={() => void checkProduction()}>
@@ -678,19 +667,20 @@ export function DramaGenerationPanel({
                         <ReadinessItem key={id} {...item} />
                     ))}
                 </div>
-                {preflight?.status === "blocked" && missingAssetIssues.length ? (
-                    <div className="mt-2 rounded-xl border border-amber-300/70 bg-amber-50/70 p-3 text-xs text-amber-950 dark:border-amber-700/60 dark:bg-amber-950/25 dark:text-amber-100" data-drama-director-blockers>
+                {preflight?.issues.length ? (
+                    <div className="mt-2 rounded-xl border border-amber-300/70 bg-amber-50/70 p-3 text-xs text-amber-950 dark:border-amber-700/60 dark:bg-amber-950/25 dark:text-amber-100" data-drama-director-warnings>
                         <div className="flex items-center gap-2 font-semibold">
                             <CircleAlert className="size-4" />
-                            固定资产图待补齐
+                            生成建议，不影响视频提交
                         </div>
                         <ul className="mt-2 space-y-1 pl-5">
-                            {missingAssetIssues.map((issue, index) => (
+                            {preflight.issues.slice(0, 8).map((issue, index) => (
                                 <li key={`${issue.code}-${issue.shotId || "general"}-${issue.assetId || "none"}-${index}`} className="list-disc">
                                     {issue.message}
                                 </li>
                             ))}
                         </ul>
+                        {preflight.issues.length > 8 ? <p className="mt-2 text-amber-800 dark:text-amber-200">另有 {preflight.issues.length - 8} 项建议，可按需查看和优化。</p> : null}
                         <div className="mt-3 flex flex-wrap items-center gap-2">
                             <Button
                                 size="small"
@@ -705,9 +695,7 @@ export function DramaGenerationPanel({
                                         if (changed) {
                                             const refreshed = await preflightDramaGeneration(project.id, episode.id, preflight.checkedShotIds || [], `drama-preflight:auto-fix:${project.id}:${episode.id}:${Date.now()}`);
                                             setPreflight(refreshed);
-                                            if (refreshed.status === "blocked") message.error("Agent 已补全可修复字段，但前置检查仍有阻断项，请展开详情查看剩余问题");
-                                            else if (refreshed.status === "passed") message.success("Agent 已补全镜头参数，前置检查已通过");
-                                            else message.info("Agent 已补全镜头参数，请确认剩余提示项后继续");
+                                            message.success("Agent 已补全镜头参数，可继续生成视频");
                                         }
                                     } finally {
                                         setAutoFixing(false);
@@ -800,7 +788,6 @@ export function DramaGenerationPanel({
                                 onCompleteReview={() => completeShotReviewAndRefresh(shot.id)}
                                 onGenerate={() => void startProduction([shot.id])}
                                 onOptimizePrompt={() => optimizeVideoPrompt(shot, preflight?.issues.filter((issue) => issue.shotId === shot.id) || [])}
-                                blocked={readiness.missingPromptShotIds.includes(shot.id) || readiness.missingReferenceShotIds.includes(shot.id)}
                                 onMaintain={(action) => {
                                     if (action === "assets") onOpenAssets();
                                     else if (action === "storyboard") onStageChange("storyboard");
@@ -949,7 +936,6 @@ function ShotTaskRow({
     onCompleteReview,
     onGenerate,
     onOptimizePrompt,
-    blocked,
     onMaintain,
 }: {
     project: DramaProject;
@@ -964,7 +950,6 @@ function ShotTaskRow({
     onCompleteReview: () => Promise<boolean>;
     onGenerate: () => void;
     onOptimizePrompt: () => Promise<unknown>;
-    blocked: boolean;
     onMaintain: (action: "assets" | "storyboard" | "review") => void;
 }) {
     const { message } = App.useApp();
@@ -980,6 +965,7 @@ function ShotTaskRow({
     const [refreshingVideo, setRefreshingVideo] = useState(false);
     const generating = [shot.storyboardStatus, shot.storyboardEndStatus, shot.generationStatus].some((status) => status === "queued" || status === "running");
     const failed = [shot.storyboardStatus, shot.storyboardEndStatus, shot.generationStatus].some((status) => status === "error");
+    const videoRunning = shot.generationStatus === "running" || shot.generationStatus === "queued";
     const audioRunning = shot.audioStatus === "running" || shot.audioStatus === "queued";
     const dialogue = (shot.subtitle || shot.dialogue || shot.narration).trim();
     const startFrames = activeFrameEvidence(shot, "storyboard_start");
@@ -1138,18 +1124,12 @@ function ShotTaskRow({
                         <ChevronDown className="size-3.5 opacity-60" aria-hidden />
                     </Button>
                 </Dropdown>
-                {generating ? (
+                {videoRunning ? (
                     <Button className={`${dialogue ? "" : "col-span-2 lg:col-span-1"} ${actionButtonClass}`} icon={<Pause className="size-4" />} onClick={onCancel}>
                         取消生成
                     </Button>
                 ) : (
-                    <Button
-                        className={`${dialogue ? "" : "col-span-2 lg:col-span-1"} ${actionButtonClass}`}
-                        disabled={episode.reviewStatus !== "visual_ready" || blocked}
-                        title={blocked ? "视频提示词或必需的连续性参考尚未就绪" : undefined}
-                        icon={failed ? <RefreshCw className="size-4" /> : <Play className="size-4" />}
-                        onClick={onGenerate}
-                    >
+                    <Button className={`${dialogue ? "" : "col-span-2 lg:col-span-1"} ${actionButtonClass}`} icon={failed ? <RefreshCw className="size-4" /> : <Play className="size-4" />} onClick={onGenerate}>
                         {failed ? "重试镜头" : shot.videoUrl ? "重新生成" : "生成镜头"}
                     </Button>
                 )}
@@ -1194,7 +1174,7 @@ function ShotMissingFixedAssets({ project, shot, onOpenAssets }: { project: Dram
     return (
         <div className="ml-11 mt-2 rounded-md border border-border bg-muted/20 p-3 text-xs" data-drama-shot-missing-fixed-assets>
             <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="font-medium">{missing.length} 项引用固定资产图待补齐</span>
+                <span className="font-medium">{missing.length} 项引用固定资产图待补齐（可选，不影响视频提交）</span>
                 <Button size="small" onClick={onOpenAssets}>
                     去生成 / 确认资产图
                 </Button>
@@ -1523,7 +1503,7 @@ function ProductionPromptPreview({
     initialSelections: Record<string, string[]>;
     initialReferenceModes: Record<string, DramaVideoReferenceMode>;
     initialVideoPrompts: Record<string, string>;
-    onChange: (value: { selections: Record<string, string[]>; referenceModes: Record<string, DramaVideoReferenceMode>; videoPrompts: Record<string, string>; invalid: boolean }) => void;
+    onChange: (value: { selections: Record<string, string[]>; referenceModes: Record<string, DramaVideoReferenceMode>; videoPrompts: Record<string, string> }) => void;
     onOpenAssets: () => void;
 }) {
     const [assetPickerShotId, setAssetPickerShotId] = useState<string>();
@@ -1532,18 +1512,9 @@ function ProductionPromptPreview({
     const [selections, setSelections] = useState<Record<string, string[]>>(initialSelections);
     const [referenceModes, setReferenceModes] = useState<Record<string, DramaVideoReferenceMode>>(initialReferenceModes);
     const [videoPrompts, setVideoPrompts] = useState<Record<string, string>>(initialVideoPrompts);
-    const invalid = rows.some((row) => {
-        const selected = selections[row.shot.id] || [];
-        const frameIds = new Set(row.shot.framePlan?.frames.map((frame) => frame.id) || []);
-        const allFrames = referenceModes[row.shot.id] === "all_frames";
-        const frameReferences = row.references.filter((reference) => reference.kind === "frame");
-        const allFramesReady = !allFrames || (frameIds.size >= 2 && frameIds.size === frameReferences.filter((reference) => frameIds.has(reference.id) && reference.orderedReady).length);
-        const allFramesSelected = !allFrames || (frameIds.size >= 2 && frameIds.size === selected.filter((id) => frameIds.has(id)).length);
-        return !videoPrompts[row.shot.id]?.trim() || selected.length > dramaReferenceImageBudget(row.shot.duration) || !allFramesReady || !allFramesSelected;
-    });
     useEffect(() => {
-        onChange({ selections, referenceModes, videoPrompts, invalid });
-    }, [invalid, onChange, referenceModes, selections, videoPrompts]);
+        onChange({ selections, referenceModes, videoPrompts });
+    }, [onChange, referenceModes, selections, videoPrompts]);
     return (
         <div className="max-h-[60vh] overflow-y-auto pr-1 text-sm">
             <div className="mb-3 grid gap-2 rounded-md border border-border bg-muted/20 p-3 text-xs sm:grid-cols-2">
@@ -1579,7 +1550,7 @@ function ProductionPromptPreview({
                         <div className="flex flex-wrap items-center justify-between gap-2">
                             <h4 className="font-semibold">{shot.title || `镜头 ${String(shot.order).padStart(2, "0")}`}</h4>
                             <span className={`text-xs ${overLimit ? "text-red-600" : "text-muted-foreground"}`}>
-                                {selectedReferences.length}/{limit} 张 · {shot.duration} 秒 · {allFrames ? "按序关键帧驱动" : "普通参考模式"}
+                                {selectedReferences.length} 张 · 建议不超过 {limit} 张 · {shot.duration} 秒 · {allFrames ? "按序关键帧驱动" : "普通参考模式"}
                             </span>
                         </div>
                         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-border/70 bg-muted/15 px-2.5 py-2 text-xs">
@@ -1595,9 +1566,9 @@ function ProductionPromptPreview({
                                     }
                                 }}
                             >
-                                按序关键帧驱动（严格模式）
+                                按序关键帧驱动
                             </Checkbox>
-                            <span className="text-muted-foreground">{allFrames ? "要求完整、可用并按时间顺序的计划帧" : "关键帧只是可选细节参考，不参与时间轴门禁"}</span>
+                            <span className="text-muted-foreground">{allFrames ? "按选择的可用计划帧提交，完整性检查仅作提醒" : "关键帧只是可选细节参考，不参与时间轴门禁"}</span>
                         </div>
                         <div className="mt-3 space-y-2">
                             <div className="font-medium">视频提示词（可编辑）</div>
@@ -1634,7 +1605,7 @@ function ProductionPromptPreview({
                                         : !allFramesReady
                                           ? "按序模式仍缺少可用计划帧"
                                           : !allFramesSelected
-                                            ? "按序模式必须保留全部计划帧"
+                                            ? "可按需补充其余计划帧"
                                             : allFrames
                                               ? "全量关键帧，顺序固定"
                                               : selectedReferences.length
@@ -1655,7 +1626,6 @@ function ProductionPromptPreview({
                                             <div className="space-y-1 px-2 py-1.5 text-[11px] leading-4">
                                                 <Checkbox
                                                     checked={checked}
-                                                    disabled={reference.required || (allFrames && reference.kind === "frame")}
                                                     onChange={(event) =>
                                                         setSelections((current) => ({
                                                             ...current,
@@ -1663,7 +1633,7 @@ function ProductionPromptPreview({
                                                         }))
                                                     }
                                                 >
-                                                    {reference.required ? "连续性必选" : allFrames && reference.kind === "frame" ? "顺序关键帧" : reference.recommended ? (checked ? "推荐引用" : "推荐参考") : "引用此图"}
+                                                    {reference.required ? "连续性参考" : allFrames && reference.kind === "frame" ? "顺序关键帧" : reference.recommended ? (checked ? "推荐引用" : "推荐参考") : "引用此图"}
                                                 </Checkbox>
                                                 <div className="truncate font-medium text-foreground">{reference.label}</div>
                                                 <div className="break-words text-muted-foreground">{reference.purpose}</div>
@@ -1725,7 +1695,7 @@ function ProductionPromptPreview({
                     </section>
                 );
             })}
-            <p className="mt-3 text-xs text-muted-foreground">关键帧为可选细节参考；未选择时按视频提示词和所选资产图生成。只有开启按序关键帧驱动后，才要求完整帧计划。确认后才会创建视频任务并消耗额度。</p>
+            <p className="mt-3 text-xs text-muted-foreground">关键帧为可选细节参考；未选择时按视频提示词和所选资产图生成。帧完整性和参考图数量建议不会阻止提交。确认后才会创建视频任务并消耗额度。</p>
         </div>
     );
 }
@@ -1876,12 +1846,6 @@ function buildPrimaryAction({
         return (
             <Button type="primary" className={primaryClass} icon={<ArrowRight className="size-4" />} onClick={() => onStageChange("script")}>
                 返回剧本并提取结构
-            </Button>
-        );
-    if (episode.reviewStatus !== "visual_ready")
-        return (
-            <Button type="primary" className={primaryClass} icon={<ArrowRight className="size-4" />} onClick={() => onStageChange("review")}>
-                完成内容审核与视觉方案
             </Button>
         );
     if (readiness.activeShotIds.length)

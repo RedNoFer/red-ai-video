@@ -1352,7 +1352,11 @@ test("drama shot generation previews prompt before confirmation", async ({ page 
 
     const strictMode = previewDialog.getByRole("checkbox", { name: "黑湖记忆 1/1启用按序关键帧驱动" });
     await strictMode.check();
-    await expect(referenceGallery.getByRole("checkbox", { name: "顺序关键帧" }).first()).toBeDisabled();
+    const orderedFrame = referenceGallery.getByRole("checkbox", { name: "顺序关键帧" }).first();
+    await expect(orderedFrame).toBeEnabled();
+    await orderedFrame.uncheck();
+    await expect(orderedFrame).not.toBeChecked();
+    await expect(previewDialog.getByRole("button", { name: "确认生成" })).toBeEnabled();
     await strictMode.uncheck();
     const frameCheckboxes = referenceGallery.locator("[data-drama-prompt-reference-item]").filter({ hasText: "分镜帧" }).getByRole("checkbox", { name: "引用此图" });
     await expect(frameCheckboxes).toHaveCount(2);

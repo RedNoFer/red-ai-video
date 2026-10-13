@@ -52,7 +52,7 @@ describe("drama video reference plan", () => {
     it("keeps explicit empty asset choices empty and treats frames as ordinary refs", () => {
         expect(selectedDramaShotReferenceAssetIds(project, shot, { [shot.id]: [] })).toEqual([]);
         expect(selectedDramaShotFrameIds(shot, "reference", { [shot.id]: ["frame-two"] })).toEqual(["frame-two"]);
-        expect(selectedDramaShotFrameIds(shot, "all_frames", { [shot.id]: [] })).toEqual(["frame-one", "frame-two"]);
+        expect(selectedDramaShotFrameIds(shot, "all_frames", { [shot.id]: [] })).toEqual([]);
     });
 
     it("keeps a current single panorama usable when an older snapshot still says legacy board", () => {

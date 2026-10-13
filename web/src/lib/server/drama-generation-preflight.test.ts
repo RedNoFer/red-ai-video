@@ -16,11 +16,13 @@ describe("drama generation preflight", () => {
         vi.mocked(preflightDramaProduction).mockReturnValue({ status: "passed", issues: [], checkedShotIds: [] } as never);
     });
 
-    it("does not call the model when deterministic checks block generation", async () => {
+    it("keeps deterministic quality findings advisory when no planner is configured", async () => {
         const project = fixture();
         vi.mocked(preflightDramaProduction).mockReturnValue({ status: "blocked", issues: [{ code: "TIMELINE_INVALID", severity: "blocking", message: "时间轴错误", shotId: "shot-one" }], checkedShotIds: ["shot-one"] } as never);
+        mocks.getAuthSettings.mockResolvedValue({ defaultModels: {} });
         const result = await preflightDramaGeneration({ origin: "http://localhost", cookie: "", userId: "user", requestId: "request", project, episode: project.episodes[0] });
-        expect(result.status).toBe("blocked");
+        expect(result.status).toBe("needs_confirmation");
+        expect(result.issues[0].severity).toBe("warning");
         expect(mocks.requestStructuredText).not.toHaveBeenCalled();
     });
 

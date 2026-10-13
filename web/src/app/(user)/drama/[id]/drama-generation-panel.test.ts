@@ -25,8 +25,8 @@ describe("Drama generation production workspace", () => {
         expect(source).toContain("onCompleteShotReview");
         expect(source).toContain("onAutoFixPreflight");
         expect(source).toContain("让 Agent 自动修复可修复问题");
-        expect(source).toContain("前置检查已通过");
-        expect(source).toContain("仍有阻断项");
+        expect(source).toContain("生成建议，不影响视频提交");
+        expect(source).not.toContain("无法提交");
         expect(source).toContain("智能补全参数");
         expect(source).not.toContain("data-drama-generation-empty");
         expect(source).toContain('<section className="mt-2.5"');
@@ -167,14 +167,14 @@ describe("Drama generation production workspace", () => {
         expect(source).toContain("普通模式下不参与时间轴");
     });
 
-    it("allows optional fixed references to be deselected while keeping frame anchors locked", async () => {
+    it("allows all video references to be deselected without authoring gates", async () => {
         const source = await readFile(resolve(process.cwd(), "src/app/(user)/drama/[id]/drama-generation-panel.tsx"), "utf8");
 
-        expect(source).toContain('disabled={reference.required || (allFrames && reference.kind === "frame")}');
-        expect(source).toContain('{reference.required ? "连续性必选" : allFrames && reference.kind === "frame" ? "顺序关键帧"');
+        expect(source).not.toContain('disabled={reference.required || (allFrames && reference.kind === "frame")}');
+        expect(source).toContain('{reference.required ? "连续性参考" : allFrames && reference.kind === "frame" ? "顺序关键帧"');
         expect(source).toContain('kind: "frame"');
-        expect(source).toContain('const allFrames = referenceModes[row.shot.id] === "all_frames"');
-        expect(source).toContain("selected.length > dramaReferenceImageBudget(row.shot.duration)");
+        expect(source).toContain('const allFrames = referenceModes[shot.id] === "all_frames"');
+        expect(source).not.toContain("selectionState.invalid");
     });
 
     it("uses the locked episode resolution and does not expose a client video-model selector", async () => {

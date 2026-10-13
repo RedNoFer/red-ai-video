@@ -9,10 +9,17 @@ describe("drama generation readiness", () => {
 
         const summary = summarizeDramaGeneration(project, project.episodes[0]);
 
-        expect(summary.queueableShotIds).toEqual(["direct", "legacy-reference"]);
+        expect(summary.queueableShotIds).toEqual(["direct", "missing-prompt", "legacy-reference"]);
         expect(summary.missingBaselineShotIds).toHaveLength(3);
         expect(summary.missingPromptShotIds).toEqual(["missing-prompt"]);
         expect(summary.missingReferenceShotIds).toEqual([]);
+    });
+
+    it("allows video submission while optional storyboard and audio tasks are active", () => {
+        const project = projectFixture([shotFixture({ id: "image-running", storyboardStatus: "running" }), shotFixture({ id: "audio-running", audioStatus: "queued" }), shotFixture({ id: "video-running", generationStatus: "running" })]);
+        const summary = summarizeDramaGeneration(project, project.episodes[0]);
+        expect(summary.queueableShotIds).toEqual(["image-running", "audio-running"]);
+        expect(summary.activeShotIds).toEqual(["video-running"]);
     });
 
     it("tracks real video and required voiceover completion without treating active tasks as queueable", () => {

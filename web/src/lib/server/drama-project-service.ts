@@ -52,7 +52,7 @@ import { createFrameEvidence, decideActualEndFrame, invalidateFrameEvidence, rep
 import { DRAMA_STYLE_NAME, normalizeDramaStyleName, resolveDramaStyleContract } from "@/lib/drama-style";
 import { normalizeDramaImageSize } from "@/lib/drama-image-size";
 import { deleteDramaFrameBeat, formatPromptFieldLines, normalizeDramaFrameBeats, updateDramaFrameBeat } from "@/lib/drama-frame-sequence";
-import { canonicalizeDramaProductionPlanVisual, defaultDramaProductionPlan, dramaReferenceImageBudget, normalizeDramaProductionPlan } from "@/lib/drama-production-plan";
+import { canonicalizeDramaProductionPlanVisual, defaultDramaProductionPlan, normalizeDramaProductionPlan } from "@/lib/drama-production-plan";
 import { resolveDramaShotDuration } from "@/lib/server/drama-shot-config";
 import { dramaDialogueFragmentSequenceError } from "@/lib/drama-dialogue-timing";
 import { repairDramaVideoPromptAudioHierarchy, repairDramaVideoPromptUtteranceCoverage, validateDramaVideoPromptAudioHierarchy, validateDramaVideoPromptCardLayout, validateDramaVideoPromptUtteranceCoverage } from "@/lib/drama-prompt-quality";
@@ -1749,10 +1749,7 @@ export async function createDramaProductionRunForUser(userId: string, projectId:
             return createDramaProductionRun(userId, run);
         });
     }
-    if (episode.reviewStatus !== "visual_ready") throw new DramaProjectServiceError("请先完成内容审核和视觉方案", 409);
     const requestedPlan = normalizeDramaProductionPlan(object(value).productionPlan, project.productionBible?.productionPlan);
-    if (!requestedPlan && !project.productionBible?.productionPlan) throw new DramaProjectServiceError("请先锁定本集生产方案", 409);
-    if (requestedPlan && project.productionBible?.productionPlan && !sameDramaVideoPlanExceptModel(requestedPlan, project.productionBible.productionPlan)) throw new DramaProjectServiceError("生产方案已变化，请重新保存并预检", 409);
     const settings = await getAuthSettings();
     const parameters = {
         imageModel: settings.defaultModels.imageModel,
@@ -1785,24 +1782,16 @@ export async function createDramaProductionRunForUser(userId: string, projectId:
     const requiresAllFrames = productionShots.some((shot) => referenceModes[shot.id] === "all_frames");
     const requestedVideoModel = parameters.videoModel;
     const videoCandidates = resolveLogicalModelCandidates(settings, "video", requestedVideoModel);
-    const requiredKeyframeCount = Math.max(0, ...productionShots.filter((shot) => referenceModes[shot.id] === "all_frames").map((shot) => shot.framePlan?.frames.length || 0));
+    const requiredKeyframeCount = Math.max(0, ...productionShots.filter((shot) => referenceModes[shot.id] === "all_frames").map((shot) => selectedDramaShotFrameIds(shot, "all_frames", referenceSelections).length));
     const videoCandidate = requiresAllFrames ? videoCandidates.find((candidate) => supportsVideoKeyframeReferences(candidate, requiredKeyframeCount)) : videoCandidates[0];
     if (!videoCandidate) {
         if (!videoCandidates.length) throw new DramaProjectServiceError(`后台默认视频模型 ${requestedVideoModel || "未配置"} 未启用或没有可用渠道，请先在后台配置可用的视频逻辑模型`, 409);
         throw new DramaProjectServiceError(`后台默认视频模型 ${requestedVideoModel} 未声明支持全能帧关键图，请在后台为该模型声明全能帧能力或调整本集帧模式`, 409);
     }
     const executionPlan = parameters.productionPlan ? { ...parameters.productionPlan, video: { ...parameters.productionPlan.video, model: videoCandidate.logicalModelId, channelId: videoCandidate.channelId } } : undefined;
-    validateDramaReferenceSelections(project, episode, productionShots, referenceSelections, referenceModes);
+    validateDramaReferenceSelections(project, episode, productionShots, referenceSelections);
     const executionEpisode = { ...episode, shots: episode.shots.map((shot) => (videoPrompts[shot.id] !== undefined ? { ...shot, videoPrompt: videoPrompts[shot.id], executionVideoPrompt: videoPrompts[shot.id] } : shot)) };
     const preflight = preflightDramaProduction(project, executionEpisode, checkedShotIds.length ? checkedShotIds : undefined, referenceSelections, referenceModes);
-    const blockingIssues = dramaSubmissionBlockingIssues(preflight, referenceModes);
-    if (blockingIssues.length) {
-        const detail = blockingIssues
-            .slice(0, 8)
-            .map((issue) => issue.message)
-            .join("；");
-        throw new DramaProjectServiceError(`生成条件尚未就绪：${detail}`, 409);
-    }
     const selectedShotIds = new Set(checkedShotIds);
     const scopedEpisode = selectedShotIds.size
         ? {
@@ -1825,13 +1814,7 @@ export async function createDramaProductionRunForUser(userId: string, projectId:
         }),
         preflightSnapshot: {
             checkedShotIds,
-            issues: array(submittedPreflight.issues).flatMap((item) => {
-                const issue = object(item);
-                const code = cleanText(issue.code);
-                const message = cleanText(issue.message);
-                if (!code || !message) return [];
-                return [{ code, message, severity: issue.severity === "blocking" ? ("blocking" as const) : ("warning" as const), shotId: optionalText(issue.shotId), assetId: optionalText(issue.assetId), correction: optionalText(issue.correction) }];
-            }),
+            issues: preflight.issues,
             changeSummary: array(submittedPreflight.changeSummary).map(cleanText).filter(Boolean),
             prompts: Object.fromEntries(
                 episode.shots
@@ -2492,31 +2475,6 @@ export async function updateDramaProductionRunForUser(userId: string, projectId:
         next = { ...run, status: "cancelled", steps: run.steps.map((step) => (["success", "cancelled"].includes(step.status) ? step : { ...step, status: "cancelled" })), updatedAt: new Date().toISOString() };
     } else if (action === "retry") {
         const stepIds = new Set(ids(object(value).stepIds));
-        if (run.scope !== "visual") {
-            const shotIds = Array.from(new Set(run.steps.filter((step) => stepIds.has(step.id) && step.shotId).map((step) => step.shotId!)));
-            const episode = project.episodes.find((item) => item.id === run.episodeId);
-            if (!episode) throw new DramaProjectServiceError("短剧剧集不存在", 404);
-            const referenceSelections = run.parameterSnapshot.referenceSelections || {};
-            const referenceModes = run.parameterSnapshot.referenceModes || {};
-            const executionEpisode = { ...episode, shots: episode.shots.map((shot) => ({ ...shot, executionVideoPrompt: run.parameterSnapshot.videoPrompts?.[shot.id] ?? shot.executionVideoPrompt })) };
-            validateDramaReferenceSelections(
-                project,
-                episode,
-                episode.shots.filter((shot) => shotIds.includes(shot.id)),
-                referenceSelections,
-                referenceModes,
-            );
-            const check = preflightDramaProduction(project, executionEpisode, shotIds, referenceSelections, referenceModes);
-            const blockingIssues = dramaSubmissionBlockingIssues(check, referenceModes);
-            if (blockingIssues.length)
-                throw new DramaProjectServiceError(
-                    `重试前检查未通过：${blockingIssues
-                        .slice(0, 6)
-                        .map((issue) => issue.message)
-                        .join("；")}`,
-                    409,
-                );
-        }
         next =
             run.scope === "visual"
                 ? unlockDramaVisualSteps({
@@ -2860,7 +2818,7 @@ async function dispatchReadyDramaProductionSteps(userId: string, project: DramaP
         let step = current.steps.find((item) => item.id === candidate.id)!;
         if (step.type !== "video" || step.status !== "ready" || step.taskId || !step.prompt) continue;
         const episode = project.episodes.find((item) => item.id === run.episodeId);
-        const refreshedStep = episode ? refreshDramaVideoStepReferences(project, episode, step, run.parameterSnapshot.videoPrompts?.[step.shotId!]) : step;
+        const refreshedStep = episode ? refreshDramaVideoStepReferences(project, episode, step, run.parameterSnapshot.videoPrompts?.[step.shotId!], run.parameterSnapshot.referenceSelections) : step;
         if (JSON.stringify(refreshedStep) !== JSON.stringify(step)) {
             current = { ...current, steps: current.steps.map((item) => (item.id === step.id ? refreshedStep : item)), updatedAt: new Date().toISOString() };
             step = refreshedStep;
@@ -4886,20 +4844,7 @@ function stringReferenceModeRecord(value: unknown): Record<string, DramaVideoRef
     ) as Record<string, DramaVideoReferenceMode>;
 }
 
-function sameDramaVideoPlanExceptModel(left: DramaProductionPlan, right: DramaProductionPlan) {
-    const stripModel = ({ model: _model, channelId: _channelId, ...video }: DramaProductionPlan["video"]) => video;
-    return (
-        JSON.stringify({ video: stripModel(left.video), frameCountRange: left.frameCountRange, customDirectorRules: left.customDirectorRules }) ===
-        JSON.stringify({ video: stripModel(right.video), frameCountRange: right.frameCountRange, customDirectorRules: right.customDirectorRules })
-    );
-}
-
-function dramaSubmissionBlockingIssues(check: ReturnType<typeof preflightDramaProduction>, referenceModes: Record<string, DramaVideoReferenceMode>) {
-    const strict = Object.values(referenceModes).includes("all_frames");
-    return check.issues.filter((issue) => issue.severity === "blocking" && ((issue.shotId ? referenceModes[issue.shotId] === "all_frames" : strict) || ["VIDEO_PROMPT_MISSING", "DURATION", "TAIL_REFERENCE", "TAIL_ACCEPTANCE"].includes(issue.code)));
-}
-
-export function validateDramaReferenceSelections(project: DramaProject, episode: DramaEpisode, shots: DramaShot[], selections: Record<string, string[]>, referenceModes: Record<string, DramaVideoReferenceMode> = {}) {
+export function validateDramaReferenceSelections(project: DramaProject, episode: DramaEpisode, shots: DramaShot[], selections: Record<string, string[]>) {
     for (const shot of shots) {
         const fixedAssetIds = Array.from(
             new Set(
@@ -4921,24 +4866,14 @@ export function validateDramaReferenceSelections(project: DramaProject, episode:
             const incoming = episode.continuityEdges?.find((edge) => edge.toShotId === shot.id && edge.inheritActualEndFrame);
             const allowed = new Set([...fixedAssetIds, ...frameIds, ...(incoming ? [`tail-${incoming.fromShotId}`] : [])]);
             if (selected.some((id) => !allowed.has(id))) throw new DramaProjectServiceError(`${shot.title}包含无效的参考图选择`, 409);
-            if (incoming && !selected.includes(`tail-${incoming.fromShotId}`)) throw new DramaProjectServiceError(`${shot.title}的上一镜实际尾帧不能取消`, 409);
             for (const id of selected) {
                 if (fixedAssetIds.includes(id) && !readableShotReference(project, shot, id)) throw new DramaProjectServiceError(`${shot.title}选择的参考图不可读，请重新生成或取消该图片`, 409);
                 if (frameIds.includes(id)) {
                     const frame = shot.storyboardFrames?.find((item) => item.id === id || item.sequenceIndex === shot.framePlan?.frames.find((beat) => beat.id === id)?.sequenceIndex);
-                    if (!frame?.mediaUrl?.trim() || frame.status !== "success" || frame.continuityStatus === "stale") throw new DramaProjectServiceError(`${shot.title}选择的分镜帧尚未生成可用图片，请取消该帧或先完成生图`, 409);
+                    if (!frame?.mediaUrl?.trim() || frame.status !== "success") throw new DramaProjectServiceError(`${shot.title}选择的分镜帧尚未生成可用图片，请取消该帧或先完成生图`, 409);
                 }
             }
         }
-        const referenceMode = referenceModes[shot.id] === "all_frames" ? "all_frames" : "reference";
-        const selectedFrameIds = referenceMode === "all_frames" ? (selected ? frameIds.filter((id) => selected.includes(id)) : frameIds) : frameIds.filter((id) => selected?.includes(id));
-        if (referenceMode === "all_frames" && selectedFrameIds.length < 2) throw new DramaProjectServiceError(`${shot.title}至少需要保留首帧和尾帧两张顺序帧`, 409);
-        if (referenceMode === "all_frames" && selected && selectedFrameIds.length !== frameIds.length) throw new DramaProjectServiceError(`${shot.title}的 all_frames 必须按顺序保留全部关键帧，不能把帧计划裁剪成普通参考图`, 409);
-        const incoming = episode.continuityEdges?.some((edge) => edge.toShotId === shot.id && edge.inheritActualEndFrame) ? 1 : 0;
-        const selectedFixedAssetCount = selected ? fixedAssetIds.filter((id) => selected.includes(id)).length : selectedDramaShotReferenceAssetIds(project, shot).length;
-        const total = selectedFixedAssetCount + incoming + selectedFrameIds.length;
-        const limit = dramaReferenceImageBudget(shot.duration);
-        if (total > limit) throw new DramaProjectServiceError(`${shot.title}本次引用 ${total} 张图片，超过 ${shot.duration} 秒视频的 ${limit} 张上限；请返回提示词预览取消部分中间帧`, 409);
     }
 }
 

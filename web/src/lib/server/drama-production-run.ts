@@ -4,8 +4,6 @@ import { nanoid } from "nanoid";
 
 import { approvedAssetReference, approvedScenePanoramaReference, hasApprovedAssetReference, hasApprovedScenePanoramaReference } from "@/lib/drama-asset-baseline";
 import { continuityStartEvidence } from "@/lib/drama-continuity-policy";
-import { planDramaVideoSegments } from "@/lib/drama-frame-sequence";
-import { dramaReferenceImageBudget } from "@/lib/drama-production-plan";
 import { compileDramaShotExecutionPrompts, sanitizeDramaSupplierText } from "@/lib/drama-prompt-compiler";
 import { resolveDramaVideoReferenceMode, selectedDramaShotFrameIds, selectedDramaShotReferenceAssetIds } from "@/lib/drama-video-reference-plan";
 import type { DramaEpisode, DramaProductionPlan, DramaProductionRun, DramaProductionStep, DramaProject, DramaVideoReferenceBinding, DramaVideoReferenceMode } from "@/lib/drama-project-contract";
@@ -48,26 +46,21 @@ export function buildDramaProductionRun(project: DramaProject, episode: DramaEpi
         });
     }
 
-    const qcStepIds = new Map<string, string>();
     for (const shot of [...episode.shots].sort((left, right) => left.order - right.order)) {
         const incoming = episode.continuityEdges?.find((edge) => edge.toShotId === shot.id && edge.inheritActualEndFrame);
         const assetIds = selectedDramaShotReferenceAssetIds(project, shot, parameters.referenceSelections);
         const assetDependencies = assetIds.map((id) => anchorStepIds.get(id)).filter((id): id is string => Boolean(id));
-        const previousQc = incoming ? qcStepIds.get(incoming.fromShotId) : undefined;
-        const continuityDependencies = previousQc ? [previousQc] : [];
         const referenceMode = resolveDramaVideoReferenceMode(parameters.referenceModes?.[shot.id]);
         const selectedFrameIds = selectedDramaShotFrameIds(shot, referenceMode, parameters.referenceSelections);
-        const frameStepIds: string[] = [];
         const allFrames = referenceMode === "all_frames" && Boolean(shot.framePlan?.frames.length);
         let videoSegments: Array<{ startSecond: number; endSecond: number; duration: number; frameIds: string[] }>;
 
         if (allFrames) {
             const allBeats = shot.framePlan!.frames;
-            const beats = allBeats;
-            for (const [beatIndex, beat] of allBeats.entries()) {
+            const beats = allBeats.filter((beat) => selectedFrameIds.includes(beat.id));
+            for (const beat of allBeats) {
                 const stored = shot.storyboardFrames?.find((frame) => frame.id === beat.id || frame.sequenceIndex === beat.sequenceIndex);
                 const id = `frame-${shot.id}-${beat.id}`;
-                frameStepIds.push(id);
                 steps.push({
                     id,
                     frameId: beat.id,
@@ -76,19 +69,17 @@ export function buildDramaProductionRun(project: DramaProject, episode: DramaEpi
                     sequenceIndex: beat.sequenceIndex,
                     startSecond: beat.startSecond,
                     endSecond: beat.endSecond,
-                    dependsOn: [...assetDependencies, ...(beatIndex === 0 ? continuityDependencies : [])],
-                    status: validFrame(stored, true) ? "success" : "blocked",
-                    outputUrls: validFrame(stored, true) ? [stored!.mediaUrl!] : undefined,
-                    outputRemoteUrls: validFrame(stored, true) && stored!.remoteUrl ? [stored!.remoteUrl] : undefined,
+                    dependsOn: assetDependencies,
+                    status: validFrame(stored) ? "success" : "blocked",
+                    outputUrls: validFrame(stored) ? [stored!.mediaUrl!] : undefined,
+                    outputRemoteUrls: validFrame(stored) && stored!.remoteUrl ? [stored!.remoteUrl] : undefined,
                     continuityEvidenceId: stored?.continuityEvidenceId,
                     referenceShotId: beat.sequenceIndex === 1 ? incoming?.fromShotId : undefined,
                 });
             }
-            videoSegments = planDramaVideoSegments(beats, {
-                minDurationSeconds: Math.max(0, parameters.minVideoSeconds || 0),
-                maxDurationSeconds: parameters.maxVideoSeconds && parameters.maxVideoSeconds > 0 ? parameters.maxVideoSeconds : shot.duration,
-                maxReferenceImages: Math.min(parameters.maxReferenceImages && parameters.maxReferenceImages > 0 ? parameters.maxReferenceImages : dramaReferenceImageBudget(shot.duration), dramaReferenceImageBudget(shot.duration)),
-                assetReferenceCount: assetIds.length + (incoming ? 1 : 0),
+            videoSegments = durationSegments(shot.duration, parameters.maxVideoSeconds).map((segment) => {
+                const boundary = beats.findLast((beat) => beat.startSecond <= segment.startSecond);
+                return { ...segment, frameIds: beats.filter((beat) => beat === boundary || (beat.startSecond >= segment.startSecond && beat.startSecond <= segment.endSecond)).map((beat) => beat.id) };
             });
         } else {
             videoSegments = durationSegments(shot.duration, parameters.maxVideoSeconds);
@@ -105,9 +96,9 @@ export function buildDramaProductionRun(project: DramaProject, episode: DramaEpi
                       .map((frameId) => storyboardFrameForId(shot, frameId))
                       .flatMap((frame) => (frame?.mediaUrl && validFrame(frame) ? [{ mediaUrl: frame.mediaUrl, remoteUrl: frame.remoteUrl, frameId: frame.id, sequenceIndex: frame.sequenceIndex }] : []));
             const previousShot = incoming ? episodeShot(project, episode, incoming.fromShotId) : undefined;
-            const continuityTail = index === 0 && previousShot ? continuityStartEvidence(previousShot) : undefined;
+            const continuityTail = index === 0 && previousShot && (!parameters.referenceSelections?.[shot.id] || parameters.referenceSelections[shot.id].includes(`tail-${previousShot.id}`)) ? continuityStartEvidence(previousShot) : undefined;
             const orderedFrames = continuityTail ? [{ mediaUrl: continuityTail.mediaUrl, remoteUrl: continuityTail.remoteUrl }, ...segmentFrames] : segmentFrames;
-            const dependencies = [...assetDependencies, ...continuityDependencies, ...(allFrames ? frameStepIds : []), ...(index ? [videoStepIds[index - 1]] : [])];
+            const dependencies = [...assetDependencies, ...(index ? [videoStepIds[index - 1]] : [])];
             videoStepIds.push(id);
             steps.push({
                 id,
@@ -134,7 +125,6 @@ export function buildDramaProductionRun(project: DramaProject, episode: DramaEpi
         const qcId = `qc-${shot.id}`;
         steps.push({ id: extractId, shotId: shot.id, type: "extract_frames", dependsOn: videoStepIds.length ? [videoStepIds.at(-1)!] : [], status: "blocked" });
         steps.push({ id: qcId, shotId: shot.id, type: "continuity_qc", dependsOn: [extractId], status: "blocked", referenceShotId: incoming?.fromShotId });
-        qcStepIds.set(shot.id, qcId);
     }
 
     const now = new Date().toISOString();
@@ -178,33 +168,31 @@ export function invalidateDramaProductionRunFromShot(run: DramaProductionRun, ep
 export function unlockDramaProductionSteps(run: DramaProductionRun) {
     const statuses = new Map(run.steps.map((step) => [step.id, step.status]));
     const steps = run.steps.map((step) => (step.status === "blocked" && step.dependsOn.every((id) => statuses.get(id) === "success") ? { ...step, status: "ready" as const } : step));
-    const execution = steps.filter((step) => step.type !== "asset_anchor" && step.type !== "start_frame" && step.type !== "end_frame" && step.type !== "keyframe");
-    const failed = steps.some((step) => step.status === "failed" || step.status === "needs_review");
+    const execution = steps.filter((step) => step.type !== "asset_anchor" && step.type !== "start_frame" && step.type !== "end_frame" && step.type !== "keyframe" && step.type !== "continuity_qc");
+    const failed = execution.some((step) => step.status === "failed" || step.status === "needs_review");
     const active = execution.some((step) => step.status === "ready" || step.status === "running" || step.status === "blocked");
     return { ...run, steps, status: failed ? ("needs_review" as const) : active ? ("running" as const) : ("completed" as const), updatedAt: new Date().toISOString() };
 }
 
-export function refreshDramaVideoStepReferences(project: DramaProject, episode: DramaEpisode, step: DramaProductionStep, submittedPrompt?: string): DramaProductionStep {
+export function refreshDramaVideoStepReferences(project: DramaProject, episode: DramaEpisode, step: DramaProductionStep, submittedPrompt?: string, referenceSelections?: Record<string, string[]>): DramaProductionStep {
     if (step.type !== "video" || !step.shotId) return step;
     const shot = episode.shots.find((item) => item.id === step.shotId);
     if (!shot) return step;
     const incoming = episode.continuityEdges?.find((edge) => edge.toShotId === shot.id && edge.inheritActualEndFrame);
     const referenceMode = resolveDramaVideoReferenceMode(step.referenceMode);
     const allFrames = referenceMode === "all_frames" && Boolean(shot.framePlan?.frames.length);
+    const selectedFrameIds = selectedDramaShotFrameIds(shot, referenceMode, referenceSelections);
+    const beats = (shot.framePlan?.frames || []).filter((frame) => selectedFrameIds.includes(frame.id));
+    const boundary = beats.findLast((frame) => frame.startSecond <= (step.startSecond || 0));
     const frameIds = allFrames
-        ? shot.framePlan!.frames.filter((frame) => frame.startSecond >= (step.startSecond || 0) && frame.startSecond <= (step.endSecond || shot.duration)).map((frame) => frame.id)
+        ? beats.filter((frame) => frame === boundary || (frame.startSecond >= (step.startSecond || 0) && frame.startSecond <= (step.endSecond || shot.duration))).map((frame) => frame.id)
         : (step.referenceBindingsSnapshot || []).filter((binding) => binding.role === "reference" && binding.frameId).map((binding) => binding.frameId!);
-    const frameRefs = allFrames
-        ? frameIds.flatMap((frameId) => {
-              const frame = storyboardFrameForId(shot, frameId);
-              return validFrame(frame, true) ? [{ mediaUrl: frame!.mediaUrl!, remoteUrl: frame!.remoteUrl, frameId: frame!.id, sequenceIndex: frame!.sequenceIndex }] : [];
-          })
-        : frameIds.flatMap((frameId) => {
-              const frame = storyboardFrameForId(shot, frameId);
-              return validFrame(frame) ? [{ mediaUrl: frame!.mediaUrl!, remoteUrl: frame!.remoteUrl, frameId: frame!.id, sequenceIndex: frame!.sequenceIndex }] : [];
-          });
+    const frameRefs = frameIds.flatMap((frameId) => {
+        const frame = storyboardFrameForId(shot, frameId);
+        return validFrame(frame) ? [{ mediaUrl: frame!.mediaUrl!, remoteUrl: frame!.remoteUrl, frameId: frame!.id, sequenceIndex: frame!.sequenceIndex }] : [];
+    });
     const previousShot = incoming ? episodeShot(project, episode, incoming.fromShotId) : undefined;
-    const continuityTail = step.clipIndex === 1 && previousShot ? continuityStartEvidence(previousShot) : undefined;
+    const continuityTail = step.clipIndex === 1 && previousShot && (!referenceSelections?.[shot.id] || referenceSelections[shot.id].includes(`tail-${previousShot.id}`)) ? continuityStartEvidence(previousShot) : undefined;
     const orderedFrames = continuityTail ? [{ mediaUrl: continuityTail.mediaUrl, remoteUrl: continuityTail.remoteUrl }, ...frameRefs] : frameRefs;
     const basePrompt = submittedPrompt ?? compileDramaShotExecutionPrompts(project, episode, shot).videoPrompt;
     return {
@@ -299,11 +287,11 @@ export function buildVideoReferenceBindings(
             frameIndex = frameCandidates.findIndex((_, index) => !usedFrames.has(index));
         }
         if (frameIndex >= 0) {
-            if (usedFrames.has(frameIndex)) throw new Error(`镜头 ${shot.code || shot.title} 的 referenceManifest 重复绑定帧 ${item.frameEvidenceId || frameIndex + 1}`);
+            if (usedFrames.has(frameIndex)) continue;
             usedFrames.add(frameIndex);
             candidate = frameCandidates[frameIndex];
         }
-        if (!candidate) throw new Error(`镜头 ${shot.code || shot.title} 的 referenceManifest ${item.alias} 无法解析到实际帧或资产，已阻止供应商请求`);
+        if (!candidate) continue;
         const role: DramaVideoReferenceBinding["role"] = item.role === "previous_actual_tail" ? "first_frame" : item.role === "action_keyframe" || item.role === "composition_keyframe" ? "keyframe" : item.role;
         if (role === "keyframe") keyframeIndex += 1;
         bindings.push({ alias: item.alias, ...candidate, role, purpose: item.purpose || candidate.purpose, ...(role === "keyframe" ? { keyframeIndex } : {}) });
@@ -333,8 +321,8 @@ function assetReference(asset: NonNullable<DramaProject["characters"]>[number], 
     return reference ? { url: reference.url, remoteUrl: reference.remoteUrl } : undefined;
 }
 
-function validFrame(frame: DramaEpisode["shots"][number]["storyboardFrames"] extends Array<infer T> | undefined ? T | undefined : never, requireAccepted = false) {
-    return Boolean(frame?.mediaUrl && frame.status === "success" && frame.continuityStatus !== "stale" && (!requireAccepted || (frame.continuityStatus !== "needs_review" && frame.continuityStatus !== "pending")));
+function validFrame(frame: DramaEpisode["shots"][number]["storyboardFrames"] extends Array<infer T> | undefined ? T | undefined : never) {
+    return Boolean(frame?.mediaUrl && frame.status === "success");
 }
 
 function storyboardFrameForId(shot: DramaEpisode["shots"][number], frameId: string) {

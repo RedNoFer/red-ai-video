@@ -20,15 +20,14 @@ import { validateDramaCharacterWardrobeContinuity, validateDramaCutInformationDi
 import { compileDramaShotPrompts } from "@/lib/drama-prompt-compiler";
 import { auditDramaShotDirectorQuality } from "@/lib/server/agent-skills/drama-video-director";
 
-const blocking = (code: string, message: string, extra: Partial<DramaProductionPreflightIssue> = {}): DramaProductionPreflightIssue => ({ code, severity: "blocking", message, ...extra });
 const warning = (code: string, message: string, extra: Partial<DramaProductionPreflightIssue> = {}): DramaProductionPreflightIssue => ({ code, severity: "warning", message, ...extra });
 
-/** Only checks required to construct an executable request stay blocking; workflow and prompt-quality findings remain actionable warnings. */
+/** Production checks advise the author; they never reject a video submission. */
 export function preflightDramaProduction(project: DramaProject, episode: DramaEpisode, shotIds?: string[], referenceSelections?: Record<string, string[]>, referenceModes?: Record<string, DramaVideoReferenceMode>): DramaProductionPreflight {
     const issues: DramaProductionPreflightIssue[] = [];
     const selected = new Set(shotIds?.length ? shotIds : episode.shots.map((shot) => shot.id));
-    if (project.ratio !== "9:16" && project.ratio !== "16:9") issues.push(blocking("RATIO", `本集画幅必须是9:16或16:9，当前为${project.ratio}`));
-    if (!project.seriesBible) issues.push(blocking("SERIES_BIBLE", "项目缺少已锁定的系列圣经，不能跨集生产"));
+    if (project.ratio !== "9:16" && project.ratio !== "16:9") issues.push(warning("RATIO", `本集画幅必须是9:16或16:9，当前为${project.ratio}`));
+    if (!project.seriesBible) issues.push(warning("SERIES_BIBLE", "项目尚未锁定系列圣经，可按需补充跨集设定"));
     const plan = project.productionBible?.productionPlan;
     const targetShotDuration = plan?.video.shotDuration;
     const targetFrameCount = plan?.video.framePolicy === "fixed-4" ? 4 : plan?.video.framePolicy === "fixed-5" ? 5 : undefined;
@@ -36,10 +35,10 @@ export function preflightDramaProduction(project: DramaProject, episode: DramaEp
     if (plan) {
         // The executable video model is selected by the backend channel binding at task creation.
         // Do not gate production on the stale model label persisted in the editable plan.
-        if (plan.references.minImages < 1 || plan.references.maxImages < plan.references.minImages) issues.push(blocking("REFERENCE_PLAN_INVALID", "多帧参考数量范围无效"));
+        if (plan.references.minImages < 1 || plan.references.maxImages < plan.references.minImages) issues.push(warning("REFERENCE_PLAN_INVALID", "多帧参考数量范围无效"));
         if (!plan.lockedAt) issues.push(warning("PRODUCTION_PLAN_UNCONFIRMED", "生产方案尚未锁定，视频仍可依据当前镜头提示词生成", { correction: "如需固定本集统一参数，可先保存本集生产方案" }));
-        if (plan.video.shotDuration !== 15 && plan.video.shotDuration !== 30) issues.push(blocking("SHOT_DURATION_PLAN_INVALID", "生产方案每镜时长只能为 15 秒或 30 秒"));
-        if (plan.video.framePolicy === "agent" && plan.video.frameCount !== undefined) issues.push(blocking("FRAME_POLICY_CONFLICT", "Agent 智能切分不能携带固定帧数"));
+        if (plan.video.shotDuration !== 15 && plan.video.shotDuration !== 30) issues.push(warning("SHOT_DURATION_PLAN_INVALID", "生产方案每镜时长只能为 15 秒或 30 秒"));
+        if (plan.video.framePolicy === "agent" && plan.video.frameCount !== undefined) issues.push(warning("FRAME_POLICY_CONFLICT", "Agent 智能切分不能携带固定帧数"));
     }
     const characters = new Map(project.characters.map((asset) => [asset.id, asset]));
     const scenes = new Map(project.scenes.map((asset) => [asset.id, asset]));
@@ -78,18 +77,18 @@ export function preflightDramaProduction(project: DramaProject, episode: DramaEp
         const from = shotById.get(edge.fromShotId);
         const to = shotById.get(edge.toShotId);
         if (!from || !to) {
-            issues.push(blocking("EDGE_REFERENCE", `连续性边引用了不存在的镜头 ${edge.fromShotId} → ${edge.toShotId}`));
+            issues.push(warning("EDGE_REFERENCE", `连续性边引用了不存在的镜头 ${edge.fromShotId} → ${edge.toShotId}`));
             continue;
         }
         if (edge.inheritActualEndFrame && ["scene_change", "hard_cut", "jump_cut"].includes(edge.transition)) {
-            issues.push(blocking("EDGE_CONFLICT", `${to.code || to.title} 的${edge.transition}不能继承上一镜实际尾帧`, { shotId: to.id }));
+            issues.push(warning("EDGE_CONFLICT", `${to.code || to.title} 的${edge.transition}不能继承上一镜实际尾帧`, { shotId: to.id }));
         }
         if (edge.inheritActualEndFrame && !edge.carryEnvironment && !edge.carryCharacterIds.length && !edge.carryPropIds.length) {
-            issues.push(blocking("EDGE_EMPTY", `${to.code || to.title}声明继承尾帧但没有可继承实体或环境`, { shotId: to.id }));
+            issues.push(warning("EDGE_EMPTY", `${to.code || to.title}声明继承尾帧但没有可继承实体或环境`, { shotId: to.id }));
         }
         compareContinuityStates(from, to, edge, issues);
     }
-    return { status: issues.some((issue) => issue.severity === "blocking") ? "blocked" : issues.length ? "needs_confirmation" : "passed", issues, checkedShotIds: episode.shots.filter((shot) => selected.has(shot.id)).map((shot) => shot.id) };
+    return { status: issues.length ? "needs_confirmation" : "passed", issues, checkedShotIds: episode.shots.filter((shot) => selected.has(shot.id)).map((shot) => shot.id) };
 }
 
 function compareContinuityStates(from: DramaShot, to: DramaShot, edge: NonNullable<DramaEpisode["continuityEdges"]>[number], issues: DramaProductionPreflightIssue[]) {
@@ -136,11 +135,11 @@ function checkShot(
 ) {
     const label = shot.code || shot.title;
     const videoPrompt = shot.executionVideoPrompt?.trim() || shot.videoPrompt?.trim();
-    if (!videoPrompt) issues.push(blocking("VIDEO_PROMPT_MISSING", `${label}缺少有效视频Prompt`, { shotId: shot.id }));
+    if (!videoPrompt) issues.push(warning("VIDEO_PROMPT_MISSING", `${label}缺少有效视频Prompt`, { shotId: shot.id }));
     if (videoPrompt) {
         for (const error of validateDramaVideoPromptLength(videoPrompt, label)) issues.push(warning("VIDEO_PROMPT_LENGTH", error, { shotId: shot.id, correction: "建议由作者压缩重复公共事实；超过2500个Unicode字符不阻断视频提交" }));
         const utteranceCoverageErrors = validateDramaVideoPromptUtteranceCoverage(videoPrompt, shot.framePlan?.frames || [], shot.utterances as DramaDialogueTimingInput[], label);
-        if (utteranceCoverageErrors.length) issues.push(blocking("DIALOGUE_PROMPT_COVERAGE", utteranceCoverageErrors[0], { shotId: shot.id, correction: "把每句对白/旁白原句写入与其时间窗口重叠的公开视频时间轴段‘台词’字段，并使用中文引号" }));
+        if (utteranceCoverageErrors.length) issues.push(warning("DIALOGUE_PROMPT_COVERAGE", utteranceCoverageErrors[0], { shotId: shot.id, correction: "把每句对白/旁白原句写入与其时间窗口重叠的公开视频时间轴段‘台词’字段，并使用中文引号" }));
     }
     const performance = shot.performancePlan;
     const beats = performance?.beats;
@@ -150,11 +149,11 @@ function checkShot(
     if (shot.framePlan?.frames.length) {
         const compiledVideoPrompt = compileDramaShotPrompts(project, episode, shot).videoPrompt;
         const layoutErrors = validateDramaSeedanceVideoPromptLayout(compiledVideoPrompt, shot.framePlan.frames, label);
-        if (layoutErrors.length) issues.push(blocking("VIDEO_PROMPT_LAYOUT", layoutErrors[0], { shotId: shot.id, correction: "重新优化或生成视频提示词，按 Seedance 2.5 适配器五层格式补齐参数、公共总规范、连续时间轴、空间站位、动作结果和收尾" }));
+        if (layoutErrors.length) issues.push(warning("VIDEO_PROMPT_LAYOUT", layoutErrors[0], { shotId: shot.id, correction: "重新优化或生成视频提示词，按 Seedance 2.5 适配器五层格式补齐参数、公共总规范、连续时间轴、空间站位、动作结果和收尾" }));
         const timingErrors = validateDramaFrameTiming(shot.framePlan.frames, shot.utterances as DramaDialogueTimingInput[], label);
-        if (timingErrors.length) issues.push((referenceMode === "all_frames" ? blocking : warning)("FRAME_DIALOGUE_TIMING", timingErrors[0], { shotId: shot.id, correction: "按对白自然开口、收句、停顿和反应重新分配帧段，禁止机械等长" }));
+        if (timingErrors.length) issues.push(warning("FRAME_DIALOGUE_TIMING", timingErrors[0], { shotId: shot.id, correction: "按对白自然开口、收句、停顿和反应重新分配帧段，禁止机械等长" }));
         const promptTimingErrors = validateDramaVideoPromptDialogueTiming(videoPrompt || "", shot.framePlan.frames, shot.utterances as DramaDialogueTimingInput[], label);
-        if (promptTimingErrors.length) issues.push(blocking("DIALOGUE_CAPACITY", promptTimingErrors[0], { shotId: shot.id, correction: "把公开镜头卡中的台词移动到足够长的 framePlan 时间段；逐句口型窗口不足时必须重切或拆分，不能异常加速" }));
+        if (promptTimingErrors.length) issues.push(warning("DIALOGUE_CAPACITY", promptTimingErrors[0], { shotId: shot.id, correction: "把公开镜头卡中的台词移动到足够长的 framePlan 时间段；逐句口型窗口不足时必须重切或拆分，不能异常加速" }));
         const shotText = [
             shot.sourceText,
             shot.description,
@@ -181,7 +180,7 @@ function checkShot(
         if (compositionErrors.length) {
             issues.push(warning("COMPOSITION_CONTRACT", `${label}${compositionErrors.join("；")}`, { shotId: shot.id, correction: "按当前画幅重写每个时间段的主要主体、可见范围、防裁脸和防遮挡安全区" }));
             const subjectErrors = compositionErrors.filter((error) => /未明确本段主要主体|未在时间段中写出/u.test(error));
-            if (subjectErrors.length) issues.push(blocking("SUBJECT_COVERAGE", `${label}${subjectErrors.join("；")}`, { shotId: shot.id, correction: "为剧情事实中需要反应的角色、NPC或关键动作安排独立可见主体，不能只作为背景描述" }));
+            if (subjectErrors.length) issues.push(warning("SUBJECT_COVERAGE", `${label}${subjectErrors.join("；")}`, { shotId: shot.id, correction: "为剧情事实中需要反应的角色、NPC或关键动作安排独立可见主体，不能只作为背景描述" }));
         }
         const cutErrors = validateDramaCutInformationDiversity({
             ratio: project.ratio,
@@ -192,34 +191,34 @@ function checkShot(
             requiresDetail: /手部|掌根|掌心|指节|桌沿|接触|受力|道具|物证/u.test(shotText),
             label,
         });
-        if (cutErrors.length) issues.push(blocking("CUT_INFORMATION_DIVERSITY", `${label}${cutErrors.join("；")}`, { shotId: shot.id, correction: "重新分配硬切信息主体，覆盖剧情实际存在的反应、关系、空间或手部/道具细节" }));
+        if (cutErrors.length) issues.push(warning("CUT_INFORMATION_DIVERSITY", `${label}${cutErrors.join("；")}`, { shotId: shot.id, correction: "重新分配硬切信息主体，覆盖剧情实际存在的反应、关系、空间或手部/道具细节" }));
         const aliasErrors = validateDramaReferenceAliasConsistency({ prompt: videoPrompt || "", manifest: shot.framePlan.referenceManifest, requireBinding: false, label });
-        if (aliasErrors.length) issues.push(blocking("REFERENCE_ALIAS_CONSISTENCY", aliasErrors.join("；"), { shotId: shot.id, correction: "严格按 referenceManifest 的 alias、职责和顺序提交供应商参考图" }));
+        if (aliasErrors.length) issues.push(warning("REFERENCE_ALIAS_CONSISTENCY", aliasErrors.join("；"), { shotId: shot.id, correction: "严格按 referenceManifest 的 alias、职责和顺序提交供应商参考图" }));
         const wardrobeErrors = validateDramaCharacterWardrobeContinuity({ prompt: videoPrompt || "", characters: project.characters, characterCodes: shot.characterIds, label });
-        if (wardrobeErrors.length) issues.push(blocking("CHARACTER_WARDROBE_CONTINUITY", wardrobeErrors.join("；"), { shotId: shot.id, correction: "补齐正式角色资产的年龄感、脸型/发型、服装和固定配饰锚点" }));
+        if (wardrobeErrors.length) issues.push(warning("CHARACTER_WARDROBE_CONTINUITY", wardrobeErrors.join("；"), { shotId: shot.id, correction: "补齐正式角色资产的年龄感、脸型/发型、服装和固定配饰锚点" }));
     }
     for (const detail of validateDramaPerformanceDetail(shot.performancePlan, shot.dialoguePerformance, dialogueCount, label)) issues.push(warning("PERFORMANCE_DETAIL", detail, { shotId: shot.id }));
     if (dialogueCount && (!shot.dialoguePerformance?.length || shot.dialoguePerformance.length < dialogueCount)) issues.push(warning("DIALOGUE_PERFORMANCE_MISSING", `${label}对白缺少逐句语气、节奏和面部反应指导`, { shotId: shot.id }));
     const light = shot.lightingPlan;
     if (!hasCompleteDramaLightingPlan(light)) issues.push(warning("LIGHTING_PLAN_MISSING", `${label}缺少完整色彩与灯光规划`, { shotId: shot.id }));
-    if (!Number.isFinite(shot.duration) || shot.duration <= 0) issues.push(blocking("DURATION", `${label}缺少有效时长`, { shotId: shot.id }));
+    if (!Number.isFinite(shot.duration) || shot.duration <= 0) issues.push(warning("DURATION", `${label}缺少有效时长`, { shotId: shot.id }));
     const utteranceTimingIssues = dramaUtteranceTimingIssues(
         shot.duration,
         shot.utterances as DramaDialogueTimingInput[],
         shot.utterances.some((item) => item.type === "dialogue" || item.type === "voiceover"),
         label,
     );
-    if (utteranceTimingIssues.length) issues.push(blocking("DIALOGUE_TIMING", utteranceTimingIssues[0], { shotId: shot.id, correction: "为每句对白填写不重叠的 startSecond/endSecond、前后停顿和语速，并确保均在当前镜头边界内" }));
+    if (utteranceTimingIssues.length) issues.push(warning("DIALOGUE_TIMING", utteranceTimingIssues[0], { shotId: shot.id, correction: "为每句对白填写不重叠的 startSecond/endSecond、前后停顿和语速，并确保均在当前镜头边界内" }));
     const dialogueTiming = dramaDialogueTimingReminder(shot.duration, shot.utterances as DramaDialogueTimingInput[], shot.dialogue, label);
     if (dialogueTiming) {
         const issue = dialogueTiming.withinTolerance
             ? warning("DIALOGUE_TIMING", dialogueTiming.message, { shotId: shot.id, correction: "轻微偏差可保留；如需优化，按自然分句、说话人转换或动作反应拆镜" })
-            : blocking("DIALOGUE_TIMING", dialogueTiming.message, { shotId: shot.id, correction: "正式生产前必须按自然分句、说话人转换、动作反应或逻辑片段边界拆镜；禁止异常加速对白" });
+            : warning("DIALOGUE_TIMING", dialogueTiming.message, { shotId: shot.id, correction: "正式生产前必须按自然分句、说话人转换、动作反应或逻辑片段边界拆镜；禁止异常加速对白" });
         issues.push(issue);
     }
     for (const windowIssue of dramaTimedDialogueCapacityIssues(shot.utterances as DramaDialogueTimingInput[], label))
         issues.push(
-            blocking("DIALOGUE_CAPACITY", `逐句对白口型窗口不足：${windowIssue.message}`, {
+            warning("DIALOGUE_CAPACITY", `逐句对白口型窗口不足：${windowIssue.message}`, {
                 shotId: shot.id,
                 correction: "先按可发音字数/语速核算每句 requiredSpeechSeconds，再单独检查前后停顿边界，随后移动帧段边界、拆分自然分句或增加逻辑片段；不得异常加速",
             }),
@@ -242,30 +241,30 @@ function checkShot(
     if (!scene) issues.push(warning("LOCATION_REFERENCE", `${label}未绑定场景图，视频将仅依据提示词生成`, { shotId: shot.id, correction: "如需稳定空间结构，可补充场景全景图" }));
     else if (!hasApprovedScenePanoramaReference(scene))
         issues.push(warning("LOCATION_ANCHOR", `${label}的场景“${scene.name}”暂无已审核全景图，将仅作为文字场景事实使用`, { shotId: shot.id, assetId: scene.id, correction: "如需锁定空间结构，再生成并审核高清场景全景图" }));
-    if (!shot.entryState || !shot.exitState) issues.push(blocking("STATE_MISSING", `${label}缺少完整入口/出口状态`, { shotId: shot.id }));
+    if (!shot.entryState || !shot.exitState) issues.push(warning("STATE_MISSING", `${label}缺少完整入口/出口状态`, { shotId: shot.id }));
     else {
-        if (!shot.entryState.environment || !shot.entryState.lighting || !shot.exitState.environment || !shot.exitState.lighting) issues.push(blocking("STATE_INCOMPLETE", `${label}入口/出口必须包含环境和灯光状态`, { shotId: shot.id }));
+        if (!shot.entryState.environment || !shot.entryState.lighting || !shot.exitState.environment || !shot.exitState.lighting) issues.push(warning("STATE_INCOMPLETE", `${label}入口/出口必须包含环境和灯光状态`, { shotId: shot.id }));
         for (const entity of [...shot.entryState.characters, ...shot.exitState.characters])
-            if (!entity.position || !entity.gaze || !entity.pose || !entity.action) issues.push(blocking("CHARACTER_STATE", `${label}角色状态缺少位置、视线、姿态或动作`, { shotId: shot.id, assetId: entity.assetId }));
-        for (const entity of [...shot.entryState.props, ...shot.exitState.props]) if (!entity.state || !entity.holderId) issues.push(blocking("PROP_STATE", `${label}道具状态缺少状态或持有人`, { shotId: shot.id, assetId: entity.assetId }));
+            if (!entity.position || !entity.gaze || !entity.pose || !entity.action) issues.push(warning("CHARACTER_STATE", `${label}角色状态缺少位置、视线、姿态或动作`, { shotId: shot.id, assetId: entity.assetId }));
+        for (const entity of [...shot.entryState.props, ...shot.exitState.props]) if (!entity.state || !entity.holderId) issues.push(warning("PROP_STATE", `${label}道具状态缺少状态或持有人`, { shotId: shot.id, assetId: entity.assetId }));
     }
     for (const id of shot.characterIds) {
         const asset = characters.get(id);
-        if (!asset) issues.push(blocking("CHARACTER_REFERENCE", `${label}引用了不存在的角色`, { shotId: shot.id, assetId: id }));
+        if (!asset) issues.push(warning("CHARACTER_REFERENCE", `${label}引用了不存在的角色`, { shotId: shot.id, assetId: id }));
         else if (!hasApprovedAssetReference(asset))
             issues.push(warning("CHARACTER_ANCHOR", `${label}的角色“${asset.name}”暂无已审核基准图，将仅依据视频提示词生成`, { shotId: shot.id, assetId: id, correction: "如需锁定角色外观，可补充并审核角色基准图" }));
     }
     for (const id of shot.propIds) {
         const asset = props.get(id);
-        if (!asset) issues.push(blocking("PROP_REFERENCE", `${label}引用了不存在的道具`, { shotId: shot.id, assetId: id }));
+        if (!asset) issues.push(warning("PROP_REFERENCE", `${label}引用了不存在的道具`, { shotId: shot.id, assetId: id }));
         else if (!asset.profile?.identityAnchors?.length || !hasApprovedAssetReference(asset))
             issues.push(warning("PROP_ANCHOR", `${label}的道具“${asset.name}”暂无完整基准图或形制锚点，视频仍可依据提示词生成`, { shotId: shot.id, assetId: id, correction: "需要稳定道具细节时，再补充道具资产图" }));
     }
-    for (const id of shot.clueIds) if (!clues.has(id)) issues.push(blocking("CLUE_REFERENCE", `${label}引用了不存在的线索`, { shotId: shot.id, assetId: id }));
+    for (const id of shot.clueIds) if (!clues.has(id)) issues.push(warning("CLUE_REFERENCE", `${label}引用了不存在的线索`, { shotId: shot.id, assetId: id }));
     for (const id of shot.sourceAssetIds || []) {
         const source = project.sourceAssets?.find((asset) => asset.id === id);
-        if (!source || source.type !== "image") issues.push(blocking("SOURCE_ASSET_REFERENCE", `${label}引用的来源素材不是有效图片`, { shotId: shot.id, assetId: id }));
-        else if (!source.serverUrl && !source.remoteUrl) issues.push(blocking("SOURCE_ASSET_URL", `${label}的来源图片“${source.title || id}”缺少可访问地址`, { shotId: shot.id, assetId: id }));
+        if (!source || source.type !== "image") issues.push(warning("SOURCE_ASSET_REFERENCE", `${label}引用的来源素材不是有效图片`, { shotId: shot.id, assetId: id }));
+        else if (!source.serverUrl && !source.remoteUrl) issues.push(warning("SOURCE_ASSET_URL", `${label}的来源图片“${source.title || id}”缺少可访问地址`, { shotId: shot.id, assetId: id }));
     }
     const promptFields = [
         { label: "静态画面提示词", text: shot.imagePrompt || "" },
@@ -288,13 +287,13 @@ function checkShot(
     const requiresAcceptedTail = shot.framePlan?.start.source === "previous_accepted_actual_tail" || incoming?.inheritActualEndFrame;
     if (requiresAcceptedTail) {
         const previous = incoming ? shotById.get(incoming.fromShotId) : undefined;
-        if (!previous) issues.push(blocking("TAIL_REFERENCE", `${label}找不到上一镜尾帧来源`, { shotId: shot.id }));
-        else if (!continuityStartEvidence(previous)) issues.push(blocking("TAIL_ACCEPTANCE", `${label}需要上一镜当前视频版本的已验收实际尾帧`, { shotId: shot.id, correction: "先验收上一镜当前视频版本的实际尾帧，再生成本镜头" }));
+        if (!previous) issues.push(warning("TAIL_REFERENCE", `${label}找不到上一镜尾帧来源`, { shotId: shot.id }));
+        else if (!continuityStartEvidence(previous)) issues.push(warning("TAIL_ACCEPTANCE", `${label}需要上一镜当前视频版本的已验收实际尾帧`, { shotId: shot.id, correction: "先验收上一镜当前视频版本的实际尾帧，再生成本镜头" }));
     }
     if (!shot.framePlan)
         issues.push(
             referenceMode === "all_frames"
-                ? blocking("FRAME_PLAN_MISSING", `${label}启用 all_frames，但暂无完整分镜帧计划`, { shotId: shot.id, correction: "先补充完整帧计划，或关闭按序关键帧驱动" })
+                ? warning("FRAME_PLAN_MISSING", `${label}启用 all_frames，但暂无完整分镜帧计划`, { shotId: shot.id, correction: "先补充完整帧计划，或关闭按序关键帧驱动" })
                 : warning("FRAME_PLAN_MISSING", `${label}暂无分镜帧计划，视频仍可依据视频Prompt生成`, { shotId: shot.id, correction: "需要分镜图或后期关键帧时，再补充分镜帧计划" }),
         );
     else {
@@ -305,15 +304,15 @@ function checkShot(
                 normalizeDramaFrameBeats(shot.framePlan.frames, shot.duration);
                 if (orderedFrames && targetFrameRange && (shot.framePlan.frames.length < targetFrameRange.min || shot.framePlan.frames.length > targetFrameRange.max))
                     issues.push(
-                        blocking("FRAME_COUNT_RANGE", `${label}包含 ${shot.framePlan.frames.length} 个关键帧，但 Agent 自适应范围为 ${targetFrameRange.min}-${targetFrameRange.max} 帧`, {
+                        warning("FRAME_COUNT_RANGE", `${label}包含 ${shot.framePlan.frames.length} 个关键帧，但 Agent 自适应范围为 ${targetFrameRange.min}-${targetFrameRange.max} 帧`, {
                             shotId: shot.id,
                             correction: `按真实动作节点调整为 ${targetFrameRange.min}-${targetFrameRange.max} 帧`,
                         }),
                     );
-                else if (orderedFrames && shot.framePlan.frames.length < 2) issues.push(blocking("FRAME_COUNT_MIN", `${label}的 all_frames 至少需要 2 个有序关键帧`, { shotId: shot.id, correction: "补充至少一张具有真实可见变化的关键帧" }));
+                else if (orderedFrames && shot.framePlan.frames.length < 2) issues.push(warning("FRAME_COUNT_MIN", `${label}的 all_frames 至少需要 2 个有序关键帧`, { shotId: shot.id, correction: "补充至少一张具有真实可见变化的关键帧" }));
                 if (orderedFrames && targetFrameCount && shot.framePlan.frames.length !== targetFrameCount)
                     issues.push(
-                        blocking("FRAME_COUNT_MISMATCH", `${label}包含 ${shot.framePlan.frames.length} 个关键帧，但当前生产方案要求 ${targetFrameCount} 个`, { shotId: shot.id, correction: `按当前生产方案重新生成 ${targetFrameCount} 个连续关键帧` }),
+                        warning("FRAME_COUNT_MISMATCH", `${label}包含 ${shot.framePlan.frames.length} 个关键帧，但当前生产方案要求 ${targetFrameCount} 个`, { shotId: shot.id, correction: `按当前生产方案重新生成 ${targetFrameCount} 个连续关键帧` }),
                     );
                 const visualPlanErrors = validateDramaFramePlanVisuals(shot.framePlan.frames);
                 for (const visualPlanError of visualPlanErrors.filter((error) => /声明了镜头\/机位切换/u.test(error)))
@@ -323,7 +322,7 @@ function checkShot(
                     if (visualError)
                         issues.push(
                             orderedFrames
-                                ? blocking("FRAME_VISUAL_CONTENT", `${label}第${index + 1}帧${visualError}`, { shotId: shot.id, correction: "回到分镜编辑补充当前帧的主体、冻结状态或一项可验收空间结果" })
+                                ? warning("FRAME_VISUAL_CONTENT", `${label}第${index + 1}帧${visualError}`, { shotId: shot.id, correction: "回到分镜编辑补充当前帧的主体、冻结状态或一项可验收空间结果" })
                                 : warning("FRAME_VISUAL_CONTENT", `${label}第${index + 1}帧${visualError}，暂不影响普通视频生成`, { shotId: shot.id, correction: "需要使用有序关键帧时，再补充该帧静态画面" }),
                         );
                     for (const visualWarning of warnDramaFrameVisualContent(frame.imagePrompt))
@@ -335,7 +334,7 @@ function checkShot(
                         const needsReview = stored?.continuityStatus === "needs_review" || stored?.continuityStatus === "pending" || stored?.continuityStatus === "stale";
                         if (!stored?.mediaUrl?.trim() || stored.status !== "success" || needsReview)
                             issues.push(
-                                blocking("FRAME_ASSET_NOT_READY", needsReview ? `${label}第${index + 1}帧（${frame.id}）仍需连续性复核，不能提交有序关键帧视频` : `${label}第${index + 1}帧（${frame.id}）尚未生成可用图片，不能提交有序关键帧视频`, {
+                                warning("FRAME_ASSET_NOT_READY", needsReview ? `${label}第${index + 1}帧（${frame.id}）可补充连续性复核` : `${label}第${index + 1}帧（${frame.id}）尚未生成可用图片，可补充分镜参考`, {
                                     shotId: shot.id,
                                     correction: needsReview ? "完成当前帧连续性复核或重新生成" : "先生成当前帧图片",
                                 }),
@@ -345,7 +344,7 @@ function checkShot(
             } catch (error) {
                 issues.push(
                     orderedFrames
-                        ? blocking("FRAME_PLAN_INVALID", `${label}逐帧计划无效：${error instanceof Error ? error.message : "时间轴必须连续覆盖镜头时长"}`, { shotId: shot.id })
+                        ? warning("FRAME_PLAN_INVALID", `${label}逐帧计划无效：${error instanceof Error ? error.message : "时间轴必须连续覆盖镜头时长"}`, { shotId: shot.id })
                         : warning("FRAME_PLAN_INVALID", `${label}逐帧计划暂不可用于有序关键帧：${error instanceof Error ? error.message : "时间轴必须连续覆盖镜头时长"}`, { shotId: shot.id }),
                 );
             }
