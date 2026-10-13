@@ -1583,7 +1583,7 @@ function ProductionPromptPreview({
                     return reference ? [{ ...reference, alias: binding.alias }] : [];
                 });
                 const limit = maxReferenceImages;
-                const voices = dramaShotCharacterVoiceReferences(project, shot, selectedIds);
+                const audioVoices = dramaShotCharacterVoiceReferences(project, shot, selectedIds).filter((voice) => voice.audio);
                 const allFrames = referenceModes[shot.id] === "all_frames";
                 const frameIds = new Set(shot.framePlan?.frames.map((frame) => frame.id) || []);
                 const frameReferences = references.filter((reference) => reference.kind === "frame");
@@ -1717,19 +1717,13 @@ function ProductionPromptPreview({
                                 </Button>
                             </div>
                         ) : null}
-                        {voices.length ? (
+                        {audioVoices.length ? (
                             <div className="mt-3 grid gap-2 border-t border-border/70 pt-3" data-drama-character-voices>
-                                <h5 className="text-xs font-medium">本次角色配音</h5>
-                                {voices.map((voice) => (
+                                <h5 className="text-xs font-medium">配音音频试听</h5>
+                                {audioVoices.map((voice) => (
                                     <div key={voice.characterId} className="grid min-w-0 gap-1 text-xs" data-drama-character-voice={voice.characterId}>
-                                        <span className="font-medium">
-                                            {voice.name} · {voice.audio ? "引用角色配音音频" : voice.timbrePrompt ? "使用音色提示词" : "未配置音色"}
-                                        </span>
-                                        {voice.audio ? (
-                                            <audio className="max-w-full" controls preload="metadata" src={voice.audio.url} aria-label={`${voice.name}角色配音音频`} />
-                                        ) : (
-                                            <p className="whitespace-pre-wrap break-words text-muted-foreground">{voice.timbrePrompt || "可在角色资产中补充音色提示词或上传配音音频。"}</p>
-                                        )}
+                                        <span className="font-medium">{voice.name}</span>
+                                        <audio className="max-w-full" controls preload="metadata" src={voice.audio!.url} aria-label={`${voice.name}角色配音音频`} />
                                     </div>
                                 ))}
                             </div>

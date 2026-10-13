@@ -159,10 +159,10 @@ test("character timbre saves and refreshes, then uploaded audio replaces prompt 
         await drawer.getByRole("button", { name: "关闭", exact: true }).click();
         await page.getByRole("button", { name: "打开项目资产" }).click();
         let dialog = await openPreview();
-        const voice = dialog.locator(`[data-drama-character-voice="${character.id}"]`);
-        await expect(voice).toContainText("使用音色提示词");
-        await expect(voice).toContainText(timbre);
-        await expect(dialog.locator("[data-drama-character-voices] audio")).toHaveCount(0);
+        const prompt = dialog.getByRole("textbox", { name: `${seeded.episodes[0].shots[0].title}视频提示词` });
+        await expect(prompt).toHaveValue(new RegExp(timbre, "u"));
+        await expect(dialog.locator("[data-drama-character-voices]")).toHaveCount(0);
+        await expect(dialog.getByText("查看本次引用与配音绑定", { exact: true })).toHaveCount(0);
         await expectNoHorizontalOverflow(page);
         await dialog.getByRole("button", { name: "返回修改" }).click();
         drawer = await edit();
@@ -173,8 +173,8 @@ test("character timbre saves and refreshes, then uploaded audio replaces prompt 
         await page.reload();
         dialog = await openPreview();
         const audioVoice = dialog.locator(`[data-drama-character-voice="${character.id}"]`);
-        await expect(audioVoice).toContainText("引用角色配音音频");
-        await expect(audioVoice).not.toContainText(timbre);
+        await expect(dialog.getByRole("textbox", { name: `${seeded.episodes[0].shots[0].title}视频提示词` })).toHaveValue(/【角色音色】[\s\S]*配音引用 @音频1/u);
+        expect(await dialog.getByRole("textbox", { name: `${seeded.episodes[0].shots[0].title}视频提示词` }).inputValue()).not.toContain(timbre);
         const audio = audioVoice.getByLabel(`${character.name}角色配音音频`);
         await expect(audio).toBeVisible();
         const audioResponse = await request.get((await audio.getAttribute("src"))!);
