@@ -167,7 +167,11 @@ export function invalidateDramaProductionRunFromShot(run: DramaProductionRun, ep
 
 export function unlockDramaProductionSteps(run: DramaProductionRun) {
     const statuses = new Map(run.steps.map((step) => [step.id, step.status]));
-    const steps = run.steps.map((step) => (step.status === "blocked" && step.dependsOn.every((id) => statuses.get(id) === "success") ? { ...step, status: "ready" as const } : step));
+    const videoIds = new Set(run.steps.filter((step) => step.type === "video").map((step) => step.id));
+    const steps = run.steps.map((step) => {
+        const dependsOn = step.type === "video" ? step.dependsOn.filter((id) => videoIds.has(id)) : step.dependsOn;
+        return { ...step, dependsOn, status: step.status === "blocked" && dependsOn.every((id) => statuses.get(id) === "success") ? ("ready" as const) : step.status };
+    });
     const execution = steps.filter((step) => step.type !== "asset_anchor" && step.type !== "start_frame" && step.type !== "end_frame" && step.type !== "keyframe" && step.type !== "continuity_qc");
     const failed = execution.some((step) => step.status === "failed" || step.status === "needs_review");
     const active = execution.some((step) => step.status === "ready" || step.status === "running" || step.status === "blocked");

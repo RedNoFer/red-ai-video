@@ -2,9 +2,26 @@ import { describe, expect, it } from "vitest";
 
 import type { DramaEpisode, DramaProject } from "@/lib/drama-project-contract";
 import { createFrameEvidence } from "@/lib/drama-continuity-policy";
-import { buildDramaProductionRun, invalidateDramaProductionRunFromShot, refreshDramaVideoStepReferences } from "@/lib/server/drama-production-run";
+import { buildDramaProductionRun, invalidateDramaProductionRunFromShot, refreshDramaVideoStepReferences, unlockDramaProductionSteps } from "@/lib/server/drama-production-run";
 
 describe("drama production run planning", () => {
+    it("releases existing queued videos from quality dependencies while retaining actual video dependencies", () => {
+        const project = fixture();
+        const run = buildDramaProductionRun(project, project.episodes[0], { imageModel: "image", videoModel: "video" });
+        run.steps = [
+            { id: "asset", type: "asset_anchor", dependsOn: [], status: "blocked" },
+            { id: "frame", type: "keyframe", dependsOn: [], status: "needs_review" },
+            { id: "qc", type: "continuity_qc", dependsOn: [], status: "failed" },
+            { id: "previous-video", type: "video", dependsOn: [], status: "running" },
+            { id: "next-video", type: "video", dependsOn: ["asset", "frame", "qc", "previous-video"], status: "blocked" },
+            { id: "independent-video", type: "video", dependsOn: ["asset", "frame", "qc"], status: "blocked" },
+        ];
+        const unlocked = unlockDramaProductionSteps(run);
+        expect(unlocked.steps.find((step) => step.id === "independent-video")).toMatchObject({ status: "ready", dependsOn: [] });
+        expect(unlocked.steps.find((step) => step.id === "next-video")).toMatchObject({ status: "blocked", dependsOn: ["previous-video"] });
+        expect(unlocked.status).toBe("running");
+    });
+
     it("preserves parameters while allowing continuous shots before prior QC", () => {
         const project = fixture();
         project.productionBible = {
