@@ -18,7 +18,7 @@ export type DramaDialogueTimingInput = {
     speechRateCharsPerSecond?: number;
 };
 
-const QUOTED_DRAMA_DIALOGUE_PATTERN = /(?:^|(?<=[\n；;：:”]))\s*(?:对白表演\s*[：:]\s*)?(?:([^：:；;\n“”]+?)\s*说|([^：:；;\n“”]+?[（(](?:心理旁白|记忆旁白|人物介绍旁白)[）)]))\s*[：:]\s*“([^”]+)”/gu;
+const QUOTED_DRAMA_DIALOGUE_PATTERN = /(?:^|(?<=[\n；;：:”]))\s*(?:对白表演\s*[：:]\s*)?(?:([^：:；;\n“”]+?)\s*说|([^：:；;\n“”]+?[（(](?:心理旁白|记忆旁白|人物介绍旁白)[）)]))\s*[：:]\s*“((?:[^“”]|“[^“”]*”)+)”/gu;
 
 export type QuotedDramaDialogue = { speaker: string; text: string };
 

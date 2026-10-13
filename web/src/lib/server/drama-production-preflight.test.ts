@@ -31,15 +31,11 @@ describe("drama production preflight", () => {
         const shot = project.episodes[0].shots[0];
         shot.duration = 6;
         shot.videoPrompt = [
-            "### 镜头 01 | 0-6秒 | 中景 | 50mm | 城门外平视 | 固定机位 | 单人镜头",
-            "场景：城门外石阶。",
-            "画面内容：角色站在石阶左侧，抬眼看向门缝，右手握紧断剑，湿石上留下脚印。",
-            "光影：左上冷光落在脸侧与湿石纹理上。",
-            "色调：冷灰蓝，肤色自然中性。",
-            "台词：无",
-            "人声：角色屏息后缓慢呼气。",
-            "音效：风掠过城门，衣料轻响。",
-            "镜头变化：单条镜头持续固定，抬眼后停在握剑手部的受力结果。",
+            "【参数】6秒，9:16，有声，城门外人物反应。",
+            "【公共总规范】城门外石阶，角色站在左侧，脚底受湿石支撑，右手握断剑；固定180度轴线。左上冷光落在脸侧，冷灰蓝；禁止瞬移、穿模和无因重排。",
+            "【时间轴】",
+            "0-6秒：角色因门缝传来风声而抬眼，右手收紧，指节发白；中景50mm城门外平视固定机位，视线停在门缝，脚底与湿石接触；人声：屏息后缓慢呼气；音效：衣料轻响。",
+            "【收尾】角色仍站石阶左侧，右手紧握断剑，视线停在门缝。",
         ].join("\n");
         shot.framePlan = {
             ...shot.framePlan!,
@@ -57,8 +53,16 @@ describe("drama production preflight", () => {
         project.episodes[0].shots[0].exitState = state;
         project.episodes[0].shots[0].continuityStatus = "passed";
         const result = preflightDramaProduction(project, project.episodes[0]);
-        expect(result.status).toBe("needs_confirmation");
         expect(result.issues.filter((issue) => issue.severity === "blocking")).toEqual([]);
+        expect(result.status).toBe("needs_confirmation");
+    });
+
+    it("warns about oversized execution prompts without blocking submission", () => {
+        const project = fixture();
+        const shot = project.episodes[0].shots[0];
+        shot.executionVideoPrompt = "字".repeat(2501);
+        shot.framePlan = undefined;
+        expect(preflightDramaProduction(project, project.episodes[0]).issues).toContainEqual(expect.objectContaining({ code: "VIDEO_PROMPT_LENGTH", severity: "warning", message: expect.stringContaining("2501") }));
     });
 
     it("blocks manual prompts that depend on a different clip or prior prompt", () => {

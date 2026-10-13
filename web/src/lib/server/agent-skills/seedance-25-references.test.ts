@@ -31,7 +31,7 @@ describe("Seedance 2.5 video reference routing", () => {
         const instructions = resolveSeedance25DirectorInstructions({ durationSeconds: 15 }).instructions;
 
         expect(instructions).toContain("参考素材按稳定 alias");
-        expect(instructions).toContain("小墨 6.3 简镜头卡");
+        expect(instructions).toContain("Seedance 2.5");
         expect(instructions).not.toContain("A线");
     });
 });

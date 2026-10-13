@@ -11,7 +11,7 @@ import {
     validateDramaVideoPromptAudioHierarchy,
     validateDramaFrameCausalChain,
     validateDramaFrameTiming,
-    validateDramaVideoPromptCardLayout,
+    validateDramaSeedanceVideoPromptLayout,
     validateDramaVideoPromptDialogueTiming,
     validateDramaVideoPromptUtteranceCoverage,
     validateDramaVideoPromptSemanticQuality,
@@ -298,7 +298,7 @@ function checkVideoPromptLayout(checks: DramaQualityGateCheck[], value: DramaPro
     const failures = value.episodes.flatMap((episode) =>
         episode.shots.flatMap((shot) => {
             const label = `${episode.code}/${shot.code || shot.title}`;
-            const promptFailures = validateDramaVideoPromptCardLayout(shot.videoPrompt, shot.framePlan?.frames || [], shot.code || shot.title);
+            const promptFailures = validateDramaSeedanceVideoPromptLayout(shot.videoPrompt, shot.framePlan?.frames || [], shot.code || shot.title);
             if (videoPromptRuntimePlaceholderPattern.test(shot.videoPrompt)) promptFailures.push(`${label}公开视频含程序占位值 undefined/null/NaN/[object Object]`);
             if (videoPromptPseudoParameterPattern.test(shot.videoPrompt)) promptFailures.push(`${label}公开视频含未声明伪参数串；请用自然语言表达视觉要求`);
             return promptFailures;
@@ -309,9 +309,9 @@ function checkVideoPromptLayout(checks: DramaQualityGateCheck[], value: DramaPro
         "VIDEO_PROMPT_LAYOUT",
         !failures.length,
         "视频提示词排版",
-        failures.length ? failures.slice(0, 8).join("；") : "每个真实 framePlan 时间段都有完整的小墨式导演镜头卡",
+        failures.length ? failures.slice(0, 8).join("；") : "Seedance 2.5 公开时间轴完整覆盖内部帧，公开段数与内部帧数不绑定",
         ["episodes[].shots[].videoPrompt", "episodes[].shots[].framePlan.frames[]"],
-        "按小墨式导演成稿补齐：每个真实 framePlan 时间段对应一个镜头卡，标题包含时间、景别、焦段、机位和运镜，正文写具体可见画面与声音；内部起点/动作/衔接/终点继续只在 framePlan 中校验。",
+        "按 Seedance 2.5 五层正文补齐，公共事实只写一次，时间轴写局部动作因果、摄影与声音，禁止回退旧公开镜头卡。",
     );
 }
 
@@ -338,11 +338,9 @@ function checkVideoPromptLength(checks: DramaQualityGateCheck[], value: DramaPro
     const maximum = entries.reduce((current, entry) => Math.max(current, entry.length), 0);
     const total = entries.reduce((current, entry) => current + entry.length, 0);
     const overLimit = entries.filter((entry) => entry.length > DRAMA_VIDEO_PROMPT_MAX_CHARACTERS);
-    add(
+    addWarning(
         checks,
         "VIDEO_PROMPT_LENGTH",
-        !overLimit.length,
-        "视频提示词长度",
         overLimit.length
             ? `${overLimit.length} 个逻辑片段超过 ${DRAMA_VIDEO_PROMPT_MAX_CHARACTERS} 个 Unicode 字符：${overLimit
                   .slice(0, 12)
@@ -567,7 +565,7 @@ function checkActionDensity(checks: DramaQualityGateCheck[], value: DramaProduct
                 missing.push(...validateDramaFrameCausalChain(frame.actionPrompt, frame.transitionPrompt, frame.endPrompt, `${shot.code}/${frame.id}`));
             }
             const publicCards = extractDramaVideoPromptCards(shot.videoPrompt);
-            if (publicCards.length !== frames.length) missing.push(shot.code + "/videoPrompt 卡片数量与真实 framePlan 不一致");
+            if (validateDramaSeedanceVideoPromptLayout(shot.videoPrompt, frames, shot.code).length) missing.push(shot.code + "/videoPrompt 时间轴未完整覆盖真实 framePlan");
             for (const [index, card] of publicCards.entries()) {
                 const publicText = [card.visual, card.voice, card.sound].join("\n");
                 if (!observableActionPattern.test(card.visual) || !observableResultPattern.test(card.visual) || !publicSoundAnchorPattern.test(publicText)) missing.push(shot.code + "/F" + (index + 1) + "/videoPrompt 缺少公开可见动作、结果或声音锚点");

@@ -349,8 +349,8 @@ describe("prompt optimization service", () => {
         const systemMessage = vi.mocked(requestStructuredText).mock.calls[0]?.[0].messages.find((message) => message.role === "system")?.content || "";
         expect(systemMessage).toContain("不要只做同义改写");
         expect(systemMessage).toContain("默认按多镜头导演方案组织");
-        expect(systemMessage).toContain("小墨 6.3 简镜头卡");
-        expect(systemMessage).toContain("每个真实 `framePlan.frames[]` 对应一张独立镜头卡");
+        expect(systemMessage).toContain("Seedance 2.5");
+        expect(systemMessage).toContain("公开段数量不要求等于内部帧数");
         expect(systemMessage).toContain("framePlan");
         expect(systemMessage).toContain("每个时间段都必须让姿态");
         expect(systemMessage).toContain("一个时间段只安排一个主动作变化");

@@ -1,6 +1,5 @@
 import type { DramaNamedAsset, DramaProject, DramaProjectMutation, DramaProjectMutationAck, DramaProjectSummary, DramaProjectSummaryPage, DramaShot } from "@/lib/drama-project-contract";
 import { normalizeDramaImageSize } from "@/lib/drama-image-size";
-import { DRAMA_VIDEO_PROMPT_MAX_UNICODE_CHARACTERS } from "@/lib/drama-prompt-quality";
 import { summarizeDramaProject } from "@/lib/drama-project-summary";
 import { readJsonDataFile, writeJsonDataFile } from "@/lib/server/data-adapter";
 import { ensurePostgresSchema, getDatabaseProvider, postgresQuery } from "@/lib/server/database";
@@ -315,7 +314,6 @@ async function updatePostgresProjectRatioMutation(userId: string, mutation: Dram
 
 /** Persists a single shot mutation without sending or rewriting the full project from the service layer. */
 export async function updateDramaProjectShotMutation(userId: string, mutation: DramaProjectShotMutation): Promise<DramaProjectShotMutationAck> {
-    if (Array.from(mutation.shot.videoPrompt || "").length > DRAMA_VIDEO_PROMPT_MAX_UNICODE_CHARACTERS) throw new DramaProjectStoreError(`镜头公开视频提示词超过${DRAMA_VIDEO_PROMPT_MAX_UNICODE_CHARACTERS}个Unicode字符`, 413);
     if (getDatabaseProvider() === "postgres") return updatePostgresProjectShotMutation(userId, mutation);
 
     let found = false;

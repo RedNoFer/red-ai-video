@@ -37,17 +37,22 @@ describe("drama production package contract compilation", () => {
         expect(template).toContain("剪辑承接");
         expect(template).toContain("只有全部 blocker 门禁均为 `passed`");
         expect(template).toContain("准备回应");
-        expect(docs).toMatch(/hardGateCodes:[\s\S]*- VIDEO_PROMPT_LENGTH/u);
-        expect(template).toMatch(/`VIDEO_PROMPT_LENGTH`\s*\| blocker/u);
-        expect(template).toContain("必须控制在 4500 个 Unicode 字符以内");
-        expect(template).toContain("超限只能压缩重复视觉");
+        expect(docs).toMatch(/informationalGateCodes:[\s\S]*- VIDEO_PROMPT_LENGTH/u);
+        expect(template).toMatch(/`VIDEO_PROMPT_LENGTH`\s*\| warning/u);
+        expect(template).toContain("提示阈值为 2500");
+        expect(template).toContain("超过只提示");
+        expect(template).toContain("seedance25-prompt-adapter@1.1.0");
         for (const gateCode of DRAMA_PACKAGE_GATE_CODES) expect(template).toContain(`\`${gateCode}\``);
         for (const title of DRAMA_PACKAGE_SECTIONS) expect(template).toContain(title);
     });
 
-    it("publishes the field guide and tested JSON from the same canonical documentation bytes", () => {
-        for (const name of ["drama-production-package-v1-fields.md", "drama-production-package-v1-field-example.json"])
-            expect(readFileSync(new URL(`../../../public/${name}`, import.meta.url), "utf8")).toBe(readFileSync(new URL(`../../../../docs/${name}`, import.meta.url), "utf8"));
+    it("publishes the field guide and tested JSON from the canonical documentation", () => {
+        for (const name of ["drama-production-package-v1-fields.md", "drama-production-package-v1-field-example.json"]) {
+            const published = readFileSync(new URL(`../../../public/${name}`, import.meta.url), "utf8");
+            const source = readFileSync(new URL(`../../../../docs/${name}`, import.meta.url), "utf8");
+            if (name.endsWith(".json")) expect(JSON.parse(published)).toEqual(JSON.parse(source));
+            else expect(published).toBe(source);
+        }
         expect(template).toContain("drama-production-package-v1-fields.md");
         expect(docs).not.toContain("三视图");
     });

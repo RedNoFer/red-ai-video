@@ -26,7 +26,7 @@ const GENERIC_DETAIL_PATTERNS = [
     /^推动当前镜头行动并回应对手或环境$/u,
 ];
 const WEAK_VIDEO_DETAIL_PATTERNS = [/^保持本镜可见反应$/u, /^保持可读的具体反应$/u, /(?:眉眼|表情|呼吸).*(?:随|根据).*(?:变化|推进|触发).*(?:可见变化)/u, /^(?:准备回应|承受(?:压力)?|情绪(?:逐步)?加剧|保持状态|自然反应)$/u];
-const CONCRETE_CAMERA_PATTERN = /固定机位|锁定机位|锁定|推(?:进|近|镜)|短推|拉(?:远|镜)|摇镜|横移|跟拍|跟随(?:移动|视线)|下压|滑轨|环绕|吊臂|升降|手持|变焦|俯拍|仰拍|平视|低机位|高机位|中景|近景|特写|远景/u;
+const CONCRETE_CAMERA_PATTERN = /固定|锁定|推(?:进|近|镜)|短推|拉(?:远|镜)|摇镜|横移|跟拍|跟随(?:移动|视线)|下压|滑轨|环绕|吊臂|升降|手持|变焦|俯拍|仰拍|平视|低机位|高机位|中景|近景|特写|远景/u;
 const OBSERVABLE_DRAMA_DETAIL_PATTERN = /眉|眼|目光|视线|嘴角|下颌|呼吸|肩|背|身体|重心|手|指|掌|站|坐|抬|低|转|握|松|触|器物|容器|纸张|文字|纸|桌|案|地面|水面|光线|影子|门|墙|尘|衣袍|NPC|背景角色|配角|旁观者|人群|开口|说|重音|停顿|语速|语气/u;
 const NPC_SEGMENT_PATTERN = /NPC群像\s*[：:]\s*(\d+)\s*名\s*[；;]\s*分布\s*[：:]\s*前景\s*(\d+)\s*名\s*[、,，]\s*中景\s*(\d+)\s*名\s*[、,，]\s*后景\s*(\d+)\s*名\s*[；;]\s*密度\s*[：:]\s*([^；;\n]+)\s*[；;]\s*反应\s*[：:]\s*([^\n]+)/u;
 const NPC_SLOT_SEGMENT_PATTERN = /NPC(?:连续性|槽位|群像槽位)\s*[：:]\s*可见槽位\s*[：:]\s*([^；;\n]+)\s*[；;]\s*(?:世界锚点|空间锚点|锚点)\s*[：:]\s*([^；;\n]+)\s*[；;]\s*(?:状态变化|可见反应|反应)\s*[：:]\s*([^\n]+)/u;
@@ -55,14 +55,14 @@ const PUBLIC_VIDEO_VISIBLE_ACTION_PATTERN = /抬|低|看|望|移|转|起身|前�
 const PUBLIC_VIDEO_VISIBLE_RESULT_PATTERN = /停在|落在|变为|变得|露出|显出|抬起|垂下|松开|收紧|移向|转向|对准|接住|落下|留下|响起|静止|形成|暴露|显现|被看见|沉默|低头|抬眼|受力|改变|回到|锁住|停住/u;
 /** @deprecated Legacy export retained for compatibility only; it is not a production gate. */
 export const DRAMA_VIDEO_PROMPT_TEMPLATE_SECTIONS = ["重要剪辑指令", "素材绑定", "故事意图", "空间与连续性", "灯光与画面", "摄影总则", "逐镜头时间线", "硬性禁止"] as const;
-/** The production-package contract limits a complete logical-shot prompt. */
-export const DRAMA_VIDEO_PROMPT_MAX_CHARACTERS = 4500;
+/** User-defined advisory threshold, including headings, punctuation and whitespace. */
+export const DRAMA_VIDEO_PROMPT_MAX_CHARACTERS = 2500;
 /** @deprecated Use DRAMA_VIDEO_PROMPT_MAX_CHARACTERS. */
 export const DRAMA_VIDEO_PROMPT_MAX_UNICODE_CHARACTERS = DRAMA_VIDEO_PROMPT_MAX_CHARACTERS;
 
 export function validateDramaVideoPromptLength(value: string, label = "镜头") {
     const length = Array.from(value).length;
-    return length > DRAMA_VIDEO_PROMPT_MAX_CHARACTERS ? [`${label} videoPrompt 共 ${length} 个 Unicode 字符，超过 ${DRAMA_VIDEO_PROMPT_MAX_CHARACTERS} 字符限制；请压缩重复设定并保留对白、动作因果、结果、声音与切镜信息`] : [];
+    return length > DRAMA_VIDEO_PROMPT_MAX_CHARACTERS ? [`${label} videoPrompt 共 ${length} 个 Unicode 字符，超过 ${DRAMA_VIDEO_PROMPT_MAX_CHARACTERS} 字符提示阈值；建议作者压缩重复事实，不阻断交稿或视频提交，不自动截断`] : [];
 }
 
 export type DramaCameraPlanFrame = Pick<{ startSecond: number; endSecond: number }, "startSecond" | "endSecond">;
@@ -137,7 +137,7 @@ export function validateDramaFrameDetail(value: unknown, label: string) {
     return isGenericDramaDetail(value) ? `${label}缺少具体可见动作或状态` : "";
 }
 
-export function validateDramaVideoPromptTemplateLayout(value: unknown, frameCount: number, label: string) {
+export function validateDramaVideoPromptTemplateLayout(value: unknown, _frameCount: number, label: string) {
     const text = typeof value === "string" ? value.trim() : "";
     const positions = DRAMA_VIDEO_PROMPT_TEMPLATE_SECTIONS.map((section) => ({ section, position: text.search(new RegExp(`(?:^|\\n)\\s*【${escapeRegExp(section)}】(?:\\s*\\n|\\s*$)`, "u")) }));
     const errors = positions.filter(({ position }) => position < 0).map(({ section }) => `缺少“【${section}】”段落`);
@@ -145,7 +145,7 @@ export function validateDramaVideoPromptTemplateLayout(value: unknown, frameCoun
     if (presentPositions.some((position, index) => index > 0 && position <= presentPositions[index - 1])) errors.push("八段标题顺序必须为“重要剪辑指令→素材绑定→故事意图→空间与连续性→灯光与画面→摄影总则→逐镜头时间线→硬性禁止”");
     const timeline = text.match(/【逐镜头时间线】([\s\S]*?)(?:\n\s*【硬性禁止】|$)/u)?.[1] || "";
     const shotMarkers = [...timeline.matchAll(/(?:^|\n)\s*镜头\s*\d+\s*[，,：:]/gu)];
-    if (frameCount > 0 && shotMarkers.length !== frameCount) errors.push(`“【逐镜头时间线】”写出 ${shotMarkers.length} 个镜头段，必须与 ${frameCount} 个 framePlan 时间段一一对应`);
+    if (!shotMarkers.length) errors.push("“【逐镜头时间线】”缺少可识别的镜头时间段");
     for (const [index, marker] of shotMarkers.entries()) {
         const start = marker.index ?? 0;
         const end = shotMarkers[index + 1]?.index ?? timeline.length;
@@ -187,8 +187,42 @@ export function extractDramaVideoPromptCards(value: unknown): DramaVideoPromptCa
     });
 }
 
-function isSeedanceAdapterPrompt(value: string) {
+export function isSeedanceAdapterPrompt(value: string) {
     return /(?:^|\n)\s*【参数】/u.test(value) && /(?:^|\n)\s*【公共总规范】/u.test(value) && /(?:^|\n)\s*【时间轴】/u.test(value);
+}
+
+/** Authoring and execution use the current format; legacy parsing is read-only. */
+export function validateDramaSeedanceVideoPromptLayout(value: string, frames: ReadonlyArray<DramaCameraPlanFrame>, label: string) {
+    if (!isSeedanceAdapterPrompt(value)) return [...validateDramaVideoPromptIndependence(value, label), `${label}必须使用 Seedance 2.5 五层正文：参数、可选参考、公共总规范、时间轴、收尾；禁止回退旧公开镜头卡`];
+    return validateSeedanceAdapterPromptLayout(value, frames, label);
+}
+
+export function dramaVideoPromptTimeRanges(prompt: string) {
+    const timeRanges = isSeedanceAdapterPrompt(prompt)
+        ? extractDramaVideoPromptSection(prompt, "时间轴")
+              .split(/\r?\n/u)
+              .flatMap((line) => {
+                  const match = line.match(SEEDANCE_ADAPTER_TIME_RANGE);
+                  return match ? [`${match[1]}-${match[2]}`] : [];
+              })
+        : [...prompt.matchAll(VIDEO_CARD_HEADER)].map((match) => match[2].split("|")[0].trim());
+    return timeRanges.map((timeRange) => {
+        const range = timeRange.match(/(\d+(?:\.\d+)?)\s*(?:-|至|到|—|–|~)\s*(\d+(?:\.\d+)?)/u);
+        return { startSecond: Number(range?.[1]), endSecond: Number(range?.[2]) };
+    });
+}
+
+export function validateDramaVideoPromptTimeline(prompt: string, frames: ReadonlyArray<DramaCameraPlanFrame>, label: string) {
+    const ranges = dramaVideoPromptTimeRanges(prompt);
+    const boundaries = new Set(frames.flatMap((frame) => [frame.startSecond, frame.endSecond]));
+    const errors: string[] = [];
+    for (const [index, range] of ranges.entries()) {
+        if (!Number.isFinite(range.startSecond) || !Number.isFinite(range.endSecond) || range.startSecond !== (ranges[index - 1]?.endSecond ?? 0) || range.endSecond <= range.startSecond)
+            errors.push(`${label}第 ${index + 1} 个公开段时间必须从0连续覆盖，无空档、重叠或倒序`);
+        else if (frames.length && (!boundaries.has(range.startSecond) || !boundaries.has(range.endSecond))) errors.push(`${label}第 ${index + 1} 个公开段必须连续且边界对齐真实内部帧`);
+    }
+    if (frames.length && ranges.at(-1)?.endSecond !== frames.at(-1)?.endSecond) errors.push(`${label}公开时间轴必须完整覆盖逻辑片段时长`);
+    return errors;
 }
 
 function extractSeedanceAdapterCards(value: string): DramaVideoPromptCard[] {
@@ -201,12 +235,9 @@ function extractSeedanceAdapterCards(value: string): DramaVideoPromptCard[] {
         const match = line.match(SEEDANCE_ADAPTER_TIME_RANGE);
         if (!match) return [];
         const segment = match[3].trim();
-        const common = extractDramaVideoPromptSection(value, "公共总规范");
-        const cameraMotion = segment.match(/(?:固定机位|锁定机位|缓慢推近|缓慢拉远|推近|拉远|横移|摇镜|跟拍|跟随|手持|环绕|俯拍|仰拍|平视|低机位|高机位|广角|中景|近景|特写|远景)[^；。\n]*/u)?.[0]?.trim() || "";
-        const dialogue =
-            extractQuotedDramaDialogues(segment)
-                .map((item) => `${item.speaker}${/旁白[）)]?$/u.test(item.speaker) ? "" : "说"}：“${item.text}”`)
-                .join("；") || "无";
+        const cameraMotion = segment.match(/(?:固定|机位固定|锁定机位|缓慢推近|缓慢拉远|推近|拉远|横移|摇镜|跟拍|跟随|手持|环绕|俯拍|仰拍|平视|低机位|高机位|广角|中景|近景|特写|远景)[^；。\n]*/u)?.[0]?.trim() || "";
+        const dialogue = segment.match(/(?:^|[；。])\s*台词[：:]([\s\S]*?)(?=[；。]\s*(?:人声|音效|镜头变化)[：:]|(?<=”)\s*(?:人声|音效|镜头变化)[：:]|$)/u)?.[1]?.trim() || "无";
+        const visual = segment.split(/[；。]\s*(?:台词|人声|音效)[：:]/u)[0].trim();
         const sound = /(?:声音|人声|音效|对白|台词|旁白|呼吸|喘息|脚步|碰撞|摩擦|风声|水声|门响|静默|沉默)/u.test(segment) ? segment : "无";
         return [
             {
@@ -218,12 +249,12 @@ function extractSeedanceAdapterCards(value: string): DramaVideoPromptCard[] {
                 cameraMotion,
                 subjectMode: /道具|手部|空间|场景/u.test(segment) ? "非人物镜头" : "人物镜头",
                 scene: extractDramaVideoPromptSection(value, "公共总规范"),
-                visual: segment,
+                visual,
                 lighting: segment.match(/(?:光线|光影|主光|冷光|暖光)[^；。\n]*/u)?.[0] || "",
                 color: segment.match(/(?:冷青|冷灰|暖橙|低饱和|高饱和|色调|色彩)[^；。\n]*/u)?.[0] || "",
                 dialogue,
-                voice: `${common}\n${sound}`,
-                sound: `${common}\n${sound}`,
+                voice: sound,
+                sound,
                 cameraChanges: segment.match(/(?:硬切|切换|镜头变化)[^；。\n]*/u)?.[0] || segment,
                 raw: line,
             },
@@ -252,14 +283,21 @@ export function dramaDenseHardCutIssues(prompt: string, frames: ReadonlyArray<Dr
 }
 
 export function validateDramaVideoPromptAudioHierarchy(value: unknown, label: string) {
+    const text = typeof value === "string" ? value : "";
+    const compact = isSeedanceAdapterPrompt(text);
+    const common = compact ? extractDramaVideoPromptSection(text, "公共总规范") : "";
     return extractDramaVideoPromptCards(value).flatMap((card, index) => {
         if (isNoDramaSpeech(card.dialogue)) return [];
         const cardLabel = `${label}第 ${index + 1} 个公开镜头卡`;
         const errors: string[] = [];
-        if (!SPEECH_CLARITY_PATTERN.test(card.voice)) errors.push(`${cardLabel}对白原声必须清晰可辨并位于前景；人声不能只写呼吸或气息`);
-        if (hasSpeechMaskingConflict(`${card.voice}\n${card.sound}`)) errors.push(`${cardLabel}音效描述与对白清晰度冲突，必须保证任何环境音、拟音或音乐都不盖过台词`);
+        const voice = `${common}\n${card.voice}`;
+        const sound = `${common}\n${card.sound}`;
+        const clear = compact ? /(?:人声|对白|旁白|心理声|原声)[^。；\n]*(?:清晰|清楚|可辨|可懂|居前|前景)/u.test(voice) : SPEECH_CLARITY_PATTERN.test(voice);
+        if (!clear) errors.push(`${cardLabel}对白原声必须清晰可辨并位于前景；人声不能只写呼吸或气息`);
+        if (hasSpeechMaskingConflict(`${voice}\n${sound}`)) errors.push(`${cardLabel}音效描述与对白清晰度冲突，必须保证任何环境音、拟音或音乐都不盖过台词`);
         const speakers = extractQuotedDramaDialogues(card.dialogue).map((quote) => normalizeDramaSpeaker(quote.speaker));
-        for (const directive of `${card.voice}\n${card.sound}`.split(/[。；;\n]/u)) {
+        for (const part of `${voice}\n${sound}`.split(/[。；;\n]/u)) {
+            const directive = compact ? part.trim().replace(/^”?(?:台词|人声|音效)[：:]\s*/u, "") : part;
             const silence = /禁止说话|不要(?:任何)?人声|不(?:得|能|要)?发声|(?:全段|整段)静音|只(?:保留|有|听见)(?:环境声|环境音|呼吸|喘息)|仅(?:保留|有)?(?:环境声|环境音|呼吸|喘息)/u;
             if (!silence.test(directive) || /(?:说话前|开口前|收句后|说完后|停顿期间|停顿间隙)/u.test(directive)) continue;
             const subject = directive.trim().match(/^([^，,；;]+?)(?:禁止说话|不(?:得|能|要)?发声|(?:只(?:保留|有|听见)|仅(?:保留|有)?)(?:呼吸|喘息))/u)?.[1];
@@ -267,7 +305,8 @@ export function validateDramaVideoPromptAudioHierarchy(value: unknown, label: st
             if (/(?:听者|背景|NPC|旁人)/iu.test(directive) && !speakers.some((speaker) => new RegExp(`(?:^|[，,\\s])${escapeRegExp(speaker)}(?:禁止|不得|不能|不要)`, "u").test(directive))) continue;
             errors.push(`${cardLabel}同一发声窗口存在禁声/替代对白指令：${directive.trim()}`);
         }
-        if (!SPEECH_DUCKING_PATTERN.test(card.sound)) errors.push(`${cardLabel}环境音/动作音/音乐必须在语音期间避让，并明确写出不遮挡台词`);
+        const ducking = compact ? /(?:声|音|音乐)[^。；\n]*(?:压低|避让|降低|减弱|不遮挡|不盖过)|(?:压低|降低|减弱)[^。；\n]*(?:声|音|音乐)/u.test(sound) : SPEECH_DUCKING_PATTERN.test(sound);
+        if (!ducking) errors.push(`${cardLabel}环境音/动作音/音乐必须在语音期间避让，并明确写出不遮挡台词`);
         return errors;
     });
 }
@@ -418,13 +457,12 @@ export function repairDramaVideoPromptRepeatedLines(prompt: string) {
 export function validateDramaVideoPromptCardLayout(value: unknown, frames: ReadonlyArray<DramaCameraPlanFrame> | number, label: string) {
     const text = typeof value === "string" ? value.trim() : "";
     const expectedFrames = typeof frames === "number" ? [] : frames;
-    const frameCount = typeof frames === "number" ? frames : frames.length;
-    if (isSeedanceAdapterPrompt(text)) return validateSeedanceAdapterPromptLayout(text, expectedFrames, frameCount, label);
+    if (isSeedanceAdapterPrompt(text)) return validateSeedanceAdapterPromptLayout(text, expectedFrames, label);
     const cards = extractDramaVideoPromptCards(text);
     const errors: string[] = [];
     if (!cards.length) errors.push("缺少小墨式“### 镜头”公开镜头卡");
     errors.push(...validateDramaVideoPromptIndependence(text, label));
-    if (frameCount > 0 && cards.length !== frameCount) errors.push(`公开镜头卡写出 ${cards.length} 个镜头，必须与 ${frameCount} 个 framePlan 时间段一一对应`);
+    errors.push(...validateDramaVideoPromptTimeline(text, expectedFrames, label));
     for (const [index, card] of cards.entries()) {
         const cardLabel = `第 ${index + 1} 个镜头卡`;
         if (!card.timeRange || !/\d+(?:\.\d+)?\s*(?:-|至|到|—|–|~)\s*\d+(?:\.\d+)?\s*(?:s|秒)/iu.test(card.timeRange)) errors.push(`${label}${cardLabel}缺少真实时间范围`);
@@ -441,36 +479,35 @@ export function validateDramaVideoPromptCardLayout(value: unknown, frames: Reado
         if (DIRECT_DIALOGUE_IN_VISUAL_PATTERN.test(card.visual)) errors.push(`${label}${cardLabel}的画面内容不得包含完整对白或说话人台词指令；只写可见口型、呼吸和表演，完整台词只能放在“台词”字段`);
         const normalizedDialogue = card.dialogue.replace(/[。！？!?；;，,]+$/gu, "").trim();
         if (card.dialogue && normalizedDialogue !== "无" && !hasQuotedDramaDialogue(card.dialogue)) errors.push(`${label}${cardLabel}的台词必须使用“说话人说：“实际台词””或“说话人（心理旁白/记忆旁白/人物介绍旁白）：“实际原句””格式`);
-        if (expectedFrames[index] && !dramaTimeRangePattern(expectedFrames[index].startSecond, expectedFrames[index].endSecond).test(card.timeRange))
-            errors.push(`${label}${cardLabel}的时间范围未对应 framePlan 的 ${expectedFrames[index].startSecond}-${expectedFrames[index].endSecond}s`);
     }
     errors.push(...validateDramaVideoPromptAudioHierarchy(text, label));
     return errors.map((error) => (error.startsWith(label) ? error : `${label}${error}`));
 }
 
-function validateSeedanceAdapterPromptLayout(text: string, expectedFrames: ReadonlyArray<DramaCameraPlanFrame>, frameCount: number, label: string) {
+function validateSeedanceAdapterPromptLayout(text: string, expectedFrames: ReadonlyArray<DramaCameraPlanFrame>, label: string) {
     const errors: string[] = [];
+    const headings = [...text.matchAll(/(?:^|\n)\s*【([^】]+)】/gu)].map((match) => match[1]);
+    const expectedHeadings = headings.includes("参考") ? ["参数", "参考", "公共总规范", "时间轴", "收尾"] : ["参数", "公共总规范", "时间轴", "收尾"];
+    if (headings.join("|") !== expectedHeadings.join("|")) errors.push(`${label}五层标题必须按参数、可选参考、公共总规范、时间轴、收尾顺序各出现一次`);
+    if (/^\s*###\s*镜头/mu.test(text)) errors.push(`${label}不得在五层正文中嵌套旧公开镜头卡`);
     for (const heading of ["参数", "公共总规范", "时间轴", "收尾"]) {
         if (!extractDramaVideoPromptSection(text, heading)) errors.push(`${label}缺少“【${heading}】”段落`);
     }
     errors.push(...validateDramaVideoPromptIndependence(text, label));
     const cards = extractSeedanceAdapterCards(text);
     if (!cards.length) errors.push(`${label}【时间轴】缺少“起止秒：主体动作；触发→结果；主运镜；对白/表演；局部声音和光影”时间段`);
-    if (frameCount > 0 && cards.length !== frameCount) errors.push(`${label}【时间轴】写出 ${cards.length} 个时间段，必须与 ${frameCount} 个 framePlan 时间段一一对应`);
+    errors.push(...validateDramaVideoPromptTimeline(text, expectedFrames, label));
     const common = extractDramaVideoPromptSection(text, "公共总规范");
-    if (!/(?:站位|位置|空间|锚点|支撑|接触|轴线|屏幕方向)/u.test(common)) errors.push(`${label}【公共总规范】缺少人物/道具空间站位、支撑接触或轴线锁定`);
-    if (!/(?:禁止|不得)[\s\S]*(?:闪现|瞬移|穿模|互穿|无因(?:换位|重排))/u.test(common)) errors.push(`${label}【公共总规范】缺少防闪现、穿模和无因重排约束`);
+    if (!/(?:站位|位置|空间|锚点|支撑|接触|轴线|屏幕方向|床|桌|门|柜|地面|落地|路口|外侧|内侧)/u.test(common)) errors.push(`${label}【公共总规范】缺少人物/道具空间站位、支撑接触或轴线锁定`);
+    if (!/(?:禁止|不得|无)[\s\S]*(?:闪现|瞬移|穿模|互穿|无因(?:换位|重排))/u.test(common)) errors.push(`${label}【公共总规范】缺少防闪现、穿模和无因重排约束`);
     for (const [index, card] of cards.entries()) {
         const cardLabel = `${label}第 ${index + 1} 个时间轴段`;
-        if (expectedFrames[index] && !dramaTimeRangePattern(expectedFrames[index].startSecond, expectedFrames[index].endSecond).test(card.timeRange))
-            errors.push(`${cardLabel}的时间范围未对应 framePlan 的 ${expectedFrames[index].startSecond}-${expectedFrames[index].endSecond}s`);
-        if (!card.visual || !PUBLIC_VIDEO_VISIBLE_ACTION_PATTERN.test(card.visual)) errors.push(`${cardLabel}缺少主体正在发生的可见动作`);
-        if (!card.visual || !PUBLIC_VIDEO_VISIBLE_RESULT_PATTERN.test(card.visual)) errors.push(`${cardLabel}缺少动作触发后的可见结果`);
+        if (isGenericDramaDetail(card.visual)) errors.push(`${cardLabel}缺少主体正在发生的可见动作`);
+        if (DIRECT_DIALOGUE_IN_VISUAL_PATTERN.test(card.visual)) errors.push(`${cardLabel}画面动作不得包含完整对白，原句只能进入台词字段`);
+        if (card.dialogue !== "无" && !hasQuotedDramaDialogue(card.dialogue)) errors.push(`${cardLabel}台词必须写出实际说话人和带中文引号的原句`);
         if (!card.cameraMotion || !hasConcreteDramaCameraDirection(card.cameraMotion)) errors.push(`${cardLabel}缺少一个具体主运镜`);
         if (!card.sound || card.sound === "无") errors.push(`${cardLabel}缺少声音锚点`);
-        if (index > 0 && !/(?:站位|位置|支撑|接触|轴线|承接|保持|到达|停在|落在)/u.test(card.visual)) errors.push(`${cardLabel}缺少当前空间状态或承接事实`);
     }
-    errors.push(...validateDramaVideoPromptAudioHierarchy(text, label));
     return errors;
 }
 
@@ -482,20 +519,20 @@ function validateSeedanceAdapterPromptLayout(text: string, expectedFrames: Reado
  */
 export function validateDramaVideoPromptSemanticQuality(value: unknown, frames: ReadonlyArray<DramaCameraPlanFrame>, label: string) {
     const cards = extractDramaVideoPromptCards(value);
+    const compact = isSeedanceAdapterPrompt(String(value || ""));
     if (!cards.length) return [`${label}缺少可执行的公开视频镜头卡`];
-    const errors: string[] = [];
+    const errors: string[] = validateDramaVideoPromptTimeline(String(value || ""), frames, label);
     const signatures: string[] = [];
     for (const [index, card] of cards.entries()) {
         const cardLabel = `${label}第 ${index + 1} 个公开镜头卡`;
         const visual = card.visual.trim();
         const sound = `${card.voice}\n${card.sound}`.trim();
-        if (!visual || !PUBLIC_VIDEO_VISIBLE_ACTION_PATTERN.test(visual)) errors.push(`${cardLabel}的画面内容缺少正在发生的可见动作`);
-        if (!visual || !PUBLIC_VIDEO_VISIBLE_RESULT_PATTERN.test(visual)) errors.push(`${cardLabel}的画面内容缺少动作产生的可见结果`);
+        if (isGenericDramaDetail(visual) || (!compact && !PUBLIC_VIDEO_VISIBLE_ACTION_PATTERN.test(visual))) errors.push(`${cardLabel}的画面内容缺少正在发生的可见动作`);
+        if (!compact && !PUBLIC_VIDEO_VISIBLE_RESULT_PATTERN.test(visual)) errors.push(`${cardLabel}的画面内容缺少动作产生的可见结果`);
         if (PUBLIC_VIDEO_ABSTRACTION_PATTERN.test(visual)) errors.push(`${cardLabel}的画面内容含不可拍摄的抽象/未来意图：${visual}`);
-        if (!CAUSAL_TRIGGER_PATTERN.test(`${visual}\n${card.voice}\n${card.sound}`)) errors.push(`${cardLabel}缺少动作触发或承接原因`);
+        if (!CAUSAL_TRIGGER_PATTERN.test(`${visual}\n${card.voice}\n${card.sound}`) && !(compact && /因|后|见|听|触|→|回到当前|转到|省略/u.test(visual))) errors.push(`${cardLabel}缺少动作触发或承接原因`);
         if (!sound || /^(?:无|无声|没有)$/u.test(sound.replace(/[\s；;、,，]+/gu, ""))) errors.push(`${cardLabel}缺少声音锚点；静默必须明确写出屏息、底噪、余响或沉默`);
         if (!card.cameraMotion || !hasConcreteDramaCameraDirection(card.cameraMotion)) errors.push(`${cardLabel}缺少可执行的主运镜`);
-        if (frames[index] && !dramaTimeRangePattern(frames[index].startSecond, frames[index].endSecond).test(card.timeRange)) errors.push(`${cardLabel}的时间范围未与 framePlan 对齐`);
         signatures.push(publicVideoCardSignature(card));
     }
     if (signatures.length > 1 && new Set(signatures).size < Math.min(2, signatures.length)) errors.push(`${label}公开镜头卡的主体、动作和结果没有形成可辨识差异`);
@@ -533,11 +570,12 @@ export function validateDramaFrameTiming(frames: ReadonlyArray<DramaCameraPlanFr
  * The public Xiaomo card is executable too. Its quoted dialogue must fit the
  * exact card window, not only the structured utterance window in framePlan.
  */
-export function validateDramaVideoPromptDialogueTiming(prompt: string, frames: ReadonlyArray<DramaCameraPlanFrame>, utterances: readonly DramaDialogueTimingInput[], label: string) {
+export function validateDramaVideoPromptDialogueTiming(prompt: string, _frames: ReadonlyArray<DramaCameraPlanFrame>, utterances: readonly DramaDialogueTimingInput[], label: string) {
     const cards = extractDramaVideoPromptCards(prompt);
+    const publicFrames = dramaVideoPromptTimeRanges(prompt);
     if (!cards.length || !utterances.length) return [];
     return cards.flatMap((card, index) => {
-        const frame = frames[index];
+        const frame = publicFrames[index];
         if (!frame || !card.dialogue || card.dialogue === "无") return [];
         const issue = dramaFrameDialogueTimingReminder(
             frame.startSecond,
@@ -550,7 +588,8 @@ export function validateDramaVideoPromptDialogueTiming(prompt: string, frames: R
     });
 }
 
-export function validateDramaVideoPromptUtteranceCoverage(prompt: string, frames: ReadonlyArray<DramaCameraPlanFrame>, utterances: readonly DramaDialogueTimingInput[], label: string) {
+export function validateDramaVideoPromptUtteranceCoverage(prompt: string, _frames: ReadonlyArray<DramaCameraPlanFrame>, utterances: readonly DramaDialogueTimingInput[], label: string) {
+    const publicFrames = dramaVideoPromptTimeRanges(prompt);
     const spokenUtterances = (Array.isArray(utterances) ? utterances : []).filter((item) => (item.type === "dialogue" || item.type === "voiceover") && item.text?.trim());
     if (!spokenUtterances.length) return [];
     const cards = extractDramaVideoPromptCards(prompt);
@@ -562,7 +601,7 @@ export function validateDramaVideoPromptUtteranceCoverage(prompt: string, frames
         const start = Number(utterance.startSecond);
         const end = Number(utterance.endSecond);
         const timed = Number.isFinite(start) && Number.isFinite(end) && end > start;
-        const cardIndexes = timed && frames.length ? frames.flatMap((frame, index) => (start < frame.endSecond && end > frame.startSecond ? [index] : [])) : cards.map((_, index) => index);
+        const cardIndexes = timed && publicFrames.length ? publicFrames.flatMap((frame, index) => (start < frame.endSecond && end > frame.startSecond ? [index] : [])) : cards.map((_, index) => index);
         let cursor = 0;
         for (const index of cardIndexes) {
             const card = cards[index];
@@ -857,7 +896,8 @@ export function validateDramaVideoAuthoringQuality(prompt: string, frames: Reado
     const cameraLine = prompt.match(/(?:^|\n)\s*单一主运镜\s*[：:]([^\n]+)/u)?.[1]?.trim() || extractDramaVideoPromptSection(prompt, "摄影总则");
     const purpose = cameraLine.match(/(?:服务于|响应|为了|用于|让观众看见|强调)\s*([^；;\n]+)/u)?.[1]?.trim() || "";
     if (cards.length) {
-        if (cards.length !== frames.length) errors.push(`${label}公开视频镜头卡数量必须与 framePlan 一致`);
+        if (isSeedanceAdapterPrompt(prompt)) errors.push(...validateDramaSeedanceVideoPromptLayout(prompt, frames, label));
+        else errors.push(...validateDramaVideoPromptTimeline(prompt, frames, label));
         if (cards.some((card) => !hasConcreteDramaCameraDirection(card.cameraMotion))) errors.push(`${label}每个镜头卡都必须有具体主运镜`);
     } else if (!purpose || !OBSERVABLE_DRAMA_DETAIL_PATTERN.test(purpose) || /当前(?:信息|动作|变化)|动作变化|情绪变化|剧情推进|氛围|节奏/u.test(purpose)) {
         errors.push(`${label}的主运镜缺少具体动机，必须说明它响应的可见动作、信息、表情、视线、道具或环境变化`);

@@ -294,7 +294,7 @@ describe("drama authoring quality gates", () => {
         expect(blockers(report, "DIALOGUE_PERFORMANCE").some((check) => check.evidence.includes("对白片段与上一时间段重叠"))).toBe(true);
     });
 
-    it("accepts Xiaomo director cards with cut events represented by frame boundaries", () => {
+    it("rejects obsolete Xiaomo public cards even when frame boundaries are valid", () => {
         const value = packageValue({
             videoPrompt: [
                 "### 镜头 01 | 0-15秒 | 中景 | 35mm | 入口侧45度平视 | 缓慢推近10厘米 | 人物镜头",
@@ -316,7 +316,7 @@ describe("drama authoring quality gates", () => {
             ].join("\n"),
         });
         const report = validateDramaAuthoringQuality({ package: value, sources: [] });
-        expect(blockers(report, "VIDEO_PROMPT_LAYOUT")).toHaveLength(0);
+        expect(blockers(report, "VIDEO_PROMPT_LAYOUT")).toHaveLength(1);
         expect(blockers(report, "CAMERA_EVENT")).toHaveLength(0);
     });
 
@@ -325,8 +325,8 @@ describe("drama authoring quality gates", () => {
             videoPrompt: `### 镜头 01 | 0-30秒 | 中景 | 50mm | 平视 | 锁定 | 人物镜头\n场景：议事大厅。\n画面内容：萧炎抬眼并压住桌沿，指节发白，纳兰接住视线。\n光影：冷窗光落在手部。\n色调：冷青白。\npalette=冷中性/saturation=low/film_stock=Kodak 500T/grain=barely-visible/halation=none\n台词：无\n人声：短促吸气。\n音效：木案轻响。\n${"重复全局设定".repeat(1000)}`,
         });
         const report = validateDramaAuthoringQuality({ package: value, sources: [] });
-        expect(blockers(report, "VIDEO_PROMPT_LENGTH")).toHaveLength(1);
-        expect(report.checks.find((check) => check.code === "VIDEO_PROMPT_LENGTH")).toMatchObject({ severity: "blocker", evidence: expect.stringContaining("超过 4500") });
+        expect(blockers(report, "VIDEO_PROMPT_LENGTH")).toHaveLength(0);
+        expect(report.checks.find((check) => check.code === "VIDEO_PROMPT_LENGTH")).toMatchObject({ severity: "warning", evidence: expect.stringContaining("超过 2500") });
         expect(blockers(report, "VIDEO_PROMPT_LAYOUT")).not.toHaveLength(0);
     });
 

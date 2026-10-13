@@ -126,6 +126,19 @@ describe("production package boundary", () => {
         expect(protectedProject.characters[0].profile).toEqual(manual.characters[0].profile);
         expect(protectedProject.characters[0].supplierPrompt).toBe("旧通用约束");
     });
+    it.each(["seedance", "legacy"])("imports %s public segments independently from nine internal frames", (format) => {
+        const source = JSON.parse(readFileSync(new URL("../../../../docs/drama-production-package-v1-field-example.json", import.meta.url), "utf8")) as DramaProductionPackageV1;
+        const shot = source.episodes[0].shots[0];
+        const original = structuredClone(shot.framePlan.frames);
+        const boundaries = [0, 1, 2, 3, 5, 7, 9, 11, 13, 15];
+        shot.framePlan.frames = boundaries.slice(0, -1).map((startSecond, index) => ({ ...original[startSecond < 3 ? 0 : 1], id: `F${index + 1}`, sequenceIndex: index + 1, startSecond, endSecond: boundaries[index + 1] }));
+        if (format === "legacy") shot.videoPrompt = canonicalVideoPrompt("### 镜头 01 | 0-3秒 | 中景 | 50mm | 平视 | 固定机位 | 人物镜头", "### 镜头 02 | 3-15秒 | 近景 | 70mm | 平视 | 固定机位 | 人物镜头");
+        const preview = previewDramaProductionPackage(JSON.stringify(source), "merged-segments.json", undefined, { allowImportWarnings: true, enforceExecutionContract: true });
+        expect(preview.package.episodes[0].shots[0].videoPrompt).toBe(shot.videoPrompt);
+        expect(preview.package.episodes[0].shots[0].framePlan.frames).toEqual(shot.framePlan.frames);
+        expect(preview.importWarnings?.join("\n")).not.toContain("一一对应");
+    });
+
     it("previews and applies a standalone timeline package without rewriting prompts or frames", () => {
         const source = JSON.parse(readFileSync(new URL("../../../../docs/drama-production-package-v1-field-example.json", import.meta.url), "utf8")) as DramaProductionPackageV1;
         const item = source.episodes[0].shots[0];
@@ -149,7 +162,7 @@ describe("production package boundary", () => {
         }
         const missingSegment = structuredClone(source);
         missingSegment.episodes[0].shots[0].videoPrompt = item.videoPrompt.replace(/^3\.000-15\.000秒：.*\n/mu, "");
-        expect(() => previewDramaProductionPackage(JSON.stringify(missingSegment), "missing-segment.json", undefined, options)).toThrow(/1.*2 个帧段/u);
+        expect(previewDramaProductionPackage(JSON.stringify(missingSegment), "missing-segment.json", undefined, options).warnings.join("\n")).toContain("公开时间轴必须完整覆盖");
         const gap = structuredClone(source);
         gap.episodes[0].shots[0].framePlan.frames[1].startSecond = 4;
         expect(() => previewDramaProductionPackage(JSON.stringify(gap), "gap.json", undefined, options)).toThrow(/不能空白、重叠或超界/u);

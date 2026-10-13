@@ -972,8 +972,6 @@ function validateStandalonePackageShape(input: Record<string, unknown>, options:
             }
             if (previousFrameEnd !== duration) fail(`${path}.framePlan.frames`, ` 未完整覆盖 ${duration}s 逻辑片段`);
             if (!text(shot.videoPrompt)) fail(`${path}.videoPrompt`, " 不能为空");
-            const publicCardCount = (text(shot.videoPrompt).match(/^###\s*镜头\s*\d+/gmu) || []).length || extractDramaVideoPromptCards(shot.videoPrompt).length;
-            if (publicCardCount !== frames.length) fail(`${path}.videoPrompt`, ` 必须与 framePlan.frames 一一对应；当前 ${publicCardCount} 个公开视频时间段/${frames.length} 个帧段`);
             if (shotDuration === 30 && text(video.internalCutPolicy) === "dense-30s") {
                 for (const issue of dramaDenseHardCutIssues(text(shot.videoPrompt), frames as Array<{ startSecond: number; endSecond: number }>, path)) qualityWarning(`${path}.videoPrompt`, issue);
             }
@@ -1115,7 +1113,7 @@ function normalizeProductionPackage(value: unknown, options: DramaProductionPack
         ...(authoring ? { authoring } : {}),
     };
     const lengthIssues = result.episodes.flatMap((episode) => episode.shots.flatMap((shot) => validateDramaVideoPromptLength(shot.videoPrompt, `${episode.code}/${shot.code}`)));
-    if (lengthIssues.length) throw new DramaProductionPackageError(lengthIssues.join("；"));
+    if (lengthIssues.length) options.importWarnings?.push(...lengthIssues);
     if (options.requireAuthoringQuality) validateStrictAuthoringQuality(result, authoring, options);
     validateProductionPackageCompleteness(result, normalizationOptions);
     if (normalizationOptions.enforceExecutionContract)

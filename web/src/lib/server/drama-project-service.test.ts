@@ -691,7 +691,7 @@ describe("drama project service updates", () => {
         expect(recoverInvalidDramaEpisodes(malformed)?.episodes).toHaveLength(1);
     });
 
-    it("repairs and persists legacy dialogue cards when an imported project is opened", async () => {
+    it("preserves authored legacy dialogue cards when an imported project is opened", async () => {
         const current = project("2026-07-19T08:00:00.000Z", "项目");
         const prompt = [
             "### 镜头 01 | 0-2秒 | 中景 | 50mm | 平视 | 锁定机位 | 人物镜头",
@@ -737,21 +737,11 @@ describe("drama project service updates", () => {
         const recovered = await repairDramaProjectForUser("user-one", current.id);
         const recoveredShot = recovered.episodes[0].shots[0];
 
-        expect(recoveredShot.videoPrompt).toContain("台词：陆川说：\u201c我叫陆川。\u201d");
-        expect(recoveredShot.videoPrompt).toContain("台词：陆川说：\u201c滑坡把我冲进来的。\u201d");
-        expect(recoveredShot.videoPrompt).toContain("陆川对白原声清晰可辨、音量居前");
-        expect(recoveredShot.videoPrompt).toContain("对白/旁白发声期间压低环境音、动作拟音与音乐");
-        expect(recoveredShot.videoPrompt).toContain("陆川吸气");
-        expect(recoveredShot.videoPrompt).toContain("湿石滴水声");
-        expect(recoveredShot.executionVideoPrompt).toBe(recoveredShot.videoPrompt);
-        expect(mocks.updateDramaProject).toHaveBeenCalledWith(
-            "user-one",
-            expect.objectContaining({ episodes: [expect.objectContaining({ shots: [expect.objectContaining({ videoPrompt: recoveredShot.videoPrompt, executionVideoPrompt: recoveredShot.executionVideoPrompt })] })] }),
-            current.updatedAt,
-        );
+        expect(recoveredShot.videoPrompt).toBe(prompt);
+        expect(recoveredShot.executionVideoPrompt).toBe(prompt);
     });
 
-    it("backs up a project before removing repeated lines from an inflated video prompt", async () => {
+    it("preserves a long authored video prompt during an explicit project repair", async () => {
         const current = project("2026-07-19T08:00:00.000Z", "项目");
         const repeatedLine = "硬切承接：陆川压住石缝，指节停在剑柄上。";
         const prompt = ["### 镜头 01 | 0-4秒 | 近景 | 50mm | 平视 | 锁定机位 | 人物镜头", "场景：北坡岩缝。", ...Array.from({ length: 4096 }, () => repeatedLine), "台词：无"].join("\n");
@@ -761,18 +751,17 @@ describe("drama project service updates", () => {
         const recovered = await repairDramaProjectForUser("user-one", current.id);
         const recoveredShot = recovered.episodes[0].shots[0];
 
-        expect(recoveredShot.videoPrompt?.match(/硬切承接：/gu)).toHaveLength(1);
-        expect(recoveredShot.executionVideoPrompt?.match(/硬切承接：/gu)).toHaveLength(1);
-        expect(mocks.createDramaProjectVersion).toHaveBeenCalledWith("user-one", current.id, "镜头提示词重复内容修复前自动快照", current);
-        expect(mocks.updateDramaProject).toHaveBeenCalledWith("user-one", expect.objectContaining({ episodes: [expect.objectContaining({ shots: [expect.objectContaining({ videoPrompt: recoveredShot.videoPrompt })] })] }), current.updatedAt);
+        expect(recoveredShot.videoPrompt).toBe(prompt);
+        expect(recoveredShot.executionVideoPrompt).toBe(prompt);
+        expect(mocks.createDramaProjectVersion).not.toHaveBeenCalled();
     });
 
-    it("rejects public video prompts above the authoring quality limit before a project save", () => {
+    it("preserves public video prompts beyond the former fixed limit during project normalization", () => {
         const current = project("2026-07-19T08:00:00.000Z", "项目");
         const input = structuredClone(current);
         input.episodes[0].shots = [{ id: "shot-one", title: "镜头", videoPrompt: "x".repeat(4501) }] as never;
 
-        expect(() => normalizeProject(input, current)).toThrow("超过4500个Unicode字符");
+        expect(normalizeProject(input, current).episodes[0].shots[0].videoPrompt).toBe(input.episodes[0].shots[0].videoPrompt);
     });
 
     it("repairs narrative contamination in character visual settings when a project is opened", async () => {
@@ -3148,24 +3137,15 @@ describe("drama project service updates", () => {
                 clueIds: [],
                 imagePrompt: "画面",
                 videoPrompt: [
-                    [0, 4],
-                    [4, 8],
-                    [8, 12],
-                    [12, 15],
-                ]
-                    .map(([start, end], index) =>
-                        [
-                            `### 镜头 ${String(index + 1).padStart(2, "0")} | ${start}-${end}秒 | 中景 | 35mm | 平视 | 固定机位 | 单人镜头`,
-                            "场景：档案室桌边。",
-                            `画面内容：前景门框遮住画面一角，中景主体因听见门后响动而${["抬眼", "转头", "前倾", "站稳"][index]}，背景留出门后空间；右手压住桌沿，指节${["收紧", "停住", "松开", "落定"][index]}。`,
-                            "光影：左侧冷光落在脸侧和手背。",
-                            "色调：冷灰蓝，肤色自然。",
-                            "台词：无",
-                            "人声：主体短促吸气后缓慢呼气。",
-                            "音效：门后传来轻响，衣料摩擦声贴近。",
-                        ].join("\n"),
-                    )
-                    .join("\n"),
+                    "【参数】15秒，9:16，有声；主体察觉门后动静。",
+                    "【公共总规范】档案室桌边，冷灰蓝，左侧冷光照亮脸侧与手背。主体双脚落地，右手压住桌沿；前景门框遮住画面一角，背景留出门后空间。衣装、接触关系与轴线稳定，无瞬移、穿模或无因换位。人声居前，环境与动作音避让。",
+                    "【时间轴】",
+                    "0-4秒：主体因门后轻响而抬眼，右手压住桌沿，指节收紧；固定中景让观众看清脸部与接触点；台词：无；人声：短促吸气；音效：门后轻响。",
+                    "4-8秒：响动再次传来，主体转头寻找声源，手指停在桌沿；固定中景揭示视线落点；台词：无；人声：呼气；音效：衣料摩擦。",
+                    "8-12秒：主体向门侧前倾，因确认声源而松开指节，脚仍落地；固定中景强调身体转向；台词：无；人声：呼吸；音效：鞋底轻擦。",
+                    "12-15秒：主体止住前倾、重新站稳，右手落定桌沿；固定中景确认结果与站位；台词：无；人声：缓慢呼气；音效：室内底声。",
+                    "【收尾】主体仍在档案室桌边，双脚落地，右手压住桌沿，目光朝门后；门框、桌面与摄影轴不变。",
+                ].join("\n"),
                 negativePrompt: "禁止文字、水印和 Logo",
                 cameraMotion: "固定",
                 duration: 15,

@@ -55,15 +55,7 @@ import { deleteDramaFrameBeat, formatPromptFieldLines, normalizeDramaFrameBeats,
 import { canonicalizeDramaProductionPlanVisual, defaultDramaProductionPlan, dramaReferenceImageBudget, normalizeDramaProductionPlan } from "@/lib/drama-production-plan";
 import { resolveDramaShotDuration } from "@/lib/server/drama-shot-config";
 import { dramaDialogueFragmentSequenceError } from "@/lib/drama-dialogue-timing";
-import {
-    DRAMA_VIDEO_PROMPT_MAX_UNICODE_CHARACTERS,
-    repairDramaVideoPromptAudioHierarchy,
-    repairDramaVideoPromptRepeatedLines,
-    repairDramaVideoPromptUtteranceCoverage,
-    validateDramaVideoPromptAudioHierarchy,
-    validateDramaVideoPromptCardLayout,
-    validateDramaVideoPromptUtteranceCoverage,
-} from "@/lib/drama-prompt-quality";
+import { repairDramaVideoPromptAudioHierarchy, repairDramaVideoPromptUtteranceCoverage, validateDramaVideoPromptAudioHierarchy, validateDramaVideoPromptCardLayout, validateDramaVideoPromptUtteranceCoverage } from "@/lib/drama-prompt-quality";
 import { TEXT_MODEL_REQUEST_TIMEOUT_MS } from "@/lib/server/model-request-policy";
 import { getAgentRun, listAgentRuns } from "@/lib/server/agent-run-store";
 import { reviewCreativeOutputs } from "@/lib/server/creative-review-service";
@@ -185,7 +177,6 @@ export async function repairDramaProjectForUser(userId: string, id: string) {
     const assetRecovered = await recoverStaleGeneratedAssetReferences(userId, characterProfileRecovered || profileRecovered || reviewRecovered || frameEvidenceRecovered || boundaryRecovered || styleRecovered || currentWithPrompts);
     const recovered = assetRecovered || characterProfileRecovered || profileRecovered || reviewRecovered || frameEvidenceRecovered || boundaryRecovered || styleRecovered || promptRecovered || episodesRecovered;
     if (!recovered) return project;
-    if (promptRecovery?.duplicateLinesChanged) await createDramaProjectVersion(userId, project.id, "镜头提示词重复内容修复前自动快照", project);
     try {
         return await updateDramaProject(userId, recovered, project.updatedAt);
     } catch (error) {
@@ -201,7 +192,6 @@ export function recoverInvalidDramaEpisodes(project: DramaProject) {
 
 function recoverStaleDramaExecutionVideoPrompts(project: DramaProject) {
     let changed = false;
-    let duplicateLinesChanged = false;
     const episodes = project.episodes.map((episode) => ({
         ...episode,
         shots: episode.shots.map((shot) => {
@@ -209,35 +199,25 @@ function recoverStaleDramaExecutionVideoPrompts(project: DramaProject) {
             const utterances = shot.utterances || [];
             const executionPrompt = shot.executionVideoPrompt?.trim();
             const sourcePrompt = shot.videoPrompt?.trim();
-            const repairPrompt = (prompt: string) => {
-                const repeatedLines = repairDramaVideoPromptRepeatedLines(prompt);
-                duplicateLinesChanged ||= repeatedLines.changed;
-                const dialogue = repairDramaVideoPromptUtteranceCoverage(repeatedLines.prompt, frames, utterances, shot.code || shot.title);
-                const audio = repairDramaVideoPromptAudioHierarchy(dialogue.prompt, shot.code || shot.title);
-                return { prompt: audio.prompt, changed: repeatedLines.changed || dialogue.changed || audio.changed };
-            };
-            const executionRepair = executionPrompt ? repairPrompt(executionPrompt) : undefined;
-            const sourceRepair = sourcePrompt ? repairPrompt(sourcePrompt) : undefined;
-            const nextExecutionPrompt = executionRepair?.prompt || executionPrompt;
-            const nextSourcePrompt = sourceRepair?.prompt || sourcePrompt;
+            const nextExecutionPrompt = executionPrompt;
+            const nextSourcePrompt = sourcePrompt;
             const promptErrors = [...validateDramaVideoPromptCardLayout(nextExecutionPrompt, frames, shot.code || shot.title), ...validateDramaVideoPromptUtteranceCoverage(nextExecutionPrompt || "", frames, utterances, shot.code || shot.title)];
             const sourceErrors = nextSourcePrompt
                 ? [...validateDramaVideoPromptCardLayout(nextSourcePrompt, frames, shot.code || shot.title), ...validateDramaVideoPromptUtteranceCoverage(nextSourcePrompt, frames, utterances, shot.code || shot.title)]
                 : ["基础视频提示词缺失"];
             const clearExecutionPrompt = Boolean(nextExecutionPrompt && promptErrors.length && !sourceErrors.length);
-            if (!executionRepair?.changed && !sourceRepair?.changed && !clearExecutionPrompt) return shot;
+            if (!clearExecutionPrompt) return shot;
             changed = true;
             const fieldOrigins = { ...(shot.fieldOrigins || {}) };
             if (clearExecutionPrompt) delete fieldOrigins.executionVideoPrompt;
             return {
                 ...shot,
-                ...(sourceRepair?.changed ? { videoPrompt: sourceRepair.prompt } : {}),
-                executionVideoPrompt: clearExecutionPrompt ? undefined : executionRepair?.changed ? executionRepair.prompt : shot.executionVideoPrompt,
+                executionVideoPrompt: undefined,
                 fieldOrigins,
             };
         }),
     }));
-    return changed ? { project: { ...project, episodes, updatedAt: nextTimestamp(project.updatedAt) }, duplicateLinesChanged } : null;
+    return changed ? { project: { ...project, episodes, updatedAt: nextTimestamp(project.updatedAt) } } : null;
 }
 
 export function recoverStaleDramaBoundaryFrames(project: DramaProject) {
@@ -3992,14 +3972,9 @@ function normalizeVisualReview(value: unknown): DramaEpisode["visualReview"] {
     };
 }
 
-function assertDramaVideoPromptLength(value: string) {
-    if (Array.from(value).length > DRAMA_VIDEO_PROMPT_MAX_UNICODE_CHARACTERS) throw new DramaProjectServiceError(`镜头公开视频提示词超过${DRAMA_VIDEO_PROMPT_MAX_UNICODE_CHARACTERS}个Unicode字符，请删除重复内容后重试`, 413);
-}
-
 function normalizeShot(value: unknown, index: number): DramaShot {
     const input = object(value);
     const videoPrompt = cleanText(input.videoPrompt);
-    assertDramaVideoPromptLength(videoPrompt);
     const normalizedShot: DramaShot = {
         id: cleanText(input.id) || `shot-${nanoid()}`,
         code: optionalText(input.code),

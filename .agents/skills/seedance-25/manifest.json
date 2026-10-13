@@ -4,7 +4,7 @@
   "sourceRepository": "liyue-aigc/seedance-2-5-video-director",
   "sourceCommit": "ad0e68ba6ce24fb9ae9c67c9276061cef37663f1",
   "sourceLicense": "MIT",
-  "sourceContentHash": "f5fe2c93d669996bc9758746819e1b8d98b11a18bcd0faf3a5fd6c9ce3d10476",
+  "sourceContentHash": "ca49e1f4adf60519d964d8abbfc28aeff5ebba8e801e9abdc5ae7e86550b8b94",
   "runtimeModule": "web/src/lib/server/agent-skills/seedance-25.generated.ts",
   "references": [
     "references/capabilities-and-limits.md",
@@ -13,6 +13,7 @@
     "references/mode-routing.md",
     "references/multi-character-blocking.md",
     "references/multimodal-patterns.md",
+    "references/prompt-adapter.md",
     "references/prompt-blueprints.md",
     "references/realistic-direction-patterns.md"
   ],

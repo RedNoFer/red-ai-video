@@ -7,7 +7,15 @@ import { dramaDialogueTimingReminder, dramaTimedDialogueCapacityIssues, dramaUtt
 import { dramaReferenceImageBudget } from "@/lib/drama-production-plan";
 import { dramaShotReferenceSelectionIds, resolveDramaVideoReferenceMode } from "@/lib/drama-video-reference-plan";
 import type { DramaVideoReferenceMode } from "@/lib/drama-project-contract";
-import { extractDramaVideoPromptCards, validateDramaFrameTiming, validateDramaPerformanceDetail, validateDramaVideoPromptCardLayout, validateDramaVideoPromptDialogueTiming, validateDramaVideoPromptUtteranceCoverage } from "@/lib/drama-prompt-quality";
+import {
+    extractDramaVideoPromptCards,
+    validateDramaFrameTiming,
+    validateDramaPerformanceDetail,
+    validateDramaSeedanceVideoPromptLayout,
+    validateDramaVideoPromptLength,
+    validateDramaVideoPromptDialogueTiming,
+    validateDramaVideoPromptUtteranceCoverage,
+} from "@/lib/drama-prompt-quality";
 import { validateDramaCharacterWardrobeContinuity, validateDramaCutInformationDiversity, validateDramaPromptComposition, validateDramaReferenceAliasConsistency } from "@/lib/drama-prompt-composition-quality";
 import { compileDramaShotPrompts } from "@/lib/drama-prompt-compiler";
 import { auditDramaShotDirectorQuality } from "@/lib/server/agent-skills/drama-video-director";
@@ -130,8 +138,9 @@ function checkShot(
     const videoPrompt = shot.executionVideoPrompt?.trim() || shot.videoPrompt?.trim();
     if (!videoPrompt) issues.push(blocking("VIDEO_PROMPT_MISSING", `${label}缺少有效视频Prompt`, { shotId: shot.id }));
     if (videoPrompt) {
+        for (const error of validateDramaVideoPromptLength(videoPrompt, label)) issues.push(warning("VIDEO_PROMPT_LENGTH", error, { shotId: shot.id, correction: "建议由作者压缩重复公共事实；超过2500个Unicode字符不阻断视频提交" }));
         const utteranceCoverageErrors = validateDramaVideoPromptUtteranceCoverage(videoPrompt, shot.framePlan?.frames || [], shot.utterances as DramaDialogueTimingInput[], label);
-        if (utteranceCoverageErrors.length) issues.push(blocking("DIALOGUE_PROMPT_COVERAGE", utteranceCoverageErrors[0], { shotId: shot.id, correction: "把每句对白/旁白原句写入与其时间窗口重叠的公开视频镜头卡‘台词’字段，并使用中文引号" }));
+        if (utteranceCoverageErrors.length) issues.push(blocking("DIALOGUE_PROMPT_COVERAGE", utteranceCoverageErrors[0], { shotId: shot.id, correction: "把每句对白/旁白原句写入与其时间窗口重叠的公开视频时间轴段‘台词’字段，并使用中文引号" }));
     }
     const performance = shot.performancePlan;
     const beats = performance?.beats;
@@ -140,8 +149,8 @@ function checkShot(
     const dialogueCount = shot.utterances.filter((item) => item.type === "dialogue").length || (shot.dialogue.trim() ? 1 : 0);
     if (shot.framePlan?.frames.length) {
         const compiledVideoPrompt = compileDramaShotPrompts(project, episode, shot).videoPrompt;
-        const layoutErrors = validateDramaVideoPromptCardLayout(compiledVideoPrompt, shot.framePlan.frames, label);
-        if (layoutErrors.length) issues.push(blocking("VIDEO_PROMPT_LAYOUT", layoutErrors[0], { shotId: shot.id, correction: "重新优化或生成视频提示词，按小墨式导演镜头卡逐帧补齐时间、景别、焦段、机位、运镜和可见画面" }));
+        const layoutErrors = validateDramaSeedanceVideoPromptLayout(compiledVideoPrompt, shot.framePlan.frames, label);
+        if (layoutErrors.length) issues.push(blocking("VIDEO_PROMPT_LAYOUT", layoutErrors[0], { shotId: shot.id, correction: "重新优化或生成视频提示词，按 Seedance 2.5 适配器五层格式补齐参数、公共总规范、连续时间轴、空间站位、动作结果和收尾" }));
         const timingErrors = validateDramaFrameTiming(shot.framePlan.frames, shot.utterances as DramaDialogueTimingInput[], label);
         if (timingErrors.length) issues.push(blocking("FRAME_DIALOGUE_TIMING", timingErrors[0], { shotId: shot.id, correction: "按对白自然开口、收句、停顿和反应重新分配帧段，禁止机械等长" }));
         const promptTimingErrors = validateDramaVideoPromptDialogueTiming(videoPrompt || "", shot.framePlan.frames, shot.utterances as DramaDialogueTimingInput[], label);

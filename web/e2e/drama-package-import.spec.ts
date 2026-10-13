@@ -5,7 +5,7 @@ import { E2E_PROTOCOL_ORIGIN, saveDramaProjectFixture } from "./support";
 import { expectNoHorizontalOverflow } from "./responsive-helpers";
 import type { DramaProject } from "../src/lib/drama-project-contract";
 
-for (const layout of ["cards", "timeline"]) {
+for (const layout of ["template", "timeline"]) {
     test(`${layout} package warnings permit one preview and preserve author prose after refresh`, async ({ page, request }) => {
         const created = await request.post("/api/drama/projects", { data: { title: `E2E 外部原稿 ${randomUUID().slice(0, 8)}`, ratio: "9:16" } });
         expect(created.ok(), await created.text()).toBe(true);
@@ -37,7 +37,17 @@ for (const layout of ["cards", "timeline"]) {
         seededProject.characters = [{ id: "retained-asset", code: characterAsset.code, name: characterAsset.name, description: "原文角色与功能事实。", supplierPrompt: "旧通用约束" }];
         seededProject.scenes = [{ id: "retained-location", code: sceneAsset.code, name: sceneAsset.name, description: "入口、出口、地面支撑", supplierPrompt: "旧通用场景约束" }];
         expect((await saveDramaProjectFixture(request, project, seededProject)).ok()).toBe(true);
-        const authored = JSON.parse(source).episodes[0].shots[0];
+        const packageInput = JSON.parse(source);
+        const authored = packageInput.episodes[0].shots[0];
+        authored.videoPrompt += `\n${"🧭".repeat(2501)}`;
+        const originalFrames = structuredClone(authored.framePlan.frames);
+        const boundaries = [0, 1, 2, 3, 5, 7, 9, 11, 13, 15];
+        authored.framePlan.frames = boundaries.slice(0, -1).map((startSecond, index) => ({ ...originalFrames[startSecond < 3 ? 0 : 1], id: `F${index + 1}`, sequenceIndex: index + 1, startSecond, endSecond: boundaries[index + 1] }));
+        source = JSON.stringify(packageInput);
+        expect(Array.from(authored.videoPrompt).length).toBeGreaterThan(2500);
+        const template = await request.get("/drama-production-package-v1-template.md");
+        expect(template.ok()).toBe(true);
+        expect(await template.text()).toContain("不阻断交稿或视频提交");
         let previewCount = 0;
         page.on("request", (req) => {
             if (req.url().endsWith("/production-package") && req.postDataJSON()?.action === "preview") previewCount += 1;
@@ -50,6 +60,7 @@ for (const layout of ["cards", "timeline"]) {
             await dialog.getByRole("button", { name: "识别并预览" }).click();
             const preview = page.locator("[data-drama-production-package-preview]");
             await expect(preview.locator("[data-drama-production-package-import-warnings]")).toContainText("允许导入");
+            await expect(preview.locator("[data-drama-production-package-import-warnings]")).toContainText("2500");
             const apply = page.getByRole("button", { name: "继续导入（有警告）" });
             await expect(apply).toBeVisible();
             const box = await apply.boundingBox();

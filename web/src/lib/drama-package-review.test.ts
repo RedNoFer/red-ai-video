@@ -9,6 +9,30 @@ import { serializeDramaProductionPackageJson, serializeDramaProductionPackageMar
 const fixture = () => JSON.parse(readFileSync(new URL("../../../docs/drama-production-package-v1-field-example.json", import.meta.url), "utf8")) as DramaProductionPackageV1;
 const preview = (value: DramaProductionPackageV1, project?: DramaProject) => previewDramaProductionPackage(JSON.stringify(value), "contract.json", project, { allowImportWarnings: true, enforceExecutionContract: true });
 const blockers = (value: ReturnType<typeof reviewDramaPackage>) => value.checks.filter((check) => check.status === "blocked");
+const legacyDialogueFixture = () => {
+    const shot = fixture().episodes[0].shots[0];
+    shot.videoPrompt = [
+        "### 镜头 01 | 0-3秒 | 中景 | 50mm | 平视 | 固定机位 | 人物镜头",
+        "场景：木门西侧，长案居中。",
+        "画面内容：林雪因对方触纸而收紧指尖，信封停在她手中。",
+        "摄影：固定机位看清手部接触。",
+        "光影：西窗柔光。",
+        "色调：暖灰木棕。",
+        "台词：林雪说：“外套颜色没变，别说话。”",
+        "人声：林雪对白原声清晰可辨、音量居前；收句后闭口。",
+        "音效：对白发声期间压低环境音与动作拟音，不盖过台词。",
+        "### 镜头 02 | 3-15秒 | 近景 | 70mm | 平视 | 固定机位 | 人物镜头",
+        "场景：木门西侧，长案居中。",
+        "画面内容：林雪因递交中止而收封，右手持封停在胸前。",
+        "摄影：固定机位确认持有人。",
+        "光影：西窗柔光。",
+        "色调：暖灰木棕。",
+        "台词：无",
+        "人声：呼吸。",
+        "音效：纸张轻擦。",
+    ].join("\n");
+    return shot;
+};
 
 describe("external production package read-only facts", () => {
     it("imports the field example without silently repairing dialogue, public prose or frame prompts", () => {
@@ -108,7 +132,7 @@ describe("external production package read-only facts", () => {
 
 describe("public dialogue and sound scope", () => {
     it("does not confuse a spoken '别说话', listener silence or silence after speech with a mute conflict", () => {
-        const shot = fixture().episodes[0].shots[0];
+        const shot = legacyDialogueFixture();
         expect(validateDramaVideoPromptAudioHierarchy(shot.videoPrompt, "SH01")).toEqual([]);
         expect(validateDramaVideoPromptAudioHierarchy(shot.videoPrompt.replace("收句后闭口。", "听者禁止说话；收句后只保留环境声。"), "SH01")).toEqual([]);
         expect(validateDramaVideoPromptAudioHierarchy(shot.videoPrompt.replace("收句后闭口。", "林雪儿禁止说话。"), "SH01")).toEqual([]);
@@ -119,7 +143,7 @@ describe("public dialogue and sound scope", () => {
     });
 
     it("uses exact speaker identity and detects duplicated quoted speech", () => {
-        const shot = fixture().episodes[0].shots[0];
+        const shot = legacyDialogueFixture();
         const wrongSpeaker = shot.videoPrompt.replace("林雪说：", "林雪儿说：");
         expect(validateDramaVideoPromptUtteranceCoverage(wrongSpeaker, shot.framePlan.frames, shot.utterances, "SH01").join("\n")).toContain("未完整写入");
         const repeated = shot.videoPrompt.replace("林雪说：“外套颜色没变，别说话。”", "林雪说：“外套颜色没变，别说话。”林雪说：“外套颜色没变，别说话。”");
@@ -128,7 +152,7 @@ describe("public dialogue and sound scope", () => {
     });
 
     it("rejects duplicate fields while keeping field-like words inside multiline quoted dialogue", () => {
-        const shot = fixture().episodes[0].shots[0];
+        const shot = legacyDialogueFixture();
         const duplicate = shot.videoPrompt.replace("人声：", "台词：无\n人声：");
         expect(validateDramaVideoPromptCardLayout(duplicate, shot.framePlan.frames, "SH01").join("\n")).toContain("重复“台词”");
         const quote = shot.videoPrompt.replace("外套颜色没变，别说话。", "外套颜色没变，\n音效：只是原句里的文字。");
@@ -137,7 +161,7 @@ describe("public dialogue and sound scope", () => {
     });
 
     it("keeps a long utterance on a monotonic cursor across a listener or hand closeup", () => {
-        const shot = fixture().episodes[0].shots[0];
+        const shot = legacyDialogueFixture();
         const utterance = { ...shot.utterances[0], startSecond: 0, endSecond: 15 };
         const continued = shot.videoPrompt.replace("外套颜色没变，别说话。", "外套颜色没变，").replace("台词：无", "台词：林雪（场内画外对白）说：“别说话。”");
         expect(validateDramaVideoPromptUtteranceCoverage(continued, shot.framePlan.frames, [utterance], "SH01")).toEqual([]);

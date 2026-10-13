@@ -51,7 +51,8 @@ describe("drama analysis contracts", () => {
     it("keeps material binding and frame planning in the Skill-owned video prompt contract", () => {
         expect(dramaVideoPromptTool.description).toContain("当前唯一 drama-video-director Skill");
         expect(dramaVideoPromptTool.parameters.properties.shots.items.properties.videoPrompt.description).toContain("当前唯一导演 Skill");
-        expect(dramaVideoPromptTool.parameters.properties.shots.items.properties.videoPrompt.description).toContain("画面内容只写屏幕上能看见的进行中动作和结果");
+        expect(dramaVideoPromptTool.parameters.properties.shots.items.properties.videoPrompt.description).toContain("只提示作者压缩，不阻断");
+        expect(dramaVideoPromptTool.parameters.properties.shots.items.properties.videoPrompt.description).toContain("Seedance 2.5 五层公开");
         expect(dramaVideoPromptTool.parameters.properties.shots.items.properties.videoPrompt.description).toContain("人声字段必须说明对应说话人/旁白原声实际发出、清晰可辨、音量居前");
         expect(dramaVideoPromptTool.parameters.properties.shots.items.properties.videoPrompt.description).toContain("环境音、动作拟音和音乐在对白/旁白发声窗口压低避让");
         expect(dramaVisualTool.parameters.properties.shots.items.properties.videoPrompt.description).toContain("原句完整可听并与说话时间同步");

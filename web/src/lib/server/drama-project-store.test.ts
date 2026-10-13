@@ -179,16 +179,19 @@ describe("drama project file provider", () => {
         await expect(getDramaProject("one", "user-one")).resolves.toMatchObject({ productionArchive: original.productionArchive, episodes: [{ shots: [shot] }] });
     });
 
-    it("rejects oversized public video prompts at the scoped persistence boundary", async () => {
-        await expect(
-            updateDramaProjectShotMutation("user-one", {
-                projectId: "project-one",
-                episodeId: "episode-one",
-                shotId: "shot-one",
-                shot: { id: "shot-one", videoPrompt: "x".repeat(DRAMA_VIDEO_PROMPT_MAX_UNICODE_CHARACTERS + 1) } as never,
-            }),
-        ).rejects.toMatchObject({ status: 413, message: expect.stringContaining("超过4500个Unicode字符") });
-        expect(mocks.postgresQuery).not.toHaveBeenCalled();
+    it("preserves oversized public video prompts through scoped persistence and readback", async () => {
+        const original = project("one", "完整原稿");
+        original.episodes[0].shots = [{ id: "shot-one", title: "镜头" } as never];
+        await createDramaProject("user-one", original);
+        const videoPrompt = "🧭".repeat(DRAMA_VIDEO_PROMPT_MAX_UNICODE_CHARACTERS + 1);
+        await updateDramaProjectShotMutation("user-one", {
+            projectId: original.id,
+            episodeId: "episode-one",
+            shotId: "shot-one",
+            shot: { id: "shot-one", title: "镜头", videoPrompt } as never,
+            expectedUpdatedAt: original.updatedAt,
+        });
+        expect((await getDramaProject(original.id, "user-one"))?.episodes[0].shots[0].videoPrompt).toBe(videoPrompt);
     });
 
     it("keeps the large archive while changing only the project ratio", async () => {

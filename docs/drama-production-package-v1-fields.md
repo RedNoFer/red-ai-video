@@ -28,7 +28,7 @@
 | `framePlan.end.required`                                                          | 布尔值，不能写 `"true"` 或提示词                                                                                                                                                 |
 | `framePlan.frames[]`                                                              | 每帧 `id/sequenceIndex/startSecond/endSecond/actionPrompt/endPrompt/imagePrompt`；按真实对白与动作边界从 0 连续覆盖至当前 `duration`，无空隙、重叠或越界                         |
 | `framePlan.referenceManifest[]`                                                   | 对象数组，使用 `alias/role/purpose/assetId`；默认场景全景加出镜角色基准，道具或关键帧只在不可替代时加入                                                                          |
-| `shots[].videoPrompt`                                                             | 独立完整字符串，最多 4500 个 Unicode 字符；每帧一张公开镜头卡，首卡重述当前世界事实；完整对白只进入卡内 `台词`，不复制进 `画面内容`                                              |
+| `shots[].videoPrompt`                                                             | Seedance 2.5 五层独立完整字符串；2500 个 Unicode 字符为提示阈值，超限不阻断。公共事实只写一次，连续内部帧可合并为公开时间轴段；完整对白只进入 `台词`，不复制进画面动作           |
 | `continuityEdges[]`                                                               | 片段之间的连接；`fromShotCode/toShotCode/transition/inheritActualEndFrame/carryCharacterIds/carryPropIds/carryEnvironment/carryAxis/notes`；枚举全部相邻片段，换场与跳时说明依据 |
 | `authoring.materials[]`                                                           | 文本来源对象数组；必须包含 `package-template` 与 `story-source`，不用提供运行凭据                                                                                                |
 | `authoring.qualityGateReport`                                                     | `{status, checks[]}`，检查项记 `code/status/severity/scope/evidence/sourceRefs/fixHint`；被阻断的检查与总状态必须一致。导入不替作者改成 `passed`                                 |
@@ -46,4 +46,4 @@ pnpm --dir web run check:drama-package -- /绝对路径/制作包.md --source /�
 
 命令只读，不调用模型、不生成分镜、不修改输入文件。输出 `importable/sourceHash/summary/warnings/qualityGateReport`：退出码 `0` 表示文本检查无阻断项；`1` 表示无法解析或结构不允许导入；`2` 表示结构可导入但需质量修订。未提供 TXT、未识别声源或尚未生成媒体时，报告保留检查缺口，不宣称全文对白、口型或成片验收通过。
 
-导入预览集中提醒质量问题，可确认后继续导入。JSON 损坏、章节结构、必填嵌套类型、非法字段、时间轴错误与完整 `videoPrompt` 超过 4500 个 Unicode 字符仍阻断。长度超限只允许作者压缩重复视觉和格式话术，导入器不截断原稿。导入、保存和刷新保留作者公开原稿；目标项目风格冲突及人工字段合并冲突只提醒。稳定 ID 映射与明确的人工字段保留是允许的变更。修改对白、入口状态或同帧提示词后，相关旧媒体保留并进入待复核状态。
+导入预览集中提醒质量问题，可确认后继续导入。JSON 损坏、章节结构、必填嵌套类型、非法字段与时间轴错误仍阻断。完整 `videoPrompt` 超过 2500 个 Unicode 字符只提示压缩重复视觉和格式话术，不阻断交稿、导入、保存或视频提交，不截断原稿、不自动拆分逻辑片段。导入、保存和刷新保留作者公开原稿；目标项目风格冲突及人工字段合并冲突只提醒。稳定 ID 映射与明确的人工字段保留是允许的变更。修改对白、入口状态或同帧提示词后，相关旧媒体保留并进入待复核状态。
