@@ -374,6 +374,27 @@ describe("admin settings model routing", () => {
         expect(mocks.setAuthSettings).toHaveBeenCalledWith(expect.objectContaining({ logicalModels: [expect.objectContaining({ id: "vendor/writer" })] }));
     });
 
+    it("keeps an explicitly reclassified Yingling video route when its saved provider metadata says text", async () => {
+        const channel = applyChannelProtocol({ id: "yingling", name: "影灵 API", baseUrl: "https://yinglingapi.com", apiKey: "saved-secret", apiFormat: "openai", models: ["dola-sd2.5-3"], enabled: true }, "yinglingapi");
+        channel.advancedConfig = {
+            ...channel.advancedConfig!,
+            modelCapabilities: { ...channel.advancedConfig?.modelCapabilities, "dola-sd2.5-3": "text" },
+            modelConfigs: { ...channel.advancedConfig?.modelConfigs, "dola-sd2.5-3": { capability: "text", source: "provider" } },
+        };
+        const videoRoute = {
+            id: "dola-sd2.5-3::video",
+            name: "dola-sd2.5-3",
+            capability: "video" as const,
+            enabled: true,
+            bindings: [{ id: "yingling:dola-sd2.5-3", channelId: "yingling", upstreamModel: "dola-sd2.5-3", enabled: true, priority: 1 }],
+        };
+
+        const response = await PATCH(request({ systemChannels: [channel], logicalModels: [videoRoute], defaultModels: { textModel: "", imageModel: "", videoModel: videoRoute.id, audioModel: "" } }));
+
+        expect(response.status).toBe(200);
+        expect(mocks.setAuthSettings).toHaveBeenCalledWith(expect.objectContaining({ logicalModels: [expect.objectContaining({ id: videoRoute.id, capability: "video", bindings: [expect.objectContaining({ upstreamModel: "dola-sd2.5-3" })] })] }));
+    });
+
     it("saves a disabled channel after clearing its now-unresolvable default", async () => {
         const response = await PATCH(
             request({

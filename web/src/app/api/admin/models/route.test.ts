@@ -54,6 +54,22 @@ describe("admin models route", () => {
         expect(fetchMock).toHaveBeenCalledWith("https://video.example.com/models", expect.any(Object));
     });
 
+    it("classifies Dola SD2.5 video models returned by the Yingling catalog", async () => {
+        vi.stubGlobal(
+            "fetch",
+            vi.fn(async () => Response.json({ data: [{ id: "dola-sd2.5-3", object: "model" }] })),
+        );
+
+        const response = await POST(request({ channelId: "saved", protocol: "yinglingapi" }));
+
+        expect(response.status).toBe(200);
+        expect(await response.json()).toMatchObject({
+            models: ["dola-sd2.5-3"],
+            modelCapabilities: { "dola-sd2.5-3": "video" },
+            modelConfigs: { "dola-sd2.5-3": { capability: "video", createPath: "/videos" } },
+        });
+    });
+
     it("loads every paginated provider model page and returns capability metadata", async () => {
         const fetchMock = vi
             .fn()

@@ -17,10 +17,15 @@ export function isCreativeGenerationModel(model: string) {
 
 export function inferModelCapability(model: string): LogicalModelCapability {
     const value = normalizeModelId(model);
-    if (isSeedanceVideoModelName(value) || /stable[-_.\s]?video[-_.\s]?diffusion|(?:^|[-_.\s/])(video|videos|svd|i2v|t2v|img2video|text2video|sora|veo|kling|wan|hailuo|runway|luma|vidu)(?:$|[-_.\s/])/.test(value)) return "video";
+    if (isSeedanceVideoModelName(value) || isDolaSd25VideoModelName(value) || /stable[-_.\s]?video[-_.\s]?diffusion|(?:^|[-_.\s/])(video|videos|svd|i2v|t2v|img2video|text2video|sora|veo|kling|wan|hailuo|runway|luma|vidu)(?:$|[-_.\s/])/.test(value))
+        return "video";
     if (/(?:^|[-_.\s/])(audio|tts|speech|voice|music|sound)(?:$|[-_.\s/])|whisper|sensevoice/.test(value)) return "audio";
     if (/(?:^|[-_.\s/])(image|images|img|flux|sdxl|midjourney)(?:$|[-_.\s/])|nano[-_.\s]?banana|seedream|gpt[-_.]?image|dall[-_.]?e|imagen|stable[-_.\s]?diffusion/.test(value) || isShortStableDiffusionName(value)) return "image";
     return "text";
+}
+
+function isDolaSd25VideoModelName(value: string) {
+    return /(?:^|[-_.\s/])dola[-_.\s]?sd[-_.\s]?2[._-]?5(?:$|[-_.\s/])/.test(value);
 }
 
 export function capabilityFromHint(value: unknown): LogicalModelCapability | undefined {

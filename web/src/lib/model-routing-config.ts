@@ -237,8 +237,8 @@ function resolveChannelModelCapability(channel: Pick<SystemModelChannel, "advanc
     const inferred = inferModelCapability(model);
     if (config?.source === "health" && inferred !== "text") return { capability: inferred, authoritative: true };
     const configured = config?.capability || channel.advancedConfig?.modelCapabilities?.[key];
+    if (configured === "text" && inferred !== "text") return { capability: inferred, authoritative: true };
     if (configured) return { capability: configured, authoritative: true };
-    if (!config && configured === "text" && inferred !== "text") return { capability: inferred, authoritative: true };
     return configured ? { capability: configured, authoritative: true } : { capability: inferred, authoritative: false };
 }
 
@@ -317,15 +317,17 @@ function channelSupportsModel(channel: Pick<SystemModelChannel, "models">, model
 function channelSupportsCapability(channel: Pick<SystemModelChannel, "apiFormat" | "advancedConfig">, model: string, capability: LogicalModelCapability) {
     if (capability === "audio" && channel.apiFormat === "gemini") return false;
     const modelKey = normalizeModelId(model);
+    const inferred = inferModelCapability(model);
+    const inferredVideo = capability === "video" && inferred === "video";
     const modelConfig = channel.advancedConfig?.modelConfigs?.[modelKey];
     if (modelConfig) {
-        if (modelConfig.capability !== capability) return false;
+        if (modelConfig.capability !== capability && !(inferredVideo && modelConfig.capability === "text")) return false;
         if (capability === "audio" && (!modelConfig.createPath || !modelConfig.requestTemplate)) return false;
-        return true;
+        if (modelConfig.capability === capability) return true;
     }
     const declaredCapability = channel.advancedConfig?.modelCapabilities?.[modelKey];
-    if (declaredCapability && declaredCapability !== capability) return false;
-    if (capability === "audio" && (inferModelCapability(model) === "image" || inferModelCapability(model) === "video")) return false;
+    if (declaredCapability && declaredCapability !== capability && !(inferredVideo && declaredCapability === "text")) return false;
+    if (capability === "audio" && (inferred === "image" || inferred === "video")) return false;
     const config = resolveChannelCapabilityConfig(channel.advancedConfig, model, capability);
     return Boolean(config?.createPath && config.requestTemplate) || (capability !== "audio" && !channel.advancedConfig);
 }
