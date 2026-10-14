@@ -89,6 +89,9 @@ describe("drama prompt compiler", () => {
 
         expect(prompt).toContain("@图片1：角色固定资产「Karin」；绑定规则：锁定身份与服装");
         expect(prompt).toContain("@图片2：场景固定资产「黑湖记忆」；绑定规则：锁定空间拓扑与主光方向");
+        expect(prompt.startsWith("【参考图片】\n@图片1")).toBe(true);
+        expect(prompt.endsWith("静态关键帧：Karin站在黑湖边")).toBe(true);
+        expect(appendDramaImageReferenceBindings(prompt, [])).toBe("静态关键帧：Karin站在黑湖边");
         expect(appendDramaImageReferenceBindings(prompt, [{ id: "scene-one", label: "场景固定资产「黑湖记忆」", binding: "锁定空间拓扑与主光方向" }])).toContain("@图片1：场景固定资产「黑湖记忆」");
         expect(appendDramaImageReferenceBindings(prompt, [{ id: "scene-one", label: "场景固定资产「黑湖记忆」", binding: "锁定空间拓扑与主光方向" }])).not.toContain("@图片2：");
     });
@@ -98,7 +101,7 @@ describe("drama prompt compiler", () => {
             { id: "frame-one", label: "顺序帧 1（开始）", binding: "作为开始阶段画面依据" },
         ]);
 
-        expect(prompt.match(/实际参考图绑定（编号与本次请求图片数组完全一致）/gu)).toHaveLength(1);
+        expect(prompt.match(/【参考图片】/gu)).toHaveLength(1);
         expect(prompt).not.toContain("参考图顺序（与视频请求数组完全一致）");
         expect(prompt).toContain("单一主运镜：缓慢推进");
         expect(prompt).toContain("@图片1：顺序帧 1（开始）；绑定规则：作为开始阶段画面依据");

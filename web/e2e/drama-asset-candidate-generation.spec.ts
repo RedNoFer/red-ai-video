@@ -398,6 +398,10 @@ for (const width of [1672, 1440, 390, 430]) {
             });
             expect(saved.ok(), await saved.text()).toBe(true);
 
+            let releaseUpload = () => {};
+            let releaseSave = () => {};
+            const uploadGate = new Promise<void>((resolve) => (releaseUpload = resolve));
+            const saveGate = new Promise<void>((resolve) => (releaseSave = resolve));
             try {
                 await page.goto(`/drama/${project.id}`, { waitUntil: "domcontentloaded" });
                 if (theme === "dark") {
@@ -407,6 +411,18 @@ for (const width of [1672, 1440, 390, 430]) {
                 await page.getByRole("button", { name: "打开项目资产" }).click();
                 await page.locator("[data-drama-assets-library] article").filter({ hasText: "上传测试角色" }).getByRole("button", { name: "编辑角色：上传测试角色" }).last().click();
                 const drawer = page.getByRole("dialog", { name: "编辑角色" });
+                const candidateSaves: string[] = [];
+                page.on("request", (request) => {
+                    if (request.method() === "PATCH" && (request.url().endsWith(`/projects/${project.id}/mutations`) || request.url().endsWith(`/assets/characters/${characterId}`))) candidateSaves.push(new URL(request.url()).pathname);
+                });
+                await page.route("**/api/reference-assets", async (route) => {
+                    await uploadGate;
+                    await route.continue();
+                });
+                await page.route(`**/assets/characters/${characterId}`, async (route) => {
+                    if (route.request().method() === "PATCH") await saveGate;
+                    await route.continue();
+                });
                 const uploadAck = page.waitForResponse((response) => response.url().endsWith(`/assets/characters/${characterId}`) && response.request().method() === "PATCH");
                 await drawer.getByRole("button", { name: "上传候选" }).click();
                 await drawer.locator('input[type="file"][accept="image/*"]').setInputFiles({
@@ -414,11 +430,23 @@ for (const width of [1672, 1440, 390, 430]) {
                     mimeType: "image/png",
                     buffer: Buffer.from(REFERENCE_DATA_URL.split(",")[1], "base64"),
                 });
+                const pending = drawer.getByRole("article", { name: "正在上传的候选图片" });
+                await expect(pending.getByRole("status")).toHaveText("上传中…");
+                await expect(pending.locator("img")).toHaveAttribute("src", /^blob:/);
+                await expect.poll(() => pending.locator("img").evaluate((image) => (image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
+                await expect(drawer.getByRole("button", { name: "保存设定" })).toBeDisabled();
+                expect(candidateSaves).toEqual([]);
+                const saveRequest = page.waitForRequest((request) => request.method() === "PATCH" && request.url().endsWith(`/assets/characters/${characterId}`));
+                releaseUpload();
+                await saveRequest;
+                await expect(pending.getByRole("status")).toHaveText("保存候选中…");
+                releaseSave();
                 await expect(drawer.locator('img[alt="uploaded-primary.png"]')).toHaveCount(1);
                 const uploadReply = await (await uploadAck).json();
                 expect(uploadReply.data.project).not.toHaveProperty("sourceAssets");
                 expect(uploadReply.data.project).not.toHaveProperty("episodes");
                 expect(uploadReply.data.project).not.toHaveProperty("productionArchive");
+                expect(candidateSaves).toEqual([`/api/drama/projects/${project.id}/assets/characters/${characterId}`]);
 
                 await drawer.getByRole("button", { name: "确认主基准" }).click();
                 await expect(drawer.getByRole("button", { name: "已审核基准" })).toBeVisible();
@@ -450,10 +478,34 @@ for (const width of [1672, 1440, 390, 430]) {
                 await expect(reopenedDrawer.locator('img[alt="保存后的上传测试角色基准图"]')).toHaveCount(1);
                 await expect(reopenedDrawer.getByText("待补基准图")).toHaveCount(0);
                 await expect(page.getByText("短剧项目已在其他页面更新，请刷新后重试", { exact: true })).toHaveCount(0);
+                const failedCandidate = { name: "retry-candidate.png", mimeType: "image/png", buffer: Buffer.from(REFERENCE_DATA_URL.split(",")[1], "base64") };
+                await page.route(`**/assets/characters/${characterId}`, async (route) => {
+                    if (route.request().method() === "PATCH") await route.fulfill({ status: 500, json: { code: 500, data: null, msg: "候选保存测试失败" } });
+                    else await route.continue();
+                });
+                await reopenedDrawer.locator('input[type="file"][accept="image/*"]').setInputFiles(failedCandidate);
+                await expect(page.getByText("候选保存测试失败", { exact: true })).toBeVisible();
+                await expect(reopenedDrawer.getByRole("article", { name: "正在上传的候选图片" })).toHaveCount(0);
+                await expect(reopenedDrawer.locator('img[alt="retry-candidate.png"]')).toHaveCount(0);
+                await expect(reopenedDrawer.getByRole("button", { name: "已审核基准" })).toBeEnabled();
+                const afterFailure = ((await (await request.get(`/api/drama/projects/${project.id}`)).json()) as { data: { project: DramaProject } }).data.project;
+                expect(afterFailure.characters[0].references).toEqual(persisted?.references);
+
+                await page.route(`**/assets/characters/${characterId}`, (route) => route.continue());
+                const retryAck = page.waitForResponse((response) => response.url().endsWith(`/assets/characters/${characterId}`) && response.request().method() === "PATCH");
+                await reopenedDrawer.locator('input[type="file"][accept="image/*"]').setInputFiles(failedCandidate);
+                expect((await retryAck).ok()).toBe(true);
+                await expect(reopenedDrawer.locator('img[alt="retry-candidate.png"]')).toHaveCount(1);
+                await expect(reopenedDrawer.getByRole("button", { name: "已审核基准" })).toBeEnabled();
+                const afterRetry = ((await (await request.get(`/api/drama/projects/${project.id}`)).json()) as { data: { project: DramaProject } }).data.project;
+                expect(afterRetry.characters[0].references).toHaveLength(2);
+                expect(afterRetry.characters[0].primaryReferenceId).toBe(persisted?.primaryReferenceId);
                 const bounds = await reopenedDrawer.evaluate((element) => ({ width: element.getBoundingClientRect().width, scrollWidth: element.scrollWidth, clientWidth: element.clientWidth }));
                 expect(Math.round(bounds.width)).toBeLessThanOrEqual(width);
                 expect(bounds.scrollWidth).toBeLessThanOrEqual(bounds.clientWidth);
             } finally {
+                releaseUpload();
+                releaseSave();
                 const deleted = await request.delete(`/api/drama/projects/${project.id}`);
                 expect(deleted.ok(), await deleted.text()).toBe(true);
             }

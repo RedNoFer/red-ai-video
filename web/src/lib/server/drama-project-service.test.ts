@@ -581,11 +581,11 @@ describe("drama project service updates", () => {
         expect(body.prompt).not.toContain("旧提示词");
         if (withAudio) {
             expect(body.references).toEqual([{ type: "audio", role: "reference", url: "/api/reference-assets/permanent/audio/heroine.wav" }]);
-            expect(body.prompt).toContain("角色「岚音」配音引用 @音频1");
+            expect(body.prompt).toContain("角色「岚音」：配音引用 @音频1");
             expect(body.prompt).not.toContain("清亮温润固定声线");
         } else {
             expect(body.references).toEqual([]);
-            expect(body.prompt).toContain("角色「岚音」固定音色提示词：清亮温润固定声线");
+            expect(body.prompt).toContain("角色「岚音」：清亮温润固定声线");
         }
         const persisted = mocks.updateDramaProductionRun.mock.calls.at(-1)?.[1];
         expect(persisted.steps[0].executionPrompt).toBe(body.prompt);
@@ -3807,7 +3807,7 @@ describe("drama visual reference URL resolution", () => {
             { id: "asset-scene-one", label: "场景固定资产「黑湖」", binding: "锁定空间拓扑、建筑结构和主光方向" },
         ]);
 
-        expect(prompt).toContain("实际参考图绑定（编号与本次请求图片数组完全一致）");
+        expect(prompt.startsWith("【参考图片】\n")).toBe(true);
         expect(prompt).toContain("@图片1：上一镜「湖畔」已人工验收的实际尾帧；绑定规则：作为当前帧唯一动作起点");
         expect(prompt).toContain("@图片2：角色固定资产「Karin」；绑定规则：锁定身份、脸部、发型和服装");
         expect(prompt).toContain("@图片3：场景固定资产「黑湖」；绑定规则：锁定空间拓扑、建筑结构和主光方向");
@@ -3819,7 +3819,7 @@ describe("drama visual reference URL resolution", () => {
             { role: "keyframe", purpose: "顺序帧 1（开始）" },
         ]);
 
-        expect(prompt.match(/实际参考图绑定（编号与本次请求图片数组完全一致）/gu)).toHaveLength(1);
+        expect(prompt.match(/【参考图片】/gu)).toHaveLength(1);
         expect(prompt).not.toContain("参考图顺序（与视频请求数组完全一致）");
         expect(prompt).toContain("@图片1：顺序帧 1（开始）");
     });

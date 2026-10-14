@@ -25,7 +25,7 @@ describe("character voice references", () => {
         const voice = dramaCharacterVoiceReference(heroine({ creationSampleAssetId: "permanent/audio/岚音.wav", previewStatus: "success", previewAudioUrl: "/api/reference-assets/old.mp3" }));
         expect(voice.audio?.url).toBe("/api/reference-assets/permanent/audio/%E5%B2%9A%E9%9F%B3.wav");
         const prompt = appendDramaCharacterVoiceBindings("原始镜头卡", [voice]);
-        expect(prompt).toContain("角色「岚音」配音引用 @音频1");
+        expect(prompt).toContain("角色「岚音」：配音引用 @音频1");
         expect(prompt).not.toContain(voice.timbrePrompt);
     });
     it("uses only successful local auditions when there is no upload", () => {
@@ -43,11 +43,12 @@ describe("character voice references", () => {
     it("writes shared dialogue rules once for multiple character voices", () => {
         const voices = [dramaCharacterVoiceReference(heroine()), dramaCharacterVoiceReference({ ...heroine(), id: "hero", name: "阿泽" })];
         const prompt = appendDramaCharacterVoiceBindings("当前画面", voices);
-        expect(prompt.match(/不增加对白/gu)).toHaveLength(1);
-        expect(prompt.match(/不改变台词窗口/gu)).toHaveLength(1);
+        expect(prompt.match(/完整说出本提示词已有的对白和旁白原句/gu)).toHaveLength(1);
+        expect(prompt.match(/保持原说话人及标注的发声时间/gu)).toHaveLength(1);
         expect(prompt).not.toContain("仅用于该角色已有台词");
-        expect(prompt).toContain("角色「岚音」固定音色提示词");
-        expect(prompt).toContain("角色「阿泽」固定音色提示词");
+        expect(prompt).not.toContain("不增加对白");
+        expect(prompt).toContain("角色「岚音」：");
+        expect(prompt).toContain("角色「阿泽」：");
     });
 
     it("matches a stable voice identity or an exact speaker name", () => {
@@ -63,9 +64,9 @@ describe("character voice references", () => {
             dramaCharacterVoiceReference({ ...heroine({ creationSampleAssetId: "permanent/b.wav" }), id: "b", name: "罗衡" }),
         ];
         const prompt = appendDramaCharacterVoiceBindings("原稿", voices);
-        expect(prompt).toContain("角色「岚音」固定音色提示词");
-        expect(prompt).toContain("角色「陆川」配音引用 @音频1");
-        expect(prompt).toContain("角色「罗衡」配音引用 @音频2");
-        expect(prompt).toContain("不复述样本内容");
+        expect(prompt).toContain("角色「岚音」：");
+        expect(prompt).toContain("角色「陆川」：配音引用 @音频1");
+        expect(prompt).toContain("角色「罗衡」：配音引用 @音频2");
+        expect(prompt).toContain("实际说话内容以本提示词台词为准");
     });
 });

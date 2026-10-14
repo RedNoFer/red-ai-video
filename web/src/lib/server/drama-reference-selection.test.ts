@@ -68,7 +68,8 @@ describe("manual fixed asset reference selection", () => {
         const selected = buildVideoReferenceBindings(project, shot, [], ["extra-character"]);
         expect(selected).toMatchObject([{ alias: "@图片1", sourceId: "extra-character" }]);
         const changed = compileDramaVideoSubmissionPrompt(`${prompt}\n作者补充：保持窗外路灯位置。`, project, shot, selected, ["extra-character"]);
-        expect(changed).toContain("人物扶住车门。\n作者补充：保持窗外路灯位置。\n【参考图片】\n@图片1：角色「同伴」");
+        expect(changed.startsWith("【参考图片】\n@图片1：角色「同伴」\n\n")).toBe(true);
+        expect(changed.endsWith("人物扶住车门。\n作者补充：保持窗外路灯位置。")).toBe(true);
         expect(changed).not.toContain("场景「车厢」");
     });
 

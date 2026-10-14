@@ -1108,6 +1108,97 @@ test("drama candidate generation does not require the approved baseline image", 
     await expect(page.getByText("参考图需要公网图片 URL", { exact: false })).toHaveCount(0);
 });
 
+test("drama image and voice bindings precede the original prompt without redundant voice labels", async ({ page, request }) => {
+    const created = await request.post("/api/drama/projects", { data: { title: "E2E 引用提示词顺序", ratio: "9:16" } });
+    expect(created.ok(), await created.text()).toBe(true);
+    const project = ((await created.json()) as { data: { project: DramaProject } }).data.project;
+    const episode = project.episodes[0];
+    const reference = async (id: string) => {
+        const media = await request.post("/api/reference-assets", {
+            data: { type: "image", persistent: true, dataUrl: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAEUlEQVR4nGPQq/3/H4QZYAwAWewKpRUlAtEAAAAASUVORK5CYII=" },
+        });
+        expect(media.ok(), await media.text()).toBe(true);
+        const image = (await media.json()) as { url: string; token: string };
+        return { id, url: image.url, storageKey: image.token, source: "upload" as const, label: "基准图", status: "approved" as const, createdAt: project.createdAt };
+    };
+    const [textReference, audioReference, sceneReference, propReference] = await Promise.all([reference("text-ref"), reference("audio-ref"), reference("scene-ref"), reference("prop-ref")]);
+    const original = "【参数】5秒，9:16，有声\n【公共总规范】湖岸冷色晨光，人物身份与站位固定。\n【时间轴】\n0-5秒：岚音握紧栏杆，凝视湖面；台词：别说话。\n【收尾】手掌仍与栏杆接触。";
+    const saved = await saveDramaProjectFixture(request, project, {
+        ...project,
+        characters: [
+            { id: "voice-text", name: "岚音", description: "短黑发成年女性", primaryReferenceId: "text-ref", references: [textReference], voiceProfile: { speed: 1, instructions: "", timbrePrompt: "清亮温润，轻微气声" } },
+            {
+                id: "voice-audio",
+                name: "陆川",
+                description: "黑发成年男性",
+                primaryReferenceId: "audio-ref",
+                references: [audioReference],
+                voiceProfile: { speed: 1, instructions: "", creationSampleAssetId: "permanent/audio/voice-reference.wav" },
+            },
+        ],
+        scenes: [{ id: "binding-scene", name: "湖岸", description: "湖面、栏杆和固定入口", primaryReferenceId: "scene-ref", references: [sceneReference] }],
+        props: [{ id: "binding-prop", name: "挂锁", description: "栏杆上的黑色挂锁", primaryReferenceId: "prop-ref", references: [propReference] }],
+        episodes: [
+            {
+                ...episode,
+                reviewStatus: "visual_ready",
+                continuityEdges: [],
+                shots: [
+                    {
+                        id: "bindings-shot",
+                        code: "SH01",
+                        order: 1,
+                        title: "音色绑定镜头",
+                        description: "岚音握紧湖岸栏杆",
+                        imagePrompt: "岚音在湖岸",
+                        videoPrompt: original,
+                        duration: 5,
+                        characterIds: ["voice-text", "voice-audio"],
+                        propIds: ["binding-prop"],
+                        clueIds: [],
+                        sceneId: "binding-scene",
+                        videoMode: "reference",
+                        audioMode: "source",
+                        utterances: [{ id: "binding-line", order: 1, type: "dialogue", speaker: "岚音", characterId: "voice-text", text: "别说话。" }],
+                    },
+                ],
+            },
+        ],
+    });
+    expect(saved.ok(), await saved.text()).toBe(true);
+
+    try {
+        await page.goto(`/drama/${project.id}`, { waitUntil: "domcontentloaded" });
+        await page.getByRole("button", { name: "切换到镜头生成" }).click();
+        await page.locator("[data-drama-generation-panel]").getByRole("button", { name: "生成镜头", exact: true }).click();
+        const dialog = page.getByRole("dialog", { name: "确认生成 1 个镜头" });
+        await expect(dialog).toBeVisible();
+        const prompt = dialog.getByRole("textbox", { name: "音色绑定镜头视频提示词" });
+        await expect(prompt).toHaveValue(/角色「岚音」：清亮温润，轻微气声/u);
+        await expect(prompt).toHaveValue(/角色「陆川」：配音引用 @音频1/u);
+        const text = await prompt.inputValue();
+        expect(text.startsWith("【参考图片】\n")).toBe(true);
+        expect(text.indexOf("【角色音色】")).toBeGreaterThan(text.indexOf("@图片3"));
+        expect(text.indexOf("【参数】")).toBeGreaterThan(text.indexOf("【角色音色】"));
+        expect(text).not.toContain("固定音色提示词");
+        expect(text).not.toContain("不增加对白");
+        expect(text).toContain("完整说出本提示词已有的对白和旁白原句");
+        expect(text).toContain("实际说话内容以本提示词台词为准");
+        expect(text.match(/【角色音色】/gu)).toHaveLength(1);
+        expect(text).toContain("台词：别说话。");
+        const propSelection = dialog.locator("[data-drama-prompt-reference-item]").filter({ hasText: "道具 · 挂锁" }).getByRole("checkbox");
+        await propSelection.uncheck();
+        await expect(prompt).not.toHaveValue(/@图片4/u);
+        await propSelection.check();
+        await expect(prompt).toHaveValue(/@图片4/u);
+        await expect(prompt).toHaveValue(/角色「陆川」：配音引用 @音频1/u);
+        expect((await prompt.inputValue()).match(/【角色音色】/gu)).toHaveLength(1);
+        await dialog.getByRole("button", { name: "返回修改" }).click();
+    } finally {
+        expect((await request.delete(`/api/drama/projects/${project.id}`)).ok()).toBe(true);
+    }
+});
+
 test("drama shot generation previews prompt before confirmation", async ({ page }) => {
     const effectCleanupErrors: string[] = [];
     page.on("console", (message) => {

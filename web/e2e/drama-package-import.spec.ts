@@ -307,7 +307,7 @@ test("shot assets replace secondary checks and manual fixed references reach the
         await picker.getByRole("checkbox", { name: "引用固定资产图：角色 · 手动角色" }).check();
         await picker.getByRole("textbox", { name: "搜索固定资产图" }).fill("手动场景");
         await picker.getByRole("checkbox", { name: "引用固定资产图：场景 · 手动场景" }).check();
-        await expect(promptEditor).toHaveValue(new RegExp(`${editedPrompt.split("\n").at(-1)}[\\s\\S]*【参考图片】`, "u"));
+        await expect(promptEditor).toHaveValue(new RegExp(`^【参考图片】[\\s\\S]*${editedPrompt.split("\n").at(-1)}$`, "u"));
         let completePrompt = await promptEditor.inputValue();
         expect(completePrompt).toContain("@图片4：角色「手动角色」");
         expect(completePrompt).toContain("@图片5：场景「手动场景」");

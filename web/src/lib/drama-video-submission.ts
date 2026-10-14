@@ -6,10 +6,10 @@ import type { DramaEpisode, DramaProject, DramaShot, DramaVideoReferenceBinding,
 export function compileDramaVideoSubmissionPrompt(prompt: string, project: DramaProject, shot: DramaShot, bindings: DramaVideoReferenceBinding[], assetIds: string[]) {
     const body = prompt
         .replace(/\n*【参考图片】\n(?:@图片\d+：[^\n]*(?:\n|$))*/u, "\n")
-        .replace(/\n*【角色音色】[\s\S]*?\n人声：按原台词和表演使用固定音色[^\n]*(?:\n|$)/u, "\n")
-        .trimEnd();
+        .replace(/\n*【角色音色】[\s\S]*?\n人声：(?:按原台词和表演使用固定音色|完整说出本提示词已有的对白和旁白原句)[^\n]*(?:\n|$)/u, "\n")
+        .trim();
     const images = bindings.length ? `【参考图片】\n${bindings.map((binding, index) => `@图片${index + 1}：${binding.purpose}`).join("\n")}` : "";
-    return appendDramaCharacterVoiceBindings([body, images].filter(Boolean).join("\n"), dramaShotCharacterVoiceReferences(project, shot, assetIds));
+    return [images, appendDramaCharacterVoiceBindings(body, dramaShotCharacterVoiceReferences(project, shot, assetIds))].filter(Boolean).join("\n\n");
 }
 
 export function buildVideoReferenceBindings(

@@ -30,10 +30,19 @@ export function appendDramaCharacterVoiceBindings(prompt: string, voices: DramaC
     let audioIndex = 0;
     const bindings = voices.flatMap((voice) => {
         const character = `角色「${voice.name}」`;
-        if (voice.audio) return [`${character}配音引用 @音频${++audioIndex}`];
-        if (voice.timbrePrompt) return [`${character}固定音色提示词：${voice.timbrePrompt}`];
+        if (voice.audio) return [`${character}：配音引用 @音频${++audioIndex}`];
+        if (voice.timbrePrompt) return [`${character}：${voice.timbrePrompt}`];
         return [];
     });
     if (!bindings.length) return prompt;
-    return [prompt, "【角色音色】", ...bindings, `人声：按原台词和表演使用固定音色，不增加对白，不改变台词窗口${audioIndex ? "，不复述样本内容" : ""}。`].filter(Boolean).join("\n");
+    return [
+        [
+            "【角色音色】",
+            ...bindings,
+            `人声：完整说出本提示词已有的对白和旁白原句，保持原说话人及标注的发声时间；各角色使用上述音色，情绪、语速和停顿按当句表演要求执行。${audioIndex ? "音频样本用于对应角色的声线参考，实际说话内容以本提示词台词为准。" : ""}`,
+        ].join("\n"),
+        prompt,
+    ]
+        .filter(Boolean)
+        .join("\n\n");
 }

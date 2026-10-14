@@ -70,6 +70,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
     const handledGenerationTaskIdsRef = useRef(new Set<string>());
     const [draft, setDraft] = useState<AssetDraft>(emptyDraft);
     const [uploading, setUploading] = useState(false);
+    const [pendingUpload, setPendingUpload] = useState<{ editorKey: string; url: string; label: string }>();
     const [savingReferences, setSavingReferences] = useState(false);
     const [generating, setGenerating] = useState(false);
     const [generationStatusLoading, setGenerationStatusLoading] = useState(false);
@@ -116,9 +117,15 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
     const voiceCreationActive = creatingVoice || ["queued", "running"].includes(draft.voiceProfile.creationStatus || "");
     const voicePreviewActive = syncingVoicePreview || ["queued", "running"].includes(draft.voiceProfile.previewStatus || "");
     const generationBusy = generating || generationStatusLoading;
+    const visibleUpload = pendingUpload?.editorKey === `${project.id}:${kind}:${assetId}` ? pendingUpload : undefined;
+
+    useEffect(() => {
+        if (pendingUpload) return () => URL.revokeObjectURL(pendingUpload.url);
+    }, [pendingUpload]);
 
     useEffect(() => {
         if (!open) {
+            setPendingUpload(undefined);
             editorKeyRef.current = "";
             generationHydrationKeyRef.current = "";
             handledGenerationTaskIdsRef.current.clear();
@@ -404,8 +411,12 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
     };
 
     const appendReferences = async (item: DramaNamedAsset, added: DramaAssetReference[]) => {
-        const nextReferences = ensureUniqueDramaAssetReferenceIds([...dramaAssetReferences(item), ...added]);
-        updateAsset(project.id, kind, item.id, { references: nextReferences }, { markShotsStale: false });
+        const latestAsset =
+            useDramaStore
+                .getState()
+                .projects.find((candidate) => candidate.id === project.id)
+                ?.[kind].find((candidate) => candidate.id === item.id) || item;
+        const nextReferences = ensureUniqueDramaAssetReferenceIds([...dramaAssetReferences(latestAsset), ...added]);
         setSavingReferences(true);
         try {
             const savedProject = await saveAssetNow(project.id, kind, item.id, { references: nextReferences, markShotsStale: false });
@@ -461,8 +472,10 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
     };
 
     const uploadReference = async (file?: File) => {
-        if (!file || !asset) return;
+        if (!file || !asset || uploading || savingReferences) return;
         setUploading(true);
+        const pending = { editorKey: `${project.id}:${kind}:${asset.id}`, url: URL.createObjectURL(file), label: file.name };
+        setPendingUpload(pending);
         try {
             const stored = await uploadImage(file);
             await appendReferences(asset, [
@@ -481,6 +494,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
         } catch (error) {
             message.error(error instanceof Error ? error.message : "参考图上传失败");
         } finally {
+            setPendingUpload((current) => (current === pending ? undefined : current));
             setUploading(false);
             if (fileInputRef.current) fileInputRef.current.value = "";
         }
@@ -679,7 +693,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
     const actions = (
         <div className="flex items-center justify-end gap-2">
             <Button onClick={onClose}>取消</Button>
-            <Button type="primary" loading={saving} onClick={save}>
+            <Button type="primary" loading={saving} disabled={uploading || savingReferences} onClick={save}>
                 {asset ? "保存设定" : `创建${definition.title}`}
             </Button>
         </div>
@@ -1057,7 +1071,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                                         </Button>
                                     ) : null}
                                     <DramaSourceImagePicker project={project} onSelect={appendSourceReference} />
-                                    <Button icon={<Upload className="size-3.5" />} loading={uploading} onClick={() => fileInputRef.current?.click()}>
+                                    <Button icon={<Upload className="size-3.5" />} loading={uploading} disabled={savingReferences} onClick={() => fileInputRef.current?.click()}>
                                         上传候选
                                     </Button>
                                     {kind !== "clues" ? (
@@ -1068,10 +1082,18 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                                 </div>
                             ) : null}
                         </div>
-                        {!references.length ? <div className="mt-4 rounded-lg border border-dashed border-border bg-muted/25 px-4 py-4 text-center text-sm text-muted-foreground">还没有参考图，可上传已有设定或生成候选图。</div> : null}
-                        {references.length ? (
+                        {!references.length && !visibleUpload ? <div className="mt-4 rounded-lg border border-dashed border-border bg-muted/25 px-4 py-4 text-center text-sm text-muted-foreground">还没有参考图，可上传已有设定或生成候选图。</div> : null}
+                        {references.length || visibleUpload ? (
                             <Image.PreviewGroup>
                                 <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+                                    {visibleUpload ? (
+                                        <article className="min-w-0 overflow-hidden rounded-xl border border-border bg-background" aria-label="正在上传的候选图片" aria-busy="true">
+                                            <Image src={visibleUpload.url} alt={visibleUpload.label} rootClassName="!block !w-full" className="!block !h-auto !w-full" preview={false} />
+                                            <div role="status" className="flex min-h-10 items-center justify-center border-t border-border px-2 text-xs text-muted-foreground">
+                                                {savingReferences ? "保存候选中…" : "上传中…"}
+                                            </div>
+                                        </article>
+                                    ) : null}
                                     {references.map((reference) => {
                                         const isPrimary = reference.id === primary?.id;
                                         return (
@@ -1120,6 +1142,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                                                                 type="button"
                                                                 className="grid w-10 shrink-0 place-items-center border-l border-border text-muted-foreground transition hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/30 dark:hover:text-rose-300"
                                                                 aria-label={`删除参考图：${reference.label}`}
+                                                                disabled={uploading || savingReferences}
                                                             >
                                                                 <Trash2 className="size-3.5" />
                                                             </button>

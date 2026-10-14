@@ -185,14 +185,14 @@ export function deriveDramaShotPromptContract(project: DramaProject, _episode: D
     };
 }
 
-/** Remove reference manifests before the current request order is appended. */
+/** Remove reference manifests before inserting the current request order. */
 export function stripDramaReferenceBindingSections(prompt: string) {
     const lines = prompt.trim().split(/\r?\n/u);
     const output: string[] = [];
     let skipping = false;
     for (const line of lines) {
         const value = line.trim();
-        if (/^(?:参考图顺序（与(?:视频)?请求数组完全一致）|实际参考图绑定（编号与本次请求图片数组完全一致）|素材绑定|参考图职责(?:计划)?)[：:]?/u.test(value)) {
+        if (/^(?:【参考图片】|参考图顺序（与(?:视频)?请求数组完全一致）|实际参考图绑定（编号与本次请求图片数组完全一致）|素材绑定|参考图职责(?:计划)?)[：:]?/u.test(value)) {
             skipping = true;
             continue;
         }
@@ -203,7 +203,7 @@ export function stripDramaReferenceBindingSections(prompt: string) {
     return output.join("\n").trim();
 }
 
-/** Append image duties in the exact order used by the supplier request. */
+/** Prepend image duties in the exact order used by the supplier request. */
 export function appendDramaImageReferenceBindings(prompt: string, references: Array<{ id: string; label?: string; binding?: string }>) {
     const base = stripDramaReferenceBindingSections(prompt);
     if (!references.length) return base;
@@ -213,9 +213,7 @@ export function appendDramaImageReferenceBindings(prompt: string, references: Ar
             return `@图片${index + 1}：${label}${reference.binding ? `；绑定规则：${reference.binding}` : ""}`;
         })
         .join("\n");
-    return [base, `实际参考图绑定（编号与本次请求图片数组完全一致）：\n${manifest}\n执行要求：逐图识别并按上述绑定关系使用；角色图不得替代场景，场景图不得改写角色，连续性帧优先约束当前可见状态。未列入本清单的图片不得假定已引用。`]
-        .filter(Boolean)
-        .join("\n");
+    return [`【参考图片】\n${manifest}\n执行要求：逐图识别并按上述绑定关系使用；角色图不得替代场景，场景图不得改写角色，连续性帧优先约束当前可见状态。未列入本清单的图片不得假定已引用。`, base].filter(Boolean).join("\n\n");
 }
 
 export function compileDramaShotPrompts(project: DramaProject, episode: DramaEpisode, shot: DramaShot): CompiledDramaPrompts {
