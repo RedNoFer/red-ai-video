@@ -45,7 +45,7 @@ import {
 import { dramaDialogueFragmentSequenceError, dramaDialogueTimingReminder, dramaFrameDialogueTimingReminder, dramaUtteranceTimingIssues, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
 import { resolveDramaStyleContract, resolveDramaStyleContractWithFallback } from "@/lib/drama-style";
 import { DRAMA_CHARACTER_CURRENT_COLOR_RULE, DRAMA_CHARACTER_CURRENT_DESIGN_RULE, normalizeDramaCharacterProfile } from "@/lib/drama-character-rules";
-import { applyDramaStaticVisualContract, applyDramaVideoVisualContract, compileDramaAssetReferencePrompt, projectDramaCharacterModelFacts, stripDramaInternalVideoQc } from "@/lib/drama-prompt-compiler";
+import { applyDramaStaticVisualContract, applyDramaVideoVisualContract, compileDramaAssetReferencePrompt, projectDramaCharacterModelFacts } from "@/lib/drama-prompt-compiler";
 import { resolveDramaShotDuration } from "@/lib/server/drama-shot-config";
 import {
     dramaTimeRangePattern,
@@ -2189,7 +2189,7 @@ function normalizePackageShot(value: unknown, index: number, options: DramaProdu
         if (options.validateVideoPrompt && !options.standaloneImport) {
             const npcPolicy = locationCode ? options.backgroundNpcPolicyByLocationCode?.get(locationCode) : undefined;
             const npcDeclaredInFramePlan = frames.some((frame) => /NPC群像|背景角色|配角|旁观者|人群/u.test(`${frame.actionPrompt}\n${frame.transitionPrompt}\n${frame.endPrompt}`));
-            validateStrictPackageVideoPrompt(stripDramaInternalVideoQc(text(shot.videoPrompt)), frames, text(shot.code) || String(index + 1), {
+            validateStrictPackageVideoPrompt(text(shot.videoPrompt), frames, text(shot.code) || String(index + 1), {
                 requiresBackgroundNpc: npcPolicy?.mode === "required" || (options.requireContentQuality === true && npcDeclaredInFramePlan),
                 backgroundNpcCountRange: npcPolicy?.countRange,
                 requiresDialoguePerformance: utterances.some((item) => item.type === "dialogue"),
@@ -2297,7 +2297,7 @@ function normalizePackageShot(value: unknown, index: number, options: DramaProdu
 }
 
 function normalizePackageVideoPrompt(value: string) {
-    const prompt = stripDramaInternalVideoQc(value).trim();
+    const prompt = value.trim();
     if (!prompt) throw new DramaProductionPackageError("镜头缺少 Agent 提供的视频提示词");
     return prompt;
 }

@@ -3,18 +3,6 @@ import type { DramaProject, DramaShot, DramaVideoReferenceBinding } from "./dram
 import { compileDramaVideoSubmissionPrompt } from "./drama-video-submission";
 
 describe("drama submission reference prefix", () => {
-    it("strips accidentally embedded QC bookkeeping from submitted prompts", () => {
-        const project = { id: "project", characters: [] } as unknown as DramaProject;
-        const shot = { utterances: [] } as unknown as DramaShot;
-        const dirty = "开场时，人物站在门边。\n00.0–05.0秒，人物停步，门外传来脚步。减切原因：结果停留；实际：3帧/2次硬切；修订状态：reduced-density-exception-registered-awaiting-final-QC。\n结束时，人物仍站在门边。";
-
-        const prompt = compileDramaVideoSubmissionPrompt(dirty, project, shot, [], []);
-
-        expect(prompt).toContain("人物停步，门外传来脚步。");
-        expect(prompt).toContain("结束时，人物仍站在门边。");
-        expect(prompt).not.toMatch(/减切原因|实际：3帧|修订状态|reduced-density-exception/iu);
-    });
-
     it("places current image and voice bindings ahead of the original text without duplication", () => {
         const original = "开场时，岚音站在湖岸边，双脚踩在湿石上。\n00.0–05.0秒，岚音凝视湖面，听见岸边脚步后收紧手指，轻声说：“别说话。”原句清晰居前，水声在发声时压低。\n结束时，岚音仍站在湿石上，视线停在湖面。";
         const project = {

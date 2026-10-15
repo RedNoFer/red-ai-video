@@ -46,6 +46,13 @@ describe("drama production package contract compilation", () => {
         for (const title of DRAMA_PACKAGE_SECTIONS) expect(template).toContain(title);
     });
 
+    it("keeps QC metadata out of public prompts in the canonical package contract", () => {
+        expect(template).toContain("字段边界（硬性）");
+        expect(template).toContain("门禁状态/代码/证据、帧数/切数");
+        expect(template).toContain("禁止依赖导入、保存、编译或提交时过滤");
+        expect(docs).toContain("字段边界（authoring 硬性要求）");
+    });
+
     it("publishes the field guide and tested JSON from the canonical documentation", () => {
         for (const name of ["drama-production-package-v1-fields.md", "drama-production-package-v1-field-example.json"]) {
             const published = readFileSync(new URL(`../../../public/${name}`, import.meta.url), "utf8");

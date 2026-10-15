@@ -236,26 +236,6 @@ export function formatDramaVideoPromptCutLines(prompt: string) {
         .replace(/\n{3,}/gu, "\n\n");
 }
 
-/** Remove internal density/QC bookkeeping that was accidentally pasted into public prompt text. */
-export function stripDramaInternalVideoQc(prompt: string) {
-    const marker = /(?:减切原因|必要减切|修订状态|实际\s*[：:]?\s*\d+\s*帧\s*[/／]\s*\d+\s*次硬切|qualityGateStatus|qualityGateReport|reduced-density-exception|内部\s*QC(?:记录|备注|文案)?|质量门禁(?:记录|状态|备注|结论)?)/iu;
-    return prompt
-        .split(/\r?\n/u)
-        .map((line) => {
-            const match = marker.exec(line);
-            return match
-                ? line
-                      .slice(0, match.index)
-                      .replace(/[\s；;，,:：]+$/u, "")
-                      .trimEnd()
-                : line;
-        })
-        .filter((line) => line.trim())
-        .join("\n")
-        .replace(/\n{3,}/gu, "\n\n")
-        .trim();
-}
-
 export function compileDramaShotPrompts(project: DramaProject, episode: DramaEpisode, shot: DramaShot): CompiledDramaPrompts {
     void episode;
     const imagePrompt = applyDramaStaticVisualContract(project, shot.imagePrompt || "");
@@ -373,7 +353,7 @@ export function applyDramaStaticVisualContract(project: DramaVisualContractProje
 
 export function applyDramaVideoVisualContract(project: DramaVisualContractProject, source: string) {
     void project;
-    return formatDramaVideoPromptCutLines(stripDramaInternalVideoQc(source));
+    return formatDramaVideoPromptCutLines(source);
 }
 
 export function stripDramaAssetReferenceSections(value: string) {

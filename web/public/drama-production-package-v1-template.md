@@ -2,7 +2,7 @@
 
 > 制作包格式：`vozeb-drama-production-package-v1`
 >
-> 模板版本：由 `pnpm compile:skills` 自动生成；唯一制作包契约：`vozeb-drama-production-package-v1@1.2.0`（契约 hash：`6b80279cb6597d032bbf63725a3d36251287c72eab1553ad199c5b13a20038a5`，规范源 hash：`bdc2e84db87b7051a43b3ca1faa592e2fd9ab1f4a46a02d57a081ae6fa972a6f`）。导演 Skill：`drama-video-director@1.16.0`（hash：`fa4c4d8cc2fad02afd37e393368db88184018fcd02098dc2292177247f14fb0d`）；模板自检规则、Seedance Skill 和来源版本由同一编译清单绑定。
+> 模板版本：由 `pnpm compile:skills` 自动生成；唯一制作包契约：`vozeb-drama-production-package-v1@1.2.0`（契约 hash：`6b80279cb6597d032bbf63725a3d36251287c72eab1553ad199c5b13a20038a5`，规范源 hash：`2405bcbdd46eaa1469aec388392515fd6d7e390fb753be6d3f82bd836041e300`）。导演 Skill：`drama-video-director@1.16.0`（hash：`4e66841324faf2286cc232340e4661c0b811c283142e907de539729bad5a5045`）；模板自检规则、Seedance Skill 和来源版本由同一编译清单绑定。
 >
 > 使用约定：本模板是当前 v1 制作包的结构、自检规则和最终交付格式。独立 Codex 必须直接生成完整 13 章 Markdown，并在“规范对象”代码块中嵌入唯一标准 JSON；JSON 与正文由 Codex 同一轮生成，服务端不负责章节投影或镜头卡重建。读取和导入保留作者原稿，只读核对并提示缺句、声音冲突或版本差异，不替代完整 authoring 自检。不要把历史制作包、旧 generationPrompt 或旧分镜正文当作新包模板。
 >
@@ -30,8 +30,9 @@
 - 时间段写当前画面、摄影、动作因果、表演、完整原句对白及局部声音。时间覆盖从 0 开始且连续到片段结束；每段是完整自然语句，不能改成 `参数/公共总规范/时间轴/收尾/台词/人声/音效` 包装字段。内部 `framePlan.frames[]` 与公开时间段数量独立。
 - 视觉基调只在开场处按需写一次；导入、提示词拼接和生成提交不得再补写统一视觉合同或重复视觉风格。
 - 每个已绑定角色参考图只引用一次，并在该角色素材绑定中仅附加一次以下约束：`每张角色资产图均展示同一个人的不同观察角度，仅参考面容、体型、服装和配饰，不继承白底、排版或图中身体投影的数量。保证人物唯一性，每个角色在世界空间中仅有一人。`该约束只解释参考图用途，不把四视图投影当成场景内多个人。
-- 每次内部硬切在公开视频中用独立换行的 `Cut to：` 描述观众看到的新画面；对应触发、新机位、切后主运镜、信息目的和承接写入切后帧的 `framePlan.frames[].transitionPrompt`。不得在正文写“镜头事件”、减切原因、帧数/切数或 QC 文案。
-- 只有 `internalCutPolicy=dense-30s` 被本轮或当前方案明确锁定时，30 秒逻辑片段才要求 8—11 个真实帧段和 7—10 次 `type=硬切`。少切例外及其实际帧/切数量、原因和修订状态写入结构化 QC，不进公开视频正文。
+- 字段边界（硬性）：`episodes[].shots[].videoPrompt` 只保存可直接提交给视频模型的公开画面、动作、表演、对白与声音正文。门禁状态/代码/证据、帧数/切数、减切原因和修订状态只写在 `authoring.qualityGateReport` 与第十三章，不得复制或拼接进 `videoPrompt`。若 authoring 自检发现混入，须在交付前修正制作包源稿，并保证 JSON 与第十一章正文一致；禁止依赖导入、保存、编译或提交时过滤，相关流程必须原样保留作者正文。
+- 每次内部硬切在公开视频中用独立换行的 `Cut to：` 描述观众看到的新画面；对应触发、新机位、切后主运镜、信息目的和承接写入切后帧的 `framePlan.frames[].transitionPrompt`。正文不写“镜头事件”等机器字段。
+- 只有 `internalCutPolicy=dense-30s` 被本轮或当前方案明确锁定时，30 秒逻辑片段才要求 8—11 个真实帧段和 7—10 次 `type=硬切`。少切例外及其实际帧/切数量、原因和修订状态写入结构化 QC。
 - 正文建议控制在 2000 个 Unicode 字符以内；2500 是提醒线。超出只提示压缩重复表达，不阻断、不截断、不拆分逻辑片段，不得删减剧情动作、对白、表演或连续性事实。
 - 每条提示词是单独提交的完整输入。不得依赖历史提示词、其他镜头、对话上下文、内部 ID/资产别名或编辑器字段；入口状态必须在本条开场和相关时间段中写成可见事实。
 
@@ -139,8 +140,8 @@ targetDuration = logicalShotCount × shotDuration
 ### 当前绑定版本
 
 - 制作包契约：`vozeb-drama-production-package-v1@1.2.0`，契约 hash：`6b80279cb6597d032bbf63725a3d36251287c72eab1553ad199c5b13a20038a5`。
-- 规范源 hash：`bdc2e84db87b7051a43b3ca1faa592e2fd9ab1f4a46a02d57a081ae6fa972a6f`；编译规则 hash：`f8a74c82c6c7c88e9a6d04f340b3890dacb527e3a2651cd2cc8f63f9dc17ddf6`。
-- 主导演 Skill：`drama-video-director@1.16.0`，hash：`fa4c4d8cc2fad02afd37e393368db88184018fcd02098dc2292177247f14fb0d`。
+- 规范源 hash：`2405bcbdd46eaa1469aec388392515fd6d7e390fb753be6d3f82bd836041e300`；编译规则 hash：`f8a74c82c6c7c88e9a6d04f340b3890dacb527e3a2651cd2cc8f63f9dc17ddf6`。
+- 主导演 Skill：`drama-video-director@1.16.0`，hash：`4e66841324faf2286cc232340e4661c0b811c283142e907de539729bad5a5045`。
 - 视频提示词公开格式：Seedance 2.5 自然段适配器 `seedance25-prompt-adapter@1.4.0`，导演判断来源为小墨个人分镜 Skill 6.3（`storyboard-director@6.3.0`）；具体输出顺序和例文见第十一章。
 - 每条逻辑片段只提交一份独立 `videoPrompt`。开场、可选视觉基调、真实素材绑定、连续自然时间段和结束状态各司其职；不能把场景、风格、声音、入口状态在多个段落重复堆叠。
 - 正文长度遵循顶部 Seedance 2.5 规范；完整剧情事实、动作因果、表演、原句对白、声音锚点和连续性优先保留。
@@ -518,7 +519,7 @@ JSON 外层字段维护时长、画幅、任务目标、参考绑定和 QC；不
 - 固定 13 章完整且顺序正确：`passed`；证据：章节清单与正文目录。
 - 静态帧唯一事实源：`passed`；证据：逐帧 `imagePrompt` 与 `framePlan`。
 - 视频卡具备主体、触发、可见动作、结果、摄影目的和声音锚点：`passed`；证据：第十一章逐卡抽检镜号/帧号。
-- 反模板禁项、对白时间、连续性和硬切信息差异：`passed`；证据：列出镜号/帧号及局部修订范围；存在任何 blocker 时不得输出制作包。
+- 公开视频/QC 字段边界、反模板禁项、对白时间、连续性和硬切信息差异：`passed`；证据：第十一章不含 QC 文案且与 JSON 正文一致，并列出镜号/帧号及局部修订范围；存在任何 blocker 时不得输出制作包。
 - 所有 blocker 门禁：逐项 `passed`；warning 只能用于非阻断建议并逐项保留，不能替代 blocker 通过。
 - `qualityGateStatus`：仅当所有 blocker 已通过、所有对白边界已对齐、每张卡有动作结果/声音锚点、相邻状态已继承、硬切事件有公开承接、JSON 与第十一章原文一致时写 `passed`。
 

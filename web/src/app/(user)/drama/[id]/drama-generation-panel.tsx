@@ -20,7 +20,7 @@ import {
     updateDramaShotPromptPatch,
 } from "@/services/api/drama-projects";
 import { resolveModelRequestConfig, useEffectiveConfig } from "@/stores/use-config-store";
-import { compileDramaShotExecutionPrompts, formatDramaVideoPromptCutLines, stripDramaInternalVideoQc } from "@/lib/drama-prompt-compiler";
+import { compileDramaShotExecutionPrompts, formatDramaVideoPromptCutLines } from "@/lib/drama-prompt-compiler";
 import { dramaShotCharacterVoiceReferences } from "@/lib/drama-character-voice-reference";
 import { buildVideoReferenceBindings, compileDramaVideoSubmissionPrompt } from "@/lib/drama-video-submission";
 import { approvedAssetReference, approvedScenePanoramaReference } from "@/lib/drama-asset-baseline";
@@ -1236,8 +1236,8 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
             .map((frame) => ({ ...frame, label: "本镜尾帧" })),
     ];
     const executionReferences = resolveShotVideoReferences(project, episode, shot, productionRun);
-    const persistedVideoPrompt = stripDramaInternalVideoQc(shot.executionVideoPrompt?.trim() || shot.videoPrompt?.trim() || "");
-    const supplierVideoPrompt = stripDramaInternalVideoQc(persistedVideoPrompt || videoStep?.executionPrompt?.trim() || "");
+    const persistedVideoPrompt = shot.executionVideoPrompt?.trim() || shot.videoPrompt?.trim() || "";
+    const supplierVideoPrompt = persistedVideoPrompt || videoStep?.executionPrompt?.trim() || "";
     const submissionPromptPreview = defaultDramaVideoSubmissionPrompt(project, episode, shot);
     useEffect(() => {
         const previous = promptSeedRef.current;
@@ -1284,7 +1284,7 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
         }
     };
     const saveVideoPrompt = async () => {
-        const prompt = formatDramaVideoPromptCutLines(stripDramaInternalVideoQc(videoPromptDraft));
+        const prompt = formatDramaVideoPromptCutLines(videoPromptDraft);
         if (!prompt || savingVideoPrompt) return;
         setSavingVideoPrompt(true);
         try {

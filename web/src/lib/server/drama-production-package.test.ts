@@ -577,17 +577,6 @@ describe("production package boundary", () => {
         });
     });
 
-    it("removes internal QC notes from imported public video prompts", () => {
-        const source = structuredClone(productionPackage);
-        source.episodes[0].shots[0].videoPrompt += "\n减切原因：静态留白；实际：3帧/2次硬切；修订状态：reduced-density-exception-registered-awaiting-final-QC。";
-
-        const preview = previewDramaProductionPackage(JSON.stringify(source), "package-with-qc.json");
-        const prompt = preview.package.episodes[0].shots[0].videoPrompt;
-
-        expect(prompt).toContain("梦中惊醒");
-        expect(prompt).not.toMatch(/减切原因|实际：3帧|修订状态|reduced-density-exception/iu);
-    });
-
     it("keeps the 30-second package contract complete after import", () => {
         const source = structuredClone(productionPackage);
         source.project.productionBible.productionPlan!.references.maxImages = 9;
