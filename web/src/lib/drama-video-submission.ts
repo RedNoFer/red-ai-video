@@ -5,7 +5,7 @@ import type { DramaEpisode, DramaProject, DramaShot, DramaVideoReferenceBinding,
 
 /** Build the complete editable prompt before confirmation; dispatch sends it unchanged. */
 export function compileDramaVideoSubmissionPrompt(prompt: string, project: DramaProject, shot: DramaShot, bindings: DramaVideoReferenceBinding[], assetIds: string[]) {
-    const body = stripDramaCharacterVoiceBindings(prompt.replace(/(?:^|\n)【角色音色】[\s\S]*?(?=\n(?:开场时，|参考图片：|\d+(?:\.\d+)?\s*(?:-|至|到|—|–|~|～)\s*\d+(?:\.\d+)?\s*秒\s*[，,:：]|结束时，))/u, "\n").trim());
+    const body = stripDramaCharacterVoiceBindings(prompt).trim();
     const withReferences = appendDramaImageReferenceBindings(
         body,
         bindings.map((binding, index) => ({ id: binding.sourceId || binding.frameId || `reference-${index}`, label: binding.purpose, isCharacter: binding.role === "character_anchor" })),

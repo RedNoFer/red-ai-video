@@ -95,6 +95,13 @@ describe("drama prompt compiler", () => {
         expect(appendDramaImageReferenceBindings(prompt, [{ id: "scene-one", label: "场景固定资产「黑湖记忆」", binding: "锁定空间拓扑与主光方向" }])).not.toContain("@图片2：");
     });
 
+    it("places image duties before a Cut to block when prose uses inline time ranges", () => {
+        const prompt = appendDramaImageReferenceBindings("开场时，人物看着卡片。\nCut to：屏幕近景。\n从9秒至17.3秒，旁白继续。", [{ id: "scene-one", label: "场景「车内」" }]);
+
+        expect(prompt).toMatch(/开场时，人物看着卡片。\n\n参考图片：\n@图片1：场景「车内」\n\nCut to：屏幕近景。/u);
+        expect(prompt).toContain("从9秒至17.3秒，旁白继续。");
+    });
+
     it("does not keep legacy reference sections when rebinding images", () => {
         const prompt = appendDramaImageReferenceBindings("动态意图：Karin握紧断剑\n参考图顺序（与视频请求数组完全一致）：\n@图片1：旧顺序帧\n必须逐图按上述职责使用；顺序帧用于锁定对应时间段的可见状态，不能用固定资产图替代。\n单一主运镜：缓慢推进", [
             { id: "frame-one", label: "顺序帧 1（开始）", binding: "作为开始阶段画面依据" },

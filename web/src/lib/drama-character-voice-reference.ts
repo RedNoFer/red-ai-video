@@ -32,12 +32,12 @@ export function stripDramaCharacterVoiceBindings(prompt: string) {
     let skippingVoiceBlock = false;
     for (const line of lines) {
         const value = line.trim();
-        if (value === "角色音色：") {
+        if (value === "角色音色：" || value.startsWith("【角色音色】")) {
             skippingVoiceBlock = true;
             continue;
         }
         if (skippingVoiceBlock) {
-            if (/^\s*\d+(?:\.\d+)?\s*(?:-|至|到|—|–|~|～)\s*\d+(?:\.\d+)?\s*秒\s*[，,:：]/u.test(line)) {
+            if (/^[ \t]*(?:\d+(?:\.\d+)?\s*(?:-|至|到|—|–|~|～)\s*\d+(?:\.\d+)?\s*秒\s*[，,:：]|从\s*\d+(?:\.\d+)?\s*秒\s*(?:-|至|到|—|–|~|～)\s*\d+(?:\.\d+)?\s*秒\s*[，,:：]|Cut\s+to\s*[：:]|结束时，|声音：)/u.test(line)) {
                 skippingVoiceBlock = false;
                 output.push(line);
             }
@@ -54,22 +54,29 @@ export function stripDramaCharacterVoiceBindings(prompt: string) {
         .map((item) => item.trim())
         .filter((item) => item && !/^角色「[^」]+」：/u.test(item));
     const start = sound.index ?? 0;
-    source = remaining.length
-        ? `${source.slice(0, start).trimEnd()}\n声音：${remaining.join("；")}`
-        : source.slice(0, start).trimEnd();
+    source = remaining.length ? `${source.slice(0, start).trimEnd()}\n声音：${remaining.join("；")}` : source.slice(0, start).trimEnd();
     return source;
 }
 
-/** Place stable role timbres below reference images and before the timed shot text. */
+/** Place stable role timbres immediately below reference images and before the shot action. */
 export function appendDramaCharacterVoiceBindings(prompt: string, voices: DramaCharacterVoiceReference[]) {
     const source = stripDramaCharacterVoiceBindings(prompt).replace(/\n{3,}/gu, "\n\n");
-    const bindings = voices
-        .filter((voice) => voice.timbrePrompt && !voice.audio)
-        .map((voice) => `角色「${voice.name}」：${voice.timbrePrompt.trim()}`);
+    let audioIndex = 0;
+    const bindings = voices.flatMap((voice) => {
+        if (voice.audio) return [`角色「${voice.name}」：配音引用 @音频${++audioIndex}`];
+        return voice.timbrePrompt ? [`角色「${voice.name}」：${voice.timbrePrompt.trim()}`] : [];
+    });
     if (!bindings.length) return source;
     const section = `角色音色：\n${bindings.join("\n")}`;
-    const firstTimeRange = /^(\s*\d+(?:\.\d+)?\s*(?:-|至|到|—|–|~|～)\s*\d+(?:\.\d+)?\s*秒\s*[，,:：])/mu.exec(source);
-    if (!firstTimeRange) return [source, section].filter(Boolean).join("\n\n");
-    const insertAt = firstTimeRange.index ?? 0;
+    const referenceHeader = /(?:^|\n)参考图片：\n/u.exec(source);
+    if (referenceHeader) {
+        const sectionStart = (referenceHeader.index ?? 0) + referenceHeader[0].length;
+        const sectionEnd = source.indexOf("\n\n", sectionStart);
+        const insertAt = sectionEnd < 0 ? source.length : sectionEnd;
+        return `${source.slice(0, insertAt).trimEnd()}\n\n${section}${source.slice(insertAt)}`.trim();
+    }
+    const firstPromptEvent = /^[ \t]*(?:\d+(?:\.\d+)?\s*(?:-|至|到|—|–|~|～)\s*\d+(?:\.\d+)?\s*秒\s*[，,:：]|从\s*\d+(?:\.\d+)?\s*秒\s*(?:-|至|到|—|–|~|～)\s*\d+(?:\.\d+)?\s*秒\s*[，,:：]|Cut\s+to\s*[：:]|结束时，|声音：)/mu.exec(source);
+    if (!firstPromptEvent) return [source, section].filter(Boolean).join("\n\n");
+    const insertAt = firstPromptEvent.index ?? 0;
     return `${source.slice(0, insertAt).trimEnd()}\n\n${section}\n\n${source.slice(insertAt).trimStart()}`;
 }

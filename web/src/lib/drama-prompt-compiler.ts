@@ -216,14 +216,14 @@ export function appendDramaImageReferenceBindings(prompt: string, references: Ar
         .join("\n");
     const characterRule = hasCharacterReferences ? "\n每张角色资产图均展示同一个人的不同观察角度，仅参考面容、体型、服装和配饰，不继承白底、排版或图中身体投影的数量。保证人物唯一性，每个角色在世界空间中仅有一人。" : "";
     const referenceSection = `参考图片：\n${manifest}${characterRule}`;
-    const firstTimeRange = /^(\s*\d+(?:\.\d+)?\s*(?:-|至|到|—|–|~|～)\s*\d+(?:\.\d+)?\s*秒\s*[，,:：])/mu.exec(base);
-    if (!firstTimeRange) {
+    const firstPromptEvent = /^[ \t]*(?:\d+(?:\.\d+)?\s*(?:-|至|到|—|–|~|～)\s*\d+(?:\.\d+)?\s*秒\s*[，,:：]|从\s*\d+(?:\.\d+)?\s*秒\s*(?:-|至|到|—|–|~|～)\s*\d+(?:\.\d+)?\s*秒\s*[，,:：]|Cut\s+to\s*[：:]|结束时，|声音：)/mu.exec(base);
+    if (!firstPromptEvent) {
         const soundSection = /(?:^|\n)声音：/u.exec(base);
         if (!soundSection) return [base, referenceSection].filter(Boolean).join("\n\n");
         const insertAt = soundSection.index ?? 0;
         return `${base.slice(0, insertAt).trimEnd()}\n\n${referenceSection}\n\n${base.slice(insertAt).trimStart()}`.trim();
     }
-    const insertAt = firstTimeRange.index ?? 0;
+    const insertAt = firstPromptEvent.index ?? 0;
     return `${base.slice(0, insertAt).trimEnd()}\n\n${referenceSection}\n\n${base.slice(insertAt).trimStart()}`.trim();
 }
 

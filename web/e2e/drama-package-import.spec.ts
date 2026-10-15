@@ -206,6 +206,11 @@ test("character timbre saves and refreshes, then uploaded audio replaces prompt 
         let dialog = await openPreview();
         const prompt = dialog.getByRole("textbox", { name: `${seeded.episodes[0].shots[0].title}视频提示词` });
         await expect(prompt).toHaveValue(new RegExp(timbre, "u"));
+        const timbrePrompt = await prompt.inputValue();
+        expect(timbrePrompt.indexOf("参考图片：")).toBeGreaterThanOrEqual(0);
+        expect(timbrePrompt.indexOf("角色音色：")).toBeGreaterThan(timbrePrompt.indexOf("参考图片："));
+        const firstPromptEvent = timbrePrompt.search(/^(?:\d+(?:\.\d+)?\s*(?:-|至|到|—|–|~|～)\s*\d+(?:\.\d+)?\s*秒\s*[，,:：]|从\s*\d+(?:\.\d+)?\s*秒\s*(?:-|至|到|—|–|~|～)\s*\d+(?:\.\d+)?\s*秒\s*[，,:：]|Cut\s+to\s*[：:])/mu);
+        expect(firstPromptEvent).toBeGreaterThan(timbrePrompt.indexOf("角色音色："));
         await expect(dialog.locator("[data-drama-character-voices]")).toHaveCount(0);
         await expect(dialog.getByText("查看本次引用与配音绑定", { exact: true })).toHaveCount(0);
         await expectNoHorizontalOverflow(page);
@@ -218,8 +223,9 @@ test("character timbre saves and refreshes, then uploaded audio replaces prompt 
         await page.reload();
         dialog = await openPreview();
         const audioVoice = dialog.locator(`[data-drama-character-voice="${character.id}"]`);
-        await expect(dialog.getByRole("textbox", { name: `${seeded.episodes[0].shots[0].title}视频提示词` })).toHaveValue(/【角色音色】[\s\S]*配音引用 @音频1/u);
-        expect(await dialog.getByRole("textbox", { name: `${seeded.episodes[0].shots[0].title}视频提示词` }).inputValue()).not.toContain(timbre);
+        const audioPrompt = await dialog.getByRole("textbox", { name: `${seeded.episodes[0].shots[0].title}视频提示词` }).inputValue();
+        expect(audioPrompt).toContain("配音引用 @音频1");
+        expect(audioPrompt).not.toContain(timbre);
         const audio = audioVoice.getByLabel(`${character.name}角色配音音频`);
         await expect(audio).toBeVisible();
         const audioResponse = await request.get((await audio.getAttribute("src"))!);

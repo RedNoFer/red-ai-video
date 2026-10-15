@@ -1591,6 +1591,7 @@ function ProductionPromptPreview({
                 });
                 const limit = maxReferenceImages;
                 const characterVoices = dramaShotCharacterVoiceReferences(project, shot, selectedIds);
+                const audioVoices = characterVoices.filter((voice) => voice.audio);
                 const allFrames = referenceModes[shot.id] === "all_frames";
                 const frameIds = new Set(shot.framePlan?.frames.map((frame) => frame.id) || []);
                 const frameReferences = references.filter((reference) => reference.kind === "frame");
@@ -1692,14 +1693,13 @@ function ProductionPromptPreview({
                                 })}
                             </div>
                         </div>
-                        {characterVoices.length ? (
+                        {audioVoices.length ? (
                             <div className="mt-3 grid gap-2 border-t border-border/70 pt-3" data-drama-character-voices>
-                                <h5 className="text-xs font-medium">人物音色应用</h5>
-                                {characterVoices.map((voice) => (
+                                <h5 className="text-xs font-medium">角色配音参考</h5>
+                                {audioVoices.map((voice) => (
                                     <div key={voice.characterId} className="grid min-w-0 gap-1 text-xs" data-drama-character-voice={voice.characterId}>
                                         <span className="font-medium">{voice.name}</span>
-                                        <span className="break-words text-muted-foreground">{voice.audio ? "本次使用该角色的已确认音频样本作为声线参考。" : voice.timbrePrompt || "未配置固定音色；本次不追加音色句。"}</span>
-                                        {voice.audio ? <audio className="max-w-full" controls preload="metadata" src={voice.audio.url} aria-label={`${voice.name}角色配音音频`} /> : null}
+                                        <audio className="max-w-full" controls preload="metadata" src={voice.audio!.url} aria-label={`${voice.name}角色配音音频`} />
                                     </div>
                                 ))}
                             </div>
