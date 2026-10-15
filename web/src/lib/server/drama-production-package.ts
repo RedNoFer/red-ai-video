@@ -72,6 +72,9 @@ import { reviewDramaPackage } from "@/lib/drama-package-review";
 import { preserveDramaAuthoredText } from "@/lib/drama-authored-text";
 import { dramaDenseHardCutIssues } from "@/lib/drama-prompt-quality";
 
+// Keep this aligned with next.config.ts proxyClientMaxBodySize so JSON isn't truncated upstream.
+export const DRAMA_PRODUCTION_PACKAGE_MAX_BYTES = 32 * 1024 * 1024;
+
 export class DramaProductionPackageError extends Error {}
 
 type DramaProjectAssetCollection = Pick<DramaProject, "title" | "style" | "ratio" | "productionBible" | "characters" | "scenes" | "props" | "clues"> & Partial<Pick<DramaProject, "episodes">>;
@@ -482,7 +485,7 @@ export function applyDramaProductionPackage(project: DramaProject, source: Drama
     const productionLock = options.episodeImportMode === "merge" ? mergeProductionLocks(project.productionLock, productionPackage.project.productionLock, episodes) : productionPackage.project.productionLock || project.productionLock;
     const productionArchive = options.episodeImportMode === "merge" ? mergeProductionArchives(project.productionArchive, productionPackage.archive) : productionPackage.archive;
     const mergedProductionBible = synchronizedBible ? { ...synchronizedBible, ...(productionLock ? { targetDuration: productionLock.targetDuration } : {}) } : synchronizedBible;
-    return {
+    const nextProject: DramaProject = {
         ...project,
         title: preferred(project.title, project.fieldOrigins, "title", projectPatch.title),
         summary: preferred(project.summary, project.fieldOrigins, "summary", projectPatch.summary),
@@ -501,6 +504,13 @@ export function applyDramaProductionPackage(project: DramaProject, source: Drama
         episodes,
         sourceAssets,
     };
+    if (rawSource && Buffer.byteLength(JSON.stringify(nextProject)) > DRAMA_PRODUCTION_PACKAGE_MAX_BYTES) {
+        return {
+            ...nextProject,
+            sourceAssets: sourceAssets.map((asset) => (asset.id === sourceAsset.id ? { ...asset, textContent: sourceHash } : asset)),
+        };
+    }
+    return nextProject;
 }
 
 function mergeProductionLocks(existing: DramaProductionLock | undefined, incoming: DramaProductionLock | undefined, episodes: DramaEpisode[]) {
