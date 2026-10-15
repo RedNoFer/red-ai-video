@@ -83,7 +83,7 @@ import { collectLocalMediaStorageKeys, localMediaStorageKeyFromValue } from "@/l
 import { signReferenceAssetInputUrl } from "@/lib/server/reference-asset-access";
 import { fetchSafeOutbound } from "@/lib/server/safe-outbound-fetch";
 import { privateUpstreamHostAllowed } from "@/lib/server/outbound-url-security";
-import { applyDramaProductionPackage, DramaProductionPackageError, previewDramaProductionPackage, type DramaProductionPackageNormalizationOptions } from "@/lib/server/drama-production-package";
+import { applyDramaProductionPackage, DRAMA_PRODUCTION_PACKAGE_MAX_BYTES, DramaProductionPackageError, previewDramaProductionPackage, type DramaProductionPackageNormalizationOptions } from "@/lib/server/drama-production-package";
 import { preserveDramaAuthoredText } from "@/lib/drama-authored-text";
 import { buildDramaProductionRun, refreshDramaVideoStepReferences, unlockDramaProductionSteps } from "@/lib/server/drama-production-run";
 import { composeDramaVideoSegments } from "@/lib/server/drama-video-sequence";
@@ -97,7 +97,7 @@ import { resolveLogicalModelCandidates, supportsVideoKeyframeReferences } from "
 import { getVideoTask } from "@/lib/server/video-task-store";
 import type { ImageTask } from "@/lib/server/image-task-store";
 
-const MAX_PROJECT_BYTES = 2 * 1024 * 1024;
+const MAX_PROJECT_BYTES = DRAMA_PRODUCTION_PACKAGE_MAX_BYTES;
 const REVIEW_COMPLETION_STALE_MS = TEXT_MODEL_REQUEST_TIMEOUT_MS * 4;
 const dramaImageDispatchLocks = new Map<string, Promise<DramaProductionRun>>();
 const dramaProductionDispatchLocks = new Map<string, Promise<DramaProductionRun>>();

@@ -8,7 +8,15 @@ import { defaultDramaProductionPlan, dramaVisualDirection } from "@/lib/drama-pr
 import { validateDramaContinuityEdges } from "@/lib/drama-continuity-policy";
 import { auditDramaShotDirectorQuality, DRAMA_VIDEO_DIRECTOR_SKILL } from "@/lib/server/agent-skills/drama-video-director";
 import { SEEDANCE_25_DIRECTOR_SKILL } from "@/lib/server/agent-skills/seedance-25";
-import { applyDramaProductionPackage, attachDramaProductionPackageAuthoring, buildDramaAssetReuseContext, DramaProductionPackageError, mergeProjectAssetsIntoProductionPackage, previewDramaProductionPackage } from "@/lib/server/drama-production-package";
+import {
+    applyDramaProductionPackage,
+    attachDramaProductionPackageAuthoring,
+    buildDramaAssetReuseContext,
+    DRAMA_PRODUCTION_PACKAGE_MAX_BYTES,
+    DramaProductionPackageError,
+    mergeProjectAssetsIntoProductionPackage,
+    previewDramaProductionPackage,
+} from "@/lib/server/drama-production-package";
 import { DRAMA_PACKAGE_CONTRACT, DRAMA_PACKAGE_GATE_CODES } from "@/lib/server/drama-production-package-contract";
 import { serializeDramaProductionPackageMarkdown } from "@/lib/drama-production-package-serializer";
 
@@ -2149,6 +2157,21 @@ describe("production package character timbre", () => {
             Object.assign(input.assets.characters[0], { voiceProfile });
             expect(() => previewDramaProductionPackage(JSON.stringify(input), "invalid-voice.json")).toThrow(/voiceProfile/);
         }
+    });
+});
+
+describe("large production package import", () => {
+    it("keeps parsed package content and replaces the duplicate raw archive with its hash when needed", () => {
+        const input = structuredClone(productionPackage);
+        input.episodes[0].script = "x".repeat(17 * 1024 * 1024);
+        const rawSource = JSON.stringify(input);
+        const preview = previewDramaProductionPackage(rawSource, "large-package.json", undefined, { allowImportWarnings: true });
+
+        const applied = applyDramaProductionPackage(project(), preview.package, preview.sourceHash, rawSource, "large-package.json", { allowImportWarnings: true });
+
+        expect(applied.episodes[0].script).toBe(input.episodes[0].script);
+        expect(applied.sourceAssets?.at(-1)).toMatchObject({ title: "制作包 large-package.json", sourceHash: preview.sourceHash, textContent: preview.sourceHash });
+        expect(Buffer.byteLength(JSON.stringify(applied))).toBeLessThanOrEqual(DRAMA_PRODUCTION_PACKAGE_MAX_BYTES);
     });
 });
 

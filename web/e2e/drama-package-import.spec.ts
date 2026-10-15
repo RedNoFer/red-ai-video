@@ -109,6 +109,51 @@ for (const layout of ["template", "timeline"]) {
     });
 }
 
+test("imports a package larger than 20 MiB from file and restores the imported project", async ({ page, request }) => {
+    const created = await request.post("/api/drama/projects", { data: { title: `E2E 大制作包 ${randomUUID().slice(0, 8)}`, ratio: "9:16" } });
+    expect(created.ok(), await created.text()).toBe(true);
+    const project = ((await created.json()) as { data: { project: DramaProject } }).data.project;
+    const example = JSON.parse(readFileSync(new URL("../../docs/drama-production-package-v1-field-example.json", import.meta.url), "utf8"));
+    example.importPadding = "x".repeat(21 * 1024 * 1024);
+    const source = JSON.stringify(example);
+    const requestBytes: Record<string, number> = {};
+    page.on("request", (req) => {
+        if (!req.url().endsWith("/production-package")) return;
+        const action = (req.postDataJSON() as { action?: string } | null)?.action;
+        if (action) requestBytes[action] = req.postDataBuffer()?.byteLength || 0;
+    });
+
+    try {
+        await page.goto(`/drama/${project.id}`);
+        await page.getByRole("button", { name: "完整制作包", exact: true }).click();
+        await page.locator('input[type="file"][accept*="application/json"]').setInputFiles({
+            name: "large-package.json",
+            mimeType: "application/json",
+            buffer: Buffer.from(source),
+        });
+        await expect(page.locator("[data-drama-production-package-preview]")).toBeVisible();
+        const warnings = page.locator("[data-drama-production-package-import-warnings]");
+        if (await warnings.count()) {
+            await page.getByRole("button", { name: "继续导入（有警告）" }).click();
+            await page.getByRole("dialog", { name: "制作包存在识别警告" }).getByRole("button", { name: "仍然导入" }).click();
+        } else {
+            await page.getByRole("button", { name: "确认应用制作包" }).click();
+        }
+        await expect(page.getByText(/已导入 \d+ 个导演镜头/u)).toBeVisible();
+        expect(requestBytes.preview).toBeGreaterThan(20 * 1024 * 1024);
+        expect(requestBytes.apply).toBeGreaterThan(20 * 1024 * 1024);
+
+        await page.reload();
+        const restored = await request.get(`/api/drama/projects/${project.id}`);
+        expect(restored.ok(), await restored.text()).toBe(true);
+        const saved = ((await restored.json()) as { data: { project: DramaProject } }).data.project;
+        expect(saved.episodes.some((episode) => episode.code === "E01")).toBe(true);
+        expect(saved.sourceAssets?.some((asset) => asset.title === "制作包 large-package.json")).toBe(true);
+    } finally {
+        expect((await request.delete(`/api/drama/projects/${project.id}`)).ok()).toBe(true);
+    }
+});
+
 test("character timbre saves and refreshes, then uploaded audio replaces prompt in the video preview", async ({ page, request }) => {
     const created = await request.post("/api/drama/projects", { data: { title: `E2E 角色音色 ${randomUUID().slice(0, 8)}`, ratio: "9:16" } });
     expect(created.ok(), await created.text()).toBe(true);
