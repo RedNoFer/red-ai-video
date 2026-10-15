@@ -83,6 +83,15 @@ test("drama review completion, continuity and audio configuration entry are visi
     await page.getByRole("button", { name: "切换到镜头生成" }).click();
     await expect(page.locator("[data-drama-generation-readiness]")).toBeVisible();
     await expect(page.getByText("视频原声默认", { exact: false }).or(page.getByText("系统音频模型已就绪", { exact: false }))).toBeVisible();
+    const shotTask = page.locator("[data-drama-shot-task]").filter({ hasText: "黑湖记忆 1/2" });
+    await shotTask.getByRole("button", { name: "展开详情" }).click();
+    const completePrompt = shotTask.locator('textarea[aria-label="完整提交提示词"]');
+    await expect(completePrompt).toHaveCount(1);
+    await expect(completePrompt).toBeEditable();
+    const originalPrompt = await completePrompt.inputValue();
+    await completePrompt.fill(`${originalPrompt}\n镜头完整提示词可编辑回归`);
+    await shotTask.getByRole("button", { name: "保存", exact: true }).click();
+    await expect(completePrompt).toHaveValue(/镜头完整提示词可编辑回归/u);
     await expectNoHorizontalOverflow(page, "drama review audio flow");
 
     await page.goto("/admin?section=channels", { waitUntil: "domcontentloaded" });

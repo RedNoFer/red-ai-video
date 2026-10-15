@@ -81,6 +81,9 @@ describe("Drama generation production workspace", () => {
         expect(source).toContain("defaultDramaVideoSubmissionPrompt(project, episode, shot)");
         expect(details).toContain("data-drama-final-submission-prompt");
         expect(details).toContain("value={submissionPromptPreview}");
+        expect(details).toContain("setVideoPromptDraft(event.target.value)");
+        expect(details).not.toContain("基础正文（可编辑）");
+        expect(details.match(/<Input\.TextArea/g)).toHaveLength(1);
         expect(preview).toContain("compileDramaVideoSubmissionPrompt(row.basePrompt");
         expect(source.indexOf("data-drama-character-voices")).toBeGreaterThan(source.indexOf("data-drama-prompt-reference-gallery"));
         expect(source).toContain("人物音色应用");

@@ -20,7 +20,7 @@ import {
     updateDramaShotPromptPatch,
 } from "@/services/api/drama-projects";
 import { resolveModelRequestConfig, useEffectiveConfig } from "@/stores/use-config-store";
-import { compileDramaShotExecutionPrompts, formatDramaVideoPromptCutLines } from "@/lib/drama-prompt-compiler";
+import { compileDramaShotExecutionPrompts, formatDramaVideoPromptCutLines, stripDramaReferenceBindingSections } from "@/lib/drama-prompt-compiler";
 import { dramaShotCharacterVoiceReferences } from "@/lib/drama-character-voice-reference";
 import { buildVideoReferenceBindings, compileDramaVideoSubmissionPrompt } from "@/lib/drama-video-submission";
 import { approvedAssetReference, approvedScenePanoramaReference } from "@/lib/drama-asset-baseline";
@@ -1238,7 +1238,8 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
     const executionReferences = resolveShotVideoReferences(project, episode, shot, productionRun);
     const persistedVideoPrompt = shot.executionVideoPrompt?.trim() || shot.videoPrompt?.trim() || "";
     const supplierVideoPrompt = persistedVideoPrompt || videoStep?.executionPrompt?.trim() || "";
-    const submissionPromptPreview = defaultDramaVideoSubmissionPrompt(project, episode, shot);
+    const authoredVideoPromptDraft = stripDramaReferenceBindingSections(videoPromptDraft).trim();
+    const submissionPromptPreview = defaultDramaVideoSubmissionPrompt(project, episode, shot, videoPromptDraft || supplierVideoPrompt);
     useEffect(() => {
         const previous = promptSeedRef.current;
         const newShot = previous.shotId !== shot.id;
@@ -1253,7 +1254,7 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
         promptSeedRef.current = { shotId: shot.id, persistedPrompt: persistedVideoPrompt, seed: supplierVideoPrompt };
     }, [shot.id, persistedVideoPrompt, supplierVideoPrompt, videoPromptDraft, videoPromptOriginal]);
     const optimizeVideoPrompt = async () => {
-        const source = videoPromptDraft.trim() !== videoPromptOriginal.trim() ? videoPromptDraft.trim() : resolveShotVideoOptimizationSource(shot);
+        const source = authoredVideoPromptDraft !== videoPromptOriginal.trim() ? authoredVideoPromptDraft : resolveShotVideoOptimizationSource(shot);
         if (!source || optimizingVideoPrompt || !beginVideoPrompt(project.id, episode.id, shot.id)) return;
         setOptimizingVideoPrompt(true);
         try {
@@ -1284,7 +1285,7 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
         }
     };
     const saveVideoPrompt = async () => {
-        const prompt = formatDramaVideoPromptCutLines(videoPromptDraft);
+        const prompt = formatDramaVideoPromptCutLines(stripDramaReferenceBindingSections(videoPromptDraft));
         if (!prompt || savingVideoPrompt) return;
         setSavingVideoPrompt(true);
         try {
@@ -1439,13 +1440,13 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0">
                         <div className="font-medium text-foreground">视频执行提示词（当前标准）</div>
-                        <p className="mt-1 text-[11px] text-muted-foreground">下方完整提交预览与生成确认弹窗共用同一编译结果。</p>
+                        <p className="mt-1 text-[11px] text-muted-foreground">此处编辑完整提交文本；保存后用于生成确认。</p>
                     </div>
                     <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5 sm:ml-3">
                         <Button size="small" className="shrink-0" icon={<Sparkles className="size-3.5" />} loading={optimizingVideoPrompt} disabled={!videoPromptDraft.trim() || optimizingVideoPrompt} onClick={() => void optimizeVideoPrompt()}>
                             提示词优化
                         </Button>
-                        <Button size="small" className="shrink-0" icon={<RefreshCw className="size-3.5" />} disabled={videoPromptDraft === videoPromptOriginal} onClick={() => setVideoPromptDraft(videoPromptOriginal)}>
+                        <Button size="small" className="shrink-0" icon={<RefreshCw className="size-3.5" />} disabled={authoredVideoPromptDraft === videoPromptOriginal.trim()} onClick={() => setVideoPromptDraft(videoPromptOriginal)}>
                             还原上次
                         </Button>
                         <Button
@@ -1453,7 +1454,7 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
                             className="shrink-0"
                             icon={<Save className="size-3.5" />}
                             loading={savingVideoPrompt}
-                            disabled={!videoPromptDraft.trim() || videoPromptDraft.trim() === videoPromptOriginal.trim() || savingVideoPrompt}
+                            disabled={!authoredVideoPromptDraft || authoredVideoPromptDraft === videoPromptOriginal.trim() || savingVideoPrompt}
                             onClick={() => void saveVideoPrompt()}
                         >
                             保存
@@ -1461,20 +1462,17 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
                     </div>
                 </div>
                 <div className="mt-2" data-drama-final-submission-prompt>
-                    <div className="mb-1 text-xs font-medium text-foreground">完整提交提示词（与生成确认弹窗一致）</div>
-                    <Input.TextArea value={submissionPromptPreview} readOnly autoSize={{ minRows: 5, maxRows: 14 }} aria-label="完整提交提示词" />
+                    <div className="mb-1 text-xs font-medium text-foreground">完整提交提示词（与生成确认弹窗一致，可直接编辑）</div>
+                    <Input.TextArea
+                        value={submissionPromptPreview}
+                        onChange={(event) => {
+                            setVideoPromptDraft(event.target.value);
+                            if (optimizedFramePlan) setOptimizedFramePlan(undefined);
+                        }}
+                        autoSize={{ minRows: 8, maxRows: 24 }}
+                        aria-label="完整提交提示词"
+                    />
                 </div>
-                <div className="mt-3 text-xs font-medium text-foreground">基础正文（可编辑）</div>
-                <Input.TextArea
-                    className="mt-2"
-                    value={videoPromptDraft}
-                    onChange={(event) => {
-                        setVideoPromptDraft(event.target.value);
-                        if (optimizedFramePlan) setOptimizedFramePlan(undefined);
-                    }}
-                    autoSize={{ minRows: 5, maxRows: 14 }}
-                    placeholder="编辑独立镜头正文；提交时会按本次真实引用补入参考图片和音色"
-                />
             </div>
         </div>
     );
@@ -1520,11 +1518,11 @@ function compileProductionPreviewPrompt(project: DramaProject, row: ProductionPr
     return compileDramaVideoSubmissionPrompt(row.basePrompt, project, row.shot, previewSelectedVideoBindings(project, row, selectedIds, mode), selectedIds);
 }
 
-function defaultDramaVideoSubmissionPrompt(project: DramaProject, episode: DramaEpisode, shot: DramaShot) {
+function defaultDramaVideoSubmissionPrompt(project: DramaProject, episode: DramaEpisode, shot: DramaShot, basePrompt?: string) {
     const row: ProductionPromptRow = {
         shot,
         references: previewVideoReferenceBindings(project, episode, shot),
-        basePrompt: compileDramaShotExecutionPrompts(project, episode, shot).videoPrompt,
+        basePrompt: basePrompt ?? compileDramaShotExecutionPrompts(project, episode, shot).videoPrompt,
     };
     return compileProductionPreviewPrompt(
         project,
