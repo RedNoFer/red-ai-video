@@ -44,7 +44,7 @@ describe("Drama generation production workspace", () => {
         expect(source).toContain("视频执行提示词（当前标准）");
         expect(source).toContain("generateDramaVideoPrompt({");
         expect(source).toContain("generateDramaVideoPrompt");
-        expect(source).toContain("formatDramaVideoPromptCutLines(supplierVideoPrompt)");
+        expect(source).toContain("formatDramaVideoPromptCutLines(stripDramaCharacterVoiceBindings(supplierVideoPrompt))");
         expect(source).toContain("compileDramaVideoSubmissionPrompt(");
         expect(source).toContain("previewSelectedVideoBindings(");
         expect(source).not.toContain("applyDramaVideoVisualContract");

@@ -25,16 +25,51 @@ export function dramaShotCharacterVoiceReferences(project: Pick<DramaProject, "i
         .map(dramaCharacterVoiceReference);
 }
 
-/** Add only stable voice guidance as a plain final sound sentence. */
+/** Remove prompt-editor residue from older runtime-injected voice bindings. */
+export function stripDramaCharacterVoiceBindings(prompt: string) {
+    const lines = prompt.trim().split(/\r?\n/u);
+    const output: string[] = [];
+    let skippingVoiceBlock = false;
+    for (const line of lines) {
+        const value = line.trim();
+        if (value === "角色音色：") {
+            skippingVoiceBlock = true;
+            continue;
+        }
+        if (skippingVoiceBlock) {
+            if (/^\s*\d+(?:\.\d+)?\s*(?:-|至|到|—|–|~|～)\s*\d+(?:\.\d+)?\s*秒\s*[，,:：]/u.test(line)) {
+                skippingVoiceBlock = false;
+                output.push(line);
+            }
+            continue;
+        }
+        output.push(line);
+    }
+
+    let source = output.join("\n").trim();
+    const sound = source.match(/(?:^|\n)声音：([\s\S]*)$/u);
+    if (!sound || !/角色「[^」]+」：/u.test(sound[1])) return source;
+    const remaining = sound[1]
+        .split(/[；;\n]/u)
+        .map((item) => item.trim())
+        .filter((item) => item && !/^角色「[^」]+」：/u.test(item));
+    const start = sound.index ?? 0;
+    source = remaining.length
+        ? `${source.slice(0, start).trimEnd()}\n声音：${remaining.join("；")}`
+        : source.slice(0, start).trimEnd();
+    return source;
+}
+
+/** Place stable role timbres below reference images and before the timed shot text. */
 export function appendDramaCharacterVoiceBindings(prompt: string, voices: DramaCharacterVoiceReference[]) {
-    const bindings = voices.filter((voice) => voice.timbrePrompt && !voice.audio).map((voice) => `角色「${voice.name}」：${voice.timbrePrompt}`);
-    if (!bindings.length) return prompt;
-    const source = prompt.trim();
-    const existing = source.match(/(?:^|\n)声音：([\s\S]*)$/u);
-    if (!existing) return `${source}\n\n声音：${bindings.join("；")}`;
-    const current = existing[1].trim();
-    const missing = bindings.filter((binding) => !current.includes(binding.slice(0, binding.indexOf("："))));
-    if (!missing.length) return source;
-    const start = existing.index ?? 0;
-    return `${source.slice(0, start).trimEnd()}\n声音：${[current, ...missing].filter(Boolean).join("；")}`;
+    const source = stripDramaCharacterVoiceBindings(prompt).replace(/\n{3,}/gu, "\n\n");
+    const bindings = voices
+        .filter((voice) => voice.timbrePrompt && !voice.audio)
+        .map((voice) => `角色「${voice.name}」：${voice.timbrePrompt.trim()}`);
+    if (!bindings.length) return source;
+    const section = `角色音色：\n${bindings.join("\n")}`;
+    const firstTimeRange = /^(\s*\d+(?:\.\d+)?\s*(?:-|至|到|—|–|~|～)\s*\d+(?:\.\d+)?\s*秒\s*[，,:：])/mu.exec(source);
+    if (!firstTimeRange) return [source, section].filter(Boolean).join("\n\n");
+    const insertAt = firstTimeRange.index ?? 0;
+    return `${source.slice(0, insertAt).trimEnd()}\n\n${section}\n\n${source.slice(insertAt).trimStart()}`;
 }

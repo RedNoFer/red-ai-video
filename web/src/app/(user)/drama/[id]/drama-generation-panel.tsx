@@ -21,7 +21,7 @@ import {
 } from "@/services/api/drama-projects";
 import { resolveModelRequestConfig, useEffectiveConfig } from "@/stores/use-config-store";
 import { compileDramaShotExecutionPrompts, formatDramaVideoPromptCutLines, stripDramaReferenceBindingSections } from "@/lib/drama-prompt-compiler";
-import { dramaShotCharacterVoiceReferences } from "@/lib/drama-character-voice-reference";
+import { dramaShotCharacterVoiceReferences, stripDramaCharacterVoiceBindings } from "@/lib/drama-character-voice-reference";
 import { buildVideoReferenceBindings, compileDramaVideoSubmissionPrompt } from "@/lib/drama-video-submission";
 import { approvedAssetReference, approvedScenePanoramaReference } from "@/lib/drama-asset-baseline";
 import { dramaProjectFixedReferenceAssets, missingDramaShotFixedReferences } from "@/lib/drama-video-reference-plan";
@@ -1238,7 +1238,7 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
     const executionReferences = resolveShotVideoReferences(project, episode, shot, productionRun);
     const persistedVideoPrompt = shot.executionVideoPrompt?.trim() || shot.videoPrompt?.trim() || "";
     const supplierVideoPrompt = persistedVideoPrompt || videoStep?.executionPrompt?.trim() || "";
-    const authoredVideoPromptDraft = stripDramaReferenceBindingSections(videoPromptDraft).trim();
+    const authoredVideoPromptDraft = stripDramaCharacterVoiceBindings(stripDramaReferenceBindingSections(videoPromptDraft)).trim();
     const submissionPromptPreview = defaultDramaVideoSubmissionPrompt(project, episode, shot, videoPromptDraft || supplierVideoPrompt);
     useEffect(() => {
         const previous = promptSeedRef.current;
@@ -1246,7 +1246,7 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
         const persistedChanged = previous.shotId === shot.id && previous.persistedPrompt !== persistedVideoPrompt && Boolean(persistedVideoPrompt) && videoPromptDraft.trim() === videoPromptOriginal.trim();
         const lateInitialSeed = previous.shotId === shot.id && !previous.seed && Boolean(supplierVideoPrompt) && !videoPromptOriginal.trim();
         if (newShot || persistedChanged || lateInitialSeed) {
-            const formattedPrompt = formatDramaVideoPromptCutLines(supplierVideoPrompt);
+            const formattedPrompt = formatDramaVideoPromptCutLines(stripDramaCharacterVoiceBindings(supplierVideoPrompt));
             setVideoPromptDraft(formattedPrompt);
             setVideoPromptOriginal(formattedPrompt);
             setOptimizedFramePlan(undefined);
@@ -1285,7 +1285,7 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
         }
     };
     const saveVideoPrompt = async () => {
-        const prompt = formatDramaVideoPromptCutLines(stripDramaReferenceBindingSections(videoPromptDraft));
+        const prompt = formatDramaVideoPromptCutLines(stripDramaCharacterVoiceBindings(stripDramaReferenceBindingSections(videoPromptDraft)));
         if (!prompt || savingVideoPrompt) return;
         setSavingVideoPrompt(true);
         try {

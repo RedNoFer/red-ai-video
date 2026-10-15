@@ -17,6 +17,8 @@ describe("drama submission reference prefix", () => {
         const compile = (prompt: string) => compileDramaVideoSubmissionPrompt(prompt, project, shot, bindings, ["text", "audio"]);
         const prompt = compile(original);
         expect(prompt).toContain("参考图片：\n@图片1：场景「湖岸」");
+        expect(prompt.indexOf("参考图片：")).toBeLessThan(prompt.indexOf("角色音色："));
+        expect(prompt.indexOf("角色音色：")).toBeLessThan(prompt.indexOf("00.0–05.0秒"));
         expect(prompt).not.toContain("【参考图片】");
         expect(prompt).not.toContain("【角色音色】");
         expect(prompt).toContain("角色「岚音」：清亮温润\n轻微气声");
@@ -27,7 +29,6 @@ describe("drama submission reference prefix", () => {
         expect(prompt).not.toContain("完整说出本提示词已有的对白和旁白原句");
         expect(prompt).toContain("00.0–05.0秒，岚音凝视湖面，听见岸边脚步后收紧手指，轻声说：“别说话。”原句清晰居前，水声在发声时压低。");
         expect(prompt).toContain("开场时，岚音站在湖岸边，双脚踩在湿石上。");
-        expect(prompt).toMatch(/\n声音：角色「岚音」：/u);
         expect(compile(prompt)).toBe(prompt);
         const withoutBindings = compileDramaVideoSubmissionPrompt(prompt, project, shot, [], []);
         expect(withoutBindings).toContain("岚音站在湖岸边，双脚踩在湿石上。");

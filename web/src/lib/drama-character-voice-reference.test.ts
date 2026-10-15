@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { appendDramaCharacterVoiceBindings, dramaCharacterVoiceReference, dramaShotCharacterVoiceReferences } from "./drama-character-voice-reference";
+import { appendDramaCharacterVoiceBindings, dramaCharacterVoiceReference, dramaShotCharacterVoiceReferences, stripDramaCharacterVoiceBindings } from "./drama-character-voice-reference";
 import { normalizeDramaVoiceProfile } from "./drama-voice";
 import type { DramaCharacter } from "./drama-project-contract";
 
@@ -40,14 +40,30 @@ describe("character voice references", () => {
         expect(dramaShotCharacterVoiceReferences(project, shot, ["listener"]).map((voice) => voice.name)).toEqual(["岚音", "陆川"]);
         expect(dramaShotCharacterVoiceReferences(project, { utterances: [] }, []).map((voice) => voice.name)).toEqual([]);
     });
-    it("writes only stable role-specific timbres without shared packaging text", () => {
+    it("writes only stable role-specific timbres in a dedicated voice block", () => {
         const voices = [dramaCharacterVoiceReference(heroine()), dramaCharacterVoiceReference({ ...heroine(), id: "hero", name: "阿泽" })];
         const prompt = appendDramaCharacterVoiceBindings("当前画面", voices);
-        expect(prompt.match(/声音：/gu)).toHaveLength(1);
-        expect(prompt).toContain("声音：角色「岚音」：");
+        expect(prompt.match(/角色音色：/gu)).toHaveLength(1);
+        expect(prompt).toContain("角色音色：\n角色「岚音」：");
         expect(prompt).toContain("角色「阿泽」：");
         expect(prompt).not.toContain("完整说出本提示词");
         expect(prompt).not.toContain("保持原说话人");
+    });
+
+    it("places voice references after image references and before the first timed segment", () => {
+        const voice = dramaCharacterVoiceReference(heroine());
+        const prompt = appendDramaCharacterVoiceBindings("参考图片：\n@图片1：角色「岚音」\n\n00.0–05.0秒，岚音看向门口。", [voice]);
+        expect(prompt.indexOf("参考图片：")).toBeLessThan(prompt.indexOf("角色音色："));
+        expect(prompt.indexOf("角色音色：")).toBeLessThan(prompt.indexOf("00.0–05.0秒"));
+    });
+
+    it("removes legacy injected voice notes while preserving authored sound guidance", () => {
+        expect(stripDramaCharacterVoiceBindings("画面结束。\n声音：环境风声；角色「岚音」：旧音色说明"))
+            .toBe("画面结束。\n声音：环境风声");
+        expect(stripDramaCharacterVoiceBindings("画面结束。\n声音：角色「岚音」：旧音色说明"))
+            .toBe("画面结束。");
+        expect(stripDramaCharacterVoiceBindings("参考图片：\n@图片1：角色\n\n角色音色：\n角色「岚音」：第一行\n\n第二行\n\n00.0–05.0秒，开始表演。"))
+            .toBe("参考图片：\n@图片1：角色\n\n00.0–05.0秒，开始表演。");
     });
 
     it("matches a stable voice identity or an exact speaker name", () => {
@@ -63,7 +79,7 @@ describe("character voice references", () => {
             dramaCharacterVoiceReference({ ...heroine({ creationSampleAssetId: "permanent/b.wav" }), id: "b", name: "罗衡" }),
         ];
         const prompt = appendDramaCharacterVoiceBindings("原稿", voices);
-        expect(prompt).toContain("声音：角色「岚音」：");
+        expect(prompt).toContain("角色音色：\n角色「岚音」：");
         expect(prompt).not.toContain("陆川");
         expect(prompt).not.toContain("罗衡");
         expect(prompt).not.toContain("配音引用");
