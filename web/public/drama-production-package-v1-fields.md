@@ -28,7 +28,7 @@
 | `framePlan.end.required`                                                          | 布尔值，不能写 `"true"` 或提示词                                                                                                                                                 |
 | `framePlan.frames[]`                                                              | 每帧 `id/sequenceIndex/startSecond/endSecond/actionPrompt/endPrompt/imagePrompt`；按真实对白与动作边界从 0 连续覆盖至当前 `duration`，无空隙、重叠或越界                         |
 | `framePlan.referenceManifest[]`                                                   | 对象数组，使用 `alias/role/purpose/assetId`；默认场景全景加出镜角色基准，道具或关键帧只在不可替代时加入                                                                          |
-| `shots[].videoPrompt`                                                             | Seedance 2.5 五层独立完整字符串；2500 个 Unicode 字符为提示阈值，超限不阻断。公共事实只写一次，连续内部帧可合并为公开时间轴段；完整对白只进入 `台词`，不复制进画面动作           |
+| `shots[].videoPrompt`                                                             | Seedance 2.5 自然段独立完整字符串：开场、可选视觉基调、实际参考绑定、连续时间段、结束、可选稳定音色；2000 个 Unicode 字符以内为目标，2500 为提醒。对白原句只在实际发声时间段出现一次，内部帧证据不要求复制为公开字段 |
 | `continuityEdges[]`                                                               | 片段之间的连接；`fromShotCode/toShotCode/transition/inheritActualEndFrame/carryCharacterIds/carryPropIds/carryEnvironment/carryAxis/notes`；枚举全部相邻片段，换场与跳时说明依据 |
 | `authoring.materials[]`                                                           | 文本来源对象数组；必须包含 `package-template` 与 `story-source`，不用提供运行凭据                                                                                                |
 | `authoring.qualityGateReport`                                                     | `{status, checks[]}`，检查项记 `code/status/severity/scope/evidence/sourceRefs/fixHint`；被阻断的检查与总状态必须一致。导入不替作者改成 `passed`                                 |
@@ -38,7 +38,7 @@
 
 角色资产统一为一张白底板：身份特写＋正面、严格左侧面、背面全身。场景为当前画幅的高清单视角全景，须读出空间拓扑。
 
-30 秒 `dense-30s` 默认 8–11 个连续帧段、7–10 次实际 `type=硬切`。匹配切、跳切与跨片段转场不计数；硬切对齐帧边界并填写触发、新机位、切后主运镜、信息目的和承接。减切原因写在本镜正文并登记修订状态，不能自动降级配置。
+30 秒 `dense-30s` 默认 8–11 个连续帧段、7–10 次实际 `type=硬切`。匹配切、跳切与跨片段转场不计数；硬切对齐帧边界并填写触发、新机位、切后主运镜、信息目的和承接。减切原因及修订状态只写在结构化 QC，不进入公开视频正文，不能自动降级配置。
 
 ```sh
 pnpm --dir web run check:drama-package -- /绝对路径/制作包.md --source /绝对路径/源文.txt

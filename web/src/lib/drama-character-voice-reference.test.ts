@@ -21,11 +21,11 @@ describe("character voice references", () => {
         expect(appendDramaCharacterVoiceBindings(original, [voice])).toContain(text.trim());
         expect(voice.audio).toBeUndefined();
     });
-    it("prefers the uploaded sample to generated audio and never also uses the prompt", () => {
+    it("prefers the uploaded sample and keeps audio bindings out of public prompt prose", () => {
         const voice = dramaCharacterVoiceReference(heroine({ creationSampleAssetId: "permanent/audio/岚音.wav", previewStatus: "success", previewAudioUrl: "/api/reference-assets/old.mp3" }));
         expect(voice.audio?.url).toBe("/api/reference-assets/permanent/audio/%E5%B2%9A%E9%9F%B3.wav");
         const prompt = appendDramaCharacterVoiceBindings("原始镜头卡", [voice]);
-        expect(prompt).toContain("角色「岚音」：配音引用 @音频1");
+        expect(prompt).toBe("原始镜头卡");
         expect(prompt).not.toContain(voice.timbrePrompt);
     });
     it("uses only successful local auditions when there is no upload", () => {
@@ -40,15 +40,14 @@ describe("character voice references", () => {
         expect(dramaShotCharacterVoiceReferences(project, shot, ["listener"]).map((voice) => voice.name)).toEqual(["岚音", "陆川"]);
         expect(dramaShotCharacterVoiceReferences(project, { utterances: [] }, []).map((voice) => voice.name)).toEqual([]);
     });
-    it("writes shared dialogue rules once for multiple character voices", () => {
+    it("writes only stable role-specific timbres without shared packaging text", () => {
         const voices = [dramaCharacterVoiceReference(heroine()), dramaCharacterVoiceReference({ ...heroine(), id: "hero", name: "阿泽" })];
         const prompt = appendDramaCharacterVoiceBindings("当前画面", voices);
-        expect(prompt.match(/完整说出本提示词已有的对白和旁白原句/gu)).toHaveLength(1);
-        expect(prompt.match(/保持原说话人及标注的发声时间/gu)).toHaveLength(1);
-        expect(prompt).not.toContain("仅用于该角色已有台词");
-        expect(prompt).not.toContain("不增加对白");
-        expect(prompt).toContain("角色「岚音」：");
+        expect(prompt.match(/声音：/gu)).toHaveLength(1);
+        expect(prompt).toContain("声音：角色「岚音」：");
         expect(prompt).toContain("角色「阿泽」：");
+        expect(prompt).not.toContain("完整说出本提示词");
+        expect(prompt).not.toContain("保持原说话人");
     });
 
     it("matches a stable voice identity or an exact speaker name", () => {
@@ -57,16 +56,17 @@ describe("character voice references", () => {
         expect(dramaShotCharacterVoiceReferences(project, { utterances: [{ id: "1", order: 1, type: "dialogue", speaker: "岚音", text: "原句" }] }, [])).toHaveLength(1);
         expect(dramaShotCharacterVoiceReferences(project, { utterances: [{ id: "1", order: 1, type: "dialogue", speaker: "岚", text: "原句" }] }, [])).toHaveLength(0);
     });
-    it("numbers audio independently of prompt voices and binds each sample to its own speaker", () => {
+    it("keeps audio references separate from stable text timbres", () => {
         const voices = [
             dramaCharacterVoiceReference(heroine()),
             dramaCharacterVoiceReference({ ...heroine({ creationSampleAssetId: "permanent/a.wav" }), id: "a", name: "陆川" }),
             dramaCharacterVoiceReference({ ...heroine({ creationSampleAssetId: "permanent/b.wav" }), id: "b", name: "罗衡" }),
         ];
         const prompt = appendDramaCharacterVoiceBindings("原稿", voices);
-        expect(prompt).toContain("角色「岚音」：");
-        expect(prompt).toContain("角色「陆川」：配音引用 @音频1");
-        expect(prompt).toContain("角色「罗衡」：配音引用 @音频2");
-        expect(prompt).toContain("实际说话内容以本提示词台词为准");
+        expect(prompt).toContain("声音：角色「岚音」：");
+        expect(prompt).not.toContain("陆川");
+        expect(prompt).not.toContain("罗衡");
+        expect(prompt).not.toContain("配音引用");
+        expect(voices.slice(1).every((voice) => Boolean(voice.audio))).toBe(true);
     });
 });

@@ -25,24 +25,16 @@ export function dramaShotCharacterVoiceReferences(project: Pick<DramaProject, "i
         .map(dramaCharacterVoiceReference);
 }
 
-/** Compact voice identities, shared rules once; included in the editable submission preview. */
+/** Add only stable voice guidance as a plain final sound sentence. */
 export function appendDramaCharacterVoiceBindings(prompt: string, voices: DramaCharacterVoiceReference[]) {
-    let audioIndex = 0;
-    const bindings = voices.flatMap((voice) => {
-        const character = `角色「${voice.name}」`;
-        if (voice.audio) return [`${character}：配音引用 @音频${++audioIndex}`];
-        if (voice.timbrePrompt) return [`${character}：${voice.timbrePrompt}`];
-        return [];
-    });
+    const bindings = voices.filter((voice) => voice.timbrePrompt && !voice.audio).map((voice) => `角色「${voice.name}」：${voice.timbrePrompt}`);
     if (!bindings.length) return prompt;
-    return [
-        [
-            "【角色音色】",
-            ...bindings,
-            `人声：完整说出本提示词已有的对白和旁白原句，保持原说话人及标注的发声时间；各角色使用上述音色，情绪、语速和停顿按当句表演要求执行。${audioIndex ? "音频样本用于对应角色的声线参考，实际说话内容以本提示词台词为准。" : ""}`,
-        ].join("\n"),
-        prompt,
-    ]
-        .filter(Boolean)
-        .join("\n\n");
+    const source = prompt.trim();
+    const existing = source.match(/(?:^|\n)声音：([\s\S]*)$/u);
+    if (!existing) return `${source}\n\n声音：${bindings.join("；")}`;
+    const current = existing[1].trim();
+    const missing = bindings.filter((binding) => !current.includes(binding.slice(0, binding.indexOf("："))));
+    if (!missing.length) return source;
+    const start = existing.index ?? 0;
+    return `${source.slice(0, start).trimEnd()}\n声音：${[current, ...missing].filter(Boolean).join("；")}`;
 }

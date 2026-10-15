@@ -45,7 +45,7 @@ import {
 import { dramaDialogueFragmentSequenceError, dramaDialogueTimingReminder, dramaFrameDialogueTimingReminder, dramaUtteranceTimingIssues, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
 import { resolveDramaStyleContract, resolveDramaStyleContractWithFallback } from "@/lib/drama-style";
 import { DRAMA_CHARACTER_CURRENT_COLOR_RULE, DRAMA_CHARACTER_CURRENT_DESIGN_RULE, normalizeDramaCharacterProfile } from "@/lib/drama-character-rules";
-import { applyDramaStaticVisualContract, applyDramaVideoVisualContract, compileDramaAssetReferencePrompt, projectDramaCharacterModelFacts, stripDramaAssetReferenceSections } from "@/lib/drama-prompt-compiler";
+import { applyDramaStaticVisualContract, applyDramaVideoVisualContract, compileDramaAssetReferencePrompt, projectDramaCharacterModelFacts } from "@/lib/drama-prompt-compiler";
 import { resolveDramaShotDuration } from "@/lib/server/drama-shot-config";
 import {
     dramaTimeRangePattern,
@@ -56,8 +56,6 @@ import {
     validateDramaCameraPlan,
     validateDramaFrameTiming,
     validateDramaPerformanceDetail,
-    repairDramaVideoPromptAudioHierarchy,
-    repairDramaVideoPromptUtteranceCoverage,
     validateDramaVideoAuthoringQuality,
     validateDramaVideoPromptCardLayout,
     validateDramaVideoPromptLength,
@@ -663,32 +661,12 @@ function mergeEpisode(
         const packageShot = incoming.shots.find((item) => item.code === shot.code);
         const framePlan = shouldPreserveManualFramePlan(shot.framePlan, shot.fieldOrigins?.framePlan) ? preserveManualFramePlan(shot.framePlan!) : remapFramePlan(packageShot?.framePlan, characterIds, locationIds, propIds, clueIds, shotIds);
         if (preserveAuthorText) return { ...shot, framePlan, storySceneId: packageShot?.storySceneCode ? storySceneIds.get(packageShot.storySceneCode) : undefined };
-        const dialogueRepairedBasePrompt = repairDramaVideoPromptUtteranceCoverage(shot.videoPrompt, framePlan?.frames || [], shot.utterances as DramaDialogueTimingInput[], shot.code || shot.title);
-        const repairedBasePrompt = repairDramaVideoPromptAudioHierarchy(dialogueRepairedBasePrompt.prompt, shot.code || shot.title);
         const linkedShot = {
             ...shot,
-            ...(dialogueRepairedBasePrompt.changed || repairedBasePrompt.changed ? { videoPrompt: repairedBasePrompt.prompt } : {}),
             framePlan,
             storySceneId: packageShot?.storySceneCode ? storySceneIds.get(packageShot.storySceneCode) : undefined,
         };
-        if (shot.fieldOrigins?.executionVideoPrompt !== "manual" || !shot.executionVideoPrompt?.trim()) return linkedShot;
-        const label = shot.code || shot.title;
-        const dialogueRepairedExecutionPrompt = repairDramaVideoPromptUtteranceCoverage(shot.executionVideoPrompt, framePlan?.frames || [], shot.utterances as DramaDialogueTimingInput[], label);
-        const repairedExecutionPrompt = repairDramaVideoPromptAudioHierarchy(dialogueRepairedExecutionPrompt.prompt, label);
-        if (dialogueRepairedExecutionPrompt.changed || repairedExecutionPrompt.changed) return { ...linkedShot, executionVideoPrompt: repairedExecutionPrompt.prompt };
-        const stalePromptErrors = [
-            ...validateDramaVideoPromptCardLayout(shot.executionVideoPrompt, framePlan?.frames || [], label),
-            ...validateDramaVideoPromptUtteranceCoverage(shot.executionVideoPrompt, framePlan?.frames || [], shot.utterances as DramaDialogueTimingInput[], label),
-        ];
-        if (!stalePromptErrors.length) return linkedShot;
-        const sourcePromptErrors = [
-            ...validateDramaVideoPromptCardLayout(linkedShot.videoPrompt, framePlan?.frames || [], label),
-            ...validateDramaVideoPromptUtteranceCoverage(linkedShot.videoPrompt, framePlan?.frames || [], shot.utterances as DramaDialogueTimingInput[], label),
-        ];
-        if (sourcePromptErrors.length) return linkedShot;
-        const fieldOrigins = { ...linkedShot.fieldOrigins };
-        delete fieldOrigins.executionVideoPrompt;
-        return { ...linkedShot, executionVideoPrompt: undefined, fieldOrigins };
+        return linkedShot;
     });
     const continuityEdges = incoming.continuityEdges.flatMap<DramaContinuityEdge>((edge) => {
         const fromShotId = shotIds.get(edge.fromShotCode);
@@ -983,7 +961,9 @@ function validateStandalonePackageShape(input: Record<string, unknown>, options:
             if (previousFrameEnd !== duration) fail(`${path}.framePlan.frames`, ` 未完整覆盖 ${duration}s 逻辑片段`);
             if (!text(shot.videoPrompt)) fail(`${path}.videoPrompt`, " 不能为空");
             if (shotDuration === 30 && text(video.internalCutPolicy) === "dense-30s") {
-                for (const issue of dramaDenseHardCutIssues(text(shot.videoPrompt), frames as Array<{ startSecond: number; endSecond: number }>, path)) qualityWarning(`${path}.videoPrompt`, issue);
+                const shotCode = text(shot.code);
+                for (const issue of dramaDenseHardCutIssues(text(shot.videoPrompt), frames as Array<{ startSecond: number; endSecond: number; transitionPrompt?: string }>, path, getStructuredDenseReduction(input, shotCode)))
+                    qualityWarning(`${path}.videoPrompt`, issue);
             }
             totalShots += 1;
             totalDuration += duration;
@@ -1244,6 +1224,15 @@ function restylePackageArchive(archive: DramaProductionPackageV1["archive"], pro
             prompt: asset.category === "storyboard" ? applyDramaVideoVisualContract(project, asset.prompt) : applyDramaStaticVisualContract(project, asset.prompt),
         })),
     };
+}
+
+function getStructuredDenseReduction(value: Record<string, unknown>, shotCode: string) {
+    const report = object(object(value.authoring).qualityGateReport);
+    const checks = array(report.checks).map(object);
+    const check = checks.find((item) => item.code === "CAMERA_EVENT" && item.severity === "warning" && array(item.shotIds).map(text).includes(shotCode));
+    const match = text(check?.evidence).match(/减切原因\s*[：:]\s*([^；\n]+)[；;]\s*实际\s*[：:]?\s*(\d+)\s*帧\s*[/／]\s*(\d+)\s*次硬切[；;]\s*修订状态\s*[：:]\s*([^；\n]+)/u);
+    if (!match) return undefined;
+    return { reason: match[1].trim(), frameCount: Number(match[2]), hardCutCount: Number(match[3]), revision: match[4].trim() };
 }
 
 function validateProductionPackageExecutionContract(value: DramaProductionPackageV1, options: { allowImportWarnings?: boolean; importWarnings?: string[] } = {}) {
@@ -2225,7 +2214,7 @@ function normalizePackageShot(value: unknown, index: number, options: DramaProdu
     }
     let videoPrompt = "";
     try {
-        videoPrompt = options.preserveAuthoredVideoPrompt ? (typeof shot.videoPrompt === "string" ? shot.videoPrompt : "") : normalizePackageVideoPrompt(text(shot.videoPrompt));
+        videoPrompt = normalizePackageVideoPrompt(typeof shot.videoPrompt === "string" ? shot.videoPrompt : text(shot.videoPrompt));
     } catch (error) {
         const message = `${label}的 videoPrompt 无效：${error instanceof Error ? error.message : "无法解析"}`;
         if (!options.allowImportWarnings) throw new DramaProductionPackageError(message);
@@ -2308,7 +2297,7 @@ function normalizePackageShot(value: unknown, index: number, options: DramaProdu
 }
 
 function normalizePackageVideoPrompt(value: string) {
-    const prompt = stripDramaAssetReferenceSections(value).trim();
+    const prompt = value.trim();
     if (!prompt) throw new DramaProductionPackageError("镜头缺少 Agent 提供的视频提示词");
     return prompt;
 }

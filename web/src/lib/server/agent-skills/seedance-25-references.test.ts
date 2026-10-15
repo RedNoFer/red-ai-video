@@ -8,7 +8,7 @@ describe("Seedance 2.5 video reference routing", () => {
         expect(resolveSeedance25VideoPromptRoute({ durationSeconds: 15 })).toBe("basic-multimodal");
         expect(resolveSeedance25VideoPromptRoute({ durationSeconds: 20 })).toBe("basic-multimodal");
         expect(resolveSeedance25VideoPromptRoute({ durationSeconds: 30 })).toBe("timestamp-30s");
-        expect(resolveSeedance25DirectorInstructions({ durationSeconds: 30 }).instructions).toContain("模式：30 秒精确时间轴");
+        expect(resolveSeedance25DirectorInstructions({ durationSeconds: 30 }).instructions).toContain("timestamp-30s");
     });
 
     it("lets an explicit operation override the duration route", () => {

@@ -50,13 +50,12 @@ describe("drama analysis contracts", () => {
 
     it("keeps material binding and frame planning in the Skill-owned video prompt contract", () => {
         expect(dramaVideoPromptTool.description).toContain("当前唯一 drama-video-director Skill");
-        expect(dramaVideoPromptTool.parameters.properties.shots.items.properties.videoPrompt.description).toContain("当前唯一导演 Skill");
-        expect(dramaVideoPromptTool.parameters.properties.shots.items.properties.videoPrompt.description).toContain("只提示作者压缩，不阻断");
-        expect(dramaVideoPromptTool.parameters.properties.shots.items.properties.videoPrompt.description).toContain("Seedance 2.5 五层公开");
-        expect(dramaVideoPromptTool.parameters.properties.shots.items.properties.videoPrompt.description).toContain("人声字段必须说明对应说话人/旁白原声实际发出、清晰可辨、音量居前");
-        expect(dramaVideoPromptTool.parameters.properties.shots.items.properties.videoPrompt.description).toContain("环境音、动作拟音和音乐在对白/旁白发声窗口压低避让");
-        expect(dramaVisualTool.parameters.properties.shots.items.properties.videoPrompt.description).toContain("原句完整可听并与说话时间同步");
-        expect(dramaVisualTool.parameters.properties.shots.items.properties.videoPrompt.description).toContain("不得盖过、吞没、替代或静音台词");
+        expect(dramaVideoPromptTool.parameters.properties.shots.items.properties.videoPrompt.description).toContain("正文目标 2000 个 Unicode 字符以内，2500 仅提醒");
+        expect(dramaVideoPromptTool.parameters.properties.shots.items.properties.videoPrompt.description).toContain("禁止包装标题、重复追加统一视觉");
+        expect(dramaVideoPromptTool.parameters.properties.shots.items.properties.videoPrompt.description).toContain("按 Seedance 2.5 自然段格式");
+        expect(dramaVideoPromptTool.parameters.properties.shots.items.properties.videoPrompt.description).toContain("时间段写摄影、动作因果、可见表演、说话人完整原句和局部声音");
+        expect(dramaVideoPromptTool.parameters.properties.shots.items.properties.videoPrompt.description).toContain("原句只出现一次");
+        expect(dramaVisualTool.parameters.properties.shots.items.properties.videoPrompt.description).toBe(dramaVideoPromptTool.parameters.properties.shots.items.properties.videoPrompt.description);
         expect(dramaVisualTool.parameters.properties.shots.items.properties.framePlan.description).toContain("imagePrompt 仅填写当前冻结画面正文");
         expect(dramaVisualTool.parameters.properties.shots.items.properties.framePlan.description).not.toContain("眉眼、呼吸、手部关系清晰可见");
         expect(dramaVisualTool.parameters.properties.shots.items.properties.framePlan.properties.frames.minItems).toBe(2);
@@ -131,7 +130,7 @@ describe("drama analysis contracts", () => {
         ).toEqual({ shots: [{ shotId: "shot-one", imagePrompt: "静态画面" }] });
     });
 
-    it("restyles direct analysis output from the current visual contract", () => {
+    it("preserves authored video prose and normalizes only static-frame visuals", () => {
         const visualProject = {
             style: "西方CG电影级写实幻想，physically based 3D",
             productionBible: {
@@ -152,7 +151,7 @@ describe("drama analysis contracts", () => {
                 shots: [
                     {
                         shotId: "shot-one",
-                        videoPrompt: "动态意图：人物抬头\n视觉风格与光色：旧东方古风国漫",
+                        videoPrompt: "开场时，人物站在门边。\n00.0–02.0秒，人物抬头看向门外。\n结束时，人物仍站在门边，视线停在门外。",
                         framePlan: {
                             frames: [{ id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 2, startPrompt: "低头", actionPrompt: "抬头", transitionPrompt: "视线抬起", endPrompt: "抬头完成", imagePrompt: "光色与风格：旧东方古风国漫" }],
                         },
@@ -164,8 +163,7 @@ describe("drama analysis contracts", () => {
             visualProject,
         );
 
-        expect(result.shots[0].videoPrompt).toContain("视觉质感采用：西方CG电影级写实幻想，physically based 3D");
-        expect(result.shots[0].videoPrompt).not.toContain("旧东方古风国漫");
+        expect(result.shots[0].videoPrompt).toBe("开场时，人物站在门边。\n00.0–02.0秒，人物抬头看向门外。\n结束时，人物仍站在门边，视线停在门外。");
         expect(result.shots[0].framePlan.frames[0].imagePrompt).toContain("光色与风格：项目视觉合同（唯一风格来源）：西方CG电影级写实幻想，physically based 3D");
         expect(result.shots[0].framePlan.frames[0].imagePrompt).not.toContain("旧东方古风国漫");
 

@@ -936,7 +936,6 @@ export type DramaProductionPackageAsset = {
     code: string;
     name: string;
     description: string;
-    voiceProfile?: Pick<DramaVoiceProfile, "timbrePrompt">;
     supplierPrompt?: string;
     profile?: DramaAssetProfile;
     payoff?: string;
@@ -944,6 +943,7 @@ export type DramaProductionPackageAsset = {
     fieldOrigins?: Record<string, DramaFieldOrigin>;
     sceneReferenceBoard?: DramaSceneReferenceBoard;
     backgroundNpcPolicy?: DramaBackgroundNpcPolicy;
+    voiceProfile?: Pick<DramaVoiceProfile, "timbrePrompt">;
 };
 
 export type DramaProductionPackageShot = Omit<DramaShot, "id" | "characterIds" | "propIds" | "clueIds" | "sceneId" | "storySceneId"> & {
@@ -1203,6 +1203,7 @@ export type DramaProductionStep = {
     assetKind?: "characters" | "scenes" | "props";
     title?: string;
     prompt?: string;
+    promptIsFrozen?: boolean;
     executionPrompt?: string;
     referenceAssetIds?: string[];
     referenceImageUrls?: string[];
@@ -1251,7 +1252,15 @@ export type DramaProductionRun = {
         checkedShotIds: string[];
         issues: DramaProductionPreflightIssue[];
         changeSummary: string[];
-        prompts: Record<string, { sourceImagePrompt: string; sourceVideoPrompt: string; executionImagePrompt: string; executionVideoPrompt: string }>;
+        prompts?: Record<
+            string,
+            {
+                sourceImagePrompt: string;
+                sourceVideoPrompt: string;
+                executionImagePrompt: string;
+                executionVideoPrompt: string;
+            }
+        >;
     };
     createdAt: string;
     updatedAt: string;

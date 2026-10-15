@@ -8,7 +8,8 @@ describe("drama production preflight", () => {
     it("reports dialogue boundaries, composition and missing production setup as advisory video findings", () => {
         const project = fixture();
         const shot = project.episodes[0].shots[0];
-        shot.videoPrompt = "【参数】15秒，9:16，有声。\n【公共总规范】人物近景。\n【时间轴】\n0-15秒：人物近景抬头，台词：角色：“别走。”；人声：低声；音效：风声。\n【收尾】人物站定。";
+        shot.videoPrompt =
+            "开场时，角色站在画面左侧，双脚踩稳地面，右手停在胸前。\n00.0–15.0秒，中近景平视固定机位，角色听见身后脚步后抬头，低声说：“别走。”原句清晰居前，说后视线停在门口；风声在发声时压低，衣料轻响。\n结束时，角色仍站在左侧，右手停在胸前，目光朝向门口。";
         shot.utterances = [{ id: "u1", order: 1, type: "dialogue", speaker: "角色", text: "别走。", startSecond: 1, endSecond: 3, speechRate: "normal" }];
         shot.framePlan!.frames = [0, 1].map((index) => ({ id: `f${index}`, sequenceIndex: index + 1, startSecond: index * 7.5, endSecond: (index + 1) * 7.5, actionPrompt: "人物抬头", imagePrompt: "人物近景" }));
         const result = preflightDramaProduction(project, project.episodes[0]);
@@ -60,11 +61,9 @@ describe("drama production preflight", () => {
         const shot = project.episodes[0].shots[0];
         shot.duration = 6;
         shot.videoPrompt = [
-            "【参数】6秒，9:16，有声，城门外人物反应。",
-            "【公共总规范】城门外石阶，角色站在左侧，脚底受湿石支撑，右手握断剑；固定180度轴线。左上冷光落在脸侧，冷灰蓝；禁止瞬移、穿模和无因重排。",
-            "【时间轴】",
-            "0-6秒：角色因门缝传来风声而抬眼，右手收紧，指节发白；中景50mm城门外平视固定机位，视线停在门缝，脚底与湿石接触；人声：屏息后缓慢呼气；音效：衣料轻响。",
-            "【收尾】角色仍站石阶左侧，右手紧握断剑，视线停在门缝。",
+            "开场时，角色站在城门外石阶左侧，双脚受湿石支撑，右手握断剑；摄影机位于固定180度轴线南侧。",
+            "00.0–06.0秒，中景50mm平视固定机位，门缝传来风声，角色抬眼、右手收紧至指节发白；屏息后缓慢呼气，衣料轻响。",
+            "结束时，角色仍站石阶左侧，右手紧握断剑，视线停在门缝。",
         ].join("\n");
         shot.framePlan = {
             ...shot.framePlan!,

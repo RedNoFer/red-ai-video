@@ -6,7 +6,9 @@ import { validateDramaCharacterWardrobeContinuity, validateDramaCutInformationDi
 import {
     extractDramaVideoPromptCards,
     DRAMA_VIDEO_PROMPT_MAX_CHARACTERS,
+    DRAMA_VIDEO_PROMPT_TARGET_CHARACTERS,
     dramaDenseHardCutIssues,
+    dramaCameraEventEvidenceIssues,
     hasConcreteDramaCameraDirection,
     validateDramaVideoPromptAudioHierarchy,
     validateDramaFrameCausalChain,
@@ -311,7 +313,7 @@ function checkVideoPromptLayout(checks: DramaQualityGateCheck[], value: DramaPro
         "视频提示词排版",
         failures.length ? failures.slice(0, 8).join("；") : "Seedance 2.5 公开时间轴完整覆盖内部帧，公开段数与内部帧数不绑定",
         ["episodes[].shots[].videoPrompt", "episodes[].shots[].framePlan.frames[]"],
-        "按 Seedance 2.5 五层正文补齐，公共事实只写一次，时间轴写局部动作因果、摄影与声音，禁止回退旧公开镜头卡。",
+        "按 Seedance 2.5 自然段规范修正开场、连续时间段、结束状态与实际素材绑定；删除包装标题和重复视觉合同。",
     );
 }
 
@@ -324,7 +326,7 @@ function checkAudioMixingHierarchy(checks: DramaQualityGateCheck[], value: Drama
         "对白与音效混音层级",
         failures.length ? failures.slice(0, 8).join("；") : "有台词的镜头明确保证对白/旁白完整可听、声音居前，环境音与拟音在说话窗口避让",
         ["episodes[].shots[].videoPrompt"],
-        "保留台词原句，在人声字段明确原声清晰可辨、音量居前；音效字段说明对白/旁白发声期间压低环境音、动作拟音与音乐，语音停顿间隙才可抬升。",
+        "保留完整原句并置于实际发声时间段；对白/旁白清晰居前，环境音、动作拟音和音乐在发声时压低避让。",
         {
             repairScope: "shot",
             shotIds: [...new Set(failures.flatMap((failure) => [...failure.matchAll(/\b(SH\d+)\b/gu)].map((match) => match[1])))],
@@ -337,20 +339,23 @@ function checkVideoPromptLength(checks: DramaQualityGateCheck[], value: DramaPro
     const entries = value.episodes.flatMap((episode) => episode.shots.map((shot) => ({ label: `${episode.code}/${shot.code}`, length: Array.from(shot.videoPrompt || "").length })));
     const maximum = entries.reduce((current, entry) => Math.max(current, entry.length), 0);
     const total = entries.reduce((current, entry) => current + entry.length, 0);
+    const overTarget = entries.filter((entry) => entry.length > DRAMA_VIDEO_PROMPT_TARGET_CHARACTERS);
     const overLimit = entries.filter((entry) => entry.length > DRAMA_VIDEO_PROMPT_MAX_CHARACTERS);
     addWarning(
         checks,
         "VIDEO_PROMPT_LENGTH",
-        overLimit.length
-            ? `${overLimit.length} 个逻辑片段超过 ${DRAMA_VIDEO_PROMPT_MAX_CHARACTERS} 个 Unicode 字符：${overLimit
+        overTarget.length
+            ? `${overTarget.length} 个逻辑片段超过 ${DRAMA_VIDEO_PROMPT_TARGET_CHARACTERS} 字符建议目标：${overTarget
                   .slice(0, 12)
                   .map((entry) => `${entry.label}（${entry.length}）`)
-                  .join("、")}${overLimit.length > 12 ? "等" : ""}；全包 ${entries.length} 段，总计 ${total} 字符，单段最大 ${maximum}`
+                  .join(
+                      "、",
+                  )}${overTarget.length > 12 ? "等" : ""}${overLimit.length ? `；其中 ${overLimit.length} 段超过 ${DRAMA_VIDEO_PROMPT_MAX_CHARACTERS} 字符提醒线` : ""}；全包 ${entries.length} 段，总计 ${total} 字符，单段最大 ${maximum}；不阻断、不截断`
             : entries.length
-              ? `${entries.length} 个逻辑片段均不超过 ${DRAMA_VIDEO_PROMPT_MAX_CHARACTERS} 个 Unicode 字符；总计 ${total} 字符，单段最大 ${maximum}`
+              ? `${entries.length} 个逻辑片段均不超过 ${DRAMA_VIDEO_PROMPT_TARGET_CHARACTERS} 字符建议目标；总计 ${total} 字符，单段最大 ${maximum}`
               : "没有可统计的逻辑片段",
         ["episodes[].shots[].videoPrompt"],
-        "仅压缩重复的全局视觉、光色、材质和格式话术；不得删除主体、触发、动作、可见结果、声音锚点、对白边界、连续性状态或本条内部硬切信息。",
+        "压缩重复或冲突的表达，不重复追加统一视觉；2000 字符为建议目标，2500 字符为提醒线，均不阻断、不截断或拆分逻辑片段。",
     );
 }
 
@@ -520,9 +525,9 @@ function checkDialoguePerformanceQuality(checks: DramaQualityGateCheck[], value:
         "DIALOGUE_PERFORMANCE",
         !failures.length,
         "对白表演质量",
-        failures.length ? failures.slice(0, 8).join("；") : "每个对白时间段均绑定当前说话人、带完整引号台词，并写出具体语气、停顿、重音和说后可见反应",
+        failures.length ? failures.slice(0, 8).join("；") : "每个对白时间段均写当前说话人、完整原句、具体语气/停顿/重音和说后可见反应",
         ["episodes[].shots[].videoPrompt", "episodes[].shots[].framePlan.frames[]", "episodes[].shots[].utterances"],
-        "按当前台词和时间段重写具体表演；对白统一使用“说话人说：“实际台词””格式，禁止把台词塞进重音字段；对白结束段改为明确的呼吸、视线、身体或道具静默结果，禁止复制模板句。",
+        "按当前台词和时间段重写具体表演；对白使用说话人引述的自然句式，完整原句仅在实际发声时间段出现一次；对白结束段改为明确的呼吸、视线、身体或道具静默结果，禁止复制模板句。",
     );
 }
 
@@ -740,29 +745,20 @@ function checkCameraMotivation(checks: DramaQualityGateCheck[], value: DramaProd
 
 function checkCameraEvents(checks: DramaQualityGateCheck[], value: DramaProductionPackageV1, customTemplateDenseRule = false) {
     const failed: string[] = [];
+    const reductions: Array<{ shotId: string; message: string }> = [];
     const productionPlan = value.project.productionBible?.productionPlan;
     for (const shot of value.episodes.flatMap((episode) => episode.shots)) {
         const prompt = shot.videoPrompt || "";
-        const eventLines = [...prompt.matchAll(/镜头事件\s*[：:]\s*([^\n]+)/gu)].map((match) => match[1]);
-        const hasCut = /(?:\bCut\s+to\b|\bCamera\s+cut\s+to\b|镜头事件\s*[：:])/iu.test(prompt);
-        const internal = /镜头模式\s*[：:]\s*内部切镜/u.test(prompt);
-        const inferredInternal = !internal && eventLines.length > 0;
         const denseMaterial = `${productionPlan?.customDirectorRules || ""}\n${prompt}`;
         const denseRuleRequested = hasDramaDenseCutRule(denseMaterial) || customTemplateDenseRule;
         const denseRequested = shot.duration === 30 && (productionPlan?.video?.internalCutPolicy === "dense-30s" || denseRuleRequested);
         if (shot.duration === 30 && denseRuleRequested && (productionPlan?.video?.internalCutPolicy === "adaptive" || (customTemplateDenseRule && productionPlan?.video?.internalCutPolicy !== "dense-30s")))
             failed.push(`${shot.code}:已声明30秒高密度硬切，但 productionPlan.video.internalCutPolicy 仍为 ${productionPlan?.video?.internalCutPolicy || "未声明"}，不能降级为 adaptive`);
-        if (hasCut && !internal && !inferredInternal) failed.push(`${shot.code}:未声明内部切镜`);
-        if (internal || inferredInternal || denseRequested) {
-            const events = eventLines;
-            if (!events.length || events.some((event) => !/(?:时间|秒).{0,12}(?:类型|硬切|匹配切|插入|甩镜).{0,40}(?:触发事件).{0,80}(?:新机位).{0,100}(?:切后主运镜).{0,100}(?:信息目的).{0,100}(?:承接)/u.test(event)))
-                failed.push(`${shot.code}:镜头事件字段不完整`);
-            const starts = new Set((shot.framePlan?.frames || []).map((frame) => Number(frame.startSecond).toFixed(3)));
-            for (const event of events) {
-                const match = event.match(/(?:时间|发生时间)\s*[：:]?\s*(\d+(?:\.\d+)?)\s*秒/u);
-                if (match && !starts.has(Number(match[1]).toFixed(3))) failed.push(`${shot.code}:切点未对齐帧边界`);
-            }
-            if (denseRequested) failed.push(...dramaDenseHardCutIssues(prompt, shot.framePlan?.frames || [], shot.code));
+        const frames = shot.framePlan?.frames || [];
+        const eventIssues = denseRequested ? dramaDenseHardCutIssues(prompt, frames, shot.code, getStructuredDenseReduction(value, shot.code)) : dramaCameraEventEvidenceIssues(prompt, frames, shot.code);
+        for (const issue of eventIssues) {
+            if (issue.includes("已登记结构化减切原因：")) reductions.push({ shotId: shot.code, message: issue });
+            else failed.push(issue);
         }
     }
     add(
@@ -770,10 +766,28 @@ function checkCameraEvents(checks: DramaQualityGateCheck[], value: DramaProducti
         "CAMERA_EVENT",
         !failed.length,
         "镜头事件",
-        failed.length ? failed.join("；") : "未声明切镜的镜头没有出现隐式 Cut；声明内部切镜时字段和边界完整",
-        ["videoPrompt", "framePlan.frames[].startSecond"],
-        "出现 Cut to 时先声明“镜头模式：内部切镜”，并在可见衔接写时间、类型、触发事件、新机位、切后主运镜、信息目的和承接；切点必须对齐帧段起点。",
+        failed.length ? failed.join("；") : "公开 Cut to 与 framePlan 内部事件证据一致，切点落在真实帧边界",
+        ["videoPrompt", "framePlan.frames[].transitionPrompt"],
+        "公开自然时间段只写观众看到的镜头变化；时间、类型、触发、新机位、切后运镜、信息目的和承接写入对应切后帧的 transitionPrompt。",
     );
+    for (const reduction of reductions)
+        checks.push({
+            code: "CAMERA_EVENT",
+            status: "warning",
+            severity: "warning",
+            scope: "本片段已说明的减切修订",
+            shotIds: [reduction.shotId],
+            evidence: reduction.message,
+            sourceRefs: ["authoring.qualityGateReport", "framePlan.frames"],
+            fixHint: "保留实际帧数与切数，并在结构化 QC 中登记可核验原因及修订状态；公开视频正文不写减切或 QC 说明。",
+        });
+}
+
+function getStructuredDenseReduction(value: DramaProductionPackageV1, shotId: string) {
+    const check = value.authoring?.qualityGateReport?.checks.find((item) => item.code === "CAMERA_EVENT" && item.severity === "warning" && item.shotIds?.includes(shotId));
+    const match = check?.evidence.match(/减切原因\s*[：:]\s*([^；\n]+)[；;]\s*实际\s*[：:]?\s*(\d+)\s*帧\s*[/／]\s*(\d+)\s*次硬切[；;]\s*修订状态\s*[：:]\s*([^；\n]+)/u);
+    if (!match) return undefined;
+    return { reason: match[1].trim(), frameCount: Number(match[2]), hardCutCount: Number(match[3]), revision: match[4].trim() };
 }
 
 function checkCompositionContract(checks: DramaQualityGateCheck[], value: DramaProductionPackageV1) {

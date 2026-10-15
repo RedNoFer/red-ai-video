@@ -62,14 +62,17 @@ describe("manual fixed asset reference selection", () => {
         const bindings = buildVideoReferenceBindings(project, shot, [], ids);
         const prompt = compileDramaVideoSubmissionPrompt("人物扶住车门。", project, shot, bindings, ids);
         expect(prompt).toContain("@图片1：场景「车厢」\n@图片2：角色「同伴」");
+        expect(prompt.match(/每张角色资产图均展示同一个人的不同观察角度/gu)).toHaveLength(1);
         expect(prompt).toContain("低沉克制，普通话清晰");
         expect(prompt).not.toContain("项目资产基准图");
         expect(compileDramaVideoSubmissionPrompt(prompt, project, shot, bindings, ids)).toBe(prompt);
         const selected = buildVideoReferenceBindings(project, shot, [], ["extra-character"]);
         expect(selected).toMatchObject([{ alias: "@图片1", sourceId: "extra-character" }]);
         const changed = compileDramaVideoSubmissionPrompt(`${prompt}\n作者补充：保持窗外路灯位置。`, project, shot, selected, ["extra-character"]);
-        expect(changed.startsWith("【参考图片】\n@图片1：角色「同伴」\n\n")).toBe(true);
-        expect(changed.endsWith("人物扶住车门。\n作者补充：保持窗外路灯位置。")).toBe(true);
+        expect(changed).toContain("参考图片：\n@图片1：角色「同伴」");
+        expect(changed).toContain("保证人物唯一性，每个角色在世界空间中仅有一人。");
+        expect(changed).toContain("人物扶住车门。");
+        expect(changed).toContain("作者补充：保持窗外路灯位置。");
         expect(changed).not.toContain("场景「车厢」");
     });
 

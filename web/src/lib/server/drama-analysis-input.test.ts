@@ -13,16 +13,12 @@ import {
 } from "./drama-analysis-input";
 
 const makeVideoCard = (index: number, start: number, end: number, visual: string, dialogue = "无") =>
-    [
-        `### 镜头 ${String(index).padStart(2, "0")} | ${start}-${end}秒 | 中近景 | 50mm | 侧45度平视 | 锁定机位，沿视线方向保持主体清晰 | 人物镜头`,
-        "场景：当前剧情所在的室内空间。",
-        `画面内容：${visual}`,
-        "光影：侧方窗光落在脸部、手部和衣纹上，接触面保持可辨。",
-        "色调：冷灰中性，肤色和材质自然。",
-        `台词：${dialogue}`,
-        `人声：${dialogue === "无" ? "短促呼吸 / 无" : "对白原声清晰可辨、音量居前，原句完整可听并按时间同步、与可见口型同步；短促呼吸"}`,
-        `音效：室内底噪和衣料轻响。${dialogue === "无" ? "" : "对白/旁白发声期间压低环境音、动作拟音与音乐，不遮挡台词清晰度，仅在语音停顿间隙再抬升。"}`,
-    ].join("\n");
+    `${String(start.toFixed(1)).padStart(4, "0")}–${String(end.toFixed(1)).padStart(4, "0")}秒，${index === 1 ? "档案室长案北侧为入口锚点，萧炎站立、双脚着地，右手按住桌沿，摄影轴位于南侧。" : "萧炎仍在长案北侧，桌沿、手部支撑和南侧摄影轴保持连续。"}${visual}；中近景，50mm，侧45度平视，锁定机位沿视线方向保持主体清晰。${dialogue === "无" ? "他短促呼吸，室内底噪和衣料轻响。" : `${dialogue}，语气低声克制，收句后合唇；室内底噪和衣料轻响在发声时降低。`}`;
+
+const makeVideoPrompt = (...segments: string[]) => ["开场时，萧炎站在档案室长案北侧，双脚着地，右手按住桌沿，摄影轴位于南侧。", ...segments, "结束时，萧炎仍站在长案北侧，右手离开桌沿，目光停在门外，摄影轴保持南侧。"].join("\n");
+
+const makeLegacyVideoCard = (index: number, start: number, end: number, visual: string) =>
+    `### 镜头 ${String(index).padStart(2, "0")} | ${start}-${end}秒 | 中近景 | 50mm | 侧45度平视 | 锁定机位 | 人物镜头\n画面内容：${visual}\n台词：无\n人声：短促呼吸\n音效：室内底噪`;
 
 describe("normalizeDramaVisualInput", () => {
     it("derives a timing-checkable utterance when legacy shots only have dialogue text", () => {
@@ -214,7 +210,7 @@ describe("video prompt reference instructions", () => {
                 shots: [
                     {
                         shotId: "shot-one",
-                        videoPrompt: `${makeVideoCard(1, 0, 3, "人物抬头看向门外，手指收紧并停住。\n模式：video-edit")}`,
+                        videoPrompt: makeVideoPrompt(`${makeVideoCard(1, 0, 3, "人物抬头看向门外，手指收紧并停住。\n模式：video-edit")}`),
                         framePlan: { frames: [{ sequenceIndex: 1, startSecond: 0, endSecond: 3, startPrompt: "", actionPrompt: "", transitionPrompt: "", endPrompt: "", imagePrompt: "" }] },
                     },
                 ],
@@ -227,7 +223,7 @@ describe("video prompt reference instructions", () => {
         expect(error).toContain("内部模式");
     });
 
-    it("rejects a public prompt without Xiaomo time-ranged shot cards", () => {
+    it("rejects a public prompt using the obsolete tagged format", () => {
         const error = validateDramaVideoPromptOutput(
             {
                 shots: [
@@ -255,11 +251,30 @@ describe("video prompt reference instructions", () => {
             [],
         );
 
-        expect(error).toContain("缺少小墨式");
+        expect(error).toBeTruthy();
     });
 
-    it("accepts a complete Xiaomo director card", () => {
-        const prompt = makeVideoCard(1, 0, 3, "人物从低头抬眼看向门外，右手收紧并在胸前停住。");
+    it("blocks a legacy tagged director card instead of stripping its fields", () => {
+        const prompt = makeLegacyVideoCard(1, 0, 3, "人物从低头抬眼看向门外，右手收紧并停住。");
+        const error = validateDramaVideoPromptOutput(
+            {
+                shots: [
+                    {
+                        shotId: "shot-one",
+                        videoPrompt: prompt,
+                        framePlan: { frames: [{ id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 3, startPrompt: "人物低头", actionPrompt: "手指收紧", transitionPrompt: "视线转向门外", endPrompt: "人物抬头", imagePrompt: "人物抬头看向门外" }] },
+                    },
+                ],
+            },
+            ["shot-one"],
+            [{ id: "shot-one", framePlan: { frames: [{ id: "f1", sequenceIndex: 1, startSecond: 0, endSecond: 3 }] } }],
+            [],
+        );
+        expect(error).toBeTruthy();
+    });
+
+    it("accepts a continuous time range with natural dialogue and sound prose", () => {
+        const prompt = makeVideoPrompt(makeVideoCard(1, 0, 3, "人物从低头抬眼看向门外，右手收紧并在胸前停住。"));
         const error = validateDramaVideoPromptOutput(
             {
                 shots: [
@@ -280,10 +295,10 @@ describe("video prompt reference instructions", () => {
 
     it("rejects overlapping dialogue prefixes in consecutive video frame prompts", () => {
         const dialogue = "纳兰小姐…你应该知道，在斗气大陆，女方悔婚会让对方有多难堪。";
-        const prompt = [
+        const prompt = makeVideoPrompt(
             makeVideoCard(1, 0, 3, "双方关系在萧炎抬眼锁住纳兰时收紧，纳兰肩线在左缘僵住。", "萧炎说：“纳兰小姐…你应该知道，在”"),
             makeVideoCard(2, 3, 6, "双方关系继续承压，萧炎眉心收紧，纳兰肩线保持紧绷。", "萧炎说：“纳兰小姐…你应该知道，”"),
-        ].join("\n");
+        );
         const error = validateDramaVideoPromptOutput(
             {
                 shots: [
@@ -338,8 +353,8 @@ describe("video prompt reference instructions", () => {
         expect(error).toContain("对白片段与上一时间段重叠");
     });
 
-    it("accepts a card with explicit line-based fields", () => {
-        const prompt = makeVideoCard(1, 0, 3, "人物从低头抬眼看向门外，手指收紧并停住。");
+    it("accepts a continuous time segment with concrete motion", () => {
+        const prompt = makeVideoPrompt(makeVideoCard(1, 0, 3, "人物从低头抬眼看向门外，手指收紧并停住。"));
         const error = validateDramaVideoPromptOutput(
             {
                 shots: [
@@ -359,7 +374,7 @@ describe("video prompt reference instructions", () => {
     });
 
     it("rejects semantically repeated visual states even when the wording is not identical", () => {
-        const prompt = [makeVideoCard(1, 0, 3, "双人关系在萧炎抬眼看向纳兰时收紧，右手按住桌沿，茶盏水面出现细小波纹。"), makeVideoCard(2, 3, 6, "双人关系保持承压，萧炎已经抬眼看向纳兰，右手仍按住桌沿，茶盏水面保持细小波纹。")].join("\n");
+        const prompt = makeVideoPrompt(makeVideoCard(1, 0, 3, "双人关系在萧炎抬眼看向纳兰时收紧，右手按住桌沿，茶盏水面出现细小波纹。"), makeVideoCard(2, 3, 6, "双人关系保持承压，萧炎已经抬眼看向纳兰，右手仍按住桌沿，茶盏水面保持细小波纹。"));
         const imagePrompt = (subject: string, state: string, performance: string) => `静态关键帧：${subject}\n可见状态：${state}\n可见表演状态：${performance}`;
         const error = validateDramaVideoPromptOutput(
             {
@@ -443,7 +458,7 @@ describe("video prompt reference instructions", () => {
             [],
         );
 
-        expect(error).toContain("缺少小墨式");
+        expect(error).toBeTruthy();
     });
 
     it("rejects duplicated or out-of-order public fields and internal skill text", () => {
@@ -454,7 +469,7 @@ describe("video prompt reference instructions", () => {
                 shots: [
                     {
                         shotId: "shot-one",
-                        videoPrompt: `${makeVideoCard(1, 0, 3, "人物从低头抬眼看向门外，手指收紧并停住。\nSkill：内部规则")}`,
+                        videoPrompt: makeVideoPrompt(makeVideoCard(1, 0, 3, "人物从低头抬眼看向门外，手指收紧并停住。\nSkill：内部规则")),
                         framePlan: { frames: [baseFrame] },
                     },
                 ],
@@ -470,7 +485,7 @@ describe("video prompt reference instructions", () => {
                 shots: [
                     {
                         shotId: "shot-one",
-                        videoPrompt: `${makeVideoCard(1, 0, 3, "人物从低头抬眼看向门外，手指收紧并停住。")}`,
+                        videoPrompt: makeVideoPrompt(makeVideoCard(1, 0, 3, "人物从低头抬眼看向门外，手指收紧并停住。")),
                         framePlan: { frames: [baseFrame] },
                     },
                 ],
@@ -486,7 +501,7 @@ describe("video prompt reference instructions", () => {
                 shots: [
                     {
                         shotId: "shot-one",
-                        videoPrompt: `${makeVideoCard(1, 0, 3, "人物从低头抬眼看向门外，手指收紧并停住。")}`,
+                        videoPrompt: makeVideoPrompt(makeVideoCard(1, 0, 3, "人物从低头抬眼看向门外，手指收紧并停住。")),
                         framePlan: { frames: [baseFrame] },
                     },
                 ],
@@ -498,7 +513,7 @@ describe("video prompt reference instructions", () => {
         expect(legacy).toBe("");
     });
 
-    it("returns a warning for a quoted dialogue fragment that cannot fit its frame duration", () => {
+    it("rejects a public segment that truncates a quoted line and warns when its frame duration is too short", () => {
         const dialogue = "纳兰小姐，你应该知道，在斗气大陆，女方悔婚会让对方有多难堪，呵呵，我脸皮厚，倒是没什么";
         const fullDialogue = `${dialogue}，可我的父亲！他是一族之长，今日若是真答应了你的要求，他日后还如何掌管萧家？还如何在乌坦城立足？`;
         const error = validateDramaVideoPromptOutput(
@@ -506,7 +521,7 @@ describe("video prompt reference instructions", () => {
                 shots: [
                     {
                         shotId: "shot-one",
-                        videoPrompt: makeVideoCard(1, 0, 3, "萧炎低头后抬眼盯住对方，手指收紧并保持肩背克制。", `萧炎说：“${fullDialogue}”`),
+                        videoPrompt: makeVideoPrompt(makeVideoCard(1, 0, 3, "萧炎低头后抬眼盯住对方，手指收紧并保持肩背克制。", `萧炎说：“${fullDialogue}”`)),
                         framePlan: {
                             frames: [
                                 {
@@ -546,7 +561,7 @@ describe("video prompt reference instructions", () => {
             [],
         );
 
-        expect(error).toBe("");
+        expect(error).toContain("未完整写入对白原句");
         const warnings = dramaVideoPromptTimingWarnings(
             {
                 shots: [

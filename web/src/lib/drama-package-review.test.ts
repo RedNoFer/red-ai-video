@@ -169,14 +169,24 @@ describe("public dialogue and sound scope", () => {
     });
 
     it("counts only actual boundary-aligned hard cuts and records reduced density as revision", () => {
-        const frames = Array.from({ length: 8 }, (_, index) => ({ id: `F${index}`, sequenceIndex: index + 1, startSecond: index * 3.75, endSecond: (index + 1) * 3.75 }));
-        const events = frames
+        const frames = Array.from({ length: 8 }, (_, index) => ({
+            id: `F${index}`,
+            sequenceIndex: index + 1,
+            startSecond: index * 3.75,
+            endSecond: (index + 1) * 3.75,
+            ...(index ? { transitionPrompt: `镜头事件：时间：${index * 3.75}秒；类型：硬切；触发事件：来手触纸；新机位：案面南侧；切后主运镜：固定；信息目的：读出纸封归属；承接：右手持封不变。` } : {}),
+        }));
+        const prompt = `\n${frames
             .slice(1)
-            .map((frame) => `镜头事件：时间：${frame.startSecond}秒；类型：硬切；触发事件：来手触纸；新机位：案面南侧；切后主运镜：固定；信息目的：读出纸封归属；承接：右手持封不变。`)
-            .join("\n");
-        expect(dramaDenseHardCutIssues(events, frames, "SH01")).toEqual([]);
-        expect(dramaDenseHardCutIssues(events.replaceAll("类型：硬切", "类型：匹配切"), frames, "SH01").join("\n")).toContain("8帧/0次");
-        expect(dramaDenseHardCutIssues(events.replace("时间：3.75秒", "时间：3秒"), frames, "SH01").join("\n")).toContain("帧段边界");
-        expect(dramaDenseHardCutIssues("减切原因：结果停留，确认持有人未改变。", frames.slice(0, 2), "SH01").join("\n")).toContain("修订");
+            .map(() => "Cut to：案面手部近景，右手持封不变。")
+            .join("\n")}`;
+        expect(dramaDenseHardCutIssues(prompt, frames, "SH01")).toEqual([]);
+        const matchingFrames = frames.map((frame) => ({ ...frame, transitionPrompt: frame.transitionPrompt?.replace("类型：硬切", "类型：匹配切") }));
+        expect(dramaDenseHardCutIssues(prompt, matchingFrames, "SH01").join("\n")).toContain("8帧/0次");
+        const misalignedFrames = frames.map((frame, index) => ({ ...frame, transitionPrompt: index === 1 ? frame.transitionPrompt?.replace("时间：3.75秒", "时间：3秒") : frame.transitionPrompt }));
+        expect(dramaDenseHardCutIssues(prompt, misalignedFrames, "SH01").join("\n")).toContain("未对齐所属切后帧");
+        const reducedFrames = frames.slice(0, 2);
+        const reduced = dramaDenseHardCutIssues("Cut to：案面手部近景。", reducedFrames, "SH01", { reason: "结果停留", revision: "已登记", frameCount: 2, hardCutCount: 1 });
+        expect(reduced.join("\n")).toContain("结构化减切原因");
     });
 });

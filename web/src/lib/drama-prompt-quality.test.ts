@@ -43,12 +43,13 @@ describe("drama prompt quality", () => {
         ];
         const cards = extractDramaVideoPromptCards(prompt);
         expect(cards).toHaveLength(2);
-        expect(cards[0]).toMatchObject({ timeRange: "0.000-3.000秒", lens: "70mm", dialogue: "齐岚（心理旁白）：“还是九月九日。”" });
+        expect(cards[0]).toMatchObject({ timeRange: "0.000-3.000秒", lens: "70mm" });
+        expect(cards[0].dialogue).toContain("齐岚（心理旁白）：“还是九月九日。”");
         expect(extractDramaVideoPromptSection(prompt, "时间轴")).not.toContain("【收尾】");
-        expect(validateDramaVideoPromptCardLayout(prompt, frames, "测试")).toEqual([]);
+        expect(validateDramaVideoPromptCardLayout(prompt, frames, "测试")).toContainEqual(expect.stringContaining("包装字段"));
         expect(validateDramaVideoPromptUtteranceCoverage(prompt, frames, [{ type: "voiceover", speaker: "齐岚", text: "还是九月九日。", startSecond: 0, endSecond: 3 }], "测试")).toEqual([]);
         expect(validateDramaVideoPromptCardLayout(prompt.replace("3.000-30.000", "4.000-30.000"), frames, "测试").join("\n")).toContain("公开段时间必须从0连续覆盖");
-        expect(validateDramaVideoPromptAudioHierarchy(prompt.replace("不遮挡台词", "音乐盖过台词"), "测试").join("\n")).toContain("音效描述与对白清晰度冲突");
+        expect(validateDramaVideoPromptAudioHierarchy(prompt.replace("音效：闹钟和呼吸", "音效：音乐盖过台词"), "测试").join("\n")).toContain("声音描述与对白清晰度冲突");
     });
 
     it("uses public time windows when two legacy cards cover four internal frames", () => {
@@ -85,29 +86,28 @@ describe("drama prompt quality", () => {
         expect(validateDramaVideoPromptTimeline(prompt.replace("3-15秒", "7-15秒"), frames, "SH01")).toContainEqual(expect.stringContaining("空档"));
         expect(validateDramaVideoPromptTimeline(prompt.replace("3-15秒", "3-10秒"), frames, "SH01")).toContainEqual(expect.stringContaining("完整覆盖"));
     });
-    it("warns at the Unicode threshold without truncating or counting emoji as two characters", () => {
-        expect(validateDramaVideoPromptLength("😀".repeat(2500))).toEqual([]);
-        expect(validateDramaVideoPromptLength("😀".repeat(2500) + "\n")).toEqual([expect.stringContaining("2501")]);
+    it("advises at 2000 characters and reminds at 2500 without truncating or double-counting emoji", () => {
+        expect(validateDramaVideoPromptLength("😀".repeat(2000))).toEqual([]);
+        expect(validateDramaVideoPromptLength("😀".repeat(2001))).toEqual([expect.stringContaining("2001")]);
+        expect(validateDramaVideoPromptLength("😀".repeat(2501))).toEqual([expect.stringContaining("2500 字符提醒线")]);
     });
 
     it("rejects legacy cards for authoring and execution", () => {
-        expect(validateDramaSeedanceVideoPromptLayout("### 镜头 1 | 0-30秒\n场景：宿舍", [], "SH01")).toEqual([expect.stringContaining("禁止回退")]);
+        expect(validateDramaSeedanceVideoPromptLayout("### 镜头 1 | 0-30秒\n场景：宿舍", [], "SH01")).toContainEqual(expect.stringContaining("开场时"));
     });
 
-    it("covers multiple internal frames with one narrative segment and keeps nested quoted dialogue intact", () => {
+    it("covers multiple internal frames with one natural narrative segment and preserves the exact spoken line", () => {
         const frames = [
             { startSecond: 0, endSecond: 5 },
             { startSecond: 5, endSecond: 15 },
             { startSecond: 15, endSecond: 30 },
         ];
-        const text = "她不知道，我刚才有多怕听见“九号”这两个字。";
+        const text = "她不知道，我刚才有多怕听见九号这两个字。";
         const prompt = [
-            "【参数】30秒，16:9，有声。",
-            "【公共总规范】齐岚坐在床沿，脚底受地面支撑，右手握手机；侧窗柔光，轴线固定；禁止瞬移和穿模。",
-            "【时间轴】",
-            `0-15秒：齐岚因确认日期而抬眼，指节松开，目光停在上铺床帘；中景平视固定机位；台词：齐岚（心理旁白）：“${text}”；人声：5-15秒，闭唇旁白，原声清晰居前；音效：床单轻擦。`,
-            "15-30秒：齐岚因触到脸颊水痕而低头擦脸，手背落在胸前，呼吸松开；近景平视固定机位，床沿支撑不变；台词：无；音效：轻呼气。",
-            "【收尾】齐岚仍坐在床沿，右手握手机，左手停在胸前。",
+            "开场时，齐岚坐在床沿，双脚着地，右手握手机，侧窗柔光落在手背。",
+            `0-15秒：齐岚确认日期后抬眼，指节松开，目光停在上铺床帘；中景平视固定机位；齐岚（心理旁白）：“${text}”；5-15秒闭唇旁白清晰可听，床单轻擦。`,
+            "15-30秒：齐岚触到脸颊水痕后低头擦脸，手背落在胸前，呼吸松开；近景平视固定机位，床沿支撑不变，轻呼气。",
+            "结束时，齐岚仍坐在床沿，右手握手机，左手停在胸前。",
         ].join("\n");
         const utterances = [{ type: "voiceover", speaker: "齐岚", text, startSecond: 5, endSecond: 15 }];
         expect(validateDramaSeedanceVideoPromptLayout(prompt, frames, "SH01")).toEqual([]);
@@ -116,15 +116,13 @@ describe("drama prompt quality", () => {
         expect(validateDramaSeedanceVideoPromptLayout(prompt.replace("15-30秒", "16-30秒"), frames, "SH01")).toContainEqual(expect.stringContaining("空档"));
     });
 
-    it("accepts the compact Seedance adapter layout and preserves spatial locks", () => {
+    it("accepts the direct Seedance structure, keeps four-view uniqueness with actual character refs, and rejects wrappers", () => {
         const prompt = [
-            "【参数】30秒，9:16竖屏，有声，短剧片段。",
-            "【参考】@Image 1=议事厅场景；@Image 2=萧炎角色。",
-            "【公共总规范】冷灰主色，左侧窗光；萧炎在长桌左侧站立，纳兰在右侧，双方脚底受地面支撑，萧炎右手接触桌沿，保持180度轴线和屏幕方向；全程禁止闪现、瞬移、无因重排、穿模、身体互穿、悬空和接触关系跳变；对白清晰，环境音避让。",
-            "【时间轴】",
-            "0-15秒：萧炎低头后抬眼并压住桌沿；听见纳兰质问 → 指节收紧，视线停在纳兰脸上；中景平视缓慢推近；萧炎短促呼吸，桌沿轻响。",
-            "15-30秒：萧炎沿长桌向右走两步，纳兰后退靠近门框；萧炎逼近 → 两人距离缩短，手掌落在门框旁；侧面平视跟拍；脚步声和门框震动，站位与轴线保持。",
-            "【收尾】萧炎停在门框左侧，纳兰背靠门框，右手仍未接触对方；长桌和入口锚点不变。",
+            "开场时，萧炎在长桌左侧站立，纳兰在右侧，双方脚底受地面支撑，左侧窗光落在桌沿。",
+            "参考图片：\n@图片1：角色「萧炎」\n@图片2：议事厅场景\n每张角色资产图均展示同一个人的不同观察角度，仅参考面容、体型、服装和配饰，不继承白底、排版或图中身体投影的数量。保证人物唯一性，每个角色在世界空间中仅有一人。",
+            "0-15秒：萧炎低头后抬眼并压住桌沿；听见纳兰质问后指节收紧，视线停在纳兰脸上；中景平视缓慢推近；萧炎短促呼吸，桌沿轻响。",
+            "15-30秒：萧炎沿长桌向右走两步，纳兰后退靠近门框；萧炎逼近后两人距离缩短，手掌落在门框旁；侧面平视跟拍；脚步声和门框震动，双方站位与轴线保持。",
+            "结束时，萧炎停在门框左侧，纳兰背靠门框，右手仍未接触对方；长桌和入口锚点不变。",
         ].join("\n");
         const frames = [
             { startSecond: 0, endSecond: 15 },
@@ -133,20 +131,21 @@ describe("drama prompt quality", () => {
 
         expect(validateDramaVideoPromptCardLayout(prompt, frames, "SH01")).toEqual([]);
         expect(validateDramaSeedanceVideoPromptLayout(prompt, frames, "SH01")).toEqual([]);
-        expect(validateDramaSeedanceVideoPromptLayout(prompt.replace("【收尾】", "【参数】"), frames, "SH01")).toContainEqual(expect.stringContaining("顺序各出现一次"));
-        expect(validateDramaSeedanceVideoPromptLayout(prompt + "\n### 镜头 1", frames, "SH01")).toContainEqual(expect.stringContaining("嵌套旧公开镜头卡"));
+        expect(validateDramaSeedanceVideoPromptLayout(prompt.replace("结束时，", "收尾："), frames, "SH01")).toContainEqual(expect.stringContaining("结束时"));
+        expect(validateDramaSeedanceVideoPromptLayout(prompt.replace("开场时，", "【参数】30秒。\n开场时，"), frames, "SH01")).toContainEqual(expect.stringContaining("包装字段"));
+        const roleRule = "每张角色资产图均展示同一个人的不同观察角度，仅参考面容、体型、服装和配饰，不继承白底、排版或图中身体投影的数量。保证人物唯一性，每个角色在世界空间中仅有一人。";
+        expect(validateDramaSeedanceVideoPromptLayout(prompt.replace(roleRule, `${roleRule}\n${roleRule}`), frames, "SH01")).toContainEqual(expect.stringContaining("四视图唯一性约束"));
+        expect(validateDramaSeedanceVideoPromptLayout(prompt.replace("门框震动，双方", "门框震动。Cut to：反打近景，双方"), frames, "SH01")).toContainEqual(expect.stringContaining("必须独立换行"));
         expect(validateDramaVideoPromptSemanticQuality(prompt, frames, "SH01")).toEqual([]);
         expect(extractDramaVideoPromptCards(prompt)).toHaveLength(2);
     });
 
-    it("accepts natural sentences with shared spatial facts and sentence-separated audio labels", () => {
+    it("accepts natural dialogue and action sentences without dialogue/audio wrapper fields", () => {
         const prompt = [
-            "【参数】15秒，16:9，有声。",
-            "【公共总规范】林雪在桌北侧站立，右手持封；西窗柔光，南侧摄影轴固定，无瞬移、穿模或无因换位；人声清晰居前，环境音避让。",
-            "【时间轴】",
-            "0-3秒：林雪因对方伸手触纸而收紧指尖，信封仍由她持有；镜头固定在手部。台词：林雪说：“别说话。”人声：原句完整发出。音效：纸张轻响。",
-            "3-15秒：林雪因递交中止而屈肘把信封收至胸前；固定细节机位强调持有人未变；台词：无；音效：纸边轻擦。",
-            "【收尾】林雪仍站桌北侧，右手持封停在胸前。",
+            "开场时，林雪站在桌北侧，右手持封，西窗柔光落在信封，南侧摄影轴固定。",
+            "0-3秒：对方伸手触纸，林雪收紧指尖，信封仍由她持有；手部固定近景；林雪说：“别说话。”纸张轻响，原声清晰居前；对白发声时环境音和拟音压低避让。",
+            "3-15秒：递交中止后林雪屈肘把信封收至胸前；固定近景，持有人未变，纸边轻擦。",
+            "结束时，林雪仍站桌北侧，右手持封停在胸前。",
         ].join("\n");
         const frames = [
             { startSecond: 0, endSecond: 3 },
@@ -154,10 +153,9 @@ describe("drama prompt quality", () => {
         ];
         expect(validateDramaSeedanceVideoPromptLayout(prompt, frames, "SH01")).toEqual([]);
         expect(validateDramaVideoPromptSemanticQuality(prompt, frames, "SH01")).toEqual([]);
-        expect(extractDramaVideoPromptCards(prompt)[0].visual).not.toContain("别说话");
         expect(validateDramaVideoPromptUtteranceCoverage(prompt, frames, [{ speaker: "林雪", text: "别说话。", startSecond: 0, endSecond: 3 }], "SH01")).toEqual([]);
         expect(validateDramaVideoPromptAudioHierarchy(prompt, "SH01")).toEqual([]);
-        expect(validateDramaVideoPromptAudioHierarchy(prompt.replace("人声：原句完整发出", "人声：林雪禁止说话"), "SH01")).toContainEqual(expect.stringContaining("同一发声窗口"));
+        expect(validateDramaVideoPromptAudioHierarchy(prompt.replace("原声清晰居前", "原声清晰居前，音乐盖过台词"), "SH01")).toContainEqual(expect.stringContaining("声音描述与对白清晰度冲突"));
     });
 
     it("removes exact repeated lines only when explicitly requested, independent of prompt length", () => {

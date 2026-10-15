@@ -83,14 +83,50 @@ function modernizeLegacySceneFixture(value: DramaProductionPackageV1) {
 }
 
 function readMahadelJsonFixture() {
-    return modernizeLegacySceneFixture(JSON.parse(readFileSync(new URL("../../../../output/mahadel-episode-01-production-package-v2-multiframe.json", import.meta.url), "utf8")) as DramaProductionPackageV1);
+    const source = structuredClone(productionPackage);
+    source.project.title = "黑湖记忆";
+    source.project.productionBible.targetDuration = 180;
+    source.project.productionBible.productionPlan = {
+        ...source.project.productionBible.productionPlan!,
+        references: { ...source.project.productionBible.productionPlan!.references, maxImages: 30 },
+        video: { ...source.project.productionBible.productionPlan!.video, mode: "storyboard", shotDuration: 15 },
+    };
+    const baseCharacter = source.assets.characters[0];
+    source.assets.characters = [
+        baseCharacter,
+        { ...baseCharacter, code: "C02", name: "梦醒者", description: "成年女性，深棕长发" },
+        { ...baseCharacter, code: "C03", name: "旅伴", description: "成年男性，短黑发" },
+        { ...baseCharacter, code: "C04", name: "守夜人", description: "成年女性，银灰短发" },
+        { ...baseCharacter, code: "C05", name: "观察者", description: "成年男性，铁灰短发，肩背宽阔", profile: undefined },
+    ];
+    const titles = ["黑湖记忆", "梦醒试探", ...Array.from({ length: 10 }, (_, index) => `湖岸动作${index + 1}`)];
+    source.episodes[0].shots = titles.map((title, index) => {
+        const characterCode = index % 2 === 0 ? "C01" : "C02";
+        const next = shot(`SH${String(index + 1).padStart(2, "0")}`, index + 1, `${index * 15}-${(index + 1) * 15}s`, [characterCode], title);
+        next.title = title;
+        next.storySceneCode = "SC01";
+        next.framePlan.start.source = index === 0 ? "independent" : "previous_accepted_actual_tail";
+        next.storyboardFrameMode = "all_frames";
+        next.framePlan.frames[0].imagePrompt = `画面主体：${title}；可见状态：Karin手部收紧，黑湖无波，视线仍低垂；构图与空间：人物站在湖岸，倒塔留在背景`;
+        next.framePlan.frames[1].imagePrompt = `画面主体：${title}；可见状态：Karin完全惊醒，手部停在断剑护手，视线抬向倒塔；构图与空间：人物站在湖岸，倒塔留在背景`;
+        return next;
+    });
+    source.episodes[0].storyScenes[0].shotCodes = source.episodes[0].shots.map((item) => item.code);
+    source.episodes[0].continuityEdges = source.episodes[0].shots.slice(1).map((item, index) => ({
+        fromShotCode: source.episodes[0].shots[index].code,
+        toShotCode: item.code,
+        transition: "continuous" as const,
+        inheritActualEndFrame: true,
+        carryCharacterIds: ["C01"],
+        carryPropIds: ["P01"],
+        carryEnvironment: true,
+        carryAxis: true,
+    }));
+    return modernizeLegacySceneFixture(source);
 }
 
 function readMahadelMarkdownFixture() {
-    const source = readFileSync(new URL("../../../../output/mahadel-episode-01-production-package-v2-multiframe.md", import.meta.url), "utf8");
-    const match = source.match(/```drama-production-package\n([\s\S]*?)\n```/u);
-    if (!match) throw new Error("Mahadel fixture is missing its canonical package block");
-    return source.replace(match[1], JSON.stringify(modernizeLegacySceneFixture(JSON.parse(match[1]) as DramaProductionPackageV1), null, 2));
+    return serializeDramaProductionPackageMarkdown(readMahadelJsonFixture());
 }
 
 describe("production package boundary", () => {
@@ -152,12 +188,10 @@ describe("production package boundary", () => {
         const item = source.episodes[0].shots[0];
         const legacyPrompt = item.videoPrompt;
         item.videoPrompt = [
-            "【参数】15秒，9:16，有声。",
-            "【公共总规范】林雪站在长案北侧，右手持封；西窗柔光照亮左颊和木案，低饱和暖灰；摄影机在长案南侧；禁止瞬移和无因重排。人声：对白原声清晰可辨并位于前景；音效：纸张摩擦，语音期间压低环境音，不遮挡台词。",
-            "【时间轴】",
-            "0.000-3.000秒：特写｜50mm｜平视｜固定机位；画面：因来手触纸，林雪嘴唇开合，收句闭口，右手持封未松开；台词：林雪说：“外套颜色没变，别说话。”",
-            "3.000-15.000秒：特写｜50mm｜平视｜固定机位；画面：因来手继续靠近，右臂收回信封，信封停在胸前，持有人不变；台词：无；音效：纸封擦过袖口发出轻响。",
-            "【收尾】林雪仍在长案北侧，信封由右手持于胸前。",
+            "开场时，林雪站在长案北侧，右手捏住信封封口停在案中；对方站在长案另一侧，西侧木门与南侧摄影轴保持固定。",
+            "00.0–03.0秒，近景平视固定机位，对方伸手触到纸边，林雪察觉后收紧指尖并抬眼；她说：“外套颜色没变，别说话。”原句清晰居前，说后闭口，指尖轻擦纸面。",
+            "03.0–15.0秒，林雪因对方继续靠近而屈肘沿案面把信封收回胸前，对方手指失去接触后停在案中；镜头缓慢推近信封，林雪重新捏稳封口，纸张轻响与室内底声在停顿间恢复。",
+            "结束时，林雪仍站长案北侧、右手持封停在胸前；对方没有接到信封，木门、长案与摄影轴保持稳定。",
         ].join("\n");
         const options = { allowImportWarnings: true, enforceExecutionContract: true, importValidationScope: "video-only" as const };
         for (const text of [JSON.stringify(source), serializeDramaProductionPackageMarkdown(source)]) {
@@ -170,7 +204,7 @@ describe("production package boundary", () => {
         }
         const missingSegment = structuredClone(source);
         missingSegment.episodes[0].shots[0].videoPrompt = item.videoPrompt.replace(/^3\.000-15\.000秒：.*\n/mu, "");
-        expect(previewDramaProductionPackage(JSON.stringify(missingSegment), "missing-segment.json", undefined, options).warnings.join("\n")).toContain("公开时间轴必须完整覆盖");
+        expect(previewDramaProductionPackage(JSON.stringify(missingSegment), "missing-segment.json", undefined, options).warnings.join("\n")).toContain("公开视频镜头卡");
         const gap = structuredClone(source);
         gap.episodes[0].shots[0].framePlan.frames[1].startSecond = 4;
         expect(() => previewDramaProductionPackage(JSON.stringify(gap), "gap.json", undefined, options)).toThrow(/不能空白、重叠或超界/u);
@@ -534,7 +568,9 @@ describe("production package boundary", () => {
         expect(preview.format).toBe("json");
         expect(preview.package.project).toMatchObject({ style: DRAMA_STYLE_NAME, productionBible: { visualStyle: DRAMA_STYLE_NAME, colorScript: DRAMA_STYLE_COLOR_SCRIPT } });
         expect(preview.summary).toEqual({ episodes: 1, storyScenes: 1, shots: 2, characters: 2, locations: 1, duration: 30, archiveSections: 0, promptAssets: 0, performancePlans: 2, lightingPlans: 2, continuityPlans: 2 });
-        expect(preview.package.episodes[0].shots[0]).toMatchObject({ code: "SH01", lens: "50mm", sound: { ambience: "车轮声" }, videoPrompt: "梦中惊醒" });
+        expect(preview.package.episodes[0].shots[0]).toMatchObject({ code: "SH01", lens: "50mm", sound: { ambience: "车轮声" } });
+        expect(preview.package.episodes[0].shots[0].videoPrompt).toContain("开场时");
+        expect(preview.package.episodes[0].shots[0].videoPrompt).toContain("梦中惊醒");
         expect(preview.package.assets.characters.find((item) => item.code === "C02")?.profile).toMatchObject({
             styling: DRAMA_CHARACTER_CURRENT_DESIGN_RULE,
             colorPalette: DRAMA_CHARACTER_CURRENT_COLOR_RULE,
@@ -542,10 +578,10 @@ describe("production package boundary", () => {
     });
 
     it("keeps the 30-second package contract complete after import", () => {
-        const source = readFileSync(new URL("../../../../output/three-year-pact-standalone-production-package-30s.json", import.meta.url), "utf8");
-        const preview = previewDramaProductionPackage(source, "three-year-pact-standalone-production-package-30s.json", undefined, { allowImportWarnings: true });
-        expect(preview.importWarnings?.some((warning) => warning.includes("C06"))).toBe(true);
-        expect(preview.package.project.productionBible.productionPlan?.references.maxImages).toBe(30);
+        const source = structuredClone(productionPackage);
+        source.project.productionBible.productionPlan!.references.maxImages = 9;
+        const preview = previewDramaProductionPackage(JSON.stringify(source), "thirty-second-package.json", undefined, { allowImportWarnings: true });
+        expect(preview.package.project.productionBible.productionPlan?.references.maxImages).toBe(9);
         const shots = preview.package.episodes.flatMap((episode) => episode.shots);
         expect(shots.every((shot) => Boolean(shot.performancePlan?.emotionalObjective.trim()))).toBe(true);
         expect(shots.flatMap((shot) => auditDramaShotDirectorQuality(shot as unknown as DramaShot).map((issue) => issue.code))).not.toContain("DIRECTOR_MULTI_MOTION");
@@ -707,7 +743,7 @@ describe("production package boundary", () => {
         expect(merged.assets.characters.find((item) => item.name === "Karin")?.supplierPrompt).not.toBe("项目已确认提示词");
     });
 
-    it("restyles package assets, video prompts and frame prompts from the current visual contract", () => {
+    it("keeps authored video prose while normalizing static prompts from the current visual contract", () => {
         const source = structuredClone(productionPackage);
         const westernCg = "西方CG电影级写实幻想，physically based 3D，冷蓝灰与旧银";
         source.project.style = westernCg;
@@ -716,6 +752,7 @@ describe("production package boundary", () => {
         source.assets.locations[0].supplierPrompt = "主体与资产类型：场景\n光色与风格：旧东方古风国漫";
         source.episodes[0].shots[0].imagePrompt += "\n光色与风格：旧东方古风国漫";
         source.episodes[0].shots[0].videoPrompt += "\n色调：旧东方古风国漫\n主体与资产类型：角色\n身份/结构锚点：故事背景与角色关系";
+        const authoredVideoPrompt = source.episodes[0].shots[0].videoPrompt;
         source.episodes[0].shots[0].framePlan.frames[0].imagePrompt += "\n光色与风格：旧东方古风国漫";
         source.archive = {
             formatVersion: "vozeb-drama-production-package-v1",
@@ -739,12 +776,10 @@ describe("production package boundary", () => {
         expect(normalized.assets.characters[0].supplierPrompt).toContain(westernCg);
         expect(normalized.assets.locations[0].supplierPrompt).toContain(westernCg);
         expect(shot.imagePrompt).toContain(westernCg);
-        expect(shot.videoPrompt).toContain(westernCg);
-        expect(shot.videoPrompt).not.toContain("主体与资产类型");
-        expect(shot.videoPrompt).not.toContain("故事背景与角色关系");
+        expect(shot.videoPrompt).toBe(authoredVideoPrompt);
         expect(shot.framePlan.frames[0].imagePrompt).toContain(westernCg);
-        expect(archivePrompts).toContain(westernCg);
-        expect(JSON.stringify(normalized)).not.toContain("旧东方古风国漫");
+        expect(archivePrompts).toContain("旧东方古风国漫");
+        expect(JSON.stringify(normalized)).toContain("旧东方古风国漫");
     });
 
     it("preserves Agent video prompt text while normalizing static fields", () => {
@@ -982,7 +1017,14 @@ describe("production package boundary", () => {
     });
 
     it("rejects a legacy Markdown snapshot that lacks required frame plans", () => {
-        const source = readFileSync(new URL("../../../../output/mahadel-episode-01-production-package.md", import.meta.url), "utf8");
+        const valid = serializeDramaProductionPackageMarkdown(productionPackage);
+        const embedded = valid.match(/```drama-production-package\n([\s\S]*?)\n```/u);
+        if (!embedded) throw new Error("Fixture is missing its canonical package block");
+        const malformed = JSON.parse(embedded[1]) as Record<string, unknown>;
+        const episodes = malformed.episodes as Array<{ shots: Array<Record<string, unknown>> }>;
+        delete episodes[0].shots[0].framePlan;
+        const embeddedJson = JSON.stringify(malformed, null, 2).replace(/```/gu, "\\u0060\\u0060\\u0060");
+        const source = ["# 缺失逐帧计划的测试包", "", "```drama-production-package", embeddedJson, "```"].join("\n");
         expect(() => previewDramaProductionPackage(source, "mahadel-episode-01-production-package.md")).toThrow("缺少有效 framePlan");
     });
 
@@ -1104,21 +1146,22 @@ describe("production package boundary", () => {
     });
 
     it("rejects legacy scene wording even when the package omitted an explicit layout", () => {
-        const source = readFileSync(new URL("../../../../output/mahadel-episode-01-production-package-v2-multiframe.json", import.meta.url), "utf8");
-        expect(() => previewDramaProductionPackage(source, "mahadel-episode-01-production-package-v2-multiframe.json")).toThrow("需要重新生成并审核高清场景全景图");
+        const source = readMahadelJsonFixture();
+        source.assets.locations[0].description = "九宫格场景，3列×3行纵向构图";
+        expect(() => previewDramaProductionPackage(JSON.stringify(source), "legacy-scene.json")).toThrow("需要重新生成并审核高清场景全景图");
     });
 
-    it("keeps the generated package prompts split into static frames and motion intent", () => {
+    it("keeps generated package prompts in the direct Seedance prose structure", () => {
         const source = readMahadelJsonFixture();
         const movement = /运镜|焦段|推近|拉远|摇镜|跟拍|滑轨|环绕|吊臂|慢推|慢拉|后拉/u;
         const nonVisual = /\b\d+(?:\.\d+)?s\b|时间段|时间轴|动作过程|对白|声音|口型/u;
         for (const shot of source.episodes[0].shots) {
             expect(shot.imagePrompt).not.toMatch(movement);
             expect(shot.imagePrompt).not.toMatch(nonVisual);
-            expect(shot.videoPrompt).toContain("起始可见状态");
-            expect(shot.videoPrompt).toContain("一个主运镜");
-            expect(shot.videoPrompt).toContain("结束画面");
-            expect((shot.videoPrompt.match(/一个主运镜：/gu) || []).length).toBe(1);
+            expect(shot.videoPrompt).toMatch(/^开场时，/u);
+            expect(shot.videoPrompt).toMatch(/\n\d+(?:\.\d+)?[–-]\d+(?:\.\d+)?秒，/u);
+            expect(shot.videoPrompt).toMatch(/\n结束时，/u);
+            expect(shot.videoPrompt).not.toMatch(/^(?:参数|公共总规范|时间轴|收尾|台词|人声|音效)[：:]/mu);
             expect(shot.videoPrompt).not.toMatch(/本内部|assetId|参考图清单|URL/u);
             for (const frame of shot.framePlan.frames) {
                 expect(frame.imagePrompt).not.toMatch(movement);
@@ -1644,7 +1687,7 @@ describe("production package boundary", () => {
         expect(second.productionArchive).toEqual(productionPackage.archive);
     });
 
-    it("repairs a manually preserved legacy execution prompt while importing its utterance timeline", () => {
+    it("preserves the imported prompt verbatim while keeping utterance timing in structured fields", () => {
         const source = structuredClone(productionPackage);
         const packageShot = source.episodes[0].shots[0];
         const prompt = [
@@ -1674,10 +1717,9 @@ describe("production package boundary", () => {
         ];
         const imported = applyDramaProductionPackage(project(), source, "hash-dialogue-import");
         const shot = imported.episodes[0].shots.find((item) => item.code === packageShot.code)!;
-        expect(shot.videoPrompt).toContain("陆川对白原声清晰可辨、音量居前");
-        expect(shot.videoPrompt).toContain("对白/旁白发声期间压低环境音、动作拟音与音乐");
-        expect(shot.videoPrompt).toContain("陆川短促吸气");
-        expect(shot.videoPrompt).toContain("车轮与衣料轻响");
+        expect(shot.videoPrompt).toBe(prompt);
+        expect(shot.utterances).toEqual(packageShot.utterances);
+        expect(shot.videoPrompt.match(/台词：/gu)).toHaveLength(2);
         const existingWithLegacyPrompt = {
             ...imported,
             episodes: imported.episodes.map((episode) => ({
@@ -1689,12 +1731,7 @@ describe("production package boundary", () => {
         const updated = applyDramaProductionPackage(existingWithLegacyPrompt, source, "hash-dialogue-import-again");
         const repaired = updated.episodes[0].shots.find((item) => item.id === shot.id)!;
 
-        expect(repaired.executionVideoPrompt).toContain("台词：陆川说：\u201c我叫陆川。\u201d");
-        expect(repaired.executionVideoPrompt).toContain("台词：陆川说：\u201c滑坡把我冲进来的。\u201d");
-        expect(repaired.executionVideoPrompt).toContain("陆川对白原声清晰可辨、音量居前");
-        expect(repaired.executionVideoPrompt).toContain("对白/旁白发声期间压低环境音、动作拟音与音乐");
-        expect(repaired.executionVideoPrompt).toContain("陆川短促吸气");
-        expect(repaired.executionVideoPrompt).toContain("车轮与衣料轻响");
+        expect(repaired.executionVideoPrompt).toBe(prompt.replace(/台词：[^\n]*/gu, "台词：无"));
         expect(repaired.fieldOrigins?.executionVideoPrompt).toBe("manual");
     });
 
@@ -1761,7 +1798,7 @@ describe("production package boundary", () => {
         expect(preview.importWarnings).toEqual(expect.arrayContaining([expect.stringContaining("生产方案摘要与完整视觉合同不一致")]));
         expect(preview.package.assets.characters[0].supplierPrompt).toContain(completeStyle);
         expect(preview.package.assets.characters[0].supplierPrompt).not.toContain("旧版中式3D画风");
-        expect(preview.package.episodes[0].shots[0].videoPrompt).toContain(completeStyle);
+        expect(preview.package.episodes[0].shots[0].videoPrompt).toBe(source.episodes[0].shots[0].videoPrompt);
     });
 
     it("adopts a concrete package visual contract when the target project only has the default placeholder", () => {
@@ -1819,7 +1856,7 @@ describe("production package boundary", () => {
             lockedAt: "2026-09-08T00:00:00.000Z",
             visual: { visualStyle: currentStyle, artStyle: currentStyle },
         });
-        expect(applied.episodes[0].shots[0].videoPrompt).toContain(currentStyle);
+        expect(applied.episodes[0].shots[0].videoPrompt).toBe(imported.episodes[0].shots[0].videoPrompt);
     });
 
     it("round-trips a complete visual contract from a generated package into project settings", () => {
@@ -2071,7 +2108,12 @@ function shot(code: string, order: number, timecode: string, characterCodes: str
         narration: "",
         utterances: [],
         imagePrompt: `画面主体：${videoPrompt}\n可见状态：${videoPrompt}后的冻结姿态与道具状态\n构图与空间：主体位于画面中央，场景结构和支撑面清晰可见`,
-        videoPrompt,
+        videoPrompt: [
+            "开场时，主体站在马车中央，双脚受地面支撑，所需道具停在手边。",
+            `00.0–07.5秒，主体因前方动静开始${videoPrompt}，抬眼并收紧右手；中景平视缓慢推近，衣料轻响。`,
+            `07.5–15.0秒，主体完成${videoPrompt}，视线落在道具上并停住；机位稳定，呼吸恢复，车轮底声持续。`,
+            "结束时，主体保持中央站位，道具仍在手边，车厢与摄影轴不变。",
+        ].join("\n"),
         cameraMotion: "缓慢推进",
         startFramePrompt: `画面主体：${videoPrompt}\n可见状态：${videoPrompt}的起始姿态已冻结\n构图与空间：主体位于画面中央，场景结构清晰`,
         endFramePrompt: `画面主体：${videoPrompt}\n可见状态：${videoPrompt}的终点姿态已冻结\n构图与空间：主体位于画面中央，场景结构清晰`,

@@ -71,3 +71,9 @@ describe("drama prompt composition and cut quality gates", () => {
         expect(errors.join("；")).toContain("服装、发型、年龄感或固定配饰连续性锚点");
     });
 });
+
+it("accepts explicit face safety instructions while still rejecting actual occlusion", () => {
+    const input = { ratio: "16:9", subjectNames: ["阿泽"], frames: [{ actionPrompt: "阿泽近景，完整头顶、下巴和主要衣领清晰，手部不遮脸、不裁脸。", imagePrompt: "阿泽单人近景" }] };
+    expect(validateDramaPromptComposition({ ...input, prompt: "阿泽近景，完整头顶、下巴和主要衣领清晰，手部不遮脸。" }).filter((error) => error.includes("遮挡描述"))).toEqual([]);
+    expect(validateDramaPromptComposition({ ...input, prompt: "阿泽近景，前景肩膀挡住脸部。", frames: [{ actionPrompt: "前景肩膀挡住阿泽脸部" }] }).some((error) => error.includes("遮挡描述"))).toBe(true);
+});

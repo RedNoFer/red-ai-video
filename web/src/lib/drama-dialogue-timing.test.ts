@@ -61,3 +61,8 @@ describe("drama dialogue timing", () => {
         expect(reminder?.message).toContain("不阻止导入");
     });
 });
+
+it("does not report binary floating point residue as an overfull speech window", () => {
+    expect(dramaDialogueTimingReminder(20.68 - 19.43, [{ type: "dialogue", text: "这是五个字", speechRateCharsPerSecond: 4 }])).toBeUndefined();
+    expect(dramaDialogueTimingReminder(1.2, [{ type: "dialogue", text: "这是五个字", speechRateCharsPerSecond: 4 }])).toBeDefined();
+});

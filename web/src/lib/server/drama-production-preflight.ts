@@ -137,9 +137,9 @@ function checkShot(
     const videoPrompt = shot.executionVideoPrompt?.trim() || shot.videoPrompt?.trim();
     if (!videoPrompt) issues.push(warning("VIDEO_PROMPT_MISSING", `${label}缺少有效视频Prompt`, { shotId: shot.id }));
     if (videoPrompt) {
-        for (const error of validateDramaVideoPromptLength(videoPrompt, label)) issues.push(warning("VIDEO_PROMPT_LENGTH", error, { shotId: shot.id, correction: "建议由作者压缩重复公共事实；超过2500个Unicode字符不阻断视频提交" }));
+        for (const error of validateDramaVideoPromptLength(videoPrompt, label)) issues.push(warning("VIDEO_PROMPT_LENGTH", error, { shotId: shot.id, correction: "建议压缩重复表达；2000 字符是建议目标，2500 字符为提醒线，均不阻断提交、不截断正文" }));
         const utteranceCoverageErrors = validateDramaVideoPromptUtteranceCoverage(videoPrompt, shot.framePlan?.frames || [], shot.utterances as DramaDialogueTimingInput[], label);
-        if (utteranceCoverageErrors.length) issues.push(warning("DIALOGUE_PROMPT_COVERAGE", utteranceCoverageErrors[0], { shotId: shot.id, correction: "把每句对白/旁白原句写入与其时间窗口重叠的公开视频时间轴段‘台词’字段，并使用中文引号" }));
+        if (utteranceCoverageErrors.length) issues.push(warning("DIALOGUE_PROMPT_COVERAGE", utteranceCoverageErrors[0], { shotId: shot.id, correction: "把完整对白原句放进其实际发声时间段，并保持说话人与原文一致" }));
     }
     const performance = shot.performancePlan;
     const beats = performance?.beats;
@@ -149,11 +149,11 @@ function checkShot(
     if (shot.framePlan?.frames.length) {
         const compiledVideoPrompt = compileDramaShotPrompts(project, episode, shot).videoPrompt;
         const layoutErrors = validateDramaSeedanceVideoPromptLayout(compiledVideoPrompt, shot.framePlan.frames, label);
-        if (layoutErrors.length) issues.push(warning("VIDEO_PROMPT_LAYOUT", layoutErrors[0], { shotId: shot.id, correction: "重新优化或生成视频提示词，按 Seedance 2.5 适配器五层格式补齐参数、公共总规范、连续时间轴、空间站位、动作结果和收尾" }));
+        if (layoutErrors.length) issues.push(warning("VIDEO_PROMPT_LAYOUT", layoutErrors[0], { shotId: shot.id, correction: "按 Seedance 2.5 自然段规范补齐开场、连续时间段、完整原句对白与结束状态；删除包装标题和重复视觉合同" }));
         const timingErrors = validateDramaFrameTiming(shot.framePlan.frames, shot.utterances as DramaDialogueTimingInput[], label);
         if (timingErrors.length) issues.push(warning("FRAME_DIALOGUE_TIMING", timingErrors[0], { shotId: shot.id, correction: "按对白自然开口、收句、停顿和反应重新分配帧段，禁止机械等长" }));
         const promptTimingErrors = validateDramaVideoPromptDialogueTiming(videoPrompt || "", shot.framePlan.frames, shot.utterances as DramaDialogueTimingInput[], label);
-        if (promptTimingErrors.length) issues.push(warning("DIALOGUE_CAPACITY", promptTimingErrors[0], { shotId: shot.id, correction: "把公开镜头卡中的台词移动到足够长的 framePlan 时间段；逐句口型窗口不足时必须重切或拆分，不能异常加速" }));
+        if (promptTimingErrors.length) issues.push(warning("DIALOGUE_CAPACITY", promptTimingErrors[0], { shotId: shot.id, correction: "把公开自然时间段中的对白移到足够长的 framePlan 时间段；逐句口型窗口不足时必须重切或拆分，不能异常加速" }));
         const shotText = [
             shot.sourceText,
             shot.description,

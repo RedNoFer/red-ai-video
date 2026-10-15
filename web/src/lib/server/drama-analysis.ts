@@ -22,8 +22,8 @@ import { resolveDramaShotDuration } from "@/lib/server/drama-shot-config";
 import { strictJsonObjectText } from "@/lib/server/structured-model-output";
 import { isGenericDramaDetail, validateDramaFrameTiming, validateDramaPerformanceDetail } from "@/lib/drama-prompt-quality";
 
-const DRAMA_VIDEO_PROMPT_AUDIO_RULES =
-    "有对白或旁白时，台词字段必须逐字写入原句；人声字段必须说明对应说话人/旁白原声实际发出、清晰可辨、音量居前、原句完整可听并与说话时间同步，直接对白还要与可见口型同步。音效字段只描述非语言声音；环境音、动作拟音和音乐在对白/旁白发声窗口压低避让，不得盖过、吞没、替代或静音台词，只能在语音停顿间隙恢复。原文确无对白/旁白时才填写无，不得虚构台词。公开视频正文不得依赖上一条视频、其他镜头编号、对话上下文或历史提示词；不输出字幕字段、台词转写文案或任何画面文字叠加，声音只通过台词、人声和音效字段表达。";
+const DRAMA_VIDEO_PROMPT_DESCRIPTION =
+    "按 Seedance 2.5 自然段格式生成可独立提交的完整正文：开场句、可选一次视觉基调、当前真实绑定的参考图片、连续自然时间段、结束句、可选末尾稳定音色。时间段写摄影、动作因果、可见表演、说话人完整原句和局部声音；原句只出现一次。内部 Cut to 单独换行，切后帧 transitionPrompt 保存事件证据；公开时间段数量不必等于内部帧数。角色参考绑定只附一次四视图唯一性约束。禁止包装标题、重复追加统一视觉、字幕/转写、内部编号、历史上下文、未绑定 alias 和编辑器数据。正文目标 2000 个 Unicode 字符以内，2500 仅提醒；不阻断、不截断、不拆分。";
 
 export function normalizeDramaContentAnalysis(value: unknown, defaultVideoSeconds: number, sourceScript = ""): DramaContentAnalysis {
     const source = object(value);
@@ -1122,8 +1122,7 @@ export const dramaVisualTool = {
                         imagePrompt: { type: "string" },
                         videoPrompt: {
                             type: "string",
-                            description:
-                                "由当前唯一导演 Skill 直接生成 Seedance 2.5 五层公开 videoPrompt：【参数】、【参考】（没有实际素材时省略）、【公共总规范】、【时间轴】、【收尾】。公共场景、身份、服装、光色、空间站位、支撑/接触、轴线及声音政策只写一次；一个公开时间轴段可以覆盖多个连续内部帧，按叙事节拍合并微镜头，段内写主体动作、触发、可见结果、景别/焦段/机位、单一主运镜、台词和局部声音。禁止回退小墨式 ### 镜头多字段卡、重复公共事实或输出内部起点/动作/衔接/终点。完整正文以 Array.from(videoPrompt).length 计数，目标1200–1800字符，2500字符为提示阈值，超限只提示作者压缩，不阻断交稿或视频提交，不得截断或改变逻辑片段数。每条正文独立自足，禁止跨片段引用、SH编号、资产ID、上下文、历史提示词、URL、编辑器元数据和画面文字。画面内容只写可见动作，原句只在台词字段；直接对白使用说话人说：中文引号原句；旁白标明声源与时间。内部 framePlan 按对白开口、收句、停顿、动作触发和反应自然分配，保持主体→触发→结果→声音锚点及入口/出口连续性，不机械等分。",
+                            description: DRAMA_VIDEO_PROMPT_DESCRIPTION,
                         },
                         cameraMotion: { type: "string" },
                         startFramePrompt: { type: "string" },
@@ -1275,8 +1274,7 @@ export const dramaVideoPromptTool = {
                         shotId: { type: "string" },
                         videoPrompt: {
                             type: "string",
-                            description:
-                                "由当前唯一导演 Skill 直接生成 Seedance 2.5 五层公开 videoPrompt：【参数】、【参考】（没有实际素材时省略）、【公共总规范】、【时间轴】、【收尾】。公共场景、身份、服装、光色、空间站位、支撑/接触、轴线及声音政策只写一次；一个公开时间轴段可以覆盖多个连续内部帧，按叙事节拍合并微镜头，段内写主体动作、触发、可见结果、景别/焦段/机位、单一主运镜、台词和局部声音。禁止回退小墨式 ### 镜头多字段卡、重复公共事实或输出内部起点/动作/衔接/终点。完整正文以 Array.from(videoPrompt).length 计数，目标1200–1800字符，2500字符为提示阈值，超限只提示作者压缩，不阻断交稿或视频提交，不得截断或改变逻辑片段数。每条正文独立自足，禁止跨片段引用、SH编号、资产ID、上下文、历史提示词、URL、编辑器元数据和画面文字。画面内容只写可见动作，原句只在台词字段；直接对白使用说话人说：中文引号原句；旁白标明声源与时间。内部 framePlan 按对白开口、收句、停顿、动作触发和反应自然分配，保持主体→触发→结果→声音锚点及入口/出口连续性，不机械等分。",
+                            description: DRAMA_VIDEO_PROMPT_DESCRIPTION,
                         },
                         framePlan: {
                             type: "object",
@@ -1314,9 +1312,6 @@ export const dramaVideoPromptTool = {
         },
     },
 };
-
-dramaVisualTool.parameters.properties.shots.items.properties.videoPrompt.description += ` ${DRAMA_VIDEO_PROMPT_AUDIO_RULES}`;
-dramaVideoPromptTool.parameters.properties.shots.items.properties.videoPrompt.description += ` ${DRAMA_VIDEO_PROMPT_AUDIO_RULES}`;
 
 export const dramaImagePromptTool = {
     name: "generate_drama_image_prompts",

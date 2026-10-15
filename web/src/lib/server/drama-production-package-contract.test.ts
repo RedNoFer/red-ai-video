@@ -39,9 +39,9 @@ describe("drama production package contract compilation", () => {
         expect(template).toContain("准备回应");
         expect(docs).toMatch(/informationalGateCodes:[\s\S]*- VIDEO_PROMPT_LENGTH/u);
         expect(template).toMatch(/`VIDEO_PROMPT_LENGTH`\s*\| warning/u);
-        expect(template).toContain("提示阈值为 2500");
-        expect(template).toContain("超过只提示");
-        expect(template).toContain("seedance25-prompt-adapter@1.1.0");
+        expect(template).toContain("2500 是提醒线");
+        expect(template).toContain("超出只提示");
+        expect(template).toContain("seedance25-prompt-adapter@1.4.0");
         for (const gateCode of DRAMA_PACKAGE_GATE_CODES) expect(template).toContain(`\`${gateCode}\``);
         for (const title of DRAMA_PACKAGE_SECTIONS) expect(template).toContain(title);
     });

@@ -192,11 +192,11 @@ export function stripDramaReferenceBindingSections(prompt: string) {
     let skipping = false;
     for (const line of lines) {
         const value = line.trim();
-        if (/^(?:【参考图片】|参考图顺序（与(?:视频)?请求数组完全一致）|实际参考图绑定（编号与本次请求图片数组完全一致）|素材绑定|参考图职责(?:计划)?)[：:]?/u.test(value)) {
+        if (/^(?:【参考图片】|参考图片|参考图顺序（与(?:视频)?请求数组完全一致）|实际参考图绑定（编号与本次请求图片数组完全一致）|素材绑定|参考图职责(?:计划)?)[：:]?/u.test(value)) {
             skipping = true;
             continue;
         }
-        if (skipping && (/^@图片\d+[：:]/u.test(value) || /^必须逐图按上述职责使用/u.test(value) || /^执行要求：逐图识别/u.test(value) || !value)) continue;
+        if (skipping && (/^@图片\d+[：:]/u.test(value) || /^角色参考图约束：/u.test(value) || /^每张角色资产图均展示同一个人的不同观察角度/u.test(value) || /^必须逐图按上述职责使用/u.test(value) || /^执行要求：逐图识别/u.test(value) || !value)) continue;
         skipping = false;
         output.push(line);
     }
@@ -204,16 +204,36 @@ export function stripDramaReferenceBindingSections(prompt: string) {
 }
 
 /** Prepend image duties in the exact order used by the supplier request. */
-export function appendDramaImageReferenceBindings(prompt: string, references: Array<{ id: string; label?: string; binding?: string }>) {
+export function appendDramaImageReferenceBindings(prompt: string, references: Array<{ id: string; label?: string; binding?: string; isCharacter?: boolean }>) {
     const base = stripDramaReferenceBindingSections(prompt);
     if (!references.length) return base;
+    const hasCharacterReferences = references.some((reference) => reference.isCharacter || /^角色(?:\s*[·「]|固定资产|资产)/u.test(reference.label || ""));
     const manifest = references
         .map((reference, index) => {
             const label = reference.label || (reference.id.startsWith("continuity-") ? "上一帧连续性锚点" : "项目资产基准图");
             return `@图片${index + 1}：${label}${reference.binding ? `；绑定规则：${reference.binding}` : ""}`;
         })
         .join("\n");
-    return [`【参考图片】\n${manifest}\n执行要求：逐图识别并按上述绑定关系使用；角色图不得替代场景，场景图不得改写角色，连续性帧优先约束当前可见状态。未列入本清单的图片不得假定已引用。`, base].filter(Boolean).join("\n\n");
+    const characterRule = hasCharacterReferences ? "\n每张角色资产图均展示同一个人的不同观察角度，仅参考面容、体型、服装和配饰，不继承白底、排版或图中身体投影的数量。保证人物唯一性，每个角色在世界空间中仅有一人。" : "";
+    const referenceSection = `参考图片：\n${manifest}${characterRule}`;
+    const firstTimeRange = /^(\s*\d+(?:\.\d+)?\s*(?:-|至|到|—|–|~|～)\s*\d+(?:\.\d+)?\s*秒\s*[，,:：])/mu.exec(base);
+    if (!firstTimeRange) {
+        const soundSection = /(?:^|\n)声音：/u.exec(base);
+        if (!soundSection) return [base, referenceSection].filter(Boolean).join("\n\n");
+        const insertAt = soundSection.index ?? 0;
+        return `${base.slice(0, insertAt).trimEnd()}\n\n${referenceSection}\n\n${base.slice(insertAt).trimStart()}`.trim();
+    }
+    const insertAt = firstTimeRange.index ?? 0;
+    return `${base.slice(0, insertAt).trimEnd()}\n\n${referenceSection}\n\n${base.slice(insertAt).trimStart()}`.trim();
+}
+
+/** Put every explicit camera cut on its own line without changing prompt wording. */
+export function formatDramaVideoPromptCutLines(prompt: string) {
+    return prompt
+        .trim()
+        .replace(/([^\r\n])[ \t]*(?=Cut to[：:])/giu, "$1\n")
+        .replace(/^[ \t]+(?=Cut to[：:])/gmu, "")
+        .replace(/\n{3,}/gu, "\n\n");
 }
 
 export function compileDramaShotPrompts(project: DramaProject, episode: DramaEpisode, shot: DramaShot): CompiledDramaPrompts {
@@ -332,16 +352,8 @@ export function applyDramaStaticVisualContract(project: DramaVisualContractProje
 }
 
 export function applyDramaVideoVisualContract(project: DramaVisualContractProject, source: string) {
-    const visualContract = currentVisualContractText(project).replace(/(?:画风规格|色彩脚本|全局负面约束)：/gu, "");
-    if (!visualContract) return source.trim();
-    const prompt = formatPromptFieldLines(stripHistoricalAssetStyleFacts(stripDramaAssetReferenceSections(sanitizeDramaVisualPrompt(source))), "video");
-    if (!prompt) return prompt;
-    const next = prompt
-        .split("\n")
-        .filter((line) => !/^(?:当前项目视觉合同（唯一风格来源）|视觉风格与光色|视觉质感采用)[：:]/u.test(line.trim()))
-        .filter((line) => !/^色调[：:](?:项目视觉合同（唯一风格来源）|.*(?:国漫|仙侠|古风|二次元))/u.test(line.trim()))
-        .join("\n");
-    return `视觉质感采用：${visualContract}\n${next}`;
+    void project;
+    return formatDramaVideoPromptCutLines(source);
 }
 
 export function stripDramaAssetReferenceSections(value: string) {

@@ -581,7 +581,7 @@ describe("drama project service updates", () => {
         expect(body.prompt).not.toContain("旧提示词");
         if (withAudio) {
             expect(body.references).toEqual([{ type: "audio", role: "reference", url: "/api/reference-assets/permanent/audio/heroine.wav" }]);
-            expect(body.prompt).toContain("角色「岚音」：配音引用 @音频1");
+            expect(body.prompt).not.toContain("配音引用");
             expect(body.prompt).not.toContain("清亮温润固定声线");
         } else {
             expect(body.references).toEqual([]);
@@ -3177,14 +3177,12 @@ describe("drama project service updates", () => {
                 clueIds: [],
                 imagePrompt: "画面",
                 videoPrompt: [
-                    "【参数】15秒，9:16，有声；主体察觉门后动静。",
-                    "【公共总规范】档案室桌边，冷灰蓝，左侧冷光照亮脸侧与手背。主体双脚落地，右手压住桌沿；前景门框遮住画面一角，背景留出门后空间。衣装、接触关系与轴线稳定，无瞬移、穿模或无因换位。人声居前，环境与动作音避让。",
-                    "【时间轴】",
-                    "0-4秒：主体因门后轻响而抬眼，右手压住桌沿，指节收紧；固定中景让观众看清脸部与接触点；台词：无；人声：短促吸气；音效：门后轻响。",
-                    "4-8秒：响动再次传来，主体转头寻找声源，手指停在桌沿；固定中景揭示视线落点；台词：无；人声：呼气；音效：衣料摩擦。",
-                    "8-12秒：主体向门侧前倾，因确认声源而松开指节，脚仍落地；固定中景强调身体转向；台词：无；人声：呼吸；音效：鞋底轻擦。",
-                    "12-15秒：主体止住前倾、重新站稳，右手落定桌沿；固定中景确认结果与站位；台词：无；人声：缓慢呼气；音效：室内底声。",
-                    "【收尾】主体仍在档案室桌边，双脚落地，右手压住桌沿，目光朝门后；门框、桌面与摄影轴不变。",
+                    "开场时，主体站在档案室桌边，双脚着地、右手压住桌沿；门框遮住画面前角，桌面与南侧摄影轴固定。左侧窗光落在脸侧和手背。",
+                    "00.0–04.0秒，固定中景，门后轻响使主体抬眼、右手压紧桌沿，指节收紧；短促吸气，门后传来轻响。",
+                    "04.0–08.0秒，响动再次传来，主体转头寻找声源，手指停在桌沿；固定中景让视线落点清楚，衣料摩擦。",
+                    "08.0–12.0秒，主体为确认声源向门侧前倾，脚仍着地，指节慢慢松开；固定中景记录身体转向和鞋底轻擦。",
+                    "12.0–15.0秒，主体止住前倾重新站稳，右手落定桌沿；室内底声恢复，门框与桌面位置不变。",
+                    "结束时，主体仍在档案室桌边，双脚着地、右手压住桌沿，目光朝门后；门框、桌面和摄影轴保持原位。",
                 ].join("\n"),
                 negativePrompt: "禁止文字、水印和 Logo",
                 cameraMotion: "固定",
@@ -3267,7 +3265,7 @@ describe("drama project service updates", () => {
         expect(mocks.resolveLogicalModelCandidates).toHaveBeenCalledWith(expect.anything(), "video", "backend-default-video");
         expect(run.parameterSnapshot.videoPrompts).toEqual({ "shot-one": edited });
         expect(run.steps.find((step) => step.type === "video")?.prompt).toBe(edited);
-        expect(run.preflightSnapshot?.prompts["shot-one"].executionVideoPrompt).toBe(edited);
+        expect(run.preflightSnapshot?.prompts?.["shot-one"]?.executionVideoPrompt).toBe(edited);
         expect(current.episodes[0].shots[0].videoPrompt).toBe("旧动作");
         await expect(createDramaProductionRunForUser("user-one", current.id, { episodeId: current.episodes[0].id, videoPrompts: { "shot-one": "  " } })).rejects.toMatchObject({ status: 400 });
         await expect(createDramaProductionRunForUser("user-one", current.id, { episodeId: current.episodes[0].id, videoPrompts: { foreign: edited } })).rejects.toMatchObject({ status: 400 });
@@ -3807,11 +3805,12 @@ describe("drama visual reference URL resolution", () => {
             { id: "asset-scene-one", label: "场景固定资产「黑湖」", binding: "锁定空间拓扑、建筑结构和主光方向" },
         ]);
 
-        expect(prompt.startsWith("【参考图片】\n")).toBe(true);
+        expect(prompt.startsWith("生成画面\n\n参考图片：\n")).toBe(true);
         expect(prompt).toContain("@图片1：上一镜「湖畔」已人工验收的实际尾帧；绑定规则：作为当前帧唯一动作起点");
         expect(prompt).toContain("@图片2：角色固定资产「Karin」；绑定规则：锁定身份、脸部、发型和服装");
         expect(prompt).toContain("@图片3：场景固定资产「黑湖」；绑定规则：锁定空间拓扑、建筑结构和主光方向");
-        expect(prompt).toContain("角色图不得替代场景");
+        expect(prompt).toContain("每张角色资产图均展示同一个人的不同观察角度");
+        expect(prompt).toContain("每个角色在世界空间中仅有一人。");
     });
 
     it("rebases video references without retaining a legacy binding block", () => {
@@ -3819,7 +3818,7 @@ describe("drama visual reference URL resolution", () => {
             { role: "keyframe", purpose: "顺序帧 1（开始）" },
         ]);
 
-        expect(prompt.match(/【参考图片】/gu)).toHaveLength(1);
+        expect(prompt.match(/(?:^|\n)参考图片：/gu)).toHaveLength(1);
         expect(prompt).not.toContain("参考图顺序（与视频请求数组完全一致）");
         expect(prompt).toContain("@图片1：顺序帧 1（开始）");
     });

@@ -34,56 +34,26 @@ describe("Drama generation production workspace", () => {
         expect(source).not.toContain("sm:grid-cols-4");
     });
 
-    it("keeps shot task rows mobile-safe and exposes exact failure labels", async () => {
+    it("keeps shot task rows mobile-safe and exposes the prompt that will be submitted", async () => {
         const source = await readFile(resolve(process.cwd(), "src/app/(user)/drama/[id]/drama-generation-panel.tsx"), "utf8");
 
         expect(source).toContain("data-drama-shot-task-list");
         expect(source).toContain("data-drama-shot-task");
         expect(source).toContain("data-drama-shot-execution-details");
         expect(source).toContain("展开详情");
-        expect(source).not.toContain("用户/剧本原始提示词（仅记录）");
         expect(source).toContain("视频执行提示词（当前标准）");
         expect(source).toContain("generateDramaVideoPrompt({");
-        expect(source).toContain("project,");
-        expect(source).toContain("episode,");
-        expect(source).toContain("referenceMaterials");
-        expect(source).toContain("framePlan");
-        expect(source).toContain("提示词已优化，请确认后保存");
-        expect(source).toContain("提示词优化");
-        expect(source).toContain('label: "提示词优化"');
-        expect(source).toContain("sm:flex-row sm:items-start sm:justify-between");
-        expect(source).toContain("shrink-0 flex-wrap items-center justify-end gap-1.5 sm:ml-3");
-        expect(source).toContain("onOptimizePrompt");
-        expect(source).toContain("提示词已优化并保存");
-        expect(source).not.toContain('label: "Agent 生成提示词"');
         expect(source).toContain("generateDramaVideoPrompt");
-        expect(source).not.toContain("已提交供应商的执行快照");
-        expect(source).not.toContain('["视频执行提示词（当前标准）", supplierVideoPrompt]');
-        expect(source).toContain("生成与重试以此执行版为准");
-        expect(source).toContain("formatDramaVideoPromptForDisplay");
-        expect(source).toContain("镜头\\d+");
-        expect(source).toContain('width: "min(760px, calc(100vw - 24px))"');
+        expect(source).toContain("formatDramaVideoPromptCutLines(supplierVideoPrompt)");
+        expect(source).toContain("compileDramaVideoSubmissionPrompt(");
+        expect(source).toContain("previewSelectedVideoBindings(");
+        expect(source).not.toContain("applyDramaVideoVisualContract");
         expect(source).toContain("实际引用资产");
-        expect(source).toContain('["本镜原文锚点", compactShotSourceEvidence(shot)]');
-        expect(source).not.toContain('["原文依据", shot.sourceText]');
-        expect(source).toContain("data-drama-shot-reference-assets");
-        expect(source).toContain("引用资产图片");
         expect(source).toContain("data-drama-shot-supplier-prompt");
         expect(source).toContain("data-drama-shot-boundary-frames");
-        expect(source).toContain("视频提示词已保存");
-        expect(source).toContain("shotReferenceAssets");
-        expect(source).toContain("[content-visibility:visible]");
-        expect(source).toContain("sm:[content-visibility:auto]");
         expect(source).toContain("publicUpstreamError");
-        expect(source).toContain("上游渠道暂时不可用");
         expect(source).toContain('body: JSON.stringify({ action: "refresh" })');
         expect(source).toContain('method: "POST"');
-        expect(source).toContain("拉取最新视频");
-        expect(source).toContain("data-drama-shot-missing-fixed-assets");
-        expect(source).not.toContain("可选优化，不影响视频生成");
-        expect(source).toContain("添加固定资产图");
-        expect(source).toContain("completeShotReviewAndRefresh");
-        expect(source).toContain("去生成 / 确认资产图");
         expect(source).toContain("videoPromptRuns");
         expect(source).toContain("beginVideoPrompt");
         expect(source).toContain("finishVideoPrompt");
@@ -95,14 +65,10 @@ describe("Drama generation production workspace", () => {
         expect(executionPrompt).toContain(
             'updateDramaShotPromptPatch(project.id, episode.id, shot.id, prompt, undefined, { executionVideoPromptOrigin: "manual", ...(optimizedFramePlan ? { framePlan: optimizedFramePlan, framePlanOrigin: "ai" as const } : {}) })',
         );
-        expect(executionPrompt).toContain("framePlan");
         expect(executionPrompt).toContain("videoPromptDraft.trim() === videoPromptOriginal.trim()");
         expect(executionPrompt).toContain("persistedVideoPrompt");
-        expect(executionPrompt).toContain("promptSeedRef");
         expect(executionPrompt).toContain("if (optimizedFramePlan) setOptimizedFramePlan(undefined)");
         expect(executionPrompt).toContain("resolveShotVideoOptimizationSource");
-        expect(executionPrompt).toContain("beginVideoPrompt(project.id, episode.id, shot.id)");
-        expect(executionPrompt).toContain("finishVideoPrompt(project.id, episode.id, shot.id)");
         expect(executionPrompt).not.toContain("saveProjectNow(project.id)");
         expect(executionPrompt).not.toContain("updateShot(project.id, episode.id, shot.id");
     });
@@ -231,15 +197,24 @@ describe("Drama generation production workspace", () => {
         expect(frameEditorSource).toContain("data-drama-prompt-references");
     });
 
-    it("does not save the full oversized project before confirming production", async () => {
+    it("uses the confirmed reference-bound prompt for production", async () => {
         const source = await readFile(resolve(process.cwd(), "src/app/(user)/drama/[id]/drama-generation-panel.tsx"), "utf8");
         const lockStart = source.indexOf("const lockProduction = async");
         const lockEnd = source.indexOf("const optimizeVideoPrompt", lockStart);
         const lockProduction = source.slice(lockStart, lockEnd);
+        const previewStart = source.indexOf("const showPromptPreview =");
+        const previewEnd = source.indexOf("const lockProduction = async", previewStart);
+        const preview = source.slice(previewStart, previewEnd);
 
         expect(lockProduction).not.toContain("saveProjectNow(project.id)");
-        expect(lockProduction).toContain('updateDramaShotPromptPatch(project.id, episode.id, shotId, prompts.videoPrompt || "", prompts.imagePrompt)');
-        expect(lockProduction).toContain("createDramaProductionRun(project.id, episode.id, undefined, check");
+        expect(lockProduction).toContain("updateDramaShotPromptPatch");
+        expect(lockProduction).toContain("createDramaProductionRun(project.id, episode.id, undefined, check, { referenceSelections, referenceModes, videoPrompts })");
+        expect(lockProduction).toContain("Object.entries(check.revisedPrompts || {})");
+        expect(lockProduction.indexOf("updateDramaShotPromptPatch")).toBeLessThan(lockProduction.indexOf("createDramaProductionRun"));
+        expect(preview).toContain("compileDramaVideoSubmissionPrompt(");
+        expect(preview).toContain("previewSelectedVideoBindings(");
+        expect(source).toContain("setVideoPrompts((current) =>");
+        expect(source).toContain("onChange({ selections, referenceModes, videoPrompts, invalid })");
     });
 
     it("shows persistent per-frame progress without blocking the whole storyboard area", async () => {

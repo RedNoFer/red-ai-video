@@ -20,10 +20,9 @@ import {
     updateDramaShotPromptPatch,
 } from "@/services/api/drama-projects";
 import { resolveModelRequestConfig, useEffectiveConfig } from "@/stores/use-config-store";
-import { compileDramaShotExecutionPrompts } from "@/lib/drama-prompt-compiler";
+import { compileDramaShotExecutionPrompts, formatDramaVideoPromptCutLines } from "@/lib/drama-prompt-compiler";
 import { dramaShotCharacterVoiceReferences } from "@/lib/drama-character-voice-reference";
 import { buildVideoReferenceBindings, compileDramaVideoSubmissionPrompt } from "@/lib/drama-video-submission";
-import { formatPromptFieldLines } from "@/lib/drama-frame-sequence";
 import { approvedAssetReference, approvedScenePanoramaReference } from "@/lib/drama-asset-baseline";
 import { dramaProjectFixedReferenceAssets, missingDramaShotFixedReferences } from "@/lib/drama-video-reference-plan";
 import { activeFrameEvidence, continuityStartEvidence, supersedeFrameEvidence } from "@/lib/drama-continuity-policy";
@@ -41,15 +40,8 @@ import { markDramaCanvasSynced } from "../../canvas/[id]/canvas-drama-navigation
 import type { DramaVideoPromptAnalysis, DramaVideoReferenceMode } from "@/lib/drama-project-contract";
 
 const actionButtonClass = "!h-9 !px-3 [&>span:last-child]:whitespace-nowrap";
-const DRAMA_VIDEO_PROMPT_SECTIONS = ["重要剪辑指令", "素材绑定", "故事意图", "故事含义", "空间与连续性", "灯光与画面", "摄影总则", "逐镜头时间线", "硬性禁止"] as const;
-
 function formatDramaVideoPromptForDisplay(value: string) {
-    const sectionPattern = DRAMA_VIDEO_PROMPT_SECTIONS.join("|");
-    return formatPromptFieldLines(value, "video")
-        .replace(new RegExp(`[ \\t]*(?=【(?:${sectionPattern})】)`, "gu"), "\n")
-        .replace(/[ \t]*(?=镜头\d+[，,:：]\s*(?:时间|起点|终点|画面))/gu, "\n")
-        .replace(/[ \t]*\n[ \t]*/gu, "\n")
-        .trim();
+    return formatDramaVideoPromptCutLines(value);
 }
 
 export function DramaGenerationPanel({
@@ -1259,8 +1251,9 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
         const persistedChanged = previous.shotId === shot.id && previous.persistedPrompt !== persistedVideoPrompt && Boolean(persistedVideoPrompt) && videoPromptDraft.trim() === videoPromptOriginal.trim();
         const lateInitialSeed = previous.shotId === shot.id && !previous.seed && Boolean(supplierVideoPrompt) && !videoPromptOriginal.trim();
         if (newShot || persistedChanged || lateInitialSeed) {
-            setVideoPromptDraft(supplierVideoPrompt);
-            setVideoPromptOriginal(supplierVideoPrompt);
+            const formattedPrompt = formatDramaVideoPromptCutLines(supplierVideoPrompt);
+            setVideoPromptDraft(formattedPrompt);
+            setVideoPromptOriginal(formattedPrompt);
             setOptimizedFramePlan(undefined);
         }
         promptSeedRef.current = { shotId: shot.id, persistedPrompt: persistedVideoPrompt, seed: supplierVideoPrompt };
@@ -1279,13 +1272,13 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
             });
             const optimized = result.shots.find((item) => item.shotId === shot.id);
             if (!optimized?.videoPrompt?.trim() || !optimized.framePlan?.frames?.length) throw new Error("Agent 未返回当前镜头的标准视频提示词和逐帧计划");
-            setVideoPromptDraft(optimized.videoPrompt.trim());
+            setVideoPromptDraft(formatDramaVideoPromptCutLines(optimized.videoPrompt));
             setOptimizedFramePlan(optimized.framePlan);
             if (result.warnings?.length) message.warning(`视频提示词已优化，请确认后保存；${result.warnings[0]}`);
             else message.success("视频提示词已优化，请确认后保存");
         } catch (error) {
             if (error instanceof DramaVideoPromptQualityError && error.candidate?.videoPrompt) {
-                setVideoPromptDraft(error.candidate.videoPrompt);
+                setVideoPromptDraft(formatDramaVideoPromptCutLines(error.candidate.videoPrompt));
                 setOptimizedFramePlan(error.candidate.framePlan);
                 message.warning(`${error.message}；Agent 候选已回填编辑框，未自动保存`);
                 return;
@@ -1297,7 +1290,7 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
         }
     };
     const saveVideoPrompt = async () => {
-        const prompt = videoPromptDraft.trim();
+        const prompt = formatDramaVideoPromptCutLines(videoPromptDraft);
         if (!prompt || savingVideoPrompt) return;
         setSavingVideoPrompt(true);
         try {

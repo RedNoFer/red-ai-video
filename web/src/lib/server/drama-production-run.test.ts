@@ -98,7 +98,7 @@ describe("drama production run planning", () => {
         expect(videos.map((step) => step.duration)).toEqual([5, 3]);
         expect(videos[1].dependsOn).toContain(videos[0].id);
         expect(videos[0].prompt).toContain("视频");
-        expect(videos[0].prompt).toContain("视觉质感采用：写实");
+        expect(videos[0].prompt).toContain("参考图片：\n@图片1：顺序帧 1\n@图片2：顺序帧 2\n@图片3：顺序帧 3");
     });
 
     it("keeps every ordered keyframe while retaining fixed assets", () => {
@@ -362,18 +362,18 @@ describe("drama production run planning", () => {
         };
         const locked = buildDramaProductionRun(project, { ...project.episodes[0], shots: [shot], continuityEdges: [] }, { imageModel: "image", videoModel: "video", maxReferenceImages: 4, referenceModes: { [shot.id]: "all_frames" } });
         const video = locked.steps.find((step) => step.type === "video")!;
+        video.prompt = "确认预览冻结全文";
         expect(video.referenceImageUrls).toEqual([]);
 
         shot.storyboardFrames = shot.framePlan.frames.map((frame) => ({ id: frame.id, sequenceIndex: frame.sequenceIndex, mediaUrl: `/generated-${frame.id}.png`, source: "generated", status: "success", continuityStatus: "passed" }));
-        const refreshed = refreshDramaVideoStepReferences(project, { ...project.episodes[0], shots: [shot], continuityEdges: [] }, video);
+        const refreshed = refreshDramaVideoStepReferences(project, { ...project.episodes[0], shots: [shot], continuityEdges: [] }, video, video.prompt);
 
         expect(refreshed.referenceImageUrls).toEqual(["/generated-f1.png", "/generated-f2.png"]);
         expect(refreshed.referenceBindingsSnapshot).toMatchObject([
             { alias: "@图片1", frameId: "f1" },
             { alias: "@图片2", frameId: "f2" },
         ]);
-        expect(refreshed.prompt).toContain("视频");
-        expect(refreshed.prompt).toContain("视觉质感采用：写实");
+        expect(refreshed.prompt).toBe("确认预览冻结全文");
     });
 
     it("allows video steps to use generated frames that are still pending inspection", () => {

@@ -23,7 +23,7 @@ describe("creative shortcut skills", () => {
         expect(DRAMA_PACKAGE_DIRECTOR_RULES).toContain("固定的是字段语义、时间连续性和可验收事实");
         expect(DRAMA_VIDEO_PROMPT_DIRECTOR_RULES).toContain("切后主运镜");
         expect(DRAMA_STATIC_FRAME_DIRECTOR_RULES).toContain("运镜过程");
-        expect(DRAMA_VIDEO_PROMPT_DIRECTOR_RULES).toContain("一个公开时间轴段可以覆盖多个连续");
+        expect(DRAMA_VIDEO_PROMPT_DIRECTOR_RULES).toContain("公开时间段可以数量不同");
         expect(DRAMA_EXTERNAL_CODEX_DIRECTOR_RULES).toContain("默认执行本 Skill");
     });
 
@@ -49,7 +49,7 @@ describe("creative shortcut skills", () => {
         expect(SEEDANCE_DIRECTOR_SKILL.instructions).toContain("每张参考图的唯一用途");
         expect(SEEDANCE_DIRECTOR_SKILL.instructions).toContain("已人工验收的实际尾帧");
         expect(SEEDANCE_DIRECTOR_SKILL.instructions).toContain("每次返修只改变一个已定位变量");
-        expect(SEEDANCE_DIRECTOR_SKILL.instructions).toContain("Seedance 2.5");
+        expect(SEEDANCE_DIRECTOR_SKILL.instructions).toContain("Seedance 多模态短剧工作流");
         expect(SEEDANCE_DIRECTOR_SKILL.instructions).toContain("内部 framePlan");
     });
 

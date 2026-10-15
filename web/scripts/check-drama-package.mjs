@@ -8,12 +8,26 @@ const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const args = process.argv.slice(2).filter((arg) => arg !== "--");
 const packagePath = args[0];
 const sourceIndex = args.indexOf("--source");
+const ledgerIndex = args.indexOf("--dialogue-ledger");
 let server;
 try {
     if (!packagePath || (sourceIndex >= 0 && !args[sourceIndex + 1])) throw new Error("用法：pnpm --dir web run check:drama-package -- <制作包.md> [--source <源文.txt>]");
     const decode = (file) => new TextDecoder("utf-8", { fatal: true }).decode(readFileSync(path.resolve(file)));
     const source = decode(packagePath);
     const storySource = sourceIndex >= 0 ? decode(args[sourceIndex + 1]) : undefined;
+    let auditedDialogues;
+    if (ledgerIndex >= 0) {
+        if (!storySource || !args[ledgerIndex + 1]) throw new Error("--dialogue-ledger 必须同时提供 --source 与已核对白表路径");
+        const ledger = JSON.parse(decode(args[ledgerIndex + 1]));
+        if (ledger.source_sha256 !== createHash("sha256").update(storySource, "utf8").digest("hex")) throw new Error("已核对白表与当前源文哈希不一致");
+        if (!Array.isArray(ledger.source_dialogues) || !ledger.source_dialogues.length) throw new Error("已核对白表缺少完整 source_dialogues 数组");
+        auditedDialogues = ledger.source_dialogues;
+        for (const row of auditedDialogues) {
+            if (!row.speaker || !row.text || /待核对/.test(row.speaker + (row.speakerStatus || "")) || !Number.isInteger(row.offset) || row.offset < 0 || row.offset >= storySource.length || !storySource.includes(row.text))
+                throw new Error("已核对白表包含未核说话人、无效源位置或非原文台词");
+        }
+        if (auditedDialogues.some((row, index) => index > 0 && row.offset < auditedDialogues[index - 1].offset)) throw new Error("已核对白表源文顺序不单调");
+    }
     const require = createRequire(import.meta.url);
     const vitePath = require.resolve("vite", { paths: [path.dirname(require.resolve("vitest/package.json"))] });
     const { createServer } = await import(pathToFileURL(vitePath).href);
@@ -22,11 +36,12 @@ try {
     const { reviewDramaPackage } = await server.ssrLoadModule("/src/lib/drama-package-review.ts");
     const { validateDramaAuthoringQuality } = await server.ssrLoadModule("/src/lib/server/drama-production-package-quality.ts");
     const preview = previewDramaProductionPackage(source, path.basename(packagePath), undefined, { allowImportWarnings: true, enforceExecutionContract: true });
-    const report = reviewDramaPackage(preview.package, preview.format === "markdown" ? source : undefined, storySource);
+    const report = reviewDramaPackage(preview.package, preview.format === "markdown" ? source : undefined, storySource, auditedDialogues);
     const authoring = validateDramaAuthoringQuality({
         package: preview.package,
         sources: storySource === undefined ? [] : [{ alias: "@源文", role: "story-source", type: "text", title: path.basename(args[sourceIndex + 1]), textContent: storySource }],
         authoringAudit: preview.package.authoring?.authoringAudit,
+        sourceDialogueLedger: auditedDialogues,
     });
     const checks = [...report.checks, ...authoring.checks, ...(preview.package.authoring?.qualityGateReport?.checks || []).map((check) => ({ ...check, scope: `作者自检/${check.scope}` }))];
     const lockedSourceHash = preview.package.project.productionLock?.storySourceHash;

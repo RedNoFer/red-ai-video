@@ -1,12 +1,12 @@
 import type { DramaProductionPackageV1, DramaQualityGateCheck, DramaQualityGateReport } from "@/lib/drama-project-contract";
-import { extractDramaSourceDialogues, normalizeDramaSpeaker } from "@/lib/drama-source-dialogue";
+import { extractDramaSourceDialogues, normalizeDramaSpeaker, type DramaSourceDialogue } from "@/lib/drama-source-dialogue";
 import { normalizeDramaDialogueSequenceText } from "@/lib/drama-dialogue-timing";
 import { validateDramaContinuityEdges } from "@/lib/drama-continuity-policy";
 import { extractDramaVideoPromptCards, validateDramaVideoPromptCardLayout, validateDramaVideoPromptUtteranceCoverage } from "@/lib/drama-prompt-quality";
 import { DRAMA_PACKAGE_SECTIONS } from "@/lib/server/drama-production-package-contract";
 
 /** Deterministic, read-only facts. Import presents findings as warnings. */
-export function reviewDramaPackage(value: DramaProductionPackageV1, markdown?: string, sourceText?: string): DramaQualityGateReport {
+export function reviewDramaPackage(value: DramaProductionPackageV1, markdown?: string, sourceText?: string, auditedDialogues?: readonly DramaSourceDialogue[]): DramaQualityGateReport {
     const checks: DramaQualityGateCheck[] = [];
     const add = (code: string, scope: string, evidence: string, sourceRefs: string[], fixHint: string, passed = false) =>
         checks.push({ code, scope, status: passed ? "passed" : "blocked", severity: passed ? "warning" : "blocker", evidence, sourceRefs, fixHint });
@@ -19,8 +19,18 @@ export function reviewDramaPackage(value: DramaProductionPackageV1, markdown?: s
     }
     for (const error of validateDramaContinuityEdges(value.episodes)) add("CONTINUITY", "相邻片段与状态覆盖", error, ["continuityEdges", "entryState", "exitState"], "逐对登记转换依据并核对角色、道具、空间及轴线。");
     if (markdown) {
-        const body = markdown.replace(/```drama-production-package[^\n]*\n[\s\S]*?```/gu, "");
-        const chapters = [...body.matchAll(/^##\s+([^\n]+)\n([\s\S]*?)(?=^##\s|$(?![\s\S]))/gmu)].filter((match) => !match[1].includes("规范对象"));
+        const body = removeDramaPackageCodeBlock(markdown);
+        const chapters: Array<[string, string, string]> = [];
+        let current: [string, string, string] | undefined;
+        for (const line of body.split(/\r?\n/u)) {
+            const heading = /^##\s+([^\n]+)$/u.exec(line);
+            const sectionHeading = heading && DRAMA_PACKAGE_SECTIONS.find((title) => heading[1].includes(title));
+            if (heading && (sectionHeading || heading[1].includes("规范对象"))) {
+                if (current && !current[1].includes("规范对象")) chapters.push(current);
+                current = sectionHeading ? [line, heading[1], ""] : undefined;
+            } else if (current) current[2] += `${line}\n`;
+        }
+        if (current && !current[1].includes("规范对象")) chapters.push(current);
         if (chapters.length !== DRAMA_PACKAGE_SECTIONS.length) add("PACKAGE_SCHEMA", "章节结构", `要求 13 个固定章节，实际 ${chapters.length} 个`, ["markdown"], "辅助字段说明放在配套文档，不新增制作包章节。");
         for (const [index, title] of DRAMA_PACKAGE_SECTIONS.entries()) {
             if (!chapters[index]?.[1].includes(title)) add("PACKAGE_SCHEMA", `第 ${index + 1} 章`, `正文章节缺失或顺序错误：${title}`, ["markdown", "archive.sections"], "保留 13 个固定章节，并与 JSON 归档一致。");
@@ -59,10 +69,12 @@ export function reviewDramaPackage(value: DramaProductionPackageV1, markdown?: s
         }
     }
     if (sourceText !== undefined) {
-        const lines = extractDramaSourceDialogues(
-            sourceText,
-            value.assets.characters.map((character) => character.name),
-        );
+        const lines =
+            auditedDialogues ||
+            extractDramaSourceDialogues(
+                sourceText,
+                value.assets.characters.map((character) => character.name),
+            );
         const utterances = value.episodes.flatMap((episode) => episode.shots.flatMap((shot) => shot.utterances || []));
         let cursor = 0;
         for (const line of lines) {
@@ -105,4 +117,12 @@ export function reviewDramaPackage(value: DramaProductionPackageV1, markdown?: s
     const cards = value.episodes.flatMap((episode) => episode.shots.flatMap((shot) => extractDramaVideoPromptCards(shot.videoPrompt)));
     add("CONTINUITY", "检查范围", `逐对检查 ${value.episodes.reduce((count, episode) => count + Math.max(0, episode.shots.length - 1), 0)} 对相邻片段和 ${cards.length} 张公开镜头卡；只检查文本，未验收实际媒体`, ["episodes", "videoPrompt"], "", true);
     return { status: checks.some((check) => check.status === "blocked") ? "blocked" : "passed", checks };
+}
+
+function removeDramaPackageCodeBlock(markdown: string) {
+    const header = /```drama-production-package[^\n]*\n/iu.exec(markdown);
+    if (!header) return markdown;
+    const contentStart = header.index + header[0].length;
+    const contentEnd = markdown.indexOf("```", contentStart);
+    return contentEnd < 0 ? markdown : `${markdown.slice(0, header.index)}${markdown.slice(contentEnd + 3)}`;
 }

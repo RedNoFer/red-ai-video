@@ -53,7 +53,9 @@ describe("drama generation preflight", () => {
         expect(result.revisedPrompts?.["shot-one"]).toEqual({ imagePrompt: "修订后的分镜提示词", videoPrompt: "修订后的视频提示词" });
         expect(project.episodes[0].shots[0].videoPrompt).toBe("Karin站在门前");
         const messages = mocks.requestStructuredText.mock.calls[0]?.[0]?.messages as Array<{ role: string; content: string }>;
-        expect(messages[0]?.content).toContain("项目视觉风格：写实");
+        expect(messages[0]?.content).toContain("不得补写、移动、改写或重复全局视觉、风格、光色段落");
+        expect(messages[0]?.content).toContain("每个 Cut to 描述独立换行");
+        expect(messages[0]?.content).not.toContain("项目视觉风格：写实");
         expect(messages[0]?.content).not.toContain("纯写实摄影或真人影视感");
     });
 

@@ -38,24 +38,22 @@ describe("drama prompt compiler", () => {
         const scene = { ...project.scenes[0], profile: { visualIdentity: "后左门、右窗、中央木桌", styling: "旧木地板、石墙、湿玻璃", colorPalette: "木褐、石灰", consistencyRules: "桌与门之间留通道" } };
         expect(compileDramaAssetReferencePrompt(project, scene, "场景")).toContain("旧木地板、石墙、湿玻璃");
     });
-    it("renders the visual style as natural standalone prompt text without project metadata", () => {
+    it("does not append a visual contract to an already authored Seedance prompt", () => {
         const project = createProject();
         project.style = "冷峻纪实，真实颗粒与哑光皮肤";
         project.productionBible = { ...project.productionBible!, visualStyle: project.style };
         const source = [
-            "### 镜头 01 | 0—3秒 | 中景 | 50mm | 侧45度 | 缓推 | 人物镜头",
-            "画面内容：Karin抬手。",
-            "色调：冷灰；左侧窗光。",
-            "### 镜头 02 | 3—7秒 | 近景 | 85mm | 侧面 | 固定 | 人物镜头",
-            "画面内容：Karin的手指停住。",
-            "色调：冷灰；窗光擦过指节。",
+            "开场时，Karin站在黑湖边，晨雾留在背景，左侧天光照亮她的脸。",
+            "00.0–03.0秒，中景平视固定机位，Karin抬眼看向湖面，手指停在断剑护手。",
+            "Cut to：手部近景，断剑的水珠滑落。",
+            "03.0–05.0秒，Karin收紧手指并垂下视线，水声在停顿间恢复。",
+            "结束时，Karin仍站在湖岸，右手停在断剑护手。",
         ].join("\n");
 
         const compiled = applyDramaVideoVisualContract(project, source);
-        expect(compiled.match(/视觉质感采用：/gu)).toHaveLength(1);
+        expect(compiled).toContain("Cut to：手部近景");
+        expect(compiled).not.toContain("视觉质感采用：");
         expect(compiled).not.toContain("项目视觉合同");
-        expect(compiled).toContain("色调：冷灰；左侧窗光。");
-        expect(compiled).toContain("色调：冷灰；窗光擦过指节。");
         expect(applyDramaVideoVisualContract(project, compiled)).toBe(compiled);
     });
     it("derives one server-side shot contract for video and keyframe consumers", () => {
@@ -81,7 +79,7 @@ describe("drama prompt compiler", () => {
         expect(contract).not.toHaveProperty("project");
     });
 
-    it("embeds exact image duties in the editable supplier prompt", () => {
+    it("embeds exact image duties once after authored text and locks character identity", () => {
         const prompt = appendDramaImageReferenceBindings("静态关键帧：Karin站在黑湖边", [
             { id: "character-one", label: "角色固定资产「Karin」", binding: "锁定身份与服装" },
             { id: "scene-one", label: "场景固定资产「黑湖记忆」", binding: "锁定空间拓扑与主光方向" },
@@ -89,8 +87,9 @@ describe("drama prompt compiler", () => {
 
         expect(prompt).toContain("@图片1：角色固定资产「Karin」；绑定规则：锁定身份与服装");
         expect(prompt).toContain("@图片2：场景固定资产「黑湖记忆」；绑定规则：锁定空间拓扑与主光方向");
-        expect(prompt.startsWith("【参考图片】\n@图片1")).toBe(true);
-        expect(prompt.endsWith("静态关键帧：Karin站在黑湖边")).toBe(true);
+        expect(prompt.startsWith("静态关键帧：Karin站在黑湖边")).toBe(true);
+        expect(prompt).toContain("\n\n参考图片：\n@图片1");
+        expect(prompt.match(/每张角色资产图均展示同一个人的不同观察角度/gu)).toHaveLength(1);
         expect(appendDramaImageReferenceBindings(prompt, [])).toBe("静态关键帧：Karin站在黑湖边");
         expect(appendDramaImageReferenceBindings(prompt, [{ id: "scene-one", label: "场景固定资产「黑湖记忆」", binding: "锁定空间拓扑与主光方向" }])).toContain("@图片1：场景固定资产「黑湖记忆」");
         expect(appendDramaImageReferenceBindings(prompt, [{ id: "scene-one", label: "场景固定资产「黑湖记忆」", binding: "锁定空间拓扑与主光方向" }])).not.toContain("@图片2：");
@@ -101,7 +100,7 @@ describe("drama prompt compiler", () => {
             { id: "frame-one", label: "顺序帧 1（开始）", binding: "作为开始阶段画面依据" },
         ]);
 
-        expect(prompt.match(/【参考图片】/gu)).toHaveLength(1);
+        expect(prompt.match(/(?:^|\n)参考图片：/gu)).toHaveLength(1);
         expect(prompt).not.toContain("参考图顺序（与视频请求数组完全一致）");
         expect(prompt).toContain("单一主运镜：缓慢推进");
         expect(prompt).toContain("@图片1：顺序帧 1（开始）；绑定规则：作为开始阶段画面依据");
@@ -294,21 +293,19 @@ describe("drama prompt compiler", () => {
         expect(styleLine).not.toContain("四视图必须是同一身份");
     });
 
-    it("recompiles video and static-frame style sections from the current project contract", () => {
+    it("preserves authored video prose and normalizes static-frame style from the project contract", () => {
         const project = createProject();
         const westernCg = "西方CG电影级写实幻想，physically based 3D，冷蓝灰与旧银";
         project.style = westernCg;
         project.productionBible = { ...project.productionBible!, visualStyle: westernCg };
         const shot = project.episodes[0].shots[0];
         shot.imagePrompt = "画面主体：女主穿着黑灰窄袖长袍，黑发束起，站在门边\n可见状态：抬头看向门口\n光色与风格：旧东方古风国漫";
-        shot.videoPrompt = "动态意图：女主抬头看向门口，旧银护腕反光\n视觉风格与光色：旧东方古风国漫";
+        shot.videoPrompt = "开场时，女主站在门边。\n00.0–03.0秒，中景固定机位，女主抬头看向门口，旧银护腕反光。\n结束时，女主仍站在门边，视线停在门口。";
 
         const prompts = compileDramaShotExecutionPrompts(project, project.episodes[0], shot);
         const framePrompt = compileDramaFrameSupplierPrompt(project, project.episodes[0], shot);
 
-        expect(prompts.videoPrompt).toContain(`视觉质感采用：${westernCg}`);
-        expect(prompts.videoPrompt).not.toContain("旧东方古风国漫");
-        expect(prompts.videoPrompt).not.toContain("旧银护腕");
+        expect(prompts.videoPrompt).toBe(shot.videoPrompt);
         expect(framePrompt).toContain(`项目视觉合同（唯一风格来源）：${westernCg}`);
         expect(framePrompt).not.toContain("旧东方古风国漫");
         expect(framePrompt).not.toContain("黑灰窄袖长袍");
@@ -887,32 +884,20 @@ describe("drama prompt compiler", () => {
         ).toBe(false);
     });
 
-    it("does not carry an asset supplier prompt into a video prompt", () => {
+    it("does not carry an asset supplier prompt into a video prompt or rewrite authored prose", () => {
         const project = createProject();
         const westernCg = "西方CG电影级写实幻想，physically based 3D，冷蓝灰与旧银";
         project.style = westernCg;
         project.productionBible = { ...project.productionBible!, visualStyle: westernCg };
         const shot = project.episodes[0].shots[0];
-        shot.videoPrompt = [
-            "主体与资产类型：角色「萧炎」",
-            "身份/结构锚点：少年；黑发束起；由被审判的沉默转成冷肃反击",
-            "一致性锁定：锁定五官、发束和四视图身份",
-            "可见状态与材质：服装按真实裁剪逻辑分层",
-            "构图与画幅：16:9纯白四视图",
-            "光色与风格：旧东方古风国漫",
-            "负面约束：无文字",
-            "动态意图：萧炎抬头锁定门口",
-            "单一主运镜：固定机位",
-        ].join("\n");
+        const authoredPrompt = "开场时，萧炎站在门边。\n00.0–03.0秒，中景固定机位，萧炎抬头锁定门口。\n结束时，萧炎仍站在门边，视线停在门口。";
+        shot.videoPrompt = authoredPrompt;
+        project.characters[0].supplierPrompt = "主体与资产类型：角色「萧炎」\n身份/结构锚点：少年；黑发束起\n一致性锁定：锁定五官和发束\n可见状态与材质：服装按真实裁剪逻辑分层\n构图与画幅：16:9纯白四视图\n光色与风格：旧东方古风国漫\n负面约束：无文字";
 
         const prompt = compileDramaShotExecutionPrompts(project, project.episodes[0], shot).videoPrompt;
 
-        expect(prompt).toContain("动态意图：萧炎抬头锁定门口");
-        expect(prompt).toContain("单一主运镜：固定机位");
-        expect(prompt).toContain(`视觉质感采用：${westernCg}`);
+        expect(prompt).toBe(authoredPrompt);
         expect(prompt).not.toContain("主体与资产类型：");
-        expect(prompt).not.toContain("身份/结构锚点：");
-        expect(prompt).not.toContain("被审判");
         expect(prompt).not.toContain("旧东方古风国漫");
     });
 
@@ -1109,7 +1094,7 @@ describe("drama prompt compiler", () => {
         expect(prompt).not.toContain("中性浅灰背景");
     });
 
-    it("applies the current project visual style to saved shot prompts", () => {
+    it("applies the current project visual style to static prompts without changing video prose", () => {
         const project = createProject();
         project.style = "现实悬疑电影感，冷蓝灰低饱和，手持摄影";
         project.productionBible = { ...project.productionBible!, visualStyle: project.style, colorScript: "冷蓝灰、低饱和" };
@@ -1117,7 +1102,7 @@ describe("drama prompt compiler", () => {
         const prompt = compileDramaShotExecutionPrompts(project, project.episodes[0], project.episodes[0].shots[0]);
 
         expect(prompt.imagePrompt).toContain(`项目视觉合同（唯一风格来源）：${project.style}`);
-        expect(prompt.videoPrompt).toContain(`视觉质感采用：${project.style}`);
+        expect(prompt.videoPrompt).toBe(project.episodes[0].shots[0].videoPrompt);
     });
 
     it("uses the configured VS7 style for character assets without a hardcoded theme", () => {
@@ -1209,7 +1194,7 @@ describe("drama prompt compiler", () => {
         expect(prompt).not.toContain("中性浅灰背景");
     });
 
-    it("does not let legacy execution image prompts override the current static source", () => {
+    it("keeps the selected execution video prompt while compiling static imagery from the current source", () => {
         const project = createProject();
         project.style = "冷色悬疑电影感，低饱和手持摄影";
         project.episodes[0].shots[0].executionImagePrompt = "旧版 VS14 分镜图，中性浅灰背景，多视角设定板";
@@ -1218,9 +1203,7 @@ describe("drama prompt compiler", () => {
         const prompts = compileDramaShotExecutionPrompts(project, project.episodes[0], project.episodes[0].shots[0]);
 
         expect(prompts.imagePrompt).toContain("项目视觉合同（唯一风格来源）：冷色悬疑电影感，低饱和手持摄影");
-        expect(prompts.videoPrompt).not.toContain("VS14");
-        expect(prompts.videoPrompt).not.toContain("中性灰背景");
-        expect(prompts.videoPrompt).not.toContain("统一视觉风格（最高级风格约束）");
+        expect(prompts.videoPrompt).toBe("旧版 VS14 视频，保持中性灰背景");
     });
 
     it.each(["角色", "场景", "道具"] as const)("sanitizes legacy visual fields for %s assets", (kind) => {

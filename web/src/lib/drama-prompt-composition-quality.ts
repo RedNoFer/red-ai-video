@@ -53,7 +53,7 @@ export function validateDramaPromptComposition(input: DramaPromptCompositionInpu
         if (ratio && !VISIBLE_SCOPE_TERMS.test(text) && !SUBJECT_TERMS.test(text)) errors.push(`${frameLabel}未明确主体可见范围或空间层级`);
         const detailSubject = /(?:手部|道具|物件|封印|信封|纯环境|环境|空间)(?:近景|特写)|(?:近景|特写)[^。\n]*(?:主体|只拍)[^。\n]*(?:手|封印|道具)/u.test(text);
         if (CLOSE_SHOT.test(text) && !detailSubject && !CLARITY_TERMS.test(text)) errors.push(`${frameLabel}为人物近景/特写但未声明完整头顶、下巴、主要衣领或防裁脸防遮挡安全区`);
-        if (OCCLUSION.test(text)) errors.push(`${frameLabel}存在前景或门框遮脸、裁脸或主要人物被遮挡描述`);
+        if (OCCLUSION.test(text.replace(/不遮脸|不裁脸|防遮脸|防裁脸|无遮挡/gu, ""))) errors.push(`${frameLabel}存在前景或门框遮脸、裁脸或主要人物被遮挡描述`);
 
         if (ratio === "9:16") {
             const visibleSubjects = subjects.filter((subject) => text.includes(subject));
