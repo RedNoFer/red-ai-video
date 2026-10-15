@@ -73,6 +73,19 @@ describe("Drama generation production workspace", () => {
         expect(executionPrompt).not.toContain("updateShot(project.id, episode.id, shot.id");
     });
 
+    it("shows the same complete submission prompt in shot details and generation confirmation", async () => {
+        const source = await readFile(resolve(process.cwd(), "src/app/(user)/drama/[id]/drama-generation-panel.tsx"), "utf8");
+        const details = source.slice(source.indexOf("function ShotExecutionDetails"), source.indexOf("function compactShotSourceEvidence"));
+        const preview = source.slice(source.indexOf("function compileProductionPreviewPrompt"), source.indexOf("function ProductionPromptPreview"));
+
+        expect(source).toContain("defaultDramaVideoSubmissionPrompt(project, episode, shot)");
+        expect(details).toContain("data-drama-final-submission-prompt");
+        expect(details).toContain("value={submissionPromptPreview}");
+        expect(preview).toContain("compileDramaVideoSubmissionPrompt(row.basePrompt");
+        expect(source.indexOf("data-drama-character-voices")).toBeGreaterThan(source.indexOf("data-drama-prompt-reference-gallery"));
+        expect(source).toContain("人物音色应用");
+    });
+
     it("cancels video tasks through their server action instead of a writable status field", async () => {
         const source = await readFile(resolve(process.cwd(), "src/app/(user)/drama/[id]/drama-generation-panel.tsx"), "utf8");
 

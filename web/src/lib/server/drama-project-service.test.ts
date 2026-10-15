@@ -1247,7 +1247,10 @@ describe("drama project service updates", () => {
         ];
         mocks.getDramaProject.mockResolvedValue(current);
 
-        const saved = await updateDramaShotPromptForUser("user-one", current.id, "episode-one", "shot-one", { executionVideoPrompt: "动态意图：Karin握住断剑。", executionVideoPromptOrigin: "manual" });
+        const saved = await updateDramaShotPromptForUser("user-one", current.id, "episode-one", "shot-one", {
+            executionVideoPrompt: "动态意图：Karin握住断剑。\n减切原因：结果停留；实际：3帧/2次硬切；修订状态：reduced-density-exception-registered-awaiting-final-QC。",
+            executionVideoPromptOrigin: "manual",
+        });
 
         expect(saved.episodes[0].shots[0]).toMatchObject({ executionVideoPrompt: "动态意图：Karin握住断剑。", fieldOrigins: { executionVideoPrompt: "manual" } });
         expect(mocks.queryStoredGenerationTasks).not.toHaveBeenCalled();

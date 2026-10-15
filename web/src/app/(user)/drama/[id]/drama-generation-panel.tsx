@@ -20,7 +20,7 @@ import {
     updateDramaShotPromptPatch,
 } from "@/services/api/drama-projects";
 import { resolveModelRequestConfig, useEffectiveConfig } from "@/stores/use-config-store";
-import { compileDramaShotExecutionPrompts, formatDramaVideoPromptCutLines } from "@/lib/drama-prompt-compiler";
+import { compileDramaShotExecutionPrompts, formatDramaVideoPromptCutLines, stripDramaInternalVideoQc } from "@/lib/drama-prompt-compiler";
 import { dramaShotCharacterVoiceReferences } from "@/lib/drama-character-voice-reference";
 import { buildVideoReferenceBindings, compileDramaVideoSubmissionPrompt } from "@/lib/drama-video-submission";
 import { approvedAssetReference, approvedScenePanoramaReference } from "@/lib/drama-asset-baseline";
@@ -409,17 +409,10 @@ export function DramaGenerationPanel({
         const selectionState: { selections: Record<string, string[]>; referenceModes: Record<string, DramaVideoReferenceMode>; videoPrompts: Record<string, string>; invalid: boolean } = {
             selections: Object.fromEntries(promptRows.map((row) => [row.shot.id, row.references.filter((reference) => reference.required || reference.recommended).map((reference) => reference.id)])),
             referenceModes: Object.fromEntries(promptRows.map((row) => [row.shot.id, "reference" as const])),
-            videoPrompts: Object.fromEntries(promptRows.map((row) => [row.shot.id, row.basePrompt])),
+            videoPrompts: {},
             invalid: false,
         };
-        for (const row of promptRows)
-            selectionState.videoPrompts[row.shot.id] = compileDramaVideoSubmissionPrompt(
-                row.basePrompt,
-                project,
-                row.shot,
-                previewSelectedVideoBindings(project, row, selectionState.selections[row.shot.id], "reference"),
-                selectionState.selections[row.shot.id],
-            );
+        for (const row of promptRows) selectionState.videoPrompts[row.shot.id] = compileProductionPreviewPrompt(project, row, selectionState.selections[row.shot.id], "reference");
         const dialog: ReturnType<typeof modal.confirm> = modal.confirm({
             title: `确认生成 ${selectedShots.length} 个镜头`,
             width: "min(760px, calc(100vw - 24px))",
@@ -1079,7 +1072,7 @@ function ShotTaskRow({
                                 {shot.audioMode === "voiceover" ? <AudioTag status={shot.audioStatus} /> : <Tag className="!m-0">{shot.audioMode === "mute" ? "静音" : "视频原声"}</Tag>}
                             </div>
                         </div>
-                        <p className="mt-2 line-clamp-2 text-sm leading-6 text-muted-foreground">{shot.executionVideoPrompt || shot.videoPrompt || "视频提示词尚未填写，请补充后生成。"}</p>
+                        <p className="mt-2 line-clamp-2 text-sm leading-6 text-muted-foreground">{defaultDramaVideoSubmissionPrompt(project, episode, shot) || "视频提示词尚未填写，请补充后生成。"}</p>
                         <Button type="text" size="small" className="mt-1 !h-7 !px-0 text-xs" icon={detailsOpen ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />} onClick={() => setDetailsOpen((value) => !value)}>
                             {detailsOpen ? "收起详情" : "展开详情"}
                         </Button>
@@ -1243,8 +1236,9 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
             .map((frame) => ({ ...frame, label: "本镜尾帧" })),
     ];
     const executionReferences = resolveShotVideoReferences(project, episode, shot, productionRun);
-    const persistedVideoPrompt = shot.executionVideoPrompt?.trim() || shot.videoPrompt?.trim() || "";
-    const supplierVideoPrompt = persistedVideoPrompt || videoStep?.executionPrompt?.trim() || "";
+    const persistedVideoPrompt = stripDramaInternalVideoQc(shot.executionVideoPrompt?.trim() || shot.videoPrompt?.trim() || "");
+    const supplierVideoPrompt = stripDramaInternalVideoQc(persistedVideoPrompt || videoStep?.executionPrompt?.trim() || "");
+    const submissionPromptPreview = defaultDramaVideoSubmissionPrompt(project, episode, shot);
     useEffect(() => {
         const previous = promptSeedRef.current;
         const newShot = previous.shotId !== shot.id;
@@ -1290,7 +1284,7 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
         }
     };
     const saveVideoPrompt = async () => {
-        const prompt = formatDramaVideoPromptCutLines(videoPromptDraft);
+        const prompt = formatDramaVideoPromptCutLines(stripDramaInternalVideoQc(videoPromptDraft));
         if (!prompt || savingVideoPrompt) return;
         setSavingVideoPrompt(true);
         try {
@@ -1445,7 +1439,7 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0">
                         <div className="font-medium text-foreground">视频执行提示词（当前标准）</div>
-                        <p className="mt-1 text-[11px] text-muted-foreground">生成与重试以此执行版为准。</p>
+                        <p className="mt-1 text-[11px] text-muted-foreground">下方完整提交预览与生成确认弹窗共用同一编译结果。</p>
                     </div>
                     <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5 sm:ml-3">
                         <Button size="small" className="shrink-0" icon={<Sparkles className="size-3.5" />} loading={optimizingVideoPrompt} disabled={!videoPromptDraft.trim() || optimizingVideoPrompt} onClick={() => void optimizeVideoPrompt()}>
@@ -1466,6 +1460,11 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
                         </Button>
                     </div>
                 </div>
+                <div className="mt-2" data-drama-final-submission-prompt>
+                    <div className="mb-1 text-xs font-medium text-foreground">完整提交提示词（与生成确认弹窗一致）</div>
+                    <Input.TextArea value={submissionPromptPreview} readOnly autoSize={{ minRows: 5, maxRows: 14 }} aria-label="完整提交提示词" />
+                </div>
+                <div className="mt-3 text-xs font-medium text-foreground">基础正文（可编辑）</div>
                 <Input.TextArea
                     className="mt-2"
                     value={videoPromptDraft}
@@ -1474,7 +1473,7 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
                         if (optimizedFramePlan) setOptimizedFramePlan(undefined);
                     }}
                     autoSize={{ minRows: 5, maxRows: 14 }}
-                    placeholder="直接填写视频提示词；分镜帧仅用于可选细节参考"
+                    placeholder="编辑独立镜头正文；提交时会按本次真实引用补入参考图片和音色"
                 />
             </div>
         </div>
@@ -1514,6 +1513,23 @@ function previewSelectedVideoBindings(project: DramaProject, row: ProductionProm
         selectedIds.filter((id) => !frames.some((frame) => frame.id === id)),
         tail?.id.slice("tail-".length),
         mode,
+    );
+}
+
+function compileProductionPreviewPrompt(project: DramaProject, row: ProductionPromptRow, selectedIds: string[], mode: DramaVideoReferenceMode = "reference") {
+    return compileDramaVideoSubmissionPrompt(row.basePrompt, project, row.shot, previewSelectedVideoBindings(project, row, selectedIds, mode), selectedIds);
+}
+
+function defaultDramaVideoSubmissionPrompt(project: DramaProject, episode: DramaEpisode, shot: DramaShot) {
+    const row: ProductionPromptRow = {
+        shot,
+        references: previewVideoReferenceBindings(project, episode, shot),
+        basePrompt: compileDramaShotExecutionPrompts(project, episode, shot).videoPrompt,
+    };
+    return compileProductionPreviewPrompt(
+        project,
+        row,
+        row.references.filter((reference) => reference.required || reference.recommended).map((reference) => reference.id),
     );
 }
 
@@ -1576,7 +1592,7 @@ function ProductionPromptPreview({
                     return reference ? [{ ...reference, alias: binding.alias }] : [];
                 });
                 const limit = maxReferenceImages;
-                const audioVoices = dramaShotCharacterVoiceReferences(project, shot, selectedIds).filter((voice) => voice.audio);
+                const characterVoices = dramaShotCharacterVoiceReferences(project, shot, selectedIds);
                 const allFrames = referenceModes[shot.id] === "all_frames";
                 const frameIds = new Set(shot.framePlan?.frames.map((frame) => frame.id) || []);
                 const frameReferences = references.filter((reference) => reference.kind === "frame");
@@ -1678,6 +1694,18 @@ function ProductionPromptPreview({
                                 })}
                             </div>
                         </div>
+                        {characterVoices.length ? (
+                            <div className="mt-3 grid gap-2 border-t border-border/70 pt-3" data-drama-character-voices>
+                                <h5 className="text-xs font-medium">人物音色应用</h5>
+                                {characterVoices.map((voice) => (
+                                    <div key={voice.characterId} className="grid min-w-0 gap-1 text-xs" data-drama-character-voice={voice.characterId}>
+                                        <span className="font-medium">{voice.name}</span>
+                                        <span className="break-words text-muted-foreground">{voice.audio ? "本次使用该角色的已确认音频样本作为声线参考。" : voice.timbrePrompt || "未配置固定音色；本次不追加音色句。"}</span>
+                                        {voice.audio ? <audio className="max-w-full" controls preload="metadata" src={voice.audio.url} aria-label={`${voice.name}角色配音音频`} /> : null}
+                                    </div>
+                                ))}
+                            </div>
+                        ) : null}
                         {assetPickerShotId === shot.id ? (
                             <div className="mt-3 rounded-md border border-border p-2.5" aria-label="固定资产图选择" data-drama-fixed-asset-picker>
                                 <Input aria-label="搜索固定资产图" placeholder="按资产名称搜索" value={assetSearch} onChange={(event) => setAssetSearch(event.target.value)} allowClear />
@@ -1708,17 +1736,6 @@ function ProductionPromptPreview({
                                 <Button className="mt-2" size="small" onClick={onOpenAssets}>
                                     去项目资产生成 / 确认基准图
                                 </Button>
-                            </div>
-                        ) : null}
-                        {audioVoices.length ? (
-                            <div className="mt-3 grid gap-2 border-t border-border/70 pt-3" data-drama-character-voices>
-                                <h5 className="text-xs font-medium">配音音频试听</h5>
-                                {audioVoices.map((voice) => (
-                                    <div key={voice.characterId} className="grid min-w-0 gap-1 text-xs" data-drama-character-voice={voice.characterId}>
-                                        <span className="font-medium">{voice.name}</span>
-                                        <audio className="max-w-full" controls preload="metadata" src={voice.audio!.url} aria-label={`${voice.name}角色配音音频`} />
-                                    </div>
-                                ))}
                             </div>
                         ) : null}
                     </section>

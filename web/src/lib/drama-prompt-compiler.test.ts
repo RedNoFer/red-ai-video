@@ -56,6 +56,20 @@ describe("drama prompt compiler", () => {
         expect(compiled).not.toContain("项目视觉合同");
         expect(applyDramaVideoVisualContract(project, compiled)).toBe(compiled);
     });
+    it("removes internal density bookkeeping while preserving the authored prompt", () => {
+        const project = createProject();
+        const source = [
+            "开场时，萧战坐在长桌北侧，右手摊开，掌心留着玉粉。",
+            "00.0–30.0秒，中景平视固定，萧战手掌停稳，纸页轻响。减切原因：结果停留；实际：3帧/2次硬切；修订状态：reduced-density-exception-registered-awaiting-final-QC。",
+            "结束时，萧战仍坐在北侧，右手停在原处，玉粉未动。",
+        ].join("\n");
+
+        const compiled = applyDramaVideoVisualContract(project, source);
+
+        expect(compiled).toContain("中景平视固定，萧战手掌停稳，纸页轻响。");
+        expect(compiled).toContain("结束时，萧战仍坐在北侧");
+        expect(compiled).not.toMatch(/减切原因|实际：3帧|修订状态|reduced-density-exception/iu);
+    });
     it("derives one server-side shot contract for video and keyframe consumers", () => {
         const project = createProject();
         const shot = project.episodes[0].shots[0];

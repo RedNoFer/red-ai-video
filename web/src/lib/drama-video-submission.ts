@@ -1,16 +1,18 @@
 import { approvedAssetReference, approvedScenePanoramaReference, hasApprovedAssetReference, hasApprovedScenePanoramaReference } from "@/lib/drama-asset-baseline";
 import { appendDramaCharacterVoiceBindings, dramaShotCharacterVoiceReferences } from "@/lib/drama-character-voice-reference";
-import { appendDramaImageReferenceBindings } from "@/lib/drama-prompt-compiler";
+import { appendDramaImageReferenceBindings, stripDramaInternalVideoQc } from "@/lib/drama-prompt-compiler";
 import type { DramaEpisode, DramaProject, DramaShot, DramaVideoReferenceBinding, DramaVideoReferenceMode } from "@/lib/drama-project-contract";
 
 /** Build the complete editable prompt before confirmation; dispatch sends it unchanged. */
 export function compileDramaVideoSubmissionPrompt(prompt: string, project: DramaProject, shot: DramaShot, bindings: DramaVideoReferenceBinding[], assetIds: string[]) {
-    const body = prompt.replace(/(?:^|\n)【角色音色】[\s\S]*?(?=\n(?:开场时，|参考图片：|\d+(?:\.\d+)?\s*(?:-|至|到|—|–|~|～)\s*\d+(?:\.\d+)?\s*秒\s*[，,:：]|结束时，))/u, "\n").trim();
+    const body = stripDramaInternalVideoQc(prompt)
+        .replace(/(?:^|\n)【角色音色】[\s\S]*?(?=\n(?:开场时，|参考图片：|\d+(?:\.\d+)?\s*(?:-|至|到|—|–|~|～)\s*\d+(?:\.\d+)?\s*秒\s*[，,:：]|结束时，))/u, "\n")
+        .trim();
     const withReferences = appendDramaImageReferenceBindings(
         body,
         bindings.map((binding, index) => ({ id: binding.sourceId || binding.frameId || `reference-${index}`, label: binding.purpose, isCharacter: binding.role === "character_anchor" })),
     );
-    return appendDramaCharacterVoiceBindings(withReferences, dramaShotCharacterVoiceReferences(project, shot, assetIds));
+    return stripDramaInternalVideoQc(appendDramaCharacterVoiceBindings(withReferences, dramaShotCharacterVoiceReferences(project, shot, assetIds)));
 }
 
 export function buildVideoReferenceBindings(

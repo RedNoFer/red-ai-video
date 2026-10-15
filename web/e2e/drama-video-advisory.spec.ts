@@ -53,9 +53,15 @@ for (const width of [1672, 390, 430]) {
         await expect(page.getByRole("button", { name: "生成 3 个就绪镜头", exact: true })).toBeEnabled();
         await expectNoHorizontalOverflow(page, `${width}px advisory video generation`);
 
-        await page.getByRole("button", { name: "生成镜头", exact: true }).first().click();
+        const firstShot = page.locator("[data-drama-shot-task]").first();
+        await firstShot.getByRole("button", { name: "展开详情" }).click();
+        const detailPrompt = firstShot.locator("[data-drama-final-submission-prompt] textarea");
+        const detailPromptText = await detailPrompt.inputValue();
+        expect(detailPromptText).not.toMatch(/减切原因|修订状态|reduced-density-exception/iu);
+        await firstShot.getByRole("button", { name: "生成镜头", exact: true }).click();
         const confirmation = page.getByRole("dialog", { name: "确认生成 1 个镜头" });
         await expect(confirmation).toBeVisible();
+        await expect(confirmation.getByRole("textbox", { name: `${shots[0].title}视频提示词` })).toHaveValue(detailPromptText);
         const submitted = page.waitForResponse((response) => response.url().endsWith(`/api/drama/projects/${project.id}/production-runs`) && response.request().method() === "POST");
         await confirmation.getByRole("button", { name: "确认生成", exact: true }).click();
         const response = await submitted;

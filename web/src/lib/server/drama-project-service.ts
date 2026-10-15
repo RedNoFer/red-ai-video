@@ -46,7 +46,7 @@ import type {
     DramaVideoReferenceMode,
 } from "@/lib/drama-project-contract";
 import { dramaRichContentToPlainText, normalizeDramaScriptRichContent } from "@/lib/drama-script-rich-content";
-import { appendDramaImageReferenceBindings, dramaAssetPromptFields, hasDramaAssetPromptQuality, stripDramaReferenceBindingSections } from "@/lib/drama-prompt-compiler";
+import { appendDramaImageReferenceBindings, dramaAssetPromptFields, hasDramaAssetPromptQuality, stripDramaInternalVideoQc, stripDramaReferenceBindingSections } from "@/lib/drama-prompt-compiler";
 import { approvedAssetReference, approvedScenePanoramaReference, isLegacySceneReferenceBoard } from "@/lib/drama-asset-baseline";
 import { createFrameEvidence, decideActualEndFrame, invalidateFrameEvidence, replaceFrameEvidence, supersedeFrameEvidence } from "@/lib/drama-continuity-policy";
 import { DRAMA_STYLE_NAME, normalizeDramaStyleName, resolveDramaStyleContract } from "@/lib/drama-style";
@@ -1767,7 +1767,9 @@ export async function createDramaProductionRunForUser(userId: string, projectId:
     const videoPrompts = Object.fromEntries(
         Object.entries(object(object(value).videoPrompts)).map(([shotId, prompt]) => {
             if (!productionShots.some((shot) => shot.id === shotId) || typeof prompt !== "string" || !prompt.trim()) throw new DramaProjectServiceError("镜头提示词不能为空，且只能编辑本次生成的镜头", 400);
-            return [shotId, prompt];
+            const cleanedPrompt = stripDramaInternalVideoQc(prompt);
+            if (!cleanedPrompt) throw new DramaProjectServiceError("镜头提示词不能为空", 400);
+            return [shotId, cleanedPrompt];
         }),
     );
     const referenceModes = Object.fromEntries(productionShots.map((shot) => [shot.id, resolveDramaVideoReferenceMode(submittedReferenceModes[shot.id])])) as Record<string, DramaVideoReferenceMode>;
@@ -3232,7 +3234,7 @@ export async function updateDramaShotPromptForUser(userId: string, projectId: st
     const episodeId = cleanText(episodeIdValue);
     const shotId = cleanText(shotIdValue);
     const input = object(value);
-    const videoPrompt = cleanText(input.executionVideoPrompt);
+    const videoPrompt = stripDramaInternalVideoQc(cleanText(input.executionVideoPrompt));
     const videoPromptOrigin: DramaFieldOrigin = input.executionVideoPromptOrigin === "manual" ? "manual" : "ai";
     const hasFramePlanPatch = Object.prototype.hasOwnProperty.call(input, "framePlan");
     const imagePrompt = cleanText(input.imagePrompt);
@@ -3294,7 +3296,7 @@ export async function updateDramaShotPromptPatchForUser(userId: string, projectI
     const episodeId = cleanText(episodeIdValue);
     const shotId = cleanText(shotIdValue);
     const input = object(value);
-    const videoPrompt = cleanText(input.executionVideoPrompt);
+    const videoPrompt = stripDramaInternalVideoQc(cleanText(input.executionVideoPrompt));
     const imagePrompt = cleanText(input.imagePrompt);
     const hasFramePlanPatch = Object.prototype.hasOwnProperty.call(input, "framePlan");
     const hasStoryboardFramesPatch = Object.prototype.hasOwnProperty.call(input, "storyboardFrames");
