@@ -381,6 +381,45 @@ describe("video task upstream reconciliation", () => {
         expect(mocks.fetchInternalApi).toHaveBeenCalledWith(`http://localhost/api/ai/system/channel/v1/videos/${task.upstream.id}`, expect.objectContaining({ cache: "no-store" }));
     });
 
+    it("recovers an existing completed Yingling task from its configured video content endpoint", async () => {
+        const task = videoTask({
+            status: "error",
+            error: "视频任务已完成但没有返回视频地址",
+            config: {
+                ...videoTask().config,
+                channelId: "yingling-video",
+                model: "dola-seedance2.5-30s",
+                advancedConfig: { protocol: "yinglingapi", queryPath: "/videos/:task_id", statusField: "status", resultField: "/videos/:task_id/content" } as NonNullable<VideoTask["config"]["advancedConfig"]>,
+            },
+        });
+        const completed = { ...task, status: "success" as const, error: undefined, result: { url: "/api/reference-assets/result.mp4", mimeType: "video/mp4", durationMs: 5_000 } };
+        mocks.claim.mockResolvedValue(task);
+        mocks.get.mockResolvedValue(task);
+        mocks.fetchInternalApi.mockImplementation(async (url: string | URL | Request, init?: RequestInit) => {
+            const requestUrl = String(url);
+            if (requestUrl.endsWith(`/videos/${task.upstream.id}/content`) && init?.method === "HEAD") return new Response(null, { status: 405 });
+            if (requestUrl.endsWith(`/videos/${task.upstream.id}/content`) && new Headers(init?.headers).get("range") === "bytes=0-0") {
+                return new Response(new Uint8Array([0]), { status: 206, headers: { "content-type": "video/mp4" } });
+            }
+            return json({ id: task.upstream.id, status: "completed" });
+        });
+        mocks.complete.mockResolvedValue(completed);
+
+        await expect(refreshVideoTaskFromUpstream(task, "http://localhost", "session=test", true)).resolves.toEqual(completed);
+
+        expect(mocks.fetchInternalApi).toHaveBeenCalledTimes(3);
+        expect(mocks.fetchInternalApi.mock.calls.map(([url, init]) => [String(url), (init as RequestInit | undefined)?.method || "GET"])).toEqual([
+            [`http://localhost/api/ai/system/channel/videos/${task.upstream.id}`, "GET"],
+            [`http://localhost/api/ai/system/channel/videos/${task.upstream.id}/content`, "HEAD"],
+            [`http://localhost/api/ai/system/channel/videos/${task.upstream.id}/content`, "GET"],
+        ]);
+        expect(new Headers(mocks.fetchInternalApi.mock.calls[2]?.[1]?.headers).get("range")).toBe("bytes=0-0");
+        expect(mocks.normalize).toHaveBeenCalledWith(expect.objectContaining({ url: `/api/ai/system/channel/videos/${task.upstream.id}/content` }));
+        expect(mocks.complete).toHaveBeenCalledWith(task.id, expect.objectContaining({ url: "/api/reference-assets/result.mp4" }), false);
+        expect(mocks.fail).not.toHaveBeenCalled();
+        expect(mocks.refund).not.toHaveBeenCalled();
+    });
+
     it("keeps the New API error code with its failure message", async () => {
         const task = videoTask({
             config: {

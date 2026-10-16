@@ -26,7 +26,7 @@ vi.mock("@/lib/server/video-task-runtime", () => ({ refreshVideoTaskFromUpstream
 vi.mock("@/lib/server/generation-task-store", () => ({ getStoredGenerationTaskRecord: mocks.getSchedule }));
 vi.mock("@/lib/server/video-task-log", () => ({ writeVideoGenerationLog: mocks.writeLog }));
 vi.mock("@/lib/server/video-task-store", () => ({
-    canReconcileVideoTask: (task: { status: string; error?: string }) => task.status === "running" || (task.status === "error" && /视频生成超时|视频任务长时间未更新/.test(task.error || "")),
+    canReconcileVideoTask: (task: { status: string; error?: string }) => task.status === "running" || (task.status === "error" && /视频生成超时|视频任务长时间未更新|^视频任务已完成但没有返回视频地址$/.test(task.error || "")),
     getVideoTask: mocks.getVideoTask,
     transitionVideoTask: mocks.transition,
 }));
@@ -149,6 +149,26 @@ describe("GET /api/video-tasks/[id]", () => {
         expect(response.status).toBe(200);
         expect(mocks.refresh).toHaveBeenCalledWith(task, "http://localhost", "session=test", true);
         expect((await response.json()).task).toMatchObject({ id: task.id, status: "running", upstreamId: task.upstream.id });
+    });
+
+    it("manually recovers a completed provider task whose video address was missing locally", async () => {
+        const task = videoTask({ status: "error", error: "视频任务已完成但没有返回视频地址" });
+        const recovered = { ...task, status: "success", error: undefined, result: { url: "/api/reference-assets/recovered.mp4" } };
+        mocks.getVideoTask.mockResolvedValue(task);
+        mocks.refresh.mockResolvedValue(recovered);
+
+        const response = await POST(
+            new Request("http://localhost/api/video-tasks/local-video", {
+                method: "POST",
+                headers: { "content-type": "application/json", cookie: "session=test" },
+                body: JSON.stringify({ action: "refresh" }),
+            }),
+            context,
+        );
+
+        expect(response.status).toBe(200);
+        expect(mocks.refresh).toHaveBeenCalledWith(task, "http://localhost", "session=test", true);
+        expect((await response.json()).task).toMatchObject({ id: task.id, status: "success", result: recovered.result });
     });
 
     it("pulls and persists a newer provider result for an already successful task", async () => {

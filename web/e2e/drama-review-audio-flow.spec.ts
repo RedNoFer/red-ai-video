@@ -348,8 +348,8 @@ test("Voice Clone 生成独立 voice_id 并可播放本地试听音频", async (
     await expect.poll(async () => audio.evaluate((element) => element.currentTime)).toBeGreaterThan(0);
 });
 
-test("已完成镜头可以手动拉取供应商最新视频", async ({ page, request }) => {
-    const created = await request.post("/api/drama/projects", { data: { title: "E2E 拉取最新视频", summary: "验证已完成镜头的手动同步入口", ratio: "9:16" } });
+test("任务已完成但视频地址未保存时可以手动拉回原视频", async ({ page, request }) => {
+    const created = await request.post("/api/drama/projects", { data: { title: "E2E 拉回已完成视频", summary: "验证已完成供应商任务的手动恢复入口", ratio: "9:16" } });
     expect(created.ok(), await created.text()).toBe(true);
     const project = ((await created.json()) as { data: { project: DramaProject } }).data.project;
     const episode = project.episodes[0];
@@ -366,9 +366,9 @@ test("已完成镜头可以手动拉取供应商最新视频", async ({ page, re
         characterIds: [],
         propIds: [],
         clueIds: [],
-        generationStatus: "success",
+        generationStatus: "error",
         generationTaskId: "e2e-refresh-video-task",
-        videoUrl: "https://example.com/old-video.mp4",
+        generationError: "视频任务已完成但没有返回视频地址",
     };
     const saved = await saveDramaProjectFixture(request, project, {
         ...project,

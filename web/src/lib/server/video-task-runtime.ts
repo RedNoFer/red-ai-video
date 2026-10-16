@@ -4,7 +4,7 @@ import { generationMediaProxyHeaders } from "@/lib/server/generation-media-autho
 import { finishGenerationAttempt } from "@/lib/server/generation-attempt";
 import { fetchInternalApi } from "@/lib/server/internal-origin";
 import { resolveModelRequestTimeoutMs } from "@/lib/server/model-request-policy";
-import { isProviderBusinessError, providerQueryPaths, videoPollingPolicy } from "@/lib/server/provider-task-config";
+import { isProviderBusinessError, providerQueryPaths, providerTaskPath, videoPollingPolicy } from "@/lib/server/provider-task-config";
 import { registerGenerationTaskAssetsForUser } from "@/lib/server/creative-runtime-service";
 import { normalizeVideoResult } from "@/lib/server/video-result-normalizer";
 import {
@@ -51,7 +51,14 @@ export async function queryVideoTaskUpstream(task: VideoTask, origin: string, co
     if (resultUrlError) return { state: "failed", status: status || "failed", error: resultUrlError };
     if (isProviderBusinessError(data) || VIDEO_PROVIDER_FAILED.has(status)) return { state: "failed", status: status || "failed", error: readVideoProviderError(data) || "视频生成失败" };
     if (resultUrl || VIDEO_PROVIDER_SUCCESS.has(status)) {
-        return resultUrl ? { state: "result_ready", status: status || "completed", resultUrl } : { state: "failed", status: status || "completed", error: "视频任务已完成但没有返回视频地址" };
+        if (resultUrl) return { state: "result_ready", status: status || "completed", resultUrl };
+        const contentPath = configuredVideoContentPath(task);
+        if (contentPath) {
+            const readyPath = await readyVideoContentPath(task, origin, cookie, workerUserId, [contentPath]);
+            if (readyPath) return { state: "result_ready", status: status || "completed", resultUrl: readyPath };
+            return { state: "pending", status: status || "completed" };
+        }
+        return { state: "failed", status: status || "completed", error: "视频任务已完成但没有返回视频地址" };
     }
     return { state: "pending", status: status || "processing" };
 }
@@ -199,15 +206,20 @@ async function queryVideoUpstream(task: VideoTask, origin: string, cookie: strin
     throw new Error(lastError || "视频任务查询失败");
 }
 
-async function readyVideoContentPath(task: VideoTask, origin: string, cookie: string, workerUserId: string) {
+function configuredVideoContentPath(task: VideoTask) {
+    const resultField = task.config.advancedConfig?.resultField?.trim() || "";
+    if (!resultField.startsWith("/") || resultField.startsWith("//") || !/(?:^|\/)(?::(?:task_id|taskId|id)|\{\{?\s*(?:task_id|taskId|id)\s*\}\}?)(?:\/|$)/i.test(resultField)) return "";
+    return providerTaskPath(resultField, task.upstream.id);
+}
+
+async function readyVideoContentPath(task: VideoTask, origin: string, cookie: string, workerUserId: string, configuredPaths?: string[]) {
     const id = encodeURIComponent(task.upstream.id);
-    const paths = [`/v1/videos/${id}/content`, `/videos/${id}/content`];
+    const paths = configuredPaths || [`/v1/videos/${id}/content`, `/videos/${id}/content`];
     for (const path of paths) {
         const url = `${origin}${task.config.baseUrl.replace(/\/+$/, "")}${path}`;
         const headers = videoProxyHeaders(task, cookie, workerUserId);
         const head = await fetchInternalApi(url, { method: "HEAD", headers, cache: "no-store", signal: AbortSignal.timeout(60_000) }).catch(() => null);
         if (head && videoContentReady(head)) return path;
-        if (head && ![405, 501].includes(head.status)) continue;
         const rangeHeaders = new Headers(headers);
         rangeHeaders.set("range", "bytes=0-0");
         const probe = await fetchInternalApi(url, { headers: rangeHeaders, cache: "no-store", signal: AbortSignal.timeout(60_000) }).catch(() => null);
