@@ -50,7 +50,7 @@ for (const width of [1672, 390, 430]) {
         await expect(page.locator("[data-drama-director-warnings]")).toBeVisible();
         await expect(page.getByText("生成建议，不影响视频提交", { exact: true })).toBeVisible();
         await expect(page.getByText("无法提交", { exact: true })).toHaveCount(0);
-        await expect(page.getByRole("button", { name: "生成 3 个就绪镜头", exact: true })).toBeEnabled();
+        await expect(page.getByRole("button", { name: "批量生成视频", exact: true })).toBeEnabled();
         await expectNoHorizontalOverflow(page, `${width}px advisory video generation`);
 
         const firstShot = page.locator("[data-drama-shot-task]").first();
@@ -84,10 +84,51 @@ for (const width of [1672, 390, 430]) {
         }
         await request.patch(`/api/drama/projects/${project.id}/production-runs/${run.id}`, { data: { action: "cancel" } });
 
-        // Batch creation uses the same backend path, with advisory findings for every selected shot.
-        const batch = await request.post(`/api/drama/projects/${project.id}/production-runs`, { data: { episodeId: episode.id, preflight: { checkedShotIds: shots.slice(1).map((shot) => shot.id) } } });
+        // Use a fresh episode so the earlier single-shot task cannot change batch selection while this dialog is open.
+        const batchCreated = await request.post("/api/drama/projects", { data: { title: `E2E 批量视频 ${width}`, ratio: "9:16" } });
+        expect(batchCreated.ok(), await batchCreated.text()).toBe(true);
+        const batchProject = ((await batchCreated.json()) as { data: { project: DramaProject } }).data.project;
+        const batchEpisode = batchProject.episodes[0];
+        const batchSaved = await saveDramaProjectFixture(request, batchProject, { ...batchProject, episodes: [{ ...batchEpisode, shots }] });
+        expect(batchSaved.ok(), await batchSaved.text()).toBe(true);
+        // The refreshed run marks one video as active while the remaining shots stay selectable.
+        await page.route(new RegExp(`/api/drama/projects/${batchProject.id}/production-runs\\?episodeId=`), async (route) => {
+            await route.fulfill({
+                json: {
+                    code: 0,
+                    data: {
+                        run: { ...run, projectId: batchProject.id, episodeId: batchEpisode.id, status: "running", steps: run.steps.map((step) => (step.type === "video" ? { ...step, shotId: shots[0].id, status: "running", taskId: undefined } : step)) },
+                        preflight: null,
+                    },
+                    msg: "OK",
+                },
+            });
+        });
+        await page.goto(`/drama/${batchProject.id}`, { waitUntil: "domcontentloaded" });
+        await page.getByRole("button", { name: "切换到镜头生成" }).click();
+        await page.getByRole("button", { name: "批量生成视频", exact: true }).click();
+        const batchDialog = page.getByRole("dialog", { name: "批量生成视频" });
+        await expect(batchDialog).toBeVisible();
+        await expectNoHorizontalOverflow(page, `${width}px batch video dialog`);
+        await expect(batchDialog.getByRole("textbox")).toHaveCount(0);
+        await expect(batchDialog.getByText("正在生产中").first()).toBeVisible();
+        await expect(batchDialog.getByRole("checkbox", { name: `选择${shots[0].title}` })).toBeDisabled();
+        await expect(batchDialog.getByRole("checkbox", { name: `选择${shots[1].title}` })).toBeChecked();
+        await expect(batchDialog.getByRole("checkbox", { name: `选择${shots[2].title}` })).toBeChecked();
+        await batchDialog.getByRole("checkbox", { name: `选择${shots[2].title}` }).uncheck();
+        await expect(batchDialog.getByRole("button", { name: "生成 1 个镜头" })).toBeEnabled();
+        await batchDialog.getByRole("checkbox", { name: `选择${shots[2].title}` }).check();
+        const batchResponse = page.waitForResponse((response) => response.url().endsWith(`/api/drama/projects/${batchProject.id}/production-runs`) && response.request().method() === "POST");
+        await batchDialog.getByRole("button", { name: "生成 2 个镜头" }).click();
+        const batch = await batchResponse;
         expect(batch.ok(), await batch.text()).toBe(true);
+        const body = batch.request().postDataJSON() as { preflight: { checkedShotIds: string[] }; videoPrompts: Record<string, string> };
+        expect(body.preflight.checkedShotIds).toEqual(shots.slice(1).map((shot) => shot.id));
+        expect(Object.values(body.videoPrompts).every((prompt) => prompt.includes("别走。"))).toBe(true);
         const batchRun = ((await batch.json()) as { data: { run: DramaProductionRun } }).data.run;
+        expect(batchRun.parameterSnapshot.videoModel).toBeTruthy();
+        expect(batchRun.parameterSnapshot.videoChannelId).toBeTruthy();
+        expect(batchRun.parameterSnapshot.videoQuality).toBeTruthy();
         expect(batchRun.steps.filter((step) => step.type === "video")).toHaveLength(2);
         const batchVideos = batchRun.steps.filter((step) => step.type === "video");
         expect(batchVideos.every((step) => ["ready", "running", "success"].includes(step.status))).toBe(true);
@@ -95,6 +136,6 @@ for (const width of [1672, 390, 430]) {
             const task = await pollTask(request, `/api/video-tasks/${step.taskId}`);
             expect(task.status).toBe("success");
         }
-        await request.patch(`/api/drama/projects/${project.id}/production-runs/${batchRun.id}`, { data: { action: "cancel" } });
+        await request.patch(`/api/drama/projects/${batchProject.id}/production-runs/${batchRun.id}`, { data: { action: "cancel" } });
     });
 }

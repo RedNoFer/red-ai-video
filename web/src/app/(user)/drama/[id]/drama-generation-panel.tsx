@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { App, Button, Checkbox, Dropdown, Input, Popconfirm, Progress, Tag, type MenuProps } from "antd";
+import { App, Button, Checkbox, Dropdown, Input, Modal, Popconfirm, Progress, Tag, type MenuProps } from "antd";
 import { ArrowRight, Captions, ChevronDown, ChevronUp, CircleAlert, CircleCheck, CircleDashed, Download, Film, GitBranch, LoaderCircle, Pause, Play, Plus, RefreshCw, Save, ScanSearch, Send, Sparkles, Volume2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { mediaDownloadFileName } from "@/lib/media-file";
@@ -77,6 +77,8 @@ export function DramaGenerationPanel({
     const [productionRun, setProductionRun] = useState<DramaProductionRun | null>(null);
     const [preflight, setPreflight] = useState<DramaProductionPreflight | null>(null);
     const [creatingRun, setCreatingRun] = useState(false);
+    const [batchOpen, setBatchOpen] = useState(false);
+    const [batchShotIds, setBatchShotIds] = useState<string[]>([]);
     const [visualRun, setVisualRun] = useState<DramaProductionRun | null>(null);
     const [visualPlanning, setVisualPlanning] = useState(false);
     const [jianyingOpen, setJianyingOpen] = useState(false);
@@ -90,6 +92,19 @@ export function DramaGenerationPanel({
     const visualSyncVersion = useRef("");
     const productionSyncVersion = useRef("");
     const readiness = useMemo(() => summarizeDramaGeneration(project, episode), [episode, project]);
+    const activeBatchShotIds = useMemo(
+        () =>
+            new Set([
+                ...readiness.activeShotIds,
+                ...(productionRun?.confirmedAt && ["ready", "running", "paused", "needs_review"].includes(productionRun.status)
+                    ? productionRun.steps
+                          .filter((step) => step.type === "video" && ["ready", "running", "blocked"].includes(step.status) && episode.shots.find((shot) => shot.id === step.shotId)?.generationStatus !== "cancelled")
+                          .map((step) => step.shotId)
+                          .filter((id): id is string => Boolean(id))
+                    : []),
+            ]),
+        [episode.shots, productionRun, readiness.activeShotIds],
+    );
     const productionPlan = project.productionBible?.productionPlan;
     const renderTask = episode.renderTask || null;
     const audioReady = Boolean(config.audioModel.trim());
@@ -471,6 +486,38 @@ export function DramaGenerationPanel({
         }
     };
 
+    const openBatchProduction = () => {
+        setBatchShotIds(episode.shots.filter((shot) => !activeBatchShotIds.has(shot.id)).map((shot) => shot.id));
+        setBatchOpen(true);
+    };
+
+    const submitBatchProduction = async () => {
+        const selectedShots = episode.shots.filter((shot) => batchShotIds.includes(shot.id) && !activeBatchShotIds.has(shot.id));
+        if (!selectedShots.length) return message.warning("请选择可生成的镜头");
+        setCreatingRun(true);
+        try {
+            const selections: Record<string, string[]> = {};
+            const referenceModes: Record<string, DramaVideoReferenceMode> = {};
+            const videoPrompts: Record<string, string> = {};
+            for (const shot of selectedShots) {
+                const references = previewVideoReferenceBindings(project, episode, shot);
+                const selectedIds = references.filter((reference) => reference.required || reference.recommended).map((reference) => reference.id);
+                selections[shot.id] = selectedIds;
+                referenceModes[shot.id] = "reference";
+                videoPrompts[shot.id] = compileProductionPreviewPrompt(project, { shot, references, basePrompt: compileDramaShotExecutionPrompts(project, episode, shot).videoPrompt }, selectedIds);
+            }
+            const shotIds = selectedShots.map((shot) => shot.id);
+            const run = await createDramaProductionRun(project.id, episode.id, undefined, { status: "passed", checkedShotIds: shotIds, issues: [], changeSummary: [] }, { referenceSelections: selections, referenceModes, videoPrompts });
+            setProductionRun(run);
+            setBatchOpen(false);
+            message.success(`已提交 ${shotIds.length} 个镜头的视频生成任务`);
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : "批量视频生成提交失败");
+        } finally {
+            setCreatingRun(false);
+        }
+    };
+
     const completeShotReviewAndRefresh = async (shotId: string) => {
         const completed = await onCompleteShotReview(shotId);
         if (!completed) return false;
@@ -529,7 +576,7 @@ export function DramaGenerationPanel({
         audioReady,
         renderTask,
         onStageChange,
-        onQueueShots: (shotIds) => void startProduction(shotIds),
+        onQueueShots: openBatchProduction,
         onQueueAudio: (shotIds) => queueAudio(project.id, episode.id, shotIds),
         onCreateRender: () => void createRender(),
     });
@@ -816,6 +863,37 @@ export function DramaGenerationPanel({
                 onPathChange={setJianyingPath}
                 onVersionChange={setJianyingVersion}
             />
+            <Modal
+                open={batchOpen}
+                title="批量生成视频"
+                okText={`生成 ${batchShotIds.filter((id) => !activeBatchShotIds.has(id)).length} 个镜头`}
+                okButtonProps={{ disabled: !batchShotIds.some((id) => !activeBatchShotIds.has(id)), loading: creatingRun }}
+                onOk={() => void submitBatchProduction()}
+                onCancel={() => setBatchOpen(false)}
+                destroyOnHidden
+            >
+                <div data-drama-video-batch className="max-h-[60vh] space-y-1 overflow-y-auto py-2">
+                    {episode.shots.map((shot) => {
+                        const active = activeBatchShotIds.has(shot.id);
+                        return (
+                            <label key={shot.id} className={`flex min-w-0 items-center gap-3 rounded-md border border-border px-3 py-2 ${active ? "bg-muted/40" : "cursor-pointer hover:bg-muted/30"}`}>
+                                <Checkbox
+                                    aria-label={`选择${shot.title || `镜头 ${shot.order}`}`}
+                                    checked={!active && batchShotIds.includes(shot.id)}
+                                    disabled={active || creatingRun}
+                                    onChange={(event) => setBatchShotIds((current) => (event.target.checked ? [...current, shot.id] : current.filter((id) => id !== shot.id)))}
+                                />
+                                <span className="min-w-0 flex-1 truncate">{shot.title || `镜头 ${String(shot.order).padStart(2, "0")}`}</span>
+                                {active ? (
+                                    <Tag color="processing" className="!m-0 shrink-0">
+                                        正在生产中
+                                    </Tag>
+                                ) : null}
+                            </label>
+                        );
+                    })}
+                </div>
+            </Modal>
             <DramaSubtitleModal open={subtitleOpen} shots={episode.shots} onClose={() => setSubtitleOpen(false)} />
             <DramaMediaPreviewModal media={previewMedia} onClose={() => setPreviewMedia(undefined)} />
         </div>
@@ -1881,7 +1959,7 @@ function buildPrimaryAction({
     audioReady: boolean;
     renderTask: DramaRenderTask | null;
     onStageChange: (stage: DramaProjectStage) => void;
-    onQueueShots: (shotIds: string[]) => void;
+    onQueueShots: () => void;
     onQueueAudio: (shotIds: string[]) => void;
     onCreateRender: () => void;
 }) {
@@ -1892,16 +1970,16 @@ function buildPrimaryAction({
                 返回剧本并提取结构
             </Button>
         );
+    if (readiness.queueableShotIds.length)
+        return (
+            <Button type="primary" className={primaryClass} icon={<Play className="size-4" />} onClick={onQueueShots}>
+                批量生成视频
+            </Button>
+        );
     if (readiness.activeShotIds.length)
         return (
             <Button type="primary" className={primaryClass} loading disabled>
                 正在处理 {readiness.activeShotIds.length} 个镜头
-            </Button>
-        );
-    if (readiness.queueableShotIds.length)
-        return (
-            <Button type="primary" className={primaryClass} icon={<Play className="size-4" />} onClick={() => onQueueShots(readiness.queueableShotIds)}>
-                {readiness.failedShotIds.length ? "重试" : "生成"} {readiness.queueableShotIds.length} 个就绪镜头
             </Button>
         );
     if (readiness.missingPromptShotIds.length || readiness.missingReferenceShotIds.length)

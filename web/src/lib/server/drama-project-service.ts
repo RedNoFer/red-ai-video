@@ -1834,6 +1834,11 @@ export async function createDramaProductionRunForUser(userId: string, projectId:
     };
     const latest = await findLatestDramaProductionRun(userId, project.id, episode.id, "production");
     if (latest?.planRevision === run.planRevision && !["cancelled", "failed", "completed"].includes(latest.status)) return latest;
+    const activeRunShotIds = new Set(
+        latest?.confirmedAt && ["ready", "running", "paused", "needs_review"].includes(latest.status) ? latest.steps.filter((step) => step.type === "video" && ["ready", "running", "blocked"].includes(step.status)).map((step) => step.shotId) : [],
+    );
+    const activeShots = productionShots.filter((shot) => shot.generationStatus === "queued" || shot.generationStatus === "running" || (activeRunShotIds.has(shot.id) && !["cancelled", "success", "error"].includes(shot.generationStatus || "")));
+    if (activeShots.length) throw new DramaProjectServiceError(`${activeShots.map((shot) => shot.title || `镜头 ${shot.order}`).join("、")}正在生产中，请先中断生成`, 409);
     const confirmed = { ...run, confirmedAt: new Date().toISOString(), status: "running" as const };
     const created = await createDramaProductionRun(userId, confirmed);
     const origin = cleanText(object(value).origin);

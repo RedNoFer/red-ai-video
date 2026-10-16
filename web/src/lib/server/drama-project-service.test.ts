@@ -3154,6 +3154,39 @@ describe("drama project service updates", () => {
         expect(retried.steps.find((step) => step.id === video.id)?.taskId).toBeUndefined();
     });
 
+    it("rejects a new video run for a shot already generating while allowing another shot", async () => {
+        const current = project("2026-07-19T08:00:01.000Z", "项目");
+        const shot = {
+            id: "shot-one",
+            order: 1,
+            title: "生产中镜头",
+            description: "人物抬头",
+            sourceText: "人物抬头",
+            shotBoundary: "",
+            dialogue: "",
+            narration: "",
+            utterances: [],
+            imagePrompt: "",
+            videoPrompt: "人物抬头",
+            cameraMotion: "",
+            duration: 15,
+            characterIds: [],
+            propIds: [],
+            clueIds: [],
+        };
+        current.episodes[0].shots = [
+            { ...shot, generationStatus: "running" },
+            { ...shot, id: "shot-two", order: 2, title: "待生成镜头", generationStatus: "idle" },
+        ] as never;
+        mocks.getDramaProject.mockResolvedValue(current);
+        mocks.getAuthSettings.mockResolvedValue({ defaultModels: { imageModel: "image", videoModel: "video", audioModel: "" }, generationDefaults: { imageQuality: "standard", videoQuality: "720" } });
+        mocks.resolveLogicalModelCandidates.mockReturnValue([{ logicalModelId: "video", channelId: "video-channel" }]);
+
+        await expect(createDramaProductionRunForUser("user-one", current.id, { episodeId: current.episodes[0].id, preflight: { checkedShotIds: ["shot-one"] } })).rejects.toMatchObject({ status: 409, message: expect.stringContaining("正在生产中") });
+        const run = await createDramaProductionRunForUser("user-one", current.id, { episodeId: current.episodes[0].id, preflight: { checkedShotIds: ["shot-two"] } });
+        expect(run.steps.filter((step) => step.type === "video").map((step) => step.shotId)).toEqual(["shot-two"]);
+    });
+
     it("allows video production when the plan has advisory preflight findings", async () => {
         const plan = { ...defaultDramaProductionPlan("manual"), video: { ...defaultDramaProductionPlan("manual").video, model: "selected-video" } };
         const current = project("2026-07-19T08:00:01.000Z", "项目");
