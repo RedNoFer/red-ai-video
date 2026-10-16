@@ -464,7 +464,8 @@ for (const width of [1672, 1440, 390, 430]) {
                 const readback = await request.get(`/api/drama/projects/${project.id}`);
                 expect(readback.ok(), await readback.text()).toBe(true);
                 const persistedProject = ((await readback.json()) as { data: { project: DramaProject } }).data.project;
-                expect(persistedProject.sourceAssets?.[0].textContent).toBe(sourceText);
+                expect(persistedProject.sourceAssets?.[0]).toMatchObject({ id: "source-large", title: "大项目来源" });
+                expect(persistedProject.sourceAssets?.[0]).not.toHaveProperty("textContent");
                 expect(acknowledged.updatedAt).toBe(persistedProject.updatedAt);
                 const persisted = persistedProject.characters.find((item) => item.id === characterId);
                 expect(persisted?.name).toBe("保存后的上传测试角色");

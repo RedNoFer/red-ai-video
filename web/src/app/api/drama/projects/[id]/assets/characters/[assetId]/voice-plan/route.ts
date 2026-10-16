@@ -5,6 +5,7 @@ import { normalizeDramaVoiceProfile } from "@/lib/drama-voice";
 import { defaultDramaVoiceDesignPrompt } from "@/lib/server/drama-voice-creation";
 import { planDramaVoice } from "@/lib/server/drama-voice-planning";
 import { getDramaProjectForUser, updateDramaProjectForUser } from "@/lib/server/drama-project-service";
+import { dramaProjectForClient } from "@/lib/server/drama-project-response";
 import { resolveInternalOrigin } from "@/lib/server/internal-origin";
 
 /** @deprecated 保留旧地址，只规划可编辑提示词；创建声纹必须调用 voice-creation 并确认替换。 */
@@ -36,7 +37,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         }
         const voiceProfile = { ...existing, ...planned, creationMode: "design" as const, creationStatus: existing.creationStatus === "success" ? ("success" as const) : ("idle" as const) };
         const nextProject = await updateDramaProjectForUser(user.id, id, { ...project, characters: project.characters.map((item) => (item.id === assetId ? { ...item, voiceProfile } : item)) });
-        return NextResponse.json({ code: 0, data: { project: nextProject, voiceProfile: nextProject.characters.find((item) => item.id === assetId)?.voiceProfile, warning }, msg: warning || "声音设计提示词已生成" });
+        return NextResponse.json({ code: 0, data: { project: dramaProjectForClient(nextProject), voiceProfile: nextProject.characters.find((item) => item.id === assetId)?.voiceProfile, warning }, msg: warning || "声音设计提示词已生成" });
     } catch (error) {
         return NextResponse.json({ code: 500, data: null, msg: error instanceof Error ? error.message : "声音提示词生成失败" }, { status: 500 });
     }

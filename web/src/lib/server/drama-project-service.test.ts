@@ -28,6 +28,8 @@ const mocks = vi.hoisted(() => {
         deleteDramaProject: vi.fn(),
         findDramaProjectBySourceHandoffId: vi.fn(),
         getDramaProject: vi.fn(),
+        getDramaProjectForClient: vi.fn(),
+        getDramaProjectForVisualRun: vi.fn(),
         listDramaProjectSummaries: vi.fn(),
         updateDramaProject: vi.fn(),
         updateDramaProjectScopedMutation: vi.fn(),
@@ -35,6 +37,7 @@ const mocks = vi.hoisted(() => {
         updateDramaProjectAssetMutation: vi.fn(),
         updateDramaProjectShotMutation: vi.fn(),
         getStoredGenerationTask: vi.fn(),
+        areStoredGenerationTasksActive: vi.fn(),
         getStoredGenerationTaskByRequest: vi.fn(),
         queryStoredGenerationTasks: vi.fn(),
         createDramaProjectVersion: vi.fn(),
@@ -73,6 +76,8 @@ vi.mock("@/lib/server/drama-project-store", () => ({
     deleteDramaProject: mocks.deleteDramaProject,
     findDramaProjectBySourceHandoffId: mocks.findDramaProjectBySourceHandoffId,
     getDramaProject: mocks.getDramaProject,
+    getDramaProjectForClient: mocks.getDramaProjectForClient,
+    getDramaProjectForVisualRun: mocks.getDramaProjectForVisualRun,
     listDramaProjectSummaries: mocks.listDramaProjectSummaries,
     updateDramaProject: mocks.updateDramaProject,
     updateDramaProjectScopedMutation: mocks.updateDramaProjectScopedMutation,
@@ -85,7 +90,12 @@ vi.mock("@/lib/server/drama-project-version-store", () => ({
     getDramaProjectVersion: mocks.getDramaProjectVersion,
     listDramaProjectVersions: mocks.listDramaProjectVersions,
 }));
-vi.mock("@/lib/server/generation-task-store", () => ({ getStoredGenerationTask: mocks.getStoredGenerationTask, getStoredGenerationTaskByRequest: mocks.getStoredGenerationTaskByRequest, queryStoredGenerationTasks: mocks.queryStoredGenerationTasks }));
+vi.mock("@/lib/server/generation-task-store", () => ({
+    areStoredGenerationTasksActive: mocks.areStoredGenerationTasksActive,
+    getStoredGenerationTask: mocks.getStoredGenerationTask,
+    getStoredGenerationTaskByRequest: mocks.getStoredGenerationTaskByRequest,
+    queryStoredGenerationTasks: mocks.queryStoredGenerationTasks,
+}));
 vi.mock("@/lib/server/local-media-storage", () => ({ deleteUserLocalMediaAssets: mocks.deleteUserLocalMediaAssets, deleteUserOwnedMediaAssetsPhysically: mocks.deleteUserOwnedMediaAssetsPhysically }));
 vi.mock("@/lib/server/logical-model-router", () => ({ resolveLogicalModelCandidates: mocks.resolveLogicalModelCandidates, supportsVideoKeyframeReferences: mocks.supportsVideoKeyframeReferences }));
 vi.mock("@/lib/server/drama-production-run-store", () => ({
@@ -154,6 +164,7 @@ describe("drama project service updates", () => {
         vi.clearAllMocks();
         mocks.updateDramaProject.mockImplementation(async (_userId: string, value: DramaProject) => value);
         mocks.updateDramaProjectScopedMutation.mockImplementation(async (_userId: string, _current: DramaProject, value: DramaProject) => ({ projectId: value.id, updatedAt: value.updatedAt }));
+        mocks.getDramaProjectForVisualRun.mockImplementation((...args: unknown[]) => mocks.getDramaProject(...args));
         mocks.updateDramaProjectShotMutation.mockImplementation(async (_userId: string, mutation: { projectId: string; episodeId: string; shotId: string; shot: DramaProject["episodes"][number]["shots"][number]; expectedUpdatedAt?: string }) => ({
             ...mutation,
             updatedAt: "2026-09-15T00:00:01.000Z",
@@ -168,6 +179,7 @@ describe("drama project service updates", () => {
         mocks.listCreativeConversations.mockResolvedValue([{ id: "conversation-one" }, { id: "conversation-two" }]);
         mocks.listAgentRuns.mockResolvedValue([]);
         mocks.getStoredGenerationTask.mockResolvedValue(null);
+        mocks.areStoredGenerationTasksActive.mockResolvedValue(false);
         mocks.getStoredGenerationTaskByRequest.mockResolvedValue(null);
         mocks.queryStoredGenerationTasks.mockResolvedValue([]);
         mocks.fetchSafeOutbound.mockResolvedValue(new Response(new Uint8Array([137]), { status: 206, headers: { "content-type": "image/png" } }));
@@ -337,6 +349,22 @@ describe("drama project service updates", () => {
         expect(updatedProject.ratio).toBe("16:9");
         expect(updatedProject.productionArchive?.sections[0]?.content).toBe("x".repeat(100_000));
         expect(updatedProject.episodes[0]?.id).toBe(current.episodes[0]?.id);
+    });
+
+    it("preserves server-side source text when the editor changes source metadata", async () => {
+        const current = project("2026-10-06T00:00:00.000Z", "原稿项目");
+        current.sourceAssets = [{ id: "source-one", type: "text", title: "旧标题", textContent: "完整正文" }];
+        mocks.getDramaProject.mockResolvedValue(current);
+        const mutation = {
+            projectId: current.id,
+            expectedUpdatedAt: current.updatedAt,
+            updatedAt: "2026-10-06T00:00:01.000Z",
+            projectPatch: { sourceAssets: [{ id: "source-one", type: "text", title: "新标题" }] },
+        };
+
+        await applyDramaProjectMutationForUser("user-one", current.id, mutation);
+
+        expect(mocks.updateDramaProjectScopedMutation.mock.calls[0]?.[2].sourceAssets).toEqual([{ id: "source-one", type: "text", title: "新标题", textContent: "完整正文" }]);
     });
 
     it("creates project versions from the server snapshot without requiring a project payload", async () => {
@@ -2309,6 +2337,24 @@ describe("drama project service updates", () => {
                 shot: expect.objectContaining({ storyboardFrames: [expect.objectContaining({ id: "f1", status: "error", error: "未找到本次生图运行记录，请确认后重新提交" })] }),
             }),
         );
+    });
+
+    it("polls active visual tasks without reading the project until a task changes state", async () => {
+        const run = {
+            id: "visual-running",
+            projectId: "drama-one",
+            episodeId: "episode-one",
+            scope: "visual",
+            status: "running",
+            confirmedAt: "2026-10-17T00:00:00.000Z",
+            steps: [{ id: "frame-one", type: "keyframe", status: "running", taskId: "image-one", dependsOn: [] }],
+        } as never;
+        mocks.findLatestDramaProductionRun.mockResolvedValue(run);
+        mocks.areStoredGenerationTasksActive.mockResolvedValue(true);
+
+        await expect(getLatestDramaProductionRunForUser("user-one", "drama-one", "episode-one", { scope: "visual" })).resolves.toBe(run);
+        expect(mocks.areStoredGenerationTasksActive).toHaveBeenCalledWith("image", "user-one", ["image-one"]);
+        expect(mocks.getDramaProjectForVisualRun).not.toHaveBeenCalled();
     });
 
     it("cancels an unsubmitted visual run and releases its queued frame for explicit retry", async () => {

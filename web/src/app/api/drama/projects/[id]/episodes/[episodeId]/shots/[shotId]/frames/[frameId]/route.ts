@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { dramaProjectForClient } from "@/lib/server/drama-project-response";
 
 import { getCurrentUser } from "@/lib/auth/session";
 import { readJsonBodyResult } from "@/lib/auth/request";
@@ -14,7 +15,7 @@ export async function DELETE(request: Request, context: Context) {
     try {
         const { id, episodeId, shotId, frameId } = await context.params;
         const { project, deletion, retainedFiles } = await deleteDramaStoryboardFrameForUser(user.id, id, episodeId, shotId, frameId, parsed.data.removeBeat === true);
-        return NextResponse.json({ code: 0, data: { project, ...deletion, retainedFiles }, msg: retainedFiles ? "分镜图片引用已删除，共享文件仍被其它帧使用" : "分镜图片已物理删除" });
+        return NextResponse.json({ code: 0, data: { project: dramaProjectForClient(project), ...deletion, retainedFiles }, msg: retainedFiles ? "分镜图片引用已删除，共享文件仍被其它帧使用" : "分镜图片已物理删除" });
     } catch (error) {
         const status = error instanceof DramaProjectServiceError ? error.status : 500;
         return NextResponse.json({ code: status, data: null, msg: error instanceof Error ? error.message : "分镜图片删除失败" }, { status });

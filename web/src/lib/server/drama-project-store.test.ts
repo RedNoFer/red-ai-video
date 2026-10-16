@@ -21,6 +21,8 @@ import {
     createDramaProject,
     deleteDramaProject,
     getDramaProject,
+    getDramaProjectForClient,
+    getDramaProjectForVisualRun,
     listDramaProjectSummaries,
     updateDramaProject,
     updateDramaProjectAssetMutation,
@@ -59,6 +61,46 @@ describe("drama project file provider", () => {
         await createDramaProject("user-one", { ...project("three", "项目三"), updatedAt: "2026-07-28T03:00:00.000Z" });
 
         await expect(listDramaProjectSummaries("user-one", { page: 2, pageSize: 2 })).resolves.toMatchObject({ items: [{ id: "one" }], total: 3, page: 2, pageSize: 2 });
+    });
+
+    it("returns source metadata to the editor while retaining the full text in storage", async () => {
+        const original = project("one", "原稿项目");
+        original.sourceAssets = [{ id: "source-one", type: "text", title: "原稿", textContent: "完整正文" }];
+        await createDramaProject("user-one", original);
+
+        expect(await getDramaProjectForClient("one", "user-one")).toMatchObject({ sourceAssets: [{ id: "source-one", title: "原稿" }] });
+        expect((await getDramaProjectForClient("one", "user-one"))?.sourceAssets?.[0]).not.toHaveProperty("textContent");
+        expect((await getDramaProject("one", "user-one"))?.sourceAssets?.[0]?.textContent).toBe("完整正文");
+    });
+
+    it("selects source metadata in PostgreSQL without returning stored source text", async () => {
+        mocks.provider = "postgres";
+        mocks.postgresQuery.mockResolvedValue({ rows: [{ project_json: { id: "one", title: "原稿项目" }, source_assets: [{ id: "source-one", type: "text", title: "原稿" }] }] });
+
+        await expect(getDramaProjectForClient("one", "user-one")).resolves.toMatchObject({ sourceAssets: [{ id: "source-one", title: "原稿" }] });
+        expect(mocks.postgresQuery).toHaveBeenCalledWith(expect.stringMatching(/project_json - 'sourceAssets'[\s\S]*asset - 'textContent'[\s\S]*WHERE id = \$1 AND user_id = \$2/), ["one", "user-one"]);
+    });
+
+    it("reads only the active episode and reference metadata for visual polling", async () => {
+        const original = project("one", "视觉生成项目");
+        original.sourceAssets = [{ id: "source-one", type: "text", title: "原稿", textContent: "完整正文" }];
+        original.episodes.push({ ...original.episodes[0], id: "episode-two" });
+        original.productionArchive = { sections: [{ content: "完整制作包" }] } as DramaProject["productionArchive"];
+        await createDramaProject("user-one", original);
+
+        const visual = await getDramaProjectForVisualRun("one", "user-one", "episode-two");
+        expect(visual?.episodes.map((episode) => episode.id)).toEqual(["episode-two"]);
+        expect(visual).not.toHaveProperty("productionArchive");
+        expect(visual?.sourceAssets?.[0]).not.toHaveProperty("textContent");
+        expect((await getDramaProject("one", "user-one"))?.sourceAssets?.[0].textContent).toBe("完整正文");
+    });
+
+    it("projects the active episode in PostgreSQL visual-run reads", async () => {
+        mocks.provider = "postgres";
+        mocks.postgresQuery.mockResolvedValue({ rows: [{ project_json: { id: "one" }, source_assets: [{ id: "source-one", title: "原稿" }], episodes: [{ id: "episode-two" }] }] });
+
+        await expect(getDramaProjectForVisualRun("one", "user-one", "episode-two")).resolves.toMatchObject({ episodes: [{ id: "episode-two" }], sourceAssets: [{ id: "source-one" }] });
+        expect(mocks.postgresQuery).toHaveBeenCalledWith(expect.stringMatching(/productionArchive'[\s\S]*episode->>'id' = \$3[\s\S]*WHERE id = \$1 AND user_id = \$2/), ["one", "user-one", "episode-two"]);
     });
 
     it("uses a bounded PostgreSQL summary query", async () => {

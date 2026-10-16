@@ -18,6 +18,7 @@ vi.mock("@/lib/server/data-adapter", () => ({
 
 import { getDatabaseProvider, postgresQuery } from "@/lib/server/database";
 import {
+    areStoredGenerationTasksActive,
     cleanupExpiredStoredGenerationTasks,
     createStoredGenerationTask,
     getStoredGenerationTask,
@@ -83,6 +84,25 @@ describe("mutateStoredGenerationTask", () => {
         } as never);
 
         await expect(getStoredGenerationTaskRecord("image", "image-one")).resolves.toMatchObject({ assetKind: "characters", assetId: "rifa", batchId: "batch-one", batchItemId: "item-one", executionPhase: "polling" });
+    });
+
+    it("checks active image tasks without reading payloads from PostgreSQL", async () => {
+        vi.mocked(getDatabaseProvider).mockReturnValue("postgres");
+        vi.mocked(postgresQuery).mockResolvedValueOnce({ rows: [{ id: "image-one", status: "running", execution_phase: "polling" }] } as never);
+
+        await expect(areStoredGenerationTasksActive("image", "user", ["image-one"])).resolves.toBe(true);
+        expect(vi.mocked(postgresQuery).mock.calls[0]).toEqual([expect.stringContaining("SELECT id, status, execution_phase FROM generation_tasks WHERE user_id = $1"), ["user", "image", ["image-one"]]]);
+        expect(vi.mocked(postgresQuery).mock.calls[0][0]).not.toContain("payload");
+    });
+
+    it("requires every submitted task to remain active before skipping reconciliation", async () => {
+        const now = Date.now();
+        mocks.records = [{ id: "image-one", userId: "user", type: "image", status: "running", executionPhase: "polling", expiresAt: now + 60_000 }];
+
+        await expect(areStoredGenerationTasksActive("image", "user", ["image-one"])).resolves.toBe(true);
+        await expect(areStoredGenerationTasksActive("image", "user", ["image-one", "image-two"])).resolves.toBe(false);
+        mocks.records[0].status = "success";
+        await expect(areStoredGenerationTasksActive("image", "user", ["image-one"])).resolves.toBe(false);
     });
 
     it("serializes file mutations so concurrent events are not lost", async () => {

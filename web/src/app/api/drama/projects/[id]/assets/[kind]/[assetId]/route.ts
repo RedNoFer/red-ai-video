@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { readJsonBodyResult } from "@/lib/auth/request";
 import { getCurrentUser } from "@/lib/auth/session";
 import { DramaProjectServiceError, getDramaProjectForUser, updateDramaAssetForUser } from "@/lib/server/drama-project-service";
+import { dramaProjectForClient } from "@/lib/server/drama-project-response";
 import { queryStoredGenerationTasks } from "@/lib/server/generation-task-store";
 import type { ImageTask } from "@/lib/server/image-task-store";
 
@@ -58,7 +59,7 @@ export async function PATCH(request: Request, context: Context) {
         const project = await updateDramaAssetForUser(user.id, id, kind, assetId, parsed.data);
         const { updatedAt, characters, scenes, props, clues, episodes } = project;
         const includeShots = !(parsed.data && typeof parsed.data === "object" && "markShotsStale" in parsed.data && parsed.data.markShotsStale === false);
-        const responseProject = request.headers.get("X-Drama-Response") === "asset-update" ? { id, updatedAt, characters, scenes, props, clues, ...(includeShots ? { episodes } : {}) } : project;
+        const responseProject = request.headers.get("X-Drama-Response") === "asset-update" ? { id, updatedAt, characters, scenes, props, clues, ...(includeShots ? { episodes } : {}) } : dramaProjectForClient(project);
         return NextResponse.json({ code: 0, data: { project: responseProject }, msg: "资产设定已保存" });
     } catch (error) {
         const status = error instanceof DramaProjectServiceError ? error.status : 500;

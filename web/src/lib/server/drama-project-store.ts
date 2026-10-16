@@ -3,6 +3,7 @@ import { normalizeDramaImageSize } from "@/lib/drama-image-size";
 import { summarizeDramaProject } from "@/lib/drama-project-summary";
 import { readJsonDataFile, writeJsonDataFile } from "@/lib/server/data-adapter";
 import { ensurePostgresSchema, getDatabaseProvider, postgresQuery } from "@/lib/server/database";
+import { dramaProjectForClient } from "@/lib/server/drama-project-response";
 
 type DramaProjectRecord = { userId: string; project: DramaProject };
 type DramaProjectDatabase = { version: 1; projects: DramaProjectRecord[] };
@@ -123,6 +124,47 @@ export async function getDramaProject(id: string, userId: string) {
         return result.rows[0]?.project_json || null;
     }
     return (await readDatabase()).projects.find((record) => record.userId === userId && record.project.id === id)?.project || null;
+}
+
+export async function getDramaProjectForClient(id: string, userId: string) {
+    if (getDatabaseProvider() === "postgres") {
+        await ensurePostgresSchema();
+        const result = await postgresQuery<{ project_json: DramaProject; source_assets: DramaProject["sourceAssets"] }>(
+            `SELECT project_json - 'sourceAssets' AS project_json,
+                    (SELECT jsonb_agg(asset - 'textContent' ORDER BY ord)
+                     FROM jsonb_array_elements(CASE WHEN jsonb_typeof(project_json->'sourceAssets') = 'array' THEN project_json->'sourceAssets' ELSE '[]'::jsonb END)
+                          WITH ORDINALITY AS source(asset, ord)) AS source_assets
+             FROM drama_projects WHERE id = $1 AND user_id = $2`,
+            [id, userId],
+        );
+        const row = result.rows[0];
+        return row ? { ...row.project_json, ...(row.source_assets ? { sourceAssets: row.source_assets } : {}) } : null;
+    }
+    const project = await getDramaProject(id, userId);
+    return project ? dramaProjectForClient(project) : null;
+}
+
+/** Visual-run polling only needs the active episode and image reference metadata. */
+export async function getDramaProjectForVisualRun(id: string, userId: string, episodeId: string) {
+    if (getDatabaseProvider() === "postgres") {
+        await ensurePostgresSchema();
+        const result = await postgresQuery<{ project_json: DramaProject; source_assets: DramaProject["sourceAssets"]; episodes: DramaProject["episodes"] }>(
+            `SELECT project_json - 'sourceAssets' - 'productionArchive' - 'episodes' AS project_json,
+                    (SELECT jsonb_agg(asset - 'textContent' ORDER BY ord)
+                     FROM jsonb_array_elements(CASE WHEN jsonb_typeof(project_json->'sourceAssets') = 'array' THEN project_json->'sourceAssets' ELSE '[]'::jsonb END) WITH ORDINALITY AS source(asset, ord)) AS source_assets,
+                    (SELECT jsonb_agg(episode ORDER BY ord)
+                     FROM jsonb_array_elements(CASE WHEN jsonb_typeof(project_json->'episodes') = 'array' THEN project_json->'episodes' ELSE '[]'::jsonb END) WITH ORDINALITY AS selected(episode, ord)
+                     WHERE episode->>'id' = $3) AS episodes
+             FROM drama_projects WHERE id = $1 AND user_id = $2`,
+            [id, userId, episodeId],
+        );
+        const row = result.rows[0];
+        return row ? { ...row.project_json, sourceAssets: row.source_assets || [], episodes: row.episodes || [] } : null;
+    }
+    const project = await getDramaProjectForClient(id, userId);
+    if (!project) return null;
+    const { productionArchive: _archive, ...metadata } = project;
+    return { ...metadata, episodes: project.episodes.filter((episode) => episode.id === episodeId) };
 }
 
 export async function createDramaProject(userId: string, project: DramaProject) {

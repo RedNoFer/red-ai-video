@@ -18,7 +18,7 @@ export function collectDramaAgentMentionItems(project: DramaProject, episode: Dr
         ...project.scenes.map((item) => ({ id: item.id, kind: "scene" as const, title: item.name, description: item.description })),
         ...project.props.map((item) => ({ id: item.id, kind: "prop" as const, title: item.name, description: item.description })),
         ...project.clues.map((item) => ({ id: item.id, kind: "clue" as const, title: item.name, description: item.description || item.payoff })),
-        ...(project.sourceAssets || []).map((item) => ({ id: item.id, kind: "source" as const, title: item.title, description: item.textContent || item.type })),
+        ...(project.sourceAssets || []).map((item) => ({ id: item.id, kind: "source" as const, title: item.title, description: item.type === "text" ? "文本素材" : item.type })),
         ...episode.shots.map((item) => ({ id: item.id, kind: "shot" as const, title: item.title || `镜头 ${String(item.order).padStart(2, "0")}`, description: item.description || item.sourceText })),
     ];
     const counts = new Map<DramaAgentMentionKind, number>();

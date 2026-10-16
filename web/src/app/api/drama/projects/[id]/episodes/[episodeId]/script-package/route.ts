@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { dramaProjectForClient } from "@/lib/server/drama-project-response";
 
 import { getCurrentUser } from "@/lib/auth/session";
 import { readJsonBodyResult } from "@/lib/auth/request";
@@ -14,7 +15,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         const input = parsed.data && typeof parsed.data === "object" && !Array.isArray(parsed.data) ? (parsed.data as Record<string, unknown>) : {};
         if (input.action === "apply") {
             const project = await applyDramaEpisodeProductionPackageForUser(user.id, id, episodeId, input);
-            return NextResponse.json({ code: 0, data: { project }, msg: "当前集制作包已回填" });
+            return NextResponse.json({ code: 0, data: { project: dramaProjectForClient(project) }, msg: "当前集制作包已回填" });
         }
         const project = await getDramaProjectForUser(user.id, id);
         const preview = previewDramaScriptProductionPackageForUser(input, project);

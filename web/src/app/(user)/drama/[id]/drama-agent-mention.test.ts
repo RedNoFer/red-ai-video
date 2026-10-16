@@ -46,4 +46,14 @@ describe("Drama Agent project mentions", () => {
         expect(result.value).toBe("让 @赵徽 ");
         expect(referencedDramaAgentItems(result.value, items).map((item) => item.id)).toEqual(["character-1"]);
     });
+
+    it("searches source metadata without indexing the full source text", () => {
+        const { project, episode } = fixtures();
+        const withSource: DramaProject = { ...project, sourceAssets: [{ id: "source-one", type: "text", title: "原稿", textContent: "长篇素材正文" }] };
+        const items = collectDramaAgentMentionItems(withSource, episode);
+
+        expect(items.find((item) => item.id === "source-one")?.description).toBe("文本素材");
+        expect(dramaAgentMentionCandidates(items, "长篇素材正文")).toEqual([]);
+        expect(dramaAgentMentionCandidates(items, "原稿").map((item) => item.id)).toEqual(["source-one"]);
+    });
 });

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { dramaProjectForClient } from "@/lib/server/drama-project-response";
 
 import { readJsonBodyResult } from "@/lib/auth/request";
 import { getCurrentUser } from "@/lib/auth/session";
@@ -14,7 +15,7 @@ export async function POST(request: Request, context: Context) {
     try {
         const { id, episodeId, shotId, frameId } = await context.params;
         const project = await acceptDramaStoryboardFrameForUser(user.id, id, episodeId, shotId, frameId, parsed.data.candidateId);
-        return NextResponse.json({ code: 0, data: { project }, msg: "分镜帧已验收" });
+        return NextResponse.json({ code: 0, data: { project: dramaProjectForClient(project) }, msg: "分镜帧已验收" });
     } catch (error) {
         const status = error instanceof DramaProjectServiceError ? error.status : 500;
         return NextResponse.json({ code: status, data: null, msg: error instanceof Error ? error.message : "分镜帧验收失败" }, { status });

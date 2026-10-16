@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { dramaProjectForClient } from "@/lib/server/drama-project-response";
 
 import { getCurrentUser } from "@/lib/auth/session";
 import { readJsonBodyResult } from "@/lib/auth/request";
@@ -14,7 +15,7 @@ export async function POST(request: Request, context: Context) {
     try {
         const params = await context.params;
         const project = await decideDramaContinuityFrameForUser(user.id, params.id, params.episodeId, params.shotId, parsed.data);
-        return NextResponse.json({ code: 0, data: { project }, msg: "连续性尾帧验收已保存" });
+        return NextResponse.json({ code: 0, data: { project: dramaProjectForClient(project) }, msg: "连续性尾帧验收已保存" });
     } catch (error) {
         if (error instanceof DramaProjectServiceError) return NextResponse.json({ code: error.status, data: null, msg: error.message }, { status: error.status });
         throw error;

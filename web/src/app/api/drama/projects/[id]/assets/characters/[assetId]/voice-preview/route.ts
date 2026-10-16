@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { getCurrentUser } from "@/lib/auth/session";
 import { getDramaProjectForUser, updateDramaProjectForUser } from "@/lib/server/drama-project-service";
+import { dramaProjectForClient } from "@/lib/server/drama-project-response";
 import { resolveInternalOrigin } from "@/lib/server/internal-origin";
 import { submitDramaVoicePreview, syncDramaVoicePreview } from "@/lib/server/drama-voice-preview";
 
@@ -22,13 +23,13 @@ async function sync(request: Request, context: { params: Promise<{ id: string; a
         const character = project.characters.find((item) => item.id === assetId);
         if (!character) return NextResponse.json({ code: 404, data: null, msg: "角色不存在" }, { status: 404 });
         const synced = await syncDramaVoicePreview({ project, character });
-        if (!synced.task) return NextResponse.json({ code: 409, data: { project, voiceProfile: synced.profile }, msg: "请先点击智能维护音色生成试听任务" }, { status: 409 });
+        if (!synced.task) return NextResponse.json({ code: 409, data: { project: dramaProjectForClient(project), voiceProfile: synced.profile }, msg: "请先点击智能维护音色生成试听任务" }, { status: 409 });
         const nextProject = await updateDramaProjectForUser(user.id, id, {
             ...project,
             characters: project.characters.map((item) => (item.id === assetId ? { ...item, voiceProfile: synced.profile } : item)),
         });
         const message = synced.profile?.previewStatus === "error" ? `试听失败：${synced.profile.previewError || "上游未返回可播放音频"}` : synced.message;
-        return NextResponse.json({ code: 0, data: { project: nextProject, voiceProfile: synced.profile, task: synced.task }, msg: message });
+        return NextResponse.json({ code: 0, data: { project: dramaProjectForClient(nextProject), voiceProfile: synced.profile, task: synced.task }, msg: message });
     } catch (error) {
         return NextResponse.json({ code: 500, data: null, msg: error instanceof Error ? error.message : "试听状态同步失败" }, { status: 500 });
     }
@@ -53,7 +54,7 @@ async function retry(request: Request, context: { params: Promise<{ id: string; 
             characters: project.characters.map((item) => (item.id === assetId ? { ...item, voiceProfile: submitted.profile } : item)),
         });
         const message = submitted.profile.previewAudioUrl ? "试听已完成" : submitted.cached ? "试听音频已就绪" : "试听任务已重新提交";
-        return NextResponse.json({ code: 0, data: { project: nextProject, voiceProfile: submitted.profile, task: submitted.task, cached: submitted.cached }, msg: message });
+        return NextResponse.json({ code: 0, data: { project: dramaProjectForClient(nextProject), voiceProfile: submitted.profile, task: submitted.task, cached: submitted.cached }, msg: message });
     } catch (error) {
         return NextResponse.json({ code: 500, data: null, msg: error instanceof Error ? error.message : "试听任务提交失败" }, { status: 500 });
     }

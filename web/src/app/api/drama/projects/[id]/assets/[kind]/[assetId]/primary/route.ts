@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { readJsonBodyResult } from "@/lib/auth/request";
 import { getCurrentUser } from "@/lib/auth/session";
 import { approveDramaAssetReferenceForUser, DramaProjectServiceError } from "@/lib/server/drama-project-service";
+import { dramaProjectForClient } from "@/lib/server/drama-project-response";
 
 type Context = { params: Promise<{ id: string; kind: string; assetId: string }> };
 
@@ -17,7 +18,7 @@ export async function POST(request: Request, context: Context) {
         const { id, kind, assetId } = await context.params;
         const project = await approveDramaAssetReferenceForUser(user.id, id, kind, assetId, referenceId);
         const { updatedAt, characters, scenes, props, clues } = project;
-        const responseProject = request.headers.get("X-Drama-Response") === "asset-update" ? { id, updatedAt, characters, scenes, props, clues } : project;
+        const responseProject = request.headers.get("X-Drama-Response") === "asset-update" ? { id, updatedAt, characters, scenes, props, clues } : dramaProjectForClient(project);
         return NextResponse.json({ code: 0, data: { project: responseProject }, msg: "主基准图已保存" });
     } catch (error) {
         const status = error instanceof DramaProjectServiceError ? error.status : 500;

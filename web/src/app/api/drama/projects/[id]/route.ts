@@ -2,12 +2,13 @@ import { NextResponse } from "next/server";
 
 import { getCurrentUser } from "@/lib/auth/session";
 import { readJsonBodyResult } from "@/lib/auth/request";
-import { deleteDramaProjectForUser, DramaProjectServiceError, getDramaProjectForUser, updateDramaProjectForUser } from "@/lib/server/drama-project-service";
+import { deleteDramaProjectForUser, DramaProjectServiceError, getDramaProjectForClientForUser, updateDramaProjectForUser } from "@/lib/server/drama-project-service";
+import { dramaProjectForClient } from "@/lib/server/drama-project-response";
 
 type Context = { params: Promise<{ id: string }> };
 
 export async function GET(_: Request, context: Context) {
-    return handle(context, (userId, id) => getDramaProjectForUser(userId, id).then((project) => NextResponse.json({ code: 0, data: { project }, msg: "OK" })));
+    return handle(context, (userId, id) => getDramaProjectForClientForUser(userId, id).then((project) => NextResponse.json({ code: 0, data: { project }, msg: "OK" })));
 }
 
 export async function PATCH(request: Request, context: Context) {
@@ -18,7 +19,7 @@ export async function PATCH(request: Request, context: Context) {
     if (Object.keys(patch).some((key) => !["defaultVideoMode", "productionBible"].includes(key)) || !patch.productionBible || typeof patch.productionBible !== "object") {
         return NextResponse.json({ code: 400, data: null, msg: "不支持提交整份短剧项目；请使用对应的局部变更接口" }, { status: 400 });
     }
-    return handle(context, (userId, id) => updateDramaProjectForUser(userId, id, body).then((project) => NextResponse.json({ code: 0, data: { project }, msg: "短剧项目已保存" })));
+    return handle(context, (userId, id) => updateDramaProjectForUser(userId, id, body).then((project) => NextResponse.json({ code: 0, data: { project: dramaProjectForClient(project) }, msg: "短剧项目已保存" })));
 }
 
 export async function DELETE(_: Request, context: Context) {

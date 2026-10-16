@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
     getCurrentUser: vi.fn(),
-    getDramaProjectForUser: vi.fn(),
+    getDramaProjectForClientForUser: vi.fn(),
     updateDramaProjectForUser: vi.fn(),
 }));
 
@@ -17,7 +17,7 @@ vi.mock("@/lib/server/drama-project-service", () => ({
         }
     },
     deleteDramaProjectForUser: vi.fn(),
-    getDramaProjectForUser: mocks.getDramaProjectForUser,
+    getDramaProjectForClientForUser: mocks.getDramaProjectForClientForUser,
     updateDramaProjectForUser: mocks.updateDramaProjectForUser,
 }));
 
@@ -27,7 +27,7 @@ describe("/api/drama/projects/[id]", () => {
     beforeEach(() => {
         vi.clearAllMocks();
         mocks.getCurrentUser.mockResolvedValue({ id: "user-one" });
-        mocks.getDramaProjectForUser.mockResolvedValue({ id: "drama-one", title: "测试短剧", episodes: [{ id: "episode-one" }] });
+        mocks.getDramaProjectForClientForUser.mockResolvedValue({ id: "drama-one", title: "测试短剧", episodes: [{ id: "episode-one" }], sourceAssets: [{ id: "source-one", title: "原稿" }] });
     });
 
     it("requires authentication", async () => {
@@ -36,15 +36,15 @@ describe("/api/drama/projects/[id]", () => {
         const response = await GET(new Request("http://localhost/api/drama/projects/drama-one"), context("drama-one"));
 
         expect(response.status).toBe(401);
-        expect(mocks.getDramaProjectForUser).not.toHaveBeenCalled();
+        expect(mocks.getDramaProjectForClientForUser).not.toHaveBeenCalled();
     });
 
     it("loads only the requested project for the current user", async () => {
         const response = await GET(new Request("http://localhost/api/drama/projects/drama-one"), context("drama-one"));
 
         expect(response.status).toBe(200);
-        expect(mocks.getDramaProjectForUser).toHaveBeenCalledWith("user-one", "drama-one");
-        await expect(response.json()).resolves.toMatchObject({ data: { project: { id: "drama-one", episodes: [{ id: "episode-one" }] } } });
+        expect(mocks.getDramaProjectForClientForUser).toHaveBeenCalledWith("user-one", "drama-one");
+        await expect(response.json()).resolves.toMatchObject({ data: { project: { id: "drama-one", episodes: [{ id: "episode-one" }], sourceAssets: [{ id: "source-one", title: "原稿" }] } } });
     });
 
     it("rejects full project snapshots on the project route", async () => {

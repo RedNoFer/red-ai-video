@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { dramaProjectForClient } from "@/lib/server/drama-project-response";
 
 import { readJsonBodyResult } from "@/lib/auth/request";
 import { getCurrentUser } from "@/lib/auth/session";
@@ -14,7 +15,7 @@ export async function PATCH(request: Request, context: Context) {
     try {
         const { id, episodeId, shotId, frameId } = await context.params;
         const project = await updateDramaStoryboardFramePromptForUser(user.id, id, episodeId, shotId, frameId, parsed.data);
-        return NextResponse.json({ code: 0, data: { project }, msg: "短剧分镜帧图片提示词已更新" });
+        return NextResponse.json({ code: 0, data: { project: dramaProjectForClient(project) }, msg: "短剧分镜帧图片提示词已更新" });
     } catch (error) {
         const status = error instanceof DramaProjectServiceError ? error.status : 500;
         return NextResponse.json({ code: status, data: null, msg: error instanceof Error ? error.message : "分镜帧图片提示词保存失败" }, { status });

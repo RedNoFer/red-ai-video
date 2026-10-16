@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { dramaProjectForClient } from "@/lib/server/drama-project-response";
 
 import { getCurrentUser } from "@/lib/auth/session";
 import { readJsonBodyResult } from "@/lib/auth/request";
@@ -20,7 +21,7 @@ export async function PATCH(request: Request, context: Context) {
             return NextResponse.json({ code: 0, data: result, msg: "短剧视频提示词已更新" });
         }
         const project = await updateDramaShotPromptForUser(user.id, params.id, params.episodeId, params.shotId, parsed.data);
-        return NextResponse.json({ code: 0, data: { project }, msg: typeof input.imagePrompt === "string" ? "短剧图片提示词已更新" : "短剧视频提示词已更新" });
+        return NextResponse.json({ code: 0, data: { project: dramaProjectForClient(project) }, msg: typeof input.imagePrompt === "string" ? "短剧图片提示词已更新" : "短剧视频提示词已更新" });
     } catch (error) {
         if (error instanceof DramaProjectServiceError) return NextResponse.json({ code: error.status, data: null, msg: error.message }, { status: error.status });
         throw error;

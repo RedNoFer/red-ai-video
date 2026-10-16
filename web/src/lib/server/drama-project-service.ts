@@ -7,7 +7,7 @@ import { hasDramaCharacterNarrativeFact, normalizeDramaCharacterProfile } from "
 
 import { getAuthSettings } from "@/lib/auth/store";
 import { fetchInternalApi } from "@/lib/server/internal-origin";
-import { getStoredGenerationTask, getStoredGenerationTaskByRequest, queryStoredGenerationTasks } from "@/lib/server/generation-task-store";
+import { areStoredGenerationTasksActive, getStoredGenerationTask, getStoredGenerationTaskByRequest, queryStoredGenerationTasks } from "@/lib/server/generation-task-store";
 import type { CanvasProject } from "@/lib/canvas-project-contract";
 import { applyDramaCanvasMediaField, buildDramaEpisodeCanvasTitle, dramaEpisodeCanvasHandoffId, mergeDramaEpisodeCanvasProject, type DramaCanvasMediaField } from "@/lib/drama-canvas-bridge";
 import type {
@@ -68,6 +68,8 @@ import {
     findDramaEpisodeByCanvasProjectId,
     findDramaProjectBySourceHandoffId,
     getDramaProject,
+    getDramaProjectForClient,
+    getDramaProjectForVisualRun,
     listDramaProjectSummaries,
     updateDramaProject,
     updateDramaProjectAssetMutation,
@@ -160,6 +162,12 @@ export function listDramaProjectSummariesForUser(userId: string, input: { page?:
 
 export async function getDramaProjectForUser(userId: string, id: string) {
     const project = await getDramaProject(cleanText(id), userId);
+    if (!project) throw new DramaProjectServiceError("短剧项目不存在", 404);
+    return project;
+}
+
+export async function getDramaProjectForClientForUser(userId: string, id: string) {
+    const project = await getDramaProjectForClient(cleanText(id), userId);
     if (!project) throw new DramaProjectServiceError("短剧项目不存在", 404);
     return project;
 }
@@ -879,6 +887,13 @@ export async function applyDramaProjectMutationForUser(userId: string, id: strin
         "fieldOrigins",
         "sourceAssets",
     ]);
+    if (Array.isArray(projectPatch.sourceAssets)) {
+        const savedSources = new Map((current.sourceAssets || []).map((asset) => [asset.id, asset]));
+        project.sourceAssets = project.sourceAssets?.map((asset) => {
+            const savedText = savedSources.get(asset.id)?.textContent;
+            return savedText !== undefined && !("textContent" in asset) ? { ...asset, textContent: savedText } : asset;
+        });
+    }
     for (const kind of ["characters", "scenes", "props", "clues"] as const) {
         const changes = input.assets?.[kind];
         if (changes)
@@ -2036,19 +2051,37 @@ export function mergeDramaShotMediaReferences(current: DramaShot, snapshot: Dram
 export async function getLatestDramaProductionRunForUser(userId: string, projectId: string, episodeId: string, transport: { origin?: string; cookie?: string; publicOrigin?: string; scope?: "visual" | "production"; deferDispatch?: boolean } = {}) {
     const savedRun = transport.scope !== "visual" && transport.deferDispatch ? await findLatestDramaProductionRun(userId, projectId, cleanText(episodeId), "production") : undefined;
     if (savedRun) return savedRun;
-    const project = transport.scope === "visual" ? await getDramaProject(cleanText(projectId), userId) : await getDramaProjectForUser(userId, projectId);
+    const visualRun = transport.scope === "visual" ? await findLatestDramaProductionRun(userId, projectId, cleanText(episodeId), "visual") : undefined;
+    if (visualRun?.scope === "visual" && visualRun.confirmedAt && ["ready", "running"].includes(visualRun.status)) {
+        const submitted = visualRun.steps.filter((step) => ["ready", "running"].includes(step.status) && step.taskId);
+        const needsDispatch = visualRun.steps.some((step) => step.status === "ready" && !step.taskId);
+        const needsReviewSync = visualRun.steps.some((step) => step.status === "needs_review" && !step.taskId);
+        if (
+            submitted.length &&
+            !needsDispatch &&
+            !needsReviewSync &&
+            (await areStoredGenerationTasksActive(
+                "image",
+                userId,
+                submitted.map((step) => step.taskId!),
+            ))
+        )
+            return visualRun;
+    }
+    const project = transport.scope === "visual" ? await getDramaProjectForVisualRun(cleanText(projectId), userId, cleanText(episodeId)) : await getDramaProjectForUser(userId, projectId);
     if (!project) throw new DramaProjectServiceError("短剧项目不存在", 404);
     if (transport.scope !== "visual" && transport.deferDispatch) return null;
-    const run = await findLatestDramaProductionRun(userId, projectId, cleanText(episodeId), transport.scope || "production");
+    const run = transport.scope === "visual" ? visualRun : await findLatestDramaProductionRun(userId, projectId, cleanText(episodeId), "production");
     if (!run) {
         if (transport.scope === "visual") await persistReleasedDramaVisualQueue(userId, project, cleanText(episodeId));
         return run;
     }
     if (transport.scope === "visual" && ["completed", "failed", "cancelled", "needs_review"].includes(run.status)) await persistReleasedDramaVisualQueue(userId, project, cleanText(episodeId));
     if (!run.scope || run.scope !== "visual") {
-        const imageSynced = await syncDramaVisualRun(userId, project, run, transport);
+        const productionProject = transport.scope === "visual" ? await getDramaProjectForUser(userId, projectId) : project;
+        const imageSynced = await syncDramaVisualRun(userId, productionProject, run, transport);
         const imageDispatched =
-            imageSynced.confirmedAt && ["running", "ready"].includes(imageSynced.status) ? await dispatchDramaImageSteps(userId, project, imageSynced, transport.origin || "", transport.cookie || "", transport.publicOrigin || "") : imageSynced;
+            imageSynced.confirmedAt && ["running", "ready"].includes(imageSynced.status) ? await dispatchDramaImageSteps(userId, productionProject, imageSynced, transport.origin || "", transport.cookie || "", transport.publicOrigin || "") : imageSynced;
         const refreshedRun = await getDramaProductionRun(userId, projectId, imageDispatched.id);
         if (!refreshedRun) return imageDispatched;
         return dispatchDramaProductionRun(userId, projectId, refreshedRun, transport.origin || "", transport.cookie || "");
@@ -2072,7 +2105,7 @@ async function persistReleasedDramaVisualQueue(userId: string, project: DramaPro
         await persistDramaVisualProjectChanges(userId, project, released);
     } catch (error) {
         if (!(error instanceof DramaProjectStoreError) || error.status !== 409) throw error;
-        const latest = await getDramaProject(project.id, userId);
+        const latest = await getDramaProjectForVisualRun(project.id, userId, episodeId);
         if (!latest) return;
         const retried = releaseOrphanedDramaVisualFrameQueue(latest, episodeId);
         if (retried !== latest) await persistDramaVisualProjectChanges(userId, latest, retried);
@@ -2188,7 +2221,7 @@ async function syncDramaVisualRun(userId: string, project: DramaProject, run: Dr
             const latestRun = await getDramaProductionRun(userId, project.id, run.id);
             if (!latestRun) return run;
             if (latestRun.updatedAt !== run.updatedAt) return latestRun;
-            const latestProject = await getDramaProject(project.id, userId);
+            const latestProject = await getDramaProjectForVisualRun(project.id, userId, run.episodeId);
             if (latestProject) project = latestProject;
         }
         return syncDramaVisualRunNow(userId, project, run, transport);
@@ -2294,7 +2327,7 @@ async function syncDramaVisualRunNow(userId: string, project: DramaProject, run:
             await persistDramaVisualProjectChanges(userId, project, nextProject);
         } catch (error) {
             if (!(error instanceof DramaProjectStoreError) || error.status !== 409) throw error;
-            const latestProject = await getDramaProject(project.id, userId);
+            const latestProject = await getDramaProjectForVisualRun(project.id, userId, run.episodeId);
             if (!latestProject) throw error;
             const rebasedProject = reconcileTerminalDramaVisualSteps(latestProject, run, steps);
             if (rebasedProject !== latestProject) {

@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { readJsonBodyResult } from "@/lib/auth/request";
 import { DRAMA_PRODUCTION_PACKAGE_MAX_BYTES } from "@/lib/server/drama-production-package";
 import { applyDramaProductionPackageForUser, DramaProjectServiceError, getDramaProjectForUser, previewDramaProductionPackageForUser } from "@/lib/server/drama-project-service";
+import { dramaProjectForClient } from "@/lib/server/drama-project-response";
 
 type Context = { params: Promise<{ id: string }> };
 
@@ -16,7 +17,7 @@ export async function POST(request: Request, context: Context) {
     try {
         if (input.action === "apply") {
             const project = await applyDramaProductionPackageForUser(user.id, (await context.params).id, input);
-            return NextResponse.json({ code: 0, data: { project }, msg: "完整制作包已导入" });
+            return NextResponse.json({ code: 0, data: { project: dramaProjectForClient(project) }, msg: "完整制作包已导入" });
         }
         const project = await getDramaProjectForUser(user.id, (await context.params).id);
         const preview = previewDramaProductionPackageForUser(input, {}, project);

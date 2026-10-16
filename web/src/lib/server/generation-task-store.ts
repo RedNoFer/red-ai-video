@@ -76,6 +76,24 @@ export async function getStoredGenerationTask<T>(type: GenerationTaskType, id: s
     return record ? withExecutionState(record.payload as T, record.executionPhase, record.lastUpstreamStatus, record.resultPayload) : null;
 }
 
+/** Reads only indexed task state so visual polling can avoid loading a large project while upstream work continues. */
+export async function areStoredGenerationTasksActive(type: GenerationTaskType, userId: string, ids: string[]) {
+    const taskIds = [...new Set(ids)];
+    if (!taskIds.length) return false;
+    const isActive = (task: { status: string; executionPhase?: string }) => ["pending", "running"].includes(task.status) && ACTIVE_CONCURRENCY_PHASES.some((phase) => phase === task.executionPhase);
+    if (getDatabaseProvider() === "postgres") {
+        await ensurePostgresSchema();
+        const result = await postgresQuery<{ id: string; status: string; execution_phase: string }>("SELECT id, status, execution_phase FROM generation_tasks WHERE user_id = $1 AND task_type = $2 AND id = ANY($3::text[]) AND expires_at > now()", [
+            userId,
+            type,
+            taskIds,
+        ]);
+        return result.rows.length === taskIds.length && result.rows.every((row) => isActive({ status: row.status, executionPhase: row.execution_phase }));
+    }
+    const tasks = (await readFileTasks()).filter((task) => task.userId === userId && task.type === type && taskIds.includes(task.id) && task.expiresAt > Date.now());
+    return tasks.length === taskIds.length && tasks.every((task) => isActive(task));
+}
+
 export async function getStoredGenerationTaskRecord(type: GenerationTaskType, id: string): Promise<StoredGenerationTaskRecord | null> {
     if (getDatabaseProvider() === "postgres") {
         await ensurePostgresSchema();
