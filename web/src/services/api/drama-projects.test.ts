@@ -88,8 +88,13 @@ describe("drama project api", () => {
 
         await getLatestDramaProductionRun("project-one", "episode-one", "visual");
         await getLatestDramaProductionRun("project-one", "episode-one", "production");
+        await getLatestDramaProductionRun("project-one", "episode-one", "production", { preflight: false });
 
-        expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(["/api/drama/projects/project-one/production-runs?episodeId=episode-one&scope=visual", "/api/drama/projects/project-one/production-runs?episodeId=episode-one&scope=production"]);
+        expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+            "/api/drama/projects/project-one/production-runs?episodeId=episode-one&scope=visual",
+            "/api/drama/projects/project-one/production-runs?episodeId=episode-one&scope=production",
+            "/api/drama/projects/project-one/production-runs?episodeId=episode-one&scope=production&preflight=0",
+        ]);
     });
 
     it("sends the selected frame ids and explicit full-regeneration intent", async () => {

@@ -1901,11 +1901,15 @@ export async function createDramaProductionRunForUser(userId: string, projectId:
         },
     };
     const latest = await findLatestDramaProductionRun(userId, project.id, episode.id, "production");
-    if (latest?.planRevision === run.planRevision && !["cancelled", "failed", "completed"].includes(latest.status)) return latest;
-    const activeRunShotIds = new Set(
-        latest?.confirmedAt && ["ready", "running", "paused", "needs_review"].includes(latest.status) ? latest.steps.filter((step) => step.type === "video" && ["ready", "running", "blocked"].includes(step.status)).map((step) => step.shotId) : [],
-    );
-    const activeShots = productionShots.filter((shot) => shot.generationStatus === "queued" || shot.generationStatus === "running" || (activeRunShotIds.has(shot.id) && !["cancelled", "success", "error"].includes(shot.generationStatus || "")));
+    const latestActive = Boolean(latest?.confirmedAt && ["ready", "running", "paused", "needs_review"].includes(latest.status));
+    const latestVideoSteps = latest?.steps.filter((step) => step.type === "video") || [];
+    const uncertainShots = productionShots.filter((shot) => latestVideoSteps.some((step) => step.shotId === shot.id && step.status === "needs_review"));
+    if (uncertainShots.length) throw new DramaProjectServiceError(`${uncertainShots.map((shot) => shot.title || `镜头 ${shot.order}`).join("、")}的上游提交结果待审核，请先核对原任务，避免重复扣费`, 409);
+    const activeShots = productionShots.filter((shot) => {
+        const steps = latestVideoSteps.filter((step) => step.shotId === shot.id);
+        return steps.length ? latestActive && steps.some((step) => ["ready", "running", "blocked"].includes(step.status)) : shot.generationStatus === "queued" || shot.generationStatus === "running";
+    });
+    if (latest?.planRevision === run.planRevision && activeShots.length === productionShots.length) return latest;
     if (activeShots.length) throw new DramaProjectServiceError(`${activeShots.map((shot) => shot.title || `镜头 ${shot.order}`).join("、")}正在生产中，请先中断生成`, 409);
     const prefix = project.videoPromptPrefix?.text.trim();
     if (prefix && productionShots.some((shot) => !run.parameterSnapshot.videoPrompts?.[shot.id]?.startsWith(`${prefix}\n`))) throw new DramaProjectServiceError("统一声明已更新，请重新打开生成确认", 409);
@@ -2030,14 +2034,16 @@ export function mergeDramaShotMediaReferences(current: DramaShot, snapshot: Dram
 }
 
 export async function getLatestDramaProductionRunForUser(userId: string, projectId: string, episodeId: string, transport: { origin?: string; cookie?: string; publicOrigin?: string; scope?: "visual" | "production"; deferDispatch?: boolean } = {}) {
+    const savedRun = transport.scope !== "visual" && transport.deferDispatch ? await findLatestDramaProductionRun(userId, projectId, cleanText(episodeId), "production") : undefined;
+    if (savedRun) return savedRun;
     const project = transport.scope === "visual" ? await getDramaProject(cleanText(projectId), userId) : await getDramaProjectForUser(userId, projectId);
     if (!project) throw new DramaProjectServiceError("短剧项目不存在", 404);
+    if (transport.scope !== "visual" && transport.deferDispatch) return null;
     const run = await findLatestDramaProductionRun(userId, projectId, cleanText(episodeId), transport.scope || "production");
     if (!run) {
         if (transport.scope === "visual") await persistReleasedDramaVisualQueue(userId, project, cleanText(episodeId));
         return run;
     }
-    if (transport.scope !== "visual" && transport.deferDispatch) return run;
     if (transport.scope === "visual" && ["completed", "failed", "cancelled", "needs_review"].includes(run.status)) await persistReleasedDramaVisualQueue(userId, project, cleanText(episodeId));
     if (!run.scope || run.scope !== "visual") {
         const imageSynced = await syncDramaVisualRun(userId, project, run, transport);

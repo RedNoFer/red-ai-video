@@ -3262,6 +3262,55 @@ describe("drama project service updates", () => {
         }
     });
 
+    it("creates a new attempt for a failed video even when the latest run revision matches and the shot status is stale", async () => {
+        const current = project("2026-07-19T08:00:01.000Z", "项目");
+        current.episodes[0].shots = [
+            {
+                id: "shot-one",
+                order: 1,
+                title: "失败镜头",
+                description: "人物抬头",
+                sourceText: "人物抬头",
+                shotBoundary: "",
+                dialogue: "",
+                narration: "",
+                utterances: [],
+                imagePrompt: "",
+                videoPrompt: "人物抬头",
+                cameraMotion: "",
+                duration: 15,
+                characterIds: [],
+                propIds: [],
+                clueIds: [],
+                generationStatus: "idle",
+            },
+        ] as never;
+        mocks.getDramaProject.mockResolvedValue(current);
+        mocks.getAuthSettings.mockResolvedValue({ defaultModels: { imageModel: "image", videoModel: "video", audioModel: "" }, generationDefaults: { imageQuality: "standard", videoQuality: "720" } });
+        mocks.resolveLogicalModelCandidates.mockReturnValue([{ logicalModelId: "video", channelId: "video-channel" }]);
+        const original = await createDramaProductionRunForUser("user-one", current.id, { episodeId: current.episodes[0].id, deferDispatch: true });
+        expect(original.steps.filter((step) => step.type === "video").map((step) => step.shotId)).toContain("shot-one");
+        current.episodes[0].shots[0].generationStatus = "queued";
+        const failed = { ...original, status: "needs_review" as const, steps: original.steps.map((step) => (step.type === "video" ? { ...step, status: "failed" as const, error: "上游明确失败" } : step)) };
+        mocks.findLatestDramaProductionRun.mockResolvedValue(failed);
+        mocks.createDramaProductionRun.mockClear();
+
+        const retried = await createDramaProductionRunForUser("user-one", current.id, { episodeId: current.episodes[0].id, deferDispatch: true });
+
+        expect(retried.id).not.toBe(original.id);
+        expect(mocks.createDramaProductionRun).toHaveBeenCalledOnce();
+    });
+
+    it("reads a saved production run for polling without loading the project", async () => {
+        const run = { id: "run-one", projectId: "drama-one", episodeId: "episode-one", scope: "production", status: "running" };
+        mocks.findLatestDramaProductionRun.mockResolvedValue(run);
+
+        await expect(getLatestDramaProductionRunForUser("user-one", "drama-one", "episode-one", { scope: "production", deferDispatch: true })).resolves.toBe(run);
+
+        expect(mocks.findLatestDramaProductionRun).toHaveBeenCalledOnce();
+        expect(mocks.getDramaProject).not.toHaveBeenCalled();
+    });
+
     it("rejects a new video run for a shot already generating while allowing another shot", async () => {
         const current = project("2026-07-19T08:00:01.000Z", "项目");
         const shot = {

@@ -297,8 +297,10 @@ export function applyDramaEpisodeProductionPackage(project: DramaProject, episod
     }).then((data) => data.project);
 }
 
-export function getLatestDramaProductionRun(projectId: string, episodeId: string, scope: "visual" | "production" = "production") {
-    return request<{ run: DramaProductionRun | null; preflight: DramaProductionPreflight | null }>(`/api/drama/projects/${encodeURIComponent(projectId)}/production-runs?episodeId=${encodeURIComponent(episodeId)}&scope=${scope}`);
+export function getLatestDramaProductionRun(projectId: string, episodeId: string, scope: "visual" | "production" = "production", options: { preflight?: boolean } = {}) {
+    return request<{ run: DramaProductionRun | null; preflight: DramaProductionPreflight | null }>(
+        `/api/drama/projects/${encodeURIComponent(projectId)}/production-runs?episodeId=${encodeURIComponent(episodeId)}&scope=${scope}${options.preflight === false ? "&preflight=0" : ""}`,
+    );
 }
 
 export class DramaApiError extends Error {

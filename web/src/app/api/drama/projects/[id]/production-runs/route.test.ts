@@ -55,6 +55,16 @@ describe("/api/drama/projects/[id]/production-runs", () => {
         await expect(response.json()).resolves.toMatchObject({ data: { preflight: { status: "passed" } } });
     });
 
+    it("skips expensive production preflight on status polling", async () => {
+        const response = await GET(new Request("http://localhost/api/drama/projects/drama-one/production-runs?episodeId=episode-one&preflight=0"), {
+            params: Promise.resolve({ id: "drama-one" }),
+        });
+
+        expect(response.status).toBe(200);
+        expect(mocks.getDramaProductionPreflightForUser).not.toHaveBeenCalled();
+        await expect(response.json()).resolves.toMatchObject({ data: { preflight: null } });
+    });
+
     it("returns the saved run and schedules a single background dispatch while the upstream is busy", async () => {
         const run = { id: "run-created", episodeId: "episode-one", scope: "production", status: "running", confirmedAt: "2026-10-17T00:00:00.000Z" };
         mocks.createDramaProductionRunForUser.mockResolvedValueOnce(run);

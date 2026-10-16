@@ -37,7 +37,7 @@ export async function GET(request: Request, context: Context) {
         const projectId = (await context.params).id;
         const episodeId = new URL(request.url).searchParams.get("episodeId") || "";
         const scope = new URL(request.url).searchParams.get("scope") === "visual" ? ("visual" as const) : ("production" as const);
-        const preflight = scope === "production" ? await getDramaProductionPreflightForUser(user.id, projectId, episodeId) : undefined;
+        const preflight = scope === "production" && new URL(request.url).searchParams.get("preflight") !== "0" ? await getDramaProductionPreflightForUser(user.id, projectId, episodeId) : undefined;
         const transport = {
             origin: resolveInternalOrigin(new URL(request.url).origin),
             publicOrigin: resolvePublicRequestOrigin(request),

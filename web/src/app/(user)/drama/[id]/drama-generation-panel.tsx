@@ -115,6 +115,7 @@ export function DramaGenerationPanel({
     const [autoFixing, setAutoFixing] = useState(false);
     const visualSyncVersion = useRef("");
     const productionSyncVersion = useRef("");
+    const productionPreflightKey = useRef("");
     const readiness = useMemo(() => summarizeDramaGeneration(project, episode), [episode, project]);
     const activeBatchShotIds = useMemo(
         () =>
@@ -214,10 +215,15 @@ export function DramaGenerationPanel({
             if (loading) return;
             loading = true;
             try {
-                const data = await getLatestDramaProductionRun(project.id, episode.id);
+                const episodeKey = `${project.id}:${episode.id}`;
+                const needsPreflight = productionPreflightKey.current !== episodeKey;
+                const data = await getLatestDramaProductionRun(project.id, episode.id, "production", { preflight: needsPreflight });
                 if (!active) return;
                 setProductionRun((current) => (current?.updatedAt === data.run?.updatedAt ? current : data.run));
-                setPreflight((current) => (JSON.stringify(current) === JSON.stringify(data.preflight) ? current : data.preflight));
+                if (needsPreflight) {
+                    setPreflight(data.preflight);
+                    productionPreflightKey.current = episodeKey;
+                }
                 if (data.run?.updatedAt && data.run.updatedAt !== productionSyncVersion.current && !hasActiveDramaVideoPromptRun(useDramaStore.getState().videoPromptRuns, project.id, episode.id)) {
                     productionSyncVersion.current = data.run.updatedAt;
                     const currentProject = useDramaStore.getState().projects.find((item) => item.id === project.id);
@@ -233,6 +239,7 @@ export function DramaGenerationPanel({
                 if (!active) return;
                 setProductionRun(null);
                 setPreflight(null);
+                productionPreflightKey.current = "";
             } finally {
                 loading = false;
             }
