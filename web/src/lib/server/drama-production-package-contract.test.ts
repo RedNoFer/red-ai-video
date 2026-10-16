@@ -46,6 +46,16 @@ describe("drama production package contract compilation", () => {
         for (const title of DRAMA_PACKAGE_SECTIONS) expect(template).toContain(title);
     });
 
+    it("publishes a stable narrator identity and per-line delivery without changing source speech", () => {
+        expect(template).toContain("旁白声音身份与逐句讲述");
+        expect(template).toContain("这不是所有项目的默认性别");
+        expect(template).toContain("archive.voiceDirections");
+        expect(template).toContain("archive.dialogueDirections[].performance");
+        expect(template).toContain("保留原句、原说话人、出现顺序与次数及既定发声时间");
+        expect(docs).toContain("场内画外对白不转为统一旁白");
+        expect(docs).toContain("不得把特定项目的女声偏好设为所有项目默认");
+    });
+
     it("keeps QC metadata out of public prompts in the canonical package contract", () => {
         expect(template).toContain("字段边界（硬性）");
         expect(template).toContain("门禁状态/代码/证据、帧数/切数");

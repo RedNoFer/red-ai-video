@@ -2,7 +2,7 @@
 
 > 制作包格式：`vozeb-drama-production-package-v1`
 >
-> 模板版本：由 `pnpm compile:skills` 自动生成；唯一制作包契约：`vozeb-drama-production-package-v1@1.2.0`（契约 hash：`6b80279cb6597d032bbf63725a3d36251287c72eab1553ad199c5b13a20038a5`，规范源 hash：`2405bcbdd46eaa1469aec388392515fd6d7e390fb753be6d3f82bd836041e300`）。导演 Skill：`drama-video-director@1.16.0`（hash：`4e66841324faf2286cc232340e4661c0b811c283142e907de539729bad5a5045`）；模板自检规则、Seedance Skill 和来源版本由同一编译清单绑定。
+> 模板版本：由 `pnpm compile:skills` 自动生成；唯一制作包契约：`vozeb-drama-production-package-v1@1.2.0`（契约 hash：`6b80279cb6597d032bbf63725a3d36251287c72eab1553ad199c5b13a20038a5`，规范源 hash：`a7e419487e39230bd1abc12c43f71cd029db8e9aa9c3dd62f6ae8e8e273e0189`）。导演 Skill：`drama-video-director@1.16.0`（hash：`4e66841324faf2286cc232340e4661c0b811c283142e907de539729bad5a5045`）；模板自检规则、Seedance Skill 和来源版本由同一编译清单绑定。
 >
 > 使用约定：本模板是当前 v1 制作包的结构、自检规则和最终交付格式。独立 Codex 必须直接生成完整 13 章 Markdown，并在“规范对象”代码块中嵌入唯一标准 JSON；JSON 与正文由 Codex 同一轮生成，服务端不负责章节投影或镜头卡重建。读取和导入保留作者原稿，只读核对并提示缺句、声音冲突或版本差异，不替代完整 authoring 自检。不要把历史制作包、旧 generationPrompt 或旧分镜正文当作新包模板。
 >
@@ -140,7 +140,7 @@ targetDuration = logicalShotCount × shotDuration
 ### 当前绑定版本
 
 - 制作包契约：`vozeb-drama-production-package-v1@1.2.0`，契约 hash：`6b80279cb6597d032bbf63725a3d36251287c72eab1553ad199c5b13a20038a5`。
-- 规范源 hash：`2405bcbdd46eaa1469aec388392515fd6d7e390fb753be6d3f82bd836041e300`；编译规则 hash：`f8a74c82c6c7c88e9a6d04f340b3890dacb527e3a2651cd2cc8f63f9dc17ddf6`。
+- 规范源 hash：`a7e419487e39230bd1abc12c43f71cd029db8e9aa9c3dd62f6ae8e8e273e0189`；编译规则 hash：`75adcec4adc746bfce86ee1cb9a4956d534d716a243e9a07864360da9093bb84`。
 - 主导演 Skill：`drama-video-director@1.16.0`，hash：`4e66841324faf2286cc232340e4661c0b811c283142e907de539729bad5a5045`。
 - 视频提示词公开格式：Seedance 2.5 自然段适配器 `seedance25-prompt-adapter@1.4.0`，导演判断来源为小墨个人分镜 Skill 6.3（`storyboard-director@6.3.0`）；具体输出顺序和例文见第十一章。
 - 每条逻辑片段只提交一份独立 `videoPrompt`。开场、可选视觉基调、真实素材绑定、连续自然时间段和结束状态各司其职；不能把场景、风格、声音、入口状态在多个段落重复堆叠。
@@ -420,6 +420,14 @@ imagePrompt
 - SH01：静默说明。
 
 ## 十、声音设计
+
+### 旁白声音身份与逐句讲述
+
+- 叙述旁白须单独确定并贯穿全书的声音身份，遵循用户指定的性别与声音偏好，写清年龄感、音区、共鸣、质感、气息和口音。当前项目选择女声时，可写“成年女声，中音偏低，口腔聚焦、胸腔共鸣柔和，温润微绒，气息细稳，标准普通话”；这不是所有项目的默认性别。
+- 使用既有 `archive.voiceDirections` 登记原旁白说话人与稳定音色，并在 `project.productionBible.soundBible` 记录统一讲述规则；不新增故事人物或正式 JSON 字段。每条含旁白的独立 `videoPrompt` 只写一次完整音色，在真实参考图片清单之后、首个动作或时间段之前；无旁白镜头省略。
+- 每句旁白按原句语义设计情绪、轻重、停连和收句：回望、事实核对、犹疑、承认责任与结尾留白分别处理，不能只写“自然语速、旁白连续”，也不统一煽情。将具体表演自然地融入该句实际发声窗口，并同步第九章与 `archive.dialogueDirections[].performance`；稳定音色与单句情绪分开。
+- 保留原句、原说话人、出现顺序与次数及既定发声时间；停连必须在原窗口容量内完成，不新增长停顿、赶字或延长收句。叙述旁白在画外讲述，画中人物不配旁白口型；角色本人心理旁白沿用该角色声线，场内画外对白仍属于原角色，不改成统一女旁白。
+- 没有已确认旁白音频时只写固定音色文本；有真实可用的同一旁白音频时才引用，不伪造音频地址、alias 或 voiceId。第十章、逐句表演、第十一章和 JSON 保持一致，第十三章记录覆盖镜头、声音窗口、长度及实际检查范围。
 
 | 镜号 | 环境音 | 拟音 | 音乐 |
 | ---- | ------ | ---- | ---- |
