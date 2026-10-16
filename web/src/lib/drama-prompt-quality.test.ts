@@ -28,6 +28,67 @@ import {
 } from "./drama-prompt-quality";
 
 describe("drama prompt quality", () => {
+    it("accepts a concrete structured result without demanding an invented state change", () => {
+        const result = "同一预览界面同时显示17:46与17:58，空白在两者之间";
+        const action = `主体：预览界面；触发：终点时标进入同框；动作：短移到终点后停住；可见结果：${result}；声音锚点：室内底噪`;
+        expect(validateDramaFrameCausalChain(action, "同轴固定", result, "F1")).toEqual([]);
+        expect(validateDramaFrameCausalChain("主体：人物；触发：剧情；动作：保持状态；可见结果：保持状态；声音锚点：无", "", "保持状态", "F1")).not.toEqual([]);
+    });
+    it("does not confuse physical pressure near a narrator with speech masking", () => {
+        const prompt = "开场时，苏晚在桌东侧，地图摊在桌面。\n00.0–30.0秒，固定中景，苏晚手掌压住地图折痕；旁白清晰居前，发声期间环境音和拟音压低避让。\n原文旁白说：“她没有离开。”\n结束时，苏晚仍在桌东侧，地图摊平。";
+        expect(validateDramaVideoPromptAudioHierarchy(prompt, "F1")).toEqual([]);
+        expect(validateDramaVideoPromptAudioHierarchy(prompt.replace("手掌压住地图折痕", "背景音乐淹没旁白"), "F1")).toContainEqual(expect.stringContaining("声音描述与对白清晰度冲突"));
+    });
+
+    it("applies one opening audio rule to all natural time ranges without hiding a local masking conflict", () => {
+        const prompt = ["开场时，苏晚坐在桌东侧。人声清晰居前，发声时环境音与拟音压低避让。", "00.0–04.0秒，固定中景，苏晚看着纸面。苏晚说：“先核文件。”纸声。", "04.0–08.0秒，固定中景，阿泽抬眼。阿泽说：“我知道。”呼吸。", "结束时，两人仍在桌边。"].join(
+            "\n",
+        );
+        expect(validateDramaVideoPromptAudioHierarchy(prompt, "共享混音")).toEqual([]);
+        expect(validateDramaVideoPromptAudioHierarchy(prompt.replace("阿泽抬眼", "阿泽抬眼，雷声盖过台词"), "共享混音")).toContainEqual(expect.stringContaining("声音描述与对白清晰度冲突"));
+        expect(validateDramaVideoPromptAudioHierarchy(prompt.replace("人声清晰居前，发声时环境音与拟音压低避让。", ""), "共享混音")).not.toEqual([]);
+    });
+
+    it("recognizes concrete device sounds without requiring an unrelated breath or room-noise tag", () => {
+        for (const sound of ["电脑风扇声", "手刹卡扣声", "按键声"]) {
+            const prompt = `开场时，阿泽在车内。\n00.0–30.0秒，固定机位道具特写，阿泽按下卡扣后手指离开，卡扣停在槽中。${sound}。\n结束时，卡扣位置不变。`;
+            expect(extractDramaVideoPromptCards(prompt)[0]?.sound).not.toBe("无");
+            expect(validateDramaSeedanceVideoPromptLayout(prompt, [], "设备声").filter((error) => error.includes("声音锚点"))).toEqual([]);
+        }
+    });
+
+    it("keeps precise voice windows independent from unequal cuts while rejecting missing evidence and mechanical cuts", () => {
+        const frames = [
+            { startSecond: 0, endSecond: 2.5 },
+            { startSecond: 2.5, endSecond: 6.5 },
+            { startSecond: 6.5, endSecond: 15 },
+        ];
+        const utterances = [{ type: "dialogue", speaker: "苏晚", text: "先核文件。", startSecond: 1, endSecond: 3 }];
+        const prompt = "开场时，苏晚坐桌边。\n00.0–15.0秒，固定中景。\n从1秒至3秒，清楚发声；苏晚说：“先核文件。”\nCut to：手部特写，纸面展开。\n结束时，纸面摊平。";
+        expect(validateDramaFrameTiming(frames, utterances, "独立轴", prompt)).toEqual([]);
+        expect(validateDramaFrameTiming(frames, utterances, "缺窗口", prompt.replace("从1秒至3秒", "从1秒至2秒"))).not.toEqual([]);
+        expect(
+            validateDramaFrameTiming(
+                [
+                    { startSecond: 0, endSecond: 5 },
+                    { startSecond: 5, endSecond: 10 },
+                    { startSecond: 10, endSecond: 15 },
+                ],
+                utterances,
+                "等分",
+                prompt,
+            ),
+        ).not.toEqual([]);
+    });
+
+    it("accepts a newline Cut to and an explicit no-subtitles constraint without admitting inline cuts or subtitle requests", () => {
+        const prompt = "开场时，阿泽站车尾，地图在后备厢边沿。无字幕。\n00.0–30.0秒，固定中景，阿泽触到纸角后压住，纸面停稳，纸声。\nCut to：同轴手部近景，手指仍压纸面，纸声延续。\n结束时，阿泽仍在车尾，地图停稳。";
+        const errors = validateDramaSeedanceVideoPromptLayout(prompt, [], "空间精简");
+        expect(errors.some((error) => /必须独立换行|不得包含字幕/.test(error))).toBe(false);
+        expect(validateDramaSeedanceVideoPromptLayout(prompt.replace("\nCut to", " Cut to"), [], "空间精简")).toContainEqual(expect.stringContaining("必须独立换行"));
+        expect(validateDramaSeedanceVideoPromptLayout(prompt.replace("无字幕", "叠加字幕"), [], "空间精简")).toContainEqual(expect.stringContaining("不得包含字幕"));
+    });
+
     it("extracts decimal timeline ranges, inline shared rules and labelled voiceovers", () => {
         const prompt = [
             "【参数】30秒，16:9，有声。",
@@ -630,6 +691,21 @@ describe("drama prompt quality", () => {
             "音效：衣料轻响。",
         ].join("\n");
         expect(validateDramaVideoPromptDialogueTiming(prompt, [{ startSecond: 0, endSecond: 4 }], [{ type: "dialogue", speaker: "萧炎", text }], "SH01")).toEqual(expect.arrayContaining([expect.stringContaining("台词窗口不足")]));
+    });
+
+    it("counts repeated source playback only inside each actual public time range", () => {
+        const text = "旧道还有人。先报坐标，别上来——";
+        const prompt = `开场时，电脑在桌上。\n00.0–03.0秒，录音播放。\n林澈说：“${text}”\n03.0–06.0秒，原速重播一次。\n林澈说：“${text}”\n结束时，播放停止。`;
+        const utterances = [0, 3].map((startSecond) => ({ type: "dialogue", speaker: "林澈", text, startSecond, endSecond: startSecond + 3, speechRateCharsPerSecond: 4 }));
+        expect(validateDramaVideoPromptDialogueTiming(prompt, [], utterances, "SH01")).toEqual([]);
+        expect(validateDramaVideoPromptDialogueTiming(prompt.replace("00.0–03.0秒", "00.0–02.0秒"), [], utterances, "SH01")).toContainEqual(expect.stringContaining("台词窗口不足"));
+    });
+
+    it("recognizes concrete natural operation results without fixed result-field wording", () => {
+        const prompt = "开场时，电脑在仪表台。\n00.0–03.0秒，手部近景固定，因电脑放稳后开始接线，阿泽把原卡插入读卡器，手指离开插口；卡槽轻响。\n结束时，卡仍在插口内。";
+        expect(validateDramaVideoPromptSemanticQuality(prompt, [{ startSecond: 0, endSecond: 3 }], "SH01")).toEqual([]);
+        expect(validateDramaFrameCausalChain("因确认接线后把原卡插入，卡槽轻响", "", "原卡插入读卡器，手指离开插口", "SH01/F1")).toEqual([]);
+        expect(validateDramaFrameCausalChain("自然反应", "", "结果状态", "SH01/F1")).toContainEqual(expect.stringContaining("具体可见结果"));
     });
 
     it("requires a causal trigger, visible result, and sound anchor for an executable frame", () => {

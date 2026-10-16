@@ -150,7 +150,7 @@ function checkShot(
         const compiledVideoPrompt = compileDramaShotPrompts(project, episode, shot).videoPrompt;
         const layoutErrors = validateDramaSeedanceVideoPromptLayout(compiledVideoPrompt, shot.framePlan.frames, label);
         if (layoutErrors.length) issues.push(warning("VIDEO_PROMPT_LAYOUT", layoutErrors[0], { shotId: shot.id, correction: "按 Seedance 2.5 自然段规范补齐开场、连续时间段、完整原句对白与结束状态；删除包装标题和重复视觉合同" }));
-        const timingErrors = validateDramaFrameTiming(shot.framePlan.frames, shot.utterances as DramaDialogueTimingInput[], label);
+        const timingErrors = validateDramaFrameTiming(shot.framePlan.frames, shot.utterances as DramaDialogueTimingInput[], label, compiledVideoPrompt);
         if (timingErrors.length) issues.push(warning("FRAME_DIALOGUE_TIMING", timingErrors[0], { shotId: shot.id, correction: "按对白自然开口、收句、停顿和反应重新分配帧段，禁止机械等长" }));
         const promptTimingErrors = validateDramaVideoPromptDialogueTiming(videoPrompt || "", shot.framePlan.frames, shot.utterances as DramaDialogueTimingInput[], label);
         if (promptTimingErrors.length) issues.push(warning("DIALOGUE_CAPACITY", promptTimingErrors[0], { shotId: shot.id, correction: "把公开自然时间段中的对白移到足够长的 framePlan 时间段；逐句口型窗口不足时必须重切或拆分，不能异常加速" }));

@@ -38,10 +38,10 @@ export function extractDramaSourceDialogues(source: string, speakers: readonly s
 }
 
 export function isDramaVoiceoverSpeaker(value: string) {
-    return /[（(](?:心理旁白|记忆旁白|人物介绍旁白)[）)]$/u.test(value.trim());
+    return /[（(](?:心理独白|心理旁白|记忆旁白|人物介绍旁白)[）)]$/u.test(value.trim());
 }
 
 /** Off-screen speech and explicitly labelled voiceover retain their source speaker. */
 export function normalizeDramaSpeaker(value: string) {
-    return value.replace(/[\s\u3000]/gu, "").replace(/(?:[（(](?:(?:场内)?画外(?:音|对白)?|心理旁白|记忆旁白|人物介绍旁白)[）)]|(?:在)?场内画外(?:音|对白)?|画外音)$/u, "");
+    return value.replace(/[\s\u3000]/gu, "").replace(/(?:[（(](?:(?:场内)?画外(?:音|对白)?|心理独白|心理旁白|记忆旁白|人物介绍旁白)[）)]|(?:在)?场内画外(?:音|对白)?|画外音)$/u, "");
 }

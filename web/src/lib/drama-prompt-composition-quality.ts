@@ -172,6 +172,8 @@ function classifyCutTargets(value: string, subjectNames: readonly string[]) {
 }
 
 function extractBindingSection(prompt: string) {
+    const references = prompt.match(/(?:^|\n)\s*参考图片\s*[：:]([\s\S]*?)(?=\n\s*(?:角色音色\s*[：:]|\d+(?:\.\d+)?\s*[–—-]|Cut to\s*[：:]|结束时[，,])|$)/u);
+    if (references) return references[1].trim();
     const heading = prompt.match(/【素材绑定】([\s\S]*?)(?=【[^】]+】|$)/u);
     if (heading) return heading[1].trim();
     const line = prompt.match(/(?:^|\n)\s*素材绑定\s*[：:]([\s\S]*?)(?=\n\s*(?:动态意图|全局设定|起始可见状态|时间段动作|单一主运镜|环境压力|视觉风格|声音意图|结束画面|连续性锁|针对性约束)\s*[：:]|$)/u);

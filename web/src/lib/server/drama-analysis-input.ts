@@ -438,6 +438,7 @@ export function validateDramaVideoPromptOutput(
             outputFrames.map((frame) => ({ startSecond: Number(frame.startSecond), endSecond: Number(frame.endSecond) })),
             sourceShot?.utterances || [],
             `镜头 ${shotId}`,
+            prompt,
         );
         if (timingErrors.length) return timingErrors.join("；");
         const utteranceCoverageErrors = validateDramaVideoPromptUtteranceCoverage(prompt, promptFrames, sourceShot?.utterances || [], `镜头 ${shotId}`);

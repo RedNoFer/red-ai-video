@@ -9,7 +9,7 @@ describe("drama dialogue timing", () => {
     });
 
     it("recognizes only the explicit voiceover labels without turning narration into direct speech", () => {
-        const labels = ["心理旁白", "记忆旁白", "人物介绍旁白"];
+        const labels = ["心理独白", "心理旁白", "记忆旁白", "人物介绍旁白"];
         const lines = labels.map((label) => formatDramaDialogueLine(`齐岚（${label}）`, "她记得。"));
         expect(lines).toEqual(labels.map((label) => `齐岚（${label}）：“她记得。”`));
         expect(extractQuotedDramaDialogues(lines.join("；"))).toEqual(labels.map((label) => ({ speaker: `齐岚（${label}）`, text: "她记得。" })));

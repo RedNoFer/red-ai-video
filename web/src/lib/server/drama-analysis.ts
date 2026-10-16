@@ -234,7 +234,7 @@ export function validateDramaVisualAnalysis(value: DramaVisualAnalysis, sourceSh
         )
             errors.push(`${label}缺少完整的连续性字段`);
         if (!shot.framePlan.frames.length) errors.push(`${label}缺少逐帧计划`);
-        errors.push(...validateDramaFrameTiming(shot.framePlan.frames, source?.utterances || [], label));
+        errors.push(...validateDramaFrameTiming(shot.framePlan.frames, source?.utterances || [], label, shot.videoPrompt));
         for (const [index, frame] of shot.framePlan.frames.entries()) {
             for (const [field, text] of [
                 ["起点", frame.startPrompt],

@@ -27,11 +27,11 @@ sourceCommit: ad0e68ba6ce24fb9ae9c67c9276061cef37663f1
 
 本 Skill 只负责已验证的 Seedance 2.5 能力、模式、时长、画幅、清晰度和参考素材限制的适配，不调用供应商接口、不消耗积分，也不创建第二套短剧导演规则。用户事实、项目资产、已验收尾帧和服务端供应商协议优先于本文件。
 
-短剧制作包和 /api/drama/analyze 的公开视频正文遵循 canonical drama-video-director Skill 的唯一自然段契约 `seedance25-prompt-adapter@1.4.0`。供应商能力适配只处理模型模式、时长、画幅、清晰度和实际参考素材；不得定义第二种公开视频结构、补写统一视觉或改写作者正文。正文长度目标为 2000 个 Unicode 字符以内，2500 仅提醒。
+短剧制作包和 /api/drama/analyze 的公开视频正文遵循 canonical drama-video-director Skill 的唯一自然段契约 `seedance25-prompt-adapter@1.4.2`。供应商能力适配只处理模型模式、时长、画幅、清晰度和实际参考素材；不得定义第二种公开视频结构、补写统一视觉或改写作者正文。正文长度目标为 2000 个 Unicode 字符以内，2500 仅提醒。
 
 ### Seedance 2.5 压缩与公开段落规则
 
-供应商参数和素材限制按已验证能力处理；公开提示词格式只引用 canonical drama-video-director Skill 中的 `seedance25-prompt-adapter@1.4.0`，不在本文件重复定义。
+供应商参数和素材限制按已验证能力处理；公开提示词格式只引用 canonical drama-video-director Skill 中的 `seedance25-prompt-adapter@1.4.2`，不在本文件重复定义。
 
 公开时间段可合并连续内部帧，数量不必一致；真实硬切仍须在公开视频以单独换行的 `Cut to：` 显示，并在切后帧 `transitionPrompt` 留证。dense-30s 只在显式锁定时执行，减切原因留在结构化 QC。正文目标为 2000 个 Unicode 字符以内，2500 仅提醒；不得阻断、截断或拆分，也不得删减原句对白和连续性事实。
 

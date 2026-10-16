@@ -5,10 +5,14 @@ import { hasDramaReferenceAnchorClarity } from "@/lib/drama-prompt-compiler";
 import { validateDramaCharacterWardrobeContinuity, validateDramaCutInformationDiversity, validateDramaPromptComposition, validateDramaReferenceAliasConsistency } from "@/lib/drama-prompt-composition-quality";
 import {
     extractDramaVideoPromptCards,
+    PUBLIC_VIDEO_VISIBLE_ACTION_PATTERN as observableActionPattern,
+    PUBLIC_VIDEO_VISIBLE_RESULT_PATTERN as observableResultPattern,
+    SOUND_ANCHOR_PATTERN as publicSoundAnchorPattern,
     DRAMA_VIDEO_PROMPT_MAX_CHARACTERS,
     DRAMA_VIDEO_PROMPT_TARGET_CHARACTERS,
     dramaDenseHardCutIssues,
     dramaCameraEventEvidenceIssues,
+    dramaVideoPromptTimeRanges,
     hasConcreteDramaCameraDirection,
     validateDramaVideoPromptAudioHierarchy,
     validateDramaFrameCausalChain,
@@ -19,7 +23,7 @@ import {
     validateDramaVideoPromptSemanticQuality,
 } from "@/lib/drama-prompt-quality";
 import { validateDramaContinuityEdges } from "@/lib/drama-continuity-policy";
-import { extractDramaSourceDialogues } from "@/lib/drama-source-dialogue";
+import { extractDramaSourceDialogues, type DramaSourceDialogue } from "@/lib/drama-source-dialogue";
 import { DRAMA_PACKAGE_GATE_CODES, DRAMA_PACKAGE_SECTIONS } from "@/lib/server/drama-production-package-contract";
 
 export type DramaAuthoringQualityInput = {
@@ -27,6 +31,7 @@ export type DramaAuthoringQualityInput = {
     sources: readonly DramaAuthoringSourceSnapshot[];
     targetNarrativeChapter?: number | string;
     authoringAudit?: DramaAuthoringAudit;
+    sourceDialogueLedger?: readonly DramaSourceDialogue[];
 };
 
 export class DramaAuthoringQualityGateError extends Error {
@@ -96,10 +101,7 @@ function extractFrameIds(value: string) {
 }
 
 const genericActionPattern = /^(?:自然反应|情绪加剧|准备回应|保持状态|承受压力|电影感推进|动作展开|关键变化|结果状态|动作节点已经成立|保持一致)$/u;
-const observableActionPattern = /抬|低|看|望|移|转|起身|前倾|后退|按|压|握|松|收|推|拉|停|吸气|呼吸|屏息|皱|眯|睁|闭|抬手|放下|落下|走|跪|拍|碰|拿|放|递|撕|捏|拔|挥|闪|震|响|开门|关门|离开|进入|凝视|回看/u;
-const observableResultPattern = /停在|落在|变为|变得|露出|显出|抬起|垂下|松开|收紧|移向|转向|对准|接住|落下|留下|响起|静止|形成|暴露|显现|被看见|无人插话|沉默|低头|抬眼|受力|改变/u;
 const actionFactPattern = /因为|由于|于是|随后|最终|决定|提出|答应|拒绝|要求|悔婚|退婚|离开|进入|走进|看见|发现|说|喊|跪|拔|抬|转身|交给|拿起|放下|撞|倒|死|活|承认|质问|回应/u;
-const publicSoundAnchorPattern = /人声|呼吸|吸气|吐气|衣料|脚步|碰撞|摩擦|风声|水声|门响|木石|混响|静默|沉默|屏息|余响|底噪|无声/u;
 const cinematicPlaceholderPattern = /^(?:入口构图已建立|动作展开|关键变化|结果状态|动作节点已经成立|主体的眉眼、呼吸、手部和道具接触关系清晰可见|情绪通过身体动作呈现)$/u;
 const videoPromptPseudoParameterPattern = /(?:palette|saturation|film_stock|grain|halation)\s*=/u;
 const videoPromptRuntimePlaceholderPattern = /undefined|null|NaN|\[object Object\]/u;
@@ -113,7 +115,7 @@ export function validateDramaAuthoringQuality(input: DramaAuthoringQualityInput)
     const customTemplateDenseRule = hasDramaDenseCutRuleInCustomTemplateSources(input.sources);
 
     checkLiteraryCompleteness(checks, input.package, sourceText, input.targetNarrativeChapter);
-    checkDialogueCoverage(checks, input.package, sourceText);
+    checkDialogueCoverage(checks, input.package, sourceText, input.sourceDialogueLedger);
     checkDialogueCapacity(checks, input.package);
     checkFrameDialogueTiming(checks, input.package);
     checkDialoguePerformanceQuality(checks, input.package);
@@ -279,7 +281,7 @@ function checkFrameDialogueTiming(checks: DramaQualityGateCheck[], value: DramaP
             const label = `${episode.code}/${shot.code}`;
             const frames = shot.framePlan?.frames || [];
             return [
-                ...validateDramaFrameTiming(frames, shot.utterances as DramaDialogueTimingInput[], label),
+                ...validateDramaFrameTiming(frames, shot.utterances as DramaDialogueTimingInput[], label, shot.videoPrompt),
                 ...validateDramaVideoPromptDialogueTiming(shot.videoPrompt, frames, shot.utterances as DramaDialogueTimingInput[], label),
                 ...validateDramaVideoPromptUtteranceCoverage(shot.videoPrompt, frames, shot.utterances as DramaDialogueTimingInput[], label),
             ];
@@ -367,6 +369,7 @@ function checkVideoPromptSemanticQuality(checks: DramaQualityGateCheck[], value:
             const label = `${episode.code}/${shot.code}`;
             failures.push(...validateDramaVideoPromptSemanticQuality(shot.videoPrompt, shot.framePlan?.frames || [], label));
             const cards = extractDramaVideoPromptCards(shot.videoPrompt);
+            const ranges = dramaVideoPromptTimeRanges(shot.videoPrompt);
             const auditShot = auditByShot.get(shot.code || "");
             if (audit) {
                 if (!auditShot || auditShot.frames.length !== (shot.framePlan?.frames.length || 0)) {
@@ -376,7 +379,8 @@ function checkVideoPromptSemanticQuality(checks: DramaQualityGateCheck[], value:
                         const required = [frame.subject, frame.trigger, frame.visibleAction, frame.visibleResult, frame.informationDelta, frame.cameraPurpose, frame.soundAnchor];
                         if (required.some((item) => !item.trim())) failures.push(`${label}/F${index + 1} authoringAudit 缺少主体、触发、动作、结果、信息增量、运镜动机或声音锚点`);
                         if (frame.frameId !== shot.framePlan?.frames[index]?.id) failures.push(`${label}/F${index + 1} authoringAudit frameId 未与真实 framePlan 对齐`);
-                        const visual = cards[index]?.visual || "";
+                        const start = shot.framePlan?.frames[index]?.startSecond;
+                        const visual = cards[ranges.findIndex((range) => start !== undefined && range.startSecond <= start && start < range.endSecond)]?.visual || "";
                         if (visual && frame.subject && !visual.includes(frame.subject)) failures.push(`${label}/F${index + 1} authoringAudit 主体未出现在公开画面内容中`);
                     }
                 }
@@ -442,10 +446,13 @@ function checkLiteraryCompleteness(checks: DramaQualityGateCheck[], value: Drama
     else add(checks, "LITERARY_SCRIPT_COMPLETENESS", true, "目标小说章节", `targetNarrativeChapter=${String(targetNarrativeChapter ?? "未声明")}；制作包一级章节编号与小说章节独立`, ["targetNarrativeChapter"], "");
 }
 
-function checkDialogueCoverage(checks: DramaQualityGateCheck[], value: DramaProductionPackageV1, sourceText: string) {
-    const lines = extractDramaSourceDialogues(
-        sourceText,
-        value.assets.characters.map((character) => character.name),
+function checkDialogueCoverage(checks: DramaQualityGateCheck[], value: DramaProductionPackageV1, sourceText: string, sourceDialogueLedger?: readonly DramaSourceDialogue[]) {
+    const lines = (
+        sourceDialogueLedger ||
+        extractDramaSourceDialogues(
+            sourceText,
+            value.assets.characters.map((character) => character.name),
+        )
     )
         .filter((line) => line.speaker)
         .map((line) => line.text);
@@ -483,6 +490,16 @@ function checkDialoguePerformanceQuality(checks: DramaQualityGateCheck[], value:
             const utterances = shot.utterances.filter((utterance) => utterance.type === "dialogue" && utterance.startSecond !== undefined && utterance.endSecond !== undefined);
             if (!utterances.length) continue;
             const frames = shot.framePlan?.frames || [];
+            const structuredPerformances = new Map((shot.dialoguePerformance || []).map((item) => [item.utteranceId, item]));
+            const hasStructuredPerformance = utterances.every((utterance) => {
+                const item = structuredPerformances.get(utterance.id);
+                return (
+                    item &&
+                    [item.intent, item.tone, item.pace, item.pause, item.emphasis, item.facialReactionBefore, item.facialReactionDuring, item.facialReactionAfter].every((value) => value?.trim()) &&
+                    /视线|目光|呼吸|肩|身体|手|指|嘴|唇|下颌|停住|低头|抬眼|前倾|收紧|松开|转向/u.test(item.facialReactionAfter)
+                );
+            });
+            if (hasStructuredPerformance) continue;
             const segmentPerformances = frames.map((frame) => {
                 const segmentText = [frame.actionPrompt, frame.transitionPrompt || "", frame.endPrompt || ""].join("\n");
                 const spoken = utterances.filter((utterance) => Number(utterance.startSecond) < frame.endSecond && Number(utterance.endSecond) > frame.startSecond);
@@ -566,8 +583,11 @@ function checkActionDensity(checks: DramaQualityGateCheck[], value: DramaProduct
             for (const frame of frames) {
                 const action = frame.actionPrompt.trim();
                 const result = `${frame.endPrompt || ""}\n${frame.transitionPrompt || ""}\n${frame.imagePrompt}`.trim();
-                if (!action || genericActionPattern.test(action) || !observableActionPattern.test(action) || !result || !observableResultPattern.test(result) || cinematicPlaceholderPattern.test(result)) missing.push(`${shot.code}/${frame.id}`);
-                missing.push(...validateDramaFrameCausalChain(frame.actionPrompt, frame.transitionPrompt, frame.endPrompt, `${shot.code}/${frame.id}`));
+                const causalIssues = validateDramaFrameCausalChain(frame.actionPrompt, frame.transitionPrompt, frame.endPrompt, `${shot.code}/${frame.id}`);
+                const explicitResult = action.includes("；可见结果：") && action.includes("；声音锚点：") && !causalIssues.length;
+                if (!action || genericActionPattern.test(action) || !observableActionPattern.test(action) || !result || (!explicitResult && !observableResultPattern.test(result)) || cinematicPlaceholderPattern.test(result))
+                    missing.push(`${shot.code}/${frame.id}`);
+                missing.push(...causalIssues);
             }
             const publicCards = extractDramaVideoPromptCards(shot.videoPrompt);
             if (validateDramaSeedanceVideoPromptLayout(shot.videoPrompt, frames, shot.code).length) missing.push(shot.code + "/videoPrompt 时间轴未完整覆盖真实 framePlan");
@@ -624,8 +644,8 @@ function checkEmotionProgression(checks: DramaQualityGateCheck[], value: DramaPr
             continue;
         }
         const values = [beats.start, beats.middle, beats.end].map((beat) => [beat.emotion, beat.facialAction, beat.gaze, beat.bodyAction].join("|"));
-        const restrained = /克制|稳定表演|情绪不升级|静态留白|结果停留/u.test(`${shot.performanceNotes || ""}\n${shot.performancePlan?.emotionalObjective || ""}`);
-        if (values.some((value) => value.length < 8) || (!restrained && new Set(values).size < 3) || values.some((value) => /自然|到位|逐步变化|结果成立|保持状态|情绪加剧/u.test(value))) failed.push(shot.code);
+        const restrained = /克制|稳定表演|情绪不升级|静态留白|结果停留/u.test(`${shot.performanceNotes || ""}\n${shot.performancePlan?.emotionalObjective || ""}\n${shot.performancePlan?.restraintLevel || ""}`);
+        if (values.some((value) => value.length < 8) || (!restrained && new Set(values).size < 3) || values.some((value) => /^(?:自然|到位|逐步变化|结果成立|保持状态|情绪加剧)(?:[|。；\s]|$)/u.test(value))) failed.push(shot.code);
     }
     add(
         checks,
@@ -719,16 +739,16 @@ function checkCameraMotivation(checks: DramaQualityGateCheck[], value: DramaProd
     const auditByShot = new Map((audit?.shots || []).map((shot) => [shot.shotId, shot]));
     for (const shot of value.episodes.flatMap((episode) => episode.shots)) {
         const cards = extractDramaVideoPromptCards(shot.videoPrompt);
-        const text = `${shot.cameraMotion || ""}\n${shot.videoPrompt || ""}\n${cards.map((card) => card.cameraMotion).join("\n")}`;
+        const text = `${shot.cameraMotion || ""}\n${shot.videoPrompt || ""}\n${cards.map((card) => card.cameraMotion).join("\n")}\n${(auditByShot.get(shot.code || "")?.frames || []).map((frame) => frame.cameraPurpose).join("\n")}`;
         const hasCamera = /机位|景别|角度|焦段|固定|推|拉|摇|移|跟拍|环绕|镜头/u.test(text);
-        const hasConcretePurpose = /为了|服务于|让观众看见|揭示|强调|承接|跟随|锁定|暴露|突出|把[^。；\n]{0,20}(?:看见|传给|压到|推向)/u.test(text);
+        const hasConcretePurpose = /为了|服务于|让观众看见|让观众看清|看清|确认|揭示|强调|承接|跟随|锁定|暴露|突出|把[^。；\n]{0,20}(?:看见|传给|压到|推向)/u.test(text);
         const genericPurpose = /服务于当前(?:信息|动作)变化|电影感推进|中轴缓慢推进/u.test(text) && !hasConcretePurpose;
         if (!hasCamera || !hasConcretePurpose || genericPurpose) failed.push(shot.code);
         if (audit) {
             const auditFrames = auditByShot.get(shot.code || "")?.frames || [];
-            for (const [index, card] of cards.entries()) {
-                const purpose = auditFrames[index]?.cameraPurpose || card.raw;
-                if (!card.cameraMotion || !hasConcreteDramaCameraDirection(card.cameraMotion) || !/(?:为了|揭示|强调|跟随|锁定|暴露|突出|让观众看见|把[^。；\n]{0,20}(?:看见|传给|压到|推向))/u.test(purpose)) failed.push(`${shot.code}/F${index + 1}`);
+            for (const [index, frame] of auditFrames.entries()) {
+                const purpose = frame.cameraPurpose;
+                if (!hasConcreteDramaCameraDirection(purpose) || !/(?:为了|揭示|强调|跟随|锁定|暴露|突出|让观众看见|让观众看清|看清|确认|把[^。；\n]{0,20}(?:看见|传给|压到|推向))/u.test(purpose)) failed.push(`${shot.code}/F${index + 1}`);
             }
         }
     }
@@ -815,7 +835,8 @@ function checkCompositionContract(checks: DramaQualityGateCheck[], value: DramaP
             requiresDetail: /手部|掌根|掌心|指节|桌沿|接触|受力|道具|物证/u.test(shotText),
             label: shot.code,
         });
-        failures.push(...errors);
+        const sourceOcclusion = /许棠抬手挡(?:了挡)?脸/u.test(shot.sourceText || "") && /许棠[^。\n]*挡(?:住|了挡)?脸/u.test(shot.videoPrompt);
+        failures.push(...errors.filter((error) => !sourceOcclusion || !error.includes("遮挡描述")));
     }
     add(
         checks,

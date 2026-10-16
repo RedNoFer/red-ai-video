@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
+import prettier from "prettier";
 
 import { describe, expect, it } from "vitest";
 
@@ -41,7 +42,10 @@ describe("drama production package contract compilation", () => {
         expect(template).toMatch(/`VIDEO_PROMPT_LENGTH`\s*\| warning/u);
         expect(template).toContain("2500 是提醒线");
         expect(template).toContain("超出只提示");
-        expect(template).toContain("seedance25-prompt-adapter@1.4.0");
+        expect(template).toContain("seedance25-prompt-adapter@1.4.2");
+        expect(template).toContain("9—11帧、8—10次硬切");
+        expect(template).toContain("首个内部镜头也标出自己的起止范围");
+        expect(template).toContain("禁止只换景别重复同一信息");
         for (const gateCode of DRAMA_PACKAGE_GATE_CODES) expect(template).toContain(`\`${gateCode}\``);
         for (const title of DRAMA_PACKAGE_SECTIONS) expect(template).toContain(title);
     });
@@ -63,12 +67,20 @@ describe("drama production package contract compilation", () => {
         expect(docs).toContain("字段边界（authoring 硬性要求）");
     });
 
-    it("publishes the field guide and tested JSON from the canonical documentation", () => {
+    it("keeps beat budgeting and character perspective rules without a borrowed story example", () => {
+        expect(template).toContain("剧情节拍与时长职责");
+        expect(template).toContain("不能单独证明剩余时长有剧情职责");
+        expect(template).toContain("用户要求取消第三方旁白时");
+        expect(template).toContain("原文间接引述的公开陈述仍是他人可听见的剧情事件");
+        expect(template).not.toContain("开场时，阿泽沿柏油路");
+    });
+
+    it("publishes the field guide and tested JSON from the canonical documentation", async () => {
         for (const name of ["drama-production-package-v1-fields.md", "drama-production-package-v1-field-example.json"]) {
             const published = readFileSync(new URL(`../../../public/${name}`, import.meta.url), "utf8");
             const source = readFileSync(new URL(`../../../../docs/${name}`, import.meta.url), "utf8");
             if (name.endsWith(".json")) expect(JSON.parse(published)).toEqual(JSON.parse(source));
-            else expect(published).toBe(source);
+            else expect(published).toBe(await prettier.format(source, { ...(await prettier.resolveConfig(new URL(`../../../public/${name}`, import.meta.url).pathname)), parser: "markdown" }));
         }
         expect(template).toContain("drama-production-package-v1-fields.md");
         expect(docs).not.toContain("三视图");

@@ -415,7 +415,7 @@ export function previewDramaProductionPackageObject(
                 const frames = merged.framePlan?.frames || [];
                 const errors = [
                     ...validateDramaVideoPromptCardLayout(merged.videoPrompt, frames, label),
-                    ...validateDramaFrameTiming(frames, merged.utterances || [], label),
+                    ...validateDramaFrameTiming(frames, merged.utterances || [], label, merged.executionVideoPrompt || merged.videoPrompt),
                     ...validateDramaVideoPromptUtteranceCoverage(merged.executionVideoPrompt || merged.videoPrompt, frames, merged.utterances || [], label),
                 ];
                 importWarnings.push(...errors.map((error) => `${error}；保留人工内容，请作者核对合并后的对白、帧计划和提示词。`));
@@ -2326,7 +2326,7 @@ function validateStrictPackageVideoPrompt(
     if (options.requireContentQuality) {
         const layoutErrors = validateDramaVideoPromptCardLayout(prompt, frames, label);
         if (layoutErrors.length) throw new DramaProductionPackageError(layoutErrors.join("；"));
-        const timingErrors = validateDramaFrameTiming(frames, (options.dialogueUtterances || []) as DramaDialogueTimingInput[], label);
+        const timingErrors = validateDramaFrameTiming(frames, (options.dialogueUtterances || []) as DramaDialogueTimingInput[], label, prompt);
         if (timingErrors.length) throw new DramaProductionPackageError(timingErrors.join("；"));
     }
     if (options.requireCameraPlan) {

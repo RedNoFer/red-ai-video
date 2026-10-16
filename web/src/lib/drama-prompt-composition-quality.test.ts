@@ -70,6 +70,42 @@ describe("drama prompt composition and cut quality gates", () => {
 
         expect(errors.join("；")).toContain("服装、发型、年龄感或固定配饰连续性锚点");
     });
+
+    it("reads the canonical reference list before character voices and natural time ranges", () => {
+        expect(
+            validateDramaReferenceAliasConsistency({
+                prompt: "开场时，阿泽在书桌旁。\n参考图片：\n@图片1：场景「书桌」\n@图片2：角色「阿泽」\n角色音色：阿泽低中音。\n00.0–30.0秒，阿泽看向录音卡。",
+                manifest: [
+                    { alias: "@图片1", role: "scene_anchor", purpose: "书桌空间" },
+                    { alias: "@图片2", role: "character_anchor", purpose: "阿泽身份" },
+                ],
+            }),
+        ).toEqual([]);
+    });
+
+    it("still rejects reordered canonical references", () => {
+        expect(
+            validateDramaReferenceAliasConsistency({
+                prompt: "参考图片：\n@图片2：角色「阿泽」\n@图片1：场景「书桌」\n00.0–30.0秒，阿泽看向录音卡。",
+                manifest: [
+                    { alias: "@图片1", role: "scene_anchor", purpose: "书桌空间" },
+                    { alias: "@图片2", role: "character_anchor", purpose: "阿泽身份" },
+                ],
+            }).join("；"),
+        ).toContain("alias 顺序与 referenceManifest 不一致");
+    });
+
+    it("does not use a timeline reference to fill a missing binding", () => {
+        expect(
+            validateDramaReferenceAliasConsistency({
+                prompt: "参考图片：\n@图片1：场景「书桌」\n00.0–30.0秒，@图片2中的阿泽抬眼。",
+                manifest: [
+                    { alias: "@图片1", role: "scene_anchor", purpose: "书桌空间" },
+                    { alias: "@图片2", role: "character_anchor", purpose: "阿泽身份" },
+                ],
+            }).join("；"),
+        ).toContain("缺少参考图 @图片2");
+    });
 });
 
 it("accepts explicit face safety instructions while still rejecting actual occlusion", () => {

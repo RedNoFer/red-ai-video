@@ -87,6 +87,39 @@ function blockers(report: ReturnType<typeof validateDramaAuthoringQuality>, code
 const hardCutTransition = (time: number, trigger = "萧炎抬眼", camera = "入口侧近景") =>
     `镜头事件：时间：${time}秒；类型：硬切；触发事件：${trigger}；新机位：${camera}；切后主运镜：锁定机位后缓慢推进；信息目的：看清人物视线变化；承接：站位、视线与长桌轴线连续。`;
 
+it("matches public groups to frame times and still audits the camera of every internal frame", () => {
+    const value = packageValue();
+    const shot = value.episodes[0].shots[0];
+    shot.videoPrompt =
+        "开场时，萧炎在桌东侧，萧战在北侧，纳兰在西侧。\n00.0–12.0秒，平视中景固定机位，萧炎看见纸后抬眼，视线停在桌上；衣料摩擦。\nCut to：平视中景固定机位，萧战听见纸响后低头，手停在桌边；呼吸声。\n12.0–30.0秒，\nCut to：平视中景固定机位，纳兰面对萧炎抬眼，下颌收紧；衣料摩擦。\n结束时，三人仍在各自桌边。";
+    const subjects = ["萧炎", "萧战", "纳兰"];
+    shot.framePlan!.frames = subjects.map((subject, index) => ({ ...shot.framePlan!.frames[0], id: `F${index + 1}`, sequenceIndex: index + 1, startSecond: [0, 5, 12][index], endSecond: [5, 12, 30][index], actionPrompt: `${subject}抬眼，手停在桌边` }));
+    const audit = {
+        schemaVersion: 1 as const,
+        shots: [
+            {
+                shotId: "SH01",
+                frames: subjects.map((subject, index) => ({
+                    frameId: `F${index + 1}`,
+                    subject,
+                    trigger: "看见纸面",
+                    visibleAction: `${subject}抬眼`,
+                    visibleResult: "视线停在桌边",
+                    informationDelta: "看清不同人物的注视对象",
+                    cameraPurpose: "中景平视固定机位，看清人物视线落点",
+                    soundAnchor: "衣料摩擦",
+                })),
+            },
+        ],
+    };
+    const report = validateDramaAuthoringQuality({ package: value, sources: [], authoringAudit: audit });
+    expect(blockers(report, "VIDEO_PROMPT_SEMANTIC_QUALITY")).toEqual([]);
+    expect(blockers(report, "CAMERA_MOTIVATION")).toEqual([]);
+    audit.shots[0].frames[2].cameraPurpose = "电影感";
+    const failed = validateDramaAuthoringQuality({ package: value, sources: [], authoringAudit: audit });
+    expect(blockers(failed, "CAMERA_MOTIVATION")[0]?.evidence).toContain("SH01/F3");
+});
+
 it("checks author-reviewed source dialogue rather than assigning a quoted pronoun as a character", () => {
     const value = packageValue({ dialogue: true });
     const utterance = value.episodes[0].shots[0].utterances[0];
@@ -100,6 +133,28 @@ it("checks author-reviewed source dialogue rather than assigning a quoted pronou
 });
 
 describe("drama authoring quality gates", () => {
+    it("uses the official per-utterance performance fields without repeating legacy frame labels", () => {
+        const value = packageValue({ dialogue: true });
+        const shot = value.episodes[0].shots[0];
+        shot.dialoguePerformance = shot.utterances
+            .filter((item) => item.type === "dialogue")
+            .map((item) => ({
+                utteranceId: item.id,
+                intent: "回应退婚要求",
+                tone: "压低声音",
+                pace: "自然语速",
+                pause: "句末停顿",
+                emphasis: "原句重音",
+                facialReactionBefore: "抬眼",
+                facialReactionDuring: "嘴唇随原句开合",
+                facialReactionAfter: "收口，视线落在长桌中央",
+            }));
+        expect(shot.dialoguePerformance.length).toBeGreaterThan(0);
+        expect(blockers(validateDramaAuthoringQuality({ package: value, sources: [] }), "DIALOGUE_PERFORMANCE")).toHaveLength(0);
+        shot.dialoguePerformance[0].tone = "";
+        expect(blockers(validateDramaAuthoringQuality({ package: value, sources: [] }), "DIALOGUE_PERFORMANCE")).not.toHaveLength(0);
+    });
+
     it("keeps project-agent runtime gate codes within the versioned contract", () => {
         const value = packageValue();
         value.authoring = {

@@ -26,8 +26,9 @@ const GENERIC_DETAIL_PATTERNS = [
     /^推动当前镜头行动并回应对手或环境$/u,
 ];
 const WEAK_VIDEO_DETAIL_PATTERNS = [/^保持本镜可见反应$/u, /^保持可读的具体反应$/u, /(?:眉眼|表情|呼吸).*(?:随|根据).*(?:变化|推进|触发).*(?:可见变化)/u, /^(?:准备回应|承受(?:压力)?|情绪(?:逐步)?加剧|保持状态|自然反应)$/u];
-const CONCRETE_CAMERA_PATTERN = /固定|锁定|推(?:进|近|镜)|短推|拉(?:远|镜)|摇镜|横移|跟拍|跟随(?:移动|视线)|下压|滑轨|环绕|吊臂|升降|手持|变焦|俯拍|仰拍|平视|低机位|高机位|中景|近景|特写|远景/u;
-const OBSERVABLE_DRAMA_DETAIL_PATTERN = /眉|眼|目光|视线|嘴角|下颌|呼吸|肩|背|身体|重心|手|指|掌|站|坐|抬|低|转|握|松|触|器物|容器|纸张|文字|纸|桌|案|地面|水面|光线|影子|门|墙|尘|衣袍|NPC|背景角色|配角|旁观者|人群|开口|说|重音|停顿|语速|语气/u;
+const CONCRETE_CAMERA_PATTERN = /\d+mm|短移|平移|全景|俯|仰|固定|锁定|推(?:进|近|镜)|短推|拉(?:远|镜)|摇镜|横移|跟拍|跟随(?:移动|视线)|下压|滑轨|环绕|吊臂|升降|手持|变焦|俯拍|仰拍|平视|低机位|高机位|中景|近景|特写|远景/u;
+const OBSERVABLE_DRAMA_DETAIL_PATTERN =
+    /五人|四人|回应|标题|表格|时间|计时器|签收|回信|邮件|更正|调查结论|日历|课程表|支撑带|旗|玻璃|步道|左腿|工作间|原件|驾驶|窗口|坡面|水沟|金属|空白|窗|线缆|接口|草稿|钥匙|电|收件人|前排|后排|座位|收句|面向|闭口|闭唇|相机|口型|胸|设备|本子|白沫|水流|脚|时刻|原版|瓶|额头|唇|漆痕|字|词|头|发|护膝|护栏|盖|电源|电量|按钮|文档|工程|栏杆|线条|回执|支撑点|影像|界面|资料|消息|时标|数字|文本|图|页|脸|腕|膝|鞋|灯|岩石|发尾|杯|桶|扣|封|电池|器材|标记|栏|记录|材料|盒|袋|卡|屏幕|照片|键|牌|椅|路|车|文件|笔|绳|眉|眼|目光|视线|嘴角|下颌|呼吸|肩|背|身体|重心|手|指|掌|站|坐|抬|低|转|握|松|触|器物|容器|纸张|文字|纸|桌|案|地面|水面|光线|影子|门|墙|尘|衣袍|NPC|背景角色|配角|旁观者|人群|开口|说|重音|停顿|语速|语气/u;
 const NPC_SEGMENT_PATTERN = /NPC群像\s*[：:]\s*(\d+)\s*名\s*[；;]\s*分布\s*[：:]\s*前景\s*(\d+)\s*名\s*[、,，]\s*中景\s*(\d+)\s*名\s*[、,，]\s*后景\s*(\d+)\s*名\s*[；;]\s*密度\s*[：:]\s*([^；;\n]+)\s*[；;]\s*反应\s*[：:]\s*([^\n]+)/u;
 const NPC_SLOT_SEGMENT_PATTERN = /NPC(?:连续性|槽位|群像槽位)\s*[：:]\s*可见槽位\s*[：:]\s*([^；;\n]+)\s*[；;]\s*(?:世界锚点|空间锚点|锚点)\s*[：:]\s*([^；;\n]+)\s*[；;]\s*(?:状态变化|可见反应|反应)\s*[：:]\s*([^\n]+)/u;
 const OBSERVABLE_NPC_REACTION_PATTERN = /抬眼|抬头|低头|收声|屏息|静默|看向|望向|交换眼神|后退|退开|分列|让出|肩背|僵住|停住|避开|回望|垂下|侧身/u;
@@ -48,11 +49,13 @@ const VIDEO_CARD_CAMERA_TERMS = /平视|俯视|俯拍|仰视|仰拍|正面|侧�
 const VIDEO_CARD_LENS_TERMS = /\d+(?:\.\d+)?\s*mm|广角|标准焦段|长焦|变形宽银幕/u;
 const DIRECT_DIALOGUE_IN_VISUAL_PATTERN = /(?:对白表演|(?:画外|内心声)?[^；：\n]{0,20}(?:说|道|问|喊|答|继续说|声音落下)\s*[：:]\s*[“"][^”\n]+[”"]|[“"][^”"\n]{2,}[”"])/u;
 const CAUSAL_TRIGGER_PATTERN = /因|因为|由于|听见|看见|发现|面对|遭到|受到|被|在[^。；\n]{0,20}后|话音|声音|风声|对白|说完|回应|接住|触到|压住|握住|拦住|撞上|落下|逼近|传来|为了|当[^。；\n]{0,20}时|承接/u;
-const SOUND_ANCHOR_PATTERN = /音效|人声|呼吸|吸气|吐气|喘息|衣料|脚步|碰撞|摩擦|风声|水声|门响|木石|混响|静默|沉默|屏息|余响|底噪|无声/u;
+export const SOUND_ANCHOR_PATTERN = /声音锚点[：:]\s*[^；\n]+|\p{Script=Han}{1,12}声|旁白|纸页|布料|轻响|音效|原声|人声|呼吸|吸气|吐气|喘息|衣料|脚步|碰撞|摩擦|风声|水声|门响|木石|混响|静默|沉默|屏息|余响|底噪|无声/u;
 const PUBLIC_VIDEO_ABSTRACTION_PATTERN =
     /准备(?:回应|进入|开口|下一条件)|保持(?:状态|疑问|关系|站位|压力|当前状态)|社会后果|关系(?:结果|冻结|停在|落地)|为下一镜(?:提供|承接)|提供空间承接|一次建立|情绪加剧|自然反应|成为主体|画面关系被固定|停在新的压力面|准备进入具体条件/u;
-const PUBLIC_VIDEO_VISIBLE_ACTION_PATTERN = /抬|低|看|望|移|转|起身|前倾|后退|按|压|握|松|收|推|拉|停|吸气|呼吸|屏息|皱|眯|睁|闭|抬手|放下|落下|走|跪|拍|碰|拿|递|撕|捏|拔|挥|闪|震|响|开门|关门|离开|进入|凝视|回看|咬|张口|闭唇|绷紧|松开/u;
-const PUBLIC_VIDEO_VISIBLE_RESULT_PATTERN = /停在|落在|变为|变得|露出|显出|抬起|垂下|松开|收紧|移向|转向|对准|接住|落下|留下|响起|静止|形成|暴露|显现|被看见|沉默|低头|抬眼|受力|改变|回到|锁住|停住/u;
+export const PUBLIC_VIDEO_VISIBLE_ACTION_PATTERN =
+    /写|划|夹|接|撑|驶|止|抬|低|看|望|移|转|起身|前倾|后退|按|压|握|松|收|推|拉|停|吸气|呼吸|屏息|皱|眯|睁|闭|抬手|放下|落下|走|跪|拍|碰|拿|递|撕|捏|拔|挥|闪|震|响|开门|关门|离开|进入|凝视|回看|咬|张口|闭唇|绷紧|松开/u;
+export const PUBLIC_VIDEO_VISIBLE_RESULT_PATTERN =
+    /写下|写入|写出|已写|铺开|展开|摊开|可见|可读|显示|接触|贴合|对齐|分开|停稳|闭合|未动|不动|闭口|闭唇|收口|合口|未按|未接|未拆|不变|仍由|仍在|停止|止住|收回|放稳|插入|留在|离开|截断|渐白|撑住|撑稳|支撑|未变|抓紧|落到|压弯|载入|起伏|未添|未补|悬在|收起|夹稳|入袋|添写|离纸|停播|退出|停在|落在|变为|变得|露出|显出|抬起|垂下|松开|收紧|移向|转向|对准|接住|落下|留下|响起|静止|形成|暴露|显现|被看见|沉默|低头|抬眼|受力|改变|回到|锁住|停住/u;
 /** @deprecated Legacy export retained for compatibility only; it is not a production gate. */
 export const DRAMA_VIDEO_PROMPT_TEMPLATE_SECTIONS = ["重要剪辑指令", "素材绑定", "故事意图", "空间与连续性", "灯光与画面", "摄影总则", "逐镜头时间线", "硬性禁止"] as const;
 /** Recommended target and advisory threshold, including punctuation and whitespace. */
@@ -208,7 +211,7 @@ export function validateDramaSeedanceVideoPromptStructure(value: string, label: 
     if (/(?:减切原因|修订状态|实际\s*\d+\s*帧\s*[/／]\s*\d+\s*次硬切|qualityGateStatus|qualityGateReport|reduced-density-exception)/iu.test(value)) errors.push(`${label}不得包含减切原因、帧数/切数统计或其他内部 QC 文案`);
     if (!dramaVideoPromptTimelineText(value)) errors.push(`${label}缺少连续的自然语言时间段`);
     if (!/(?:^|\n)结束时，/u.test(value)) errors.push(`${label}必须以“结束时，”自然句交代最终状态`);
-    if (/[^\n]\s*Cut\s+to\s*[：:]/iu.test(value)) errors.push(`${label}每个 Cut to 必须独立换行`);
+    if (/[^\s][ \t]*Cut\s+to\s*[：:]/iu.test(value)) errors.push(`${label}每个 Cut to 必须独立换行`);
     if ([...value.matchAll(/(?:^|\n)参考图片：/gu)].length > 1) errors.push(`${label}“参考图片：”只能出现一次`);
     const characterRefs = value.split(/\r?\n/u).filter((line) => /^@图片\d+[：:].*角色/u.test(line));
     const roleRule = "每张角色资产图均展示同一个人的不同观察角度，仅参考面容、体型、服装和配饰，不继承白底、排版或图中身体投影的数量。保证人物唯一性，每个角色在世界空间中仅有一人。";
@@ -255,7 +258,7 @@ function extractSeedanceAdapterCards(value: string): DramaVideoPromptCard[] {
         const cameraMotion = segment.match(/(?:固定|机位固定|锁定机位|缓慢推近|缓慢拉远|推近|拉远|横移|摇镜|跟拍|跟随|手持|环绕|俯拍|仰拍|平视|低机位|高机位|广角|中景|近景|特写|远景)[^；。\n]*/u)?.[0]?.trim() || "";
         const dialogue = extractQuotedDramaDialogues(segment).length ? segment : "无";
         const visual = segment.replace(/“((?:[^“”]|“[^“”]*”)+)”/gu, "").trim();
-        const sound = /(?:声音|人声|音效|对白|台词|旁白|呼吸|喘息|脚步|碰撞|摩擦|风声|水声|门响|静默|沉默|屏息|余响|底噪|轻响|敲击|滴答|纸边|纸张|擦|衣料)/u.test(segment) || dialogue !== "无" ? segment : "无";
+        const sound = /(?:\p{Script=Han}{1,12}声|声音|人声|音效|对白|台词|旁白|呼吸|喘息|脚步|碰撞|摩擦|风声|水声|门响|静默|沉默|屏息|余响|底噪|轻响|敲击|滴答|纸边|纸张|擦|衣料)/u.test(segment) || dialogue !== "无" ? segment : "无";
         return {
             index: index + 1,
             timeRange: `${match[1]}-${match[2]}秒`,
@@ -344,9 +347,11 @@ export function validateDramaVideoPromptAudioHierarchy(value: unknown, label: st
     const text = typeof value === "string" ? value : "";
     const compact = isSeedanceAdapterPrompt(text);
     if (compact) {
+        const firstRange = [...text.matchAll(SEEDANCE_ADAPTER_TIME_MARKER)][0];
+        const common = text.slice(0, firstRange?.index ?? 0);
         return extractDramaVideoPromptCards(text).flatMap((card, index) => {
             if (isNoDramaSpeech(card.dialogue)) return [];
-            const audioText = `${card.raw}\n${text.match(/(?:^|\n)声音：[\s\S]*$/u)?.[0] || ""}`;
+            const audioText = `${common}\n${card.raw}\n${text.match(/(?:^|\n)声音：[\s\S]*$/u)?.[0] || ""}`;
             const errors: string[] = [];
             if (!/(?:对白|旁白|人声|原声)[^。；\n]{0,28}(?:清晰|清楚|可辨|可懂|居前|前景)|清晰地?(?:说|回答|问|开口)/u.test(audioText)) errors.push(`${label}第 ${index + 1} 个公开时间段必须保证原句清晰可听并位于前景`);
             if (!SPEECH_DUCKING_PATTERN.test(audioText)) errors.push(`${label}第 ${index + 1} 个公开时间段必须说明对白发声时环境音和拟音压低避让`);
@@ -421,11 +426,13 @@ function normalizeLegacySpeechMix(value: string) {
 }
 
 function hasSpeechMaskingConflict(value: string) {
-    return [...value.matchAll(new RegExp(SPEECH_MASKING_CONFLICT_PATTERN.source, "gu"))].some((match) => {
-        const start = match.index ?? 0;
-        const context = value.slice(Math.max(0, start - 12), start + match[0].length + 8);
-        return !/(?:不|不能|不得|不应|不会|避免|禁止).{0,8}(?:盖过|盖住|压过|压住|淹没|遮盖|遮住|覆盖|盖掉)/u.test(context);
-    });
+    return value.split(/[。；，\n]/u).some((clause) =>
+        [...clause.matchAll(new RegExp(SPEECH_MASKING_CONFLICT_PATTERN.source, "gu"))].some((match) => {
+            const start = match.index ?? 0;
+            const context = clause.slice(Math.max(0, start - 12), start + match[0].length + 8);
+            return !/(?:未|不|不能|不得|不应|不会|避免|禁止).{0,8}(?:盖过|盖住|压过|压住|淹没|遮盖|遮住|覆盖|盖掉)/u.test(context);
+        }),
+    );
 }
 
 function appendAudioInstruction(current: string, instruction: string) {
@@ -465,7 +472,7 @@ function validateDramaVideoPromptIndependence(prompt: string, label: string) {
     ) {
         errors.push(`${label}公开视频提示词不得引用其他镜头/视频、项目或上下文；SH 编号、内部 ID、URL 和历史提示词不得进入正文，参考 alias 只能来自本次实际绑定`);
     }
-    if (/(?:字幕|台词转写|画面文字叠加|文字叠加|对白字卡)/u.test(publicBody)) {
+    if (/(?:字幕|台词转写|画面文字叠加|文字叠加|对白字卡)/u.test(publicBody.replace(/(?:无|禁止|不要|不得|不生成|不叠加|不显示)(?:字幕|台词转写|画面文字叠加|文字叠加|对白字卡)/gu, ""))) {
         errors.push(`${label}公开视频提示词不得包含字幕、台词转写或画面文字叠加内容；对白原句只写在实际发声时间段`);
     }
     return errors;
@@ -610,11 +617,10 @@ function publicVideoCardSignature(card: DramaVideoPromptCard) {
 }
 
 /**
- * A frame plan with timed speech must expose the speech boundaries as visual
- * edit points. Mechanical equal-duration frames are only acceptable when
- * they happen to land on every timed utterance boundary.
+ * Speech may span unequal visual frames when its exact public voice window
+ * is stated. Mechanical equal-duration frames still require aligned speech.
  */
-export function validateDramaFrameTiming(frames: ReadonlyArray<DramaCameraPlanFrame>, utterances: readonly DramaDialogueTimingInput[], label: string) {
+export function validateDramaFrameTiming(frames: ReadonlyArray<DramaCameraPlanFrame>, utterances: readonly DramaDialogueTimingInput[], label: string, publicPrompt = "") {
     if (frames.length < 2) return [];
     const timedUtterances = utterances.filter((item) => {
         const type = item.type || "dialogue";
@@ -622,8 +628,18 @@ export function validateDramaFrameTiming(frames: ReadonlyArray<DramaCameraPlanFr
     });
     if (!timedUtterances.length) return [];
     const boundaries = new Set(frames.flatMap((frame) => [Number(frame.startSecond), Number(frame.endSecond)]).map((value) => value.toFixed(2)));
-    const unaligned = timedUtterances.some((item) => !boundaries.has(Number(item.startSecond).toFixed(2)) || !boundaries.has(Number(item.endSecond).toFixed(2)));
-    return unaligned ? [`${label}含有带自然时间边界的对白/旁白，但至少一个开口或收句边界落在帧段内部；必须按对白自然时长、停顿、动作触发和反应留白重新分配帧段，不能把对白切在段内`] : [];
+    const unaligned = timedUtterances.filter((item) => !boundaries.has(Number(item.startSecond).toFixed(2)) || !boundaries.has(Number(item.endSecond).toFixed(2)));
+    const mechanical = new Set(frames.map((frame) => (Number(frame.endSecond) - Number(frame.startSecond)).toFixed(2))).size === 1;
+    const explicitWindows =
+        !mechanical &&
+        isSeedanceAdapterPrompt(publicPrompt) &&
+        unaligned.every((item) =>
+            publicPrompt.split(/\r?\n/u).some((line) => {
+                const window = line.match(/^从\s*(\d+(?:\.\d+)?)\s*秒至\s*(\d+(?:\.\d+)?)\s*秒[，,]/u);
+                return window && Number(window[1]) === item.startSecond && Number(window[2]) === item.endSecond && hasQuotedDramaDialogue(line, item.speaker, item.text);
+            }),
+        );
+    return unaligned.length && !explicitWindows ? [`${label}含有带自然时间边界的对白/旁白，但开口或收句落在帧段内部且未登记准确公开发声窗口，或帧段仍为机械等分；须按自然节拍编排，不能把对白切在段内`] : [];
 }
 
 /**
@@ -641,7 +657,9 @@ export function validateDramaVideoPromptDialogueTiming(prompt: string, _frames: 
             frame.startSecond,
             frame.endSecond,
             card.dialogue,
-            utterances.map((utterance) => ({ ...utterance, pauseBeforeSeconds: 0, pauseAfterSeconds: 0 })),
+            utterances
+                .filter((utterance) => !Number.isFinite(utterance.startSecond) || !Number.isFinite(utterance.endSecond) || (Number(utterance.startSecond) < frame.endSecond && Number(utterance.endSecond) > frame.startSecond))
+                .map((utterance) => ({ ...utterance, pauseBeforeSeconds: 0, pauseAfterSeconds: 0 })),
             `${label}/镜头卡${index + 1}`,
         );
         return issue ? [`${label}第 ${index + 1} 个公开镜头卡的台词窗口不足：${issue.message}`] : [];
@@ -782,9 +800,14 @@ export function validateDramaFrameCausalChain(actionPrompt: unknown, transitionP
     const end = typeof endPrompt === "string" ? endPrompt.trim() : "";
     const all = `${action}\n${transition}\n${end}`;
     const errors: string[] = [];
-    if (!CAUSAL_TRIGGER_PATTERN.test(all)) errors.push(`${label}缺少“因为什么/承接什么而动作触发”的明确原因`);
+    const explicitResult = action
+        .slice(action.lastIndexOf("；可见结果：") + "；可见结果：".length)
+        .split("；声音锚点：")[0]
+        .trim();
+    const structuredResult = action.includes("；可见结果：") && explicitResult === end && !isGenericDramaDetail(end) && (OBSERVABLE_DRAMA_DETAIL_PATTERN.test(end) || PUBLIC_VIDEO_VISIBLE_ACTION_PATTERN.test(end));
+    if (!CAUSAL_TRIGGER_PATTERN.test(all) && !/触发[：:]\s*[^；\n]+/u.test(action)) errors.push(`${label}缺少“因为什么/承接什么而动作触发”的明确原因`);
     if (!SOUND_ANCHOR_PATTERN.test(all)) errors.push(`${label}缺少声音锚点；即使是静默也必须写明静默、屏息、底噪或余响`);
-    if (!end || !OBSERVABLE_DRAMA_DETAIL_PATTERN.test(end) || !/(?:停|落|变|露|显|抬|垂|松|收|移|转|对准|接住|形成|沉默|静默|屏息|受力|改变|看见)/u.test(end)) errors.push(`${label}终点没有写出由本段动作产生的具体可见结果`);
+    if (!structuredResult && (!end || !OBSERVABLE_DRAMA_DETAIL_PATTERN.test(end) || !PUBLIC_VIDEO_VISIBLE_RESULT_PATTERN.test(end))) errors.push(`${label}终点没有写出由本段动作产生的具体可见结果`);
     return errors;
 }
 
