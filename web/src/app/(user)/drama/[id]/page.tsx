@@ -626,7 +626,7 @@ function DramaProjectEditor({ project }: { project: DramaProject }) {
                                                     type="primary"
                                                     className="!h-9 !w-full sm:!w-auto"
                                                     icon={<ArrowRight className="size-4" />}
-                                                    disabled={!episode.shots.length || episode.reviewStatus !== "visual_ready"}
+                                                    disabled={!episode.shots.length || !episode.shots.every((shot) => shot.videoPrompt.trim())}
                                                     onClick={() => setStage("generate")}
                                                 >
                                                     进入镜头生成

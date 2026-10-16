@@ -53,6 +53,7 @@ export function DramaReviewPanel({ project, episode, onDesignVisuals, designing,
     const totalDuration = episode.shots.reduce((total, shot) => total + shot.duration, 0);
     const dialogueCount = episode.shots.reduce((total, shot) => total + (shot.utterances.filter((item) => item.type === "dialogue").length || shot.dialogue.split(/\n+/).filter((line) => line.trim()).length), 0);
     const hasPackageVisualPlan = episode.reviewStatus === "visual_ready" && episode.shots.every((shot) => shot.imagePrompt.trim() && shot.videoPrompt.trim() && shot.fieldOrigins?.imagePrompt === "package" && shot.fieldOrigins?.videoPrompt === "package");
+    const hasDirectPromptPlan = episode.shots.length > 0 && episode.shots.every((shot) => shot.videoMode === "direct" && shot.videoPrompt.trim());
     const missingReviewFields = episode.shots.flatMap((shot) => missingReviewFieldsForShot(shot));
     const tabCompletionLabels = view === "performance" ? ["表演规划", "对白表演", "色彩灯光"] : view === "continuity" ? ["连续性"] : [];
     const tabMissingReviewCount = missingReviewFields.filter((item) => tabCompletionLabels.some((label) => item.endsWith(`：${label}`))).length;
@@ -95,9 +96,9 @@ export function DramaReviewPanel({ project, episode, onDesignVisuals, designing,
                         className="!h-9 !w-full sm:!w-auto"
                         icon={episode.shots.length ? <Check className="size-4" /> : <ArrowLeft className="size-4" />}
                         loading={designing}
-                        onClick={!episode.shots.length ? () => onStageChange("script") : hasPackageVisualPlan ? () => onStageChange("storyboard") : onDesignVisuals}
+                        onClick={!episode.shots.length ? () => onStageChange("script") : hasDirectPromptPlan ? () => onStageChange("generate") : hasPackageVisualPlan ? () => onStageChange("storyboard") : onDesignVisuals}
                     >
-                        {!episode.shots.length ? "返回剧本并提取结构" : hasPackageVisualPlan ? "进入分镜" : episode.reviewStatus === "visual_ready" ? "更新视觉方案" : "确认内容并生成视觉方案"}
+                        {!episode.shots.length ? "返回剧本并提取结构" : hasDirectPromptPlan ? "进入镜头生成" : hasPackageVisualPlan ? "进入分镜" : episode.reviewStatus === "visual_ready" ? "更新视觉方案" : "确认内容并生成视觉方案"}
                     </Button>
                 }
             />

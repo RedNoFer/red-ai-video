@@ -154,6 +154,88 @@ test("imports a package larger than 20 MiB from file and restores the imported p
     }
 });
 
+test("compact Markdown import keeps prompts, asset bindings and blank review data after refresh", async ({ page, request }, testInfo) => {
+    const created = await request.post("/api/drama/projects", { data: { title: `E2E 精简导入 ${randomUUID().slice(0, 8)}`, ratio: "9:16" } });
+    expect(created.ok(), await created.text()).toBe(true);
+    const project = ((await created.json()) as { data: { project: DramaProject } }).data.project;
+    const scenePrompt = "后左门、右窗、中央木桌，旧木地板，9:16 单视角全景。";
+    const source = readFileSync(new URL("../public/drama-compact-package-template.md", import.meta.url), "utf8")
+        .replace("在这里逐字粘贴这一集的小说原文。不要改写或总结。", "原文第一段。\n\n原文第二段，保持原样。")
+        .replace("填写完整场景全景基准图提示词，包含空间拓扑、材质和光色。", scenePrompt);
+    try {
+        const seeded = structuredClone(project);
+        seeded.characters = [
+            {
+                id: "approved-character",
+                code: "OLD_CHAR",
+                name: "角色姓名",
+                description: "已确认身份",
+                supplierPrompt: "已确认的角色提示词",
+                profile: { visualIdentity: "既有面孔", styling: "原有服装", colorPalette: "灰色", consistencyRules: "保持同一人物" },
+                references: [{ id: "approved-reference", url: "/approved-character.png", source: "generated", label: "主基准", createdAt: project.createdAt, status: "approved" }],
+                primaryReferenceId: "approved-reference",
+            },
+        ];
+        expect((await saveDramaProjectFixture(request, project, seeded)).ok()).toBe(true);
+        const template = await request.get("/drama-compact-package-template.md");
+        expect(template.ok()).toBe(true);
+        await page.goto(`/drama/${project.id}`);
+        await page.getByRole("button", { name: "精简制作包导入" }).click();
+        const modal = page.getByRole("dialog", { name: "导入精简制作包" });
+        await expect(modal.getByRole("link", { name: "下载精简模板" })).toBeVisible();
+        if (testInfo.project.name === "chromium") {
+            await page.locator('input[type="file"][accept=".md,text/markdown,text/plain"]').setInputFiles({ name: "compact.md", mimeType: "text/markdown", buffer: Buffer.from(source, "utf8") });
+        } else {
+            await modal.getByRole("textbox", { name: "粘贴精简制作包" }).fill(source);
+            await modal.getByRole("button", { name: "识别并预览" }).click();
+        }
+        const preview = page.locator("[data-drama-compact-package-preview]");
+        await expect(preview).toContainText("片段");
+        await expect(preview).toContainText("新增资产");
+        await expect(preview).toContainText("复用资产");
+        await page.getByRole("dialog", { name: "预览精简制作包" }).getByRole("button", { name: "确认导入精简制作包" }).click();
+        await expect(page.getByText("已导入 1 个片段")).toBeVisible();
+        await page.reload();
+        const response = await request.get(`/api/drama/projects/${project.id}`);
+        expect(response.ok(), await response.text()).toBe(true);
+        const saved = ((await response.json()) as { data: { project: DramaProject } }).data.project;
+        const episode = saved.episodes.find((item) => item.code === "E01")!;
+        expect(episode.script).toBe("原文第一段。\n\n原文第二段，保持原样。");
+        expect(episode).toMatchObject({ reviewStatus: "draft", storyScenes: [], continuityEdges: [] });
+        expect(episode.shots[0]).toMatchObject({
+            videoMode: "direct",
+            videoPrompt: "填写可单独提交的视频提示词，包含本片段必要的画面、动作和声音事实。",
+            characterIds: ["approved-character"],
+            sceneId: saved.scenes[0].id,
+            propIds: [saved.props[0].id],
+            clueIds: [saved.clues[0].id],
+        });
+        expect(episode.shots[0].framePlan).toBeUndefined();
+        expect(saved.characters[0]).toMatchObject({ id: "approved-character", supplierPrompt: "已确认的角色提示词", primaryReferenceId: "approved-reference" });
+        expect(saved.scenes[0].supplierPrompt).toContain("后左门、右窗、中央木桌");
+        expect(saved.scenes[0].profile?.visualIdentity).toContain("后左门、右窗、中央木桌");
+        await page.getByRole("button", { name: "打开项目资产" }).click();
+        await page.getByRole("button", { name: "编辑角色：角色姓名" }).last().click();
+        const drawer = page.getByRole("dialog", { name: "编辑角色" });
+        await drawer.getByText("实际供应商提示词（可编辑）").click();
+        await expect(drawer.getByRole("textbox", { name: "供应商提示词" })).toHaveValue("已确认的角色提示词");
+        await drawer.getByRole("button", { name: "关闭", exact: true }).click();
+        await page.locator('[aria-label="项目资产分类"] button').filter({ hasText: "场景" }).click();
+        await page.getByRole("button", { name: "编辑场景：场景名称" }).last().click();
+        const sceneDrawer = page.getByRole("dialog", { name: "编辑场景" });
+        await sceneDrawer.getByText("实际供应商提示词（可编辑）").click();
+        await expect(sceneDrawer.getByRole("textbox", { name: "供应商提示词" })).toHaveValue(scenePrompt);
+        await sceneDrawer.getByRole("button", { name: "关闭", exact: true }).click();
+        await page.getByRole("button", { name: "切换到内容审核" }).click();
+        await expect(page.locator('[data-drama-stage="review"]')).toBeVisible();
+        await page.locator('[data-drama-stage="review"]').getByRole("button", { name: "进入镜头生成" }).click();
+        await expect(page.locator('[data-drama-stage="generate"]')).toBeVisible();
+        await expectNoHorizontalOverflow(page);
+    } finally {
+        expect((await request.delete(`/api/drama/projects/${project.id}`)).ok()).toBe(true);
+    }
+});
+
 test("character timbre saves and refreshes, then uploaded audio replaces prompt in the video preview", async ({ page, request }) => {
     const created = await request.post("/api/drama/projects", { data: { title: `E2E 角色音色 ${randomUUID().slice(0, 8)}`, ratio: "9:16" } });
     expect(created.ok(), await created.text()).toBe(true);

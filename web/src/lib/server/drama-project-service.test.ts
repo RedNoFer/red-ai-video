@@ -101,8 +101,10 @@ vi.mock("@/lib/server/creative-review-service", () => ({ reviewCreativeOutputs: 
 import {
     acceptDramaStoryboardFrameForUser,
     applyDramaProductionPackageForUser,
+    applyDramaCompactPackageForUser,
     applyDramaEpisodeProductionPackageForUser,
     previewDramaProductionPackageForUser,
+    previewDramaCompactPackageForUser,
     previewDramaScriptProductionPackageForUser,
     reviewDramaStoryboardFrameForUser,
     createDramaProjectForUser,
@@ -214,6 +216,34 @@ describe("drama project service updates", () => {
         const writes = mocks.updateDramaProject.mock.calls.length;
         expect(await getDramaProjectForUser("user-one", latest.id)).toBe(saved);
         expect(mocks.updateDramaProject.mock.calls.length).toBe(writes);
+    });
+
+    it("persists a compact Markdown package against the latest project and preserves unrelated episodes", async () => {
+        const source = readFileSync(new URL("../../../public/drama-compact-package-template.md", import.meta.url), "utf8");
+        const current = project("2026-10-16T00:00:00.000Z", "精简导入");
+        current.episodes[0].code = "E02";
+        current.characters = [
+            {
+                id: "fixed-character",
+                code: "OLD_C",
+                name: "角色姓名",
+                description: "原有角色",
+                supplierPrompt: "确认过的提示词",
+                references: [{ id: "approved-reference", url: "/approved.png", source: "generated", label: "主基准", createdAt: current.createdAt, status: "approved" }],
+                primaryReferenceId: "approved-reference",
+            },
+        ];
+        const preview = previewDramaCompactPackageForUser({ source }, current);
+        const latest = { ...current, updatedAt: "2026-10-16T00:00:01.000Z" };
+        mocks.getDramaProject.mockResolvedValue(latest);
+        const saved = await applyDramaCompactPackageForUser("user-one", current.id, { source, fileName: "compact.md", sourceHash: preview.sourceHash });
+        expect(saved.episodes.map((episode) => episode.code)).toEqual(["E02", "E01"]);
+        expect(saved.episodes[1]).toMatchObject({ reviewStatus: "draft", storyScenes: [], continuityEdges: [] });
+        expect(saved.episodes[1].shots[0]).toMatchObject({ videoMode: "direct", characterIds: ["fixed-character"], framePlan: undefined });
+        expect(saved.characters[0]).toMatchObject({ id: "fixed-character", supplierPrompt: "确认过的提示词", primaryReferenceId: "approved-reference" });
+        expect(mocks.createDramaProjectVersion).toHaveBeenCalledWith("user-one", current.id, "精简制作包导入前", latest);
+        expect(mocks.updateDramaProject).toHaveBeenCalledWith("user-one", expect.objectContaining({ episodes: saved.episodes }), latest.updatedAt);
+        await expect(applyDramaCompactPackageForUser("user-one", current.id, { source: `${source}\n<!-- changed -->`, sourceHash: preview.sourceHash })).rejects.toMatchObject({ status: 409 });
     });
 
     it("applies a quality-blocked external package to one episode without internal run credentials", async () => {

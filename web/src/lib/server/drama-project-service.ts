@@ -84,6 +84,7 @@ import { signReferenceAssetInputUrl } from "@/lib/server/reference-asset-access"
 import { fetchSafeOutbound } from "@/lib/server/safe-outbound-fetch";
 import { privateUpstreamHostAllowed } from "@/lib/server/outbound-url-security";
 import { applyDramaProductionPackage, DRAMA_PRODUCTION_PACKAGE_MAX_BYTES, DramaProductionPackageError, previewDramaProductionPackage, type DramaProductionPackageNormalizationOptions } from "@/lib/server/drama-production-package";
+import { applyDramaCompactPackage, DramaCompactPackageError, previewDramaCompactPackage } from "@/lib/server/drama-compact-package";
 import { preserveDramaAuthoredText } from "@/lib/drama-authored-text";
 import { buildDramaProductionRun, refreshDramaVideoStepReferences, unlockDramaProductionSteps } from "@/lib/server/drama-production-run";
 import { stripDramaVideoPromptPrefix } from "@/lib/drama-video-prompt-prefix";
@@ -1659,6 +1660,40 @@ export async function applyDramaProductionPackageForUser(userId: string, id: str
         return await updateDramaProject(userId, invalidateChangedDramaFrameEvidence(current, normalizeProject(project, current), project), current.updatedAt);
     } catch (error) {
         if (error instanceof Error && !(error instanceof DramaProjectStoreError)) throw new DramaProjectServiceError(`制作包应用失败：${error.message}`, 400);
+        if (error instanceof DramaProjectStoreError) throw new DramaProjectServiceError(error.message, error.status);
+        throw error;
+    }
+}
+
+export function previewDramaCompactPackageForUser(value: unknown, project: DramaProject) {
+    const input = object(value);
+    try {
+        return previewDramaCompactPackage(typeof input.source === "string" ? input.source : "", project);
+    } catch (error) {
+        if (error instanceof DramaCompactPackageError) throw new DramaProjectServiceError(error.message, 400);
+        throw error;
+    }
+}
+
+export async function applyDramaCompactPackageForUser(userId: string, id: string, value: unknown) {
+    const input = object(value);
+    const current = await getDramaProjectForUser(userId, id);
+    const source = typeof input.source === "string" ? input.source : "";
+    const preview = previewDramaCompactPackageForUser(input, current);
+    if (cleanText(input.sourceHash) !== preview.sourceHash) throw new DramaProjectServiceError("精简制作包内容已变化，请重新预览", 409);
+    const fileName = cleanText(input.fileName) || "精简制作包.md";
+    let next: DramaProject;
+    try {
+        next = applyDramaCompactPackage(current, source, fileName);
+        next = invalidateChangedDramaFrameEvidence(current, normalizeProject(next, current), next);
+    } catch (error) {
+        if (error instanceof DramaCompactPackageError || error instanceof DramaProjectServiceError) throw new DramaProjectServiceError(error.message, 400);
+        throw error;
+    }
+    await createDramaProjectVersion(userId, current.id, "精简制作包导入前", current);
+    try {
+        return await updateDramaProject(userId, next, current.updatedAt);
+    } catch (error) {
         if (error instanceof DramaProjectStoreError) throw new DramaProjectServiceError(error.message, error.status);
         throw error;
     }
@@ -3949,7 +3984,7 @@ function normalizeEpisode(value: unknown): DramaEpisode | null {
             : undefined;
     const script = cleanText(input.script);
     const scriptRichContent = normalizeDramaScriptRichContent(input.scriptRichContent);
-    return {
+    const normalizedEpisode: DramaEpisode = {
         id,
         code: optionalText(input.code),
         canvasProjectId: optionalText(input.canvasProjectId),
@@ -3969,6 +4004,7 @@ function normalizeEpisode(value: unknown): DramaEpisode | null {
         reviewCompletionTask: normalizeReviewCompletionTask(input.reviewCompletionTask),
         visualReview: normalizeVisualReview(input.visualReview),
     };
+    return !scriptRichContent && object(input.fieldOrigins).script === "package" ? preserveDramaAuthoredText(normalizedEpisode, input) : normalizedEpisode;
 }
 
 function normalizeReviewCompletionTask(value: unknown): DramaEpisode["reviewCompletionTask"] {

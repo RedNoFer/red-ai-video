@@ -259,6 +259,28 @@ export function applyDramaProductionPackage(project: DramaProject, preview: Dram
     }).then((data) => data.project);
 }
 
+export type DramaCompactPackagePreview = {
+    sourceHash: string;
+    summary: { episodes: number; shots: number; duration: number; assetsNew: number; assetsReused: number; shotsUpdated: number; oldResultsToReview: number };
+    warnings: string[];
+};
+
+export function previewDramaCompactPackage(projectId: string, source: string, fileName: string) {
+    return request<{ preview: DramaCompactPackagePreview }>(`/api/drama/projects/${encodeURIComponent(projectId)}/compact-package`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "preview", source, fileName }),
+    }).then((data) => data.preview);
+}
+
+export function applyDramaCompactPackage(projectId: string, source: string, fileName: string, sourceHash: string) {
+    return request<{ project: DramaProject }>(`/api/drama/projects/${encodeURIComponent(projectId)}/compact-package`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "apply", source, fileName, sourceHash }),
+    }).then((data) => data.project);
+}
+
 export function previewDramaEpisodeProductionPackage(projectId: string, episodeId: string, source: string, fileName: string) {
     return request<{ preview: DramaProductionPackagePreview }>(`/api/drama/projects/${encodeURIComponent(projectId)}/episodes/${encodeURIComponent(episodeId)}/script-package`, {
         method: "POST",

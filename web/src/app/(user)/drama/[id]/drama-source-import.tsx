@@ -10,6 +10,7 @@ import { splitDramaSource, type DramaSourceEpisodeDraft } from "@/lib/drama-sour
 import { applyDramaProductionPackage, previewDramaProductionPackage } from "@/services/api/drama-projects";
 import type { DramaProject } from "../types";
 import { useDramaStore } from "../stores/use-drama-store";
+import { DramaCompactImport } from "./drama-compact-import";
 
 const IMPORT_PAGE_SIZE = 20;
 const PRODUCTION_PACKAGE_TEMPLATE_URL = "/drama-production-package-v1-template.md";
@@ -178,6 +179,7 @@ export function DramaSourceImport({ project, onImported }: { project: DramaProje
             <Button className="!h-8 !px-2.5" size="small" icon={<PackageOpen className="size-3.5" />} loading={previewingPackage} onClick={() => setPackageImportOpen(true)}>
                 完整制作包
             </Button>
+            <DramaCompactImport project={project} onImported={onImported} />
             <input ref={inputRef} type="file" accept=".txt,.md,text/plain,text/markdown" className="hidden" onChange={(event) => void readSource(event.target.files?.[0])} />
             <input ref={packageInputRef} type="file" accept=".json,.md,application/json,text/markdown" className="hidden" onChange={(event) => void readPackage(event.target.files?.[0])} />
             <Modal
