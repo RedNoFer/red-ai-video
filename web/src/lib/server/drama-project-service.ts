@@ -1937,6 +1937,7 @@ export async function createDramaProductionRunForUser(userId: string, projectId:
     }
     const confirmed = { ...run, confirmedAt: new Date().toISOString(), status: "running" as const };
     const created = await createDramaProductionRun(userId, confirmed);
+    if (input.deferDispatch === true) return created;
     const origin = cleanText(object(value).origin);
     const cookie = cleanText(object(value).cookie);
     const publicOrigin = cleanText(object(value).publicOrigin);
@@ -2028,7 +2029,7 @@ export function mergeDramaShotMediaReferences(current: DramaShot, snapshot: Dram
     };
 }
 
-export async function getLatestDramaProductionRunForUser(userId: string, projectId: string, episodeId: string, transport: { origin?: string; cookie?: string; publicOrigin?: string; scope?: "visual" | "production" } = {}) {
+export async function getLatestDramaProductionRunForUser(userId: string, projectId: string, episodeId: string, transport: { origin?: string; cookie?: string; publicOrigin?: string; scope?: "visual" | "production"; deferDispatch?: boolean } = {}) {
     const project = transport.scope === "visual" ? await getDramaProject(cleanText(projectId), userId) : await getDramaProjectForUser(userId, projectId);
     if (!project) throw new DramaProjectServiceError("短剧项目不存在", 404);
     const run = await findLatestDramaProductionRun(userId, projectId, cleanText(episodeId), transport.scope || "production");
@@ -2036,6 +2037,7 @@ export async function getLatestDramaProductionRunForUser(userId: string, project
         if (transport.scope === "visual") await persistReleasedDramaVisualQueue(userId, project, cleanText(episodeId));
         return run;
     }
+    if (transport.scope !== "visual" && transport.deferDispatch) return run;
     if (transport.scope === "visual" && ["completed", "failed", "cancelled", "needs_review"].includes(run.status)) await persistReleasedDramaVisualQueue(userId, project, cleanText(episodeId));
     if (!run.scope || run.scope !== "visual") {
         const imageSynced = await syncDramaVisualRun(userId, project, run, transport);
@@ -3060,6 +3062,7 @@ async function dispatchReadyDramaProductionSteps(userId: string, project: DramaP
 function dispatchDramaProductionRun(userId: string, projectId: string, run: DramaProductionRun, origin: string, cookie: string) {
     const key = `${userId}:${projectId}:${run.id}`;
     const previous = dramaProductionDispatchLocks.get(key);
+    if (previous) return previous;
     const execute = async () => {
         const latestProject = (await getDramaProjectForUser(userId, projectId)) || undefined;
         const latestRun = (await getDramaProductionRun(userId, projectId, run.id)) || run;
@@ -3070,7 +3073,7 @@ function dispatchDramaProductionRun(userId: string, projectId: string, run: Dram
         const dispatchRun = (await getDramaProductionRun(userId, projectId, synced.id)) || synced;
         return dispatchReadyDramaProductionSteps(userId, dispatchProject, dispatchRun, origin, cookie);
     };
-    const operation = (previous ? previous.catch(() => undefined).then(execute) : execute()).finally(() => {
+    const operation = execute().finally(() => {
         if (dramaProductionDispatchLocks.get(key) === operation) dramaProductionDispatchLocks.delete(key);
     });
     dramaProductionDispatchLocks.set(key, operation);

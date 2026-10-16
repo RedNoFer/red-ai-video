@@ -319,11 +319,15 @@ for (const width of [1672, 390, 430]) {
         expect(body.videoPrompts[shots[1].id]).not.toContain("@图片");
         const run = ((await response.json()) as { data: { run: DramaProductionRun } }).data.run;
         expect(run.steps.find((step) => step.type === "video" && step.shotId === shots[0].id)?.referenceBindingsSnapshot?.map((binding) => binding.sourceId)).toEqual(["box", "phone"]);
-        expect(
-            run.steps.filter((step) => step.type === "video").every((step) => step.taskId),
-            JSON.stringify(run.steps.filter((step) => step.type === "video")),
-        ).toBe(true);
-        for (const step of run.steps.filter((item) => item.type === "video" && item.taskId)) expect((await pollTask(request, `/api/video-tasks/${step.taskId}`)).status).toBe("success");
+        let dispatched = run;
+        await expect
+            .poll(async () => {
+                const current = await request.get(`/api/drama/projects/${project.id}/production-runs?episodeId=${episode.id}`);
+                dispatched = ((await current.json()) as { data: { run: DramaProductionRun } }).data.run;
+                return dispatched.steps.filter((step) => step.type === "video").every((step) => step.taskId);
+            })
+            .toBe(true);
+        for (const step of dispatched.steps.filter((item) => item.type === "video" && item.taskId)) expect((await pollTask(request, `/api/video-tasks/${step.taskId}`)).status).toBe("success");
         const upstream = await protocolFixtureState(request);
         expect(upstream.requests).toEqual(expect.arrayContaining([expect.objectContaining({ method: "POST", prompt: frozenPrompt, images: [expect.stringContaining(props[0].references![0].url), expect.stringContaining(props[2].references![0].url)] })]));
         const reloaded = await request.get(`/api/drama/projects/${project.id}`);

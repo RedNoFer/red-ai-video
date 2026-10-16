@@ -1102,7 +1102,9 @@ function ShotTaskRow({
     const [refreshingVideo, setRefreshingVideo] = useState(false);
     const generating = [shot.storyboardStatus, shot.storyboardEndStatus, shot.generationStatus].some((status) => status === "queued" || status === "running");
     const failed = [shot.storyboardStatus, shot.storyboardEndStatus, shot.generationStatus].some((status) => status === "error");
-    const videoRunning = shot.generationStatus === "running" || shot.generationStatus === "queued";
+    const pendingVideoStep =
+        productionRun?.confirmedAt && ["ready", "running"].includes(productionRun.status) ? productionRun.steps.find((step) => step.shotId === shot.id && step.type === "video" && ["ready", "running"].includes(step.status)) : undefined;
+    const videoRunning = shot.generationStatus === "running" || shot.generationStatus === "queued" || Boolean(pendingVideoStep);
     const audioRunning = shot.audioStatus === "running" || shot.audioStatus === "queued";
     const dialogue = (shot.subtitle || shot.dialogue || shot.narration).trim();
     const startFrames = activeFrameEvidence(shot, "storyboard_start");
@@ -1200,7 +1202,7 @@ function ShotTaskRow({
                             <div className="flex flex-wrap items-center gap-1.5">
                                 <StoryboardTag status={shot.storyboardStatus} />
                                 {shot.storyboardFrameMode === "first_last" ? <Tag className="!m-0 !h-6 !rounded-md !leading-6">尾帧 {shot.storyboardEndStatus === "success" ? "完成" : shot.storyboardEndStatus === "error" ? "失败" : "待处理"}</Tag> : null}
-                                <GenerationTag status={shot.generationStatus} />
+                                <GenerationTag status={pendingVideoStep?.status === "ready" ? "queued" : pendingVideoStep?.status === "running" ? "running" : shot.generationStatus} />
                                 {shot.audioMode === "voiceover" ? <AudioTag status={shot.audioStatus} /> : <Tag className="!m-0">{shot.audioMode === "mute" ? "静音" : "视频原声"}</Tag>}
                             </div>
                         </div>
@@ -1264,8 +1266,8 @@ function ShotTaskRow({
                     </Button>
                 </Dropdown>
                 {videoRunning ? (
-                    <Button className={`${dialogue ? "" : "col-span-2 lg:col-span-1"} ${actionButtonClass}`} icon={<Pause className="size-4" />} onClick={onCancel}>
-                        取消生成
+                    <Button className={`${dialogue ? "" : "col-span-2 lg:col-span-1"} ${actionButtonClass}`} icon={<Pause className="size-4" />} disabled={Boolean(pendingVideoStep && !pendingVideoStep.taskId)} onClick={onCancel}>
+                        {pendingVideoStep && !pendingVideoStep.taskId ? "排队中" : "取消生成"}
                     </Button>
                 ) : (
                     <Button className={`${dialogue ? "" : "col-span-2 lg:col-span-1"} ${actionButtonClass}`} icon={failed ? <RefreshCw className="size-4" /> : <Play className="size-4" />} onClick={onGenerate}>

@@ -3214,6 +3214,54 @@ describe("drama project service updates", () => {
         expect(retried.steps.find((step) => step.id === video.id)?.taskId).toBeUndefined();
     });
 
+    it("returns a persisted video run without waiting for a stalled upstream submission", async () => {
+        const current = project("2026-07-19T08:00:01.000Z", "项目");
+        current.episodes[0].shots = [
+            {
+                id: "shot-one",
+                order: 1,
+                title: "重试镜头",
+                description: "人物抬头",
+                sourceText: "人物抬头",
+                shotBoundary: "",
+                dialogue: "",
+                narration: "",
+                utterances: [],
+                imagePrompt: "",
+                videoPrompt: "人物抬头",
+                cameraMotion: "",
+                duration: 15,
+                characterIds: [],
+                propIds: [],
+                clueIds: [],
+            },
+        ];
+        mocks.getDramaProject.mockResolvedValue(current);
+        mocks.getAuthSettings.mockResolvedValue({ defaultModels: { imageModel: "image", videoModel: "video", audioModel: "" }, generationDefaults: { imageQuality: "standard", videoQuality: "720" } });
+        mocks.resolveLogicalModelCandidates.mockReturnValue([{ logicalModelId: "video", channelId: "video-channel" }]);
+        let savedRun: Awaited<ReturnType<typeof createDramaProductionRunForUser>> | undefined;
+        mocks.createDramaProductionRun.mockImplementation(async (_userId: string, run: typeof savedRun) => {
+            savedRun = run;
+            return run;
+        });
+        mocks.getDramaProductionRun.mockImplementation(async () => savedRun);
+        let releaseSubmission: (response: Response) => void = () => undefined;
+        mocks.fetchInternalApi.mockImplementation(
+            () =>
+                new Promise<Response>((resolve) => {
+                    releaseSubmission = resolve;
+                }),
+        );
+
+        try {
+            const returned = await createDramaProductionRunForUser("user-one", current.id, { episodeId: current.episodes[0].id, origin: "http://localhost:3010", cookie: "session=test", deferDispatch: true });
+            expect(returned.steps.find((step) => step.type === "video")?.status).toBe("ready");
+            expect(mocks.fetchInternalApi).not.toHaveBeenCalled();
+        } finally {
+            releaseSubmission(new Response(JSON.stringify({ task: { id: "video-task-one" } }), { headers: { "content-type": "application/json" } }));
+        }
+    });
+
     it("rejects a new video run for a shot already generating while allowing another shot", async () => {
         const current = project("2026-07-19T08:00:01.000Z", "项目");
         const shot = {
