@@ -5,7 +5,7 @@ import { App, Button, Empty, Input, Modal } from "antd";
 import { ArrowRight, GitBranch, History } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 
-import { ensureDramaEpisodeCanvas, getLatestDramaProductionRun } from "@/services/api/drama-projects";
+import { ensureDramaEpisodeCanvas, getLatestDramaProductionRun, updateDramaProductionRun } from "@/services/api/drama-projects";
 import { resolveDramaGlobalVisualContract } from "@/lib/drama-style";
 import { normalizeDramaImageSize } from "@/lib/drama-image-size";
 import { syncUserPointsFromHeaders } from "@/services/api/points";
@@ -24,7 +24,7 @@ import { DramaReviewPanel, missingReviewFieldsForShot } from "./drama-review-pan
 import { DramaStoryboardShotCard } from "./drama-storyboard-shot-card";
 import { markDramaCanvasSynced } from "../../canvas/[id]/canvas-drama-navigation";
 import { DramaVersionModal } from "./drama-project-modals";
-import { applyDramaVisualRunTerminalStep, dramaShotVideoMode, hasActiveDramaVisualQueue, resolveDramaVisualRunSync } from "./drama-shot-generation-utils";
+import { applyDramaProductionRunStep, applyDramaVisualRunTerminalStep, dramaShotVideoMode, hasActiveDramaVisualQueue, resolveDramaVisualRunSync } from "./drama-shot-generation-utils";
 import { DramaEpisodeSidebar, DramaScriptPanel, DramaWorkspaceHeader, type DramaProjectStage } from "./drama-project-sections";
 
 export default function DramaProjectPage() {
@@ -110,7 +110,10 @@ function DramaProjectEditor({ project }: { project: DramaProject }) {
     const episode = project.episodes.find((item) => item.id === project.activeEpisodeId) || fallbackEpisode;
     const promptOptimizationActive = useDramaStore((state) => hasActiveDramaVideoPromptRun(state.videoPromptRuns, project.id, episode.id));
     const hasEpisode = project.episodes.length > 0;
-    const runningVideo = episode.shots.find((shot) => shot.generationStatus === "running" && shot.generationTaskId);
+    const pendingVideoKey = episode.shots
+        .filter((shot) => ["queued", "running", "needs_review"].includes(shot.generationStatus || ""))
+        .map((shot) => `${shot.id}:${shot.generationRunId || ""}:${shot.generationTaskId || ""}:${shot.generationStatus}`)
+        .join("|");
     const boundaryTarget = episode.shots.find((item) => {
         const frames = item.frameEvidence || [];
         return (
@@ -481,28 +484,79 @@ function DramaProjectEditor({ project }: { project: DramaProject }) {
     }, [assetsOpen, episode.id, project.id, promptOptimizationActive, replaceShot, stage]);
 
     useEffect(() => {
-        const running = runningVideo;
-        if (!running) return;
-        const timer = window.setInterval(async () => {
-            const response = await fetch(`/api/video-tasks/${encodeURIComponent(running.generationTaskId!)}`, { cache: "no-store" });
-            syncUserPointsFromHeaders(response.headers, "system");
-            const payload = (await response.json().catch(() => ({}))) as { task?: { status?: string; result?: { url?: string }; error?: string }; error?: string };
-            if (!response.ok) return updateShot(project.id, episode.id, running.id, { generationStatus: "error", generationError: payload.error || "视频任务查询失败" });
-            if (payload.task?.status === "success")
-                updateShot(project.id, episode.id, running.id, {
-                    generationStatus: "success",
-                    videoUrl: payload.task.result?.url,
-                    generationError: undefined,
-                    ...(running.audioMode === "voiceover" && (running.subtitle || running.dialogue).trim() && audioReady ? { audioStatus: "queued" as const, audioError: undefined } : {}),
-                    frameEvidence: supersedeFrameEvidence(running.frameEvidence, "当前镜头视频已重新生成"),
-                    actualStartFrameUrl: undefined,
-                    actualEndFrameUrl: undefined,
-                    actualFrameVideoUrl: undefined,
-                });
-            if (payload.task?.status === "error" || payload.task?.status === "cancelled") updateShot(project.id, episode.id, running.id, { generationStatus: payload.task.status, generationError: payload.task.error });
-        }, 2500);
-        return () => window.clearInterval(timer);
-    }, [audioReady, episode.id, project.id, runningVideo?.audioMode, runningVideo?.dialogue, runningVideo?.generationTaskId, runningVideo?.id, runningVideo?.subtitle, updateShot]);
+        if (!pendingVideoKey) return;
+        let active = true;
+        let syncing = false;
+        const sync = async () => {
+            if (syncing) return;
+            syncing = true;
+            try {
+                const currentEpisode = useDramaStore
+                    .getState()
+                    .projects.find((item) => item.id === project.id)
+                    ?.episodes.find((item) => item.id === episode.id);
+                const pending = currentEpisode?.shots.filter((shot) => ["queued", "running", "needs_review"].includes(shot.generationStatus || "")) || [];
+                const runIds = [...new Set(pending.map((shot) => shot.generationRunId).filter((id): id is string => Boolean(id)))];
+                for (const runId of runIds) {
+                    try {
+                        const run = await updateDramaProductionRun(project.id, runId, { action: "sync" });
+                        if (!active) return;
+                        const latestEpisode = useDramaStore
+                            .getState()
+                            .projects.find((item) => item.id === project.id)
+                            ?.episodes.find((item) => item.id === episode.id);
+                        for (const shot of latestEpisode?.shots || []) {
+                            if (shot.generationRunId !== run.id) continue;
+                            const next = run.steps.reduce((current, step) => applyDramaProductionRunStep(current, step, run.id), shot);
+                            if (JSON.stringify(next) !== JSON.stringify(shot) || run.projectUpdatedAt) replaceShot(project.id, episode.id, shot.id, next, run.projectUpdatedAt);
+                        }
+                    } catch {
+                        // Concurrent edits or transient reads retain the original task for the next sync.
+                    }
+                }
+                await Promise.all(
+                    pending
+                        .filter((shot) => !shot.generationRunId && shot.generationTaskId)
+                        .map(async (running) => {
+                            try {
+                                const response = await fetch(`/api/video-tasks/${encodeURIComponent(running.generationTaskId!)}`, { cache: "no-store" });
+                                syncUserPointsFromHeaders(response.headers, "system");
+                                const payload = (await response.json().catch(() => ({}))) as { task?: { status?: string; needsReview?: boolean; reviewReason?: string; result?: { url?: string }; error?: string } };
+                                const current = useDramaStore
+                                    .getState()
+                                    .projects.find((item) => item.id === project.id)
+                                    ?.episodes.find((item) => item.id === episode.id)
+                                    ?.shots.find((item) => item.id === running.id);
+                                if (!active || !response.ok || !current || current.generationTaskId !== running.generationTaskId || current.generationRunId) return;
+                                if (payload.task?.needsReview) updateShot(project.id, episode.id, running.id, { generationStatus: "needs_review", generationError: payload.task.reviewReason || "上游提交结果待确认" });
+                                else if (payload.task?.status === "success" && payload.task.result?.url)
+                                    updateShot(project.id, episode.id, running.id, {
+                                        generationStatus: "success",
+                                        videoUrl: payload.task.result.url,
+                                        generationError: undefined,
+                                        ...(current.audioMode === "voiceover" && (current.subtitle || current.dialogue).trim() && audioReady ? { audioStatus: "queued" as const, audioError: undefined } : {}),
+                                        frameEvidence: supersedeFrameEvidence(current.frameEvidence, "当前镜头视频已重新生成"),
+                                        actualStartFrameUrl: undefined,
+                                        actualEndFrameUrl: undefined,
+                                        actualFrameVideoUrl: undefined,
+                                    });
+                                else if (payload.task?.status === "error" || payload.task?.status === "cancelled") updateShot(project.id, episode.id, running.id, { generationStatus: payload.task.status, generationError: payload.task.error });
+                            } catch {
+                                // A failed status query does not mean that the paid generation failed.
+                            }
+                        }),
+                );
+            } finally {
+                syncing = false;
+            }
+        };
+        void sync();
+        const timer = window.setInterval(() => void sync(), 2500);
+        return () => {
+            active = false;
+            window.clearInterval(timer);
+        };
+    }, [audioReady, episode.id, pendingVideoKey, project.id, replaceShot, updateShot]);
 
     useEffect(() => {
         const shot = boundaryTarget;

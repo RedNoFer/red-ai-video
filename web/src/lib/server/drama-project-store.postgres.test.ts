@@ -4,12 +4,105 @@ import { beforeAll, describe, expect, it } from "vitest";
 import type { DramaProject } from "@/lib/drama-project-contract";
 import { initializePostgresSchema, postgresQuery } from "@/lib/server/database";
 import { createDramaProject, getDramaProject, updateDramaProjectAssetMutation, updateDramaProjectRatioMutation, updateDramaProjectScopedMutation, updateDramaProjectShotMutation } from "./drama-project-store";
-import { applyDramaProductionPackageForUser, getDramaProjectForUser, previewDramaProductionPackageForUser, updateDramaShotPromptPatchForUser, updateDramaVideoPromptPrefixForUser } from "./drama-project-service";
+import { applyDramaProductionPackageForUser, getDramaProjectForUser, previewDramaProductionPackageForUser, updateDramaShotPromptPatchForUser, updateDramaVideoPromptPrefixForUser, updateDramaProductionRunForUser } from "./drama-project-service";
+import { createDramaProductionRun, getDramaProductionRun } from "./drama-production-run-store";
+import { createStoredGenerationTask } from "./generation-task-store";
+import { GENERATION_TASK_RETENTION_MS } from "./generation-task-retention";
+import type { DramaProductionRun } from "@/lib/drama-project-contract";
 
 const postgresDescribe = process.env.VOZEB_PRO_RUN_POSTGRES_INTEGRATION === "1" ? describe : describe.skip;
 
 postgresDescribe("drama project PostgreSQL mutation round-trip", () => {
     beforeAll(() => initializePostgresSchema());
+
+    it("synchronizes terminal tasks in different runs through trigger-backed scoped writes and preserves a newer attempt", async () => {
+        const userId = `drama-video-sync-${randomUUID()}`;
+        const now = new Date().toISOString();
+        const project = {
+            id: `drama-${randomUUID()}`,
+            title: "视频状态同步",
+            ratio: "16:9",
+            status: "active",
+            characters: [],
+            scenes: [],
+            props: [],
+            clues: [],
+            episodes: [{ id: "episode", shots: [] }],
+            createdAt: now,
+            updatedAt: now,
+        } as unknown as DramaProject;
+        const taskIds: string[] = [];
+        await postgresQuery("INSERT INTO users (id, username, display_name, password_hash) VALUES ($1, $1, '视频同步', 'test-only')", [userId]);
+        try {
+            for (const status of ["error", "success"] as const) {
+                const runId = `run-${randomUUID()}`;
+                const taskId = randomUUID();
+                taskIds.push(taskId);
+                project.episodes[0].shots.push({ id: status, title: status, generationStatus: "running", generationRunId: runId, generationTaskId: taskId } as never);
+                await createStoredGenerationTask(
+                    "video",
+                    {
+                        id: taskId,
+                        userId,
+                        status,
+                        createdAt: Date.now(),
+                        updatedAt: Date.now(),
+                        config: { model: "test-video" },
+                        upstream: { id: `provider-${taskId}` },
+                        error: status === "error" ? "上游明确失败" : undefined,
+                        result: status === "success" ? { url: "/recovered.mp4" } : undefined,
+                    },
+                    GENERATION_TASK_RETENTION_MS,
+                );
+            }
+            await createDramaProject(userId, project);
+            const original = await getDramaProject(project.id, userId);
+            for (const shot of project.episodes[0].shots) {
+                const run = {
+                    id: shot.generationRunId!,
+                    projectId: project.id,
+                    episodeId: "episode",
+                    planRevision: shot.id,
+                    status: "running",
+                    mode: "strict",
+                    parameterSnapshot: { imageModel: "", videoModel: "test-video", ratio: "16:9" },
+                    steps: [
+                        { id: `video-${shot.id}`, type: "video", shotId: shot.id, status: "running", taskId: shot.generationTaskId, dependsOn: [] },
+                        { id: `extract-${shot.id}`, type: "extract_frames", shotId: shot.id, status: "blocked", dependsOn: [`video-${shot.id}`] },
+                    ],
+                    confirmedAt: now,
+                    createdAt: now,
+                    updatedAt: now,
+                } as DramaProductionRun;
+                await createDramaProductionRun(userId, run);
+                const synced = await updateDramaProductionRunForUser(userId, project.id, run.id, { action: "sync" });
+                const read = await getDramaProject(project.id, userId);
+                expect(synced).toHaveProperty("projectUpdatedAt", read?.updatedAt);
+                expect(read?.episodes[0].shots.find((item) => item.id === shot.id)).toMatchObject({
+                    generationStatus: shot.id,
+                    generationTaskId: shot.generationTaskId,
+                    ...(shot.id === "success" ? { videoUrl: "/recovered.mp4" } : { generationError: "上游明确失败" }),
+                });
+                expect((await getDramaProductionRun(userId, project.id, run.id))?.steps[0].status).toBe(shot.id === "error" ? "failed" : "success");
+            }
+            const read = (await getDramaProject(project.id, userId))!;
+            expect(read.title).toBe(original?.title);
+            expect(read.ratio).toBe(original?.ratio);
+            const first = read.episodes[0].shots[0];
+            await updateDramaProjectShotMutation(userId, {
+                projectId: project.id,
+                episodeId: "episode",
+                shotId: first.id,
+                shot: { ...first, generationRunId: "newer-run", generationTaskId: "newer-task", generationStatus: "running" },
+                expectedUpdatedAt: read.updatedAt,
+            });
+            await updateDramaProductionRunForUser(userId, project.id, first.generationRunId!, { action: "sync" });
+            expect((await getDramaProject(project.id, userId))?.episodes[0].shots[0]).toMatchObject({ generationRunId: "newer-run", generationTaskId: "newer-task", generationStatus: "running" });
+        } finally {
+            await postgresQuery("DELETE FROM generation_tasks WHERE user_id = $1 AND id = ANY($2::text[])", [userId, taskIds]);
+            await postgresQuery("DELETE FROM users WHERE id = $1", [userId]);
+        }
+    });
 
     it("round-trips prompt reference preferences and an empty selection through consecutive trigger-backed saves", async () => {
         const userId = `drama-reference-${randomUUID()}`;

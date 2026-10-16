@@ -250,8 +250,15 @@ export function applyDramaVisualRunTerminalStep(shot: DramaShot, step: DramaProd
     };
 }
 
+export function isActiveDramaVideoStep(shot: DramaShot | undefined, step: DramaProductionRun["steps"][number], runId: string) {
+    return Boolean(shot && (!shot.generationRunId || shot.generationRunId === runId) && !["success", "error", "cancelled"].includes(shot.generationStatus || "") && step.type === "video" && ["ready", "running", "blocked"].includes(step.status));
+}
+
 export function applyDramaProductionRunStep(shot: DramaShot, step: DramaProductionRun["steps"][number], runId?: string) {
     if (!step.shotId || step.shotId !== shot.id) return shot;
+    if (runId && shot.generationRunId && shot.generationRunId !== runId) return shot;
+    if (step.type === "video" && shot.generationTaskId && step.taskId && shot.generationTaskId !== step.taskId) return shot;
+    if (step.type === "video" && ["ready", "running", "blocked"].includes(step.status) && ["success", "error", "cancelled"].includes(shot.generationStatus || "") && shot.generationTaskId === step.taskId) return shot;
     if (step.type === "extract_frames") {
         if (step.status === "success" && step.outputUrls?.[0])
             return {

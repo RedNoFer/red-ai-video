@@ -494,8 +494,8 @@ export function createDramaProductionRun(
     }).then((data) => data.run);
 }
 
-export function updateDramaProductionRun(projectId: string, runId: string, input: { action: "confirm" | "cancel" | "retry"; stepIds?: string[] }) {
-    return request<{ run: DramaProductionRun }>(`/api/drama/projects/${encodeURIComponent(projectId)}/production-runs/${encodeURIComponent(runId)}`, {
+export function updateDramaProductionRun(projectId: string, runId: string, input: { action: "confirm" | "cancel" | "retry" | "sync"; stepIds?: string[] }) {
+    return request<{ run: DramaProductionRun & { projectUpdatedAt?: string } }>(`/api/drama/projects/${encodeURIComponent(projectId)}/production-runs/${encodeURIComponent(runId)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(input),

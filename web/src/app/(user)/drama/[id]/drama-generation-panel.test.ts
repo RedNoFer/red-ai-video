@@ -296,12 +296,12 @@ describe("Drama generation production workspace", () => {
         expect(source).toContain("resolveDramaVisualRunSync(currentProject, episode.id, run)");
         expect(source).toContain("replaceShot(project.id, episode.id, currentShot.id, nextShot)");
         expect(source).toContain("if (active && shouldContinue) timer = window.setTimeout");
-        expect(source).toContain("const runningVideo = episode.shots.find");
+        expect(source).toContain("const pendingVideoKey = episode.shots");
         expect(source).toContain("const boundaryTarget = episode.shots.find");
         expect(source).not.toContain("[audioReady, episode.id, episode.shots, project.id, updateShot]");
         expect(source).not.toContain("[episode.id, episode.shots, project.id, updateShot]");
         const visualSyncStart = source.indexOf("useEffect(() => {\n        if (promptOptimizationActive) return;", source.indexOf("const [preflighting"));
-        const visualSyncEnd = source.indexOf("useEffect(() => {\n        const running = runningVideo", visualSyncStart);
+        const visualSyncEnd = source.indexOf("useEffect(() => {\n        if (!pendingVideoKey) return;", visualSyncStart);
         expect(visualSyncEnd).toBeGreaterThan(visualSyncStart);
         expect(source.slice(visualSyncStart, visualSyncEnd)).not.toContain("loadProject(project.id, true)");
     });

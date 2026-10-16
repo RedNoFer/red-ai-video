@@ -308,7 +308,7 @@ export async function refreshServerVideoGenerationTask(taskId: string) {
     });
     throwIfClientSessionExpired(response);
     syncUserPointsFromHeaders(response.headers, "system");
-    const payload = (await response.json().catch(() => ({}))) as { task?: { id: string; status: string; result?: VideoGenerationResult; error?: string }; error?: string };
+    const payload = (await response.json().catch(() => ({}))) as { task?: GenerationTaskExecutionState & { id: string; status: string; result?: VideoGenerationResult; error?: string }; error?: string };
     if (!response.ok || !payload.task) throw new Error(payload.error || `供应商视频状态同步失败（HTTP ${response.status}）`);
     if (payload.task.id !== taskId) throw new Error("供应商视频同步返回了不匹配的任务");
     return payload.task;

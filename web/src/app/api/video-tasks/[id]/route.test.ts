@@ -45,6 +45,24 @@ describe("GET /api/video-tasks/[id]", () => {
         mocks.query.mockResolvedValue({ state: "pending", status: "processing" });
     });
 
+    it("does not describe a known terminal failure as an uncertain submission when scheduling metadata is stale", async () => {
+        const task = { ...videoTask(), status: "error", error: "供应商明确失败", upstream: { ...videoTask().upstream, pointsRecordId: undefined } };
+        mocks.getVideoTask.mockResolvedValue(task);
+        mocks.getSchedule.mockResolvedValue({ executionPhase: "needs_review" });
+        const response = await GET(new Request("http://localhost/api/video-tasks/local-video"), context);
+        expect((await response.json()).task).toMatchObject({ status: "error", needsReview: false });
+    });
+
+    it("keeps manual refresh of an unknown submission in review without querying a missing upstream ID", async () => {
+        const task = { ...videoTask(), upstream: { ...videoTask().upstream, id: "" }, executionPhase: "needs_review", reviewReason: "未取得上游任务编号，请核对原任务" };
+        mocks.getVideoTask.mockResolvedValue(task);
+        const response = await POST(new Request("http://localhost/api/video-tasks/local-video", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "refresh" }) }), context);
+        expect(response.status).toBe(200);
+        expect((await response.json()).task).toMatchObject({ needsReview: true, reviewReason: task.reviewReason });
+        expect(mocks.refresh).not.toHaveBeenCalled();
+        expect(mocks.query).not.toHaveBeenCalled();
+    });
+
     it("returns a running task immediately and schedules a low-cost Worker wakeup", async () => {
         const task = videoTask();
         mocks.getVideoTask.mockResolvedValue(task);

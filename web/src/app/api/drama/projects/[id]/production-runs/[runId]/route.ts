@@ -8,6 +8,9 @@ import { DramaProjectServiceError, updateDramaProductionRunForUser } from "@/lib
 
 type Context = { params: Promise<{ id: string; runId: string }> };
 
+export const runtime = "nodejs";
+export const maxDuration = 2400;
+
 export async function PATCH(request: Request, context: Context) {
     const user = await getCurrentUser();
     if (!user) return NextResponse.json({ code: 401, data: null, msg: "请先登录" }, { status: 401 });

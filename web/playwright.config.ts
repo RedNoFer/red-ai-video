@@ -29,6 +29,7 @@ export default defineConfig({
         {
             name: "chromium",
             testMatch: [
+                /drama-video-task-sync\.spec\.ts/,
                 /(?:admin-channel-api-key|admin-channel-save|all-pages|canvas|commerce|core|creative-video-result|drama-asset-candidate-generation|drama-assets-scroll|drama-episode-settings|drama-frame-sequence|drama-package-import|drama-review-audio-flow|drama-scene-reference-preview|drama-video-advisory|home|responsive)\.spec\.ts/,
             ],
             dependencies: ["setup"],
@@ -36,13 +37,13 @@ export default defineConfig({
         },
         {
             name: "mobile-390",
-            testMatch: /(?:all-pages|commerce|creative-video-result|drama-package-import|drama-review-audio-flow|drama-scene-reference-preview|home|responsive)\.spec\.ts/,
+            testMatch: /(?:all-pages|commerce|creative-video-result|drama-package-import|drama-review-audio-flow|drama-video-task-sync|drama-scene-reference-preview|home|responsive)\.spec\.ts/,
             dependencies: ["setup"],
             use: { ...devices["iPhone 13"], browserName: "chromium", viewport: { width: 390, height: 844 }, storageState },
         },
         {
             name: "mobile-430",
-            testMatch: /(?:all-pages|commerce|creative-video-result|drama-package-import|drama-review-audio-flow|drama-scene-reference-preview|home|responsive)\.spec\.ts/,
+            testMatch: /(?:all-pages|commerce|creative-video-result|drama-package-import|drama-review-audio-flow|drama-video-task-sync|drama-scene-reference-preview|home|responsive)\.spec\.ts/,
             dependencies: ["setup"],
             use: { ...devices["iPhone 14 Pro Max"], browserName: "chromium", viewport: { width: 430, height: 932 }, storageState },
         },

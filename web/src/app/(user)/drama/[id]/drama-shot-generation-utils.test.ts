@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { createFrameEvidence } from "@/lib/drama-continuity-policy";
 import {
     applyDramaProductionRunStep,
+    isActiveDramaVideoStep,
     applyDramaVisualRunTerminalStep,
     characterReferenceAudios,
     dramaShotVideoMode,
@@ -219,6 +220,24 @@ describe("applyDramaVisualRunTerminalStep", () => {
 });
 
 describe("applyDramaProductionRunStep", () => {
+    it.each(["success", "error", "cancelled"])("does not regress a %s result to a stale running step", (generationStatus) => {
+        const shot = { id: "shot-one", generationStatus, generationRunId: "run-one", generationTaskId: "task-one" } as never;
+        const step = { shotId: "shot-one", type: "video", status: "running", taskId: "task-one" } as never;
+        expect(applyDramaProductionRunStep(shot, step, "run-one")).toBe(shot);
+        expect(isActiveDramaVideoStep(shot, step, "run-one")).toBe(false);
+    });
+
+    it("ignores late video and extraction results from an older run", () => {
+        const shot = { id: "shot-one", generationStatus: "running", generationRunId: "new-run", generationTaskId: "new-task" } as never;
+        for (const step of [
+            { shotId: "shot-one", type: "video", status: "failed", taskId: "old-task" },
+            { shotId: "shot-one", type: "extract_frames", status: "success", outputUrls: ["/old.mp4"] },
+        ]) {
+            expect(applyDramaProductionRunStep(shot, step as never, "old-run")).toBe(shot);
+            expect(isActiveDramaVideoStep(shot, step as never, "old-run")).toBe(false);
+        }
+    });
+
     it("updates only the affected shot when a segmented video run changes", () => {
         const shot = { id: "shot-one", generationStatus: "queued" } as never;
         const running = applyDramaProductionRunStep(shot, { shotId: "shot-one", type: "video", status: "running", taskId: "video-task" } as never);

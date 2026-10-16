@@ -31,10 +31,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const shouldRefund = Boolean(task.upstream.pointsRecordId && !task.upstream.refunded && task.status === "error");
     const settledTask = shouldRefund ? await refundVideoTask(task) : task;
     const refreshedUser = shouldRefund ? await getCurrentUser(request) : user;
-    return NextResponse.json(
-        { task: { ...publicTask(settledTask), needsReview: executionPhase === "needs_review", reviewReason: executionPhase === "needs_review" ? schedule?.resultPayload?.reviewReason || task.reviewReason : undefined, executionPhase } },
-        { headers: pointsResponseHeaders(refreshedUser) },
-    );
+    const needsReview = settledTask.status === "running" && executionPhase === "needs_review";
+    return NextResponse.json({ task: { ...publicTask(settledTask), needsReview, reviewReason: needsReview ? schedule?.resultPayload?.reviewReason || task.reviewReason : undefined, executionPhase } }, { headers: pointsResponseHeaders(refreshedUser) });
 }
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -80,6 +78,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (!parsed.ok) return NextResponse.json({ error: parsed.message }, { status: parsed.status });
     if (parsed.data.action !== "refresh") return NextResponse.json({ error: "不支持的视频任务操作" }, { status: 400 });
 
+    if (task.status === "running" && task.executionPhase === "needs_review" && !task.upstream.id) {
+        return NextResponse.json({ task: publicTask(task), refreshed: false }, { headers: pointsResponseHeaders(user) });
+    }
+
     const origin = resolveInternalOrigin(new URL(request.url).origin);
     const cookie = request.headers.get("cookie") || "";
     try {
@@ -95,7 +97,18 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 type VideoTask = NonNullable<Awaited<ReturnType<typeof getVideoTask>>>;
 
 function publicTask(task: VideoTask) {
-    return { id: task.id, status: task.status, model: generationModelId(task.config), upstreamId: task.upstream.id, durationSeconds: task.requestedDurationSeconds, result: task.result, error: task.error, canRetry: task.retryable === true };
+    return {
+        id: task.id,
+        status: task.status,
+        model: generationModelId(task.config),
+        upstreamId: task.upstream.id,
+        durationSeconds: task.requestedDurationSeconds,
+        result: task.result,
+        error: task.error,
+        canRetry: task.retryable === true,
+        needsReview: task.status === "running" && task.executionPhase === "needs_review",
+        reviewReason: task.reviewReason,
+    };
 }
 
 function settledExecutionPhase(status: string) {

@@ -738,10 +738,9 @@ describe("drama project service updates", () => {
 
         await getLatestDramaProductionRunForUser("user-one", current.id, "episode-one");
 
-        expect(mocks.updateDramaProject).toHaveBeenCalledWith(
+        expect(mocks.updateDramaProjectShotMutation).toHaveBeenCalledWith(
             "user-one",
-            expect.objectContaining({ episodes: [expect.objectContaining({ shots: [expect.objectContaining({ id: "shot-one", generationStatus: "error", generationError: "video generation timed out", generationTaskId: "video-task-one" })] })] }),
-            current.updatedAt,
+            expect.objectContaining({ shotId: "shot-one", expectedUpdatedAt: current.updatedAt, shot: expect.objectContaining({ generationStatus: "error", generationError: "video generation timed out", generationTaskId: "video-task-one" }) }),
         );
     });
 
@@ -768,10 +767,9 @@ describe("drama project service updates", () => {
 
         await getLatestDramaProductionRunForUser("user-one", current.id, "episode-one");
 
-        expect(mocks.updateDramaProject).toHaveBeenCalledWith(
+        expect(mocks.updateDramaProjectShotMutation).toHaveBeenCalledWith(
             "user-one",
-            expect.objectContaining({ episodes: [expect.objectContaining({ shots: [expect.objectContaining({ id: "shot-one", generationStatus: "needs_review", generationError: "提交结果待确认", generationTaskId: "video-task-one" })] })] }),
-            current.updatedAt,
+            expect.objectContaining({ shotId: "shot-one", expectedUpdatedAt: current.updatedAt, shot: expect.objectContaining({ generationStatus: "needs_review", generationError: "提交结果待确认", generationTaskId: "video-task-one" }) }),
         );
         expect(mocks.updateDramaProductionRun).toHaveBeenCalledWith("user-one", expect.objectContaining({ steps: [expect.objectContaining({ id: "video-shot-one", status: "needs_review" })] }));
     });
@@ -3380,6 +3378,190 @@ describe("drama project service updates", () => {
 
         expect(retried.id).not.toBe(original.id);
         expect(mocks.createDramaProductionRun).toHaveBeenCalledOnce();
+    });
+
+    it.each(["success", "error"])("allows regeneration after a %s task in an older run despite stale running state", async (status) => {
+        const current = project("2026-07-19T08:00:01.000Z", "项目");
+        const shot = {
+            id: "shot-one",
+            order: 1,
+            title: "旧计划镜头",
+            dialogue: "",
+            narration: "",
+            utterances: [],
+            description: "人物抬头",
+            sourceText: "人物抬头",
+            shotBoundary: "",
+            imagePrompt: "",
+            cameraMotion: "",
+            videoPrompt: "人物抬头",
+            duration: 15,
+            characterIds: [],
+            propIds: [],
+            clueIds: [],
+            generationStatus: "running",
+            generationRunId: "older-run",
+            generationTaskId: "video-task-one",
+        };
+        current.episodes[0].shots = [shot] as never;
+        mocks.getDramaProject.mockResolvedValue(current);
+        mocks.getAuthSettings.mockResolvedValue({ defaultModels: { imageModel: "image", videoModel: "video", audioModel: "" }, generationDefaults: {} });
+        mocks.resolveLogicalModelCandidates.mockReturnValue([{ logicalModelId: "video", channelId: "video-channel" }]);
+        mocks.findLatestDramaProductionRun.mockResolvedValue({ id: "latest-run", status: "needs_review", steps: [] });
+        mocks.getDramaProductionRun.mockResolvedValue({
+            id: "older-run",
+            episodeId: current.episodes[0].id,
+            confirmedAt: "2026-07-19",
+            status: "running",
+            steps: [{ id: "video-one", type: "video", shotId: shot.id, status: "running", taskId: shot.generationTaskId }],
+        });
+        mocks.getStoredGenerationTask.mockResolvedValue({
+            id: shot.generationTaskId,
+            userId: "user-one",
+            status,
+            executionPhase: "completed",
+            result: status === "success" ? { url: "/video.mp4" } : undefined,
+            error: status === "error" ? "上游明确失败" : undefined,
+        });
+
+        await expect(createDramaProductionRunForUser("user-one", current.id, { episodeId: current.episodes[0].id, deferDispatch: true })).resolves.toMatchObject({ id: expect.stringMatching(/^drama-run-/) });
+        expect(mocks.createDramaProductionRun).toHaveBeenCalledOnce();
+        expect(mocks.fetchInternalApi).not.toHaveBeenCalled();
+    });
+
+    it("keeps an uncertain submission in an older run blocked without creating another paid task", async () => {
+        const current = project("2026-07-19T08:00:01.000Z", "项目");
+        current.episodes[0].shots = [
+            {
+                id: "shot-one",
+                order: 1,
+                title: "待核对镜头",
+                dialogue: "",
+                narration: "",
+                utterances: [],
+                description: "人物抬头",
+                sourceText: "人物抬头",
+                shotBoundary: "",
+                imagePrompt: "",
+                cameraMotion: "",
+                videoPrompt: "人物抬头",
+                duration: 15,
+                characterIds: [],
+                propIds: [],
+                clueIds: [],
+                generationStatus: "running",
+                generationRunId: "older-run",
+                generationTaskId: "video-task-one",
+            },
+        ] as never;
+        mocks.getDramaProject.mockResolvedValue(current);
+        mocks.getAuthSettings.mockResolvedValue({ defaultModels: { imageModel: "image", videoModel: "video", audioModel: "" }, generationDefaults: {} });
+        mocks.resolveLogicalModelCandidates.mockReturnValue([{ logicalModelId: "video", channelId: "video-channel" }]);
+        mocks.findLatestDramaProductionRun.mockResolvedValue({ id: "latest-run", status: "completed", steps: [] });
+        mocks.getDramaProductionRun.mockResolvedValue(null);
+        mocks.getStoredGenerationTask.mockResolvedValue({ id: "video-task-one", userId: "user-one", status: "running", executionPhase: "needs_review", reviewReason: "提交结果不明" });
+
+        await expect(createDramaProductionRunForUser("user-one", current.id, { episodeId: current.episodes[0].id, deferDispatch: true })).rejects.toMatchObject({ status: 409, message: expect.stringContaining("待审核") });
+        expect(mocks.createDramaProductionRun).not.toHaveBeenCalled();
+        expect(mocks.fetchInternalApi).not.toHaveBeenCalled();
+    });
+
+    it("synchronizes a failed task in its own older run with a scoped shot write and no provider submission", async () => {
+        const current = project("2026-07-19T08:00:01.000Z", "项目");
+        current.episodes[0].shots = [{ id: "shot-one", generationStatus: "running", generationRunId: "older-run", generationTaskId: "video-task-one" }] as never;
+        mocks.getDramaProject.mockResolvedValue(current);
+        mocks.getDramaProductionRun.mockResolvedValue({
+            id: "older-run",
+            projectId: current.id,
+            episodeId: current.episodes[0].id,
+            status: "running",
+            parameterSnapshot: {},
+            steps: [{ id: "video-one", type: "video", shotId: "shot-one", dependsOn: [], status: "running", taskId: "video-task-one" }],
+        });
+        mocks.getStoredGenerationTask.mockResolvedValue({ id: "video-task-one", userId: "user-one", status: "error", executionPhase: "completed", error: "上游明确失败" });
+
+        const result = await updateDramaProductionRunForUser("user-one", current.id, "older-run", { action: "sync" });
+
+        expect(result.steps[0]).toMatchObject({ status: "failed", error: "上游明确失败" });
+        expect(mocks.updateDramaProjectShotMutation).toHaveBeenCalledWith("user-one", expect.objectContaining({ shotId: "shot-one", shot: expect.objectContaining({ generationStatus: "error", generationTaskId: "video-task-one" }) }));
+        expect(mocks.updateDramaProject).not.toHaveBeenCalled();
+        expect(mocks.fetchInternalApi).not.toHaveBeenCalled();
+    });
+
+    it("does not overwrite a newer attempt when synchronizing an older run", async () => {
+        const current = project("2026-07-19T08:00:01.000Z", "项目");
+        current.episodes[0].shots = [{ id: "shot-one", generationStatus: "running", generationRunId: "newer-run", generationTaskId: "newer-task" }] as never;
+        mocks.getDramaProject.mockResolvedValue(current);
+        mocks.getDramaProductionRun.mockResolvedValue({
+            id: "older-run",
+            projectId: current.id,
+            episodeId: current.episodes[0].id,
+            status: "running",
+            parameterSnapshot: {},
+            steps: [{ id: "video-one", type: "video", shotId: "shot-one", dependsOn: [], status: "running", taskId: "older-task" }],
+        });
+        mocks.getStoredGenerationTask.mockResolvedValue({ id: "older-task", userId: "user-one", status: "error", executionPhase: "completed", error: "旧任务失败" });
+
+        await updateDramaProductionRunForUser("user-one", current.id, "older-run", { action: "sync" });
+
+        expect(mocks.updateDramaProjectShotMutation).not.toHaveBeenCalled();
+        expect(mocks.updateDramaProject).not.toHaveBeenCalled();
+    });
+
+    it("blocks step-level retry while the original paid submission remains uncertain", async () => {
+        const current = project("2026-07-19T08:00:01.000Z", "项目");
+        mocks.getDramaProject.mockResolvedValue(current);
+        mocks.getDramaProductionRun.mockResolvedValue({ id: "run-one", projectId: current.id, episodeId: "episode-one", steps: [{ id: "video-one", type: "video", taskId: "task-one", status: "needs_review" }] });
+        mocks.getStoredGenerationTask.mockResolvedValue({ id: "task-one", userId: "user-one", status: "running", executionPhase: "needs_review" });
+        await expect(updateDramaProductionRunForUser("user-one", current.id, "run-one", { action: "retry", stepIds: ["video-one"] })).rejects.toMatchObject({ status: 409, message: expect.stringContaining("待审核") });
+        expect(mocks.updateDramaProductionRun).not.toHaveBeenCalled();
+        expect(mocks.fetchInternalApi).not.toHaveBeenCalled();
+    });
+
+    it("dispatches an authorized run after a concurrent sync releases the same run lock", async () => {
+        const current = project("2026-07-19T08:00:01.000Z", "项目");
+        current.episodes[0].shots = [
+            {
+                id: "shot-one",
+                title: "镜头",
+                order: 1,
+                dialogue: "",
+                narration: "",
+                utterances: [],
+                description: "人物抬头",
+                sourceText: "人物抬头",
+                shotBoundary: "",
+                imagePrompt: "",
+                cameraMotion: "",
+                videoPrompt: "人物抬头",
+                duration: 15,
+                characterIds: [],
+                propIds: [],
+                clueIds: [],
+            },
+        ] as never;
+        mocks.getDramaProject.mockResolvedValue(current);
+        mocks.getAuthSettings.mockResolvedValue({ defaultModels: { imageModel: "image", videoModel: "video", audioModel: "" }, generationDefaults: {} });
+        mocks.resolveLogicalModelCandidates.mockReturnValue([{ logicalModelId: "video", channelId: "video-channel" }]);
+        const run = await createDramaProductionRunForUser("user-one", current.id, { episodeId: current.episodes[0].id, deferDispatch: true });
+        mocks.getDramaProductionRun.mockResolvedValue(run);
+        mocks.findLatestDramaProductionRun.mockResolvedValue(run);
+        let release!: (project: DramaProject) => void;
+        mocks.getDramaProjectForVisualRun.mockImplementationOnce(
+            () =>
+                new Promise<DramaProject>((resolve) => {
+                    release = resolve;
+                }),
+        );
+        mocks.fetchInternalApi.mockResolvedValue(new Response(JSON.stringify({ task: { id: "new-task" } }), { headers: { "content-type": "application/json" } }));
+        const syncing = updateDramaProductionRunForUser("user-one", current.id, run.id, { action: "sync" });
+        await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+        const dispatching = getLatestDramaProductionRunForUser("user-one", current.id, current.episodes[0].id, { origin: "http://localhost:3010" });
+        await vi.waitFor(() => expect(mocks.getDramaProductionRun).toHaveBeenCalledTimes(3));
+        release(current);
+        await Promise.all([syncing, dispatching]);
+        expect(mocks.fetchInternalApi).toHaveBeenCalledOnce();
+        expect(mocks.updateDramaProductionRun).toHaveBeenCalledWith("user-one", expect.objectContaining({ steps: expect.arrayContaining([expect.objectContaining({ type: "video", taskId: "new-task" })]) }));
     });
 
     it("reads a saved production run for polling without loading the project", async () => {

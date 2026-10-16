@@ -38,7 +38,7 @@ import { summarizeDramaGeneration } from "./drama-generation-readiness";
 import { DramaMediaPreviewModal, DramaMediaThumbnail, type DramaPreviewMedia } from "./drama-media-preview";
 import { DramaJianyingModal, DramaSubtitleModal } from "./drama-project-modals";
 import type { DramaProjectStage } from "./drama-project-sections";
-import { applyDramaProductionRunStep, applyDramaVisualRunTerminalStep, dramaShotVideoMode, estimateEpisodePoints, resolveDramaVisualRunSync } from "./drama-shot-generation-utils";
+import { applyDramaProductionRunStep, isActiveDramaVideoStep, applyDramaVisualRunTerminalStep, dramaShotVideoMode, estimateEpisodePoints, resolveDramaVisualRunSync } from "./drama-shot-generation-utils";
 import { markDramaCanvasSynced } from "../../canvas/[id]/canvas-drama-navigation";
 import type { DramaVideoPromptAnalysis, DramaVideoReferenceMode } from "@/lib/drama-project-contract";
 
@@ -123,7 +123,13 @@ export function DramaGenerationPanel({
                 ...readiness.activeShotIds,
                 ...(productionRun?.confirmedAt && ["ready", "running", "paused", "needs_review"].includes(productionRun.status)
                     ? productionRun.steps
-                          .filter((step) => step.type === "video" && ["ready", "running", "blocked"].includes(step.status) && episode.shots.find((shot) => shot.id === step.shotId)?.generationStatus !== "cancelled")
+                          .filter((step) =>
+                              isActiveDramaVideoStep(
+                                  episode.shots.find((shot) => shot.id === step.shotId),
+                                  step,
+                                  productionRun.id,
+                              ),
+                          )
                           .map((step) => step.shotId)
                           .filter((id): id is string => Boolean(id))
                     : []),
@@ -1109,8 +1115,7 @@ function ShotTaskRow({
     const [refreshingVideo, setRefreshingVideo] = useState(false);
     const generating = [shot.storyboardStatus, shot.storyboardEndStatus, shot.generationStatus].some((status) => status === "queued" || status === "running");
     const failed = [shot.storyboardStatus, shot.storyboardEndStatus, shot.generationStatus].some((status) => status === "error");
-    const pendingVideoStep =
-        productionRun?.confirmedAt && ["ready", "running"].includes(productionRun.status) ? productionRun.steps.find((step) => step.shotId === shot.id && step.type === "video" && ["ready", "running"].includes(step.status)) : undefined;
+    const pendingVideoStep = productionRun?.confirmedAt && ["ready", "running"].includes(productionRun.status) ? productionRun.steps.find((step) => step.shotId === shot.id && isActiveDramaVideoStep(shot, step, productionRun.id)) : undefined;
     const videoRunning = shot.generationStatus === "running" || shot.generationStatus === "queued" || Boolean(pendingVideoStep);
     const audioRunning = shot.audioStatus === "running" || shot.audioStatus === "queued";
     const dialogue = (shot.subtitle || shot.dialogue || shot.narration).trim();
@@ -1161,6 +1166,7 @@ function ShotTaskRow({
         setRefreshingVideo(true);
         try {
             const task = await refreshServerVideoGenerationTask(taskId);
+            const synced = shot.generationRunId ? await updateDramaProductionRun(project.id, shot.generationRunId, { action: "sync" }) : null;
             const currentShot = useDramaStore
                 .getState()
                 .projects.find((item) => item.id === project.id)
@@ -1170,7 +1176,18 @@ function ShotTaskRow({
                 message.info("镜头已重新生成，已保留最新任务");
                 return;
             }
-            if (task.status === "success" && task.result?.url) {
+            if (synced && currentShot.generationRunId === synced.id) {
+                const next = synced.steps.reduce((current, step) => applyDramaProductionRunStep(current, step, synced.id), currentShot);
+                useDramaStore.getState().replaceShot(project.id, episode.id, shot.id, next, synced.projectUpdatedAt);
+                if (task.status === "success" && task.result?.url) message.success("已拉取供应商最新视频并保存到项目");
+                else message.info(task.needsReview ? "提交结果尚未确认，请先由管理员核对供应商原任务" : task.error || "已同步原视频任务状态");
+                return;
+            }
+            if (task.needsReview) {
+                updateShot(project.id, episode.id, shot.id, { generationStatus: "needs_review", generationError: task.reviewReason || "上游提交结果待确认，尚未取得可查询的任务编号" });
+                await saveProjectNow(project.id);
+                message.info("提交结果尚未确认，请先由管理员核对供应商原任务");
+            } else if (task.status === "success" && task.result?.url) {
                 updateShot(project.id, episode.id, shot.id, {
                     generationStatus: "success",
                     videoUrl: task.result.url,
@@ -1186,6 +1203,10 @@ function ShotTaskRow({
                 updateShot(project.id, episode.id, shot.id, { generationStatus: "running", generationError: undefined });
                 message.info("供应商仍在生成，项目会继续查询这个原任务");
             } else {
+                if (task.status === "error" || task.status === "cancelled") {
+                    updateShot(project.id, episode.id, shot.id, { generationStatus: task.status, generationError: task.error });
+                    await saveProjectNow(project.id);
+                }
                 message.info(task.error || "供应商暂未返回新视频");
             }
         } catch (error) {

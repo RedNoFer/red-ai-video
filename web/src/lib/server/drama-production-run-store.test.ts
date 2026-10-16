@@ -32,6 +32,14 @@ describe("drama production run file provider", () => {
         expect(await findLatestDramaProductionRun("user-one", "project", "episode", "production")).toMatchObject({ id: "production" });
         expect(await findLatestDramaProductionRun("user-one", "project", "episode", "visual")).toMatchObject({ id: "visual", scope: "visual" });
     });
+
+    it("keeps the newest production attempt current when an older run finishes later", async () => {
+        const old = run("old", "2026-01-01T00:00:00.000Z");
+        await createDramaProductionRun("user-one", old);
+        await createDramaProductionRun("user-one", run("new", "2026-01-02T00:00:00.000Z"));
+        await updateDramaProductionRun("user-one", { ...old, updatedAt: "2026-01-03T00:00:00.000Z", status: "completed" });
+        expect(await findLatestDramaProductionRun("user-one", "project", "episode")).toMatchObject({ id: "new" });
+    });
 });
 
 function run(id: string, updatedAt: string): DramaProductionRun {

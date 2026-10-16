@@ -1916,14 +1916,31 @@ export async function createDramaProductionRunForUser(userId: string, projectId:
         },
     };
     const latest = await findLatestDramaProductionRun(userId, project.id, episode.id, "production");
-    const latestActive = Boolean(latest?.confirmedAt && ["ready", "running", "paused", "needs_review"].includes(latest.status));
-    const latestVideoSteps = latest?.steps.filter((step) => step.type === "video") || [];
-    const uncertainShots = productionShots.filter((shot) => latestVideoSteps.some((step) => step.shotId === shot.id && step.status === "needs_review"));
+    const runIds = [...new Set(productionShots.map((shot) => shot.generationRunId).filter((id): id is string => Boolean(id && id !== latest?.id)))];
+    const previousRuns = await Promise.all(runIds.map((id) => getDramaProductionRun(userId, project.id, id)));
+    const submissionStates = await Promise.all(
+        productionShots.map(async (shot) => {
+            const ownRun = shot.generationRunId ? [latest, ...previousRuns].find((item) => item?.id === shot.generationRunId) : latest;
+            const steps = ownRun?.steps.filter((step) => step.type === "video" && step.shotId === shot.id && (!shot.generationTaskId || shot.generationRunId || !step.taskId || step.taskId === shot.generationTaskId)) || [];
+            const reconciled = await Promise.all(
+                steps.map(async (step) => {
+                    const task = step.taskId ? await getVideoTask(step.taskId) : await getStoredGenerationTaskByRequest<import("@/lib/server/video-task-store").VideoTask>("video", userId, dramaVideoStepRequestId(ownRun!.id, step), step.attemptNo || 1);
+                    return task?.userId === userId ? reconcileDramaVideoStepTask(step, task) : step;
+                }),
+            );
+            const task = !steps.length && shot.generationTaskId ? await getVideoTask(shot.generationTaskId) : null;
+            const uncertain = reconciled.some((step) => step.status === "needs_review") || (task?.userId === userId && task.status === "running" && task.executionPhase === "needs_review");
+            const active = steps.length
+                ? reconciled.some((step) => step.status === "running" || Boolean(ownRun?.confirmedAt && ["ready", "running", "paused", "needs_review"].includes(ownRun.status) && ["ready", "blocked"].includes(step.status)))
+                : task?.userId === userId
+                  ? task.status === "running"
+                  : shot.generationStatus === "queued" || shot.generationStatus === "running";
+            return { shot, uncertain, active };
+        }),
+    );
+    const uncertainShots = submissionStates.filter((item) => item.uncertain).map((item) => item.shot);
     if (uncertainShots.length) throw new DramaProjectServiceError(`${uncertainShots.map((shot) => shot.title || `镜头 ${shot.order}`).join("、")}的上游提交结果待审核，请先核对原任务，避免重复扣费`, 409);
-    const activeShots = productionShots.filter((shot) => {
-        const steps = latestVideoSteps.filter((step) => step.shotId === shot.id);
-        return steps.length ? latestActive && steps.some((step) => ["ready", "running", "blocked"].includes(step.status)) : shot.generationStatus === "queued" || shot.generationStatus === "running";
-    });
+    const activeShots = submissionStates.filter((item) => item.active).map((item) => item.shot);
     if (latest?.planRevision === run.planRevision && activeShots.length === productionShots.length) return latest;
     if (activeShots.length) throw new DramaProjectServiceError(`${activeShots.map((shot) => shot.title || `镜头 ${shot.order}`).join("、")}正在生产中，请先中断生成`, 409);
     const prefix = project.videoPromptPrefix?.text.trim();
@@ -1931,11 +1948,16 @@ export async function createDramaProductionRunForUser(userId: string, projectId:
     const shotPatches = productionShots.map((shot) => ({
         id: shot.id,
         fields: {
+            generationStatus: "queued" as const,
+            generationRunId: run.id,
+            generationTaskId: undefined,
+            generationError: undefined,
             executionVideoPrompt: stripDramaVideoPromptPrefix(run.parameterSnapshot.videoPrompts?.[shot.id] || "", project),
             videoReferenceIds: referenceSelections[shot.id],
             videoReferenceMode: referenceModes[shot.id],
             fieldOrigins: { ...shot.fieldOrigins, executionVideoPrompt: videoPrompts[shot.id] !== undefined ? ("manual" as const) : shot.fieldOrigins?.executionVideoPrompt || ("ai" as const) },
         },
+        unset: ["generationTaskId" as const, "generationError" as const],
     }));
     const preferencesProject = {
         ...project,
@@ -2603,9 +2625,10 @@ export async function updateDramaProductionRunForUser(userId: string, projectId:
     const input = object(value);
     const run = await getDramaProductionRun(userId, projectId, cleanText(runId));
     if (!run) throw new DramaProjectServiceError("生产运行不存在", 404);
+    const action = cleanText(input.action);
+    if (action === "sync" && run.scope !== "visual") return dispatchDramaProductionRun(userId, projectId, run, cleanText(input.origin), cleanText(input.cookie), true);
     const project = run.scope === "visual" ? await getDramaProject(cleanText(projectId), userId) : await getDramaProjectForUser(userId, projectId);
     if (!project) throw new DramaProjectServiceError("短剧项目不存在", 404);
-    const action = cleanText(input.action);
     let next: DramaProductionRun;
     if (action === "confirm" && run.scope === "visual") {
         if (run.confirmedAt) {
@@ -2621,6 +2644,10 @@ export async function updateDramaProductionRunForUser(userId: string, projectId:
     } else if (action === "retry") {
         const stepIds = new Set(ids(object(value).stepIds));
         if (run.scope !== "visual") {
+            for (const step of run.steps.filter((item) => item.type === "video" && stepIds.has(item.id) && item.taskId)) {
+                const task = await getVideoTask(step.taskId!);
+                if (task?.userId === userId && task.status === "running") throw new DramaProjectServiceError(task.executionPhase === "needs_review" ? "上游提交结果待审核，请先核对原任务，避免重复扣费" : "原视频任务仍在执行，请先等待或中断生成", 409);
+            }
             const episode = project.episodes.find((item) => item.id === run.episodeId);
             if (!episode) throw new DramaProjectServiceError("短剧剧集不存在", 404);
             const settings = await getAuthSettings();
@@ -2883,11 +2910,13 @@ async function syncDramaProductionRun(userId: string, project: DramaProject, run
         const task = step.taskId ? await getVideoTask(step.taskId) : await getStoredGenerationTaskByRequest<import("@/lib/server/video-task-store").VideoTask>("video", userId, requestId, step.attemptNo || 1);
         if (!task || task.userId !== userId) continue;
         const reconciled = reconcileDramaVideoStepTask(step, task);
-        if (sameJsonValue(reconciled, step)) continue;
-        changed = true;
-        steps = steps.map((item) => (item.id === step.id ? reconciled : item));
-        if (step.shotId)
-            nextProject = updateDramaShotInProject(nextProject, run.episodeId, step.shotId, {
+        if (!sameJsonValue(reconciled, step)) {
+            changed = true;
+            steps = steps.map((item) => (item.id === step.id ? reconciled : item));
+        }
+        const shot = nextProject.episodes.find((item) => item.id === run.episodeId)?.shots.find((item) => item.id === step.shotId);
+        if (shot && isCurrentDramaVideoRun(shot, run, step.taskId) && reconciled.status !== "success")
+            nextProject = updateDramaShotInProject(nextProject, run.episodeId, shot.id, {
                 generationStatus: reconciled.status === "failed" ? "error" : reconciled.status === "cancelled" ? "cancelled" : reconciled.status === "needs_review" ? "needs_review" : "running",
                 generationRunId: run.id,
                 generationTaskId: reconciled.taskId,
@@ -2899,22 +2928,25 @@ async function syncDramaProductionRun(userId: string, project: DramaProject, run
     const episode = nextProject.episodes.find((item) => item.id === run.episodeId);
     if (episode) {
         for (const shot of episode.shots) {
+            if (!isCurrentDramaVideoRun(shot, run)) continue;
             const videoSteps = nextRun.steps.filter((step) => step.shotId === shot.id && step.type === "video").sort((left, right) => (left.clipIndex || 0) - (right.clipIndex || 0));
             const extract = nextRun.steps.find((step) => step.shotId === shot.id && step.type === "extract_frames");
-            if (extract && extract.status !== "success" && videoSteps.length && videoSteps.every((step) => step.status === "success" && step.outputUrls?.[0])) {
+            if (extract && (extract.status !== "success" || shot.generationStatus !== "success") && videoSteps.length && videoSteps.every((step) => step.status === "success" && step.outputUrls?.[0])) {
                 changed = true;
                 try {
-                    const videoUrl = await composeDramaVideoSegments({
-                        clips: videoSteps.map((step) => ({ url: step.outputUrls![0], duration: step.duration || 0 })),
-                        ratio: run.parameterSnapshot.ratio,
-                        origin: transport.origin || "",
-                        cookie: transport.cookie || "",
-                        ownerUserId: userId,
-                        projectId: project.id,
-                        runId: run.id,
-                        shotId: shot.id,
-                        title: `${project.title}-${shot.title}`,
-                    });
+                    const videoUrl =
+                        (extract.status === "success" && extract.outputUrls?.[0]) ||
+                        (await composeDramaVideoSegments({
+                            clips: videoSteps.map((step) => ({ url: step.outputUrls![0], duration: step.duration || 0 })),
+                            ratio: run.parameterSnapshot.ratio,
+                            origin: transport.origin || "",
+                            cookie: transport.cookie || "",
+                            ownerUserId: userId,
+                            projectId: project.id,
+                            runId: run.id,
+                            shotId: shot.id,
+                            title: `${project.title}-${shot.title}`,
+                        }));
                     nextRun = {
                         ...nextRun,
                         steps: nextRun.steps.map((step) => (step.id === extract.id ? { ...step, status: "success" as const, outputUrls: [videoUrl], error: undefined } : step)),
@@ -2954,10 +2986,11 @@ async function syncDramaProductionRun(userId: string, project: DramaProject, run
         }
     }
     nextRun = unlockDramaProductionSteps(nextRun);
-    if (!changed && nextRun.status === run.status && nextRun.steps.every((step, index) => step.status === run.steps[index]?.status)) return run;
-    if (JSON.stringify(nextProject) !== JSON.stringify(project)) await updateDramaProject(userId, { ...nextProject, updatedAt: nextTimestamp(project.updatedAt) }, project.updatedAt);
+    const projectChanged = !sameJsonValue(nextProject, project);
+    if (!changed && !projectChanged && nextRun.status === run.status && nextRun.steps.every((step, index) => step.status === run.steps[index]?.status)) return { ...run, projectUpdatedAt: project.updatedAt };
+    const persisted = projectChanged ? await persistDramaShotChanges(userId, project, nextProject) : project;
     await updateDramaProductionRun(userId, nextRun);
-    return nextRun;
+    return { ...nextRun, projectUpdatedAt: persisted.updatedAt };
 }
 
 async function dispatchReadyDramaProductionSteps(userId: string, project: DramaProject, run: DramaProductionRun, origin: string, cookie: string) {
@@ -3080,7 +3113,7 @@ async function dispatchReadyDramaProductionSteps(userId: string, project: DramaP
     }
     if (JSON.stringify(nextProject) !== JSON.stringify(project)) {
         try {
-            await updateDramaProject(userId, { ...nextProject, updatedAt: nextTimestamp(project.updatedAt) }, project.updatedAt);
+            await persistDramaShotChanges(userId, project, nextProject);
         } catch (error) {
             if (!(error instanceof DramaProjectStoreError) || error.status !== 409) throw error;
             const latestProject = await getDramaProject(project.id, userId);
@@ -3088,7 +3121,7 @@ async function dispatchReadyDramaProductionSteps(userId: string, project: DramaP
             const rebased = mergeDramaProductionTaskState(latestProject, project, nextProject);
             if (rebased !== latestProject) {
                 try {
-                    await updateDramaProject(userId, rebased, latestProject.updatedAt);
+                    await persistDramaShotChanges(userId, latestProject, rebased);
                 } catch (rebasedError) {
                     if (!(rebasedError instanceof DramaProjectStoreError) || rebasedError.status !== 409) throw rebasedError;
                 }
@@ -3098,23 +3131,35 @@ async function dispatchReadyDramaProductionSteps(userId: string, project: DramaP
     return current;
 }
 
-function dispatchDramaProductionRun(userId: string, projectId: string, run: DramaProductionRun, origin: string, cookie: string) {
+function isCurrentDramaVideoRun(shot: DramaShot, run: DramaProductionRun, taskId?: string) {
+    return (
+        (!shot.generationRunId || shot.generationRunId === run.id) &&
+        (!shot.generationTaskId || (taskId ? shot.generationTaskId === taskId : run.steps.some((step) => step.type === "video" && step.shotId === shot.id && step.taskId === shot.generationTaskId)))
+    );
+}
+
+function dispatchDramaProductionRun(userId: string, projectId: string, run: DramaProductionRun, origin: string, cookie: string, syncOnly = false): Promise<DramaProductionRun & { projectUpdatedAt?: string }> {
     const key = `${userId}:${projectId}:${run.id}`;
     const previous = dramaProductionDispatchLocks.get(key);
-    if (previous) return previous;
+    if (previous) return syncOnly ? previous : previous.then(() => dispatchDramaProductionRun(userId, projectId, run, origin, cookie));
     const execute = async () => {
-        const latestProject = (await getDramaProjectForUser(userId, projectId)) || undefined;
         const latestRun = (await getDramaProductionRun(userId, projectId, run.id)) || run;
+        const latestProject = syncOnly ? await getDramaProjectForVisualRun(projectId, userId, latestRun.episodeId) : await getDramaProjectForUser(userId, projectId);
         if (!latestProject) return latestRun;
         const synced = await syncDramaProductionRun(userId, latestProject, latestRun, { origin, cookie });
-        if (!synced.confirmedAt || !["running", "ready"].includes(synced.status)) return synced;
+        if (syncOnly || !synced.confirmedAt || !["running", "ready"].includes(synced.status)) return synced;
         const dispatchProject = (await getDramaProjectForUser(userId, projectId)) || latestProject;
         const dispatchRun = (await getDramaProductionRun(userId, projectId, synced.id)) || synced;
         return dispatchReadyDramaProductionSteps(userId, dispatchProject, dispatchRun, origin, cookie);
     };
-    const operation = execute().finally(() => {
-        if (dramaProductionDispatchLocks.get(key) === operation) dramaProductionDispatchLocks.delete(key);
-    });
+    const operation = execute()
+        .catch((error) => {
+            if (error instanceof DramaProjectStoreError) throw new DramaProjectServiceError(error.message, error.status);
+            throw error;
+        })
+        .finally(() => {
+            if (dramaProductionDispatchLocks.get(key) === operation) dramaProductionDispatchLocks.delete(key);
+        });
     dramaProductionDispatchLocks.set(key, operation);
     return operation;
 }
@@ -3133,6 +3178,8 @@ function mergeDramaProductionTaskState(latest: DramaProject, base: DramaProject,
                 if (
                     !baseShot ||
                     !desiredShot ||
+                    shot.generationRunId !== baseShot.generationRunId ||
+                    shot.generationTaskId !== baseShot.generationTaskId ||
                     JSON.stringify({ generationStatus: baseShot.generationStatus, generationRunId: baseShot.generationRunId, generationTaskId: baseShot.generationTaskId, generationError: baseShot.generationError }) ===
                         JSON.stringify({ generationStatus: desiredShot.generationStatus, generationRunId: desiredShot.generationRunId, generationTaskId: desiredShot.generationTaskId, generationError: desiredShot.generationError })
                 )
@@ -3181,10 +3228,11 @@ async function isReadableDramaReferenceImage(url: string) {
 }
 
 export function reconcileDramaVideoStepTask(step: DramaProductionStep, task: import("@/lib/server/video-task-store").VideoTask & Partial<import("@/lib/server/generation-task-types").GenerationTaskExecutionState>): DramaProductionStep {
+    if (task.status === "error" || task.status === "cancelled") return { ...step, taskId: task.id, status: task.status === "cancelled" ? "cancelled" : "failed", error: task.error || "视频子段生成失败" };
+    if (task.status === "success" && task.result?.url) return { ...step, taskId: task.id, status: "success", outputUrls: [task.result.url], outputRemoteUrls: task.result.remoteUrl ? [task.result.remoteUrl] : undefined, error: undefined };
     if (task.executionPhase === "needs_review") return { ...step, taskId: task.id, status: "needs_review", error: task.reviewReason || task.error || "视频任务提交结果待确认，系统已停止自动重复提交" };
     if (task.status === "running") return { ...step, taskId: task.id, status: "running", error: undefined };
-    if (task.status === "success" && task.result?.url) return { ...step, taskId: task.id, status: "success", outputUrls: [task.result.url], outputRemoteUrls: task.result.remoteUrl ? [task.result.remoteUrl] : undefined, error: undefined };
-    return { ...step, taskId: task.id, status: task.status === "cancelled" ? "cancelled" : "failed", error: task.error || "视频子段生成失败" };
+    return { ...step, taskId: task.id, status: "failed", error: task.error || "视频子段生成失败" };
 }
 
 export function compileDramaVideoReferencePrompt(prompt: string, references: Array<{ role: string; purpose?: string }>) {
