@@ -4,12 +4,56 @@ import { beforeAll, describe, expect, it } from "vitest";
 import type { DramaProject } from "@/lib/drama-project-contract";
 import { initializePostgresSchema, postgresQuery } from "@/lib/server/database";
 import { createDramaProject, getDramaProject, updateDramaProjectAssetMutation, updateDramaProjectRatioMutation, updateDramaProjectScopedMutation, updateDramaProjectShotMutation } from "./drama-project-store";
-import { applyDramaProductionPackageForUser, getDramaProjectForUser, previewDramaProductionPackageForUser } from "./drama-project-service";
+import { applyDramaProductionPackageForUser, getDramaProjectForUser, previewDramaProductionPackageForUser, updateDramaShotPromptPatchForUser, updateDramaVideoPromptPrefixForUser } from "./drama-project-service";
 
 const postgresDescribe = process.env.VOZEB_PRO_RUN_POSTGRES_INTEGRATION === "1" ? describe : describe.skip;
 
 postgresDescribe("drama project PostgreSQL mutation round-trip", () => {
     beforeAll(() => initializePostgresSchema());
+
+    it("round-trips prompt reference preferences and an empty selection through consecutive trigger-backed saves", async () => {
+        const userId = `drama-reference-${randomUUID()}`;
+        const now = new Date().toISOString();
+        const project = {
+            id: `drama-${randomUUID()}`,
+            title: "引用保存",
+            ratio: "16:9",
+            status: "active",
+            characters: [],
+            scenes: [],
+            clues: [],
+            createdAt: now,
+            updatedAt: now,
+            props: ["box", "phone"].map((id) => ({ id, name: id, description: id, primaryReferenceId: `${id}-ref`, references: [{ id: `${id}-ref`, url: `/${id}.png`, status: "approved", source: "library", label: id, createdAt: now }] })),
+            episodes: [{ id: "episode", shots: [{ id: "shot", title: "桌面", duration: 15, videoPrompt: "桌上的铁盒保持打开。", characterIds: [], propIds: ["box", "phone"], clueIds: [], utterances: [] }] }],
+        } as unknown as DramaProject;
+        await postgresQuery("INSERT INTO users (id, username, display_name, password_hash) VALUES ($1, $1, '引用保存', 'test-only')", [userId]);
+        try {
+            await createDramaProject(userId, project);
+            const prefix = await updateDramaVideoPromptPrefixForUser(userId, project.id, { action: "save", text: "声明：虚构人物。", expectedUpdatedAt: project.updatedAt });
+            const withPrefix = await getDramaProject(project.id, userId);
+            expect(withPrefix?.videoPromptPrefix).toEqual({ text: "声明：虚构人物。", previousText: "" });
+            expect(withPrefix?.updatedAt).toBe(prefix.updatedAt);
+            const saved = await updateDramaShotPromptPatchForUser(userId, project.id, "episode", "shot", { executionVideoPrompt: "声明：虚构人物。\n\n作者修改：铁盒保持打开。", videoReferenceIds: ["box"], videoReferenceMode: "reference" });
+            const read = await getDramaProjectForUser(userId, project.id);
+            expect(saved.updatedAt).toBe(read.updatedAt);
+            expect(read.episodes[0].shots[0]).toMatchObject({ executionVideoPrompt: saved.shot.executionVideoPrompt, videoReferenceIds: ["box"], videoReferenceMode: "reference" });
+            expect(saved.shot.executionVideoPrompt).toContain("@图片1：道具「box」");
+            const empty = await updateDramaShotPromptPatchForUser(userId, project.id, "episode", "shot", { videoReferenceIds: [], videoReferenceMode: "reference" });
+            const reloaded = await getDramaProjectForUser(userId, project.id);
+            expect(empty.updatedAt).toBe(reloaded.updatedAt);
+            expect(reloaded.episodes[0].shots[0].videoReferenceIds).toEqual([]);
+            expect(reloaded.episodes[0].shots[0].executionVideoPrompt).toBe("作者修改：铁盒保持打开。");
+            const undo = await updateDramaVideoPromptPrefixForUser(userId, project.id, { action: "undo", expectedUpdatedAt: reloaded.updatedAt });
+            const restored = await getDramaProject(project.id, userId);
+            expect(restored?.updatedAt).toBe(undo.updatedAt);
+            expect(restored?.videoPromptPrefix).toEqual({ text: "" });
+            expect(restored?.episodes[0].shots[0]).toMatchObject({ executionVideoPrompt: "作者修改：铁盒保持打开。", videoReferenceIds: [] });
+            await expect(updateDramaProjectShotMutation(userId, { projectId: project.id, episodeId: "episode", shotId: "shot", shot: saved.shot, expectedUpdatedAt: saved.updatedAt })).rejects.toMatchObject({ status: 409 });
+        } finally {
+            await postgresQuery("DELETE FROM users WHERE id = $1", [userId]);
+        }
+    });
 
     it("preserves external author prose through import, consecutive trigger-backed saves and fresh reads", async () => {
         const userId = `drama-regression-${randomUUID()}`;

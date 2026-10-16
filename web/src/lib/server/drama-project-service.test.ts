@@ -135,6 +135,7 @@ import {
     updateDramaProductionRunForUser,
     updateDramaProjectForUser,
     updateDramaProjectRatioForUser,
+    updateDramaVideoPromptPrefixForUser,
     deleteDramaStoryboardFrameForUser,
     updateDramaAssetForUser,
     updateDramaShotPromptForUser,
@@ -342,6 +343,35 @@ describe("drama project service updates", () => {
             }),
         );
         expect(mocks.updateDramaProject).not.toHaveBeenCalled();
+    });
+
+    it("saves prompt and reference selection together, including no references, and restores them after normalization", async () => {
+        const current = project("2026-09-15T00:00:00.000Z", "项目");
+        const asset = (id: string) => ({
+            id,
+            name: id,
+            description: id,
+            primaryReferenceId: `${id}-image`,
+            references: [{ id: `${id}-image`, status: "approved" as const, url: `/${id}.png`, source: "library" as const, label: id, createdAt: current.updatedAt }],
+        });
+        current.props = [asset("box"), asset("phone")];
+        current.episodes[0].shots = [{ id: "shot-one", title: "镜头", duration: 15, characterIds: [], propIds: ["box", "phone"], clueIds: [], utterances: [], dialogue: "", narration: "", imagePrompt: "画面", videoPrompt: "桌面上的铁盒。" } as never];
+        mocks.getDramaProject.mockResolvedValue(current);
+        const saved = await updateDramaShotPromptPatchForUser("user-one", current.id, "episode-one", "shot-one", { executionVideoPrompt: "作者修改：铁盒留在桌面。", videoReferenceIds: ["box"], videoReferenceMode: "reference" });
+        expect(saved.shot).toMatchObject({ videoReferenceIds: ["box"], videoReferenceMode: "reference" });
+        expect(saved.shot.executionVideoPrompt).toContain("@图片1：道具「box」");
+        expect(saved.shot.executionVideoPrompt).not.toContain("phone");
+        current.episodes[0].shots = [saved.shot];
+        const reloaded = normalizeProject(JSON.parse(JSON.stringify(current)), current);
+        expect(reloaded.episodes[0].shots[0].videoReferenceIds).toEqual(["box"]);
+        const empty = await updateDramaShotPromptPatchForUser("user-one", current.id, "episode-one", "shot-one", { videoReferenceIds: [], videoReferenceMode: "reference" });
+        expect(empty.shot.videoReferenceIds).toEqual([]);
+        expect(empty.shot.executionVideoPrompt).toContain("作者修改：铁盒留在桌面。");
+        expect(empty.shot.executionVideoPrompt).not.toContain("@图片");
+        const writes = mocks.updateDramaProjectShotMutation.mock.calls.length;
+        await expect(updateDramaShotPromptPatchForUser("user-one", current.id, "episode-one", "shot-one", { videoReferenceIds: ["foreign"] })).rejects.toMatchObject({ status: 409 });
+        await expect(updateDramaShotPromptPatchForUser("user-one", current.id, "episode-one", "shot-one", { videoReferenceIds: "box" })).rejects.toMatchObject({ status: 400 });
+        expect(mocks.updateDramaProjectShotMutation).toHaveBeenCalledTimes(writes);
     });
 
     it("removes a storyboard frame reference and physically deletes its owned media", async () => {
@@ -581,7 +611,7 @@ describe("drama project service updates", () => {
         expect(body.prompt).not.toContain("旧提示词");
         if (withAudio) {
             expect(body.references).toEqual([{ type: "audio", role: "reference", url: "/api/reference-assets/permanent/audio/heroine.wav" }]);
-            expect(body.prompt).not.toContain("配音引用");
+            expect(body.prompt).toContain("配音引用 @音频1");
             expect(body.prompt).not.toContain("清亮温润固定声线");
         } else {
             expect(body.references).toEqual([]);
@@ -3299,6 +3329,12 @@ describe("drama project service updates", () => {
         expect(run.parameterSnapshot.videoPrompts).toEqual({ "shot-one": edited });
         expect(run.steps.find((step) => step.type === "video")?.prompt).toBe(edited);
         expect(run.preflightSnapshot?.prompts?.["shot-one"]?.executionVideoPrompt).toBe(edited);
+        expect(mocks.updateDramaProjectScopedMutation).toHaveBeenCalledWith(
+            "user-one",
+            current,
+            expect.objectContaining({ episodes: [expect.objectContaining({ shots: [expect.objectContaining({ executionVideoPrompt: edited, videoReferenceIds: [], videoReferenceMode: "reference" })] })] }),
+            expect.objectContaining({ episodes: { patch: [expect.objectContaining({ id: current.episodes[0].id, shots: { patch: [expect.objectContaining({ id: "shot-one" })] } })] } }),
+        );
         expect(current.episodes[0].shots[0].videoPrompt).toBe("旧动作");
         await expect(createDramaProductionRunForUser("user-one", current.id, { episodeId: current.episodes[0].id, videoPrompts: { "shot-one": "  " } })).rejects.toMatchObject({ status: 400 });
         await expect(createDramaProductionRunForUser("user-one", current.id, { episodeId: current.episodes[0].id, videoPrompts: { foreign: edited } })).rejects.toMatchObject({ status: 400 });
@@ -3666,6 +3702,30 @@ describe("drama project service updates", () => {
         expect(persisted.productionBible?.ratio).toBe("16:9");
         expect(persisted.productionBible?.productionPlan?.video.ratio).toBe("16:9");
         expect(persisted.productionBible?.productionPlan?.lockedAt).toBe("2026-07-19T08:00:01.000Z");
+    });
+
+    it("saves, replaces and undoes a project-wide declaration with versioned scalar mutations", async () => {
+        const current = project("2026-07-19T08:00:02.000Z", "声明项目");
+        const bodies = structuredClone(current.episodes);
+        mocks.getDramaProject.mockResolvedValue(current);
+        const saved = await updateDramaVideoPromptPrefixForUser("user-one", current.id, { action: "save", text: "声明：虚构人物。", expectedUpdatedAt: current.updatedAt });
+        expect(saved.videoPromptPrefix).toEqual({ text: "声明：虚构人物。", previousText: "" });
+        const next = mocks.updateDramaProjectScopedMutation.mock.calls[0][2] as DramaProject;
+        expect(next.episodes).toEqual(bodies);
+        expect(mocks.updateDramaProjectScopedMutation.mock.calls[0][3]).toMatchObject({ expectedUpdatedAt: current.updatedAt, projectPatch: { videoPromptPrefix: saved.videoPromptPrefix } });
+        expect(Object.keys(mocks.updateDramaProjectScopedMutation.mock.calls[0][3])).not.toContain("episodes");
+        mocks.getDramaProject.mockResolvedValue(next);
+        const replaced = await updateDramaVideoPromptPrefixForUser("user-one", current.id, { action: "save", text: "新版声明", expectedUpdatedAt: next.updatedAt });
+        expect(replaced.videoPromptPrefix).toEqual({ text: "新版声明", previousText: "声明：虚构人物。" });
+        const replacedProject = mocks.updateDramaProjectScopedMutation.mock.calls[1][2] as DramaProject;
+        mocks.getDramaProject.mockResolvedValue(replacedProject);
+        const undone = await updateDramaVideoPromptPrefixForUser("user-one", current.id, { action: "undo", expectedUpdatedAt: replacedProject.updatedAt });
+        expect(undone.videoPromptPrefix).toEqual({ text: "声明：虚构人物。" });
+        expect(normalizeProject({ ...next, videoPromptPrefix: undefined }, next).videoPromptPrefix).toEqual(saved.videoPromptPrefix);
+        await expect(updateDramaVideoPromptPrefixForUser("user-one", current.id, { action: "save", text: "过期", expectedUpdatedAt: current.updatedAt })).rejects.toMatchObject({ status: 409 });
+        await expect(updateDramaVideoPromptPrefixForUser("user-one", current.id, { action: "save", text: " ", expectedUpdatedAt: replacedProject.updatedAt })).rejects.toMatchObject({ status: 400 });
+        mocks.getDramaProject.mockResolvedValue(null);
+        await expect(updateDramaVideoPromptPrefixForUser("other-user", current.id, { action: "undo", expectedUpdatedAt: replacedProject.updatedAt })).rejects.toMatchObject({ status: 404 });
     });
 
     it("validates a project ratio and persists it as a compact versioned mutation", async () => {

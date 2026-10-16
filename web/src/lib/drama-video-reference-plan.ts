@@ -38,7 +38,7 @@ export function selectedDramaShotReferenceAssetIds(project: DramaProject, shot: 
             .map((item) => item.id),
         ...dramaShotReferenceAssetIds(project, shot),
     ];
-    const selected = selections?.[shot.id];
+    const selected = selections?.[shot.id] ?? shot.videoReferenceIds;
     if (!selected) return defaultDramaShotReferenceAssetIds(project, shot);
     const availableIds = new Set(available);
     return selected.filter((id, index, ids) => availableIds.has(id) && ids.indexOf(id) === index);
@@ -46,8 +46,8 @@ export function selectedDramaShotReferenceAssetIds(project: DramaProject, shot: 
 
 export function selectedDramaShotFrameIds(shot: DramaShot, mode: DramaVideoReferenceMode, selections?: Record<string, string[]>) {
     const frameIds = (shot.framePlan?.frames || []).map((frame) => frame.id);
-    if (mode === "all_frames" && !selections?.[shot.id]) return frameIds;
-    const selected = selections?.[shot.id];
+    const selected = selections?.[shot.id] ?? shot.videoReferenceIds;
+    if (mode === "all_frames" && !selected) return frameIds;
     if (!selected) return [];
     const selectedIds = new Set(selected);
     return frameIds.filter((id) => selectedIds.has(id));

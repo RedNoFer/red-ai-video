@@ -53,7 +53,7 @@ export function buildDramaProductionRun(project: DramaProject, episode: DramaEpi
         const incoming = episode.continuityEdges?.find((edge) => edge.toShotId === shot.id && edge.inheritActualEndFrame);
         const assetIds = selectedDramaShotReferenceAssetIds(project, shot, parameters.referenceSelections);
         const assetDependencies = assetIds.map((id) => anchorStepIds.get(id)).filter((id): id is string => Boolean(id));
-        const referenceMode = resolveDramaVideoReferenceMode(parameters.referenceModes?.[shot.id]);
+        const referenceMode = resolveDramaVideoReferenceMode(parameters.referenceModes?.[shot.id] ?? shot.videoReferenceMode);
         const selectedFrameIds = selectedDramaShotFrameIds(shot, referenceMode, parameters.referenceSelections);
         const allFrames = referenceMode === "all_frames" && Boolean(shot.framePlan?.frames.length);
         let videoSegments: Array<{ startSecond: number; endSecond: number; duration: number; frameIds: string[] }>;

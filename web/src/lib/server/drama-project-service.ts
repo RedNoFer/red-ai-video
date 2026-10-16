@@ -86,6 +86,8 @@ import { privateUpstreamHostAllowed } from "@/lib/server/outbound-url-security";
 import { applyDramaProductionPackage, DRAMA_PRODUCTION_PACKAGE_MAX_BYTES, DramaProductionPackageError, previewDramaProductionPackage, type DramaProductionPackageNormalizationOptions } from "@/lib/server/drama-production-package";
 import { preserveDramaAuthoredText } from "@/lib/drama-authored-text";
 import { buildDramaProductionRun, refreshDramaVideoStepReferences, unlockDramaProductionSteps } from "@/lib/server/drama-production-run";
+import { stripDramaVideoPromptPrefix } from "@/lib/drama-video-prompt-prefix";
+import { buildDramaShotVideoReferenceBindings, compileDramaVideoSubmissionPrompt } from "@/lib/drama-video-submission";
 import { composeDramaVideoSegments } from "@/lib/server/drama-video-sequence";
 import { buildDramaVisualProductionRun, compileDramaFrameBeatPrompt, compileDramaVisualStepPrompt, unlockDramaVisualSteps } from "@/lib/server/drama-visual-production-run";
 import { preflightDramaProduction } from "@/lib/server/drama-production-preflight";
@@ -953,6 +955,8 @@ const DRAMA_SHOT_MUTATION_FIELDS = [
     "imagePrompt",
     "videoPrompt",
     "executionVideoPrompt",
+    "videoReferenceIds",
+    "videoReferenceMode",
     "executionImagePrompt",
     "cameraMotion",
     "startFramePrompt",
@@ -1068,6 +1072,35 @@ export async function updateDramaProjectRatioForUser(userId: string, id: string,
     if (!parseTimestamp(expectedUpdatedAt)) throw new DramaProjectServiceError("项目版本缺失，请刷新后重试", 400);
     try {
         return await updateDramaProjectRatioMutation(userId, { projectId: cleanText(id), ratio, expectedUpdatedAt });
+    } catch (error) {
+        if (error instanceof DramaProjectStoreError) throw new DramaProjectServiceError(error.message, error.status);
+        throw error;
+    }
+}
+
+export async function updateDramaVideoPromptPrefixForUser(userId: string, id: string, value: unknown) {
+    const input = object(value);
+    if (!["save", "undo"].includes(String(input.action))) throw new DramaProjectServiceError("声明操作无效", 400);
+    const expectedUpdatedAt = cleanText(input.expectedUpdatedAt);
+    if (!parseTimestamp(expectedUpdatedAt)) throw new DramaProjectServiceError("项目版本缺失，请刷新后重试", 400);
+    const current = await getDramaProject(cleanText(id), userId);
+    if (!current) throw new DramaProjectServiceError("短剧项目不存在", 404);
+    if (current.updatedAt !== expectedUpdatedAt) throw new DramaProjectServiceError("项目已更新，请刷新后重试", 409);
+    const previous = current.videoPromptPrefix;
+    if (input.action === "undo" && previous?.previousText === undefined) throw new DramaProjectServiceError("暂无可撤销的声明操作", 409);
+    const text = input.action === "undo" ? previous!.previousText! : cleanText(input.text);
+    if (input.action === "save" && !text) throw new DramaProjectServiceError("声明内容不能为空", 400);
+    if (input.action === "save" && text === previous?.text) return { projectId: current.id, updatedAt: current.updatedAt, videoPromptPrefix: previous };
+    const videoPromptPrefix = input.action === "undo" ? { text } : { text, previousText: previous?.text || "" };
+    const next = { ...current, videoPromptPrefix, updatedAt: nextTimestamp(current.updatedAt) };
+    try {
+        const ack = await updateDramaProjectScopedMutation(userId, current, next, {
+            projectId: current.id,
+            expectedUpdatedAt: current.updatedAt,
+            updatedAt: next.updatedAt,
+            projectPatch: { videoPromptPrefix },
+        });
+        return { ...ack, videoPromptPrefix };
     } catch (error) {
         if (error instanceof DramaProjectStoreError) throw new DramaProjectServiceError(error.message, error.status);
         throw error;
@@ -1770,10 +1803,10 @@ export async function createDramaProductionRunForUser(userId: string, projectId:
             return [shotId, prompt];
         }),
     );
-    const referenceModes = Object.fromEntries(productionShots.map((shot) => [shot.id, resolveDramaVideoReferenceMode(submittedReferenceModes[shot.id])])) as Record<string, DramaVideoReferenceMode>;
+    const referenceModes = Object.fromEntries(productionShots.map((shot) => [shot.id, resolveDramaVideoReferenceMode(submittedReferenceModes[shot.id] ?? shot.videoReferenceMode)])) as Record<string, DramaVideoReferenceMode>;
     const referenceSelections = Object.fromEntries(
         productionShots.map((shot) => {
-            const submitted = submittedReferenceSelections[shot.id];
+            const submitted = submittedReferenceSelections[shot.id] ?? shot.videoReferenceIds;
             if (submitted) return [shot.id, submitted];
             const incoming = episode.continuityEdges?.find((edge) => edge.toShotId === shot.id && edge.inheritActualEndFrame);
             return [shot.id, [...selectedDramaShotReferenceAssetIds(project, shot), ...selectedDramaShotFrameIds(shot, referenceModes[shot.id]), ...(incoming ? [`tail-${incoming.fromShotId}`] : [])]];
@@ -1839,14 +1872,42 @@ export async function createDramaProductionRunForUser(userId: string, projectId:
     );
     const activeShots = productionShots.filter((shot) => shot.generationStatus === "queued" || shot.generationStatus === "running" || (activeRunShotIds.has(shot.id) && !["cancelled", "success", "error"].includes(shot.generationStatus || "")));
     if (activeShots.length) throw new DramaProjectServiceError(`${activeShots.map((shot) => shot.title || `镜头 ${shot.order}`).join("、")}正在生产中，请先中断生成`, 409);
+    const prefix = project.videoPromptPrefix?.text.trim();
+    if (prefix && productionShots.some((shot) => !run.parameterSnapshot.videoPrompts?.[shot.id]?.startsWith(`${prefix}\n`))) throw new DramaProjectServiceError("统一声明已更新，请重新打开生成确认", 409);
+    const shotPatches = productionShots.map((shot) => ({
+        id: shot.id,
+        fields: {
+            executionVideoPrompt: stripDramaVideoPromptPrefix(run.parameterSnapshot.videoPrompts?.[shot.id] || "", project),
+            videoReferenceIds: referenceSelections[shot.id],
+            videoReferenceMode: referenceModes[shot.id],
+            fieldOrigins: { ...shot.fieldOrigins, executionVideoPrompt: videoPrompts[shot.id] !== undefined ? ("manual" as const) : shot.fieldOrigins?.executionVideoPrompt || ("ai" as const) },
+        },
+    }));
+    const preferencesProject = {
+        ...project,
+        updatedAt: nextTimestamp(project.updatedAt),
+        episodes: project.episodes.map((item) => (item.id === episode.id ? { ...item, shots: item.shots.map((shot) => ({ ...shot, ...shotPatches.find((patch) => patch.id === shot.id)?.fields })) } : item)),
+    };
+    try {
+        const ack = await updateDramaProjectScopedMutation(userId, project, preferencesProject, {
+            projectId: project.id,
+            expectedUpdatedAt: project.updatedAt,
+            updatedAt: preferencesProject.updatedAt,
+            episodes: { patch: [{ id: episode.id, fields: {}, shots: { patch: shotPatches } }] },
+        });
+        preferencesProject.updatedAt = ack.updatedAt;
+    } catch (error) {
+        if (error instanceof DramaProjectStoreError) throw new DramaProjectServiceError(error.message, error.status);
+        throw error;
+    }
     const confirmed = { ...run, confirmedAt: new Date().toISOString(), status: "running" as const };
     const created = await createDramaProductionRun(userId, confirmed);
     const origin = cleanText(object(value).origin);
     const cookie = cleanText(object(value).cookie);
     const publicOrigin = cleanText(object(value).publicOrigin);
-    const imageRun = await dispatchDramaImageSteps(userId, project, created, origin, cookie, publicOrigin);
+    const imageRun = await dispatchDramaImageSteps(userId, preferencesProject, created, origin, cookie, publicOrigin);
     const refreshedRun = await getDramaProductionRun(userId, project.id, imageRun.id);
-    return refreshedRun ? dispatchDramaProductionRun(userId, project.id, refreshedRun, origin, cookie) : imageRun;
+    return refreshedRun ? dispatchDramaProductionRun(userId, preferencesProject.id, refreshedRun, origin, cookie) : imageRun;
 }
 
 export function mergeDramaShotMediaReferences(current: DramaShot, snapshot: DramaShot): DramaShot {
@@ -3237,7 +3298,7 @@ export async function updateDramaShotPromptForUser(userId: string, projectId: st
     const episodeId = cleanText(episodeIdValue);
     const shotId = cleanText(shotIdValue);
     const input = object(value);
-    const videoPrompt = cleanText(input.executionVideoPrompt);
+    const videoPrompt = stripDramaVideoPromptPrefix(cleanText(input.executionVideoPrompt), project);
     const videoPromptOrigin: DramaFieldOrigin = input.executionVideoPromptOrigin === "manual" ? "manual" : "ai";
     const hasFramePlanPatch = Object.prototype.hasOwnProperty.call(input, "framePlan");
     const imagePrompt = cleanText(input.imagePrompt);
@@ -3299,11 +3360,14 @@ export async function updateDramaShotPromptPatchForUser(userId: string, projectI
     const episodeId = cleanText(episodeIdValue);
     const shotId = cleanText(shotIdValue);
     const input = object(value);
-    const videoPrompt = cleanText(input.executionVideoPrompt);
+    const videoPrompt = stripDramaVideoPromptPrefix(cleanText(input.executionVideoPrompt), project);
     const imagePrompt = cleanText(input.imagePrompt);
     const hasFramePlanPatch = Object.prototype.hasOwnProperty.call(input, "framePlan");
     const hasStoryboardFramesPatch = Object.prototype.hasOwnProperty.call(input, "storyboardFrames");
-    if (!videoPrompt && !imagePrompt && !hasFramePlanPatch && !hasStoryboardFramesPatch) throw new DramaProjectServiceError("提示词不能为空", 400);
+    const hasReferencePatch = Object.prototype.hasOwnProperty.call(input, "videoReferenceIds");
+    if (hasReferencePatch && (!Array.isArray(input.videoReferenceIds) || input.videoReferenceIds.some((id) => typeof id !== "string" || !id.trim()))) throw new DramaProjectServiceError("镜头图片引用格式无效", 400);
+    if (input.videoReferenceMode !== undefined && (!hasReferencePatch || !["reference", "all_frames"].includes(String(input.videoReferenceMode)))) throw new DramaProjectServiceError("镜头图片引用模式无效", 400);
+    if (!videoPrompt && !imagePrompt && !hasFramePlanPatch && !hasStoryboardFramesPatch && !hasReferencePatch) throw new DramaProjectServiceError("提示词不能为空", 400);
 
     const persist = async (baseProject: DramaProject) => {
         const currentEpisode = baseProject.episodes.find((item) => item.id === episodeId);
@@ -3320,7 +3384,19 @@ export async function updateDramaShotPromptPatchForUser(userId: string, projectI
             if (!framePlan) throw new DramaProjectServiceError("逐帧计划无效，未保存本次提示词", 422);
             validateSavedDramaDialogueSequence(framePlan, currentShot.utterances, `${currentEpisode.code || currentEpisode.title}/${currentShot.code || currentShot.title}`);
         }
-        const repairedVideoPrompt = videoPrompt ? repairDramaVideoPromptAudioHierarchy(videoPrompt, currentShot.code || currentShot.title).prompt : "";
+        const referenceIds = hasReferencePatch ? ids(input.videoReferenceIds) : currentShot.videoReferenceIds;
+        const referenceMode = resolveDramaVideoReferenceMode(input.videoReferenceMode ?? currentShot.videoReferenceMode);
+        if (hasReferencePatch) validateDramaReferenceSelections(baseProject, currentEpisode, [currentShot], { [shotId]: referenceIds! });
+        const selectedPrompt = hasReferencePatch
+            ? compileDramaVideoSubmissionPrompt(
+                  videoPrompt || currentShot.executionVideoPrompt || currentShot.videoPrompt,
+                  baseProject,
+                  currentShot,
+                  buildDramaShotVideoReferenceBindings(baseProject, currentEpisode, currentShot, referenceIds!, referenceMode),
+                  referenceIds!,
+              )
+            : videoPrompt;
+        const repairedVideoPrompt = selectedPrompt ? repairDramaVideoPromptAudioHierarchy(selectedPrompt, currentShot.code || currentShot.title).prompt : "";
         if (videoPrompt) {
             const coverageErrors = validateDramaVideoPromptUtteranceCoverage(videoPrompt, framePlan?.frames || [], currentShot.utterances, currentShot.code || currentShot.title);
             if (coverageErrors.length) throw new DramaProjectServiceError(coverageErrors[0], 422);
@@ -3331,13 +3407,14 @@ export async function updateDramaShotPromptPatchForUser(userId: string, projectI
         if (hasStoryboardFramesPatch && !storyboardFrames) throw new DramaProjectServiceError("分镜帧状态无效", 400);
         const fieldOrigins = {
             ...(currentShot.fieldOrigins || {}),
-            ...(videoPrompt ? { executionVideoPrompt: input.executionVideoPromptOrigin === "manual" ? ("manual" as const) : ("ai" as const) } : {}),
+            ...(selectedPrompt ? { executionVideoPrompt: input.executionVideoPromptOrigin === "manual" || hasReferencePatch ? ("manual" as const) : ("ai" as const) } : {}),
             ...(imagePrompt ? { imagePrompt: "ai" as const, executionImagePrompt: "ai" as const } : {}),
             ...(hasFramePlanPatch ? { framePlan: input.framePlanOrigin === "manual" ? ("manual" as const) : ("ai" as const) } : {}),
         };
         const nextShot: DramaShot = {
             ...currentShot,
-            ...(videoPrompt ? { executionVideoPrompt: repairedVideoPrompt } : {}),
+            ...(selectedPrompt ? { executionVideoPrompt: stripDramaVideoPromptPrefix(repairedVideoPrompt, baseProject) } : {}),
+            ...(hasReferencePatch ? { videoReferenceIds: referenceIds, videoReferenceMode: referenceMode } : {}),
             ...(imagePrompt ? { imagePrompt: formatPromptFieldLines(imagePrompt, "static"), executionImagePrompt: undefined } : {}),
             ...(hasFramePlanPatch ? { framePlan, storyboardFrameMode: "all_frames" as const } : {}),
             ...(hasStoryboardFramesPatch ? { storyboardFrames } : {}),
@@ -3790,6 +3867,7 @@ export function normalizeProject(value: unknown, current: DramaProject): DramaPr
         props: normalizeNamedAssets(input.props, "prop"),
         clues: normalizeClues(input.clues),
         defaultVideoMode: videoMode(input.defaultVideoMode),
+        videoPromptPrefix: current.videoPromptPrefix,
         episodes,
         sourceAssets: normalizeSourceAssets(input.sourceAssets),
         createdAt: current.createdAt,
@@ -3989,6 +4067,7 @@ function normalizeShot(value: unknown, index: number): DramaShot {
         imagePrompt: formatPromptFieldLines(cleanText(input.imagePrompt), "static"),
         videoPrompt,
         executionVideoPrompt: optionalText(input.executionVideoPrompt),
+        ...(Array.isArray(input.videoReferenceIds) ? { videoReferenceIds: ids(input.videoReferenceIds), videoReferenceMode: resolveDramaVideoReferenceMode(input.videoReferenceMode) } : {}),
         executionImagePrompt: optionalText(input.executionImagePrompt),
         cameraMotion: cleanText(input.cameraMotion),
         startFramePrompt: formatOptionalPromptField(input.startFramePrompt, "static"),

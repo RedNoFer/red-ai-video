@@ -265,6 +265,14 @@ test("shot assets replace secondary checks and manual fixed references reach the
     const limited = await request.patch("/api/admin/settings", { data: { logicalModels } });
     expect(limited.ok()).toBe(true);
     expect((await limited.json()).settings.logicalModels.find((model: { id: string }) => model.id === "e2e-video").bindings[0].capabilityProfile.maxReferenceImages).toBe(9);
+    // Keep the reference-limit flow independent from other cases' video submission rate budgets.
+    const credentials = { username: `manual_refs_${Date.now()}`, password: "E2e_Reference_Only_2026!" };
+    const provisioned = await request.post("/api/admin/users", { data: { ...credentials, displayName: "手动引用回归", role: "admin", adminPermissions: ["users.read", "upstream.manage", "billing.manage"], status: "active", pointsBalance: 0 } });
+    expect(provisioned.ok(), await provisioned.text()).toBe(true);
+    const signedIn = await request.post("/api/auth/login", { data: credentials });
+    expect(signedIn.ok(), await signedIn.text()).toBe(true);
+    await page.context().clearCookies();
+    await page.context().addCookies((await request.storageState()).cookies);
     const created = await request.post("/api/drama/projects", { data: { title: `E2E 手动引用 ${randomUUID().slice(0, 8)}`, ratio: "9:16" } });
     expect(created.ok(), await created.text()).toBe(true);
     const empty = (await created.json()).data.project as DramaProject;
@@ -358,10 +366,10 @@ test("shot assets replace secondary checks and manual fixed references reach the
         await picker.getByRole("checkbox", { name: "引用固定资产图：角色 · 手动角色" }).check();
         await picker.getByRole("textbox", { name: "搜索固定资产图" }).fill("手动场景");
         await picker.getByRole("checkbox", { name: "引用固定资产图：场景 · 手动场景" }).check();
-        await expect(promptEditor).toHaveValue(new RegExp(`^【参考图片】[\\s\\S]*${editedPrompt.split("\n").at(-1)}$`, "u"));
+        await expect(promptEditor).toHaveValue(new RegExp(`^总体风格：真人实拍，自然窗光。[\\s\\S]*参考图片：[\\s\\S]*${editedPrompt.split("\n").at(-1)}$`, "u"));
         let completePrompt = await promptEditor.inputValue();
-        expect(completePrompt).toContain("@图片4：角色「手动角色」");
-        expect(completePrompt).toContain("@图片5：场景「手动场景」");
+        expect(completePrompt).toContain("@图片5：角色「手动角色」");
+        expect(completePrompt).toContain("@图片4：场景「手动场景」");
         expect(completePrompt).not.toContain("项目资产基准图");
         expect(completePrompt).not.toContain("参考素材一致性要求");
         await expect(dialog.locator("[data-drama-prompt-reference-gallery]").getByRole("img", { name: "角色 · 手动角色" })).toBeVisible();
@@ -388,14 +396,14 @@ test("shot assets replace secondary checks and manual fixed references reach the
                 cells: Array.from(element.children).map((cell) => ({ x: cell.getBoundingClientRect().x, right: cell.getBoundingClientRect().right, width: cell.getBoundingClientRect().width })),
             }));
         expect(grid.display).toBe("grid");
-        expect(new Set(grid.cells.slice(0, grid.columns).map((cell) => Math.round(cell.x))).size).toBe(page.viewportSize()!.width < 640 ? 2 : 4);
+        expect(new Set(grid.cells.slice(0, grid.columns).map((cell) => Math.round(cell.x))).size).toBe(page.viewportSize()!.width < 640 ? 3 : 4);
         expect(grid.cells.every((cell) => cell.width > 0 && cell.right <= page.viewportSize()!.width)).toBe(true);
         const responsePromise = page.waitForResponse((response) => response.url().endsWith(`/projects/${seeded.id}/production-runs`) && response.request().method() === "POST");
         await dialog.getByRole("button", { name: "确认生成", exact: true }).click();
         const response = await responsePromise;
         expect(response.ok(), await response.text()).toBe(true);
         const run = (await response.json()).data.run;
-        expect(run.parameterSnapshot.referenceSelections[shot.id]).toEqual([role.id, prop.id, clue.id, "manual-character", "manual-scene"]);
+        expect(run.parameterSnapshot.referenceSelections[shot.id]).toEqual([role.id, prop.id, clue.id, "manual-scene", "manual-character"]);
         expect(run.parameterSnapshot.videoPrompts[shot.id]).toBe(completePrompt);
         let dispatched = run;
         await expect
@@ -409,7 +417,7 @@ test("shot assets replace secondary checks and manual fixed references reach the
         expect(step.executionPrompt, step.error).toBe(completePrompt);
         expect(step.executionPrompt).not.toContain(shot.videoPrompt);
         const upstream = await (await request.get(`${E2E_PROTOCOL_ORIGIN}/__state`)).json();
-        const submission = upstream.requests.find((item: { method: string; prompt?: string }) => item.method === "POST" && item.prompt?.includes(editedPrompt));
+        const submission = upstream.requests.find((item: { method: string; prompt?: string }) => item.method === "POST" && item.prompt?.includes(editedPrompt.split("\n").at(-1)!));
         expect(submission).toBeDefined();
         expect(submission.prompt).toBe(completePrompt);
         expect(submission.images).toEqual(step.referenceBindingsSnapshot.map((binding: { url: string }) => binding.url));

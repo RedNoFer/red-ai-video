@@ -162,6 +162,14 @@ export function updateDramaProjectRatio(projectId: string, ratio: string, expect
     });
 }
 
+export function updateDramaVideoPromptPrefix(projectId: string, input: { action: "save" | "undo"; text?: string; expectedUpdatedAt: string }) {
+    return request<{ projectId: string; updatedAt: string; videoPromptPrefix: NonNullable<DramaProject["videoPromptPrefix"]> }>(`/api/drama/projects/${encodeURIComponent(projectId)}/video-prompt-prefix`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+    });
+}
+
 export function saveDramaAsset(projectId: string, kind: "characters" | "scenes" | "props" | "clues", assetId: string, patch: unknown) {
     return request<{ project: DramaProjectAssetUpdate }>(`/api/drama/projects/${encodeURIComponent(projectId)}/assets/${kind}/${encodeURIComponent(assetId)}`, {
         method: "PATCH",
@@ -511,7 +519,7 @@ export function updateDramaShotPromptPatch(
     shotId: string,
     executionVideoPrompt?: string,
     imagePrompt?: string,
-    options?: { executionVideoPromptOrigin?: "manual" | "ai"; framePlan?: unknown; framePlanOrigin?: "manual" | "ai"; storyboardFrames?: unknown },
+    options?: { executionVideoPromptOrigin?: "manual" | "ai"; framePlan?: unknown; framePlanOrigin?: "manual" | "ai"; storyboardFrames?: unknown; videoReferenceIds?: string[]; videoReferenceMode?: DramaVideoReferenceMode },
 ) {
     return request<{ projectId: string; episodeId: string; shotId: string; updatedAt: string; shot: DramaShot }>(
         `/api/drama/projects/${encodeURIComponent(projectId)}/episodes/${encodeURIComponent(episodeId)}/shots/${encodeURIComponent(shotId)}/prompt?response=shot`,
@@ -523,6 +531,8 @@ export function updateDramaShotPromptPatch(
                 ...(imagePrompt ? { imagePrompt } : {}),
                 ...(options?.framePlan ? { framePlan: options.framePlan, ...(options.framePlanOrigin ? { framePlanOrigin: options.framePlanOrigin } : {}) } : {}),
                 ...(options?.storyboardFrames ? { storyboardFrames: options.storyboardFrames } : {}),
+                ...(options?.videoReferenceIds ? { videoReferenceIds: options.videoReferenceIds } : {}),
+                ...(options?.videoReferenceMode ? { videoReferenceMode: options.videoReferenceMode } : {}),
             }),
         },
     );

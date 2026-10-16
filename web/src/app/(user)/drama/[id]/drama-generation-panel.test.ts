@@ -31,7 +31,6 @@ describe("Drama generation production workspace", () => {
         expect(source).not.toContain("data-drama-generation-empty");
         expect(source).toContain('<section className="mt-2.5"');
         expect(source).not.toContain("<Empty");
-        expect(source).not.toContain("sm:grid-cols-4");
     });
 
     it("keeps shot task rows mobile-safe and exposes the prompt that will be submitted", async () => {
@@ -44,7 +43,7 @@ describe("Drama generation production workspace", () => {
         expect(source).toContain("视频执行提示词（当前标准）");
         expect(source).toContain("generateDramaVideoPrompt({");
         expect(source).toContain("generateDramaVideoPrompt");
-        expect(source).toContain("formatDramaVideoPromptCutLines(stripDramaCharacterVoiceBindings(supplierVideoPrompt))");
+        expect(source).toContain("formatDramaVideoPromptCutLines(defaultDramaVideoSubmissionPrompt(project, episode, shot, supplierVideoPrompt))");
         expect(source).toContain("compileDramaVideoSubmissionPrompt(");
         expect(source).toContain("previewSelectedVideoBindings(");
         expect(source).not.toContain("applyDramaVideoVisualContract");
@@ -62,9 +61,9 @@ describe("Drama generation production workspace", () => {
         const executionPromptStart = source.indexOf("function ShotExecutionDetails");
         const executionPromptEnd = source.indexOf("function ProductionPromptPreview", executionPromptStart);
         const executionPrompt = source.slice(executionPromptStart, executionPromptEnd);
-        expect(executionPrompt).toContain(
-            'updateDramaShotPromptPatch(project.id, episode.id, shot.id, prompt, undefined, { executionVideoPromptOrigin: "manual", ...(optimizedFramePlan ? { framePlan: optimizedFramePlan, framePlanOrigin: "ai" as const } : {}) })',
-        );
+        expect(executionPrompt).toContain("updateDramaShotPromptPatch(project.id, episode.id, shot.id, prompt, undefined,");
+        expect(executionPrompt).toContain("videoReferenceIds: referenceIds");
+        expect(executionPrompt).toContain("videoReferenceMode: referenceMode");
         expect(executionPrompt).toContain("videoPromptDraft.trim() === videoPromptOriginal.trim()");
         expect(executionPrompt).toContain("persistedVideoPrompt");
         expect(executionPrompt).toContain("if (optimizedFramePlan) setOptimizedFramePlan(undefined)");
@@ -78,7 +77,7 @@ describe("Drama generation production workspace", () => {
         const details = source.slice(source.indexOf("function ShotExecutionDetails"), source.indexOf("function compactShotSourceEvidence"));
         const preview = source.slice(source.indexOf("function compileProductionPreviewPrompt"), source.indexOf("function ProductionPromptPreview"));
 
-        expect(source).toContain("defaultDramaVideoSubmissionPrompt(project, episode, shot)");
+        expect(source).toContain("defaultDramaVideoSubmissionPrompt(project, episode, shot,");
         expect(details).toContain("data-drama-final-submission-prompt");
         expect(details).toContain("value={submissionPromptPreview}");
         expect(details).toContain("setVideoPromptDraft(event.target.value)");
@@ -86,7 +85,7 @@ describe("Drama generation production workspace", () => {
         expect(details.match(/<Input\.TextArea/g)).toHaveLength(1);
         expect(preview).toContain("compileDramaVideoSubmissionPrompt(row.basePrompt");
         expect(source.indexOf("data-drama-character-voices")).toBeGreaterThan(source.indexOf("data-drama-prompt-reference-gallery"));
-        expect(source).toContain("人物音色应用");
+        expect(source).toContain("更改引用时同步更新图片编号和音色");
     });
 
     it("cancels video tasks through their server action instead of a writable status field", async () => {
@@ -153,7 +152,7 @@ describe("Drama generation production workspace", () => {
         const source = await readFile(resolve(process.cwd(), "src/app/(user)/drama/[id]/drama-generation-panel.tsx"), "utf8");
 
         expect(source).not.toContain('disabled={reference.required || (allFrames && reference.kind === "frame")}');
-        expect(source).toContain('{reference.required ? "连续性参考" : allFrames && reference.kind === "frame" ? "顺序关键帧"');
+        expect(source).toContain('checked ? "已引用" : "未引用"');
         expect(source).toContain('kind: "frame"');
         expect(source).toContain('const allFrames = referenceModes[shot.id] === "all_frames"');
         expect(source).toContain("Boolean(maxReferenceImages && (selections[row.shot.id] || []).length > maxReferenceImages)");

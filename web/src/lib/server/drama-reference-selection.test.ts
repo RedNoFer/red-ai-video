@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { DramaProject, DramaShot } from "@/lib/drama-project-contract";
 import { validateDramaReferenceSelections } from "./drama-project-service";
 import { buildDramaProductionRun, refreshDramaVideoStepReferences } from "./drama-production-run";
+import { selectedDramaShotFrameIds, selectedDramaShotReferenceAssetIds } from "@/lib/drama-video-reference-plan";
 
 const character = { id: "extra-character", name: "同伴", description: "成年同伴", primaryReferenceId: "character-image", references: [{ id: "character-image", status: "approved", url: "/character.png" }] };
 const scene = {
@@ -20,6 +21,34 @@ function fixture() {
 }
 
 describe("manual fixed asset reference selection", () => {
+    it("restores a saved subset and an intentionally empty selection instead of selecting defaults again", () => {
+        const { project, episode, shot } = fixture();
+        shot.sceneId = "extra-scene";
+        shot.characterIds = ["extra-character"];
+        shot.videoReferenceIds = ["extra-character"];
+        expect(selectedDramaShotReferenceAssetIds(project, shot)).toEqual(["extra-character"]);
+        const run = buildDramaProductionRun(project, episode, { imageModel: "image", videoModel: "video" });
+        const step = run.steps.find((item) => item.type === "video")!;
+        expect(step.referenceBindingsSnapshot).toMatchObject([{ alias: "@图片1", sourceId: "extra-character" }]);
+        expect(step.prompt).not.toContain("场景「车厢」");
+        shot.videoReferenceIds = [];
+        expect(selectedDramaShotReferenceAssetIds(project, shot)).toEqual([]);
+        expect(selectedDramaShotFrameIds(shot, "all_frames")).toEqual([]);
+        expect(buildDramaProductionRun(project, episode, { imageModel: "image", videoModel: "video" }).steps.find((item) => item.type === "video")?.referenceBindingsSnapshot).toEqual([]);
+        expect(selectedDramaShotReferenceAssetIds(project, shot, { [shot.id]: ["extra-scene"] })).toEqual(["extra-scene"]);
+    });
+
+    it("updates authored image mentions when references are removed and renumbered", () => {
+        const { project, shot } = fixture();
+        const all = buildVideoReferenceBindings(project, shot, [], ["extra-scene", "extra-character"]);
+        const original = compileDramaVideoSubmissionPrompt("@图片2的人物坐在@图片1的车厢里。", project, shot, all, ["extra-scene", "extra-character"]);
+        const selected = buildVideoReferenceBindings(project, shot, [], ["extra-character"]);
+        const updated = compileDramaVideoSubmissionPrompt(original, project, shot, selected, ["extra-character"]);
+        expect(updated).toContain("@图片1的人物坐在场景「车厢」的车厢里。");
+        expect(updated).not.toContain("@图片2");
+        expect(updated).not.toContain("@图片1：场景");
+    });
+
     it("keeps the edited prompt through persistence and reference refresh without restoring the project prompt", () => {
         const { project, episode, shot } = fixture();
         const edited = "总体风格：自然摄影。\n0–15秒：同伴在车窗左侧抬起右手，衣袖擦过玻璃后停住。\n音效：短促衣料摩擦。";

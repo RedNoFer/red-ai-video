@@ -1,16 +1,40 @@
 import { approvedAssetReference, approvedScenePanoramaReference, hasApprovedAssetReference, hasApprovedScenePanoramaReference } from "@/lib/drama-asset-baseline";
 import { appendDramaCharacterVoiceBindings, dramaShotCharacterVoiceReferences, stripDramaCharacterVoiceBindings } from "@/lib/drama-character-voice-reference";
-import { appendDramaImageReferenceBindings } from "@/lib/drama-prompt-compiler";
+import { appendDramaImageReferenceBindings, stripDramaReferenceBindingSections } from "@/lib/drama-prompt-compiler";
+import { continuityStartEvidence } from "@/lib/drama-continuity-policy";
+import { selectedDramaShotFrameIds, selectedDramaShotReferenceAssetIds } from "@/lib/drama-video-reference-plan";
 import type { DramaEpisode, DramaProject, DramaShot, DramaVideoReferenceBinding, DramaVideoReferenceMode } from "@/lib/drama-project-contract";
+
+import { stripDramaVideoPromptPrefix, withDramaVideoPromptPrefix } from "@/lib/drama-video-prompt-prefix";
 
 /** Build the complete editable prompt before confirmation; dispatch sends it unchanged. */
 export function compileDramaVideoSubmissionPrompt(prompt: string, project: DramaProject, shot: DramaShot, bindings: DramaVideoReferenceBinding[], assetIds: string[]) {
-    const body = stripDramaCharacterVoiceBindings(prompt).trim();
+    prompt = stripDramaVideoPromptPrefix(prompt, project);
+    const previousAliases = new Map(Array.from(prompt.matchAll(/^(@图片\d+)[：:]([^\n]+)$/gmu), (match) => [match[1], match[2].trim()]));
+    const aliases = new Map(bindings.map((binding) => [binding.purpose, binding.alias]));
+    const body = stripDramaReferenceBindingSections(stripDramaCharacterVoiceBindings(prompt))
+        .replace(/@图片\d+/gu, (alias) => {
+            const purpose = previousAliases.get(alias);
+            return purpose ? aliases.get(purpose) || purpose : alias;
+        })
+        .trim();
     const withReferences = appendDramaImageReferenceBindings(
         body,
         bindings.map((binding, index) => ({ id: binding.sourceId || binding.frameId || `reference-${index}`, label: binding.purpose, isCharacter: binding.role === "character_anchor" })),
     );
-    return appendDramaCharacterVoiceBindings(withReferences, dramaShotCharacterVoiceReferences(project, shot, assetIds));
+    return withDramaVideoPromptPrefix(appendDramaCharacterVoiceBindings(withReferences, dramaShotCharacterVoiceReferences(project, shot, assetIds)), project);
+}
+
+export function buildDramaShotVideoReferenceBindings(project: DramaProject, episode: DramaEpisode, shot: DramaShot, referenceIds: string[], mode: DramaVideoReferenceMode = "reference") {
+    const selections = { [shot.id]: referenceIds };
+    const frames = selectedDramaShotFrameIds(shot, mode, selections).flatMap((id) => {
+        const frame = shot.storyboardFrames?.find((item) => item.id === id);
+        return frame?.mediaUrl && frame.status === "success" ? [{ mediaUrl: frame.mediaUrl, remoteUrl: frame.remoteUrl, frameId: id }] : [];
+    });
+    const incoming = episode.continuityEdges?.find((edge) => edge.toShotId === shot.id && edge.inheritActualEndFrame);
+    const previous = incoming && referenceIds.includes(`tail-${incoming.fromShotId}`) ? episode.shots.find((item) => item.id === incoming.fromShotId) : undefined;
+    const tail = previous ? continuityStartEvidence(previous) : undefined;
+    return buildVideoReferenceBindings(project, shot, tail ? [{ mediaUrl: tail.mediaUrl, remoteUrl: tail.remoteUrl }, ...frames] : frames, selectedDramaShotReferenceAssetIds(project, shot, selections), previous?.id, mode);
 }
 
 export function buildVideoReferenceBindings(

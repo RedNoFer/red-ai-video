@@ -1177,14 +1177,13 @@ test("drama image and voice bindings precede the original prompt without redunda
         await expect(prompt).toHaveValue(/角色「岚音」：清亮温润，轻微气声/u);
         await expect(prompt).toHaveValue(/角色「陆川」：配音引用 @音频1/u);
         const text = await prompt.inputValue();
-        expect(text.startsWith("【参考图片】\n")).toBe(true);
-        expect(text.indexOf("【角色音色】")).toBeGreaterThan(text.indexOf("@图片3"));
-        expect(text.indexOf("【参数】")).toBeGreaterThan(text.indexOf("【角色音色】"));
+        expect(text.indexOf("参考图片：")).toBeGreaterThanOrEqual(0);
+        expect(text.indexOf("角色音色：")).toBeGreaterThan(text.indexOf("@图片4"));
+        expect(text.indexOf("0-5秒")).toBeGreaterThan(text.indexOf("角色音色："));
         expect(text).not.toContain("固定音色提示词");
         expect(text).not.toContain("不增加对白");
-        expect(text).toContain("完整说出本提示词已有的对白和旁白原句");
-        expect(text).toContain("实际说话内容以本提示词台词为准");
-        expect(text.match(/【角色音色】/gu)).toHaveLength(1);
+        expect(text).toContain("【收尾】手掌仍与栏杆接触。");
+        expect(text.match(/角色音色：/gu)).toHaveLength(1);
         expect(text).toContain("台词：别说话。");
         const propSelection = dialog.locator("[data-drama-prompt-reference-item]").filter({ hasText: "道具 · 挂锁" }).getByRole("checkbox");
         await propSelection.uncheck();
@@ -1192,7 +1191,7 @@ test("drama image and voice bindings precede the original prompt without redunda
         await propSelection.check();
         await expect(prompt).toHaveValue(/@图片4/u);
         await expect(prompt).toHaveValue(/角色「陆川」：配音引用 @音频1/u);
-        expect((await prompt.inputValue()).match(/【角色音色】/gu)).toHaveLength(1);
+        expect((await prompt.inputValue()).match(/角色音色：/gu)).toHaveLength(1);
         await dialog.getByRole("button", { name: "返回修改" }).click();
     } finally {
         expect((await request.delete(`/api/drama/projects/${project.id}`)).ok()).toBe(true);
@@ -1427,7 +1426,7 @@ test("drama shot generation previews prompt before confirmation", async ({ page 
     expect(effectCleanupErrors).toEqual([]);
     await expect(previewDialog.getByText("清晰度：", { exact: false })).toBeVisible();
     await expect(previewDialog.getByRole("textbox", { name: "黑湖记忆 1/1视频提示词" })).toHaveValue(/动态意图：[\s\S]*时间段动作：/u);
-    await expect(previewDialog.getByRole("textbox", { name: "黑湖记忆 1/1视频提示词" })).toHaveValue(/【参考图片】[\s\S]*@图片1：场景「黑湖」/u);
+    await expect(previewDialog.getByRole("textbox", { name: "黑湖记忆 1/1视频提示词" })).toHaveValue(/参考图片：[\s\S]*@图片1：场景「黑湖」/u);
     await expect(previewDialog.getByText("关键帧为可选细节参考；未选择时按视频提示词和所选资产图生成", { exact: false })).toBeVisible();
     const referenceGallery = previewDialog.locator("[data-drama-prompt-reference-gallery]");
     await expect(referenceGallery).toBeVisible();
@@ -1441,13 +1440,16 @@ test("drama shot generation previews prompt before confirmation", async ({ page 
 
     const strictMode = previewDialog.getByRole("checkbox", { name: "黑湖记忆 1/1启用按序关键帧驱动" });
     await strictMode.check();
-    const orderedFrame = referenceGallery.getByRole("checkbox", { name: "顺序关键帧" }).first();
+    const orderedFrame = referenceGallery.getByRole("checkbox", { name: "引用分镜帧 1", exact: true });
     await expect(orderedFrame).toBeEnabled();
     await orderedFrame.uncheck();
     await expect(orderedFrame).not.toBeChecked();
     await expect(previewDialog.getByRole("button", { name: "确认生成" })).toBeEnabled();
     await strictMode.uncheck();
-    const frameCheckboxes = referenceGallery.locator("[data-drama-prompt-reference-item]").filter({ hasText: "分镜帧" }).getByRole("checkbox", { name: "引用此图" });
+    const frameCheckboxes = referenceGallery
+        .locator("[data-drama-prompt-reference-item]")
+        .filter({ hasText: "分镜帧" })
+        .getByRole("checkbox", { name: /^引用分镜帧 /u });
     await expect(frameCheckboxes).toHaveCount(2);
     await frameCheckboxes.nth(0).uncheck();
     await frameCheckboxes.nth(1).uncheck();
@@ -1632,8 +1634,8 @@ test("drama execution prompt saves through its scoped shot endpoint", async ({ p
     const saveRequest = page.waitForRequest((candidate) => candidate.method() === "PATCH" && candidate.url().includes(`/episodes/${episode.id}/shots/${shot.id}/prompt`));
     await editor.getByRole("button", { name: "保存" }).click();
     const patchRequest = await saveRequest;
-    expect(patchRequest.postDataJSON()).toEqual({ executionVideoPrompt: prompt, executionVideoPromptOrigin: "manual" });
-    await expect(page.getByText("视频提示词已保存", { exact: true })).toBeVisible();
+    expect(patchRequest.postDataJSON()).toEqual({ executionVideoPrompt: prompt, executionVideoPromptOrigin: "manual", videoReferenceIds: [], videoReferenceMode: "reference" });
+    await expect(page.getByText("提示词与图片引用已保存", { exact: true })).toBeVisible();
 
     const persisted = ((await (await request.get(`/api/drama/projects/${project.id}`)).json()) as { data: { project: DramaProject } }).data.project;
     expect(persisted.episodes[0].shots[0]).toMatchObject({ executionVideoPrompt: prompt, fieldOrigins: { executionVideoPrompt: "manual" } });

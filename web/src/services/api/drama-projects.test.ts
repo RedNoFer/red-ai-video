@@ -14,6 +14,7 @@ import {
     saveDramaProductionPlan,
     createDramaProjectVersion,
     updateDramaProjectRatio,
+    updateDramaVideoPromptPrefix,
     updateDramaShotImagePrompt,
     updateDramaShotPrompt,
     updateDramaShotPromptPatch,
@@ -32,6 +33,15 @@ describe("drama project api", () => {
 
         await expect(listDramaProjectSummaries({ page: 2, pageSize: 12 })).resolves.toMatchObject({ total: 24, page: 2, pageSize: 12 });
         expect(fetchMock).toHaveBeenCalledWith("/api/drama/projects?page=2&pageSize=12", { cache: "no-store" });
+    });
+
+    it("saves a project declaration as a compact versioned request", async () => {
+        const ack = { projectId: "project-one", updatedAt: "2026-10-16T00:00:01.000Z", videoPromptPrefix: { text: "声明", previousText: "" } };
+        const fetchMock = vi.fn().mockResolvedValue(Response.json({ code: 0, data: ack, msg: "OK" }));
+        vi.stubGlobal("fetch", fetchMock);
+        const input = { action: "save" as const, text: "声明", expectedUpdatedAt: "2026-10-16T00:00:00.000Z" };
+        await expect(updateDramaVideoPromptPrefix("project-one", input)).resolves.toEqual(ack);
+        expect(fetchMock).toHaveBeenCalledWith("/api/drama/projects/project-one/video-prompt-prefix", expect.objectContaining({ method: "PATCH", body: JSON.stringify(input) }));
     });
 
     it("updates a project ratio without sending the full project snapshot", async () => {
@@ -329,9 +339,9 @@ describe("drama project api", () => {
         const fetchMock = vi.fn().mockResolvedValue(Response.json({ code: 0, data: { projectId: "project-one", episodeId: "episode-one", shotId: "shot-one", updatedAt: "2026-08-31T00:00:01.000Z", shot }, msg: "OK" }));
         vi.stubGlobal("fetch", fetchMock);
 
-        await expect(updateDramaShotPromptPatch("project-one", "episode-one", "shot-one", "手动修订", undefined, { executionVideoPromptOrigin: "manual" })).resolves.toMatchObject({ shot });
+        await expect(updateDramaShotPromptPatch("project-one", "episode-one", "shot-one", "手动修订", undefined, { executionVideoPromptOrigin: "manual", videoReferenceIds: [], videoReferenceMode: "reference" })).resolves.toMatchObject({ shot });
         expect(fetchMock).toHaveBeenCalledWith("/api/drama/projects/project-one/episodes/episode-one/shots/shot-one/prompt?response=shot", expect.objectContaining({ method: "PATCH" }));
-        expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({ executionVideoPrompt: "手动修订", executionVideoPromptOrigin: "manual" });
+        expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({ executionVideoPrompt: "手动修订", executionVideoPromptOrigin: "manual", videoReferenceIds: [], videoReferenceMode: "reference" });
     });
 
     it("saves a preflight video and image revision through the compact prompt endpoint", async () => {

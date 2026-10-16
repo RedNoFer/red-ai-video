@@ -37,7 +37,10 @@ export function stripDramaCharacterVoiceBindings(prompt: string) {
             continue;
         }
         if (skippingVoiceBlock) {
-            if (/^[ \t]*(?:\d+(?:\.\d+)?\s*(?:-|至|到|—|–|~|～)\s*\d+(?:\.\d+)?\s*秒\s*[，,:：]|从\s*\d+(?:\.\d+)?\s*秒\s*(?:-|至|到|—|–|~|～)\s*\d+(?:\.\d+)?\s*秒\s*[，,:：]|Cut\s+to\s*[：:]|结束时，|声音：)/u.test(line)) {
+            if (
+                /^[ \t]*(?:\d+(?:\.\d+)?\s*(?:-|至|到|—|–|~|～)\s*\d+(?:\.\d+)?\s*秒\s*[，,:：]|从\s*\d+(?:\.\d+)?\s*秒\s*(?:-|至|到|—|–|~|～)\s*\d+(?:\.\d+)?\s*秒\s*[，,:：]|Cut\s+to\s*[：:]|结束时，|声音：)/u.test(line) ||
+                /^(?!角色「)[^：:\n]+[：:]/u.test(value)
+            ) {
                 skippingVoiceBlock = false;
                 output.push(line);
             }

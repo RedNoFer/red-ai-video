@@ -644,6 +644,8 @@ export type DramaShot = {
     imagePrompt: string;
     videoPrompt: string;
     executionVideoPrompt?: string;
+    videoReferenceIds?: string[];
+    videoReferenceMode?: DramaVideoReferenceMode;
     executionImagePrompt?: string;
     cameraMotion: string;
     startFramePrompt?: string;
@@ -804,6 +806,7 @@ export type DramaProject = {
     props: DramaProp[];
     clues: DramaClue[];
     defaultVideoMode: DramaVideoMode;
+    videoPromptPrefix?: { text: string; previousText?: string };
     episodes: DramaEpisode[];
     sourceAssets?: DramaSourceAsset[];
     createdAt: string;
@@ -821,7 +824,10 @@ export type DramaProjectMutation = {
     expectedUpdatedAt: string;
     updatedAt: string;
     projectPatch?: Partial<
-        Pick<DramaProject, "title" | "summary" | "style" | "ratio" | "status" | "creativeConversationId" | "activeEpisodeId" | "defaultVideoMode" | "productionBible" | "seriesBible" | "productionArchive" | "fieldOrigins" | "sourceAssets">
+        Pick<
+            DramaProject,
+            "title" | "summary" | "style" | "ratio" | "status" | "creativeConversationId" | "activeEpisodeId" | "defaultVideoMode" | "videoPromptPrefix" | "productionBible" | "seriesBible" | "productionArchive" | "fieldOrigins" | "sourceAssets"
+        >
     >;
     projectUnset?: Array<"creativeConversationId" | "activeEpisodeId" | "seriesBible" | "productionBible" | "productionArchive" | "fieldOrigins" | "sourceAssets">;
     assets?: Partial<Record<"characters" | "scenes" | "props" | "clues", { upsert?: DramaNamedAsset[]; patch?: Array<DramaProjectMutationPatch<DramaNamedAsset>>; remove?: string[] }>>;
