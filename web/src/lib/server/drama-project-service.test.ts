@@ -403,6 +403,41 @@ describe("drama project service updates", () => {
         expect(mocks.updateDramaProject).not.toHaveBeenCalled();
     });
 
+    it.each([
+        ["interrupted recording", "7–10秒，扬声器播放林澈的录音：“旧道还有人。先报坐标，别上来——”末尾戛然而断。\n人声：原声清晰居前，发声时环境音压低避让。\n音效：风扇声。"],
+        ["rewritten dialogue", "0–15秒，小林问：“卡里还有什么？”阿泽摇头。\n人声：原声清晰居前，发声时环境音压低避让。\n音效：风扇声。"],
+        ["draft without timed dialogue", "作者草稿：录音在句尾突然中断，五人安静听着。"],
+    ])("saves %s without requiring exact utterance coverage through either prompt endpoint", async (_label, prompt) => {
+        const current = project("2026-09-15T00:00:00.000Z", "人工提示词");
+        const episode = current.episodes[0];
+        const shot = {
+            id: "shot-one",
+            title: "录音",
+            code: "SH010",
+            order: 1,
+            description: "扬声器播放录音",
+            sourceText: "旧道还有人。先报坐标，别上来——",
+            shotBoundary: "",
+            dialogue: "",
+            narration: "",
+            cameraMotion: "固定",
+            characterIds: [],
+            propIds: [],
+            clueIds: [],
+            imagePrompt: "录音卡",
+            videoPrompt: "播放录音",
+            duration: 15,
+            utterances: [{ id: "recording", order: 1, type: "dialogue" as const, speaker: "林澈", text: "旧道还有人。先报坐标，别上来——", startSecond: 7, endSecond: 10 }],
+        };
+        episode.shots = [shot];
+        mocks.getDramaProject.mockResolvedValue(current);
+        const compact = await updateDramaShotPromptPatchForUser("user-one", current.id, episode.id, shot.id, { executionVideoPrompt: prompt, executionVideoPromptOrigin: "manual", videoReferenceIds: [], videoReferenceMode: "reference" });
+        expect(compact.shot).toMatchObject({ executionVideoPrompt: prompt, videoReferenceIds: [], fieldOrigins: { executionVideoPrompt: "manual" }, utterances: shot.utterances });
+        const full = await updateDramaShotPromptForUser("user-one", current.id, episode.id, shot.id, { executionVideoPrompt: prompt, executionVideoPromptOrigin: "manual" });
+        expect(full.episodes[0].shots[0].executionVideoPrompt).toBe(prompt);
+        expect(full.episodes[0].shots[0].utterances).toEqual(shot.utterances);
+    });
+
     it("saves prompt and reference selection together, including no references, and restores them after normalization", async () => {
         const current = project("2026-09-15T00:00:00.000Z", "项目");
         const asset = (id: string) => ({

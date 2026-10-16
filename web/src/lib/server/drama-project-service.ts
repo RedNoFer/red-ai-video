@@ -3397,8 +3397,6 @@ export async function updateDramaShotPromptForUser(userId: string, projectId: st
                           if (framePlan) validateSavedDramaDialogueSequence(framePlan, shot.utterances, `${episode.code || episode.title}/${shot.code || shot.title}`);
                           const repairedVideoPrompt = videoPrompt ? repairDramaVideoPromptAudioHierarchy(videoPrompt, shot.code || shot.title).prompt : "";
                           if (videoPrompt) {
-                              const coverageErrors = validateDramaVideoPromptUtteranceCoverage(videoPrompt, framePlan?.frames || shot.framePlan?.frames || [], shot.utterances, shot.code || shot.title);
-                              if (coverageErrors.length) throw new DramaProjectServiceError(coverageErrors[0], 422);
                               const audioErrors = validateDramaVideoPromptAudioHierarchy(repairedVideoPrompt, shot.code || shot.title);
                               if (audioErrors.length) throw new DramaProjectServiceError(audioErrors[0], 422);
                           }
@@ -3475,8 +3473,6 @@ export async function updateDramaShotPromptPatchForUser(userId: string, projectI
             : videoPrompt;
         const repairedVideoPrompt = selectedPrompt ? repairDramaVideoPromptAudioHierarchy(selectedPrompt, currentShot.code || currentShot.title).prompt : "";
         if (videoPrompt) {
-            const coverageErrors = validateDramaVideoPromptUtteranceCoverage(videoPrompt, framePlan?.frames || [], currentShot.utterances, currentShot.code || currentShot.title);
-            if (coverageErrors.length) throw new DramaProjectServiceError(coverageErrors[0], 422);
             const audioErrors = validateDramaVideoPromptAudioHierarchy(repairedVideoPrompt, currentShot.code || currentShot.title);
             if (audioErrors.length) throw new DramaProjectServiceError(audioErrors[0], 422);
         }
