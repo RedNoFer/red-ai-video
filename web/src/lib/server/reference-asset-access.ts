@@ -2,7 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 
 import { REFERENCE_ASSET_SIGNATURE_PURPOSE } from "@/lib/reference-asset-url";
 
-const SIGNED_URL_TTL_MS = 15 * 60 * 1000;
+const SIGNED_URL_TTL_MS = 24 * 60 * 60 * 1000;
 const SIGNED_URL_TTL_SECONDS = SIGNED_URL_TTL_MS / 1000;
 const GENERATION_SCOPE = "generation";
 

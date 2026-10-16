@@ -21,17 +21,25 @@ describe("reference asset access", () => {
         expect(verifyReferenceAssetSignature("temporary/2026/07/19/images/file.png", purpose, url.searchParams.get("expires"), url.searchParams.get("signature"), now)).toBe(true);
         expect(verifyReferenceAssetSignature("temporary/2026/07/19/images/file.png", "download", url.searchParams.get("expires"), url.searchParams.get("signature"), now)).toBe(false);
         expect(verifyReferenceAssetSignature("temporary/2026/07/19/images/other.png", purpose, url.searchParams.get("expires"), url.searchParams.get("signature"), now)).toBe(false);
-        expect(verifyReferenceAssetSignature("temporary/2026/07/19/images/file.png", purpose, url.searchParams.get("expires"), url.searchParams.get("signature"), now + 14 * 60 * 1000)).toBe(true);
-        expect(verifyReferenceAssetSignature("temporary/2026/07/19/images/file.png", purpose, url.searchParams.get("expires"), url.searchParams.get("signature"), now + 16 * 60 * 1000)).toBe(false);
+        expect(Number(url.searchParams.get("expires"))).toBe(Math.floor(now / 1000) + 24 * 60 * 60);
+        expect(verifyReferenceAssetSignature("temporary/2026/07/19/images/file.png", purpose, url.searchParams.get("expires"), url.searchParams.get("signature"), now + 24 * 60 * 60 * 1000 - 1000)).toBe(true);
+        expect(verifyReferenceAssetSignature("temporary/2026/07/19/images/file.png", purpose, url.searchParams.get("expires"), url.searchParams.get("signature"), now + 24 * 60 * 60 * 1000)).toBe(false);
     });
 
     it("signs both local asset paths without signing provider URLs", () => {
         process.env.VOZEB_PRO_REFERENCE_ASSET_SIGNING_KEY = "test-signing-key";
         expect(signReferenceAssetInputUrl("https://cdn.example/image.png", "https://vozeb.example")).toBe("https://cdn.example/image.png");
         expect(signReferenceAssetInputUrl("/api/reference-assets/permanent/2026/07/19/images/file.png", "https://vozeb.example")).toContain("purpose=provider-read");
-        const generationUrl = new URL(createSignedGenerationAssetUrl("permanent/2026/07/19/images/file.png", "https://vozeb.example"));
+        const now = Date.UTC(2026, 6, 19);
+        const generationUrl = new URL(createSignedGenerationAssetUrl("permanent/2026/07/19/images/file.png", "https://vozeb.example", now));
+        expect(Number(generationUrl.searchParams.get("expires"))).toBe(Math.floor(now / 1000) + 24 * 60 * 60);
         expect(signReferenceAssetInputUrl("/api/generation-log-assets/permanent/2026/07/19/images/file.png", "https://vozeb.example")).toContain("/api/generation-log-assets/");
-        expect(verifyGenerationAssetSignature("permanent/2026/07/19/images/file.png", generationUrl.searchParams.get("purpose"), generationUrl.searchParams.get("expires"), generationUrl.searchParams.get("signature"))).toBe(true);
+        expect(
+            verifyGenerationAssetSignature("permanent/2026/07/19/images/file.png", generationUrl.searchParams.get("purpose"), generationUrl.searchParams.get("expires"), generationUrl.searchParams.get("signature"), now + 24 * 60 * 60 * 1000 - 1000),
+        ).toBe(true);
+        expect(verifyGenerationAssetSignature("permanent/2026/07/19/images/file.png", generationUrl.searchParams.get("purpose"), generationUrl.searchParams.get("expires"), generationUrl.searchParams.get("signature"), now + 24 * 60 * 60 * 1000)).toBe(
+            false,
+        );
         expect(verifyReferenceAssetSignature("permanent/2026/07/19/images/file.png", generationUrl.searchParams.get("purpose"), generationUrl.searchParams.get("expires"), generationUrl.searchParams.get("signature"))).toBe(false);
     });
 });
