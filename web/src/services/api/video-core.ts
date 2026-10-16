@@ -299,6 +299,21 @@ export async function cancelServerVideoGenerationTask(task: VideoGenerationTask)
     if (payload.task?.status !== "cancelled") throw new Error(payload.error || "视频任务尚未取消");
 }
 
+export async function refreshServerVideoGenerationTask(taskId: string) {
+    const response = await fetch(`/api/video-tasks/${encodeURIComponent(taskId)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "refresh" }),
+        cache: "no-store",
+    });
+    throwIfClientSessionExpired(response);
+    syncUserPointsFromHeaders(response.headers, "system");
+    const payload = (await response.json().catch(() => ({}))) as { task?: { id: string; status: string; result?: VideoGenerationResult; error?: string }; error?: string };
+    if (!response.ok || !payload.task) throw new Error(payload.error || `供应商视频状态同步失败（HTTP ${response.status}）`);
+    if (payload.task.id !== taskId) throw new Error("供应商视频同步返回了不匹配的任务");
+    return payload.task;
+}
+
 export async function pollUpstreamVideoGenerationTask(config: AiConfig, task: VideoGenerationTask, options?: RequestOptions): Promise<VideoGenerationTaskState> {
     const requestConfig = resolveModelRequestConfig(config, task.model);
     assertVideoConfig(requestConfig, requestConfig.model);

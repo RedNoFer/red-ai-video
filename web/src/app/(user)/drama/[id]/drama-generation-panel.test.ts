@@ -51,8 +51,6 @@ describe("Drama generation production workspace", () => {
         expect(source).toContain("data-drama-shot-supplier-prompt");
         expect(source).toContain("data-drama-shot-boundary-frames");
         expect(source).toContain("publicUpstreamError");
-        expect(source).toContain('body: JSON.stringify({ action: "refresh" })');
-        expect(source).toContain('method: "POST"');
         expect(source).toContain("videoPromptRuns");
         expect(source).toContain("beginVideoPrompt");
         expect(source).toContain("finishVideoPrompt");

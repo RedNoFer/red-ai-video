@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
 import type { DramaProject } from "../src/lib/drama-project-contract";
 import { applyChannelProtocol } from "../src/lib/channel-protocol-registry";
@@ -377,12 +378,16 @@ test("任务已完成但视频地址未保存时可以手动拉回原视频", as
     });
     expect(saved.ok(), await saved.text()).toBe(true);
 
-    let refreshRequestCount = 0;
-    await page.route("**/api/video-tasks/e2e-refresh-video-task", async (route) => {
+    const refreshRequests: string[] = [];
+    const videoBytes = await readFile(new URL("./fixtures/video-recovery.mp4", import.meta.url));
+    await page.route("**/api/video-tasks/e2e-*video-task/download", (route) => route.fulfill({ status: 200, contentType: "video/mp4", body: videoBytes }));
+    await page.route("**/api/video-tasks/e2e-*video-task", async (route) => {
         if (route.request().method() !== "POST") return route.continue();
         expect(route.request().postDataJSON()).toEqual({ action: "refresh" });
-        refreshRequestCount += 1;
-        await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ task: { id: "e2e-refresh-video-task", status: "success", result: { url: "https://example.com/latest-video.mp4" } } }) });
+        const taskId = new URL(route.request().url()).pathname.split("/").at(-1)!;
+        refreshRequests.push(taskId);
+        if (refreshRequests.length === 1) return route.fulfill({ status: 502, contentType: "text/html", body: "Bad Gateway" });
+        await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ task: { id: taskId, status: "success", result: { url: `https://example.com/${taskId}.mp4` } } }) });
     });
 
     await page.goto(`/drama/${project.id}`, { waitUntil: "domcontentloaded" });
@@ -390,7 +395,36 @@ test("任务已完成但视频地址未保存时可以手动拉回原视频", as
     const refreshButton = page.getByRole("button", { name: "拉取最新视频" });
     await expect(refreshButton).toBeVisible();
     await refreshButton.click();
+    await expect(page.getByText("供应商视频状态同步失败（HTTP 502）", { exact: true })).toBeVisible();
+    await expect(refreshButton).toBeEnabled();
+    await refreshButton.click();
     await expect(page.getByText("已拉取供应商最新视频并保存到项目", { exact: true })).toBeVisible();
-    expect(refreshRequestCount).toBe(1);
+    expect(refreshRequests).toEqual(["e2e-refresh-video-task", "e2e-refresh-video-task"]);
+    const firstPull = ((await (await request.get(`/api/drama/projects/${project.id}`)).json()) as { data: { project: DramaProject } }).data.project;
+    expect(firstPull.episodes[0].shots[0].videoUrl).toBe("https://example.com/e2e-refresh-video-task.mp4");
+    const retried = await saveDramaProjectFixture(request, firstPull, {
+        ...firstPull,
+        episodes: firstPull.episodes.map((item) => ({ ...item, shots: item.shots.map((current) => ({ ...current, generationTaskId: "e2e-retried-video-task", generationStatus: "error", generationError: "视频任务已完成但没有返回视频地址" })) })),
+    });
+    expect(retried.ok(), await retried.text()).toBe(true);
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.getByRole("button", { name: "切换到镜头生成" }).click();
+    await expect(refreshButton).toBeVisible();
+    await refreshButton.click();
+    await expect(page.getByText("已拉取供应商最新视频并保存到项目", { exact: true })).toBeVisible();
+    expect(refreshRequests).toEqual(["e2e-refresh-video-task", "e2e-refresh-video-task", "e2e-retried-video-task"]);
+    const latestPull = ((await (await request.get(`/api/drama/projects/${project.id}`)).json()) as { data: { project: DramaProject } }).data.project;
+    expect(latestPull.episodes[0].shots[0]).toMatchObject({ generationTaskId: "e2e-retried-video-task", generationStatus: "success", videoUrl: "https://example.com/e2e-retried-video-task.mp4" });
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.getByRole("button", { name: "切换到镜头生成" }).click();
+    await expect(page.locator("video").first()).toHaveAttribute("src", /\/api\/video-tasks\/e2e-retried-video-task\/download/);
+    await expect
+        .poll(() =>
+            page
+                .locator("video")
+                .first()
+                .evaluate((element) => element.videoWidth),
+        )
+        .toBeGreaterThan(0);
     await expectNoHorizontalOverflow(page, "manual video refresh");
 });

@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -12,6 +13,7 @@ const mocks = vi.hoisted(() => ({
     touch: vi.fn(),
     update: vi.fn(),
     writeLog: vi.fn(),
+    writeMedia: vi.fn(),
 }));
 
 vi.mock("@/lib/auth/store", () => ({ refundUserPoints: mocks.refund }));
@@ -19,6 +21,7 @@ vi.mock("@/lib/globalaiopc-catalog", () => ({ resolveGlobalAiOpcPreset: vi.fn(()
 vi.mock("@/lib/server/internal-origin", () => ({ fetchInternalApi: mocks.fetchInternalApi }));
 vi.mock("@/lib/server/creative-runtime-service", () => ({ registerGenerationTaskAssetsForUser: mocks.register }));
 vi.mock("@/lib/server/video-result-normalizer", () => ({ normalizeVideoResult: mocks.normalize }));
+vi.mock("@/lib/server/reference-asset-store", () => ({ writeReferenceMediaFile: mocks.writeMedia }));
 vi.mock("@/lib/server/video-task-log", () => ({ writeVideoGenerationLog: mocks.writeLog }));
 vi.mock("@/lib/server/video-task-store", () => ({
     claimVideoTaskPoll: mocks.claim,
@@ -86,13 +89,13 @@ describe("video task upstream reconciliation", () => {
 
     it("refreshes the supplier even when task creation already stored a result URL", async () => {
         const task = videoTask({ upstream: { ...videoTask().upstream, resultUrl: "https://cdn.example.com/stale.mp4" } });
+        mocks.claim.mockResolvedValue(task);
+        mocks.get.mockResolvedValue(task);
+        mocks.complete.mockResolvedValue({ ...task, status: "success" });
         mocks.fetchInternalApi.mockResolvedValue(json({ status: "completed", video_url: "https://cdn.example.com/current.mp4" }));
 
-        await expect(queryVideoTaskUpstream(task, "http://localhost", "session=test", "", true)).resolves.toEqual({
-            state: "result_ready",
-            status: "completed",
-            resultUrl: "https://cdn.example.com/current.mp4",
-        });
+        await refreshVideoTaskFromUpstream(task, "http://localhost", "session=test", true);
+        expect(mocks.normalize).toHaveBeenCalledWith(expect.objectContaining({ url: expect.stringContaining(encodeURIComponent("https://cdn.example.com/current.mp4")) }));
         expect(mocks.fetchInternalApi).toHaveBeenCalledOnce();
     });
 
@@ -415,9 +418,44 @@ describe("video task upstream reconciliation", () => {
         ]);
         expect(new Headers(mocks.fetchInternalApi.mock.calls[2]?.[1]?.headers).get("range")).toBe("bytes=0-0");
         expect(mocks.normalize).toHaveBeenCalledWith(expect.objectContaining({ url: `/api/ai/system/channel/videos/${task.upstream.id}/content` }));
+        const downloadHeaders = new Headers(mocks.normalize.mock.calls[0][0].internalHeaders);
+        expect(downloadHeaders.get("x-vozeb-pro-upstream-model")).toBe(task.config.model);
+        expect(downloadHeaders.get("x-vozeb-pro-logical-model")).toBe(task.config.model);
         expect(mocks.complete).toHaveBeenCalledWith(task.id, expect.objectContaining({ url: "/api/reference-assets/result.mp4" }), false);
         expect(mocks.fail).not.toHaveBeenCalled();
         expect(mocks.refund).not.toHaveBeenCalled();
+    });
+
+    it("downloads provider content through the model-authorized proxy and writes the complete video file", async () => {
+        const fixture = createProtocolFixtureServer();
+        await new Promise<void>((resolve) => fixture.server.listen(0, "127.0.0.1", resolve));
+        const address = fixture.server.address();
+        if (!address || typeof address === "string") throw new Error("Protocol fixture did not bind a TCP port");
+        const origin = `http://127.0.0.1:${address.port}`;
+        const task = videoTask({ config: { ...videoTask().config, logicalModel: "public-video" } });
+        const contentPath = `/videos/${task.upstream.id}/content`;
+        const actual = await vi.importActual<typeof import("./video-result-normalizer")>("./video-result-normalizer");
+        mocks.normalize.mockImplementation(actual.normalizeVideoResult);
+        mocks.get.mockResolvedValue(task);
+        mocks.complete.mockResolvedValue({ ...task, status: "success" });
+        mocks.fetchInternalApi.mockImplementation(async (url: string, init: RequestInit) => {
+            expect(url).toBe(`${origin}${task.config.baseUrl}${contentPath}`);
+            const headers = new Headers(init.headers);
+            if (headers.get("x-vozeb-pro-upstream-model") !== task.config.model || headers.get("x-vozeb-pro-logical-model") !== task.config.logicalModel) return Response.json({ error: "系统模型代理缺少上游模型标识" }, { status: 400 });
+            return fetch(`${origin}/media/fixture.mp4`, init);
+        });
+        mocks.writeMedia.mockImplementation(async (path: string) => {
+            const expected = await fetch(`${origin}/media/fixture.mp4`).then((response) => response.arrayBuffer());
+            expect(await readFile(path)).toEqual(Buffer.from(expected));
+            return { url: "/api/reference-assets/downloaded.mp4" };
+        });
+        try {
+            await persistVideoTaskResult(task, contentPath, origin, "session=test");
+            expect(mocks.writeMedia).toHaveBeenCalledWith(expect.any(String), "video", "video/mp4", true, expect.objectContaining({ taskId: task.id, ownerUserId: task.userId }));
+            expect(mocks.complete).toHaveBeenCalledWith(task.id, expect.objectContaining({ url: "/api/reference-assets/downloaded.mp4" }), false);
+        } finally {
+            await new Promise<void>((resolve, reject) => fixture.server.close((error) => (error ? reject(error) : resolve())));
+        }
     });
 
     it("keeps the New API error code with its failure message", async () => {

@@ -5,6 +5,7 @@ import { App, Button, Checkbox, Dropdown, Input, Modal, Popconfirm, Progress, Ta
 import { ArrowRight, Captions, ChevronDown, ChevronUp, CircleAlert, CircleCheck, CircleDashed, Download, Film, GitBranch, LoaderCircle, Pause, Play, Plus, RefreshCw, Save, ScanSearch, Send, Sparkles, Volume2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { mediaDownloadFileName } from "@/lib/media-file";
+import { refreshServerVideoGenerationTask } from "@/services/api/video";
 import { imagePreviewUrl, originalMediaDownloadUrl } from "@/lib/media-image-url";
 import {
     createDramaProductionRun,
@@ -1150,31 +1151,33 @@ function ShotTaskRow({
         if (!taskId || refreshingVideo) return;
         setRefreshingVideo(true);
         try {
-            const response = await fetch(`/api/video-tasks/${encodeURIComponent(taskId)}`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ action: "refresh" }),
-                cache: "no-store",
-            });
-            const payload = (await response.json().catch(() => ({}))) as { task?: { status?: string; result?: { url?: string }; error?: string }; error?: string };
-            if (!response.ok || !payload.task) throw new Error(payload.error || "供应商视频状态同步失败");
-            if (payload.task.status === "success" && payload.task.result?.url) {
+            const task = await refreshServerVideoGenerationTask(taskId);
+            const currentShot = useDramaStore
+                .getState()
+                .projects.find((item) => item.id === project.id)
+                ?.episodes.find((item) => item.id === episode.id)
+                ?.shots.find((item) => item.id === shot.id);
+            if (currentShot?.generationTaskId !== taskId) {
+                message.info("镜头已重新生成，已保留最新任务");
+                return;
+            }
+            if (task.status === "success" && task.result?.url) {
                 updateShot(project.id, episode.id, shot.id, {
                     generationStatus: "success",
-                    videoUrl: payload.task.result.url,
+                    videoUrl: task.result.url,
                     generationError: undefined,
-                    frameEvidence: supersedeFrameEvidence(shot.frameEvidence, "当前镜头视频已重新同步"),
+                    frameEvidence: supersedeFrameEvidence(currentShot.frameEvidence, "当前镜头视频已重新同步"),
                     actualStartFrameUrl: undefined,
                     actualEndFrameUrl: undefined,
                     actualFrameVideoUrl: undefined,
                 });
                 await saveProjectNow(project.id);
                 message.success("已拉取供应商最新视频并保存到项目");
-            } else if (payload.task.status === "running") {
+            } else if (task.status === "running") {
                 updateShot(project.id, episode.id, shot.id, { generationStatus: "running", generationError: undefined });
                 message.info("供应商仍在生成，项目会继续查询这个原任务");
             } else {
-                message.info(payload.task.error || "供应商暂未返回新视频");
+                message.info(task.error || "供应商暂未返回新视频");
             }
         } catch (error) {
             message.error(error instanceof Error ? error.message : "供应商视频状态同步失败");

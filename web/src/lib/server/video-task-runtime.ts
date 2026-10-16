@@ -32,7 +32,7 @@ export async function refreshVideoTaskFromUpstream(task: VideoTask, origin: stri
     const claimed = await claimVideoTaskPoll(task.id, polling.intervalMs, forceRefresh);
     if (!claimed) return getVideoTask(task.id);
 
-    const step = await queryVideoTaskUpstream(claimed, origin, cookie);
+    const step = await queryVideoTaskUpstream(claimed, origin, cookie, "", forceRefresh);
     if (step.state === "failed") return failVideoTask(claimed, step.error);
     if (step.state === "result_ready") return persistVideoTaskResult(claimed, step.resultUrl, origin, cookie);
     return getVideoTask(claimed.id);
@@ -111,7 +111,7 @@ async function completeVideoTask(task: VideoTask, resultUrl: string, origin: str
     });
     await updateVideoTask(task.id, { attempts });
     const channelId = task.config.channelId || systemGenerationChannelId(task.config.baseUrl);
-    const workerHeaders = new Headers(workerUserId ? maintenanceWorkerHeaders(workerUserId) : undefined);
+    const workerHeaders = new Headers(videoProxyHeaders(task, "", workerUserId));
     if (/^https?:\/\//i.test(resultUrl) && channelId) {
         Object.entries(generationMediaProxyHeaders({ userId: task.userId, taskType: "video", taskId: task.id, channelId, upstreamModel: task.config.model, url: resultUrl })).forEach(([key, value]) => workerHeaders.set(key, value));
     }

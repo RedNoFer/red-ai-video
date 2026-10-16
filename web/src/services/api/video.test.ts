@@ -15,7 +15,7 @@ vi.mock("@/stores/use-config-store", () => ({
 import type { AiConfig } from "@/stores/use-config-store";
 import type { ReferenceImage } from "@/types/image";
 import type { ReferenceAudio, ReferenceVideo } from "@/types/media";
-import { cancelServerVideoGenerationTask, createServerVideoGenerationTask, createVideoGenerationTask, pollVideoGenerationTask } from "./video";
+import { cancelServerVideoGenerationTask, createServerVideoGenerationTask, createVideoGenerationTask, pollVideoGenerationTask, refreshServerVideoGenerationTask } from "./video";
 import { createUpstreamVideoGenerationTask } from "./video-core";
 import { buildCompatibleVideoPayloadVariants, compatibleVideoCreatePaths, compatibleVideoPollPaths, isGlobalAiOpcVideoConfig } from "./video-providers";
 import { normalizeCompatibleVideoDuration, normalizeGlobalAiOpcVideoDuration } from "./video-payloads";
@@ -36,6 +36,23 @@ describe("video API service", () => {
     afterEach(() => {
         vi.unstubAllGlobals();
         vi.clearAllMocks();
+    });
+
+    it("refreshes the selected server task and preserves a concrete upstream failure", async () => {
+        const fetchMock = vi.fn().mockResolvedValue(Response.json({ error: "媒体下载失败（400）" }, { status: 502 }));
+        vi.stubGlobal("fetch", fetchMock);
+        await expect(refreshServerVideoGenerationTask("latest-task")).rejects.toThrow("媒体下载失败（400）");
+        expect(fetchMock).toHaveBeenCalledWith("/api/video-tasks/latest-task", expect.objectContaining({ method: "POST", body: JSON.stringify({ action: "refresh" }) }));
+    });
+
+    it("identifies an HTTP failure when the gateway returns a non-JSON response", async () => {
+        vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("Bad Gateway", { status: 502 })));
+        await expect(refreshServerVideoGenerationTask("latest-task")).rejects.toThrow("供应商视频状态同步失败（HTTP 502）");
+    });
+
+    it("rejects a result belonging to a different generation task", async () => {
+        vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ task: { id: "old-task", status: "success", result: { url: "/old.mp4" } } })));
+        await expect(refreshServerVideoGenerationTask("latest-task")).rejects.toThrow("不匹配的任务");
     });
 
     it("submits the original public image source instead of the local asset preview", async () => {

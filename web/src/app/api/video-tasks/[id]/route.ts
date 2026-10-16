@@ -87,6 +87,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         const responseTask = refreshed || (await getVideoTask(task.id)) || task;
         return NextResponse.json({ task: publicTask(responseTask), refreshed: responseTask !== task }, { headers: pointsResponseHeaders(await getCurrentUser(request)) });
     } catch (error) {
+        console.error("Video task manual refresh failed", { taskId: task.id, error: error instanceof Error ? error.message : String(error) });
         return NextResponse.json({ error: error instanceof Error ? error.message : "供应商视频状态同步失败" }, { status: 502 });
     }
 }
