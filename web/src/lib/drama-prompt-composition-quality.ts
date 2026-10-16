@@ -121,7 +121,7 @@ export function validateDramaReferenceAliasConsistency(input: { prompt: string; 
             .slice(line.indexOf(alias) + alias.length)
             .replace(/^[\s：:：()（）\[\]【】、,，-]+/u, "")
             .trim();
-        if (!mapping || /^至|到|等|普通参考图|参考图$/u.test(mapping)) errors.push(`${label}${alias}没有逐项写明素材职责，不能只写“@图片1至@图片N”`);
+        if (!mapping || /^(?:至|到|等)(?:\s|@|$)|^(?:普通参考图|参考图)$/u.test(mapping)) errors.push(`${label}${alias}没有逐项写明素材职责，不能只写“@图片1至@图片N”`);
         const role = String(entry.role || "");
         if (role === "character_anchor" && /场景|地点|建筑|环境|空间/u.test(`${entry.purpose || ""} ${mapping}`)) errors.push(`${label}${alias}声明为角色锚点却绑定了场景职责`);
         if (role === "scene_anchor" && /角色|人物|脸型|服装|发型/u.test(`${entry.purpose || ""} ${mapping}`)) errors.push(`${label}${alias}声明为场景锚点却绑定了角色职责`);

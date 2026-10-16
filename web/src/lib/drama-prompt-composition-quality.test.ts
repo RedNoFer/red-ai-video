@@ -61,6 +61,11 @@ describe("drama prompt composition and cut quality gates", () => {
         expect(errors.join("；")).toContain("alias 顺序与 referenceManifest 不一致");
     });
 
+    it("accepts a named character containing 到 without treating it as a reference range", () => {
+        expect(validateDramaReferenceAliasConsistency({ prompt: "参考图片：\n@图片1：角色「迟到志愿者」\n00.0–30.0秒，固定近景。", manifest: [{ alias: "@图片1", role: "character_anchor", purpose: "人物身份与服装" }] })).toEqual([]);
+        expect(validateDramaReferenceAliasConsistency({ prompt: "参考图片：\n@图片1至@图片2\n00.0–30.0秒，固定近景。", manifest: [{ alias: "@图片1", role: "character_anchor", purpose: "人物身份与服装" }] }).join("；")).toContain("逐项写明素材职责");
+    });
+
     it("blocks a character shot that drops the registered wardrobe and accessory anchors", () => {
         const errors = validateDramaCharacterWardrobeContinuity({
             prompt: "角色甲抬眼看向角色乙，眉心收紧。",
