@@ -1931,18 +1931,23 @@ export async function createDramaProductionRunForUser(userId: string, projectId:
             const task = !steps.length && shot.generationTaskId ? await getVideoTask(shot.generationTaskId) : null;
             const uncertain = reconciled.some((step) => step.status === "needs_review") || (task?.userId === userId && task.status === "running" && task.executionPhase === "needs_review");
             const active = steps.length
-                ? reconciled.some((step) => step.status === "running" || Boolean(ownRun?.confirmedAt && ["ready", "running", "paused", "needs_review"].includes(ownRun.status) && ["ready", "blocked"].includes(step.status)))
+                ? reconciled.some((step) => step.status === "running" || Boolean(!uncertain && ownRun?.confirmedAt && ["ready", "running", "paused", "needs_review"].includes(ownRun.status) && ["ready", "blocked"].includes(step.status)))
                 : task?.userId === userId
-                  ? task.status === "running"
+                  ? task.status === "running" && task.executionPhase !== "needs_review"
                   : shot.generationStatus === "queued" || shot.generationStatus === "running";
-            return { shot, uncertain, active };
+            const uncertainTaskIds = reconciled.filter((step) => step.status === "needs_review").map((step) => step.taskId);
+            if (task?.userId === userId && task.status === "running" && task.executionPhase === "needs_review") uncertainTaskIds.push(task.id);
+            return { shot, uncertain, active, uncertainTaskIds };
         }),
     );
-    const uncertainShots = submissionStates.filter((item) => item.uncertain).map((item) => item.shot);
+    const confirmedUncertainTaskIds = ids(input.confirmedUncertainTaskIds);
+    const uncertainShots = submissionStates.filter((item) => item.uncertain && (!item.uncertainTaskIds.length || item.uncertainTaskIds.some((id) => !id || !confirmedUncertainTaskIds.includes(id)))).map((item) => item.shot);
     if (uncertainShots.length) throw new DramaProjectServiceError(`${uncertainShots.map((shot) => shot.title || `镜头 ${shot.order}`).join("、")}的上游提交结果待审核，请先核对原任务，避免重复扣费`, 409);
     const activeShots = submissionStates.filter((item) => item.active).map((item) => item.shot);
     if (latest?.planRevision === run.planRevision && activeShots.length === productionShots.length) return latest;
     if (activeShots.length) throw new DramaProjectServiceError(`${activeShots.map((shot) => shot.title || `镜头 ${shot.order}`).join("、")}正在生产中，请先中断生成`, 409);
+    const replacedTaskIds = submissionStates.flatMap((item) => item.uncertainTaskIds).filter((id): id is string => Boolean(id));
+    if (replacedTaskIds.length) run.parameterSnapshot.confirmedUncertainTaskIds = [...new Set(replacedTaskIds)];
     const prefix = project.videoPromptPrefix?.text.trim();
     if (prefix && productionShots.some((shot) => !run.parameterSnapshot.videoPrompts?.[shot.id]?.startsWith(`${prefix}\n`))) throw new DramaProjectServiceError("统一声明已更新，请重新打开生成确认", 409);
     const shotPatches = productionShots.map((shot) => ({

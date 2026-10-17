@@ -459,6 +459,7 @@ export function createDramaProductionRun(
         referenceSelections?: Record<string, string[]>;
         referenceModes?: Record<string, DramaVideoReferenceMode>;
         videoPrompts?: Record<string, string>;
+        confirmedUncertainTaskIds?: string[];
     } = {},
 ) {
     const compactPreflight = preflight
@@ -490,6 +491,7 @@ export function createDramaProductionRun(
             ...(options.referenceSelections ? { referenceSelections: options.referenceSelections } : {}),
             ...(options.referenceModes ? { referenceModes: options.referenceModes } : {}),
             ...(options.videoPrompts ? { videoPrompts: options.videoPrompts } : {}),
+            ...(options.confirmedUncertainTaskIds?.length ? { confirmedUncertainTaskIds: options.confirmedUncertainTaskIds } : {}),
         }),
     }).then((data) => data.run);
 }

@@ -221,13 +221,13 @@ describe("Drama generation production workspace", () => {
 
         expect(lockProduction).not.toContain("saveProjectNow(project.id)");
         expect(lockProduction).toContain("updateDramaShotPromptPatch");
-        expect(lockProduction).toContain("createDramaProductionRun(project.id, episode.id, undefined, check, { referenceSelections, referenceModes, videoPrompts })");
+        expect(lockProduction).toContain("createDramaProductionRun(project.id, episode.id, undefined, check, { referenceSelections, referenceModes, videoPrompts, confirmedUncertainTaskIds })");
         expect(lockProduction).toContain("Object.entries(check.revisedPrompts || {})");
         expect(lockProduction.indexOf("updateDramaShotPromptPatch")).toBeLessThan(lockProduction.indexOf("createDramaProductionRun"));
         expect(preview).toContain("compileDramaVideoSubmissionPrompt(");
         expect(preview).toContain("previewSelectedVideoBindings(");
         expect(source).toContain("setVideoPrompts((current) =>");
-        expect(source).toContain("onChange({ selections, referenceModes, videoPrompts, invalid })");
+        expect(source).toContain("onChange({ selections, referenceModes, videoPrompts, confirmedUncertainTaskIds, invalid })");
     });
 
     it("shows persistent per-frame progress without blocking the whole storyboard area", async () => {

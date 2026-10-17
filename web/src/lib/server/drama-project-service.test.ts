@@ -3429,7 +3429,12 @@ describe("drama project service updates", () => {
         expect(mocks.fetchInternalApi).not.toHaveBeenCalled();
     });
 
-    it("keeps an uncertain submission in an older run blocked without creating another paid task", async () => {
+    it.each([
+        { confirmedUncertainTaskIds: [], ownRun: false },
+        { confirmedUncertainTaskIds: ["another-task"], ownRun: false },
+        { confirmedUncertainTaskIds: ["video-task-one"], ownRun: false },
+        { confirmedUncertainTaskIds: ["video-task-one"], ownRun: true },
+    ])("requires confirmation of the exact uncertain submission before a new run: $confirmedUncertainTaskIds", async ({ confirmedUncertainTaskIds, ownRun }) => {
         const current = project("2026-07-19T08:00:01.000Z", "项目");
         current.episodes[0].shots = [
             {
@@ -3458,11 +3463,27 @@ describe("drama project service updates", () => {
         mocks.getAuthSettings.mockResolvedValue({ defaultModels: { imageModel: "image", videoModel: "video", audioModel: "" }, generationDefaults: {} });
         mocks.resolveLogicalModelCandidates.mockReturnValue([{ logicalModelId: "video", channelId: "video-channel" }]);
         mocks.findLatestDramaProductionRun.mockResolvedValue({ id: "latest-run", status: "completed", steps: [] });
-        mocks.getDramaProductionRun.mockResolvedValue(null);
+        mocks.getDramaProductionRun.mockResolvedValue(
+            ownRun
+                ? {
+                      id: "older-run",
+                      status: "needs_review",
+                      confirmedAt: current.updatedAt,
+                      steps: [{ id: "video-one", shotId: "shot-one", type: "video", status: "needs_review", taskId: "video-task-one" }],
+                  }
+                : null,
+        );
         mocks.getStoredGenerationTask.mockResolvedValue({ id: "video-task-one", userId: "user-one", status: "running", executionPhase: "needs_review", reviewReason: "提交结果不明" });
 
-        await expect(createDramaProductionRunForUser("user-one", current.id, { episodeId: current.episodes[0].id, deferDispatch: true })).rejects.toMatchObject({ status: 409, message: expect.stringContaining("待审核") });
-        expect(mocks.createDramaProductionRun).not.toHaveBeenCalled();
+        const result = createDramaProductionRunForUser("user-one", current.id, { episodeId: current.episodes[0].id, deferDispatch: true, confirmedUncertainTaskIds });
+        if (confirmedUncertainTaskIds.includes("video-task-one")) {
+            await expect(result).resolves.toMatchObject({ parameterSnapshot: { confirmedUncertainTaskIds: ["video-task-one"] } });
+            expect(mocks.createDramaProductionRun).toHaveBeenCalledOnce();
+            await expect(mocks.getStoredGenerationTask.mock.results.at(-1)?.value).resolves.toMatchObject({ status: "running", executionPhase: "needs_review" });
+        } else {
+            await expect(result).rejects.toMatchObject({ status: 409, message: expect.stringContaining("待审核") });
+            expect(mocks.createDramaProductionRun).not.toHaveBeenCalled();
+        }
         expect(mocks.fetchInternalApi).not.toHaveBeenCalled();
     });
 

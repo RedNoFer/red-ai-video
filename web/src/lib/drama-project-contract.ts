@@ -1249,6 +1249,7 @@ export type DramaProductionRun = {
         referenceSelections?: Record<string, string[]>;
         referenceModes?: Record<string, DramaVideoReferenceMode>;
         videoPrompts?: Record<string, string>;
+        confirmedUncertainTaskIds?: string[];
     };
     steps: DramaProductionStep[];
     scope?: "visual";

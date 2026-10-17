@@ -102,7 +102,7 @@ export function DramaGenerationPanel({
     const [batchOpen, setBatchOpen] = useState(false);
     const [batchShotIds, setBatchShotIds] = useState<string[]>([]);
     const [batchPromptRows, setBatchPromptRows] = useState<ProductionPromptRow[]>([]);
-    const [batchDraft, setBatchDraft] = useState<ProductionPromptState>({ selections: {}, referenceModes: {}, videoPrompts: {}, invalid: false });
+    const [batchDraft, setBatchDraft] = useState<ProductionPromptState>({ selections: {}, referenceModes: {}, videoPrompts: {}, confirmedUncertainTaskIds: [], invalid: false });
     const [visualRun, setVisualRun] = useState<DramaProductionRun | null>(null);
     const [visualPlanning, setVisualPlanning] = useState(false);
     const [jianyingOpen, setJianyingOpen] = useState(false);
@@ -396,14 +396,21 @@ export function DramaGenerationPanel({
         }
     };
 
-    const lockProduction = async (shotIds: string[], check: DramaProductionPreflight, referenceSelections: Record<string, string[]>, referenceModes: Record<string, DramaVideoReferenceMode>, videoPrompts: Record<string, string>) => {
+    const lockProduction = async (
+        shotIds: string[],
+        check: DramaProductionPreflight,
+        referenceSelections: Record<string, string[]>,
+        referenceModes: Record<string, DramaVideoReferenceMode>,
+        videoPrompts: Record<string, string>,
+        confirmedUncertainTaskIds: string[],
+    ) => {
         setCreatingRun(true);
         try {
             for (const [shotId, prompts] of Object.entries(check.revisedPrompts || {})) {
                 const saved = await updateDramaShotPromptPatch(project.id, episode.id, shotId, prompts.videoPrompt || "", prompts.imagePrompt);
                 replaceShot(project.id, episode.id, shotId, saved.shot, saved.updatedAt);
             }
-            const run = await createDramaProductionRun(project.id, episode.id, undefined, check, { referenceSelections, referenceModes, videoPrompts });
+            const run = await createDramaProductionRun(project.id, episode.id, undefined, check, { referenceSelections, referenceModes, videoPrompts, confirmedUncertainTaskIds });
             setProductionRun(run);
             await loadProject(project.id, true);
             message.success("生产运行已锁定，将按视频提示词、所选参考图和连续性约束执行");
@@ -481,10 +488,10 @@ export function DramaGenerationPanel({
             cancelText: "返回修改",
             onOk: () => {
                 if (selectionState.invalid) {
-                    message.error("请填写视频提示词，或取消超出当前模型上限的参考图");
+                    message.error("请填写视频提示词、检查参考图数量，并确认待确认任务的重新提交说明");
                     return Promise.reject();
                 }
-                return lockProduction(shotIds, check, selectionState.selections, selectionState.referenceModes, selectionState.videoPrompts);
+                return lockProduction(shotIds, check, selectionState.selections, selectionState.referenceModes, selectionState.videoPrompts, selectionState.confirmedUncertainTaskIds);
             },
         });
     };
@@ -541,6 +548,7 @@ export function DramaGenerationPanel({
                     referenceSelections: selectedValues(batchDraft.selections),
                     referenceModes: selectedValues(batchDraft.referenceModes),
                     videoPrompts: selectedValues(batchDraft.videoPrompts),
+                    confirmedUncertainTaskIds: batchDraft.confirmedUncertainTaskIds.filter((id) => selectedShots.some((shot) => shot.generationTaskId === id)),
                 },
             );
             setProductionRun(run);
@@ -1299,7 +1307,7 @@ function ShotTaskRow({
                     </Button>
                 ) : (
                     <Button className={`${dialogue ? "" : "col-span-2 lg:col-span-1"} ${actionButtonClass}`} icon={failed ? <RefreshCw className="size-4" /> : <Play className="size-4" />} onClick={onGenerate}>
-                        {failed ? "重试镜头" : shot.videoUrl ? "重新生成" : "生成镜头"}
+                        {shot.generationStatus === "needs_review" ? "处理待确认" : failed ? "重试镜头" : shot.videoUrl ? "重新生成" : "生成镜头"}
                     </Button>
                 )}
                 {shot.generationTaskId ? (
@@ -1685,12 +1693,18 @@ type PromptReferenceBinding = ShotReferenceAsset & {
     orderedReady?: boolean;
 };
 type ProductionPromptRow = { shot: DramaShot; references: PromptReferenceBinding[]; basePrompt: string };
-type ProductionPromptState = { selections: Record<string, string[]>; referenceModes: Record<string, DramaVideoReferenceMode>; videoPrompts: Record<string, string>; invalid: boolean };
+type ProductionPromptState = { selections: Record<string, string[]>; referenceModes: Record<string, DramaVideoReferenceMode>; videoPrompts: Record<string, string>; confirmedUncertainTaskIds: string[]; invalid: boolean };
 
 function initialProductionPromptState(project: DramaProject, rows: ProductionPromptRow[]): ProductionPromptState {
     const selections = Object.fromEntries(rows.map((row) => [row.shot.id, initialVideoReferenceIds(project, row)]));
     const referenceModes = Object.fromEntries(rows.map(({ shot }) => [shot.id, shot.videoReferenceMode || "reference"])) as Record<string, DramaVideoReferenceMode>;
-    return { selections, referenceModes, videoPrompts: Object.fromEntries(rows.map((row) => [row.shot.id, compileProductionPreviewPrompt(project, row, selections[row.shot.id], referenceModes[row.shot.id])])), invalid: false };
+    return {
+        selections,
+        referenceModes,
+        videoPrompts: Object.fromEntries(rows.map((row) => [row.shot.id, compileProductionPreviewPrompt(project, row, selections[row.shot.id], referenceModes[row.shot.id])])),
+        confirmedUncertainTaskIds: [],
+        invalid: rows.some((row) => row.shot.generationStatus === "needs_review"),
+    };
 }
 
 function initialVideoReferenceIds(project: DramaProject, row: ProductionPromptRow) {
@@ -1824,13 +1838,20 @@ function ProductionPromptPreview({
     const [selections, setSelections] = useState<Record<string, string[]>>(initialSelections);
     const [referenceModes, setReferenceModes] = useState<Record<string, DramaVideoReferenceMode>>(initialReferenceModes);
     const [videoPrompts, setVideoPrompts] = useState<Record<string, string>>(initialVideoPrompts);
+    const [confirmedUncertainTaskIds, setConfirmedUncertainTaskIds] = useState<string[]>([]);
     const [expandedPrompts, setExpandedPrompts] = useState<string[]>([]);
     const savingRef = useRef(new Set<string>());
     const [savingIds, setSavingIds] = useState<string[]>([]);
     const [savedIds, setSavedIds] = useState<string[]>([]);
     const invalid =
         savingIds.length > 0 ||
-        rows.some((row) => (!batchSelection || batchSelection.selectedIds.includes(row.shot.id)) && (!videoPrompts[row.shot.id]?.trim() || Boolean(maxReferenceImages && (selections[row.shot.id] || []).length > maxReferenceImages)));
+        rows.some(
+            (row) =>
+                (!batchSelection || batchSelection.selectedIds.includes(row.shot.id)) &&
+                (!videoPrompts[row.shot.id]?.trim() ||
+                    Boolean(maxReferenceImages && (selections[row.shot.id] || []).length > maxReferenceImages) ||
+                    (row.shot.generationStatus === "needs_review" && !confirmedUncertainTaskIds.includes(row.shot.generationTaskId || ""))),
+        );
     const saveRow = async (row: ProductionPromptRow, selectedIds: string[], mode: DramaVideoReferenceMode, prompt: string) => {
         if (savingRef.current.has(row.shot.id)) return;
         savingRef.current.add(row.shot.id);
@@ -1870,8 +1891,8 @@ function ProductionPromptPreview({
         );
     }, [project, referenceModes, rows, selections]);
     useEffect(() => {
-        onChange({ selections, referenceModes, videoPrompts, invalid });
-    }, [invalid, onChange, referenceModes, selections, videoPrompts]);
+        onChange({ selections, referenceModes, videoPrompts, confirmedUncertainTaskIds, invalid });
+    }, [confirmedUncertainTaskIds, invalid, onChange, referenceModes, selections, videoPrompts]);
     return (
         <div className="max-h-[60vh] overflow-y-auto pr-1 text-sm">
             {!batchSelection ? (
@@ -1905,6 +1926,20 @@ function ProductionPromptPreview({
                 const overLimit = Boolean(limit && selectedReferences.length > limit);
                 return (
                     <section key={shot.id} data-drama-prompt-shot-id={shot.id} className={`mb-3 min-w-0 rounded-md border p-3 last:mb-0 ${overLimit ? "border-red-500" : "border-border"}`}>
+                        {shot.generationStatus === "needs_review" ? (
+                            <div className="mb-3 space-y-2 rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-sm">
+                                <p>上次提交的结果尚未确认，这不代表上游现在不可用。请先在供应商记录中核对；管理员可在生成任务中心补录任务 ID 或确认未创建。</p>
+                                <p className="break-all text-xs text-muted-foreground">原任务：{shot.generationTaskId || "未取得本地任务编号，请联系管理员"}</p>
+                                <p>继续将创建独立的新任务，可能与上次提交重复生成、重复计费。原记录会保留，已有视频仍可使用。</p>
+                                <Checkbox
+                                    disabled={disabled || !shot.generationTaskId}
+                                    checked={confirmedUncertainTaskIds.includes(shot.generationTaskId || "")}
+                                    onChange={(event) => setConfirmedUncertainTaskIds((current) => (event.target.checked ? [...current, shot.generationTaskId!] : current.filter((id) => id !== shot.generationTaskId)))}
+                                >
+                                    我已核对原提交，仍要发起新任务并承担可能的重复计费
+                                </Checkbox>
+                            </div>
+                        ) : null}
                         <div className="flex flex-wrap items-center justify-between gap-2">
                             {batchSelection ? (
                                 <Checkbox

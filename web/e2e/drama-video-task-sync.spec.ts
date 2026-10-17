@@ -115,28 +115,52 @@ test("镜头跨计划同步终态、刷新恢复并允许再次生成，未知�
     const blocked = await request.post(`/api/drama/projects/${project.id}/production-runs`, { data: { episodeId: episode.id, preflight: { checkedShotIds: [shots[2].id] } } });
     expect(blocked.status()).toBe(409);
     expect((await blocked.json()).msg).toContain("待审核");
-    for (const shot of shots.slice(0, 2)) {
+    const staleConsent = await request.post(`/api/drama/projects/${project.id}/production-runs`, { data: { episodeId: episode.id, preflight: { checkedShotIds: [shots[2].id] }, confirmedUncertainTaskIds: [shots[1].generationTaskId] } });
+    expect(staleConsent.status()).toBe(409);
+    await page.getByRole("button", { name: "批量生成视频", exact: true }).click();
+    const batch = page.getByRole("dialog", { name: "批量生成视频" });
+    await expect(batch.getByRole("button", { name: "生成 3 个镜头", exact: true })).toBeDisabled();
+    const batchConsent = batch.getByRole("checkbox", { name: "我已核对原提交，仍要发起新任务并承担可能的重复计费" });
+    await batchConsent.check();
+    await expect(batch.getByRole("button", { name: "生成 3 个镜头", exact: true })).toBeEnabled();
+    await batchConsent.uncheck();
+    await expect(batch.getByRole("button", { name: "生成 3 个镜头", exact: true })).toBeDisabled();
+    await batch.getByRole("button", { name: /^取\s*消$/ }).click();
+    for (const shot of shots) {
         await page.reload({ waitUntil: "domcontentloaded" });
         await page.getByRole("button", { name: "切换到镜头生成" }).click();
         await page
             .locator("[data-drama-shot-task]")
             .nth(shot.order - 1)
-            .getByRole("button", { name: /^(重试镜头|重新生成)$/ })
+            .getByRole("button", { name: /^(重试镜头|重新生成|处理待确认)$/ })
             .click();
         const confirmation = page.getByRole("dialog", { name: "确认生成 1 个镜头" });
         await expect(confirmation).toBeVisible();
+        if (shot.order === 3) {
+            const consent = confirmation.getByRole("checkbox", { name: "我已核对原提交，仍要发起新任务并承担可能的重复计费" });
+            await expect(consent).not.toBeChecked();
+            await confirmation.getByRole("button", { name: "确认生成", exact: true }).click();
+            await expect(confirmation).toBeVisible();
+            expect((await protocolFixtureState(request)).requests.filter((item) => item.method === "POST" && item.path.endsWith("/videos"))).toHaveLength(2);
+            await consent.check();
+            await expectNoHorizontalOverflow(page, "待确认重新提交确认");
+        }
         const submitted = page.waitForResponse((response) => response.url().endsWith(`/api/drama/projects/${project.id}/production-runs`) && response.request().method() === "POST");
         await confirmation.getByRole("button", { name: "确认生成", exact: true }).click();
         const response = await submitted;
         expect(response.ok(), await response.text()).toBe(true);
         const run = ((await response.json()) as { data: { run: DramaProductionRun } }).data.run;
         expect(run.id).not.toBe(shot.generationRunId);
+        if (shot.order === 3) expect(run.parameterSnapshot.confirmedUncertainTaskIds).toEqual([shot.generationTaskId]);
         await expect.poll(async () => (await readProject()).episodes[0].shots.find((item) => item.id === shot.id)?.generationTaskId).toBeTruthy();
         const taskId = (await readProject()).episodes[0].shots.find((item) => item.id === shot.id)!.generationTaskId;
         expect((await pollTask(request, `/api/video-tasks/${taskId}`)).status).toBe("success");
     }
-    await expect.poll(async () => (await protocolFixtureState(request)).requests.filter((item) => item.method === "POST" && item.path.endsWith("/videos")).length).toBe(2);
+    await expect.poll(async () => (await protocolFixtureState(request)).requests.filter((item) => item.method === "POST" && item.path.endsWith("/videos")).length).toBe(3);
     await page.reload({ waitUntil: "domcontentloaded" });
     await page.getByRole("button", { name: "切换到镜头生成" }).click();
-    await expect.poll(async () => (await readProject()).episodes[0].shots.map((shot) => shot.generationStatus)).toEqual(["success", "success", "needs_review"]);
+    await expect.poll(async () => (await readProject()).episodes[0].shots.map((shot) => shot.generationStatus)).toEqual(["success", "success", "success"]);
+    const originalTask = await request.get(`/api/video-tasks/${shots[2].generationTaskId}`);
+    expect(originalTask.ok()).toBe(true);
+    expect((await originalTask.json()).task).toMatchObject({ status: "running", needsReview: true });
 });
