@@ -9,6 +9,7 @@ import { getAuthSettings } from "@/lib/auth/store";
 import { fetchInternalApi } from "@/lib/server/internal-origin";
 import { areStoredGenerationTasksActive, getStoredGenerationTask, getStoredGenerationTaskByRequest, queryStoredGenerationTasks } from "@/lib/server/generation-task-store";
 import type { CanvasProject } from "@/lib/canvas-project-contract";
+import { mergeDramaShotVideoResults } from "@/lib/drama-shot-video-results";
 import { applyDramaCanvasMediaField, buildDramaEpisodeCanvasTitle, dramaEpisodeCanvasHandoffId, mergeDramaEpisodeCanvasProject, type DramaCanvasMediaField } from "@/lib/drama-canvas-bridge";
 import type {
     CreateDramaProjectInput,
@@ -37,6 +38,8 @@ import type {
     DramaReferenceManifestItem,
     DramaSeriesBible,
     DramaShot,
+    DramaShotReferenceIntent,
+    DramaShotVideoResult,
     DramaShotContinuity,
     DramaLightingPlan,
     DramaPerformancePlan,
@@ -99,7 +102,7 @@ import { dramaProjectFixedReferenceAssets, resolveDramaVideoReferenceMode, reada
 import { createDramaProductionRun, findLatestDramaProductionRun, getDramaProductionRun, updateDramaProductionRun } from "@/lib/server/drama-production-run-store";
 import { createCanvasProjectForUser, getCanvasProjectForUser, updateCanvasProjectForUser } from "@/lib/server/canvas-project-service";
 import { resolveLogicalModelCandidates, supportsVideoKeyframeReferences } from "@/lib/server/logical-model-router";
-import { getVideoTask } from "@/lib/server/video-task-store";
+import { getVideoTask, type VideoTask } from "@/lib/server/video-task-store";
 import type { ImageTask } from "@/lib/server/image-task-store";
 
 const MAX_PROJECT_BYTES = DRAMA_PRODUCTION_PACKAGE_MAX_BYTES;
@@ -3390,6 +3393,38 @@ export async function syncDramaCanvasForUser(userId: string, canvasProjectId: st
     return ensureDramaEpisodeCanvasForUser(userId, linked.project.id, linked.episode.id);
 }
 
+export async function syncDramaShotVideoResultsForUser(userId: string, projectIdValue: string, episodeIdValue: string, shotIdValue: string) {
+    const project = await getDramaProjectForUser(userId, projectIdValue);
+    const episodeId = cleanText(episodeIdValue);
+    const shotId = cleanText(shotIdValue);
+    const episode = project.episodes.find((item) => item.id === episodeId);
+    const shot = episode?.shots.find((item) => item.id === shotId);
+    if (!episode || !shot) throw new DramaProjectServiceError("镜头不存在", 404);
+
+    const videos: DramaShotVideoResult[] = [];
+    let cursor: { createdAt: number; id: string } | undefined;
+    while (true) {
+        const page = await queryStoredGenerationTasks<VideoTask>("video", { userId, projectId: project.id, episodeId, shotId, statuses: ["success"], limit: 100, cursor });
+        for (const task of page) {
+            if (task.status !== "success" || !task.result?.url) continue;
+            videos.push({ id: task.id, taskId: task.id, url: task.result.url, createdAt: new Date(task.createdAt).toISOString(), durationMs: task.result.durationMs });
+        }
+        if (page.length < 100) break;
+        const last = page[page.length - 1];
+        cursor = { createdAt: last.createdAt, id: last.id };
+    }
+
+    const mergedShot = mergeDramaShotVideoResults(shot, videos);
+    if (sameJsonValue(mergedShot, shot)) return { projectId: project.id, episodeId, shotId, updatedAt: project.updatedAt, shot };
+    try {
+        return await updateDramaProjectShotMutation(userId, { projectId: project.id, episodeId, shotId, shot: mergedShot, expectedUpdatedAt: project.updatedAt });
+    } catch (error) {
+        if (error instanceof DramaProjectStoreError) throw new DramaProjectServiceError(error.message, error.status);
+        throw error;
+    }
+}
+
+
 export async function updateDramaShotMediaForUser(userId: string, projectId: string, episodeIdValue: string, shotIdValue: string, value: unknown) {
     const project = await getDramaProjectForUser(userId, projectId);
     const episodeId = cleanText(episodeIdValue);
@@ -4215,6 +4250,7 @@ function normalizeShot(value: unknown, index: number): DramaShot {
         exitState: normalizeContinuityState(input.exitState),
         framePlan: normalizeShotFramePlan(input.framePlan, resolveDramaShotDuration(input.duration, 5)),
         frameEvidence: normalizeFrameEvidence(input.frameEvidence),
+        ...(normalizeReferenceIntents(input.referenceIntents).length ? { referenceIntents: normalizeReferenceIntents(input.referenceIntents) } : {}),
         fieldOrigins: normalizeFieldOrigins(input.fieldOrigins),
         sourceAssetIds: ids(input.sourceAssetIds),
         continuityStatus: continuityStatus(input.continuityStatus),
@@ -4329,6 +4365,20 @@ function normalizeShotFramePlan(value: unknown, duration: number): DramaShotFram
 function formatOptionalPromptField(value: unknown, kind: "static" | "video") {
     const text = optionalText(value);
     return text ? formatPromptFieldLines(text, kind) : undefined;
+}
+
+function normalizeReferenceIntents(value: unknown): DramaShotReferenceIntent[] {
+    const intents = new Map<string, DramaShotReferenceIntent>();
+    for (const item of array(value)) {
+        const input = object(item);
+        const assetId = cleanText(input.assetId);
+        const code = cleanText(input.code);
+        const guidance = cleanText(input.guidance);
+        if (!assetId || !code || !guidance || intents.has(assetId)) continue;
+        const role = cleanText(input.role);
+        intents.set(assetId, { assetId, code, role: role === "character_anchor" || role === "scene_anchor" ? role : "prop_anchor", guidance });
+    }
+    return [...intents.values()];
 }
 
 function normalizeFrameEvidence(value: unknown): DramaFrameEvidence[] {

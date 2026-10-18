@@ -59,8 +59,15 @@ for (const layout of ["template", "timeline"]) {
             await dialog.getByRole("textbox", { name: "粘贴制作包文本" }).fill(source);
             await dialog.getByRole("button", { name: "识别并预览" }).click();
             const preview = page.locator("[data-drama-production-package-preview]");
-            await expect(preview.locator("[data-drama-production-package-import-warnings]")).toContainText("允许导入");
-            await expect(preview.locator("[data-drama-production-package-import-warnings]")).toContainText("2500");
+            const warningSection = preview.locator("[data-drama-production-package-import-warnings]");
+            const warningToggle = warningSection.getByRole("button", { name: /识别提示：允许继续导入 · \d+ 项/u });
+            await expect(warningToggle).toHaveAttribute("aria-expanded", "false");
+            await expect(warningSection).not.toContainText("2500");
+            await warningToggle.click();
+            await expect(warningToggle).toHaveAttribute("aria-expanded", "true");
+            await expect(warningSection).toContainText("2500");
+            await warningToggle.click();
+            await expect(warningToggle).toHaveAttribute("aria-expanded", "false");
             const apply = page.getByRole("button", { name: "继续导入（有警告）" });
             await expect(apply).toBeVisible();
             const box = await apply.boundingBox();
