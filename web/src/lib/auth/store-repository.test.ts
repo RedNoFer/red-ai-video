@@ -72,7 +72,7 @@ describe("PostgreSQL auth read paths", () => {
         expect(settings.generationConcurrency).toMatchObject({
             agent: 2,
             image: 4,
-            video: 1,
+            video: 2,
         });
     });
 

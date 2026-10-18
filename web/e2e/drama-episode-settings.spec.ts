@@ -200,7 +200,7 @@ test("a production package with fixable quality warnings can still be imported",
         await dialog.getByRole("button", { name: "识别并预览" }).click();
 
         const preview = page.locator("[data-drama-production-package-preview]");
-        await expect(preview.locator("[data-drama-production-package-import-warnings]")).toContainText("允许导入");
+        await expect(preview.locator("[data-drama-production-package-import-warnings]")).toContainText("允许继续导入");
         await expect(page.getByRole("button", { name: "继续导入（有警告）" })).toBeEnabled();
         await page.getByRole("button", { name: "继续导入（有警告）" }).click();
         const confirmation = page.getByRole("dialog", { name: "制作包存在识别警告" });

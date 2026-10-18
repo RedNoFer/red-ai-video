@@ -2,6 +2,7 @@ import type { ApiCallFormat, LogicalModelCapability, SystemChannelAdvancedConfig
 import { inferModelCapability, normalizeModelId } from "@/lib/model-capability";
 import { SEEDANCE_SPECIAL_MODELS } from "@/lib/seedance-special";
 import { normalizeYumengModelCenterBaseUrl, YUMENG_DEFAULT_IMAGE_OPERATION, YUMENG_DEFAULT_VIDEO_OPERATION, YUMENG_MODEL_CENTER_BASE_URL, YUMENG_MODEL_CENTER_MODELS } from "@/lib/yumeng-model-center";
+import { YINGLING_REFERENCE_IMAGE_MAX_BYTES } from "@/lib/yingling-reference-constraints";
 
 type ProtocolOperation = Omit<SystemChannelModelConfig, "capability" | "source" | "protocol" | "apiFormat"> & {
     capability: LogicalModelCapability;
@@ -139,8 +140,14 @@ const yinglingVideoOperation: ProtocolOperation = {
     statusField: "status",
     referenceRule: "影灵 Zeling 视频插件使用 JSON 请求；普通参考图作为 images URL 数组传入。该字段是普通多参考图，不声明有序关键帧能力。",
     supportsReferenceImage: true,
+    maxReferenceImageBytes: YINGLING_REFERENCE_IMAGE_MAX_BYTES,
     supportsKeyframes: false,
     videoReferenceModes: ["reference"],
+};
+
+const yinglingImageOperation: ProtocolOperation = {
+    ...openAiOperations.image!,
+    maxReferenceImageBytes: YINGLING_REFERENCE_IMAGE_MAX_BYTES,
 };
 
 const vozebRecommendedVideoOperation: ProtocolOperation = {
@@ -448,7 +455,7 @@ export const registeredChannelProtocolDefinitions: ChannelProtocolDefinition[] =
         documentationUrl: "https://docs.newapi.pro/zh/docs/api",
         modelCatalogPaths: ["/v1/models"],
         capabilities: ["text", "image", "video", "audio"],
-        operations: { ...openAiOperations, video: yinglingVideoOperation },
+        operations: { ...openAiOperations, image: yinglingImageOperation, video: yinglingVideoOperation },
         strict: true,
     },
     {

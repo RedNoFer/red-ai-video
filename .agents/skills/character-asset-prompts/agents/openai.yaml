@@ -1,0 +1,4 @@
+interface:
+  display_name: "角色资产提示词生成器"
+  short_description: "先读角色描述并补问关键细节，再生成中文或中英双语角色绘图提示词"
+  default_prompt: "使用 $character-asset-prompts，先从我的文本提取角色设定，缺少关键细节时针对性提问，再生成中文绘图提示词与角色锁定卡，先不出图。"

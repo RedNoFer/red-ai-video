@@ -122,6 +122,7 @@ describe("PostgreSQL schema lifecycle", () => {
         expect(ddl).toContain("CREATE INDEX IF NOT EXISTS vozeb_pro_billing_orders_provider_payment_idx ON vozeb_pro_billing_orders (provider, provider_payment_id)");
         expect(ddl).toContain("webhook_secret_ciphertext text NOT NULL DEFAULT ''");
         expect(ddl).toContain("CREATE UNIQUE INDEX IF NOT EXISTS vozeb_pro_generation_tasks_channel_upstream_idx ON vozeb_pro_generation_tasks (channel_id, upstream_task_id)");
+        expect(ddl).toContain("CREATE INDEX IF NOT EXISTS vozeb_pro_generation_tasks_drama_shot_idx ON vozeb_pro_generation_tasks (user_id, project_id, task_type, status, (payload->>'episodeId'), (payload->>'shotId'), created_at DESC, id DESC)");
         expect(ddl).toContain("signature_timestamp timestamptz NOT NULL");
         expect(ddl).toContain("conflict_count integer NOT NULL DEFAULT 0");
         expect(ddl).toContain("user_id text NOT NULL REFERENCES vozeb_pro_users(id) ON DELETE CASCADE");

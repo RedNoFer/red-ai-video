@@ -2,11 +2,26 @@ import { createHash } from "node:crypto";
 
 import { nanoid } from "nanoid";
 
-import type { DramaEpisode, DramaNamedAsset, DramaProject, DramaShot } from "@/lib/drama-project-contract";
+import type { DramaEpisode, DramaNamedAsset, DramaProject, DramaReferenceManifestRole, DramaShot, DramaShotReferenceIntent } from "@/lib/drama-project-contract";
+import { extractDramaPackageReferenceEntries, replaceDramaPackageCodeTokens, stripDramaPackageReferenceSections, type DramaPackageReferenceEntry } from "@/lib/drama-package-reference-intents";
 
 type AssetKind = "characters" | "scenes" | "props" | "clues";
 type CompactAsset = { kind: AssetKind; code: string; name: string; prompt: string };
-type CompactShot = { code: string; title: string; duration: number; videoPrompt: string; imagePrompt?: string; startFramePrompt?: string; endFramePrompt?: string; characters: string[]; scene?: string; props: string[]; clues: string[] };
+type CompactShot = {
+    code: string;
+    title: string;
+    duration: number;
+    description?: string;
+    videoPrompt: string;
+    imagePrompt?: string;
+    startFramePrompt?: string;
+    endFramePrompt?: string;
+    characters: string[];
+    scene?: string;
+    props: string[];
+    clues: string[];
+    referenceEntries?: DramaPackageReferenceEntry[];
+};
 type CompactEpisode = { code: string; title: string; script: string; shots: CompactShot[] };
 type CompactPackage = { assets: CompactAsset[]; episodes: CompactEpisode[] };
 
@@ -19,8 +34,11 @@ export type DramaCompactPackagePreview = {
 export class DramaCompactPackageError extends Error {}
 
 const kinds: Record<string, AssetKind> = { 角色: "characters", 场景: "scenes", 道具: "props", 线索: "clues" };
-const promptFields = { 视频提示词: "videoPrompt", 静帧提示词: "imagePrompt", 首帧提示词: "startFramePrompt", 尾帧提示词: "endFramePrompt" } as const;
+const promptFields = { 章节文案: "description", 视频提示词: "videoPrompt", 静帧提示词: "imagePrompt", 首帧提示词: "startFramePrompt", 尾帧提示词: "endFramePrompt" } as const;
 const codePattern = /^[A-Za-z][A-Za-z0-9_-]*$/u;
+const referencePrefixKinds: Record<string, AssetKind> = { CHAR: "characters", LOC: "scenes", PROP: "props", CLUE: "clues" };
+const kindLabels: Record<AssetKind, string> = { characters: "角色", scenes: "场景", props: "道具", clues: "线索" };
+const roleForKind: Record<AssetKind, DramaReferenceManifestRole> = { characters: "character_anchor", scenes: "scene_anchor", props: "prop_anchor", clues: "prop_anchor" };
 
 function fail(message: string): never {
     throw new DramaCompactPackageError(message);
@@ -91,7 +109,7 @@ export function parseDramaCompactPackage(source: string): CompactPackage {
             field = "prompt";
             continue;
         }
-        const promptField = /^#### (视频提示词|静帧提示词|首帧提示词|尾帧提示词)$/u.exec(line);
+        const promptField = /^#### (章节文案|视频提示词|静帧提示词|首帧提示词|尾帧提示词)$/u.exec(line);
         if (shot && promptField) {
             field = promptField[1] as keyof typeof promptFields;
             continue;
@@ -155,7 +173,38 @@ export function parseDramaCompactPackage(source: string): CompactPackage {
             }
         }
     }
+    processDramaPackageReferenceEntries(result);
     return result;
+}
+
+/** Extract 【参考】 facts, strip them from the public text, swap known codes for asset names, and validate the codes. */
+function processDramaPackageReferenceEntries(result: CompactPackage) {
+    const assetsByCode = new Map(result.assets.map((asset) => [asset.code, asset]));
+    const resolveAsset = (code: string) => assetsByCode.get(code) || assetsByCode.get([...assetsByCode.keys()].find((key) => key.toUpperCase() === code.toUpperCase()) || "");
+    for (const episode of result.episodes) {
+        for (const shot of episode.shots) {
+            const entries: DramaPackageReferenceEntry[] = [];
+            for (const field of ["description", "videoPrompt"] as const) {
+                const text = shot[field];
+                if (!text?.trim()) continue;
+                entries.push(...extractDramaPackageReferenceEntries(text));
+                const stripped = stripDramaPackageReferenceSections(text);
+                shot[field] = replaceDramaPackageCodeTokens(stripped, (code) => resolveAsset(code)?.name);
+            }
+            if (!entries.length) continue;
+            const seen = new Set<string>();
+            for (const entry of entries) {
+                if (seen.has(entry.code)) continue;
+                seen.add(entry.code);
+                const asset = resolveAsset(entry.code);
+                if (!asset) fail(`${episode.code}/${shot.code} 的【参考】绑定代码不存在：${entry.code}，请先在固定资产中定义`);
+                const prefix = /^([A-Za-z]+)_/u.exec(entry.code)?.[1]?.toUpperCase();
+                const expectedKind = prefix && referencePrefixKinds[prefix];
+                if (expectedKind && expectedKind !== asset!.kind) fail(`${episode.code}/${shot.code} 的【参考】代码 ${entry.code} 与资产类型不符：按前缀应为${kindLabels[expectedKind]}`);
+            }
+            shot.referenceEntries = entries;
+        }
+    }
 }
 
 function projectAssets(project: DramaProject, kind: AssetKind): DramaNamedAsset[] {
@@ -188,6 +237,11 @@ export function previewDramaCompactPackage(source: string, project: DramaProject
             const previous = current?.shots.find((item) => item.code === shot.code);
             if (previous) shotsUpdated++;
             if (previous && (previous.videoUrl || previous.storyboardImageUrl || previous.storyboardEndImageUrl || previous.storyboardFrames?.some((frame) => frame.mediaUrl))) oldResultsToReview++;
+            for (const entry of shot.referenceEntries || []) {
+                if (!shot.characters.includes(entry.code) && shot.scene !== entry.code && !shot.props.includes(entry.code) && !shot.clues.includes(entry.code)) {
+                    warnings.push(`${episode.code}/${shot.code} 的【参考】${entry.code} 未在本片段绑定行声明，导入后不会引用该资产的基准图。`);
+                }
+            }
         }
     }
     return {
@@ -243,6 +297,7 @@ export function applyDramaCompactPackage(project: DramaProject, source: string, 
         else bucket.push(incoming);
     }
     const episodes = project.episodes.filter((episode) => episode.code || episode.script.trim() || episode.shots.length);
+    const kindByCode = new Map(compact.assets.map((asset) => [asset.code, asset.kind]));
     for (const item of compact.episodes) {
         const index = episodes.findIndex((episode) => episode.code === item.code);
         const current = episodes[index];
@@ -252,6 +307,12 @@ export function applyDramaCompactPackage(project: DramaProject, source: string, 
             const propIds = shot.props.map((code) => ids.get(code)!);
             const clueIds = shot.clues.map((code) => ids.get(code)!);
             const sceneId = shot.scene ? ids.get(shot.scene) : undefined;
+            const intents = new Map<string, DramaShotReferenceIntent>();
+            for (const entry of shot.referenceEntries || []) {
+                const assetId = ids.get(entry.code);
+                if (!assetId || intents.has(assetId)) continue;
+                intents.set(assetId, { assetId, code: entry.code, role: roleForKind[kindByCode.get(entry.code) || "props"], guidance: entry.guidance });
+            }
             const hasOldMedia = Boolean(previous?.videoUrl || previous?.storyboardImageUrl || previous?.storyboardEndImageUrl || previous?.storyboardFrames?.some((frame) => frame.mediaUrl));
             return {
                 ...previous,
@@ -260,7 +321,7 @@ export function applyDramaCompactPackage(project: DramaProject, source: string, 
                 order: shotIndex + 1,
                 title: shot.title,
                 duration: shot.duration,
-                description: "",
+                description: shot.description || "",
                 sourceText: "",
                 shotBoundary: "",
                 dialogue: "",
@@ -280,6 +341,7 @@ export function applyDramaCompactPackage(project: DramaProject, source: string, 
                 entryState: undefined,
                 exitState: undefined,
                 framePlan: undefined,
+                ...(intents.size ? { referenceIntents: [...intents.values()] } : {}),
                 storySceneId: undefined,
                 sourceAssetIds: [],
                 videoReferenceIds: undefined,
@@ -295,7 +357,18 @@ export function applyDramaCompactPackage(project: DramaProject, source: string, 
                 generationStatus: previous?.videoUrl ? "stale" : previous?.generationStatus || "idle",
                 audioStatus: previous?.audioUrl ? "stale" : previous?.audioStatus || "idle",
                 continuityStatus: hasOldMedia ? "stale" : "ready",
-                fieldOrigins: { ...previous?.fieldOrigins, title: "package", duration: "package", imagePrompt: "package", videoPrompt: "package", characterIds: "package", sceneId: "package", propIds: "package", clueIds: "package" },
+                fieldOrigins: {
+                    ...previous?.fieldOrigins,
+                    title: "package",
+                    description: "package",
+                    duration: "package",
+                    imagePrompt: "package",
+                    videoPrompt: "package",
+                    characterIds: "package",
+                    sceneId: "package",
+                    propIds: "package",
+                    clueIds: "package",
+                },
             };
         });
         const nextEpisode: DramaEpisode = {

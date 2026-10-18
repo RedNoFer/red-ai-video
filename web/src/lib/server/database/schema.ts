@@ -325,6 +325,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS generation_tasks_channel_upstream_idx ON gener
 CREATE INDEX IF NOT EXISTS generation_tasks_conversation_idx ON generation_tasks (conversation_id, updated_at DESC) WHERE conversation_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS generation_tasks_run_idx ON generation_tasks (run_id, updated_at DESC) WHERE run_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS generation_tasks_user_project_idx ON generation_tasks (user_id, project_id, task_type, status) WHERE project_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS generation_tasks_drama_shot_idx ON generation_tasks (user_id, project_id, task_type, status, (payload->>'episodeId'), (payload->>'shotId'), created_at DESC, id DESC) WHERE project_id IS NOT NULL AND task_type = 'video';
 DROP INDEX IF EXISTS generation_tasks_recovery_due_idx;
 CREATE INDEX generation_tasks_recovery_due_idx ON generation_tasks (next_poll_at, lease_until, id) WHERE (status IN ('pending', 'running') AND execution_phase IN ('created', 'submitting', 'submitted', 'polling', 'result_ready', 'persisting')) OR (status = 'cancelled' AND execution_phase IN ('cancel_requested', 'cancel_polling')) OR (task_type = 'agent' AND status = 'success' AND execution_phase IN ('review_pending', 'reviewing'));
 

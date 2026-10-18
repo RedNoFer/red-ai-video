@@ -300,6 +300,24 @@ describe("mutateStoredGenerationTask", () => {
         await expect(queryStoredGenerationTasks<{ id: string }>("agent", { userId: "user", conversationId: "conversation-one", projectId: "project-one", surface: "canvas", limit: 1 })).resolves.toEqual([{ id: "run-match" }]);
     });
 
+    it("filters video history by exact episode and shot ids before applying the PostgreSQL page cursor", async () => {
+        vi.mocked(getDatabaseProvider).mockReturnValue("postgres");
+        vi.mocked(postgresQuery).mockResolvedValueOnce({ rows: [] } as never);
+        const createdAt = Date.parse("2026-10-17T04:00:00.000Z");
+
+        await queryStoredGenerationTasks("video", { userId: "user-one", projectId: "project-one", episodeId: "episode-one", shotId: "shot-one", statuses: ["success"], cursor: { createdAt, id: "task-cursor" }, limit: 100 });
+
+        const [query, params] = vi.mocked(postgresQuery).mock.calls[0] || [];
+        expect(String(query)).toContain("project_id = $3");
+        expect(String(query)).toContain("payload->>'episodeId' = $4");
+        expect(String(query)).toContain("payload->>'shotId' = $5");
+        expect(String(query)).toContain("status = ANY($6::text[])");
+        expect(String(query)).toContain("(created_at, id) < ($7::timestamptz, $8)");
+        expect(String(query)).toContain("ORDER BY created_at DESC, id DESC LIMIT $9");
+        expect(params).toEqual(["user-one", "video", "project-one", "episode-one", "shot-one", ["success"], new Date(createdAt), "task-cursor", 100]);
+        vi.mocked(getDatabaseProvider).mockReturnValue("file");
+    });
+
     it("filters file-provider Agent statuses before limiting", async () => {
         const now = Date.now();
         mocks.records = [
@@ -308,6 +326,49 @@ describe("mutateStoredGenerationTask", () => {
         ];
 
         await expect(queryStoredGenerationTasks<{ id: string }>("agent", { userId: "user", surface: "chat", statuses: ["planning", "running", "paused"], limit: 1 })).resolves.toEqual([{ id: "run-active" }]);
+    });
+
+    it("returns only the exact file-provider video tasks for a shot and continues after its cursor", async () => {
+        const now = Date.now();
+        mocks.records = [
+            {
+                id: "task-newer",
+                userId: "user-one",
+                type: "video",
+                status: "success",
+                projectId: "project-one",
+                payload: { id: "task-newer", episodeId: "episode-one", shotId: "shot-one", result: { url: "/new.mp4" } },
+                createdAt: now + 2,
+                updatedAt: now + 2,
+                expiresAt: now + 60_000,
+            },
+            {
+                id: "task-match",
+                userId: "user-one",
+                type: "video",
+                status: "success",
+                projectId: "project-one",
+                payload: { id: "task-match", episodeId: "episode-one", shotId: "shot-one", result: { url: "/match.mp4" } },
+                createdAt: now + 1,
+                updatedAt: now + 1,
+                expiresAt: now + 60_000,
+            },
+            {
+                id: "task-wrong-shot",
+                userId: "user-one",
+                type: "video",
+                status: "success",
+                projectId: "project-one",
+                payload: { id: "task-wrong-shot", episodeId: "episode-one", shotId: "other-shot" },
+                createdAt: now,
+                updatedAt: now,
+                expiresAt: now + 60_000,
+            },
+        ];
+
+        await expect(
+            queryStoredGenerationTasks<{ id: string }>("video", { userId: "user-one", projectId: "project-one", episodeId: "episode-one", shotId: "shot-one", statuses: ["success"], cursor: { createdAt: now + 2, id: "task-newer" }, limit: 100 }),
+        ).resolves.toEqual([expect.objectContaining({ id: "task-match" })]);
     });
 });
 

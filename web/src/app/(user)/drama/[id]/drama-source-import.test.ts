@@ -21,6 +21,11 @@ describe("drama source import workspace", () => {
         expect(source).toContain("制作包存在识别警告");
         expect(source).toContain("继续导入（有警告）");
         expect(source).toContain("data-drama-production-package-import-warnings");
+        expect(source).toContain("const [showParseWarnings, setShowParseWarnings] = useState(false)");
+        expect(source).toContain("const [showImportWarnings, setShowImportWarnings] = useState(false)");
+        expect(source).toContain("aria-expanded={expanded}");
+        expect(source).toContain("max-h-48 space-y-1 overflow-y-auto");
+        expect(source).toContain("{title} · {warnings.length} 项");
         expect(template).toContain("vozeb-drama-production-package-v1");
         expect(template).toContain("## 十三、QC 报告");
         expect(template).toContain("imagePrompt");

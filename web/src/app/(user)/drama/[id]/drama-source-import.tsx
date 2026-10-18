@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import { App, Button, Input, Modal, Pagination, Radio } from "antd";
-import { BookOpenText, Download, FileJson2, FileText, PackageOpen, Search, TriangleAlert, Upload } from "lucide-react";
+import { BookOpenText, ChevronDown, Download, FileJson2, FileText, PackageOpen, Search, TriangleAlert, Upload } from "lucide-react";
 
 import type { DramaProductionPackagePreview } from "@/lib/drama-project-contract";
 import { serializeDramaProductionPackageJson, serializeDramaProductionPackageMarkdown } from "@/lib/drama-production-package-serializer";
@@ -32,6 +32,8 @@ export function DramaSourceImport({ project, onImported }: { project: DramaProje
     const [packageDraft, setPackageDraft] = useState("");
     const [packageImportOpen, setPackageImportOpen] = useState(false);
     const [packagePreview, setPackagePreview] = useState<DramaProductionPackagePreview>();
+    const [showParseWarnings, setShowParseWarnings] = useState(false);
+    const [showImportWarnings, setShowImportWarnings] = useState(false);
     const [previewingPackage, setPreviewingPackage] = useState(false);
     const [packageImportMode, setPackageImportMode] = useState<"replace" | "merge">("merge");
     const applyingPackageRef = useRef(false);
@@ -110,6 +112,8 @@ export function DramaSourceImport({ project, onImported }: { project: DramaProje
             const preview = await previewDramaProductionPackage(project.id, source, sourceName);
             setPackageSource(source);
             setPackageFileName(sourceName);
+            setShowParseWarnings(false);
+            setShowImportWarnings(false);
             setPackagePreview(preview);
             setPackageImportOpen(false);
         } catch (error) {
@@ -134,6 +138,8 @@ export function DramaSourceImport({ project, onImported }: { project: DramaProje
         setPackageFileName("");
         setPackageDraft("");
         setPackagePreview(undefined);
+        setShowParseWarnings(false);
+        setShowImportWarnings(false);
         setPackageImportMode("merge");
     };
 
@@ -363,37 +369,64 @@ export function DramaSourceImport({ project, onImported }: { project: DramaProje
                             </Button>
                         </div>
                         {packagePreview.warnings.length ? (
-                            <div className="rounded-md border border-amber-300/70 bg-amber-50/70 p-3 text-xs text-amber-900 dark:border-amber-700/60 dark:bg-amber-950/20 dark:text-amber-100">
-                                <div className="flex items-center gap-1.5 font-medium">
-                                    <TriangleAlert className="size-3.5" />
-                                    解析警告
-                                </div>
-                                <ul className="mt-1.5 space-y-1">
-                                    {packagePreview.warnings.map((warning) => (
-                                        <li key={warning}>{warning}</li>
-                                    ))}
-                                </ul>
-                            </div>
+                            <PackageWarningDisclosure
+                                id="drama-package-parse-warnings"
+                                title="解析警告"
+                                summary="展开查看识别过程中的具体提醒。"
+                                warnings={packagePreview.warnings}
+                                expanded={showParseWarnings}
+                                onToggle={() => setShowParseWarnings((value) => !value)}
+                                tone="amber"
+                            />
                         ) : null}
                         {packagePreview.importWarnings?.length ? (
-                            <div className="rounded-md border border-orange-300/80 bg-orange-50/80 p-3 text-xs text-orange-950 dark:border-orange-700/70 dark:bg-orange-950/25 dark:text-orange-100" data-drama-production-package-import-warnings>
-                                <div className="flex items-center gap-1.5 font-medium">
-                                    <TriangleAlert className="size-3.5" />
-                                    识别提示：允许继续导入
-                                </div>
-                                <p className="mt-1.5 leading-5">以下问题不会阻止本次导入，但对应内容在后续分镜或制作包生成前需要处理：</p>
-                                <ul className="mt-1.5 space-y-1">
-                                    {packagePreview.importWarnings.map((warning) => (
-                                        <li key={warning}>{warning}</li>
-                                    ))}
-                                </ul>
-                            </div>
+                            <PackageWarningDisclosure
+                                id="drama-production-package-import-warnings"
+                                title="识别提示：允许继续导入"
+                                summary="这些提醒不阻止本次导入。"
+                                warnings={packagePreview.importWarnings}
+                                expanded={showImportWarnings}
+                                onToggle={() => setShowImportWarnings((value) => !value)}
+                                tone="orange"
+                            />
                         ) : null}
                         <p className="text-xs leading-5 text-muted-foreground">应用前会自动创建恢复版本；制作包正文保存为项目来源素材，文学剧本、资产、镜头参数和连续性关系分别进入对应数据结构。</p>
                     </div>
                 ) : null}
             </Modal>
         </>
+    );
+}
+
+function PackageWarningDisclosure({ id, title, summary, warnings, expanded, onToggle, tone }: { id: string; title: string; summary: string; warnings: string[]; expanded: boolean; onToggle: () => void; tone: "amber" | "orange" }) {
+    const colors =
+        tone === "orange"
+            ? "border-orange-300/80 bg-orange-50/80 text-orange-950 dark:border-orange-700/70 dark:bg-orange-950/25 dark:text-orange-100"
+            : "border-amber-300/70 bg-amber-50/70 text-amber-900 dark:border-amber-700/60 dark:bg-amber-950/20 dark:text-amber-100";
+
+    return (
+        <section className={`overflow-hidden rounded-md border text-xs ${colors}`} data-drama-package-warning-section data-drama-production-package-import-warnings={id === "drama-production-package-import-warnings" ? "" : undefined}>
+            <button type="button" className="flex w-full items-center gap-2 px-3 py-2.5 text-left" aria-expanded={expanded} aria-controls={`${id}-details`} onClick={onToggle}>
+                <TriangleAlert className="size-3.5 shrink-0" />
+                <span className="min-w-0 flex-1">
+                    <span className="block font-medium">
+                        {title} · {warnings.length} 项
+                    </span>
+                    <span className="mt-0.5 block text-current/75">{summary}</span>
+                </span>
+                <span className="shrink-0 font-medium">{expanded ? "收起" : "展开详情"}</span>
+                <ChevronDown className={`size-3.5 shrink-0 transition-transform ${expanded ? "rotate-180" : ""}`} />
+            </button>
+            {expanded ? (
+                <ul id={`${id}-details`} className="max-h-48 space-y-1 overflow-y-auto border-t border-current/15 px-3 py-2.5 leading-5">
+                    {warnings.map((warning, index) => (
+                        <li key={`${index}-${warning}`} className="break-words">
+                            {warning}
+                        </li>
+                    ))}
+                </ul>
+            ) : null}
+        </section>
     );
 }
 

@@ -36,7 +36,10 @@ data/
 !.agents/skills/drama-image/**
 !.agents/skills/drama-video-director/
 !.agents/skills/drama-video-director/**
+!.agents/skills/character-asset-prompts/
+!.agents/skills/character-asset-prompts/**
 skills-lock.json
+output/
 docs/assets/
 VOZEB-PRO-审计报告.md
 VOZEB-PRO项目缺陷检查报告.md

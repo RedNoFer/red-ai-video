@@ -92,7 +92,7 @@ describe("video generation candidate failover", () => {
     beforeEach(() => {
         vi.clearAllMocks();
         mocks.fetchInternalApi.mockReset();
-        mocks.fetchSafeOutbound.mockResolvedValue(new Response(null, { status: 200, headers: { "content-type": "image/png" } }));
+        mocks.fetchSafeOutbound.mockResolvedValue(new Response(null, { status: 200, headers: { "content-type": "image/png", "content-length": "1" } }));
         resetChannelRuntimeHealth();
         mocks.getAuthSettings.mockResolvedValue(settings);
         storedTask = undefined;
@@ -647,6 +647,26 @@ describe("video generation candidate failover", () => {
         expect(response.status).toBe(200);
         expect(mocks.createVideoTask).toHaveBeenCalledWith(expect.objectContaining(context));
         expect(mocks.linkStoredGenerationTask).toHaveBeenCalledWith("video", "local-task", context);
+    });
+
+    it("sends a frozen Drama prompt unchanged through Buming and stores that same prompt on the task", async () => {
+        const bumingChannel = applyChannelProtocol({ ...channels[0], baseUrl: "", models: ["seedance-2-0-official"], advancedConfig: emptyAdvancedConfig() }, "buming-seedance");
+        mocks.getAuthSettings.mockResolvedValue({
+            ...settings,
+            systemChannels: [bumingChannel],
+            logicalModels: [{ ...settings.logicalModels[0], bindings: [{ ...settings.logicalModels[0].bindings[0], channelId: bumingChannel.id, upstreamModel: "seedance-2-0-official" }] }],
+        });
+        mocks.fetchInternalApi.mockResolvedValue(json({ id: "buming-frozen-prompt", state: "queued" }));
+        const frozenPrompt = "预览中冻结的完整提示词\n实际参考图绑定：@图片1";
+
+        const response = await POST(request({ videoSeconds: 5 }, [{ type: "image", url: "https://cdn.example.com/reference.png" }], { surface: "drama", runId: "run-frozen" }, frozenPrompt));
+        const [, init] = mocks.fetchInternalApi.mock.calls[0] as [string, RequestInit];
+        const upstreamBody = JSON.parse(String(init.body));
+
+        expect(response.status).toBe(200);
+        expect(upstreamBody.prompt).toBe(frozenPrompt);
+        expect(mocks.createVideoTask).toHaveBeenCalledWith(expect.objectContaining({ prompt: frozenPrompt }));
+        expect(mocks.updateVideoTask).toHaveBeenCalledWith("local-task", expect.objectContaining({ upstream: expect.objectContaining({ requestSnapshot: expect.objectContaining({ prompt: frozenPrompt }) }) }));
     });
 
     it("ignores a raw upstream model and still uses the backend default", async () => {

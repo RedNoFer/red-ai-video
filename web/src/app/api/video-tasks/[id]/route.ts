@@ -49,6 +49,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         return NextResponse.json({ error: "视频任务终态和结果只能由服务端更新" }, { status: 403 });
     }
     if (body.action !== "cancel" && body.status !== "cancelled") return NextResponse.json({ error: "不支持的视频任务操作" }, { status: 400 });
+    if (task.status === "success" || task.status === "error" || task.status === "cancelled") {
+        return NextResponse.json({ task: publicTask(task) }, { headers: pointsResponseHeaders(user) });
+    }
     if (task.status !== "running") return NextResponse.json({ error: "当前任务无法取消" }, { status: 409 });
     const target: GenerationCancellationTarget = {
         type: "video",
@@ -60,7 +63,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         config: task.config,
     };
     const next = await transitionVideoTask(task, { status: "cancelled", error: "任务已取消", retryable: false }, cancellationExecutionPatch(target));
-    if (!next) return NextResponse.json({ error: "当前任务状态无法修改" }, { status: 409 });
+    if (!next) {
+        const latest = await getVideoTask(task.id);
+        if (latest && (latest.status === "success" || latest.status === "error" || latest.status === "cancelled")) {
+            return NextResponse.json({ task: publicTask(latest) }, { headers: pointsResponseHeaders(user) });
+        }
+        return NextResponse.json({ error: "当前任务状态无法修改" }, { status: 409 });
+    }
     await writeVideoGenerationLog(next, "failed", "任务已取消", false).catch((error) => console.warn("Cancelled video generation log update failed", { taskId: task.id, error }));
     const origin = resolveInternalOrigin(new URL(request.url).origin);
     after(() => runGenerationTaskRecoveryBatch({ origin, limit: 1, taskIds: [task.id] }));

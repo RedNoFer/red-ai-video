@@ -119,8 +119,8 @@ function validateEpisodeContinuityEdges(episode: DramaProductionPackageEpisode):
             for (const assetId of [...edge.carryCharacterIds, ...edge.carryPropIds]) {
                 const state = nextCharacters.get(assetId) || nextProps.get(assetId);
                 const position = state?.position;
-                if (position && !positionAnchors(position).some((anchor) => blocking.includes(anchor) || firstFrameText.includes(anchor)))
-                    issues.push(issue(episode.code, edge, `下一镜首个帧段未重复锁定 ${assetId} 的空间位置“${position}”；硬切后不得让模型自行重排人物/道具`));
+                const authoredAnchors = positionAnchors(`${blocking}\n${firstFrameText}`).join("\n");
+                if (position && !positionAnchors(position).some((anchor) => authoredAnchors.includes(anchor))) issues.push(issue(episode.code, edge, `下一镜首个帧段未重复锁定 ${assetId} 的空间位置“${position}”；硬切后不得让模型自行重排人物/道具`));
             }
         }
     }
@@ -148,7 +148,7 @@ function validateEntityCarry(
 }
 
 function hasMovementCause(value: string) {
-    return MOVEMENT_CUE.test(value);
+    return MOVEMENT_CUE.test(value) || /(?:拿起|取出|放回|放下|放到|放在|压在|贴在|装入|抽出|展开)[^。；\n]*(?:纸|袋|图|笔|手机|电话|杯|冰袋|书|本|桌|膝|床|手)/u.test(value);
 }
 
 function positionAnchors(value: string) {

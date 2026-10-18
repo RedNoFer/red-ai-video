@@ -53,6 +53,8 @@ export type SystemChannelModelConfig = {
     videoReferenceModes?: Array<"reference" | "first_frame" | "first_last" | "all_frames">;
     /** 单次请求的供应商参考图片总上限。 */
     maxReferenceImages?: number;
+    /** 单张供应商参考图片的字节上限；仅超限时在提交前压缩。 */
+    maxReferenceImageBytes?: number;
     /** 音频模型的实际操作；普通 TTS 省略，声纹创建必须显式标识。 */
     audioOperation?: "tts" | "voice-design" | "voice-clone";
     /** Voice Design / Clone 返回的专属声纹字段路径。 */
@@ -89,6 +91,7 @@ export type SystemChannelAdvancedConfig = {
     supportsReferenceVideo: boolean;
     supportsReferenceAudio: boolean;
     supportsKeyframes?: boolean;
+    maxReferenceImageBytes?: number;
     audioOperation?: "tts" | "voice-design" | "voice-clone";
     voiceIdField?: string;
     previewAudioField?: string;

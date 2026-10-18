@@ -164,11 +164,25 @@ export async function listStoredGenerationTasks<T>(type: GenerationTaskType, use
 
 export async function queryStoredGenerationTasks<T>(
     type: GenerationTaskType,
-    options: { userId: string; conversationId?: string; projectId?: string; surface?: string; assetKind?: "characters" | "scenes" | "props"; assetId?: string; statuses?: string[]; limit?: number },
+    options: {
+        userId: string;
+        conversationId?: string;
+        projectId?: string;
+        episodeId?: string;
+        shotId?: string;
+        surface?: string;
+        assetKind?: "characters" | "scenes" | "props";
+        assetId?: string;
+        statuses?: string[];
+        limit?: number;
+        cursor?: { createdAt: number; id: string };
+    },
 ): Promise<T[]> {
     const userId = options.userId.trim();
     const conversationId = cleanContextText(options.conversationId);
     const projectId = cleanContextText(options.projectId);
+    const episodeId = cleanContextText(options.episodeId);
+    const shotId = cleanContextText(options.shotId);
     const surface = cleanContextText(options.surface);
     const assetKind = cleanContextText(options.assetKind);
     const assetId = cleanContextText(options.assetId);
@@ -185,6 +199,14 @@ export async function queryStoredGenerationTasks<T>(
         };
         addFilter("conversation_id", conversationId);
         addFilter("project_id", projectId);
+        if (episodeId) {
+            values.push(episodeId);
+            filters.push(`payload->>'episodeId' = $${values.length}`);
+        }
+        if (shotId) {
+            values.push(shotId);
+            filters.push(`payload->>'shotId' = $${values.length}`);
+        }
         addFilter("surface", surface);
         addFilter("payload->>'assetKind'", assetKind);
         addFilter("payload->>'assetId'", assetId);
@@ -192,8 +214,13 @@ export async function queryStoredGenerationTasks<T>(
             values.push(statuses);
             filters.push(`status = ANY($${values.length}::text[])`);
         }
+        if (options.cursor && Number.isFinite(options.cursor.createdAt) && options.cursor.id) {
+            values.push(new Date(options.cursor.createdAt), options.cursor.id);
+            filters.push(`(created_at, id) < ($${values.length - 1}::timestamptz, $${values.length})`);
+        }
         values.push(limit);
-        const result = await postgresQuery<{ payload: T }>(`SELECT payload FROM generation_tasks WHERE ${filters.join(" AND ")} ORDER BY updated_at DESC, id DESC LIMIT $${values.length}`, values);
+        const orderBy = options.cursor || (episodeId && shotId) ? "created_at DESC, id DESC" : "updated_at DESC, id DESC";
+        const result = await postgresQuery<{ payload: T }>(`SELECT payload FROM generation_tasks WHERE ${filters.join(" AND ")} ORDER BY ${orderBy} LIMIT $${values.length}`, values);
         return result.rows.map((row) => row.payload);
     }
     const tasks = await readFileTasks();
@@ -205,12 +232,15 @@ export async function queryStoredGenerationTasks<T>(
                 task.expiresAt > Date.now() &&
                 (!conversationId || task.conversationId === conversationId) &&
                 (!projectId || task.projectId === projectId) &&
+                (!episodeId || task.episodeId === episodeId || task.payload.episodeId === episodeId) &&
+                (!shotId || task.shotId === shotId || task.payload.shotId === shotId) &&
                 (!surface || task.surface === surface) &&
                 (!assetKind || task.assetKind === assetKind) &&
                 (!assetId || task.assetId === assetId) &&
                 (!statuses.length || statuses.includes(task.status)),
         )
-        .sort((a, b) => b.updatedAt - a.updatedAt || b.id.localeCompare(a.id))
+        .filter((task) => !options.cursor || task.createdAt < options.cursor.createdAt || (task.createdAt === options.cursor.createdAt && task.id < options.cursor.id))
+        .sort((a, b) => (options.cursor || (episodeId && shotId) ? b.createdAt - a.createdAt : b.updatedAt - a.updatedAt) || b.id.localeCompare(a.id))
         .slice(0, limit)
         .map((task) => task.payload as T);
 }

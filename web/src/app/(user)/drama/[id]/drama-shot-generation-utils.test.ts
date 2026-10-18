@@ -10,6 +10,7 @@ import {
     hasActiveDramaVisualQueue,
     isDramaStoryboardFrameActive,
     resolveDramaVisualRunSync,
+    resolveDramaVideoCancellationPatch,
     shotReferenceImages,
     storyboardReferenceImages,
     videoReferenceImages,
@@ -244,6 +245,17 @@ describe("applyDramaProductionRunStep", () => {
         expect(running).toMatchObject({ generationStatus: "running", generationTaskId: "video-task" });
         const completed = applyDramaProductionRunStep(running, { shotId: "shot-one", type: "extract_frames", status: "success", outputUrls: ["/video.mp4"] } as never);
         expect(completed).toMatchObject({ generationStatus: "success", videoUrl: "/video.mp4" });
+    });
+});
+
+describe("resolveDramaVideoCancellationPatch", () => {
+    it("keeps an upstream failure visible when the shot still appears to be running", () => {
+        expect(resolveDramaVideoCancellationPatch([{ status: "error", error: "上游生成失败" }])).toEqual({ generationStatus: "error", generationError: "上游生成失败" });
+    });
+
+    it("uses the actual terminal status returned for video tasks", () => {
+        expect(resolveDramaVideoCancellationPatch([{ status: "cancelled" }])).toMatchObject({ generationStatus: "cancelled" });
+        expect(resolveDramaVideoCancellationPatch([{ status: "success", result: { url: "/video.mp4" } }])).toEqual({ generationStatus: "success", generationError: undefined, videoUrl: "/video.mp4" });
     });
 });
 

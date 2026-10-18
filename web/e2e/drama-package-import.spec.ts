@@ -159,9 +159,11 @@ test("compact Markdown import keeps prompts, asset bindings and blank review dat
     expect(created.ok(), await created.text()).toBe(true);
     const project = ((await created.json()) as { data: { project: DramaProject } }).data.project;
     const scenePrompt = "后左门、右窗、中央木桌，旧木地板，9:16 单视角全景。";
+    const referencePrompt = "【参考】CHAR_01=角色姓名主外观与服装锁定；LOC_01=场景名称清晨光线。\n参考仅提供外观与空间基准职责，不含上传图片编号。\n\n保持CHAR_01形象不漂移。\n开场时，角色姓名站在门口。";
     const source = readFileSync(new URL("../public/drama-compact-package-template.md", import.meta.url), "utf8")
         .replace("在这里逐字粘贴这一集的小说原文。不要改写或总结。", "原文第一段。\n\n原文第二段，保持原样。")
-        .replace("填写完整场景全景基准图提示词，包含空间拓扑、材质和光色。", scenePrompt);
+        .replace("填写完整场景全景基准图提示词，包含空间拓扑、材质和光色。", scenePrompt)
+        .replace("填写可单独提交的视频提示词，包含本片段必要的画面、动作和声音事实。", referencePrompt);
     try {
         const seeded = structuredClone(project);
         seeded.characters = [
@@ -204,12 +206,16 @@ test("compact Markdown import keeps prompts, asset bindings and blank review dat
         expect(episode).toMatchObject({ reviewStatus: "draft", storyScenes: [], continuityEdges: [] });
         expect(episode.shots[0]).toMatchObject({
             videoMode: "direct",
-            videoPrompt: "填写可单独提交的视频提示词，包含本片段必要的画面、动作和声音事实。",
+            videoPrompt: "保持角色姓名形象不漂移。\n开场时，角色姓名站在门口。",
             characterIds: ["approved-character"],
             sceneId: saved.scenes[0].id,
             propIds: [saved.props[0].id],
             clueIds: [saved.clues[0].id],
         });
+        expect(episode.shots[0].referenceIntents).toEqual([
+            { assetId: "approved-character", code: "CHAR_01", role: "character_anchor", guidance: "角色姓名主外观与服装锁定" },
+            { assetId: saved.scenes[0].id, code: "LOC_01", role: "scene_anchor", guidance: "场景名称清晨光线" },
+        ]);
         expect(episode.shots[0].framePlan).toBeUndefined();
         expect(saved.characters[0]).toMatchObject({ id: "approved-character", supplierPrompt: "已确认的角色提示词", primaryReferenceId: "approved-reference" });
         expect(saved.scenes[0].supplierPrompt).toContain("后左门、右窗、中央木桌");
@@ -230,6 +236,14 @@ test("compact Markdown import keeps prompts, asset bindings and blank review dat
         await expect(page.locator('[data-drama-stage="review"]')).toBeVisible();
         await page.locator('[data-drama-stage="review"]').getByRole("button", { name: "进入镜头生成" }).click();
         await expect(page.locator('[data-drama-stage="generate"]')).toBeVisible();
+        await page.locator("[data-drama-generation-panel]").getByRole("button", { name: "生成镜头", exact: true }).first().click();
+        const confirmDialog = page.getByRole("dialog", { name: "确认生成 1 个镜头" });
+        const confirmPrompt = await confirmDialog.getByRole("textbox", { name: "片段标题视频提示词" }).inputValue();
+        expect(confirmPrompt).not.toContain("CHAR_01");
+        expect(confirmPrompt).toContain("开场时，角色姓名站在门口。");
+        expect(confirmPrompt).toContain("@图片1：角色「角色姓名」（主外观与服装锁定）");
+        expect(confirmPrompt).not.toContain("@图片2");
+        await confirmDialog.getByRole("button", { name: "返回修改" }).click();
         await expectNoHorizontalOverflow(page);
     } finally {
         expect((await request.delete(`/api/drama/projects/${project.id}`)).ok()).toBe(true);

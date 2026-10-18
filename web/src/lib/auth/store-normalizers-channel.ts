@@ -63,6 +63,7 @@ export function normalizeSystemChannelAdvancedConfig(config: Partial<SystemChann
         supportsReferenceVideo: Boolean(config.supportsReferenceVideo),
         supportsReferenceAudio: Boolean(config.supportsReferenceAudio),
         supportsKeyframes: Boolean(config.supportsKeyframes),
+        ...(positiveInteger(config.maxReferenceImageBytes) ? { maxReferenceImageBytes: positiveInteger(config.maxReferenceImageBytes) } : {}),
         ...(["tts", "voice-design", "voice-clone"].includes(String(config.audioOperation || "")) ? { audioOperation: config.audioOperation as "tts" | "voice-design" | "voice-clone" } : {}),
         ...(textOrEmpty(config.voiceIdField, 500) ? { voiceIdField: textOrEmpty(config.voiceIdField, 500) } : {}),
         ...(textOrEmpty(config.previewAudioField, 500) ? { previewAudioField: textOrEmpty(config.previewAudioField, 500) } : {}),
@@ -136,6 +137,7 @@ function normalizeChannelModelConfigs(value: unknown) {
                               }
                             : {}),
                         ...(positiveInteger(config.maxReferenceImages) ? { maxReferenceImages: positiveInteger(config.maxReferenceImages) } : {}),
+                        ...(positiveInteger(config.maxReferenceImageBytes) ? { maxReferenceImageBytes: positiveInteger(config.maxReferenceImageBytes) } : {}),
                         ...(["tts", "voice-design", "voice-clone"].includes(String(config.audioOperation || "")) ? { audioOperation: config.audioOperation as "tts" | "voice-design" | "voice-clone" } : {}),
                         ...(textOrEmpty(config.voiceIdField, 500) ? { voiceIdField: textOrEmpty(config.voiceIdField, 500) } : {}),
                         ...(textOrEmpty(config.previewAudioField, 500) ? { previewAudioField: textOrEmpty(config.previewAudioField, 500) } : {}),

@@ -142,6 +142,12 @@ export async function getDramaProject(id: string) {
     return request<{ project: DramaProject }>(`/api/drama/projects/${encodeURIComponent(id)}`).then((data) => data.project);
 }
 
+export function syncDramaShotVideoResults(projectId: string, episodeId: string, shotId: string) {
+    return request<{ projectId: string; episodeId: string; shotId: string; updatedAt: string; shot: DramaShot }>(
+        `/api/drama/projects/${encodeURIComponent(projectId)}/episodes/${encodeURIComponent(episodeId)}/shots/${encodeURIComponent(shotId)}/video-results`,
+    );
+}
+
 export function createDramaProject(input: CreateDramaProjectInput) {
     return request<{ project: DramaProject }>("/api/drama/projects", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) }).then((data) => data.project);
 }

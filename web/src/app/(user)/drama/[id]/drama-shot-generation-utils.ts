@@ -7,6 +7,7 @@ import { resolveDramaGenerationSize } from "@/lib/drama-image-size";
 import type { ReferenceImage } from "@/types/image";
 import type { ReferenceAudio } from "@/types/media";
 import type { VideoReferenceRole } from "@/lib/video-reference-contract";
+import { mergeDramaShotVideoResults } from "@/lib/drama-shot-video-results";
 
 export function isDramaStoryboardFrameActive(frame?: DramaStoryboardFrame) {
     return Boolean(frame && [frame.status, frame.candidateStatus].some((status) => status === "queued" || status === "running"));
@@ -261,19 +262,22 @@ export function applyDramaProductionRunStep(shot: DramaShot, step: DramaProducti
     if (step.type === "video" && ["ready", "running", "blocked"].includes(step.status) && ["success", "error", "cancelled"].includes(shot.generationStatus || "") && shot.generationTaskId === step.taskId) return shot;
     if (step.type === "extract_frames") {
         if (step.status === "success" && step.outputUrls?.[0])
-            return {
-                ...shot,
-                generationStatus: "success" as const,
-                generationRunId: runId || shot.generationRunId,
-                generationTaskId: shot.generationTaskId,
-                generationError: undefined,
-                videoUrl: step.outputUrls[0],
-                frameEvidence: supersedeFrameEvidence(shot.frameEvidence, "当前镜头视频已重新生成"),
-                actualStartFrameUrl: undefined,
-                actualEndFrameUrl: undefined,
-                actualFrameVideoUrl: undefined,
-                ...(shot.audioMode === "voiceover" && (shot.subtitle || shot.dialogue).trim() ? { audioStatus: "queued" as const, audioError: undefined } : {}),
-            };
+            return mergeDramaShotVideoResults(
+                {
+                    ...shot,
+                    generationStatus: "success" as const,
+                    generationRunId: runId || shot.generationRunId,
+                    generationTaskId: shot.generationTaskId,
+                    generationError: undefined,
+                    videoUrl: step.outputUrls[0],
+                    frameEvidence: supersedeFrameEvidence(shot.frameEvidence, "当前镜头视频已重新生成"),
+                    actualStartFrameUrl: undefined,
+                    actualEndFrameUrl: undefined,
+                    actualFrameVideoUrl: undefined,
+                    ...(shot.audioMode === "voiceover" && (shot.subtitle || shot.dialogue).trim() ? { audioStatus: "queued" as const, audioError: undefined } : {}),
+                },
+                [{ id: `run:${runId || "unknown"}:${step.id}`, url: step.outputUrls[0] }],
+            );
         if (step.status === "failed" || step.status === "needs_review")
             return { ...shot, generationStatus: step.status === "needs_review" ? ("needs_review" as const) : ("error" as const), generationRunId: runId || shot.generationRunId, generationError: step.error };
         return step.status === "cancelled" ? { ...shot, generationStatus: "cancelled" as const, generationRunId: runId || shot.generationRunId, generationError: step.error } : shot;
@@ -284,6 +288,16 @@ export function applyDramaProductionRunStep(shot: DramaShot, step: DramaProducti
         return { ...shot, generationStatus: step.status === "needs_review" ? ("needs_review" as const) : ("error" as const), generationRunId: runId || shot.generationRunId, generationTaskId: step.taskId, generationError: step.error };
     if (step.status === "cancelled") return { ...shot, generationStatus: "cancelled" as const, generationRunId: runId || shot.generationRunId, generationTaskId: step.taskId, generationError: step.error };
     return shot;
+}
+
+export function resolveDramaVideoCancellationPatch(tasks: Array<{ status?: string; error?: string; result?: { url?: string } }>) {
+    const failed = tasks.find((task) => task.status === "error");
+    if (failed) return { generationStatus: "error" as const, generationError: failed.error || "视频生成失败" };
+    if (tasks.some((task) => task.status === "cancelled")) return { generationStatus: "cancelled" as const, generationError: undefined };
+    const completed = tasks.find((task) => task.status === "success");
+    return completed
+        ? { generationStatus: "success" as const, generationError: undefined, ...(tasks.length === 1 && completed.result?.url ? { videoUrl: completed.result.url } : {}) }
+        : { generationStatus: "cancelled" as const, generationError: undefined };
 }
 
 export function shotReferenceImages(project: DramaProject, shot: DramaShot) {

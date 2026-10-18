@@ -1,16 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ fetchSafeOutbound: vi.fn() }));
+const mocks = vi.hoisted(() => ({ fetchSafeOutbound: vi.fn(), publishYinglingReferenceImageUrl: vi.fn() }));
 
 vi.mock("@/lib/server/safe-outbound-fetch", () => ({ fetchSafeOutbound: mocks.fetchSafeOutbound }));
+vi.mock("@/lib/server/yingling-reference-image", () => ({ publishYinglingReferenceImageUrl: mocks.publishYinglingReferenceImageUrl }));
 
 import { prepareImageTaskReference, publicImageReferenceRequestUrl } from "./image-task-reference-urls";
+import { YINGLING_REFERENCE_IMAGE_MAX_BYTES } from "@/lib/yingling-reference-constraints";
 
 describe("image task reference request URLs", () => {
     beforeEach(() => {
         vi.clearAllMocks();
         process.env.VOZEB_PRO_REFERENCE_ASSET_SIGNING_KEY = "test-signing-key";
         mocks.fetchSafeOutbound.mockResolvedValue(new Response(new Uint8Array([137]), { status: 206, headers: { "content-type": "image/png" } }));
+        mocks.publishYinglingReferenceImageUrl.mockResolvedValue("https://vozeb.example/api/reference-assets/temporary/compressed.jpg?signature=test");
     });
 
     afterEach(() => {
@@ -51,6 +54,20 @@ describe("image task reference request URLs", () => {
             publicImageReferenceRequestUrl({ id: "reference-one", type: "image/png", dataUrl: "", remoteUrl: "https://provider.example/expired.png" }, "http://127.0.0.1:3010", "https://vozeb.example", { ownerUserId: "user-one", taskId: "task-one" }),
         ).rejects.toThrow("供应商参考图已失效且没有可用本地副本");
         expect(mocks.fetchSafeOutbound).toHaveBeenCalledWith("https://provider.example/expired.png", expect.objectContaining({ method: "HEAD", headers: { accept: "image/*" } }));
+    });
+
+    it("compresses inline image references directly before storing a provider URL", async () => {
+        const dataUrl = "data:image/png;base64,aGVsbG8=";
+
+        await expect(publicImageReferenceRequestUrl({ id: "reference-one", type: "image/png", dataUrl }, "http://127.0.0.1:3010", "https://vozeb.example", { ownerUserId: "user-one", taskId: "task-one" }, YINGLING_REFERENCE_IMAGE_MAX_BYTES)).resolves.toBe(
+            "https://vozeb.example/api/reference-assets/temporary/compressed.jpg?signature=test",
+        );
+        expect(mocks.publishYinglingReferenceImageUrl).toHaveBeenCalledWith(dataUrl, YINGLING_REFERENCE_IMAGE_MAX_BYTES, {
+            ownerUserId: "user-one",
+            taskId: "task-one",
+            publicOrigin: "https://vozeb.example",
+        });
+        expect(mocks.fetchSafeOutbound).not.toHaveBeenCalled();
     });
 
     it("signs a local mirror only when no provider URL exists", async () => {

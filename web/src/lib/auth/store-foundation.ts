@@ -160,7 +160,7 @@ export const DEFAULT_SETTINGS: AuthSettings = {
     generationCostControl: DEFAULT_GENERATION_COST_CONTROL,
     dataLifecycle: DEFAULT_DATA_LIFECYCLE,
     entitlements: DEFAULT_ENTITLEMENT_SETTINGS,
-    generationConcurrency: { agent: 2, image: 4, video: 1, audio: 2, text: 4, render: 1 },
+    generationConcurrency: { agent: 2, image: 4, video: 2, audio: 2, text: 4, render: 1 },
     generationDefaults: {
         canvasImageCount: 1,
         imageSize: DEFAULT_IMAGE_SIZE,

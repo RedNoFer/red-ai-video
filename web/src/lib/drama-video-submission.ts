@@ -1,6 +1,7 @@
 import { approvedAssetReference, approvedScenePanoramaReference, hasApprovedAssetReference, hasApprovedScenePanoramaReference } from "@/lib/drama-asset-baseline";
 import { appendDramaCharacterVoiceBindings, dramaShotCharacterVoiceReferences, stripDramaCharacterVoiceBindings } from "@/lib/drama-character-voice-reference";
 import { appendDramaImageReferenceBindings, stripDramaReferenceBindingSections } from "@/lib/drama-prompt-compiler";
+import { stripDramaPackageReferenceSections } from "@/lib/drama-package-reference-intents";
 import { continuityStartEvidence } from "@/lib/drama-continuity-policy";
 import { selectedDramaShotFrameIds, selectedDramaShotReferenceAssetIds } from "@/lib/drama-video-reference-plan";
 import type { DramaEpisode, DramaProject, DramaShot, DramaVideoReferenceBinding, DramaVideoReferenceMode } from "@/lib/drama-project-contract";
@@ -12,7 +13,7 @@ export function compileDramaVideoSubmissionPrompt(prompt: string, project: Drama
     prompt = stripDramaVideoPromptPrefix(prompt, project);
     const previousAliases = new Map(Array.from(prompt.matchAll(/^(@图片\d+)[：:]([^\n]+)$/gmu), (match) => [match[1], match[2].trim()]));
     const aliases = new Map(bindings.map((binding) => [binding.purpose, binding.alias]));
-    const body = stripDramaReferenceBindingSections(stripDramaCharacterVoiceBindings(prompt))
+    const body = stripDramaPackageReferenceSections(stripDramaReferenceBindingSections(stripDramaCharacterVoiceBindings(prompt)))
         .replace(/@图片\d+/gu, (alias) => {
             const purpose = previousAliases.get(alias);
             return purpose ? aliases.get(purpose) || purpose : alias;
@@ -70,6 +71,7 @@ export function buildVideoReferenceBindings(
         };
     });
     const assetCandidates: Array<Omit<DramaVideoReferenceBinding, "alias"> & { assetId: string }> = [];
+    const referenceIntents = shot.referenceIntents || [];
     for (const assetId of assetIds) {
         const asset = [...project.characters, ...project.scenes, ...project.props, ...project.clues].find((item) => item.id === assetId);
         const source = project.sourceAssets?.find((item) => item.id === assetId && item.type === "image");
@@ -87,7 +89,10 @@ export function buildVideoReferenceBindings(
               : undefined;
         if (reference?.url) {
             const kind = isScene ? "场景" : project.characters.some((item) => item.id === assetId) ? "角色" : project.clues.some((item) => item.id === assetId) ? "线索" : source ? "来源素材" : "道具";
-            assetCandidates.push({ assetId, role: roleFor(assetId), purpose: `${kind}「${asset?.name || source?.title}」`, sourceId: assetId, url: reference.url, remoteUrl: reference.remoteUrl });
+            const name = asset?.name || source?.title || "";
+            const guidance = referenceIntents.find((item) => item.assetId === assetId)?.guidance?.trim() || "";
+            const detail = guidance && guidance.startsWith(name) ? guidance.slice(name.length).trim() : guidance;
+            assetCandidates.push({ assetId, role: roleFor(assetId), purpose: `${kind}「${name}」${detail ? `（${detail}）` : ""}`, sourceId: assetId, url: reference.url, remoteUrl: reference.remoteUrl });
         }
     }
     if (!manifest.length) {

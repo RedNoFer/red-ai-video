@@ -150,6 +150,45 @@ describe("GET /api/video-tasks/[id]", () => {
         expect(mocks.refund).not.toHaveBeenCalled();
     });
 
+    it("returns an upstream failure when a stale shot asks to cancel its terminal task", async () => {
+        const task = videoTask({ status: "error", error: "上游生成失败" });
+        mocks.getVideoTask.mockResolvedValue(task);
+
+        const response = await PATCH(
+            new Request("http://localhost/api/video-tasks/local-video", {
+                method: "PATCH",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ action: "cancel" }),
+            }),
+            context,
+        );
+
+        expect(response.status).toBe(200);
+        expect((await response.json()).task).toMatchObject({ id: task.id, status: "error", error: "上游生成失败" });
+        expect(mocks.transition).not.toHaveBeenCalled();
+        expect(mocks.recover).not.toHaveBeenCalled();
+    });
+
+    it("returns the terminal provider state when task completion wins the cancellation race", async () => {
+        const running = videoTask();
+        const failed = videoTask({ status: "error", error: "上游生成失败" });
+        mocks.getVideoTask.mockResolvedValueOnce(running).mockResolvedValueOnce(failed);
+        mocks.transition.mockResolvedValue(undefined);
+
+        const response = await PATCH(
+            new Request("http://localhost/api/video-tasks/local-video", {
+                method: "PATCH",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ action: "cancel" }),
+            }),
+            context,
+        );
+
+        expect(response.status).toBe(200);
+        expect((await response.json()).task).toMatchObject({ id: failed.id, status: "error", error: "上游生成失败" });
+        expect(mocks.transition).toHaveBeenCalledOnce();
+    });
+
     it("manually refreshes a running provider task without creating a new task", async () => {
         const task = videoTask();
         mocks.getVideoTask.mockResolvedValue(task);

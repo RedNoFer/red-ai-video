@@ -71,7 +71,7 @@ export default defineConfig({
             env: {
                 ...process.env,
                 PORT: String(port),
-                NEXT_PUBLIC_SITE_URL: process.env.VOZEB_PRO_E2E_PUBLIC_SITE_URL?.trim() || "https://e2e.vozeb.test",
+                NEXT_PUBLIC_SITE_URL: process.env.VOZEB_PRO_E2E_PUBLIC_SITE_URL?.trim() || `http://127.0.0.1:${port}`,
                 VOZEB_PRO_DATABASE_PROVIDER: databaseUrl ? "postgres" : "file",
                 VOZEB_PRO_DATA_DIR: path.join(process.cwd(), ".e2e-data"),
                 VOZEB_PRO_ENCRYPTION_KEY: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",

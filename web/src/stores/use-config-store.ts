@@ -225,7 +225,7 @@ export const defaultConfig: AiConfig = {
         videoQuality: { "480": 1, "720": 1, "1080": 1 },
         videoSeconds: { "-1": 1, "5": 1, "10": 1 },
     },
-    generationConcurrency: { agent: 2, image: 4, video: 1, audio: 2, text: 4, render: 1 },
+    generationConcurrency: { agent: 2, image: 4, video: 2, audio: 2, text: 4, render: 1 },
 };
 
 type ConfigStore = {

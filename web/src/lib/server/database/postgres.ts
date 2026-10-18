@@ -183,6 +183,7 @@ const POSTGRES_SCHEMA_OBJECTS = [
     "generation_tasks_conversation_idx",
     "generation_tasks_run_idx",
     "generation_tasks_user_project_idx",
+    "generation_tasks_drama_shot_idx",
     "generation_tasks_recovery_due_idx",
     "generation_worker_heartbeats_seen_idx",
     "generation_webhook_events_received_idx",

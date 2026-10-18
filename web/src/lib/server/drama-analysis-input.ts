@@ -1,5 +1,6 @@
 import { resolveDramaShotDuration } from "@/lib/server/drama-shot-config";
 import { hasCompleteDramaLightingPlan } from "@/lib/drama-project-contract";
+import { stripDramaPackageReferenceSections } from "@/lib/drama-package-reference-intents";
 import { dramaFrameVisualSignature } from "@/lib/drama-frame-sequence";
 import { dramaDialogueFragmentSequenceError, type DramaDialogueTimingInput } from "@/lib/drama-dialogue-timing";
 import { inferDramaPromptSubjects, validateDramaCharacterWardrobeContinuity, validateDramaCutInformationDiversity, validateDramaPromptComposition, validateDramaReferenceAliasConsistency } from "@/lib/drama-prompt-composition-quality";
@@ -130,7 +131,7 @@ export function normalizeDramaVideoPromptInput(body: DramaAnalyzeBody) {
         array(body.shots).flatMap((value) => {
             const shot = object(value);
             const id = dramaAnalysisText(shot.id);
-            const prompt = dramaAnalysisText(shot.videoPrompt) || dramaAnalysisText(shot.executionVideoPrompt);
+            const prompt = stripDramaPackageReferenceSections(dramaAnalysisText(shot.videoPrompt) || dramaAnalysisText(shot.executionVideoPrompt));
             return id && prompt ? [[id, prompt] as const] : [];
         }),
     );
@@ -171,7 +172,7 @@ function normalizeVideoContinuityNeighbor(value: unknown, edge: "previous" | "ne
     return {
         shotId,
         title: dramaAnalysisText(input.title),
-        videoPrompt: dramaAnalysisText(input.videoPrompt),
+        videoPrompt: stripDramaPackageReferenceSections(dramaAnalysisText(input.videoPrompt)),
         ...(Object.keys(continuity).length ? { continuity } : {}),
         ...(entryState ? { entryState } : {}),
         ...(exitState ? { exitState } : {}),

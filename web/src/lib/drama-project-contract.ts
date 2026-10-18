@@ -44,6 +44,14 @@ export type DramaShotFramePlan = {
     referenceCount?: { min: number; max: number };
 };
 
+export type DramaShotVideoResult = {
+    id: string;
+    taskId?: string;
+    url: string;
+    createdAt?: string;
+    durationMs?: number;
+};
+
 export type DramaFrameBeat = {
     id: string;
     sequenceIndex: number;
@@ -74,6 +82,14 @@ export type DramaReferenceManifestItem = {
     assetId?: string;
     shotId?: string;
     frameEvidenceId?: string;
+};
+
+/** Package-authored 【参考】 fact bound to one project asset for one shot. */
+export type DramaShotReferenceIntent = {
+    assetId: string;
+    code: string;
+    role: DramaReferenceManifestRole;
+    guidance: string;
 };
 
 export type DramaVideoReferenceBinding = {
@@ -666,6 +682,7 @@ export type DramaShot = {
     exitState?: DramaContinuityState;
     framePlan?: DramaShotFramePlan;
     frameEvidence?: DramaFrameEvidence[];
+    referenceIntents?: DramaShotReferenceIntent[];
     fieldOrigins?: Record<string, DramaFieldOrigin>;
     sourceAssetIds?: string[];
     continuityStatus?: "ready" | "stale" | "blocked" | "needs_review" | "passed";
@@ -709,6 +726,7 @@ export type DramaShot = {
     generationTaskId?: string;
     generationError?: string;
     videoUrl?: string;
+    videoResults?: DramaShotVideoResult[];
     subtitle?: string;
     audioMode?: DramaShotAudioMode;
     audioStatus?: DramaTaskStatus;
