@@ -40,6 +40,8 @@ data/
 !.agents/skills/character-asset-prompts/**
 skills-lock.json
 output/
+docs/generated/
+.codex/
 docs/assets/
 VOZEB-PRO-审计报告.md
 VOZEB-PRO项目缺陷检查报告.md
