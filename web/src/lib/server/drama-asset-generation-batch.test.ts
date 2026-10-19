@@ -30,7 +30,7 @@ vi.mock("./drama-project-service", () => ({
         characters: [{ id: "rifa", name: "Rifa", description: "女主角", profile: { visualIdentity: "固定五官", styling: "原创服装", colorPalette: "深色", consistencyRules: "固定年龄" } }],
         scenes: [{ id: "scene-one", name: "雪原", description: "雪原", profile: { visualIdentity: "高山", styling: "冰雪材质", colorPalette: "冷色", consistencyRules: "入口固定" } }],
         props: [],
-        clues: [],
+        clues: [{ id: "clue-one", name: "旧钥匙", description: "贯穿全剧的旧铜钥匙", profile: { visualIdentity: "泛黄铜钥匙", styling: "", colorPalette: "", consistencyRules: "" } }],
         episodes: [{ shots: [{ utterances: [{ id: "line-one", order: 1, type: "dialogue", speaker: "Rifa", text: "我们走。" }] }] }],
     }),
 }));
@@ -89,8 +89,10 @@ describe("drama asset generation batches", () => {
         expect(withVoice.executionConfig?.generateVoice).toBeUndefined();
     });
 
-    it("rejects clues from the batch surface", async () => {
-        await expect(createDramaAssetGenerationBatchForUser("user-one", "project-one", [{ kind: "clues", assetId: "clue-one" }])).rejects.toMatchObject({ status: 400 });
+    it("accepts clue assets into the batch surface as single-subject references", async () => {
+        const batch = await createDramaAssetGenerationBatchForUser("user-one", "project-one", [{ kind: "clues", assetId: "clue-one" }]);
+        expect(batch.items.map((item) => item.kind)).toEqual(["clues"]);
+        expect(batch.items[0].prompt).toContain("主体与资产类型：道具「旧钥匙」");
     });
 
     it("keeps a failed completion failed even when later media success exists", () => {

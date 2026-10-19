@@ -20,7 +20,7 @@ export class DramaAssetGenerationBatchError extends Error {
     }
 }
 
-type AssetKind = "characters" | "scenes" | "props";
+type AssetKind = "characters" | "scenes" | "props" | "clues";
 type BatchConfig = Record<string, unknown>;
 const activeProcessors = new Set<string>();
 
@@ -42,12 +42,12 @@ export async function createDramaAssetGenerationBatchForUser(userId: string, pro
     const project = await getDramaProjectForUser(userId, projectId);
     const unique = new Map<string, { kind: AssetKind; asset: DramaNamedAsset }>();
     for (const input of assetIds) {
-        if (input.kind !== "characters" && input.kind !== "scenes" && input.kind !== "props") throw new DramaAssetGenerationBatchError("批量生成只支持角色、场景和道具");
+        if (input.kind !== "characters" && input.kind !== "scenes" && input.kind !== "props" && input.kind !== "clues") throw new DramaAssetGenerationBatchError("批量生成只支持角色、场景、道具和线索");
         const asset = project[input.kind].find((item) => item.id === input.assetId);
         if (!asset) throw new DramaAssetGenerationBatchError("选择的项目资产不存在", 404);
         unique.set(`${input.kind}:${asset.id}`, { kind: input.kind, asset });
     }
-    if (!unique.size) throw new DramaAssetGenerationBatchError("请至少选择一个角色、场景或道具");
+    if (!unique.size) throw new DramaAssetGenerationBatchError("请至少选择一个角色、场景、道具或线索");
     const now = new Date().toISOString();
     const safeExecutionConfig = withoutVoiceGeneration(executionConfig);
     const imageItems: DramaAssetGenerationBatchItem[] = [...unique.values()].map(({ kind, asset }) => ({
@@ -82,8 +82,8 @@ export async function createDramaAssetGenerationBatchForUser(userId: string, pro
     return createDramaAssetGenerationBatch(userId, batch);
 }
 
-export function compileDramaAssetBatchItemPrompt(project: Pick<DramaProject, "title" | "style" | "ratio" | "productionBible" | "characters" | "scenes" | "props">, item: Pick<DramaAssetGenerationBatchItem, "kind" | "assetId" | "prompt" | "outputType">) {
-    const assets = item.kind === "characters" ? project.characters : item.kind === "scenes" ? project.scenes : project.props;
+export function compileDramaAssetBatchItemPrompt(project: Pick<DramaProject, "title" | "style" | "ratio" | "productionBible" | "characters" | "scenes" | "props" | "clues">, item: Pick<DramaAssetGenerationBatchItem, "kind" | "assetId" | "prompt" | "outputType">) {
+    const assets = item.kind === "characters" ? project.characters : item.kind === "scenes" ? project.scenes : item.kind === "clues" ? project.clues : project.props;
     const asset = assets.find((candidate) => candidate.id === item.assetId);
     if (!asset) throw new DramaAssetGenerationBatchError("批量生成资产不存在", 404);
     return resolveDramaAssetReferencePrompt(project, asset, item.kind === "characters" ? "角色" : item.kind === "scenes" ? "场景" : "道具");

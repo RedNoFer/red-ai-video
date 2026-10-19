@@ -37,7 +37,7 @@ export function listDramaAssetGenerationBatches(projectId: string) {
     return request<{ batches: DramaAssetGenerationBatch[] }>(`/api/drama/projects/${encodeURIComponent(projectId)}/asset-generation-batches`).then((data) => data.batches);
 }
 
-export function createDramaAssetGenerationBatch(projectId: string, assets: Array<{ kind: "characters" | "scenes" | "props"; assetId: string }>, config: unknown) {
+export function createDramaAssetGenerationBatch(projectId: string, assets: Array<{ kind: "characters" | "scenes" | "props" | "clues"; assetId: string }>, config: unknown) {
     return request<{ batch: DramaAssetGenerationBatch }>(`/api/drama/projects/${encodeURIComponent(projectId)}/asset-generation-batches`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ assets, config }) }).then(
         (data) => data.batch,
     );
@@ -59,7 +59,7 @@ export function retryDramaAssetGenerationBatch(projectId: string, batchId: strin
     }).then((data) => data.batch);
 }
 
-export function refineDramaAsset(projectId: string, kind: "characters" | "scenes" | "props", assetId: string, prompt: string, requestId: string) {
+export function refineDramaAsset(projectId: string, kind: "characters" | "scenes" | "props" | "clues", assetId: string, prompt: string, requestId: string) {
     return request<{ proposal: DramaAssetRefinementProposal }>(`/api/drama/projects/${encodeURIComponent(projectId)}/assets/${kind}/${encodeURIComponent(assetId)}/refine`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

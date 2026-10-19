@@ -136,7 +136,7 @@ export type DramaAssetGenerationBatchStatus = "queued" | "running" | "completed"
 export type DramaAssetGenerationItemStatus = "queued" | "running" | "success" | "error" | "cancelled";
 export type DramaAssetGenerationBatchItem = {
     id: string;
-    kind: "characters" | "scenes" | "props";
+    kind: "characters" | "scenes" | "props" | "clues";
     outputType: "reference_image" | "character_voice";
     assetId: string;
     assetName: string;

@@ -14,7 +14,7 @@ export async function GET(request: Request, context: Context) {
     if (!user) return NextResponse.json({ code: 401, data: null, msg: "请先登录" }, { status: 401 });
     try {
         const { id, kind, assetId } = await context.params;
-        if (kind !== "characters" && kind !== "scenes" && kind !== "props") return NextResponse.json({ code: 400, data: null, msg: "当前资产类型不支持生图" }, { status: 400 });
+        if (kind !== "characters" && kind !== "scenes" && kind !== "props" && kind !== "clues") return NextResponse.json({ code: 400, data: null, msg: "当前资产类型不支持生图" }, { status: 400 });
         const project = await getDramaProjectForUser(user.id, id);
         if (!project[kind].some((asset) => asset.id === assetId)) return NextResponse.json({ code: 404, data: null, msg: "项目资产不存在，请刷新后重试" }, { status: 404 });
         const tasks = await queryStoredGenerationTasks<ImageTask>("image", {

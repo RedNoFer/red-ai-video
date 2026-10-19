@@ -11,9 +11,9 @@ import { cancelDramaAssetGenerationBatch, createDramaAssetGenerationBatch, getDr
 import { dramaAssetReferences } from "./drama-asset-reference-utils";
 import { dramaAssetAutoCompletionItems } from "./drama-asset-library-utils";
 
-type BatchKind = "characters" | "scenes" | "props";
-const kinds: BatchKind[] = ["characters", "scenes", "props"];
-const labels: Record<BatchKind, string> = { characters: "角色", scenes: "场景", props: "道具" };
+type BatchKind = "characters" | "scenes" | "props" | "clues";
+const kinds: BatchKind[] = ["characters", "scenes", "props", "clues"];
+const labels: Record<BatchKind, string> = { characters: "角色", scenes: "场景", props: "道具", clues: "线索" };
 
 export function DramaAssetGenerationBatchPanel({ project, onProjectReload }: { project: DramaProject; onProjectReload: () => void }) {
     const { message } = App.useApp();
@@ -85,7 +85,7 @@ export function DramaAssetGenerationBatchPanel({ project, onProjectReload }: { p
     }, [active, batch?.id, onProjectReload, project.id]);
 
     const submit = async () => {
-        if (!selectedAssets.length) return message.warning("请至少选择一个角色、场景或道具");
+        if (!selectedAssets.length) return message.warning("请至少选择一个角色、场景、道具或线索");
         setLoading(true);
         try {
             const created = await createDramaAssetGenerationBatch(

@@ -20,7 +20,7 @@ export async function POST(request: Request, context: Context) {
     if (!prompt || prompt.length > 4000) return NextResponse.json({ code: 400, data: null, msg: "请输入 1–4000 字的调整要求" }, { status: 400 });
     try {
         const { id, kind, assetId } = await context.params;
-        if (kind !== "characters" && kind !== "scenes" && kind !== "props") return NextResponse.json({ code: 400, data: null, msg: "当前资产类型不支持 GPT 调整" }, { status: 400 });
+        if (kind !== "characters" && kind !== "scenes" && kind !== "props" && kind !== "clues") return NextResponse.json({ code: 400, data: null, msg: "当前资产类型不支持 GPT 调整" }, { status: 400 });
         const project = await getDramaProjectForUser(user.id, id);
         const asset = project[kind].find((item) => item.id === assetId);
         if (!asset) return NextResponse.json({ code: 404, data: null, msg: "项目资产不存在" }, { status: 404 });
@@ -32,7 +32,7 @@ export async function POST(request: Request, context: Context) {
             userId: user.id,
             requestId: requestId || `${asset.id}:${prompt}`,
             project,
-            kind,
+            kind: kind === "clues" ? "props" : kind,
             asset: refinementBase,
             prompt,
         });
