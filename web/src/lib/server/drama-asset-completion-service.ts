@@ -108,7 +108,7 @@ export async function completeDramaAsset(input: {
         result.voiceTaskId = created.task.id;
     }
 
-    if (!input.skipReference && input.kind !== "clues" && missing.some((item) => item.task === "reference")) {
+    if (!input.skipReference && missing.some((item) => item.task === "reference")) {
         const current = project[input.kind].find((item) => item.id === asset.id)!;
         const config = input.config && typeof input.config === "object" ? input.config : {};
         const response = await fetchInternalApi(`${input.origin}/api/image-tasks`, {

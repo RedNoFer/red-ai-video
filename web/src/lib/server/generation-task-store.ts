@@ -171,7 +171,7 @@ export async function queryStoredGenerationTasks<T>(
         episodeId?: string;
         shotId?: string;
         surface?: string;
-        assetKind?: "characters" | "scenes" | "props";
+        assetKind?: "characters" | "scenes" | "props" | "clues";
         assetId?: string;
         statuses?: string[];
         limit?: number;
@@ -944,7 +944,7 @@ function normalizeGenerationTaskContext(context: GenerationTaskContext): Generat
         clientRequestId: cleanContextText(context.clientRequestId),
         generationLogId: cleanContextText(context.generationLogId),
         generationSlotId: cleanContextText(context.generationSlotId),
-        assetKind: context.assetKind === "characters" || context.assetKind === "scenes" || context.assetKind === "props" ? context.assetKind : undefined,
+        assetKind: context.assetKind === "characters" || context.assetKind === "scenes" || context.assetKind === "props" || context.assetKind === "clues" ? context.assetKind : undefined,
         assetId: cleanContextText(context.assetId),
         batchId: cleanContextText(context.batchId),
         batchItemId: cleanContextText(context.batchItemId),
@@ -1046,7 +1046,7 @@ function mapStoredTaskRecord(row: Record<string, unknown>): StoredGenerationTask
         episodeId: cleanContextText(String(payload.episodeId || "")),
         shotId: cleanContextText(String(payload.shotId || "")),
         estimatedPoints: positiveContextNumber(payload.estimatedPoints),
-        assetKind: payload.assetKind === "characters" || payload.assetKind === "scenes" || payload.assetKind === "props" ? payload.assetKind : undefined,
+        assetKind: payload.assetKind === "characters" || payload.assetKind === "scenes" || payload.assetKind === "props" || payload.assetKind === "clues" ? payload.assetKind : undefined,
         assetId: cleanContextText(String(payload.assetId || "")),
         batchId: cleanContextText(String(payload.batchId || "")),
         batchItemId: cleanContextText(String(payload.batchItemId || "")),

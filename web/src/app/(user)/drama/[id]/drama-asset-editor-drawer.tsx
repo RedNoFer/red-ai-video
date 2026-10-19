@@ -110,7 +110,8 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                   profile: { ...draftPromptAsset.profile, ...editedPromptFields },
               }
             : draftPromptAsset;
-    const automaticSupplierPrompt = promptAsset && kind !== "clues" ? compileDramaAssetReferencePrompt(project, promptAsset, kind === "characters" ? "角色" : kind === "scenes" ? "场景" : "道具") : "";
+    const assetPromptKind: "角色" | "场景" | "道具" = kind === "characters" ? "角色" : kind === "scenes" ? "场景" : "道具";
+    const automaticSupplierPrompt = promptAsset ? compileDramaAssetReferencePrompt(project, promptAsset, assetPromptKind) : "";
     const supplierPrompt = supplierPromptOverride ?? automaticSupplierPrompt;
     const cloneAvailable = config.supportsVoiceClone;
     const voicePreviewStatus = draft.voiceProfile.previewStatus === "success" ? "试听已完成" : draft.voiceProfile.previewStatus === "error" ? "试听生成失败" : ["queued", "running"].includes(draft.voiceProfile.previewStatus || "") ? "试听生成中" : "";
@@ -180,10 +181,10 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
         const supplierPromptChanged = Boolean(asset && (supplierPromptOverride || "").trim() !== (asset.supplierPrompt || "").trim());
         try {
             if (asset) {
-                const supplierPrompt = kind !== "clues" ? (supplierPromptOverride === undefined ? asset.supplierPrompt?.trim() || "" : supplierPromptOverride.trim()) : "";
+                const supplierPrompt = supplierPromptOverride === undefined ? asset.supplierPrompt?.trim() || "" : supplierPromptOverride.trim();
                 const patch = {
                     ...base,
-                    ...(kind !== "clues" ? { supplierPrompt: assetFactsChanged && !supplierPromptChanged ? "" : supplierPrompt } : {}),
+                    supplierPrompt: assetFactsChanged && !supplierPromptChanged ? "" : supplierPrompt,
                     ...(kind === "characters" ? { voiceProfile: draft.voiceProfile } : {}),
                     ...(kind === "clues" ? { payoff: draft.payoff.trim() } : {}),
                 };
@@ -324,8 +325,8 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
     };
 
     const optimizeAssetPrompt = async () => {
-        if (!asset || kind === "clues" || optimizingAssetPrompt) return;
-        const assetKind = kind === "characters" ? "角色" : kind === "scenes" ? "场景" : "道具";
+        if (!asset || optimizingAssetPrompt) return;
+        const assetKind = assetPromptKind;
         const promptAsset = { ...asset, name: draft.name.trim() || asset.name, description: draft.description.trim(), profile: draft.profile };
         const preflight = preflightDramaAssetGeneration(project, promptAsset, assetKind);
         if (!preflight.ok) return void message.warning(`暂不能优化：${preflight.errors.join("；")}`);
@@ -583,7 +584,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                 handledGenerationTaskIdsRef.current.add(task.id);
                 setGenerating(true);
                 try {
-                    const assetKind = kind === "characters" ? "角色" : kind === "scenes" ? "场景" : "道具";
+                    const assetKind = assetPromptKind;
                     const currentProject = projectRef.current;
                     const currentAsset =
                         useDramaStore
@@ -621,11 +622,11 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
     }, [asset?.id, config.imageModel, config.imageModels[0], kind, message, open, persistGeneratedReference, project.id]);
 
     const generateReference = async (proposalOverride?: DramaAssetRefinementProposal, referenceOverride?: DramaAssetReference) => {
-        if (!asset || kind === "clues" || generationBusy) return;
+        if (!asset || generationBusy) return;
         setGenerating(true);
         try {
             const activeProposal = proposalOverride || refinementProposal;
-            const assetKind = kind === "characters" ? "角色" : kind === "scenes" ? "场景" : "道具";
+            const assetKind = assetPromptKind;
             const preflight = preflightDramaAssetGeneration(project, draftPromptAsset || asset, assetKind);
             if (!preflight.ok) {
                 message.warning(`暂不能生成：${preflight.errors.join("；")}`);
@@ -676,7 +677,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                 conversationId: project.creativeConversationId,
                 surface: "drama",
                 projectId: project.id,
-                assetKind: kind === "characters" || kind === "scenes" || kind === "props" ? kind : undefined,
+                assetKind: kind,
                 assetId: asset.id,
                 generationStage: activeProposal ? "refinement" : "initial",
                 clientRequestId: `drama-reference:${project.id}:${asset.id}:${nanoid()}`,
@@ -793,7 +794,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                 <div className="mb-2.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                     <h3 className="text-sm font-semibold">视觉设定档</h3>
                     <p className="text-xs text-muted-foreground">供分镜与生成保持一致；标志色用于跨镜头识别角色/物件，约束服装、道具和光线中的稳定色彩线索，不是卡片状态颜色。</p>
-                    {asset && kind !== "clues" ? (
+                    {asset ? (
                         <Button type="link" size="small" className="!px-0" icon={<Sparkles className="size-3.5" />} onClick={completeMissingSettings}>
                             智能补全缺失设定
                         </Button>
@@ -962,8 +963,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
 
             {asset ? (
                 <>
-                    {kind !== "clues" ? (
-                        <section ref={refinementSectionRef} className="border-t border-border pt-4" data-drama-asset-refinement>
+                    <section ref={refinementSectionRef} className="border-t border-border pt-4" data-drama-asset-refinement>
                             <div className="mb-2.5 flex items-start gap-2">
                                 <MessageCircle className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
                                 <div>
@@ -1020,7 +1020,6 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                                 </div>
                             ) : null}
                         </section>
-                    ) : null}
                     <section className="border-t border-border pt-4">
                         <div className="flex flex-wrap items-start justify-between gap-3">
                             <div>
@@ -1035,7 +1034,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                                     <span className="font-medium text-foreground">审核标准：</span>
                                     与本次生成提示词使用同一套身份锚点、角色白底四视图或场景/道具单主体布局、允许项和禁止项；审核建议不会阻止你选择有效候选。
                                 </div>
-                                {asset && kind !== "clues" ? (
+                                {asset ? (
                                     <details className="mt-2 rounded-lg border border-border bg-background px-3 py-2 text-xs leading-5">
                                         <summary className="cursor-pointer font-medium text-foreground">实际供应商提示词（可编辑）</summary>
                                         <div className="mt-2 grid gap-2">
@@ -1060,25 +1059,19 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                             </div>
                             {asset ? (
                                 <div className="flex flex-wrap items-center justify-end gap-2">
-                                    {kind !== "clues" ? (
-                                        <Button icon={<MessageCircle className="size-3.5" />} onClick={() => refinementSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}>
-                                            GPT 调整{definition.title}
-                                        </Button>
-                                    ) : null}
-                                    {kind !== "clues" ? (
-                                        <Button icon={<Sparkles className="size-3.5" />} loading={optimizingAssetPrompt} onClick={() => void optimizeAssetPrompt()}>
-                                            优化并同步设定
-                                        </Button>
-                                    ) : null}
+                                    <Button icon={<MessageCircle className="size-3.5" />} onClick={() => refinementSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}>
+                                        GPT 调整{definition.title}
+                                    </Button>
+                                    <Button icon={<Sparkles className="size-3.5" />} loading={optimizingAssetPrompt} onClick={() => void optimizeAssetPrompt()}>
+                                        优化并同步设定
+                                    </Button>
                                     <DramaSourceImagePicker project={project} onSelect={appendSourceReference} />
                                     <Button icon={<Upload className="size-3.5" />} loading={uploading} disabled={savingReferences} onClick={() => fileInputRef.current?.click()}>
                                         上传候选
                                     </Button>
-                                    {kind !== "clues" ? (
-                                        <Button icon={<Sparkles className="size-3.5" />} loading={generationBusy} disabled={generationBusy} onClick={() => void generateReference()}>
-                                            生成候选
-                                        </Button>
-                                    ) : null}
+                                    <Button icon={<Sparkles className="size-3.5" />} loading={generationBusy} disabled={generationBusy} onClick={() => void generateReference()}>
+                                        生成候选
+                                    </Button>
                                 </div>
                             ) : null}
                         </div>

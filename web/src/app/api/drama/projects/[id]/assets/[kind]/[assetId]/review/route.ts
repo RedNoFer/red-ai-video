@@ -17,7 +17,7 @@ export async function POST(request: Request, context: Context) {
     if (!parsed.ok) return NextResponse.json({ code: parsed.status, data: null, msg: parsed.message }, { status: parsed.status });
     try {
         const { id, kind, assetId } = await context.params;
-        if (kind !== "characters" && kind !== "scenes" && kind !== "props") return NextResponse.json({ code: 400, data: null, msg: "当前资产类型不支持自动审核" }, { status: 400 });
+        if (kind !== "characters" && kind !== "scenes" && kind !== "props" && kind !== "clues") return NextResponse.json({ code: 400, data: null, msg: "当前资产类型不支持自动审核" }, { status: 400 });
         const project = await getDramaProjectForUser(user.id, id);
         const asset = project[kind].find((item) => item.id === assetId);
         if (!asset) return NextResponse.json({ code: 404, data: null, msg: "项目资产不存在" }, { status: 404 });
@@ -34,7 +34,7 @@ export async function POST(request: Request, context: Context) {
             foundation: {
                 complexity: "complex",
                 brief: {
-                    objective: `审核${asset.name}的最新候选图是否仍是同一个${kind === "characters" ? "角色" : kind === "scenes" ? "场景" : "道具"}`,
+                    objective: `审核${asset.name}的最新候选图是否仍是同一个${kind === "characters" ? "角色" : kind === "scenes" ? "场景" : kind === "clues" ? "线索" : "道具"}`,
                     coreMessage: asset.description,
                     constraints: [profile?.visualIdentity, profile?.consistencyRules, ...(profile?.identityAnchors || []), ...(profile?.forbiddenChanges || [])].filter(Boolean) as string[],
                     referenceStrategy: "以当前资产固定设定和本轮明确调整要求为准，未授权字段必须保持不变",

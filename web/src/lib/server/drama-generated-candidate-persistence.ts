@@ -13,7 +13,7 @@ type GeneratedResult = {
 type CandidatePersistenceInput = {
     ownerUserId: string;
     projectId: string;
-    assetKind?: "characters" | "scenes" | "props";
+    assetKind?: "characters" | "scenes" | "props" | "clues";
     assetId: string;
     taskId: string;
     prompt: string;
@@ -24,7 +24,7 @@ type CandidatePersistenceInput = {
 
 export async function persistDramaGeneratedCandidates(input: CandidatePersistenceInput) {
     const project = await getDramaProjectForUser(input.ownerUserId, input.projectId);
-    const assetKind = input.assetKind || (["characters", "scenes", "props"] as const).find((kind) => project[kind].some((item) => item.id === input.assetId));
+    const assetKind = input.assetKind || (["characters", "scenes", "props", "clues"] as const).find((kind) => project[kind].some((item) => item.id === input.assetId));
     if (!assetKind) return 0;
     const asset = project[assetKind].find((item) => item.id === input.assetId);
     if (!asset) return 0;

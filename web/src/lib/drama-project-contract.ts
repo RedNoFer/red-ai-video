@@ -1224,7 +1224,7 @@ export type DramaProductionStep = {
     outputRemoteUrls?: string[];
     error?: string;
     assetId?: string;
-    assetKind?: "characters" | "scenes" | "props";
+    assetKind?: "characters" | "scenes" | "props" | "clues";
     title?: string;
     prompt?: string;
     promptIsFrozen?: boolean;

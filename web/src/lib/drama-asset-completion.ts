@@ -23,7 +23,7 @@ export function getDramaAssetMissingItems(asset: DramaNamedAsset | DramaCharacte
         if (!voice?.blueprint || !voice.instructions.trim() || !voice.voiceId?.trim()) add("voice", "音色画像与项目音色", "voice");
     }
     const hasReference = kind === "scenes" ? hasApprovedScenePanoramaReference(asset) : Boolean(approvedAssetReference(asset));
-    if (kind !== "clues" && !hasReference) add("reference", kind === "scenes" ? "高清场景全景图" : "基准图", "reference");
+    if (!hasReference) add("reference", kind === "scenes" ? "高清场景全景图" : "基准图", "reference");
     return missing;
 }
 

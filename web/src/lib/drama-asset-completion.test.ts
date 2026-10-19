@@ -14,10 +14,11 @@ describe("drama asset completion", () => {
         ]);
     });
 
-    it("does not schedule images or voices for clues", () => {
+    it("schedules the reference image but no voice for clues", () => {
         const missing = getDramaAssetMissingItems({ id: "clue-one", name: "旧钥匙", description: "", payoff: "" }, "clues");
         expect(missing.map((item) => item.key)).toContain("payoff");
-        expect(missing.some((item) => item.task === "voice" || item.task === "reference")).toBe(false);
+        expect(missing.some((item) => item.task === "voice")).toBe(false);
+        expect(missing.some((item) => item.task === "reference")).toBe(true);
     });
 
     it("keeps a complete asset untouched", () => {

@@ -17,7 +17,7 @@ export type GenerationTaskContext = {
     clientRequestId?: string;
     generationLogId?: string;
     generationSlotId?: string;
-    assetKind?: "characters" | "scenes" | "props";
+    assetKind?: "characters" | "scenes" | "props" | "clues";
     assetId?: string;
     batchId?: string;
     batchItemId?: string;
