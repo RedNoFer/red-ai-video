@@ -310,8 +310,8 @@ test("character timbre saves and refreshes, then uploaded audio replaces prompt 
         const prompt = dialog.getByRole("textbox", { name: `${seeded.episodes[0].shots[0].title}视频提示词` });
         await expect(prompt).toHaveValue(new RegExp(timbre, "u"));
         const timbrePrompt = await prompt.inputValue();
-        expect(timbrePrompt.indexOf("参考图片：")).toBeGreaterThanOrEqual(0);
-        expect(timbrePrompt.indexOf("角色音色：")).toBeGreaterThan(timbrePrompt.indexOf("参考图片："));
+        expect(timbrePrompt.indexOf("【参考图片】：")).toBe(0);
+        expect(timbrePrompt.indexOf("角色音色：")).toBeGreaterThan(timbrePrompt.indexOf("【参考图片】："));
         const firstPromptEvent = timbrePrompt.search(/^(?:\d+(?:\.\d+)?\s*(?:-|至|到|—|–|~|～)\s*\d+(?:\.\d+)?\s*秒\s*[，,:：]|从\s*\d+(?:\.\d+)?\s*秒\s*(?:-|至|到|—|–|~|～)\s*\d+(?:\.\d+)?\s*秒\s*[，,:：]|Cut\s+to\s*[：:])/mu);
         expect(firstPromptEvent).toBeGreaterThan(timbrePrompt.indexOf("角色音色："));
         await expect(dialog.locator("[data-drama-character-voices]")).toHaveCount(0);
@@ -469,7 +469,7 @@ test("shot assets replace secondary checks and manual fixed references reach the
         await picker.getByRole("checkbox", { name: "引用固定资产图：角色 · 手动角色" }).check();
         await picker.getByRole("textbox", { name: "搜索固定资产图" }).fill("手动场景");
         await picker.getByRole("checkbox", { name: "引用固定资产图：场景 · 手动场景" }).check();
-        await expect(promptEditor).toHaveValue(new RegExp(`^总体风格：真人实拍，自然窗光。[\\s\\S]*参考图片：[\\s\\S]*${editedPrompt.split("\n").at(-1)}$`, "u"));
+        await expect(promptEditor).toHaveValue(new RegExp(`^【参考图片】：[\\s\\S]*总体风格：真人实拍，自然窗光。[\\s\\S]*${editedPrompt.split("\n").at(-1)}$`, "u"));
         let completePrompt = await promptEditor.inputValue();
         expect(completePrompt).toContain("@图片5：角色「手动角色」");
         expect(completePrompt).toContain("@图片4：场景「手动场景」");

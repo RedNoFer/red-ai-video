@@ -37,13 +37,10 @@ export function stripDramaCharacterVoiceBindings(prompt: string) {
             continue;
         }
         if (skippingVoiceBlock) {
-            if (
-                /^[ \t]*(?:\d+(?:\.\d+)?\s*(?:-|至|到|—|–|~|～)\s*\d+(?:\.\d+)?\s*秒\s*[，,:：]|从\s*\d+(?:\.\d+)?\s*秒\s*(?:-|至|到|—|–|~|～)\s*\d+(?:\.\d+)?\s*秒\s*[，,:：]|Cut\s+to\s*[：:]|结束时，|声音：)/u.test(line) ||
-                /^(?!角色「)[^：:\n]+[：:]/u.test(value)
-            ) {
-                skippingVoiceBlock = false;
-                output.push(line);
-            }
+            if (!value) continue;
+            if (/^角色「[^」]+」：/u.test(value)) continue;
+            skippingVoiceBlock = false;
+            output.push(line);
             continue;
         }
         output.push(line);
@@ -67,11 +64,11 @@ export function appendDramaCharacterVoiceBindings(prompt: string, voices: DramaC
     let audioIndex = 0;
     const bindings = voices.flatMap((voice) => {
         if (voice.audio) return [`角色「${voice.name}」：配音引用 @音频${++audioIndex}`];
-        return voice.timbrePrompt ? [`角色「${voice.name}」：${voice.timbrePrompt.trim()}`] : [];
+        return voice.timbrePrompt ? [`角色「${voice.name}」：${voice.timbrePrompt.trim().replace(/\s*\n+\s*/gu, " ")}`] : [];
     });
     if (!bindings.length) return source;
     const section = `角色音色：\n${bindings.join("\n")}`;
-    const referenceHeader = /(?:^|\n)参考图片：\n/u.exec(source);
+    const referenceHeader = /(?:^|\n)【?参考图片】?[：:]\n/u.exec(source);
     if (referenceHeader) {
         const sectionStart = (referenceHeader.index ?? 0) + referenceHeader[0].length;
         const sectionEnd = source.indexOf("\n\n", sectionStart);

@@ -203,7 +203,7 @@ export function stripDramaReferenceBindingSections(prompt: string) {
     return output.join("\n").trim();
 }
 
-/** Prepend image duties in the exact order used by the supplier request. */
+/** Prepend image duties in the exact order used by the supplier request, at the top of the prompt. */
 export function appendDramaImageReferenceBindings(prompt: string, references: Array<{ id: string; label?: string; binding?: string; isCharacter?: boolean }>) {
     const base = stripDramaReferenceBindingSections(prompt);
     if (!references.length) return base;
@@ -215,16 +215,8 @@ export function appendDramaImageReferenceBindings(prompt: string, references: Ar
         })
         .join("\n");
     const characterRule = hasCharacterReferences ? "\n每张角色资产图均展示同一个人的不同观察角度，仅参考面容、体型、服装和配饰，不继承白底、排版或图中身体投影的数量。保证人物唯一性，每个角色在世界空间中仅有一人。" : "";
-    const referenceSection = `参考图片：\n${manifest}${characterRule}`;
-    const firstPromptEvent = /^[ \t]*(?:\d+(?:\.\d+)?\s*(?:-|至|到|—|–|~|～)\s*\d+(?:\.\d+)?\s*秒\s*[，,:：]|从\s*\d+(?:\.\d+)?\s*秒\s*(?:-|至|到|—|–|~|～)\s*\d+(?:\.\d+)?\s*秒\s*[，,:：]|Cut\s+to\s*[：:]|结束时，|声音：)/mu.exec(base);
-    if (!firstPromptEvent) {
-        const soundSection = /(?:^|\n)声音：/u.exec(base);
-        if (!soundSection) return [base, referenceSection].filter(Boolean).join("\n\n");
-        const insertAt = soundSection.index ?? 0;
-        return `${base.slice(0, insertAt).trimEnd()}\n\n${referenceSection}\n\n${base.slice(insertAt).trimStart()}`.trim();
-    }
-    const insertAt = firstPromptEvent.index ?? 0;
-    return `${base.slice(0, insertAt).trimEnd()}\n\n${referenceSection}\n\n${base.slice(insertAt).trimStart()}`.trim();
+    const referenceSection = `【参考图片】：\n${manifest}${characterRule}`;
+    return [referenceSection, base.trim()].filter(Boolean).join("\n\n");
 }
 
 /** Put every explicit camera cut on its own line without changing prompt wording. */

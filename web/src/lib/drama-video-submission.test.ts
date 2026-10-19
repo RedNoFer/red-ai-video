@@ -16,12 +16,11 @@ describe("drama submission reference prefix", () => {
         const bindings = [{ alias: "@图片1", role: "scene_anchor", purpose: "场景「湖岸」", url: "/scene.png" }] as DramaVideoReferenceBinding[];
         const compile = (prompt: string) => compileDramaVideoSubmissionPrompt(prompt, project, shot, bindings, ["text", "audio"]);
         const prompt = compile(original);
-        expect(prompt).toContain("参考图片：\n@图片1：场景「湖岸」");
-        expect(prompt.indexOf("参考图片：")).toBeLessThan(prompt.indexOf("角色音色："));
+        expect(prompt).toContain("【参考图片】：\n@图片1：场景「湖岸」");
+        expect(prompt.indexOf("【参考图片】：")).toBeLessThan(prompt.indexOf("角色音色："));
         expect(prompt.indexOf("角色音色：")).toBeLessThan(prompt.indexOf("00.0–05.0秒"));
-        expect(prompt).not.toContain("【参考图片】");
         expect(prompt).not.toContain("【角色音色】");
-        expect(prompt).toContain("角色「岚音」：清亮温润\n轻微气声");
+        expect(prompt).toContain("角色「岚音」：清亮温润 轻微气声");
         expect(prompt).toContain("角色「陆川」：配音引用 @音频1");
         expect(prompt).not.toContain("固定音色提示词");
         expect(prompt).not.toContain("不增加对白");
@@ -33,7 +32,8 @@ describe("drama submission reference prefix", () => {
         const withoutBindings = compileDramaVideoSubmissionPrompt(prompt, project, shot, [], []);
         expect(withoutBindings).toContain("岚音站在湖岸边，双脚踩在湿石上。");
         expect(withoutBindings).toContain("结束时，岚音仍站在湿石上，视线停在湖面。");
-        expect(withoutBindings).not.toContain("参考图片：");
+        expect(withoutBindings).not.toContain("【参考图片】：");
+        expect(withoutBindings).not.toContain("\n参考图片：");
     });
 
     it("keeps voice directly below image references for Cut to prompts with inline spoken time ranges", () => {
@@ -51,7 +51,7 @@ describe("drama submission reference prefix", () => {
 
         const prompt = compile(original);
 
-        expect(prompt).toMatch(/参考图片：\n@图片1：场景「车内」\n\n角色音色：\n角色「阿泽」：成年男性中低音区，胸腔共鸣厚实，普通话自然。\n\nCut to：/u);
+        expect(prompt).toMatch(/【参考图片】：\n@图片1：场景「车内」\n\n角色音色：\n角色「阿泽」：成年男性中低音区，胸腔共鸣厚实，普通话自然。\n\n卡停在阿泽视线前/u);
         expect(prompt).toContain("从9秒至17.3秒，原文旁白的声线为成年中性声");
         expect(prompt).toContain("结束时，录音卡仍在透明小袋内。");
         expect(prompt).not.toContain("旧音色内容");
@@ -73,6 +73,7 @@ describe("drama submission reference prefix", () => {
         const prompt = compileDramaVideoSubmissionPrompt("【参考】CHAR_01=阿泽主外观与服装锁定。\n参考仅提供外观与空间基准职责。\n\n开场时，阿泽站在门口。", project, shot, bindings, ["aze"]);
         expect(prompt).not.toContain("CHAR_01");
         expect(prompt).toContain("开场时，阿泽站在门口。");
-        expect(prompt).toContain("参考图片：\n@图片1：角色「阿泽」（主外观与服装锁定）");
+        expect(prompt).toContain("【参考图片】：\n@图片1：角色「阿泽」（主外观与服装锁定）");
+        expect(prompt.indexOf("【参考图片】：")).toBe(0);
     });
 });

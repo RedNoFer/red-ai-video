@@ -87,18 +87,18 @@ describe("drama prompt compiler", () => {
 
         expect(prompt).toContain("@图片1：角色固定资产「Karin」；绑定规则：锁定身份与服装");
         expect(prompt).toContain("@图片2：场景固定资产「黑湖记忆」；绑定规则：锁定空间拓扑与主光方向");
-        expect(prompt.startsWith("静态关键帧：Karin站在黑湖边")).toBe(true);
-        expect(prompt).toContain("\n\n参考图片：\n@图片1");
+        expect(prompt.startsWith("【参考图片】：\n@图片1：")).toBe(true);
+        expect(prompt.endsWith("静态关键帧：Karin站在黑湖边")).toBe(true);
         expect(prompt.match(/每张角色资产图均展示同一个人的不同观察角度/gu)).toHaveLength(1);
         expect(appendDramaImageReferenceBindings(prompt, [])).toBe("静态关键帧：Karin站在黑湖边");
         expect(appendDramaImageReferenceBindings(prompt, [{ id: "scene-one", label: "场景固定资产「黑湖记忆」", binding: "锁定空间拓扑与主光方向" }])).toContain("@图片1：场景固定资产「黑湖记忆」");
         expect(appendDramaImageReferenceBindings(prompt, [{ id: "scene-one", label: "场景固定资产「黑湖记忆」", binding: "锁定空间拓扑与主光方向" }])).not.toContain("@图片2：");
     });
 
-    it("places image duties before a Cut to block when prose uses inline time ranges", () => {
+    it("places image duties at the top ahead of a Cut to block when prose uses inline time ranges", () => {
         const prompt = appendDramaImageReferenceBindings("开场时，人物看着卡片。\nCut to：屏幕近景。\n从9秒至17.3秒，旁白继续。", [{ id: "scene-one", label: "场景「车内」" }]);
 
-        expect(prompt).toMatch(/开场时，人物看着卡片。\n\n参考图片：\n@图片1：场景「车内」\n\nCut to：屏幕近景。/u);
+        expect(prompt).toMatch(/【参考图片】：\n@图片1：场景「车内」\n\n开场时，人物看着卡片。\nCut to：屏幕近景。/u);
         expect(prompt).toContain("从9秒至17.3秒，旁白继续。");
     });
 
@@ -107,7 +107,7 @@ describe("drama prompt compiler", () => {
             { id: "frame-one", label: "顺序帧 1（开始）", binding: "作为开始阶段画面依据" },
         ]);
 
-        expect(prompt.match(/(?:^|\n)参考图片：/gu)).toHaveLength(1);
+        expect(prompt.match(/(?:^|\n)【?参考图片】?[：:]/gu)).toHaveLength(1);
         expect(prompt).not.toContain("参考图顺序（与视频请求数组完全一致）");
         expect(prompt).toContain("单一主运镜：缓慢推进");
         expect(prompt).toContain("@图片1：顺序帧 1（开始）；绑定规则：作为开始阶段画面依据");

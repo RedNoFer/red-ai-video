@@ -4309,7 +4309,8 @@ describe("drama visual reference URL resolution", () => {
             { id: "asset-scene-one", label: "场景固定资产「黑湖」", binding: "锁定空间拓扑、建筑结构和主光方向" },
         ]);
 
-        expect(prompt.startsWith("生成画面\n\n参考图片：\n")).toBe(true);
+        expect(prompt.startsWith("【参考图片】：\n@图片1：")).toBe(true);
+        expect(prompt.endsWith("生成画面")).toBe(true);
         expect(prompt).toContain("@图片1：上一镜「湖畔」已人工验收的实际尾帧；绑定规则：作为当前帧唯一动作起点");
         expect(prompt).toContain("@图片2：角色固定资产「Karin」；绑定规则：锁定身份、脸部、发型和服装");
         expect(prompt).toContain("@图片3：场景固定资产「黑湖」；绑定规则：锁定空间拓扑、建筑结构和主光方向");
@@ -4322,7 +4323,7 @@ describe("drama visual reference URL resolution", () => {
             { role: "keyframe", purpose: "顺序帧 1（开始）" },
         ]);
 
-        expect(prompt.match(/(?:^|\n)参考图片：/gu)).toHaveLength(1);
+        expect(prompt.match(/(?:^|\n)【?参考图片】?[：:]/gu)).toHaveLength(1);
         expect(prompt).not.toContain("参考图顺序（与视频请求数组完全一致）");
         expect(prompt).toContain("@图片1：顺序帧 1（开始）");
     });

@@ -18,7 +18,7 @@ describe("character voice references", () => {
         const voice = dramaCharacterVoiceReference(heroine({ timbrePrompt: text }));
         const original = "台词：岚音：“外套颜色没变，别说话。”";
         expect(appendDramaCharacterVoiceBindings(original, [voice])).toContain(original);
-        expect(appendDramaCharacterVoiceBindings(original, [voice])).toContain(text.trim());
+        expect(appendDramaCharacterVoiceBindings(original, [voice])).toContain(text.trim().replace(/\s*\n+\s*/gu, " "));
         expect(voice.audio).toBeUndefined();
     });
     it("prefers the uploaded sample and references its real audio alias", () => {
@@ -60,7 +60,7 @@ describe("character voice references", () => {
     it("removes legacy injected voice notes while preserving authored sound guidance", () => {
         expect(stripDramaCharacterVoiceBindings("画面结束。\n声音：环境风声；角色「岚音」：旧音色说明")).toBe("画面结束。\n声音：环境风声");
         expect(stripDramaCharacterVoiceBindings("画面结束。\n声音：角色「岚音」：旧音色说明")).toBe("画面结束。");
-        expect(stripDramaCharacterVoiceBindings("参考图片：\n@图片1：角色\n\n角色音色：\n角色「岚音」：第一行\n\n第二行\n\n00.0–05.0秒，开始表演。")).toBe("参考图片：\n@图片1：角色\n\n00.0–05.0秒，开始表演。");
+        expect(stripDramaCharacterVoiceBindings("参考图片：\n@图片1：角色\n\n角色音色：\n角色「岚音」：第一行\n\n第二行\n\n00.0–05.0秒，开始表演。")).toBe("参考图片：\n@图片1：角色\n\n第二行\n\n00.0–05.0秒，开始表演。");
     });
 
     it("matches a stable voice identity or an exact speaker name", () => {

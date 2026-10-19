@@ -98,7 +98,7 @@ describe("drama production run planning", () => {
         expect(videos.map((step) => step.duration)).toEqual([5, 3]);
         expect(videos[1].dependsOn).toContain(videos[0].id);
         expect(videos[0].prompt).toContain("视频");
-        expect(videos[0].prompt).toContain("参考图片：\n@图片1：顺序帧 1\n@图片2：顺序帧 2\n@图片3：顺序帧 3");
+        expect(videos[0].prompt).toContain("【参考图片】：\n@图片1：顺序帧 1\n@图片2：顺序帧 2\n@图片3：顺序帧 3");
     });
 
     it("keeps every ordered keyframe while retaining fixed assets", () => {
