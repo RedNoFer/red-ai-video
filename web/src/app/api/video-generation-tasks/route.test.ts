@@ -280,6 +280,23 @@ describe("video generation candidate failover", () => {
         expect(mocks.scheduleGenerationTask).toHaveBeenLastCalledWith("video", "local-task", expect.objectContaining({ executionPhase: "needs_review", nextPollAt: undefined, lastUpstreamStatus: "submission_outcome_unknown" }));
     });
 
+    it("keeps the provider error text in the review reason when the upstream rejects without a task id", async () => {
+        mocks.fetchInternalApi.mockResolvedValue(json({ error: "这班还没开" }, 200));
+
+        const response = await POST(request());
+
+        expect(response.status).toBe(202);
+        expect(mocks.scheduleGenerationTask).toHaveBeenLastCalledWith(
+            "video",
+            "local-task",
+            expect.objectContaining({
+                executionPhase: "needs_review",
+                lastUpstreamStatus: "submission_outcome_unknown",
+                resultPayload: { reviewReason: expect.stringContaining("上游返回「这班还没开」") },
+            }),
+        );
+    });
+
     it("does not retry another path or binding after an ambiguous server failure", async () => {
         mocks.fetchInternalApi.mockResolvedValue(json({ error: "gateway failed" }, 502));
 

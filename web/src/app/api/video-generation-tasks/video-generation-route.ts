@@ -31,6 +31,7 @@ import { checkGenerationRateLimit, rateLimitHeaders } from "@/lib/server/securit
 import { resolveModelRequestTimeoutMs } from "@/lib/server/model-request-policy";
 import { mediaTaskSource } from "@/lib/media-management-contract";
 import { runGenerationTaskRecoveryBatch } from "@/lib/server/generation-task-recovery-service";
+import { upstreamFailureReviewReason } from "@/lib/server/generation-task-review-reason";
 import { scheduleGenerationTask } from "@/lib/server/generation-task-scheduler";
 import { VIDEO_PROVIDER_MEDIA_KEYS, parseVideoProviderJson, readVideoProviderError, readVideoProviderHttpError, readVideoProviderId, readVideoProviderUrl, videoProviderResultUrlError } from "@/lib/server/video-provider-response";
 import { buildSeedanceSpecialRequest } from "@/lib/seedance-special";
@@ -269,7 +270,14 @@ export async function POST(request: Request) {
                 if (error instanceof SafeCandidateFailure && index < channels.length - 1) continue;
                 const message = toSafeGenerationErrorMessage(error, "视频任务创建失败");
                 if (!(error instanceof SafeCandidateFailure)) {
-                    await scheduleGenerationTask("video", localTask.id, { executionPhase: "needs_review", nextPollAt: undefined, lastUpstreamStatus: "submission_outcome_unknown" });
+                    // Keep the provider's own error text so the review reason explains what actually happened upstream.
+                    const reviewReason = upstreamFailureReviewReason(message, "submission_outcome_unknown");
+                    await scheduleGenerationTask("video", localTask.id, {
+                        executionPhase: "needs_review",
+                        nextPollAt: undefined,
+                        lastUpstreamStatus: "submission_outcome_unknown",
+                        resultPayload: { reviewReason: reviewReason.slice(0, 500) },
+                    });
                     return NextResponse.json({ task: { ...publicTask({ ...localTask, attempts }), needsReview: true }, warning: `${message}；上游创建结果待确认，系统不会自动重复创建。` }, { status: 202 });
                 }
                 break;

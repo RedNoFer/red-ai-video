@@ -87,7 +87,12 @@ function taskSummary(record: StoredGenerationTaskRecord, user?: { accountId: str
         lastUpstreamStatus: record.lastUpstreamStatus,
         attempts: generationAttempts(payload.attempts),
         prompt: firstText(payload.prompt, config.prompt, tasks.find((task) => text(task.prompt))?.prompt).slice(0, 500),
-        error: firstText(payload.error, tasks.find((task) => text(task.error))?.error, resolveGenerationReviewReason(record)).slice(0, 1000) || undefined,
+        error:
+            firstText(
+                payload.error,
+                tasks.find((task) => text(task.error))?.error,
+                resolveGenerationReviewReason({ executionPhase: record.executionPhase, lastUpstreamStatus: record.lastUpstreamStatus, resultPayload: record.resultPayload, taskPayload: record.payload }),
+            ).slice(0, 1000) || undefined,
         durationMs: Math.max(0, record.updatedAt - record.createdAt),
         pointsCost,
         pointsBreakdown,

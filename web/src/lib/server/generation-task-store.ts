@@ -1172,7 +1172,7 @@ function withExecutionState<T>(payload: T, phase: unknown, status: unknown, resu
         ...payload,
         executionPhase,
         lastUpstreamStatus,
-        reviewReason: resolveGenerationReviewReason({ executionPhase, lastUpstreamStatus, resultPayload }),
+        reviewReason: resolveGenerationReviewReason({ executionPhase, lastUpstreamStatus, resultPayload, taskPayload: payload }),
     };
 }
 

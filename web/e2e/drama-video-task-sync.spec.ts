@@ -164,3 +164,95 @@ test("镜头跨计划同步终态、刷新恢复并允许再次生成，未知�
     expect(originalTask.ok()).toBe(true);
     expect((await originalTask.json()).task).toMatchObject({ status: "running", needsReview: true });
 });
+
+test("待确认镜头展示上游原始报错文案而不是通用提示", async ({ page, request }) => {
+    test.skip(Boolean(process.env.VOZEB_PRO_E2E_DATABASE_URL), "文件夹具由独立 PostgreSQL 集成测试补充");
+    process.env.VOZEB_PRO_DATA_DIR = path.resolve(process.cwd(), ".e2e-data");
+    expect((await request.patch("/api/admin/settings", { data: e2eSettingsPatch() })).ok()).toBe(true);
+    const credentials = { username: `video_error_${Date.now()}`, password: "E2e_Video_Error_2026!" };
+    const provisioned = await request.post("/api/admin/users", { data: { ...credentials, displayName: "上游报错回归", role: "admin", adminPermissions: ["users.read"], status: "active", pointsBalance: 0 } });
+    expect(provisioned.ok(), await provisioned.text()).toBe(true);
+    expect((await request.post("/api/auth/login", { data: credentials })).ok()).toBe(true);
+    await page.context().clearCookies();
+    await page.context().addCookies((await request.storageState()).cookies);
+    const created = await request.post("/api/drama/projects", { data: { title: "E2E 上游报错文案", ratio: "16:9" } });
+    expect(created.ok(), await created.text()).toBe(true);
+    const project = ((await created.json()) as { data: { project: DramaProject } }).data.project;
+    const user = (await (await request.get("/api/auth/session")).json()).user;
+    const episode = project.episodes[0];
+    const now = Date.now();
+    const shot: DramaShot = {
+        id: `${project.id}-shot-upstream-error`,
+        order: 1,
+        title: "上游拒绝生成",
+        description: "人物在室内抬头",
+        sourceText: "人物在室内抬头",
+        shotBoundary: "",
+        dialogue: "",
+        narration: "",
+        utterances: [],
+        imagePrompt: "",
+        videoPrompt: "人物在室内抬头，听到门外声响后站定。",
+        cameraMotion: "固定",
+        duration: 5,
+        characterIds: [],
+        propIds: [],
+        clueIds: [],
+        generationStatus: "running",
+        generationRunId: `${project.id}-run-upstream-error`,
+        generationTaskId: `${project.id}-task-upstream-error`,
+    };
+    const run: DramaProductionRun = {
+        id: shot.generationRunId!,
+        projectId: project.id,
+        episodeId: episode.id,
+        planRevision: shot.id,
+        status: "running",
+        mode: "strict",
+        parameterSnapshot: { imageModel: "e2e-image", videoModel: "e2e-video", ratio: "16:9" },
+        steps: [{ id: `video-${shot.id}`, shotId: shot.id, type: "video", dependsOn: [], status: "running", taskId: shot.generationTaskId, duration: 5 }],
+        confirmedAt: new Date(now).toISOString(),
+        createdAt: new Date(now).toISOString(),
+        updatedAt: new Date(now).toISOString(),
+    };
+    await withJsonDataFileLock("generation-tasks.json", async () => {
+        const existing = await readJsonDataFile<unknown[]>("generation-tasks.json", []);
+        await writeJsonDataFile("generation-tasks.json", [
+            ...existing,
+            {
+                id: shot.generationTaskId,
+                type: "video",
+                userId: user.id,
+                status: "running",
+                expiresAt: now + 86_400_000,
+                createdAt: now,
+                updatedAt: now,
+                executionPhase: "needs_review",
+                lastUpstreamStatus: "submission_outcome_unknown",
+                payload: {
+                    id: shot.generationTaskId,
+                    userId: user.id,
+                    status: "running",
+                    createdAt: now,
+                    updatedAt: now,
+                    projectId: project.id,
+                    runId: shot.generationRunId,
+                    config: { model: "e2e-video" },
+                    upstream: { id: "" },
+                    attempts: [{ attemptNo: 1, status: "failed", error: "这班还没开" }],
+                },
+            },
+        ]);
+    });
+    await withJsonDataFileLock("drama-production-runs.json", async () => {
+        const existing = await readJsonDataFile<{ version: number; items: unknown[] }>("drama-production-runs.json", { version: 1, items: [] });
+        await writeJsonDataFile("drama-production-runs.json", { ...existing, items: [...existing.items, { ...run, userId: user.id }] });
+    });
+    const saved = await saveDramaProjectFixture(request, project, { ...project, activeEpisodeId: episode.id, episodes: [{ ...episode, reviewStatus: "visual_ready", shots: [shot] }] });
+    expect(saved.ok(), await saved.text()).toBe(true);
+    await page.goto(`/drama/${project.id}`, { waitUntil: "domcontentloaded" });
+    await page.getByRole("button", { name: "切换到镜头生成" }).click();
+    const readProject = async () => ((await (await request.get(`/api/drama/projects/${project.id}`)).json()) as { data: { project: DramaProject } }).data.project;
+    await expect.poll(async () => (await readProject()).episodes[0].shots[0]?.generationError).toContain("上游返回「这班还没开」");
+    await expect(page.locator("[data-drama-shot-task]").first().getByText("上游返回「这班还没开」").first()).toBeVisible();
+});
