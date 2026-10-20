@@ -3,6 +3,7 @@ import { recordChannelRuntimeFailure, recordChannelRuntimeSuccess } from "@/lib/
 import { fetchInternalApi } from "@/lib/server/internal-origin";
 import { resolveModelRequestTimeoutMs } from "@/lib/server/model-request-policy";
 import { maintenanceWorkerContextHeaders } from "@/lib/server/maintenance-auth";
+import { SYSTEM_AI_LOGICAL_MODEL_HEADER } from "@/lib/server/system-ai-billing";
 import { buildProviderRequest, isProviderBusinessError, readProviderError, readProviderString } from "@/lib/server/provider-task-config";
 import { strictJsonObjectText } from "@/lib/server/structured-model-output";
 import { resolveTextProtocol } from "@/lib/server/text-protocol-resolver";
@@ -11,6 +12,8 @@ export type TextPlanningProtocol = "responses" | "chat" | "gemini" | "custom";
 export type TextPlanningCandidate = {
     channelId: string;
     upstreamModel: string;
+    /** Logical model actually backing this channel+upstream pair; sent on the billing header. */
+    logicalModelId?: string;
     channel: SystemModelChannel;
     capabilityProfile?: { timeoutMs?: number };
 };
@@ -176,6 +179,7 @@ async function requestTextProtocol(input: Pick<StructuredTextRequest, "origin" |
     const base = `${input.origin}/api/ai/system/${encodeURIComponent(input.candidate.channelId)}`;
     const headers = new Headers(input.headers);
     headers.set("content-type", "application/json");
+    if (input.candidate.logicalModelId?.trim()) headers.set(SYSTEM_AI_LOGICAL_MODEL_HEADER, input.candidate.logicalModelId.trim());
     const workerHeaders = maintenanceWorkerContextHeaders(input.cookie || "");
     if (workerHeaders) Object.entries(workerHeaders).forEach(([key, value]) => headers.set(key, value));
     else if (input.cookie) headers.set("cookie", input.cookie);

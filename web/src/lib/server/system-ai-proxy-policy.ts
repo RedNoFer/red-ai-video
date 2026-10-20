@@ -70,7 +70,10 @@ export function authorizeSystemAiProxyRequest(input: ProxyPolicyInput): SystemAi
 function resolveBoundLogicalModel(logicalModels: LogicalModel[], channelId: string, upstreamModel: string, preferredLogicalModelId = "") {
     const matches = logicalModels.filter((logical) => logical.enabled && logical.bindings.some((binding) => binding.enabled && binding.channelId === channelId && normalizeModel(binding.upstreamModel) === upstreamModel));
     const preferred = preferredLogicalModelId.trim().toLowerCase();
-    if (preferred) return matches.find((logical) => logical.id.toLowerCase() === preferred) || null;
+    // The preferred id only picks among the bindings that already match this channel+upstream pair;
+    // a stale preferred id (e.g. the first-choice model carried on a fallback request) must not
+    // reject a legitimately bound logical model.
+    if (preferred) return matches.find((logical) => logical.id.toLowerCase() === preferred) || matches.sort((left, right) => left.id.localeCompare(right.id))[0] || null;
     return matches.sort((left, right) => left.id.localeCompare(right.id))[0] || null;
 }
 
