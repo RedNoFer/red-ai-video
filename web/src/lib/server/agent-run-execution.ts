@@ -413,7 +413,8 @@ export async function executeTasks(runId: string, origin: string, cookie: string
         const run = await getAgentRun(runId);
         if (!run) return;
         const completed = new Set(run.tasks.filter((task) => task.status === "completed").map((task) => task.id));
-        const ready = run.tasks.filter((task) => (task.status === "ready" || task.status === "running") && task.dependencies.every((id) => completed.has(id))).slice(0, settings.generationConcurrency.agent);
+        const agentLimit = settings.generationConcurrency.agent;
+        const ready = run.tasks.filter((task) => (task.status === "ready" || task.status === "running") && task.dependencies.every((id) => completed.has(id))).slice(0, agentLimit > 0 ? agentLimit : undefined);
         if (!ready.length) {
             if (run.tasks.every((task) => task.status === "completed")) {
                 if (!run.reviewed && shouldBlockOnReview(run)) {
@@ -797,7 +798,7 @@ async function mapWithConcurrency<R>(count: number, concurrency: number, worker:
     const results: Array<PromiseSettledResult<R> & { index: number }> = [];
     let cursor = 0;
     await Promise.all(
-        Array.from({ length: Math.min(concurrency, count) }, async () => {
+        Array.from({ length: concurrency > 0 ? Math.min(concurrency, count) : count }, async () => {
             while (cursor < count) {
                 const index = cursor++;
                 try {

@@ -374,13 +374,19 @@ function normalizeMultiplierMap(settings: Record<string, unknown> | undefined, d
 
 function normalizeGenerationConcurrency(settings?: Partial<GenerationConcurrencySettings>) {
     return {
-        agent: positiveInteger(settings?.agent, defaultConfig.generationConcurrency.agent),
-        image: positiveInteger(settings?.image, defaultConfig.generationConcurrency.image),
-        video: positiveInteger(settings?.video, defaultConfig.generationConcurrency.video),
-        audio: positiveInteger(settings?.audio, defaultConfig.generationConcurrency.audio),
-        text: positiveInteger(settings?.text, defaultConfig.generationConcurrency.text),
-        render: positiveInteger(settings?.render, defaultConfig.generationConcurrency.render),
+        agent: concurrencyLimit(settings?.agent, defaultConfig.generationConcurrency.agent),
+        image: concurrencyLimit(settings?.image, defaultConfig.generationConcurrency.image),
+        video: concurrencyLimit(settings?.video, defaultConfig.generationConcurrency.video),
+        audio: concurrencyLimit(settings?.audio, defaultConfig.generationConcurrency.audio),
+        text: concurrencyLimit(settings?.text, defaultConfig.generationConcurrency.text),
+        render: concurrencyLimit(settings?.render, defaultConfig.generationConcurrency.render),
     };
+}
+
+// 0 means the concurrency cap is disabled for that task type.
+function concurrencyLimit(value: unknown, fallback: number) {
+    const numberValue = Number(value);
+    return Number.isSafeInteger(numberValue) && numberValue >= 0 ? numberValue : fallback;
 }
 
 function normalizeCanvasImageCount(value: unknown) {

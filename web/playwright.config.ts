@@ -30,7 +30,7 @@ export default defineConfig({
             name: "chromium",
             testMatch: [
                 /drama-video-task-sync\.spec\.ts/,
-                /(?:admin-channel-api-key|admin-channel-save|all-pages|canvas|commerce|core|creative-video-result|drama-asset-candidate-generation|drama-assets-scroll|drama-episode-settings|drama-frame-sequence|drama-package-import|drama-review-audio-flow|drama-scene-reference-preview|drama-video-advisory|home|responsive)\.spec\.ts/,
+                /(?:admin-channel-api-key|admin-channel-save|all-pages|canvas|commerce|core|creative-video-result|drama-asset-batch-panel|drama-asset-candidate-generation|drama-assets-scroll|drama-episode-settings|drama-frame-sequence|drama-package-import|drama-review-audio-flow|drama-scene-reference-preview|drama-video-advisory|home|responsive)\.spec\.ts/,
             ],
             dependencies: ["setup"],
             use: { ...devices["Desktop Chrome"], storageState },

@@ -96,7 +96,8 @@ export function useAdminDashboardSettingsActions({ state, data }: { state: Admin
             ...current,
             generationConcurrency: {
                 ...current.generationConcurrency,
-                [key]: Number.isSafeInteger(value) && Number(value) > 0 ? Number(value) : current.generationConcurrency[key],
+                // 0 disables the concurrency cap for that task type.
+                [key]: Number.isSafeInteger(value) && Number(value) >= 0 ? Number(value) : current.generationConcurrency[key],
             },
         }));
     };

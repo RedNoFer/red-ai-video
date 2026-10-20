@@ -757,6 +757,9 @@ export async function countActiveStoredGenerationTasks(userId: string, type: Gen
 }
 
 export async function withGenerationConcurrencyLimit<T>(userId: string, type: GenerationTaskType, staleMs: number, limit: number, handler: () => Promise<T>, excludeTaskId?: string): Promise<T | null> {
+    // A non-positive limit means the administrator disabled the concurrency cap for this task type:
+    // the request runs directly, without counting active tasks or serializing submissions.
+    if (!Number.isFinite(limit) || limit <= 0) return handler();
     if (getDatabaseProvider() === "postgres") {
         await ensurePostgresSchema();
         return withPostgresTransaction(async (client) => {

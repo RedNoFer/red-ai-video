@@ -9,7 +9,6 @@ import { approvedAssetReference } from "@/lib/drama-asset-baseline";
 import { useEffectiveConfig } from "@/stores/use-config-store";
 import { cancelDramaAssetGenerationBatch, createDramaAssetGenerationBatch, getDramaAssetGenerationBatch, listDramaAssetGenerationBatches, retryDramaAssetGenerationBatch } from "@/services/api/drama-projects";
 import { dramaAssetReferences } from "./drama-asset-reference-utils";
-import { dramaAssetAutoCompletionItems } from "./drama-asset-library-utils";
 
 type BatchKind = "characters" | "scenes" | "props" | "clues";
 const kinds: BatchKind[] = ["characters", "scenes", "props", "clues"];
@@ -233,17 +232,16 @@ export function DramaAssetGenerationBatchPanel({ project, onProjectReload }: { p
                             </div>
                             <Divider className="!my-2" />
                             <div className="grid gap-2 sm:grid-cols-2">
-                                {rows.map(({ asset, key }) => (
-                                    <label key={key} className="flex min-w-0 cursor-pointer items-center gap-2 rounded border border-border px-2.5 py-2 hover:bg-muted/50">
-                                        <Checkbox checked={selected.includes(key)} onChange={(event) => setSelected((current) => (event.target.checked ? [...current, key] : current.filter((value) => value !== key)))} />
-                                        <span className="min-w-0 flex-1 truncate">{asset.name}</span>
-                                        <span className="shrink-0 text-[11px] text-muted-foreground">
-                                            {dramaAssetAutoCompletionItems(asset, kind)
-                                                .map((item) => item.label)
-                                                .join("、") || "设定完整"}
-                                        </span>
-                                    </label>
-                                ))}
+                                {rows.map(({ asset, key }) => {
+                                    const hasImage = dramaAssetReferences(asset).length > 0;
+                                    return (
+                                        <label key={key} className="flex min-w-0 cursor-pointer items-center gap-2 rounded border border-border px-2.5 py-2 hover:bg-muted/50">
+                                            <Checkbox checked={selected.includes(key)} onChange={(event) => setSelected((current) => (event.target.checked ? [...current, key] : current.filter((value) => value !== key)))} />
+                                            <span className="min-w-0 flex-1 truncate">{asset.name}</span>
+                                            <span className={`shrink-0 text-[11px] ${hasImage ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"}`}>{hasImage ? "已生成图" : "缺图"}</span>
+                                        </label>
+                                    );
+                                })}
                             </div>
                         </div>
                     );

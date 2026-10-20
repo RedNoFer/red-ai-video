@@ -23,25 +23,25 @@ export function GenerationConcurrencyPanel({ settings, onChange }: { settings: A
             <SectionTitle icon={<Sparkles className="size-4" />} title="每用户并发上限" />
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 <LabeledControl label="Agent 同时运行">
-                    <InputNumber className="w-full" min={1} precision={0} value={settings.generationConcurrency.agent} onChange={(value) => onChange("agent", value)} />
+                    <InputNumber className="w-full" min={0} precision={0} value={settings.generationConcurrency.agent} onChange={(value) => onChange("agent", value)} />
                 </LabeledControl>
                 <LabeledControl label="生图同时生成">
-                    <InputNumber className="w-full" min={1} precision={0} value={settings.generationConcurrency.image} onChange={(value) => onChange("image", value)} />
+                    <InputNumber className="w-full" min={0} precision={0} value={settings.generationConcurrency.image} onChange={(value) => onChange("image", value)} />
                 </LabeledControl>
                 <LabeledControl label="视频同时生成">
-                    <InputNumber className="w-full" min={1} precision={0} value={settings.generationConcurrency.video} onChange={(value) => onChange("video", value)} />
+                    <InputNumber className="w-full" min={0} precision={0} value={settings.generationConcurrency.video} onChange={(value) => onChange("video", value)} />
                 </LabeledControl>
                 <LabeledControl label="音频同时生成">
-                    <InputNumber className="w-full" min={1} precision={0} value={settings.generationConcurrency.audio} onChange={(value) => onChange("audio", value)} />
+                    <InputNumber className="w-full" min={0} precision={0} value={settings.generationConcurrency.audio} onChange={(value) => onChange("audio", value)} />
                 </LabeledControl>
                 <LabeledControl label="文本同时生成">
-                    <InputNumber className="w-full" min={1} precision={0} value={settings.generationConcurrency.text} onChange={(value) => onChange("text", value)} />
+                    <InputNumber className="w-full" min={0} precision={0} value={settings.generationConcurrency.text} onChange={(value) => onChange("text", value)} />
                 </LabeledControl>
                 <LabeledControl label="整集合成同时运行">
-                    <InputNumber className="w-full" min={1} precision={0} value={settings.generationConcurrency.render} onChange={(value) => onChange("render", value)} />
+                    <InputNumber className="w-full" min={0} precision={0} value={settings.generationConcurrency.render} onChange={(value) => onChange("render", value)} />
                 </LabeledControl>
             </div>
-            <div className="mt-2 text-xs leading-5 text-stone-500 dark:text-stone-400">限制的是单个用户自己的并发任务，不是全站共享上限。</div>
+            <div className="mt-2 text-xs leading-5 text-stone-500 dark:text-stone-400">限制的是单个用户自己的并发任务，不是全站共享上限；填写 0 表示不限制并发。</div>
         </div>
     );
 }

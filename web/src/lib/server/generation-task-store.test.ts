@@ -179,6 +179,16 @@ describe("mutateStoredGenerationTask", () => {
         await expect(withGenerationConcurrencyLimit("user", "agent", 60_000, 1, async () => "other-run")).resolves.toBeNull();
     });
 
+    it("runs without a concurrency cap when the limit is disabled", async () => {
+        const now = Date.now();
+        mocks.records = [
+            { id: "image-one", userId: "user", type: "image", status: "running", payload: {}, executionPhase: "created", createdAt: now, updatedAt: now, expiresAt: now + 60_000 },
+            { id: "image-two", userId: "user", type: "image", status: "running", payload: {}, executionPhase: "created", createdAt: now, updatedAt: now, expiresAt: now + 60_000 },
+        ];
+
+        await expect(withGenerationConcurrencyLimit("user", "image", 60_000, 0, async () => "unlimited")).resolves.toBe("unlimited");
+    });
+
     it("restores a safe review reason for a legacy uncertain submission", async () => {
         const now = Date.now();
         mocks.records = [

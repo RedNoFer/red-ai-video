@@ -22,4 +22,10 @@ describe("generation default normalization", () => {
     it("preserves administrator-defined positive concurrency without platform ceilings", () => {
         expect(normalizeGenerationConcurrency({ agent: 11, image: 12, video: 6, audio: 13, text: 21, render: 7 })).toEqual({ agent: 11, image: 12, video: 6, audio: 13, text: 21, render: 7 });
     });
+
+    it("keeps zero as the disabled concurrency limit and falls back on invalid values", () => {
+        expect(normalizeGenerationConcurrency({ image: 0, video: 0 })).toMatchObject({ image: 0, video: 0 });
+        expect(normalizeGenerationConcurrency({ image: -3 })).toMatchObject({ image: 4 });
+        expect(normalizeGenerationConcurrency({ image: 1.5 })).toMatchObject({ image: 4 });
+    });
 });

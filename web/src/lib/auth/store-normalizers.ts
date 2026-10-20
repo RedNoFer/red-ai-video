@@ -398,6 +398,12 @@ function normalizePositiveSafeInteger(value: unknown, fallback: number) {
     return Number.isSafeInteger(number) && number > 0 ? number : fallback;
 }
 
+// Concurrency limits accept 0 to mean "no limit"; other invalid values fall back to the default.
+function normalizeConcurrencyLimit(value: unknown, fallback: number) {
+    const number = Number(value);
+    return Number.isSafeInteger(number) && number >= 0 ? number : fallback;
+}
+
 export function allowedText(value: unknown, allowed: string[], fallback: string) {
     const text = typeof value === "string" ? value.trim() : "";
     return allowed.includes(text) ? text : fallback;
@@ -456,12 +462,12 @@ export function normalizeFeatureList(value: unknown) {
 
 export function normalizeGenerationConcurrency(settings: Partial<GenerationConcurrencySettings> | undefined): GenerationConcurrencySettings {
     return {
-        agent: normalizePositiveSafeInteger(settings?.agent, DEFAULT_SETTINGS.generationConcurrency.agent),
-        image: normalizePositiveSafeInteger(settings?.image, DEFAULT_SETTINGS.generationConcurrency.image),
-        video: normalizePositiveSafeInteger(settings?.video, DEFAULT_SETTINGS.generationConcurrency.video),
-        audio: normalizePositiveSafeInteger(settings?.audio, DEFAULT_SETTINGS.generationConcurrency.audio),
-        text: normalizePositiveSafeInteger(settings?.text, DEFAULT_SETTINGS.generationConcurrency.text),
-        render: normalizePositiveSafeInteger(settings?.render, DEFAULT_SETTINGS.generationConcurrency.render),
+        agent: normalizeConcurrencyLimit(settings?.agent, DEFAULT_SETTINGS.generationConcurrency.agent),
+        image: normalizeConcurrencyLimit(settings?.image, DEFAULT_SETTINGS.generationConcurrency.image),
+        video: normalizeConcurrencyLimit(settings?.video, DEFAULT_SETTINGS.generationConcurrency.video),
+        audio: normalizeConcurrencyLimit(settings?.audio, DEFAULT_SETTINGS.generationConcurrency.audio),
+        text: normalizeConcurrencyLimit(settings?.text, DEFAULT_SETTINGS.generationConcurrency.text),
+        render: normalizeConcurrencyLimit(settings?.render, DEFAULT_SETTINGS.generationConcurrency.render),
     };
 }
 
