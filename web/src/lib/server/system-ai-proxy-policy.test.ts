@@ -36,6 +36,32 @@ describe("system AI proxy policy", () => {
         ).toMatchObject({ allowed: true, logicalModelId: "writer", operation: "create" });
     });
 
+    it("falls back to the bound logical model when a fallback request carries a stale preferred id", () => {
+        const fallbackModels = [
+            ...logicalModels,
+            {
+                id: "writer-backup",
+                name: "写作备用",
+                capability: "text" as const,
+                enabled: true,
+                bindings: [{ id: "writer-backup-main", channelId: "backup", upstreamModel: "vendor-backup-text", enabled: true, priority: 1 }],
+            },
+        ];
+        expect(
+            authorizeSystemAiProxyRequest({
+                method: "POST",
+                path: ["chat", "completions"],
+                search: "",
+                channelId: "backup",
+                upstreamModel: "vendor-backup-text",
+                preferredLogicalModelId: "writer",
+                logicalModels: fallbackModels,
+                apiFormat: "openai",
+                pointsUsageKind: "text",
+            }),
+        ).toMatchObject({ allowed: true, logicalModelId: "writer-backup", operation: "create" });
+    });
+
     it("authorizes Gemini Veo creation and operation polling paths", () => {
         const base = {
             channelId: "main",

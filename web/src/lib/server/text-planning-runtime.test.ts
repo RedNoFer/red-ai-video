@@ -28,6 +28,17 @@ describe("text planning runtime protocol matrix", () => {
         expectBasicJsonMessages(requestBody());
     });
 
+    it("请求头使用候选自身的逻辑模型，覆盖回退请求携带的首选模型", async () => {
+        mockedFetch.mockResolvedValue(chatJsonResponse());
+
+        await requestStructuredText({
+            ...requestInput({ ...candidate("newapi"), logicalModelId: "writer-backup" }),
+            headers: { "x-vozeb-pro-logical-model": "writer" },
+        });
+
+        expect(new Headers(mockedFetch.mock.calls[0]?.[1]?.headers).get("x-vozeb-pro-logical-model")).toBe("writer-backup");
+    });
+
     it("compatible 模型明确配置 Responses 时直接使用 Responses", async () => {
         mockedFetch.mockResolvedValue(Response.json({ output_text: "{}" }));
 
