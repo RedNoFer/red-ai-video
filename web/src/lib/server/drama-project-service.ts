@@ -3424,7 +3424,6 @@ export async function syncDramaShotVideoResultsForUser(userId: string, projectId
     }
 }
 
-
 export async function updateDramaShotMediaForUser(userId: string, projectId: string, episodeIdValue: string, shotIdValue: string, value: unknown) {
     const project = await getDramaProjectForUser(userId, projectId);
     const episodeId = cleanText(episodeIdValue);

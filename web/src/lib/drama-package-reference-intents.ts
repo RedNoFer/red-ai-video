@@ -31,16 +31,17 @@ function scanDramaPackageReferenceSections(text: string): ScanResult {
         }
         kept.push(line);
     }
-    return { sections, rest: kept.join("\n").replace(/\n{3,}/gu, "\n\n").trim() };
+    return {
+        sections,
+        rest: kept
+            .join("\n")
+            .replace(/\n{3,}/gu, "\n\n")
+            .trim(),
+    };
 }
 
 function isStructuralDramaLine(value: string) {
-    return (
-        value.startsWith("【") ||
-        /^(?:\d+(?:\.\d+)?\s*(?:[-–—~～]|至|到)\s*\d+(?:\.\d+)?\s*秒|从\s*\d+(?:\.\d+)?\s*秒)/u.test(value) ||
-        /^Cut\s+to\s*[：:]/iu.test(value) ||
-        /^(?:开场时|结束时|声音|角色音色|参考图片|镜头模式)[：:，]?/u.test(value)
-    );
+    return value.startsWith("【") || /^(?:\d+(?:\.\d+)?\s*(?:[-–—~～]|至|到)\s*\d+(?:\.\d+)?\s*秒|从\s*\d+(?:\.\d+)?\s*秒)/u.test(value) || /^Cut\s+to\s*[：:]/iu.test(value) || /^(?:开场时|结束时|声音|角色音色|参考图片|镜头模式)[：:，]?/u.test(value);
 }
 
 /** Continuation lines are entry pairs (`CODE=`) or 参考-prefixed tail notes; anything else ends the block. */
@@ -77,10 +78,7 @@ export function replaceDramaPackageCodeTokens(text: string, resolve: (code: stri
 }
 
 /** Bind entries to project assets in authored order; duplicate codes keep their first fact. */
-export function bindDramaPackageReferenceEntries(
-    entries: DramaPackageReferenceEntry[],
-    resolveAsset: (code: string) => { assetId: string; role: DramaReferenceManifestRole } | undefined,
-): { intents: DramaShotReferenceIntent[]; unknownCodes: string[] } {
+export function bindDramaPackageReferenceEntries(entries: DramaPackageReferenceEntry[], resolveAsset: (code: string) => { assetId: string; role: DramaReferenceManifestRole } | undefined): { intents: DramaShotReferenceIntent[]; unknownCodes: string[] } {
     const intents: DramaShotReferenceIntent[] = [];
     const unknownCodes: string[] = [];
     const seen = new Set<string>();

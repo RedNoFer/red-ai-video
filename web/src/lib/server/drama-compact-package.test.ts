@@ -37,10 +37,7 @@ const source = [
     "~~~",
 ].join("\n");
 
-const referenceSource = source.replace(
-    "原样保留的画面与对白。\n第二行。",
-    "【参考】CHAR_01=林雪主外观与服装锁定；LOC_01=旧书房清晨光线。\n参考仅提供外观与空间基准职责，不含上传图片编号。\n\n保持CHAR_01形象不漂移。\n原样保留的画面与对白。",
-);
+const referenceSource = source.replace("原样保留的画面与对白。\n第二行。", "【参考】CHAR_01=林雪主外观与服装锁定；LOC_01=旧书房清晨光线。\n参考仅提供外观与空间基准职责，不含上传图片编号。\n\n保持CHAR_01形象不漂移。\n原样保留的画面与对白。");
 
 function project(): DramaProject {
     const shot: DramaShot = {
@@ -192,10 +189,7 @@ describe("compact drama package", () => {
 
     it("rejects unknown or mismatched 【参考】 codes before applying", () => {
         expect(() => applyDramaCompactPackage(project(), referenceSource.replace("CHAR_01=林雪主外观与服装锁定", "CHAR_09=未知角色主外观"), "book.md")).toThrow(/CHAR_09/);
-        const mismatched = source
-            .replace("### 场景 LOC_01｜旧书房", "### 场景 CHAR_02｜旧书房")
-            .replace("场景：LOC_01", "场景：CHAR_02")
-            .replace("原样保留的画面与对白。", "【参考】CHAR_02=旧书房清晨光线。\n原样保留的画面与对白。");
+        const mismatched = source.replace("### 场景 LOC_01｜旧书房", "### 场景 CHAR_02｜旧书房").replace("场景：LOC_01", "场景：CHAR_02").replace("原样保留的画面与对白。", "【参考】CHAR_02=旧书房清晨光线。\n原样保留的画面与对白。");
         expect(() => applyDramaCompactPackage(project(), mismatched, "book.md")).toThrow(/资产类型不符/);
     });
 

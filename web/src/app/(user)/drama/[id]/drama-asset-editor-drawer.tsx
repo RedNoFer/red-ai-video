@@ -964,62 +964,62 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
             {asset ? (
                 <>
                     <section ref={refinementSectionRef} className="border-t border-border pt-4" data-drama-asset-refinement>
-                            <div className="mb-2.5 flex items-start gap-2">
-                                <MessageCircle className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
-                                <div>
-                                    <h3 className="text-sm font-semibold">GPT 调整</h3>
-                                    <p className="mt-1 text-xs leading-5 text-muted-foreground">只修改你明确提出的特征，姓名、身份和一致性规则会自动保留。先生成候选，不会覆盖当前基准图。</p>
-                                </div>
+                        <div className="mb-2.5 flex items-start gap-2">
+                            <MessageCircle className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
+                            <div>
+                                <h3 className="text-sm font-semibold">GPT 调整</h3>
+                                <p className="mt-1 text-xs leading-5 text-muted-foreground">只修改你明确提出的特征，姓名、身份和一致性规则会自动保留。先生成候选，不会覆盖当前基准图。</p>
                             </div>
-                            {asset.refinementHistory?.length ? (
-                                <div className="hide-scrollbar mb-3 grid max-h-44 gap-2 overflow-y-auto border-l-2 border-border pl-3" aria-label="GPT 调整记录">
-                                    {asset.refinementHistory.slice(-3).map((item) => (
-                                        <div key={item.id} className="text-xs leading-5">
-                                            <p className="font-medium text-foreground">你：{item.request}</p>
-                                            <p className="text-muted-foreground">GPT：{item.reply}</p>
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : null}
-                            <Input.TextArea
-                                value={refinementPrompt}
-                                onChange={(event) => {
-                                    setSupplierPromptOverride(undefined);
-                                    setRefinementPrompt(event.target.value);
-                                }}
-                                autoSize={{ minRows: 3, maxRows: 6 }}
-                                placeholder={`${asset.name} 的肤色、服装、造型或材质需要怎样调整？`}
-                            />
-                            <div className="mt-2 flex justify-end">
-                                <Button type="primary" ghost icon={<Send className="size-3.5" />} loading={refining} disabled={!refinementPrompt.trim()} onClick={() => void requestRefinement()}>
-                                    生成调整方案
-                                </Button>
-                            </div>
-                            {refinementProposal ? (
-                                <div className="mt-3 rounded-lg border border-border bg-muted/20 p-3" data-drama-asset-refinement-proposal>
-                                    <p className="text-sm leading-6">{refinementProposal.reply}</p>
-                                    {refinementProposal.changes.length ? (
-                                        <div className="mt-2 grid gap-1.5 text-xs text-muted-foreground">
-                                            {refinementProposal.changes.map((change) => (
-                                                <div key={`${change.field}:${change.after}`}>
-                                                    <span className="font-medium text-foreground">{change.field}</span>：{change.before || "未填写"} → {change.after}
-                                                </div>
-                                            ))}
-                                        </div>
-                                    ) : null}
-                                    {refinementProposal.preservedRules.length ? <p className="mt-2 text-xs text-muted-foreground">保留：{refinementProposal.preservedRules.join("；")}</p> : null}
-                                    {refinementProposal.negativePrompt ? <p className="mt-1 text-xs text-muted-foreground">避免：{refinementProposal.negativePrompt}</p> : null}
-                                    <div className="mt-3 flex flex-wrap justify-end gap-2">
-                                        <Button size="small" onClick={applyRefinementDraft}>
-                                            仅应用到设定
-                                        </Button>
-                                        <Button size="small" type="primary" icon={<Sparkles className="size-3.5" />} loading={generationBusy} disabled={generationBusy} onClick={() => void generateReference()}>
-                                            生成调整候选
-                                        </Button>
+                        </div>
+                        {asset.refinementHistory?.length ? (
+                            <div className="hide-scrollbar mb-3 grid max-h-44 gap-2 overflow-y-auto border-l-2 border-border pl-3" aria-label="GPT 调整记录">
+                                {asset.refinementHistory.slice(-3).map((item) => (
+                                    <div key={item.id} className="text-xs leading-5">
+                                        <p className="font-medium text-foreground">你：{item.request}</p>
+                                        <p className="text-muted-foreground">GPT：{item.reply}</p>
                                     </div>
+                                ))}
+                            </div>
+                        ) : null}
+                        <Input.TextArea
+                            value={refinementPrompt}
+                            onChange={(event) => {
+                                setSupplierPromptOverride(undefined);
+                                setRefinementPrompt(event.target.value);
+                            }}
+                            autoSize={{ minRows: 3, maxRows: 6 }}
+                            placeholder={`${asset.name} 的肤色、服装、造型或材质需要怎样调整？`}
+                        />
+                        <div className="mt-2 flex justify-end">
+                            <Button type="primary" ghost icon={<Send className="size-3.5" />} loading={refining} disabled={!refinementPrompt.trim()} onClick={() => void requestRefinement()}>
+                                生成调整方案
+                            </Button>
+                        </div>
+                        {refinementProposal ? (
+                            <div className="mt-3 rounded-lg border border-border bg-muted/20 p-3" data-drama-asset-refinement-proposal>
+                                <p className="text-sm leading-6">{refinementProposal.reply}</p>
+                                {refinementProposal.changes.length ? (
+                                    <div className="mt-2 grid gap-1.5 text-xs text-muted-foreground">
+                                        {refinementProposal.changes.map((change) => (
+                                            <div key={`${change.field}:${change.after}`}>
+                                                <span className="font-medium text-foreground">{change.field}</span>：{change.before || "未填写"} → {change.after}
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : null}
+                                {refinementProposal.preservedRules.length ? <p className="mt-2 text-xs text-muted-foreground">保留：{refinementProposal.preservedRules.join("；")}</p> : null}
+                                {refinementProposal.negativePrompt ? <p className="mt-1 text-xs text-muted-foreground">避免：{refinementProposal.negativePrompt}</p> : null}
+                                <div className="mt-3 flex flex-wrap justify-end gap-2">
+                                    <Button size="small" onClick={applyRefinementDraft}>
+                                        仅应用到设定
+                                    </Button>
+                                    <Button size="small" type="primary" icon={<Sparkles className="size-3.5" />} loading={generationBusy} disabled={generationBusy} onClick={() => void generateReference()}>
+                                        生成调整候选
+                                    </Button>
                                 </div>
-                            ) : null}
-                        </section>
+                            </div>
+                        ) : null}
+                    </section>
                     <section className="border-t border-border pt-4">
                         <div className="flex flex-wrap items-start justify-between gap-3">
                             <div>

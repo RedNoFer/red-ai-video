@@ -82,7 +82,10 @@ export async function createDramaAssetGenerationBatchForUser(userId: string, pro
     return createDramaAssetGenerationBatch(userId, batch);
 }
 
-export function compileDramaAssetBatchItemPrompt(project: Pick<DramaProject, "title" | "style" | "ratio" | "productionBible" | "characters" | "scenes" | "props" | "clues">, item: Pick<DramaAssetGenerationBatchItem, "kind" | "assetId" | "prompt" | "outputType">) {
+export function compileDramaAssetBatchItemPrompt(
+    project: Pick<DramaProject, "title" | "style" | "ratio" | "productionBible" | "characters" | "scenes" | "props" | "clues">,
+    item: Pick<DramaAssetGenerationBatchItem, "kind" | "assetId" | "prompt" | "outputType">,
+) {
     const assets = item.kind === "characters" ? project.characters : item.kind === "scenes" ? project.scenes : item.kind === "clues" ? project.clues : project.props;
     const asset = assets.find((candidate) => candidate.id === item.assetId);
     if (!asset) throw new DramaAssetGenerationBatchError("批量生成资产不存在", 404);
