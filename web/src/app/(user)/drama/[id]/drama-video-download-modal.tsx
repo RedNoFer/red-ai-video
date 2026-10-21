@@ -123,15 +123,15 @@ export function DramaVideoDownloadModal({ open, projectId, onClose }: { open: bo
                                             </span>
                                         </div>
                                         <div className="space-y-2.5 px-3 py-2.5">
-                                            {episode.shots.map((shot) => (
+                                            {episode.shots.map((shot, shotIndex) => (
                                                 <div key={shot.shotId}>
                                                     <div className="text-xs font-medium text-muted-foreground">
                                                         {shot.code} · {shot.title}
                                                     </div>
                                                     <div className="mt-1 grid gap-1.5 sm:grid-cols-2">
-                                                        {shot.videos.map((video) => {
+                                                        {shot.videos.map((video, videoIndex) => {
                                                             const key = dramaVideoExportEntryKey(episode.episodeId, shot.shotId, video.id);
-                                                            const inputId = `drama-video-export-${episode.order}-${shot.shotId}-${video.id}`.replace(/[^\w-]/g, "-");
+                                                            const inputId = `drama-video-export-${episode.order}-${shotIndex}-${videoIndex}`;
                                                             return (
                                                                 <div key={key} className="flex min-w-0 items-center gap-2 rounded-md border border-border px-2 py-1.5">
                                                                     <Checkbox

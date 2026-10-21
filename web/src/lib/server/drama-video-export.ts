@@ -69,7 +69,7 @@ export async function collectDramaVideoExportPayload(userId: string, project: Dr
 export async function exportDramaVideos(input: { project: DramaProject; entries: DramaVideoExportEntry[]; origin: string; cookie?: string }): Promise<DramaVideoExportResult> {
     if (!input.entries.length) throw new DramaVideoExportError("请先选择要下载的视频", 422);
     const root = await mkdtemp(join(tmpdir(), "vozeb-drama-videos-"));
-    const downloads: Array<{ path: string; zipPath: string }> = [];
+    const downloads: Array<{ entry: DramaVideoExportEntry; path: string; zipPath: string }> = [];
     const failures: Array<{ episode: string; shot: string; reason: string }> = [];
     const variants = new Map<string, number>();
     let totalBytes = 0;
@@ -83,7 +83,7 @@ export async function exportDramaVideos(input: { project: DramaProject; entries:
                 const shotKey = `${entry.episodeId}::${entry.shotId}`;
                 const variant = (variants.get(shotKey) || 0) + 1;
                 variants.set(shotKey, variant);
-                downloads.push({ path, zipPath: `${episodeFolder(entry)}/${shotFileName(entry, variant, downloaded.mimeType)}` });
+                downloads.push({ entry, path, zipPath: `${episodeFolder(entry)}/${shotFileName(entry, variant, downloaded.mimeType)}` });
             } catch (error) {
                 if (error instanceof DramaVideoExportError) throw error;
                 failures.push({ episode: entry.episodeTitle, shot: entry.shotTitle, reason: error instanceof Error ? error.message : "下载失败" });
@@ -94,7 +94,7 @@ export async function exportDramaVideos(input: { project: DramaProject; entries:
             projectId: input.project.id,
             projectTitle: input.project.title,
             exportedAt: new Date().toISOString(),
-            exported: input.entries.map((entry, index) => ({ episode: entry.episodeTitle, shot: entry.shotTitle, shotCode: entry.shotCode, file: downloads[index]?.zipPath, videoId: entry.videoId, url: entry.url })),
+            exported: downloads.map(({ entry, zipPath }) => ({ episode: entry.episodeTitle, shot: entry.shotTitle, shotCode: entry.shotCode, file: zipPath, videoId: entry.videoId, url: entry.url })),
             failed: failures,
         };
         const stream = createZipStream(root, downloads, manifest);
