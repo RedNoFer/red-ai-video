@@ -37,6 +37,7 @@ import { AudioTag, DramaStageHeader, GenerationTag, StoryboardTag } from "./dram
 import { summarizeDramaGeneration } from "./drama-generation-readiness";
 import { DramaMediaPreviewModal, DramaMediaThumbnail, type DramaPreviewMedia } from "./drama-media-preview";
 import { DramaJianyingModal, DramaSubtitleModal } from "./drama-project-modals";
+import { DramaVideoDownloadModal } from "./drama-video-download-modal";
 import type { DramaProjectStage } from "./drama-project-sections";
 import { applyDramaProductionRunStep, isActiveDramaVideoStep, applyDramaVisualRunTerminalStep, dramaShotVideoMode, estimateEpisodePoints, resolveDramaVisualRunSync } from "./drama-shot-generation-utils";
 import { markDramaCanvasSynced } from "../../canvas/[id]/canvas-drama-navigation";
@@ -106,6 +107,7 @@ export function DramaGenerationPanel({
     const [visualRun, setVisualRun] = useState<DramaProductionRun | null>(null);
     const [visualPlanning, setVisualPlanning] = useState(false);
     const [jianyingOpen, setJianyingOpen] = useState(false);
+    const [videoDownloadOpen, setVideoDownloadOpen] = useState(false);
     const [jianyingPath, setJianyingPath] = useState("");
     const [jianyingVersion, setJianyingVersion] = useState<"5" | "6">("6");
     const [jianyingExporting, setJianyingExporting] = useState(false);
@@ -117,6 +119,7 @@ export function DramaGenerationPanel({
     const productionSyncVersion = useRef("");
     const productionPreflightKey = useRef("");
     const readiness = useMemo(() => summarizeDramaGeneration(project, episode), [episode, project]);
+    const downloadableVideoCount = useMemo(() => project.episodes.reduce((total, item) => total + item.shots.filter((shot) => shot.videoUrl).length, 0), [project]);
     const activeBatchShotIds = useMemo(
         () =>
             new Set([
@@ -856,9 +859,12 @@ export function DramaGenerationPanel({
                                 字幕时间轴
                             </Button>
                         </ToolGroup>
-                        <ToolGroup title="交付导出" description="镜头结果可导出字幕和剪映草稿，成片完成后直接下载。">
+                        <ToolGroup title="交付导出" description="镜头结果可导出字幕、批量下载视频和剪映草稿，成片完成后直接下载。">
                             <Button className={actionButtonClass} icon={<Download className="size-4" />} disabled={!episode.shots.some((shot) => (shot.subtitle || shot.dialogue).trim())} onClick={downloadSubtitles}>
                                 导出 SRT
+                            </Button>
+                            <Button className={actionButtonClass} icon={<Download className="size-4" />} disabled={!downloadableVideoCount} onClick={() => setVideoDownloadOpen(true)}>
+                                批量下载视频
                             </Button>
                             <Button className={actionButtonClass} icon={<Download className="size-4" />} disabled={!episode.shots.some((shot) => shot.videoUrl)} onClick={() => setJianyingOpen(true)}>
                                 剪映草稿
@@ -968,6 +974,7 @@ export function DramaGenerationPanel({
                 </div>
             </Modal>
             <DramaSubtitleModal open={subtitleOpen} shots={episode.shots} onClose={() => setSubtitleOpen(false)} />
+            <DramaVideoDownloadModal open={videoDownloadOpen} projectId={project.id} onClose={() => setVideoDownloadOpen(false)} />
             <DramaMediaPreviewModal media={previewMedia} onClose={() => setPreviewMedia(undefined)} />
         </div>
     );

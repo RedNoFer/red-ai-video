@@ -23,6 +23,7 @@ import type {
     DramaVideoReferenceMode,
 } from "@/lib/drama-project-contract";
 import { resolveDramaGlobalVisualContract } from "@/lib/drama-style";
+import type { DramaVideoExportPayload } from "@/lib/drama-video-export";
 
 export type DramaAssetGenerationStatus = {
     id: string;
@@ -627,6 +628,26 @@ export async function exportDramaJianyingDraft(projectId: string, input: { episo
     const disposition = response.headers.get("content-disposition") || "";
     const encodedName = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
     return { blob: await response.blob(), fileName: encodedName ? decodeURIComponent(encodedName) : "短剧剪映草稿.zip" };
+}
+
+export async function exportDramaVideos(projectId: string, items: Array<{ episodeId: string; shotId: string; videoId: string }>) {
+    const response = await fetch(`/api/drama/projects/${encodeURIComponent(projectId)}/export-videos`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items }) });
+    if (!response.ok) {
+        const payload = (await response.json().catch(() => ({}))) as { msg?: string };
+        throw new Error(payload.msg || "批量下载视频失败");
+    }
+    const disposition = response.headers.get("content-disposition") || "";
+    const encodedName = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+    return {
+        blob: await response.blob(),
+        fileName: encodedName ? decodeURIComponent(encodedName) : "短剧视频.zip",
+        exported: Number(response.headers.get("x-drama-video-export-exported") || "0"),
+        failed: Number(response.headers.get("x-drama-video-export-failed") || "0"),
+    };
+}
+
+export function listDramaProjectVideos(projectId: string) {
+    return request<DramaVideoExportPayload>(`/api/drama/projects/${encodeURIComponent(projectId)}/videos`, { cache: "no-store" });
 }
 
 async function request<T>(url: string, init?: RequestInit) {
