@@ -39,6 +39,72 @@ const source = [
 
 const referenceSource = source.replace("原样保留的画面与对白。\n第二行。", "【参考】CHAR_01=林雪主外观与服装锁定；LOC_01=旧书房清晨光线。\n参考仅提供外观与空间基准职责，不含上传图片编号。\n\n保持CHAR_01形象不漂移。\n原样保留的画面与对白。");
 
+const sequelSource = [
+    "# 精简制作包",
+    "## 固定资产",
+    "### 角色 CHAR_01｜林雪",
+    "#### 图片提示词",
+    "~~~text",
+    "新角色外貌提示词",
+    "~~~",
+    "### 场景 LOC_01｜旧书房",
+    "#### 图片提示词",
+    "~~~text",
+    "后左门、右窗、中央木桌，9:16 单视角全景",
+    "~~~",
+    "### 道具 PROP_01｜旧铁盒",
+    "#### 图片提示词",
+    "~~~text",
+    "旧铁盒基础态提示词",
+    "~~~",
+    "## 剧集 E05｜第五集 喜宴之后",
+    "### 小说原文",
+    "~~~text",
+    "第五段正文。",
+    "~~~",
+    "### 片段 SH01｜15秒｜喜宴散场",
+    "角色：CHAR_01",
+    "场景：LOC_01",
+    "道具：PROP_01",
+    "#### 章节文案",
+    "~~~text",
+    "喜宴散场后的走廊。",
+    "~~~",
+    "#### 静帧提示词",
+    "~~~text",
+    "喜宴散场后的走廊静帧。",
+    "~~~",
+    "#### 视频提示词",
+    "~~~text",
+    "喜宴散场，林雪沿走廊离开。",
+    "~~~",
+    "#### 首帧提示词",
+    "~~~text",
+    "喜宴散场的走廊首帧。",
+    "~~~",
+].join("\n");
+
+const bareSource = [
+    "# 精简制作包",
+    "## 固定资产",
+    "### 角色 CHAR_01｜林雪",
+    "#### 图片提示词",
+    "~~~text",
+    "新角色外貌提示词",
+    "~~~",
+    "## 剧集 E01｜零公里",
+    "### 小说原文",
+    "~~~text",
+    "第一段。",
+    "~~~",
+    "### 片段 SH01｜15秒｜取下铁盒",
+    "角色：CHAR_01",
+    "#### 视频提示词",
+    "~~~text",
+    "包里的新视频提示词。",
+    "~~~",
+].join("\n");
+
 function project(): DramaProject {
     const shot: DramaShot = {
         id: "shot-original",
@@ -118,6 +184,51 @@ describe("compact drama package", () => {
         const parsed = parseDramaCompactPackage(template);
         expect(parsed.episodes).toHaveLength(1);
         expect(parsed.episodes[0].shots).toHaveLength(1);
+        expect(parsed.episodes[0].shots[0].description).toBe("");
+        expect(parsed.episodes[0].shots[0].imagePrompt).toBe("");
+        expect(template).toContain("续集规范");
+    });
+
+    it("appends a sequel episode by code and keeps existing episodes and assets intact", () => {
+        const before = project();
+        const preview = previewDramaCompactPackage(sequelSource, before);
+        expect(preview.summary).toMatchObject({ episodes: 1, assetsReused: 2, assetsNew: 1, shotsUpdated: 0 });
+        const after = applyDramaCompactPackage(before, sequelSource, "sequel.md");
+        expect(after.episodes.map((episode) => episode.code)).toEqual(["E01", "E05"]);
+        expect(after.episodes[0]).toBe(before.episodes[0]);
+        expect(after.episodes[1]).toMatchObject({ code: "E05", title: "第五集 喜宴之后", script: "第五段正文。", reviewStatus: "draft" });
+        expect(after.episodes[1].shots[0]).toMatchObject({
+            code: "SH01",
+            title: "喜宴散场",
+            videoPrompt: "喜宴散场，林雪沿走廊离开。",
+            imagePrompt: "喜宴散场后的走廊静帧。",
+            startFramePrompt: "喜宴散场的走廊首帧。",
+            characterIds: ["character-old"],
+            sceneId: "scene-old",
+        });
+        expect(after.episodes[1].shots[0].fieldOrigins).toMatchObject({ imagePrompt: "package", videoPrompt: "package", startFramePrompt: "package" });
+        expect(after.characters.find((item) => item.id === "character-old")).toMatchObject({ supplierPrompt: "已确认的旧基准提示词" });
+        expect(after.props.map((item) => item.code)).toEqual(["PROP_01"]);
+    });
+
+    it("leaves package-empty fields open for later AI passes and never overwrites manual edits", () => {
+        const before = project();
+        const after = applyDramaCompactPackage(before, bareSource, "update.md");
+        expect(after.episodes[0].shots[0].imagePrompt).toBe("");
+        expect(after.episodes[0].shots[0].fieldOrigins?.imagePrompt).toBeUndefined();
+        expect(after.episodes[0].shots[0].videoPrompt).toBe("包里的新视频提示词。");
+        expect(after.episodes[0].shots[0].fieldOrigins?.videoPrompt).toBe("package");
+
+        const manual = {
+            ...before,
+            episodes: before.episodes.map((episode) => ({
+                ...episode,
+                shots: episode.shots.map((shot) => ({ ...shot, videoPrompt: "人工写死的视频提示词", fieldOrigins: { ...shot.fieldOrigins, videoPrompt: "manual" as const } })),
+            })),
+        };
+        const manualAfter = applyDramaCompactPackage(manual, bareSource, "update.md");
+        expect(manualAfter.episodes[0].shots[0].videoPrompt).toBe("人工写死的视频提示词");
+        expect(manualAfter.episodes[0].shots[0].fieldOrigins?.videoPrompt).toBe("manual");
     });
 
     it("imports original prose and core shot bindings while reusing confirmed assets and old media", () => {

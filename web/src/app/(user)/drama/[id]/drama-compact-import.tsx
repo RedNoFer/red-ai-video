@@ -114,7 +114,7 @@ export function DramaCompactImport({ project, onImported }: { project: DramaProj
                     </Button>
                     <div className="flex items-center gap-3 text-xs text-muted-foreground before:h-px before:flex-1 before:bg-border after:h-px after:flex-1 after:bg-border">或直接粘贴</div>
                     <Input.TextArea value={draft} onChange={(event) => setDraft(event.target.value)} autoSize={{ minRows: 10, maxRows: 18 }} placeholder="粘贴精简制作包 Markdown" aria-label="粘贴精简制作包" />
-                    <p className="text-xs leading-5 text-muted-foreground">只需小说原文、固定资产图提示词及各片段视频提示词；预览后再确认导入。</p>
+                    <p className="text-xs leading-5 text-muted-foreground">只需小说原文、固定资产图提示词及各片段视频提示词；预览后再确认导入。续集请写新的剧集代码（如 E05）以追加为新一集，固定资产名称与项目一致即自动复用。</p>
                 </div>
             </Modal>
             <Modal
@@ -160,7 +160,7 @@ export function DramaCompactImport({ project, onImported }: { project: DramaProj
                                 ))}
                             </ul>
                         ) : null}
-                        <p className="text-xs leading-5 text-muted-foreground">仅更新包内剧集；已有固定资产基准图和已保存提示词会保留。导入前自动创建恢复版本。</p>
+                        <p className="text-xs leading-5 text-muted-foreground">仅更新包内剧集；已有固定资产基准图和已保存提示词会保留。包内剧集按代码对应项目：代码不存在则追加为新一集，代码相同则整集替换，其余集不受影响。导入前自动创建恢复版本。</p>
                     </div>
                 ) : null}
             </Modal>

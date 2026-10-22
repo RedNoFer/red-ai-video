@@ -48,6 +48,21 @@ function nameKey(value: string) {
     return value.normalize("NFKC").trim().replace(/\s+/gu, " ").toLocaleLowerCase();
 }
 
+const COMPACT_SHOT_TEXT_FIELDS = ["title", "description", "imagePrompt", "videoPrompt", "startFramePrompt", "endFramePrompt"] as const;
+
+type CompactShotTextField = (typeof COMPACT_SHOT_TEXT_FIELDS)[number];
+
+/**
+ * Package text wins, manual edits stay manual, and fields the package leaves
+ * empty stay open so later AI passes can fill them.
+ */
+function resolveCompactTextField(field: CompactShotTextField, incoming: string | undefined, previous: DramaShot | undefined) {
+    const previousOrigin = previous?.fieldOrigins?.[field];
+    if (previousOrigin === "manual") return { value: previous?.[field] || "", origin: "manual" as const };
+    if (incoming?.trim()) return { value: incoming, origin: "package" as const };
+    return { value: "", origin: undefined };
+}
+
 function parseCodes(value: string) {
     return value.split(/[,，、\s]+/u).filter(Boolean);
 }
@@ -301,6 +316,10 @@ export function applyDramaCompactPackage(project: DramaProject, source: string, 
     for (const item of compact.episodes) {
         const index = episodes.findIndex((episode) => episode.code === item.code);
         const current = episodes[index];
+        const episodeText = (key: "title" | "script") => {
+            if (current?.fieldOrigins?.[key] === "manual") return { value: current[key] || "", origin: "manual" as const };
+            return { value: item[key], origin: "package" as const };
+        };
         const shots = item.shots.map((shot, shotIndex): DramaShot => {
             const previous = current?.shots.find((candidate) => candidate.code === shot.code);
             const characterIds = shot.characters.map((code) => ids.get(code)!);
@@ -314,14 +333,28 @@ export function applyDramaCompactPackage(project: DramaProject, source: string, 
                 intents.set(assetId, { assetId, code: entry.code, role: roleForKind[kindByCode.get(entry.code) || "props"], guidance: entry.guidance });
             }
             const hasOldMedia = Boolean(previous?.videoUrl || previous?.storyboardImageUrl || previous?.storyboardEndImageUrl || previous?.storyboardFrames?.some((frame) => frame.mediaUrl));
+            const text = Object.fromEntries(COMPACT_SHOT_TEXT_FIELDS.map((key) => [key, resolveCompactTextField(key, shot[key], previous)])) as Record<CompactShotTextField, { value: string; origin: "manual" | "package" | "ai" | undefined }>;
+            const fieldOrigins: NonNullable<DramaShot["fieldOrigins"]> = {
+                ...previous?.fieldOrigins,
+                duration: "package",
+                characterIds: "package",
+                sceneId: "package",
+                propIds: "package",
+                clueIds: "package",
+            };
+            for (const key of COMPACT_SHOT_TEXT_FIELDS) {
+                const origin = text[key].origin;
+                if (origin) fieldOrigins[key] = origin;
+                else delete fieldOrigins[key];
+            }
             return {
                 ...previous,
                 id: previous?.id || `shot-${nanoid()}`,
                 code: shot.code,
                 order: shotIndex + 1,
-                title: shot.title,
+                title: text.title.value,
                 duration: shot.duration,
-                description: shot.description || "",
+                description: text.description.value,
                 sourceText: "",
                 shotBoundary: "",
                 dialogue: "",
@@ -330,12 +363,12 @@ export function applyDramaCompactPackage(project: DramaProject, source: string, 
                 performancePlan: undefined,
                 dialoguePerformance: undefined,
                 lightingPlan: undefined,
-                imagePrompt: shot.imagePrompt || "",
-                videoPrompt: shot.videoPrompt,
+                imagePrompt: text.imagePrompt.value,
+                videoPrompt: text.videoPrompt.value,
                 executionVideoPrompt: undefined,
                 executionImagePrompt: undefined,
-                startFramePrompt: shot.startFramePrompt,
-                endFramePrompt: shot.endFramePrompt,
+                startFramePrompt: text.startFramePrompt.value,
+                endFramePrompt: text.endFramePrompt.value,
                 cameraMotion: "",
                 continuity: undefined,
                 entryState: undefined,
@@ -357,26 +390,15 @@ export function applyDramaCompactPackage(project: DramaProject, source: string, 
                 generationStatus: previous?.videoUrl ? "stale" : previous?.generationStatus || "idle",
                 audioStatus: previous?.audioUrl ? "stale" : previous?.audioStatus || "idle",
                 continuityStatus: hasOldMedia ? "stale" : "ready",
-                fieldOrigins: {
-                    ...previous?.fieldOrigins,
-                    title: "package",
-                    description: "package",
-                    duration: "package",
-                    imagePrompt: "package",
-                    videoPrompt: "package",
-                    characterIds: "package",
-                    sceneId: "package",
-                    propIds: "package",
-                    clueIds: "package",
-                },
+                fieldOrigins,
             };
         });
         const nextEpisode: DramaEpisode = {
             ...current,
             id: current?.id || `episode-${nanoid()}`,
             code: item.code,
-            title: item.title,
-            script: item.script,
+            title: episodeText("title").value,
+            script: episodeText("script").value,
             scriptRichContent: undefined,
             outline: "",
             hook: "",
@@ -389,7 +411,7 @@ export function applyDramaCompactPackage(project: DramaProject, source: string, 
             continuityEdges: [],
             shots,
             renderTask: undefined,
-            fieldOrigins: { ...current?.fieldOrigins, title: "package", script: "package" },
+            fieldOrigins: { ...current?.fieldOrigins, title: episodeText("title").origin, script: episodeText("script").origin },
         };
         if (index < 0) episodes.push(nextEpisode);
         else episodes[index] = nextEpisode;
