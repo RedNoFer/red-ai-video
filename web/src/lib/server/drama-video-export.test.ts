@@ -26,7 +26,14 @@ describe("Drama video export", () => {
             { id: "current-task", isCurrent: true },
             { id: "candidate-task", isCurrent: false },
         ]);
-        expect(payload.episodes[1].shots[0].videos).toHaveLength(1);
+        expect(payload.episodes[1].shots).toHaveLength(0);
+    });
+
+    it("does not offer shots that have no current video", async () => {
+        const payload = await collectDramaVideoExportPayload("user-one", project());
+
+        expect(payload.episodes[0].shots.map((item) => item.shotId)).toEqual(["shot-one"]);
+        expect(payload.episodes[1].shots).toHaveLength(0);
     });
 
     it("packs the selected videos into a zip grouped by episode", async () => {
@@ -40,11 +47,11 @@ describe("Drama video export", () => {
         const files = unzipSync(new Uint8Array(await new Response(result.stream).arrayBuffer()));
         const names = Object.keys(files);
 
-        expect(names).toEqual(expect.arrayContaining([expect.stringMatching(/^01_第 1 集\/SH01_开场\.mp4$/), expect.stringMatching(/^01_第 1 集\/SH01_开场_2\.mp4$/), expect.stringMatching(/^02_第 2 集\/SH02_收尾\.mp4$/), "manifest.json"]));
-        expect(result.exported).toBe(3);
+        expect(names).toEqual(expect.arrayContaining([expect.stringMatching(/^01_第 1 集\/SH01_开场\.mp4$/), expect.stringMatching(/^01_第 1 集\/SH01_开场_2\.mp4$/), "manifest.json"]));
+        expect(result.exported).toBe(2);
         expect(result.failed).toBe(0);
         const manifest = JSON.parse(new TextDecoder().decode(files["manifest.json"])) as { exported: unknown[]; failed: unknown[] };
-        expect(manifest.exported).toHaveLength(3);
+        expect(manifest.exported).toHaveLength(2);
         expect(manifest.failed).toHaveLength(0);
     });
 
@@ -64,7 +71,7 @@ describe("Drama video export", () => {
 function project(): DramaProject {
     const now = new Date().toISOString();
     const first = episode("episode-one", "第 1 集", [{ ...shot("shot-one", "SH01", "开场"), videoUrl: "/api/media/current.mp4" }]);
-    const second = episode("episode-two", "第 2 集", [{ ...shot("shot-two", "SH02", "收尾"), videoUrl: "/api/media/second.mp4" }]);
+    const second = episode("episode-two", "第 2 集", [{ ...shot("shot-two", "SH02", "收尾") }]);
     return {
         id: "project-one",
         title: "测试短剧",

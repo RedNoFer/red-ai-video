@@ -30,20 +30,20 @@ export default defineConfig({
             name: "chromium",
             testMatch: [
                 /drama-video-task-sync\.spec\.ts/,
-                /(?:admin-channel-api-key|admin-channel-save|all-pages|canvas|commerce|core|creative-video-result|drama-asset-batch-panel|drama-asset-candidate-generation|drama-assets-scroll|drama-episode-settings|drama-frame-sequence|drama-package-import|drama-review-audio-flow|drama-scene-reference-preview|drama-video-advisory|drama-video-batch-download|home|responsive)\.spec\.ts/,
+                /(?:admin-channel-api-key|admin-channel-save|all-pages|canvas|commerce|core|creative-video-result|drama-asset-batch-panel|drama-asset-candidate-generation|drama-assets-scroll|drama-batch-consent|drama-episode-settings|drama-frame-sequence|drama-package-import|drama-review-audio-flow|drama-scene-reference-preview|drama-video-advisory|drama-video-batch-download|home|responsive)\.spec\.ts/,
             ],
             dependencies: ["setup"],
             use: { ...devices["Desktop Chrome"], storageState },
         },
         {
             name: "mobile-390",
-            testMatch: /(?:all-pages|commerce|creative-video-result|drama-package-import|drama-review-audio-flow|drama-video-batch-download|drama-video-task-sync|drama-scene-reference-preview|home|responsive)\.spec\.ts/,
+            testMatch: /(?:all-pages|commerce|creative-video-result|drama-package-import|drama-batch-consent|drama-review-audio-flow|drama-video-batch-download|drama-video-task-sync|drama-scene-reference-preview|home|responsive)\.spec\.ts/,
             dependencies: ["setup"],
             use: { ...devices["iPhone 13"], browserName: "chromium", viewport: { width: 390, height: 844 }, storageState },
         },
         {
             name: "mobile-430",
-            testMatch: /(?:all-pages|commerce|creative-video-result|drama-package-import|drama-review-audio-flow|drama-video-batch-download|drama-video-task-sync|drama-scene-reference-preview|home|responsive)\.spec\.ts/,
+            testMatch: /(?:all-pages|commerce|creative-video-result|drama-package-import|drama-batch-consent|drama-review-audio-flow|drama-video-batch-download|drama-video-task-sync|drama-scene-reference-preview|home|responsive)\.spec\.ts/,
             dependencies: ["setup"],
             use: { ...devices["iPhone 14 Pro Max"], browserName: "chromium", viewport: { width: 430, height: 932 }, storageState },
         },

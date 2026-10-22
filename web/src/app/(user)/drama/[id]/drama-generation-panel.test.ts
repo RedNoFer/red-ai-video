@@ -11,6 +11,18 @@ describe("Drama generation production workspace", () => {
         expect(source).not.toContain("group-hover:scale-[1.02]");
     });
 
+    it("confirms every pending resubmission once for the whole batch and supports select all and deselect all", async () => {
+        const source = await readFile(resolve(process.cwd(), "src/app/(user)/drama/[id]/drama-generation-panel.tsx"), "utf8");
+
+        expect(source).toContain("data-drama-batch-consent");
+        expect(source).toContain("全部确认原提交并承担可能的重复计费");
+        expect(source).toContain("全部勾选");
+        expect(source).toContain("全部取消勾选");
+        expect(source).toContain("toggleAllUncertain");
+        expect(source).toContain("uncertainRows.length > 1");
+        expect(source).toContain("confirmedUncertainCount === uncertainTaskIds.length");
+    });
+
     it("uses readiness, one primary action, grouped tools and an actionable compact empty state", async () => {
         const source = await readFile(resolve(process.cwd(), "src/app/(user)/drama/[id]/drama-generation-panel.tsx"), "utf8");
 

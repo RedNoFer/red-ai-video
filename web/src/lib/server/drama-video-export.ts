@@ -48,6 +48,7 @@ export async function collectDramaVideoExportPayload(userId: string, project: Dr
             byShot.set(shotId, results);
         }
         const shots = episode.shots
+            .filter((shot) => Boolean(shot.videoUrl))
             .map((shot) => {
                 const merged = mergeDramaShotVideoResults(shot, byShot.get(shot.id) || []);
                 const videos = visibleDramaShotVideoResults(merged).map((result) => ({

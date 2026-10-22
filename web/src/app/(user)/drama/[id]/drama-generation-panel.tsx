@@ -1847,6 +1847,10 @@ function ProductionPromptPreview({
     const [videoPrompts, setVideoPrompts] = useState<Record<string, string>>(initialVideoPrompts);
     const [confirmedUncertainTaskIds, setConfirmedUncertainTaskIds] = useState<string[]>([]);
     const [expandedPrompts, setExpandedPrompts] = useState<string[]>([]);
+    const uncertainRows = rows.filter((row) => row.shot.generationStatus === "needs_review" && row.shot.generationTaskId);
+    const uncertainTaskIds = uncertainRows.map((row) => row.shot.generationTaskId!);
+    const confirmedUncertainCount = uncertainTaskIds.filter((id) => confirmedUncertainTaskIds.includes(id)).length;
+    const toggleAllUncertain = (checked: boolean) => setConfirmedUncertainTaskIds((current) => (checked ? [...new Set([...current, ...uncertainTaskIds])] : current.filter((id) => !uncertainTaskIds.includes(id))));
     const savingRef = useRef(new Set<string>());
     const [savingIds, setSavingIds] = useState<string[]>([]);
     const [savedIds, setSavedIds] = useState<string[]>([]);
@@ -1902,6 +1906,34 @@ function ProductionPromptPreview({
     }, [confirmedUncertainTaskIds, invalid, onChange, referenceModes, selections, videoPrompts]);
     return (
         <div className="max-h-[60vh] overflow-y-auto pr-1 text-sm">
+            {uncertainRows.length > 1 ? (
+                <div className="sticky top-0 z-10 mb-3 space-y-2 rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-sm" data-drama-batch-consent>
+                    <p>上次提交的结果尚未确认，这不代表上游现在不可用。请先在供应商记录中核对；管理员可在生成任务中心补录任务 ID 或确认未创建。</p>
+                    <p>继续将创建独立的新任务，可能与上次提交重复生成、重复计费。原记录会保留，已有视频仍可使用。</p>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                        <Checkbox
+                            aria-label={`全部确认原提交并承担可能的重复计费（${uncertainRows.length} 个待确认镜头）`}
+                            checked={confirmedUncertainCount === uncertainTaskIds.length}
+                            indeterminate={confirmedUncertainCount > 0 && confirmedUncertainCount < uncertainTaskIds.length}
+                            onChange={(event) => toggleAllUncertain(event.target.checked)}
+                        >
+                            全部确认原提交，仍要发起新任务并承担可能的重复计费
+                        </Checkbox>
+                        <span className="text-xs tabular-nums text-muted-foreground">
+                            已确认 {confirmedUncertainCount} / {uncertainTaskIds.length}
+                        </span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-3 text-xs">
+                        <button type="button" className="font-medium text-primary underline-offset-2 hover:underline" onClick={() => toggleAllUncertain(true)}>
+                            全部勾选
+                        </button>
+                        <button type="button" className="font-medium text-primary underline-offset-2 hover:underline" onClick={() => toggleAllUncertain(false)}>
+                            全部取消勾选
+                        </button>
+                        <span className="text-muted-foreground">勾选一次即对全部待确认镜头生效，也可以单独取消某个镜头。</span>
+                    </div>
+                </div>
+            ) : null}
             {!batchSelection ? (
                 <div className="mb-3 grid gap-2 rounded-md border border-border bg-muted/20 p-3 text-xs sm:grid-cols-2">
                     <span>清晰度：{project.productionBible?.productionPlan?.video.resolution || "按后台默认"}</span>
@@ -1935,9 +1967,13 @@ function ProductionPromptPreview({
                     <section key={shot.id} data-drama-prompt-shot-id={shot.id} className={`mb-3 min-w-0 rounded-md border p-3 last:mb-0 ${overLimit ? "border-red-500" : "border-border"}`}>
                         {shot.generationStatus === "needs_review" ? (
                             <div className="mb-3 space-y-2 rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-sm">
-                                <p>上次提交的结果尚未确认，这不代表上游现在不可用。请先在供应商记录中核对；管理员可在生成任务中心补录任务 ID 或确认未创建。</p>
+                                {uncertainRows.length > 1 ? null : (
+                                    <>
+                                        <p>上次提交的结果尚未确认，这不代表上游现在不可用。请先在供应商记录中核对；管理员可在生成任务中心补录任务 ID 或确认未创建。</p>
+                                        <p>继续将创建独立的新任务，可能与上次提交重复生成、重复计费。原记录会保留，已有视频仍可使用。</p>
+                                    </>
+                                )}
                                 <p className="break-all text-xs text-muted-foreground">原任务：{shot.generationTaskId || "未取得本地任务编号，请联系管理员"}</p>
-                                <p>继续将创建独立的新任务，可能与上次提交重复生成、重复计费。原记录会保留，已有视频仍可使用。</p>
                                 <Checkbox
                                     disabled={disabled || !shot.generationTaskId}
                                     checked={confirmedUncertainTaskIds.includes(shot.generationTaskId || "")}

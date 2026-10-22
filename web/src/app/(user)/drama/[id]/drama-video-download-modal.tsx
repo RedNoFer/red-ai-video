@@ -157,7 +157,7 @@ export function DramaVideoDownloadModal({ open, projectId, onClose }: { open: bo
                             })}
                     </div>
                 ) : (
-                    <Empty className="!my-8" description="当前项目还没有可下载的镜头视频" />
+                    <Empty className="!my-8" description="还没有已生成视频的镜头可以下载" />
                 )}
             </div>
         </Modal>
