@@ -38,6 +38,8 @@ data/
 !.agents/skills/drama-video-director/**
 !.agents/skills/character-asset-prompts/
 !.agents/skills/character-asset-prompts/**
+!.agents/skills/vozeb-pro-production-ops/
+!.agents/skills/vozeb-pro-production-ops/**
 skills-lock.json
 output/
 docs/generated/
