@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { App, Button, Input, Modal } from "antd";
-import { Download, PackageOpen, Upload } from "lucide-react";
+import { Check, Download, PackageOpen, Upload } from "lucide-react";
 
 import { applyDramaCompactPackage, previewDramaCompactPackage, type DramaCompactPackagePreview } from "@/services/api/drama-projects";
 import type { DramaProject } from "../types";
@@ -20,19 +20,35 @@ export function DramaCompactImport({ project, onImported }: { project: DramaProj
     const [source, setSource] = useState("");
     const [fileName, setFileName] = useState("");
     const [preview, setPreview] = useState<DramaCompactPackagePreview>();
+    const [overwriteAssetPrompts, setOverwriteAssetPrompts] = useState(false);
     const [busy, setBusy] = useState(false);
 
     const previewSource = async (text: string, name: string) => {
         if (!text.trim()) return message.warning("请粘贴精简制作包，或选择 Markdown 文件");
         setBusy(true);
         try {
-            const result = await previewDramaCompactPackage(project.id, text, name);
+            const result = await previewDramaCompactPackage(project.id, text, name, false);
             setSource(text);
             setFileName(name);
             setPreview(result);
+            setOverwriteAssetPrompts(false);
             setOpen(false);
         } catch (error) {
             message.error(error instanceof Error ? error.message : "精简制作包解析失败");
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const toggleOverwriteAssetPrompts = async (next: boolean) => {
+        if (!source || busy) return;
+        setOverwriteAssetPrompts(next);
+        setBusy(true);
+        try {
+            setPreview(await previewDramaCompactPackage(project.id, source, fileName, next));
+        } catch (error) {
+            setOverwriteAssetPrompts(!next);
+            message.error(error instanceof Error ? error.message : "精简制作包预览失败");
         } finally {
             setBusy(false);
         }
@@ -55,6 +71,7 @@ export function DramaCompactImport({ project, onImported }: { project: DramaProj
         setSource("");
         setDraft("");
         setFileName("");
+        setOverwriteAssetPrompts(false);
     };
 
     const apply = async () => {
@@ -62,12 +79,13 @@ export function DramaCompactImport({ project, onImported }: { project: DramaProj
         applyingRef.current = true;
         setBusy(true);
         try {
-            const saved = await applyDramaCompactPackage(project.id, source, fileName, preview.sourceHash);
+            const saved = await applyDramaCompactPackage(project.id, source, fileName, preview.sourceHash, overwriteAssetPrompts);
             replaceProject(saved);
-            closePreview();
             setPreview(undefined);
             setSource("");
             setDraft("");
+            setFileName("");
+            setOverwriteAssetPrompts(false);
             onImported();
             message.success(`已导入 ${preview.summary.shots} 个片段`);
         } catch (error) {
@@ -153,6 +171,23 @@ export function DramaCompactImport({ project, onImported }: { project: DramaProj
                                 </div>
                             ))}
                         </div>
+                        {preview.summary.assetPromptsOverwritable ? (
+                            <button
+                                type="button"
+                                aria-pressed={overwriteAssetPrompts}
+                                disabled={busy}
+                                onClick={() => void toggleOverwriteAssetPrompts(!overwriteAssetPrompts)}
+                                className="flex w-full items-start gap-2.5 rounded-md border border-border bg-card px-3 py-2.5 text-left transition hover:border-foreground/25 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                                <span className={`mt-0.5 flex size-4 shrink-0 items-center justify-center rounded transition ${overwriteAssetPrompts ? "bg-primary text-primary-foreground" : "border border-border bg-background"}`}>
+                                    {overwriteAssetPrompts ? <Check className="size-3" strokeWidth={3} /> : null}
+                                </span>
+                                <span className="min-w-0 text-xs leading-5">
+                                    <span className="font-medium text-foreground">覆盖已有资产的提示词文案（{preview.summary.assetPromptsOverwritable} 项）</span>
+                                    <span className="mt-0.5 block text-muted-foreground">按本文件改写这些资产的供应商提示词与视觉身份；基准图、候选图和参考图绑定保留。</span>
+                                </span>
+                            </button>
+                        ) : null}
                         {preview.warnings.length ? (
                             <ul className="max-h-40 list-disc space-y-1 overflow-y-auto rounded-md border border-amber-300/70 bg-amber-50/70 px-7 py-3 text-xs text-amber-900 dark:border-amber-700/60 dark:bg-amber-950/20 dark:text-amber-100">
                                 {preview.warnings.map((warning) => (
@@ -160,7 +195,9 @@ export function DramaCompactImport({ project, onImported }: { project: DramaProj
                                 ))}
                             </ul>
                         ) : null}
-                        <p className="text-xs leading-5 text-muted-foreground">仅更新包内剧集；已有固定资产基准图和已保存提示词会保留。包内剧集按代码对应项目：代码不存在则追加为新一集，代码相同则整集替换，其余集不受影响。导入前自动创建恢复版本。</p>
+                        <p className="text-xs leading-5 text-muted-foreground">
+                            仅更新包内剧集；已有固定资产默认保留基准图与提示词，需要改文案时可勾选上方覆盖。包内剧集按代码对应项目：代码不存在则追加为新一集，代码相同则整集替换，其余集不受影响。导入前自动创建恢复版本。
+                        </p>
                     </div>
                 ) : null}
             </Modal>

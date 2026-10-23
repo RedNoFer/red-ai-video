@@ -257,6 +257,62 @@ test("compact Markdown import keeps prompts, asset bindings and blank review dat
     }
 });
 
+test("compact import overwrites asset wording only when the preview option is enabled", async ({ page, request }, testInfo) => {
+    const created = await request.post("/api/drama/projects", { data: { title: `E2E 精简覆盖 ${randomUUID().slice(0, 8)}`, ratio: "9:16" } });
+    expect(created.ok(), await created.text()).toBe(true);
+    const project = ((await created.json()) as { data: { project: DramaProject } }).data.project;
+    const characterPrompt = "改写后的角色基准提示词：纯白背景，深色长衫，四视图。";
+    const source = readFileSync(new URL("../public/drama-compact-package-template.md", import.meta.url), "utf8")
+        .replace("在这里逐字粘贴这一集的小说原文。不要改写或总结。", "覆盖测试原文。")
+        .replace("填写完整角色基准图提示词，包含身份外貌、服装、材质和固有色。", characterPrompt)
+        .replace("填写完整场景全景基准图提示词，包含空间拓扑、材质和光色。", "后左门、右窗，单视角全景。")
+        .replace("填写可单独提交的视频提示词，包含本片段必要的画面、动作和声音事实。", "角色姓名站在门口。");
+    try {
+        const seeded = structuredClone(project);
+        seeded.characters = [
+            {
+                id: "approved-character",
+                code: "OLD_CHAR",
+                name: "角色姓名",
+                description: "已确认身份",
+                supplierPrompt: "已确认的角色提示词",
+                references: [{ id: "approved-reference", url: "/approved-character.png", source: "generated", label: "主基准", createdAt: project.createdAt, status: "approved" }],
+                primaryReferenceId: "approved-reference",
+                referenceImageUrl: "/approved-character.png",
+            },
+        ];
+        expect((await saveDramaProjectFixture(request, project, seeded)).ok()).toBe(true);
+        await page.goto(`/drama/${project.id}`);
+        await page.getByRole("button", { name: "精简制作包导入" }).click();
+        const modal = page.getByRole("dialog", { name: "导入精简制作包" });
+        if (testInfo.project.name === "chromium") {
+            await page.locator('input[type="file"][accept=".md,text/markdown,text/plain"]').setInputFiles({ name: "compact.md", mimeType: "text/markdown", buffer: Buffer.from(source, "utf8") });
+        } else {
+            await modal.getByRole("textbox", { name: "粘贴精简制作包" }).fill(source);
+            await modal.getByRole("button", { name: "识别并预览" }).click();
+        }
+        const preview = page.getByRole("dialog", { name: "预览精简制作包" });
+        await expect(preview).toContainText("本次保留现有设定，忽略新文本");
+        const overwriteToggle = preview.getByRole("button", { name: /覆盖已有资产的提示词文案/ });
+        await expect(overwriteToggle).toHaveAttribute("aria-pressed", "false");
+        await overwriteToggle.click();
+        await expect(overwriteToggle).toHaveAttribute("aria-pressed", "true");
+        await expect(preview).toContainText("将按本文件覆盖，基准图、候选图和参考图绑定保留");
+        await expectNoHorizontalOverflow(page, "精简覆盖预览");
+        await preview.getByRole("button", { name: "确认导入精简制作包" }).click();
+        await expect(page.getByText("已导入 1 个片段")).toBeVisible();
+        const response = await request.get(`/api/drama/projects/${project.id}`);
+        expect(response.ok(), await response.text()).toBe(true);
+        const saved = ((await response.json()) as { data: { project: DramaProject } }).data.project;
+        const character = saved.characters.find((item) => item.id === "approved-character")!;
+        expect(character.supplierPrompt).toBe(characterPrompt);
+        expect(character).toMatchObject({ primaryReferenceId: "approved-reference", referenceImageUrl: "/approved-character.png" });
+        expect(character.references?.[0]).toMatchObject({ id: "approved-reference", url: "/approved-character.png" });
+    } finally {
+        expect((await request.delete(`/api/drama/projects/${project.id}`)).ok()).toBe(true);
+    }
+});
+
 test("character timbre saves and refreshes, then uploaded audio replaces prompt in the video preview", async ({ page, request }) => {
     const created = await request.post("/api/drama/projects", { data: { title: `E2E 角色音色 ${randomUUID().slice(0, 8)}`, ratio: "9:16" } });
     expect(created.ok(), await created.text()).toBe(true);

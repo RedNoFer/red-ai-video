@@ -1686,11 +1686,15 @@ export async function applyDramaProductionPackageForUser(userId: string, id: str
 export function previewDramaCompactPackageForUser(value: unknown, project: DramaProject) {
     const input = object(value);
     try {
-        return previewDramaCompactPackage(typeof input.source === "string" ? input.source : "", project);
+        return previewDramaCompactPackage(typeof input.source === "string" ? input.source : "", project, compactPackageOptions(input));
     } catch (error) {
         if (error instanceof DramaCompactPackageError) throw new DramaProjectServiceError(error.message, 400);
         throw error;
     }
+}
+
+function compactPackageOptions(input: Record<string, unknown>) {
+    return { overwriteAssetPrompts: input.overwriteAssetPrompts === true };
 }
 
 export async function applyDramaCompactPackageForUser(userId: string, id: string, value: unknown) {
@@ -1702,7 +1706,7 @@ export async function applyDramaCompactPackageForUser(userId: string, id: string
     const fileName = cleanText(input.fileName) || "精简制作包.md";
     let next: DramaProject;
     try {
-        next = applyDramaCompactPackage(current, source, fileName);
+        next = applyDramaCompactPackage(current, source, fileName, compactPackageOptions(input));
         next = invalidateChangedDramaFrameEvidence(current, normalizeProject(next, current), next);
     } catch (error) {
         if (error instanceof DramaCompactPackageError || error instanceof DramaProjectServiceError) throw new DramaProjectServiceError(error.message, 400);

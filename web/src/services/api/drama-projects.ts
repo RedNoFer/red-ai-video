@@ -268,23 +268,23 @@ export function applyDramaProductionPackage(project: DramaProject, preview: Dram
 
 export type DramaCompactPackagePreview = {
     sourceHash: string;
-    summary: { episodes: number; shots: number; duration: number; assetsNew: number; assetsReused: number; shotsUpdated: number; oldResultsToReview: number };
+    summary: { episodes: number; shots: number; duration: number; assetsNew: number; assetsReused: number; assetPromptsOverwritable: number; shotsUpdated: number; oldResultsToReview: number };
     warnings: string[];
 };
 
-export function previewDramaCompactPackage(projectId: string, source: string, fileName: string) {
+export function previewDramaCompactPackage(projectId: string, source: string, fileName: string, overwriteAssetPrompts: boolean) {
     return request<{ preview: DramaCompactPackagePreview }>(`/api/drama/projects/${encodeURIComponent(projectId)}/compact-package`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "preview", source, fileName }),
+        body: JSON.stringify({ action: "preview", source, fileName, overwriteAssetPrompts }),
     }).then((data) => data.preview);
 }
 
-export function applyDramaCompactPackage(projectId: string, source: string, fileName: string, sourceHash: string) {
+export function applyDramaCompactPackage(projectId: string, source: string, fileName: string, sourceHash: string, overwriteAssetPrompts: boolean) {
     return request<{ project: DramaProject }>(`/api/drama/projects/${encodeURIComponent(projectId)}/compact-package`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "apply", source, fileName, sourceHash }),
+        body: JSON.stringify({ action: "apply", source, fileName, sourceHash, overwriteAssetPrompts }),
     }).then((data) => data.project);
 }
 

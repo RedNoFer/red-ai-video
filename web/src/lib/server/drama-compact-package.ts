@@ -25,9 +25,11 @@ type CompactShot = {
 type CompactEpisode = { code: string; title: string; script: string; shots: CompactShot[] };
 type CompactPackage = { assets: CompactAsset[]; episodes: CompactEpisode[] };
 
+export type DramaCompactPackageOptions = { overwriteAssetPrompts?: boolean };
+
 export type DramaCompactPackagePreview = {
     sourceHash: string;
-    summary: { episodes: number; shots: number; duration: number; assetsNew: number; assetsReused: number; shotsUpdated: number; oldResultsToReview: number };
+    summary: { episodes: number; shots: number; duration: number; assetsNew: number; assetsReused: number; assetPromptsOverwritable: number; shotsUpdated: number; oldResultsToReview: number };
     warnings: string[];
 };
 
@@ -234,15 +236,19 @@ function matchAsset(project: DramaProject, asset: CompactAsset) {
     return matches[0];
 }
 
-export function previewDramaCompactPackage(source: string, project: DramaProject): DramaCompactPackagePreview {
+export function previewDramaCompactPackage(source: string, project: DramaProject, options: DramaCompactPackageOptions = {}): DramaCompactPackagePreview {
     const compact = parseDramaCompactPackage(source);
+    const overwrite = options.overwriteAssetPrompts === true;
     const warnings: string[] = [];
     let assetsReused = 0;
+    let assetPromptsOverwritable = 0;
     for (const asset of compact.assets) {
         const current = matchAsset(project, asset);
         if (!current) continue;
         assetsReused++;
-        if (current.supplierPrompt?.trim() && current.supplierPrompt !== asset.prompt) warnings.push(`${asset.name} 已有固定资产提示词和基准图；本次保留现有设定，忽略新文本。`);
+        if (!current.supplierPrompt?.trim() || current.supplierPrompt.trim() === asset.prompt.trim()) continue;
+        assetPromptsOverwritable++;
+        warnings.push(overwrite ? `${asset.name} 的提示词文案将按本文件覆盖，基准图、候选图和参考图绑定保留。` : `${asset.name} 已有固定资产提示词和基准图；本次保留现有设定，忽略新文本。需要改写时可勾选“覆盖已有资产的提示词文案”。`);
     }
     let shotsUpdated = 0;
     let oldResultsToReview = 0;
@@ -267,6 +273,7 @@ export function previewDramaCompactPackage(source: string, project: DramaProject
             duration: compact.episodes.reduce((total, item) => total + item.shots.reduce((sum, shot) => sum + shot.duration, 0), 0),
             assetsNew: compact.assets.length - assetsReused,
             assetsReused,
+            assetPromptsOverwritable,
             shotsUpdated,
             oldResultsToReview,
         },
@@ -274,8 +281,9 @@ export function previewDramaCompactPackage(source: string, project: DramaProject
     };
 }
 
-export function applyDramaCompactPackage(project: DramaProject, source: string, fileName: string): DramaProject {
+export function applyDramaCompactPackage(project: DramaProject, source: string, fileName: string, options: DramaCompactPackageOptions = {}): DramaProject {
     const compact = parseDramaCompactPackage(source);
+    const overwriteAssetPrompts = options.overwriteAssetPrompts === true;
     const nextAssets = {
         characters: [...project.characters],
         scenes: [...project.scenes],
@@ -295,7 +303,13 @@ export function applyDramaCompactPackage(project: DramaProject, source: string, 
                             supplierPrompt: asset.prompt,
                             profile: current.profile ? { ...current.profile, visualIdentity: current.profile.visualIdentity || asset.prompt } : { visualIdentity: asset.prompt, styling: "", colorPalette: "", consistencyRules: "" },
                         }
-                      : {}),
+                      : overwriteAssetPrompts && current.supplierPrompt.trim() !== asset.prompt.trim()
+                        ? {
+                              supplierPrompt: asset.prompt,
+                              profile: current.profile ? { ...current.profile, visualIdentity: asset.prompt } : { visualIdentity: asset.prompt, styling: "", colorPalette: "", consistencyRules: "" },
+                              fieldOrigins: { ...current.fieldOrigins, supplierPrompt: "package" as const },
+                          }
+                        : {}),
               }
             : {
                   id,

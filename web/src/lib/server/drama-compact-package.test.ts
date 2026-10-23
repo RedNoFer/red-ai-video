@@ -259,6 +259,34 @@ describe("compact drama package", () => {
         expect(before.episodes[0].shots[0].videoPrompt).toBe("旧视频提示词");
     });
 
+    it("overwrites reusable asset wording only when the import opts in and always keeps the reference images", () => {
+        const before = project();
+        const changed = bareSource.replace("新角色外貌提示词", "改写后的林雪外貌提示词");
+        const kept = previewDramaCompactPackage(changed, before);
+        expect(kept.summary.assetPromptsOverwritable).toBe(1);
+        expect(kept.warnings).toEqual([expect.stringContaining("本次保留现有设定，忽略新文本")]);
+
+        const allowed = previewDramaCompactPackage(changed, before, { overwriteAssetPrompts: true });
+        expect(allowed.warnings).toEqual([expect.stringContaining("将按本文件覆盖，基准图、候选图和参考图绑定保留")]);
+
+        const preserved = applyDramaCompactPackage(before, changed, "update.md").characters[0];
+        expect(preserved).toMatchObject({ id: "character-old", supplierPrompt: "已确认的旧基准提示词", profile: { visualIdentity: "长脸杏眼" }, primaryReferenceId: "reference-old" });
+
+        const overwritten = applyDramaCompactPackage(before, changed, "update.md", { overwriteAssetPrompts: true }).characters[0];
+        expect(overwritten).toMatchObject({ id: "character-old", supplierPrompt: "改写后的林雪外貌提示词", profile: { visualIdentity: "改写后的林雪外貌提示词", styling: "墨灰夹克" }, primaryReferenceId: "reference-old" });
+        expect(overwritten.fieldOrigins?.supplierPrompt).toBe("package");
+        expect(overwritten.references).toEqual([{ id: "reference-old", url: "/asset.png", source: "generated", label: "主基准", createdAt: "2026-01-01T00:00:00.000Z", status: "approved" }]);
+    });
+
+    it("does not report or touch assets whose package wording already matches", () => {
+        const before = project();
+        const same = bareSource.replace("新角色外貌提示词", "已确认的旧基准提示词");
+        const preview = previewDramaCompactPackage(same, before);
+        expect(preview.summary.assetPromptsOverwritable).toBe(0);
+        expect(preview.warnings).toEqual([]);
+        expect(applyDramaCompactPackage(before, same, "update.md", { overwriteAssetPrompts: true }).characters[0].supplierPrompt).toBe("已确认的旧基准提示词");
+    });
+
     it("plans a direct video step without requiring storyboard frames", () => {
         const imported = applyDramaCompactPackage(project(), source, "book.md");
         const run = buildDramaProductionRun(imported, imported.episodes[0], { imageModel: "image", videoModel: "video" });

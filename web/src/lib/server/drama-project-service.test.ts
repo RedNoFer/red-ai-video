@@ -258,6 +258,30 @@ describe("drama project service updates", () => {
         await expect(applyDramaCompactPackageForUser("user-one", current.id, { source: `${source}\n<!-- changed -->`, sourceHash: preview.sourceHash })).rejects.toMatchObject({ status: 409 });
     });
 
+    it("overwrites reusable asset wording only when the compact import opts in", async () => {
+        const source = readFileSync(new URL("../../../public/drama-compact-package-template.md", import.meta.url), "utf8");
+        const current = project("2026-10-16T00:00:00.000Z", "精简覆盖");
+        current.episodes[0].code = "E02";
+        current.characters = [
+            {
+                id: "fixed-character",
+                code: "OLD_C",
+                name: "角色姓名",
+                description: "原有角色",
+                supplierPrompt: "确认过的提示词",
+                references: [{ id: "approved-reference", url: "/approved.png", source: "generated", label: "主基准", createdAt: current.createdAt, status: "approved" }],
+                primaryReferenceId: "approved-reference",
+            },
+        ];
+        const preview = previewDramaCompactPackageForUser({ source, overwriteAssetPrompts: true }, current);
+        expect(preview.summary.assetPromptsOverwritable).toBe(1);
+        mocks.getDramaProject.mockResolvedValue(current);
+        const saved = await applyDramaCompactPackageForUser("user-one", current.id, { source, fileName: "compact.md", sourceHash: preview.sourceHash, overwriteAssetPrompts: true });
+        expect(saved.characters[0]).toMatchObject({ id: "fixed-character", primaryReferenceId: "approved-reference" });
+        expect(saved.characters[0].supplierPrompt).toContain("填写完整角色基准图提示词");
+        expect(saved.characters[0].references?.[0]).toMatchObject({ id: "approved-reference", url: "/approved.png" });
+    });
+
     it("applies a quality-blocked external package to one episode without internal run credentials", async () => {
         const source = readFileSync(new URL("../../../../docs/drama-production-package-v1-field-example.json", import.meta.url), "utf8");
         const current = project("2026-10-11T00:00:00.000Z", "单集导入");
