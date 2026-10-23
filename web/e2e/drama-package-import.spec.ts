@@ -293,7 +293,7 @@ test("compact import overwrites asset wording only when the preview option is en
         }
         const preview = page.getByRole("dialog", { name: "预览精简制作包" });
         await expect(preview).toContainText("本次保留现有设定，忽略新文本");
-        const overwriteToggle = preview.getByRole("button", { name: /覆盖已有资产的提示词文案/ });
+        const overwriteToggle = preview.getByRole("button", { name: /覆盖已有资产的提示词与名称/ });
         await expect(overwriteToggle).toHaveAttribute("aria-pressed", "false");
         await overwriteToggle.click();
         await expect(overwriteToggle).toHaveAttribute("aria-pressed", "true");
@@ -308,6 +308,58 @@ test("compact import overwrites asset wording only when the preview option is en
         expect(character.supplierPrompt).toBe(characterPrompt);
         expect(character).toMatchObject({ primaryReferenceId: "approved-reference", referenceImageUrl: "/approved-character.png" });
         expect(character.references?.[0]).toMatchObject({ id: "approved-reference", url: "/approved-character.png" });
+    } finally {
+        expect((await request.delete(`/api/drama/projects/${project.id}`)).ok()).toBe(true);
+    }
+});
+
+test("compact import reuses a scene whose code collides with another name instead of blocking", async ({ page, request }) => {
+    const created = await request.post("/api/drama/projects", { data: { title: `E2E 精简改码 ${randomUUID().slice(0, 8)}`, ratio: "9:16" } });
+    expect(created.ok(), await created.text()).toBe(true);
+    const project = ((await created.json()) as { data: { project: DramaProject } }).data.project;
+    const source = readFileSync(new URL("../public/drama-compact-package-template.md", import.meta.url), "utf8")
+        .replace("在这里逐字粘贴这一集的小说原文。不要改写或总结。", "改码复用测试原文。")
+        .replace("填写完整角色基准图提示词，包含身份外貌、服装、材质和固有色。", "角色基准提示词。")
+        .replace("填写完整场景全景基准图提示词，包含空间拓扑、材质和光色。", "后左门、右窗，单视角全景。")
+        .replace("填写可单独提交的视频提示词，包含本片段必要的画面、动作和声音事实。", "角色姓名站在门口。");
+    try {
+        const seeded = structuredClone(project);
+        seeded.scenes = [
+            {
+                id: "scene-collision",
+                code: "LOC_01",
+                name: "项目里的场景名",
+                description: "",
+                supplierPrompt: "",
+                references: [{ id: "scene-reference", url: "/scene-reference.png", source: "generated", label: "主基准", createdAt: project.createdAt, status: "approved" }],
+                primaryReferenceId: "scene-reference",
+                referenceImageUrl: "/scene-reference.png",
+            },
+        ];
+        expect((await saveDramaProjectFixture(request, project, seeded)).ok()).toBe(true);
+        await page.goto(`/drama/${project.id}`);
+        await page.getByRole("button", { name: "精简制作包导入" }).click();
+        const modal = page.getByRole("dialog", { name: "导入精简制作包" });
+        await modal.getByRole("textbox", { name: "粘贴精简制作包" }).fill(source);
+        await modal.getByRole("button", { name: "识别并预览" }).click();
+        const preview = page.getByRole("dialog", { name: "预览精简制作包" });
+        await expect(preview).toContainText("资产代码 LOC_01 已被「项目里的场景名」使用");
+        await expect(preview).toContainText("保留现有名称「项目里的场景名」");
+        await expectNoHorizontalOverflow(page, "精简改码预览");
+        await preview.getByRole("button", { name: /覆盖已有资产的提示词与名称/ }).click();
+        await expect(preview).toContainText("改用包内名称「场景名称」");
+        await preview.getByRole("button", { name: "确认导入精简制作包" }).click();
+        await expect(page.getByText("已导入 1 个片段")).toBeVisible();
+        const response = await request.get(`/api/drama/projects/${project.id}`);
+        expect(response.ok(), await response.text()).toBe(true);
+        const saved = ((await response.json()) as { data: { project: DramaProject } }).data.project;
+        expect(saved.scenes.find((scene) => scene.id === "scene-collision")).toMatchObject({
+            code: "LOC_01",
+            name: "场景名称",
+            supplierPrompt: "后左门、右窗，单视角全景。",
+            primaryReferenceId: "scene-reference",
+            referenceImageUrl: "/scene-reference.png",
+        });
     } finally {
         expect((await request.delete(`/api/drama/projects/${project.id}`)).ok()).toBe(true);
     }

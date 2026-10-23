@@ -228,12 +228,13 @@ function projectAssets(project: DramaProject, kind: AssetKind): DramaNamedAsset[
     return kind === "characters" ? project.characters : kind === "scenes" ? project.scenes : kind === "props" ? project.props : project.clues;
 }
 
-function matchAsset(project: DramaProject, asset: CompactAsset) {
+/** 名称一致即同一资产；名称不同但代码被占用时按代码复用该资产，交给用户决定是否覆盖名称与提示词。 */
+function matchAsset(project: DramaProject, asset: CompactAsset): { current?: DramaNamedAsset; renamed?: DramaNamedAsset } {
     const matches = projectAssets(project, asset.kind).filter((item) => nameKey(item.name) === nameKey(asset.name));
     if (matches.length > 1) fail(`${asset.name} 匹配到多个已有${asset.kind}资产，请先消除重名`);
-    const collision = projectAssets(project, asset.kind).find((item) => item.code === asset.code && nameKey(item.name) !== nameKey(asset.name));
-    if (!matches.length && collision) fail(`资产代码 ${asset.code} 已被 ${collision.name} 使用`);
-    return matches[0];
+    if (matches.length) return { current: matches[0] };
+    const collision = projectAssets(project, asset.kind).find((item) => item.code === asset.code);
+    return collision ? { current: collision, renamed: collision } : {};
 }
 
 export function previewDramaCompactPackage(source: string, project: DramaProject, options: DramaCompactPackageOptions = {}): DramaCompactPackagePreview {
@@ -243,12 +244,21 @@ export function previewDramaCompactPackage(source: string, project: DramaProject
     let assetsReused = 0;
     let assetPromptsOverwritable = 0;
     for (const asset of compact.assets) {
-        const current = matchAsset(project, asset);
+        const { current, renamed } = matchAsset(project, asset);
         if (!current) continue;
         assetsReused++;
-        if (!current.supplierPrompt?.trim() || current.supplierPrompt.trim() === asset.prompt.trim()) continue;
+        const promptDiffers = Boolean(current.supplierPrompt?.trim()) && current.supplierPrompt!.trim() !== asset.prompt.trim();
+        if (!promptDiffers && !renamed) continue;
         assetPromptsOverwritable++;
-        warnings.push(overwrite ? `${asset.name} 的提示词文案将按本文件覆盖，基准图、候选图和参考图绑定保留。` : `${asset.name} 已有固定资产提示词和基准图；本次保留现有设定，忽略新文本。需要改写时可勾选“覆盖已有资产的提示词文案”。`);
+        if (renamed) {
+            warnings.push(
+                overwrite
+                    ? `资产代码 ${asset.code} 已被「${renamed.name}」使用：本次按代码复用该资产并改用包内名称「${asset.name}」，基准图、候选图和参考图绑定保留。`
+                    : `资产代码 ${asset.code} 已被「${renamed.name}」使用：本次按代码复用该资产并保留现有名称「${renamed.name}」。需要改成包内名称「${asset.name}」时勾选“覆盖已有资产的提示词与名称”。`,
+            );
+        }
+        if (!promptDiffers) continue;
+        warnings.push(overwrite ? `${asset.name} 的提示词文案将按本文件覆盖，基准图、候选图和参考图绑定保留。` : `${asset.name} 已有固定资产提示词和基准图；本次保留现有设定，忽略新文本。需要改写时可勾选“覆盖已有资产的提示词与名称”。`);
     }
     let shotsUpdated = 0;
     let oldResultsToReview = 0;
@@ -292,12 +302,13 @@ export function applyDramaCompactPackage(project: DramaProject, source: string, 
     };
     const ids = new Map<string, string>();
     for (const asset of compact.assets) {
-        const current = matchAsset(project, asset);
+        const { current, renamed } = matchAsset(project, asset);
         const id = current?.id || `${asset.kind}-${nanoid()}`;
         ids.set(asset.code, id);
         const incoming = current
             ? {
                   ...current,
+                  ...(renamed && overwriteAssetPrompts ? { name: asset.name } : {}),
                   ...(!current.supplierPrompt?.trim()
                       ? {
                             supplierPrompt: asset.prompt,

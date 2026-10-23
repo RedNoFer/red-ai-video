@@ -278,6 +278,24 @@ describe("compact drama package", () => {
         expect(overwritten.references).toEqual([{ id: "reference-old", url: "/asset.png", source: "generated", label: "主基准", createdAt: "2026-01-01T00:00:00.000Z", status: "approved" }]);
     });
 
+    it("reuses a coded asset renamed by the package instead of blocking the import", () => {
+        const before = project();
+        const renamed = source.replace("### 场景 LOC_01｜旧书房", "### 场景 OLD_L｜旧书房·黄昏版").replace("场景：LOC_01", "场景：OLD_L");
+
+        const preview = previewDramaCompactPackage(renamed, before);
+        expect(preview.summary).toMatchObject({ assetsReused: 2, assetsNew: 0 });
+        expect(preview.warnings).toEqual(expect.arrayContaining([expect.stringContaining("资产代码 OLD_L 已被「旧书房」使用"), expect.stringContaining("保留现有名称「旧书房」")]));
+
+        const kept = applyDramaCompactPackage(before, renamed, "rename.md");
+        expect(kept.scenes[0]).toMatchObject({ id: "scene-old", code: "OLD_L", name: "旧书房", supplierPrompt: "旧场景提示词" });
+        expect(kept.episodes[0].shots[0].sceneId).toBe("scene-old");
+
+        const allowed = previewDramaCompactPackage(renamed, before, { overwriteAssetPrompts: true });
+        expect(allowed.warnings).toEqual(expect.arrayContaining([expect.stringContaining("改用包内名称「旧书房·黄昏版」")]));
+        const overwritten = applyDramaCompactPackage(before, renamed, "rename.md", { overwriteAssetPrompts: true });
+        expect(overwritten.scenes[0]).toMatchObject({ id: "scene-old", name: "旧书房·黄昏版", supplierPrompt: "后左门、右窗、中央木桌，9:16 单视角全景" });
+    });
+
     it("does not report or touch assets whose package wording already matches", () => {
         const before = project();
         const same = bareSource.replace("新角色外貌提示词", "已确认的旧基准提示词");

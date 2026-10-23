@@ -183,8 +183,8 @@ export function DramaCompactImport({ project, onImported }: { project: DramaProj
                                     {overwriteAssetPrompts ? <Check className="size-3" strokeWidth={3} /> : null}
                                 </span>
                                 <span className="min-w-0 text-xs leading-5">
-                                    <span className="font-medium text-foreground">覆盖已有资产的提示词文案（{preview.summary.assetPromptsOverwritable} 项）</span>
-                                    <span className="mt-0.5 block text-muted-foreground">按本文件改写这些资产的供应商提示词与视觉身份；基准图、候选图和参考图绑定保留。</span>
+                                    <span className="font-medium text-foreground">覆盖已有资产的提示词与名称（{preview.summary.assetPromptsOverwritable} 项）</span>
+                                    <span className="mt-0.5 block text-muted-foreground">按本文件改写这些资产的供应商提示词与视觉身份；代码相同但名称不同的资产同时改用包内名称。基准图、候选图和参考图绑定保留。</span>
                                 </span>
                             </button>
                         ) : null}
@@ -196,7 +196,7 @@ export function DramaCompactImport({ project, onImported }: { project: DramaProj
                             </ul>
                         ) : null}
                         <p className="text-xs leading-5 text-muted-foreground">
-                            仅更新包内剧集；已有固定资产默认保留基准图与提示词，需要改文案时可勾选上方覆盖。包内剧集按代码对应项目：代码不存在则追加为新一集，代码相同则整集替换，其余集不受影响。导入前自动创建恢复版本。
+                            仅更新包内剧集；已有固定资产默认保留基准图与提示词，需要覆盖文案或名称时可勾选上方覆盖。包内剧集按代码对应项目：代码不存在则追加为新一集，代码相同则整集替换，其余集不受影响。导入前自动创建恢复版本。
                         </p>
                     </div>
                 ) : null}
