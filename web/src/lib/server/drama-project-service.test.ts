@@ -3652,6 +3652,105 @@ describe("drama project service updates", () => {
         expect(run.steps.filter((step) => step.type === "video").map((step) => step.shotId)).toEqual(["shot-two"]);
     });
 
+    it("allows regenerating a cancelled shot whose stopped run still holds an unsubmitted step", async () => {
+        const current = project("2026-07-19T08:00:01.000Z", "项目");
+        current.episodes[0].shots = [
+            {
+                id: "shot-one",
+                order: 1,
+                title: "外婆的相框",
+                description: "人物拿起相框",
+                sourceText: "人物拿起相框",
+                shotBoundary: "",
+                dialogue: "",
+                narration: "",
+                utterances: [],
+                imagePrompt: "画面",
+                videoPrompt: "动作",
+                cameraMotion: "",
+                duration: 30,
+                characterIds: [],
+                propIds: [],
+                clueIds: [],
+                generationStatus: "cancelled",
+                generationRunId: "run-stopped",
+            },
+        ] as never;
+        const stoppedRun = {
+            id: "run-stopped",
+            projectId: current.id,
+            episodeId: "episode-one",
+            scope: "production",
+            mode: "strict",
+            status: "needs_review",
+            confirmedAt: current.updatedAt,
+            parameterSnapshot: { imageModel: "image-default", videoModel: "video", videoQuality: "720", ratio: "9:16" },
+            steps: [
+                { id: "video-shot-one", type: "video", shotId: "shot-one", dependsOn: [], status: "failed", taskId: "task-failed", error: "resolution must be a string" },
+                { id: "video-shot-two", type: "video", shotId: "shot-one", dependsOn: ["video-shot-one"], status: "ready", prompt: "动作" },
+            ],
+            createdAt: current.updatedAt,
+            updatedAt: current.updatedAt,
+        } as never;
+        mocks.getDramaProject.mockResolvedValue(current);
+        mocks.findLatestDramaProductionRun.mockResolvedValue(stoppedRun);
+        mocks.getDramaProductionRun.mockResolvedValue(stoppedRun);
+        mocks.getAuthSettings.mockResolvedValue({ defaultModels: { imageModel: "image", videoModel: "video", audioModel: "" }, generationDefaults: { imageQuality: "standard", videoQuality: "720" } });
+        mocks.resolveLogicalModelCandidates.mockReturnValue([{ logicalModelId: "video", channelId: "video-channel" }]);
+
+        const run = await createDramaProductionRunForUser("user-one", current.id, { episodeId: current.episodes[0].id, preflight: { checkedShotIds: ["shot-one"] }, deferDispatch: true });
+
+        expect(run.steps.filter((step) => step.type === "video").map((step) => step.shotId)).toEqual(["shot-one"]);
+        expect(run.id).not.toBe("run-stopped");
+    });
+
+    it("cancels an unsubmitted step of a cancelled shot instead of submitting it", async () => {
+        const current = project("2026-07-19T08:00:01.000Z", "项目");
+        current.episodes[0].shots = [
+            {
+                id: "shot-one",
+                order: 1,
+                title: "外婆的相框",
+                description: "人物拿起相框",
+                sourceText: "人物拿起相框",
+                shotBoundary: "",
+                dialogue: "",
+                narration: "",
+                utterances: [],
+                imagePrompt: "画面",
+                videoPrompt: "动作",
+                cameraMotion: "",
+                duration: 30,
+                characterIds: [],
+                propIds: [],
+                clueIds: [],
+                generationStatus: "cancelled",
+                generationRunId: "run-one",
+            },
+        ] as never;
+        const run = {
+            id: "run-one",
+            projectId: current.id,
+            episodeId: "episode-one",
+            scope: "production",
+            mode: "strict",
+            status: "running",
+            confirmedAt: current.updatedAt,
+            parameterSnapshot: { imageModel: "image-default", videoModel: "video", videoQuality: "720", ratio: "9:16", videoPrompts: { "shot-one": "动作" }, referenceSelections: {} },
+            steps: [{ id: "video-shot-one", type: "video", shotId: "shot-one", dependsOn: [], status: "ready", prompt: "动作" }],
+            createdAt: current.updatedAt,
+            updatedAt: current.updatedAt,
+        } as never;
+        mocks.getDramaProject.mockResolvedValue(current);
+        mocks.getDramaProductionRun.mockResolvedValue(run);
+        mocks.findLatestDramaProductionRun.mockResolvedValue(run);
+
+        const synced = await getLatestDramaProductionRunForUser("user-one", current.id, "episode-one", { origin: "http://localhost:3010", cookie: "session=test" });
+
+        expect(mocks.fetchInternalApi).not.toHaveBeenCalled();
+        expect(synced?.steps.find((step) => step.id === "video-shot-one")).toMatchObject({ status: "cancelled" });
+    });
+
     it("allows video production when the plan has advisory preflight findings", async () => {
         const plan = { ...defaultDramaProductionPlan("manual"), video: { ...defaultDramaProductionPlan("manual").video, model: "selected-video" } };
         const current = project("2026-07-19T08:00:01.000Z", "项目");

@@ -124,7 +124,7 @@ export function DramaGenerationPanel({
         () =>
             new Set([
                 ...readiness.activeShotIds,
-                ...(productionRun?.confirmedAt && ["ready", "running", "paused", "needs_review"].includes(productionRun.status)
+                ...(productionRun?.confirmedAt && ["ready", "running"].includes(productionRun.status)
                     ? productionRun.steps
                           .filter((step) =>
                               isActiveDramaVideoStep(

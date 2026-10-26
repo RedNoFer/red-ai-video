@@ -1938,7 +1938,7 @@ export async function createDramaProductionRunForUser(userId: string, projectId:
             const task = !steps.length && shot.generationTaskId ? await getVideoTask(shot.generationTaskId) : null;
             const uncertain = reconciled.some((step) => step.status === "needs_review") || (task?.userId === userId && task.status === "running" && task.executionPhase === "needs_review");
             const active = steps.length
-                ? reconciled.some((step) => step.status === "running" || Boolean(!uncertain && ownRun?.confirmedAt && ["ready", "running", "paused", "needs_review"].includes(ownRun.status) && ["ready", "blocked"].includes(step.status)))
+                ? reconciled.some((step) => step.status === "running" || Boolean(!uncertain && ownRun?.confirmedAt && ["ready", "running"].includes(ownRun.status) && ["ready", "blocked"].includes(step.status)))
                 : task?.userId === userId
                   ? task.status === "running" && task.executionPhase !== "needs_review"
                   : shot.generationStatus === "queued" || shot.generationStatus === "running";
@@ -3028,6 +3028,11 @@ async function dispatchReadyDramaProductionSteps(userId: string, project: DramaP
             step = refreshedStep;
         }
         const shot = episode?.shots.find((item) => item.id === step.shotId);
+        if (shot && (shot.generationStatus === "cancelled" || !isCurrentDramaVideoRun(shot, run))) {
+            current = unlockDramaProductionSteps({ ...current, steps: current.steps.map((item) => (item.id === step.id ? { ...item, status: "cancelled" as const, error: undefined } : item)) });
+            await updateDramaProductionRun(userId, current);
+            continue;
+        }
         const attemptNo = step.attemptNo || 1;
         const requestId = dramaVideoStepRequestId(run.id, step);
         const existingTask = await getStoredGenerationTaskByRequest<import("@/lib/server/video-task-store").VideoTask>("video", userId, requestId, attemptNo);
