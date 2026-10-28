@@ -43,8 +43,8 @@ ssh vozeb-pro-production 'docker ps --format "{{.Names}}\t{{.Image}}\t{{.Status}
 | 应用容器 | `vozeb-pro`（镜像 `vozeb-pro:git-<7 位短 sha>`） |
 | Worker 容器 | `vozeb-pro-generation-worker`（同镜像，`node /app/web/scripts/generation-worker.mjs`） |
 | 数据库容器 | `vozeb-pro-postgres`（`postgres:16.6-alpine`，**运维边界外，不重建、不删卷**） |
-| 对外入口 | 宝塔 nginx `:80/:443` → `127.0.0.1:3001`（应用容器内 3000） |
-| 正式域名 | `https://bowlpetdaily.com` |
+| 对外入口 | 宝塔 nginx `:80/:443` → `127.0.0.1:3001`（应用容器内 3000）；Cloudflare 橙色云代理在源站之前 |
+| 正式域名 | `https://bowlpetdaily.com`；nginx 站点配置为 `/www/server/panel/vhost/nginx/bowlpetdaily.com(.ssl).conf`，已按用户要求设置 `keepalive_timeout 300s` 并开启 `access_log /www/wwwlogs/bowlpetdaily.com.log` 与 `error_log ... warn`（2026-10-28，为消除 Cloudflare 与源站 keepalive 竞态导致的偶发 POST 502，改动前的 `.conf` 备份保留在同目录） |
 | 数据卷 | `vozeb-pro_vozeb-pro-data` → `/app/web/.data`；`vozeb-pro_vozeb-pro-postgres` → `/var/lib/postgresql/data` |
 | 环境变量 | `/opt/vozeb-pro/current/.env`（含 `DATABASE_URL`、`POSTGRES_*`、`VOZEB_PRO_*_TOKEN`、`VOZEB_PRO_IMAGE`、`VOZEB_PRO_APP_HOST_PORT`） |
 
