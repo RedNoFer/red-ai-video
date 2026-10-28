@@ -1,5 +1,10 @@
 import { randomUUID } from "node:crypto";
 
+// 供应商对同一视频任务连续返回确定性业务错误（task_not_exist 等）时的终止阈值；
+// 结合现有 60 秒轮询退避，约等于连续 10 分钟确认任务已被上游丢弃。
+const VIDEO_QUERY_DETERMINISTIC_ERROR_LIMIT = 10;
+const DETERMINISTIC_VIDEO_QUERY_ERROR_PATTERN = /task_not_exist|not[ _-]?found|不存在|已删除|已过期|expired|deleted|invalid[ _-]?task|unknown[ _-]?task/i;
+
 import { generationTaskNextPollAt, claimDueGenerationTasks, releaseGenerationTaskLease, renewGenerationTaskLeases, scheduleGenerationTask, type GenerationTaskLease } from "@/lib/server/generation-task-scheduler";
 import { failVideoTaskFromWorker, persistVideoTaskResult, queryVideoTaskUpstream } from "@/lib/server/video-task-runtime";
 import { getVideoTask, type VideoTask } from "@/lib/server/video-task-store";
@@ -732,7 +737,16 @@ async function processVideoLease(lease: GenerationTaskLease, workerId: string, o
         });
         return "pending";
     } catch (error) {
+        const message = safeError(error);
         const count = errorCount(lease.lastUpstreamStatus) + 1;
+        // 供应商对同一任务连续返回确定性业务错误（如 task_not_exist）说明任务已被上游丢弃；
+        // 按现有退避策略约 10 分钟无变化后必须终止，不能无限轮询。
+        if (count >= VIDEO_QUERY_DETERMINISTIC_ERROR_LIMIT && isDeterministicVideoQueryError(message)) {
+            await failVideoTaskFromWorker(task, `供应商已查询不到该视频任务（${message}），请重新生成`, true);
+            await releaseGenerationTaskLease("video", task.id, workerId, { executionPhase: "completed", nextPollAt: undefined, lastPollAt: Date.now(), lastUpstreamStatus: "query_failed_deterministic" });
+            console.warn("Video task query failed terminally", { taskId: task.id, consecutiveErrors: count, error: message });
+            return "failed";
+        }
         await releaseGenerationTaskLease("video", task.id, workerId, {
             executionPhase: "polling",
             upstreamTaskId: task.upstream.id || lease.upstreamTaskId,
@@ -741,7 +755,7 @@ async function processVideoLease(lease: GenerationTaskLease, workerId: string, o
             lastPollAt: Date.now(),
             lastUpstreamStatus: `query_error:${count}`,
         });
-        console.warn("Video task query deferred", { taskId: task.id, error: safeError(error) });
+        console.warn("Video task query deferred", { taskId: task.id, error: message });
         return "deferred";
     }
 }
@@ -814,6 +828,10 @@ function summarize(results: RecoveryResult[]) {
 function errorCount(status?: string) {
     const count = Number(status?.match(/(?:query|persist|cancel_query)_error:(\d+)/)?.[1] || 0);
     return Number.isFinite(count) ? Math.max(0, count) : 0;
+}
+
+function isDeterministicVideoQueryError(message: string) {
+    return DETERMINISTIC_VIDEO_QUERY_ERROR_PATTERN.test(message);
 }
 
 function safeError(error: unknown) {

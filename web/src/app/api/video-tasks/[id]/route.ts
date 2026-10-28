@@ -98,8 +98,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         const responseTask = refreshed || (await getVideoTask(task.id)) || task;
         return NextResponse.json({ task: publicTask(responseTask), refreshed: responseTask !== task }, { headers: pointsResponseHeaders(await getCurrentUser(request)) });
     } catch (error) {
-        console.error("Video task manual refresh failed", { taskId: task.id, error: error instanceof Error ? error.message : String(error) });
-        return NextResponse.json({ error: error instanceof Error ? error.message : "供应商视频状态同步失败" }, { status: 502 });
+        const message = error instanceof Error ? error.message : "供应商视频状态同步失败";
+        console.error("Video task manual refresh failed", { taskId: task.id, error: message });
+        const detail = /task_not_exist|not[ _-]?found|不存在/i.test(message) ? `供应商已查询不到该任务（${message}），请改用重新生成或稍后在供应商后台核对` : message;
+        return NextResponse.json({ error: detail }, { status: 502 });
     }
 }
 

@@ -509,6 +509,34 @@ describe("generation task recovery service", () => {
         expect(result).toMatchObject({ claimed: 1, failed: 1, deferred: 0 });
     });
 
+    it("fails a video task after repeated deterministic provider query errors instead of polling forever", async () => {
+        const task = { id: "video-zombie", userId: "user-one", status: "running", upstream: { id: "upstream-video" }, config: { channelId: "channel-video", apiFormat: "openai" } };
+        mocks.claim.mockResolvedValue([{ ...lease(), id: task.id, userId: task.userId, type: "video" as const, status: "running" as const, executionPhase: "polling", upstreamTaskId: "upstream-video", lastUpstreamStatus: "query_error:10" }]);
+        mocks.getVideoTask.mockResolvedValue(task);
+        mocks.queryVideoTaskUpstream.mockRejectedValue(new Error("task_not_exist"));
+
+        const result = await runGenerationTaskRecoveryBatch({ origin: "http://internal", workerId: "worker-one" });
+
+        const videoRuntime = await import("@/lib/server/video-task-runtime");
+        expect(videoRuntime.failVideoTaskFromWorker).toHaveBeenCalledWith(task, expect.stringContaining("供应商已查询不到该视频任务（task_not_exist）"), true);
+        expect(mocks.release).toHaveBeenCalledWith("video", task.id, "worker-one", expect.objectContaining({ executionPhase: "completed", nextPollAt: undefined, lastUpstreamStatus: "query_failed_deterministic" }));
+        expect(result).toMatchObject({ claimed: 1, failed: 1, deferred: 0 });
+    });
+
+    it("keeps deferring a video task whose provider query errors are not deterministic", async () => {
+        const task = { id: "video-flaky", userId: "user-one", status: "running", upstream: { id: "upstream-video" }, config: { channelId: "channel-video", apiFormat: "openai" } };
+        mocks.claim.mockResolvedValue([{ ...lease(), id: task.id, userId: task.userId, type: "video" as const, status: "running" as const, executionPhase: "polling", upstreamTaskId: "upstream-video", lastUpstreamStatus: "query_error:40" }]);
+        mocks.getVideoTask.mockResolvedValue(task);
+        mocks.queryVideoTaskUpstream.mockRejectedValue(new Error("fetch failed"));
+
+        const result = await runGenerationTaskRecoveryBatch({ origin: "http://internal", workerId: "worker-one" });
+
+        const videoRuntime = await import("@/lib/server/video-task-runtime");
+        expect(videoRuntime.failVideoTaskFromWorker).not.toHaveBeenCalled();
+        expect(mocks.release).toHaveBeenCalledWith("video", task.id, "worker-one", expect.objectContaining({ executionPhase: "polling", lastUpstreamStatus: "query_error:41" }));
+        expect(result).toMatchObject({ claimed: 1, deferred: 1 });
+    });
+
     it("persists the selected text channel before the next upstream query", async () => {
         const task = {
             id: "text-one",
