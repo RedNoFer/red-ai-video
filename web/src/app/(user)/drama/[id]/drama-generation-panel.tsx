@@ -20,6 +20,7 @@ import {
     updateDramaProductionRun,
     updateDramaShotPromptPatch,
     updateDramaVideoPromptPrefix,
+    syncDramaShotVideoResults,
 } from "@/services/api/drama-projects";
 import { resolveModelRequestConfig, useEffectiveConfig } from "@/stores/use-config-store";
 import { compileDramaShotExecutionPrompts, formatDramaVideoPromptCutLines, stripDramaReferenceBindingSections } from "@/lib/drama-prompt-compiler";
@@ -40,6 +41,7 @@ import { DramaJianyingModal, DramaSubtitleModal } from "./drama-project-modals";
 import { DramaVideoDownloadModal } from "./drama-video-download-modal";
 import type { DramaProjectStage } from "./drama-project-sections";
 import { applyDramaProductionRunStep, isActiveDramaVideoStep, applyDramaVisualRunTerminalStep, dramaShotVideoMode, estimateEpisodePoints, resolveDramaVisualRunSync } from "./drama-shot-generation-utils";
+import { visibleDramaShotVideoResults } from "@/lib/drama-shot-video-results";
 import { markDramaCanvasSynced } from "../../canvas/[id]/canvas-drama-navigation";
 import type { DramaVideoPromptAnalysis, DramaVideoReferenceMode } from "@/lib/drama-project-contract";
 
@@ -1136,6 +1138,23 @@ function ShotTaskRow({
     const dialogue = (shot.subtitle || shot.dialogue || shot.narration).trim();
     const startFrames = activeFrameEvidence(shot, "storyboard_start");
     const endFrames = activeFrameEvidence(shot, "storyboard_end");
+    const candidateVideos = useMemo(() => visibleDramaShotVideoResults(shot), [shot]);
+    const syncedVideoResultShotsRef = useRef(new Set<string>());
+    useEffect(() => {
+        const key = `${shot.id}:${shot.videoUrl || ""}`;
+        if (!shot.videoUrl || candidateVideos.length > 1 || syncedVideoResultShotsRef.current.has(key) || videoRunning) return;
+        syncedVideoResultShotsRef.current.add(key);
+        let cancelled = false;
+        syncDramaShotVideoResults(project.id, episode.id, shot.id)
+            .then((synced) => {
+                if (cancelled) return;
+                updateShot(project.id, episode.id, shot.id, { videoResults: synced.shot.videoResults || [] });
+            })
+            .catch(() => {});
+        return () => {
+            cancelled = true;
+        };
+    }, [candidateVideos.length, episode.id, project.id, shot.id, shot.videoUrl, updateShot, videoRunning]);
     const agentActionItems: MenuProps["items"] = [
         {
             type: "group",
@@ -1260,7 +1279,7 @@ function ShotTaskRow({
                 <ShotMissingFixedAssets project={project} shot={shot} onOpenAssets={() => onMaintain("assets")} />
                 {detailsOpen ? <ShotExecutionDetails project={project} episode={episode} shot={shot} productionRun={productionRun} onPreview={onPreview} /> : null}
 
-                {startFrames.length || endFrames.length || shot.videoUrl ? (
+                {startFrames.length || endFrames.length || candidateVideos.length ? (
                     <div className="ml-11 mt-3 flex max-w-2xl flex-wrap gap-2">
                         {startFrames.map((frame, index) => (
                             <DramaMediaThumbnail key={`start-${frame.id}`} media={{ type: "image", url: frame.mediaUrl, title: `${shot.title}起始帧${index + 1}` }} onOpen={onPreview} />
@@ -1268,26 +1287,31 @@ function ShotTaskRow({
                         {endFrames.map((frame, index) => (
                             <DramaMediaThumbnail key={`end-${frame.id}`} media={{ type: "image", url: frame.mediaUrl, title: `${shot.title}结束帧${index + 1}` }} onOpen={onPreview} />
                         ))}
-                        {shot.videoUrl ? (
-                            <DramaMediaThumbnail
-                                media={{
-                                    type: "video",
-                                    url: shot.videoUrl,
-                                    title: `${shot.title}生成视频`,
-                                    downloadUrl: shot.generationTaskId ? `/api/video-tasks/${encodeURIComponent(shot.generationTaskId)}/download` : undefined,
-                                    onRepair: shot.generationTaskId
-                                        ? async () => {
-                                              const response = await fetch(`/api/video-tasks/${encodeURIComponent(shot.generationTaskId!)}/download?repair=1`, { cache: "no-store" });
-                                              const payload = (await response.json().catch(() => ({}))) as { data?: { url?: string }; msg?: string };
-                                              if (!response.ok || !payload.data?.url) throw new Error(payload.msg || "视频资源补全失败");
-                                              updateShot(project.id, episode.id, shot.id, { videoUrl: payload.data.url, generationError: undefined });
-                                              await saveProjectNow(project.id);
-                                          }
-                                        : undefined,
-                                }}
-                                onOpen={onPreview}
-                            />
-                        ) : null}
+                        {candidateVideos.map((video, index) => {
+                            const current = video.url === shot.videoUrl;
+                            return (
+                                <DramaMediaThumbnail
+                                    key={video.id}
+                                    media={{
+                                        type: "video",
+                                        url: video.url,
+                                        title: current ? `${shot.title}生成视频` : `${shot.title}候补视频${candidateVideos.filter((item, position) => item.url !== shot.videoUrl && position < index).length + 1}`,
+                                        downloadUrl: (current ? shot.generationTaskId : video.taskId) ? `/api/video-tasks/${encodeURIComponent((current ? shot.generationTaskId : video.taskId)!)}/download` : undefined,
+                                        onRepair:
+                                            current && shot.generationTaskId
+                                                ? async () => {
+                                                      const response = await fetch(`/api/video-tasks/${encodeURIComponent(shot.generationTaskId!)}/download?repair=1`, { cache: "no-store" });
+                                                      const payload = (await response.json().catch(() => ({}))) as { data?: { url?: string }; msg?: string };
+                                                      if (!response.ok || !payload.data?.url) throw new Error(payload.msg || "视频资源补全失败");
+                                                      updateShot(project.id, episode.id, shot.id, { videoUrl: payload.data.url, generationError: undefined });
+                                                      await saveProjectNow(project.id);
+                                                  }
+                                                : undefined,
+                                    }}
+                                    onOpen={onPreview}
+                                />
+                            );
+                        })}
                     </div>
                 ) : null}
                 {dialogue ? <p className="ml-11 mt-2 max-w-2xl text-xs leading-5 text-muted-foreground">字幕：{dialogue}</p> : null}

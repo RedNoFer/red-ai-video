@@ -43,6 +43,7 @@ test("镜头跨计划同步终态、刷新恢复并允许再次生成，未知�
         generationStatus: "running",
         generationRunId: `${project.id}-run-${index}`,
         generationTaskId: `${project.id}-task-${index}`,
+        ...(index === 1 ? { videoUrl: "https://example.com/recovered.mp4" } : {}),
     }));
     const runs = shots.map((shot, index): DramaProductionRun => ({
         id: shot.generationRunId!,
@@ -89,6 +90,32 @@ test("镜头跨计划同步终态、刷新恢复并允许再次生成，未知�
                 },
             };
         });
+        tasks.push({
+            id: `${shots[1].id}-history-take`,
+            type: "video",
+            userId: user.id,
+            projectId: project.id,
+            status: "success",
+            expiresAt: now + 86_400_000,
+            createdAt: now - 60_000,
+            updatedAt: now - 60_000,
+            executionPhase: "completed",
+            lastUpstreamStatus: "persisted",
+            payload: {
+                id: `${shots[1].id}-history-take`,
+                userId: user.id,
+                status: "success",
+                createdAt: now - 60_000,
+                updatedAt: now - 60_000,
+                projectId: project.id,
+                episodeId: episode.id,
+                shotId: shots[1].id,
+                runId: shots[1].generationRunId,
+                config: { model: "e2e-video" },
+                upstream: { id: "provider-history-take" },
+                result: { url: "https://example.com/first-take.mp4", durationMs: 5000 },
+            },
+        });
         await writeJsonDataFile("generation-tasks.json", [...existing, ...tasks]);
     });
     await withJsonDataFileLock("drama-production-runs.json", async () => {
@@ -105,6 +132,17 @@ test("镜头跨计划同步终态、刷新恢复并允许再次生成，未知�
     await expect.poll(async () => (await readProject()).episodes[0].shots.map((shot) => shot.generationStatus)).toEqual(["error", "success", "needs_review"]);
     await expect(page.locator("[data-drama-shot-task]").nth(0).getByRole("button", { name: "重试镜头", exact: true })).toBeEnabled();
     await expect(page.locator("[data-drama-shot-task]").nth(1).getByRole("button", { name: "重新生成", exact: true })).toBeEnabled();
+    const successCard = page.locator("[data-drama-shot-task]").nth(1);
+    const videoThumbs = successCard.locator("button[aria-label^='查看视频']");
+    await expect(videoThumbs).toHaveCount(2);
+    await expect(videoThumbs.nth(0)).toHaveAttribute("aria-label", "查看视频：上游已成功生成视频");
+    await expect(videoThumbs.nth(1)).toHaveAttribute("aria-label", "查看视频：上游已成功候补视频1");
+    await videoThumbs.nth(1).click();
+    const candidateDialog = page.getByRole("dialog", { name: "上游已成功候补视频1" });
+    await expect(candidateDialog).toBeVisible();
+    await expect(candidateDialog.locator("video")).toHaveCount(1);
+    await page.keyboard.press("Escape");
+    await expect(candidateDialog).toBeHidden();
     await page.locator("[data-drama-shot-task]").nth(2).getByRole("button", { name: "拉取最新视频", exact: true }).click();
     await expect(page.getByText("提交结果尚未确认，请先由管理员核对供应商原任务", { exact: true })).toBeVisible();
     expect((await protocolFixtureState(request)).requests.filter((item) => item.method === "POST" && item.path.endsWith("/videos"))).toHaveLength(0);
