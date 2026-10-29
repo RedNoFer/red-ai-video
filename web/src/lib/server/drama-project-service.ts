@@ -1937,8 +1937,11 @@ export async function createDramaProductionRunForUser(userId: string, projectId:
             );
             const task = !steps.length && shot.generationTaskId ? await getVideoTask(shot.generationTaskId) : null;
             const uncertain = reconciled.some((step) => step.status === "needs_review") || (task?.userId === userId && task.status === "running" && task.executionPhase === "needs_review");
+            // 用户已取消的镜头不再被旧运行里未提交的 ready/blocked 步骤拦截；这类步骤没有上游任务，
+            // 不存在重复计费，且后续 sync 派发时会自动把它们标记为取消。
+            const interrupted = shot.generationStatus === "cancelled";
             const active = steps.length
-                ? reconciled.some((step) => step.status === "running" || Boolean(!uncertain && ownRun?.confirmedAt && ["ready", "running"].includes(ownRun.status) && ["ready", "blocked"].includes(step.status)))
+                ? reconciled.some((step) => step.status === "running" || Boolean(!interrupted && !uncertain && ownRun?.confirmedAt && ["ready", "running"].includes(ownRun.status) && ["ready", "blocked"].includes(step.status)))
                 : task?.userId === userId
                   ? task.status === "running" && task.executionPhase !== "needs_review"
                   : shot.generationStatus === "queued" || shot.generationStatus === "running";
@@ -3164,7 +3167,11 @@ function dispatchDramaProductionRun(userId: string, projectId: string, run: Dram
         const latestProject = syncOnly ? await getDramaProjectForVisualRun(projectId, userId, latestRun.episodeId) : await getDramaProjectForUser(userId, projectId);
         if (!latestProject) return latestRun;
         const synced = await syncDramaProductionRun(userId, latestProject, latestRun, { origin, cookie });
-        if (syncOnly || !synced.confirmedAt || !["running", "ready"].includes(synced.status)) return synced;
+        if (!synced.confirmedAt || !["running", "ready"].includes(synced.status)) return synced;
+        // 并发额度满时 429 会把视频步骤留在 ready 排队；页面轮询的 sync 必须在额度空出后继续派发，
+        // 否则这些步骤没有任何后台重试路径，会永远停在排队中。
+        const pendingDispatch = synced.steps.some((step) => step.type === "video" && step.status === "ready" && !step.taskId && step.prompt);
+        if (!pendingDispatch) return synced;
         const dispatchProject = (await getDramaProjectForUser(userId, projectId)) || latestProject;
         const dispatchRun = (await getDramaProductionRun(userId, projectId, synced.id)) || synced;
         return dispatchReadyDramaProductionSteps(userId, dispatchProject, dispatchRun, origin, cookie);

@@ -3533,6 +3533,35 @@ describe("drama project service updates", () => {
         expect(mocks.fetchInternalApi).not.toHaveBeenCalled();
     });
 
+    it("re-dispatches a queued ready step when a later sync runs after the concurrency quota freed", async () => {
+        const current = project("2026-07-19T08:00:01.000Z", "项目");
+        current.episodes[0].shots = [{ id: "shot-one", generationStatus: "queued", generationRunId: "run-one" }] as never;
+        const queuedRun = {
+            id: "run-one",
+            projectId: current.id,
+            episodeId: current.episodes[0].id,
+            scope: "production",
+            status: "running",
+            confirmedAt: "2026-07-19T08:00:01.000Z",
+            parameterSnapshot: { imageModel: "image-default", videoModel: "video", videoQuality: "720", ratio: "9:16" },
+            steps: [{ id: "video-one", type: "video", shotId: "shot-one", dependsOn: [], status: "ready", prompt: "人物抬头" }],
+            createdAt: "2026-07-19T08:00:01.000Z",
+            updatedAt: "2026-07-19T08:00:01.000Z",
+        } as never;
+        mocks.getDramaProject.mockResolvedValue(current);
+        mocks.getDramaProjectForVisualRun.mockResolvedValue(current);
+        mocks.getDramaProductionRun.mockResolvedValue(queuedRun);
+        mocks.getStoredGenerationTask.mockResolvedValue(undefined);
+        mocks.getStoredGenerationTaskByRequest.mockResolvedValue(undefined);
+        mocks.fetchInternalApi.mockResolvedValue(new Response(JSON.stringify({ task: { id: "queued-task" } }), { headers: { "content-type": "application/json" } }));
+
+        const result = await updateDramaProductionRunForUser("user-one", current.id, "run-one", { action: "sync", origin: "http://localhost:3010", cookie: "session=test" });
+
+        expect(mocks.fetchInternalApi).toHaveBeenCalled();
+        expect(result.steps[0]).toMatchObject({ status: "running", taskId: "queued-task" });
+        expect(mocks.updateDramaProductionRun).toHaveBeenCalledWith("user-one", expect.objectContaining({ steps: expect.arrayContaining([expect.objectContaining({ id: "video-one", taskId: "queued-task", status: "running" })]) }));
+    });
+
     it("does not overwrite a newer attempt when synchronizing an older run", async () => {
         const current = project("2026-07-19T08:00:01.000Z", "项目");
         current.episodes[0].shots = [{ id: "shot-one", generationStatus: "running", generationRunId: "newer-run", generationTaskId: "newer-task" }] as never;
@@ -3702,6 +3731,55 @@ describe("drama project service updates", () => {
 
         expect(run.steps.filter((step) => step.type === "video").map((step) => step.shotId)).toEqual(["shot-one"]);
         expect(run.id).not.toBe("run-stopped");
+    });
+
+    it("allows regenerating a cancelled shot whose still-running run holds a queued step that never dispatched", async () => {
+        const current = project("2026-10-29T13:30:00.000Z", "项目");
+        current.episodes[0].shots = [
+            {
+                id: "shot-one",
+                order: 1,
+                title: "查记录",
+                description: "人物翻看记录",
+                sourceText: "人物翻看记录",
+                shotBoundary: "",
+                dialogue: "",
+                narration: "",
+                utterances: [],
+                imagePrompt: "画面",
+                videoPrompt: "动作",
+                cameraMotion: "",
+                duration: 15,
+                characterIds: [],
+                propIds: [],
+                clueIds: [],
+                generationStatus: "cancelled",
+                generationRunId: "run-stuck",
+            },
+        ] as never;
+        const stuckRun = {
+            id: "run-stuck",
+            projectId: current.id,
+            episodeId: "episode-one",
+            scope: "production",
+            mode: "strict",
+            status: "running",
+            confirmedAt: current.updatedAt,
+            parameterSnapshot: { imageModel: "image-default", videoModel: "video", videoQuality: "720", ratio: "9:16" },
+            steps: [{ id: "video-shot-one", type: "video", shotId: "shot-one", dependsOn: [], status: "ready", prompt: "动作" }],
+            createdAt: current.updatedAt,
+            updatedAt: current.updatedAt,
+        } as never;
+        mocks.getDramaProject.mockResolvedValue(current);
+        mocks.findLatestDramaProductionRun.mockResolvedValue(stuckRun);
+        mocks.getDramaProductionRun.mockResolvedValue(stuckRun);
+        mocks.getAuthSettings.mockResolvedValue({ defaultModels: { imageModel: "image", videoModel: "video", audioModel: "" }, generationDefaults: { imageQuality: "standard", videoQuality: "720" } });
+        mocks.resolveLogicalModelCandidates.mockReturnValue([{ logicalModelId: "video", channelId: "video-channel" }]);
+
+        const run = await createDramaProductionRunForUser("user-one", current.id, { episodeId: current.episodes[0].id, preflight: { checkedShotIds: ["shot-one"] }, deferDispatch: true });
+
+        expect(run.steps.filter((step) => step.type === "video").map((step) => step.shotId)).toEqual(["shot-one"]);
+        expect(run.id).not.toBe("run-stuck");
     });
 
     it("cancels an unsubmitted step of a cancelled shot instead of submitting it", async () => {
