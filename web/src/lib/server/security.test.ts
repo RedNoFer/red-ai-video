@@ -108,8 +108,8 @@ describe("checkRateLimit", () => {
 
     it("limits generation requests by user", async () => {
         const userId = `user:${crypto.randomUUID()}`;
-        for (let index = 0; index < 6; index += 1) expect((await checkGenerationRateLimit(userId, new Request("http://localhost"), "video")).allowed).toBe(true);
-        expect((await checkGenerationRateLimit(userId, new Request("http://localhost"), "video")).allowed).toBe(false);
+        for (let index = 0; index < 6; index += 1) expect((await checkGenerationRateLimit(userId, new Request("http://localhost"), "render")).allowed).toBe(true);
+        expect((await checkGenerationRateLimit(userId, new Request("http://localhost"), "render")).allowed).toBe(false);
     });
 
     it("limits generation requests across users sharing an IP", async () => {
@@ -119,9 +119,9 @@ describe("checkRateLimit", () => {
         try {
             for (let index = 0; index < 24; index += 1) {
                 const request = new Request("http://localhost", { headers: { "x-forwarded-for": clientIp } });
-                expect((await checkGenerationRateLimit(`user:${crypto.randomUUID()}`, request, "video")).allowed).toBe(true);
+                expect((await checkGenerationRateLimit(`user:${crypto.randomUUID()}`, request, "render")).allowed).toBe(true);
             }
-            const blocked = await checkGenerationRateLimit(`user:${crypto.randomUUID()}`, new Request("http://localhost", { headers: { "x-forwarded-for": clientIp } }), "video");
+            const blocked = await checkGenerationRateLimit(`user:${crypto.randomUUID()}`, new Request("http://localhost", { headers: { "x-forwarded-for": clientIp } }), "render");
             expect(blocked.allowed).toBe(false);
         } finally {
             if (previous === undefined) delete process.env.VOZEB_PRO_TRUSTED_PROXY_HOPS;

@@ -27,7 +27,7 @@ export const AUTH_LOGIN_RATE_LIMIT: RateLimitConfig = { maxRequests: 8, windowMs
 const generationRateLimits: Record<GenerationRateLimitType, RateLimitConfig> = {
     agent: { maxRequests: 10, windowMs: 60 * 1000 },
     image: { maxRequests: 20, windowMs: 60 * 1000 },
-    video: { maxRequests: 6, windowMs: 60 * 1000 },
+    video: { maxRequests: 50, windowMs: 60 * 1000 },
     audio: { maxRequests: 20, windowMs: 60 * 1000 },
     text: { maxRequests: 30, windowMs: 60 * 1000 },
     render: { maxRequests: 6, windowMs: 60 * 1000 },
