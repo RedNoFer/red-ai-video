@@ -196,7 +196,11 @@ export function stripDramaReferenceBindingSections(prompt: string) {
             skipping = true;
             continue;
         }
-        if (skipping && (/^@图片\d+[：:]/u.test(value) || /^角色参考图约束：/u.test(value) || /^每张角色资产图均展示同一个人的不同观察角度/u.test(value) || /^必须逐图按上述职责使用/u.test(value) || /^执行要求：逐图识别/u.test(value) || !value)) continue;
+        if (
+            skipping &&
+            (/^@图片\d+[：:]/u.test(value) || /^角色参考图约束：/u.test(value) || /^(?:【角色一致性】)?每张角色资产图均展示同一个人的不同观察角度/u.test(value) || /^必须逐图按上述职责使用/u.test(value) || /^执行要求：逐图识别/u.test(value) || !value)
+        )
+            continue;
         skipping = false;
         output.push(line);
     }
@@ -214,7 +218,7 @@ export function appendDramaImageReferenceBindings(prompt: string, references: Ar
             return `@图片${index + 1}：${label}${reference.binding ? `；绑定规则：${reference.binding}` : ""}`;
         })
         .join("\n");
-    const characterRule = hasCharacterReferences ? "\n每张角色资产图均展示同一个人的不同观察角度，仅参考面容、体型、服装和配饰，不继承白底、排版或图中身体投影的数量。保证人物唯一性，每个角色在世界空间中仅有一人。" : "";
+    const characterRule = hasCharacterReferences ? "\n【角色一致性】每张角色资产图均展示同一个人的不同观察角度，仅参考面容、体型、服装和配饰，不继承白底、排版或图中身体投影的数量。保证人物唯一性，每个角色在世界空间中仅有一人。" : "";
     const referenceSection = `【参考图片】：\n${manifest}${characterRule}`;
     return [referenceSection, base.trim()].filter(Boolean).join("\n\n");
 }

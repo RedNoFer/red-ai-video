@@ -90,6 +90,8 @@ describe("drama prompt compiler", () => {
         expect(prompt.startsWith("【参考图片】：\n@图片1：")).toBe(true);
         expect(prompt.endsWith("静态关键帧：Karin站在黑湖边")).toBe(true);
         expect(prompt.match(/每张角色资产图均展示同一个人的不同观察角度/gu)).toHaveLength(1);
+        expect(prompt).toContain("【角色一致性】每张角色资产图均展示同一个人的不同观察角度");
+        expect(appendDramaImageReferenceBindings(prompt, [{ id: "character-one", label: "角色固定资产「Karin」", binding: "锁定身份与服装" }]).match(/【角色一致性】每张角色资产图/gu)).toHaveLength(1);
         expect(appendDramaImageReferenceBindings(prompt, [])).toBe("静态关键帧：Karin站在黑湖边");
         expect(appendDramaImageReferenceBindings(prompt, [{ id: "scene-one", label: "场景固定资产「黑湖记忆」", binding: "锁定空间拓扑与主光方向" }])).toContain("@图片1：场景固定资产「黑湖记忆」");
         expect(appendDramaImageReferenceBindings(prompt, [{ id: "scene-one", label: "场景固定资产「黑湖记忆」", binding: "锁定空间拓扑与主光方向" }])).not.toContain("@图片2：");
