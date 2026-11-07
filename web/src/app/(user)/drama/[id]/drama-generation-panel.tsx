@@ -1421,6 +1421,7 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
     const [optimizedFramePlan, setOptimizedFramePlan] = useState<DramaVideoPromptAnalysis["shots"][number]["framePlan"]>();
     const [optimizingVideoPrompt, setOptimizingVideoPrompt] = useState(false);
     const [savingVideoPrompt, setSavingVideoPrompt] = useState(false);
+    const [chapterTextExpanded, setChapterTextExpanded] = useState(false);
     const assets = shotAssetLabels(project, shot);
     const promptReferences = useMemo(() => previewVideoReferenceBindings(project, episode, shot), [project, episode, shot]);
     const promptRow = { shot, references: promptReferences, basePrompt: "" };
@@ -1547,7 +1548,20 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
             {rows.map(([label, value]) => (
                 <div key={label} className="grid min-w-0 gap-1 sm:grid-cols-[7rem_minmax(0,1fr)]">
                     <span className="font-medium text-foreground">{label}</span>
-                    <p className="min-w-0 whitespace-pre-wrap break-words text-muted-foreground">{value}</p>
+                    {label === "章节文案" && !chapterTextExpanded ? (
+                        <button type="button" className="justify-self-start text-left text-muted-foreground underline-offset-2 hover:text-foreground hover:underline" onClick={() => setChapterTextExpanded(true)}>
+                            展开查看全文（{String(value).length} 字）
+                        </button>
+                    ) : label === "章节文案" ? (
+                        <div className="min-w-0 space-y-1">
+                            <p className="min-w-0 whitespace-pre-wrap break-words text-muted-foreground">{value}</p>
+                            <button type="button" className="text-muted-foreground underline-offset-2 hover:text-foreground hover:underline" onClick={() => setChapterTextExpanded(false)}>
+                                收起章节文案
+                            </button>
+                        </div>
+                    ) : (
+                        <p className="min-w-0 whitespace-pre-wrap break-words text-muted-foreground">{value}</p>
+                    )}
                 </div>
             ))}
             <div className="mt-1 border-t border-border/70 pt-3" data-drama-shot-reference-assets>
