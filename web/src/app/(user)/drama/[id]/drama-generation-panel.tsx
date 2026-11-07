@@ -1548,16 +1548,12 @@ function ShotExecutionDetails({ project, episode, shot, productionRun, onPreview
             {rows.map(([label, value]) => (
                 <div key={label} className="grid min-w-0 gap-1 sm:grid-cols-[7rem_minmax(0,1fr)]">
                     <span className="font-medium text-foreground">{label}</span>
-                    {label === "章节文案" && !chapterTextExpanded ? (
-                        <button type="button" className="justify-self-start text-left text-muted-foreground underline-offset-2 hover:text-foreground hover:underline" onClick={() => setChapterTextExpanded(true)}>
-                            展开查看全文（{String(value).length} 字）
-                        </button>
-                    ) : label === "章节文案" ? (
+                    {label === "章节文案" ? (
                         <div className="min-w-0 space-y-1">
-                            <p className="min-w-0 whitespace-pre-wrap break-words text-muted-foreground">{value}</p>
-                            <button type="button" className="text-muted-foreground underline-offset-2 hover:text-foreground hover:underline" onClick={() => setChapterTextExpanded(false)}>
-                                收起章节文案
+                            <button type="button" className="text-muted-foreground underline-offset-2 hover:text-foreground hover:underline" onClick={() => setChapterTextExpanded((expanded) => !expanded)}>
+                                {chapterTextExpanded ? "收起章节文案" : `展开查看全文（${String(value).length} 字）`}
                             </button>
+                            {chapterTextExpanded ? <p className="min-w-0 whitespace-pre-wrap break-words text-muted-foreground">{value}</p> : null}
                         </div>
                     ) : (
                         <p className="min-w-0 whitespace-pre-wrap break-words text-muted-foreground">{value}</p>
