@@ -17,13 +17,21 @@ export function dramaProjectFixedReferenceAssets(project: DramaProject) {
 }
 
 export function missingDramaShotFixedReferences(project: DramaProject, shot: DramaShot) {
-    const ids = new Set([shot.sceneId, ...shot.characterIds, ...shot.propIds, ...shot.clueIds, ...(shot.framePlan?.referenceManifest || []).map((item) => item.assetId)]);
+    const ids = new Set([
+        shot.sceneId,
+        ...shot.characterIds,
+        ...shot.propIds,
+        ...shot.clueIds,
+        ...(shot.sourceAssetIds || []),
+        ...(shot.referenceIntents || []).map((intent) => intent.assetId),
+        ...(shot.framePlan?.referenceManifest || []).map((item) => item.assetId),
+    ]);
     return dramaProjectFixedReferenceAssets(project).filter((item) => ids.has(item.id) && !item.reference);
 }
 
 export function dramaShotReferenceAssetIds(project: DramaProject, shot: DramaShot) {
-    const declared = [shot.sceneId, ...shot.characterIds, ...shot.propIds, ...shot.clueIds, ...(shot.sourceAssetIds || [])].filter((id): id is string => Boolean(id));
-    return declared.filter((id) => Boolean(readableShotReference(project, shot, id)));
+    const declared = [shot.sceneId, ...shot.characterIds, ...shot.propIds, ...shot.clueIds, ...(shot.sourceAssetIds || []), ...(shot.referenceIntents || []).map((intent) => intent.assetId)].filter((id): id is string => Boolean(id));
+    return [...new Set(declared)].filter((id) => Boolean(readableShotReference(project, shot, id)));
 }
 
 export function defaultDramaShotReferenceAssetIds(project: DramaProject, shot: DramaShot) {

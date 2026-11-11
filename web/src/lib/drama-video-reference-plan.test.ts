@@ -40,6 +40,25 @@ describe("drama video reference plan", () => {
         expect(missingDramaShotFixedReferences(project, shot)).toEqual([]);
     });
 
+    it("includes supplementary scene reference intents in declared and default selections", () => {
+        const withIntent = structuredClone(project);
+        (withIntent as Record<string, unknown>).scenes = [
+            ...withIntent.scenes,
+            { id: "scene-inner", name: "内殿", references: [{ id: "inner-ref", url: "/inner.png", status: "approved" }], primaryReferenceId: "inner-ref", sceneReferenceBoard: { layout: "panorama", referenceId: "inner-ref" } },
+        ];
+        const shotWithIntent = { ...shot, referenceIntents: [{ assetId: "scene-inner", role: "scene_anchor", guidance: "9-30秒内殿空间基准" }] } as unknown as DramaShot;
+        expect(defaultDramaShotReferenceAssetIds(withIntent, shotWithIntent)).toEqual(["scene-one", "character-one", "prop-one", "clue-one", "scene-inner"]);
+        expect(selectedDramaShotReferenceAssetIds(withIntent, shotWithIntent)).toEqual(["scene-one", "character-one", "prop-one", "clue-one", "scene-inner"]);
+        const deduped = {
+            ...shotWithIntent,
+            referenceIntents: [
+                { assetId: "scene-one", role: "scene_anchor", guidance: "" },
+                { assetId: "missing-asset", role: "scene_anchor", guidance: "" },
+            ],
+        } as unknown as DramaShot;
+        expect(defaultDramaShotReferenceAssetIds(withIntent, deduped)).toEqual(["scene-one", "character-one", "prop-one", "clue-one"]);
+    });
+
     it("accepts explicitly selected approved project assets without adding them to defaults", () => {
         const extra = structuredClone(project);
         extra.characters.push({ ...extra.characters[0], id: "manual-role", name: "另一角色" });

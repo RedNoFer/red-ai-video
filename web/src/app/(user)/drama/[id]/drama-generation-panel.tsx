@@ -2264,7 +2264,17 @@ function shotReferenceAssets(project: DramaProject, shot: DramaShot): ShotRefere
         const url = asset.serverUrl || asset.remoteUrl;
         return url ? [{ id: asset.id, label: `来源素材 · ${asset.title}`, url, width: asset.width, height: asset.height }] : [];
     });
-    return [...fixedReferences, ...sourceReferences].filter((asset, index, all) => all.findIndex((item) => item.id === asset.id || item.url === asset.url) === index);
+    const fixedIds = new Set(fixedAssets.map(({ id }) => id));
+    const intentReferences = (shot.referenceIntents || []).flatMap((intent) => {
+        if (fixedIds.has(intent.assetId)) return [];
+        const asset = [...project.scenes, ...project.characters, ...project.props, ...(project.clues || [])].find((item) => item.id === intent.assetId);
+        if (!asset) return [];
+        const isScene = project.scenes.some((item) => item.id === asset.id);
+        const kind = isScene ? "场景" : project.characters.some((item) => item.id === asset.id) ? "角色" : (project.clues || []).some((item) => item.id === asset.id) ? "线索" : "道具";
+        const reference = isScene ? approvedScenePanoramaReference(asset) : approvedAssetReference(asset);
+        return reference?.url ? [{ id: asset.id, label: `${kind} · ${asset.name}`, url: reference.url, width: reference.width, height: reference.height }] : [];
+    });
+    return [...fixedReferences, ...intentReferences, ...sourceReferences].filter((asset, index, all) => all.findIndex((item) => item.id === asset.id || item.url === asset.url) === index);
 }
 
 function shotAssetLabels(project: DramaProject, shot: DramaShot) {
@@ -2274,6 +2284,12 @@ function shotAssetLabels(project: DramaProject, shot: DramaShot) {
         ...project.props.filter((item) => shot.propIds.includes(item.id)).map((item) => `道具：${item.name}`),
         ...(project.clues || []).filter((item) => shot.clueIds.includes(item.id)).map((item) => `线索：${item.name}`),
         ...(project.sourceAssets || []).filter((item) => (shot.sourceAssetIds || []).includes(item.id)).map((item) => `来源素材：${item.title}`),
+        ...(shot.referenceIntents || []).flatMap((intent) => {
+            if ([shot.sceneId, ...shot.characterIds, ...shot.propIds, ...shot.clueIds].includes(intent.assetId)) return [];
+            const isScene = project.scenes.some((item) => item.id === intent.assetId);
+            const asset = [...project.scenes, ...project.characters, ...project.props, ...(project.clues || [])].find((item) => item.id === intent.assetId);
+            return asset ? [`${isScene ? "补充场景" : "参考"}：${asset.name}`] : [];
+        }),
     ];
     return Array.from(new Set(labels));
 }
