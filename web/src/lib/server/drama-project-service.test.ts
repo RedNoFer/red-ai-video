@@ -1042,6 +1042,32 @@ describe("drama project service updates", () => {
         expect(normalized.scenes[0].sceneReferenceBoard).toEqual({ layout: "panorama", referenceId: "scene-ref" });
     });
 
+    it("keeps a confirmed panorama scene referenceable when its long negative list enumerates 九宫格 far from the negative marker", () => {
+        const current = project("2026-07-19T08:00:00.000Z", "项目");
+        const normalized = normalizeProject(
+            {
+                ...current,
+                scenes: [
+                    {
+                        id: "scene-one",
+                        name: "宅邸走廊",
+                        description: "宅邸清晨走廊空镜，作为剧情中的室内空间底板。",
+                        profile: {
+                            visualIdentity: "16:9 单张全景空镜。真人电影剧照质感。",
+                            consistencyRules: "保持16:9单张全景空镜、宅邸长走廊纵深、两侧石柱与挂毯交替、尽头尖拱窗的位置关系不变；不得加入人物、人体局部、倒影、车辆、动物、手持道具、方向标签、九宫格、文字、图形说明或水印。",
+                        },
+                        references: [{ id: "scene-ref", url: "/scene-panorama.png", source: "generated", status: "approved", label: "基准", createdAt: "2026-01-01T00:00:00.000Z" }],
+                        primaryReferenceId: "scene-ref",
+                        sceneReferenceBoard: { layout: "legacy-3x3", referenceId: "scene-ref" },
+                    },
+                ],
+            },
+            current,
+        );
+
+        expect(normalized.scenes[0].sceneReferenceBoard).toEqual({ layout: "panorama", referenceId: "scene-ref" });
+    });
+
     it("round-trips the scene background NPC policy without adding NPC assets", () => {
         const current = project("2026-07-19T08:00:00.000Z", "项目");
         const normalized = normalizeProject(

@@ -19,9 +19,11 @@ export function isLegacySceneReferenceBoard(asset?: DramaNamedAsset): boolean {
     if (asset?.sceneReferenceBoard?.layout !== "legacy-3x3") return false;
     const primary = approvedAssetReference(asset);
     const source = [asset.supplierPrompt, primary?.compiledPrompt, primary?.label, asset.description, asset.profile?.visualIdentity, asset.profile?.designPrompt, asset.profile?.consistencyRules].filter(Boolean).join("\n");
-    const withoutNegativeRules = source.replace(/(?:不生成|禁止(?:生成)?|不要|不得|无|避免)[^。；;\n]{0,24}(?:九宫格|九格|3\s*[x×*]\s*3|三列[\s\S]*三行|3列[\s\S]*3行)/gu, "");
+    // 负面约束常按长清单枚举多个禁项后才出现「九宫格」，窗口过短会把「不得加入…九宫格」误判成九宫格要求。
+    const withoutNegativeRules = source.replace(/(?:不生成|禁止(?:生成)?|不要|不得|无|避免)[^。；;\n]{0,64}(?:九宫格|九格|3\s*[x×*]\s*3|三列[\s\S]*三行|3列[\s\S]*3行)/gu, "");
     if (/九宫格|九格|3\s*[x×*]\s*3|三列[\s\S]*三行|3列[\s\S]*3行/u.test(withoutNegativeRules)) return true;
-    return !/(?:单视角(?:场景)?全景|全景建立图)/u.test(withoutNegativeRules);
+    // 「单张全景」「全景空镜」与「单视角全景」同义，都是全景契约的明确证据。
+    return !/(?:单视角(?:场景)?全景|单张(?:场景)?全景|全景(?:建立图|空镜))/u.test(withoutNegativeRules);
 }
 
 export function approvedScenePanoramaReference(asset?: DramaNamedAsset): DramaAssetReference | undefined {

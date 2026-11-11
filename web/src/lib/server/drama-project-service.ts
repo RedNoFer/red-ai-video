@@ -4575,7 +4575,7 @@ function isLegacySceneAsset(value: unknown) {
     if (["3x3", "legacy-3x3"].includes(boardLayout)) return isLegacySceneReferenceBoard(asset as unknown as DramaNamedAsset);
     const profile = object(asset.profile);
     const source = [asset.description, asset.supplierPrompt, profile.visualIdentity, profile.designPrompt, profile.consistencyRules].map(cleanText).filter(Boolean).join("\n");
-    const withoutNegativeRules = source.replace(/(?:不生成|禁止(?:生成)?|不要|不得|无|避免)[^。；;\n]{0,24}(?:九宫格|九格|3\s*[x×*]\s*3|三列[\s\S]*三行|3列[\s\S]*3行)/gu, "");
+    const withoutNegativeRules = source.replace(/(?:不生成|禁止(?:生成)?|不要|不得|无|避免)[^。；;\n]{0,64}(?:九宫格|九格|3\s*[x×*]\s*3|三列[\s\S]*三行|3列[\s\S]*3行)/gu, "");
     return /九宫格|九格|3\s*[x×*]\s*3|三列[\s\S]*三行|3列[\s\S]*3行/u.test(withoutNegativeRules);
 }
 
