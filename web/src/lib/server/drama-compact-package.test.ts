@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import type { DramaProject, DramaShot } from "@/lib/drama-project-contract";
+import { buildVideoReferenceBindings, compileDramaVideoSubmissionPrompt } from "@/lib/drama-video-submission";
 import { buildDramaProductionRun } from "./drama-production-run";
 import { applyDramaCompactPackage, DramaCompactPackageError, parseDramaCompactPackage, previewDramaCompactPackage } from "./drama-compact-package";
 
@@ -259,6 +260,29 @@ describe("compact drama package", () => {
         expect(before.episodes[0].shots[0].videoPrompt).toBe("旧视频提示词");
     });
 
+    it("accepts annotated scene bindings and demotes multi-scene lines to a primary-scene warning", () => {
+        const before = project();
+        const annotated = source
+            .replace("### 场景 LOC_01｜旧书房", "### 场景 LOC_01｜旧书房\n#### 图片提示词\n~~~text\n旧场景提示词\n~~~\n### 场景 LOC_02｜内殿祭坛")
+            .replace("场景：LOC_01", "场景：LOC_01（0-9秒，山门与门后通道）、LOC_02（9秒后，内殿祭坛）");
+        const preview = previewDramaCompactPackage(annotated, before);
+        expect(preview.warnings).toContain("E01/SH01 绑定了多个场景（LOC_01、LOC_02），已以 LOC_01 为主场景导入，其余场景不参与本片段的基准图引用；跨场景剧情建议拆成两个片段。");
+        const after = applyDramaCompactPackage(before, annotated, "book.md");
+        expect(after.episodes[0].shots[0].sceneId).toBe("scene-old");
+
+        const singleAnnotated = source.replace("场景：LOC_01", "场景：LOC_01（0-9秒，山门与门后通道）");
+        const singlePreview = previewDramaCompactPackage(singleAnnotated, before);
+        expect(singlePreview.warnings.filter((warning) => warning.includes("多个场景"))).toEqual([]);
+        expect(applyDramaCompactPackage(before, singleAnnotated, "book.md").episodes[0].shots[0].sceneId).toBe("scene-old");
+    });
+
+    it("rejects binding lines whose tokens are not asset codes", () => {
+        const before = project();
+        const invalid = source.replace("场景：LOC_01", "场景：山门与门后通道");
+        expect(() => previewDramaCompactPackage(invalid, before)).toThrow(DramaCompactPackageError);
+        expect(() => previewDramaCompactPackage(invalid, before)).toThrow(/绑定代码无效：山门与门后通道/);
+    });
+
     it("overwrites reusable asset wording only when the import opts in and always keeps the reference images", () => {
         const before = project();
         const changed = bareSource.replace("新角色外貌提示词", "改写后的林雪外貌提示词");
@@ -336,6 +360,25 @@ describe("compact drama package", () => {
             { assetId: "character-old", code: "CHAR_01", role: "character_anchor", guidance: "林雪主外观与服装锁定" },
             { assetId: "scene-old", code: "LOC_01", role: "scene_anchor", guidance: "旧书房清晨光线" },
         ]);
+    });
+
+    it("resolves cross-asset codes in reference guidance before persistence and public compilation", () => {
+        const input = source
+            .replace("### 场景 LOC_01｜旧书房", "### 道具 PROP_01｜米色棉裙\n#### 图片提示词\n~~~text\n米色棉裙基准\n~~~\n### 场景 LOC_01｜旧书房")
+            .replace("场景：LOC_01", "场景：LOC_01\n道具：PROP_01")
+            .replace("原样保留的画面与对白。\n第二行。", "【参考】CHAR_01=身份基准；PROP_01=本段服装唯一基准，由 CHAR_01 着用，char_01 的身份不变。\n\n林雪站在门口。");
+        const imported = applyDramaCompactPackage(project(), input, "book.md");
+        const restored = JSON.parse(JSON.stringify(imported)) as DramaProject;
+        const shot = restored.episodes[0].shots[0];
+        const prop = restored.props.find((asset) => asset.name === "米色棉裙")!;
+        expect(shot.referenceIntents).toContainEqual({ assetId: prop.id, code: "PROP_01", role: "prop_anchor", guidance: "本段服装唯一基准，由 林雪 着用，林雪 的身份不变" });
+        prop.references = [{ id: "dress-reference", url: "/dress.png", source: "generated", label: "基准", createdAt: restored.updatedAt, status: "approved" }];
+        prop.primaryReferenceId = "dress-reference";
+        const bindings = buildVideoReferenceBindings(restored, shot, [], [prop.id]);
+        expect(bindings[0].purpose).toBe("道具「米色棉裙」（本段服装唯一基准，由 林雪 着用，林雪 的身份不变）");
+        const prompt = compileDramaVideoSubmissionPrompt(shot.videoPrompt, restored, shot, bindings, [prop.id]);
+        expect(prompt).toContain(bindings[0].purpose);
+        expect(prompt).not.toMatch(/CHAR_01/iu);
     });
 
     it("keeps shots without reference blocks unchanged and still binds intents for the previous shot layout", () => {

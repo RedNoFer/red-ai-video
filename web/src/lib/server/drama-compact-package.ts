@@ -23,7 +23,7 @@ type CompactShot = {
     referenceEntries?: DramaPackageReferenceEntry[];
 };
 type CompactEpisode = { code: string; title: string; script: string; shots: CompactShot[] };
-type CompactPackage = { assets: CompactAsset[]; episodes: CompactEpisode[] };
+type CompactPackage = { assets: CompactAsset[]; episodes: CompactEpisode[]; warnings: string[] };
 
 export type DramaCompactPackageOptions = { overwriteAssetPrompts?: boolean };
 
@@ -66,12 +66,20 @@ function resolveCompactTextField(field: CompactShotTextField, incoming: string |
 }
 
 function parseCodes(value: string) {
-    return value.split(/[,，、\s]+/u).filter(Boolean);
+    // 绑定行允许在代码后追加括号注解（如时间分段说明），先剥离再校验，避免中文注解被当成代码。
+    const cleaned = value.replace(/[（(][^）)]*[）)]/gu, " ");
+    return cleaned
+        .split(/[,，、\s]+/u)
+        .filter(Boolean)
+        .map((token) => {
+            if (!codePattern.test(token)) fail(`绑定代码无效：${token}（请填写固定资产代码，说明文字请写在括号内）`);
+            return token;
+        });
 }
 
 export function parseDramaCompactPackage(source: string): CompactPackage {
     const lines = source.replace(/\r\n?/gu, "\n").split("\n");
-    const result: CompactPackage = { assets: [], episodes: [] };
+    const result: CompactPackage = { assets: [], episodes: [], warnings: [] };
     let scope: "assets" | "episode" | undefined;
     let asset: CompactAsset | undefined;
     let episode: CompactEpisode | undefined;
@@ -147,10 +155,14 @@ export function parseDramaCompactPackage(source: string): CompactPackage {
         }
         const binding = /^(角色|场景|道具|线索)：(.*)$/u.exec(line);
         if (shot && binding) {
-            const codes = parseCodes(binding[2]);
+            let codes = parseCodes(binding[2]);
             if (binding[1] === "角色") shot.characters = codes;
             if (binding[1] === "场景") {
-                if (codes.length > 1) fail(`${episode?.code}/${shot.code} 只能绑定一个场景`);
+                // 镜头数据模型是单场景绑定：多场景片段取第一个为主场景，其余记入预警，跨场景剧情应拆分片段。
+                if (codes.length > 1) {
+                    result.warnings.push(`${episode?.code}/${shot.code} 绑定了多个场景（${codes.join("、")}），已以 ${codes[0]} 为主场景导入，其余场景不参与本片段的基准图引用；跨场景剧情建议拆成两个片段。`);
+                    codes = [codes[0]];
+                }
                 shot.scene = codes[0];
             }
             if (binding[1] === "道具") shot.props = codes;
@@ -219,7 +231,7 @@ function processDramaPackageReferenceEntries(result: CompactPackage) {
                 const expectedKind = prefix && referencePrefixKinds[prefix];
                 if (expectedKind && expectedKind !== asset!.kind) fail(`${episode.code}/${shot.code} 的【参考】代码 ${entry.code} 与资产类型不符：按前缀应为${kindLabels[expectedKind]}`);
             }
-            shot.referenceEntries = entries;
+            shot.referenceEntries = entries.map((entry) => ({ ...entry, guidance: replaceDramaPackageCodeTokens(entry.guidance, (code) => resolveAsset(code)?.name) }));
         }
     }
 }
@@ -240,7 +252,7 @@ function matchAsset(project: DramaProject, asset: CompactAsset): { current?: Dra
 export function previewDramaCompactPackage(source: string, project: DramaProject, options: DramaCompactPackageOptions = {}): DramaCompactPackagePreview {
     const compact = parseDramaCompactPackage(source);
     const overwrite = options.overwriteAssetPrompts === true;
-    const warnings: string[] = [];
+    const warnings: string[] = [...compact.warnings];
     let assetsReused = 0;
     let assetPromptsOverwritable = 0;
     for (const asset of compact.assets) {
