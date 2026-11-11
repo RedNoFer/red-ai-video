@@ -180,6 +180,18 @@ function project(): DramaProject {
 }
 
 describe("compact drama package", () => {
+    it("canonicalizes binding codes case-insensitively and reports wrong-kind bindings in Chinese", () => {
+        const before = project();
+        const tolerant = source.replace("场景：LOC_01", "场景：loc_01（0-9秒，山门）").replace("角色：CHAR_01", "角色：char_01");
+        const preview = previewDramaCompactPackage(tolerant, before);
+        expect(preview.warnings.filter((warning) => warning.includes("绑定不存在"))).toEqual([]);
+        const after = applyDramaCompactPackage(before, tolerant, "book.md");
+        expect(after.episodes[0].shots[0]).toMatchObject({ sceneId: "scene-old", characterIds: ["character-old"] });
+
+        const wrongKind = source.replace("场景：LOC_01", "场景：CHAR_01");
+        expect(() => previewDramaCompactPackage(wrongKind, before)).toThrow(/的场景绑定不存在或类型不符：CHAR_01/);
+    });
+
     it("keeps the downloadable Markdown template parseable", () => {
         const template = readFileSync(new URL("../../../public/drama-compact-package-template.md", import.meta.url), "utf8");
         const parsed = parseDramaCompactPackage(template);

@@ -392,6 +392,15 @@ describe("production package boundary", () => {
         expect(() => previewDramaProductionPackage(JSON.stringify(source), "package.json", undefined, { allowImportWarnings: false })).toThrow("引用的场景资产 S99");
     });
 
+    it("warns instead of blocking when an imported shot's 素材绑定 line omits a bound asset", () => {
+        const source = structuredClone(productionPackage);
+        const shot = source.episodes[0].shots[0];
+        shot.videoPrompt = `${shot.videoPrompt}\n素材绑定：木门`;
+        const preview = previewDramaProductionPackage(JSON.stringify(source), "package.json", undefined, { allowImportWarnings: true, validateVideoPrompt: true });
+        expect(preview.importWarnings?.join("\n")).toContain("素材绑定未明确写出角色");
+        expect(preview.importWarnings?.join("\n")).toContain("已允许导入，请在分镜或生成前补齐素材绑定");
+    });
+
     it("surfaces a dialogue capacity reminder without blocking package import", () => {
         const source = structuredClone(productionPackage);
         const shot = source.episodes[0].shots[0];

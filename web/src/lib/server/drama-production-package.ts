@@ -1607,6 +1607,7 @@ function validateProductionPackageCompleteness(value: Record<string, unknown>, o
     const characters = assetCodes("characters");
     const locations = assetCodes("locations");
     const props = assetCodes("props");
+    const clues = assetCodes("clues");
     for (const location of array(assets.locations)) {
         const item = object(location);
         if (isLegacySceneReferenceBoard(item)) throw new DramaProductionPackageError(`场景 ${text(item.code) || text(item.name) || "未命名"} 是旧九宫格资产，需要重新生成并审核高清场景全景图`);
@@ -1653,11 +1654,28 @@ function validateProductionPackageCompleteness(value: Record<string, unknown>, o
                 if (!options.allowImportWarnings) throw new DramaProductionPackageError(message);
                 if (!options.importWarnings?.some((warning) => warning.startsWith(`${label}引用的场景资产`))) options.importWarnings?.push(`${message}；已允许导入，生成前请补齐场景绑定`);
             }
-            for (const code of strings(item.characterCodes)) if (!characters.has(code)) throw new DramaProductionPackageError(`${label}引用了不存在的角色资产 ${code}`);
-            for (const code of strings(item.propCodes)) if (!props.has(code)) throw new DramaProductionPackageError(`${label}引用了不存在的道具资产 ${code}`);
+            const dangling = [
+                ...strings(item.characterCodes)
+                    .filter((code) => !characters.has(code))
+                    .map((code) => `角色资产 ${code}`),
+                ...strings(item.propCodes)
+                    .filter((code) => !props.has(code))
+                    .map((code) => `道具资产 ${code}`),
+                ...strings(item.clueCodes)
+                    .filter((code) => !clues.has(code))
+                    .map((code) => `线索资产 ${code}`),
+            ];
+            if (dangling.length) {
+                const message = `${label}引用了不存在的${dangling.join("、")}`;
+                if (!options.allowImportWarnings) throw new DramaProductionPackageError(message);
+                options.importWarnings?.push(`${message}；已允许导入，该悬空引用将在导入时剔除`);
+            }
             if (options.validateVideoPrompt) {
                 const bindingIssues = validatePromptAssetBindings(text(item.videoPrompt), strings(item.characterCodes), strings(item.propCodes), text(item.locationCode), array(assets.characters), array(assets.props), array(assets.locations), label);
-                if (bindingIssues.length) throw new DramaProductionPackageError(bindingIssues.join("；"));
+                if (bindingIssues.length) {
+                    if (!options.allowImportWarnings) throw new DramaProductionPackageError(bindingIssues.join("；"));
+                    options.importWarnings?.push(...bindingIssues.map((issue) => `${issue}；已允许导入，请在分镜或生成前补齐素材绑定`));
+                }
             }
             if (!options.standaloneImport && /(?:运镜|焦段|推近|拉远|摇镜|跟拍|滑轨|环绕|吊臂|慢推|慢拉|后拉|时间段|时间轴|动作过程|对白|声音|口型)/u.test(dramaStaticFramePositiveText(text(item.imagePrompt))))
                 throw new DramaProductionPackageError(`${label}的 imagePrompt 必须是单一静态画面，不能包含运镜、时间过程、对白或声音`);

@@ -199,10 +199,12 @@ export function parseDramaCompactPackage(source: string): CompactPackage {
     if (!result.episodes.length) fail("至少需要一个剧集");
     const assetCodes = new Set<string>();
     const assetNames = new Set<string>();
+    const assetCodeIndex = new Map<string, string>();
     for (const item of result.assets) {
         if (!item.name || !item.prompt.trim()) fail(`资产 ${item.code} 缺少名称或图片提示词`);
         if (assetCodes.has(item.code)) fail(`资产代码重复：${item.code}`);
         assetCodes.add(item.code);
+        assetCodeIndex.set(`${item.kind}:${item.code.toLowerCase()}`, item.code);
         const key = `${item.kind}:${nameKey(item.name)}`;
         if (assetNames.has(key)) fail(`同类型资产名称重复：${item.name}`);
         assetNames.add(key);
@@ -217,14 +219,17 @@ export function parseDramaCompactPackage(source: string): CompactPackage {
             if (!codePattern.test(part.code) || shotCodes.has(part.code)) fail(`${item.code} 的片段代码重复或无效：${part.code}`);
             shotCodes.add(part.code);
             if (!part.title || !Number.isSafeInteger(part.duration) || part.duration < 1 || !part.videoPrompt.trim()) fail(`${item.code}/${part.code} 需要标题、正整数时长和视频提示词`);
-            for (const [kind, codes] of [
-                ["characters", part.characters],
-                ["scenes", part.scene ? [part.scene] : []],
-                ["props", part.props],
-                ["clues", part.clues],
-            ] as const) {
-                for (const code of codes) if (!result.assets.some((asset) => asset.kind === kind && asset.code === code)) fail(`${item.code}/${part.code} 的${kind}绑定不存在或类型不符：${code}`);
-            }
+            const kindLabels = { characters: "角色", scenes: "场景", props: "道具", clues: "线索" } as const;
+            const canonicalize = (kind: keyof typeof kindLabels, code: string) => {
+                const canonical = assetCodeIndex.get(`${kind}:${code.toLowerCase()}`);
+                if (!canonical) fail(`${item.code}/${part.code} 的${kindLabels[kind]}绑定不存在或类型不符：${code}`);
+                return canonical;
+            };
+            part.characters = part.characters.map((code) => canonicalize("characters", code));
+            if (part.scene) part.scene = canonicalize("scenes", part.scene);
+            part.props = part.props.map((code) => canonicalize("props", code));
+            part.clues = part.clues.map((code) => canonicalize("clues", code));
+            for (const extra of part.extraScenes || []) extra.code = canonicalize("scenes", extra.code);
         }
     }
     processDramaPackageReferenceEntries(result);
