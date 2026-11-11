@@ -18,6 +18,7 @@ type CompactShot = {
     endFramePrompt?: string;
     characters: string[];
     scene?: string;
+    extraScenes?: Array<{ code: string; note: string }>;
     props: string[];
     clues: string[];
     referenceEntries?: DramaPackageReferenceEntry[];
@@ -75,6 +76,28 @@ function parseCodes(value: string) {
             if (!codePattern.test(token)) fail(`绑定代码无效：${token}（请填写固定资产代码，说明文字请写在括号内）`);
             return token;
         });
+}
+
+/** 场景绑定解析出「代码 + 括号注解」序列；主场景之外的场景作为补充参考图保留其注解作为引用职责说明。 */
+function parseSceneBindings(value: string) {
+    const pattern = /([A-Za-z][A-Za-z0-9_-]*)\s*(?:[（(]([^）)]*)[）)])?/gu;
+    const scenes: Array<{ code: string; note: string }> = [];
+    let lastIndex = 0;
+    for (const match of value.matchAll(pattern)) {
+        const between = value.slice(lastIndex, match.index ?? 0).trim();
+        if (between && !/^[,，、\s]*$/u.test(between)) fail(`绑定代码无效：${between}（请填写固定资产代码，说明文字请写在括号内）`);
+        scenes.push({ code: match[1], note: (match[2] || "").trim() });
+        lastIndex = (match.index ?? 0) + match[0].length;
+    }
+    const tail = value.slice(lastIndex).trim();
+    if (tail && !/^[,，、\s]*$/u.test(tail)) fail(`绑定代码无效：${tail}（请填写固定资产代码，说明文字请写在括号内）`);
+    if (!scenes.length) fail(`场景绑定缺少有效的场景代码：${value.slice(0, 30)}`);
+    const seen = new Set<string>();
+    for (const scene of scenes) {
+        if (seen.has(scene.code)) fail(`场景代码重复：${scene.code}`);
+        seen.add(scene.code);
+    }
+    return scenes;
 }
 
 export function parseDramaCompactPackage(source: string): CompactPackage {
@@ -155,18 +178,20 @@ export function parseDramaCompactPackage(source: string): CompactPackage {
         }
         const binding = /^(角色|场景|道具|线索)：(.*)$/u.exec(line);
         if (shot && binding) {
-            let codes = parseCodes(binding[2]);
-            if (binding[1] === "角色") shot.characters = codes;
             if (binding[1] === "场景") {
-                // 镜头数据模型是单场景绑定：多场景片段取第一个为主场景，其余记入预警，跨场景剧情应拆分片段。
-                if (codes.length > 1) {
-                    result.warnings.push(`${episode?.code}/${shot.code} 绑定了多个场景（${codes.join("、")}），已以 ${codes[0]} 为主场景导入，其余场景不参与本片段的基准图引用；跨场景剧情建议拆成两个片段。`);
-                    codes = [codes[0]];
+                // 镜头数据模型是单场景绑定：第一个场景作为主场景锚点，其余场景带注解作为补充场景参考图保留。
+                const scenes = parseSceneBindings(binding[2]);
+                shot.scene = scenes[0].code;
+                if (scenes.length > 1) {
+                    shot.extraScenes = scenes.slice(1);
+                    result.warnings.push(`${episode?.code}/${shot.code} 绑定了多个场景（${scenes.map((scene) => scene.code).join("、")}），已以 ${scenes[0].code} 为主场景锚点，其余场景的基准图作为补充参考图随片段引用；跨场景剧情仍建议拆成两个片段。`);
                 }
-                shot.scene = codes[0];
+            } else {
+                const codes = parseCodes(binding[2]);
+                if (binding[1] === "角色") shot.characters = codes;
+                if (binding[1] === "道具") shot.props = codes;
+                if (binding[1] === "线索") shot.clues = codes;
             }
-            if (binding[1] === "道具") shot.props = codes;
-            if (binding[1] === "线索") shot.clues = codes;
             continue;
         }
         fail(`第 ${index + 1} 行无法识别：${line.slice(0, 60)}`);
@@ -219,6 +244,10 @@ function processDramaPackageReferenceEntries(result: CompactPackage) {
                 entries.push(...extractDramaPackageReferenceEntries(text));
                 const stripped = stripDramaPackageReferenceSections(text);
                 shot[field] = replaceDramaPackageCodeTokens(stripped, (code) => resolveAsset(code)?.name);
+            }
+            for (const extra of shot.extraScenes || []) {
+                if (entries.some((entry) => entry.code === extra.code)) continue;
+                entries.push({ code: extra.code, guidance: replaceDramaPackageCodeTokens(extra.note, (code) => resolveAsset(code)?.name) || `${extra.code} 场景空间基准` });
             }
             if (!entries.length) continue;
             const seen = new Set<string>();
@@ -281,7 +310,7 @@ export function previewDramaCompactPackage(source: string, project: DramaProject
             if (previous) shotsUpdated++;
             if (previous && (previous.videoUrl || previous.storyboardImageUrl || previous.storyboardEndImageUrl || previous.storyboardFrames?.some((frame) => frame.mediaUrl))) oldResultsToReview++;
             for (const entry of shot.referenceEntries || []) {
-                if (!shot.characters.includes(entry.code) && shot.scene !== entry.code && !shot.props.includes(entry.code) && !shot.clues.includes(entry.code)) {
+                if (!shot.characters.includes(entry.code) && shot.scene !== entry.code && !(shot.extraScenes || []).some((extra) => extra.code === entry.code) && !shot.props.includes(entry.code) && !shot.clues.includes(entry.code)) {
                     warnings.push(`${episode.code}/${shot.code} 的【参考】${entry.code} 未在本片段绑定行声明，导入后不会引用该资产的基准图。`);
                 }
             }

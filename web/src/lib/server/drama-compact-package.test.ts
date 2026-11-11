@@ -260,15 +260,20 @@ describe("compact drama package", () => {
         expect(before.episodes[0].shots[0].videoPrompt).toBe("旧视频提示词");
     });
 
-    it("accepts annotated scene bindings and demotes multi-scene lines to a primary-scene warning", () => {
+    it("accepts annotated scene bindings, keeps extra scenes as reference intents, and warns", () => {
         const before = project();
         const annotated = source
             .replace("### 场景 LOC_01｜旧书房", "### 场景 LOC_01｜旧书房\n#### 图片提示词\n~~~text\n旧场景提示词\n~~~\n### 场景 LOC_02｜内殿祭坛")
             .replace("场景：LOC_01", "场景：LOC_01（0-9秒，山门与门后通道）、LOC_02（9秒后，内殿祭坛）");
         const preview = previewDramaCompactPackage(annotated, before);
-        expect(preview.warnings).toContain("E01/SH01 绑定了多个场景（LOC_01、LOC_02），已以 LOC_01 为主场景导入，其余场景不参与本片段的基准图引用；跨场景剧情建议拆成两个片段。");
+        expect(preview.warnings).toContain("E01/SH01 绑定了多个场景（LOC_01、LOC_02），已以 LOC_01 为主场景锚点，其余场景的基准图作为补充参考图随片段引用；跨场景剧情仍建议拆成两个片段。");
         const after = applyDramaCompactPackage(before, annotated, "book.md");
-        expect(after.episodes[0].shots[0].sceneId).toBe("scene-old");
+        const shot = after.episodes[0].shots[0];
+        expect(shot.sceneId).toBe("scene-old");
+        const locTwo = after.scenes.find((scene) => scene.code === "LOC_02");
+        expect(locTwo).toBeDefined();
+        expect(shot.referenceIntents?.some((intent) => intent.assetId === locTwo!.id && intent.role === "scene_anchor")).toBe(true);
+        expect(shot.referenceIntents?.find((intent) => intent.assetId === locTwo!.id)?.guidance).toBe("9秒后，内殿祭坛");
 
         const singleAnnotated = source.replace("场景：LOC_01", "场景：LOC_01（0-9秒，山门与门后通道）");
         const singlePreview = previewDramaCompactPackage(singleAnnotated, before);
