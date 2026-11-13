@@ -70,10 +70,11 @@ function assetUsageCount(project: DramaProject, kind: DramaAssetKind, assetId: s
 }
 
 function assetUsageCountInEpisode(episode: DramaEpisode, kind: DramaAssetKind, assetId: string) {
-    return episode.shots.filter((shot) => {
+    const bound = (shot: DramaEpisode["shots"][number]) => {
         if (kind === "characters") return shot.characterIds.includes(assetId);
         if (kind === "scenes") return shot.sceneId === assetId;
         if (kind === "props") return shot.propIds.includes(assetId);
         return shot.clueIds.includes(assetId);
-    }).length;
+    };
+    return episode.shots.filter((shot) => bound(shot) || (shot.referenceIntents || []).some((intent) => intent.assetId === assetId)).length;
 }
