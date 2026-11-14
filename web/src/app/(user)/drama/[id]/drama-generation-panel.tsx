@@ -502,7 +502,10 @@ export function DramaGenerationPanel({
     };
 
     const checkProduction = async (shotIds: string[] = episode.shots.map((shot) => shot.id)) => {
-        if (preflighting) return;
+        if (preflighting) {
+            message.warning("生成前检查仍在进行，请稍候");
+            return;
+        }
         setPreflighting(true);
         try {
             const check = await preflightDramaGeneration(project.id, episode.id, shotIds, `drama-preflight:${project.id}:${episode.id}:${shotIds.join(",")}:${project.updatedAt}`);
@@ -517,7 +520,10 @@ export function DramaGenerationPanel({
     };
 
     const startProduction = async (shotIds: string[]) => {
-        if (creatingRun || preflighting) return;
+        if (creatingRun || preflighting) {
+            message.warning("正在准备生成配置，请等当前准备完成再点击");
+            return;
+        }
         setPreflighting(true);
         try {
             const { preflight: check } = await getLatestDramaProductionRun(project.id, episode.id);
@@ -928,6 +934,7 @@ export function DramaGenerationPanel({
                                 onOpenCanvas={() => void openEpisodeCanvas()}
                                 onCompleteReview={() => completeShotReviewAndRefresh(shot.id)}
                                 onGenerate={() => void startProduction([shot.id])}
+                                preparingRun={preflighting || creatingRun}
                                 onOptimizePrompt={() => optimizeVideoPrompt(shot, preflight?.issues.filter((issue) => issue.shotId === shot.id) || [])}
                                 onMaintain={(action) => {
                                     if (action === "assets") onOpenAssets();
@@ -1102,6 +1109,7 @@ function ShotTaskRow({
     onOpenCanvas,
     onCompleteReview,
     onGenerate,
+    preparingRun,
     onOptimizePrompt,
     onMaintain,
 }: {
@@ -1116,6 +1124,7 @@ function ShotTaskRow({
     onOpenCanvas: () => void;
     onCompleteReview: () => Promise<boolean>;
     onGenerate: () => void;
+    preparingRun?: boolean;
     onOptimizePrompt: () => Promise<unknown>;
     onMaintain: (action: "assets" | "storyboard" | "review") => void;
 }) {
@@ -1337,7 +1346,14 @@ function ShotTaskRow({
                         {pendingVideoStep && !pendingVideoStep.taskId ? "排队中" : "取消生成"}
                     </Button>
                 ) : (
-                    <Button className={`${dialogue ? "" : "col-span-2 lg:col-span-1"} ${actionButtonClass}`} icon={failed ? <RefreshCw className="size-4" /> : <Play className="size-4" />} onClick={onGenerate}>
+                    <Button
+                        className={`${dialogue ? "" : "col-span-2 lg:col-span-1"} ${actionButtonClass}`}
+                        icon={failed ? <RefreshCw className="size-4" /> : <Play className="size-4" />}
+                        loading={preparingRun}
+                        disabled={preparingRun}
+                        aria-busy={preparingRun || undefined}
+                        onClick={onGenerate}
+                    >
                         {shot.generationStatus === "needs_review" ? "处理待确认" : failed ? "重试镜头" : shot.videoUrl ? "重新生成" : "生成镜头"}
                     </Button>
                 )}
