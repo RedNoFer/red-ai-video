@@ -6,6 +6,7 @@ import { generationModelId, toSystemGenerationChannel } from "@/lib/server/gener
 import { finishGenerationAttempt, startGenerationAttempt, type GenerationAttempt } from "@/lib/server/generation-attempt";
 import { fetchInternalApi, resolveInternalOrigin } from "@/lib/server/internal-origin";
 import { resolveLogicalModelCandidates, supportsVideoKeyframeReferences } from "@/lib/server/logical-model-router";
+import { ensureReferenceAssetPngVariantUrl } from "@/lib/server/reference-asset-store";
 import {
     assertReferenceCapabilities,
     assertReferenceUrls,
@@ -91,11 +92,15 @@ export async function POST(request: Request) {
         const maxDramaImageReferences = isDramaRun && Number.isFinite(dramaDuration) && dramaDuration > 0 ? dramaReferenceImageBudget(dramaDuration) : undefined;
         let references: VideoGenerationReference[];
         try {
-            references = normalizeVideoGenerationReferences(body.references, { maxImageReferences: maxDramaImageReferences }).map((reference) => ({
-                ...reference,
-                url: signReferenceAssetInputUrl(reference.url, publicOrigin),
-                ...(reference.serverUrl ? { serverUrl: signReferenceAssetInputUrl(reference.serverUrl, publicOrigin) } : {}),
-            }));
+            const variantContext = { ownerUserId: user.id, projectId: body.context?.projectId };
+            const toSignedVideoReferenceUrl = async (value: string) => signReferenceAssetInputUrl((await ensureReferenceAssetPngVariantUrl(value, variantContext)) || value, publicOrigin);
+            references = await Promise.all(
+                normalizeVideoGenerationReferences(body.references, { maxImageReferences: maxDramaImageReferences }).map(async (reference) => ({
+                    ...reference,
+                    url: await toSignedVideoReferenceUrl(reference.url),
+                    ...(reference.serverUrl ? { serverUrl: await toSignedVideoReferenceUrl(reference.serverUrl) } : {}),
+                })),
+            );
         } catch (error) {
             return NextResponse.json({ error: error instanceof Error ? error.message : "视频参考素材不正确" }, { status: 400 });
         }

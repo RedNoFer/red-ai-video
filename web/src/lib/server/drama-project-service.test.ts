@@ -54,6 +54,7 @@ const mocks = vi.hoisted(() => {
         updateDramaProductionRun: vi.fn(),
         fetchInternalApi: vi.fn(),
         fetchSafeOutbound: vi.fn(),
+        ensurePngVariantUrl: vi.fn(),
         reviewCreativeOutputs: vi.fn(),
     };
 });
@@ -107,6 +108,10 @@ vi.mock("@/lib/server/drama-production-run-store", () => ({
 vi.mock("@/lib/server/internal-origin", () => ({ fetchInternalApi: mocks.fetchInternalApi }));
 vi.mock("@/lib/server/safe-outbound-fetch", () => ({ fetchSafeOutbound: mocks.fetchSafeOutbound }));
 vi.mock("@/lib/server/creative-review-service", () => ({ reviewCreativeOutputs: mocks.reviewCreativeOutputs }));
+vi.mock("@/lib/server/reference-asset-store", async (importOriginal) => ({
+    ...(await importOriginal<object>()),
+    ensureReferenceAssetPngVariantUrl: mocks.ensurePngVariantUrl,
+}));
 
 import {
     acceptDramaStoryboardFrameForUser,
@@ -4586,6 +4591,28 @@ describe("drama visual reference URL resolution", () => {
         mocks.fetchSafeOutbound.mockResolvedValue(new Response(null, { status: 200, headers: { "content-type": "image/png" } }));
         await expect(resolveReadableDramaVideoReferenceUrl(url, undefined, "http://localhost:3010")).resolves.toBe(url);
         await expect(resolveReadableDramaVideoReferenceUrl("http://127.0.0.2:4010/media/fixture.png", undefined, "http://localhost:3010")).rejects.toThrow("公网地址不可访问");
+    });
+
+    it("signs the deterministic PNG variant for JPEG local video references", async () => {
+        vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://app.example.com");
+        vi.stubEnv("VOZEB_PRO_ENCRYPTION_KEY", "test-encryption-key-that-is-at-least-32-characters");
+        const jpegUrl = "/api/reference-assets/permanent/2026/01/01/images/20260101-000000-00000000-0000-4000-8000-000000000000.jpg";
+        const pngUrl = "/api/reference-assets/permanent/2026/01/01/images/20260101-000000-00000000-0000-4000-8000-000000000001.png";
+        mocks.ensurePngVariantUrl.mockResolvedValue(pngUrl);
+        mocks.fetchSafeOutbound.mockResolvedValue(new Response(null, { status: 200, headers: { "content-type": "image/png" } }));
+
+        await expect(resolveReadableDramaVideoReferenceUrl(jpegUrl, undefined, "http://localhost:3010", undefined, { ownerUserId: "user-one", projectId: "drama-one" })).resolves.toContain(pngUrl);
+        expect(mocks.ensurePngVariantUrl).toHaveBeenCalledWith(jpegUrl, { ownerUserId: "user-one", projectId: "drama-one" });
+    });
+
+    it("keeps signing the original JPEG when no PNG variant can be derived", async () => {
+        vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://app.example.com");
+        vi.stubEnv("VOZEB_PRO_ENCRYPTION_KEY", "test-encryption-key-that-is-at-least-32-characters");
+        const jpegUrl = "/api/reference-assets/permanent/2026/01/01/images/20260101-000000-00000000-0000-4000-8000-000000000000.jpg";
+        mocks.ensurePngVariantUrl.mockResolvedValue(null);
+        mocks.fetchSafeOutbound.mockResolvedValue(new Response(null, { status: 200, headers: { "content-type": "image/jpeg" } }));
+
+        await expect(resolveReadableDramaVideoReferenceUrl(jpegUrl, undefined, "http://localhost:3010", undefined, { ownerUserId: "user-one" })).resolves.toContain("20260101-000000-00000000-0000-4000-8000-000000000000.jpg");
     });
 
     it("signs local references when an external site origin is configured", () => {

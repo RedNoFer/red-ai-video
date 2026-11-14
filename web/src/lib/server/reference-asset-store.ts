@@ -1,6 +1,8 @@
 import { copyFile, mkdir, stat, unlink, writeFile } from "node:fs/promises";
 import { basename, dirname, resolve, sep } from "node:path";
 
+import sharp from "sharp";
+
 import { createDatedMediaPath, REFERENCE_MEDIA_ROOT } from "@/lib/server/local-media-storage";
 import { getLocalMediaRegistration, registerLocalMediaAsset } from "@/lib/server/local-media-registry";
 import { persistExternalMediaIfEnabled } from "@/lib/server/object-storage-service";
@@ -58,11 +60,13 @@ async function writeMediaBytes(bytes: Uint8Array, expectedType: "image" | "video
     if (!normalizedMimeType.startsWith(`${expectedType}/`)) throw new Error("参考素材格式不正确");
     const maxBytes = Math.min(context.maxBytes || MAX_REFERENCE_BYTES[expectedType], MAX_REFERENCE_BYTES[expectedType]);
     if (!bytes.length || bytes.length > maxBytes) throw new Error(`参考${expectedType === "image" ? "图" : expectedType === "video" ? "视频" : "音频"}文件为空或过大`);
+    return writeMediaBytesAt(createDatedMediaPath(persistent ? "permanent" : "temporary", expectedType, extensionFromMime(normalizedMimeType)), bytes, expectedType, normalizedMimeType, persistent, context);
+}
 
-    const token = createDatedMediaPath(persistent ? "permanent" : "temporary", expectedType, extensionFromMime(normalizedMimeType));
-    const registration = referenceRegistration(token, persistent, expectedType, normalizedMimeType, bytes.length, context);
+async function writeMediaBytesAt(token: string, bytes: Uint8Array, expectedType: "image" | "video" | "audio", mimeType: string, persistent: boolean, context: ReferenceMediaWriteContext): Promise<StoredReferenceAsset> {
+    const registration = referenceRegistration(token, persistent, expectedType, mimeType, bytes.length, context);
     const external = await persistExternalMediaIfEnabled({ registration, bytes: Buffer.from(bytes) });
-    if (external) return { token, bytes: bytes.length, mimeType: normalizedMimeType, storage: "object" };
+    if (external) return { token, bytes: bytes.length, mimeType, storage: "object" };
     const filePath = resolve(REFERENCE_MEDIA_ROOT, token);
     await mkdir(dirname(filePath), { recursive: true });
     await writeFile(filePath, bytes);
@@ -72,7 +76,32 @@ async function writeMediaBytes(bytes: Uint8Array, expectedType: "image" | "video
         await unlink(filePath).catch(() => undefined);
         throw error;
     }
-    return { token, bytes: bytes.length, mimeType: normalizedMimeType, storage: "local" };
+    return { token, bytes: bytes.length, mimeType, storage: "local" };
+}
+
+// 部分视频供应商（如 wan-3.0-pro）对参考图只接受 PNG 等格式，JPEG 会在上游报 invalid_asset_media。
+// 用确定性派生 key（源 token 扩展名换成 .png）保证同一来源只生成一次副本。
+export async function ensureReferenceImagePngVariant(sourceToken: string, context: { ownerUserId: string; projectId?: string }): Promise<string | null> {
+    const token = sourceToken.replace(/\.jpe?g$/i, ".png");
+    if (token === sourceToken || !isReferenceAssetPath(token)) return null;
+    if (await getLocalMediaRegistration(token)) return token;
+    const source = await readReferenceAsset(sourceToken);
+    if (!source) return null;
+    const png = await sharp(source.filePath).png().toBuffer();
+    await writeMediaBytesAt(token, png, "image", "image/png", true, { ...context, source: "provider-png-variant" });
+    return token;
+}
+
+export async function ensureReferenceAssetPngVariantUrl(localUrl: string, context: { ownerUserId: string; projectId?: string }): Promise<string | null> {
+    const match = localUrl.split(/[?#]/, 1)[0].match(/^\/api\/reference-assets\/(.+\.jpe?g)$/i);
+    if (!match) return null;
+    try {
+        const token = match[1].split("/").map(decodeURIComponent).join("/");
+        const variant = await ensureReferenceImagePngVariant(token, context);
+        return variant ? `/api/reference-assets/${variant.split("/").map(encodeURIComponent).join("/")}` : null;
+    } catch {
+        return null;
+    }
 }
 
 export async function writeReferenceMediaFile(sourcePath: string, expectedType: "image" | "video" | "audio", mimeType: string, persistent: boolean, context: ReferenceMediaWriteContext): Promise<StoredReferenceAsset> {

@@ -86,6 +86,7 @@ import { persistDramaGeneratedImageReference } from "@/lib/server/drama-asset-re
 import { deleteUserLocalMediaAssets, deleteUserOwnedMediaAssetsPhysically } from "@/lib/server/local-media-storage";
 import { collectLocalMediaStorageKeys, localMediaStorageKeyFromValue } from "@/lib/server/local-media-references";
 import { signReferenceAssetInputUrl } from "@/lib/server/reference-asset-access";
+import { ensureReferenceAssetPngVariantUrl } from "@/lib/server/reference-asset-store";
 import { fetchSafeOutbound } from "@/lib/server/safe-outbound-fetch";
 import { privateUpstreamHostAllowed } from "@/lib/server/outbound-url-security";
 import { applyDramaProductionPackage, DRAMA_PRODUCTION_PACKAGE_MAX_BYTES, DramaProductionPackageError, previewDramaProductionPackage, type DramaProductionPackageNormalizationOptions } from "@/lib/server/drama-production-package";
@@ -3068,7 +3069,7 @@ async function dispatchReadyDramaProductionSteps(userId: string, project: DramaP
                 references = await Promise.all(
                     referenceInputs.map(async ({ remoteUrl, ...reference }) => ({
                         ...reference,
-                        url: await resolveReadableDramaVideoReferenceUrl(reference.url, remoteUrl, origin),
+                        url: await resolveReadableDramaVideoReferenceUrl(reference.url, remoteUrl, origin, undefined, { ownerUserId: userId, projectId: run.projectId }),
                     })),
                 );
             } catch (error) {
@@ -3222,11 +3223,20 @@ function dramaVideoStepRequestId(runId: string, step: DramaProductionStep) {
     return `drama-video:${runId}:${step.id}:attempt-${step.attemptNo || 1}`;
 }
 
-export async function resolveReadableDramaVideoReferenceUrl(localUrl: string | undefined, remoteUrl: string | undefined, origin: string, publicOrigin = externalDramaOrigin(process.env.NEXT_PUBLIC_SITE_URL || "")) {
+export async function resolveReadableDramaVideoReferenceUrl(
+    localUrl: string | undefined,
+    remoteUrl: string | undefined,
+    origin: string,
+    publicOrigin = externalDramaOrigin(process.env.NEXT_PUBLIC_SITE_URL || ""),
+    variantContext?: { ownerUserId: string; projectId?: string },
+) {
     if (isExternalDramaUrl(remoteUrl) && (await isReadableDramaReferenceImage(remoteUrl!))) return remoteUrl!.trim();
     const local = (localUrl || "").trim();
     if (/\/api\/(?:reference-assets|generation-log-assets)\//.test(local) && publicOrigin) {
-        const absoluteLocal = local.startsWith("/") ? new URL(local, origin).toString() : local;
+        // wan-3.0-pro 等上游只接受 PNG 类参考图：站内 JPEG 基准图先转成确定性 PNG 副本再签名提交。
+        const pngUrl = variantContext ? await ensureReferenceAssetPngVariantUrl(local, { ownerUserId: variantContext.ownerUserId, projectId: variantContext.projectId }) : null;
+        const target = pngUrl || local;
+        const absoluteLocal = target.startsWith("/") ? new URL(target, origin).toString() : target;
         const signed = signReferenceAssetInputUrl(absoluteLocal, publicOrigin);
         if (signed && signed !== absoluteLocal && (await isReadableDramaReferenceImage(signed))) return signed;
     }

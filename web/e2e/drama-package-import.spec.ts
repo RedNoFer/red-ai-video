@@ -166,7 +166,7 @@ test("compact Markdown import keeps prompts, asset bindings and blank review dat
     expect(created.ok(), await created.text()).toBe(true);
     const project = ((await created.json()) as { data: { project: DramaProject } }).data.project;
     const scenePrompt = "后左门、右窗、中央木桌，旧木地板，9:16 单视角全景。";
-    const referencePrompt = "【参考】CHAR_01=角色姓名主外观与服装锁定；LOC_01=场景名称清晨光线。\n参考仅提供外观与空间基准职责，不含上传图片编号。\n\n保持CHAR_01形象不漂移。\n开场时，角色姓名站在门口。";
+    const referencePrompt = "【参考】CHAR_01=角色姓名主外观与服装锁定；LOC_01=场景名称清晨光线；PROP_01=本段服装唯一基准，由 CHAR_01 着用。\n参考仅提供外观与空间基准职责，不含上传图片编号。\n\n保持CHAR_01形象不漂移。\n开场时，角色姓名站在门口。";
     const source = readFileSync(new URL("../public/drama-compact-package-template.md", import.meta.url), "utf8")
         .replace("在这里逐字粘贴这一集的小说原文。不要改写或总结。", "原文第一段。\n\n原文第二段，保持原样。")
         .replace("填写完整场景全景基准图提示词，包含空间拓扑、材质和光色。", scenePrompt)
@@ -183,6 +183,16 @@ test("compact Markdown import keeps prompts, asset bindings and blank review dat
                 profile: { visualIdentity: "既有面孔", styling: "原有服装", colorPalette: "灰色", consistencyRules: "保持同一人物" },
                 references: [{ id: "approved-reference", url: "/approved-character.png", source: "generated", label: "主基准", createdAt: project.createdAt, status: "approved" }],
                 primaryReferenceId: "approved-reference",
+            },
+        ];
+        seeded.props = [
+            {
+                id: "approved-prop",
+                code: "OLD_PROP",
+                name: "道具名称",
+                description: "服装基准",
+                references: [{ id: "approved-prop-reference", url: "/approved-prop.png", source: "generated", label: "服装基准", createdAt: project.createdAt, status: "approved" }],
+                primaryReferenceId: "approved-prop-reference",
             },
         ];
         expect((await saveDramaProjectFixture(request, project, seeded)).ok()).toBe(true);
@@ -222,6 +232,7 @@ test("compact Markdown import keeps prompts, asset bindings and blank review dat
         expect(episode.shots[0].referenceIntents).toEqual([
             { assetId: "approved-character", code: "CHAR_01", role: "character_anchor", guidance: "角色姓名主外观与服装锁定" },
             { assetId: saved.scenes[0].id, code: "LOC_01", role: "scene_anchor", guidance: "场景名称清晨光线" },
+            { assetId: saved.props[0].id, code: "PROP_01", role: "prop_anchor", guidance: "本段服装唯一基准，由 角色姓名 着用" },
         ]);
         expect(episode.shots[0].framePlan).toBeUndefined();
         expect(saved.characters[0]).toMatchObject({ id: "approved-character", supplierPrompt: "已确认的角色提示词", primaryReferenceId: "approved-reference" });
@@ -249,7 +260,8 @@ test("compact Markdown import keeps prompts, asset bindings and blank review dat
         expect(confirmPrompt).not.toContain("CHAR_01");
         expect(confirmPrompt).toContain("开场时，角色姓名站在门口。");
         expect(confirmPrompt).toContain("@图片1：角色「角色姓名」（主外观与服装锁定）");
-        expect(confirmPrompt).not.toContain("@图片2");
+        expect(confirmPrompt).toContain("@图片2：道具「道具名称」（本段服装唯一基准，由 角色姓名 着用）");
+        expect(confirmPrompt).not.toContain("@图片3");
         await confirmDialog.getByRole("button", { name: "返回修改" }).click();
         await expectNoHorizontalOverflow(page);
     } finally {
