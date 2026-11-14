@@ -180,6 +180,14 @@ function project(): DramaProject {
 }
 
 describe("compact drama package", () => {
+    it("strips NUL control characters left by transfer tools before parsing", () => {
+        const corrupted = source.replace("林雪推门进屋，桌上旧信未收。", "林雪推门进屋\u0000，桌上旧信未收\u00002\u0000。");
+        const parsed = parseDramaCompactPackage(corrupted);
+        expect(parsed.episodes[0].shots[0].description).toBe("林雪推门进屋，桌上旧信未收2。");
+        const preview = previewDramaCompactPackage(corrupted, project());
+        expect(preview.summary.shots).toBe(1);
+    });
+
     it("canonicalizes binding codes case-insensitively and reports wrong-kind bindings in Chinese", () => {
         const before = project();
         const tolerant = source.replace("场景：LOC_01", "场景：loc_01（0-9秒，山门）").replace("角色：CHAR_01", "角色：char_01");

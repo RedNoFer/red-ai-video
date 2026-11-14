@@ -2841,7 +2841,8 @@ function packageOrigins(fields: string[]) {
 }
 function parseObject(value: string) {
     try {
-        return JSON.parse(value) as unknown;
+        // 上游工具可能残留 NUL 控制字符；JSON 字符串中的 \u0000 落入 jsonb 会被 PostgreSQL 拒绝，解析前剥离。
+        return JSON.parse(value.replace(/\u0000/gu, "")) as unknown;
     } catch {
         return null;
     }

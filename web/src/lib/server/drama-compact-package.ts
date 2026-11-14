@@ -101,7 +101,11 @@ function parseSceneBindings(value: string) {
 }
 
 export function parseDramaCompactPackage(source: string): CompactPackage {
-    const lines = source.replace(/\r\n?/gu, "\n").split("\n");
+    // 微信传输等来源可能残留 NUL 控制字符；PostgreSQL jsonb 拒绝 \u0000，必须在解析前剥离，否则导入落库时整包失败。
+    const lines = source
+        .replace(/\u0000/gu, "")
+        .replace(/\r\n?/gu, "\n")
+        .split("\n");
     const result: CompactPackage = { assets: [], episodes: [], warnings: [] };
     let scope: "assets" | "episode" | undefined;
     let asset: CompactAsset | undefined;
