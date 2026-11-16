@@ -658,6 +658,12 @@ async function request<T>(url: string, init?: RequestInit) {
         throw error;
     }
     const payload = (await response.json().catch(() => ({}))) as { data?: T; msg?: string };
-    if (!response.ok || !payload.data) throw new DramaApiError(payload.msg || "短剧项目请求失败", response.status);
+    if (!response.ok || !payload.data) throw new DramaApiError(payload.msg || requestFailureMessage(response.status), response.status);
     return payload.data;
+}
+
+function requestFailureMessage(status: number) {
+    if (status === 408) return "上传超时（网络中断），请检查网络后重试";
+    if (status >= 500) return `服务暂时不可用（${status}），请稍后重试`;
+    return `短剧项目请求失败（${status}）`;
 }

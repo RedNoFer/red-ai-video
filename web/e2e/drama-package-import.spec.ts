@@ -656,3 +656,26 @@ test("shot assets replace secondary checks and manual fixed references reach the
         expect((await request.patch("/api/admin/settings", { data: e2eSettingsPatch() })).ok()).toBe(true);
     }
 });
+
+test("compact import keeps the draft and explains a stalled upload", async ({ page, request }) => {
+    const created = await request.post("/api/drama/projects", { data: { title: `E2E 精简上传中断 ${randomUUID().slice(0, 8)}`, ratio: "9:16" } });
+    expect(created.ok(), await created.text()).toBe(true);
+    const project = ((await created.json()) as { data: { project: DramaProject } }).data.project;
+    const source = readFileSync(new URL("../public/drama-compact-package-template.md", import.meta.url), "utf8");
+    const endpoint = `**/api/drama/projects/${project.id}/compact-package`;
+    try {
+        await page.route(endpoint, (route) => route.fulfill({ status: 408, body: "" }));
+        await page.goto(`/drama/${project.id}`);
+        await page.getByRole("button", { name: "精简制作包导入" }).click();
+        const modal = page.getByRole("dialog", { name: "导入精简制作包" });
+        await modal.getByRole("textbox", { name: "粘贴精简制作包" }).fill(source);
+        await modal.getByRole("button", { name: "识别并预览" }).click();
+        await expect(modal.locator("[data-drama-compact-import-error]")).toContainText("上传超时");
+        await expect(modal.getByRole("textbox", { name: "粘贴精简制作包" })).toHaveValue(source);
+        await page.unroute(endpoint);
+        await modal.getByRole("button", { name: "识别并预览" }).click();
+        await expect(page.locator("[data-drama-compact-package-preview]")).toContainText("片段");
+    } finally {
+        expect((await request.delete(`/api/drama/projects/${project.id}`)).ok()).toBe(true);
+    }
+});

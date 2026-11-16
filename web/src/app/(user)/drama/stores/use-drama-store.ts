@@ -29,6 +29,7 @@ import type { DramaSourceEpisodeDraft } from "@/lib/drama-source-splitter";
 import { ensureUniqueDramaAssetReferenceIds } from "../[id]/drama-asset-reference-utils";
 import { dramaShotVideoMode } from "../[id]/drama-shot-generation-utils";
 import {
+    DramaApiError,
     createDramaProject,
     createDramaProjectVersion,
     deleteDramaProject,
@@ -47,7 +48,7 @@ type DramaStore = {
     hydrated: boolean;
     hydratedUserId: string;
     syncError?: string;
-    saveStateByProject: Record<string, { status: "saving" | "saved" | "error"; savedAt?: string }>;
+    saveStateByProject: Record<string, { status: "saving" | "saved" | "error"; savedAt?: string; message?: string }>;
     summaries: DramaProjectSummary[];
     summaryTotal: number;
     summaryPage: number;
@@ -1071,7 +1072,21 @@ async function flushQueuedProjectMutation(session: ClientSessionStamp, projectId
     const operation = (previous ? previous.catch(() => undefined) : Promise.resolve()).then(async () => {
         assertCurrent(session);
         try {
-            const saved: DramaProjectMutationAck = await saveDramaProjectMutation(mutation);
+            // 后台镜头/视频状态同步会持续更新项目版本；命中 409 时用服务端最新版本作为新的基线重放本次补丁，
+            // 只重新对齐 expectedUpdatedAt，不改写用户本次编辑内容，也不整体覆盖项目快照。
+            let expectedUpdatedAt = mutation.expectedUpdatedAt;
+            let saved: DramaProjectMutationAck | undefined;
+            for (let attempt = 0; !saved; attempt += 1) {
+                try {
+                    saved = await saveDramaProjectMutation({ ...mutation, expectedUpdatedAt });
+                } catch (error) {
+                    if (!(error instanceof DramaApiError) || error.status !== 409 || attempt >= 4) throw error;
+                    const latest = await getDramaProject(projectId);
+                    assertCurrent(session);
+                    expectedUpdatedAt = latest.updatedAt;
+                    latestProjectTimes.set(key, Date.parse(latest.updatedAt) || Date.now());
+                }
+            }
             assertCurrent(session);
             latestProjectTimes.set(key, Date.parse(saved.updatedAt) || Date.now());
             useDramaStore.setState((state) => {
@@ -1092,7 +1107,7 @@ async function flushQueuedProjectMutation(session: ClientSessionStamp, projectId
             if (latest?.updatedAt === mutation.updatedAt)
                 useDramaStore.setState((state) => ({
                     syncError: error instanceof Error ? error.message : "短剧项目变更保存失败",
-                    saveStateByProject: { ...state.saveStateByProject, [projectId]: { status: "error", savedAt: state.saveStateByProject[projectId]?.savedAt } },
+                    saveStateByProject: { ...state.saveStateByProject, [projectId]: { status: "error", savedAt: state.saveStateByProject[projectId]?.savedAt, message: error instanceof Error ? error.message : undefined } },
                 }));
             throw error;
         }

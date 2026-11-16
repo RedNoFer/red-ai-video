@@ -10,6 +10,11 @@ import { useDramaStore } from "../stores/use-drama-store";
 
 const TEMPLATE_URL = "/drama-compact-package-template.md";
 
+function compactImportFailure(reason: unknown, fallback: string) {
+    if (reason instanceof TypeError) return "上传中断：网络连接不稳定，请确认网络后重试";
+    return reason instanceof Error ? reason.message : fallback;
+}
+
 export function DramaCompactImport({ project, onImported }: { project: DramaProject; onImported: () => void }) {
     const { message } = App.useApp();
     const replaceProject = useDramaStore((state) => state.replaceProject);
@@ -22,10 +27,12 @@ export function DramaCompactImport({ project, onImported }: { project: DramaProj
     const [preview, setPreview] = useState<DramaCompactPackagePreview>();
     const [overwriteAssetPrompts, setOverwriteAssetPrompts] = useState(false);
     const [busy, setBusy] = useState(false);
+    const [error, setError] = useState("");
 
     const previewSource = async (text: string, name: string) => {
         if (!text.trim()) return message.warning("请粘贴精简制作包，或选择 Markdown 文件");
         setBusy(true);
+        setError("");
         try {
             const result = await previewDramaCompactPackage(project.id, text, name, false);
             setSource(text);
@@ -33,8 +40,10 @@ export function DramaCompactImport({ project, onImported }: { project: DramaProj
             setPreview(result);
             setOverwriteAssetPrompts(false);
             setOpen(false);
-        } catch (error) {
-            message.error(error instanceof Error ? error.message : "精简制作包解析失败");
+        } catch (reason) {
+            const failure = compactImportFailure(reason, "精简制作包解析失败");
+            setError(failure);
+            message.error(failure);
         } finally {
             setBusy(false);
         }
@@ -44,11 +53,12 @@ export function DramaCompactImport({ project, onImported }: { project: DramaProj
         if (!source || busy) return;
         setOverwriteAssetPrompts(next);
         setBusy(true);
+        setError("");
         try {
             setPreview(await previewDramaCompactPackage(project.id, source, fileName, next));
-        } catch (error) {
+        } catch (reason) {
             setOverwriteAssetPrompts(!next);
-            message.error(error instanceof Error ? error.message : "精简制作包预览失败");
+            message.error(compactImportFailure(reason, "精简制作包预览失败"));
         } finally {
             setBusy(false);
         }
@@ -58,8 +68,8 @@ export function DramaCompactImport({ project, onImported }: { project: DramaProj
         if (!file) return;
         try {
             await previewSource(await file.text(), file.name);
-        } catch (error) {
-            message.error(error instanceof Error ? error.message : "文件读取失败");
+        } catch (reason) {
+            message.error(compactImportFailure(reason, "文件读取失败"));
         } finally {
             if (inputRef.current) inputRef.current.value = "";
         }
@@ -72,12 +82,14 @@ export function DramaCompactImport({ project, onImported }: { project: DramaProj
         setDraft("");
         setFileName("");
         setOverwriteAssetPrompts(false);
+        setError("");
     };
 
     const apply = async () => {
         if (!preview || applyingRef.current) return;
         applyingRef.current = true;
         setBusy(true);
+        setError("");
         try {
             const saved = await applyDramaCompactPackage(project.id, source, fileName, preview.sourceHash, overwriteAssetPrompts);
             replaceProject(saved);
@@ -88,8 +100,10 @@ export function DramaCompactImport({ project, onImported }: { project: DramaProj
             setOverwriteAssetPrompts(false);
             onImported();
             message.success(`已导入 ${preview.summary.shots} 个片段`);
-        } catch (error) {
-            message.error(error instanceof Error ? error.message : "精简制作包导入失败");
+        } catch (reason) {
+            const failure = compactImportFailure(reason, "精简制作包导入失败");
+            setError(failure);
+            message.error(failure);
         } finally {
             applyingRef.current = false;
             setBusy(false);
@@ -133,6 +147,11 @@ export function DramaCompactImport({ project, onImported }: { project: DramaProj
                     <div className="flex items-center gap-3 text-xs text-muted-foreground before:h-px before:flex-1 before:bg-border after:h-px after:flex-1 after:bg-border">或直接粘贴</div>
                     <Input.TextArea value={draft} onChange={(event) => setDraft(event.target.value)} autoSize={{ minRows: 10, maxRows: 18 }} placeholder="粘贴精简制作包 Markdown" aria-label="粘贴精简制作包" />
                     <p className="text-xs leading-5 text-muted-foreground">只需小说原文、固定资产图提示词及各片段视频提示词；预览后再确认导入。续集请写新的剧集代码（如 E05）以追加为新一集，固定资产名称与项目一致即自动复用。</p>
+                    {error ? (
+                        <p className="rounded-md border border-rose-300/70 bg-rose-50/70 px-3 py-2 text-xs leading-5 text-rose-700 dark:border-rose-700/60 dark:bg-rose-950/30 dark:text-rose-200" data-drama-compact-import-error>
+                            {error}
+                        </p>
+                    ) : null}
                 </div>
             </Modal>
             <Modal
@@ -155,6 +174,11 @@ export function DramaCompactImport({ project, onImported }: { project: DramaProj
                         <p className="truncate text-sm font-medium" title={fileName}>
                             {fileName}
                         </p>
+                        {error ? (
+                            <p className="rounded-md border border-rose-300/70 bg-rose-50/70 px-3 py-2 text-xs leading-5 text-rose-700 dark:border-rose-700/60 dark:bg-rose-950/30 dark:text-rose-200" data-drama-compact-import-error>
+                                {error}
+                            </p>
+                        ) : null}
                         <div className="grid grid-cols-2 gap-px overflow-hidden rounded-md border border-border bg-border sm:grid-cols-3">
                             {[
                                 ["剧集", preview.summary.episodes],

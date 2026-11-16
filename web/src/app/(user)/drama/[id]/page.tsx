@@ -844,8 +844,8 @@ function DramaScriptGlobalBar({
         <footer className={`flex h-[60px] shrink-0 items-center justify-between gap-2 border-t border-border bg-card px-3 sm:gap-3 sm:px-5 ${episodeNavigatorOpen ? "min-[1366px]:!pl-[210px]" : ""}`} data-drama-script-global-bar>
             <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
                 <span className={`size-2 shrink-0 rounded-full ${saveState?.status === "error" ? "bg-rose-500" : saveState?.status === "saving" ? "bg-amber-500" : "bg-emerald-500"}`} />
-                <span className="hidden sm:inline" title={savedLabel}>
-                    {saveState?.status === "saving" ? "正在自动保存" : saveState?.status === "error" ? "自动保存失败" : "自动保存已开启"}
+                <span className="hidden max-w-[min(52vw,460px)] truncate sm:inline" title={saveState?.status === "error" && saveState.message ? `自动保存失败：${saveState.message}` : savedLabel}>
+                    {saveState?.status === "saving" ? "正在自动保存" : saveState?.status === "error" ? (saveState.message ? `自动保存失败：${saveState.message}` : "自动保存失败") : "自动保存已开启"}
                 </span>
             </div>
             <div className="flex shrink-0 items-center gap-2 sm:gap-3">
