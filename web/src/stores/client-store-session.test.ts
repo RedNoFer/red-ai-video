@@ -363,6 +363,25 @@ describe("client store session isolation", () => {
         expect(useDramaStore.getState().summaries).toEqual([summarizeDramaProject(freshProject)]);
     });
 
+    it("keeps the locally selected episode when a forced reload returns a stale active episode", async () => {
+        useUserStore.getState().setUser(user("user-a"));
+        const base = dramaProject("drama-ep", "本地短剧");
+        const secondEpisode = { ...base.episodes[0], id: "drama-ep-episode-2", title: "第 2 集" };
+        useDramaStore.setState((state) => ({
+            projects: [{ ...base, episodes: [...base.episodes, secondEpisode], activeEpisodeId: "drama-ep-episode-2" }, ...state.projects.filter((item) => item.id !== base.id)],
+        }));
+        const serverProject = { ...dramaProject("drama-ep", "服务端短剧"), episodes: [...dramaProject("drama-ep", "服务端短剧").episodes, secondEpisode] };
+        mocks.getDramaProject.mockResolvedValueOnce(serverProject);
+
+        await useDramaStore.getState().loadProject("drama-ep", true);
+        expect(useDramaStore.getState().projects[0].activeEpisodeId).toBe("drama-ep-episode-2");
+
+        const removedEpisode = { ...dramaProject("drama-ep", "服务端短剧"), updatedAt: new Date(Date.now() + 1000).toISOString() };
+        mocks.getDramaProject.mockResolvedValueOnce(removedEpisode);
+        await useDramaStore.getState().loadProject("drama-ep", true);
+        expect(useDramaStore.getState().projects[0].activeEpisodeId).toBe("drama-ep-episode-1");
+    });
+
     it("keeps stable character and scene ids when applying Drama analysis", () => {
         useUserStore.getState().setUser(user("user-a"));
         const project = dramaProject("drama-a", "用户 A 短剧");

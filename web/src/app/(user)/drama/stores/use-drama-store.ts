@@ -215,12 +215,17 @@ export const useDramaStore = create<DramaStore>((set, get) => ({
             .then((project) => {
                 assertCurrent(session);
                 latestProjectTimes.set(key, Date.parse(project.updatedAt) || Date.now());
-                set((state) => ({
-                    projects: [project, ...state.projects.filter((item) => item.id !== project.id)],
-                    summaries: upsertSummary(state.summaries, project),
-                    syncError: undefined,
-                    saveStateByProject: { ...state.saveStateByProject, [project.id]: { status: "saved", savedAt: project.updatedAt } },
-                }));
+                set((state) => {
+                    const existing = state.projects.find((item) => item.id === project.id);
+                    const merged =
+                        existing?.activeEpisodeId && existing.activeEpisodeId !== project.activeEpisodeId && project.episodes.some((episode) => episode.id === existing.activeEpisodeId) ? { ...project, activeEpisodeId: existing.activeEpisodeId } : project;
+                    return {
+                        projects: [merged, ...state.projects.filter((item) => item.id !== merged.id)],
+                        summaries: upsertSummary(state.summaries, merged),
+                        syncError: undefined,
+                        saveStateByProject: { ...state.saveStateByProject, [merged.id]: { status: "saved", savedAt: merged.updatedAt } },
+                    };
+                });
                 return project;
             })
             .finally(() => {
