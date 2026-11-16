@@ -266,7 +266,7 @@ function visualPlanBlockers(project: DramaProject, episode: DramaEpisode, shots:
         if (!shot.imagePrompt.trim() && !shot.startFramePrompt?.trim()) blockers.push(`${shot.title}缺少画面提示词`);
         const scene = shot.sceneId ? project.scenes.find((asset) => asset.id === shot.sceneId) : undefined;
         if (shot.sceneId && !scene) blockers.push(`${shot.title}引用了不存在的场景`);
-        else if (scene && !approvedScenePanoramaReference(scene)) blockers.push(`${shot.title}需要重新生成并审核高清场景全景图`);
+        else if (scene && !approvedScenePanoramaReference(scene)) blockers.push(`${shot.title}缺少可用的场景基准图，请先上传或选择一张场景图`);
         if (shot.characterIds.some((id) => !project.characters.some((asset) => asset.id === id))) blockers.push(`${shot.title}引用了不存在的角色`);
         if (shot.propIds.some((id) => !project.props.some((asset) => asset.id === id))) blockers.push(`${shot.title}引用了不存在的道具`);
         if (shot.storyboardFrameMode === "all_frames" && targetFrameCount && shot.framePlan?.frames.length !== targetFrameCount) blockers.push(`${shot.title}当前有 ${shot.framePlan?.frames.length || 0} 个关键帧，生产方案要求 ${targetFrameCount} 个`);

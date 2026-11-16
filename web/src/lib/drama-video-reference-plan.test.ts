@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { approvedScenePanoramaReference } from "./drama-asset-baseline";
 import type { DramaProject, DramaShot } from "./drama-project-contract";
 import { defaultDramaShotReferenceAssetIds, missingDramaShotFixedReferences, selectedDramaShotFrameIds, selectedDramaShotReferenceAssetIds } from "./drama-video-reference-plan";
 
@@ -33,11 +34,18 @@ describe("drama video reference plan", () => {
     it("reports only bound assets without a usable confirmed baseline", () => {
         const incomplete = structuredClone(project);
         incomplete.characters[0].primaryReferenceId = undefined;
-        incomplete.scenes[0].sceneReferenceBoard = { layout: "legacy-3x3" };
-        incomplete.scenes[0].description = "九宫格场景";
         incomplete.props.push({ id: "unused", name: "未引用道具", description: "" });
-        expect(missingDramaShotFixedReferences(incomplete, shot).map((item) => item.id)).toEqual(["scene-one", "character-one"]);
+        expect(missingDramaShotFixedReferences(incomplete, shot).map((item) => item.id)).toEqual(["character-one"]);
         expect(missingDramaShotFixedReferences(project, shot)).toEqual([]);
+    });
+
+    it("uses the user-provided scene image even when a legacy board flag is still stored", () => {
+        const legacy = structuredClone(project);
+        legacy.scenes[0].sceneReferenceBoard = { layout: "legacy-3x3" };
+        legacy.scenes[0].description = "九宫格场景";
+        expect(approvedScenePanoramaReference(legacy.scenes[0])).toMatchObject({ id: "scene-ref", url: "/scene.png" });
+        expect(missingDramaShotFixedReferences(legacy, shot)).toEqual([]);
+        expect(selectedDramaShotReferenceAssetIds(legacy, shot)).toEqual(["scene-one", "character-one", "prop-one", "clue-one"]);
     });
 
     it("includes supplementary scene reference intents in declared and default selections", () => {

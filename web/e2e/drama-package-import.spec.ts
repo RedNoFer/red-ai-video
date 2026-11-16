@@ -539,7 +539,7 @@ test("shot assets replace secondary checks and manual fixed references reach the
         name: "手动场景",
         references: [{ ...role.references[0], id: "manual-scene-reference", url: `${E2E_PROTOCOL_ORIGIN}/media/fixture.png?manual-scene` }],
         primaryReferenceId: "manual-scene-reference",
-        sceneReferenceBoard: { layout: "panorama", referenceId: "manual-scene-reference" },
+        sceneReferenceBoard: { layout: "legacy-3x3", referenceId: "manual-scene-reference" },
     });
     const episode = seeded.episodes[0];
     episode.reviewStatus = "visual_ready";
@@ -589,6 +589,7 @@ test("shot assets replace secondary checks and manual fixed references reach the
         await picker.getByRole("textbox", { name: "搜索固定资产图" }).fill("手动角色");
         await picker.getByRole("checkbox", { name: "引用固定资产图：角色 · 手动角色" }).check();
         await picker.getByRole("textbox", { name: "搜索固定资产图" }).fill("手动场景");
+        await expect(picker.getByRole("checkbox", { name: "引用固定资产图：场景 · 手动场景" })).toBeEnabled();
         await picker.getByRole("checkbox", { name: "引用固定资产图：场景 · 手动场景" }).check();
         await expect(promptEditor).toHaveValue(new RegExp(`^【参考图片】：[\\s\\S]*总体风格：真人实拍，自然窗光。[\\s\\S]*${editedPrompt.split("\n").at(-1)}$`, "u"));
         let completePrompt = await promptEditor.inputValue();

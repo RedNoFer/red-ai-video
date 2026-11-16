@@ -34,15 +34,16 @@ describe("drama asset completion", () => {
         expect(getDramaAssetMissingItems(asset, "scenes")).toEqual([]);
     });
 
-    it("requires a high-definition panorama when only a legacy single scene image is approved", () => {
+    it("accepts a user-provided approved scene image as the usable baseline", () => {
         const asset = {
             id: "scene-one",
             name: "诊所",
             description: "主场景",
             profile: { visualIdentity: "狭长走廊", styling: "旧木与瓷砖", colorPalette: "冷白与暗绿", consistencyRules: "入口始终在左侧" },
             primaryReferenceId: "ref-one",
-            references: [{ id: "ref-one", url: "/scene.png", source: "generated" as const, label: "旧基准", status: "approved" as const, createdAt: "2026-01-01T00:00:00.000Z" }],
+            sceneReferenceBoard: { layout: "legacy-3x3" as const, referenceId: "ref-one" },
+            references: [{ id: "ref-one", url: "/scene.png", source: "generated" as const, label: "已提供基准", status: "approved" as const, createdAt: "2026-01-01T00:00:00.000Z" }],
         };
-        expect(getDramaAssetMissingItems(asset, "scenes")).toContainEqual({ key: "reference", label: "高清场景全景图", task: "reference" });
+        expect(getDramaAssetMissingItems(asset, "scenes")).toEqual([]);
     });
 });

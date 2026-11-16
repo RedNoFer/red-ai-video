@@ -1404,10 +1404,10 @@ function ShotMissingFixedAssets({ project, shot, onOpenAssets }: { project: Dram
                 </Button>
             </div>
             <ul className="mt-2 space-y-1.5 text-muted-foreground">
-                {missing.map(({ id, label, kind, asset }) => (
+                {missing.map(({ id, label, asset }) => (
                     <li key={id} className="flex flex-wrap justify-between gap-x-3 gap-y-1">
                         <span>{label}</span>
-                        <span>{kind === "scenes" && approvedAssetReference(asset) ? "需生成单视角全景图" : asset.references?.some((reference) => reference.url && reference.status !== "rejected") ? "待确认主基准图" : "尚未生成"}</span>
+                        <span>{asset.references?.some((reference) => reference.url && reference.status !== "rejected") ? "待确认主基准图" : "尚未生成"}</span>
                     </li>
                 ))}
             </ul>

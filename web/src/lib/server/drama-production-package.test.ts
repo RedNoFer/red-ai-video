@@ -1018,11 +1018,12 @@ describe("production package boundary", () => {
         expect(() => previewDramaProductionPackage(JSON.stringify(invalidFramePolicy), "package.json")).toThrow("不能携带固定帧数");
     });
 
-    it("rejects legacy nine-grid scene assets until a panorama is regenerated", () => {
+    it("imports legacy nine-grid scene assets with a warning instead of blocking", () => {
         const legacy = structuredClone(productionPackage);
         legacy.assets.locations[0].sceneReferenceBoard = { layout: "legacy-3x3", referenceId: "legacy-scene" };
 
-        expect(() => previewDramaProductionPackage(JSON.stringify(legacy), "package.json")).toThrow("需要重新生成并审核高清场景全景图");
+        const preview = previewDramaProductionPackage(JSON.stringify(legacy), "package.json");
+        expect(preview.importWarnings?.join("\n")).toContain("保留了旧九宫格布局标记");
     });
 
     it("rejects a legacy Markdown snapshot that lacks required frame plans", () => {
@@ -1154,10 +1155,11 @@ describe("production package boundary", () => {
         expect(preview.package.episodes[0].shots[0].framePlan?.frames.at(-1)?.imagePrompt).toContain("完全惊醒");
     });
 
-    it("rejects legacy scene wording even when the package omitted an explicit layout", () => {
+    it("warns on legacy scene wording even when the package omitted an explicit layout", () => {
         const source = readMahadelJsonFixture();
         source.assets.locations[0].description = "九宫格场景，3列×3行纵向构图";
-        expect(() => previewDramaProductionPackage(JSON.stringify(source), "legacy-scene.json")).toThrow("需要重新生成并审核高清场景全景图");
+        const preview = previewDramaProductionPackage(JSON.stringify(source), "legacy-scene.json");
+        expect(preview.importWarnings?.join("\n")).toContain("保留了旧九宫格布局标记");
     });
 
     it("keeps generated package prompts in the direct Seedance prose structure", () => {

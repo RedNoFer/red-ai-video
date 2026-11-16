@@ -1610,7 +1610,7 @@ function validateProductionPackageCompleteness(value: Record<string, unknown>, o
     const clues = assetCodes("clues");
     for (const location of array(assets.locations)) {
         const item = object(location);
-        if (isLegacySceneReferenceBoard(item)) throw new DramaProductionPackageError(`场景 ${text(item.code) || text(item.name) || "未命名"} 是旧九宫格资产，需要重新生成并审核高清场景全景图`);
+        if (isLegacySceneReferenceBoard(item)) options.importWarnings?.push(`场景 ${text(item.code) || text(item.name) || "未命名"} 保留了旧九宫格布局标记，导入后直接使用当前已提供的基准图，不再触发重新审核`);
     }
     for (const episode of array(value.episodes)) {
         for (const shot of array(object(episode).shots)) {

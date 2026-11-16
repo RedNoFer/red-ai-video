@@ -114,11 +114,19 @@ describe("manual fixed asset reference selection", () => {
         expect(() => validateDramaReferenceSelections(project, episode, [shot], { [shot.id]: ids }, 9)).toThrow("超过当前模型的 9 张上限");
     });
 
-    it.each(["unknown", "extra-character", "extra-scene"])("rejects foreign or unconfirmed reference %s", (id) => {
+    it.each(["unknown", "extra-character"])("rejects foreign or unconfirmed reference %s", (id) => {
         const { project, episode, shot } = fixture();
         project.characters[0].primaryReferenceId = undefined;
+        expect(() => validateDramaReferenceSelections(project, episode, [shot], { [shot.id]: [id] })).toThrow("无效的参考图选择");
+    });
+
+    it("keeps the user-provided scene image selectable without a panorama re-review", () => {
+        const { project, episode, shot } = fixture();
         project.scenes[0].sceneReferenceBoard = { layout: "legacy-3x3" };
         project.scenes[0].description = "九宫格场景";
-        expect(() => validateDramaReferenceSelections(project, episode, [shot], { [shot.id]: [id] })).toThrow("无效的参考图选择");
+        expect(() => validateDramaReferenceSelections(project, episode, [shot], { [shot.id]: ["extra-scene"] })).not.toThrow();
+        const run = buildDramaProductionRun(project, episode, { imageModel: "image", videoModel: "video", referenceSelections: { [shot.id]: ["extra-scene"] } });
+        const step = run.steps.find((item) => item.type === "video")!;
+        expect(step.referenceBindingsSnapshot).toMatchObject([{ alias: "@图片1", sourceId: "extra-scene", role: "scene_anchor", url: "/scene.png" }]);
     });
 });

@@ -192,6 +192,18 @@ describe("drama asset image results", () => {
         expect(sceneReferenceBoard).not.toContain("max-h-[70vh] max-w-full object-contain");
     });
 
+    it("treats a user-provided asset image as the current baseline without a review step", async () => {
+        const [panel, editor] = await Promise.all([readFile(resolve(process.cwd(), "src/app/(user)/drama/[id]/drama-assets-panel.tsx"), "utf8"), readFile(resolve(process.cwd(), "src/app/(user)/drama/[id]/drama-asset-editor-drawer.tsx"), "utf8")]);
+
+        expect(panel).not.toContain("需重生全景");
+        expect(panel).not.toContain('"待审核"');
+        expect(editor).toContain("用户自己提供的图片不需要再审核");
+        expect(editor).toContain("approveDramaAssetReference(project.id, kind, item.id, promoteId)");
+        expect(editor).not.toContain("参考图已上传为候选");
+        expect(editor).not.toContain("来源图片已加入候选");
+        expect(editor).not.toContain("当前主图是旧版九宫格空间基准图，不能用于生产");
+    });
+
     it("filters derived readiness and usage states without changing project data", () => {
         const rows: DramaAssetLibraryRow[] = [
             {

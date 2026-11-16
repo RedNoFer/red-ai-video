@@ -64,7 +64,7 @@ test("project ratio can be chosen at creation and changed for an existing projec
         await page.locator('[aria-label="项目资产分类"] button').filter({ hasText: "场景" }).click();
         await page.locator("[data-drama-assets-library] article").filter({ hasText: "画幅测试场景" }).getByRole("button", { name: "编辑场景：画幅测试场景" }).last().click();
         const sceneDrawer = page.getByRole("dialog", { name: "编辑场景" });
-        await expect(sceneDrawer.getByText(/每张候选均按本项目 16:9 成片画幅/)).toBeVisible();
+        await expect(sceneDrawer.getByText(/直接作为当前基准.*16:9.*画幅/)).toBeVisible();
         await sceneDrawer.getByText("实际供应商提示词（可编辑）").click();
         await expect(sceneDrawer.getByLabel("供应商提示词")).toHaveValue(scene.supplierPrompt);
         const submittedSizes: string[] = [];
@@ -384,7 +384,7 @@ test("生成候选通过真实图片任务链路完成", async ({ page, request 
 
 for (const width of [1672, 1440, 390, 430]) {
     for (const theme of ["light", "dark"]) {
-        test(`上传候选、确认基准、保存设定和刷新保持一致（${width}px/${theme}）`, async ({ page, request }) => {
+        test(`上传候选直接作为基准、保存设定和刷新保持一致（${width}px/${theme}）`, async ({ page, request }) => {
             await page.setViewportSize({ width, height: width < 600 ? 932 : 1000 });
             const created = await request.post("/api/drama/projects", { data: { title: `E2E 上传主基准 ${Date.now()}`, ratio: "9:16" } });
             expect(created.ok(), await created.text()).toBe(true);
@@ -437,6 +437,7 @@ for (const width of [1672, 1440, 390, 430]) {
                 await expect(drawer.getByRole("button", { name: "保存设定" })).toBeDisabled();
                 expect(candidateSaves).toEqual([]);
                 const saveRequest = page.waitForRequest((request) => request.method() === "PATCH" && request.url().endsWith(`/assets/characters/${characterId}`));
+                const primaryAck = page.waitForResponse((response) => response.request().method() === "POST" && response.url().endsWith(`/assets/characters/${characterId}/primary`));
                 releaseUpload();
                 await saveRequest;
                 await expect(pending.getByRole("status")).toHaveText("保存候选中…");
@@ -448,7 +449,9 @@ for (const width of [1672, 1440, 390, 430]) {
                 expect(uploadReply.data.project).not.toHaveProperty("productionArchive");
                 expect(candidateSaves).toEqual([`/api/drama/projects/${project.id}/assets/characters/${characterId}`]);
 
-                await drawer.getByRole("button", { name: "确认主基准" }).click();
+                const primaryReply = await primaryAck;
+                expect(primaryReply.ok(), await primaryReply.text()).toBe(true);
+                expect(new URL(primaryReply.url()).pathname).toBe(`/api/drama/projects/${project.id}/assets/characters/${characterId}/primary`);
                 await expect(drawer.getByRole("button", { name: "已审核基准" })).toBeVisible();
                 await expect(drawer.locator('img[alt="上传测试角色基准图"]')).toHaveCount(1);
                 await expect(drawer.getByText("待补基准图")).toHaveCount(0);
@@ -494,13 +497,18 @@ for (const width of [1672, 1440, 390, 430]) {
 
                 await page.route(`**/assets/characters/${characterId}`, (route) => route.continue());
                 const retryAck = page.waitForResponse((response) => response.url().endsWith(`/assets/characters/${characterId}`) && response.request().method() === "PATCH");
+                const retryPrimaryAck = page.waitForResponse((response) => response.request().method() === "POST" && response.url().endsWith(`/assets/characters/${characterId}/primary`));
                 await reopenedDrawer.locator('input[type="file"][accept="image/*"]').setInputFiles(failedCandidate);
                 expect((await retryAck).ok()).toBe(true);
                 await expect(reopenedDrawer.locator('img[alt="retry-candidate.png"]')).toHaveCount(1);
                 await expect(reopenedDrawer.getByRole("button", { name: "已审核基准" })).toBeEnabled();
+                expect((await retryPrimaryAck).ok()).toBe(true);
                 const afterRetry = ((await (await request.get(`/api/drama/projects/${project.id}`)).json()) as { data: { project: DramaProject } }).data.project;
                 expect(afterRetry.characters[0].references).toHaveLength(2);
-                expect(afterRetry.characters[0].primaryReferenceId).toBe(persisted?.primaryReferenceId);
+                const retryReference = afterRetry.characters[0].references?.find((item) => item.label === "retry-candidate.png");
+                expect(retryReference).toMatchObject({ status: "approved", url: expect.stringContaining("/api/") });
+                expect(afterRetry.characters[0].primaryReferenceId).toBe(retryReference?.id);
+                expect(afterRetry.characters[0].primaryReferenceId).not.toBe(persisted?.primaryReferenceId);
                 const bounds = await reopenedDrawer.evaluate((element) => ({ width: element.getBoundingClientRect().width, scrollWidth: element.scrollWidth, clientWidth: element.clientWidth }));
                 expect(Math.round(bounds.width)).toBeLessThanOrEqual(width);
                 expect(bounds.scrollWidth).toBeLessThanOrEqual(bounds.clientWidth);

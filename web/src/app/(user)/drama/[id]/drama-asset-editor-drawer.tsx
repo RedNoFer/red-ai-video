@@ -422,6 +422,12 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
         try {
             const savedProject = await saveAssetNow(project.id, kind, item.id, { references: nextReferences, markShotsStale: false });
             replaceProject(savedProject);
+            // 用户自己提供的图片不需要再审核：直接作为当前主基准图生效。
+            const promoteId = added.at(-1)?.id;
+            if (promoteId && nextReferences.some((reference) => reference.id === promoteId)) {
+                const promoted = await approveDramaAssetReference(project.id, kind, item.id, promoteId);
+                replaceProject(promoted);
+            }
         } finally {
             setSavingReferences(false);
         }
@@ -447,7 +453,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                 createdAt: new Date().toISOString(),
             },
         ])
-            .then(() => message.success("来源图片已加入候选，请确认主基准图"))
+            .then(() => message.success("来源图片已设为当前基准图"))
             .catch((error) => message.error(error instanceof Error ? error.message : "来源图片保存失败"));
     };
 
@@ -491,7 +497,7 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                     createdAt: new Date().toISOString(),
                 },
             ]);
-            message.success("参考图已上传为候选，请确认主基准图");
+            message.success("参考图已上传并设为当前基准图");
         } catch (error) {
             message.error(error instanceof Error ? error.message : "参考图上传失败");
         } finally {
@@ -1025,11 +1031,10 @@ export function DramaAssetEditorDrawer({ project, kind, assetId, open, onClose }
                             <div>
                                 <h3 className="text-sm font-semibold">{kind === "scenes" ? "高清场景全景图候选" : "参考图候选"}</h3>
                                 <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                                    {kind === "scenes" ? `每张候选均按本项目 ${project.ratio} 成片画幅生成高清、无人物、无文字的单视角场景全景建立图；确认后作为后续镜头的场景锚点。` : "候选图不会进入镜头生成，必须明确确认一张主基准图。"}
+                                    {kind === "scenes"
+                                        ? `上传或选择的场景图直接作为当前基准与镜头场景锚点使用；也可以按本项目 ${project.ratio} 画幅生成新的无水印全景图再替换。`
+                                        : "上传或选择的图片直接作为当前基准图使用；生成出的候选图点击确认后才会用于镜头生成。"}
                                 </p>
-                                {kind === "scenes" && asset?.sceneReferenceBoard?.layout === "legacy-3x3" ? (
-                                    <p className="mt-1 text-xs leading-5 text-amber-700 dark:text-amber-300">当前主图是旧版九宫格空间基准图，不能用于生产；请按本项目 {project.ratio} 画幅重新生成并确认高清场景全景图。</p>
-                                ) : null}
                                 <div className="mt-2 rounded-lg border border-border bg-muted/25 px-3 py-2 text-xs leading-5 text-muted-foreground">
                                     <span className="font-medium text-foreground">审核标准：</span>
                                     与本次生成提示词使用同一套身份锚点、角色白底四视图或场景/道具单主体布局、允许项和禁止项；审核建议不会阻止你选择有效候选。

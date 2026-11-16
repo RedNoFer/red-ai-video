@@ -27,8 +27,7 @@ export function isLegacySceneReferenceBoard(asset?: DramaNamedAsset): boolean {
 }
 
 export function approvedScenePanoramaReference(asset?: DramaNamedAsset): DramaAssetReference | undefined {
-    if (asset?.sceneReferenceBoard?.layout === "legacy-3x3" && isLegacySceneReferenceBoard(asset)) return undefined;
-    if (asset?.sceneReferenceBoard?.layout !== "panorama" && !asset?.sceneReferenceBoard?.layout) return undefined;
+    // 场景基准图以用户当前确认的主基准为准，不再按九宫格/全景标记二次审核。
     return approvedAssetReference(asset);
 }
 

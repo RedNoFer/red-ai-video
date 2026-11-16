@@ -14,7 +14,7 @@ import { DRAMA_ASSET_DEFINITIONS, type DramaAssetKind } from "./drama-asset-defi
 import { DramaAssetEditorDrawer } from "./drama-asset-editor-drawer";
 import { DramaAssetGenerationBatchPanel } from "./drama-asset-generation-batch-panel";
 import { downloadDramaAssetBundle } from "./drama-asset-export";
-import { dramaAssetReferences, dramaSceneBoardReference, isLegacyDramaSceneReference } from "./drama-asset-reference-utils";
+import { dramaAssetReferences, dramaSceneBoardReference } from "./drama-asset-reference-utils";
 import { DramaSceneReferenceBoard } from "./drama-scene-reference-board";
 import { completeDramaAsset, createDramaAssetGenerationBatch } from "@/services/api/drama-projects";
 import { useEffectiveConfig } from "@/stores/use-config-store";
@@ -220,7 +220,6 @@ function DramaAssetCard({ kind, row, onEdit, onComplete, onDelete, completing }:
     const references = dramaAssetReferences(asset);
     const primary = approvedAssetReference(asset);
     const sceneBoard = kind === "scenes" ? dramaSceneBoardReference(asset, references) : undefined;
-    const candidateCount = references.filter((reference) => reference.status !== "approved" && reference.status !== "rejected").length;
     const missingFields = dramaAssetMissingFields(asset, kind);
 
     return (
@@ -255,9 +254,7 @@ function DramaAssetCard({ kind, row, onEdit, onComplete, onDelete, completing }:
                         <h3 className="min-w-0 flex-1 truncate text-sm font-semibold" title={asset.name}>
                             {asset.name}
                         </h3>
-                        {!primary || (kind === "scenes" && (!sceneBoard || isLegacyDramaSceneReference(asset))) ? (
-                            <span className="shrink-0 text-[10px] font-medium text-amber-600 dark:text-amber-300">{candidateCount ? "待审核" : kind === "scenes" ? "需重生全景" : "缺基准"}</span>
-                        ) : null}
+                        {!primary ? <span className="shrink-0 text-[10px] font-medium text-amber-600 dark:text-amber-300">缺基准</span> : null}
                     </div>
                     <p className="mt-1 truncate text-xs leading-4 text-muted-foreground" title={asset.description || undefined}>
                         {asset.description || `未填写${definition.label}用途`}
