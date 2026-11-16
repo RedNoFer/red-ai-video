@@ -71,7 +71,6 @@ export function buildVideoReferenceBindings(
         };
     });
     const assetCandidates: Array<Omit<DramaVideoReferenceBinding, "alias"> & { assetId: string }> = [];
-    const referenceIntents = shot.referenceIntents || [];
     for (const assetId of assetIds) {
         const asset = [...project.characters, ...project.scenes, ...project.props, ...project.clues].find((item) => item.id === assetId);
         const source = project.sourceAssets?.find((item) => item.id === assetId && item.type === "image");
@@ -90,9 +89,7 @@ export function buildVideoReferenceBindings(
         if (reference?.url) {
             const kind = isScene ? "场景" : project.characters.some((item) => item.id === assetId) ? "角色" : project.clues.some((item) => item.id === assetId) ? "线索" : source ? "来源素材" : "道具";
             const name = asset?.name || source?.title || "";
-            const guidance = referenceIntents.find((item) => item.assetId === assetId)?.guidance?.trim() || "";
-            const detail = guidance && guidance.startsWith(name) ? guidance.slice(name.length).trim() : guidance;
-            assetCandidates.push({ assetId, role: roleFor(assetId), purpose: `${kind}「${name}」${detail ? `（${detail}）` : ""}`, sourceId: assetId, url: reference.url, remoteUrl: reference.remoteUrl });
+            assetCandidates.push({ assetId, role: roleFor(assetId), purpose: `${kind}「${name}」`, sourceId: assetId, url: reference.url, remoteUrl: reference.remoteUrl });
         }
     }
     if (!manifest.length) {

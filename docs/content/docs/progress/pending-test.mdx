@@ -5,6 +5,8 @@ description: VOZEB PRO 当前版本需要人工或真实环境确认的事项
 
 # 待测试
 
+- 视频提示词「参考图片」清单精简：不再把资产职责说明塞进括号，`@图片N：角色「X」（身份与默认着装基准(单人塑像图)）` 改为 `@图片N：角色「X」`，场景/道具/线索/来源素材同理。括号细节仍保留在制作包 `referenceIntents.guidance` 与运行快照的参考映射中，不丢数据。改动覆盖：`drama-video-submission` 的 purpose 生成，以及 `appendDramaImageReferenceBindings` 对资产类标签的尾部括号归一化（帧标签如「顺序帧 1（开始）」保持不变）。验收方式：导入精简制作包或打开已有项目，生成确认弹窗与「视频执行提示词（当前标准）」中的参考清单应只显示资产类型和名称。回归：全量 3564 单测、prettier、check:release、drama-package-import 27 项、drama-video-advisory/task-sync E2E 通过。
+
 - 修复在第 N 集确认「生成视频」后页面跳回第 1 集的问题：生成提交后 `loadProject(force)` 会用服务端项目整体替换本地，而服务端 `activeEpisodeId` 只在防抖保存后更新，仍是旧值（通常是第 1 集），导致刚切换的当前集被覆盖。现在强制重拉项目时保留本地当前选择的集（本地所选集在服务端已不存在时回退服务端值）。回归：client-store-session 新增 1 项单测，drama-video-task-sync / drama-video-advisory / drama-package-import E2E 39 项通过。
 
 - 修复镜头生成页「生成镜头/重试镜头/重新生成」按钮偶发点击无响应、生成确认弹窗一直不弹的问题：原因是点击后要先等服务端生成前预检（大项目要加载全量镜头并跑导演检查）才弹窗，期间组件忙碌标志位为 true，重复点击被 `if (creatingRun || preflighting) return;` 静默吞掉——没有任何提示，且 API 请求无超时，请求挂住时只能刷新页面恢复。现在：① 准备期间该按钮显示加载态并禁用，用户能看出"正在准备"；② 忙碌中再点击弹出「正在准备生成配置，请等当前准备完成再点击」提示；③「检查生成条件」按钮忙碌中重复点击同样提示。浏览器回归：drama-video-task-sync / drama-video-advisory / drama-video-batch-download E2E 通过，面板单测 17 项、tsc 通过。

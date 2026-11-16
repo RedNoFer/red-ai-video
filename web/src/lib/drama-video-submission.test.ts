@@ -58,7 +58,7 @@ describe("drama submission reference prefix", () => {
         expect(compile(prompt)).toBe(prompt);
     });
 
-    it("injects package reference guidance into alias purposes and strips legacy 【参考】 blocks", () => {
+    it("keeps alias purposes to asset kind and name and strips legacy 【参考】 blocks", () => {
         const project = {
             id: "project",
             characters: [{ id: "aze", name: "阿泽", references: [{ id: "ref-1", url: "/aze.png", source: "generated", label: "主基准", createdAt: "2026-01-01T00:00:00.000Z", status: "approved" }], primaryReferenceId: "ref-1" }],
@@ -68,12 +68,12 @@ describe("drama submission reference prefix", () => {
         } as unknown as DramaProject;
         const shot = { utterances: [], referenceIntents: [{ assetId: "aze", code: "CHAR_01", role: "character_anchor", guidance: "阿泽主外观与服装锁定" }] } as unknown as DramaShot;
         const bindings = buildVideoReferenceBindings(project, shot, [], ["aze"]);
-        expect(bindings.map((binding) => binding.purpose)).toEqual(["角色「阿泽」（主外观与服装锁定）"]);
+        expect(bindings.map((binding) => binding.purpose)).toEqual(["角色「阿泽」"]);
 
         const prompt = compileDramaVideoSubmissionPrompt("【参考】CHAR_01=阿泽主外观与服装锁定。\n参考仅提供外观与空间基准职责。\n\n开场时，阿泽站在门口。", project, shot, bindings, ["aze"]);
         expect(prompt).not.toContain("CHAR_01");
         expect(prompt).toContain("开场时，阿泽站在门口。");
-        expect(prompt).toContain("【参考图片】：\n@图片1：角色「阿泽」（主外观与服装锁定）");
+        expect(prompt).toContain("【参考图片】：\n@图片1：角色「阿泽」");
         expect(prompt.indexOf("【参考图片】：")).toBe(0);
     });
 });

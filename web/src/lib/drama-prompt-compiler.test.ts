@@ -97,6 +97,20 @@ describe("drama prompt compiler", () => {
         expect(appendDramaImageReferenceBindings(prompt, [{ id: "scene-one", label: "场景固定资产「黑湖记忆」", binding: "锁定空间拓扑与主光方向" }])).not.toContain("@图片2：");
     });
 
+    it("drops redundant parenthetical duty notes from reference labels", () => {
+        const prompt = appendDramaImageReferenceBindings("开场时，Karin站在黑湖边", [
+            { id: "character-one", label: "角色「Karin」（身份与默认着装基准(单人塑像图)）", binding: "锁定身份与服装" },
+            { id: "scene-one", label: "场景「黑湖记忆」（空间与光位基准(空镜底板)）" },
+            { id: "prop-one", label: "道具「黑金龙卡」（卡面形制基准(黑紫鎏金鹰纹平放态)）" },
+        ]);
+
+        expect(prompt).toContain("@图片1：角色「Karin」；绑定规则：锁定身份与服装");
+        expect(prompt).toContain("@图片2：场景「黑湖记忆」");
+        expect(prompt).toContain("@图片3：道具「黑金龙卡」");
+        expect(prompt).not.toContain("单人塑像图");
+        expect(prompt).not.toContain("空镜底板");
+    });
+
     it("places image duties at the top ahead of a Cut to block when prose uses inline time ranges", () => {
         const prompt = appendDramaImageReferenceBindings("开场时，人物看着卡片。\nCut to：屏幕近景。\n从9秒至17.3秒，旁白继续。", [{ id: "scene-one", label: "场景「车内」" }]);
 

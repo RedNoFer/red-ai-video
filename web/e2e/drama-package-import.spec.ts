@@ -259,8 +259,9 @@ test("compact Markdown import keeps prompts, asset bindings and blank review dat
         const confirmPrompt = await confirmDialog.getByRole("textbox", { name: "片段标题视频提示词" }).inputValue();
         expect(confirmPrompt).not.toContain("CHAR_01");
         expect(confirmPrompt).toContain("开场时，角色姓名站在门口。");
-        expect(confirmPrompt).toContain("@图片1：角色「角色姓名」（主外观与服装锁定）");
-        expect(confirmPrompt).toContain("@图片2：道具「道具名称」（本段服装唯一基准，由 角色姓名 着用）");
+        expect(confirmPrompt).toContain("@图片1：角色「角色姓名」\n");
+        expect(confirmPrompt).toContain("@图片2：道具「道具名称」\n");
+        expect(confirmPrompt).not.toContain("主外观与服装锁定）");
         expect(confirmPrompt).not.toContain("@图片3");
         await confirmDialog.getByRole("button", { name: "返回修改" }).click();
         await expectNoHorizontalOverflow(page);

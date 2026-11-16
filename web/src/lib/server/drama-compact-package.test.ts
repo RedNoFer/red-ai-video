@@ -400,7 +400,7 @@ describe("compact drama package", () => {
         prop.references = [{ id: "dress-reference", url: "/dress.png", source: "generated", label: "基准", createdAt: restored.updatedAt, status: "approved" }];
         prop.primaryReferenceId = "dress-reference";
         const bindings = buildVideoReferenceBindings(restored, shot, [], [prop.id]);
-        expect(bindings[0].purpose).toBe("道具「米色棉裙」（本段服装唯一基准，由 林雪 着用，林雪 的身份不变）");
+        expect(bindings[0].purpose).toBe("道具「米色棉裙」");
         const prompt = compileDramaVideoSubmissionPrompt(shot.videoPrompt, restored, shot, bindings, [prop.id]);
         expect(prompt).toContain(bindings[0].purpose);
         expect(prompt).not.toMatch(/CHAR_01/iu);

@@ -207,6 +207,24 @@ export function stripDramaReferenceBindingSections(prompt: string) {
     return output.join("\n").trim();
 }
 
+/** Asset reference labels only need the kind and name; trailing parenthetical duty notes are redundant. */
+export function normalizeDramaReferenceLabel(label: string) {
+    const trimmed = label.trim();
+    if (!/^(?:角色|场景|道具|线索|来源素材)/u.test(trimmed)) return trimmed;
+    let value = trimmed;
+    let changed = true;
+    while (changed) {
+        changed = false;
+        for (const pattern of [/（[^（）]*）\s*$/u, /\([^()]*\)\s*$/u]) {
+            if (pattern.test(value)) {
+                value = value.replace(pattern, "").trim();
+                changed = true;
+            }
+        }
+    }
+    return value || trimmed;
+}
+
 /** Prepend image duties in the exact order used by the supplier request, at the top of the prompt. */
 export function appendDramaImageReferenceBindings(prompt: string, references: Array<{ id: string; label?: string; binding?: string; isCharacter?: boolean }>) {
     const base = stripDramaReferenceBindingSections(prompt);
@@ -214,7 +232,7 @@ export function appendDramaImageReferenceBindings(prompt: string, references: Ar
     const hasCharacterReferences = references.some((reference) => reference.isCharacter || /^角色(?:\s*[·「]|固定资产|资产)/u.test(reference.label || ""));
     const manifest = references
         .map((reference, index) => {
-            const label = reference.label || (reference.id.startsWith("continuity-") ? "上一帧连续性锚点" : "项目资产基准图");
+            const label = normalizeDramaReferenceLabel(reference.label || (reference.id.startsWith("continuity-") ? "上一帧连续性锚点" : "项目资产基准图"));
             return `@图片${index + 1}：${label}${reference.binding ? `；绑定规则：${reference.binding}` : ""}`;
         })
         .join("\n");
