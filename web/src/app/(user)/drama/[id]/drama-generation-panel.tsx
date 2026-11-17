@@ -41,6 +41,7 @@ import { DramaJianyingModal, DramaSubtitleModal } from "./drama-project-modals";
 import { DramaVideoDownloadModal } from "./drama-video-download-modal";
 import type { DramaProjectStage } from "./drama-project-sections";
 import { applyDramaProductionRunStep, isActiveDramaVideoStep, applyDramaVisualRunTerminalStep, dramaShotVideoMode, estimateEpisodePoints, resolveDramaVisualRunSync } from "./drama-shot-generation-utils";
+import { dramaShotHasSubtitleText } from "@/lib/drama-subtitle-plan";
 import { visibleDramaShotVideoResults } from "@/lib/drama-shot-video-results";
 import { markDramaCanvasSynced } from "../../canvas/[id]/canvas-drama-navigation";
 import type { DramaVideoPromptAnalysis, DramaVideoReferenceMode } from "@/lib/drama-project-contract";
@@ -1306,6 +1307,10 @@ function ShotTaskRow({
                                         url: video.url,
                                         title: current ? `${shot.title}生成视频` : `${shot.title}候补视频${candidateVideos.filter((item, position) => item.url !== shot.videoUrl && position < index).length + 1}`,
                                         downloadUrl: (current ? shot.generationTaskId : video.taskId) ? `/api/video-tasks/${encodeURIComponent((current ? shot.generationTaskId : video.taskId)!)}/download` : undefined,
+                                        subtitleExport: (() => {
+                                            const videoId = current ? shot.generationTaskId : video.taskId || video.id;
+                                            return videoId ? { projectId: project.id, episodeId: episode.id, shotId: shot.id, videoId, hasText: dramaShotHasSubtitleText(shot) } : undefined;
+                                        })(),
                                         onRepair:
                                             current && shot.generationTaskId
                                                 ? async () => {

@@ -12,6 +12,16 @@ export async function ffmpegAvailable() {
     }
 }
 
+/** 不是所有 FFmpeg 构建都启用 libass，字幕烧录前需要单独确认 ass 滤镜存在。 */
+export async function ffmpegSubtitleAvailable() {
+    try {
+        const result = await runFfmpeg(["-hide_banner", "-filters"], { timeoutMs: 10_000 });
+        return /\bass\s+V->V\b/u.test(result.stdout);
+    } catch {
+        return false;
+    }
+}
+
 export function runFfmpeg(args: string[], options?: { timeoutMs?: number; cwd?: string; signal?: AbortSignal }) {
     return runProcess(resolveFfmpegPath(), args, options);
 }

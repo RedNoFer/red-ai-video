@@ -630,8 +630,12 @@ export async function exportDramaJianyingDraft(projectId: string, input: { episo
     return { blob: await response.blob(), fileName: encodedName ? decodeURIComponent(encodedName) : "短剧剪映草稿.zip" };
 }
 
-export async function exportDramaVideos(projectId: string, items: Array<{ episodeId: string; shotId: string; videoId: string }>) {
-    const response = await fetch(`/api/drama/projects/${encodeURIComponent(projectId)}/export-videos`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items }) });
+export async function exportDramaVideos(projectId: string, items: Array<{ episodeId: string; shotId: string; videoId: string }>, options?: { includeSubtitles?: boolean }) {
+    const response = await fetch(`/api/drama/projects/${encodeURIComponent(projectId)}/export-videos`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items, includeSubtitles: options?.includeSubtitles === true }),
+    });
     if (!response.ok) {
         const payload = (await response.json().catch(() => ({}))) as { msg?: string };
         throw new Error(payload.msg || "批量下载视频失败");
@@ -644,6 +648,21 @@ export async function exportDramaVideos(projectId: string, items: Array<{ episod
         exported: Number(response.headers.get("x-drama-video-export-exported") || "0"),
         failed: Number(response.headers.get("x-drama-video-export-failed") || "0"),
     };
+}
+
+export async function exportDramaSubtitleVideo(projectId: string, input: { episodeId: string; shotId: string; videoId: string }) {
+    const response = await fetch(`/api/drama/projects/${encodeURIComponent(projectId)}/subtitle-video`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+    });
+    if (!response.ok) {
+        const payload = (await response.json().catch(() => ({}))) as { msg?: string };
+        throw new Error(payload.msg || "生成字幕版视频失败");
+    }
+    const disposition = response.headers.get("content-disposition") || "";
+    const encodedName = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+    return { blob: await response.blob(), fileName: encodedName ? decodeURIComponent(encodedName) : "字幕版视频.mp4" };
 }
 
 export function listDramaProjectVideos(projectId: string) {

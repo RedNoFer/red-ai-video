@@ -32,7 +32,7 @@ test("批量下载视频按剧集分组展示，默认全选并把勾选视频�
     const candidateUrl = await uploadVideo("batch-download-candidate.mp4");
     const secondEpisodeUrl = await uploadVideo("batch-download-second-episode.mp4");
 
-    const shots = [shot(`${project.id}-shot-1`, "SH01", 1, "开场", currentUrl), shot(`${project.id}-shot-2`, "SH02", 2, "对峙", candidateUrl)];
+    const shots = [shot(`${project.id}-shot-1`, "SH01", 1, "开场", currentUrl, "林雪：你终于来了。"), shot(`${project.id}-shot-2`, "SH02", 2, "对峙", candidateUrl)];
     const secondEpisode: DramaEpisode = {
         ...episode,
         id: `${project.id}-episode-two`,
@@ -95,6 +95,19 @@ test("批量下载视频按剧集分组展示，默认全选并把勾选视频�
         await expect(modal.getByRole("checkbox", { name: "选择开场当前视频" })).toBeChecked();
         await expect(modal.getByRole("checkbox", { name: "选择开场候选视频" })).toBeChecked();
         await expect(modal.getByRole("checkbox", { name: "选择对峙当前视频" })).toBeChecked();
+        await expect(modal.getByRole("checkbox", { name: "同时导出字幕版（保留原片）" })).toBeEnabled();
+        await expect(modal.getByRole("checkbox", { name: "同时导出字幕版（保留原片）" })).toBeChecked();
+        await expect(modal.locator("[data-drama-video-download-subtitles-note]")).toContainText("字幕会按镜头重新编码");
+
+        await modal.getByRole("checkbox", { name: "选择开场当前视频" }).uncheck();
+        await modal.getByRole("checkbox", { name: "选择开场候选视频" }).uncheck();
+        await expect(modal.getByRole("checkbox", { name: "同时导出字幕版（保留原片）" })).toBeDisabled();
+        await expect(modal.locator("[data-drama-video-download-subtitles-note]")).toContainText("没有可烧录的台词或旁白");
+        await modal.getByRole("checkbox", { name: "选择开场当前视频" }).check();
+        await modal.getByRole("checkbox", { name: "选择开场候选视频" }).check();
+        await expect(modal.getByRole("checkbox", { name: "同时导出字幕版（保留原片）" })).toBeEnabled();
+        await expect(modal.getByRole("checkbox", { name: "同时导出字幕版（保留原片）" })).toBeChecked();
+        await modal.getByRole("checkbox", { name: "同时导出字幕版（保留原片）" }).uncheck();
 
         await modal.getByRole("checkbox", { name: "选择对峙当前视频" }).uncheck();
         await expect(modal.locator("[data-drama-video-download-summary]")).toContainText("已选 3 / 4 个视频");
@@ -117,7 +130,7 @@ test("批量下载视频按剧集分组展示，默认全选并把勾选视频�
     }
 });
 
-function shot(id: string, code: string, order: number, title: string, videoUrl: string): DramaShot {
+function shot(id: string, code: string, order: number, title: string, videoUrl: string, subtitleText?: string): DramaShot {
     return {
         id,
         code,
@@ -126,7 +139,7 @@ function shot(id: string, code: string, order: number, title: string, videoUrl: 
         description: "人物在室内抬头",
         sourceText: "人物在室内抬头",
         shotBoundary: "",
-        dialogue: "",
+        dialogue: subtitleText || "",
         narration: "",
         utterances: [],
         imagePrompt: "夜景室内",
@@ -136,6 +149,7 @@ function shot(id: string, code: string, order: number, title: string, videoUrl: 
         characterIds: [],
         propIds: [],
         clueIds: [],
+        ...(subtitleText ? { subtitle: subtitleText } : {}),
         videoUrl,
     };
 }

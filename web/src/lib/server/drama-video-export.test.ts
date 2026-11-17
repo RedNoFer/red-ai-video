@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { DramaEpisode, DramaProject, DramaShot } from "@/lib/drama-project-contract";
 
-const mocks = vi.hoisted(() => ({ queryStoredGenerationTasks: vi.fn() }));
+const mocks = vi.hoisted(() => ({ queryStoredGenerationTasks: vi.fn(), probeDramaVideo: vi.fn(), renderDramaSubtitleVideo: vi.fn() }));
 
 vi.mock("@/lib/server/generation-task-store", () => ({ queryStoredGenerationTasks: mocks.queryStoredGenerationTasks }));
 vi.mock("@/lib/server/media-download", () => ({
@@ -14,6 +14,7 @@ vi.mock("@/lib/server/media-download", () => ({
         return { bytes: 4, mimeType: "video/mp4" };
     }),
 }));
+vi.mock("@/lib/server/drama-subtitle-render", () => ({ probeDramaVideo: mocks.probeDramaVideo, renderDramaSubtitleVideo: mocks.renderDramaSubtitleVideo }));
 
 import { collectDramaVideoExportPayload, DramaVideoExportError, exportDramaVideos, resolveDramaVideoExportEntries } from "./drama-video-export";
 
@@ -53,6 +54,63 @@ describe("Drama video export", () => {
         const manifest = JSON.parse(new TextDecoder().decode(files["manifest.json"])) as { exported: unknown[]; failed: unknown[] };
         expect(manifest.exported).toHaveLength(2);
         expect(manifest.failed).toHaveLength(0);
+    });
+
+    it("adds burned subtitle videos and SRT files when subtitles are requested", async () => {
+        const current = project();
+        current.episodes[0].shots[0].dialogue = "第一句台词。第二句台词。";
+        const payload = await collectDramaVideoExportPayload("user-one", current);
+        const entries = resolveDramaVideoExportEntries(
+            payload,
+            payload.episodes.flatMap((episode) => episode.shots.flatMap((shot) => shot.videos.map((video) => ({ episodeId: episode.episodeId, shotId: shot.shotId, videoId: video.id })))),
+        );
+        mocks.probeDramaVideo.mockResolvedValue({ width: 1080, height: 1920, durationMs: 5_000, audioCodec: "aac" });
+        mocks.renderDramaSubtitleVideo.mockImplementation(async ({ outputPath }: { outputPath: string }) => {
+            await writeFile(outputPath, new Uint8Array([9, 9, 9]));
+        });
+
+        const result = await exportDramaVideos({ project: current, entries, origin: "http://127.0.0.1:3000", includeSubtitles: true });
+        const files = unzipSync(new Uint8Array(await new Response(result.stream).arrayBuffer()));
+        const names = Object.keys(files);
+
+        expect(names).toEqual(
+            expect.arrayContaining([
+                expect.stringMatching(/^01_第 1 集\/SH01_开场\.mp4$/),
+                expect.stringMatching(/^01_第 1 集\/字幕版\/SH01_开场_字幕\.mp4$/),
+                expect.stringMatching(/^01_第 1 集\/字幕版\/SH01_开场\.srt$/),
+                expect.stringMatching(/^01_第 1 集\/字幕版\/SH01_开场_2_字幕\.mp4$/),
+                expect.stringMatching(/^01_第 1 集\/字幕版\/SH01_开场_2\.srt$/),
+                "manifest.json",
+            ]),
+        );
+        const manifest = JSON.parse(new TextDecoder().decode(files["manifest.json"])) as { subtitles: { generated: unknown[]; failed: unknown[]; skipped: unknown[] } };
+        expect(manifest.subtitles.generated).toHaveLength(2);
+        expect(manifest.subtitles.failed).toHaveLength(0);
+        expect(manifest.subtitles.skipped).toHaveLength(0);
+        expect(new TextDecoder().decode(files["01_第 1 集/字幕版/SH01_开场.srt"])).toContain("第一句台词");
+    });
+
+    it("records skipped subtitles without running media probes when the shot has no text", async () => {
+        const current = project();
+        mocks.probeDramaVideo.mockClear();
+        mocks.renderDramaSubtitleVideo.mockClear();
+        const payload = await collectDramaVideoExportPayload("user-one", current);
+        const entries = resolveDramaVideoExportEntries(
+            payload,
+            payload.episodes.flatMap((episode) => episode.shots.flatMap((shot) => shot.videos.map((video) => ({ episodeId: episode.episodeId, shotId: shot.shotId, videoId: video.id })))),
+        );
+
+        const result = await exportDramaVideos({ project: current, entries, origin: "http://127.0.0.1:3000", includeSubtitles: true });
+        const files = unzipSync(new Uint8Array(await new Response(result.stream).arrayBuffer()));
+        const manifest = JSON.parse(new TextDecoder().decode(files["manifest.json"])) as { subtitles: { generated: unknown[]; failed: unknown[]; skipped: Array<{ reason: string }> } };
+
+        expect(manifest.subtitles.generated).toHaveLength(0);
+        expect(manifest.subtitles.failed).toHaveLength(0);
+        expect(manifest.subtitles.skipped).toHaveLength(2);
+        expect(manifest.subtitles.skipped[0].reason).toContain("没有可烧录");
+        expect(Object.keys(files).some((name) => name.includes("字幕版"))).toBe(false);
+        expect(mocks.probeDramaVideo).not.toHaveBeenCalled();
+        expect(mocks.renderDramaSubtitleVideo).not.toHaveBeenCalled();
     });
 
     it("ignores selections that do not belong to the project", async () => {

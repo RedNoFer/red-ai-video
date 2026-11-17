@@ -33,6 +33,7 @@ function videoPayload(): DramaVideoExportPayload {
                         shotId: "shot-one",
                         code: "SH01",
                         title: "开场",
+                        hasSubtitles: false,
                         videos: [
                             { id: "current", url: "/api/media/current.mp4", isCurrent: true },
                             { id: "candidate", url: "/api/media/candidate.mp4", isCurrent: false },
@@ -44,7 +45,7 @@ function videoPayload(): DramaVideoExportPayload {
                 episodeId: "episode-two",
                 order: 2,
                 title: "第 2 集",
-                shots: [{ shotId: "shot-two", code: "SH02", title: "收尾", videos: [{ id: "current", url: "/api/media/second.mp4", isCurrent: true }] }],
+                shots: [{ shotId: "shot-two", code: "SH02", title: "收尾", hasSubtitles: false, videos: [{ id: "current", url: "/api/media/second.mp4", isCurrent: true }] }],
             },
         ],
     };

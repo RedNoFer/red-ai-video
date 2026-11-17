@@ -4,12 +4,14 @@ import { join } from "node:path";
 
 import { Zip, ZipPassThrough } from "fflate";
 
-import type { DramaProject, DramaShotVideoResult } from "@/lib/drama-project-contract";
+import type { DramaProject, DramaShot, DramaShotVideoResult } from "@/lib/drama-project-contract";
+import { buildDramaSrt, dramaShotHasSubtitleText, planDramaShotSubtitles } from "@/lib/drama-subtitle-plan";
 import { mergeDramaShotVideoResults, visibleDramaShotVideoResults } from "@/lib/drama-shot-video-results";
 import type { DramaVideoExportPayload } from "@/lib/drama-video-export";
 import { mediaFileExtension } from "@/lib/media-file";
 import { queryStoredGenerationTasks } from "@/lib/server/generation-task-store";
 import { downloadMediaToFile } from "@/lib/server/media-download";
+import { probeDramaVideo, renderDramaSubtitleVideo } from "@/lib/server/drama-subtitle-render";
 import type { VideoTask } from "@/lib/server/video-task-store";
 
 const MAX_FILE_BYTES = 200 * 1024 * 1024;
@@ -20,6 +22,20 @@ export type DramaVideoExportResult = {
     fileName: string;
     exported: number;
     failed: number;
+};
+
+type DramaVideoExportManifest = {
+    projectId: string;
+    projectTitle: string;
+    exportedAt: string;
+    exported: Array<{ episode: string; shot: string; shotCode: string; file: string; videoId: string; url: string }>;
+    failed: Array<{ episode: string; shot: string; reason: string }>;
+    subtitles: {
+        requested: boolean;
+        generated: Array<{ episode: string; shot: string; shotCode: string; videoId: string; file: string; srt: string }>;
+        skipped: Array<{ episode: string; shot: string; shotCode: string; videoId: string; reason: string }>;
+        failed: Array<{ episode: string; shot: string; shotCode: string; videoId: string; reason: string }>;
+    };
 };
 
 export type DramaVideoExportEntry = {
@@ -58,7 +74,7 @@ export async function collectDramaVideoExportPayload(userId: string, project: Dr
                     createdAt: result.createdAt,
                     durationMs: result.durationMs,
                 }));
-                return { shotId: shot.id, code: shot.code || `镜头${String(shot.order).padStart(2, "0")}`, title: shot.title || `镜头 ${shot.order}`, videos };
+                return { shotId: shot.id, code: shot.code || `镜头${String(shot.order).padStart(2, "0")}`, title: shot.title || `镜头 ${shot.order}`, videos, hasSubtitles: dramaShotHasSubtitleText(shot) };
             })
             .filter((shot) => shot.videos.length > 0);
         episodes.push({ episodeId: episode.id, order: index + 1, title: episode.title, shots });
@@ -67,10 +83,11 @@ export async function collectDramaVideoExportPayload(userId: string, project: Dr
 }
 
 /** 把选中的镜头视频打包成按剧集分目录的 ZIP，直接落到用户本地下载目录。 */
-export async function exportDramaVideos(input: { project: DramaProject; entries: DramaVideoExportEntry[]; origin: string; cookie?: string }): Promise<DramaVideoExportResult> {
+export async function exportDramaVideos(input: { project: DramaProject; entries: DramaVideoExportEntry[]; origin: string; cookie?: string; includeSubtitles?: boolean }): Promise<DramaVideoExportResult> {
     if (!input.entries.length) throw new DramaVideoExportError("请先选择要下载的视频", 422);
+    const includeSubtitles = input.includeSubtitles === true;
     const root = await mkdtemp(join(tmpdir(), "vozeb-drama-videos-"));
-    const downloads: Array<{ entry: DramaVideoExportEntry; path: string; zipPath: string }> = [];
+    const downloads: Array<{ entry: DramaVideoExportEntry; path: string; zipPath: string; variant: number; mimeType: string }> = [];
     const failures: Array<{ episode: string; shot: string; reason: string }> = [];
     const variants = new Map<string, number>();
     let totalBytes = 0;
@@ -84,21 +101,22 @@ export async function exportDramaVideos(input: { project: DramaProject; entries:
                 const shotKey = `${entry.episodeId}::${entry.shotId}`;
                 const variant = (variants.get(shotKey) || 0) + 1;
                 variants.set(shotKey, variant);
-                downloads.push({ entry, path, zipPath: `${episodeFolder(entry)}/${shotFileName(entry, variant, downloaded.mimeType)}` });
+                downloads.push({ entry, path, zipPath: `${episodeFolder(entry)}/${shotFileName(entry, variant, downloaded.mimeType)}`, variant, mimeType: downloaded.mimeType });
             } catch (error) {
                 if (error instanceof DramaVideoExportError) throw error;
                 failures.push({ episode: entry.episodeTitle, shot: entry.shotTitle, reason: error instanceof Error ? error.message : "下载失败" });
             }
         }
         if (!downloads.length) throw new DramaVideoExportError("视频文件下载失败，请稍后重试", 502);
-        const manifest = {
+        const manifest: DramaVideoExportManifest = {
             projectId: input.project.id,
             projectTitle: input.project.title,
             exportedAt: new Date().toISOString(),
             exported: downloads.map(({ entry, zipPath }) => ({ episode: entry.episodeTitle, shot: entry.shotTitle, shotCode: entry.shotCode, file: zipPath, videoId: entry.videoId, url: entry.url })),
             failed: failures,
+            subtitles: { requested: includeSubtitles, generated: [], skipped: [], failed: [] },
         };
-        const stream = createZipStream(root, downloads, manifest);
+        const stream = createZipStream(root, downloads, manifest, input.project, includeSubtitles);
         return { stream, fileName: `${safeName(input.project.title) || "短剧项目"}_视频.zip`, exported: downloads.length, failed: failures.length };
     } catch (error) {
         await rm(root, { recursive: true, force: true });
@@ -146,10 +164,14 @@ async function queryEpisodeVideoTasks(userId: string, projectId: string, episode
     return tasks;
 }
 
-function createZipStream(root: string, downloads: Array<{ path: string; zipPath: string }>, manifest: unknown) {
+function createZipStream(root: string, downloads: Array<{ entry: DramaVideoExportEntry; path: string; zipPath: string; variant: number }>, manifest: DramaVideoExportManifest, project: DramaProject, includeSubtitles: boolean) {
+    let closed = false;
     return new ReadableStream<Uint8Array>({
+        cancel() {
+            closed = true;
+            return rm(root, { recursive: true, force: true }).catch(() => undefined);
+        },
         start(controller) {
-            let closed = false;
             const fail = (error: unknown) => {
                 if (closed) return;
                 closed = true;
@@ -166,14 +188,58 @@ function createZipStream(root: string, downloads: Array<{ path: string; zipPath:
             });
             (async () => {
                 try {
+                    const shots = new Map<string, DramaShot>();
+                    for (const episode of project.episodes) {
+                        for (const shot of episode.shots) shots.set(`${episode.id}::${shot.id}`, shot);
+                    }
+                    for (const [index, item] of downloads.entries()) {
+                        if (closed) break;
+                        const original = new ZipPassThrough(item.zipPath);
+                        zip.add(original);
+                        original.push(new Uint8Array(await readFile(item.path)), true);
+                        if (!includeSubtitles) continue;
+
+                        const shot = shots.get(`${item.entry.episodeId}::${item.entry.shotId}`);
+                        if (!shot || !dramaShotHasSubtitleText(shot)) {
+                            manifest.subtitles.skipped.push({ episode: item.entry.episodeTitle, shot: item.entry.shotTitle, shotCode: item.entry.shotCode, videoId: item.entry.videoId, reason: "本镜头没有可烧录的台词或旁白" });
+                            continue;
+                        }
+                        const subtitleFile = subtitleZipPath(item);
+                        const srtFile = srtZipPath(item);
+                        try {
+                            const probe = await probeDramaVideo(item.path, { cwd: root });
+                            const cues = planDramaShotSubtitles(shot, probe.durationMs, probe.width, probe.height);
+                            if (!cues.length) {
+                                manifest.subtitles.skipped.push({ episode: item.entry.episodeTitle, shot: item.entry.shotTitle, shotCode: item.entry.shotCode, videoId: item.entry.videoId, reason: "本镜头没有可烧录的台词或旁白" });
+                                continue;
+                            }
+                            const outputPath = join(root, `subtitle-${index}.mp4`);
+                            await renderDramaSubtitleVideo({
+                                workdir: root,
+                                sourcePath: item.path,
+                                outputPath,
+                                cues,
+                                width: probe.width,
+                                height: probe.height,
+                                audioCodec: probe.audioCodec,
+                            });
+                            const subtitleBytes = new Uint8Array(await readFile(outputPath));
+                            const srtBytes = new TextEncoder().encode(buildDramaSrt(cues));
+                            const subtitle = new ZipPassThrough(subtitleFile);
+                            zip.add(subtitle);
+                            subtitle.push(subtitleBytes, true);
+                            const srt = new ZipPassThrough(srtFile);
+                            zip.add(srt);
+                            srt.push(srtBytes, true);
+                            manifest.subtitles.generated.push({ episode: item.entry.episodeTitle, shot: item.entry.shotTitle, shotCode: item.entry.shotCode, videoId: item.entry.videoId, file: subtitleFile, srt: srtFile });
+                        } catch (error) {
+                            manifest.subtitles.failed.push({ episode: item.entry.episodeTitle, shot: item.entry.shotTitle, shotCode: item.entry.shotCode, videoId: item.entry.videoId, reason: error instanceof Error ? error.message : "字幕视频生成失败" });
+                        }
+                    }
+                    if (closed) return;
                     const manifestEntry = new ZipPassThrough("manifest.json");
                     zip.add(manifestEntry);
                     manifestEntry.push(new TextEncoder().encode(JSON.stringify(manifest, null, 2)), true);
-                    for (const item of downloads) {
-                        const entry = new ZipPassThrough(item.zipPath);
-                        zip.add(entry);
-                        entry.push(new Uint8Array(await readFile(item.path)), true);
-                    }
                     zip.end();
                 } catch (error) {
                     fail(error);
@@ -183,6 +249,16 @@ function createZipStream(root: string, downloads: Array<{ path: string; zipPath:
             })();
         },
     });
+}
+
+function subtitleZipPath(item: { entry: DramaVideoExportEntry; variant: number }) {
+    const base = `${safeName(item.entry.shotCode)}_${safeName(item.entry.shotTitle) || "镜头"}${item.variant > 1 ? `_${item.variant}` : ""}`;
+    return `${episodeFolder(item.entry)}/字幕版/${base}_字幕.mp4`;
+}
+
+function srtZipPath(item: { entry: DramaVideoExportEntry; variant: number }) {
+    const base = `${safeName(item.entry.shotCode)}_${safeName(item.entry.shotTitle) || "镜头"}${item.variant > 1 ? `_${item.variant}` : ""}`;
+    return `${episodeFolder(item.entry)}/字幕版/${base}.srt`;
 }
 
 function episodeFolder(entry: DramaVideoExportEntry) {

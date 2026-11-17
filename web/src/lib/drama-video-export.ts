@@ -11,6 +11,7 @@ export type DramaVideoExportShot = {
     code: string;
     title: string;
     videos: DramaVideoExportVideo[];
+    hasSubtitles: boolean;
 };
 
 export type DramaVideoExportEpisode = {

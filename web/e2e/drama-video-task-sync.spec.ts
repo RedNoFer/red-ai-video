@@ -141,6 +141,7 @@ test("镜头跨计划同步终态、刷新恢复并允许再次生成，未知�
     const candidateDialog = page.getByRole("dialog", { name: "上游已成功候补视频1" });
     await expect(candidateDialog).toBeVisible();
     await expect(candidateDialog.locator("video")).toHaveCount(1);
+    await expect(candidateDialog.getByRole("checkbox", { name: "带字幕下载" })).toBeDisabled();
     await page.keyboard.press("Escape");
     await expect(candidateDialog).toBeHidden();
     await page.locator("[data-drama-shot-task]").nth(2).getByRole("button", { name: "拉取最新视频", exact: true }).click();

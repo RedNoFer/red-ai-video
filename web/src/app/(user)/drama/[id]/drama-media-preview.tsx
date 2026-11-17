@@ -1,13 +1,22 @@
 "use client";
 
-import { Modal } from "antd";
+import { Checkbox, Modal } from "antd";
+import { saveAs } from "file-saver";
 import { Download, Film, ImageIcon, RefreshCw, ScanSearch } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { mediaDownloadFileName } from "@/lib/media-file";
 import { imagePreviewUrl } from "@/lib/media-image-url";
+import { exportDramaSubtitleVideo } from "@/services/api/drama-projects";
 
-export type DramaPreviewMedia = { type: "image" | "video"; url: string; title: string; downloadUrl?: string; onRepair?: () => Promise<void> };
+export type DramaPreviewMedia = {
+    type: "image" | "video";
+    url: string;
+    title: string;
+    downloadUrl?: string;
+    onRepair?: () => Promise<void>;
+    subtitleExport?: { projectId: string; episodeId: string; shotId: string; videoId: string; hasText: boolean };
+};
 
 export function DramaMediaThumbnail({ media, onOpen }: { media: DramaPreviewMedia; onOpen: (media: DramaPreviewMedia) => void }) {
     return (
@@ -33,6 +42,34 @@ export function DramaMediaThumbnail({ media, onOpen }: { media: DramaPreviewMedi
 export function DramaMediaPreviewModal({ media, onClose }: { media?: DramaPreviewMedia; onClose: () => void }) {
     const [repairing, setRepairing] = useState(false);
     const [repairError, setRepairError] = useState("");
+    const [downloadingSubtitles, setDownloadingSubtitles] = useState(false);
+    const [downloadError, setDownloadError] = useState("");
+    const [withSubtitles, setWithSubtitles] = useState(false);
+
+    useEffect(() => {
+        setWithSubtitles(Boolean(media?.subtitleExport?.hasText));
+        setDownloadError("");
+        setRepairError("");
+    }, [media]);
+
+    const downloadSubtitles = async () => {
+        if (!media?.subtitleExport || downloadingSubtitles) return;
+        setDownloadingSubtitles(true);
+        setDownloadError("");
+        try {
+            const result = await exportDramaSubtitleVideo(media.subtitleExport.projectId, {
+                episodeId: media.subtitleExport.episodeId,
+                shotId: media.subtitleExport.shotId,
+                videoId: media.subtitleExport.videoId,
+            });
+            saveAs(result.blob, result.fileName);
+        } catch (error) {
+            setDownloadError(error instanceof Error ? error.message : "生成字幕版视频失败");
+        } finally {
+            setDownloadingSubtitles(false);
+        }
+    };
+
     return (
         <Modal
             title={media?.title || "媒体预览"}
@@ -40,7 +77,12 @@ export function DramaMediaPreviewModal({ media, onClose }: { media?: DramaPrevie
             width={960}
             footer={
                 media ? (
-                    <div className="flex items-center justify-end gap-2">
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                        {media.type === "video" && media.subtitleExport ? (
+                            <Checkbox checked={withSubtitles} disabled={!media.subtitleExport.hasText} onChange={(event) => setWithSubtitles(event.target.checked)}>
+                                带字幕下载
+                            </Checkbox>
+                        ) : null}
                         {media.type === "video" && media.onRepair ? (
                             <button
                                 type="button"
@@ -62,15 +104,28 @@ export function DramaMediaPreviewModal({ media, onClose }: { media?: DramaPrevie
                                 {repairing ? "补全中" : "补全视频"}
                             </button>
                         ) : null}
-                        <a
-                            className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm font-medium hover:bg-muted"
-                            href={downloadLink(media.downloadUrl || media.url)}
-                            download={mediaDownloadFileName(media.title, media.type === "video" ? "video/mp4" : "image/png", media.url)}
-                        >
-                            <Download className="size-4" />
-                            {media.type === "video" ? "下载视频" : "下载原图"}
-                        </a>
+                        {media.type === "video" && media.subtitleExport && withSubtitles ? (
+                            <button
+                                type="button"
+                                className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                                disabled={downloadingSubtitles}
+                                onClick={() => void downloadSubtitles()}
+                            >
+                                <Download className={`size-4 ${downloadingSubtitles ? "animate-pulse" : ""}`} />
+                                {downloadingSubtitles ? "正在生成字幕版..." : "下载带字幕视频"}
+                            </button>
+                        ) : (
+                            <a
+                                className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm font-medium hover:bg-muted"
+                                href={downloadLink(media.downloadUrl || media.url)}
+                                download={mediaDownloadFileName(media.title, media.type === "video" ? "video/mp4" : "image/png", media.url)}
+                            >
+                                <Download className="size-4" />
+                                {media.type === "video" ? "下载视频" : "下载原图"}
+                            </a>
+                        )}
                         {repairError ? <span className="text-xs text-rose-600">{repairError}</span> : null}
+                        {downloadError ? <span className="text-xs text-rose-600">{downloadError}</span> : null}
                     </div>
                 ) : null
             }

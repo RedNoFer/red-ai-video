@@ -20,7 +20,8 @@ describe("Drama batch video download", () => {
         expect(source).toContain("data-drama-video-download-group");
         expect(source).toContain("toggleMany(episodeKeys, event.target.checked)");
         expect(source).toContain("saveAs(result.blob, result.fileName)");
-        expect(source).toContain("exportDramaVideos(projectId, items)");
+        expect(source).toContain("exportDramaVideos(projectId, items, { includeSubtitles: wantSubtitles })");
+        expect(source).toContain("同时导出字幕版（保留原片）");
     });
 
     it("only exports videos that belong to the project", async () => {

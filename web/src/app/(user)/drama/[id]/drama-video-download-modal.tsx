@@ -14,11 +14,13 @@ export function DramaVideoDownloadModal({ open, projectId, onClose }: { open: bo
     const [loading, setLoading] = useState(false);
     const [downloading, setDownloading] = useState(false);
     const [selected, setSelected] = useState<string[]>([]);
+    const [includeSubtitles, setIncludeSubtitles] = useState(true);
 
     useEffect(() => {
         if (!open) return;
         let active = true;
         setLoading(true);
+        setIncludeSubtitles(true);
         listDramaProjectVideos(projectId)
             .then((data) => {
                 if (!active) return;
@@ -38,6 +40,17 @@ export function DramaVideoDownloadModal({ open, projectId, onClose }: { open: bo
     }, [open, projectId, message]);
 
     const allKeys = useMemo(() => (payload ? dramaVideoExportKeys(payload) : []), [payload]);
+    const selectedHasSubtitles = useMemo(() => {
+        if (!payload) return false;
+        for (const episode of payload.episodes) {
+            for (const shot of episode.shots) {
+                if (!shot.hasSubtitles) continue;
+                if (shot.videos.some((video) => selected.includes(dramaVideoExportEntryKey(episode.episodeId, shot.shotId, video.id)))) return true;
+            }
+        }
+        return false;
+    }, [payload, selected]);
+    const wantSubtitles = includeSubtitles && selectedHasSubtitles;
     const toggle = (key: string, checked: boolean) => setSelected((current) => (checked ? [...new Set([...current, key])] : current.filter((item) => item !== key)));
     const toggleMany = (keys: string[], checked: boolean) =>
         setSelected((current) => {
@@ -55,9 +68,9 @@ export function DramaVideoDownloadModal({ open, projectId, onClose }: { open: bo
         if (!items.length) return;
         setDownloading(true);
         try {
-            const result = await exportDramaVideos(projectId, items);
+            const result = await exportDramaVideos(projectId, items, { includeSubtitles: wantSubtitles });
             saveAs(result.blob, result.fileName);
-            message.success(result.failed ? `已导出 ${items.length - result.failed} 个视频，${result.failed} 个失败（详见 manifest.json）` : `已导出 ${items.length} 个视频到本地下载目录`);
+            message.success(result.failed ? `已导出 ${items.length - result.failed} 个视频，${result.failed} 个失败（详见 manifest.json）` : `已导出 ${items.length} 个视频到本地下载目录${wantSubtitles ? "（字幕版和 SRT 结果见 manifest.json）" : ""}`);
         } catch (error) {
             message.error(error instanceof Error ? error.message : "批量下载视频失败");
         } finally {
@@ -93,6 +106,14 @@ export function DramaVideoDownloadModal({ open, projectId, onClose }: { open: bo
                     </Checkbox>
                     <span className="text-xs text-muted-foreground" data-drama-video-download-summary>
                         已选 {selected.length} / {allKeys.length} 个视频，打包为 ZIP 并按剧集分文件夹保存到本地下载目录
+                    </span>
+                </div>
+                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-border bg-muted/30 px-3 py-2">
+                    <Checkbox checked={wantSubtitles} disabled={!selectedHasSubtitles} onChange={(event) => setIncludeSubtitles(event.target.checked)}>
+                        同时导出字幕版（保留原片）
+                    </Checkbox>
+                    <span className="text-xs text-muted-foreground" data-drama-video-download-subtitles-note>
+                        {selectedHasSubtitles ? "字幕会按镜头重新编码，耗时更长；字幕版视频和 SRT 放在“字幕版”文件夹。" : "所选镜头没有可烧录的台词或旁白，将只下载原片。"}
                     </span>
                 </div>
                 {loading ? (
