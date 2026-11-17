@@ -305,6 +305,33 @@ export function SystemChannelEditor({ channel, fetching, onChange, onDelete, onF
                             </LabeledControl>
                         ) : null}
                         <ModelRouteConfigEditor channel={channel} advanced={advanced} onChange={updateAdvanced} />
+                        {advanced.protocol === "yinglingapi" ? (
+                            <div className="md:col-span-2 rounded-lg border border-stone-200 bg-white/70 p-3 dark:border-stone-800 dark:bg-stone-950/50">
+                                <div className="text-xs font-semibold text-stone-800 dark:text-stone-100">参考图过脸处理</div>
+                                <div className="mt-1 text-[11px] leading-5 text-stone-500 dark:text-stone-400">
+                                    影灵视频接口的可选 face_processing 参数，默认开启；只有带参考图的 seedance-2.0 系列模型（seedance-2.0、seedance2.0-15s、seedance-2.0-fast）会实际追加，2.5 及其他模型不受影响。
+                                </div>
+                                <div className="mt-3 flex flex-wrap items-center gap-4">
+                                    <Checkbox checked={advanced.faceProcessing !== false} onChange={(event) => updateAdvanced({ faceProcessing: event.target.checked })}>
+                                        启用过脸处理
+                                    </Checkbox>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xs text-stone-500 dark:text-stone-400">处理方式</span>
+                                        <Select
+                                            size="small"
+                                            className="w-32"
+                                            disabled={advanced.faceProcessing === false}
+                                            value={advanced.faceProcessingMethod || "grid"}
+                                            options={[
+                                                { value: "grid", label: "grid" },
+                                                { value: "feature_split", label: "feature_split" },
+                                            ]}
+                                            onChange={(value) => updateAdvanced({ faceProcessingMethod: value as "grid" | "feature_split" })}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        ) : null}
                         {protocolDefinition.advanced ? (
                             <>
                                 {detectedCapabilities.has("video") ? (

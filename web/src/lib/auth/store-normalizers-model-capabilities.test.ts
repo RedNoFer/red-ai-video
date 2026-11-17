@@ -36,6 +36,15 @@ describe("system channel model capabilities", () => {
         expect(normalized?.modelConfigs?.["seedance-2-0-official"]).toMatchObject({ supportsKeyframes: true, videoReferenceModes: ["reference", "all_frames"], maxReferenceImages: 9 });
     });
 
+    it("round-trips the Yingling face processing switch", () => {
+        const normalized = normalizeSystemChannelAdvancedConfig({ protocol: "yinglingapi", faceProcessing: false, faceProcessingMethod: "feature_split" } as never);
+        expect(normalized).toMatchObject({ faceProcessing: false, faceProcessingMethod: "feature_split" });
+
+        const defaults = normalizeSystemChannelAdvancedConfig({ protocol: "yinglingapi", faceProcessing: "yes", faceProcessingMethod: "invalid" } as never);
+        expect(defaults?.faceProcessing).toBeUndefined();
+        expect(defaults?.faceProcessingMethod).toBeUndefined();
+    });
+
     it("persists the VOZEB recommended protocol after a settings round-trip", () => {
         expect(normalizeSystemChannelAdvancedConfig({ protocol: "vozeb-recommended" } as never)?.protocol).toBe("vozeb-recommended");
     });

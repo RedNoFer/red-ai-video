@@ -637,6 +637,34 @@ describe("video generation candidate failover", () => {
             images: references.map((reference) => reference.url),
         });
         expect(body.images).toHaveLength(9);
+        expect(body).not.toHaveProperty("face_processing");
+    });
+
+    it("adds Yingling face processing for seedance-2.0 requests by default", async () => {
+        mocks.getAuthSettings.mockResolvedValue(yinglingSeedance20Settings());
+        mocks.fetchInternalApi.mockResolvedValue(json({ id: "yingling-face-task", status: "queued" }));
+        const references = [{ type: "image", url: "https://cdn.example.com/face.png" }];
+
+        const response = await POST(request({ model: "admin-configured-yingling-face", videoSeconds: "5", size: "9:16", vquality: "720" }, references));
+        const [, init] = mocks.fetchInternalApi.mock.calls[0] as [string, RequestInit];
+        const body = JSON.parse(String(init.body));
+
+        expect(response.status).toBe(200);
+        expect(body).toMatchObject({ model: "seedance-2.0", face_processing: true, face_processing_method: "grid" });
+    });
+
+    it("skips Yingling face processing when the channel switch is off", async () => {
+        mocks.getAuthSettings.mockResolvedValue(yinglingSeedance20Settings(false));
+        mocks.fetchInternalApi.mockResolvedValue(json({ id: "yingling-face-off-task", status: "queued" }));
+        const references = [{ type: "image", url: "https://cdn.example.com/face.png" }];
+
+        const response = await POST(request({ model: "admin-configured-yingling-face", videoSeconds: "5", size: "9:16", vquality: "720" }, references));
+        const [, init] = mocks.fetchInternalApi.mock.calls[0] as [string, RequestInit];
+        const body = JSON.parse(String(init.body));
+
+        expect(response.status).toBe(200);
+        expect(body).not.toHaveProperty("face_processing");
+        expect(body).not.toHaveProperty("face_processing_method");
     });
 
     it("marks a local OpenAI multipart reference-count rejection terminal before any provider request", async () => {
@@ -1694,6 +1722,24 @@ function newApiVideoSettings() {
             },
         ],
         defaultModels: { videoModel: model },
+    };
+}
+
+function yinglingSeedance20Settings(faceProcessing?: boolean) {
+    const model = "seedance-2.0";
+    const advancedConfig = { ...emptyAdvancedConfig(), ...(faceProcessing === undefined ? {} : { faceProcessing }) };
+    const channel = applyChannelProtocol({ ...channels[0], models: [model], advancedConfig }, "yinglingapi");
+    return {
+        ...settings,
+        systemChannels: [channel],
+        logicalModels: [
+            {
+                ...settings.logicalModels[0],
+                id: "admin-configured-yingling-face",
+                bindings: [{ ...settings.logicalModels[0].bindings[0], upstreamModel: model }],
+            },
+        ],
+        defaultModels: { videoModel: "admin-configured-yingling-face" },
     };
 }
 

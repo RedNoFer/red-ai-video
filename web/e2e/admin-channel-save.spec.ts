@@ -16,6 +16,33 @@ test("影灵 API 渠道向导预填地址并要求管理员提供账号密钥", 
     await expect(page.getByRole("button", { name: "下一步" })).toBeDisabled();
 });
 
+test("影灵渠道可以关闭 seedance-2.0 的参考图过脸处理", async ({ page, request }) => {
+    const current = await request.get("/api/admin/settings");
+    expect(current.ok(), await current.text()).toBe(true);
+    const settings = (await current.json()) as { settings: { systemChannels: Array<Record<string, unknown>> } };
+    const channel = applyChannelProtocol({ id: "e2e-yingling-face", name: "E2E 影灵人脸", baseUrl: "https://yinglingapi.com", apiKey: "fixture-key", apiFormat: "openai", models: ["seedance-2.0"], enabled: true }, "yinglingapi");
+    const prepared = await request.patch("/api/admin/settings", { data: { systemChannels: [...settings.settings.systemChannels.filter((item) => item.id !== channel.id), channel] } });
+    expect(prepared.ok(), await prepared.text()).toBe(true);
+
+    await page.goto("/admin?section=channels", { waitUntil: "networkidle" });
+    await page.getByRole("button", { name: "查看渠道：E2E 影灵人脸" }).click();
+    await page.getByRole("tab", { name: "渠道配置" }).click();
+    await page.getByText("高级设置", { exact: true }).click();
+
+    const toggle = page.getByRole("checkbox", { name: "启用过脸处理" });
+    await expect(toggle).toBeChecked();
+    await toggle.uncheck();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog")).toBeHidden();
+    await page.getByRole("button", { name: "保存模型渠道配置" }).click();
+    await expect(page.getByText("模型渠道配置已保存", { exact: true })).toBeVisible();
+
+    const saved = await request.get("/api/admin/settings");
+    expect(saved.ok(), await saved.text()).toBe(true);
+    const persisted = (await saved.json()) as { settings: { systemChannels: Array<{ id: string; advancedConfig?: { faceProcessing?: boolean } }> } };
+    expect(persisted.settings.systemChannels.find((item) => item.id === channel.id)?.advancedConfig?.faceProcessing).toBe(false);
+});
+
 test("管理员保存时会修复旧版 TokenGo Seedance 模板", async ({ page, request }) => {
     const current = await request.get("/api/admin/settings");
     expect(current.ok(), await current.text()).toBe(true);

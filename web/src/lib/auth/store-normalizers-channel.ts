@@ -68,6 +68,8 @@ export function normalizeSystemChannelAdvancedConfig(config: Partial<SystemChann
         ...(textOrEmpty(config.voiceIdField, 500) ? { voiceIdField: textOrEmpty(config.voiceIdField, 500) } : {}),
         ...(textOrEmpty(config.previewAudioField, 500) ? { previewAudioField: textOrEmpty(config.previewAudioField, 500) } : {}),
         ...(textOrEmpty(config.cloneSampleField, 160) ? { cloneSampleField: textOrEmpty(config.cloneSampleField, 160) } : {}),
+        ...(typeof config.faceProcessing === "boolean" ? { faceProcessing: config.faceProcessing } : {}),
+        ...(config.faceProcessingMethod === "grid" || config.faceProcessingMethod === "feature_split" ? { faceProcessingMethod: config.faceProcessingMethod } : {}),
         ...(modelCatalogPaths.length ? { modelCatalogPaths } : {}),
         ...(Object.keys(modelCapabilities).length ? { modelCapabilities } : {}),
         ...(Object.keys(modelConfigs).length ? { modelConfigs } : {}),

@@ -66,6 +66,10 @@ export type SystemChannelModelConfig = {
 };
 
 export type SystemChannelAdvancedConfig = {
+    /** 影灵视频接口的可选 face_processing；未设置按开启，仅 seedance-2.0 系列模型会实际追加。 */
+    faceProcessing?: boolean;
+    /** 影灵过脸处理方式；默认 grid。 */
+    faceProcessingMethod?: "grid" | "feature_split";
     protocol: SystemChannelProtocol;
     authMode?: SystemChannelAuthMode;
     authHeader?: string;

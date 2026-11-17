@@ -48,6 +48,7 @@ import { normalizeVideoGenerationReferences, regularVideoReferences, videoFrameR
 import { dramaReferenceImageBudget } from "@/lib/drama-production-plan";
 import { assertYumengVideoReferences, buildYumengVideoRequest } from "@/lib/yumeng-model-center";
 import { createVideoProviderRequestSnapshot } from "@/lib/server/video-provider-request-snapshot";
+import { withYinglingFaceProcessing } from "@/lib/yingling-face-processing";
 
 const CREATE_PATHS = ["/video/generations", "/videos/generations", "/videos/videos", "/videos"];
 type CreateVideoTaskBody = { config?: Record<string, unknown>; prompt?: string; references?: VideoGenerationReference[]; source?: string; context?: GenerationTaskContext };
@@ -463,7 +464,14 @@ export async function createUpstream(
                     : buildVideoProviderRequest(channel.advancedConfig?.requestTemplate, defaults, values);
         requestBody = multipart
             ? await buildOpenAiVideoFormData({ model: channel.model, prompt, seconds: values.seconds as number, width: dimensions.width, height: dimensions.height, imageUrls: firstFrameUrl ? [firstFrameUrl] : images, origin, cookie })
-            : serializeVideoProviderRequest(payload);
+            : serializeVideoProviderRequest(
+                  withYinglingFaceProcessing(payload as Record<string, unknown> | undefined, {
+                      protocol: channel.advancedConfig?.protocol,
+                      model: channel.model,
+                      enabled: channel.advancedConfig?.faceProcessing,
+                      method: channel.advancedConfig?.faceProcessingMethod,
+                  }),
+              );
         const imageToVideoPath = images.length || firstFrameUrl ? channel.advancedConfig?.imageToVideoPath?.trim() : "";
         createPaths = globalPreset ? [globalPreset.createPath] : imageToVideoPath ? [imageToVideoPath] : resolvedProviderCreatePaths(channel.advancedConfig, "video", CREATE_PATHS);
     } catch (error) {
