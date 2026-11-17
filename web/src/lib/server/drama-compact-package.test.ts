@@ -408,6 +408,23 @@ describe("compact drama package", () => {
         expect(prompt).not.toMatch(/CHAR_01/iu);
     });
 
+    it("clears stale reference intents and manual reference selections when the same segment is re-imported", () => {
+        const first = applyDramaCompactPackage(project(), referenceSource, "v1.md");
+        const firstEpisode = first.episodes.find((episode) => episode.code === "E01")!;
+        const firstShot = firstEpisode.shots.find((shot) => shot.code === "SH01")!;
+        expect(firstShot.referenceIntents?.length).toBeGreaterThan(0);
+        firstShot.videoReferenceIds = [firstShot.sceneId!, firstShot.characterIds[0]];
+        firstShot.videoReferenceMode = "all_frames";
+        const second = applyDramaCompactPackage(first, source, "v2.md");
+        const secondShot = second.episodes.find((episode) => episode.code === "E01")!.shots.find((shot) => shot.code === "SH01")!;
+        expect(secondShot.referenceIntents).toBeUndefined();
+        expect(secondShot.referenceAliasBindings).toBeUndefined();
+        expect(secondShot.videoReferenceIds).toBeUndefined();
+        expect(secondShot.videoReferenceMode).toBe("reference");
+        expect(secondShot.characterIds).toEqual([firstShot.characterIds[0]]);
+        expect(secondShot.sceneId).toBe(firstShot.sceneId);
+    });
+
     it("keeps shots without reference blocks unchanged and still binds intents for the previous shot layout", () => {
         const after = applyDramaCompactPackage(project(), source, "book.md");
         expect(after.episodes[0].shots[0].videoPrompt).toBe("原样保留的画面与对白。\n第二行。");

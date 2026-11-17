@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
 import { E2E_PROTOCOL_ORIGIN, e2eSettingsPatch, pollTask, saveDramaProjectFixture } from "./support";
@@ -306,6 +306,7 @@ test("compact import binds only the segment asset list and reuses its local @图
         "#### 视频提示词",
         "```text",
         "【参考】@图片1=CHAR_01;@图片2=PROP_01。",
+        "【参考】CHAR_01=林雪主外观与服装；PROP_01=金币基础态。",
         "第1段（镜头01–08）",
         "林雪@图片1把金币@图片2放在桌上，黑卡留在抽屉里。",
         "```",
@@ -374,6 +375,37 @@ test("compact import binds only the segment asset list and reuses its local @图
         expect(confirmPrompt).not.toContain("道具「黑卡」");
         expect(confirmPrompt).not.toContain("@图片3");
         await confirmDialog.getByRole("button", { name: "返回修改" }).click();
+
+        const revised = source
+            .replace("道具：PROP_01\n", "")
+            .replace("绑定顺序：CHAR_01 > PROP_01", "绑定顺序：CHAR_01")
+            .replace("本段资产：2/2", "本段资产：1/1")
+            .replace("【参考】@图片1=CHAR_01;@图片2=PROP_01。", "【参考】@图片1=CHAR_01。")
+            .replace("【参考】CHAR_01=林雪主外观与服装；PROP_01=金币基础态。\n", "")
+            .replace("林雪@图片1把金币@图片2放在桌上，黑卡留在抽屉里。", "林雪@图片1站在门口，桌上只放着信封。");
+        const revisedHash = createHash("sha256").update(revised).digest("hex");
+        const revisedResponse = await request.post(`/api/drama/projects/${project.id}/compact-package`, {
+            data: { action: "apply", source: revised, sourceHash: revisedHash, fileName: "revised.md" },
+        });
+        expect(revisedResponse.ok(), await revisedResponse.text()).toBe(true);
+        const revisedProject = ((await revisedResponse.json()) as { data: { project: DramaProject } }).data.project;
+        const revisedShot = revisedProject.episodes.find((episode) => episode.code === "E01")!.shots[0];
+        expect(revisedShot.referenceIntents).toBeUndefined();
+        expect(revisedShot.referenceAliasBindings).toEqual([{ alias: "@图片1", assetId: "approved-character" }]);
+        expect(revisedShot.videoReferenceIds).toBeUndefined();
+        await page.reload();
+        await page.getByRole("button", { name: "切换到内容审核" }).click();
+        await expect(page.locator('[data-drama-stage="review"]')).toBeVisible();
+        await page.locator('[data-drama-stage="review"]').getByRole("button", { name: "进入镜头生成" }).click();
+        await expect(page.locator('[data-drama-stage="generate"]')).toBeVisible();
+        await page.locator("[data-drama-generation-panel]").getByRole("button", { name: "生成镜头", exact: true }).first().click();
+        const revisedDialog = page.getByRole("dialog", { name: "确认生成 1 个镜头" });
+        const revisedPrompt = await revisedDialog.getByRole("textbox", { name: "清点金币视频提示词" }).inputValue();
+        expect(revisedPrompt.match(/(?:^|\n)@图片\d+：/gu)).toHaveLength(1);
+        expect(revisedPrompt).toContain("@图片1：角色「林雪」");
+        expect(revisedPrompt).not.toContain("道具「金币」");
+        expect(revisedPrompt).not.toContain("@图片2");
+        await revisedDialog.getByRole("button", { name: "返回修改" }).click();
         await expectNoHorizontalOverflow(page);
     } finally {
         expect((await request.delete(`/api/drama/projects/${project.id}`)).ok()).toBe(true);
