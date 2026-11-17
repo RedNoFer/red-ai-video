@@ -53,7 +53,9 @@ function runProcess(command: string, args: string[], options?: { timeoutMs?: num
             reject(new Error("FFmpeg 已取消"));
             return;
         }
-        const child = spawn(command, args, { cwd: options?.cwd, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+        // 媒体任务对页面请求让路：POSIX 下用 nice 降低调度优先级（nice 会 exec 目标程序，PID 不变，取消/超时信号照常生效）；Windows 没有 nice 命令，按原样启动。
+        const useNice = process.platform !== "win32";
+        const child = useNice ? spawn("nice", ["-n", "15", command, ...args], { cwd: options?.cwd, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] }) : spawn(command, args, { cwd: options?.cwd, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
         let stdout = "";
         let stderr = "";
         const append = (current: string, chunk: Buffer) => `${current}${chunk.toString("utf8")}`.slice(-20_000);

@@ -54,7 +54,7 @@ describe("Drama subtitle rendering", () => {
                 "-c:v",
                 "libx264",
                 "-preset",
-                "fast",
+                "veryfast",
                 "-crf",
                 "12",
                 "-tune",
