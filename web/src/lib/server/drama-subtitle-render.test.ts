@@ -24,7 +24,7 @@ describe("Drama subtitle rendering", () => {
         await expect(probeDramaVideo("/tmp/source.mp4")).resolves.toEqual({ width: 720, height: 1280, durationMs: 4_500, audioCodec: "aac" });
     });
 
-    it("writes an ASS file and copies AAC audio while burning subtitles", async () => {
+    it("writes an ASS file and burns subtitles with near-lossless video settings while copying AAC audio", async () => {
         const workdir = await mkdtemp(join(tmpdir(), "vozeb-subtitle-render-test-"));
         workdirs.push(workdir);
 
@@ -42,7 +42,29 @@ describe("Drama subtitle rendering", () => {
         expect(ass).toContain("PlayResX: 1080");
         expect(ass).toContain("Dialogue: 0,0:00:00.00,0:00:02.00");
         expect(mocks.runFfmpeg).toHaveBeenCalledWith(
-            expect.arrayContaining(["-map", "0:v:0", "-map", "0:a:0", "-c:a", "copy", "-vf", expect.stringContaining("ass="), "-c:v", "libx264", "-movflags", "+faststart", join(workdir, "output.mp4")]),
+            expect.arrayContaining([
+                "-map",
+                "0:v:0",
+                "-map",
+                "0:a:0",
+                "-c:a",
+                "copy",
+                "-vf",
+                expect.stringContaining("ass="),
+                "-c:v",
+                "libx264",
+                "-preset",
+                "fast",
+                "-crf",
+                "12",
+                "-tune",
+                "film",
+                "-pix_fmt",
+                "yuv420p",
+                "-movflags",
+                "+faststart",
+                join(workdir, "output.mp4"),
+            ]),
             expect.objectContaining({ cwd: workdir }),
         );
     });

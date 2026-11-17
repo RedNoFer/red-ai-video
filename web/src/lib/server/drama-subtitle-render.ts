@@ -42,7 +42,8 @@ export async function renderDramaSubtitleVideo(input: { workdir: string; sourceP
     const assPath = join(input.workdir, "subtitles.ass");
     await writeFile(assPath, buildDramaAss(input.cues, input.width, input.height), "utf8");
     const audioArgs = input.audioCodec ? (["aac", "mp3"].includes(input.audioCodec) ? ["-map", "0:a:0", "-c:a", "copy"] : ["-map", "0:a:0", "-c:a", "aac", "-b:a", "160k"]) : ["-an"];
-    await runFfmpeg(["-y", "-i", input.sourcePath, "-map", "0:v:0", ...audioArgs, "-vf", `ass=${assPath}`, "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", "-sn", "-movflags", "+faststart", input.outputPath], {
+    // 硬字幕必须重新编码整段画面；使用视觉近无损参数，避免字幕版画质明显低于原片。
+    await runFfmpeg(["-y", "-i", input.sourcePath, "-map", "0:v:0", ...audioArgs, "-vf", `ass=${assPath}`, "-c:v", "libx264", "-preset", "fast", "-crf", "12", "-tune", "film", "-pix_fmt", "yuv420p", "-sn", "-movflags", "+faststart", input.outputPath], {
         cwd: input.workdir,
         signal: input.signal,
         timeoutMs: 30 * 60_000,
