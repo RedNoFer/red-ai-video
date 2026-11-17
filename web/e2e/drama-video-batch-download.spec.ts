@@ -87,6 +87,8 @@ test("批量下载视频按剧集分组展示，默认全选并把勾选视频�
 
         await page.goto(`/drama/${project.id}`, { waitUntil: "networkidle" });
         await page.getByRole("button", { name: "切换到镜头生成" }).click();
+        await expect(page.locator("[data-drama-shot-task]")).toHaveCount(2);
+        await expect(page.locator("[data-drama-shot-task] video")).toHaveCount(0);
 
         const previewOption = (label: string) => page.locator(`.ant-select-dropdown:visible .ant-select-item-option[title="${label}"]`);
         const englishPreview = page.getByRole("dialog", { name: "开场生成视频" });
