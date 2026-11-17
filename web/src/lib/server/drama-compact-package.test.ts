@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import type { DramaProject, DramaShot } from "@/lib/drama-project-contract";
 import { buildVideoReferenceBindings, compileDramaVideoSubmissionPrompt } from "@/lib/drama-video-submission";
+import { selectedDramaShotReferenceAssetIds } from "@/lib/drama-video-reference-plan";
 import { buildDramaProductionRun } from "./drama-production-run";
 import { applyDramaCompactPackage, DramaCompactPackageError, parseDramaCompactPackage, previewDramaCompactPackage } from "./drama-compact-package";
 
@@ -426,5 +427,33 @@ describe("compact drama package", () => {
         expect(preview.warnings.some((warning) => warning.includes("PROP_01") && warning.includes("未在本片段绑定行声明") && warning.includes("已跳过"))).toBe(true);
         const after = applyDramaCompactPackage(project(), withProp, "book.md");
         expect(after.episodes[0].shots[0].referenceIntents).toBeUndefined();
+    });
+
+    it("binds multiple scenes from one segment and submits every scene baseline", () => {
+        const multiScene = project();
+        multiScene.scenes = [
+            {
+                ...multiScene.scenes[0],
+                references: [{ id: "scene-old-ref", url: "/old.png", source: "uploaded", label: "主基准", createdAt: multiScene.createdAt, status: "approved" }],
+                primaryReferenceId: "scene-old-ref",
+            },
+            {
+                id: "scene-gate",
+                code: "OLD_GATE",
+                name: "山门",
+                description: "山门全景",
+                references: [{ id: "scene-gate-ref", url: "/gate.png", source: "uploaded", label: "主基准", createdAt: multiScene.createdAt, status: "approved" }],
+                primaryReferenceId: "scene-gate-ref",
+            },
+        ];
+        const input = source.replace("### 场景 LOC_01｜旧书房", "### 场景 LOC_02｜山门\n#### 图片提示词\n~~~text\n山门清晨全景\n~~~\n### 场景 LOC_01｜旧书房").replace("场景：LOC_01", "场景：LOC_01（0-9秒，旧书房）、LOC_02（9-30秒，山门）");
+        const imported = applyDramaCompactPackage(multiScene, input, "book.md");
+        const shot = imported.episodes[0].shots[0];
+        expect(shot.sceneId).toBe("scene-old");
+        expect(shot.referenceIntents).toEqual([expect.objectContaining({ assetId: "scene-gate", role: "scene_anchor" })]);
+        const ids = selectedDramaShotReferenceAssetIds(imported, shot);
+        expect(ids).toEqual(["scene-old", "character-old", "scene-gate"]);
+        const bindings = buildVideoReferenceBindings(imported, shot, [], ids);
+        expect(bindings.map((binding) => binding.purpose)).toEqual(["场景「旧书房」", "角色「林雪」", "场景「山门」"]);
     });
 });
