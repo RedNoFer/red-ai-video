@@ -41,7 +41,7 @@ import { DramaJianyingModal, DramaSubtitleModal } from "./drama-project-modals";
 import { DramaVideoDownloadModal } from "./drama-video-download-modal";
 import type { DramaProjectStage } from "./drama-project-sections";
 import { applyDramaProductionRunStep, isActiveDramaVideoStep, applyDramaVisualRunTerminalStep, dramaShotVideoMode, estimateEpisodePoints, resolveDramaVisualRunSync } from "./drama-shot-generation-utils";
-import { dramaShotHasSubtitleText } from "@/lib/drama-subtitle-plan";
+import { dramaShotSubtitleAvailability } from "@/lib/drama-subtitle-plan";
 import { visibleDramaShotVideoResults } from "@/lib/drama-shot-video-results";
 import { markDramaCanvasSynced } from "../../canvas/[id]/canvas-drama-navigation";
 import type { DramaVideoPromptAnalysis, DramaVideoReferenceMode } from "@/lib/drama-project-contract";
@@ -1309,7 +1309,9 @@ function ShotTaskRow({
                                         downloadUrl: (current ? shot.generationTaskId : video.taskId) ? `/api/video-tasks/${encodeURIComponent((current ? shot.generationTaskId : video.taskId)!)}/download` : undefined,
                                         subtitleExport: (() => {
                                             const videoId = video.taskId || video.id;
-                                            return videoId ? { projectId: project.id, episodeId: episode.id, shotId: shot.id, videoId, hasText: dramaShotHasSubtitleText(shot) } : undefined;
+                                            if (!videoId) return undefined;
+                                            const availability = dramaShotSubtitleAvailability(shot, episode.script);
+                                            return { projectId: project.id, episodeId: episode.id, shotId: shot.id, videoId, hasText: availability.hasText, hasEnglishText: availability.hasEnglish };
                                         })(),
                                         onRepair:
                                             current && shot.generationTaskId

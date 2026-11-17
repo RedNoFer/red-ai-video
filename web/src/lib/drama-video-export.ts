@@ -1,3 +1,5 @@
+import { DRAMA_SUBTITLE_EXPORT_MODES, type DramaSubtitleExportMode } from "@/lib/drama-subtitle-plan";
+
 export type DramaVideoExportVideo = {
     id: string;
     url: string;
@@ -12,7 +14,14 @@ export type DramaVideoExportShot = {
     title: string;
     videos: DramaVideoExportVideo[];
     hasSubtitles: boolean;
+    hasEnglishSubtitles: boolean;
 };
+
+export function normalizeDramaSubtitleExportModes(value: unknown): DramaSubtitleExportMode[] {
+    if (!Array.isArray(value)) return [];
+    const modes = value.filter((item): item is DramaSubtitleExportMode => typeof item === "string" && DRAMA_SUBTITLE_EXPORT_MODES.includes(item as DramaSubtitleExportMode));
+    return [...new Set(modes)];
+}
 
 export type DramaVideoExportEpisode = {
     episodeId: string;

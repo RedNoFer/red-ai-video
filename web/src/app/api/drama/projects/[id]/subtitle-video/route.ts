@@ -8,7 +8,8 @@ import { NextResponse } from "next/server";
 import { readJsonBodyResult } from "@/lib/auth/request";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getAuthSettings } from "@/lib/auth/store";
-import { dramaShotHasSubtitleText, planDramaShotSubtitles } from "@/lib/drama-subtitle-plan";
+import { dramaShotSubtitleAvailability, planDramaShotSubtitles, type DramaSubtitleExportMode } from "@/lib/drama-subtitle-plan";
+import { normalizeDramaSubtitleExportModes } from "@/lib/drama-video-export";
 import { checkGenerationRateLimit, rateLimitHeaders } from "@/lib/server/security";
 import { collectDramaVideoExportPayload, DramaVideoExportError, resolveDramaVideoExportEntries } from "@/lib/server/drama-video-export";
 import { getDramaProjectForUser, DramaProjectServiceError } from "@/lib/server/drama-project-service";
@@ -31,11 +32,14 @@ export async function POST(request: Request, context: Context) {
     if (!rate.allowed) return NextResponse.json({ code: 429, data: null, msg: "字幕导出请求过于频繁，请稍后重试" }, { status: 429, headers: rateLimitHeaders(rate) });
     const limit = (await getAuthSettings()).generationConcurrency.render;
     const response = await withGenerationConcurrencyLimit(user.id, "render", 60 * 60_000, limit, async () => {
-        const parsed = await readJsonBodyResult<{ episodeId?: unknown; shotId?: unknown; videoId?: unknown }>(request);
+        const parsed = await readJsonBodyResult<{ episodeId?: unknown; shotId?: unknown; videoId?: unknown; mode?: unknown }>(request);
         if (!parsed.ok) return NextResponse.json({ code: parsed.status, data: null, msg: parsed.message }, { status: parsed.status });
         const episodeId = text(parsed.data.episodeId);
         const shotId = text(parsed.data.shotId);
         const videoId = text(parsed.data.videoId);
+        const requestMode = normalizeDramaSubtitleExportModes([parsed.data.mode])[0];
+        if (parsed.data.mode !== undefined && !requestMode) return NextResponse.json({ code: 422, data: null, msg: "字幕版本无效" }, { status: 422 });
+        const mode: DramaSubtitleExportMode = requestMode || "bilingual";
         if (!episodeId || !shotId || !videoId) return NextResponse.json({ code: 422, data: null, msg: "缺少镜头视频参数" }, { status: 422 });
         if (!(await ffmpegAvailable())) return NextResponse.json({ code: 503, data: null, msg: "当前服务器未安装 FFmpeg" }, { status: 503 });
 
@@ -45,7 +49,9 @@ export async function POST(request: Request, context: Context) {
             const episode = project.episodes.find((item) => item.id === episodeId);
             const shot = episode?.shots.find((item) => item.id === shotId);
             if (!episode || !shot) return NextResponse.json({ code: 404, data: null, msg: "镜头不存在" }, { status: 404 });
-            if (!dramaShotHasSubtitleText(shot)) return NextResponse.json({ code: 422, data: null, msg: "本镜头没有可烧录的台词或旁白" }, { status: 422 });
+            const availability = dramaShotSubtitleAvailability(shot, episode.script);
+            if (!availability.hasText) return NextResponse.json({ code: 422, data: null, msg: "本镜头没有可烧录的台词或旁白" }, { status: 422 });
+            if (mode === "english" && !availability.hasEnglish) return NextResponse.json({ code: 422, data: null, msg: "本镜头没有英文字幕" }, { status: 422 });
             if (!(await ffmpegSubtitleAvailable())) return NextResponse.json({ code: 503, data: null, msg: "当前服务器 FFmpeg 未启用 libass，无法烧录字幕" }, { status: 503 });
 
             const payload = await collectDramaVideoExportPayload(user.id, project);
@@ -63,7 +69,7 @@ export async function POST(request: Request, context: Context) {
                 timeoutMs: 5 * 60_000,
             });
             const probe = await probeDramaVideo(sourcePath, { cwd: workdir });
-            const cues = planDramaShotSubtitles(shot, probe.durationMs, probe.width, probe.height);
+            const cues = planDramaShotSubtitles(shot, probe.durationMs, probe.width, probe.height, { script: episode.script, mode });
             if (!cues.length) return NextResponse.json({ code: 422, data: null, msg: "本镜头没有可烧录的台词或旁白" }, { status: 422 });
             await renderDramaSubtitleVideo({
                 workdir,
@@ -76,13 +82,14 @@ export async function POST(request: Request, context: Context) {
             });
             const output = await stat(outputPath);
             if (!output.isFile() || output.size <= 0) throw new Error("字幕视频生成失败");
-            const fileName = `${safeName(project.title) || "短剧项目"}_${safeName(shot.code || `镜头${shot.order}`) || "镜头"}_字幕版.mp4`;
+            const fileName = `${safeName(project.title) || "短剧项目"}_${safeName(shot.code || `镜头${shot.order}`) || "镜头"}_${mode === "english" ? "英文字幕版" : "双语字幕版"}.mp4`;
             const headers = {
                 "Content-Type": "video/mp4",
                 "Content-Length": String(output.size),
                 "Content-Disposition": `attachment; filename="subtitle-video.mp4"; filename*=UTF-8''${encodeURIComponent(fileName)}`,
                 "Cache-Control": "no-store",
                 "X-Drama-Subtitle-Cues": String(cues.length),
+                "X-Drama-Subtitle-Mode": mode,
             };
             return new Response(streamFile(outputPath, workdir), { headers });
         } catch (error) {

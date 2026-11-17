@@ -44,7 +44,9 @@ beforeEach(() => {
     mocks.collect.mockResolvedValue({
         projectId: "project-one",
         projectTitle: "测试短剧",
-        episodes: [{ episodeId: "episode-one", order: 1, title: "第 1 集", shots: [{ shotId: "shot-one", code: "SH01", title: "开场", hasSubtitles: true, videos: [{ id: "task-one", url: "/api/media/video.mp4", isCurrent: true }] }] }],
+        episodes: [
+            { episodeId: "episode-one", order: 1, title: "第 1 集", shots: [{ shotId: "shot-one", code: "SH01", title: "开场", hasSubtitles: true, hasEnglishSubtitles: false, videos: [{ id: "task-one", url: "/api/media/video.mp4", isCurrent: true }] }] },
+        ],
     });
     mocks.resolve.mockReturnValue([{ episodeId: "episode-one", episodeTitle: "第 1 集", episodeOrder: 1, shotId: "shot-one", shotCode: "SH01", shotTitle: "开场", videoId: "task-one", url: "/api/media/video.mp4" }]);
     mocks.download.mockImplementation(async (_url: string, path: string) => {
@@ -65,9 +67,39 @@ it("streams a burned subtitle video for the selected shot video", async () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe("video/mp4");
-    expect(response.headers.get("content-disposition")).toContain(encodeURIComponent("测试短剧_SH01_字幕版.mp4"));
+    expect(response.headers.get("content-disposition")).toContain(encodeURIComponent("测试短剧_SH01_双语字幕版.mp4"));
+    expect(response.headers.get("x-drama-subtitle-mode")).toBe("bilingual");
     expect(mocks.render).toHaveBeenCalledWith(expect.objectContaining({ cues: expect.arrayContaining([expect.objectContaining({ text: "第一句台词。第二句台词。" })]), width: 1080, height: 1920 }));
     expect(new Uint8Array(await response.arrayBuffer())).toEqual(new Uint8Array([7, 7, 7]));
+});
+
+it("streams the English-only version from the episode script", async () => {
+    const project = projectWithScript();
+    mocks.project.mockResolvedValue(project);
+
+    const response = await POST(
+        new Request("http://localhost/api/drama/projects/project-one/subtitle-video", {
+            method: "POST",
+            body: JSON.stringify({ episodeId: "episode-one", shotId: "shot-one", videoId: "task-one", mode: "english" }),
+        }),
+        { params: Promise.resolve({ id: "project-one" }) },
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-drama-subtitle-mode")).toBe("english");
+    expect(response.headers.get("content-disposition")).toContain(encodeURIComponent("测试短剧_SH01_英文字幕版.mp4"));
+    expect(mocks.render).toHaveBeenCalledWith(expect.objectContaining({ cues: expect.arrayContaining([expect.objectContaining({ text: "By morning, everything would be cheaper." })]) }));
+    expect((mocks.render.mock.calls[0][0] as { cues: Array<{ secondaryText?: string }> }).cues.every((cue) => !cue.secondaryText)).toBe(true);
+});
+
+it("rejects the English-only version when the shot has no English text", async () => {
+    const response = await POST(new Request("http://localhost/api/drama/projects/project-one/subtitle-video", { method: "POST", body: JSON.stringify({ episodeId: "episode-one", shotId: "shot-one", videoId: "task-one", mode: "english" }) }), {
+        params: Promise.resolve({ id: "project-one" }),
+    });
+
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual(expect.objectContaining({ msg: "本镜头没有英文字幕" }));
+    expect(mocks.render).not.toHaveBeenCalled();
 });
 
 it("rejects shots without subtitle text", async () => {
@@ -115,7 +147,13 @@ function projectWithSubtitle() {
         clueIds: [],
         subtitle: "第一句台词。第二句台词。",
     };
-    return { id: "project-one", title: "测试短剧", episodes: [{ id: "episode-one", title: "第 1 集", shots: [shot] }] };
+    return { id: "project-one", title: "测试短剧", episodes: [{ id: "episode-one", title: "第 1 集", script: "", shots: [shot] }] };
+}
+
+function projectWithScript() {
+    const project = projectWithoutSubtitle();
+    project.episodes[0].script = ["【SH01｜0–30秒｜开场】", "", '"By morning, everything would be cheaper."', "中译：到了明早，一切都将便宜一千万倍。"].join("\n");
+    return project;
 }
 
 function projectWithoutSubtitle() {
@@ -124,5 +162,6 @@ function projectWithoutSubtitle() {
     project.episodes[0].shots[0].subtitle = "";
     project.episodes[0].shots[0].dialogue = "";
     project.episodes[0].shots[0].narration = "";
+    project.episodes[0].script = "";
     return project;
 }

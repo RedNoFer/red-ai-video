@@ -1,10 +1,11 @@
 "use client";
 
-import { Checkbox, Modal } from "antd";
+import { Checkbox, Modal, Select } from "antd";
 import { saveAs } from "file-saver";
 import { Download, Film, ImageIcon, RefreshCw, ScanSearch } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import type { DramaSubtitleExportMode } from "@/lib/drama-subtitle-plan";
 import { mediaDownloadFileName } from "@/lib/media-file";
 import { imagePreviewUrl } from "@/lib/media-image-url";
 import { exportDramaSubtitleVideo } from "@/services/api/drama-projects";
@@ -15,7 +16,7 @@ export type DramaPreviewMedia = {
     title: string;
     downloadUrl?: string;
     onRepair?: () => Promise<void>;
-    subtitleExport?: { projectId: string; episodeId: string; shotId: string; videoId: string; hasText: boolean };
+    subtitleExport?: { projectId: string; episodeId: string; shotId: string; videoId: string; hasText: boolean; hasEnglishText: boolean };
 };
 
 export function DramaMediaThumbnail({ media, onOpen }: { media: DramaPreviewMedia; onOpen: (media: DramaPreviewMedia) => void }) {
@@ -45,9 +46,11 @@ export function DramaMediaPreviewModal({ media, onClose }: { media?: DramaPrevie
     const [downloadingSubtitles, setDownloadingSubtitles] = useState(false);
     const [downloadError, setDownloadError] = useState("");
     const [withSubtitles, setWithSubtitles] = useState(false);
+    const [subtitleMode, setSubtitleMode] = useState<DramaSubtitleExportMode>("bilingual");
 
     useEffect(() => {
         setWithSubtitles(Boolean(media?.subtitleExport?.hasText));
+        setSubtitleMode("bilingual");
         setDownloadError("");
         setRepairError("");
     }, [media]);
@@ -61,6 +64,7 @@ export function DramaMediaPreviewModal({ media, onClose }: { media?: DramaPrevie
                 episodeId: media.subtitleExport.episodeId,
                 shotId: media.subtitleExport.shotId,
                 videoId: media.subtitleExport.videoId,
+                mode: subtitleMode,
             });
             saveAs(result.blob, result.fileName);
         } catch (error) {
@@ -79,9 +83,24 @@ export function DramaMediaPreviewModal({ media, onClose }: { media?: DramaPrevie
                 media ? (
                     <div className="flex flex-wrap items-center justify-end gap-2">
                         {media.type === "video" && media.subtitleExport ? (
-                            <Checkbox checked={withSubtitles} disabled={!media.subtitleExport.hasText} onChange={(event) => setWithSubtitles(event.target.checked)}>
-                                带字幕下载
-                            </Checkbox>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <Checkbox checked={withSubtitles} disabled={!media.subtitleExport.hasText} onChange={(event) => setWithSubtitles(event.target.checked)}>
+                                    带字幕下载
+                                </Checkbox>
+                                {withSubtitles ? (
+                                    <Select
+                                        aria-label="字幕版本"
+                                        size="small"
+                                        className="min-w-[164px]"
+                                        value={subtitleMode}
+                                        onChange={(value: DramaSubtitleExportMode) => setSubtitleMode(value)}
+                                        options={[
+                                            { value: "bilingual", label: "双语字幕（英/中）" },
+                                            { value: "english", label: "英文字幕单独版", disabled: !media.subtitleExport.hasEnglishText },
+                                        ]}
+                                    />
+                                ) : null}
+                            </div>
                         ) : null}
                         {media.type === "video" && media.onRepair ? (
                             <button
@@ -112,7 +131,7 @@ export function DramaMediaPreviewModal({ media, onClose }: { media?: DramaPrevie
                                 onClick={() => void downloadSubtitles()}
                             >
                                 <Download className={`size-4 ${downloadingSubtitles ? "animate-pulse" : ""}`} />
-                                {downloadingSubtitles ? "正在生成字幕版..." : "下载带字幕视频"}
+                                {downloadingSubtitles ? "正在生成字幕版..." : subtitleMode === "english" ? "下载英文字幕视频" : "下载双语字幕视频"}
                             </button>
                         ) : (
                             <a
@@ -132,8 +151,8 @@ export function DramaMediaPreviewModal({ media, onClose }: { media?: DramaPrevie
             destroyOnHidden
             onCancel={onClose}
         >
-            {media?.type === "image" ? <img className="max-h-[75dvh] w-full rounded-md object-contain" src={imagePreviewUrl(media.url, 2048)} alt={media.title} /> : null}
-            {media?.type === "video" ? <video className="max-h-[75dvh] w-full rounded-md bg-black" src={media.downloadUrl || media.url} controls autoPlay playsInline preload="metadata" /> : null}
+            {media?.type === "image" ? <img className="max-h-[calc(100dvh-280px)] w-full rounded-md object-contain" src={imagePreviewUrl(media.url, 2048)} alt={media.title} /> : null}
+            {media?.type === "video" ? <video className="max-h-[calc(100dvh-280px)] w-full rounded-md bg-black" src={media.downloadUrl || media.url} controls autoPlay playsInline preload="metadata" /> : null}
         </Modal>
     );
 }

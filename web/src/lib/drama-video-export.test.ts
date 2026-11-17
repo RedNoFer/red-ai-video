@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { dramaVideoExportEntryKey, dramaVideoExportKeys, dramaVideoExportSelection, type DramaVideoExportPayload } from "./drama-video-export";
+import { dramaVideoExportEntryKey, dramaVideoExportKeys, dramaVideoExportSelection, normalizeDramaSubtitleExportModes, type DramaVideoExportPayload } from "./drama-video-export";
 
 describe("Drama video export selection", () => {
     it("keys every video by episode, shot and video id", () => {
@@ -16,6 +16,11 @@ describe("Drama video export selection", () => {
         expect(dramaVideoExportSelection(payload, ['["episode-one","shot-one","candidate"]'])).toEqual([{ episodeId: "episode-one", shotId: "shot-one", videoId: "candidate" }]);
         expect(dramaVideoExportSelection(payload, ['["episode-one","shot-one","unknown"]'])).toEqual([]);
         expect(dramaVideoExportSelection(payload, dramaVideoExportKeys(payload))).toHaveLength(3);
+    });
+
+    it("accepts only known subtitle modes and deduplicates them", () => {
+        expect(normalizeDramaSubtitleExportModes(["bilingual", "unknown", "english", "bilingual"])).toEqual(["bilingual", "english"]);
+        expect(normalizeDramaSubtitleExportModes("english")).toEqual([]);
     });
 });
 
@@ -34,6 +39,7 @@ function videoPayload(): DramaVideoExportPayload {
                         code: "SH01",
                         title: "开场",
                         hasSubtitles: false,
+                        hasEnglishSubtitles: false,
                         videos: [
                             { id: "current", url: "/api/media/current.mp4", isCurrent: true },
                             { id: "candidate", url: "/api/media/candidate.mp4", isCurrent: false },
@@ -45,7 +51,7 @@ function videoPayload(): DramaVideoExportPayload {
                 episodeId: "episode-two",
                 order: 2,
                 title: "第 2 集",
-                shots: [{ shotId: "shot-two", code: "SH02", title: "收尾", hasSubtitles: false, videos: [{ id: "current", url: "/api/media/second.mp4", isCurrent: true }] }],
+                shots: [{ shotId: "shot-two", code: "SH02", title: "收尾", hasSubtitles: false, hasEnglishSubtitles: false, videos: [{ id: "current", url: "/api/media/second.mp4", isCurrent: true }] }],
             },
         ],
     };

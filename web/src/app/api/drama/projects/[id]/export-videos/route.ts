@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 
 import { getCurrentUser } from "@/lib/auth/session";
 import { readJsonBodyResult } from "@/lib/auth/request";
+import type { DramaSubtitleExportMode } from "@/lib/drama-subtitle-plan";
+import { normalizeDramaSubtitleExportModes } from "@/lib/drama-video-export";
 import { collectDramaVideoExportPayload, exportDramaVideos, resolveDramaVideoExportEntries, DramaVideoExportError } from "@/lib/server/drama-video-export";
 import { getDramaProjectForUser, DramaProjectServiceError } from "@/lib/server/drama-project-service";
 import { ffmpegSubtitleAvailable } from "@/lib/server/ffmpeg";
@@ -16,7 +18,7 @@ export async function POST(request: Request, context: Context) {
     const user = await getCurrentUser();
     if (!user) return NextResponse.json({ code: 401, data: null, msg: "请先登录" }, { status: 401 });
     try {
-        const parsed = await readJsonBodyResult<{ items?: Array<{ episodeId?: string; shotId?: string; videoId?: string }>; includeSubtitles?: boolean }>(request);
+        const parsed = await readJsonBodyResult<{ items?: Array<{ episodeId?: string; shotId?: string; videoId?: string }>; includeSubtitles?: boolean; subtitleModes?: unknown }>(request);
         if (!parsed.ok) return NextResponse.json({ code: parsed.status, data: null, msg: parsed.message }, { status: parsed.status });
         const items = Array.isArray(parsed.data.items) ? parsed.data.items : [];
         if (!items.length) return NextResponse.json({ code: 422, data: null, msg: "请先选择要下载的视频" }, { status: 422 });
@@ -24,10 +26,19 @@ export async function POST(request: Request, context: Context) {
         const payload = await collectDramaVideoExportPayload(user.id, project);
         const entries = resolveDramaVideoExportEntries(payload, items);
         if (!entries.length) return NextResponse.json({ code: 422, data: null, msg: "所选视频已不存在，请刷新后重试" }, { status: 422 });
+        const subtitleModes: DramaSubtitleExportMode[] = normalizeDramaSubtitleExportModes(parsed.data.subtitleModes);
+        if (!subtitleModes.length && parsed.data.includeSubtitles === true) subtitleModes.push("bilingual");
         const requestedKeys = new Set(entries.map((entry) => `${entry.episodeId}::${entry.shotId}`));
-        const selectedHasSubtitles = payload.episodes.some((episode) => episode.shots.some((shot) => shot.hasSubtitles && requestedKeys.has(`${episode.episodeId}::${shot.shotId}`)));
-        if (parsed.data.includeSubtitles === true && selectedHasSubtitles && !(await ffmpegSubtitleAvailable())) return NextResponse.json({ code: 503, data: null, msg: "当前服务器 FFmpeg 未启用 libass，无法烧录字幕" }, { status: 503 });
-        const result = await exportDramaVideos({ project, entries, origin: resolveInternalOrigin(new URL(request.url).origin), cookie: request.headers.get("cookie") || "", includeSubtitles: parsed.data.includeSubtitles === true });
+        const selectedShots = payload.episodes.flatMap((episode) => episode.shots.filter((shot) => requestedKeys.has(`${episode.episodeId}::${shot.shotId}`)));
+        const needsSubtitleRender = subtitleModes.some((mode) => selectedShots.some((shot) => (mode === "english" ? shot.hasEnglishSubtitles : shot.hasSubtitles)));
+        if (needsSubtitleRender && !(await ffmpegSubtitleAvailable())) return NextResponse.json({ code: 503, data: null, msg: "当前服务器 FFmpeg 未启用 libass，无法烧录字幕" }, { status: 503 });
+        const result = await exportDramaVideos({
+            project,
+            entries,
+            origin: resolveInternalOrigin(new URL(request.url).origin),
+            cookie: request.headers.get("cookie") || "",
+            subtitleModes,
+        });
         return new Response(result.stream, {
             headers: {
                 "Content-Type": "application/zip",

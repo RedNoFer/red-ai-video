@@ -103,7 +103,8 @@ describe("Drama generation production workspace", () => {
 
         expect(source).toContain("subtitleExport:");
         expect(source).toContain("const videoId = video.taskId || video.id;");
-        expect(source).toContain("hasText: dramaShotHasSubtitleText(shot)");
+        expect(source).toContain("hasText: availability.hasText");
+        expect(source).toContain("hasEnglishText: availability.hasEnglish");
     });
 
     it("cancels video tasks through their server action instead of a writable status field", async () => {

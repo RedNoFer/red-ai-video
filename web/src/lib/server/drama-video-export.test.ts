@@ -90,6 +90,39 @@ describe("Drama video export", () => {
         expect(new TextDecoder().decode(files["01_第 1 集/字幕版/SH01_开场.srt"])).toContain("第一句台词");
     });
 
+    it("writes a separate English-only burned video and SRT when both subtitle versions are requested", async () => {
+        const current = project();
+        current.episodes[0].script = ["【SH01｜0–30秒｜开场】", "", '"By morning, everything would be cheaper."', "中译：到了明早，一切都将便宜一千万倍。"].join("\n");
+        const payload = await collectDramaVideoExportPayload("user-one", current);
+        const entries = resolveDramaVideoExportEntries(
+            payload,
+            payload.episodes.flatMap((episode) => episode.shots.flatMap((shot) => shot.videos.map((video) => ({ episodeId: episode.episodeId, shotId: shot.shotId, videoId: video.id })))),
+        );
+        expect(payload.episodes[0].shots[0]).toMatchObject({ hasSubtitles: true, hasEnglishSubtitles: true });
+        mocks.probeDramaVideo.mockResolvedValue({ width: 1080, height: 1920, durationMs: 5_000, audioCodec: "aac" });
+        mocks.renderDramaSubtitleVideo.mockImplementation(async ({ outputPath }: { outputPath: string }) => {
+            await writeFile(outputPath, new Uint8Array([9, 9, 9]));
+        });
+
+        const result = await exportDramaVideos({ project: current, entries, origin: "http://127.0.0.1:3000", subtitleModes: ["bilingual", "english"] });
+        const files = unzipSync(new Uint8Array(await new Response(result.stream).arrayBuffer()));
+        const names = Object.keys(files);
+
+        expect(names).toEqual(
+            expect.arrayContaining([
+                expect.stringMatching(/^01_第 1 集\/字幕版\/SH01_开场_字幕\.mp4$/),
+                expect.stringMatching(/^01_第 1 集\/字幕版\/SH01_开场\.srt$/),
+                expect.stringMatching(/^01_第 1 集\/字幕版\/英文\/SH01_开场_英文字幕\.mp4$/),
+                expect.stringMatching(/^01_第 1 集\/字幕版\/英文\/SH01_开场\.en\.srt$/),
+            ]),
+        );
+        const manifest = JSON.parse(new TextDecoder().decode(files["manifest.json"])) as { subtitles: { modes: string[]; generated: Array<{ mode: string }> } };
+        expect(manifest.subtitles.modes).toEqual(["bilingual", "english"]);
+        expect(manifest.subtitles.generated.map((item) => item.mode)).toEqual(["bilingual", "english", "bilingual", "english"]);
+        expect(new TextDecoder().decode(files["01_第 1 集/字幕版/SH01_开场.srt"])).toContain("By morning, everything would be cheaper.\n到了明早，一切都将便宜一千万倍。");
+        expect(new TextDecoder().decode(files["01_第 1 集/字幕版/英文/SH01_开场.en.srt"])).not.toContain("到了明早");
+    });
+
     it("records skipped subtitles without running media probes when the shot has no text", async () => {
         const current = project();
         mocks.probeDramaVideo.mockClear();

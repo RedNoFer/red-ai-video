@@ -1,12 +1,15 @@
 "use client";
 
 import { saveAs } from "file-saver";
-import { App, Button, Checkbox, Empty, Modal, Spin } from "antd";
+import { App, Button, Checkbox, Empty, Modal, Select, Spin } from "antd";
 import { Download, Film } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
+import type { DramaSubtitleExportMode } from "@/lib/drama-subtitle-plan";
 import { dramaVideoExportEntryKey, dramaVideoExportKeys, dramaVideoExportSelection, type DramaVideoExportPayload } from "@/lib/drama-video-export";
 import { exportDramaVideos, listDramaProjectVideos } from "@/services/api/drama-projects";
+
+type DramaSubtitleChoice = DramaSubtitleExportMode | "both";
 
 export function DramaVideoDownloadModal({ open, projectId, onClose }: { open: boolean; projectId: string; onClose: () => void }) {
     const { message } = App.useApp();
@@ -15,12 +18,14 @@ export function DramaVideoDownloadModal({ open, projectId, onClose }: { open: bo
     const [downloading, setDownloading] = useState(false);
     const [selected, setSelected] = useState<string[]>([]);
     const [includeSubtitles, setIncludeSubtitles] = useState(true);
+    const [subtitleChoice, setSubtitleChoice] = useState<DramaSubtitleChoice>("bilingual");
 
     useEffect(() => {
         if (!open) return;
         let active = true;
         setLoading(true);
         setIncludeSubtitles(true);
+        setSubtitleChoice("bilingual");
         listDramaProjectVideos(projectId)
             .then((data) => {
                 if (!active) return;
@@ -40,17 +45,23 @@ export function DramaVideoDownloadModal({ open, projectId, onClose }: { open: bo
     }, [open, projectId, message]);
 
     const allKeys = useMemo(() => (payload ? dramaVideoExportKeys(payload) : []), [payload]);
-    const selectedHasSubtitles = useMemo(() => {
-        if (!payload) return false;
+    const selectedSubtitleAvailability = useMemo(() => {
+        const available = { any: false, english: false };
+        if (!payload) return available;
         for (const episode of payload.episodes) {
             for (const shot of episode.shots) {
-                if (!shot.hasSubtitles) continue;
-                if (shot.videos.some((video) => selected.includes(dramaVideoExportEntryKey(episode.episodeId, shot.shotId, video.id)))) return true;
+                if (!shot.hasSubtitles && !shot.hasEnglishSubtitles) continue;
+                if (!shot.videos.some((video) => selected.includes(dramaVideoExportEntryKey(episode.episodeId, shot.shotId, video.id)))) continue;
+                available.any ||= shot.hasSubtitles;
+                available.english ||= shot.hasEnglishSubtitles;
             }
         }
-        return false;
+        return available;
     }, [payload, selected]);
-    const wantSubtitles = includeSubtitles && selectedHasSubtitles;
+    const effectiveSubtitleChoice: DramaSubtitleChoice = subtitleChoice !== "bilingual" && !selectedSubtitleAvailability.english ? "bilingual" : subtitleChoice;
+    const subtitleModes: DramaSubtitleExportMode[] = effectiveSubtitleChoice === "both" ? ["bilingual", "english"] : [effectiveSubtitleChoice];
+    const wantSubtitles = includeSubtitles && selectedSubtitleAvailability.any;
+    const subtitleVersionLabel = subtitleModes.length > 1 ? "双语与英文字幕版" : subtitleModes[0] === "english" ? "英文字幕版" : "双语字幕版";
     const toggle = (key: string, checked: boolean) => setSelected((current) => (checked ? [...new Set([...current, key])] : current.filter((item) => item !== key)));
     const toggleMany = (keys: string[], checked: boolean) =>
         setSelected((current) => {
@@ -68,9 +79,11 @@ export function DramaVideoDownloadModal({ open, projectId, onClose }: { open: bo
         if (!items.length) return;
         setDownloading(true);
         try {
-            const result = await exportDramaVideos(projectId, items, { includeSubtitles: wantSubtitles });
+            const result = await exportDramaVideos(projectId, items, { includeSubtitles: wantSubtitles, subtitleModes: wantSubtitles ? subtitleModes : [] });
             saveAs(result.blob, result.fileName);
-            message.success(result.failed ? `已导出 ${items.length - result.failed} 个视频，${result.failed} 个失败（详见 manifest.json）` : `已导出 ${items.length} 个视频到本地下载目录${wantSubtitles ? "（字幕版和 SRT 结果见 manifest.json）" : ""}`);
+            message.success(
+                result.failed ? `已导出 ${items.length - result.failed} 个视频，${result.failed} 个失败（详见 manifest.json）` : `已导出 ${items.length} 个视频到本地下载目录${wantSubtitles ? `（${subtitleVersionLabel}和 SRT 结果见 manifest.json）` : ""}`,
+            );
         } catch (error) {
             message.error(error instanceof Error ? error.message : "批量下载视频失败");
         } finally {
@@ -108,12 +121,27 @@ export function DramaVideoDownloadModal({ open, projectId, onClose }: { open: bo
                         已选 {selected.length} / {allKeys.length} 个视频，打包为 ZIP 并按剧集分文件夹保存到本地下载目录
                     </span>
                 </div>
-                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-border bg-muted/30 px-3 py-2">
-                    <Checkbox checked={wantSubtitles} disabled={!selectedHasSubtitles} onChange={(event) => setIncludeSubtitles(event.target.checked)}>
+                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border border-border bg-muted/30 px-3 py-2" data-drama-video-download-subtitles>
+                    <Checkbox checked={wantSubtitles} disabled={!selectedSubtitleAvailability.any} onChange={(event) => setIncludeSubtitles(event.target.checked)}>
                         同时导出字幕版（保留原片）
                     </Checkbox>
+                    {wantSubtitles ? (
+                        <Select
+                            aria-label="字幕版本"
+                            className="min-w-[240px]"
+                            size="small"
+                            value={effectiveSubtitleChoice}
+                            data-drama-video-download-subtitle-mode
+                            onChange={(value: DramaSubtitleChoice) => setSubtitleChoice(value)}
+                            options={[
+                                { value: "bilingual", label: "双语字幕（英文主行 + 中文副行）" },
+                                { value: "english", label: "英文单独版（英文烧录视频 + 英文 SRT）", disabled: !selectedSubtitleAvailability.english },
+                                { value: "both", label: "双语 + 英文单独版（额外导出）", disabled: !selectedSubtitleAvailability.english },
+                            ]}
+                        />
+                    ) : null}
                     <span className="text-xs text-muted-foreground" data-drama-video-download-subtitles-note>
-                        {selectedHasSubtitles ? "字幕会按镜头重新编码，耗时更长；字幕版视频和 SRT 放在“字幕版”文件夹。" : "所选镜头没有可烧录的台词或旁白，将只下载原片。"}
+                        {selectedSubtitleAvailability.any ? "双语字幕英文在上、中文在下，共用同一句台词时间窗；英文单独版额外输出英文烧录视频和英文 SRT。字幕会按镜头重新编码，耗时更长，原片保留。" : "所选镜头没有可烧录的台词或旁白，将只下载原片。"}
                     </span>
                 </div>
                 {loading ? (

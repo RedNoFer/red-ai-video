@@ -20,8 +20,11 @@ describe("Drama batch video download", () => {
         expect(source).toContain("data-drama-video-download-group");
         expect(source).toContain("toggleMany(episodeKeys, event.target.checked)");
         expect(source).toContain("saveAs(result.blob, result.fileName)");
-        expect(source).toContain("exportDramaVideos(projectId, items, { includeSubtitles: wantSubtitles })");
+        expect(source).toContain("exportDramaVideos(projectId, items, { includeSubtitles: wantSubtitles, subtitleModes: wantSubtitles ? subtitleModes : [] })");
         expect(source).toContain("同时导出字幕版（保留原片）");
+        expect(source).toContain("双语字幕（英文主行 + 中文副行）");
+        expect(source).toContain("英文单独版（英文烧录视频 + 英文 SRT）");
+        expect(source).toContain("双语 + 英文单独版（额外导出）");
     });
 
     it("only exports videos that belong to the project", async () => {

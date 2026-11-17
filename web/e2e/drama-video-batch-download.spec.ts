@@ -32,7 +32,8 @@ test("批量下载视频按剧集分组展示，默认全选并把勾选视频�
     const candidateUrl = await uploadVideo("batch-download-candidate.mp4");
     const secondEpisodeUrl = await uploadVideo("batch-download-second-episode.mp4");
 
-    const shots = [shot(`${project.id}-shot-1`, "SH01", 1, "开场", currentUrl, "林雪：你终于来了。"), shot(`${project.id}-shot-2`, "SH02", 2, "对峙", candidateUrl)];
+    const subtitleScript = ["【SH01｜0–30秒｜开场】", "", '"You finally came."', "中译：你终于来了。", "", "【SH02｜30–60秒｜对峙】", "", "她把信封推过桌面。", '"你还是不肯说。"', "中译：你还是不肯说。"].join("\n");
+    const shots = [shot(`${project.id}-shot-1`, "SH01", 1, "开场", currentUrl), shot(`${project.id}-shot-2`, "SH02", 2, "对峙", candidateUrl)];
     const secondEpisode: DramaEpisode = {
         ...episode,
         id: `${project.id}-episode-two`,
@@ -44,7 +45,7 @@ test("批量下载视频按剧集分组展示，默认全选并把勾选视频�
         const saved = await saveDramaProjectFixture(request, project, {
             ...project,
             activeEpisodeId: episode.id,
-            episodes: [{ ...episode, reviewStatus: "visual_ready", shots }, secondEpisode],
+            episodes: [{ ...episode, script: subtitleScript, reviewStatus: "visual_ready", shots }, secondEpisode],
         });
         expect(saved.ok(), await saved.text()).toBe(true);
 
@@ -86,6 +87,35 @@ test("批量下载视频按剧集分组展示，默认全选并把勾选视频�
 
         await page.goto(`/drama/${project.id}`, { waitUntil: "networkidle" });
         await page.getByRole("button", { name: "切换到镜头生成" }).click();
+
+        const previewOption = (label: string) => page.locator(`.ant-select-dropdown:visible .ant-select-item-option[title="${label}"]`);
+        const englishPreview = page.getByRole("dialog", { name: "开场生成视频" });
+        await page.getByRole("button", { name: "查看视频：开场生成视频" }).click();
+        await expect(englishPreview).toBeVisible();
+        await expect(englishPreview.getByRole("checkbox", { name: "带字幕下载" })).toBeChecked();
+        await expect(englishPreview.locator(".ant-select-content")).toHaveText("双语字幕（英/中）");
+        await englishPreview.getByRole("combobox", { name: "字幕版本" }).click();
+        await expect(previewOption("英文字幕单独版")).not.toHaveClass(/ant-select-item-option-disabled/);
+        await previewOption("英文字幕单独版").click();
+        await expect(englishPreview.locator(".ant-select-content")).toHaveText("英文字幕单独版");
+        await expect(englishPreview.getByRole("button", { name: "下载英文字幕视频" })).toBeVisible();
+        await expectDialogWithinViewport(englishPreview);
+        await englishPreview.locator(".ant-modal-close").click();
+        await expect(englishPreview).toBeHidden();
+
+        const chinesePreview = page.getByRole("dialog", { name: "对峙生成视频" });
+        await page.getByRole("button", { name: "查看视频：对峙生成视频" }).click();
+        await expect(chinesePreview).toBeVisible();
+        await expect(chinesePreview.getByRole("checkbox", { name: "带字幕下载" })).toBeChecked();
+        await chinesePreview.getByRole("combobox", { name: "字幕版本" }).click();
+        await expect(previewOption("英文字幕单独版")).toHaveClass(/ant-select-item-option-disabled/);
+        await chinesePreview.getByRole("combobox", { name: "字幕版本" }).press("Escape");
+        await expect(previewOption("英文字幕单独版")).toBeHidden();
+        await expectNoHorizontalOverflow(page, "单镜字幕预览");
+        await expectDialogWithinViewport(chinesePreview);
+        await chinesePreview.locator(".ant-modal-close").click();
+        await expect(chinesePreview).toBeHidden();
+
         await page.getByRole("button", { name: "批量下载视频" }).click();
 
         const modal = page.getByRole("dialog", { name: "批量下载视频" });
@@ -97,16 +127,39 @@ test("批量下载视频按剧集分组展示，默认全选并把勾选视频�
         await expect(modal.getByRole("checkbox", { name: "选择对峙当前视频" })).toBeChecked();
         await expect(modal.getByRole("checkbox", { name: "同时导出字幕版（保留原片）" })).toBeEnabled();
         await expect(modal.getByRole("checkbox", { name: "同时导出字幕版（保留原片）" })).toBeChecked();
-        await expect(modal.locator("[data-drama-video-download-subtitles-note]")).toContainText("字幕会按镜头重新编码");
+        await expect(modal.locator("[data-drama-video-download-subtitles-note]")).toContainText("双语字幕英文在上、中文在下");
+        const subtitleRow = modal.locator("[data-drama-video-download-subtitles]");
+        const subtitleMode = subtitleRow.getByRole("combobox", { name: "字幕版本" });
+        const subtitleModeLabel = subtitleRow.locator("[data-drama-video-download-subtitle-mode] .ant-select-content");
+        const subtitleOption = (label: string) => page.locator(`.ant-select-dropdown:visible .ant-select-item-option[title="${label}"]`);
+        const chooseSubtitleMode = async (label: string) => {
+            await subtitleMode.click();
+            await subtitleOption(label).click();
+            await expect(subtitleModeLabel).toHaveText(label);
+        };
+        await expect(subtitleModeLabel).toHaveText("双语字幕（英文主行 + 中文副行）");
+        await chooseSubtitleMode("英文单独版（英文烧录视频 + 英文 SRT）");
+        await chooseSubtitleMode("双语 + 英文单独版（额外导出）");
+        await chooseSubtitleMode("双语字幕（英文主行 + 中文副行）");
 
         await modal.getByRole("checkbox", { name: "选择开场当前视频" }).uncheck();
         await modal.getByRole("checkbox", { name: "选择开场候选视频" }).uncheck();
+        await expect(modal.getByRole("checkbox", { name: "同时导出字幕版（保留原片）" })).toBeEnabled();
+        await subtitleMode.click();
+        await expect(subtitleOption("英文单独版（英文烧录视频 + 英文 SRT）")).toHaveClass(/ant-select-item-option-disabled/);
+        await expect(subtitleOption("双语 + 英文单独版（额外导出）")).toHaveClass(/ant-select-item-option-disabled/);
+        await page.keyboard.press("Escape");
+        await expect(subtitleOption("英文单独版（英文烧录视频 + 英文 SRT）")).toBeHidden();
+        await modal.getByRole("checkbox", { name: "选择对峙当前视频" }).uncheck();
         await expect(modal.getByRole("checkbox", { name: "同时导出字幕版（保留原片）" })).toBeDisabled();
         await expect(modal.locator("[data-drama-video-download-subtitles-note]")).toContainText("没有可烧录的台词或旁白");
         await modal.getByRole("checkbox", { name: "选择开场当前视频" }).check();
         await modal.getByRole("checkbox", { name: "选择开场候选视频" }).check();
+        await modal.getByRole("checkbox", { name: "选择对峙当前视频" }).check();
         await expect(modal.getByRole("checkbox", { name: "同时导出字幕版（保留原片）" })).toBeEnabled();
         await expect(modal.getByRole("checkbox", { name: "同时导出字幕版（保留原片）" })).toBeChecked();
+        await expect(modal.getByRole("combobox", { name: "字幕版本" })).toHaveCount(1);
+        await expect(subtitleModeLabel).toHaveText("双语字幕（英文主行 + 中文副行）");
         await modal.getByRole("checkbox", { name: "同时导出字幕版（保留原片）" }).uncheck();
 
         await modal.getByRole("checkbox", { name: "选择对峙当前视频" }).uncheck();

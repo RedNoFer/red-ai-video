@@ -1,4 +1,5 @@
 import type { CreativeReview } from "@/lib/creative-agent-contract";
+import type { DramaSubtitleExportMode } from "@/lib/drama-subtitle-plan";
 import type {
     CreateDramaProjectInput,
     DramaCostSummary,
@@ -630,11 +631,11 @@ export async function exportDramaJianyingDraft(projectId: string, input: { episo
     return { blob: await response.blob(), fileName: encodedName ? decodeURIComponent(encodedName) : "短剧剪映草稿.zip" };
 }
 
-export async function exportDramaVideos(projectId: string, items: Array<{ episodeId: string; shotId: string; videoId: string }>, options?: { includeSubtitles?: boolean }) {
+export async function exportDramaVideos(projectId: string, items: Array<{ episodeId: string; shotId: string; videoId: string }>, options?: { includeSubtitles?: boolean; subtitleModes?: DramaSubtitleExportMode[] }) {
     const response = await fetch(`/api/drama/projects/${encodeURIComponent(projectId)}/export-videos`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items, includeSubtitles: options?.includeSubtitles === true }),
+        body: JSON.stringify({ items, includeSubtitles: options?.includeSubtitles === true, subtitleModes: options?.subtitleModes || [] }),
     });
     if (!response.ok) {
         const payload = (await response.json().catch(() => ({}))) as { msg?: string };
@@ -650,7 +651,7 @@ export async function exportDramaVideos(projectId: string, items: Array<{ episod
     };
 }
 
-export async function exportDramaSubtitleVideo(projectId: string, input: { episodeId: string; shotId: string; videoId: string }) {
+export async function exportDramaSubtitleVideo(projectId: string, input: { episodeId: string; shotId: string; videoId: string; mode?: DramaSubtitleExportMode }) {
     const response = await fetch(`/api/drama/projects/${encodeURIComponent(projectId)}/subtitle-video`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

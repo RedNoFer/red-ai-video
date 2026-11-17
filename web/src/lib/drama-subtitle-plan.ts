@@ -1,15 +1,26 @@
 import type { DramaShot } from "@/lib/drama-project-contract";
 
+export const DRAMA_SUBTITLE_EXPORT_MODES = ["bilingual", "english"] as const;
+export type DramaSubtitleExportMode = (typeof DRAMA_SUBTITLE_EXPORT_MODES)[number];
+
 export type DramaSubtitleCue = {
     startMs: number;
     endMs: number;
     text: string;
+    secondaryText?: string;
 };
 
 export type DramaSubtitleSource = {
     text: string;
+    translation?: string;
+    hasEnglish: boolean;
     startMs?: number;
     endMs?: number;
+};
+
+export type DramaSubtitleAvailability = {
+    hasText: boolean;
+    hasEnglish: boolean;
 };
 
 export type DramaSubtitleLayout = {
@@ -24,47 +35,68 @@ export type DramaSubtitleLayout = {
     maxCharsPerCue: number;
 };
 
+type DramaSubtitleChunk = {
+    text: string;
+    secondaryText?: string;
+};
+
 const CHINESE_CHARS_PER_SECOND = 4.5;
 const MIN_CUE_MS = 350;
 const MAX_CUE_MS = 6_000;
 const CUE_GAP_MS = 160;
 
-export function dramaShotSubtitleSources(shot: DramaShot): DramaSubtitleSource[] {
-    const utterances = (shot.utterances || [])
-        .filter((utterance) => (utterance.type === "dialogue" || utterance.type === "voiceover") && (utterance.text || "").trim())
-        .sort((left, right) => left.order - right.order)
-        .map((utterance) => ({
-            text: normalizeSubtitleText(utterance.text),
-            startMs: secondsToMs(utterance.startSecond),
-            endMs: secondsToMs(utterance.endSecond),
-        }))
-        .filter((source) => source.text);
-    if (utterances.length) return utterances;
-
-    const subtitleLines = (shot.subtitle || "").split(/\r?\n/u).map(cleanScriptLine).filter(Boolean);
-    if (subtitleLines.length) return subtitleLines.map((text) => ({ text }));
-
-    const scriptLines = [shot.dialogue || "", shot.narration || ""]
-        .flatMap((value) => value.split(/\r?\n/u))
-        .map(cleanScriptLine)
-        .filter(Boolean);
-    return scriptLines.map((text) => ({ text }));
+/** 只读取镜头已保存的台词；镜头没有正文时，才从当前集剧本文本回退。 */
+export function dramaShotSubtitleSources(shot: DramaShot, script?: string): DramaSubtitleSource[] {
+    const shotSources = shotSubtitleSources(shot);
+    if (shotSources.length) {
+        if (shotSources.some((source) => source.hasEnglish)) return shotSources;
+        const scriptSources = dramaScriptShotSubtitleSources(script, shot.code);
+        const translations = new Map<string, DramaSubtitleSource>();
+        for (const source of scriptSources) {
+            if (source.hasEnglish && source.translation) translations.set(subtitleMatchKey(source.translation), source);
+        }
+        return shotSources.map((source) => {
+            const match = translations.get(subtitleMatchKey(source.text));
+            return match ? { ...source, text: match.text, translation: match.translation, hasEnglish: true } : source;
+        });
+    }
+    return dramaScriptShotSubtitleSources(script, shot.code);
 }
 
-export function dramaShotHasSubtitleText(shot: DramaShot) {
-    return dramaShotSubtitleSources(shot).length > 0;
+/** 按镜头编号读取剧本里的英中对照台词，供制作包没有写入镜头台词时使用。 */
+export function dramaScriptShotSubtitleSources(script: string | undefined, shotCode: string | undefined): DramaSubtitleSource[] {
+    const code = normalizeShotCode(shotCode);
+    if (!script || !code) return [];
+    const blocks = splitScriptBlocks(script);
+    const block = blocks.find((item) => normalizeShotCode(item.code) === code);
+    if (!block) return [];
+    return scriptDialogueSources(block.body);
 }
 
-export function planDramaShotSubtitles(shot: DramaShot, durationMs: number, width = 1080, height = 1920): DramaSubtitleCue[] {
+export function dramaShotSubtitleAvailability(shot: DramaShot, script?: string): DramaSubtitleAvailability {
+    const sources = dramaShotSubtitleSources(shot, script);
+    return { hasText: sources.length > 0, hasEnglish: sources.some((source) => source.hasEnglish) };
+}
+
+export function dramaShotHasSubtitleText(shot: DramaShot, script?: string) {
+    return dramaShotSubtitleAvailability(shot, script).hasText;
+}
+
+export function dramaShotHasEnglishSubtitleText(shot: DramaShot, script?: string) {
+    return dramaShotSubtitleAvailability(shot, script).hasEnglish;
+}
+
+export function planDramaShotSubtitles(shot: DramaShot, durationMs: number, width = 1080, height = 1920, options: { script?: string; mode?: DramaSubtitleExportMode } = {}): DramaSubtitleCue[] {
     const totalMs = Math.max(500, Math.round(Number.isFinite(durationMs) ? durationMs : 5_000));
     const layout = dramaSubtitleLayout(width, height);
-    const sources = dramaShotSubtitleSources(shot);
+    const mode = options.mode === "english" ? "english" : "bilingual";
+    const sources = dramaShotSubtitleSources(shot, options.script).filter((source) => mode !== "english" || source.hasEnglish);
     if (!sources.length) return [];
 
     const cues: DramaSubtitleCue[] = [];
     let cursor = Math.min(200, totalMs / 2);
     for (const source of sources) {
-        const chunks = splitSubtitleText(source.text, layout.maxCharsPerCue);
+        const chunks = sourceChunks(source, mode, layout);
         if (!chunks.length) continue;
         const hasWindow = source.startMs !== undefined && source.endMs !== undefined && source.endMs > source.startMs;
         const windowStart = hasWindow ? Math.max(0, Math.min(totalMs, source.startMs!)) : cursor;
@@ -76,7 +108,7 @@ export function planDramaShotSubtitles(shot: DramaShot, durationMs: number, widt
             const startMs = Math.max(cues.length ? cues[cues.length - 1].endMs + 40 : 0, Math.round(cue.startMs));
             const endMs = Math.max(startMs + 120, Math.min(totalMs, Math.round(cue.endMs)));
             if (endMs <= startMs || startMs >= totalMs) continue;
-            cues.push({ startMs, endMs, text: cue.text });
+            cues.push({ startMs, endMs, text: cue.text, ...(cue.secondaryText ? { secondaryText: cue.secondaryText } : {}) });
         }
         cursor = Math.max(cursor, cues.length ? cues[cues.length - 1].endMs + CUE_GAP_MS : cursor);
         if (cursor >= totalMs) break;
@@ -105,7 +137,7 @@ export function dramaSubtitleLayout(width: number, height: number): DramaSubtitl
 }
 
 export function buildDramaSrt(cues: DramaSubtitleCue[]) {
-    return cues.map((cue, index) => `${index + 1}\n${srtTime(cue.startMs)} --> ${srtTime(cue.endMs)}\n${cue.text}`).join("\n\n");
+    return cues.map((cue, index) => `${index + 1}\n${srtTime(cue.startMs)} --> ${srtTime(cue.endMs)}\n${[cue.text, cue.secondaryText].filter(Boolean).join("\n")}`).join("\n\n");
 }
 
 export function buildDramaAss(cues: DramaSubtitleCue[], width: number, height: number) {
@@ -126,19 +158,106 @@ export function buildDramaAss(cues: DramaSubtitleCue[], width: number, height: n
         "[Events]",
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
     ].join("\n");
-    const events = cues.map((cue) => `Dialogue: 0,${assTime(cue.startMs)},${assTime(cue.endMs)},Default,,0,0,0,,{\\an2}${assText(cue.text, layout.maxCharsPerLine)}`);
+    const events = cues.map((cue) => {
+        const primary = assText(cue.text, layout.maxCharsPerLine);
+        const secondary = cue.secondaryText ? assText(cue.secondaryText, layout.maxCharsPerLine) : "";
+        return `Dialogue: 0,${assTime(cue.startMs)},${assTime(cue.endMs)},Default,,0,0,0,,{\\an2}${primary}${secondary ? `\\N${secondary}` : ""}`;
+    });
     return `${header}\n${events.join("\n")}${events.length ? "\n" : ""}`;
+}
+
+function shotSubtitleSources(shot: DramaShot): DramaSubtitleSource[] {
+    const utterances = (shot.utterances || [])
+        .filter((utterance) => (utterance.type === "dialogue" || utterance.type === "voiceover") && (utterance.text || "").trim())
+        .sort((left, right) => left.order - right.order)
+        .flatMap((utterance) => textSources(utterance.text, secondsToMs(utterance.startSecond), secondsToMs(utterance.endSecond)));
+    if (utterances.length) return utterances;
+
+    const subtitleLines = textSources(shot.subtitle || "");
+    if (subtitleLines.length) return subtitleLines;
+
+    return [shot.dialogue || "", shot.narration || ""].flatMap((value) => textSources(value));
+}
+
+function textSources(value: string, startMs?: number, endMs?: number): DramaSubtitleSource[] {
+    const lines = value.split(/\r?\n/u).map(cleanScriptLine).filter(Boolean);
+    if (!lines.length) return [];
+    const translationIndex = lines.findIndex(isTranslationLine);
+    if (translationIndex >= 0) {
+        const text = lines.slice(0, translationIndex).join(" ").trim();
+        const translation = lines.slice(translationIndex).map(stripTranslationPrefix).filter(Boolean).join(" ").trim();
+        if (!text) return translation ? [{ text: translation, hasEnglish: looksLikeEnglish(translation), startMs, endMs }] : [];
+        return [{ text, translation: translation || undefined, hasEnglish: looksLikeEnglish(text), startMs, endMs }];
+    }
+    return lines.map((text) => ({ text, hasEnglish: looksLikeEnglish(text), startMs, endMs }));
+}
+
+function splitScriptBlocks(script: string) {
+    const blocks: Array<{ code: string; body: string }> = [];
+    const header = /^【([^】]+)】/gmu;
+    const matches = Array.from(script.matchAll(header));
+    for (const [index, match] of matches.entries()) {
+        const code = (match[1] || "").split(/[｜|]/u)[0]?.trim() || "";
+        const start = (match.index || 0) + match[0].length;
+        const end = matches[index + 1]?.index ?? script.length;
+        blocks.push({ code, body: script.slice(start, end) });
+    }
+    return blocks;
+}
+
+function scriptDialogueSources(body: string) {
+    const sources: DramaSubtitleSource[] = [];
+    let last: DramaSubtitleSource | undefined;
+    for (const raw of body.split(/\r?\n/u)) {
+        const line = raw.trim();
+        if (!line) continue;
+        if (isTranslationLine(line)) {
+            if (last && !last.translation) last.translation = stripTranslationPrefix(line);
+            continue;
+        }
+        const text = scriptDialogueText(line);
+        if (!text) continue;
+        const source: DramaSubtitleSource = { text, hasEnglish: looksLikeEnglish(text) };
+        sources.push(source);
+        last = source;
+    }
+    return sources;
+}
+
+function scriptDialogueText(line: string) {
+    if (/^[*]{2,}/u.test(line) || /^(?:人物|场景|地点)[：:]/u.test(line) || /^△/u.test(line) || /^【/u.test(line)) return "";
+    if ((line.startsWith('"') && line.endsWith('"')) || (line.startsWith("“") && line.endsWith("”"))) {
+        return normalizeSubtitleText(line.slice(1, -1));
+    }
+    if (line.startsWith("*") && line.endsWith("*") && !line.startsWith("**") && !line.endsWith("**")) {
+        return normalizeSubtitleText(line.slice(1, -1));
+    }
+    return "";
+}
+
+function sourceChunks(source: DramaSubtitleSource, mode: DramaSubtitleExportMode, layout: DramaSubtitleLayout): DramaSubtitleChunk[] {
+    if (mode === "english" || !source.hasEnglish) {
+        return splitSubtitleText(source.text, layout.maxCharsPerCue).map((text) => ({ text }));
+    }
+    const translation = (source.translation || "").trim();
+    if (!translation) return splitSubtitleText(source.text, layout.maxCharsPerCue).map((text) => ({ text }));
+    const primaryChunks = splitSubtitleText(source.text, layout.maxCharsPerCue);
+    const secondaryChunks = splitSubtitleText(translation, layout.maxCharsPerCue);
+    if (primaryChunks.length === secondaryChunks.length) {
+        return primaryChunks.map((text, index) => ({ text, secondaryText: secondaryChunks[index] }));
+    }
+    return [{ text: source.text, secondaryText: translation }];
 }
 
 function splitSubtitleText(text: string, maxChars: number) {
     const atoms = normalizeSubtitleText(text)
-        .split(/(?<=[。！？!?；;，,、：:])/u)
+        .split(/(?<=[。！？!?；;，,、：:.…])/u)
         .map((value) => value.trim())
         .filter(Boolean);
     const chunks: string[] = [];
     let current = "";
     for (const atom of atoms) {
-        const next = `${current}${atom}`;
+        const next = joinSubtitleAtoms(current, atom);
         if (!current || textWeight(next) <= maxChars) {
             current = next;
             continue;
@@ -155,7 +274,32 @@ function splitSubtitleText(text: string, maxChars: number) {
     return chunks.filter(Boolean);
 }
 
+function joinSubtitleAtoms(current: string, atom: string) {
+    if (!current) return atom;
+    const left = current.slice(-1);
+    const right = atom.slice(0, 1);
+    const latin = /[A-Za-z]/u.test(current + atom);
+    return latin && /[A-Za-z0-9,.;:!?)]/u.test(left) && /[A-Za-z0-9(]/u.test(right) ? `${current} ${atom}` : `${current}${atom}`;
+}
+
 function hardSplit(text: string, maxChars: number) {
+    if (/\s/u.test(text) && /[A-Za-z]/u.test(text)) {
+        const words = text.split(/\s+/u).filter(Boolean);
+        const pieces: string[] = [];
+        let current = "";
+        for (const word of words) {
+            const next = current ? `${current} ${word}` : word;
+            if (textWeight(next) <= maxChars) {
+                current = next;
+                continue;
+            }
+            if (current) pieces.push(current);
+            if (textWeight(word) > maxChars) pieces.push(...hardSplit(word, maxChars));
+            else current = word;
+        }
+        if (current) pieces.push(current);
+        return pieces;
+    }
     const pieces: string[] = [];
     let current = "";
     for (const char of Array.from(text)) {
@@ -171,30 +315,30 @@ function hardSplit(text: string, maxChars: number) {
     return pieces;
 }
 
-function allocateWindow(chunks: string[], startMs: number, endMs: number): DramaSubtitleCue[] {
-    const weights = chunks.map(textWeight);
+function allocateWindow(chunks: DramaSubtitleChunk[], startMs: number, endMs: number): DramaSubtitleCue[] {
+    const weights = chunks.map((chunk) => textWeight(chunk.text) + textWeight(chunk.secondaryText || ""));
     const total = weights.reduce((sum, value) => sum + value, 0) || chunks.length;
     const available = endMs - startMs;
     let cursor = startMs;
-    return chunks.map((text, index) => {
+    return chunks.map((chunk, index) => {
         const share = available * ((weights[index] || 1) / total);
         const next = index === chunks.length - 1 ? endMs : Math.max(cursor + 120, Math.min(endMs, cursor + Math.round(share)));
-        const cue = { startMs: cursor, endMs: Math.max(cursor + 120, next), text };
+        const cue = { startMs: cursor, endMs: Math.max(cursor + 120, next), text: chunk.text, ...(chunk.secondaryText ? { secondaryText: chunk.secondaryText } : {}) };
         cursor = cue.endMs + 20;
         return cue;
     });
 }
 
-function estimateWindow(chunks: string[], startMs: number, endMs: number): DramaSubtitleCue[] {
+function estimateWindow(chunks: DramaSubtitleChunk[], startMs: number, endMs: number): DramaSubtitleCue[] {
     const available = Math.max(0, endMs - startMs - 200);
-    const rawDurations = chunks.map((text) => clamp(Math.round((textWeight(text) / CHINESE_CHARS_PER_SECOND) * 1000), MIN_CUE_MS, MAX_CUE_MS));
+    const rawDurations = chunks.map((chunk) => clamp(Math.round(((textWeight(chunk.text) + textWeight(chunk.secondaryText || "")) / CHINESE_CHARS_PER_SECOND) * 1000), MIN_CUE_MS, MAX_CUE_MS));
     const gaps = Math.max(0, chunks.length - 1) * CUE_GAP_MS;
     const total = rawDurations.reduce((sum, value) => sum + value, 0) + gaps;
     const scale = total > available && total > 0 ? Math.max(0.25, available / total) : 1;
     let cursor = startMs;
-    return chunks.map((text, index) => {
+    return chunks.map((chunk, index) => {
         const duration = Math.max(160, Math.round(rawDurations[index] * scale));
-        const cue = { startMs: cursor, endMs: cursor + duration, text };
+        const cue = { startMs: cursor, endMs: cursor + duration, text: chunk.text, ...(chunk.secondaryText ? { secondaryText: chunk.secondaryText } : {}) };
         cursor = cue.endMs + CUE_GAP_MS;
         return cue;
     });
@@ -206,6 +350,29 @@ function normalizeSubtitleText(value: string) {
 
 function cleanScriptLine(value: string) {
     return normalizeSubtitleText(value);
+}
+
+function isTranslationLine(value: string) {
+    return /^(?:中译|翻译|英译)[：:]/u.test(value);
+}
+
+function stripTranslationPrefix(value: string) {
+    return normalizeSubtitleText(value.replace(/^(?:中译|翻译|英译)[：:]\s*/u, ""));
+}
+
+function looksLikeEnglish(value: string) {
+    return /[A-Za-z]/u.test(value);
+}
+
+function subtitleMatchKey(value: string) {
+    return normalizeSubtitleText(value)
+        .replace(/^[\p{L}\p{N}_·\s]{1,20}[：:]\s*/u, "")
+        .replace(/["'“”‘’\s]/gu, "")
+        .toLowerCase();
+}
+
+function normalizeShotCode(value: string | undefined) {
+    return (value || "").trim().toUpperCase().replace(/\s+/gu, "");
 }
 
 function textWeight(value: string) {
