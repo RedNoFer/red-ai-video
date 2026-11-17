@@ -320,7 +320,7 @@ export function previewDramaCompactPackage(source: string, project: DramaProject
             if (previous && (previous.videoUrl || previous.storyboardImageUrl || previous.storyboardEndImageUrl || previous.storyboardFrames?.some((frame) => frame.mediaUrl))) oldResultsToReview++;
             for (const entry of shot.referenceEntries || []) {
                 if (!shot.characters.includes(entry.code) && shot.scene !== entry.code && !(shot.extraScenes || []).some((extra) => extra.code === entry.code) && !shot.props.includes(entry.code) && !shot.clues.includes(entry.code)) {
-                    warnings.push(`${episode.code}/${shot.code} 的【参考】${entry.code} 未在本片段绑定行声明，导入后不会引用该资产的基准图。`);
+                    warnings.push(`${episode.code}/${shot.code} 的【参考】${entry.code} 未在本片段绑定行声明，已跳过该参考职责，不会引用该资产的基准图。`);
                 }
             }
         }
@@ -401,8 +401,11 @@ export function applyDramaCompactPackage(project: DramaProject, source: string, 
             const propIds = shot.props.map((code) => ids.get(code)!);
             const clueIds = shot.clues.map((code) => ids.get(code)!);
             const sceneId = shot.scene ? ids.get(shot.scene) : undefined;
+            const declaredCodes = new Set([shot.scene, ...(shot.extraScenes || []).map((extra) => extra.code), ...shot.characters, ...shot.props, ...shot.clues].filter((code): code is string => Boolean(code)));
             const intents = new Map<string, DramaShotReferenceIntent>();
             for (const entry of shot.referenceEntries || []) {
+                // 绑定行决定本片段实际引用的资产；未声明的【参考】只保留原文提示，不进入引用清单，避免把本段未出镜的角色/道具基准图交给模型。
+                if (!declaredCodes.has(entry.code)) continue;
                 const assetId = ids.get(entry.code);
                 if (!assetId || intents.has(assetId)) continue;
                 intents.set(assetId, { assetId, code: entry.code, role: roleForKind[kindByCode.get(entry.code) || "props"], guidance: entry.guidance });

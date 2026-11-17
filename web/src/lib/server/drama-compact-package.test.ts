@@ -418,15 +418,13 @@ describe("compact drama package", () => {
         expect(() => applyDramaCompactPackage(project(), mismatched, "book.md")).toThrow(/资产类型不符/);
     });
 
-    it("warns when a reference fact names an asset the shot binding lines never declare", () => {
+    it("warns and skips a reference fact that names an asset the shot binding lines never declare", () => {
         const withProp = source
             .replace("### 场景 LOC_01｜旧书房", "### 道具 PROP_01｜旧铁盒\n#### 图片提示词\n~~~text\n旧铁盒基础态提示词\n~~~\n### 场景 LOC_01｜旧书房")
             .replace("原样保留的画面与对白。", "【参考】PROP_01=旧铁盒基础态（无银纹）。\n原样保留的画面与对白。");
         const preview = previewDramaCompactPackage(withProp, project());
-        expect(preview.warnings.some((warning) => warning.includes("PROP_01") && warning.includes("未在本片段绑定行声明"))).toBe(true);
+        expect(preview.warnings.some((warning) => warning.includes("PROP_01") && warning.includes("未在本片段绑定行声明") && warning.includes("已跳过"))).toBe(true);
         const after = applyDramaCompactPackage(project(), withProp, "book.md");
-        const intents = after.episodes[0].shots[0].referenceIntents || [];
-        expect(intents).toHaveLength(1);
-        expect(intents[0]).toMatchObject({ code: "PROP_01", role: "prop_anchor", guidance: "旧铁盒基础态（无银纹）" });
+        expect(after.episodes[0].shots[0].referenceIntents).toBeUndefined();
     });
 });

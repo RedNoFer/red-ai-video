@@ -58,6 +58,20 @@ describe("drama submission reference prefix", () => {
         expect(compile(prompt)).toBe(prompt);
     });
 
+    it("remaps imported @图片N aliases by kind and name even when labels carry extra notes", () => {
+        const project = { id: "project", characters: [], scenes: [], props: [], clues: [] } as unknown as DramaProject;
+        const shot = { utterances: [] } as unknown as DramaShot;
+        const bindings = [
+            { alias: "@图片1", role: "scene_anchor", purpose: "场景「客厅」", url: "/scene.png" },
+            { alias: "@图片2", role: "character_anchor", purpose: "角色「Chloe」", url: "/chloe.png" },
+            { alias: "@图片3", role: "character_anchor", purpose: "角色「Serena」", url: "/serena.png" },
+        ] as DramaVideoReferenceBinding[];
+        const imported = ["参考图片：", "@图片1：场景 · 客厅全景", "@图片2：角色「Serena」（西装版）", "@图片3：角色「Chloe」", "", "Serena 穿 @图片2 的西装走进客厅，@图片1 的沙发在左侧；Chloe 留在 @图片3 的门口。"].join("\n");
+        const prompt = compileDramaVideoSubmissionPrompt(imported, project, shot, bindings, []);
+        expect(prompt).toContain("Serena 穿 @图片3 的西装走进客厅，@图片1 的沙发在左侧；Chloe 留在 @图片2 的门口。");
+        expect(prompt).toContain("【参考图片】：\n@图片1：场景「客厅」\n@图片2：角色「Chloe」\n@图片3：角色「Serena」");
+    });
+
     it("keeps alias purposes to asset kind and name and strips legacy 【参考】 blocks", () => {
         const project = {
             id: "project",

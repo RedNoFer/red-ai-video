@@ -1,6 +1,6 @@
 import { approvedAssetReference, approvedScenePanoramaReference, hasApprovedAssetReference, hasApprovedScenePanoramaReference } from "@/lib/drama-asset-baseline";
 import { appendDramaCharacterVoiceBindings, dramaShotCharacterVoiceReferences, stripDramaCharacterVoiceBindings } from "@/lib/drama-character-voice-reference";
-import { appendDramaImageReferenceBindings, stripDramaReferenceBindingSections } from "@/lib/drama-prompt-compiler";
+import { appendDramaImageReferenceBindings, normalizeDramaReferenceLabel, stripDramaReferenceBindingSections } from "@/lib/drama-prompt-compiler";
 import { stripDramaPackageReferenceSections } from "@/lib/drama-package-reference-intents";
 import { continuityStartEvidence } from "@/lib/drama-continuity-policy";
 import { selectedDramaShotFrameIds, selectedDramaShotReferenceAssetIds } from "@/lib/drama-video-reference-plan";
@@ -8,15 +8,35 @@ import type { DramaEpisode, DramaProject, DramaShot, DramaVideoReferenceBinding,
 
 import { stripDramaVideoPromptPrefix, withDramaVideoPromptPrefix } from "@/lib/drama-video-prompt-prefix";
 
+/** 外部导入的参考清单可能写“角色「名字」（服装版）”“角色 · 名字”或带补充描述，比对时统一成类型加名字。 */
+function dramaReferenceAliasKey(label: string) {
+    const normalized = normalizeDramaReferenceLabel(label);
+    const bracketed = /^(角色|场景|道具|线索|来源素材)[·\s]*[「『]([^」』]+)[」』]/u.exec(normalized);
+    const value = bracketed ? `${bracketed[1]}${bracketed[2]}` : normalized;
+    return value.replace(/[\s·：:｜|「」『』“”"'（）()【】[\]]/gu, "");
+}
+
+/** 旧清单标签可能比当前资产名多一段补充描述（如“客厅全景”），按最长类型加名字前缀回落到唯一资产。 */
+function resolveReferenceAlias(key: string, aliases: Array<[string, string]>) {
+    const exact = aliases.find(([candidate]) => candidate === key)?.[1];
+    if (exact) return exact;
+    let best: [string, string] | undefined;
+    for (const entry of aliases) {
+        if (key.length <= entry[0].length || !key.startsWith(entry[0])) continue;
+        if (!best || entry[0].length > best[0].length) best = entry;
+    }
+    return best?.[1];
+}
+
 /** Build the complete editable prompt before confirmation; dispatch sends it unchanged. */
 export function compileDramaVideoSubmissionPrompt(prompt: string, project: DramaProject, shot: DramaShot, bindings: DramaVideoReferenceBinding[], assetIds: string[]) {
     prompt = stripDramaVideoPromptPrefix(prompt, project);
     const previousAliases = new Map(Array.from(prompt.matchAll(/^(@图片\d+)[：:]([^\n]+)$/gmu), (match) => [match[1], match[2].trim()]));
-    const aliases = new Map(bindings.map((binding) => [binding.purpose, binding.alias]));
+    const aliases = bindings.map((binding) => [dramaReferenceAliasKey(binding.purpose), binding.alias] as [string, string]);
     const body = stripDramaPackageReferenceSections(stripDramaReferenceBindingSections(stripDramaCharacterVoiceBindings(prompt)))
         .replace(/@图片\d+/gu, (alias) => {
             const purpose = previousAliases.get(alias);
-            return purpose ? aliases.get(purpose) || purpose : alias;
+            return purpose ? resolveReferenceAlias(dramaReferenceAliasKey(purpose), aliases) || purpose : alias;
         })
         .trim();
     const withReferences = appendDramaImageReferenceBindings(
