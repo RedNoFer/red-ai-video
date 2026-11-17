@@ -121,8 +121,11 @@ function streamFile(path: string, workdir: string) {
             }
         },
         async cancel() {
-            await iterator.return?.();
-            await cleanup();
+            try {
+                await iterator.return?.();
+            } finally {
+                await cleanup();
+            }
         },
     });
 }

@@ -98,6 +98,14 @@ describe("Drama generation production workspace", () => {
         expect(source).toContain("更改引用时同步更新图片编号和音色");
     });
 
+    it("wires every shot video result to subtitle export with its stable result id", async () => {
+        const source = await readFile(resolve(process.cwd(), "src/app/(user)/drama/[id]/drama-generation-panel.tsx"), "utf8");
+
+        expect(source).toContain("subtitleExport:");
+        expect(source).toContain("const videoId = video.taskId || video.id;");
+        expect(source).toContain("hasText: dramaShotHasSubtitleText(shot)");
+    });
+
     it("cancels video tasks through their server action instead of a writable status field", async () => {
         const source = await readFile(resolve(process.cwd(), "src/app/(user)/drama/[id]/drama-generation-panel.tsx"), "utf8");
 

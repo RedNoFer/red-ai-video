@@ -1308,7 +1308,7 @@ function ShotTaskRow({
                                         title: current ? `${shot.title}生成视频` : `${shot.title}候补视频${candidateVideos.filter((item, position) => item.url !== shot.videoUrl && position < index).length + 1}`,
                                         downloadUrl: (current ? shot.generationTaskId : video.taskId) ? `/api/video-tasks/${encodeURIComponent((current ? shot.generationTaskId : video.taskId)!)}/download` : undefined,
                                         subtitleExport: (() => {
-                                            const videoId = current ? shot.generationTaskId : video.taskId || video.id;
+                                            const videoId = video.taskId || video.id;
                                             return videoId ? { projectId: project.id, episodeId: episode.id, shotId: shot.id, videoId, hasText: dramaShotHasSubtitleText(shot) } : undefined;
                                         })(),
                                         onRepair:
