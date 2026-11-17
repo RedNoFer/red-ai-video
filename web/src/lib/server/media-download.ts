@@ -3,7 +3,7 @@ import { open } from "node:fs/promises";
 import { fetchInternalApi } from "@/lib/server/internal-origin";
 import { fetchSafeOutbound } from "@/lib/server/safe-outbound-fetch";
 
-export async function downloadMediaToFile(url: string, path: string, input: { origin: string; cookie?: string; internalHeaders?: HeadersInit; maxBytes: number; timeoutMs?: number }) {
+export async function downloadMediaToFile(url: string, path: string, input: { origin: string; cookie?: string; internalHeaders?: HeadersInit; maxBytes: number; timeoutMs?: number; onProgress?: (bytes: number) => void }) {
     const source = url.trim();
     if (!source) throw new Error("媒体地址为空");
     const internal = source.startsWith("/");
@@ -29,6 +29,7 @@ export async function downloadMediaToFile(url: string, path: string, input: { or
                 throw new Error("媒体文件超过大小限制");
             }
             await file.write(value);
+            input.onProgress?.(bytes);
         }
     } finally {
         await file.close();

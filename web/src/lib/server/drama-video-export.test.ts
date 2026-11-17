@@ -16,7 +16,7 @@ vi.mock("@/lib/server/media-download", () => ({
 }));
 vi.mock("@/lib/server/drama-subtitle-render", () => ({ probeDramaVideo: mocks.probeDramaVideo, renderDramaSubtitleVideo: mocks.renderDramaSubtitleVideo }));
 
-import { collectDramaVideoExportPayload, DramaVideoExportError, exportDramaVideos, resolveDramaVideoExportEntries } from "./drama-video-export";
+import { collectDramaVideoExportPayload, DramaVideoExportError, exportDramaVideos, resolveDramaVideoExportEntries, type DramaVideoExportProgress } from "./drama-video-export";
 
 describe("Drama video export", () => {
     it("lists the current video and the regenerated candidates of every shot", async () => {
@@ -35,6 +35,27 @@ describe("Drama video export", () => {
 
         expect(payload.episodes[0].shots.map((item) => item.shotId)).toEqual(["shot-one"]);
         expect(payload.episodes[1].shots).toHaveLength(0);
+    });
+
+    it("reports download, subtitle and packaging progress", async () => {
+        const current = project();
+        current.episodes[0].shots[0].dialogue = "第一句台词。第二句台词。";
+        const payload = await collectDramaVideoExportPayload("user-one", current);
+        const entries = resolveDramaVideoExportEntries(
+            payload,
+            payload.episodes.flatMap((episode) => episode.shots.flatMap((shot) => shot.videos.map((video) => ({ episodeId: episode.episodeId, shotId: shot.shotId, videoId: video.id })))),
+        );
+        mocks.probeDramaVideo.mockResolvedValue({ width: 1080, height: 1920, durationMs: 5_000, audioCodec: "aac" });
+        mocks.renderDramaSubtitleVideo.mockImplementation(async ({ outputPath }: { outputPath: string }) => {
+            await writeFile(outputPath, new Uint8Array([9, 9, 9]));
+        });
+        const events: DramaVideoExportProgress[] = [];
+        const result = await exportDramaVideos({ project: current, entries, origin: "http://127.0.0.1:3000", includeSubtitles: true, onProgress: (progress) => events.push(progress) });
+        await new Response(result.stream).arrayBuffer();
+
+        expect(events.some((event) => event.phase === "downloading" && event.done === entries.length && event.bytes > 0)).toBe(true);
+        expect(events.some((event) => event.phase === "subtitles" && event.subtitlesTotal === entries.length)).toBe(true);
+        expect(events.some((event) => event.phase === "packaging")).toBe(true);
     });
 
     it("packs the selected videos into a zip grouped by episode", async () => {
@@ -121,6 +142,57 @@ describe("Drama video export", () => {
         expect(manifest.subtitles.generated.map((item) => item.mode)).toEqual(["bilingual", "english", "bilingual", "english"]);
         expect(new TextDecoder().decode(files["01_第 1 集/字幕版/SH01_开场.srt"])).toContain("By morning, everything would be cheaper.\n到了明早，一切都将便宜一千万倍。");
         expect(new TextDecoder().decode(files["01_第 1 集/字幕版/英文/SH01_开场.en.srt"])).not.toContain("到了明早");
+    });
+
+    it("packs only burned subtitle videos and SRT files when originals are excluded", async () => {
+        const current = project();
+        current.episodes[0].shots[0].dialogue = "第一句台词。第二句台词。";
+        const payload = await collectDramaVideoExportPayload("user-one", current);
+        const entries = resolveDramaVideoExportEntries(
+            payload,
+            payload.episodes.flatMap((episode) => episode.shots.flatMap((shot) => shot.videos.map((video) => ({ episodeId: episode.episodeId, shotId: shot.shotId, videoId: video.id })))),
+        );
+        mocks.probeDramaVideo.mockResolvedValue({ width: 1080, height: 1920, durationMs: 5_000, audioCodec: "aac" });
+        mocks.renderDramaSubtitleVideo.mockImplementation(async ({ outputPath }: { outputPath: string }) => {
+            await writeFile(outputPath, new Uint8Array([9, 9, 9]));
+        });
+
+        const result = await exportDramaVideos({ project: current, entries, origin: "http://127.0.0.1:3000", subtitleModes: ["bilingual"], includeOriginals: false });
+        const files = unzipSync(new Uint8Array(await new Response(result.stream).arrayBuffer()));
+        const names = Object.keys(files);
+
+        expect(result.fileName).toBe("测试短剧_字幕版.zip");
+        expect(result.exported).toBe(0);
+        expect(names.every((name) => name === "manifest.json" || name.includes("字幕版"))).toBe(true);
+        expect(names).toEqual(
+            expect.arrayContaining([
+                expect.stringMatching(/^01_第 1 集\/字幕版\/SH01_开场_字幕\.mp4$/),
+                expect.stringMatching(/^01_第 1 集\/字幕版\/SH01_开场\.srt$/),
+                expect.stringMatching(/^01_第 1 集\/字幕版\/SH01_开场_2_字幕\.mp4$/),
+                expect.stringMatching(/^01_第 1 集\/字幕版\/SH01_开场_2\.srt$/),
+                "manifest.json",
+            ]),
+        );
+        const manifest = JSON.parse(new TextDecoder().decode(files["manifest.json"])) as { originalsIncluded: boolean; exported: unknown[]; subtitles: { generated: unknown[] } };
+        expect(manifest.originalsIncluded).toBe(false);
+        expect(manifest.exported).toHaveLength(0);
+        expect(manifest.subtitles.generated).toHaveLength(2);
+    });
+
+    it("rejects subtitle-only exports without modes or selected subtitle text", async () => {
+        const current = project();
+        const payload = await collectDramaVideoExportPayload("user-one", current);
+        const entries = resolveDramaVideoExportEntries(
+            payload,
+            payload.episodes.flatMap((episode) => episode.shots.flatMap((shot) => shot.videos.map((video) => ({ episodeId: episode.episodeId, shotId: shot.shotId, videoId: video.id })))),
+        );
+
+        await expect(exportDramaVideos({ project: current, entries, origin: "http://127.0.0.1:3000", includeOriginals: false })).rejects.toEqual(
+            expect.objectContaining<Partial<DramaVideoExportError>>({ status: 422, message: "仅字幕版需要至少选择一种字幕版本" }),
+        );
+        await expect(exportDramaVideos({ project: current, entries, origin: "http://127.0.0.1:3000", includeOriginals: false, subtitleModes: ["bilingual"] })).rejects.toEqual(
+            expect.objectContaining<Partial<DramaVideoExportError>>({ status: 422, message: "所选镜头没有可导出的字幕内容" }),
+        );
     });
 
     it("records skipped subtitles without running media probes when the shot has no text", async () => {

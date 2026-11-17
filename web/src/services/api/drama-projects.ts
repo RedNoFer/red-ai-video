@@ -631,24 +631,39 @@ export async function exportDramaJianyingDraft(projectId: string, input: { episo
     return { blob: await response.blob(), fileName: encodedName ? decodeURIComponent(encodedName) : "短剧剪映草稿.zip" };
 }
 
-export async function exportDramaVideos(projectId: string, items: Array<{ episodeId: string; shotId: string; videoId: string }>, options?: { includeSubtitles?: boolean; subtitleModes?: DramaSubtitleExportMode[] }) {
-    const response = await fetch(`/api/drama/projects/${encodeURIComponent(projectId)}/export-videos`, {
+export type DramaVideoExportJob = {
+    id: string;
+    projectId: string;
+    projectTitle: string;
+    status: "pending" | "running" | "success" | "error";
+    phase: "queued" | "downloading" | "subtitles" | "packaging" | "done" | "failed";
+    message: string;
+    progress: { done: number; total: number; bytes: number; subtitlesDone: number; subtitlesTotal: number };
+    fileName: string;
+    archiveBytes: number;
+    exported: number;
+    failed: number;
+    error?: string;
+    createdAt: number;
+    updatedAt: number;
+    expiresAt: number;
+    downloadUrl?: string;
+};
+
+export function createDramaVideoExport(projectId: string, items: Array<{ episodeId: string; shotId: string; videoId: string }>, options?: { includeSubtitles?: boolean; subtitleModes?: DramaSubtitleExportMode[]; includeOriginals?: boolean }) {
+    return request<DramaVideoExportJob>(`/api/drama/projects/${encodeURIComponent(projectId)}/export-videos`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items, includeSubtitles: options?.includeSubtitles === true, subtitleModes: options?.subtitleModes || [] }),
+        body: JSON.stringify({ items, includeSubtitles: options?.includeSubtitles === true, subtitleModes: options?.subtitleModes || [], includeOriginals: options?.includeOriginals !== false }),
     });
-    if (!response.ok) {
-        const payload = (await response.json().catch(() => ({}))) as { msg?: string };
-        throw new Error(payload.msg || "批量下载视频失败");
-    }
-    const disposition = response.headers.get("content-disposition") || "";
-    const encodedName = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
-    return {
-        blob: await response.blob(),
-        fileName: encodedName ? decodeURIComponent(encodedName) : "短剧视频.zip",
-        exported: Number(response.headers.get("x-drama-video-export-exported") || "0"),
-        failed: Number(response.headers.get("x-drama-video-export-failed") || "0"),
-    };
+}
+
+export function getDramaVideoExport(projectId: string, jobId: string) {
+    return request<DramaVideoExportJob>(`/api/drama/projects/${encodeURIComponent(projectId)}/export-videos/${encodeURIComponent(jobId)}`);
+}
+
+export function listDramaVideoExports(projectId: string) {
+    return request<DramaVideoExportJob[]>(`/api/drama/projects/${encodeURIComponent(projectId)}/export-videos`);
 }
 
 export async function exportDramaSubtitleVideo(projectId: string, input: { episodeId: string; shotId: string; videoId: string; mode?: DramaSubtitleExportMode }) {

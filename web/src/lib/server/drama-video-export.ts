@@ -24,10 +24,20 @@ export type DramaVideoExportResult = {
     failed: number;
 };
 
+export type DramaVideoExportProgress = {
+    phase: "downloading" | "subtitles" | "packaging";
+    done: number;
+    total: number;
+    bytes: number;
+    subtitlesDone: number;
+    subtitlesTotal: number;
+};
+
 type DramaVideoExportManifest = {
     projectId: string;
     projectTitle: string;
     exportedAt: string;
+    originalsIncluded: boolean;
     exported: Array<{ episode: string; shot: string; shotCode: string; file: string; videoId: string; url: string }>;
     failed: Array<{ episode: string; shot: string; reason: string }>;
     subtitles: {
@@ -92,20 +102,41 @@ export async function collectDramaVideoExportPayload(userId: string, project: Dr
 }
 
 /** 把选中的镜头视频打包成按剧集分目录的 ZIP，直接落到用户本地下载目录。 */
-export async function exportDramaVideos(input: { project: DramaProject; entries: DramaVideoExportEntry[]; origin: string; cookie?: string; includeSubtitles?: boolean; subtitleModes?: DramaSubtitleExportMode[] }): Promise<DramaVideoExportResult> {
+export async function exportDramaVideos(input: {
+    project: DramaProject;
+    entries: DramaVideoExportEntry[];
+    origin: string;
+    cookie?: string;
+    includeSubtitles?: boolean;
+    subtitleModes?: DramaSubtitleExportMode[];
+    includeOriginals?: boolean;
+    onProgress?: (progress: DramaVideoExportProgress) => void;
+}): Promise<DramaVideoExportResult> {
     if (!input.entries.length) throw new DramaVideoExportError("请先选择要下载的视频", 422);
+    const includeOriginals = input.includeOriginals !== false;
     const subtitleModes: DramaSubtitleExportMode[] = input.subtitleModes?.length ? [...input.subtitleModes] : input.includeSubtitles === true ? ["bilingual"] : [];
+    if (!includeOriginals) assertDramaSubtitlesExportable(input.project, input.entries, subtitleModes);
     const root = await mkdtemp(join(tmpdir(), "vozeb-drama-videos-"));
     const downloads: Array<{ entry: DramaVideoExportEntry; path: string; zipPath: string; variant: number; mimeType: string }> = [];
     const failures: Array<{ episode: string; shot: string; reason: string }> = [];
     const variants = new Map<string, number>();
     let totalBytes = 0;
+    let settledBytes = 0;
+    const total = input.entries.length;
+    input.onProgress?.({ phase: "downloading", done: 0, total, bytes: 0, subtitlesDone: 0, subtitlesTotal: 0 });
     try {
         for (const [index, entry] of input.entries.entries()) {
             const path = join(root, `${index}.media`);
             try {
-                const downloaded = await downloadMediaToFile(entry.url, path, { origin: input.origin, cookie: input.cookie, maxBytes: MAX_FILE_BYTES });
+                const downloaded = await downloadMediaToFile(entry.url, path, {
+                    origin: input.origin,
+                    cookie: input.cookie,
+                    maxBytes: MAX_FILE_BYTES,
+                    onProgress: (bytes) => input.onProgress?.({ phase: "downloading", done: index, total, bytes: settledBytes + bytes, subtitlesDone: 0, subtitlesTotal: 0 }),
+                });
                 totalBytes += downloaded.bytes;
+                settledBytes += downloaded.bytes;
+                input.onProgress?.({ phase: "downloading", done: index + 1, total, bytes: settledBytes, subtitlesDone: 0, subtitlesTotal: 0 });
                 if (totalBytes > MAX_TOTAL_BYTES) throw new DramaVideoExportError("批量下载素材超过 800MB，请减少勾选数量后重试", 413);
                 const shotKey = `${entry.episodeId}::${entry.shotId}`;
                 const variant = (variants.get(shotKey) || 0) + 1;
@@ -121,12 +152,18 @@ export async function exportDramaVideos(input: { project: DramaProject; entries:
             projectId: input.project.id,
             projectTitle: input.project.title,
             exportedAt: new Date().toISOString(),
-            exported: downloads.map(({ entry, zipPath }) => ({ episode: entry.episodeTitle, shot: entry.shotTitle, shotCode: entry.shotCode, file: zipPath, videoId: entry.videoId, url: entry.url })),
+            originalsIncluded: includeOriginals,
+            exported: includeOriginals ? downloads.map(({ entry, zipPath }) => ({ episode: entry.episodeTitle, shot: entry.shotTitle, shotCode: entry.shotCode, file: zipPath, videoId: entry.videoId, url: entry.url })) : [],
             failed: failures,
             subtitles: { requested: subtitleModes.length > 0, modes: subtitleModes, generated: [], skipped: [], failed: [] },
         };
-        const stream = createZipStream(root, downloads, manifest, input.project, subtitleModes);
-        return { stream, fileName: `${safeName(input.project.title) || "短剧项目"}_视频.zip`, exported: downloads.length, failed: failures.length };
+        const stream = createZipStream(root, downloads, manifest, input.project, subtitleModes, includeOriginals, settledBytes, input.onProgress);
+        return {
+            stream,
+            fileName: `${safeName(input.project.title) || "短剧项目"}_${includeOriginals ? "视频" : "字幕版"}.zip`,
+            exported: includeOriginals ? downloads.length : 0,
+            failed: failures.length,
+        };
     } catch (error) {
         await rm(root, { recursive: true, force: true });
         throw error;
@@ -173,8 +210,32 @@ async function queryEpisodeVideoTasks(userId: string, projectId: string, episode
     return tasks;
 }
 
-function createZipStream(root: string, downloads: Array<{ entry: DramaVideoExportEntry; path: string; zipPath: string; variant: number }>, manifest: DramaVideoExportManifest, project: DramaProject, subtitleModes: DramaSubtitleExportMode[]) {
+function assertDramaSubtitlesExportable(project: DramaProject, entries: DramaVideoExportEntry[], subtitleModes: DramaSubtitleExportMode[]) {
+    if (!subtitleModes.length) throw new DramaVideoExportError("仅字幕版需要至少选择一种字幕版本", 422);
+    const selected = new Set(entries.map((entry) => `${entry.episodeId}::${entry.shotId}`));
+    const available = project.episodes.some((episode) =>
+        episode.shots.some((shot) => {
+            if (!selected.has(`${episode.id}::${shot.id}`)) return false;
+            const subtitle = dramaShotSubtitleAvailability(shot, episode.script);
+            return subtitleModes.some((mode) => (mode === "english" ? subtitle.hasEnglish : subtitle.hasText));
+        }),
+    );
+    if (!available) throw new DramaVideoExportError("所选镜头没有可导出的字幕内容", 422);
+}
+
+function createZipStream(
+    root: string,
+    downloads: Array<{ entry: DramaVideoExportEntry; path: string; zipPath: string; variant: number }>,
+    manifest: DramaVideoExportManifest,
+    project: DramaProject,
+    subtitleModes: DramaSubtitleExportMode[],
+    includeOriginals: boolean,
+    receivedBytes: number,
+    onProgress?: (progress: DramaVideoExportProgress) => void,
+) {
     let closed = false;
+    const subtitlesTotal = downloads.length * subtitleModes.length;
+    let subtitlesDone = 0;
     return new ReadableStream<Uint8Array>({
         cancel() {
             closed = true;
@@ -203,9 +264,11 @@ function createZipStream(root: string, downloads: Array<{ entry: DramaVideoExpor
                     }
                     for (const [index, item] of downloads.entries()) {
                         if (closed) break;
-                        const original = new ZipPassThrough(item.zipPath);
-                        zip.add(original);
-                        original.push(new Uint8Array(await readFile(item.path)), true);
+                        if (includeOriginals) {
+                            const original = new ZipPassThrough(item.zipPath);
+                            zip.add(original);
+                            original.push(new Uint8Array(await readFile(item.path)), true);
+                        }
                         if (!subtitleModes.length) continue;
 
                         const record = shots.get(`${item.entry.episodeId}::${item.entry.shotId}`);
@@ -221,6 +284,8 @@ function createZipStream(root: string, downloads: Array<{ entry: DramaVideoExpor
                         }
                         let probe: Awaited<ReturnType<typeof probeDramaVideo>> | undefined;
                         for (const mode of subtitleModes) {
+                            onProgress?.({ phase: "subtitles", done: index, total: downloads.length, bytes: receivedBytes, subtitlesDone, subtitlesTotal });
+                            subtitlesDone += 1;
                             if (mode === "english" && !availability.hasEnglish) {
                                 manifest.subtitles.skipped.push({ episode: item.entry.episodeTitle, shot: item.entry.shotTitle, shotCode: item.entry.shotCode, videoId: item.entry.videoId, mode, reason: "本镜头没有英文字幕" });
                                 continue;
@@ -266,6 +331,7 @@ function createZipStream(root: string, downloads: Array<{ entry: DramaVideoExpor
                         }
                     }
                     if (closed) return;
+                    onProgress?.({ phase: "packaging", done: downloads.length, total: downloads.length, bytes: receivedBytes, subtitlesDone, subtitlesTotal });
                     const manifestEntry = new ZipPassThrough("manifest.json");
                     zip.add(manifestEntry);
                     manifestEntry.push(new TextEncoder().encode(JSON.stringify(manifest, null, 2)), true);

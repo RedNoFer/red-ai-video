@@ -16,12 +16,17 @@ describe("Drama batch video download", () => {
         const source = await readFile(resolve(process.cwd(), "src/app/(user)/drama/[id]/drama-video-download-modal.tsx"), "utf8");
 
         expect(source).toContain("listDramaProjectVideos(projectId)");
+        expect(source).toContain("listDramaVideoExports(projectId)");
         expect(source).toContain("setSelected(dramaVideoExportKeys(data))");
         expect(source).toContain("data-drama-video-download-group");
         expect(source).toContain("toggleMany(episodeKeys, event.target.checked)");
-        expect(source).toContain("saveAs(result.blob, result.fileName)");
-        expect(source).toContain("exportDramaVideos(projectId, items, { includeSubtitles: wantSubtitles, subtitleModes: wantSubtitles ? subtitleModes : [] })");
+        expect(source).toContain("createDramaVideoExport(projectId, items");
+        expect(source).toContain("getDramaVideoExport(projectId, jobId)");
+        expect(source).toContain("data-drama-video-export-progress");
+        expect(source).toContain("triggerNativeDownload");
+        expect(source).toContain("includeSubtitles: wantSubtitles, includeOriginals, subtitleModes: wantSubtitles ? subtitleModes : []");
         expect(source).toContain("同时导出字幕版（保留原片）");
+        expect(source).toContain("仅字幕版（不含原片）");
         expect(source).toContain("双语字幕（英文主行 + 中文副行）");
         expect(source).toContain("英文单独版（英文烧录视频 + 英文 SRT）");
         expect(source).toContain("双语 + 英文单独版（额外导出）");
@@ -33,5 +38,8 @@ describe("Drama batch video download", () => {
         expect(source).toContain("resolveDramaVideoExportEntries(payload, items)");
         expect(source).toContain("getDramaProjectForUser(user.id");
         expect(source).not.toContain("items[0].url");
+        expect(source).toContain("createDramaVideoExportJob");
+        expect(source).toContain("after(() => runDramaVideoExportJob");
+        expect(source).not.toContain('"Content-Type": "application/zip"');
     });
 });
