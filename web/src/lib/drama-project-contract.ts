@@ -683,6 +683,8 @@ export type DramaShot = {
     framePlan?: DramaShotFramePlan;
     frameEvidence?: DramaFrameEvidence[];
     referenceIntents?: DramaShotReferenceIntent[];
+    /** Package-authored local alias (`@图片N`) → project asset id; submission renumbers by asset id. */
+    referenceAliasBindings?: Array<{ alias: string; assetId: string }>;
     fieldOrigins?: Record<string, DramaFieldOrigin>;
     sourceAssetIds?: string[];
     continuityStatus?: "ready" | "stale" | "blocked" | "needs_review" | "passed";

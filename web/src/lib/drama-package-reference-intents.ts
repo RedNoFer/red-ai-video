@@ -65,6 +65,23 @@ export function extractDramaPackageReferenceEntries(text: string): DramaPackageR
     return entries;
 }
 
+/** Parse `@图片N=CODE` alias legends out of 【参考】 blocks used by segment-binding packages. */
+export function extractDramaPackageAliasLegend(text: string): Array<{ alias: string; code: string }> {
+    const { sections } = scanDramaPackageReferenceSections(text);
+    const legend = new Map<number, string>();
+    for (const section of sections) {
+        const body = section.replace(/^【参考】[：:]?/u, "");
+        for (const segment of body.split(/[；;\n]/u)) {
+            const match = /^\s*@图片(\d+)\s*[=＝]\s*([A-Za-z][A-Za-z0-9_-]*)/u.exec(segment);
+            if (!match) continue;
+            const index = Number(match[1]);
+            if (!Number.isSafeInteger(index) || index < 1 || legend.has(index)) continue;
+            legend.set(index, match[2]);
+        }
+    }
+    return [...legend.entries()].sort((left, right) => left[0] - right[0]).map(([index, code]) => ({ alias: `@图片${index}`, code }));
+}
+
 /** Remove 【参考】 blocks from the public prompt; a no-match input is returned unchanged. */
 export function stripDramaPackageReferenceSections(text: string) {
     const { sections, rest } = scanDramaPackageReferenceSections(text);

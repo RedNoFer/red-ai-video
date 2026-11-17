@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { nanoid } from "nanoid";
 
 import type { DramaEpisode, DramaNamedAsset, DramaProject, DramaReferenceManifestRole, DramaShot, DramaShotReferenceIntent } from "@/lib/drama-project-contract";
-import { extractDramaPackageReferenceEntries, replaceDramaPackageCodeTokens, stripDramaPackageReferenceSections, type DramaPackageReferenceEntry } from "@/lib/drama-package-reference-intents";
+import { extractDramaPackageAliasLegend, extractDramaPackageReferenceEntries, replaceDramaPackageCodeTokens, stripDramaPackageReferenceSections, type DramaPackageReferenceEntry } from "@/lib/drama-package-reference-intents";
 
 type AssetKind = "characters" | "scenes" | "props" | "clues";
 type CompactAsset = { kind: AssetKind; code: string; name: string; prompt: string };
@@ -22,6 +22,11 @@ type CompactShot = {
     props: string[];
     clues: string[];
     referenceEntries?: DramaPackageReferenceEntry[];
+    aliasLegend?: Array<{ alias: string; code: string }>;
+    bindingOrder?: string[];
+    declaredAssetCount?: number;
+    femaleReferenceCount?: number;
+    forbiddenCodes?: string[];
 };
 type CompactEpisode = { code: string; title: string; script: string; shots: CompactShot[] };
 type CompactPackage = { assets: CompactAsset[]; episodes: CompactEpisode[]; warnings: string[] };
@@ -180,6 +185,24 @@ export function parseDramaCompactPackage(source: string): CompactPackage {
             index = end;
             continue;
         }
+        const segmentMeta = /^(?:>\s*)?(绑定顺序|本段资产|女性参考|禁用)[：:]\s*(.*)$/u.exec(line);
+        if (shot && segmentMeta) {
+            const value = segmentMeta[2].trim();
+            const codes = [...value.matchAll(/[A-Za-z][A-Za-z0-9_-]*/gu)].map((match) => match[0]);
+            if (segmentMeta[1] === "绑定顺序") shot.bindingOrder = codes;
+            if (segmentMeta[1] === "禁用") shot.forbiddenCodes = /^无/u.test(value) ? [] : codes;
+            if (segmentMeta[1] === "本段资产") {
+                const numbers = value.match(/\d+/gu);
+                if (numbers?.length) shot.declaredAssetCount = Number(numbers[numbers.length - 1]);
+            }
+            if (segmentMeta[1] === "女性参考") {
+                const number = /\d+/u.exec(value);
+                if (number) shot.femaleReferenceCount = Number(number[0]);
+            }
+            continue;
+        }
+        // 生成器附加的说明性引用行（如“> 绑定契约”）不参与结构解析。
+        if (line.startsWith(">")) continue;
         const binding = /^(角色|场景|道具|线索)：(.*)$/u.exec(line);
         if (shot && binding) {
             if (binding[1] === "场景") {
@@ -234,6 +257,14 @@ export function parseDramaCompactPackage(source: string): CompactPackage {
             part.props = part.props.map((code) => canonicalize("props", code));
             part.clues = part.clues.map((code) => canonicalize("clues", code));
             for (const extra of part.extraScenes || []) extra.code = canonicalize("scenes", extra.code);
+            const canonicalIfKnown = (code: string) => {
+                const prefix = /^([A-Za-z]+)_/u.exec(code)?.[1]?.toUpperCase();
+                const kind = prefix && referencePrefixKinds[prefix];
+                return (kind && assetCodeIndex.get(`${kind}:${code.toLowerCase()}`)) || code;
+            };
+            if (part.bindingOrder) part.bindingOrder = part.bindingOrder.map(canonicalIfKnown);
+            if (part.forbiddenCodes) part.forbiddenCodes = part.forbiddenCodes.map(canonicalIfKnown);
+            if (part.aliasLegend) part.aliasLegend = part.aliasLegend.map((entry) => ({ ...entry, code: canonicalIfKnown(entry.code) }));
         }
     }
     processDramaPackageReferenceEntries(result);
@@ -250,6 +281,8 @@ function processDramaPackageReferenceEntries(result: CompactPackage) {
             for (const field of ["description", "videoPrompt"] as const) {
                 const text = shot[field];
                 if (!text?.trim()) continue;
+                const legend = extractDramaPackageAliasLegend(text);
+                if (legend.length) shot.aliasLegend = [...new Map([...(shot.aliasLegend || []), ...legend].map((item) => [item.alias, item])).values()];
                 entries.push(...extractDramaPackageReferenceEntries(text));
                 const stripped = stripDramaPackageReferenceSections(text);
                 shot[field] = replaceDramaPackageCodeTokens(stripped, (code) => resolveAsset(code)?.name);
@@ -322,6 +355,35 @@ export function previewDramaCompactPackage(source: string, project: DramaProject
                 if (!shot.characters.includes(entry.code) && shot.scene !== entry.code && !(shot.extraScenes || []).some((extra) => extra.code === entry.code) && !shot.props.includes(entry.code) && !shot.clues.includes(entry.code)) {
                     warnings.push(`${episode.code}/${shot.code} 的【参考】${entry.code} 未在本片段绑定行声明，已跳过该参考职责，不会引用该资产的基准图。`);
                 }
+            }
+            const declared = [shot.scene, ...(shot.extraScenes || []).map((scene) => scene.code), ...shot.characters, ...shot.props, ...shot.clues].filter((code): code is string => Boolean(code));
+            if (shot.declaredAssetCount !== undefined && shot.declaredAssetCount !== declared.length) {
+                warnings.push(`${episode.code}/${shot.code} 标注本段资产 ${shot.declaredAssetCount} 个，实际绑定行声明 ${declared.length} 个；导入会以绑定行为准。`);
+            }
+            if (shot.femaleReferenceCount !== undefined && shot.femaleReferenceCount > shot.characters.length) {
+                warnings.push(`${episode.code}/${shot.code} 标注女性参考 ${shot.femaleReferenceCount} 个，但只绑定了 ${shot.characters.length} 个角色；请核对绑定行。`);
+            }
+            if (shot.bindingOrder?.length && (shot.bindingOrder.length !== declared.length || shot.bindingOrder.some((code, index) => code !== declared[index]))) {
+                warnings.push(`${episode.code}/${shot.code} 的绑定顺序（${shot.bindingOrder.join(" > ")}）与绑定行（${declared.join(" > ")}）不一致；导入后按绑定行顺序生成 @图片N。`);
+            }
+            if (shot.forbiddenCodes?.length) {
+                const forbidden = shot.forbiddenCodes.filter((code) => declared.includes(code));
+                if (forbidden.length) warnings.push(`${episode.code}/${shot.code} 的禁用清单包含已绑定资产 ${forbidden.join("、")}；导入仍会引用这些资产，请核对绑定行。`);
+            }
+            const legend = shot.aliasLegend;
+            if (legend?.length) {
+                const bound = new Set(declared);
+                const legendCodes = new Set(legend.map((entry) => entry.code));
+                const unbound = legend.filter((entry) => !bound.has(entry.code));
+                if (unbound.length) warnings.push(`${episode.code}/${shot.code} 的${unbound.map((entry) => `${entry.alias}=${entry.code}`).join("、")} 指向未在绑定行声明的资产，导入后不会引用，正文编号也不会重映射。`);
+                const unlisted = declared.filter((code) => !legendCodes.has(code));
+                if (unlisted.length) warnings.push(`${episode.code}/${shot.code} 的绑定行资产 ${unlisted.join("、")} 未出现在【参考】别名清单，正文若引用 @图片N 可能无法对应。`);
+                const used = [...new Set([...shot.videoPrompt.matchAll(/@图片\d+/gu)].map((match) => match[0]))];
+                const unresolved = used.filter((alias) => !legend.some((entry) => entry.alias === alias));
+                if (unresolved.length) warnings.push(`${episode.code}/${shot.code} 正文使用了 ${unresolved.join("、")}，但【参考】别名清单未定义；请补齐清单或改用资产姓名。`);
+            }
+            if (/[A-Za-z\u4e00-\u9fa5]图\d+/u.test(shot.videoPrompt)) {
+                warnings.push(`${episode.code}/${shot.code} 正文含纯文本「图N」，平台不会把它当作参考图编号；请改成 @图片N 或直接写资产姓名。`);
             }
         }
     }
@@ -410,6 +472,13 @@ export function applyDramaCompactPackage(project: DramaProject, source: string, 
                 if (!assetId || intents.has(assetId)) continue;
                 intents.set(assetId, { assetId, code: entry.code, role: roleForKind[kindByCode.get(entry.code) || "props"], guidance: entry.guidance });
             }
+            // 本段编号只在段内有效：保存 @图片N → 资产 ID，提交时按平台实际引用顺序重排，禁止把段内编号当成项目级全量顺序。
+            const aliasSources = shot.aliasLegend?.length ? shot.aliasLegend : (shot.bindingOrder || []).map((code, index) => ({ alias: `@图片${index + 1}`, code }));
+            const aliasBindings = aliasSources
+                .filter((entry) => declaredCodes.has(entry.code))
+                .map((entry) => ({ alias: entry.alias, assetId: ids.get(entry.code) }))
+                .filter((entry): entry is { alias: string; assetId: string } => Boolean(entry.assetId))
+                .filter((entry, entryIndex, all) => all.findIndex((candidate) => candidate.alias === entry.alias) === entryIndex);
             const hasOldMedia = Boolean(previous?.videoUrl || previous?.storyboardImageUrl || previous?.storyboardEndImageUrl || previous?.storyboardFrames?.some((frame) => frame.mediaUrl));
             const text = Object.fromEntries(COMPACT_SHOT_TEXT_FIELDS.map((key) => [key, resolveCompactTextField(key, shot[key], previous)])) as Record<CompactShotTextField, { value: string; origin: "manual" | "package" | "ai" | undefined }>;
             const fieldOrigins: NonNullable<DramaShot["fieldOrigins"]> = {
@@ -453,6 +522,7 @@ export function applyDramaCompactPackage(project: DramaProject, source: string, 
                 exitState: undefined,
                 framePlan: undefined,
                 ...(intents.size ? { referenceIntents: [...intents.values()] } : {}),
+                referenceAliasBindings: aliasBindings.length ? aliasBindings : undefined,
                 storySceneId: undefined,
                 sourceAssetIds: [],
                 videoReferenceIds: undefined,

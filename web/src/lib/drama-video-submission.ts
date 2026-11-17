@@ -33,8 +33,14 @@ export function compileDramaVideoSubmissionPrompt(prompt: string, project: Drama
     prompt = stripDramaVideoPromptPrefix(prompt, project);
     const previousAliases = new Map(Array.from(prompt.matchAll(/^(@图片\d+)[：:]([^\n]+)$/gmu), (match) => [match[1], match[2].trim()]));
     const aliases = bindings.map((binding) => [dramaReferenceAliasKey(binding.purpose), binding.alias] as [string, string]);
+    const aliasAssetIds = new Map((shot.referenceAliasBindings || []).map((item) => [item.alias, item.assetId]));
+    const aliasByAssetId = new Map(bindings.filter((binding) => binding.sourceId).map((binding) => [binding.sourceId as string, binding.alias]));
+    // 已编译提示词自带参考清单，正文编号已经按当前引用顺序排好；再次编译只按职责重排，不能把已重排的编号再套回段内旧映射。
+    const alreadyCompiled = /(?:^|\n)\s*(?:【参考图片】|参考图片)[：:]/u.test(prompt);
     const body = stripDramaPackageReferenceSections(stripDramaReferenceBindingSections(stripDramaCharacterVoiceBindings(prompt)))
         .replace(/@图片\d+/gu, (alias) => {
+            const assetId = alreadyCompiled ? undefined : aliasAssetIds.get(alias);
+            if (assetId) return aliasByAssetId.get(assetId) || "";
             const purpose = previousAliases.get(alias);
             return purpose ? resolveReferenceAlias(dramaReferenceAliasKey(purpose), aliases) || purpose : alias;
         })

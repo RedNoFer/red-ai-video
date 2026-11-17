@@ -1,8 +1,19 @@
 import { describe, expect, it } from "vitest";
 
-import { bindDramaPackageReferenceEntries, extractDramaPackageReferenceEntries, replaceDramaPackageCodeTokens, stripDramaPackageReferenceSections } from "./drama-package-reference-intents";
+import { bindDramaPackageReferenceEntries, extractDramaPackageAliasLegend, extractDramaPackageReferenceEntries, replaceDramaPackageCodeTokens, stripDramaPackageReferenceSections } from "./drama-package-reference-intents";
 
 describe("drama package reference intents", () => {
+    it("extracts segment-local @图片N alias legends and leaves code-fact entries untouched", () => {
+        const legend = "【参考】@图片1=LOC_03;@图片2=CHAR_01;@图片3=PROP_04。";
+        expect(extractDramaPackageAliasLegend(legend)).toEqual([
+            { alias: "@图片1", code: "LOC_03" },
+            { alias: "@图片2", code: "CHAR_01" },
+            { alias: "@图片3", code: "PROP_04" },
+        ]);
+        expect(extractDramaPackageReferenceEntries(legend)).toEqual([]);
+        expect(extractDramaPackageAliasLegend("【参考】CHAR_01=阿泽主外观。")).toEqual([]);
+    });
+
     it("extracts code facts and drops the trailing note", () => {
         const text = "【参考】CHAR_01=阿泽主外观与服装锁定；CHAR_02=苏晚主外观与细框眼镜锁定；PROP_01=泛黄手绘古图。参考仅提供外观与空间基准职责，不含上传图片编号。";
         expect(extractDramaPackageReferenceEntries(text)).toEqual([

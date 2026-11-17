@@ -72,6 +72,51 @@ describe("drama submission reference prefix", () => {
         expect(prompt).toContain("【参考图片】：\n@图片1：场景「客厅」\n@图片2：角色「Chloe」\n@图片3：角色「Serena」");
     });
 
+    it("renumbers package-local @图片N aliases by asset id when the selection changes", () => {
+        const project = { id: "project", characters: [], scenes: [], props: [], clues: [] } as unknown as DramaProject;
+        const shot = {
+            utterances: [],
+            referenceAliasBindings: [
+                { alias: "@图片1", assetId: "scene" },
+                { alias: "@图片2", assetId: "serena" },
+                { alias: "@图片3", assetId: "coin" },
+            ],
+        } as unknown as DramaShot;
+        const bindings = [
+            { alias: "@图片1", role: "scene_anchor", purpose: "场景「客厅」", url: "/scene.png", sourceId: "scene" },
+            { alias: "@图片2", role: "prop_anchor", purpose: "道具「金币」", url: "/coin.png", sourceId: "coin" },
+        ] as DramaVideoReferenceBinding[];
+        const prompt = compileDramaVideoSubmissionPrompt("客厅@图片1，Serena 拿起金币@图片3，把金币留在桌角。", project, shot, bindings, []);
+        expect(prompt).toContain("客厅@图片1，Serena 拿起金币@图片2，把金币留在桌角。");
+        expect(prompt).not.toContain("@图片3");
+        expect(prompt).toContain("【参考图片】：\n@图片1：场景「客厅」\n@图片2：道具「金币」");
+    });
+
+    it("does not reapply the segment mapping to an already compiled prompt with a reference list", () => {
+        const project = { id: "project", characters: [], scenes: [], props: [], clues: [] } as unknown as DramaProject;
+        const shot = {
+            utterances: [],
+            referenceAliasBindings: [
+                { alias: "@图片1", assetId: "scene" },
+                { alias: "@图片2", assetId: "coin" },
+            ],
+        } as unknown as DramaShot;
+        const first = [
+            { alias: "@图片1", role: "scene_anchor", purpose: "场景「客厅」", url: "/scene.png", sourceId: "scene" },
+            { alias: "@图片2", role: "character_anchor", purpose: "角色「Serena」", url: "/serena.png", sourceId: "serena" },
+            { alias: "@图片3", role: "prop_anchor", purpose: "道具「金币」", url: "/coin.png", sourceId: "coin" },
+        ] as DramaVideoReferenceBinding[];
+        const compiled = compileDramaVideoSubmissionPrompt("客厅@图片1，Serena 拿起金币@图片2。", project, shot, first, []);
+        expect(compiled).toContain("Serena 拿起金币@图片3");
+        const second = [
+            { alias: "@图片1", role: "scene_anchor", purpose: "场景「客厅」", url: "/scene.png", sourceId: "scene" },
+            { alias: "@图片2", role: "prop_anchor", purpose: "道具「金币」", url: "/coin.png", sourceId: "coin" },
+        ] as DramaVideoReferenceBinding[];
+        const recompiled = compileDramaVideoSubmissionPrompt(compiled, project, shot, second, []);
+        expect(recompiled).toContain("Serena 拿起金币@图片2");
+        expect(recompiled.match(/(?:^|\n)【?参考图片】?[：:]/gu)).toHaveLength(1);
+    });
+
     it("keeps alias purposes to asset kind and name and strips legacy 【参考】 blocks", () => {
         const project = {
             id: "project",

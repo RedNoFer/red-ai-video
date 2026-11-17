@@ -270,6 +270,116 @@ test("compact Markdown import keeps prompts, asset bindings and blank review dat
     }
 });
 
+test("compact import binds only the segment asset list and reuses its local @图片N numbering", async ({ page, request }) => {
+    const created = await request.post("/api/drama/projects", { data: { title: `E2E 分段绑定 ${randomUUID().slice(0, 8)}`, ratio: "9:16" } });
+    expect(created.ok(), await created.text()).toBe(true);
+    const project = ((await created.json()) as { data: { project: DramaProject } }).data.project;
+    const source = [
+        "# 精简制作包",
+        "> 绑定契约：本包每段以 `绑定顺序` 为准；编号只在本段有效。",
+        "## 固定资产",
+        "### 角色 CHAR_01｜林雪",
+        "#### 图片提示词",
+        "```text",
+        "林雪纯白底四视图基准提示词。",
+        "```",
+        "### 道具 PROP_01｜金币",
+        "#### 图片提示词",
+        "```text",
+        "金币纯白底单主体提示词。",
+        "```",
+        "### 道具 PROP_02｜黑卡",
+        "#### 图片提示词",
+        "```text",
+        "黑卡纯白底单主体提示词。",
+        "```",
+        "## 剧集 E01｜第一集",
+        "### 小说原文",
+        "```text",
+        "林雪把金币放在桌上，黑卡留在抽屉里。",
+        "```",
+        "### 片段 SH01｜30秒｜清点金币",
+        "角色：CHAR_01",
+        "道具：PROP_01",
+        "绑定顺序：CHAR_01 > PROP_01",
+        "本段资产：2/2",
+        "#### 视频提示词",
+        "```text",
+        "【参考】@图片1=CHAR_01;@图片2=PROP_01。",
+        "第1段（镜头01–08）",
+        "林雪@图片1把金币@图片2放在桌上，黑卡留在抽屉里。",
+        "```",
+    ].join("\n");
+    try {
+        const seeded = structuredClone(project);
+        seeded.characters = [
+            {
+                id: "approved-character",
+                code: "OLD_CHAR",
+                name: "林雪",
+                description: "已确认身份",
+                supplierPrompt: "已确认的角色提示词",
+                references: [{ id: "approved-character-reference", url: "/approved-character.png", source: "generated", label: "主基准", createdAt: project.createdAt, status: "approved" }],
+                primaryReferenceId: "approved-character-reference",
+            },
+        ];
+        seeded.props = [
+            {
+                id: "approved-coin",
+                code: "OLD_COIN",
+                name: "金币",
+                description: "金币基准",
+                references: [{ id: "approved-coin-reference", url: "/approved-coin.png", source: "generated", label: "主基准", createdAt: project.createdAt, status: "approved" }],
+                primaryReferenceId: "approved-coin-reference",
+            },
+            {
+                id: "unbound-card",
+                code: "OLD_CARD",
+                name: "黑卡",
+                description: "未绑定到本片段的资产",
+                references: [{ id: "unbound-card-reference", url: "/unbound-card.png", source: "generated", label: "主基准", createdAt: project.createdAt, status: "approved" }],
+                primaryReferenceId: "unbound-card-reference",
+            },
+        ];
+        expect((await saveDramaProjectFixture(request, project, seeded)).ok()).toBe(true);
+        await page.goto(`/drama/${project.id}`);
+        await page.getByRole("button", { name: "精简制作包导入" }).click();
+        const modal = page.getByRole("dialog", { name: "导入精简制作包" });
+        await modal.getByRole("textbox", { name: "粘贴精简制作包" }).fill(source);
+        await modal.getByRole("button", { name: "识别并预览" }).click();
+        const preview = page.getByRole("dialog", { name: "预览精简制作包" });
+        await preview.getByRole("button", { name: "确认导入精简制作包" }).click();
+        await expect(page.getByText("已导入 1 个片段")).toBeVisible();
+        await page.reload();
+        const response = await request.get(`/api/drama/projects/${project.id}`);
+        expect(response.ok(), await response.text()).toBe(true);
+        const saved = ((await response.json()) as { data: { project: DramaProject } }).data.project;
+        const shot = saved.episodes.find((item) => item.code === "E01")!.shots[0];
+        expect(shot.referenceAliasBindings).toEqual([
+            { alias: "@图片1", assetId: "approved-character" },
+            { alias: "@图片2", assetId: "approved-coin" },
+        ]);
+        expect(shot.videoPrompt).toContain("林雪@图片1把金币@图片2放在桌上");
+        await page.getByRole("button", { name: "切换到内容审核" }).click();
+        await expect(page.locator('[data-drama-stage="review"]')).toBeVisible();
+        await page.locator('[data-drama-stage="review"]').getByRole("button", { name: "进入镜头生成" }).click();
+        await expect(page.locator('[data-drama-stage="generate"]')).toBeVisible();
+        await page.locator("[data-drama-generation-panel]").getByRole("button", { name: "生成镜头", exact: true }).first().click();
+        const confirmDialog = page.getByRole("dialog", { name: "确认生成 1 个镜头" });
+        const confirmPrompt = await confirmDialog.getByRole("textbox", { name: "清点金币视频提示词" }).inputValue();
+        expect(confirmPrompt.match(/(?:^|\n)@图片\d+：/gu)).toHaveLength(2);
+        expect(confirmPrompt).toContain("@图片1：角色「林雪」");
+        expect(confirmPrompt).toContain("@图片2：道具「金币」");
+        expect(confirmPrompt).toContain("林雪@图片1把金币@图片2放在桌上");
+        expect(confirmPrompt).not.toContain("道具「黑卡」");
+        expect(confirmPrompt).not.toContain("@图片3");
+        await confirmDialog.getByRole("button", { name: "返回修改" }).click();
+        await expectNoHorizontalOverflow(page);
+    } finally {
+        expect((await request.delete(`/api/drama/projects/${project.id}`)).ok()).toBe(true);
+    }
+});
+
 test("compact import overwrites asset wording only when the preview option is enabled", async ({ page, request }, testInfo) => {
     const created = await request.post("/api/drama/projects", { data: { title: `E2E 精简覆盖 ${randomUUID().slice(0, 8)}`, ratio: "9:16" } });
     expect(created.ok(), await created.text()).toBe(true);

@@ -5,6 +5,7 @@ import type { DramaProject, DramaShot } from "@/lib/drama-project-contract";
 import { buildVideoReferenceBindings, compileDramaVideoSubmissionPrompt } from "@/lib/drama-video-submission";
 import { selectedDramaShotReferenceAssetIds } from "@/lib/drama-video-reference-plan";
 import { buildDramaProductionRun } from "./drama-production-run";
+import { normalizeProject } from "./drama-project-service";
 import { applyDramaCompactPackage, DramaCompactPackageError, parseDramaCompactPackage, previewDramaCompactPackage } from "./drama-compact-package";
 
 const source = [
@@ -455,5 +456,80 @@ describe("compact drama package", () => {
         expect(ids).toEqual(["scene-old", "character-old", "scene-gate"]);
         const bindings = buildVideoReferenceBindings(imported, shot, [], ids);
         expect(bindings.map((binding) => binding.purpose)).toEqual(["场景「旧书房」", "角色「林雪」", "场景「山门」"]);
+    });
+
+    it("imports segment-local binding metadata and keeps @图片N mapped to asset ids", () => {
+        const bindingSource = [
+            "# 精简制作包",
+            "> 绑定契约：本包每段以 `绑定顺序` 为准；编号只在本段有效。",
+            "## 固定资产",
+            "### 角色 CHAR_01｜林雪",
+            "#### 图片提示词",
+            "~~~text",
+            "林雪基准提示词",
+            "~~~",
+            "### 角色 CHAR_02｜陆沉",
+            "#### 图片提示词",
+            "~~~text",
+            "陆沉基准提示词",
+            "~~~",
+            "### 场景 LOC_01｜旧书房",
+            "#### 图片提示词",
+            "~~~text",
+            "旧书房全景提示词",
+            "~~~",
+            "### 道具 PROP_01｜金币",
+            "#### 图片提示词",
+            "~~~text",
+            "金币纯白底提示词",
+            "~~~",
+            "### 道具 PROP_02｜黑卡",
+            "#### 图片提示词",
+            "~~~text",
+            "黑卡纯白底提示词",
+            "~~~",
+            "## 剧集 E01｜零公里",
+            "### 小说原文",
+            "~~~text",
+            "林雪推门进屋。",
+            "~~~",
+            "### 片段 SH01｜30秒｜清点金币",
+            "角色：CHAR_01、CHAR_02",
+            "场景：LOC_01",
+            "道具：PROP_01、PROP_02",
+            "绑定顺序：LOC_01 > CHAR_01 > CHAR_02 > PROP_01 > PROP_02",
+            "本段资产：5/5",
+            "女性参考：1（林雪）",
+            "> 禁用：PROP_03。",
+            "#### 章节文案",
+            "~~~text",
+            "林雪清点金币，陆沉站在门边。",
+            "~~~",
+            "#### 视频提示词",
+            "~~~text",
+            "【参考】@图片1=LOC_01;@图片2=CHAR_01;@图片3=CHAR_02;@图片4=PROP_01;@图片5=PROP_02。",
+            "第1段（镜头01–08）",
+            "林雪@图片2拿起金币@图片4，陆沉@图片3站在门边，黑卡@图片5在桌上。",
+            "~~~",
+        ].join("\n");
+        const preview = previewDramaCompactPackage(bindingSource, project());
+        expect(preview.warnings.filter((warning) => /绑定顺序|别名|禁用|本段资产|图N|女性参考/u.test(warning))).toEqual([]);
+        const imported = applyDramaCompactPackage(project(), bindingSource, "book.md");
+        const shot = imported.episodes[0].shots[0];
+        const names = (shot.referenceAliasBindings || []).map((binding) => [...imported.characters, ...imported.scenes, ...imported.props].find((asset) => asset.id === binding.assetId)?.name);
+        expect(names).toEqual(["旧书房", "林雪", "陆沉", "金币", "黑卡"]);
+        expect(shot.videoPrompt).toContain("林雪@图片2拿起金币@图片4");
+        expect(shot.videoPrompt).not.toContain("【参考】");
+        expect(shot.videoPrompt).not.toMatch(/CHAR_0\d/u);
+        expect(normalizeProject(imported, project()).episodes[0].shots[0].referenceAliasBindings).toEqual(shot.referenceAliasBindings);
+
+        const mismatched = bindingSource.replace("本段资产：5/5", "本段资产：6/6").replace("> 禁用：PROP_03。", "> 禁用：PROP_01。").replace("金币@图片4", "金币图4");
+        const warnings = previewDramaCompactPackage(mismatched, project()).warnings;
+        expect(warnings.some((warning) => warning.includes("标注本段资产 6 个"))).toBe(true);
+        expect(warnings.some((warning) => warning.includes("禁用清单包含已绑定资产 PROP_01"))).toBe(true);
+        expect(warnings.some((warning) => warning.includes("纯文本「图N」"))).toBe(true);
+
+        const unboundAlias = bindingSource.replace("@图片5=PROP_02。", "@图片5=PROP_09。");
+        expect(previewDramaCompactPackage(unboundAlias, project()).warnings.some((warning) => warning.includes("@图片5=PROP_09") && warning.includes("未在绑定行声明"))).toBe(true);
     });
 });

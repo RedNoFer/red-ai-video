@@ -4276,6 +4276,7 @@ function normalizeShot(value: unknown, index: number): DramaShot {
         framePlan: normalizeShotFramePlan(input.framePlan, resolveDramaShotDuration(input.duration, 5)),
         frameEvidence: normalizeFrameEvidence(input.frameEvidence),
         ...(normalizeReferenceIntents(input.referenceIntents).length ? { referenceIntents: normalizeReferenceIntents(input.referenceIntents) } : {}),
+        referenceAliasBindings: normalizeReferenceAliasBindings(input.referenceAliasBindings),
         fieldOrigins: normalizeFieldOrigins(input.fieldOrigins),
         sourceAssetIds: ids(input.sourceAssetIds),
         continuityStatus: continuityStatus(input.continuityStatus),
@@ -4390,6 +4391,18 @@ function normalizeShotFramePlan(value: unknown, duration: number): DramaShotFram
 function formatOptionalPromptField(value: unknown, kind: "static" | "video") {
     const text = optionalText(value);
     return text ? formatPromptFieldLines(text, kind) : undefined;
+}
+
+function normalizeReferenceAliasBindings(value: unknown): DramaShot["referenceAliasBindings"] {
+    const bindings = new Map<string, { alias: string; assetId: string }>();
+    for (const item of array(value)) {
+        const input = object(item);
+        const alias = cleanText(input.alias);
+        const assetId = cleanText(input.assetId);
+        if (!/^@图片\d+$/u.test(alias) || !assetId || bindings.has(alias)) continue;
+        bindings.set(alias, { alias, assetId });
+    }
+    return bindings.size ? [...bindings.values()] : undefined;
 }
 
 function normalizeReferenceIntents(value: unknown): DramaShotReferenceIntent[] {
