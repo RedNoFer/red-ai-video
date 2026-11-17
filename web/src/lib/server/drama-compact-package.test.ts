@@ -434,7 +434,7 @@ describe("compact drama package", () => {
         multiScene.scenes = [
             {
                 ...multiScene.scenes[0],
-                references: [{ id: "scene-old-ref", url: "/old.png", source: "uploaded", label: "主基准", createdAt: multiScene.createdAt, status: "approved" }],
+                references: [{ id: "scene-old-ref", url: "/old.png", source: "upload", label: "主基准", createdAt: multiScene.createdAt, status: "approved" }],
                 primaryReferenceId: "scene-old-ref",
             },
             {
@@ -442,7 +442,7 @@ describe("compact drama package", () => {
                 code: "OLD_GATE",
                 name: "山门",
                 description: "山门全景",
-                references: [{ id: "scene-gate-ref", url: "/gate.png", source: "uploaded", label: "主基准", createdAt: multiScene.createdAt, status: "approved" }],
+                references: [{ id: "scene-gate-ref", url: "/gate.png", source: "upload", label: "主基准", createdAt: multiScene.createdAt, status: "approved" }],
                 primaryReferenceId: "scene-gate-ref",
             },
         ];
