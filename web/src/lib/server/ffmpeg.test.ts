@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { join } from "node:path";
 
-import { resolveFfprobePath } from "./ffmpeg";
+import { ffmpegAssFilterOutputAvailable, resolveFfprobePath } from "./ffmpeg";
 
 const originalFfmpegPath = process.env.FFMPEG_PATH;
 const originalFfprobePath = process.env.FFPROBE_PATH;
@@ -31,6 +31,15 @@ describe("FFmpeg runtime paths", () => {
         delete process.env.FFPROBE_PATH;
 
         expect(resolveFfprobePath()).toBe("ffprobe");
+    });
+
+    it("detects the ass filter from the single-filter help output", () => {
+        const output = ["Filter ass", "  Render ASS subtitles onto input video using the libass library.", "    Inputs:", "       #0: default (video)", "    Outputs:", "       #0: default (video)"].join("\n");
+        expect(ffmpegAssFilterOutputAvailable(output)).toBe(true);
+    });
+
+    it("rejects an FFmpeg build without the ass filter", () => {
+        expect(ffmpegAssFilterOutputAvailable("Unknown filter 'ass'.\n\nExiting with exit code 0\n")).toBe(false);
     });
 });
 

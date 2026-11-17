@@ -13,10 +13,14 @@ export async function ffmpegAvailable() {
 }
 
 /** 不是所有 FFmpeg 构建都启用 libass，字幕烧录前需要单独确认 ass 滤镜存在。 */
+export function ffmpegAssFilterOutputAvailable(output: string) {
+    return /^Filter ass\b/mu.test(output) && /Render ASS subtitles/u.test(output);
+}
+
 export async function ffmpegSubtitleAvailable() {
     try {
-        const result = await runFfmpeg(["-hide_banner", "-filters"], { timeoutMs: 10_000 });
-        return /\bass\s+V->V\b/u.test(result.stdout);
+        const result = await runFfmpeg(["-hide_banner", "-h", "filter=ass"], { timeoutMs: 10_000 });
+        return ffmpegAssFilterOutputAvailable(result.stdout);
     } catch {
         return false;
     }
