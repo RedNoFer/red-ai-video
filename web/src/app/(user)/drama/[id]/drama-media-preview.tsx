@@ -52,7 +52,7 @@ export function DramaMediaPreviewModal({ media, onClose }: { media?: DramaPrevie
     const [subtitleMode, setSubtitleMode] = useState<DramaSubtitleExportMode>("bilingual");
 
     useEffect(() => {
-        setWithSubtitles(Boolean(media?.subtitleExport?.hasText));
+        setWithSubtitles(false);
         setSubtitleMode("bilingual");
         setDownloadError("");
         setRepairError("");

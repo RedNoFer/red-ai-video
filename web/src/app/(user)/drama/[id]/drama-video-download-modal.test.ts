@@ -24,6 +24,9 @@ describe("Drama batch video download", () => {
         expect(source).toContain("getDramaVideoExport(projectId, jobId)");
         expect(source).toContain("data-drama-video-export-progress");
         expect(source).toContain("triggerNativeDownload");
+        expect(source).toContain("const [includeSubtitles, setIncludeSubtitles] = useState(false);");
+        expect(source).toContain("setIncludeSubtitles(false)");
+        expect(source).toContain("当前只下载原片");
         expect(source).toContain("includeSubtitles: wantSubtitles, includeOriginals, subtitleModes: wantSubtitles ? subtitleModes : []");
         expect(source).toContain("同时导出字幕版（保留原片）");
         expect(source).toContain("仅字幕版（不含原片）");

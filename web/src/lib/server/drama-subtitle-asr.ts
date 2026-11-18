@@ -20,6 +20,8 @@ const MIN_OVERLAP_MS = 100;
 const MIN_OVERLAP_RATIO = 0.15;
 const SCRIPT_COVERAGE = 0.8;
 const ASR_COVERAGE = 0.75;
+const FALLBACK_SCRIPT_COVERAGE = 0.5;
+const FALLBACK_ASR_COVERAGE = 0.5;
 const MAX_MATCH_SEGMENTS = 3;
 
 export type DramaSubtitleTranscriptSegment = {
@@ -135,6 +137,8 @@ export async function resolveDramaSubtitleSources(input: {
     if (!segments.length) return [];
     const sources = alignDramaSubtitleSources(segments, input.scriptSources || []);
     if (input.mode !== "bilingual") return sources;
+    // 剧本已经提供中文翻译时，不再走文本模型：字幕文案、翻译和时间轴都来自剧本与真实语音段。
+    if (dramaScriptHasSubtitleTranslations(input.scriptSources)) return sources;
     const untranslated = sources.filter((source) => !source.translation);
     if (!untranslated.length) return sources;
     try {
@@ -150,10 +154,16 @@ export async function resolveDramaSubtitleSources(input: {
     return sources;
 }
 
+/** 剧本是否自带中文翻译；有翻译时字幕不再请求文本模型，避免模型改写或额外计费。 */
+export function dramaScriptHasSubtitleTranslations(scriptSources: DramaSubtitleSource[] | undefined) {
+    return Boolean(scriptSources?.some((source) => source.hasEnglish && Boolean((source.translation || "").trim())));
+}
+
 /**
- * 把 Whisper 语音段对齐回剧本里的英文台词：
- * 连续语音段能覆盖整条剧本台词时复用剧本自带中文翻译，但每个语音段始终保留自己的真实起止时间。
- * 未匹配的语音段保留 ASR 原文，交给模型逐段翻译；没有出现在音频里的剧本台词不会进入字幕。
+ * 把 Whisper 语音段对齐回剧本台词：
+ * 先用高覆盖率匹配常规台词，再用较低覆盖率承接实际发音和剧本措辞不同的台词；
+ * 命中后复用剧本英文与中文，并按每个真实语音段的语音占比拆分，每个语音段保留自己的起止时间。
+ * 没有出现在音频里的剧本台词（例如未配音的心声）不会进入字幕；完全未匹配的语音段保留 ASR 原文。
  */
 export function alignDramaSubtitleSources(segments: DramaSubtitleTranscriptSegment[], scriptSources: DramaSubtitleSource[]): DramaSubtitleSource[] {
     const candidates = scriptSources.filter((source) => source.hasEnglish && Boolean(source.text.trim()));
@@ -161,72 +171,184 @@ export function alignDramaSubtitleSources(segments: DramaSubtitleTranscriptSegme
     const used = new Set<number>();
     const aligned: DramaSubtitleSource[] = [];
     let cursor = 0;
+    let lastUsedIndex = -1;
     while (cursor < segments.length) {
-        let matchedIndex = -1;
-        let matchedSize = 1;
-        for (let size = 1; size <= MAX_MATCH_SEGMENTS && cursor + size <= segments.length; size += 1) {
-            const words = matchWords(
-                segments
-                    .slice(cursor, cursor + size)
-                    .map((segment) => segment.text)
-                    .join(" "),
-            );
-            if (!words.length) continue;
-            let bestIndex = -1;
-            let bestDice = 0;
-            for (const [index, candidate] of candidateWords.entries()) {
-                if (used.has(index) || !candidate.length) continue;
-                const shared = words.filter((word) => candidate.includes(word)).length;
-                const scriptCoverage = shared / candidate.length;
-                const asrCoverage = shared / words.length;
-                if (scriptCoverage < SCRIPT_COVERAGE || asrCoverage < ASR_COVERAGE) continue;
-                const dice = (2 * shared) / (words.length + candidate.length);
-                if (dice > bestDice) {
-                    bestDice = dice;
-                    bestIndex = index;
-                }
-            }
-            if (bestIndex >= 0) {
-                matchedIndex = bestIndex;
-                matchedSize = size;
-                break;
-            }
+        const matched = findScriptMatch(segments, cursor, candidateWords, used, lastUsedIndex, SCRIPT_COVERAGE, ASR_COVERAGE) ?? findScriptMatch(segments, cursor, candidateWords, used, lastUsedIndex, FALLBACK_SCRIPT_COVERAGE, FALLBACK_ASR_COVERAGE);
+        if (!matched) {
+            const segment = segments[cursor];
+            aligned.push({ text: segment.text, hasEnglish: true, startMs: segment.startMs, endMs: segment.endMs });
+            cursor += 1;
+            continue;
         }
-        if (matchedIndex >= 0) {
-            used.add(matchedIndex);
-            const source = candidates[matchedIndex];
-            const parts = matchedTranslationParts(source.translation, matchedSize);
-            for (let offset = 0; offset < matchedSize; offset += 1) {
-                const segment = segments[cursor + offset];
-                const translation = parts[offset] || "";
+
+        used.add(matched.index);
+        lastUsedIndex = matched.index;
+        const source = candidates[matched.index];
+        const text = source.text.trim();
+        const translation = (source.translation || "").trim();
+        const group = segments.slice(cursor, cursor + matched.size);
+        const textParts = splitAlignedText(text, group);
+        const translationParts = translation ? splitAlignedText(translation, group) : [];
+        const canSplit = textParts.length === group.length && (!translation || translationParts.length === group.length);
+        if (!canSplit) {
+            // 句内标点不足以拆成每个语音段时，合并为一个覆盖整组语音窗口的字幕源，避免把单词拆断。
+            aligned.push({
+                text,
+                hasEnglish: true,
+                startMs: group[0].startMs,
+                endMs: group[group.length - 1].endMs,
+                ...(translation ? { translation } : {}),
+            });
+        } else {
+            for (let offset = 0; offset < group.length; offset += 1) {
+                const segment = group[offset];
+                const part = textParts[offset] || "";
+                const translated = translationParts[offset] || "";
                 aligned.push({
-                    text: segment.text,
+                    text: part,
                     hasEnglish: true,
                     startMs: segment.startMs,
                     endMs: segment.endMs,
-                    ...(translation ? { translation } : {}),
+                    ...(translated ? { translation: translated } : {}),
                 });
             }
-            cursor += matchedSize;
-            continue;
         }
-        const segment = segments[cursor];
-        aligned.push({ text: segment.text, hasEnglish: true, startMs: segment.startMs, endMs: segment.endMs });
-        cursor += 1;
+        cursor += matched.size;
     }
     return aligned;
 }
 
-/** 剧本一条台词被 Whisper 拆成多段时，按标点把中文翻译拆到对应段；拆不齐则交给模型逐段翻译。 */
-function matchedTranslationParts(translation: string | undefined, count: number) {
-    const value = (translation || "").trim();
-    if (!value) return [];
-    if (count === 1) return [value];
-    const parts = value
+type ScriptMatch = {
+    index: number;
+    size: number;
+};
+
+/** 只在已使用台词之后找匹配，保证剧本顺序；高覆盖率找不到时再放宽到低覆盖率。 */
+function findScriptMatch(segments: DramaSubtitleTranscriptSegment[], cursor: number, candidateWords: string[][], used: Set<number>, afterIndex: number, minScriptCoverage: number, minAsrCoverage: number): ScriptMatch | undefined {
+    for (let size = 1; size <= MAX_MATCH_SEGMENTS && cursor + size <= segments.length; size += 1) {
+        const words = matchWords(
+            segments
+                .slice(cursor, cursor + size)
+                .map((segment) => segment.text)
+                .join(" "),
+        );
+        if (!words.length) continue;
+        let bestIndex = -1;
+        let bestDice = 0;
+        for (let index = afterIndex + 1; index < candidateWords.length; index += 1) {
+            if (used.has(index)) continue;
+            const candidate = candidateWords[index];
+            if (!candidate.length) continue;
+            const shared = sharedWordCount(words, candidate);
+            const scriptCoverage = shared / candidate.length;
+            const asrCoverage = shared / words.length;
+            if (scriptCoverage < minScriptCoverage || asrCoverage < minAsrCoverage) continue;
+            const dice = (2 * shared) / (words.length + candidate.length);
+            if (dice > bestDice) {
+                bestDice = dice;
+                bestIndex = index;
+            }
+        }
+        if (bestIndex >= 0) return { index: bestIndex, size };
+    }
+    return undefined;
+}
+
+/** 多重集合交集，避免 ASR 重复词把覆盖率算到大于 1。 */
+function sharedWordCount(words: string[], candidate: string[]) {
+    const remaining = new Map<string, number>();
+    for (const word of candidate) remaining.set(word, (remaining.get(word) || 0) + 1);
+    let shared = 0;
+    for (const word of words) {
+        const count = remaining.get(word) || 0;
+        if (!count) continue;
+        shared += 1;
+        remaining.set(word, count - 1);
+    }
+    return shared;
+}
+
+/**
+ * 用剧本原文和翻译按真实语音段拆分：句内标点足够时按标点和语音词数比例分组；
+ * 不足时返回整条文本，由调用方合并为一个语音窗口，避免拆断单词或把翻译错配到空段。
+ */
+function splitAlignedText(value: string, segments: DramaSubtitleTranscriptSegment[]) {
+    const text = value.trim();
+    const count = Math.max(1, segments.length);
+    if (!text) return count === 1 ? [""] : [];
+    if (count === 1) return [text];
+    const atoms = text
         .split(/(?<=[。！？!?；;，,、：:.…])/u)
         .map((item) => item.trim())
         .filter(Boolean);
-    return parts.length === count ? parts : [];
+    if (atoms.length < count) return [text];
+    return splitAlignedAtoms(atoms, count, alignedSegmentTargets(segments));
+}
+
+/** 以 ASR 真实词数作为每个语音段应占的比例；最后一段承接剩余部分。 */
+function alignedSegmentTargets(segments: DramaSubtitleTranscriptSegment[]) {
+    const weights = segments.map((segment) => Math.max(1, matchWords(segment.text).length));
+    const total = weights.reduce((sum, value) => sum + value, 0);
+    let cursor = 0;
+    return weights.slice(0, -1).map((weight) => {
+        cursor += weight;
+        return cursor / total;
+    });
+}
+
+/** 枚举所有可能的分句边界，选累计文本占比最接近真实语音占比的一组。 */
+function splitAlignedAtoms(atoms: string[], count: number, targets: number[]) {
+    const weights = atoms.map(alignedTextWeight);
+    const total = weights.reduce((sum, value) => sum + value, 0) || atoms.length;
+    let cursor = 0;
+    const prefixes = weights.map((weight) => {
+        cursor += weight;
+        return cursor / total;
+    });
+    let bestPath: number[] | undefined;
+    let bestError = Number.POSITIVE_INFINITY;
+    const choose = (start: number, path: number[]) => {
+        if (path.length === count - 1) {
+            const error = path.reduce((sum, boundary, index) => sum + Math.abs(prefixes[boundary - 1] - targets[index]), 0);
+            if (error < bestError) {
+                bestError = error;
+                bestPath = [...path];
+            }
+            return;
+        }
+        const remainingParts = count - path.length - 1;
+        const maxBoundary = atoms.length - remainingParts;
+        for (let boundary = start + 1; boundary <= maxBoundary; boundary += 1) {
+            choose(boundary, [...path, boundary]);
+        }
+    };
+    choose(0, []);
+    if (!bestPath) return [atoms.join("")];
+    const parts: string[] = [];
+    let start = 0;
+    for (const boundary of bestPath) {
+        parts.push(joinAlignedAtoms(atoms.slice(start, boundary)));
+        start = boundary;
+    }
+    parts.push(joinAlignedAtoms(atoms.slice(start)));
+    return parts;
+}
+
+function alignedTextWeight(value: string) {
+    const text = value.trim();
+    if (!text) return 0;
+    if (/[\u3400-\u9fff]/u.test(text)) return Array.from(text.replace(/\s+/gu, "")).length;
+    return text.split(/\s+/u).filter(Boolean).length;
+}
+
+function joinAlignedAtoms(atoms: string[]) {
+    return atoms.reduce((current, atom) => {
+        if (!current) return atom;
+        const left = current.slice(-1);
+        const right = atom.slice(0, 1);
+        const latin = /[A-Za-z]/u.test(current + atom);
+        return latin && /[A-Za-z0-9,.;:!?)]/u.test(left) && /[A-Za-z0-9(]/u.test(right) ? `${current} ${atom}` : `${current}${atom}`;
+    }, "");
 }
 
 function matchWords(value: string) {

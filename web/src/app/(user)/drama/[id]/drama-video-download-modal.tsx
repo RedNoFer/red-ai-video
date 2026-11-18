@@ -16,7 +16,7 @@ export function DramaVideoDownloadModal({ open, projectId, onClose }: { open: bo
     const [loading, setLoading] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [selected, setSelected] = useState<string[]>([]);
-    const [includeSubtitles, setIncludeSubtitles] = useState(true);
+    const [includeSubtitles, setIncludeSubtitles] = useState(false);
     const [subtitlesOnly, setSubtitlesOnly] = useState(false);
     const [subtitleChoice, setSubtitleChoice] = useState<DramaSubtitleChoice>("bilingual");
     const [job, setJob] = useState<DramaVideoExportJob | null>(null);
@@ -29,7 +29,7 @@ export function DramaVideoDownloadModal({ open, projectId, onClose }: { open: bo
         if (!open) return;
         let active = true;
         setLoading(true);
-        setIncludeSubtitles(true);
+        setIncludeSubtitles(false);
         setSubtitlesOnly(false);
         setSubtitleChoice("bilingual");
         Promise.all([listDramaProjectVideos(projectId), listDramaVideoExports(projectId).catch(() => [])])
@@ -102,7 +102,7 @@ export function DramaVideoDownloadModal({ open, projectId, onClose }: { open: bo
     useEffect(() => {
         if (selectedSubtitleAvailability.any) return;
         setSubtitlesOnly(false);
-        setIncludeSubtitles(true);
+        setIncludeSubtitles(false);
     }, [selectedSubtitleAvailability.any]);
     const effectiveSubtitleChoice: DramaSubtitleChoice = subtitleChoice !== "bilingual" && !selectedSubtitleAvailability.english ? "bilingual" : subtitleChoice;
     const subtitleModes: DramaSubtitleExportMode[] = effectiveSubtitleChoice === "both" ? ["bilingual", "english"] : [effectiveSubtitleChoice];
@@ -126,7 +126,7 @@ export function DramaVideoDownloadModal({ open, projectId, onClose }: { open: bo
     };
     const chooseSubtitlesOnly = (checked: boolean) => {
         setSubtitlesOnly(checked);
-        setIncludeSubtitles(!checked);
+        if (checked) setIncludeSubtitles(false);
     };
 
     const download = async () => {
@@ -208,7 +208,9 @@ export function DramaVideoDownloadModal({ open, projectId, onClose }: { open: bo
                         {selectedSubtitleAvailability.any
                             ? subtitlesOnlyActive
                                 ? "仅字幕版会打包烧录后的字幕视频和 SRT，不含原片；原片仍保留在项目中，不会被删除。字幕会按镜头重新编码，耗时更长。"
-                                : "双语字幕英文在上、中文在下，共用同一句台词时间窗；英文单独版额外输出英文烧录视频和英文 SRT。字幕会按镜头重新编码，耗时更长，原片保留。"
+                                : wantSubtitles
+                                  ? "双语字幕英文在上、中文在下，共用同一句台词时间窗；英文单独版额外输出英文烧录视频和英文 SRT。字幕会按镜头重新编码，耗时更长，原片保留。"
+                                  : "当前只下载原片，不烧录字幕。需要字幕请勾选「同时导出字幕版（保留原片）」或「仅字幕版（不含原片）」。"
                             : "所选镜头没有可烧录的台词或旁白，将只下载原片。"}
                     </span>
                 </div>

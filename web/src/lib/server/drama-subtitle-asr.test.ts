@@ -18,6 +18,7 @@ import {
     alignDramaSubtitleSources,
     buildDramaSubtitleChunks,
     buildDramaSubtitleSources,
+    dramaScriptHasSubtitleTranslations,
     parseDramaSilenceIntervals,
     parseDramaSubtitleTranslations,
     parseDramaWhisperTranscript,
@@ -117,6 +118,12 @@ describe("Drama subtitle ASR", () => {
         expect(parseDramaSubtitleTranslations("not json", 1)).toBeUndefined();
     });
 
+    it("only treats script sources with Chinese as model-free subtitle sources", () => {
+        expect(dramaScriptHasSubtitleTranslations([{ text: "What?", hasEnglish: true }])).toBe(false);
+        expect(dramaScriptHasSubtitleTranslations([{ text: "What?", translation: "   ", hasEnglish: true }])).toBe(false);
+        expect(dramaScriptHasSubtitleTranslations([{ text: "What?", translation: "什么？", hasEnglish: true }])).toBe(true);
+    });
+
     it("splits a matched script line across real ASR segments and keeps each segment timing", () => {
         const scriptSources = [
             { text: "The black-gold card? Grandpa said it was real.", translation: "黑金龙卡？爷爷说它真的存在。", hasEnglish: true },
@@ -132,10 +139,10 @@ describe("Drama subtitle ASR", () => {
         const aligned = alignDramaSubtitleSources(segments, scriptSources);
 
         expect(aligned).toHaveLength(4);
-        expect(aligned[0]).toMatchObject({ text: "That's the black gold card.", translation: "黑金龙卡？", startMs: 0, endMs: 9_900 });
+        expect(aligned[0]).toMatchObject({ text: "The black-gold card?", translation: "黑金龙卡？", startMs: 0, endMs: 9_900 });
         expect(aligned[1]).toMatchObject({ text: "Grandpa said it was real.", translation: "爷爷说它真的存在。", startMs: 9_900, endMs: 12_780 });
         expect(aligned[2]).toMatchObject({ text: "What?", translation: "什么？", startMs: 12_780, endMs: 13_780 });
-        expect(aligned[3]).toMatchObject({ text: "Is something wrong?", translation: "出什么事了？", startMs: 13_780, endMs: 16_020 });
+        expect(aligned[3]).toMatchObject({ text: "Something wrong?", translation: "出什么事了？", startMs: 13_780, endMs: 16_020 });
     });
 
     it("keeps unrecognized speech as ASR text and never reuses one script line", () => {
@@ -180,20 +187,20 @@ describe("Drama subtitle ASR", () => {
         const aligned = alignDramaSubtitleSources(segments, scriptSources);
 
         expect(aligned.map((source) => source.text)).toEqual([
-            "That's the black gold card.",
+            "The black-gold card?",
             "Grandpa said it was real.",
             "What?",
-            "Is something wrong?",
-            "You don't know what that is?",
+            "Something wrong?",
+            "You don't know what that is.",
             "A card.",
             "The bank gave it to me.",
             "The bank gave it to you.",
-            "I'm Serena Meridian's branch president.",
-            "I saw your $10 bill at breakfast.",
+            "I'm Serena. Private banking, Meridian.",
+            "I saw your ten at the breakfast shop.",
         ]);
-        expect(aligned.slice(0, 8).every((source) => source.translation)).toBe(true);
-        expect(aligned[8].translation).toBeUndefined();
-        expect(aligned[9].translation).toBeUndefined();
+        expect(aligned.every((source) => source.translation)).toBe(true);
+        expect(aligned[8].translation).toBe("我是Serena，Meridian私人银行。");
+        expect(aligned[9].translation).toBe("我在早餐店看见你那张十美元。");
         expect(aligned.every((source, index) => source.startMs === segments[index].startMs && source.endMs === segments[index].endMs)).toBe(true);
         expect(aligned.some((source) => source.text.includes("seen a ghost"))).toBe(false);
 
@@ -202,7 +209,7 @@ describe("Drama subtitle ASR", () => {
         expect(cues[0].startMs).toBe(0);
         expect(cues[1].startMs).toBeGreaterThanOrEqual(9_900);
         expect(cues[9].endMs).toBeLessThanOrEqual(30_000);
-        expect(cues.some((cue) => cue.secondaryText === undefined)).toBe(true);
+        expect(cues.every((cue) => cue.secondaryText)).toBe(true);
     });
 
     it("falls back to the next text model for translation and bills that model", async () => {
