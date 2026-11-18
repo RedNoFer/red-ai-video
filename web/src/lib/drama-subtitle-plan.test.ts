@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { DramaShot } from "@/lib/drama-project-contract";
-import { buildDramaAss, buildDramaSrt, dramaShotHasSubtitleText, dramaShotSubtitleSources, planDramaShotSubtitles } from "./drama-subtitle-plan";
+import { buildDramaAss, buildDramaSrt, dramaShotHasSubtitleText, dramaShotSubtitleSources, dramaSubtitleLayout, planDramaShotSubtitles } from "./drama-subtitle-plan";
 
 describe("Drama subtitle planning", () => {
     it("prefers structured utterances and keeps their measured local windows", () => {
@@ -97,6 +97,12 @@ describe("Drama subtitle planning", () => {
         expect(dramaShotHasSubtitleText(dramaShot({}))).toBe(false);
     });
 
+    it("uses a readable subtitle size for both horizontal and vertical frames", () => {
+        expect(dramaSubtitleLayout(1920, 1080).fontSize).toBe(54);
+        expect(dramaSubtitleLayout(1080, 1920).fontSize).toBe(54);
+        expect(dramaSubtitleLayout(3840, 2160).fontSize).toBe(96);
+    });
+
     it("builds ASS with bottom alignment, safe margins and escaped text", () => {
         const ass = buildDramaAss(
             [
@@ -133,8 +139,7 @@ describe("Drama subtitle planning", () => {
         const ass = buildDramaAss(cues, 1080, 1920);
 
         expect(srt).toContain("By morning, everything would be cheaper.\n到了明早，一切都将便宜一千万倍。");
-        expect(ass).toContain("By morning, everything would");
-        expect(ass).toContain("be cheaper.");
+        expect(ass).toContain("By morning, everything would be\\Ncheaper.");
         expect(ass).toMatch(/\\N到了明早，一切都将便宜一千万倍/u);
     });
 });

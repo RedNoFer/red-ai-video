@@ -8,11 +8,12 @@ import { NextResponse } from "next/server";
 import { readJsonBodyResult } from "@/lib/auth/request";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getAuthSettings } from "@/lib/auth/store";
-import { dramaShotSubtitleAvailability, planDramaShotSubtitles, type DramaSubtitleExportMode } from "@/lib/drama-subtitle-plan";
+import { dramaShotSubtitleAvailability, planDramaSubtitleSources, type DramaSubtitleExportMode } from "@/lib/drama-subtitle-plan";
 import { normalizeDramaSubtitleExportModes } from "@/lib/drama-video-export";
 import { checkGenerationRateLimit, rateLimitHeaders } from "@/lib/server/security";
 import { collectDramaVideoExportPayload, DramaVideoExportError, resolveDramaVideoExportEntries } from "@/lib/server/drama-video-export";
 import { getDramaProjectForUser, DramaProjectServiceError } from "@/lib/server/drama-project-service";
+import { DramaSubtitleAsrError, dramaSubtitleAsrAvailable, resolveDramaSubtitleSources } from "@/lib/server/drama-subtitle-asr";
 import { ffmpegAvailable, ffmpegSubtitleAvailable } from "@/lib/server/ffmpeg";
 import { withGenerationConcurrencyLimit } from "@/lib/server/generation-task-store";
 import { resolveInternalOrigin } from "@/lib/server/internal-origin";
@@ -53,6 +54,7 @@ export async function POST(request: Request, context: Context) {
             if (!availability.hasText) return NextResponse.json({ code: 422, data: null, msg: "本镜头没有可烧录的台词或旁白" }, { status: 422 });
             if (mode === "english" && !availability.hasEnglish) return NextResponse.json({ code: 422, data: null, msg: "本镜头没有英文字幕" }, { status: 422 });
             if (!(await ffmpegSubtitleAvailable())) return NextResponse.json({ code: 503, data: null, msg: "当前服务器 FFmpeg 未启用 libass，无法烧录字幕" }, { status: 503 });
+            if (!(await dramaSubtitleAsrAvailable())) return NextResponse.json({ code: 503, data: null, msg: "当前服务器未安装字幕语音识别组件，无法按实际音频生成字幕" }, { status: 503 });
 
             const payload = await collectDramaVideoExportPayload(user.id, project);
             const entry = resolveDramaVideoExportEntries(payload, [{ episodeId, shotId, videoId }])[0];
@@ -62,15 +64,31 @@ export async function POST(request: Request, context: Context) {
             const sourcePath = join(workdir, "source.mp4");
             const outputPath = join(workdir, "output.mp4");
             const origin = resolveInternalOrigin(new URL(request.url).origin);
+            const cookie = request.headers.get("cookie") || "";
             await downloadMediaToFile(entry.url, sourcePath, {
                 origin,
-                cookie: request.headers.get("cookie") || "",
+                cookie,
                 maxBytes: 500 * 1024 * 1024,
                 timeoutMs: 5 * 60_000,
             });
             const probe = await probeDramaVideo(sourcePath, { cwd: workdir });
-            const cues = planDramaShotSubtitles(shot, probe.durationMs, probe.width, probe.height, { script: episode.script, mode });
-            if (!cues.length) return NextResponse.json({ code: 422, data: null, msg: "本镜头没有可烧录的台词或旁白" }, { status: 422 });
+            const sources = await resolveDramaSubtitleSources({
+                sourcePath,
+                workdir,
+                durationMs: probe.durationMs,
+                width: probe.width,
+                height: probe.height,
+                audioCodec: probe.audioCodec,
+                mode,
+                origin,
+                cookie,
+                userId: user.id,
+                projectId: project.id,
+                shotId: shot.id,
+                videoId: entry.videoId,
+            });
+            const cues = planDramaSubtitleSources(sources, probe.durationMs, probe.width, probe.height, mode);
+            if (!cues.length) return NextResponse.json({ code: 422, data: null, msg: "本镜头没有检测到可烧录的对白" }, { status: 422 });
             await renderDramaSubtitleVideo({
                 workdir,
                 sourcePath,
@@ -94,7 +112,7 @@ export async function POST(request: Request, context: Context) {
             return new Response(streamFile(outputPath, workdir), { headers });
         } catch (error) {
             if (workdir) await rm(workdir, { recursive: true, force: true }).catch(() => undefined);
-            if (error instanceof DramaProjectServiceError || error instanceof DramaVideoExportError) return NextResponse.json({ code: error.status, data: null, msg: error.message }, { status: error.status });
+            if (error instanceof DramaProjectServiceError || error instanceof DramaVideoExportError || error instanceof DramaSubtitleAsrError) return NextResponse.json({ code: error.status, data: null, msg: error.message }, { status: error.status });
             console.error("drama subtitle video failed", error);
             return NextResponse.json({ code: 500, data: null, msg: error instanceof Error ? error.message : "字幕视频生成失败" }, { status: 500 });
         }

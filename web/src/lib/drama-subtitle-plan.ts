@@ -87,15 +87,21 @@ export function dramaShotHasEnglishSubtitleText(shot: DramaShot, script?: string
 }
 
 export function planDramaShotSubtitles(shot: DramaShot, durationMs: number, width = 1080, height = 1920, options: { script?: string; mode?: DramaSubtitleExportMode } = {}): DramaSubtitleCue[] {
+    const sources = dramaShotSubtitleSources(shot, options.script);
+    return planDramaSubtitleSources(sources, durationMs, width, height, options.mode);
+}
+
+/** 已按真实音频拆句并写入起止时间后，按统一排版规则生成最终 cue。 */
+export function planDramaSubtitleSources(sources: DramaSubtitleSource[], durationMs: number, width = 1080, height = 1920, requestedMode: DramaSubtitleExportMode = "bilingual"): DramaSubtitleCue[] {
     const totalMs = Math.max(500, Math.round(Number.isFinite(durationMs) ? durationMs : 5_000));
     const layout = dramaSubtitleLayout(width, height);
-    const mode = options.mode === "english" ? "english" : "bilingual";
-    const sources = dramaShotSubtitleSources(shot, options.script).filter((source) => mode !== "english" || source.hasEnglish);
-    if (!sources.length) return [];
+    const mode = requestedMode === "english" ? "english" : "bilingual";
+    const selected = sources.filter((source) => mode !== "english" || source.hasEnglish);
+    if (!selected.length) return [];
 
     const cues: DramaSubtitleCue[] = [];
     let cursor = Math.min(200, totalMs / 2);
-    for (const source of sources) {
+    for (const source of selected) {
         const chunks = sourceChunks(source, mode, layout);
         if (!chunks.length) continue;
         const hasWindow = source.startMs !== undefined && source.endMs !== undefined && source.endMs > source.startMs;
@@ -119,7 +125,8 @@ export function planDramaShotSubtitles(shot: DramaShot, durationMs: number, widt
 export function dramaSubtitleLayout(width: number, height: number): DramaSubtitleLayout {
     const safeWidth = Math.max(320, Math.round(width || 1080));
     const safeHeight = Math.max(320, Math.round(height || 1920));
-    const fontSize = clamp(Math.round(safeHeight * 0.032), 18, 96);
+    // 横屏 1080p 此前只有 35px，明显小于常见成片字幕；按画面短边计算可同时覆盖横竖屏。
+    const fontSize = clamp(Math.round(Math.min(safeWidth, safeHeight) * 0.05), 24, 96);
     const marginV = Math.round(safeHeight * 0.08);
     const marginH = Math.round(safeWidth * 0.06);
     const maxCharsPerLine = clamp(Math.floor((safeWidth - marginH * 2) / fontSize), 8, 28);
@@ -129,11 +136,25 @@ export function dramaSubtitleLayout(width: number, height: number): DramaSubtitl
         fontSize,
         marginV,
         marginH,
-        outline: Math.max(1, Math.round(fontSize * 0.045)),
+        outline: Math.max(2, Math.round(fontSize * 0.06)),
         shadow: Math.max(1, Math.round(fontSize * 0.02)),
         maxCharsPerLine,
         maxCharsPerCue: maxCharsPerLine * 2,
     };
+}
+
+/** 供 ASR 拆句和翻译复用同一套标点、长度规则。 */
+export function splitDramaSubtitleText(text: string, maxChars: number) {
+    return splitSubtitleText(text, maxChars);
+}
+
+/** 在已经识别出的真实语音窗口内，按字幕长度分配每一句的起止时间。 */
+export function allocateDramaSubtitleWindow(chunks: string[], startMs: number, endMs: number) {
+    return allocateWindow(
+        chunks.map((text) => ({ text })),
+        startMs,
+        endMs,
+    ).map((cue) => ({ text: cue.text, startMs: cue.startMs, endMs: cue.endMs }));
 }
 
 export function buildDramaSrt(cues: DramaSubtitleCue[]) {

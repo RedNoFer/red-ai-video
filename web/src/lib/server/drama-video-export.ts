@@ -5,12 +5,13 @@ import { join } from "node:path";
 import { Zip, ZipPassThrough } from "fflate";
 
 import type { DramaProject, DramaShot, DramaShotVideoResult } from "@/lib/drama-project-contract";
-import { buildDramaSrt, dramaShotSubtitleAvailability, planDramaShotSubtitles, type DramaSubtitleExportMode } from "@/lib/drama-subtitle-plan";
+import { buildDramaSrt, dramaShotSubtitleAvailability, planDramaSubtitleSources, type DramaSubtitleExportMode, type DramaSubtitleSource } from "@/lib/drama-subtitle-plan";
 import { mergeDramaShotVideoResults, visibleDramaShotVideoResults } from "@/lib/drama-shot-video-results";
 import type { DramaVideoExportPayload } from "@/lib/drama-video-export";
 import { mediaFileExtension } from "@/lib/media-file";
 import { queryStoredGenerationTasks } from "@/lib/server/generation-task-store";
 import { downloadMediaToFile } from "@/lib/server/media-download";
+import { resolveDramaSubtitleSources } from "@/lib/server/drama-subtitle-asr";
 import { probeDramaVideo, renderDramaSubtitleVideo } from "@/lib/server/drama-subtitle-render";
 import type { VideoTask } from "@/lib/server/video-task-store";
 
@@ -107,6 +108,7 @@ export async function exportDramaVideos(input: {
     entries: DramaVideoExportEntry[];
     origin: string;
     cookie?: string;
+    userId: string;
     includeSubtitles?: boolean;
     subtitleModes?: DramaSubtitleExportMode[];
     includeOriginals?: boolean;
@@ -157,7 +159,11 @@ export async function exportDramaVideos(input: {
             failed: failures,
             subtitles: { requested: subtitleModes.length > 0, modes: subtitleModes, generated: [], skipped: [], failed: [] },
         };
-        const stream = createZipStream(root, downloads, manifest, input.project, subtitleModes, includeOriginals, settledBytes, input.onProgress);
+        const stream = createZipStream(root, downloads, manifest, input.project, subtitleModes, includeOriginals, settledBytes, input.onProgress, {
+            origin: input.origin,
+            cookie: input.cookie || "",
+            userId: input.userId,
+        });
         return {
             stream,
             fileName: `${safeName(input.project.title) || "短剧项目"}_${includeOriginals ? "视频" : "字幕版"}.zip`,
@@ -231,7 +237,8 @@ function createZipStream(
     subtitleModes: DramaSubtitleExportMode[],
     includeOriginals: boolean,
     receivedBytes: number,
-    onProgress?: (progress: DramaVideoExportProgress) => void,
+    onProgress: ((progress: DramaVideoExportProgress) => void) | undefined,
+    context: { origin: string; cookie: string; userId: string },
 ) {
     let closed = false;
     const subtitlesTotal = downloads.length * subtitleModes.length;
@@ -283,6 +290,38 @@ function createZipStream(
                             continue;
                         }
                         let probe: Awaited<ReturnType<typeof probeDramaVideo>> | undefined;
+                        let sources: DramaSubtitleSource[] | undefined;
+                        try {
+                            probe = await probeDramaVideo(item.path, { cwd: root });
+                            sources = await resolveDramaSubtitleSources({
+                                sourcePath: item.path,
+                                workdir: root,
+                                durationMs: probe.durationMs,
+                                width: probe.width,
+                                height: probe.height,
+                                audioCodec: probe.audioCodec,
+                                mode: subtitleModes.includes("bilingual") ? "bilingual" : "english",
+                                origin: context.origin,
+                                cookie: context.cookie,
+                                userId: context.userId,
+                                projectId: project.id,
+                                shotId: item.entry.shotId,
+                                videoId: item.entry.videoId,
+                            });
+                        } catch (error) {
+                            const reason = error instanceof Error ? error.message : "字幕语音识别失败";
+                            for (const mode of subtitleModes) manifest.subtitles.failed.push({ episode: item.entry.episodeTitle, shot: item.entry.shotTitle, shotCode: item.entry.shotCode, videoId: item.entry.videoId, mode, reason });
+                            subtitlesDone += subtitleModes.length;
+                            onProgress?.({ phase: "subtitles", done: index + 1, total: downloads.length, bytes: receivedBytes, subtitlesDone, subtitlesTotal });
+                            continue;
+                        }
+                        if (!sources?.length) {
+                            for (const mode of subtitleModes)
+                                manifest.subtitles.skipped.push({ episode: item.entry.episodeTitle, shot: item.entry.shotTitle, shotCode: item.entry.shotCode, videoId: item.entry.videoId, mode, reason: "本镜头没有检测到可烧录的对白" });
+                            subtitlesDone += subtitleModes.length;
+                            onProgress?.({ phase: "subtitles", done: index + 1, total: downloads.length, bytes: receivedBytes, subtitlesDone, subtitlesTotal });
+                            continue;
+                        }
                         for (const mode of subtitleModes) {
                             onProgress?.({ phase: "subtitles", done: index, total: downloads.length, bytes: receivedBytes, subtitlesDone, subtitlesTotal });
                             subtitlesDone += 1;
@@ -291,10 +330,9 @@ function createZipStream(
                                 continue;
                             }
                             try {
-                                probe ??= await probeDramaVideo(item.path, { cwd: root });
-                                const cues = planDramaShotSubtitles(record.shot, probe.durationMs, probe.width, probe.height, { script: record.script, mode });
+                                const cues = planDramaSubtitleSources(sources, probe.durationMs, probe.width, probe.height, mode);
                                 if (!cues.length) {
-                                    manifest.subtitles.skipped.push({ episode: item.entry.episodeTitle, shot: item.entry.shotTitle, shotCode: item.entry.shotCode, videoId: item.entry.videoId, mode, reason: "本镜头没有可烧录的台词或旁白" });
+                                    manifest.subtitles.skipped.push({ episode: item.entry.episodeTitle, shot: item.entry.shotTitle, shotCode: item.entry.shotCode, videoId: item.entry.videoId, mode, reason: "本镜头没有检测到可烧录的对白" });
                                     continue;
                                 }
                                 const subtitleFile = subtitleZipPath(item, mode);

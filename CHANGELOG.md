@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- [短剧/字幕导出] 字幕改为按实际音频 ASR + 翻译：单镜与批量导出先用生产镜像内置的 whisper.cpp base 模型识别实际视频音轨的英文台词和真实 token/语音段时间戳，再用 FFmpeg `silencedetect` 去掉段首尾静音；双语中文由后台默认文本模型按 ASR 逐句翻译，英文单独版复用同一份 transcript。字幕正文不再取剧本或镜头台词，ASR/翻译不可用时明确返回 503/502，不回退旧剧本字幕；无音轨或无对白镜头在批量清单标记 skipped。修复 `SH01_黑卡亮相` 这类实际音频与剧本不一致时字幕时间错位、台词错误、末尾对白几乎无字幕的问题。
+
+- [短剧/字幕导出] 1080p 字幕字号从 `height * 0.032`（约 35px）改为 `min(width, height) * 0.05`（约 54px），限制 24–96px，横屏和竖屏一致放大，底部白字黑描边同步加粗；SRT/ASS 与单镜、批量字幕共用同一排版。
+
+- [部署] 生产镜像内置 whisper.cpp `whisper-cli` 与 `ggml-base.bin` 语音识别模型，模型 SHA-256 为 `60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe`；构建阶段静态编译并在运行镜像校验模型哈希，单镜/批量字幕接口在组件缺失时返回 503。
+
 - [短剧/字幕导出] 字幕烧录提速并让路页面请求：硬字幕重编码预设由 `fast` 改为 `veryfast`（保持 CRF 12 / tune film），生产镜像实测同一条 1080p 片源烧录耗时从 98 秒降到 47 秒（约 2.1 倍），输出体积反而略小（42.7MB → 38.0MB），SSIM 0.9951 与旧参数 0.9957 基本一致，仍属视觉近无损；同时全部 FFmpeg/FFprobe 子进程在 macOS/Linux 下以 `nice -n 15` 低优先级运行（Windows 无 nice 命令保持原行为），批量导出烧录期间页面请求不再被 CPU 竞争拖慢。nice 通过 exec 替换进程映像，PID 不变，超时与取消的 SIGKILL 语义不受影响。
 
 - [渠道/影灵] 影灵（`yinglingapi`）渠道新增「参考图过脸处理」开关：默认开启，只对带参考图的 seedance-2.0 系列模型（`seedance-2.0`、`seedance2.0-15s`、`seedance-2.0-fast`）在请求里追加 `face_processing: true` 与 `face_processing_method`（默认 `grid`，可选 `feature_split`）；`seedance-2.5` 等其他模型、纯文本视频和未开启开关的渠道都不带该字段。管理员可在渠道「高级设置 → 参考图过脸处理」关闭，开关与处理方式写入渠道高级配置，请求快照和重试沿用同一结果。

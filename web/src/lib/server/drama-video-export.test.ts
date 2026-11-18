@@ -1,13 +1,14 @@
 import { writeFile } from "node:fs/promises";
 
 import { unzipSync } from "fflate";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { DramaEpisode, DramaProject, DramaShot } from "@/lib/drama-project-contract";
 
-const mocks = vi.hoisted(() => ({ queryStoredGenerationTasks: vi.fn(), probeDramaVideo: vi.fn(), renderDramaSubtitleVideo: vi.fn() }));
+const mocks = vi.hoisted(() => ({ queryStoredGenerationTasks: vi.fn(), probeDramaVideo: vi.fn(), renderDramaSubtitleVideo: vi.fn(), resolveSubtitleSources: vi.fn() }));
 
 vi.mock("@/lib/server/generation-task-store", () => ({ queryStoredGenerationTasks: mocks.queryStoredGenerationTasks }));
+vi.mock("@/lib/server/drama-subtitle-asr", () => ({ resolveDramaSubtitleSources: mocks.resolveSubtitleSources }));
 vi.mock("@/lib/server/media-download", () => ({
     downloadMediaToFile: vi.fn(async (_url: string, path: string) => {
         await writeFile(path, new Uint8Array([1, 2, 3, 4]));
@@ -17,6 +18,14 @@ vi.mock("@/lib/server/media-download", () => ({
 vi.mock("@/lib/server/drama-subtitle-render", () => ({ probeDramaVideo: mocks.probeDramaVideo, renderDramaSubtitleVideo: mocks.renderDramaSubtitleVideo }));
 
 import { collectDramaVideoExportPayload, DramaVideoExportError, exportDramaVideos, resolveDramaVideoExportEntries, type DramaVideoExportProgress } from "./drama-video-export";
+
+beforeEach(() => {
+    mocks.resolveSubtitleSources.mockReset();
+    mocks.resolveSubtitleSources.mockResolvedValue([
+        { text: "第一句台词。", hasEnglish: true, startMs: 200, endMs: 2_400 },
+        { text: "第二句台词。", hasEnglish: true, startMs: 2_600, endMs: 4_800 },
+    ]);
+});
 
 describe("Drama video export", () => {
     it("lists the current video and the regenerated candidates of every shot", async () => {
@@ -50,7 +59,7 @@ describe("Drama video export", () => {
             await writeFile(outputPath, new Uint8Array([9, 9, 9]));
         });
         const events: DramaVideoExportProgress[] = [];
-        const result = await exportDramaVideos({ project: current, entries, origin: "http://127.0.0.1:3000", includeSubtitles: true, onProgress: (progress) => events.push(progress) });
+        const result = await exportDramaVideos({ project: current, entries, origin: "http://127.0.0.1:3000", userId: "user-one", includeSubtitles: true, onProgress: (progress) => events.push(progress) });
         await new Response(result.stream).arrayBuffer();
 
         expect(events.some((event) => event.phase === "downloading" && event.done === entries.length && event.bytes > 0)).toBe(true);
@@ -65,7 +74,7 @@ describe("Drama video export", () => {
             payload,
             payload.episodes.flatMap((episode) => episode.shots.flatMap((shot) => shot.videos.map((video) => ({ episodeId: episode.episodeId, shotId: shot.shotId, videoId: video.id })))),
         );
-        const result = await exportDramaVideos({ project: current, entries, origin: "http://127.0.0.1:3000" });
+        const result = await exportDramaVideos({ project: current, entries, origin: "http://127.0.0.1:3000", userId: "user-one" });
         const files = unzipSync(new Uint8Array(await new Response(result.stream).arrayBuffer()));
         const names = Object.keys(files);
 
@@ -90,7 +99,7 @@ describe("Drama video export", () => {
             await writeFile(outputPath, new Uint8Array([9, 9, 9]));
         });
 
-        const result = await exportDramaVideos({ project: current, entries, origin: "http://127.0.0.1:3000", includeSubtitles: true });
+        const result = await exportDramaVideos({ project: current, entries, origin: "http://127.0.0.1:3000", userId: "user-one", includeSubtitles: true });
         const files = unzipSync(new Uint8Array(await new Response(result.stream).arrayBuffer()));
         const names = Object.keys(files);
 
@@ -120,12 +129,13 @@ describe("Drama video export", () => {
             payload.episodes.flatMap((episode) => episode.shots.flatMap((shot) => shot.videos.map((video) => ({ episodeId: episode.episodeId, shotId: shot.shotId, videoId: video.id })))),
         );
         expect(payload.episodes[0].shots[0]).toMatchObject({ hasSubtitles: true, hasEnglishSubtitles: true });
+        mocks.resolveSubtitleSources.mockResolvedValue([{ text: "By morning, everything would be cheaper.", translation: "到了明早，一切都将便宜一千万倍。", hasEnglish: true, startMs: 200, endMs: 4_800 }]);
         mocks.probeDramaVideo.mockResolvedValue({ width: 1080, height: 1920, durationMs: 5_000, audioCodec: "aac" });
         mocks.renderDramaSubtitleVideo.mockImplementation(async ({ outputPath }: { outputPath: string }) => {
             await writeFile(outputPath, new Uint8Array([9, 9, 9]));
         });
 
-        const result = await exportDramaVideos({ project: current, entries, origin: "http://127.0.0.1:3000", subtitleModes: ["bilingual", "english"] });
+        const result = await exportDramaVideos({ project: current, entries, origin: "http://127.0.0.1:3000", userId: "user-one", subtitleModes: ["bilingual", "english"] });
         const files = unzipSync(new Uint8Array(await new Response(result.stream).arrayBuffer()));
         const names = Object.keys(files);
 
@@ -157,7 +167,7 @@ describe("Drama video export", () => {
             await writeFile(outputPath, new Uint8Array([9, 9, 9]));
         });
 
-        const result = await exportDramaVideos({ project: current, entries, origin: "http://127.0.0.1:3000", subtitleModes: ["bilingual"], includeOriginals: false });
+        const result = await exportDramaVideos({ project: current, entries, origin: "http://127.0.0.1:3000", userId: "user-one", subtitleModes: ["bilingual"], includeOriginals: false });
         const files = unzipSync(new Uint8Array(await new Response(result.stream).arrayBuffer()));
         const names = Object.keys(files);
 
@@ -187,10 +197,10 @@ describe("Drama video export", () => {
             payload.episodes.flatMap((episode) => episode.shots.flatMap((shot) => shot.videos.map((video) => ({ episodeId: episode.episodeId, shotId: shot.shotId, videoId: video.id })))),
         );
 
-        await expect(exportDramaVideos({ project: current, entries, origin: "http://127.0.0.1:3000", includeOriginals: false })).rejects.toEqual(
+        await expect(exportDramaVideos({ project: current, entries, origin: "http://127.0.0.1:3000", userId: "user-one", includeOriginals: false })).rejects.toEqual(
             expect.objectContaining<Partial<DramaVideoExportError>>({ status: 422, message: "仅字幕版需要至少选择一种字幕版本" }),
         );
-        await expect(exportDramaVideos({ project: current, entries, origin: "http://127.0.0.1:3000", includeOriginals: false, subtitleModes: ["bilingual"] })).rejects.toEqual(
+        await expect(exportDramaVideos({ project: current, entries, origin: "http://127.0.0.1:3000", userId: "user-one", includeOriginals: false, subtitleModes: ["bilingual"] })).rejects.toEqual(
             expect.objectContaining<Partial<DramaVideoExportError>>({ status: 422, message: "所选镜头没有可导出的字幕内容" }),
         );
     });
@@ -205,7 +215,7 @@ describe("Drama video export", () => {
             payload.episodes.flatMap((episode) => episode.shots.flatMap((shot) => shot.videos.map((video) => ({ episodeId: episode.episodeId, shotId: shot.shotId, videoId: video.id })))),
         );
 
-        const result = await exportDramaVideos({ project: current, entries, origin: "http://127.0.0.1:3000", includeSubtitles: true });
+        const result = await exportDramaVideos({ project: current, entries, origin: "http://127.0.0.1:3000", userId: "user-one", includeSubtitles: true });
         const files = unzipSync(new Uint8Array(await new Response(result.stream).arrayBuffer()));
         const manifest = JSON.parse(new TextDecoder().decode(files["manifest.json"])) as { subtitles: { generated: unknown[]; failed: unknown[]; skipped: Array<{ reason: string }> } };
 
@@ -227,7 +237,7 @@ describe("Drama video export", () => {
     });
 
     it("rejects an empty selection", async () => {
-        await expect(exportDramaVideos({ project: project(), entries: [], origin: "http://127.0.0.1:3000" })).rejects.toEqual(expect.objectContaining<Partial<DramaVideoExportError>>({ status: 422 }));
+        await expect(exportDramaVideos({ project: project(), entries: [], origin: "http://127.0.0.1:3000", userId: "user-one" })).rejects.toEqual(expect.objectContaining<Partial<DramaVideoExportError>>({ status: 422 }));
     });
 });
 

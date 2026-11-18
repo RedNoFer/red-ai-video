@@ -2,16 +2,24 @@ import { writeFile } from "node:fs/promises";
 
 import { beforeEach, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({
-    project: vi.fn(),
-    collect: vi.fn(),
-    resolve: vi.fn(),
-    download: vi.fn(),
-    probe: vi.fn(),
-    render: vi.fn(),
-    ffmpeg: vi.fn(),
-    limit: vi.fn(),
-}));
+const mocks = vi.hoisted(() => {
+    class AsrError extends Error {
+        status = 502;
+    }
+    return {
+        project: vi.fn(),
+        collect: vi.fn(),
+        resolve: vi.fn(),
+        download: vi.fn(),
+        probe: vi.fn(),
+        render: vi.fn(),
+        ffmpeg: vi.fn(),
+        asrAvailable: vi.fn(),
+        resolveSources: vi.fn(),
+        AsrError,
+        limit: vi.fn(),
+    };
+});
 
 vi.mock("@/lib/auth/session", () => ({ getCurrentUser: async () => ({ id: "user-one" }) }));
 vi.mock("@/lib/auth/store", () => ({ getAuthSettings: async () => ({ generationConcurrency: { render: 2 } }) }));
@@ -32,6 +40,7 @@ vi.mock("@/lib/server/drama-video-export", () => ({
 }));
 vi.mock("@/lib/server/media-download", () => ({ downloadMediaToFile: mocks.download }));
 vi.mock("@/lib/server/drama-subtitle-render", () => ({ probeDramaVideo: mocks.probe, renderDramaSubtitleVideo: mocks.render }));
+vi.mock("@/lib/server/drama-subtitle-asr", () => ({ dramaSubtitleAsrAvailable: mocks.asrAvailable, resolveDramaSubtitleSources: mocks.resolveSources, DramaSubtitleAsrError: mocks.AsrError }));
 vi.mock("@/lib/server/ffmpeg", () => ({ ffmpegAvailable: mocks.ffmpeg, ffmpegSubtitleAvailable: mocks.ffmpeg }));
 vi.mock("@/lib/server/internal-origin", () => ({ resolveInternalOrigin: () => "http://127.0.0.1:3000" }));
 
@@ -40,6 +49,8 @@ import { POST } from "./route";
 beforeEach(() => {
     vi.clearAllMocks();
     mocks.ffmpeg.mockResolvedValue(true);
+    mocks.asrAvailable.mockResolvedValue(true);
+    mocks.resolveSources.mockResolvedValue([{ text: "第一句台词。第二句台词。", hasEnglish: true, startMs: 200, endMs: 4_500 }]);
     mocks.project.mockResolvedValue(projectWithSubtitle());
     mocks.collect.mockResolvedValue({
         projectId: "project-one",
@@ -76,6 +87,7 @@ it("streams a burned subtitle video for the selected shot video", async () => {
 it("streams the English-only version from the episode script", async () => {
     const project = projectWithScript();
     mocks.project.mockResolvedValue(project);
+    mocks.resolveSources.mockResolvedValue([{ text: "By morning, everything would be cheaper.", hasEnglish: true, startMs: 200, endMs: 4_500 }]);
 
     const response = await POST(
         new Request("http://localhost/api/drama/projects/project-one/subtitle-video", {
@@ -123,6 +135,31 @@ it("requires FFmpeg with libass before burning subtitles", async () => {
 
     expect(response.status).toBe(503);
     expect(await response.json()).toEqual(expect.objectContaining({ msg: "当前服务器 FFmpeg 未启用 libass，无法烧录字幕" }));
+    expect(mocks.render).not.toHaveBeenCalled();
+});
+
+it("requires the local speech recognizer before burning audio-aligned subtitles", async () => {
+    mocks.asrAvailable.mockResolvedValue(false);
+
+    const response = await POST(new Request("http://localhost/api/drama/projects/project-one/subtitle-video", { method: "POST", body: JSON.stringify({ episodeId: "episode-one", shotId: "shot-one", videoId: "task-one" }) }), {
+        params: Promise.resolve({ id: "project-one" }),
+    });
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual(expect.objectContaining({ msg: "当前服务器未安装字幕语音识别组件，无法按实际音频生成字幕" }));
+    expect(mocks.resolveSources).not.toHaveBeenCalled();
+    expect(mocks.render).not.toHaveBeenCalled();
+});
+
+it("skips burning when the actual audio contains no detected speech", async () => {
+    mocks.resolveSources.mockResolvedValue([]);
+
+    const response = await POST(new Request("http://localhost/api/drama/projects/project-one/subtitle-video", { method: "POST", body: JSON.stringify({ episodeId: "episode-one", shotId: "shot-one", videoId: "task-one" }) }), {
+        params: Promise.resolve({ id: "project-one" }),
+    });
+
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual(expect.objectContaining({ msg: "本镜头没有检测到可烧录的对白" }));
     expect(mocks.render).not.toHaveBeenCalled();
 });
 

@@ -1,5 +1,12 @@
 # syntax=docker/dockerfile:1.7
 
+FROM node:22-bookworm-slim AS whisper-build
+
+ARG WHISPER_VERSION=v1.9.4
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates git cmake make g++ && rm -rf /var/lib/apt/lists/*
+RUN git clone --depth 1 --branch ${WHISPER_VERSION} https://github.com/ggml-org/whisper.cpp.git /src/whisper
+RUN cmake -S /src/whisper -B /src/whisper/build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DWHISPER_BUILD_EXAMPLES=ON -DWHISPER_BUILD_TESTS=OFF -DGGML_NATIVE=OFF -DGGML_OPENMP=OFF && cmake --build /src/whisper/build --target whisper-cli -j2
+
 FROM node:22-bookworm-slim AS web-build
 
 WORKDIR /app/web
@@ -46,9 +53,16 @@ ENV VOZEB_PRO_DATA_DIR=/app/web/.data
 ENV VOZEB_PRO_INTERNAL_ORIGIN=http://127.0.0.1:3000
 ENV NODE_OPTIONS=--max-old-space-size=384
 ENV UV_THREADPOOL_SIZE=2
+ENV WHISPER_CLI_PATH=/app/whisper/whisper-cli
+ENV WHISPER_MODEL_PATH=/app/whisper/models/ggml-base.bin
 
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates ffmpeg fonts-noto-cjk postgresql-client && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl ffmpeg fonts-noto-cjk postgresql-client && rm -rf /var/lib/apt/lists/*
 RUN mkdir -p /app/web/scripts
+
+COPY --from=whisper-build /src/whisper/build/bin/whisper-cli /app/whisper/whisper-cli
+RUN mkdir -p /app/whisper/models; \
+    curl -L --fail --retry 3 -o /app/whisper/models/ggml-base.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin; \
+    echo "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe  /app/whisper/models/ggml-base.bin" | sha256sum -c -
 
 COPY VERSION /app/VERSION
 COPY CHANGELOG.md /app/CHANGELOG.md

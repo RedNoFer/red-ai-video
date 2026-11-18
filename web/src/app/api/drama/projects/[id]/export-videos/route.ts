@@ -8,6 +8,7 @@ import { collectDramaVideoExportPayload, resolveDramaVideoExportEntries, DramaVi
 import { createDramaVideoExportJob, listDramaVideoExportJobs, publicDramaVideoExportJob } from "@/lib/server/drama-video-export-store";
 import { prepareDramaVideoExportJob, prepareResumableDramaVideoExportJobs, runDramaVideoExportJob } from "@/lib/server/drama-video-export-runner";
 import { getDramaProjectForUser, DramaProjectServiceError } from "@/lib/server/drama-project-service";
+import { dramaSubtitleAsrAvailable } from "@/lib/server/drama-subtitle-asr";
 import { ffmpegSubtitleAvailable } from "@/lib/server/ffmpeg";
 import { resolveInternalOrigin } from "@/lib/server/internal-origin";
 
@@ -45,6 +46,7 @@ export async function POST(request: Request, context: Context) {
         const needsSubtitleRender = subtitleModes.some((mode) => selectedShots.some((shot) => (mode === "english" ? shot.hasEnglishSubtitles : shot.hasSubtitles)));
         if (!includeOriginals && !needsSubtitleRender) return NextResponse.json({ code: 422, data: null, msg: "所选镜头没有可导出的字幕内容" }, { status: 422 });
         if (needsSubtitleRender && !(await ffmpegSubtitleAvailable())) return NextResponse.json({ code: 503, data: null, msg: "当前服务器 FFmpeg 未启用 libass，无法烧录字幕" }, { status: 503 });
+        if (needsSubtitleRender && !(await dramaSubtitleAsrAvailable())) return NextResponse.json({ code: 503, data: null, msg: "当前服务器未安装字幕语音识别组件，无法按实际音频生成字幕" }, { status: 503 });
         const activeJobs = (await listDramaVideoExportJobs({ userId: user.id, projectId: project.id, limit: 20 })).filter((job) => job.status === "pending" || job.status === "running");
         if (activeJobs.length >= MAX_ACTIVE_EXPORTS) return NextResponse.json({ code: 429, data: null, msg: `当前已有 ${MAX_ACTIVE_EXPORTS} 个导出任务正在进行，请等待完成` }, { status: 429 });
         const job = await createDramaVideoExportJob({

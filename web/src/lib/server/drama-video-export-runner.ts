@@ -7,6 +7,7 @@ import { pipeline } from "node:stream/promises";
 
 import { exportDramaVideos, type DramaVideoExportProgress } from "@/lib/server/drama-video-export";
 import { dramaVideoExportArchivePath, updateDramaVideoExportJob, type DramaVideoExportJob } from "@/lib/server/drama-video-export-store";
+import { maintenanceWorkerContext } from "@/lib/server/maintenance-auth";
 import { getDramaProjectForUser } from "@/lib/server/drama-project-service";
 
 const globalRunner = globalThis as typeof globalThis & { __vozebProDramaVideoExportActive?: Set<string> };
@@ -47,11 +48,20 @@ export async function runDramaVideoExportJob(job: DramaVideoExportJob, context: 
         await mkdir(dirname(archivePath), { recursive: true });
         await persist({ status: "running", phase: "queued", message: "正在准备导出", error: undefined }, true);
         const project = await getDramaProjectForUser(job.userId, job.projectId);
+        let runtimeCookie = context.cookie?.trim() || "";
+        if (!runtimeCookie && job.input.subtitleModes.length) {
+            try {
+                runtimeCookie = maintenanceWorkerContext(job.userId);
+            } catch {
+                runtimeCookie = "";
+            }
+        }
         const result = await exportDramaVideos({
             project,
             entries: job.input.entries,
             origin: context.origin,
-            cookie: context.cookie,
+            cookie: runtimeCookie,
+            userId: job.userId,
             subtitleModes: job.input.subtitleModes,
             includeOriginals: job.input.includeOriginals,
             onProgress: (progress) => {
