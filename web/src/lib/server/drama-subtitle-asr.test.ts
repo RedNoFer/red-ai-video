@@ -16,14 +16,17 @@ vi.mock("@/lib/server/text-planning-runtime", () => ({ rankTextPlanningCandidate
 
 import {
     alignDramaSubtitleSources,
+    alignDramaTranscriptSegments,
     buildDramaSubtitleChunks,
     buildDramaSubtitleSources,
     dramaScriptHasSubtitleTranslations,
+    filterDramaSpeechBursts,
     parseDramaSilenceIntervals,
     parseDramaSubtitleTranslations,
     parseDramaWhisperTranscript,
     refineDramaTranscriptSegments,
     translateDramaSubtitleChunks,
+    type DramaSubtitleSpeechBurst,
     type DramaSubtitleSpeechInterval,
 } from "./drama-subtitle-asr";
 
@@ -90,6 +93,66 @@ describe("Drama subtitle ASR", () => {
         expect(refined[1].endMs).toBe(12_780);
         expect(refined[1].startMs).toBeGreaterThanOrEqual(9_880);
         expect(refined[2].startMs).toBeGreaterThanOrEqual(12_780);
+    });
+
+    it("keeps only intervals confirmed as real speech by per-burst recognition", () => {
+        const intervals: DramaSubtitleSpeechInterval[] = [
+            { startMs: 2_970, endMs: 5_530 },
+            { startMs: 6_116, endMs: 6_459 },
+            { startMs: 12_637, endMs: 12_819 },
+        ];
+
+        expect(filterDramaSpeechBursts(intervals, ["[BLANK_AUDIO]", "That's...", "What?"])).toEqual([
+            { startMs: 6_116, endMs: 6_459, text: "That's..." },
+            { startMs: 12_637, endMs: 12_819, text: "What?" },
+        ]);
+        // 识别失败按仍有语音处理（text 为空，仅按时长兜底对齐），宁可多显示也不丢对白。
+        expect(filterDramaSpeechBursts(intervals, [undefined, undefined, ""])).toEqual([
+            { startMs: 2_970, endMs: 5_530, text: "" },
+            { startMs: 6_116, endMs: 6_459, text: "" },
+        ]);
+    });
+
+    it("aligns sentences to real speech bursts instead of drifting whisper timestamps", () => {
+        // SH01 形态：全量识别把首句提前到音乐起点（2.97s），句尾拖进静音；真实语音从 6.1s 开始。
+        const segments = [
+            { startMs: 2_970, endMs: 9_880, text: "That's the black gold card." },
+            { startMs: 9_880, endMs: 12_780, text: "Grandpa said it was real." },
+            { startMs: 12_780, endMs: 13_780, text: "What?" },
+            { startMs: 13_780, endMs: 16_020, text: "Is something wrong?" },
+        ];
+        const bursts: DramaSubtitleSpeechBurst[] = [
+            { startMs: 6_116, endMs: 6_459, text: "That's..." },
+            { startMs: 7_198, endMs: 8_394, text: "the black gold card." },
+            { startMs: 9_885, endMs: 10_979, text: "Grandpa said it was real." },
+            { startMs: 12_637, endMs: 12_819, text: "What?" },
+            { startMs: 13_482, endMs: 14_128, text: "Is something wrong?" },
+        ];
+
+        const aligned = alignDramaTranscriptSegments(segments, bursts);
+
+        expect(aligned.map((segment) => [segment.startMs, segment.endMs])).toEqual([
+            [6_116, 8_394], // 两段爆发同属一句
+            [9_885, 10_979],
+            [12_637, 13_422], // 0.18s 的短句延长到可读时长，但不越过下一句
+            [13_482, 14_482],
+        ]);
+        expect(aligned.map((segment) => segment.text)).toEqual(segments.map((segment) => segment.text));
+    });
+
+    it("slices a single burst window when silence detection cannot separate continuous speech", () => {
+        const segments = [
+            { startMs: 0, endMs: 600, text: "Hello there my dear friend" },
+            { startMs: 0, endMs: 600, text: "Hi." },
+        ];
+
+        const aligned = alignDramaTranscriptSegments(segments, [{ startMs: 0, endMs: 600, text: "Hello there my dear friend. Hi." }]);
+
+        expect(aligned.map((segment) => [segment.startMs, segment.endMs])).toEqual([
+            [0, 500],
+            [500, 1400], // 独占结尾的句子允许延到一个短尾巴
+        ]);
+        expect(aligned.map((segment) => segment.text)).toEqual(["Hello there my dear friend", "Hi."]);
     });
 
     it("splits actual speech into readable cue windows and keeps bilingual text aligned", () => {

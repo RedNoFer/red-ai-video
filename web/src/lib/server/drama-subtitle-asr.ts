@@ -16,8 +16,19 @@ const DEFAULT_WHISPER_MODEL = "/app/whisper/models/ggml-base.bin";
 const ASR_TIMEOUT_MS = 10 * 60_000;
 const EXTRACT_TIMEOUT_MS = 5 * 60_000;
 const SILENCE_TIMEOUT_MS = 2 * 60_000;
+const BURST_ASR_TIMEOUT_MS = 2 * 60_000;
 const MIN_OVERLAP_MS = 100;
 const MIN_OVERLAP_RATIO = 0.15;
+// 对齐代价：逐区间单独识别的文本与台词句的词重合误差权重，以及可容忍的最大时长误差（秒）。
+// 文本重合是主信号（背景音乐/停顿让 Whisper token 时间轴漂移，但逐区间的识别文本顺序稳定）；
+// 识别出的文本没有对应发声区间的句子按罚金空着，不抢真实语音的窗口。
+const ALIGN_TEXT_WEIGHT = 3;
+const MAX_DURATION_ERROR_S = 1.5;
+const EMPTY_ALIGNMENT_COST = 1.2;
+// 可读性：短句（如 "What?"）说完后字幕继续停留一小段，但不越过下一句起点，也不超过一个短尾巴。
+const MIN_CUE_DISPLAY_MS = 1_000;
+const MAX_CUE_TAIL_MS = 800;
+const CUE_TAIL_GAP_MS = 60;
 const SCRIPT_COVERAGE = 0.8;
 const ASR_COVERAGE = 0.75;
 const FALLBACK_SCRIPT_COVERAGE = 0.5;
@@ -34,6 +45,9 @@ export type DramaSubtitleSpeechInterval = {
     startMs: number;
     endMs: number;
 };
+
+/** 单独识别过的有声区间：text 是该区间内识别出的语音文本（识别失败时为空串，仅按时长兜底对齐）。 */
+export type DramaSubtitleSpeechBurst = DramaSubtitleSpeechInterval & { text: string };
 
 export type DramaSubtitleChunk = {
     text: string;
@@ -89,7 +103,10 @@ export async function transcribeDramaSubtitleVideo(input: { sourcePath: string; 
     });
     const payload = JSON.parse(await readFile(`${outputBase}.json`, "utf8"));
     const segments = parseDramaWhisperTranscript(payload, input.durationMs);
-    return refineDramaTranscriptSegments(segments, speechIntervals);
+    // Whisper 的 token 时间轴在背景音乐/混响下会整体漂移（实测把首句台词提前到音乐起点、句尾拖进静音）；
+    // 先逐个有声区间单独识别确认真实语音，再把台词句整段对齐到这些真实发声区间。
+    const bursts = await detectDramaSpeechBursts(speechIntervals, { wavPath, workdir: input.workdir, signal: input.signal });
+    return alignDramaTranscriptSegments(segments, bursts);
 }
 
 /** 先按真实语音段拆句并分配时间，再逐句翻译，保证英文和中文 cue 一一对应。 */
@@ -442,6 +459,158 @@ export function refineDramaTranscriptSegments(segments: DramaSubtitleTranscriptS
         cursor = snappedEnd + 20;
     }
     return refined;
+}
+
+/** 把台词句整段对齐到已确认有语音的区间；没有可用区间时退回旧的贴边逻辑。 */
+export function alignDramaTranscriptSegments(segments: DramaSubtitleTranscriptSegment[], bursts: DramaSubtitleSpeechBurst[]): DramaSubtitleTranscriptSegment[] {
+    if (!segments.length || !bursts.length) return refineDramaTranscriptSegments(segments, bursts);
+    const ordered = [...segments].sort((left, right) => left.startMs - right.startMs);
+    const segmentWords = ordered.map((segment) => matchWords(segment.text));
+    const burstWords = bursts.map((burst) => matchWords(burst.text));
+    const durations = bursts.map((burst) => (burst.endMs - burst.startMs) / 1_000);
+    // 每个字/词的期望发声时长，作为文本重合度之外的第二信号。
+    const scale = durations.reduce((sum, value) => sum + value, 0) / segmentWords.reduce((sum, words) => sum + Math.max(1, words.length), 0);
+    const segmentCount = ordered.length;
+    const burstCount = bursts.length;
+    // dp[i][j]：前 i 句消费前 j 个发声区间的最小代价；from 记录第 i 句占用的起始区间。
+    // 一句可以吞下连续多个区间（一 Animated句被停顿切开），代价 = 文本重合误差 + 时长误差；
+    // 没有任何匹配的句子宁可空着（罚金），把区间让给真正对应的台词。
+    const best: number[][] = Array.from({ length: segmentCount + 1 }, () => new Array<number>(burstCount + 1).fill(Number.POSITIVE_INFINITY));
+    const from: number[][] = Array.from({ length: segmentCount + 1 }, () => new Array<number>(burstCount + 1).fill(0));
+    best[0][0] = 0;
+    for (let i = 0; i < segmentCount; i += 1) {
+        const expected = Math.max(1, segmentWords[i].length) * scale;
+        const words = segmentWords[i];
+        for (let j = 0; j <= burstCount; j += 1) {
+            const base = best[i][j];
+            if (!Number.isFinite(base)) continue;
+            if (base + EMPTY_ALIGNMENT_COST < best[i + 1][j]) {
+                best[i + 1][j] = base + EMPTY_ALIGNMENT_COST;
+                from[i + 1][j] = j;
+            }
+            const group: string[] = [];
+            let duration = 0;
+            const maxK = Math.min(burstCount, j + MAX_MATCH_SEGMENTS);
+            for (let k = j; k < maxK; k += 1) {
+                group.push(...burstWords[k]);
+                duration += durations[k];
+                const shared = sharedWordCount(group, words);
+                const dice = group.length + words.length ? (2 * shared) / (group.length + words.length) : 0;
+                const cost = base + (1 - dice) * ALIGN_TEXT_WEIGHT + Math.min(Math.abs(duration - expected), MAX_DURATION_ERROR_S);
+                if (cost < best[i + 1][k + 1]) {
+                    best[i + 1][k + 1] = cost;
+                    from[i + 1][k + 1] = j;
+                }
+            }
+        }
+    }
+    const starts = new Array<number>(segmentCount + 1).fill(burstCount);
+    for (let i = segmentCount; i > 0; i -= 1) starts[i - 1] = from[i][starts[i]];
+    const windows = ordered.map((_, index) => {
+        const start = starts[index];
+        const end = starts[index + 1];
+        return start < end ? { startMs: bursts[start].startMs, endMs: bursts[end - 1].endMs } : undefined;
+    });
+    // 连续没有分到区间的句子（静音检测没切开连续语流）按字数借用相邻窗口切开，保证台词不丢。
+    for (let index = 0; index < segmentCount; index += 1) {
+        if (windows[index]) continue;
+        let stop = index;
+        while (stop < segmentCount && !windows[stop]) stop += 1;
+        const borrowNext = stop < segmentCount;
+        const sourceIndex = borrowNext ? stop : index - 1;
+        const window = windows[sourceIndex];
+        if (!window) return refineDramaTranscriptSegments(segments, bursts);
+        const members: number[] = [];
+        if (borrowNext) {
+            for (let cursor = index; cursor <= stop; cursor += 1) members.push(cursor);
+        } else {
+            members.push(sourceIndex);
+            for (let cursor = index; cursor < stop; cursor += 1) members.push(cursor);
+        }
+        const slices = sliceAlignedWindow(
+            window,
+            members.map((member) => Math.max(1, segmentWords[member].length)),
+        );
+        members.forEach((member, offset) => {
+            windows[member] = slices[offset];
+        });
+    }
+    return extendAlignedCueWindows(ordered.map((segment, index) => ({ startMs: windows[index]!.startMs, endMs: windows[index]!.endMs, text: segment.text })));
+}
+
+/** 按逐区间识别文本过滤有声区间；undefined 表示该区间识别失败，保守保留，宁可多显示也不丢对白。 */
+export function filterDramaSpeechBursts(intervals: DramaSubtitleSpeechInterval[], texts: Array<string | undefined>): DramaSubtitleSpeechBurst[] {
+    const bursts: DramaSubtitleSpeechBurst[] = [];
+    intervals.forEach((interval, index) => {
+        const raw = texts[index];
+        if (raw === undefined) {
+            bursts.push({ ...interval, text: "" });
+            return;
+        }
+        const text = cleanWhisperText(raw);
+        if (text) bursts.push({ ...interval, text });
+    });
+    return bursts;
+}
+
+/**
+ * 逐个有声区间单独送一次识别：背景音乐、环境音在能量检测里与语音不可区分，
+ * 但单独识别时返回空文本，可以放心剔除，避免字幕在没人说话的音乐段出现。
+ */
+async function detectDramaSpeechBursts(intervals: DramaSubtitleSpeechInterval[], context: { wavPath: string; workdir: string; signal?: AbortSignal }): Promise<DramaSubtitleSpeechBurst[]> {
+    const texts: Array<string | undefined> = [];
+    for (const [index, interval] of intervals.entries()) {
+        const slicePath = join(context.workdir, `subtitle-burst-${index}.wav`);
+        const outputBase = join(context.workdir, `subtitle-burst-${index}`);
+        try {
+            await runFfmpeg(["-y", "-ss", (interval.startMs / 1_000).toFixed(3), "-i", context.wavPath, "-t", ((interval.endMs - interval.startMs) / 1_000).toFixed(3), slicePath], {
+                cwd: context.workdir,
+                signal: context.signal,
+                timeoutMs: EXTRACT_TIMEOUT_MS,
+            });
+            await runWhisperCli(["-m", whisperModelPath(), "-f", slicePath, "-l", "en", "-ojf", "-of", outputBase, "-t", String(whisperThreads())], {
+                cwd: context.workdir,
+                signal: context.signal,
+                timeoutMs: BURST_ASR_TIMEOUT_MS,
+            });
+            const payload = JSON.parse(await readFile(`${outputBase}.json`, "utf8")) as unknown;
+            const rows = isRecord(payload) && Array.isArray(payload.transcription) ? payload.transcription : [];
+            texts.push(
+                rows
+                    .map((row) => (isRecord(row) ? cleanWhisperText(row.text) : ""))
+                    .join(" ")
+                    .trim(),
+            );
+        } catch {
+            texts.push(undefined);
+        }
+    }
+    return filterDramaSpeechBursts(intervals, texts);
+}
+
+/** 把一个窗口按字数比例切成 N 份；最后一份承接剩余时间。 */
+function sliceAlignedWindow(window: { startMs: number; endMs: number }, weights: number[]): Array<{ startMs: number; endMs: number }> {
+    const total = weights.reduce((sum, value) => sum + value, 0) || weights.length;
+    const slices: Array<{ startMs: number; endMs: number }> = [];
+    let start = window.startMs;
+    let consumed = 0;
+    for (let index = 0; index < weights.length; index += 1) {
+        consumed += weights[index];
+        const end = index === weights.length - 1 ? window.endMs : Math.min(window.endMs, window.startMs + Math.round(((window.endMs - window.startMs) * consumed) / total));
+        slices.push({ startMs: start, endMs: Math.max(start + 1, end) });
+        start = end;
+    }
+    return slices;
+}
+
+/** 台词说完了字幕立刻消失会闪现；把窗口尾部延长到可读时长，但不越过下一句、也不超过一个短尾巴。 */
+function extendAlignedCueWindows(segments: DramaSubtitleTranscriptSegment[]): DramaSubtitleTranscriptSegment[] {
+    return segments.map((segment, index) => {
+        const next = segments[index + 1];
+        const tailCap = Math.min(segment.endMs + MAX_CUE_TAIL_MS, next ? next.startMs - CUE_TAIL_GAP_MS : Number.POSITIVE_INFINITY);
+        const endMs = Math.max(segment.endMs, Math.min(segment.startMs + MIN_CUE_DISPLAY_MS, tailCap));
+        return { startMs: segment.startMs, endMs, text: segment.text };
+    });
 }
 
 /** 把英文 ASR 台词批量翻译成简体中文；输出条数和输入必须完全一致。 */
