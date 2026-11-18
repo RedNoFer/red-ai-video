@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { getAuthSettings, refundUserPoints } from "@/lib/auth/store";
 import { allocateDramaSubtitleWindow, dramaSubtitleLayout, planDramaSubtitleSources, splitDramaSubtitleText, type DramaSubtitleCue, type DramaSubtitleExportMode, type DramaSubtitleSource } from "@/lib/drama-subtitle-plan";
 import { runFfmpeg } from "@/lib/server/ffmpeg";
-import { resolveLogicalModelCandidates } from "@/lib/server/logical-model-router";
+import { resolveTextPlanningModelCandidates } from "@/lib/server/logical-model-router";
 import { hasSystemAiCharge, readSystemAiBilling, systemAiBillingHeaders, systemAiIdempotencyKey } from "@/lib/server/system-ai-billing";
 import { rankTextPlanningCandidates, requestStructuredText } from "@/lib/server/text-planning-runtime";
 
@@ -144,20 +144,16 @@ export async function resolveDramaSubtitleSources(input: {
             untranslated[index].translation = translation;
         });
     } catch (error) {
-        // 模型翻译失败但剧本自带英中对照时，退回剧本字幕，避免整段导出只剩 manifest。
-        const fallback = (input.scriptSources || []).filter((source) => source.hasEnglish && source.text.trim());
-        if (fallback.some((source) => source.translation)) {
-            console.warn("drama subtitle translation failed, falling back to script sources", error);
-            return fallback;
-        }
-        throw error;
+        // 翻译失败时保留 ASR 的真实时间轴：未翻译的句子只显示英文，不能再把整份剧本按字数铺满全片。
+        console.warn("drama subtitle translation failed, keeping ASR timing", error);
     }
     return sources;
 }
 
 /**
- * 把 Whisper 连续语音段对齐回剧本里的英文台词：
- * Whisper 常把一条台词拆成多段，连续组合后能覆盖整条剧本台词时复用剧本原文和自带中文翻译。
+ * 把 Whisper 语音段对齐回剧本里的英文台词：
+ * 连续语音段能覆盖整条剧本台词时复用剧本自带中文翻译，但每个语音段始终保留自己的真实起止时间。
+ * 未匹配的语音段保留 ASR 原文，交给模型逐段翻译；没有出现在音频里的剧本台词不会进入字幕。
  */
 export function alignDramaSubtitleSources(segments: DramaSubtitleTranscriptSegment[], scriptSources: DramaSubtitleSource[]): DramaSubtitleSource[] {
     const candidates = scriptSources.filter((source) => source.hasEnglish && Boolean(source.text.trim()));
@@ -199,15 +195,18 @@ export function alignDramaSubtitleSources(segments: DramaSubtitleTranscriptSegme
         if (matchedIndex >= 0) {
             used.add(matchedIndex);
             const source = candidates[matchedIndex];
-            const first = segments[cursor];
-            const last = segments[cursor + matchedSize - 1];
-            aligned.push({
-                text: source.text,
-                hasEnglish: true,
-                startMs: first.startMs,
-                endMs: last.endMs,
-                ...(source.translation ? { translation: source.translation } : {}),
-            });
+            const parts = matchedTranslationParts(source.translation, matchedSize);
+            for (let offset = 0; offset < matchedSize; offset += 1) {
+                const segment = segments[cursor + offset];
+                const translation = parts[offset] || "";
+                aligned.push({
+                    text: segment.text,
+                    hasEnglish: true,
+                    startMs: segment.startMs,
+                    endMs: segment.endMs,
+                    ...(translation ? { translation } : {}),
+                });
+            }
             cursor += matchedSize;
             continue;
         }
@@ -216,6 +215,18 @@ export function alignDramaSubtitleSources(segments: DramaSubtitleTranscriptSegme
         cursor += 1;
     }
     return aligned;
+}
+
+/** 剧本一条台词被 Whisper 拆成多段时，按标点把中文翻译拆到对应段；拆不齐则交给模型逐段翻译。 */
+function matchedTranslationParts(translation: string | undefined, count: number) {
+    const value = (translation || "").trim();
+    if (!value) return [];
+    if (count === 1) return [value];
+    const parts = value
+        .split(/(?<=[。！？!?；;，,、：:.…])/u)
+        .map((item) => item.trim())
+        .filter(Boolean);
+    return parts.length === count ? parts : [];
 }
 
 function matchWords(value: string) {
@@ -317,7 +328,7 @@ export async function translateDramaSubtitleChunks(input: { origin: string; cook
     if (!lines.length) return [];
     const settings = await getAuthSettings();
     const model = settings.defaultModels.textModel;
-    const candidates = resolveLogicalModelCandidates(settings, "text", model);
+    const candidates = resolveTextPlanningModelCandidates(settings, model);
     if (!model || !candidates.length) throw new DramaSubtitleAsrError("后台尚未配置可用的默认文本模型，无法生成双语字幕", 503);
     const ranked = rankTextPlanningCandidates(candidates);
     const translations: string[] = [];
@@ -343,7 +354,8 @@ async function translateDramaSubtitleBatch(input: {
     let latestError: unknown;
     for (const candidate of input.candidates) {
         for (let attempt = 1; attempt <= 2; attempt += 1) {
-            const idempotencyKey = systemAiIdempotencyKey("drama-subtitle", input.userId, input.projectId, input.shotId, input.videoId, input.lines.join("\0"), candidate.channelId, candidate.upstreamModel, `attempt-${attempt}`);
+            const billingModel = candidate.logicalModelId || input.model;
+            const idempotencyKey = systemAiIdempotencyKey("drama-subtitle", input.userId, input.projectId, input.shotId, input.videoId, input.lines.join("\0"), billingModel, candidate.channelId, candidate.upstreamModel, `attempt-${attempt}`);
             try {
                 const call = await requestStructuredText({
                     origin: input.origin,
@@ -361,14 +373,14 @@ async function translateDramaSubtitleBatch(input: {
                         "Content-Type": "application/json",
                         "Idempotency-Key": idempotencyKey,
                         "X-Client-Request-Id": idempotencyKey,
-                        ...systemAiBillingHeaders(input.model, idempotencyKey, candidate.upstreamModel),
+                        ...systemAiBillingHeaders(billingModel, idempotencyKey, candidate.upstreamModel),
                     },
                     signal: input.signal,
-                    onInvalidResponse: (headers) => refundInvalidResponse(input.userId, input.model, headers),
+                    onInvalidResponse: (headers) => refundInvalidResponse(input.userId, billingModel, headers),
                 });
                 const translations = parseDramaSubtitleTranslations(call.arguments, input.lines.length);
                 if (!translations) {
-                    await refundInvalidResponse(input.userId, input.model, call.headers);
+                    await refundInvalidResponse(input.userId, billingModel, call.headers);
                     latestError = new DramaSubtitleAsrError("默认文本模型没有返回有效的中文字幕翻译", 502);
                     continue;
                 }
@@ -379,7 +391,8 @@ async function translateDramaSubtitleBatch(input: {
         }
     }
     if (latestError instanceof DramaSubtitleAsrError) throw latestError;
-    throw new DramaSubtitleAsrError("默认文本模型没有返回有效的中文字幕翻译，请稍后重试", 502);
+    const detail = latestError instanceof Error && latestError.message.trim() ? `：${latestError.message.trim()}` : "";
+    throw new DramaSubtitleAsrError(`默认文本模型没有返回有效的中文字幕翻译${detail}`, 502);
 }
 
 function translationBatches(lines: string[]) {

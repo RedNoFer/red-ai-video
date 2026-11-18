@@ -47,6 +47,7 @@ type DramaVideoExportManifest = {
         generated: Array<{ episode: string; shot: string; shotCode: string; videoId: string; mode: DramaSubtitleExportMode; file: string; srt: string }>;
         skipped: Array<{ episode: string; shot: string; shotCode: string; videoId: string; mode: DramaSubtitleExportMode; reason: string }>;
         failed: Array<{ episode: string; shot: string; shotCode: string; videoId: string; mode: DramaSubtitleExportMode; reason: string }>;
+        warnings: Array<{ episode: string; shot: string; shotCode: string; videoId: string; mode: DramaSubtitleExportMode; reason: string }>;
     };
 };
 
@@ -157,7 +158,7 @@ export async function exportDramaVideos(input: {
             originalsIncluded: includeOriginals,
             exported: includeOriginals ? downloads.map(({ entry, zipPath }) => ({ episode: entry.episodeTitle, shot: entry.shotTitle, shotCode: entry.shotCode, file: zipPath, videoId: entry.videoId, url: entry.url })) : [],
             failed: failures,
-            subtitles: { requested: subtitleModes.length > 0, modes: subtitleModes, generated: [], skipped: [], failed: [] },
+            subtitles: { requested: subtitleModes.length > 0, modes: subtitleModes, generated: [], skipped: [], failed: [], warnings: [] },
         };
         const stream = createZipStream(root, downloads, manifest, input.project, subtitleModes, includeOriginals, settledBytes, input.onProgress, {
             origin: input.origin,
@@ -326,6 +327,19 @@ function createZipStream(
                         for (const mode of subtitleModes) {
                             onProgress?.({ phase: "subtitles", done: index, total: downloads.length, bytes: receivedBytes, subtitlesDone, subtitlesTotal });
                             subtitlesDone += 1;
+                            if (mode === "bilingual") {
+                                const missingTranslations = sources.filter((source) => !source.translation).length;
+                                if (missingTranslations) {
+                                    manifest.subtitles.warnings.push({
+                                        episode: item.entry.episodeTitle,
+                                        shot: item.entry.shotTitle,
+                                        shotCode: item.entry.shotCode,
+                                        videoId: item.entry.videoId,
+                                        mode,
+                                        reason: `${missingTranslations} 句台词没有生成中文翻译，已保留英文`,
+                                    });
+                                }
+                            }
                             if (mode === "english" && !availability.hasEnglish) {
                                 manifest.subtitles.skipped.push({ episode: item.entry.episodeTitle, shot: item.entry.shotTitle, shotCode: item.entry.shotCode, videoId: item.entry.videoId, mode, reason: "本镜头没有英文字幕" });
                                 continue;

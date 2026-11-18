@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
     getAuthSettings: vi.fn(),
     refundUserPoints: vi.fn(),
-    resolveLogicalModelCandidates: vi.fn(),
+    resolveTextPlanningModelCandidates: vi.fn(),
     rankTextPlanningCandidates: vi.fn(),
     requestStructuredText: vi.fn(),
     hasSystemAiCharge: vi.fn(),
@@ -13,7 +13,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/auth/store", () => ({ getAuthSettings: mocks.getAuthSettings, refundUserPoints: mocks.refundUserPoints }));
-vi.mock("@/lib/server/logical-model-router", () => ({ resolveLogicalModelCandidates: mocks.resolveLogicalModelCandidates }));
+vi.mock("@/lib/server/logical-model-router", () => ({ resolveTextPlanningModelCandidates: mocks.resolveTextPlanningModelCandidates }));
 vi.mock("@/lib/server/text-planning-runtime", () => ({ rankTextPlanningCandidates: mocks.rankTextPlanningCandidates, requestStructuredText: mocks.requestStructuredText }));
 vi.mock("@/lib/server/system-ai-billing", () => ({
     hasSystemAiCharge: mocks.hasSystemAiCharge,
@@ -28,7 +28,7 @@ describe("Drama subtitle translation", () => {
     beforeEach(() => {
         vi.clearAllMocks();
         mocks.getAuthSettings.mockResolvedValue({ defaultModels: { textModel: "text-model" } });
-        mocks.resolveLogicalModelCandidates.mockReturnValue([{ channelId: "channel-one", upstreamModel: "upstream-one", logicalModelId: "text-model", channel: {} }]);
+        mocks.resolveTextPlanningModelCandidates.mockReturnValue([{ channelId: "channel-one", upstreamModel: "upstream-one", logicalModelId: "text-model", channel: {} }]);
         mocks.rankTextPlanningCandidates.mockImplementation((candidates: unknown[]) => candidates);
         mocks.systemAiBillingHeaders.mockReturnValue({});
         mocks.systemAiIdempotencyKey.mockReturnValue("translation-idempotency-key");
@@ -79,7 +79,7 @@ describe("Drama subtitle translation", () => {
 
     it("fails with a configuration error when no default text model is available", async () => {
         mocks.getAuthSettings.mockResolvedValue({ defaultModels: { textModel: "" } });
-        mocks.resolveLogicalModelCandidates.mockReturnValue([]);
+        mocks.resolveTextPlanningModelCandidates.mockReturnValue([]);
 
         await expect(
             translateDramaSubtitleChunks({

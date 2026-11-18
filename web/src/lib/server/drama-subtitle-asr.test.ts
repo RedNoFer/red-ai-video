@@ -1,6 +1,18 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { planDramaSubtitleSources } from "@/lib/drama-subtitle-plan";
+
+const mocks = vi.hoisted(() => ({
+    settings: vi.fn(),
+    candidates: vi.fn(),
+    ranked: vi.fn((items: unknown[]) => items),
+    structured: vi.fn(),
+    refund: vi.fn(),
+}));
+
+vi.mock("@/lib/auth/store", () => ({ getAuthSettings: mocks.settings, refundUserPoints: mocks.refund }));
+vi.mock("@/lib/server/logical-model-router", () => ({ resolveTextPlanningModelCandidates: mocks.candidates }));
+vi.mock("@/lib/server/text-planning-runtime", () => ({ rankTextPlanningCandidates: mocks.ranked, requestStructuredText: mocks.structured }));
 
 import {
     alignDramaSubtitleSources,
@@ -10,6 +22,7 @@ import {
     parseDramaSubtitleTranslations,
     parseDramaWhisperTranscript,
     refineDramaTranscriptSegments,
+    translateDramaSubtitleChunks,
     type DramaSubtitleSpeechInterval,
 } from "./drama-subtitle-asr";
 
@@ -104,7 +117,7 @@ describe("Drama subtitle ASR", () => {
         expect(parseDramaSubtitleTranslations("not json", 1)).toBeUndefined();
     });
 
-    it("merges split ASR segments back into the script line and reuses the script translation", () => {
+    it("splits a matched script line across real ASR segments and keeps each segment timing", () => {
         const scriptSources = [
             { text: "The black-gold card? Grandpa said it was real.", translation: "黑金龙卡？爷爷说它真的存在。", hasEnglish: true },
             { text: "What? Something wrong?", translation: "什么？出什么事了？", hasEnglish: true },
@@ -118,9 +131,11 @@ describe("Drama subtitle ASR", () => {
 
         const aligned = alignDramaSubtitleSources(segments, scriptSources);
 
-        expect(aligned).toHaveLength(2);
-        expect(aligned[0]).toMatchObject({ text: scriptSources[0].text, translation: scriptSources[0].translation, startMs: 0, endMs: 12_780 });
-        expect(aligned[1]).toMatchObject({ text: scriptSources[1].text, translation: scriptSources[1].translation, startMs: 12_780, endMs: 16_020 });
+        expect(aligned).toHaveLength(4);
+        expect(aligned[0]).toMatchObject({ text: "That's the black gold card.", translation: "黑金龙卡？", startMs: 0, endMs: 9_900 });
+        expect(aligned[1]).toMatchObject({ text: "Grandpa said it was real.", translation: "爷爷说它真的存在。", startMs: 9_900, endMs: 12_780 });
+        expect(aligned[2]).toMatchObject({ text: "What?", translation: "什么？", startMs: 12_780, endMs: 13_780 });
+        expect(aligned[3]).toMatchObject({ text: "Is something wrong?", translation: "出什么事了？", startMs: 13_780, endMs: 16_020 });
     });
 
     it("keeps unrecognized speech as ASR text and never reuses one script line", () => {
@@ -165,16 +180,54 @@ describe("Drama subtitle ASR", () => {
         const aligned = alignDramaSubtitleSources(segments, scriptSources);
 
         expect(aligned.map((source) => source.text)).toEqual([
-            scriptSources[0].text,
-            scriptSources[1].text,
-            scriptSources[2].text,
-            scriptSources[3].text,
-            scriptSources[4].text,
+            "That's the black gold card.",
+            "Grandpa said it was real.",
+            "What?",
+            "Is something wrong?",
+            "You don't know what that is?",
+            "A card.",
+            "The bank gave it to me.",
+            "The bank gave it to you.",
             "I'm Serena Meridian's branch president.",
             "I saw your $10 bill at breakfast.",
         ]);
-        expect(aligned.slice(0, 5).every((source) => source.translation)).toBe(true);
-        expect(aligned[5].translation).toBeUndefined();
-        expect(aligned[6].translation).toBeUndefined();
+        expect(aligned.slice(0, 8).every((source) => source.translation)).toBe(true);
+        expect(aligned[8].translation).toBeUndefined();
+        expect(aligned[9].translation).toBeUndefined();
+        expect(aligned.every((source, index) => source.startMs === segments[index].startMs && source.endMs === segments[index].endMs)).toBe(true);
+        expect(aligned.some((source) => source.text.includes("seen a ghost"))).toBe(false);
+
+        const cues = planDramaSubtitleSources(aligned, 30_000, 1920, 1080, "bilingual");
+        expect(cues.map((cue) => cue.text)).toEqual(aligned.map((source) => source.text));
+        expect(cues[0].startMs).toBe(0);
+        expect(cues[1].startMs).toBeGreaterThanOrEqual(9_900);
+        expect(cues[9].endMs).toBeLessThanOrEqual(30_000);
+        expect(cues.some((cue) => cue.secondaryText === undefined)).toBe(true);
+    });
+
+    it("falls back to the next text model for translation and bills that model", async () => {
+        mocks.settings.mockResolvedValue({ defaultModels: { textModel: "gpt-5.5" } });
+        mocks.candidates.mockReturnValue([
+            { logicalModelId: "gpt-5.5", channelId: "channel-one", upstreamModel: "gpt-5.5", channel: { id: "channel-one" } },
+            { logicalModelId: "gpt-5.6", channelId: "channel-one", upstreamModel: "gpt-5.6", channel: { id: "channel-one" } },
+        ]);
+        mocks.structured.mockImplementation(async (input: { candidate: { logicalModelId: string } }) => {
+            if (input.candidate.logicalModelId === "gpt-5.5") throw new Error("文本模型渠道暂不可用（HTTP 502）");
+            return { arguments: JSON.stringify({ translations: ["我是Serena Meridian分行的行长。", "我早餐时看到了你那张10美元钞票。"] }), headers: new Headers() };
+        });
+
+        const result = await translateDramaSubtitleChunks({
+            origin: "http://127.0.0.1:3000",
+            cookie: "",
+            userId: "user-one",
+            projectId: "project-one",
+            shotId: "shot-one",
+            videoId: "video-one",
+            chunks: ["I'm Serena Meridian's branch president.", "I saw your $10 bill at breakfast."],
+        });
+
+        expect(result).toEqual(["我是Serena Meridian分行的行长。", "我早餐时看到了你那张10美元钞票。"]);
+        expect(mocks.structured).toHaveBeenCalledTimes(3);
+        expect(mocks.structured.mock.calls[2][0].headers["x-vozeb-pro-logical-model"]).toBe("gpt-5.6");
     });
 });
