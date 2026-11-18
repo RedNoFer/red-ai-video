@@ -140,6 +140,28 @@ describe("Drama subtitle ASR", () => {
         expect(aligned.map((segment) => segment.text)).toEqual(segments.map((segment) => segment.text));
     });
 
+    it("claims short bursts by duration when per-burst text is noise", () => {
+        // 真实案例："What?" 被单独识别成 "one."，词重合为 0；短区间文本证据弱，应由时长主导归还给 "What?"
+        const segments = [
+            { startMs: 0, endMs: 2_000, text: "Grandpa said it was real." },
+            { startMs: 2_000, endMs: 3_000, text: "What?" },
+            { startMs: 3_000, endMs: 5_000, text: "Is something wrong?" },
+        ];
+
+        const aligned = alignDramaTranscriptSegments(segments, [
+            { startMs: 0, endMs: 1_120, text: "Grandpa said it was real." },
+            { startMs: 1_200, endMs: 1_390, text: "one." },
+            { startMs: 1_450, endMs: 2_100, text: "Is something wrong?" },
+        ]);
+
+        expect(aligned.map((segment) => [segment.startMs, segment.endMs])).toEqual([
+            [0, 1_120],
+            [1_200, 1_390],
+            [1_450, 2_450], // 独占结尾的句子允许延到一个短尾巴
+        ]);
+        expect(aligned.map((segment) => segment.text)).toEqual(segments.map((segment) => segment.text));
+    });
+
     it("slices a single burst window when silence detection cannot separate continuous speech", () => {
         const segments = [
             { startMs: 0, endMs: 600, text: "Hello there my dear friend" },

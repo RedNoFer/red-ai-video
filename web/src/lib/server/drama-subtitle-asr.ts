@@ -23,6 +23,8 @@ const MIN_OVERLAP_RATIO = 0.15;
 // 文本重合是主信号（背景音乐/停顿让 Whisper token 时间轴漂移，但逐区间的识别文本顺序稳定）；
 // 识别出的文本没有对应发声区间的句子按罚金空着，不抢真实语音的窗口。
 const ALIGN_TEXT_WEIGHT = 3;
+// 单独识别的短区间文本证据不足：词数少于该值时按比例降低文本权重，让时长信号主导短句对齐。
+const MIN_TEXT_EVIDENCE_WORDS = 3;
 const MAX_DURATION_ERROR_S = 1.5;
 const EMPTY_ALIGNMENT_COST = 1.2;
 // 可读性：短句（如 "What?"）说完后字幕继续停留一小段，但不越过下一句起点，也不超过一个短尾巴。
@@ -473,7 +475,8 @@ export function alignDramaTranscriptSegments(segments: DramaSubtitleTranscriptSe
     const segmentCount = ordered.length;
     const burstCount = bursts.length;
     // dp[i][j]：前 i 句消费前 j 个发声区间的最小代价；from 记录第 i 句占用的起始区间。
-    // 一句可以吞下连续多个区间（一 Animated句被停顿切开），代价 = 文本重合误差 + 时长误差；
+    // 一句可以吞下连续多个区间（一句台词被停顿切开），代价 = 文本重合误差 + 时长误差；
+    // 短区间的单独识别文本经常是噪声（如 "What?" 被识别成 "one."），词越少文本证据权重越低、时长权重相对越高；
     // 没有任何匹配的句子宁可空着（罚金），把区间让给真正对应的台词。
     const best: number[][] = Array.from({ length: segmentCount + 1 }, () => new Array<number>(burstCount + 1).fill(Number.POSITIVE_INFINITY));
     const from: number[][] = Array.from({ length: segmentCount + 1 }, () => new Array<number>(burstCount + 1).fill(0));
@@ -496,7 +499,8 @@ export function alignDramaTranscriptSegments(segments: DramaSubtitleTranscriptSe
                 duration += durations[k];
                 const shared = sharedWordCount(group, words);
                 const dice = group.length + words.length ? (2 * shared) / (group.length + words.length) : 0;
-                const cost = base + (1 - dice) * ALIGN_TEXT_WEIGHT + Math.min(Math.abs(duration - expected), MAX_DURATION_ERROR_S);
+                const textWeight = ALIGN_TEXT_WEIGHT * Math.min(1, group.length / MIN_TEXT_EVIDENCE_WORDS);
+                const cost = base + (1 - dice) * textWeight + Math.min(Math.abs(duration - expected), MAX_DURATION_ERROR_S);
                 if (cost < best[i + 1][k + 1]) {
                     best[i + 1][k + 1] = cost;
                     from[i + 1][k + 1] = j;
