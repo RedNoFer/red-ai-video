@@ -20,7 +20,7 @@ import {
     buildDramaSubtitleChunks,
     buildDramaSubtitleSources,
     dramaScriptHasSubtitleTranslations,
-    filterDramaSpeechBursts,
+    splitLongSpeechBurst,
     parseDramaSilenceIntervals,
     parseDramaSubtitleTranslations,
     parseDramaWhisperTranscript,
@@ -95,22 +95,25 @@ describe("Drama subtitle ASR", () => {
         expect(refined[2].startMs).toBeGreaterThanOrEqual(12_780);
     });
 
-    it("keeps only intervals confirmed as real speech by per-burst recognition", () => {
-        const intervals: DramaSubtitleSpeechInterval[] = [
-            { startMs: 2_970, endMs: 5_530 },
-            { startMs: 6_116, endMs: 6_459 },
-            { startMs: 12_637, endMs: 12_819 },
-        ];
+    it("splits long bursts by row timestamps and drops sound-effect rows", () => {
+        const interval: DramaSubtitleSpeechInterval = { startMs: 0, endMs: 7_820 };
 
-        expect(filterDramaSpeechBursts(intervals, ["[BLANK_AUDIO]", "That's...", "What?"])).toEqual([
-            { startMs: 6_116, endMs: 6_459, text: "That's..." },
-            { startMs: 12_637, endMs: 12_819, text: "What?" },
-        ]);
-        // 识别失败按仍有语音处理（text 为空，仅按时长兜底对齐），宁可多显示也不丢对白。
-        expect(filterDramaSpeechBursts(intervals, [undefined, undefined, ""])).toEqual([
-            { startMs: 2_970, endMs: 5_530, text: "" },
-            { startMs: 6_116, endMs: 6_459, text: "" },
-        ]);
+        // 真实案例：0-7.82s 的区间里混着轻音乐和 "Why me?"，行级时间戳能把台词剥出来
+        expect(
+            splitLongSpeechBurst(interval, [
+                { fromMs: 0, toMs: 2_580, text: "(soft music)" },
+                { fromMs: 5_740, toMs: 6_600, text: "- Why me?" },
+            ]),
+        ).toEqual([{ startMs: 5_740, endMs: 6_600, text: "Why me?" }]);
+        // 拟音行（门声）清洗后为空：整段剔除，字幕不再覆盖门声
+        expect(splitLongSpeechBurst({ startMs: 0, endMs: 1_160 }, [{ fromMs: 0, toMs: 1_160, text: "(door slams)" }])).toEqual([]);
+        // 行跨度与词数严重不符（噪声里 whisper 常把整段铺给一句）：不拆分，退回整段窗口
+        expect(
+            splitLongSpeechBurst({ startMs: 0, endMs: 10_620 }, [
+                { fromMs: 0, toMs: 9_100, text: "Open it." },
+                { fromMs: 9_100, toMs: 10_060, text: "You think this is funny?" },
+            ]),
+        ).toEqual([{ startMs: 0, endMs: 10_620, text: "Open it. You think this is funny?" }]);
     });
 
     it("aligns sentences to real speech bursts instead of drifting whisper timestamps", () => {

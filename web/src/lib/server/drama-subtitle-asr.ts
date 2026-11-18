@@ -27,6 +27,8 @@ const ALIGN_TEXT_WEIGHT = 3;
 const MIN_TEXT_EVIDENCE_WORDS = 3;
 const MAX_DURATION_ERROR_S = 1.5;
 const EMPTY_ALIGNMENT_COST = 1.2;
+// 超过该时长的有声区间用单独识别的行级时间戳二次切分（更短的区间整段窗口已足够准）。
+const LONG_BURST_SPLIT_MS = 3_000;
 // 可读性：短句（如 "What?"）说完后字幕继续停留一小段，但不越过下一句起点，也不超过一个短尾巴。
 const MIN_CUE_DISPLAY_MS = 1_000;
 const MAX_CUE_TAIL_MS = 800;
@@ -50,6 +52,9 @@ export type DramaSubtitleSpeechInterval = {
 
 /** 单独识别过的有声区间：text 是该区间内识别出的语音文本（识别失败时为空串，仅按时长兜底对齐）。 */
 export type DramaSubtitleSpeechBurst = DramaSubtitleSpeechInterval & { text: string };
+
+/** 单独识别返回的行级时间戳（相对该区间切片起点）。 */
+export type DramaSubtitleBurstRow = { fromMs: number; toMs: number; text: string };
 
 export type DramaSubtitleChunk = {
     text: string;
@@ -542,27 +547,13 @@ export function alignDramaTranscriptSegments(segments: DramaSubtitleTranscriptSe
     return extendAlignedCueWindows(ordered.map((segment, index) => ({ startMs: windows[index]!.startMs, endMs: windows[index]!.endMs, text: segment.text })));
 }
 
-/** 按逐区间识别文本过滤有声区间；undefined 表示该区间识别失败，保守保留，宁可多显示也不丢对白。 */
-export function filterDramaSpeechBursts(intervals: DramaSubtitleSpeechInterval[], texts: Array<string | undefined>): DramaSubtitleSpeechBurst[] {
-    const bursts: DramaSubtitleSpeechBurst[] = [];
-    intervals.forEach((interval, index) => {
-        const raw = texts[index];
-        if (raw === undefined) {
-            bursts.push({ ...interval, text: "" });
-            return;
-        }
-        const text = cleanWhisperText(raw);
-        if (text) bursts.push({ ...interval, text });
-    });
-    return bursts;
-}
-
 /**
  * 逐个有声区间单独送一次识别：背景音乐、环境音在能量检测里与语音不可区分，
- * 但单独识别时返回空文本，可以放心剔除，避免字幕在没人说话的音乐段出现。
+ * 但单独识别时返回空文本，可以放心剔除，避免字幕在没人说话的音乐段出现；
+ * 长区间内部再按行级时间戳二次切分，把混进同一区间的音乐/拟音行剥掉。
  */
 async function detectDramaSpeechBursts(intervals: DramaSubtitleSpeechInterval[], context: { wavPath: string; workdir: string; signal?: AbortSignal }): Promise<DramaSubtitleSpeechBurst[]> {
-    const texts: Array<string | undefined> = [];
+    const bursts: DramaSubtitleSpeechBurst[] = [];
     for (const [index, interval] of intervals.entries()) {
         const slicePath = join(context.workdir, `subtitle-burst-${index}.wav`);
         const outputBase = join(context.workdir, `subtitle-burst-${index}`);
@@ -578,18 +569,42 @@ async function detectDramaSpeechBursts(intervals: DramaSubtitleSpeechInterval[],
                 timeoutMs: BURST_ASR_TIMEOUT_MS,
             });
             const payload = JSON.parse(await readFile(`${outputBase}.json`, "utf8")) as unknown;
-            const rows = isRecord(payload) && Array.isArray(payload.transcription) ? payload.transcription : [];
-            texts.push(
-                rows
-                    .map((row) => (isRecord(row) ? cleanWhisperText(row.text) : ""))
-                    .join(" ")
-                    .trim(),
-            );
+            const rawRows = isRecord(payload) && Array.isArray(payload.transcription) ? payload.transcription : [];
+            const rows: DramaSubtitleBurstRow[] = [];
+            for (const rawRow of rawRows) {
+                if (!isRecord(rawRow)) continue;
+                const offsets = isRecord(rawRow.offsets) ? rawRow.offsets : {};
+                rows.push({ fromMs: numberValue(offsets.from) ?? 0, toMs: numberValue(offsets.to) ?? 0, text: typeof rawRow.text === "string" ? rawRow.text : "" });
+            }
+            bursts.push(...splitLongSpeechBurst(interval, rows));
         } catch {
-            texts.push(undefined);
+            bursts.push({ ...interval, text: "" });
         }
     }
-    return filterDramaSpeechBursts(intervals, texts);
+    return bursts;
+}
+
+/** 长区间内部按行级时间戳二次切分：拟音/音乐行剔除后，台词行按各自起止切开；行跨度与词数严重不符时不拆分，退回整段窗口。 */
+export function splitLongSpeechBurst(interval: DramaSubtitleSpeechInterval, rows: DramaSubtitleBurstRow[]): DramaSubtitleSpeechBurst[] {
+    const cleaned = rows.map((row) => ({ ...row, text: cleanWhisperText(row.text) })).filter((row) => row.text && row.toMs > row.fromMs);
+    const text = cleaned
+        .map((row) => row.text)
+        .join(" ")
+        .trim();
+    if (!text) return [];
+    const burstDuration = interval.endMs - interval.startMs;
+    const plausible = burstDuration >= LONG_BURST_SPLIT_MS && cleaned.every((row) => row.toMs - row.fromMs <= Math.max(1_500, Math.max(1, matchWords(row.text).length) * 600));
+    if (!plausible) return [{ ...interval, text }];
+    const bursts: DramaSubtitleSpeechBurst[] = [];
+    let cursor = interval.startMs;
+    for (const row of cleaned) {
+        const startMs = Math.max(cursor, interval.startMs + Math.round(row.fromMs));
+        const endMs = Math.min(interval.endMs, interval.startMs + Math.round(row.toMs));
+        if (endMs - startMs < 120) continue;
+        bursts.push({ startMs, endMs, text: row.text });
+        cursor = endMs;
+    }
+    return bursts.length ? bursts : [{ ...interval, text }];
 }
 
 /** 把一个窗口按字数比例切成 N 份；最后一份承接剩余时间。 */
@@ -726,6 +741,10 @@ function cleanWhisperText(value: unknown) {
     const text = value
         .replace(/\[_[^\]]+\]/gu, "")
         .replace(/\[(?:BLANK_AUDIO|MUSIC|SOUND|NOISE|LAUGHTER|APPLAUSE)\]/giu, "")
+        // whisper 常把门声/音乐写成 (door slams)/(soft music)，拟音符号写成 ♪；这些都是非语音标注
+        .replace(/\([^()]{0,80}\)/gu, "")
+        .replace(/[♪♫♩♬]+/gu, "")
+        .replace(/^\s*[-–—]+\s*/u, "")
         .replace(/\s+/gu, " ")
         .trim();
     return /[\p{L}\p{N}]/u.test(text) ? text : "";
