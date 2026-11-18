@@ -316,7 +316,10 @@ function runWhisperCli(args: string[], options: { cwd?: string; signal?: AbortSi
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), options.timeoutMs);
         const signal = options.signal ? AbortSignal.any([options.signal, controller.signal]) : controller.signal;
-        const child = spawn(whisperCliPath(), args, {
+        // 语音识别与页面请求让路：POSIX 下用 nice 降低调度优先级（与 FFmpeg 一致，nice 会 exec 目标程序，PID 不变，取消/超时信号照常生效）；
+        // turbopackIgnore 阻止构建器追踪动态二进制路径导致整个项目被收入 standalone 产物。
+        const useNice = process.platform !== "win32";
+        const child = spawn(/* turbopackIgnore: true */ useNice ? "nice" : whisperCliPath(), useNice ? ["-n", "15", whisperCliPath(), ...args] : args, {
             cwd: options.cwd,
             signal,
             stdio: ["ignore", "pipe", "pipe"],
