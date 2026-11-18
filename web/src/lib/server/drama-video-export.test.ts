@@ -205,6 +205,44 @@ describe("Drama video export", () => {
         );
     });
 
+    it("passes the shot script translations to subtitle generation", async () => {
+        const current = project();
+        current.episodes[0].script = ["【SH01｜0–30秒｜开场】", "", '"By morning, everything would be cheaper."', "中译：到了明早，一切都将便宜一千万倍。"].join("\n");
+        const payload = await collectDramaVideoExportPayload("user-one", current);
+        const entries = resolveDramaVideoExportEntries(
+            payload,
+            payload.episodes.flatMap((episode) => episode.shots.flatMap((shot) => shot.videos.map((video) => ({ episodeId: episode.episodeId, shotId: shot.shotId, videoId: video.id })))),
+        );
+        mocks.probeDramaVideo.mockResolvedValue({ width: 1080, height: 1920, durationMs: 5_000, audioCodec: "aac" });
+        mocks.renderDramaSubtitleVideo.mockImplementation(async ({ outputPath }: { outputPath: string }) => {
+            await writeFile(outputPath, new Uint8Array([9]));
+        });
+
+        await new Response((await exportDramaVideos({ project: current, entries, origin: "http://127.0.0.1:3000", userId: "user-one", subtitleModes: ["bilingual"], includeOriginals: false })).stream).arrayBuffer();
+
+        expect(mocks.resolveSubtitleSources).toHaveBeenCalledWith(
+            expect.objectContaining({
+                scriptSources: expect.arrayContaining([expect.objectContaining({ text: "By morning, everything would be cheaper.", translation: "到了明早，一切都将便宜一千万倍。" })]),
+            }),
+        );
+    });
+
+    it("fails a subtitle-only export instead of returning a manifest-only zip", async () => {
+        const current = project();
+        current.episodes[0].shots[0].dialogue = "第一句台词。第二句台词。";
+        const payload = await collectDramaVideoExportPayload("user-one", current);
+        const entries = resolveDramaVideoExportEntries(
+            payload,
+            payload.episodes.flatMap((episode) => episode.shots.flatMap((shot) => shot.videos.map((video) => ({ episodeId: episode.episodeId, shotId: shot.shotId, videoId: video.id })))),
+        );
+        mocks.probeDramaVideo.mockResolvedValue({ width: 1080, height: 1920, durationMs: 5_000, audioCodec: "aac" });
+        mocks.resolveSubtitleSources.mockRejectedValue(new Error("默认文本模型没有返回有效的中文字幕翻译"));
+
+        const result = await exportDramaVideos({ project: current, entries, origin: "http://127.0.0.1:3000", userId: "user-one", subtitleModes: ["bilingual"], includeOriginals: false });
+
+        await expect(new Response(result.stream).arrayBuffer()).rejects.toThrow("字幕版导出失败：默认文本模型没有返回有效的中文字幕翻译");
+    });
+
     it("records skipped subtitles without running media probes when the shot has no text", async () => {
         const current = project();
         mocks.probeDramaVideo.mockClear();

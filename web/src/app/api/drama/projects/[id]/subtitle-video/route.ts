@@ -8,7 +8,7 @@ import { NextResponse } from "next/server";
 import { readJsonBodyResult } from "@/lib/auth/request";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getAuthSettings } from "@/lib/auth/store";
-import { dramaShotSubtitleAvailability, planDramaSubtitleSources, type DramaSubtitleExportMode } from "@/lib/drama-subtitle-plan";
+import { dramaScriptShotSubtitleSources, dramaShotSubtitleAvailability, planDramaSubtitleSources, type DramaSubtitleExportMode } from "@/lib/drama-subtitle-plan";
 import { normalizeDramaSubtitleExportModes } from "@/lib/drama-video-export";
 import { checkGenerationRateLimit, rateLimitHeaders } from "@/lib/server/security";
 import { collectDramaVideoExportPayload, DramaVideoExportError, resolveDramaVideoExportEntries } from "@/lib/server/drama-video-export";
@@ -86,6 +86,7 @@ export async function POST(request: Request, context: Context) {
                 projectId: project.id,
                 shotId: shot.id,
                 videoId: entry.videoId,
+                scriptSources: dramaScriptShotSubtitleSources(episode.script, shot.code),
             });
             const cues = planDramaSubtitleSources(sources, probe.durationMs, probe.width, probe.height, mode);
             if (!cues.length) return NextResponse.json({ code: 422, data: null, msg: "本镜头没有检测到可烧录的对白" }, { status: 422 });

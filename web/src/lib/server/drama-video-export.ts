@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { Zip, ZipPassThrough } from "fflate";
 
 import type { DramaProject, DramaShot, DramaShotVideoResult } from "@/lib/drama-project-contract";
-import { buildDramaSrt, dramaShotSubtitleAvailability, planDramaSubtitleSources, type DramaSubtitleExportMode, type DramaSubtitleSource } from "@/lib/drama-subtitle-plan";
+import { buildDramaSrt, dramaScriptShotSubtitleSources, dramaShotSubtitleAvailability, planDramaSubtitleSources, type DramaSubtitleExportMode, type DramaSubtitleSource } from "@/lib/drama-subtitle-plan";
 import { mergeDramaShotVideoResults, visibleDramaShotVideoResults } from "@/lib/drama-shot-video-results";
 import type { DramaVideoExportPayload } from "@/lib/drama-video-export";
 import { mediaFileExtension } from "@/lib/media-file";
@@ -307,6 +307,7 @@ function createZipStream(
                                 projectId: project.id,
                                 shotId: item.entry.shotId,
                                 videoId: item.entry.videoId,
+                                scriptSources: dramaScriptShotSubtitleSources(record.script, record.shot.code),
                             });
                         } catch (error) {
                             const reason = error instanceof Error ? error.message : "字幕语音识别失败";
@@ -369,6 +370,10 @@ function createZipStream(
                         }
                     }
                     if (closed) return;
+                    if (!includeOriginals && !manifest.subtitles.generated.length) {
+                        const reason = manifest.subtitles.failed[0]?.reason || manifest.subtitles.skipped[0]?.reason || "没有生成任何字幕文件";
+                        throw new DramaVideoExportError(`字幕版导出失败：${reason}`, 502);
+                    }
                     onProgress?.({ phase: "packaging", done: downloads.length, total: downloads.length, bytes: receivedBytes, subtitlesDone, subtitlesTotal });
                     const manifestEntry = new ZipPassThrough("manifest.json");
                     zip.add(manifestEntry);

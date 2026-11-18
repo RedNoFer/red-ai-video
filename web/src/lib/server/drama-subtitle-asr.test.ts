@@ -2,7 +2,16 @@ import { describe, expect, it } from "vitest";
 
 import { planDramaSubtitleSources } from "@/lib/drama-subtitle-plan";
 
-import { buildDramaSubtitleChunks, buildDramaSubtitleSources, parseDramaSilenceIntervals, parseDramaSubtitleTranslations, parseDramaWhisperTranscript, refineDramaTranscriptSegments, type DramaSubtitleSpeechInterval } from "./drama-subtitle-asr";
+import {
+    alignDramaSubtitleSources,
+    buildDramaSubtitleChunks,
+    buildDramaSubtitleSources,
+    parseDramaSilenceIntervals,
+    parseDramaSubtitleTranslations,
+    parseDramaWhisperTranscript,
+    refineDramaTranscriptSegments,
+    type DramaSubtitleSpeechInterval,
+} from "./drama-subtitle-asr";
 
 describe("Drama subtitle ASR", () => {
     it("parses silence detection into real speech intervals", () => {
@@ -93,5 +102,79 @@ describe("Drama subtitle ASR", () => {
         expect(parseDramaSubtitleTranslations(JSON.stringify({ translations: ["只有一句。"] }), 2)).toBeUndefined();
         expect(parseDramaSubtitleTranslations(JSON.stringify({ translations: ["", "空行。"] }), 2)).toBeUndefined();
         expect(parseDramaSubtitleTranslations("not json", 1)).toBeUndefined();
+    });
+
+    it("merges split ASR segments back into the script line and reuses the script translation", () => {
+        const scriptSources = [
+            { text: "The black-gold card? Grandpa said it was real.", translation: "黑金龙卡？爷爷说它真的存在。", hasEnglish: true },
+            { text: "What? Something wrong?", translation: "什么？出什么事了？", hasEnglish: true },
+        ];
+        const segments = [
+            { startMs: 0, endMs: 9_900, text: "That's the black gold card." },
+            { startMs: 9_900, endMs: 12_780, text: "Grandpa said it was real." },
+            { startMs: 12_780, endMs: 13_780, text: "What?" },
+            { startMs: 13_780, endMs: 16_020, text: "Is something wrong?" },
+        ];
+
+        const aligned = alignDramaSubtitleSources(segments, scriptSources);
+
+        expect(aligned).toHaveLength(2);
+        expect(aligned[0]).toMatchObject({ text: scriptSources[0].text, translation: scriptSources[0].translation, startMs: 0, endMs: 12_780 });
+        expect(aligned[1]).toMatchObject({ text: scriptSources[1].text, translation: scriptSources[1].translation, startMs: 12_780, endMs: 16_020 });
+    });
+
+    it("keeps unrecognized speech as ASR text and never reuses one script line", () => {
+        const scriptSources = [{ text: "What? Something wrong?", translation: "什么？出什么事了？", hasEnglish: true }];
+        const segments = [
+            { startMs: 0, endMs: 1_000, text: "What? Something wrong?" },
+            { startMs: 1_000, endMs: 2_000, text: "What? Something wrong?" },
+            { startMs: 2_000, endMs: 3_000, text: "Thank you very much." },
+        ];
+
+        const aligned = alignDramaSubtitleSources(segments, scriptSources);
+
+        expect(aligned[0]).toMatchObject({ text: scriptSources[0].text, translation: scriptSources[0].translation });
+        expect(aligned[1]).toMatchObject({ text: "What? Something wrong?", startMs: 1_000, endMs: 2_000 });
+        expect(aligned[1].translation).toBeUndefined();
+        expect(aligned[2]).toMatchObject({ text: "Thank you very much.", startMs: 2_000, endMs: 3_000 });
+    });
+
+    it("aligns a real split transcript to the script and only leaves unmatched lines for translation", () => {
+        const scriptSources = [
+            { text: "The black-gold card? Grandpa said it was real.", translation: "黑金龙卡？爷爷说它真的存在。", hasEnglish: true },
+            { text: "What? Something wrong?", translation: "什么？出什么事了？", hasEnglish: true },
+            { text: "You don't know what that is.", translation: "你不知道那是什么。", hasEnglish: true },
+            { text: "A card. The bank gave it to me.", translation: "一张卡。银行给我的。", hasEnglish: true },
+            { text: "The bank gave it to you.", translation: "银行给你的。", hasEnglish: true },
+            { text: "She's seen a ghost. Over my card.", translation: "她像见了鬼。就为了我那张卡。", hasEnglish: true },
+            { text: "I'm Serena. Private banking, Meridian. I saw your ten at the breakfast shop.", translation: "我是Serena，Meridian私人银行。我在早餐店看见你那张十美元。", hasEnglish: true },
+        ];
+        const segments = [
+            { startMs: 0, endMs: 9_900, text: "That's the black gold card." },
+            { startMs: 9_900, endMs: 12_780, text: "Grandpa said it was real." },
+            { startMs: 12_780, endMs: 13_780, text: "What?" },
+            { startMs: 13_780, endMs: 16_020, text: "Is something wrong?" },
+            { startMs: 16_020, endMs: 17_860, text: "You don't know what that is?" },
+            { startMs: 17_860, endMs: 18_860, text: "A card." },
+            { startMs: 18_860, endMs: 21_060, text: "The bank gave it to me." },
+            { startMs: 21_060, endMs: 25_460, text: "The bank gave it to you." },
+            { startMs: 25_460, endMs: 28_100, text: "I'm Serena Meridian's branch president." },
+            { startMs: 28_100, endMs: 30_000, text: "I saw your $10 bill at breakfast." },
+        ];
+
+        const aligned = alignDramaSubtitleSources(segments, scriptSources);
+
+        expect(aligned.map((source) => source.text)).toEqual([
+            scriptSources[0].text,
+            scriptSources[1].text,
+            scriptSources[2].text,
+            scriptSources[3].text,
+            scriptSources[4].text,
+            "I'm Serena Meridian's branch president.",
+            "I saw your $10 bill at breakfast.",
+        ]);
+        expect(aligned.slice(0, 5).every((source) => source.translation)).toBe(true);
+        expect(aligned[5].translation).toBeUndefined();
+        expect(aligned[6].translation).toBeUndefined();
     });
 });
